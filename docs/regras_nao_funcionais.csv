@@ -1,0 +1,13 @@
+Nº Regra;Tipo;Regra
+RN001;Usabilidade;A aplicação deverá ser responsiva, funcionando em sistemas web desktop/laptop, tablet e mobile
+RN002;Usabilidade;A aplicação deverá funcionar nos principais navegadores (Chrome, Firefox, Edge, Safari e Opera)
+RN003;Segurança;O usuário deverá ser capaz de recuperar seu login via Email
+RN004;Segurança;Todas as funcionalidades cadastrais e administrativas devem ser auditáveis, possibilitando saber quem criou, data de criação, quem alterou e data de alteração
+RN005;Conformidade;O sistema deve suportar exclusivamente o idioma português do Brasil
+RN006;Usabilidade;O código fonte deverá possuir comentários claros e legíveis documentando o processo de desenvolvimento
+RN007;Performance;As páginas de consulta de conteúdo (classes, raças, magias, itens) devem carregar em até 2 segundos
+RN008;Usabilidade;O sistema deve oferecer tema claro e escuro para a interface
+RN009;Acessibilidade;O sistema deve seguir as diretrizes WCAG 2.1 nível AA para garantir acessibilidade
+RN010;Segurança;Senhas devem ser armazenadas com hash seguro (bcrypt ou equivalente) e nunca em texto plano
+RN011;Disponibilidade;O sistema deve ter disponibilidade mínima de 99% durante sessões de jogo (horário noturno e fins de semana)
+RN012;Usabilidade;A interface de consulta de conteúdo deve ser acessível sem necessidade de login (acesso público de leitura)

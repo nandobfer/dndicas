@@ -1,0 +1,276 @@
+Cadastro de Classe;;;;;;;;;;
+;Tab: Geral;;;;;;;;;
+;Campo;Obrigatório;Tipo;Dica de entrada;Tamanho;Mascara;Combo;Lista;Multi-seleção;Observação
+;Ativa;Sim;Texto;Informe o status da classe;3;;Sim;"Sim
+Não";Não;
+;Nome;Sim;Texto;Informe o nome da classe (ex: Guerreiro);100;;Não;;;
+;Descrição;Sim;Texto;Descreva a classe;5000;;Não;;;
+;Dado de Vida;Sim;Texto;Selecione o dado de vida da classe;5;;Sim;@Lista_Dados_de_Vida;Não;"Origem: Lista Fixa
+Ex: d6, d8, d10, d12"
+;Vida no 1º Nível;Sim;Texto;Informe a fórmula de vida no 1º nível (ex: 10 + mod. Constituição);100;;Não;;;
+;Vida nos Níveis Seguintes;Sim;Texto;Informe a fórmula de vida por nível subsequente;200;;Não;;;
+;Proficiências em Armaduras;Não;Texto;Selecione as proficiências em armaduras;200;;Sim;@Lista_Tipos_Armadura;Sim;
+;Proficiências em Armas;Não;Texto;Selecione as proficiências em armas;200;;Sim;@Lista_Tipos_Arma;Sim;
+;Proficiências em Ferramentas;Não;Texto;Selecione as proficiências em ferramentas;200;;Sim;@Lista_Ferramentas;Sim;
+;Testes de Resistência;Sim;Texto;Selecione os 2 atributos de resistência;50;;Sim;@Lista_Atributos;Sim;"Exatamente 2 seleções"
+;Perícias Disponíveis;Sim;Texto;Selecione perícias disponíveis para a classe;500;;Sim;@Lista_Pericias;Sim;
+;Qtd. Perícias a Escolher;Sim;Inteiro;Informe quantas perícias o jogador pode escolher;;;Não;;;
+;Equipamento Inicial;Não;Texto;Descreva as opções de equipamento inicial;2000;;Não;;;
+;É Conjurador;Sim;Texto;A classe possui habilidade de conjuração?;3;;Sim;"Sim
+Não";Não;
+;Atributo de Conjuração;Não;Texto;Selecione o atributo de conjuração;20;;Sim;@Lista_Atributos;Não;"Obrigatório se 'É Conjurador' = Sim"
+;Imagem;Não;Blob;Adicione uma imagem ilustrativa da classe;;;Não;;;
+;Tab: Habilidades de Classe;;;;;;;;;
+;Nível;Sim;Inteiro;Nível em que a habilidade é obtida (1-20);;;Não;;;
+;Nome da Habilidade;Sim;Texto;Nome da habilidade de classe;100;;Não;;;
+;Descrição da Habilidade;Sim;Texto;Descreva a habilidade;5000;;Não;;;
+;Tab: Subclasses;;;;;;;;;
+;Nome da Subclasse;Sim;Texto;Informe o nome da subclasse;100;;Não;;;
+;Descrição da Subclasse;Sim;Texto;Descreva a subclasse;5000;;Não;;;
+;Nível de Acesso;Sim;Inteiro;Nível em que a subclasse é escolhida;;;Não;;;"Ex: 1, 2 ou 3 dependendo da classe"
+;Tab: Tabela de Progressão;;;;;;;;;
+;Nível;Sim;Inteiro;Nível do personagem (1-20);;;Não;;;
+;Bônus de Proficiência;Sim;Texto;Bônus de proficiência neste nível;5;;Não;;;"Ex: +2, +3, etc."
+;Habilidades;Sim;Texto;Habilidades obtidas neste nível;500;;Não;;;
+;Espaços de Magia;Não;Texto;Espaços de magia por nível de magia;200;;Não;;;"Se conjurador"
+;Tab: Log;;;;;;;;;
+;Criado por;Não;Texto;;100;;Não;;;"Campos somente leitura
+Geração automática"
+;Data da criação;Não;Data;;;dd/mm/aaaa hh:mi:ss;Não;;;
+;Alterado por;Não;Texto;;100;;Não;;;
+;Data da alteração;Não;Data;;;dd/mm/aaaa hh:mi:ss;Não;;;
+;;;;;;;;;;
+;;;;;;;;;;
+Cadastro de Raça;;;;;;;;;;
+;Tab: Geral;;;;;;;;;
+;Campo;Obrigatório;Tipo;Dica de entrada;Tamanho;Mascara;Combo;Lista;Multi-seleção;Observação
+;Ativa;Sim;Texto;Informe o status da raça;3;;Sim;"Sim
+Não";Não;
+;Nome;Sim;Texto;Informe o nome da raça (ex: Elfo);100;;Não;;;
+;Descrição;Sim;Texto;Descreva a raça;5000;;Não;;;
+;Aumento de Atributo;Sim;Texto;Descreva os aumentos de atributo (ex: +2 Destreza);200;;Não;;;
+;Idade;Não;Texto;Descreva a expectativa de vida da raça;500;;Não;;;
+;Tendência;Não;Texto;Descreva a tendência típica da raça;500;;Não;;;
+;Tamanho;Sim;Texto;Selecione o tamanho da criatura;20;;Sim;@Lista_Tamanhos;Não;
+;Deslocamento;Sim;Texto;Informe o deslocamento base em metros (ex: 9m);20;;Não;;;
+;Idiomas;Sim;Texto;Selecione os idiomas da raça;200;;Sim;@Lista_Idiomas;Sim;
+;Visão no Escuro;Sim;Texto;A raça possui visão no escuro?;3;;Sim;"Sim
+Não";Não;
+;Alcance Visão no Escuro;Não;Texto;Alcance da visão no escuro em metros;10;;Não;;;"Obrigatório se Visão no Escuro = Sim"
+;Imagem;Não;Blob;Adicione uma imagem ilustrativa da raça;;;Não;;;
+;Tab: Traços Raciais;;;;;;;;;
+;Nome do Traço;Sim;Texto;Nome do traço racial;100;;Não;;;
+;Descrição do Traço;Sim;Texto;Descreva o traço racial;2000;;Não;;;
+;Tab: Sub-raças;;;;;;;;;
+;Nome da Sub-raça;Sim;Texto;Informe o nome da sub-raça (ex: Alto Elfo);100;;Não;;;
+;Descrição;Sim;Texto;Descreva a sub-raça;2000;;Não;;;
+;Aumento de Atributo Adicional;Não;Texto;Aumento adicional de atributo da sub-raça;200;;Não;;;
+;Traços Adicionais;Não;Texto;Traços exclusivos da sub-raça;2000;;Não;;;
+;Tab: Log;;;;;;;;;
+;Criado por;Não;Texto;;100;;Não;;;"Campos somente leitura
+Geração automática"
+;Data da criação;Não;Data;;;dd/mm/aaaa hh:mi:ss;Não;;;
+;Alterado por;Não;Texto;;100;;Não;;;
+;Data da alteração;Não;Data;;;dd/mm/aaaa hh:mi:ss;Não;;;
+;;;;;;;;;;
+;;;;;;;;;;
+Cadastro de Origem (Antecedente);;;;;;;;;;
+;Tab: Geral;;;;;;;;;
+;Campo;Obrigatório;Tipo;Dica de entrada;Tamanho;Mascara;Combo;Lista;Multi-seleção;Observação
+;Ativa;Sim;Texto;Informe o status da origem;3;;Sim;"Sim
+Não";Não;
+;Nome;Sim;Texto;Informe o nome da origem (ex: Acólito);100;;Não;;;
+;Descrição;Sim;Texto;Descreva a origem;5000;;Não;;;
+;Proficiências em Perícias;Sim;Texto;Selecione as perícias concedidas;200;;Sim;@Lista_Pericias;Sim;
+;Proficiências em Ferramentas;Não;Texto;Selecione ferramentas concedidas;200;;Sim;@Lista_Ferramentas;Sim;
+;Idiomas Adicionais;Não;Texto;Selecione idiomas concedidos;200;;Sim;@Lista_Idiomas;Sim;
+;Equipamento;Sim;Texto;Descreva o equipamento concedido pela origem;1000;;Não;;;
+;Riqueza Inicial;Não;Texto;Descreva a riqueza concedida (ex: 15 PO);50;;Não;;;
+;Característica;Sim;Texto;Descreva a característica especial da origem;2000;;Não;;;
+;Imagem;Não;Blob;Adicione uma imagem ilustrativa da origem;;;Não;;;
+;Tab: Sugestões de Personalização;;;;;;;;;
+;Traço de Personalidade;Não;Texto;Sugestões de traço de personalidade (d8);2000;;Não;;;
+;Ideal;Não;Texto;Sugestões de ideal (d6);2000;;Não;;;
+;Vínculo;Não;Texto;Sugestões de vínculo (d6);2000;;Não;;;
+;Defeito;Não;Texto;Sugestões de defeito (d6);2000;;Não;;;
+;Tab: Log;;;;;;;;;
+;Criado por;Não;Texto;;100;;Não;;;"Campos somente leitura
+Geração automática"
+;Data da criação;Não;Data;;;dd/mm/aaaa hh:mi:ss;Não;;;
+;Alterado por;Não;Texto;;100;;Não;;;
+;Data da alteração;Não;Data;;;dd/mm/aaaa hh:mi:ss;Não;;;
+;;;;;;;;;;
+;;;;;;;;;;
+Cadastro de Talento;;;;;;;;;;
+;Tab: Geral;;;;;;;;;
+;Campo;Obrigatório;Tipo;Dica de entrada;Tamanho;Mascara;Combo;Lista;Multi-seleção;Observação
+;Ativo;Sim;Texto;Informe o status do talento;3;;Sim;"Sim
+Não";Não;
+;Nome;Sim;Texto;Informe o nome do talento (ex: Sortudo);100;;Não;;;
+;Pré-requisito;Não;Texto;Descreva o pré-requisito (ex: Destreza 13 ou superior);200;;Não;;;
+;Descrição;Sim;Texto;Descreva os benefícios do talento;5000;;Não;;;
+;Imagem;Não;Blob;Adicione uma imagem ilustrativa do talento;;;Não;;;
+;Tab: Log;;;;;;;;;
+;Criado por;Não;Texto;;100;;Não;;;"Campos somente leitura
+Geração automática"
+;Data da criação;Não;Data;;;dd/mm/aaaa hh:mi:ss;Não;;;
+;Alterado por;Não;Texto;;100;;Não;;;
+;Data da alteração;Não;Data;;;dd/mm/aaaa hh:mi:ss;Não;;;
+;;;;;;;;;;
+;;;;;;;;;;
+Cadastro de Magia;;;;;;;;;;
+;Tab: Geral;;;;;;;;;
+;Campo;Obrigatório;Tipo;Dica de entrada;Tamanho;Mascara;Combo;Lista;Multi-seleção;Observação
+;Ativa;Sim;Texto;Informe o status da magia;3;;Sim;"Sim
+Não";Não;
+;Nome;Sim;Texto;Informe o nome da magia (ex: Bola de Fogo);100;;Não;;;
+;Nível;Sim;Texto;Selecione o nível da magia;15;;Sim;@Lista_Niveis_Magia;Não;"Truque, 1º ao 9º"
+;Escola;Sim;Texto;Selecione a escola de magia;20;;Sim;@Lista_Escolas_Magia;Não;
+;Tempo de Conjuração;Sim;Texto;Informe o tempo de conjuração (ex: 1 ação);100;;Não;;;
+;Alcance;Sim;Texto;Informe o alcance da magia (ex: 45 metros);100;;Não;;;
+;Componentes;Sim;Texto;Selecione os componentes necessários;10;;Sim;@Lista_Componentes_Magia;Sim;"V (Verbal), S (Somático), M (Material)"
+;Material;Não;Texto;Descreva o componente material (se houver);500;;Não;;;"Obrigatório se Componente M selecionado"
+;Duração;Sim;Texto;Informe a duração da magia (ex: Instantânea, 1 minuto);100;;Não;;;
+;Concentração;Sim;Texto;A magia requer concentração?;3;;Sim;"Sim
+Não";Não;
+;Ritual;Sim;Texto;A magia pode ser conjurada como ritual?;3;;Sim;"Sim
+Não";Não;
+;Descrição;Sim;Texto;Descreva o efeito da magia;10000;;Não;;;
+;Em Níveis Superiores;Não;Texto;Descreva o efeito quando conjurada em níveis superiores;2000;;Não;;;
+;Classes;Sim;Texto;Selecione as classes que possuem acesso a esta magia;200;;Sim;@Lista_de_Classes;Sim;"Origem: Tabela de Classes
+Retorno: Campo ""Nome"""
+;Imagem;Não;Blob;Adicione uma imagem ilustrativa da magia;;;Não;;;
+;Tab: Log;;;;;;;;;
+;Criado por;Não;Texto;;100;;Não;;;"Campos somente leitura
+Geração automática"
+;Data da criação;Não;Data;;;dd/mm/aaaa hh:mi:ss;Não;;;
+;Alterado por;Não;Texto;;100;;Não;;;
+;Data da alteração;Não;Data;;;dd/mm/aaaa hh:mi:ss;Não;;;
+;;;;;;;;;;
+;;;;;;;;;;
+Cadastro de Item;;;;;;;;;;
+;Tab: Geral;;;;;;;;;
+;Campo;Obrigatório;Tipo;Dica de entrada;Tamanho;Mascara;Combo;Lista;Multi-seleção;Observação
+;Ativo;Sim;Texto;Informe o status do item;3;;Sim;"Sim
+Não";Não;
+;Nome;Sim;Texto;Informe o nome do item (ex: Espada Longa);100;;Não;;;
+;Tipo;Sim;Texto;Selecione o tipo do item;30;;Sim;@Lista_Tipos_Item;Não;
+;Subtipo;Não;Texto;Selecione o subtipo (ex: Arma Marcial Corpo a Corpo);50;;Sim;@Lista_Subtipos_Item;Não;
+;Raridade;Sim;Texto;Selecione a raridade do item;20;;Sim;@Lista_Raridades;Não;
+;Custo;Não;Texto;Informe o custo do item (ex: 15 PO);50;;Não;;;
+;Peso;Não;Texto;Informe o peso do item (ex: 1,5 kg);20;;Não;;;
+;Descrição;Sim;Texto;Descreva o item e suas propriedades;5000;;Não;;;
+;Mágico;Sim;Texto;O item é mágico?;3;;Sim;"Sim
+Não";Não;
+;Requer Sintonia;Sim;Texto;O item requer sintonia?;3;;Sim;"Sim
+Não
+Sim (com requisito)";Não;
+;Requisito de Sintonia;Não;Texto;Descreva o requisito de sintonia (ex: por um conjurador);200;;Não;;;"Obrigatório se Sintonia = Sim (com requisito)"
+;Imagem;Não;Blob;Adicione uma imagem ilustrativa do item;;;Não;;;
+;Tab: Propriedades de Arma (se aplicável);;;;;;;;;
+;Dano;Não;Texto;Informe o dano da arma (ex: 1d8);20;;Não;;;
+;Tipo de Dano;Não;Texto;Selecione o tipo de dano;20;;Sim;@Lista_Tipos_Dano;Não;
+;Propriedades;Não;Texto;Selecione as propriedades da arma;200;;Sim;@Lista_Propriedades_Arma;Sim;"Ex: Acuidade, Pesada, Versátil"
+;Tab: Propriedades de Armadura (se aplicável);;;;;;;;;
+;Classe de Armadura (CA);Não;Texto;Informe a CA concedida (ex: 14 + mod. Des);50;;Não;;;
+;Força Mínima;Não;Inteiro;Informe a Força mínima necessária;;;Não;;;
+;Desvantagem em Furtividade;Não;Texto;A armadura causa desvantagem em Furtividade?;3;;Sim;"Sim
+Não";Não;
+;Tab: Log;;;;;;;;;
+;Criado por;Não;Texto;;100;;Não;;;"Campos somente leitura
+Geração automática"
+;Data da criação;Não;Data;;;dd/mm/aaaa hh:mi:ss;Não;;;
+;Alterado por;Não;Texto;;100;;Não;;;
+;Data da alteração;Não;Data;;;dd/mm/aaaa hh:mi:ss;Não;;;
+;;;;;;;;;;
+;;;;;;;;;;
+Cadastro de Ficha de Personagem;;;;;;;;;;
+;Tab: Informações Básicas;;;;;;;;;
+;Campo;Obrigatório;Tipo;Dica de entrada;Tamanho;Mascara;Combo;Lista;Multi-seleção;Observação
+;Nome do Personagem;Sim;Texto;Informe o nome do personagem;100;;Não;;;
+;Jogador;Sim;Texto;Usuário proprietário da ficha;100;;Não;;;"Preenchido automaticamente com o usuário logado"
+;Classe;Sim;Texto;Selecione a classe do personagem;100;;Sim;@Lista_de_Classes;Não;"Origem: Tabela de Classes (ativas)
+Retorno: Campo ""Nome"""
+;Subclasse;Não;Texto;Selecione a subclasse;100;;Sim;@Lista_Subclasses_da_Classe;Não;"Filtrada pela classe selecionada"
+;Nível;Sim;Inteiro;Informe o nível do personagem (1-20);2;;Não;;;
+;Raça;Sim;Texto;Selecione a raça do personagem;100;;Sim;@Lista_de_Racas;Não;"Origem: Tabela de Raças (ativas)
+Retorno: Campo ""Nome"""
+;Sub-raça;Não;Texto;Selecione a sub-raça;100;;Sim;@Lista_Subracas_da_Raca;Não;"Filtrada pela raça selecionada"
+;Origem;Sim;Texto;Selecione a origem do personagem;100;;Sim;@Lista_de_Origens;Não;"Origem: Tabela de Origens (ativas)
+Retorno: Campo ""Nome"""
+;Tendência;Não;Texto;Selecione a tendência do personagem;30;;Sim;@Lista_Tendencias;Não;
+;Pontos de Experiência;Não;Inteiro;Informe os XP do personagem;;;Não;;;
+;Avatar;Não;Blob;Adicione uma imagem do personagem;;;Não;;;
+;Tab: Atributos;;;;;;;;;
+;Força;Sim;Inteiro;Informe o valor de Força (1-30);2;;Não;;;Valor base do atributo
+;Destreza;Sim;Inteiro;Informe o valor de Destreza (1-30);2;;Não;;;
+;Constituição;Sim;Inteiro;Informe o valor de Constituição (1-30);2;;Não;;;
+;Inteligência;Sim;Inteiro;Informe o valor de Inteligência (1-30);2;;Não;;;
+;Sabedoria;Sim;Inteiro;Informe o valor de Sabedoria (1-30);2;;Não;;;
+;Carisma;Sim;Inteiro;Informe o valor de Carisma (1-30);2;;Não;;;
+;Mod. Força;Não;Inteiro;Calculado: (Força - 10) / 2;;;Não;;;"Campo calculado automaticamente"
+;Mod. Destreza;Não;Inteiro;Calculado;;;Não;;;"Campo calculado automaticamente"
+;Mod. Constituição;Não;Inteiro;Calculado;;;Não;;;"Campo calculado automaticamente"
+;Mod. Inteligência;Não;Inteiro;Calculado;;;Não;;;"Campo calculado automaticamente"
+;Mod. Sabedoria;Não;Inteiro;Calculado;;;Não;;;"Campo calculado automaticamente"
+;Mod. Carisma;Não;Inteiro;Calculado;;;Não;;;"Campo calculado automaticamente"
+;Tab: Combate;;;;;;;;;
+;Classe de Armadura (CA);Não;Inteiro;Calculado a partir do equipamento e Destreza;;;Não;;;"Campo calculado automaticamente"
+;Iniciativa;Não;Inteiro;Calculado: Mod. Destreza;;;Não;;;"Campo calculado automaticamente"
+;Deslocamento;Não;Texto;Herdado da raça selecionada;;;Não;;;"Campo calculado automaticamente"
+;HP Máximo;Não;Inteiro;Calculado a partir da classe, nível e Constituição;;;Não;;;"Campo calculado automaticamente"
+;HP Atual;Sim;Inteiro;Informe os pontos de vida atuais;;;Não;;;
+;HP Temporário;Não;Inteiro;Informe HP temporário (se houver);;;Não;;;
+;Dados de Vida;Não;Texto;Herdado da classe e nível;;;Não;;;"Campo calculado automaticamente"
+;Testes de Resistência contra a Morte;Não;Texto;Marque sucessos e falhas;;;Não;;;
+;Tab: Proficiências e Perícias;;;;;;;;;
+;Bônus de Proficiência;Não;Inteiro;Calculado a partir do nível;;;Não;;;"Campo calculado automaticamente"
+;Testes de Resistência;Não;Texto;Herdado da classe;;;Não;;;"Campo calculado automaticamente"
+;Perícias Proficientes;Sim;Texto;Selecione as perícias proficientes;500;;Sim;@Lista_Pericias;Sim;"Limitado pela quantidade da classe + origem"
+;Tab: Talentos;;;;;;;;;
+;Talentos;Não;Texto;Selecione os talentos do personagem;500;;Sim;@Lista_de_Talentos;Sim;"Origem: Tabela de Talentos (ativos)
+Retorno: Campo ""Nome"""
+;Tab: Magias;;;;;;;;;
+;Magias Conhecidas;Não;Texto;Selecione as magias conhecidas;2000;;Sim;@Lista_de_Magias;Sim;"Filtrada por classe do personagem"
+;Magias Preparadas;Não;Texto;Selecione as magias preparadas para o dia;2000;;Sim;@Lista_Magias_Conhecidas;Sim;
+;Tab: Equipamento e Inventário;;;;;;;;;
+;Itens;Não;Texto;Selecione itens do inventário;2000;;Sim;@Lista_de_Itens;Sim;"Origem: Tabela de Itens (ativos)
+Retorno: Campo ""Nome"""
+;Quantidade;Não;Inteiro;Informe a quantidade de cada item;;;Não;;;
+;PC (Peças de Cobre);Não;Inteiro;Informe a quantidade de PC;;;Não;;;
+;PP (Peças de Prata);Não;Inteiro;Informe a quantidade de PP;;;Não;;;
+;PE (Peças de Electro);Não;Inteiro;Informe a quantidade de PE;;;Não;;;
+;PO (Peças de Ouro);Não;Inteiro;Informe a quantidade de PO;;;Não;;;
+;PL (Peças de Platina);Não;Inteiro;Informe a quantidade de PL;;;Não;;;
+;Tab: Personalidade;;;;;;;;;
+;Traços de Personalidade;Não;Texto;Descreva traços de personalidade do personagem;1000;;Não;;;
+;Ideais;Não;Texto;Descreva os ideais do personagem;1000;;Não;;;
+;Vínculos;Não;Texto;Descreva os vínculos do personagem;1000;;Não;;;
+;Defeitos;Não;Texto;Descreva os defeitos do personagem;1000;;Não;;;
+;História;Não;Texto;Escreva a história do personagem;5000;;Não;;;
+;Notas;Não;Texto;Anotações livres do jogador;5000;;Não;;;
+;Tab: Log;;;;;;;;;
+;Criado por;Não;Texto;;100;;Não;;;"Campos somente leitura
+Geração automática"
+;Data da criação;Não;Data;;;dd/mm/aaaa hh:mi:ss;Não;;;
+;Alterado por;Não;Texto;;100;;Não;;;
+;Data da alteração;Não;Data;;;dd/mm/aaaa hh:mi:ss;Não;;;
+;;;;;;;;;;
+;;;;;;;;;;
+Cadastro de Usuários;;;;;;;;;;
+;Tab: Geral;;;;;;;;;
+;Campo;Obrigatório;Tipo;Dica de entrada;Tamanho;Mascara;Combo;Lista;Multi-seleção;Observação
+;Ativo;Sim;Texto;Informe o status do usuário;3;;Sim;"Sim
+Não";Não;
+;Nome;Sim;Texto;Informe o nome do usuário;100;;Não;;;
+;Email;Sim;Texto;Informe o Email do usuário;100;;Não;;;
+;Tipo;Sim;Texto;Tipo de perfil do usuário;30;;Sim;@Lista_Perfis;Não;
+;Foto;Não;Blob;Adicione uma foto para o perfil do usuário;;;Não;;;
+;Apelido;Não;Texto;Informe o apelido do usuário (nome de exibição);50;;Não;;;
+;Observação;Não;Texto;Digite as observações pertinentes;1000;;Não;;;
+;Tab: Log;;;;;;;;;
+;Criado por;Não;Texto;;100;;Não;;;"Campos somente leitura
+Geração automática"
+;Data da criação;Não;Data;;;dd/mm/aaaa hh:mi:ss;Não;;;
+;Alterado por;Não;Texto;;100;;Não;;;
+;Data da alteração;Não;Data;;;dd/mm/aaaa hh:mi:ss;Não;;;

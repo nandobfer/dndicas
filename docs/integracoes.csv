@@ -1,0 +1,5 @@
+Integração;Método;Interface;Objetivo
+Owlbear Rodeo SDK – Sincronização de Ficha;POST/PUT;Ficha de Personagem > Conectar ao Owlbear;"Envia os dados da ficha de personagem (HP, CA, atributos, condições) para a sessão ativa do Owlbear Rodeo via SDK, permitindo que os dados fiquem visíveis no VTT."
+Owlbear Rodeo SDK – Atualização Dinâmica de HP;PUT;Ficha de Personagem > Combate > HP Atual;"Atualiza em tempo real os valores de HP do personagem na sessão do Owlbear quando alterados na ficha, e vice-versa. Sincronização bidirecional."
+Owlbear Rodeo SDK – Rolagem de Dados;POST;Ficha de Personagem > Ações / Magias / Perícias;"Ao clicar em uma ação, perícia ou magia na ficha, dispara a rolagem de dados correspondente no Owlbear Rodeo, exibindo o resultado para todos os jogadores na sessão."
+Owlbear Rodeo SDK – Leitura de Estado da Sessão;GET;*Interface de sistema - Não possui tela;"Lê o estado atual da sessão do Owlbear (jogadores conectados, estado dos tokens) para manter a ficha sincronizada com o estado do VTT."

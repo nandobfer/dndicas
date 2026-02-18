@@ -1,0 +1,52 @@
+ATRIBUTOS;;;;ESCOLAS DE MAGIA;;;;NÍVEIS DE MAGIA;;;;TAMANHOS DE CRIATURA;;;;TENDÊNCIAS;;;;TIPO DE PERFIL;;
+Nome;Sigla;;;Nome;;;;Cod.;Nome;;;;Nome;;;;Nome;;;;Cod.;Nome
+Força;FOR;;;Abjuração;;;;0;Truque;;;;Miúdo;;;;Leal e Bom (LB);;;;1;Administrador
+Destreza;DES;;;Adivinhação;;;;1;1º Nível;;;;Pequeno;;;;Neutro e Bom (NB);;;;2;Usuário Comum
+Constituição;CON;;;Conjuração;;;;2;2º Nível;;;;Médio;;;;Caótico e Bom (CB);;;;
+Inteligência;INT;;;Encantamento;;;;3;3º Nível;;;;Grande;;;;Leal e Neutro (LN);;;;
+Sabedoria;SAB;;;Evocação;;;;4;4º Nível;;;;Enorme;;;;Neutro (N);;;;
+Carisma;CAR;;;Ilusão;;;;5;5º Nível;;;;Colossal;;;;Caótico e Neutro (CN);;;;
+;;;;;Necromancia;;;;6;6º Nível;;;;;;;;Leal e Mau (LM);;;;
+;;;;;Transmutação;;;;7;7º Nível;;;;;;;;Neutro e Mau (NM);;;;
+;;;;;;;;;8;8º Nível;;;;;;;;Caótico e Mau (CM);;;;
+;;;;;;;;;9;9º Nível;;;;;;;;;;;;
+;;;;;;;;;;;;;;;;;;;;;
+;;;;;;;;;;;;;;;;;;;;;
+DADOS DE VIDA;;;;TIPOS DE ITEM;;;;RARIDADES;;;;TIPOS DE DANO;;;;COMPONENTES DE MAGIA;;;;IDIOMAS;;
+Nome;;;;Nome;;;;Nome;;;;Nome;;;;Cod.;Nome;;;;Nome
+d6;;;;Arma;;;;Comum;;;;Ácido;;;;V;Verbal;;;;Comum
+d8;;;;Armadura;;;;Incomum;;;;Contundente;;;;S;Somático;;;;Élfico
+d10;;;;Equipamento de Aventura;;;;Raro;;;;Cortante;;;;M;Material;;;;Anão
+d12;;;;Ferramenta;;;;Muito Raro;;;;Elétrico;;;;;;;;Gigante
+;;;;;Poção;;;;Lendário;;;;Fogo;;;;;;;;Gnômico
+;;;;;Pergaminho;;;;Artefato;;;;Frio;;;;;;;;Halfling
+;;;;;Anel;;;;;;;;Necrótico;;;;;;;;Orc
+;;;;;Bastão;;;;;;;;Perfurante;;;;;;;;Abissal
+;;;;;Cajado;;;;;;;;Psíquico;;;;;;;;Celestial
+;;;;;Varinha;;;;;;;;Radiante;;;;;;;;Dracônico
+;;;;;Maravilha;;;;;;;;Trovejante;;;;;;;;Infernal
+;;;;;Veículo;;;;;;;;Veneno;;;;;;;;Primordial
+;;;;;Montaria;;;;;;;;Energético;;;;;;;;Silvestre
+;;;;;;;;;;;;;;;;;;;;;Subcomum
+;;;;;;;;;;;;;;;;;;;;;
+;;;;;;;;;;;;;;;;;;;;;
+PERÍCIAS;;;;TIPOS DE ARMA;;;;TIPOS DE ARMADURA;;;;PROPRIEDADES DE ARMA;;;;;;
+Nome;Atributo;;;Nome;;;;Nome;;;;Nome;;;;;;
+Acrobacia;DES;;;Arma Simples Corpo a Corpo;;;;Armadura Leve;;;;Acuidade;;;;;;
+Adestrar Animais;SAB;;;Arma Simples à Distância;;;;Armadura Média;;;;Alcance;;;;;;
+Arcanismo;INT;;;Arma Marcial Corpo a Corpo;;;;Armadura Pesada;;;;Arremesso;;;;;;
+Atletismo;FOR;;;Arma Marcial à Distância;;;;Escudo;;;;Duas Mãos;;;;;;
+Atuação;CAR;;;;;;;;;;;Leve;;;;;;
+Enganação;CAR;;;;;;;;;;;Munição;;;;;;
+Furtividade;DES;;;;;;;;;;;Pesada;;;;;;
+História;INT;;;;;;;;;;;Versátil;;;;;;
+Intimidação;CAR;;;;;;;;;;;Recarga;;;;;;
+Intuição;SAB;;;;;;;;;;;Especial;;;;;;
+Investigação;INT;;;;;;;;;;;;;;;
+Medicina;SAB;;;;;;;;;;;;;;;
+Natureza;INT;;;;;;;;;;;;;;;
+Percepção;SAB;;;;;;;;;;;;;;;
+Persuasão;CAR;;;;;;;;;;;;;;;
+Prestidigitação;DES;;;;;;;;;;;;;;;
+Religião;INT;;;;;;;;;;;;;;;
+Sobrevivência;SAB;;;;;;;;;;;;;;;

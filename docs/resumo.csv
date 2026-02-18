@@ -1,0 +1,27 @@
+Visão resumida ;;;;
+Fase;Foco;Valor Principal;Entregas principais;Resultado esperado
+MVP;Dados;Disponibilidade da informação;"	Cadastro de Classes
+	Cadastro de Raças
+	Cadastro de Origens
+	Cadastro de Talentos
+	Cadastro de Magias
+	Cadastro de Itens
+	Consulta pública com filtros e busca
+	Cadastro de Usuários e Autenticação";"Cadastro e consulta de informações de D&D em português
+Base sólida de conteúdo para a comunidade brasileira
+Fluxo administrativo funcionando ponta a ponta"
+Expansão;Ficha;Criação de fichas de personagens;"	Cadastro de fichas de personagens
+	Seleção de classe, raça, origem e talentos
+	Atributos e parâmetros calculados automaticamente
+	Gerenciamento de magias e equipamento na ficha
+	Exportação de ficha em PDF
+	Progressão de nível";"Criação fluida e satisfatória do personagem de D&D
+Experiência guiada passo a passo
+Cálculos automáticos eliminam erros manuais"
+Integração;Gameplay;Integração com Owlbear e gerenciamento dinâmico;"	Integração via SDK do Owlbear Rodeo
+	Atualização dinâmica de HP, condições e recursos
+	Rolagem de dados integrada
+	Sincronização em tempo real durante sessões
+	Painel de mestre com visão dos personagens";"Jogabilidade com ficha de D&D em português
+Eliminação de planilhas paralelas durante sessões
+Experiência fluida de jogo online"

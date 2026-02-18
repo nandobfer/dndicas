@@ -1,0 +1,20 @@
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+Iniciativa;;GRIMÓRIO D7D - Compêndio de D&D em Português para a Comunidade Brasileira;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+Épico;;Fundação e Autenticação;;;;;;;;;;Cadastro de Conteúdo (Admin);;;;;;;;;;;;;;;;;;;;Consulta Pública;;;;;;;;Ficha de Personagem;;;;;;;;;;;;;;Integração Owlbear;;;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+História;;Usuários;;;;Autenticação;;;;Classes;;;;Raças;;;;Origens;;;;Talentos;;;;Magias;;;;Itens;;;;Busca e Navegação;;;;Filtros Avançados;;;;Criação de Ficha;;;;Gerenciamento de Ficha;;;;Exportação;;;;Sincronização VTT;;;;Rolagem de Dados;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+Tarefa;;Listar;;Cadastrar;;Login;;Logout;;Listar;;Cadastrar;;Listar;;Cadastrar;;Listar;;Cadastrar;;Listar;;Cadastrar;;Listar;;Cadastrar;;Listar;;Cadastrar;;Busca global;;Navegação por categoria;;Filtro por nível;;Filtro por classe;;Fluxo guiado;;Cálculos automáticos;;Listar fichas;;Editar ficha;;Gerar PDF;;Compartilhar;;Conectar sessão;;Enviar dados;;Rolagem integrada;;Resultado no VTT
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+Subtarefa;;Listar usuários;;Cadastrar usuário;;Realizar login;;Realizar logout;;Listar classes;;Cadastrar classe;;Listar raças;;Cadastrar raça;;Listar origens;;Cadastrar origem;;Listar talentos;;Cadastrar talento;;Listar magias;;Cadastrar magia;;Listar itens;;Cadastrar item;;Buscar em todo conteúdo;;Exibir cards por tipo;;Filtrar magias por nível;;Filtrar magias por classe;;Wizard passo a passo;;Calcular modificadores;;Listar fichas do usuário;;Editar atributos e equipamento;;Exportar ficha PDF;;Gerar link de compartilhamento;;Autenticar com Owlbear SDK;;Sincronizar HP e CA;;Rolar dados pela ficha;;Exibir resultado para mesa
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;;Gerar log;;Gerar log;;Recuperar senha;;;;Editar classe;;Gerar log;;Editar raça;;Gerar log;;Editar origem;;Gerar log;;Editar talento;;Gerar log;;Editar magia;;Gerar log;;Editar item;;Gerar log;;Exibir resultados agrupados;;Exibir detalhamento;;Filtrar itens por tipo;;Filtrar itens por raridade;;Selecionar raça/classe/origem;;Calcular HP e CA;;Visualizar ficha completa;;Subir de nível;;Layout D&D clássico;;;;Sincronizar em tempo real;;Atualizar condições;;Aplicar bônus automáticos;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;;Editar usuário;;;;Controle de perfil;;;;Excluir classe;;;;Excluir raça;;;;Excluir origem;;;;Excluir talento;;;;Excluir magia;;;;Excluir item;;;;Busca por nome;;Breadcrumbs;;Filtrar por escola;;Buscar por nome;;Selecionar perícias e talentos;;Calcular proficiências;;Duplicar ficha;;Gerenciar magias preparadas;;;;;;Leitura bidirecional;;Atualizar recursos gastos;;;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;;;;;;;;;;Cadastrar habilidades de classe;;;;Cadastrar traços raciais;;;;Cadastrar sugestões de personalização;;;;;;;;;;Cadastrar propriedades de arma/armadura;;;;;;;;;;;;;;Selecionar equipamento;;Calcular testes de resistência;;Excluir ficha;;Gerenciar inventário;;;;;;;;;;;;;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;;;;;;;;;;Cadastrar subclasses;;;;Cadastrar sub-raças;;;;;;;;;;;;;;;;;;;;;;;;;;;;Definir personalidade e história;;;;;;;;;;;;;;;;;;;;;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;;;;;;;;;;Cadastrar tabela de progressão;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;Revisão final e salvar;;;;;;;;;;;;;;;;;;;;;;
