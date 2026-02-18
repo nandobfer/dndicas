@@ -57,17 +57,19 @@ O projeto utiliza Next.js 15+ como base, com um template core já implementado e
 
 ## 🔐 Autenticação e Segurança
 
-### Authentication
-- **Sistema**: Username + Email + Password
-- **Bcrypt**: Hash de senhas
-- **JWT**: Tokens de sessão
-- **Recuperação**: Reset de senha via email
+### Authentication (Clerk)
+- **Sistema**: Clerk (Identity Provider)
+- **Vínculo**: `clerkId` (armazenado no MongoDB)
+- **Recursos**:
+  - Login Social e Gerenciamento de Identidade
+  - Sessão gerenciada pelo Clerk
+  - O banco de dados local sincroniza dados básicos (email, nome) via Webhooks ou Login Flow
 
-### Authorization
+### Authorization (Local DB)
 - **Perfis**: Administrador | Usuário Comum
-- **RBAC**: Role-Based Access Control
-  - Admin: CRUD de conteúdo + fichas pessoais
-  - User: Consulta pública + CRUD de fichas pessoais
+- **RBAC**: Gerenciado no banco de dados local (MongoDB)
+  - Admin: Definido no campo `role` do modelo `User`
+  - User: Role padrão para novos registros
 
 ---
 
@@ -309,25 +311,26 @@ export const DAMAGE_TYPES = [
 ```json
 {
   "dependencies": {
-    "next": "^15.0.0",
-    "react": "^18.0.0",
-    "react-dom": "^18.0.0",
+    "next": "16.1.4",
+    "react": "19.2.3",
+    "react-dom": "19.2.3",
     "typescript": "^5.0.0",
     
+    "@clerk/nextjs": "^6.36.10",
+    "@clerk/localizations": "^3.35.2",
     "@tanstack/react-query": "^5.0.0",
     "react-hook-form": "^7.0.0",
     "zod": "^3.0.0",
-    "framer-motion": "^11.0.0",
+    "framer-motion": "^12.0.0",
     
-    "mongoose": "^8.0.0",
-    "bcrypt": "^5.1.0",
-    "jsonwebtoken": "^9.0.0",
+    "mongoose": "^9.0.0",
+    "axios": "^1.13.2",
+    "lucide-react": "^0.563.0",
     
-    "tailwindcss": "^3.0.0",
-    "@radix-ui/react-*": "latest",
+    "tailwindcss": "4.0.0",
     "class-variance-authority": "^0.7.0",
     "clsx": "^2.0.0",
-    "tailwind-merge": "^2.0.0"
+    "tailwind-merge": "^3.0.0"
   }
 }
 ```
@@ -417,7 +420,6 @@ src/
 ```env
 # .env.local
 DATABASE_URL=mongodb+srv://...
-JWT_SECRET=...
 NEXT_PUBLIC_APP_URL=http://localhost:3000
 OWLBEAR_API_KEY=...
 ```
@@ -454,10 +456,10 @@ OWLBEAR_API_KEY=...
 - [ ] Instalar dependências (`npm install`)
 - [ ] Configurar Tailwind + Shadcn/ui
 - [ ] Configurar TanStack Query Provider
-- [ ] Implementar authentication flow
-- [ ] Criar models do Mongoose (8 entidades)
-- [ ] Configurar Framer Motion global config
-- [ ] Definir paleta de cores (Liquid Glass + D&D theme)
+- [/] Implementar authentication flow (Clerk Dashboard + Middleware)
+- [ ] Criar models do Mongoose (Character, Spell, Item, etc. - User é gerenciado pelo Clerk)
+- [x] Configurar Framer Motion global config
+- [x] Definir paleta de cores (Liquid Glass + D&D theme)
 - [ ] Implementar Error Boundaries
-- [ ] Configurar ESLint + Prettier
-- [ ] Setup de testes (Jest + React Testing Library)
+- [x] Configurar ESLint + Prettier
+- [x] Setup de testes (Jest + React Testing Library)
