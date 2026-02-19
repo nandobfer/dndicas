@@ -1,0 +1,176 @@
+'use client';
+
+import * as React from 'react';
+import { motion } from 'framer-motion';
+import { User, Calendar, Database, ArrowRight } from 'lucide-react';
+import { GlassDialog, GlassDialogContent, GlassDialogHeader, GlassDialogTitle, GlassDialogDescription } from '@/components/ui/glass-dialog';
+import { ActionChip } from '@/components/ui/action-chip';
+import { DiffView } from '@/components/ui/diff-view';
+import { glassClasses, cardGlass } from '@/lib/config/glass-config';
+import { fade } from '@/lib/config/motion-configs';
+import type { AuditLog } from '../types/audit.types';
+
+interface AuditLogDetailModalProps {
+  log: AuditLog | null;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+}
+
+function formatDate(date: Date | string): string {
+  return new Intl.DateTimeFormat('pt-BR', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+  }).format(new Date(date));
+}
+
+function formatEntityType(entityType: string): string {
+  const labels: Record<string, string> = {
+    User: 'Usuário',
+    Company: 'Empresa',
+    Organization: 'Organização',
+  };
+  return labels[entityType] || entityType;
+}
+
+export function AuditLogDetailModal({
+  log,
+  open,
+  onOpenChange,
+}: AuditLogDetailModalProps) {
+  if (!log) return null;
+
+  return (
+    <GlassDialog open={open} onOpenChange={onOpenChange}>
+      <GlassDialogContent className="max-w-3xl max-h-[85vh] overflow-y-auto">
+        <GlassDialogHeader>
+          <GlassDialogTitle className="flex items-center gap-3">
+            <span>Detalhes do Log</span>
+            <ActionChip action={log.action} />
+          </GlassDialogTitle>
+          <GlassDialogDescription>
+            {formatEntityType(log.entity)} • {log.entityId}
+          </GlassDialogDescription>
+        </GlassDialogHeader>
+
+        <motion.div className="space-y-6 mt-6" {...fade}>
+          {/* Metadata Grid */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            <InfoCard
+              icon={<Database className="h-4 w-4" />}
+              label="Entidade"
+              value={formatEntityType(log.entity)}
+            />
+            <InfoCard
+              icon={<ArrowRight className="h-4 w-4" />}
+              label="ID"
+              value={log.entityId.slice(0, 8) + '...'}
+              title={log.entityId}
+            />
+            <InfoCard
+              icon={<User className="h-4 w-4" />}
+              label="Usuário"
+              value={log.performedByUser?.name || log.performedByUser?.username || 'Sistema'}
+              title={log.performedByUser?.email}
+            />
+            <InfoCard
+              icon={<Calendar className="h-4 w-4" />}
+              label="Data"
+              value={formatDate(log.createdAt)}
+            />
+          </div>
+
+          {/* Content based on action type */}
+          {log.action === 'CREATE' && log.newData && (
+            <div className="space-y-3">
+              <h3 className="text-sm font-medium text-green-400 flex items-center gap-2">
+                <span className="h-2 w-2 rounded-full bg-green-400" />
+                Dados Criados
+              </h3>
+              <DataDisplay data={log.newData} variant="create" />
+            </div>
+          )}
+
+          {log.action === 'UPDATE' && (
+            <div className="space-y-3">
+              <h3 className="text-sm font-medium text-blue-400 flex items-center gap-2">
+                <span className="h-2 w-2 rounded-full bg-blue-400" />
+                Alterações
+              </h3>
+              <div className="grid grid-cols-2 gap-2 text-xs text-muted-foreground mb-3">
+                <span className="text-red-400">← Antes</span>
+                <span className="text-green-400 text-right">Depois →</span>
+              </div>
+              <DiffView
+                previousData={log.previousData as Record<string, unknown>}
+                newData={log.newData as Record<string, unknown>}
+              />
+            </div>
+          )}
+
+          {log.action === 'DELETE' && log.previousData && (
+            <div className="space-y-3">
+              <h3 className="text-sm font-medium text-red-400 flex items-center gap-2">
+                <span className="h-2 w-2 rounded-full bg-red-400" />
+                Dados Excluídos
+              </h3>
+              <DataDisplay data={log.previousData} variant="delete" />
+            </div>
+          )}
+        </motion.div>
+      </GlassDialogContent>
+    </GlassDialog>
+  );
+}
+
+interface InfoCardProps {
+  icon: React.ReactNode;
+  label: string;
+  value: string;
+  title?: string;
+}
+
+function InfoCard({ icon, label, value, title }: InfoCardProps) {
+  return (
+    <div
+      className={`${glassClasses.card} p-3 rounded-lg`}
+      title={title}
+    >
+      <div className="flex items-center gap-2 text-muted-foreground mb-1">
+        {icon}
+        <span className="text-xs">{label}</span>
+      </div>
+      <p className="text-sm font-medium truncate">{value}</p>
+    </div>
+  );
+}
+
+interface DataDisplayProps {
+  data: Record<string, unknown>;
+  variant: 'create' | 'delete';
+}
+
+function DataDisplay({ data, variant }: DataDisplayProps) {
+  const borderColor = variant === 'create' ? 'border-green-500/20' : 'border-red-500/20';
+  const bgColor = variant === 'create' ? 'bg-green-500/5' : 'bg-red-500/5';
+
+  // Filter out internal fields
+  const displayData = Object.fromEntries(
+    Object.entries(data).filter(
+      ([key]) => !key.startsWith('_') && !['createdAt', 'updatedAt', '__v'].includes(key)
+    )
+  );
+
+  return (
+    <pre
+      className={`${cardGlass.blur} ${bgColor} border ${borderColor} p-4 text-xs font-mono overflow-x-auto rounded-lg`}
+    >
+      {JSON.stringify(displayData, null, 2)}
+    </pre>
+  );
+}
+
+AuditLogDetailModal.displayName = 'AuditLogDetailModal';

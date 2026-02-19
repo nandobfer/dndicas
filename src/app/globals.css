@@ -142,3 +142,121 @@
 button {
   cursor: pointer;
 }
+
+/* ===========================
+   Liquid Glass Utility Classes
+   =========================== */
+
+/* Glass backgrounds with blur effect */
+.glass-card {
+  @apply backdrop-blur-xl bg-white/10 border border-white/10;
+}
+
+.glass-card-solid {
+  @apply backdrop-blur-2xl bg-black/70 border border-white/5;
+}
+
+.glass-sidebar {
+  @apply backdrop-blur-2xl bg-black/80 border-r border-white/5;
+}
+
+.glass-overlay {
+  @apply backdrop-blur-md bg-black/60 border border-white/10;
+}
+
+.glass-input {
+  @apply backdrop-blur-sm bg-white/5 border border-white/10 text-white placeholder:text-white/40;
+}
+
+.glass-tooltip {
+  @apply backdrop-blur-md bg-black/80 border border-white/5 text-white text-sm;
+}
+
+/* Glass hover states */
+.glass-hover {
+  @apply transition-all duration-200 hover:bg-white/5;
+}
+
+.glass-hover-bright {
+  @apply transition-all duration-200 hover:bg-white/15;
+}
+
+/* Glass shadows */
+.glass-shadow {
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+}
+
+.glass-shadow-lg {
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+}
+
+/* Glass text utilities */
+.text-glass-primary {
+  @apply text-white;
+}
+
+.text-glass-secondary {
+  @apply text-white/60;
+}
+
+.text-glass-muted {
+  @apply text-white/40;
+}
+
+/* Glass dividers */
+.glass-divider {
+  @apply h-px bg-white/10;
+}
+
+.glass-divider-vertical {
+  @apply w-px bg-white/10;
+}
+
+/* D&D Rarity color classes */
+.rarity-common {
+  @apply text-gray-400;
+}
+
+.rarity-uncommon {
+  @apply text-green-400;
+}
+
+.rarity-rare {
+  @apply text-blue-400;
+}
+
+.rarity-epic {
+  @apply text-purple-400;
+}
+
+.rarity-legendary {
+  @apply text-amber-400;
+}
+
+.rarity-artifact {
+  @apply text-rose-400;
+}
+
+/* Glass focus ring */
+.glass-focus {
+  @apply focus:outline-none focus:ring-2 focus:ring-white/20 focus:ring-offset-0;
+}
+
+/* Glass scrollbar styling for WebKit browsers */
+.glass-scrollbar::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+.glass-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.glass-scrollbar::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 3px;
+}
+
+.glass-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.2);
+}

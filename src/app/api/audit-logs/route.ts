@@ -33,36 +33,48 @@ export async function GET(request: NextRequest) {
     const filterUserId = searchParams.get('userId');
     const action = searchParams.get('action');
     const collectionName = searchParams.get('collectionName');
+    const actorEmail = searchParams.get("actorEmail")
+    const entityType = searchParams.get("entityType")
 
-    const skip = (page - 1) * limit;
+    const skip = (page - 1) * limit
 
     // Construir query com filtros
-    const query: any = {};
+    const query: any = {}
 
     // Filtro de data
     if (startDate || endDate) {
-      query.timestamp = {};
-      if (startDate) {
-        query.timestamp.$gte = new Date(startDate);
-      }
-      if (endDate) {
-        query.timestamp.$lte = new Date(endDate);
-      }
+        query.timestamp = {}
+        if (startDate) {
+            query.timestamp.$gte = new Date(startDate)
+        }
+        if (endDate) {
+            query.timestamp.$lte = new Date(endDate)
+        }
     }
 
     // Filtro de usuário
     if (filterUserId) {
-      query.userId = filterUserId;
+        query.userId = filterUserId
     }
 
     // Filtro de ação
     if (action) {
-      query.action = action;
+        query.action = action
     }
 
     // Filtro de coleção
     if (collectionName) {
-      query.collectionName = collectionName;
+        query.collectionName = collectionName
+    }
+
+    // Filtro de email do ator (para logs estendidos)
+    if (actorEmail) {
+        query.actorEmail = { $regex: actorEmail, $options: "i" }
+    }
+
+    // Filtro de tipo de entidade (para logs estendidos)
+    if (entityType) {
+        query.entityType = entityType
     }
 
     const [logs, total] = await Promise.all([
