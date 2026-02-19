@@ -32,7 +32,7 @@
 *GATE: Must pass before Phase 0 research. Re-check after Phase 1 design.*
 
 Use esta seção para registrar verificações objetivas de aderência à constituição
-do Grimório D7D. Para cada item abaixo, marque se a feature **cumpre**, **viola**
+do Dungeons & Dicas. Para cada item abaixo, marque se a feature **cumpre**, **viola**
 ou **não se aplica**, e registre justificativas em caso de violação.
 
 - [ ] **TypeScript estrito e tipagem correta**
@@ -42,7 +42,7 @@ ou **não se aplica**, e registre justificativas em caso de violação.
 
 - [ ] **Core imutável e extensão por features**
   - Nenhum arquivo em `src/core/` foi modificado para implementar esta feature.
-  - Toda lógica específica do Grimório D7D está em `src/features/` ou `src/app/`.
+  - Toda lógica específica do Dungeons & Dicas está em `src/features/` ou `src/app/`.
   - Extensões do core, se existirem, usam wrappers/composição conforme
     `aicontext/use-para-estender-o-core.md`.
 

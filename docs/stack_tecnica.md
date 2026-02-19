@@ -1,4 +1,4 @@
-# Stack Técnica - Grimório D7D
+# Stack Técnica - Dungeons & Dicas
 
 > Plataforma de Compêndio de D&D em Português para a Comunidade Brasileira
 

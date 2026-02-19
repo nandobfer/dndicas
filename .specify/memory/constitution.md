@@ -3,7 +3,7 @@ Sync Impact Report
 
 - Version: n/a → 1.0.0
 - Modified principles:
-  - Core principles definidos para o Grimório D7D
+  - Core principles definidos para o Dungeons & Dicas
 - Added sections:
   - Requisitos Técnicos e Stack Oficial
   - Fluxo de Desenvolvimento, Revisão e Qualidade
@@ -18,7 +18,7 @@ Sync Impact Report
   - Nenhum
 -->
 
-# Constituição de Desenvolvimento do Grimório D7D
+# Constituição de Desenvolvimento do Dungeons & Dicas
 
 ## Core Principles
 
@@ -45,7 +45,7 @@ e permitem que humanos e IAs trabalhem com segurança sobre a base de código.
 - O diretório `src/core/` é considerado **core imutável** e NÃO PODE ser modificado
   diretamente neste projeto. Atualizações do core vêm do repositório template,
   via `git remote add template` e `git merge` conforme descrito no `README.md`.
-- Toda lógica específica do Grimório D7D (domínio, telas, integrações próprias)
+- Toda lógica específica do Dungeons & Dicas (domínio, telas, integrações próprias)
   DEVE viver em `src/features/` e `src/app/`, nunca em `src/core/`.
 - Extensões do core DEVEM ser feitas por composição e wrappers, conforme
   documentado em `aicontext/use-para-estender-o-core.md` (por exemplo, criando
@@ -190,7 +190,7 @@ sem ignorar os princípios desta constituição.
 ## Governance
 
 - Esta constituição é a fonte de verdade para decisões de arquitetura, stack e
-  fluxo de desenvolvimento do Grimório D7D. Em caso de conflito, ela prevalece
+  fluxo de desenvolvimento do Dungeons & DIcas. Em caso de conflito, ela prevalece
   sobre outros documentos, exceto quando uma decisão explícita a altera em uma
   nova versão.
 - Os documentos `docs/regras_gerais.md`, `docs/stack_tecnica.md` e os arquivos
