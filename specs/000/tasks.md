@@ -57,7 +57,7 @@
 
 ### Implementation for User Story 1
 
-- [ ] T015 [US1] Create useSidebar hook with sessionStorage persistence in src/components/ui/hooks/useSidebar.ts
+- [ ] T015 [US1] Create useSidebar hook with sessionStorage persistence in src/hooks/useSidebar.ts
 - [ ] T016 [US1] Create ExpandableSidebar component in src/components/ui/expandable-sidebar.tsx
 - [ ] T017 [US1] Create SidebarItem component with tooltip support in src/components/ui/sidebar-item.tsx
 - [ ] T018 [US1] Create SidebarToggleButton component in src/components/ui/sidebar-toggle-button.tsx
@@ -99,7 +99,7 @@
 - [ ] T028 [US3] Create Clerk webhook handler in src/app/api/webhooks/clerk/route.ts
 - [ ] T029 [US3] Create user sync service in src/features/users/api/sync.ts
 - [ ] T030 [US3] Update middleware to fallback sync user on request in src/middleware.ts
-- [ ] T031 [US3] Create bootstrap-admin CLI script in scripts/bootstrap-admin.ts
+- [ ] T031 [US3] Create bootstrap-admin CLI script in scripts/bootstrap-admin.ts - MUST handle edge cases: (1) email exists in Clerk but not local → link + promote, (2) user exists local with role "user" → promote to admin, (3) already admin → notify + skip, (4) Clerk/DB failure → clear error message
 - [ ] T032 [US3] Create helper to get current user from DB in src/features/users/api/get-current-user.ts
 
 **Checkpoint**: US3 complete - novos logins criam registro no MongoDB em < 1s
@@ -124,6 +124,7 @@
 #### Feature Hooks
 
 - [ ] T037 [US4] Create useUsersFilters hook in src/features/users/hooks/useUsersFilters.ts
+- [ ] T037b [P] [US4] Create users API client wrapper in src/features/users/api/users.ts
 - [ ] T038 [US4] Create useUsers hook with TanStack Query in src/features/users/hooks/useUsers.ts
 
 #### Feature Components
@@ -136,7 +137,7 @@
 #### API Routes
 
 - [ ] T043 [US4] Create Users API route (GET list, POST create) in src/app/api/users/route.ts
-- [ ] T044 [US4] Create User detail API route (GET, PUT, DELETE) in src/app/api/users/[id]/route.ts
+- [ ] T044 [US4] Create User detail API route (GET, PUT, DELETE) in src/app/api/users/[id]/route.ts - MUST implement FR-026: prevent self-delete validation
 
 #### Page
 
@@ -154,7 +155,7 @@
 
 ### Implementation for User Story 5
 
-- [ ] T046 [US5] Extend AuditLog model with previousData/newData in src/features/users/models/audit-log-extended.ts
+- [ ] T046 [US5] Create AuditLogExtended model via Mongoose discriminator pattern in src/features/users/models/audit-log-extended.ts (extends core model without modifying src/core/)
 - [ ] T047 [US5] Create audit types in src/features/users/types/audit.types.ts
 - [ ] T048 [US5] Create audit service with logging functions in src/features/users/api/audit-service.ts
 - [ ] T049 [US5] Integrate audit logging into Users API create operation
@@ -175,6 +176,7 @@
 
 - [ ] T052 [P] [US6] Create ActionChip component (CREATE=green, UPDATE=blue, DELETE=red) in src/components/ui/action-chip.tsx
 - [ ] T053 [US6] Create useAuditLogs hook with TanStack Query in src/features/users/hooks/useAuditLogs.ts
+- [ ] T053b [US6] Create useAuditLogsFilters hook for filter state management in src/features/users/hooks/useAuditLogsFilters.ts
 - [ ] T054 [US6] Create AuditLogsFilters component in src/features/users/components/audit-logs-filters.tsx
 - [ ] T055 [US6] Create AuditLogsTable component with server-side pagination in src/features/users/components/audit-logs-table.tsx
 - [ ] T056 [US6] Create Audit Logs API route (GET list) in src/app/api/audit-logs/route.ts
@@ -313,15 +315,15 @@ T014 validation.ts
 | US1: Sidebar | 6 | 0 | P1 |
 | US2: Theme | 7 | 4 | P1 |
 | US3: Auth | 5 | 0 | P1 |
-| US4: CRUD | 13 | 4 | P2 |
+| US4: CRUD | 14 | 5 | P2 |
 | US5: Audit Log | 6 | 0 | P2 |
-| US6: Audit View | 6 | 1 | P3 |
+| US6: Audit View | 7 | 1 | P3 |
 | US7: Diff | 4 | 0 | P3 |
 | Polish | 6 | 2 | - |
-| **TOTAL** | **67** | **22** | - |
+| **TOTAL** | **69** | **23** | - |
 
 **Task Distribution by Priority**:
 - P1 (MVP): 32 tasks (US1 + US2 + US3 + Setup + Foundational)
-- P2: 19 tasks (US4 + US5)
-- P3: 10 tasks (US6 + US7)
+- P2: 20 tasks (US4 + US5)
+- P3: 11 tasks (US6 + US7)
 - Polish: 6 tasks

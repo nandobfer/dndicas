@@ -211,7 +211,7 @@ Ao clicar em "Visualizar" em um log de auditoria, um modal translúcido abre mos
 - **FR-020**: Sistema DEVE fornecer filtros por função (todos, administrador, usuário) e status (ativos, inativos, todos)
 - **FR-050**: Componente de busca DEVE exibir indicador visual de progresso (barra) enquanto aguarda debounce
 - **FR-021**: Botão "Adicionar Usuário" DEVE abrir modal translúcido com formulário
-- **FR-022**: Formulário de usuário DEVE validar campos: username (obrigatório, único), email (obrigatório, válido, único), name (opcional), avatar URL (opcional)
+- **FR-022**: Formulário de usuário DEVE validar campos: username (obrigatório, único), email (obrigatório, válido, único), name (opcional), avatar URL (opcional). Ver FR-047 para seletor de função.
 - **FR-047**: Seletor de função DEVE ser estilo tabs Liquid Glass com cores distintas (admin=vermelho, user=roxo)
 - **FR-023**: Coluna de ações DEVE ter botões para Editar e Deletar
 - **FR-024**: Botão Editar DEVE abrir modal com dados preenchidos
@@ -240,7 +240,7 @@ Ao clicar em "Visualizar" em um log de auditoria, um modal translúcido abre mos
 - **FR-038**: Sistema DEVE exibir tabela de logs com colunas: Ação, Entidade, ID Documento, Usuário, Data/Hora, Ações
 - **FR-051**: Logs de auditoria DEVEM ter retenção ilimitada
 - **FR-052**: Tabela de logs DEVE implementar paginação server-side otimizada para grandes volumes
-- **FR-039**: Chips de ação DEVEM ter cores distintas: CREATE=verde, READ=cinza, UPDATE=azul, DELETE=vermelho
+- **FR-039**: Chips de ação DEVEM ter cores distintas: CREATE=verde, UPDATE=azul, DELETE=vermelho
 - **FR-040**: Chip de usuário DEVE exibir avatar, nome e cor baseada na função
 - **FR-041**: Tooltip do chip de usuário DEVE mostrar detalhes completos do usuário
 - **FR-042**: Botão "Visualizar" DEVE abrir modal com detalhes e diff view
