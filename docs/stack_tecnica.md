@@ -456,10 +456,10 @@ OWLBEAR_API_KEY=...
 - [ ] Instalar dependências (`npm install`)
 - [ ] Configurar Tailwind + Shadcn/ui
 - [ ] Configurar TanStack Query Provider
-- [/] Implementar authentication flow (Clerk Dashboard + Middleware)
+- [ ] Implementar authentication flow (Clerk Dashboard + Middleware)
 - [ ] Criar models do Mongoose (Character, Spell, Item, etc. - User é gerenciado pelo Clerk)
-- [x] Configurar Framer Motion global config
-- [x] Definir paleta de cores (Liquid Glass + D&D theme)
+- [ ] Configurar Framer Motion global config
+- [ ] Definir paleta de cores (Liquid Glass + D&D theme)
 - [ ] Implementar Error Boundaries
-- [x] Configurar ESLint + Prettier
-- [x] Setup de testes (Jest + React Testing Library)
+- [ ] Configurar ESLint + Prettier
+- [ ] Setup de testes (Jest + React Testing Library)

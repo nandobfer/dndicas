@@ -31,49 +31,7 @@
 
 *GATE: Must pass before Phase 0 research. Re-check after Phase 1 design.*
 
-Use esta seção para registrar verificações objetivas de aderência à constituição
-do Dungeons & Dicas. Para cada item abaixo, marque se a feature **cumpre**, **viola**
-ou **não se aplica**, e registre justificativas em caso de violação.
-
-- [ ] **TypeScript estrito e tipagem correta**
-  - Todo código novo está em TypeScript com `strict` habilitado.
-  - Nenhum `any` ou `@ts-ignore` foi introduzido sem justificativa explícita.
-  - Props de componentes, parâmetros e retornos de funções estão tipados.
-
-- [ ] **Core imutável e extensão por features**
-  - Nenhum arquivo em `src/core/` foi modificado para implementar esta feature.
-  - Toda lógica específica do Dungeons & Dicas está em `src/features/` ou `src/app/`.
-  - Extensões do core, se existirem, usam wrappers/composição conforme
-    `aicontext/use-para-estender-o-core.md`.
-
-- [ ] **Separação de responsabilidades e uso de hooks**
-  - Componentes React estão focados em renderização/composição, sem regras de
-    negócio ou acesso direto a infra.
-  - Lógica de negócio e de UI complexa foi extraída para custom hooks (`use*`)
-    em `hooks/` do feature ou em `src/hooks/`.
-  - Estado de servidor usa TanStack Query quando aplicável; estado local usa
-    `useState`/`useReducer` e contextos apenas quando necessário.
-
-- [ ] **Documentação de contexto e alinhamento com aicontext/**
-  - A feature possui documentação em `aicontext/modules/[nome-modulo].md`
-    (ou foi explicitamente avaliado que não se aplica).
-  - Regras específicas adotadas aqui estão refletidas em `docs/` e/ou
-    `aicontext/use-*` quando forem padrões reutilizáveis.
-  - Humanos e IAs usaram `docs/regras_gerais.md`, `docs/stack_tecnica.md` e
-    `aicontext/use-sempre-que-desenvolver.md` como contexto para este plano.
-
-- [ ] **Qualidade, testes, segurança e observabilidade**
-  - Existem testes automatizados planejados para a lógica crítica (e.g. Jest +
-    React Testing Library), conforme `__tests__/README.md`.
-  - Inputs são validados (cliente e servidor) e dados renderizados são
-    sanitizados quando necessário.
-  - Uso de Clerk, roles e acesso a dados segue as diretrizes de segurança da
-    stack técnica.
-  - Não há segredos commitados; variáveis de ambiente são usadas corretamente.
-
-Qualquer violação destas verificações DEVE ser refletida na tabela de
-“Complexity Tracking” deste plano, com justificativas e alternativas mais
-simples consideradas e rejeitadas.
+[Gates determined based on constitution file]
 
 ## Project Structure
 
