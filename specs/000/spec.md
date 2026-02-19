@@ -163,6 +163,11 @@ Ao clicar em "Visualizar" em um log de auditoria, um modal translúcido abre mos
 - O que acontece quando há muitos logs de auditoria? Tabela deve ter paginação eficiente.
 - Como lidar com dados de usuário deletado nos logs? Manter referência histórica, não deletar registros de auditoria.
 - O que acontece com sessão quando função do usuário é alterada? Deve refletir imediatamente em novas requisições.
+- **Edge Cases do bootstrap-admin**:
+  - Email já existe no Clerk mas não local: Vincular usuário existente e promover a admin local.
+  - Usuário já existe local mas com role "usuário": Promover para role "administrador".
+  - Usuário já existe e já é administrador: Notificar e não realizar alterações.
+  - Falha na API do Clerk ou Conexão DB: Exibir erro técnico claro no terminal.
 
 ---
 

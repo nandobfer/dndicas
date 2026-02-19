@@ -306,15 +306,20 @@ Criar três componentes especializados com estética Liquid Glass consistente:
 ## 10. Script bootstrap-admin
 
 ### Decisão
-Criar script CLI em `scripts/bootstrap-admin.ts` que:
-1. Verifica se já existe admin no MongoDB
-2. Se não, cria usuário no Clerk via Admin API
-3. Cria registro correspondente no MongoDB com role "administrador"
+Criar script CLI em `scripts/bootstrap-admin.ts` com tratamento de edge cases robusto:
+1. **Verificação Local**: Se usuário existe e é admin, encerra. Se existe e não é admin, promove.
+2. **Verificação Clerk**: Se usuário existe no Clerk, recupera `clerkId`. Se não existe, cria via Admin API.
+3. **Sincronização**: Garante que o registro local tenha o `clerkId` correto e role `admin`.
 
 ### Racional
-- Necessário para setup inicial antes de webhooks funcionarem
-- Evita chicken-egg problem (precisa de admin para configurar admin)
-- Validação de segurança (não cria se já existe)
+- Necessário para setup inicial antes de webhooks funcionarem.
+- Evita o problema de "ovo e galinha" (precisa de admin para criar admin).
+- Garante a integridade entre Clerk e DB local mesmo em setups manuais.
+
+### Edge Cases Planejados
+- **Conflict**: Email existente no Clerk deve ser reaproveitado, não duplicado.
+- **Promotion**: Usuário logado via social login (que já existe no DB) pode ser promovido via script.
+- **Error Handling**: Validar formato de email e conectividade antes de iniciar mutations.
 
 ### Uso
 ```bash
