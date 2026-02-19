@@ -1,0 +1,252 @@
+openapi: 3.0.3
+info:
+  title: Audit Logs API - Dungeons & Dicas
+  version: 1.0.0
+  description: API para consulta de logs de auditoria do sistema
+
+servers:
+  - url: /api
+    description: API local
+
+paths:
+  /audit-logs:
+    get:
+      summary: Listar logs de auditoria
+      description: Retorna lista paginada de logs de auditoria com filtros
+      operationId: listAuditLogs
+      tags:
+        - AuditLogs
+      parameters:
+        - name: action
+          in: query
+          description: Filtrar por tipo de ação
+          schema:
+            type: string
+            enum: [all, CREATE, READ, UPDATE, DELETE]
+            default: all
+        - name: entity
+          in: query
+          description: Filtrar por entidade
+          schema:
+            type: string
+        - name: userId
+          in: query
+          description: Filtrar por ID do usuário
+          schema:
+            type: string
+        - name: startDate
+          in: query
+          description: Data inicial (ISO 8601)
+          schema:
+            type: string
+            format: date-time
+        - name: endDate
+          in: query
+          description: Data final (ISO 8601)
+          schema:
+            type: string
+            format: date-time
+        - name: page
+          in: query
+          description: Número da página
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+        - name: limit
+          in: query
+          description: Registros por página
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 10
+      responses:
+        '200':
+          description: Lista de logs de auditoria
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuditLogsListResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /audit-logs/{id}:
+    get:
+      summary: Obter detalhes do log
+      description: Retorna detalhes completos de um log de auditoria incluindo dados anteriores e novos
+      operationId: getAuditLog
+      tags:
+        - AuditLogs
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: ID do log
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Detalhes do log
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuditLogDetailResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+components:
+  schemas:
+    AuditLogResponse:
+      type: object
+      required:
+        - id
+        - action
+        - entity
+        - documentId
+        - timestamp
+      properties:
+        id:
+          type: string
+          description: ID único do log
+        action:
+          type: string
+          enum: [CREATE, READ, UPDATE, DELETE]
+          description: Tipo de ação
+        entity:
+          type: string
+          description: Nome da entidade afetada
+        documentId:
+          type: string
+          description: ID do documento afetado
+        user:
+          $ref: '#/components/schemas/UserSummary'
+        timestamp:
+          type: string
+          format: date-time
+          description: Data/hora da operação
+
+    AuditLogDetailResponse:
+      allOf:
+        - $ref: '#/components/schemas/AuditLogResponse'
+        - type: object
+          properties:
+            previousData:
+              type: object
+              description: Estado anterior do documento (UPDATE/DELETE)
+              additionalProperties: true
+            newData:
+              type: object
+              description: Novo estado do documento (CREATE/UPDATE)
+              additionalProperties: true
+            metadata:
+              type: object
+              properties:
+                ip:
+                  type: string
+                  description: IP do cliente
+                userAgent:
+                  type: string
+                  description: User agent do cliente
+
+    AuditLogsListResponse:
+      type: object
+      required:
+        - items
+        - total
+        - page
+        - totalPages
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/AuditLogResponse'
+        total:
+          type: integer
+          description: Total de registros
+        page:
+          type: integer
+          description: Página atual
+        totalPages:
+          type: integer
+          description: Total de páginas
+
+    UserSummary:
+      type: object
+      required:
+        - id
+        - username
+        - role
+      properties:
+        id:
+          type: string
+        username:
+          type: string
+        name:
+          type: string
+        avatarUrl:
+          type: string
+          format: uri
+        role:
+          type: string
+          enum: [admin, user]
+
+    Error:
+      type: object
+      required:
+        - message
+      properties:
+        message:
+          type: string
+          description: Mensagem de erro
+        code:
+          type: string
+          description: Código do erro
+
+  responses:
+    Unauthorized:
+      description: Não autenticado
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            message: Autenticação necessária
+
+    Forbidden:
+      description: Sem permissão
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            message: Acesso negado
+
+    NotFound:
+      description: Recurso não encontrado
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            message: Log não encontrado
+
+  securitySchemes:
+    ClerkAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: Token JWT do Clerk
+
+security:
+  - ClerkAuth: []
+
+tags:
+  - name: AuditLogs
+    description: Consulta de logs de auditoria

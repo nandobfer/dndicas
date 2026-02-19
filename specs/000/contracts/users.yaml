@@ -1,0 +1,400 @@
+openapi: 3.0.3
+info:
+  title: Users API - Dungeons & Dicas
+  version: 1.0.0
+  description: API para gerenciamento de usuários do sistema
+
+servers:
+  - url: /api
+    description: API local
+
+paths:
+  /users:
+    get:
+      summary: Listar usuários
+      description: Retorna lista paginada de usuários com filtros
+      operationId: listUsers
+      tags:
+        - Users
+      parameters:
+        - name: search
+          in: query
+          description: Busca textual por nome, username ou email
+          schema:
+            type: string
+        - name: role
+          in: query
+          description: Filtrar por função
+          schema:
+            type: string
+            enum: [all, admin, user]
+            default: all
+        - name: status
+          in: query
+          description: Filtrar por status
+          schema:
+            type: string
+            enum: [all, active, inactive]
+            default: active
+        - name: page
+          in: query
+          description: Número da página
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+        - name: limit
+          in: query
+          description: Registros por página
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 10
+      responses:
+        '200':
+          description: Lista de usuários
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UsersListResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+    post:
+      summary: Criar usuário
+      description: Cria um novo usuário no sistema (admin only)
+      operationId: createUser
+      tags:
+        - Users
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateUserInput'
+      responses:
+        '201':
+          description: Usuário criado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserResponse'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          description: Username ou email já existe
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /users/{id}:
+    get:
+      summary: Obter usuário
+      description: Retorna dados de um usuário específico
+      operationId: getUser
+      tags:
+        - Users
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: ID do usuário
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Dados do usuário
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+    put:
+      summary: Atualizar usuário
+      description: Atualiza dados de um usuário (admin only)
+      operationId: updateUser
+      tags:
+        - Users
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: ID do usuário
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateUserInput'
+      responses:
+        '200':
+          description: Usuário atualizado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserResponse'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: Username ou email já existe
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+    delete:
+      summary: Excluir usuário (soft delete)
+      description: Marca usuário como inativo (admin only, não pode excluir a si mesmo)
+      operationId: deleteUser
+      tags:
+        - Users
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: ID do usuário
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Usuário inativado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserResponse'
+        '400':
+          description: Não pode excluir a si mesmo
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+components:
+  schemas:
+    UserResponse:
+      type: object
+      required:
+        - id
+        - username
+        - email
+        - role
+        - status
+        - createdAt
+        - updatedAt
+      properties:
+        id:
+          type: string
+          description: ID único do usuário
+        username:
+          type: string
+          description: Nome de usuário (login)
+        email:
+          type: string
+          format: email
+          description: Email do usuário
+        name:
+          type: string
+          description: Nome completo
+        avatarUrl:
+          type: string
+          format: uri
+          description: URL do avatar
+        role:
+          type: string
+          enum: [admin, user]
+          description: Função do usuário
+        status:
+          type: string
+          enum: [active, inactive]
+          description: Status do usuário
+        createdAt:
+          type: string
+          format: date-time
+          description: Data de criação
+        updatedAt:
+          type: string
+          format: date-time
+          description: Data de atualização
+
+    UsersListResponse:
+      type: object
+      required:
+        - items
+        - total
+        - page
+        - totalPages
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/UserResponse'
+        total:
+          type: integer
+          description: Total de registros
+        page:
+          type: integer
+          description: Página atual
+        totalPages:
+          type: integer
+          description: Total de páginas
+
+    CreateUserInput:
+      type: object
+      required:
+        - username
+        - email
+      properties:
+        username:
+          type: string
+          minLength: 3
+          maxLength: 50
+          pattern: '^[a-zA-Z0-9_]+$'
+          description: Nome de usuário (apenas letras, números e underscore)
+        email:
+          type: string
+          format: email
+          description: Email do usuário
+        name:
+          type: string
+          description: Nome completo (opcional)
+        avatarUrl:
+          type: string
+          format: uri
+          description: URL do avatar (opcional)
+        role:
+          type: string
+          enum: [admin, user]
+          default: user
+          description: Função do usuário
+
+    UpdateUserInput:
+      type: object
+      properties:
+        username:
+          type: string
+          minLength: 3
+          maxLength: 50
+          pattern: '^[a-zA-Z0-9_]+$'
+        email:
+          type: string
+          format: email
+        name:
+          type: string
+        avatarUrl:
+          type: string
+          format: uri
+        role:
+          type: string
+          enum: [admin, user]
+        status:
+          type: string
+          enum: [active, inactive]
+
+    Error:
+      type: object
+      required:
+        - message
+      properties:
+        message:
+          type: string
+          description: Mensagem de erro
+        code:
+          type: string
+          description: Código do erro
+        details:
+          type: object
+          description: Detalhes adicionais
+
+    ValidationError:
+      type: object
+      required:
+        - message
+        - errors
+      properties:
+        message:
+          type: string
+          default: Dados inválidos
+        errors:
+          type: array
+          items:
+            type: object
+            properties:
+              field:
+                type: string
+              message:
+                type: string
+
+  responses:
+    Unauthorized:
+      description: Não autenticado
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            message: Autenticação necessária
+
+    Forbidden:
+      description: Sem permissão
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            message: Acesso negado
+
+    NotFound:
+      description: Recurso não encontrado
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            message: Usuário não encontrado
+
+    ValidationError:
+      description: Erro de validação
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ValidationError'
+
+  securitySchemes:
+    ClerkAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: Token JWT do Clerk
+
+security:
+  - ClerkAuth: []
+
+tags:
+  - name: Users
+    description: Gerenciamento de usuários
