@@ -15,6 +15,21 @@ Esta é a especificação fundacional do projeto Dungeons & Dicas. Define o sist
 
 ---
 
+## Clarifications
+
+### Session 2026-02-19
+
+- Q: Comportamento de exclusão de usuários - soft delete ou hard delete? → A: Soft delete (marcar como "inativo")
+- Q: Criação do primeiro administrador - somente Clerk webhook ou suporte a criação local? → A: Criar local + Clerk via script `bootstrap-admin --email`
+- Q: Retenção de logs de auditoria - tempo limitado ou ilimitado? → A: Retenção ilimitada com paginação server-side
+- Q: Estado inicial do sidebar - expandido ou recolhido? → A: Inicialmente expandido
+- Q: Persistência do estado do sidebar - localStorage, sessionStorage ou URL? → A: Somente sessão (sessionStorage)
+- Q: Campos do formulário de usuário - quais obrigatórios vs opcionais? → A: username (obrigatório), email (obrigatório), name (opcional), avatar (opcional), role com seletor tipo tabs Liquid Glass (admin=vermelho, user=roxo)
+- Q: Registros por página na tabela - quantidade e comportamento de paginação? → A: 10 registros, animações fluidas de transição e auto-scroll para topo
+- Q: Tempo de debounce para busca e comportamento visual? → A: 500ms com barra de progresso visual no componente de input
+
+---
+
 ## User Scenarios & Testing *(mandatory)*
 
 ### User Story 1 - Navegação no Dashboard com Sidebar Expansível (Priority: P1)
@@ -171,7 +186,8 @@ Ao clicar em "Visualizar" em um log de auditoria, um modal translúcido abre mos
 - **FR-009**: Animações de expansão/recolhimento do sidebar DEVEM ser fluidas via Framer Motion
 - **FR-010**: Sidebar DEVE exibir seção "Cadastros" substituindo "Módulos"
 - **FR-011**: Módulo "Empresas" DEVE ser removido do sidebar
-- **FR-012**: Estado do sidebar (expandido/recolhido) DEVE ser mantido durante navegação
+- **FR-012**: Estado do sidebar (expandido/recolhido) DEVE persistir usando sessionStorage (somente durante sessão do browser)
+- **FR-053**: Sidebar DEVE iniciar expandido por padrão na primeira visita da sessão
 
 #### Autenticação e Usuários
 
@@ -180,19 +196,26 @@ Ao clicar em "Visualizar" em um log de auditoria, um modal translúcido abre mos
 - **FR-015**: Sistema DEVE atribuir função padrão "usuário" para novos registros
 - **FR-016**: Sistema DEVE suportar funções: "administrador" e "usuário"
 - **FR-017**: Somente administradores DEVEM ter acesso às funcionalidades de gerenciamento
+- **FR-054**: Sistema DEVE fornecer script `bootstrap-admin --email <email>` para criar primeiro administrador (cria no banco local e no Clerk)
+- **FR-055**: Script bootstrap-admin DEVE validar se já existe administrador antes de criar novo
 
 #### CRUD de Usuários
 
 - **FR-018**: Sistema DEVE exibir tabela de usuários com colunas: Avatar, Nome, Email, Função, Data Cadastro, Ações
-- **FR-019**: Sistema DEVE fornecer campo de busca textual para filtrar usuários
-- **FR-020**: Sistema DEVE fornecer filtros por função (todos, administrador, usuário)
+- **FR-019**: Sistema DEVE fornecer campo de busca textual com debounce de 500ms e barra de progresso visual durante digitação
+- **FR-020**: Sistema DEVE fornecer filtros por função (todos, administrador, usuário) e status (ativos, inativos, todos)
+- **FR-050**: Componente de busca DEVE exibir indicador visual de progresso (barra) enquanto aguarda debounce
 - **FR-021**: Botão "Adicionar Usuário" DEVE abrir modal translúcido com formulário
-- **FR-022**: Formulário de usuário DEVE validar campos (nome obrigatório, email válido e único)
+- **FR-022**: Formulário de usuário DEVE validar campos: username (obrigatório, único), email (obrigatório, válido, único), name (opcional), avatar URL (opcional)
+- **FR-047**: Seletor de função DEVE ser estilo tabs Liquid Glass com cores distintas (admin=vermelho, user=roxo)
 - **FR-023**: Coluna de ações DEVE ter botões para Editar e Deletar
 - **FR-024**: Botão Editar DEVE abrir modal com dados preenchidos
 - **FR-025**: Botão Deletar DEVE abrir modal de confirmação antes de executar
 - **FR-026**: Sistema DEVE impedir usuário de deletar a si mesmo
-- **FR-027**: Tabela DEVE ter paginação para listas grandes
+- **FR-027**: Tabela DEVE exibir 10 registros por página com paginação server-side
+- **FR-044**: Exclusão de usuários DEVE ser soft delete, marcando status como "inativo"
+- **FR-045**: Usuários inativos DEVEM ser filtráveis na tabela (filtro de status: ativos/inativos/todos)
+- **FR-046**: Paginação DEVE executar animação fluida de transição entre páginas com auto-scroll para topo
 
 #### Componentes Core Reutilizáveis
 
@@ -210,6 +233,8 @@ Ao clicar em "Visualizar" em um log de auditoria, um modal translúcido abre mos
 - **FR-036**: Sistema DEVE registrar automaticamente todas as operações CRUD
 - **FR-037**: Registro de auditoria DEVE conter: ação, entidade, ID do documento, ID do usuário, timestamp, dados anteriores (se aplicável), dados novos
 - **FR-038**: Sistema DEVE exibir tabela de logs com colunas: Ação, Entidade, ID Documento, Usuário, Data/Hora, Ações
+- **FR-051**: Logs de auditoria DEVEM ter retenção ilimitada
+- **FR-052**: Tabela de logs DEVE implementar paginação server-side otimizada para grandes volumes
 - **FR-039**: Chips de ação DEVEM ter cores distintas: CREATE=verde, READ=cinza, UPDATE=azul, DELETE=vermelho
 - **FR-040**: Chip de usuário DEVE exibir avatar, nome e cor baseada na função
 - **FR-041**: Tooltip do chip de usuário DEVE mostrar detalhes completos do usuário
@@ -218,7 +243,7 @@ Ao clicar em "Visualizar" em um log de auditoria, um modal translúcido abre mos
 
 ### Key Entities
 
-- **User**: Representa um usuário do sistema. Atributos: ID local, Clerk ID, nome, email, avatar URL, função (administrador/usuário), data de criação, data de atualização.
+- **User**: Representa um usuário do sistema. Atributos: ID local, Clerk ID, username (único), nome, email (único), avatar URL, função (administrador/usuário), status (ativo/inativo), data de criação, data de atualização.
 - **AuditLog**: Representa um registro de auditoria. Atributos: ID, ação (CREATE/READ/UPDATE/DELETE), entidade (nome da entidade), documento ID, usuário ID (referência ao User), dados anteriores (JSON), dados novos (JSON), timestamp.
 - **ThemeConfig**: Configuração de tema centralizada. Atributos: cores, gradientes, configurações de blur, variantes de animação.
 
