@@ -5,6 +5,14 @@
 **Status**: Draft  
 **Input**: User description: "Create a catalog of rules (references) for D&D, including CRUD operations, a rich text editor component based on GlassInput, audit logging, and dashboard integration."
 
+## Clarifications
+
+### Session 2026-02-20
+- Q: Image Storage in Rich Text Editor? -> A: Upload to S3 (Best Practice).
+- Q: Data Format for Description? -> A: HTML String.
+- Q: Rule Name Uniqueness? -> A: Unique Names Enforced.
+- Q: Dashboard Chart Metric? -> A: Growth (Total Rules).
+
 ## User Scenarios & Testing *(mandatory)*
 
 ### P1: Gerenciamento de Regras (CRUD)
@@ -62,7 +70,11 @@
 
 ### FR-01: Gestão de Regras (Reference Management)
 O sistema deve permitir gerenciar o ciclo de vida completo de uma Regra (chamada internamente de `Reference`), incluindo:
-- **Criação**: Nome, Descrição (Texto Rico), Fonte (Ex: Livro/Página), Status (Ativo/Inativo).
+- **Criação**: 
+    - **Nome**: Texto curto, obrigatório e **único** (chave primária natural para referências futuras).
+    - **Descrição**: Texto rico (HTML String sanitizado), obrigatório.
+    - **Fonte**: Origem da regra (Ex: Livro/Página), obrigatório.
+    - **Status**: Ativo/Inativo.
 - **Edição**: Alterar qualquer campo existente.
 - **Exclusão**: Remoção lógica ou física do registro.
 - **Leitura**: Visualização detalhada da regra.
@@ -70,7 +82,8 @@ O sistema deve permitir gerenciar o ciclo de vida completo de uma Regra (chamada
 ### FR-02: Editor de Texto Rico (Rich Text Editor)
 O sistema deve disponibilizar um componente de edição de texto que suporte:
 - Formatação básica (Negrito, Itálico).
-- Inserção de imagens via Área de Transferência (Cola).
+- Inserção de imagens via Área de Transferência (Cola), realizando **upload automático para o S3** (usando `src/core/storage/s3.ts`) e inserindo a URL resultante no conteúdo HTML.
+- **Armazenamento**: O conteúdo deve ser salvo como uma string HTML limpa.
 - Visual e comportamento integrados ao sistema de design (Glassmorphism).
 
 ### FR-03: Listagem e Visualização
@@ -85,12 +98,13 @@ Todas as modificações nas regras (criação, edição, exclusão) devem ser re
 
 ### FR-05: Painel de Controle (Dashboard)
 O painel principal deve refletir a disponibilidade do módulo de Regras:
-- Exibir estatísticas de volume e atividade de regras.
+- Exibir estatísticas de volume total de regras cadastradas (Gráfico de Crescimento).
 - Remover indicativos de funcionalidade em desenvolvimento para este módulo.
 
 ## Success Criteria *(mandatory)*
 
 - **Produtividade**: Tempo médio de criação de regra completa < 2 minutos.
+- **Performance**: Upload de imagens < 2mb deve completar em < 3s (dependente de conexão/S3).
 - **Adoção Visual**: O novo editor de texto rico não deve quebrar a consistência visual da aplicação.
 - **Precisão**: A contagem de regras no Dashboard deve ter 100% de acurácia em relação ao banco de dados.
 - **Auditabilidade**: 100% das alterações geram log de auditoria.
@@ -98,12 +112,13 @@ O painel principal deve refletir a disponibilidade do módulo de Regras:
 ## Key Entities & Data *(optional)*
 
 ### Reference (Rule)
-- **Nome**: Identificador principal.
-- **Descrição**: Conteúdo formatado (HTML/Rich Text).
+- **Nome**: Identificador principal (Index Único).
+- **Descrição**: Conteúdo HTML String (com URLs de imagens do S3).
 - **Fonte**: Origem da regra (Livro/Página).
 - **Status**: Estado atual (Ativo/Inativo).
 
 ## Dependencies & Assumptions *(optional)*
 
 - **Dependência**: Reutilização da estrutura de UI/UX existente (Cards, Inputs, Tabelas).
-- **Assumption**: O armazenamento de imagens coladas será feito inicialmente via Base64 ou URL externa se o editor suportar upload, mas o requisito principal é "colar e ver".
+- **Dependência**: Configuração AWS S3 (`src/core/storage/s3.ts`) deve estar funcional (variáveis de ambiente configuradas).
+- **Assumption**: A sanitização do HTML colado será feita no cliente/servidor para evitar XSS.
