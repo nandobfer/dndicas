@@ -13,6 +13,7 @@ import {
   GlassPopoverContent,
   GlassPopoverTrigger,
 } from '@/components/ui/glass-popover';
+import { GlassInput } from '@/components/ui/glass-input';
 import { glassConfig } from '@/lib/config/glass-config';
 
 export interface PeriodFilterProps {
@@ -30,57 +31,73 @@ export interface PeriodFilterProps {
  * Quick preset options for date range selection.
  */
 const presets = [
-  {
-    label: 'Hoje',
-    getRange: () => {
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
-      return {
-        start: today.toISOString().split('T')[0],
-        end: today.toISOString().split('T')[0],
-      };
+    {
+        label: "Hoje",
+        getRange: () => {
+            const d = new Date()
+            const year = d.getFullYear()
+            const month = String(d.getMonth() + 1).padStart(2, "0")
+            const day = String(d.getDate()).padStart(2, "0")
+            const localStr = `${year}-${month}-${day}`
+            return {
+                start: localStr,
+                end: localStr,
+            }
+        },
     },
-  },
-  {
-    label: 'Última Semana',
-    getRange: () => {
-      const end = new Date();
-      end.setHours(23, 59, 59, 999);
-      const start = new Date();
-      start.setDate(start.getDate() - 7);
-      start.setHours(0, 0, 0, 0);
-      return {
-        start: start.toISOString().split('T')[0],
-        end: end.toISOString().split('T')[0],
-      };
+    {
+        label: "Última Semana",
+        getRange: () => {
+            const now = new Date()
+            const start = new Date()
+            start.setDate(now.getDate() - 7)
+
+            const toISO = (d: Date) => {
+                const y = d.getFullYear()
+                const m = String(d.getMonth() + 1).padStart(2, "0")
+                const day = String(d.getDate()).padStart(2, "0")
+                return `${y}-${m}-${day}`
+            }
+
+            return {
+                start: toISO(start),
+                end: toISO(now),
+            }
+        },
     },
-  },
-  {
-    label: 'Último Mês',
-    getRange: () => {
-      const end = new Date();
-      end.setHours(23, 59, 59, 999);
-      const start = new Date();
-      start.setMonth(start.getMonth() - 1);
-      start.setHours(0, 0, 0, 0);
-      return {
-        start: start.toISOString().split('T')[0],
-        end: end.toISOString().split('T')[0],
-      };
+    {
+        label: "Último Mês",
+        getRange: () => {
+            const now = new Date()
+            const start = new Date()
+            start.setMonth(now.getMonth() - 1)
+
+            const toISO = (d: Date) => {
+                const y = d.getFullYear()
+                const m = String(d.getMonth() + 1).padStart(2, "0")
+                const day = String(d.getDate()).padStart(2, "0")
+                return `${y}-${m}-${day}`
+            }
+
+            return {
+                start: toISO(start),
+                end: toISO(now),
+            }
+        },
     },
-  },
-];
+]
 
 /**
  * Format date for display (simple version without date-fns).
  */
 function formatDate(dateStr: string): string {
-  try {
-    const date = new Date(dateStr);
-    return date.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: '2-digit' });
-  } catch {
-    return dateStr;
-  }
+    try {
+        const [year, month, day] = dateStr.split("-").map(Number)
+        const date = new Date(year, month - 1, day)
+        return date.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit", year: "2-digit" })
+    } catch {
+        return dateStr
+    }
 }
 
 /**
@@ -185,45 +202,23 @@ export function PeriodFilter({
       </GlassPopoverTrigger>
       <GlassPopoverContent className="w-80 p-4" align="end">
         <div className="space-y-4">
-          <div className="space-y-2">
-            <label htmlFor="period-start" className="text-xs font-medium text-white/60">
-              De
-            </label>
-            <input
-              id="period-start"
-              type="date"
-              value={localStartDate}
-              onChange={(e) => setLocalStartDate(e.target.value)}
-              className={cn(
-                'w-full h-9 px-3 rounded-lg text-sm',
-                'text-white placeholder:text-white/40',
-                glassConfig.input.blur,
-                glassConfig.input.background,
-                glassConfig.input.border,
-                'focus:outline-none focus:ring-2 focus:ring-blue-500/50'
-              )}
-            />
-          </div>
+          <GlassInput
+            id="period-start"
+            label="De"
+            type="date"
+            value={localStartDate}
+            onChange={(e) => setLocalStartDate(e.target.value)}
+            className="h-9"
+          />
 
-          <div className="space-y-2">
-            <label htmlFor="period-end" className="text-xs font-medium text-white/60">
-              Até
-            </label>
-            <input
-              id="period-end"
-              type="date"
-              value={localEndDate}
-              onChange={(e) => setLocalEndDate(e.target.value)}
-              className={cn(
-                'w-full h-9 px-3 rounded-lg text-sm',
-                'text-white placeholder:text-white/40',
-                glassConfig.input.blur,
-                glassConfig.input.background,
-                glassConfig.input.border,
-                'focus:outline-none focus:ring-2 focus:ring-blue-500/50'
-              )}
-            />
-          </div>
+          <GlassInput
+            id="period-end"
+            label="Até"
+            type="date"
+            value={localEndDate}
+            onChange={(e) => setLocalEndDate(e.target.value)}
+            className="h-9"
+          />
 
           <div className="pt-2 border-t border-white/10">
             <p className="text-xs font-medium text-white/60 mb-2">Seleção Rápida</p>

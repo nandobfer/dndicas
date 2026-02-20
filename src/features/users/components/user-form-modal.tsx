@@ -19,6 +19,7 @@ import {
   GlassModalTitle,
   GlassModalDescription,
 } from '@/components/ui/glass-modal';
+import { GlassInput } from '@/components/ui/glass-input';
 import { glassConfig } from '@/lib/config/glass-config';
 import { RoleTabs } from '@/components/ui/role-tabs';
 import { createUserSchema, updateUserSchema, type CreateUserSchema, type UpdateUserSchema } from '../api/validation';
@@ -104,100 +105,37 @@ export function UserFormModal({
 
               <form onSubmit={handleSubmit(handleFormSubmit)} className="space-y-6">
                   {/* Name */}
-                  <div className="space-y-2">
-                      <label htmlFor="name" className="text-sm font-medium text-white/80">
-                          Nome
-                      </label>
-                      <div className="relative">
-                          <UserIcon className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-white/60 z-10" />
-                          <input
-                              id="name"
-                              type="text"
-                              {...register("name")}
-                              className={cn(
-                                  "w-full h-10 pl-10 pr-4 rounded-lg text-sm",
-                                  "text-white placeholder:text-white/40",
-                                  glassConfig.input.blur,
-                                  glassConfig.input.background,
-                                  glassConfig.input.border,
-                                  "focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500/50",
-                                  errors.name && "border-rose-400/50 focus:ring-rose-400/30",
-                              )}
-                              placeholder="Nome completo"
-                          />
-                      </div>
-                      <AnimatePresence>
-                          {errors.name && (
-                              <motion.p initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} className="text-xs text-rose-400">
-                                  {errors.name.message}
-                              </motion.p>
-                          )}
-                      </AnimatePresence>
-                  </div>
+                  <GlassInput
+                      id="name"
+                      label="Nome"
+                      placeholder="Nome completo"
+                      icon={<UserIcon />}
+                      error={errors.name?.message}
+                      {...register("name")}
+                  />
 
                   {/* Username */}
-                  <div className="space-y-2">
-                      <label htmlFor="username" className="text-sm font-medium text-white/80">
-                          Username <span className="text-rose-400">*</span>
-                      </label>
-                      <div className="relative">
-                          <AtSign className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-white/60 z-10" />
-                          <input
-                              id="username"
-                              type="text"
-                              {...register("username")}
-                              className={cn(
-                                  "w-full h-10 pl-10 pr-4 rounded-lg text-sm",
-                                  "text-white placeholder:text-white/40",
-                                  glassConfig.input.blur,
-                                  glassConfig.input.background,
-                                  glassConfig.input.border,
-                                  "focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500/50",
-                                  errors.username && "border-rose-400/50 focus:ring-rose-400/30",
-                              )}
-                              placeholder="username_exemplo"
-                          />
-                      </div>
-                      <AnimatePresence>
-                          {errors.username && (
-                              <motion.p initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} className="text-xs text-rose-400">
-                                  {errors.username.message}
-                              </motion.p>
-                          )}
-                      </AnimatePresence>
-                  </div>
+                  <GlassInput
+                      id="username"
+                      label="Username"
+                      placeholder="username_exemplo"
+                      required
+                      icon={<AtSign />}
+                      error={errors.username?.message}
+                      {...register("username")}
+                  />
 
                   {/* Email */}
-                  <div className="space-y-2">
-                      <label htmlFor="email" className="text-sm font-medium text-white/80">
-                          Email <span className="text-rose-400">*</span>
-                      </label>
-                      <div className="relative">
-                          <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-white/60 z-10" />
-                          <input
-                              id="email"
-                              type="email"
-                              {...register("email")}
-                              className={cn(
-                                  "w-full h-10 pl-10 pr-4 rounded-lg text-sm",
-                                  "text-white placeholder:text-white/40",
-                                  glassConfig.input.blur,
-                                  glassConfig.input.background,
-                                  glassConfig.input.border,
-                                  "focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500/50",
-                                  errors.email && "border-rose-400/50 focus:ring-rose-400/30",
-                              )}
-                              placeholder="email@exemplo.com"
-                          />
-                      </div>
-                      <AnimatePresence>
-                          {errors.email && (
-                              <motion.p initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} className="text-xs text-rose-400">
-                                  {errors.email.message}
-                              </motion.p>
-                          )}
-                      </AnimatePresence>
-                  </div>
+                  <GlassInput
+                      id="email"
+                      label="Email"
+                      placeholder="email@exemplo.com"
+                      type="email"
+                      required
+                      icon={<Mail />}
+                      error={errors.email?.message}
+                      {...register("email")}
+                  />
 
                   {/* Role */}
                   <div className="space-y-2">

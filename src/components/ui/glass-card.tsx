@@ -27,16 +27,14 @@ export interface GlassCardProps extends Omit<HTMLMotionProps<"div">, "children">
     children?: React.ReactNode
     /** Whether to animate on mount */
     animate?: boolean
-    /** Whether to show glow effect on hover */
-    glowOnHover?: boolean
 }
 
 /**
  * Card component with Liquid Glass glassmorphism effect.
  * Uses backdrop-blur with subtle transparency and glow borders.
  */
-const GlassCard = React.forwardRef<HTMLDivElement, GlassCardProps>(({ className, animate = true, glowOnHover = true, children, ...props }, ref) => {
-    const cardClasses = cn("rounded-xl relative", "border border-white/10", glowOnHover && "transition-shadow hover:ring-2 hover:ring-white/15", className)
+const GlassCard = React.forwardRef<HTMLDivElement, GlassCardProps>(({ className, animate = true, children, ...props }, ref) => {
+    const cardClasses = cn("rounded-xl relative", "border border-white/10", className)
 
     if (animate) {
         return (
@@ -48,7 +46,6 @@ const GlassCard = React.forwardRef<HTMLDivElement, GlassCardProps>(({ className,
                 animate="animate"
                 exit="exit"
                 transition={motionConfig.transitions.normal}
-                whileHover={glowOnHover ? motionConfig.hover : undefined}
                 {...props}
             >
                 <GlassBackdrop />
@@ -64,65 +61,36 @@ const GlassCard = React.forwardRef<HTMLDivElement, GlassCardProps>(({ className,
         </div>
     )
 })
-GlassCard.displayName = 'GlassCard';
+GlassCard.displayName = "GlassCard"
 
 /**
  * Header section for GlassCard.
  */
-const GlassCardHeader = React.forwardRef<
-  HTMLDivElement,
-  React.HTMLAttributes<HTMLDivElement>
->(({ className, ...props }, ref) => (
-  <div
-    ref={ref}
-    className={cn('flex flex-col space-y-1.5 p-6', className)}
-    {...props}
-  />
-));
-GlassCardHeader.displayName = 'GlassCardHeader';
+const GlassCardHeader = React.forwardRef<HTMLDivElement, React.HTMLAttributes<HTMLDivElement>>(({ className, ...props }, ref) => (
+    <div ref={ref} className={cn("flex flex-col space-y-1.5 p-6", className)} {...props} />
+))
+GlassCardHeader.displayName = "GlassCardHeader"
 
 /**
  * Title for GlassCard header.
  */
-const GlassCardTitle = React.forwardRef<
-  HTMLHeadingElement,
-  React.HTMLAttributes<HTMLHeadingElement>
->(({ className, ...props }, ref) => (
-  <h3
-    ref={ref}
-    className={cn(
-      'font-semibold leading-none tracking-tight text-white',
-      className
-    )}
-    {...props}
-  />
-));
-GlassCardTitle.displayName = 'GlassCardTitle';
+const GlassCardTitle = React.forwardRef<HTMLHeadingElement, React.HTMLAttributes<HTMLHeadingElement>>(({ className, ...props }, ref) => (
+    <h3 ref={ref} className={cn("font-semibold leading-none tracking-tight text-white", className)} {...props} />
+))
+GlassCardTitle.displayName = "GlassCardTitle"
 
 /**
  * Description text for GlassCard header.
  */
-const GlassCardDescription = React.forwardRef<
-  HTMLParagraphElement,
-  React.HTMLAttributes<HTMLParagraphElement>
->(({ className, ...props }, ref) => (
-  <p
-    ref={ref}
-    className={cn('text-sm text-white/60', className)}
-    {...props}
-  />
-));
-GlassCardDescription.displayName = 'GlassCardDescription';
+const GlassCardDescription = React.forwardRef<HTMLParagraphElement, React.HTMLAttributes<HTMLParagraphElement>>(({ className, ...props }, ref) => (
+    <p ref={ref} className={cn("text-sm text-white/60", className)} {...props} />
+))
+GlassCardDescription.displayName = "GlassCardDescription"
 
 /**
  * Main content area for GlassCard.
  */
-const GlassCardContent = React.forwardRef<
-  HTMLDivElement,
-  React.HTMLAttributes<HTMLDivElement>
->(({ className, ...props }, ref) => (
-  <div ref={ref} className={cn('p-6 pt-0', className)} {...props} />
-));
+const GlassCardContent = React.forwardRef<HTMLDivElement, React.HTMLAttributes<HTMLDivElement>>(({ className, ...props }, ref) => <div ref={ref} className={cn("p-4 pt-0", className)} {...props} />)
 GlassCardContent.displayName = 'GlassCardContent';
 
 /**

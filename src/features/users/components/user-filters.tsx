@@ -50,31 +50,20 @@ export function UserFilters({
   className,
 }: UserFiltersProps) {
   return (
-    <div className={cn('flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between', className)}>
-      {/* Left side: Search */}
-      <div className="flex-1 max-w-md">
-        <SearchInput
-          value={filters.search || ''}
-          onChange={onSearchChange}
-          isLoading={isSearching}
-          placeholder="Buscar por nome, username ou email..."
-        />
-      </div>
+      <div className={cn("flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between", className)}>
+          {/* Left side: Search */}
+          <div className="flex-1">
+              <SearchInput value={filters.search || ""} onChange={onSearchChange} isLoading={isSearching} placeholder="Buscar por nome, username ou email..." />
+          </div>
 
-      {/* Right side: Filters */}
-      <div className="flex flex-wrap items-center gap-3">
-        {/* Role tabs */}
-        <RoleTabs
-          value={filters.role || 'all'}
-          onChange={onRoleChange}
-        />
+          {/* Right side: Filters */}
+          <div className="flex flex-wrap items-center gap-3">
+              {/* Role tabs */}
+              <RoleTabs value={filters.role || "all"} onChange={onRoleChange} />
 
-        {/* Status chips */}
-        <StatusChips
-          value={filters.status || 'active'}
-          onChange={onStatusChange as (status: StatusFilter) => void}
-        />
+              {/* Status chips */}
+              <StatusChips value={filters.status || "active"} onChange={onStatusChange as (status: StatusFilter) => void} />
+          </div>
       </div>
-    </div>
-  );
+  )
 }

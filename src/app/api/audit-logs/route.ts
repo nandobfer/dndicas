@@ -44,18 +44,28 @@ export async function GET(request: NextRequest) {
 
         // Filtro de data
         if (startDate || endDate) {
-            query.timestamp = {}
+            const dateQuery: any = {}
             if (startDate) {
-                query.timestamp.$gte = new Date(startDate)
+                // Ensure start of day in local time or consistent format
+                const start = new Date(startDate)
+                start.setUTCHours(0, 0, 0, 0)
+                dateQuery.$gte = start
             }
             if (endDate) {
-                query.timestamp.$lte = new Date(endDate)
+                // Ensure end of day (23:59:59.999)
+                const end = new Date(endDate)
+                end.setUTCHours(23, 59, 59, 999)
+                dateQuery.$lte = end
             }
+
+            // Query both createdAt (modern) and timestamp (legacy)
+            query.$or = [{ createdAt: dateQuery }, { timestamp: dateQuery }]
         }
 
-        // Filtro de usuário
+        // Filtro de usuário (checa ambos os campos: legível e moderno)
         if (filterUserId) {
-            query.userId = filterUserId
+            query.$or = query.$or || []
+            query.$or.push({ performedBy: filterUserId }, { userId: filterUserId })
         }
 
         // Filtro de ação
@@ -63,19 +73,22 @@ export async function GET(request: NextRequest) {
             query.action = { $in: actions }
         }
 
-        // Filtro de coleção
+        // Filtro de entidade/coleção
         if (collectionName) {
-            query.collectionName = collectionName
+            query.$or = query.$or || []
+            query.$or.push({ entity: collectionName }, { collectionName: collectionName })
         }
 
-        // Filtro de email do ator (para logs estendidos)
+        // Filtro de email do ator (para logs legados/estendidos)
         if (actorEmail) {
-            query.actorEmail = { $regex: actorEmail, $options: "i" }
+            query.$or = query.$or || []
+            query.$or.push({ actorEmail: { $regex: actorEmail, $options: "i" } }, { "performedByUser.email": { $regex: actorEmail, $options: "i" } })
         }
 
-        // Filtro de tipo de entidade (para logs estendidos)
+        // Filtro de tipo de entidade
         if (entityType) {
-            query.entityType = entityType
+            query.$or = query.$or || []
+            query.$or.push({ entity: entityType }, { entityType: entityType })
         }
 
         const [logs, total] = await Promise.all([AuditLogExtended.find(query).skip(skip).limit(limit).sort({ createdAt: -1, timestamp: -1 }), AuditLogExtended.countDocuments(query)])
