@@ -10,13 +10,14 @@ import type { AuditLogsFilterState } from "../hooks/useAuditLogsFilters"
 
 interface AuditLogsFiltersProps {
     filters: AuditLogsFilterState
+    isLoading?: boolean
     onActionsChange: (actions: AuditAction[]) => void
     onActorEmailChange: (email: string | undefined) => void
     onDateRangeChange: (startDate?: string, endDate?: string) => void
     onReset: () => void
 }
 
-export function AuditLogsFilters({ filters, onActionsChange, onActorEmailChange, onDateRangeChange, onReset }: AuditLogsFiltersProps) {
+export function AuditLogsFilters({ filters, isLoading, onActionsChange, onActorEmailChange, onDateRangeChange, onReset }: AuditLogsFiltersProps) {
     const hasActiveFilters = !!((filters.actions && filters.actions.length > 0) || filters.actorEmail || filters.startDate || filters.endDate)
 
     return (
@@ -24,6 +25,7 @@ export function AuditLogsFilters({ filters, onActionsChange, onActorEmailChange,
             searchValue={filters.actorEmail || ""}
             searchPlaceholder="Buscar por email..."
             onSearchChange={(value) => onActorEmailChange(value || undefined)}
+            isSearching={isLoading}
             hasActiveFilters={hasActiveFilters}
             onClearFilters={onReset}
         >

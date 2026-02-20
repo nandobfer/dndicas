@@ -13,6 +13,7 @@ import { ActionChip } from '@/components/ui/action-chip';
 import { UserMini } from "@/components/ui/user-mini"
 import { LoadingState } from "@/components/ui/loading-state"
 import { EmptyState } from "@/components/ui/empty-state"
+import { Skeleton } from "@/core/ui/skeleton"
 import { DataTablePagination } from "@/components/ui/data-table-pagination"
 import { motionConfig } from "@/lib/config/motion-configs"
 import type { AuditLog } from "../types/audit.types"
@@ -70,13 +71,52 @@ function formatEntityType(entityType: string): string {
 }
 
 export function AuditLogsTable({ logs, isLoading, pagination, onPageChange, onRowClick }: AuditLogsTableProps) {
-    // Loading state
+    const { limit = 10 } = pagination
+
+    // Loading state with skeleton table
     if (isLoading && logs.length === 0) {
         return (
             <GlassCard>
-                <GlassCardContent className="py-12">
-                    <LoadingState variant="skeleton" message="Carregando logs..." />
-                </GlassCardContent>
+                <div className="overflow-x-auto">
+                    <table className="w-full">
+                        <thead>
+                            <tr className="border-b border-white/10">
+                                {columns.map((col) => (
+                                    <th key={col.key} className={cn("px-4 py-3 text-left text-xs font-medium text-white/50 uppercase tracking-wider", col.className)}>
+                                        {col.label}
+                                    </th>
+                                ))}
+                            </tr>
+                        </thead>
+                        <tbody className="divide-y divide-white/5">
+                            {[...Array(limit)].map((_, i) => (
+                                <tr key={i} className="animate-pulse">
+                                    <td className="px-4 py-4">
+                                        <Skeleton className="h-6 w-20 rounded-full" />
+                                    </td>
+                                    <td className="px-4 py-4">
+                                        <div className="space-y-2">
+                                            <Skeleton className="h-4 w-24" />
+                                            <Skeleton className="h-3 w-32 opacity-50" />
+                                        </div>
+                                    </td>
+                                    <td className="px-4 py-4">
+                                        <div className="flex items-center gap-3">
+                                            <Skeleton className="h-8 w-8 rounded-full" />
+                                            <div className="space-y-2">
+                                                <Skeleton className="h-4 w-32" />
+                                                <Skeleton className="h-3 w-20 opacity-50" />
+                                            </div>
+                                        </div>
+                                    </td>
+                                    <td className="px-4 py-4">
+                                        <Skeleton className="h-4 w-40" />
+                                    </td>
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
+                </div>
             </GlassCard>
         )
     }

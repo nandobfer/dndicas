@@ -19,8 +19,7 @@ import * as React from 'react';
 import { motion, type HTMLMotionProps } from 'framer-motion';
 import { cn } from '@/core/utils';
 import { glassConfig } from '@/lib/config/glass-config';
-import { motionConfig } from '@/lib/config/motion-configs';
-import { GlassBackdrop } from "./glass-backdrop"
+import { motionConfig } from "@/lib/config/motion-configs"
 
 export interface GlassCardProps extends Omit<HTMLMotionProps<"div">, "children"> {
     /** Content to render inside the card */
@@ -41,14 +40,13 @@ const GlassCard = React.forwardRef<HTMLDivElement, GlassCardProps>(({ className,
             <motion.div
                 ref={ref}
                 className={cardClasses}
-                variants={motionConfig.variants.fadeInUp}
+                // variants={motionConfig.variants.fadeInUp}
                 initial="initial"
                 animate="animate"
                 exit="exit"
                 transition={motionConfig.transitions.normal}
                 {...props}
             >
-                <GlassBackdrop />
                 {children}
             </motion.div>
         )
@@ -56,7 +54,6 @@ const GlassCard = React.forwardRef<HTMLDivElement, GlassCardProps>(({ className,
 
     return (
         <div ref={ref} className={cardClasses} {...(props as React.HTMLAttributes<HTMLDivElement>)}>
-            <GlassBackdrop />
             {children}
         </div>
     )

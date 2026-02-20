@@ -70,8 +70,8 @@ export function SearchInput({ value, onChange, debounceMs = 500, isLoading = fal
         setIsDebouncing(false)
     }
 
-    const showLoader = isLoading || isDebouncing
-    const showClear = localValue.length > 0
+    const showLoader = isLoading
+    const showClear = localValue.length > 0 && !isLoading
 
     return (
         <GlassInput
@@ -107,13 +107,14 @@ export function SearchInput({ value, onChange, debounceMs = 500, isLoading = fal
             }
             {...props}
         >
-            {/* Progress bar */}
+            {/* Progress bar reflects debounce period */}
             <AnimatePresence>
-                {showLoader && (
+                {isDebouncing && (
                     <motion.div
+                        key={localValue}
                         initial={{ scaleX: 0, opacity: 0 }}
                         animate={{ scaleX: 1, opacity: 1 }}
-                        exit={{ scaleX: 0, opacity: 0 }}
+                        exit={{ opacity: 0 }}
                         transition={{ duration: debounceMs / 1000, ease: "linear" }}
                         className="absolute bottom-0 left-0 right-0 h-0.5 bg-gradient-to-r from-blue-400 via-purple-400 to-blue-400 origin-left rounded-b-lg z-20"
                     />

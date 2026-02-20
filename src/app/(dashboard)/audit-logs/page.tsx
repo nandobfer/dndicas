@@ -46,7 +46,7 @@ function AuditLogsContent() {
             {/* Filters */}
             <GlassCard>
                 <GlassCardContent className="py-4">
-                    <AuditLogsFilters filters={filters} onActionsChange={setActions} onActorEmailChange={setActorEmail} onDateRangeChange={setDateRange} onReset={resetFilters} />
+                    <AuditLogsFilters filters={filters} isLoading={isLoading} onActionsChange={setActions} onActorEmailChange={setActorEmail} onDateRangeChange={setDateRange} onReset={resetFilters} />
                 </GlassCardContent>
             </GlassCard>
 
