@@ -12,7 +12,7 @@ export type AuditAction = 'CREATE' | 'UPDATE' | 'DELETE';
 /**
  * Entity type being audited.
  */
-export type AuditEntity = 'User' | 'Auth';
+export type AuditEntity = 'User' | 'Auth' | 'Reference';
 
 /**
  * Base audit log record.
