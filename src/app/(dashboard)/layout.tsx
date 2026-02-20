@@ -9,7 +9,6 @@ import Link from "next/link"
 import { motion } from "framer-motion"
 import { useSidebar } from "@/hooks/useSidebar"
 import { ExpandableSidebar } from "@/components/ui/expandable-sidebar"
-import { SidebarToggleButton } from "@/components/ui/sidebar-toggle-button"
 import { Sidebar } from "@/core/ui/layout/sidebar"
 import { glassConfig } from "@/lib/config/glass-config"
 import { motionConfig } from "@/lib/config/motion-configs"
@@ -18,7 +17,7 @@ import { cn } from "@/core/utils"
 import { useState, useEffect } from "react"
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
-    const { isExpanded, toggle, isHydrated } = useSidebar()
+    const { isExpanded, expand, collapse, isHydrated } = useSidebar()
     const [isMobile, setIsMobile] = useState(false)
 
     useEffect(() => {
@@ -31,12 +30,45 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         return () => window.removeEventListener("resize", checkMobile)
     }, [])
 
-    const marginLeft = isMobile ? "0" : isHydrated ? (isExpanded ? "280px" : "72px") : "72px"
+    const marginLeft = isMobile ? "0" : isHydrated ? (isExpanded ? `${themeConfig.spacing.sidebar.expanded}px` : `${themeConfig.spacing.sidebar.collapsed}px`) : `${themeConfig.spacing.sidebar.collapsed}px`
 
     return (
         <div className="flex min-h-screen w-full bg-background">
             {/* Desktop Sidebar - Fixed */}
-            <ExpandableSidebar isExpanded={isExpanded} />
+            <ExpandableSidebar 
+                isExpanded={isExpanded} 
+                onExpand={expand} 
+                onCollapse={collapse} 
+            />
+
+            {/* Mobile Toggle - Floating when header is gone */}
+            <div className="md:hidden fixed top-4 left-4 z-50">
+                <Sheet>
+                    <SheetTrigger asChild>
+                        <Button variant="ghost" size="icon" className="shrink-0 text-white/70 hover:text-white hover:bg-white/10 bg-black/20 backdrop-blur-md border border-white/10 rounded-full h-10 w-10">
+                            <Menu className="h-5 w-5" />
+                            <span className="sr-only">Abrir menu</span>
+                        </Button>
+                    </SheetTrigger>
+                    <SheetContent side="left" className={cn("flex flex-col", glassConfig.sidebar.blur, glassConfig.sidebar.background)}>
+                        <VisuallyHidden>
+                            <SheetTitle>Menu de Navegação</SheetTitle>
+                        </VisuallyHidden>
+                        <nav className="grid gap-2 text-lg font-medium">
+                            <Link href="/" className="flex items-center gap-2 text-lg font-semibold text-white">
+                                <Package2 className="h-6 w-6" />
+                                <span>Dungeons & Dicas</span>
+                            </Link>
+                            <Sidebar className="mt-4" />
+                        </nav>
+                        
+                        <div className="mt-auto pt-4 border-t border-white/5 flex items-center justify-between">
+                            <span className="text-sm text-white/70 font-medium">Minha Conta</span>
+                            <UserButton afterSignOutUrl="/sign-in" />
+                        </div>
+                    </SheetContent>
+                </Sheet>
+            </div>
 
             {/* Main Content Area - With left margin to account for sidebar */}
             <div
@@ -45,46 +77,6 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                     marginLeft,
                 }}
             >
-                {/* Topbar */}
-                <header
-                    className={cn(
-                        "flex h-14 items-center gap-4 border-b border-white/5 px-4 lg:h-[60px] lg:px-6",
-                        glassConfig.sidebar.blur,
-                        "bg-black/40",
-                    )}
-                >
-                    {/* Mobile Menu */}
-                    <Sheet>
-                        <SheetTrigger asChild>
-                            <Button variant="ghost" size="icon" className="shrink-0 md:hidden text-white/70 hover:text-white hover:bg-white/10">
-                                <Menu className="h-5 w-5" />
-                                <span className="sr-only">Abrir menu</span>
-                            </Button>
-                        </SheetTrigger>
-                        <SheetContent side="left" className={cn("flex flex-col", glassConfig.sidebar.blur, glassConfig.sidebar.background)}>
-                            <VisuallyHidden>
-                                <SheetTitle>Menu de Navegação</SheetTitle>
-                            </VisuallyHidden>
-                            <nav className="grid gap-2 text-lg font-medium">
-                                <Link href="/" className="flex items-center gap-2 text-lg font-semibold text-white">
-                                    <Package2 className="h-6 w-6" />
-                                    <span>Dungeons & Dicas</span>
-                                </Link>
-                                <Sidebar className="mt-4" />
-                            </nav>
-                        </SheetContent>
-                    </Sheet>
-
-                    {/* Desktop Toggle Button */}
-                    <SidebarToggleButton isExpanded={isExpanded} onToggle={toggle} className="hidden md:flex" />
-
-                    {/* Spacer */}
-                    <div className="flex-1" />
-
-                    {/* User Button */}
-                    <UserButton afterSignOutUrl="/sign-in" />
-                </header>
-
                 {/* Page Content */}
                 <motion.main
                     className="flex flex-1 flex-col gap-4 p-4 lg:gap-6 lg:p-6"

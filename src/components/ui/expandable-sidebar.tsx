@@ -23,10 +23,15 @@ import { motionConfig, sidebarTransition } from '@/lib/config/motion-configs';
 import { themeConfig } from '@/lib/config/theme-config';
 import { SidebarItem, SidebarSection } from './sidebar-item';
 import { TooltipProvider } from '@/core/ui/tooltip';
+import { UserButton } from '@clerk/nextjs';
 
 export interface ExpandableSidebarProps {
   /** Whether sidebar is expanded */
   isExpanded: boolean;
+  /** Expand callback */
+  onExpand: () => void;
+  /** Collapse callback */
+  onCollapse: () => void;
   /** Additional CSS classes */
   className?: string;
 }
@@ -62,6 +67,8 @@ const adminItems = [
  */
 export const ExpandableSidebar: React.FC<ExpandableSidebarProps> = ({
   isExpanded,
+  onExpand,
+  onCollapse,
   className,
 }) => {
   const pathname = usePathname();
@@ -69,11 +76,14 @@ export const ExpandableSidebar: React.FC<ExpandableSidebarProps> = ({
   return (
       <TooltipProvider>
           <motion.aside
+              onMouseEnter={onExpand}
+              onMouseLeave={onCollapse}
               className={cn(
-                  "hidden md:flex flex-col fixed left-0 top-0 h-screen z-40",
+                  "hidden md:flex flex-col fixed left-0 top-0 h-screen z-40 transition-shadow duration-300",
                   "border-r border-white/5",
                   glassConfig.sidebar.blur,
                   glassConfig.sidebar.background,
+                  isExpanded && "shadow-2xl shadow-black/50",
                   className,
               )}
               variants={motionConfig.variants.sidebar}
@@ -82,9 +92,12 @@ export const ExpandableSidebar: React.FC<ExpandableSidebarProps> = ({
               transition={sidebarTransition}
               style={{ minWidth: isExpanded ? themeConfig.spacing.sidebar.expanded : themeConfig.spacing.sidebar.collapsed }}
           >
-              {/* Logo/Brand */}
-              <div className={cn("flex h-14 items-center border-b border-white/5 px-4 lg:h-[60px]", !isExpanded && "justify-center px-2")}>
-                  <Link href="/" className="flex items-center gap-2 font-semibold text-white">
+              {/* Logo/Brand Header Area */}
+              <div className={cn(
+                "flex h-14 items-center border-b border-white/5 px-4 lg:h-[60px]", 
+                !isExpanded && "justify-center"
+              )}>
+                  <Link href="/" className="flex items-center gap-2 font-semibold text-white truncate">
                       <Package2 className="h-6 w-6 shrink-0" />
                       {isExpanded && (
                           <motion.span
@@ -160,6 +173,28 @@ export const ExpandableSidebar: React.FC<ExpandableSidebarProps> = ({
                       </SidebarSection>
                   </div>
               </nav>
+
+              {/* User Button Area at the bottom */}
+              <div className={cn(
+                  "p-4 border-t border-white/5 flex items-center gap-3 mt-auto",
+                  !isExpanded && "justify-center p-2"
+              )}>
+                  <div className="flex-shrink-0">
+                    <UserButton afterSignOutUrl="/sign-in" />
+                  </div>
+                  {isExpanded && (
+                      <motion.div
+                          className="flex flex-col overflow-hidden"
+                          initial={{ opacity: 0, x: -10 }}
+                          animate={{ opacity: 1, x: 0 }}
+                          exit={{ opacity: 0, x: -10 }}
+                          transition={motionConfig.transitions.fast}
+                      >
+                          <span className="text-sm font-medium text-white truncate">Minha Conta</span>
+                          <span className="text-xs text-white/50 truncate">Gerenciar perfil</span>
+                      </motion.div>
+                  )}
+              </div>
           </motion.aside>
       </TooltipProvider>
   )

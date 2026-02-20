@@ -19,8 +19,8 @@ const STORAGE_KEY = 'sidebar-expanded';
  * Default state: expanded (per FR-053).
  */
 export const useSidebar = () => {
-  // Initialize with default value, will sync with storage in useEffect
-  const [isExpanded, setIsExpanded] = useState(true);
+  // Initialize with default value: collapsed (false) for hover strategy
+  const [isExpanded, setIsExpanded] = useState(false);
   const [isHydrated, setIsHydrated] = useState(false);
 
   // Sync with sessionStorage on mount (client-side only)
@@ -28,8 +28,8 @@ export const useSidebar = () => {
     if (typeof window === 'undefined') return;
 
     const stored = sessionStorage.getItem(STORAGE_KEY);
-    // Default is expanded (true) if no stored value
-    const initialValue = stored === null ? true : stored === 'true';
+    // Default is collapsed (false) if no stored value
+    const initialValue = stored === 'true';
     setIsExpanded(initialValue);
     setIsHydrated(true);
   }, []);
