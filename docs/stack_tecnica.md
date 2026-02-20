@@ -6,7 +6,7 @@
 
 ## 🎯 Visão Geral
 
-O projeto utiliza Next.js 15+ como base, com um template core já implementado em repositório separado (adicionado como remote). **Analise o código já existente para implementar no mesmo padrão.**
+O projeto utiliza Next.js 15+ como base, com um template core já implementado. **Analise o código já existente para implementar no mesmo padrão.**
 
 ---
 
@@ -43,7 +43,7 @@ O projeto utiliza Next.js 15+ como base, com um template core já implementado e
 - **Animations**: Framer Motion (transições fluidas e UX aprimorada)
 
 ### Design Concept
-> **Estética**: Design MUITO moderno com Liquid Glass e iluminação, mesclando o estilo de fantasia e dungeons & dragons antigo com tecnologia e modernidade.
+> **Estética**: Design MUITO moderno com Liquid Glass, translúcidos e iluminação, mesclando o estilo de fantasia e dungeons & dragons antigo com tecnologia e modernidade.
 
 **Referências visuais:**
 - Glassmorphism (vidro fosco com blur)
@@ -57,19 +57,8 @@ O projeto utiliza Next.js 15+ como base, com um template core já implementado e
 
 ## 🔐 Autenticação e Segurança
 
-### Authentication (Clerk)
-- **Sistema**: Clerk (Identity Provider)
-- **Vínculo**: `clerkId` (armazenado no MongoDB)
-- **Recursos**:
-  - Login Social e Gerenciamento de Identidade
-  - Sessão gerenciada pelo Clerk
-  - O banco de dados local sincroniza dados básicos (email, nome) via Webhooks ou Login Flow
+(Clerk)
 
-### Authorization (Local DB)
-- **Perfis**: Administrador | Usuário Comum
-- **RBAC**: Gerenciado no banco de dados local (MongoDB)
-  - Admin: Definido no campo `role` do modelo `User`
-  - User: Role padrão para novos registros
 
 ---
 
@@ -78,7 +67,6 @@ O projeto utiliza Next.js 15+ como base, com um template core já implementado e
 ### Database
 - **DBMS**: MongoDB (NoSQL)
 - **ODM**: Mongoose
-- **Hosting**: MongoDB Atlas (recomendado)
 
 ### Models (Mongoose Schemas)
 ```
@@ -208,12 +196,6 @@ export const fadeInUp = {
   exit: { opacity: 0, y: -20 },
   transition: { duration: 0.3 },
 };
-
-export const glassMorphism = {
-  initial: { opacity: 0, scale: 0.95, backdropFilter: 'blur(0px)' },
-  animate: { opacity: 1, scale: 1, backdropFilter: 'blur(12px)' },
-  transition: { duration: 0.4 },
-};
 ```
 
 ---
@@ -335,86 +317,9 @@ export const DAMAGE_TYPES = [
 }
 ```
 
----
-
-## 🏗️ Arquitetura de Pastas
-
-```
-src/
-├── app/                           # Next.js 15 App Router
-│   ├── (auth)/                   # Grupo: Autenticação
-│   │   ├── login/
-│   │   └── register/
-│   ├── (public)/                 # Grupo: Acesso público
-│   │   ├── classes/
-│   │   ├── racas/
-│   │   ├── magias/
-│   │   ├── itens/
-│   │   └── talentos/
-│   ├── (protected)/              # Grupo: Requer autenticação
-│   │   ├── fichas/
-│   │   └── admin/
-│   ├── api/                      # API Routes
-│   │   ├── auth/
-│   │   ├── classes/
-│   │   ├── characters/
-│   │   └── spells/
-│   ├── layout.tsx
-│   └── page.tsx
-├── components/
-│   ├── ui/                       # Shadcn/ui components
-│   ├── common/                   # Componentes reutilizáveis
-│   ├── layout/                   # Header, Footer, Sidebar
-│   └── animations/               # Wrappers de animação
-├── features/                     # Módulos por funcionalidade
-│   ├── classes/
-│   │   ├── components/
-│   │   ├── hooks/
-│   │   ├── types/
-│   │   └── api/
-│   ├── spells/
-│   ├── character-sheet/
-│   └── owlbear-integration/
-├── lib/
-│   ├── db/                       # MongoDB connection + models
-│   │   ├── connection.ts
-│   │   └── models/
-│   ├── utils/                    # Helper functions
-│   │   ├── calculate-modifiers.ts
-│   │   └── format-helpers.ts
-│   └── config/                   # Configurações centralizadas
-│       ├── colors.ts
-│       ├── motion-configs.ts
-│       ├── dnd-constants.ts
-│       └── site-config.ts
-├── hooks/                        # Hooks globais
-│   ├── use-theme.ts
-│   └── use-auth.ts
-├── types/                        # TypeScript types globais
-│   ├── dnd.types.ts
-│   └── api.types.ts
-├── styles/
-│   └── globals.css
-└── middleware.ts                 # Auth middleware
-```
 
 ---
 
-## 🔄 Dev Workflow
-
-### Scripts
-```json
-{
-  "scripts": {
-    "dev": "next dev",
-    "build": "next build",
-    "start": "next start",
-    "lint": "next lint",
-    "type-check": "tsc --noEmit",
-    "format": "prettier --write ."
-  }
-}
-```
 
 ### Environment Variables
 ```env
@@ -428,11 +333,7 @@ OWLBEAR_API_KEY=...
 
 ## 🚢 Deploy
 
-### Recomendações
-- **Hosting**: Vercel (otimizado para Next.js)
-- **Database**: MongoDB Atlas
-- **CDN**: Cloudflare (assets estáticos)
-- **Monitoring**: Vercel Analytics + Sentry
+Docker
 
 ---
 
@@ -456,10 +357,10 @@ OWLBEAR_API_KEY=...
 - [ ] Instalar dependências (`npm install`)
 - [ ] Configurar Tailwind + Shadcn/ui
 - [ ] Configurar TanStack Query Provider
-- [/] Implementar authentication flow (Clerk Dashboard + Middleware)
+- [ ] Implementar authentication flow (Clerk Dashboard + Middleware)
 - [ ] Criar models do Mongoose (Character, Spell, Item, etc. - User é gerenciado pelo Clerk)
-- [x] Configurar Framer Motion global config
-- [x] Definir paleta de cores (Liquid Glass + D&D theme)
+- [ ] Configurar Framer Motion global config
+- [ ] Definir paleta de cores (Liquid Glass + D&D theme)
 - [ ] Implementar Error Boundaries
-- [x] Configurar ESLint + Prettier
-- [x] Setup de testes (Jest + React Testing Library)
+- [ ] Configurar ESLint + Prettier
+- [ ] Setup de testes (Jest + React Testing Library)

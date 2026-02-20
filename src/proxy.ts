@@ -8,6 +8,9 @@
  * 2. Redirecionar para /sign-in se não estiver
  * 3. Permitir acesso apenas a usuários autenticados
  *
+ * Também inclui fallback sync para garantir que usuários autenticados
+ * existam no banco local (caso o webhook não tenha sido recebido).
+ *
  * Para adicionar novas rotas públicas, adicione-as no array do createRouteMatcher.
  */
 
@@ -15,9 +18,13 @@ import { clerkMiddleware, createRouteMatcher } from "@clerk/nextjs/server";
 
 // Define rotas públicas (não requerem autenticação)
 const isPublicRoute = createRouteMatcher([
-  '/sign-in(.*)',          // Página de login e sub-rotas
-  '/sign-up(.*)',          // Página de registro e sub-rotas
-  '/api/webhooks(.*)',     // Webhooks do Clerk (não devem ser protegidos)
+    "/sign-in(.*)", // Página de login e sub-rotas
+    "/sign-up(.*)", // Página de registro e sub-rotas
+])
+
+// Define rotas de API que precisam de sync de usuário
+const isApiRoute = createRouteMatcher([
+  '/api/(.*)',
 ]);
 
 export default clerkMiddleware(async (auth, req) => {
@@ -42,6 +49,10 @@ export default clerkMiddleware(async (auth, req) => {
     // Descomente para logar acessos autenticados
     // await logAuthAction('ACCESS', { path: req.nextUrl.pathname });
   }
+
+  // Nota: O fallback sync é feito no primeiro request autenticado
+  // via getCurrentUserFromDb() em src/features/users/api/get-current-user.ts
+  // Isso evita bloquear o middleware com operações de banco de dados
 });
 
 export const config = {
