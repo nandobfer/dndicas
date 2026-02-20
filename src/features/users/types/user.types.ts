@@ -24,26 +24,28 @@ export type UserStatus = 'active' | 'inactive';
  * Used internally and for database operations.
  */
 export interface User {
-  /** MongoDB ObjectId as string */
-  id: string;
-  /** Clerk user ID for authentication linking */
-  clerkId: string;
-  /** Unique username for login */
-  username: string;
-  /** User email address */
-  email: string;
-  /** Display name (optional) */
-  name?: string;
-  /** Avatar URL (optional) */
-  avatarUrl?: string;
-  /** User role for authorization */
-  role: UserRole;
-  /** User status for soft delete */
-  status: UserStatus;
-  /** Creation timestamp */
-  createdAt: string;
-  /** Last update timestamp */
-  updatedAt: string;
+    /** MongoDB ObjectId as string */
+    id: string
+    /** Clerk user ID for authentication linking */
+    clerkId: string
+    /** Unique username for login */
+    username: string
+    /** User email address */
+    email: string
+    /** Display name (optional) */
+    name?: string
+    /** Avatar URL (optional) */
+    avatarUrl?: string
+    /** User role for authorization */
+    role: UserRole
+    /** User status for soft delete */
+    status: UserStatus
+    /** Whether the user is soft-deleted */
+    deleted?: boolean
+    /** Creation timestamp */
+    createdAt: string
+    /** Last update timestamp */
+    updatedAt: string
 }
 
 /**
@@ -51,15 +53,17 @@ export interface User {
  * Consistent format for all user endpoints.
  */
 export interface UserResponse {
-  id: string;
-  username: string;
-  email: string;
-  name?: string;
-  avatarUrl?: string;
-  role: UserRole;
-  status: UserStatus;
-  createdAt: string;
-  updatedAt: string;
+    id: string
+    clerkId: string
+    username: string
+    email: string
+    name?: string
+    avatarUrl?: string
+    role: UserRole
+    status: UserStatus
+    deleted?: boolean
+    createdAt: string
+    updatedAt: string
 }
 
 /**

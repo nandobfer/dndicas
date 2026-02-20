@@ -1,4 +1,4 @@
-"use client";
+"use client"
 
 /**
  * @fileoverview User form modal for creating and editing users.
@@ -6,20 +6,16 @@
  * @see specs/000/spec.md - FR-009, FR-010
  */
 
-import * as React from 'react';
-import { useForm } from 'react-hook-form';
-import { zodResolver } from '@hookform/resolvers/zod';
-import { motion, AnimatePresence } from 'framer-motion';
-import { User as UserIcon, Mail, AtSign, Shield, Loader2 } from 'lucide-react';
-import { cn } from '@/core/utils';
-import {
-  GlassModal,
-  GlassModalContent,
-  GlassModalHeader,
-  GlassModalTitle,
-  GlassModalDescription,
-} from '@/components/ui/glass-modal';
+import * as React from "react"
+import { useForm } from "react-hook-form"
+import { zodResolver } from "@hookform/resolvers/zod"
+import { motion, AnimatePresence } from "framer-motion"
+import { User as UserIcon, Mail, AtSign, Shield, Loader2 } from "lucide-react"
+import { cn } from "@/core/utils"
+import { useAuth } from "@/core/hooks/useAuth"
+import { GlassModal, GlassModalContent, GlassModalHeader, GlassModalTitle, GlassModalDescription } from "@/components/ui/glass-modal"
 import { GlassInput } from "@/components/ui/glass-input"
+import { GlassSwitch } from "@/components/ui/glass-switch"
 import { glassConfig } from "@/lib/config/glass-config"
 import { RoleTabs } from "@/components/ui/role-tabs"
 import { createUserSchema, updateUserSchema, type CreateUserSchema, type UpdateUserSchema } from "../api/validation"
@@ -52,7 +48,9 @@ export interface UserFormModalProps {
  * ```
  */
 export function UserFormModal({ isOpen, onClose, onSubmit, user, isSubmitting = false }: UserFormModalProps) {
+    const { userId } = useAuth()
     const isEditMode = !!user
+    const isSelfEdit = isEditMode && user?.clerkId === userId
 
     const {
         register,
@@ -68,6 +66,7 @@ export function UserFormModal({ isOpen, onClose, onSubmit, user, isSubmitting = 
             email: user?.email || "",
             name: user?.name || "",
             role: user?.role || "user",
+            status: user?.status || "active",
         },
     })
 
@@ -81,6 +80,7 @@ export function UserFormModal({ isOpen, onClose, onSubmit, user, isSubmitting = 
                 email: user?.email || "",
                 name: user?.name || "",
                 role: user?.role || "user",
+                status: user?.status || "active",
             })
         }
     }, [isOpen, user, reset])
@@ -98,6 +98,19 @@ export function UserFormModal({ isOpen, onClose, onSubmit, user, isSubmitting = 
                 </GlassModalHeader>
 
                 <form onSubmit={handleSubmit(handleFormSubmit)} className="space-y-6">
+                    {/* Status */}
+                    {isEditMode && (
+                        <div className="pt-2 mb-2">
+                            <GlassSwitch
+                                label="Conta Ativa"
+                                description="Usuários inativos não podem acessar o sistema"
+                                checked={watch("status") === "active"}
+                                onCheckedChange={(checked) => setValue("status", checked ? "active" : "inactive")}
+                                disabled={isSubmitting}
+                            />
+                        </div>
+                    )}
+
                     {/* Name */}
                     <GlassInput id="name" label="Nome" placeholder="Nome completo" icon={<UserIcon />} error={errors.name?.message} {...register("name")} />
 
@@ -113,15 +126,20 @@ export function UserFormModal({ isOpen, onClose, onSubmit, user, isSubmitting = 
                             <Shield className="h-4 w-4" />
                             Função <span className="text-rose-400">*</span>
                         </label>
-                        <RoleTabs
-                            value={role === "admin" || role === "user" ? role : "user"}
-                            onChange={(newRole) => {
-                                if (newRole !== "all") {
-                                    setValue("role", newRole)
-                                }
-                            }}
-                            showAll={false}
-                        />
+                        <div className="w-full">
+                            <RoleTabs
+                                value={role === "admin" || role === "user" ? role : "user"}
+                                onChange={(newRole) => {
+                                    if (newRole !== "all") {
+                                        setValue("role", newRole)
+                                    }
+                                }}
+                                showAll={false}
+                                fullWidth
+                                disabled={isSelfEdit}
+                            />
+                        </div>
+                        {isSelfEdit && <p className="text-xs text-blue-400/80 mt-1">Você não pode alterar sua própria função administrativa.</p>}
                     </div>
 
                     {/* Actions */}

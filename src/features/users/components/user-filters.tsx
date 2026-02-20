@@ -62,7 +62,7 @@ export function UserFilters({
               <RoleTabs value={filters.role || "all"} onChange={onRoleChange} />
 
               {/* Status chips */}
-              <StatusChips value={filters.status || "active"} onChange={onStatusChange as (status: StatusFilter) => void} />
+              <StatusChips value={filters.status || "all"} onChange={onStatusChange as (status: StatusFilter) => void} />
           </div>
       </div>
   )

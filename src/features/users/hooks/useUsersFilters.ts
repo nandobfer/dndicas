@@ -12,12 +12,12 @@ import type { UserFilters } from '../types/user.types';
  * Default filter values.
  */
 const DEFAULT_FILTERS: UserFilters = {
-  search: '',
-  role: 'all',
-  status: 'active',
-  page: 1,
-  limit: 10,
-};
+    search: "",
+    role: "all",
+    status: "all",
+    page: 1,
+    limit: 10,
+}
 
 /**
  * Hook for managing user filters with URL sync.

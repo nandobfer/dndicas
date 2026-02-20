@@ -55,57 +55,56 @@ export function DataTablePagination({
   const hasNextPage = page < totalPages;
 
   return (
-    <div className={cn(
-      'flex items-center justify-between px-4 py-3 border-t border-white/10',
-      className
-    )}>
-      {/* Item count */}
-      <span className="text-sm text-white/50">
-        {total === 0 ? (
-          `Nenhum ${itemLabel}`
-        ) : (
-          <>
-            Mostrando {startItem} a {endItem} de {total} {itemLabel}
-          </>
-        )}
-      </span>
+      <div className={cn("flex items-center justify-between px-4 py-3 border-t border-white/10", className)}>
+          {/* Item count */}
+          <span className="text-sm text-white/50">
+              {total === 0 ? (
+                  `Nenhum ${itemLabel}`
+              ) : (
+                  <>
+                      Mostrando {startItem} a {endItem} de {total} {itemLabel}
+                  </>
+              )}
+          </span>
 
-      {/* Navigation */}
-      <div className="flex items-center gap-2">
-        <button
-          onClick={() => onPageChange(page - 1)}
-          disabled={!hasPrevPage}
-          className={cn(
-            'p-2 rounded-lg transition-colors',
-            hasPrevPage
-              ? 'text-white/60 hover:text-white hover:bg-white/10'
-              : 'text-white/20 cursor-not-allowed'
-          )}
-          aria-label="Página anterior"
-        >
-          <ChevronLeft className="h-4 w-4" />
-        </button>
+          {/* Navigation */}
+          <div className="flex items-center gap-2">
+              <button
+                  onClick={() => onPageChange(page - 1)}
+                  disabled={!hasPrevPage}
+                  className={cn(
+                      "p-2 rounded-lg transition-all duration-200 border border-transparent",
+                      hasPrevPage
+                          ? "text-white/60 hover:text-white hover:bg-white/10 hover:border-white/10 hover:shadow-[0_0_15px_rgba(255,255,255,0.05)] active:scale-95"
+                          : "text-white/10 cursor-not-allowed opacity-50",
+                  )}
+                  aria-label="Página anterior"
+              >
+                  <ChevronLeft className="h-4 w-4" />
+              </button>
 
-        <span className="text-sm text-white/60 min-w-[80px] text-center">
-          Página {page} de {totalPages}
-        </span>
+              <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white/5 border border-white/5 text-xs font-medium text-white/60">
+                  <span className="text-white">Página {page}</span>
+                  <span className="text-white/20">/</span>
+                  <span>{totalPages || 1}</span>
+              </div>
 
-        <button
-          onClick={() => onPageChange(page + 1)}
-          disabled={!hasNextPage}
-          className={cn(
-            'p-2 rounded-lg transition-colors',
-            hasNextPage
-              ? 'text-white/60 hover:text-white hover:bg-white/10'
-              : 'text-white/20 cursor-not-allowed'
-          )}
-          aria-label="Próxima página"
-        >
-          <ChevronRight className="h-4 w-4" />
-        </button>
+              <button
+                  onClick={() => onPageChange(page + 1)}
+                  disabled={!hasNextPage}
+                  className={cn(
+                      "p-2 rounded-lg transition-all duration-200 border border-transparent",
+                      hasNextPage
+                          ? "text-white/60 hover:text-white hover:bg-white/10 hover:border-white/10 hover:shadow-[0_0_15px_rgba(255,255,255,0.05)] active:scale-95"
+                          : "text-white/10 cursor-not-allowed opacity-50",
+                  )}
+                  aria-label="Próxima página"
+              >
+                  <ChevronRight className="h-4 w-4" />
+              </button>
+          </div>
       </div>
-    </div>
-  );
+  )
 }
 
 DataTablePagination.displayName = 'DataTablePagination';

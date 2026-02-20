@@ -11,6 +11,7 @@ import Image from "next/image"
 import { motion, AnimatePresence } from "framer-motion"
 import { MoreHorizontal, Pencil, Trash2, Users } from "lucide-react"
 import { cn } from "@/core/utils"
+import { useAuth } from "@/core/hooks/useAuth"
 import { GlassCard, GlassCardContent } from "@/components/ui/glass-card"
 import { UserMini } from "@/components/ui/user-mini"
 import { Chip, chipVariantMap } from "@/components/ui/chip"
@@ -18,6 +19,7 @@ import { LoadingState } from "@/components/ui/loading-state"
 import { EmptyState } from "@/components/ui/empty-state"
 import { DataTablePagination } from "@/components/ui/data-table-pagination"
 import { GlassDropdownMenu, GlassDropdownMenuContent, GlassDropdownMenuItem, GlassDropdownMenuTrigger } from "@/components/ui/glass-dropdown-menu"
+import { GlassTooltip, GlassTooltipContent, GlassTooltipTrigger } from "@/components/ui/glass-tooltip"
 import { motionConfig } from "@/lib/config/motion-configs"
 import type { UserResponse } from "../types/user.types"
 
@@ -54,6 +56,7 @@ const columns = [
  * UsersTable component with animations and pagination.
  */
 export function UsersTable({ users, total, page, limit, isLoading = false, onEdit, onDelete, onPageChange }: UsersTableProps) {
+    const { userId } = useAuth()
     const totalPages = Math.ceil(total / limit)
     const hasNextPage = page < totalPages
     const hasPrevPage = page > 1
@@ -118,12 +121,7 @@ export function UsersTable({ users, total, page, limit, isLoading = false, onEdi
 
                                     {/* User */}
                                     <td className="py-3 pl-0 min-w-[200px]">
-                                        <UserMini 
-                                            name={user.name} 
-                                            username={user.username} 
-                                            email={user.email} 
-                                            avatarUrl={user.avatarUrl} 
-                                        />
+                                        <UserMini name={user.name} username={user.username} email={user.email} avatarUrl={user.avatarUrl} />
                                     </td>
 
                                     {/* Role */}
@@ -153,10 +151,26 @@ export function UsersTable({ users, total, page, limit, isLoading = false, onEdi
                                                     <Pencil className="h-4 w-4" />
                                                     Editar
                                                 </GlassDropdownMenuItem>
-                                                <GlassDropdownMenuItem onClick={() => onDelete(user)} className="text-rose-400 focus:text-rose-400">
-                                                    <Trash2 className="h-4 w-4" />
-                                                    Excluir
-                                                </GlassDropdownMenuItem>
+                                                {user.clerkId === userId ? (
+                                                    <GlassTooltip>
+                                                        <GlassTooltipTrigger asChild>
+                                                            <div>
+                                                                <GlassDropdownMenuItem disabled className="text-rose-400/50 cursor-not-allowed opacity-50">
+                                                                    <Trash2 className="h-4 w-4" />
+                                                                    Excluir
+                                                                </GlassDropdownMenuItem>
+                                                            </div>
+                                                        </GlassTooltipTrigger>
+                                                        <GlassTooltipContent side="left">
+                                                            Você não pode excluir a si mesmo
+                                                        </GlassTooltipContent>
+                                                    </GlassTooltip>
+                                                ) : (
+                                                    <GlassDropdownMenuItem onClick={() => onDelete(user)} className="text-rose-400 focus:text-rose-400">
+                                                        <Trash2 className="h-4 w-4" />
+                                                        Excluir
+                                                    </GlassDropdownMenuItem>
+                                                )}
                                             </GlassDropdownMenuContent>
                                         </GlassDropdownMenu>
                                     </td>

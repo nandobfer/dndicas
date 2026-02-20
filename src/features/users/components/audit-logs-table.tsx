@@ -6,10 +6,11 @@
 
 import * as React from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Clock, User } from 'lucide-react';
-import { cn } from '@/core/utils';
-import { GlassCard, GlassCardContent } from '@/components/ui/glass-card';
-import { ActionChip } from '@/components/ui/action-chip';
+import { Clock, User, Copy, Check } from "lucide-react"
+import { cn } from "@/core/utils"
+import { toast } from "sonner"
+import { GlassCard, GlassCardContent } from "@/components/ui/glass-card"
+import { ActionChip } from "@/components/ui/action-chip"
 import { UserMini } from "@/components/ui/user-mini"
 import { LoadingState } from "@/components/ui/loading-state"
 import { EmptyState } from "@/components/ui/empty-state"
@@ -36,9 +37,9 @@ interface AuditLogsTableProps {
  */
 const columns = [
     { key: "action", label: "Ação", className: "w-[15%]" },
-    { key: "entity", label: "Entidade", className: "w-[20%]" },
-    { key: "user", label: "Usuário", className: "w-[35%]" },
-    { key: "date", label: "Data", className: "w-[30%]" },
+    { key: "entity", label: "Entidade", className: "w-[30%]" },
+    { key: "user", label: "Autor", className: "w-[35%]" },
+    { key: "date", label: "Data", className: "w-[20%] text-right" },
 ]
 
 function formatDate(date: Date | string | undefined | null): string {
@@ -82,7 +83,10 @@ export function AuditLogsTable({ logs, isLoading, pagination, onPageChange, onRo
                         <thead>
                             <tr className="border-b border-white/10">
                                 {columns.map((col) => (
-                                    <th key={col.key} className={cn("px-4 py-3 text-left text-xs font-medium text-white/50 uppercase tracking-wider", col.className)}>
+                                    <th
+                                        key={col.key}
+                                        className={cn("px-4 py-3 text-xs font-medium text-white/50 uppercase tracking-wider", !col.className?.includes("text-right") && "text-left", col.className)}
+                                    >
                                         {col.label}
                                     </th>
                                 ))}
@@ -91,15 +95,18 @@ export function AuditLogsTable({ logs, isLoading, pagination, onPageChange, onRo
                         <tbody className="divide-y divide-white/5">
                             {[...Array(limit)].map((_, i) => (
                                 <tr key={i} className="animate-pulse">
+                                    {/* Action */}
                                     <td className="px-4 py-4">
                                         <Skeleton className="h-6 w-20 rounded-full" />
                                     </td>
+                                    {/* Entity */}
                                     <td className="px-4 py-4">
                                         <div className="space-y-2">
                                             <Skeleton className="h-4 w-24" />
-                                            <Skeleton className="h-3 w-32 opacity-50" />
+                                            <Skeleton className="h-3 w-48 opacity-50" />
                                         </div>
                                     </td>
+                                    {/* Author */}
                                     <td className="px-4 py-4">
                                         <div className="flex items-center gap-3">
                                             <Skeleton className="h-8 w-8 rounded-full" />
@@ -109,8 +116,9 @@ export function AuditLogsTable({ logs, isLoading, pagination, onPageChange, onRo
                                             </div>
                                         </div>
                                     </td>
-                                    <td className="px-4 py-4">
-                                        <Skeleton className="h-4 w-40" />
+                                    {/* Date */}
+                                    <td className="px-4 py-4 text-right">
+                                        <Skeleton className="h-4 w-32 ml-auto" />
                                     </td>
                                 </tr>
                             ))}
@@ -141,7 +149,10 @@ export function AuditLogsTable({ logs, isLoading, pagination, onPageChange, onRo
                     <thead>
                         <tr className="border-b border-white/10">
                             {columns.map((col) => (
-                                <th key={col.key} className={cn("px-4 py-3 text-left text-xs font-medium text-white/50 uppercase tracking-wider", col.className)}>
+                                <th
+                                    key={col.key}
+                                    className={cn("px-4 py-3 text-xs font-medium text-white/50 uppercase tracking-wider", !col.className?.includes("text-right") && "text-left", col.className)}
+                                >
                                     {col.label}
                                 </th>
                             ))}
@@ -169,13 +180,26 @@ export function AuditLogsTable({ logs, isLoading, pagination, onPageChange, onRo
 
                                     {/* Entity */}
                                     <td className="px-4 py-3">
-                                        <div className="flex flex-col">
+                                        <div className="flex flex-col gap-1">
                                             <span className="text-sm font-medium text-white">{formatEntityType(log.entity)}</span>
-                                            <span className="text-xs text-white/40 font-mono truncate max-w-[120px]">{log.entityId}</span>
+                                            <div className="flex items-center gap-2 group/id">
+                                                <span className="text-[10px] text-white/40 font-mono tracking-tight">{log.entityId}</span>
+                                                <button
+                                                    onClick={(e) => {
+                                                        e.stopPropagation()
+                                                        navigator.clipboard.writeText(log.entityId)
+                                                        toast.success("ID copiado com sucesso!")
+                                                    }}
+                                                    className="opacity-0 group-hover/id:opacity-100 p-1 rounded-md bg-white/5 hover:bg-white/10 text-white/40 hover:text-white transition-all"
+                                                    title="Copiar ID"
+                                                >
+                                                    <Copy className="h-2.5 w-2.5" />
+                                                </button>
+                                            </div>
                                         </div>
                                     </td>
 
-                                    {/* User */}
+                                    {/* User (Author) */}
                                     <td className="px-4 py-3">
                                         {log.performedByUser?.username ? (
                                             <UserMini
@@ -195,7 +219,7 @@ export function AuditLogsTable({ logs, isLoading, pagination, onPageChange, onRo
                                     </td>
 
                                     {/* Date */}
-                                    <td className="px-4 py-3 text-sm text-white/60">{formatDate((log as any).createdAt || (log as any).timestamp)}</td>
+                                    <td className="px-4 py-3 text-sm text-white/60 text-right whitespace-nowrap">{formatDate((log as any).createdAt || (log as any).timestamp)}</td>
                                 </motion.tr>
                             ))}
                         </AnimatePresence>

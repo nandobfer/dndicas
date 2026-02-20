@@ -2,13 +2,15 @@
 
 import * as React from 'react';
 import { motion } from 'framer-motion';
-import { User, Calendar, Database, ArrowRight } from 'lucide-react';
+import { User, Calendar, Database, ArrowRight, Copy } from "lucide-react"
 import { GlassModal, GlassModalContent, GlassModalHeader, GlassModalTitle, GlassModalDescription } from "@/components/ui/glass-modal"
 import { ActionChip } from "@/components/ui/action-chip"
 import { DiffView } from "@/components/ui/diff-view"
 import { glassClasses, cardGlass } from "@/lib/config/glass-config"
 import { fade } from "@/lib/config/motion-configs"
+import { toast } from "sonner"
 import type { AuditLog } from "../types/audit.types"
+import { cn } from "@/core/utils"
 
 interface AuditLogDetailModalProps {
     log: AuditLog | null
@@ -20,7 +22,7 @@ function formatDate(date: Date | string): string {
     if (!date) return "N/A"
     return new Intl.DateTimeFormat("pt-BR", {
         day: "2-digit",
-        month: "2-digit",
+        month: "short",
         year: "numeric",
         hour: "2-digit",
         minute: "2-digit",
@@ -33,12 +35,19 @@ function formatEntityType(entityType: string): string {
         User: "Usuário",
         Company: "Empresa",
         Organization: "Organização",
+        OrganizationMembership: "Membro da Organização",
     }
     return labels[entityType] || entityType || "Sistema"
 }
 
 export function AuditLogDetailModal({ log, open, onOpenChange }: AuditLogDetailModalProps) {
     if (!log) return null
+
+    const handleCopyId = (e: React.MouseEvent) => {
+        e.stopPropagation()
+        navigator.clipboard.writeText(log.entityId)
+        toast.success("ID copiado com sucesso!")
+    }
 
     return (
         <GlassModal open={open} onOpenChange={onOpenChange}>
@@ -48,23 +57,26 @@ export function AuditLogDetailModal({ log, open, onOpenChange }: AuditLogDetailM
                         <span>Detalhes do Log</span>
                         <ActionChip action={log.action} />
                     </GlassModalTitle>
-                    <GlassModalDescription>
-                        {formatEntityType(log.entity)} • {log.entityId}
+                    <GlassModalDescription className="flex items-center gap-2">
+                        {formatEntityType(log.entity)} •{" "}
+                        <span className="font-mono text-[10px] bg-white/5 px-2 py-0.5 rounded cursor-pointer hover:bg-white/10 transition-colors" onClick={handleCopyId}>
+                            {log.entityId}
+                        </span>
                     </GlassModalDescription>
                 </GlassModalHeader>
 
-                <motion.div className="space-y-6 mt-6" {...fade}>
+                <motion.div className="space-y-6 mt-6 pb-6" {...fade}>
                     {/* Metadata Grid */}
                     <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                         <InfoCard icon={<Database className="h-4 w-4" />} label="Entidade" value={formatEntityType(log.entity)} />
-                        <InfoCard icon={<ArrowRight className="h-4 w-4" />} label="ID" value={log.entityId.slice(0, 8) + "..."} title={log.entityId} />
+                        <InfoCard icon={<ArrowRight className="h-4 w-4" />} label="ID da Entidade" value={log.entityId} isMono onClick={handleCopyId} className="cursor-pointer group/id" />
                         <InfoCard
                             icon={<User className="h-4 w-4" />}
-                            label="Usuário"
+                            label="Autor"
                             value={log.performedByUser?.name || log.performedByUser?.username || "Sistema"}
                             title={log.performedByUser?.email}
                         />
-                        <InfoCard icon={<Calendar className="h-4 w-4" />} label="Data" value={formatDate(log.createdAt)} />
+                        <InfoCard icon={<Calendar className="h-4 w-4" />} label="Data" value={formatDate(log.createdAt || (log as any).timestamp)} />
                     </div>
 
                     {/* Content based on action type */}
@@ -108,25 +120,28 @@ export function AuditLogDetailModal({ log, open, onOpenChange }: AuditLogDetailM
 }
 
 interface InfoCardProps {
-  icon: React.ReactNode;
-  label: string;
-  value: string;
-  title?: string;
+    icon: React.ReactNode
+    label: string
+    value: string
+    title?: string
+    isMono?: boolean
+    onClick?: (e: React.MouseEvent) => void
+    className?: string
 }
 
-function InfoCard({ icon, label, value, title }: InfoCardProps) {
-  return (
-    <div
-      className={`${glassClasses.card} p-3 rounded-lg`}
-      title={title}
-    >
-      <div className="flex items-center gap-2 text-muted-foreground mb-1">
-        {icon}
-        <span className="text-xs">{label}</span>
-      </div>
-      <p className="text-sm font-medium truncate">{value}</p>
-    </div>
-  );
+function InfoCard({ icon, label, value, title, isMono, onClick, className }: InfoCardProps) {
+    return (
+        <div className={cn(glassClasses.card, "p-3 rounded-lg flex flex-col justify-between min-h-[70px]", className)} title={title} onClick={onClick}>
+            <div className="flex items-center gap-2 text-muted-foreground mb-1">
+                {icon}
+                <span className="text-xs">{label}</span>
+            </div>
+            <div className="flex items-center gap-2 overflow-hidden">
+                <p className={cn("text-sm font-medium truncate", isMono && "font-mono text-[10px] bg-white/5 px-1 rounded truncate leading-loose")}>{value}</p>
+                {onClick && <Copy className="h-3 w-3 text-white/20 group-hover/id:text-white/60 transition-colors flex-shrink-0" />}
+            </div>
+        </div>
+    )
 }
 
 interface DataDisplayProps {

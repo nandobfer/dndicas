@@ -18,10 +18,9 @@ import { clerkMiddleware, createRouteMatcher } from "@clerk/nextjs/server";
 
 // Define rotas públicas (não requerem autenticação)
 const isPublicRoute = createRouteMatcher([
-  '/sign-in(.*)',          // Página de login e sub-rotas
-  '/sign-up(.*)',          // Página de registro e sub-rotas
-  '/api/webhooks(.*)',     // Webhooks do Clerk (não devem ser protegidos)
-]);
+    "/sign-in(.*)", // Página de login e sub-rotas
+    "/sign-up(.*)", // Página de registro e sub-rotas
+])
 
 // Define rotas de API que precisam de sync de usuário
 const isApiRoute = createRouteMatcher([
