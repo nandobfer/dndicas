@@ -53,77 +53,62 @@ const GlassModalClose = DialogPrimitive.Close;
 /**
  * Overlay backdrop with blur effect.
  */
-const GlassModalOverlay = React.forwardRef<
-  React.ElementRef<typeof DialogPrimitive.Overlay>,
-  React.ComponentPropsWithoutRef<typeof DialogPrimitive.Overlay>
->(({ className, ...props }, ref) => (
-  <DialogPrimitive.Overlay ref={ref} asChild {...props}>
-    <motion.div
-      className={cn(
-        'fixed inset-0 bg-black/60 backdrop-blur-sm',
-        className
-      )}
-      variants={motionConfig.variants.fade}
-      initial="initial"
-      animate="animate"
-      exit="exit"
-      transition={{ duration: 0.35, ease: 'easeInOut' }}
-    />
-  </DialogPrimitive.Overlay>
-));
-GlassModalOverlay.displayName = 'GlassModalOverlay';
+const GlassModalOverlay = React.forwardRef<React.ElementRef<typeof DialogPrimitive.Overlay>, React.ComponentPropsWithoutRef<typeof DialogPrimitive.Overlay>>(({ className, ...props }, ref) => (
+    <DialogPrimitive.Overlay ref={ref} asChild {...props}>
+        <motion.div
+            className={cn("fixed inset-0 backdrop-blur-[2px]", className)}
+            variants={motionConfig.variants.fade}
+            initial="initial"
+            animate="animate"
+            exit="exit"
+            transition={{ duration: 0.35, ease: "easeInOut" }}
+        />
+    </DialogPrimitive.Overlay>
+))
+GlassModalOverlay.displayName = "GlassModalOverlay"
 
-export interface GlassModalContentProps
-  extends React.ComponentPropsWithoutRef<typeof DialogPrimitive.Content> {
-  /** Hide the close button */
-  hideCloseButton?: boolean;
-  /** Size variant */
-  size?: 'sm' | 'md' | 'lg' | 'xl' | 'full';
+export interface GlassModalContentProps extends React.ComponentPropsWithoutRef<typeof DialogPrimitive.Content> {
+    /** Hide the close button */
+    hideCloseButton?: boolean
+    /** Size variant */
+    size?: "sm" | "md" | "lg" | "xl" | "full"
 }
 
 const sizeClasses = {
-  sm: 'max-w-sm',
-  md: 'max-w-md',
-  lg: 'max-w-lg',
-  xl: 'max-w-xl',
-  full: 'max-w-4xl',
-};
+    sm: "max-w-sm",
+    md: "max-w-md",
+    lg: "max-w-lg",
+    xl: "max-w-xl",
+    full: "max-w-4xl",
+}
 
 /**
  * Modal content with Liquid Glass styling.
  */
-const GlassModalContent = React.forwardRef<
-  React.ElementRef<typeof DialogPrimitive.Content>,
-  GlassModalContentProps
->(({ className, children, hideCloseButton = false, size = 'lg', ...props }, ref) => (
-  <GlassModalPortal>
-    <GlassModalOverlay />
-    <DialogPrimitive.Content ref={ref} asChild {...props}>
-      <motion.div
-        className={cn(
-          'w-full p-6 rounded-xl relative overflow-hidden',
-          'border border-white/10',
-          sizeClasses[size],
-          className
-        )}
-        variants={motionConfig.variants.scaleUp}
-        initial="initial"
-        animate="animate"
-        exit="exit"
-        transition={{ duration: 0.35, ease: 'easeInOut' }}
-      >
-        <GlassBackdrop />
-        {children}
-        {!hideCloseButton && (
-          <DialogPrimitive.Close className="absolute right-4 top-4 rounded-sm p-1 opacity-70 ring-offset-transparent transition-all hover:opacity-100 hover:bg-white/10 focus:outline-none focus:ring-2 focus:ring-white/20 focus:ring-offset-2 disabled:pointer-events-none">
-            <X className="h-4 w-4 text-white" />
-            <span className="sr-only">Fechar</span>
-          </DialogPrimitive.Close>
-        )}
-      </motion.div>
-    </DialogPrimitive.Content>
-  </GlassModalPortal>
-));
+const GlassModalContent = React.forwardRef<React.ElementRef<typeof DialogPrimitive.Content>, GlassModalContentProps>(({ className, children, hideCloseButton = false, size = "lg", ...props }, ref) => (
+    <GlassModalPortal>
+        <GlassModalOverlay />
+        <DialogPrimitive.Content ref={ref} asChild {...props}>
+            <motion.div
+                className={cn("w-full p-6 rounded-xl relative overflow-hidden backdrop-blur-sm", "border border-white/10", sizeClasses[size], className)}
+                variants={motionConfig.variants.scaleUp}
+                initial="initial"
+                animate="animate"
+                exit="exit"
+                transition={{ duration: 0.35, ease: "easeInOut" }}
+            >
+                <GlassBackdrop />
+                {children}
+                {!hideCloseButton && (
+                    <DialogPrimitive.Close className="absolute right-4 top-4 rounded-sm p-1 opacity-70 ring-offset-transparent transition-all hover:opacity-100 hover:bg-white/10 focus:outline-none focus:ring-2 focus:ring-white/20 focus:ring-offset-2 disabled:pointer-events-none">
+                        <X className="h-4 w-4 text-white" />
+                        <span className="sr-only">Fechar</span>
+                    </DialogPrimitive.Close>
+                )}
+            </motion.div>
+        </DialogPrimitive.Content>
+    </GlassModalPortal>
+))
 GlassModalContent.displayName = 'GlassModalContent';
 
 /**

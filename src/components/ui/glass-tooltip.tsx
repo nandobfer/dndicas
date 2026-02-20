@@ -49,9 +49,10 @@ const GlassTooltipContent = React.forwardRef<React.ElementRef<typeof TooltipPrim
             <TooltipPrimitive.Content
                 ref={ref}
                 sideOffset={sideOffset}
+                collisionPadding={10}
                 className={cn(
                     "z-50 overflow-hidden rounded-lg px-3 py-1.5 text-sm relative",
-                    "border border-white/10",
+                    "border border-white/10 shadow-2xl",
                     "text-white",
                     "animate-in fade-in-0 zoom-in-95",
                     "data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-95",
@@ -64,7 +65,7 @@ const GlassTooltipContent = React.forwardRef<React.ElementRef<typeof TooltipPrim
                 {...props}
             >
                 <GlassBackdrop />
-                {children}
+                <div className="relative z-10">{children}</div>
             </TooltipPrimitive.Content>
         </TooltipPrimitive.Portal>
     ),

@@ -56,39 +56,44 @@ function sanitizeData(data: Record<string, unknown>): Record<string, unknown> {
 /**
  * Get user details for audit log display.
  */
-async function getUserDetails(userId: string): Promise<{
-  _id: string;
-  name?: string;
-  username: string;
-  email: string;
-  avatarUrl?: string;
-  role: 'admin' | 'user';
-} | undefined> {
-  try {
-    await dbConnect();
-    
-    // Try to find by MongoDB ID first
-    let user = await User.findById(userId).lean();
-    
-    // If not found, try by clerkId
-    if (!user) {
-      const userDoc = await User.findByClerkId(userId);
-      user = userDoc ? userDoc.toObject() : null;
+async function getUserDetails(userId: string): Promise<
+    | {
+          _id: string
+          name?: string
+          username: string
+          email: string
+          avatarUrl?: string
+          role: "admin" | "user"
+          status: "active" | "inactive"
+      }
+    | undefined
+> {
+    try {
+        await dbConnect()
+
+        // Try to find by MongoDB ID first
+        let user = await User.findById(userId).lean()
+
+        // If not found, try by clerkId
+        if (!user) {
+            const userDoc = await User.findByClerkId(userId)
+            user = userDoc ? userDoc.toObject() : null
+        }
+
+        if (!user) return undefined
+
+        return {
+            _id: String(user._id),
+            name: user.name,
+            username: user.username,
+            email: user.email,
+            avatarUrl: user.avatarUrl,
+            role: user.role,
+            status: (user.status as any) || "active",
+        }
+    } catch {
+        return undefined
     }
-
-    if (!user) return undefined;
-
-    return {
-      _id: String(user._id),
-      name: user.name,
-      username: user.username,
-      email: user.email,
-      avatarUrl: user.avatarUrl,
-      role: user.role,
-    };
-  } catch {
-    return undefined;
-  }
 }
 
 /**

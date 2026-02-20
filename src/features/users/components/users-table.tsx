@@ -7,11 +7,12 @@
  */
 
 import * as React from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import Image from "next/image"
+import { motion, AnimatePresence } from "framer-motion"
 import { MoreHorizontal, Pencil, Trash2, Users } from "lucide-react"
 import { cn } from "@/core/utils"
 import { GlassCard, GlassCardContent } from "@/components/ui/glass-card"
-import { UserChip } from "@/components/ui/user-chip"
+import { UserMini } from "@/components/ui/user-mini"
 import { Chip, chipVariantMap } from "@/components/ui/chip"
 import { LoadingState } from "@/components/ui/loading-state"
 import { EmptyState } from "@/components/ui/empty-state"
@@ -117,27 +118,12 @@ export function UsersTable({ users, total, page, limit, isLoading = false, onEdi
 
                                     {/* User */}
                                     <td className="py-3 pl-0 min-w-[200px]">
-                                        <div className="flex items-center gap-2">
-                                            {/* Avatar */}
-                                            <div className="flex-shrink-0 h-10 w-10 rounded-full bg-white/5 border border-white/10 flex items-center justify-center text-sm font-medium text-white overflow-hidden">
-                                                {user.avatarUrl ? (
-                                                    <img src={user.avatarUrl} alt={user.name} className="h-full w-full object-cover" />
-                                                ) : (
-                                                    (user.name || user.username || "").split(" ").map(n => n[0]).join("").toUpperCase().slice(0, 2)
-                                                )}
-                                            </div>
-
-                                            {/* Name and Username with Divider */}
-                                            <div className="flex flex-col min-w-0">
-                                                <span className="text-sm font-semibold text-white truncate max-w-[240px]">
-                                                    {user.name || user.username}
-                                                </span>
-                                                <div className="h-px w-full bg-white/10 my-1 mt-1.5" />
-                                                <span className="text-[11px] text-white/40 lowercase font-mono">
-                                                    @{user.username}
-                                                </span>
-                                            </div>
-                                        </div>
+                                        <UserMini 
+                                            name={user.name} 
+                                            username={user.username} 
+                                            email={user.email} 
+                                            avatarUrl={user.avatarUrl} 
+                                        />
                                     </td>
 
                                     {/* Role */}

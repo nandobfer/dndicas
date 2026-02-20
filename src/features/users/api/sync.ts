@@ -217,7 +217,14 @@ export async function ensureUserExists(
     await dbConnect();
 
     // Check if user exists
-    const existingUser = await User.findByClerkId(clerkId);
+    let existingUser = await User.findByClerkId(clerkId)
+
+    // If user exists but is missing data we have, update it
+    if (existingUser && clerkUser && !existingUser.avatarUrl && clerkUser.image_url) {
+        existingUser.avatarUrl = clerkUser.image_url
+        await existingUser.save()
+    }
+
     if (existingUser) {
       return existingUser;
     }

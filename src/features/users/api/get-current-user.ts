@@ -53,37 +53,37 @@ function convertCurrentUser(user: Awaited<ReturnType<typeof currentUser>>): Cler
  */
 export async function getCurrentUserFromDb(): Promise<CurrentUserResult> {
   try {
-    const { userId } = await auth();
+      const { userId } = await auth()
 
-    if (!userId) {
-      return {
-        success: false,
-        user: null,
-        clerkId: null,
-        error: 'Not authenticated',
-      };
-    }
-
-    await dbConnect();
-
-    // Try to find existing user
-    let user = await User.findByClerkId(userId);
-
-    if (!user) {
-      // Fallback: sync user from Clerk
-      const clerkUser = await currentUser();
-      const clerkUserData = convertCurrentUser(clerkUser);
-
-      if (clerkUserData) {
-        user = await ensureUserExists(userId, clerkUserData);
+      if (!userId) {
+          return {
+              success: false,
+              user: null,
+              clerkId: null,
+              error: "Not authenticated",
+          }
       }
-    }
 
-    return {
-      success: true,
-      user,
-      clerkId: userId,
-    };
+      await dbConnect()
+
+      // Try to find existing user
+      let user = await User.findByClerkId(userId)
+
+      // If user exists but is missing avatar, or doesn't exist at all, sync from Clerk
+      if (!user || !user.avatarUrl) {
+          const clerkUser = await currentUser()
+          const clerkUserData = convertCurrentUser(clerkUser)
+
+          if (clerkUserData) {
+              user = await ensureUserExists(userId, clerkUserData)
+          }
+      }
+
+      return {
+          success: true,
+          user,
+          clerkId: userId,
+      }
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unknown error';
     console.error('[getCurrentUserFromDb] Error:', message);

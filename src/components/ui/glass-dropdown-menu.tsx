@@ -29,7 +29,7 @@ const GlassDropdownMenuContent = React.forwardRef<React.ElementRef<typeof Dropdo
                 ref={ref}
                 sideOffset={sideOffset}
                 className={cn(
-                    "z-50 min-w-[8rem] overflow-hidden rounded-xl p-1 relative",
+                    "z-50 min-w-[8rem] overflow-hidden rounded-xl p-1 relative backdrop-blur-sm",
                     "border border-white/10",
                     "data-[state=open]:animate-in data-[state=closed]:animate-out",
                     "data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0",

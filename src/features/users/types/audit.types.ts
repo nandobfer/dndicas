@@ -18,36 +18,37 @@ export type AuditEntity = 'User' | 'Auth';
  * Base audit log record.
  */
 export interface AuditLog {
-  _id: string;
-  /** Action performed */
-  action: AuditAction;
-  /** Entity type */
-  entity: AuditEntity;
-  /** Entity ID that was affected */
-  entityId: string;
-  /** User ID who performed the action */
-  performedBy: string;
-  /** User details for display */
-  performedByUser?: {
-    _id: string;
-    name?: string;
-    username: string;
-    email: string;
-    avatarUrl?: string;
-    role: 'admin' | 'user';
-  };
-  /** Previous data (for UPDATE and DELETE) */
-  previousData?: Record<string, unknown>;
-  /** New data (for CREATE and UPDATE) */
-  newData?: Record<string, unknown>;
-  /** Additional metadata */
-  metadata?: {
-    ip?: string;
-    userAgent?: string;
-    reason?: string;
-  };
-  /** When the action occurred */
-  createdAt: Date;
+    _id: string
+    /** Action performed */
+    action: AuditAction
+    /** Entity type */
+    entity: AuditEntity
+    /** Entity ID that was affected */
+    entityId: string
+    /** User ID who performed the action */
+    performedBy: string
+    /** User details for display */
+    performedByUser?: {
+        _id: string
+        name?: string
+        username: string
+        email: string
+        avatarUrl?: string
+        role: "admin" | "user"
+        status?: "active" | "inactive"
+    }
+    /** Previous data (for UPDATE and DELETE) */
+    previousData?: Record<string, unknown>
+    /** New data (for CREATE and UPDATE) */
+    newData?: Record<string, unknown>
+    /** Additional metadata */
+    metadata?: {
+        ip?: string
+        userAgent?: string
+        reason?: string
+    }
+    /** When the action occurred */
+    createdAt: Date
 }
 
 /**
