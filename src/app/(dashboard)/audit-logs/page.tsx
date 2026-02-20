@@ -5,6 +5,7 @@ import { motion } from "framer-motion"
 import { Clock } from "lucide-react"
 import { LoadingState } from "@/components/ui/loading-state"
 import { ErrorState } from "@/components/ui/error-state"
+import { GlassCard, GlassCardContent } from "@/components/ui/glass-card"
 import { fade } from "@/lib/config/motion-configs"
 import { AuditLogsFilters } from "@/features/users/components/audit-logs-filters"
 import { AuditLogsTable } from "@/features/users/components/audit-logs-table"
@@ -43,7 +44,11 @@ function AuditLogsContent() {
             </motion.div>
 
             {/* Filters */}
-            <AuditLogsFilters filters={filters} onActionsChange={setActions} onActorEmailChange={setActorEmail} onDateRangeChange={setDateRange} onReset={resetFilters} />
+            <GlassCard>
+                <GlassCardContent className="py-4">
+                    <AuditLogsFilters filters={filters} onActionsChange={setActions} onActorEmailChange={setActorEmail} onDateRangeChange={setDateRange} onReset={resetFilters} />
+                </GlassCardContent>
+            </GlassCard>
 
             {/* Table */}
             <AuditLogsTable logs={logs} isLoading={isLoading} pagination={pagination} onPageChange={setPage} onRowClick={handleRowClick} />

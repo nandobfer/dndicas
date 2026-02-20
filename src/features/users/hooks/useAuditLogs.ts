@@ -58,7 +58,11 @@ async function fetchAuditLogs(filters: AuditLogsFilters): Promise<AuditLogsRespo
     throw new Error(error.error || 'Erro ao carregar logs de auditoria');
   }
   
-  return response.json();
+  const result = await response.json()
+  return {
+      logs: result.data,
+      pagination: result.pagination,
+  }
 }
 
 export function useAuditLogs(filters: AuditLogsFilters = {}) {

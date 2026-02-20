@@ -120,7 +120,13 @@ export async function createAuditLog(options: CreateAuditLogOptions): Promise<IA
       metadata: options.metadata,
     });
 
-    console.log(`[Audit] ${options.action} on ${options.entity}:${options.entityId} by ${options.performedBy}`);
+    console.log("[AUDIT] Log criado:", {
+        action: options.action,
+        entity: options.entity,
+        entityId: options.entityId,
+        performedBy: options.performedBy,
+        timestamp: new Date().toISOString(),
+    })
 
     return auditLog;
   } catch (error) {

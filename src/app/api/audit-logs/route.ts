@@ -82,16 +82,27 @@ export async function GET(request: NextRequest) {
       AuditLog.countDocuments(query),
     ]);
 
-    const response: PaginatedResponse<typeof logs[0]> = {
-      success: true,
-      data: logs,
-      pagination: {
-        page,
-        limit,
-        total,
-        totalPages: Math.ceil(total / limit),
-      },
-    };
+    const normalizedLogs = logs.map((log) => {
+        const logObj = log.toObject()
+        return {
+            ...logObj,
+            entity: logObj.entity || logObj.collectionName || "System",
+            entityId: logObj.entityId || logObj.documentId || "N/A",
+            performedBy: logObj.performedBy || logObj.userId || "system",
+            createdAt: logObj.createdAt || logObj.timestamp || new Date(),
+        }
+    })
+
+    const response: PaginatedResponse<any> = {
+        success: true,
+        data: normalizedLogs,
+        pagination: {
+            page,
+            limit,
+            total,
+            totalPages: Math.ceil(total / limit),
+        },
+    }
 
     return NextResponse.json(response, { status: 200 });
   } catch (error) {

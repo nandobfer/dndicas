@@ -9,21 +9,22 @@ import * as React from 'react';
 import * as TooltipPrimitive from '@radix-ui/react-tooltip';
 import { cn } from '@/core/utils';
 import { glassConfig } from '@/lib/config/glass-config';
+import { GlassBackdrop } from "./glass-backdrop"
 
 /**
  * TooltipProvider wrapper - must wrap components using tooltips.
  */
-const GlassTooltipProvider = TooltipPrimitive.Provider;
+const GlassTooltipProvider = TooltipPrimitive.Provider
 
 /**
  * Tooltip root component.
  */
-const GlassTooltip = TooltipPrimitive.Root;
+const GlassTooltip = TooltipPrimitive.Root
 
 /**
  * Tooltip trigger - the element that triggers the tooltip on hover.
  */
-const GlassTooltipTrigger = TooltipPrimitive.Trigger;
+const GlassTooltipTrigger = TooltipPrimitive.Trigger
 
 /**
  * Glass-styled tooltip content with glassmorphism effects.
@@ -42,32 +43,32 @@ const GlassTooltipTrigger = TooltipPrimitive.Trigger;
  * </GlassTooltipProvider>
  * ```
  */
-const GlassTooltipContent = React.forwardRef<
-  React.ElementRef<typeof TooltipPrimitive.Content>,
-  React.ComponentPropsWithoutRef<typeof TooltipPrimitive.Content>
->(({ className, sideOffset = 4, ...props }, ref) => (
-  <TooltipPrimitive.Portal>
-    <TooltipPrimitive.Content
-      ref={ref}
-      sideOffset={sideOffset}
-      className={cn(
-        'z-50 overflow-hidden rounded-lg px-3 py-1.5 text-sm',
-        glassConfig.tooltip.blur,
-        glassConfig.tooltip.background,
-        glassConfig.tooltip.border,
-        glassConfig.tooltip.text,
-        'animate-in fade-in-0 zoom-in-95',
-        'data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-95',
-        'data-[side=bottom]:slide-in-from-top-2',
-        'data-[side=left]:slide-in-from-right-2',
-        'data-[side=right]:slide-in-from-left-2',
-        'data-[side=top]:slide-in-from-bottom-2',
-        className
-      )}
-      {...props}
-    />
-  </TooltipPrimitive.Portal>
-));
+const GlassTooltipContent = React.forwardRef<React.ElementRef<typeof TooltipPrimitive.Content>, React.ComponentPropsWithoutRef<typeof TooltipPrimitive.Content>>(
+    ({ className, sideOffset = 4, children, ...props }, ref) => (
+        <TooltipPrimitive.Portal>
+            <TooltipPrimitive.Content
+                ref={ref}
+                sideOffset={sideOffset}
+                className={cn(
+                    "z-50 overflow-hidden rounded-lg px-3 py-1.5 text-sm relative",
+                    "border border-white/10",
+                    "text-white",
+                    "animate-in fade-in-0 zoom-in-95",
+                    "data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-95",
+                    "data-[side=bottom]:slide-in-from-top-2",
+                    "data-[side=left]:slide-in-from-right-2",
+                    "data-[side=right]:slide-in-from-left-2",
+                    "data-[side=top]:slide-in-from-bottom-2",
+                    className,
+                )}
+                {...props}
+            >
+                <GlassBackdrop />
+                {children}
+            </TooltipPrimitive.Content>
+        </TooltipPrimitive.Portal>
+    ),
+)
 GlassTooltipContent.displayName = 'GlassTooltipContent';
 
 /**

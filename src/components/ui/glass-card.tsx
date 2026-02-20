@@ -20,57 +20,50 @@ import { motion, type HTMLMotionProps } from 'framer-motion';
 import { cn } from '@/core/utils';
 import { glassConfig } from '@/lib/config/glass-config';
 import { motionConfig } from '@/lib/config/motion-configs';
+import { GlassBackdrop } from "./glass-backdrop"
 
-export interface GlassCardProps extends Omit<HTMLMotionProps<'div'>, 'children'> {
-  /** Content to render inside the card */
-  children?: React.ReactNode;
-  /** Whether to animate on mount */
-  animate?: boolean;
-  /** Whether to show glow effect on hover */
-  glowOnHover?: boolean;
+export interface GlassCardProps extends Omit<HTMLMotionProps<"div">, "children"> {
+    /** Content to render inside the card */
+    children?: React.ReactNode
+    /** Whether to animate on mount */
+    animate?: boolean
+    /** Whether to show glow effect on hover */
+    glowOnHover?: boolean
 }
 
 /**
  * Card component with Liquid Glass glassmorphism effect.
  * Uses backdrop-blur with subtle transparency and glow borders.
  */
-const GlassCard = React.forwardRef<HTMLDivElement, GlassCardProps>(
-  ({ className, animate = true, glowOnHover = true, children, ...props }, ref) => {
-    const cardClasses = cn(
-      'rounded-xl',
-      glassConfig.card.blur,
-      glassConfig.card.background,
-      glassConfig.card.border,
-      glassConfig.card.glow,
-      glowOnHover && 'transition-shadow hover:ring-2 hover:ring-white/15',
-      className
-    );
+const GlassCard = React.forwardRef<HTMLDivElement, GlassCardProps>(({ className, animate = true, glowOnHover = true, children, ...props }, ref) => {
+    const cardClasses = cn("rounded-xl relative", "border border-white/10", glowOnHover && "transition-shadow hover:ring-2 hover:ring-white/15", className)
 
     if (animate) {
-      return (
-        <motion.div
-          ref={ref}
-          className={cardClasses}
-          variants={motionConfig.variants.fadeInUp}
-          initial="initial"
-          animate="animate"
-          exit="exit"
-          transition={motionConfig.transitions.normal}
-          whileHover={glowOnHover ? motionConfig.hover : undefined}
-          {...props}
-        >
-          {children}
-        </motion.div>
-      );
+        return (
+            <motion.div
+                ref={ref}
+                className={cardClasses}
+                variants={motionConfig.variants.fadeInUp}
+                initial="initial"
+                animate="animate"
+                exit="exit"
+                transition={motionConfig.transitions.normal}
+                whileHover={glowOnHover ? motionConfig.hover : undefined}
+                {...props}
+            >
+                <GlassBackdrop />
+                {children}
+            </motion.div>
+        )
     }
 
     return (
-      <div ref={ref} className={cardClasses} {...(props as React.HTMLAttributes<HTMLDivElement>)}>
-        {children}
-      </div>
-    );
-  }
-);
+        <div ref={ref} className={cardClasses} {...(props as React.HTMLAttributes<HTMLDivElement>)}>
+            <GlassBackdrop />
+            {children}
+        </div>
+    )
+})
 GlassCard.displayName = 'GlassCard';
 
 /**

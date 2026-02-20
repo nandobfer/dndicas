@@ -31,12 +31,22 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { cn } from '@/core/utils';
 import { glassConfig } from '@/lib/config/glass-config';
 import { motionConfig } from '@/lib/config/motion-configs';
+import { GlassBackdrop } from './glass-backdrop';
 
 const GlassModal = DialogPrimitive.Root;
 
 const GlassModalTrigger = DialogPrimitive.Trigger;
 
-const GlassModalPortal = DialogPrimitive.Portal;
+/**
+ * Portal wrapper that centers modal content.
+ */
+const GlassModalPortal = ({ children, ...props }: React.ComponentPropsWithoutRef<typeof DialogPrimitive.Portal>) => (
+  <DialogPrimitive.Portal {...props}>
+    <div className="fixed inset-0 z-50 flex items-center justify-center">
+      {children}
+    </div>
+  </DialogPrimitive.Portal>
+);
 
 const GlassModalClose = DialogPrimitive.Close;
 
@@ -50,14 +60,14 @@ const GlassModalOverlay = React.forwardRef<
   <DialogPrimitive.Overlay ref={ref} asChild {...props}>
     <motion.div
       className={cn(
-        'fixed inset-0 z-50 bg-black/60 backdrop-blur-sm',
+        'fixed inset-0 bg-black/60 backdrop-blur-sm',
         className
       )}
       variants={motionConfig.variants.fade}
       initial="initial"
       animate="animate"
       exit="exit"
-      transition={motionConfig.transitions.fast}
+      transition={{ duration: 0.35, ease: 'easeInOut' }}
     />
   </DialogPrimitive.Overlay>
 ));
@@ -91,11 +101,8 @@ const GlassModalContent = React.forwardRef<
     <DialogPrimitive.Content ref={ref} asChild {...props}>
       <motion.div
         className={cn(
-          'fixed left-[50%] top-[50%] z-50 grid w-full translate-x-[-50%] translate-y-[-50%] gap-4 p-6 rounded-xl',
-          glassConfig.overlay.blur,
-          glassConfig.overlay.background,
-          glassConfig.overlay.border,
-          glassConfig.overlay.shadow,
+          'w-full p-6 rounded-xl relative overflow-hidden',
+          'border border-white/10',
           sizeClasses[size],
           className
         )}
@@ -103,8 +110,9 @@ const GlassModalContent = React.forwardRef<
         initial="initial"
         animate="animate"
         exit="exit"
-        transition={motionConfig.transitions.page}
+        transition={{ duration: 0.35, ease: 'easeInOut' }}
       >
+        <GlassBackdrop />
         {children}
         {!hideCloseButton && (
           <DialogPrimitive.Close className="absolute right-4 top-4 rounded-sm p-1 opacity-70 ring-offset-transparent transition-all hover:opacity-100 hover:bg-white/10 focus:outline-none focus:ring-2 focus:ring-white/20 focus:ring-offset-2 disabled:pointer-events-none">
