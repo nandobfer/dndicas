@@ -11,6 +11,7 @@ Initialization of the feature module and dependencies.
 - [ ] T002 Create feature directory structure in `src/features/rules/`
 - [ ] T003 Define TypeScript interfaces in `src/features/rules/types/rules.types.ts`
 - [ ] T004 [P] Create generic Upload API route in `src/app/api/upload/route.ts` using `s3.ts`
+- [ ] T028 [P] Verify/Create context documentation in `aicontext/modules/rules.md`
 
 ## Phase 2: Foundational (Backend & Core)
 Blocking backend implementation required for UI development.
