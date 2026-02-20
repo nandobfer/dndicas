@@ -23,7 +23,7 @@ export function AuditLogsFilters({ filters, isLoading, onActionsChange, onActorE
     return (
         <DataTableFilters
             searchValue={filters.actorEmail || ""}
-            searchPlaceholder="Buscar por email..."
+            searchPlaceholder="Digite para buscar..."
             onSearchChange={(value) => onActorEmailChange(value || undefined)}
             isSearching={isLoading}
             hasActiveFilters={hasActiveFilters}
