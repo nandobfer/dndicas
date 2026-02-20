@@ -7,6 +7,12 @@
  */
 
 /**
+ * Primary color used for main actions (buttons, links, primary interactions).
+ * Based on D&D rare (blue) - #3B82F6
+ */
+export const primaryColor = '#3B82F6';
+
+/**
  * D&D 5e rarity colors mapped to hex values.
  * Used throughout the app for consistent visual hierarchy.
  */
@@ -16,7 +22,7 @@ export const rarityColors = {
   /** Uncommon items - success state (CREATE actions) */
   uncommon: '#10B981',
   /** Rare items - info state (UPDATE actions) */
-  rare: '#3B82F6',
+  rare: primaryColor,
   /** Very Rare items - highlight state (regular users) */
   veryRare: '#8B5CF6',
   /** Legendary items - warning state */
@@ -66,6 +72,7 @@ export const glassColors = {
  * Import this for access to all color palettes.
  */
 export const colors = {
+  primary: primaryColor,
   rarity: rarityColors,
   action: actionColors,
   role: roleColors,

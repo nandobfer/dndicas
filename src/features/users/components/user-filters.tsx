@@ -1,13 +1,14 @@
 "use client";
 
 /**
- * @fileoverview User filters component with search, role tabs, and status filter.
+ * @fileoverview User filters component with search, role tabs, and status chips.
  *
  * @see specs/000/spec.md - FR-013, FR-014, FR-015, FR-019
  */
 
 import { SearchInput } from '@/components/ui/search-input';
 import { RoleTabs, type RoleFilter } from '@/components/ui/role-tabs';
+import { StatusChips, type StatusFilter } from '@/components/ui/status-chips';
 import { cn } from '@/core/utils';
 import type { UserFilters } from '../types/user.types';
 
@@ -27,16 +28,7 @@ export interface UserFiltersProps {
 }
 
 /**
- * Status filter options.
- */
-const statusOptions: Array<{ value: UserFilters['status']; label: string }> = [
-  { value: 'all', label: 'Todos' },
-  { value: 'active', label: 'Ativos' },
-  { value: 'inactive', label: 'Inativos' },
-];
-
-/**
- * UserFilters component combining search, role tabs, and status selector.
+ * UserFilters component combining search, role tabs, and status chips.
  *
  * @example
  * ```tsx
@@ -77,31 +69,11 @@ export function UserFilters({
           onChange={onRoleChange}
         />
 
-        {/* Status selector */}
-        <select
+        {/* Status chips */}
+        <StatusChips
           value={filters.status || 'active'}
-          onChange={(e) => onStatusChange(e.target.value as UserFilters['status'])}
-          className={cn(
-            'h-9 px-3 rounded-lg text-sm',
-            'bg-white/5 border border-white/10 text-white',
-            'outline-none transition-all',
-            'focus:ring-2 focus:ring-white/20',
-            'cursor-pointer appearance-none',
-            'bg-no-repeat bg-right pr-8',
-          )}
-          style={{
-            backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='rgba(255,255,255,0.5)' stroke-width='2'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' d='M19 9l-7 7-7-7'/%3E%3C/svg%3E")`,
-            backgroundSize: '16px',
-            backgroundPosition: 'right 8px center',
-          }}
-          aria-label="Filtrar por status"
-        >
-          {statusOptions.map((option) => (
-            <option key={option.value} value={option.value} className="bg-gray-900 text-white">
-              {option.label}
-            </option>
-          ))}
-        </select>
+          onChange={onStatusChange as (status: StatusFilter) => void}
+        />
       </div>
     </div>
   );

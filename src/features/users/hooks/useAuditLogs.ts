@@ -18,7 +18,7 @@ import type { AuditLog, AuditAction } from '../types/audit.types';
 
 /** Filter options for audit logs query */
 export interface AuditLogsFilters {
-  action?: AuditAction;
+  actions?: AuditAction[];
   entityType?: string;
   actorEmail?: string;
   startDate?: string;
@@ -41,7 +41,9 @@ export interface AuditLogsResponse {
 async function fetchAuditLogs(filters: AuditLogsFilters): Promise<AuditLogsResponse> {
   const params = new URLSearchParams();
   
-  if (filters.action) params.set('action', filters.action);
+  if (filters.actions && filters.actions.length > 0) {
+    filters.actions.forEach(action => params.append('action', action));
+  }
   if (filters.entityType) params.set('entityType', filters.entityType);
   if (filters.actorEmail) params.set('actorEmail', filters.actorEmail);
   if (filters.startDate) params.set('startDate', filters.startDate);

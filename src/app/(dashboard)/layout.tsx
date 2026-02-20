@@ -15,19 +15,44 @@ import { glassConfig } from "@/lib/config/glass-config"
 import { motionConfig } from "@/lib/config/motion-configs"
 import { themeConfig } from "@/lib/config/theme-config"
 import { cn } from "@/core/utils"
+import { useState, useEffect } from "react"
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
     const { isExpanded, toggle, isHydrated } = useSidebar()
+    const [isMobile, setIsMobile] = useState(false)
+
+    useEffect(() => {
+        const checkMobile = () => {
+            setIsMobile(window.innerWidth < 768)
+        }
+
+        checkMobile()
+        window.addEventListener("resize", checkMobile)
+        return () => window.removeEventListener("resize", checkMobile)
+    }, [])
+
+    const marginLeft = isMobile ? "0" : isHydrated ? (isExpanded ? "280px" : "72px") : "72px"
 
     return (
         <div className="flex min-h-screen w-full bg-background">
-            {/* Desktop Sidebar */}
+            {/* Desktop Sidebar - Fixed */}
             <ExpandableSidebar isExpanded={isExpanded} />
 
-            {/* Main Content Area */}
-            <div className="flex flex-1 flex-col">
+            {/* Main Content Area - With left margin to account for sidebar */}
+            <div
+                className="flex flex-1 flex-col transition-all duration-300"
+                style={{
+                    marginLeft,
+                }}
+            >
                 {/* Topbar */}
-                <header className={cn("flex h-14 items-center gap-4 border-b border-white/5 px-4 lg:h-[60px] lg:px-6", glassConfig.sidebar.blur, "bg-black/40")}>
+                <header
+                    className={cn(
+                        "flex h-14 items-center gap-4 border-b border-white/5 px-4 lg:h-[60px] lg:px-6",
+                        glassConfig.sidebar.blur,
+                        "bg-black/40",
+                    )}
+                >
                     {/* Mobile Menu */}
                     <Sheet>
                         <SheetTrigger asChild>

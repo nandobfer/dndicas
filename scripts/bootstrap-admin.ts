@@ -22,7 +22,7 @@ import mongoose from 'mongoose';
 import { clerkClient } from '@clerk/nextjs/server';
 
 // Load environment variables
-dotenv.config({ path: '.env.local' });
+dotenv.config({ path: ".env" })
 
 // Import after dotenv to ensure env vars are loaded
 // eslint-disable-next-line @typescript-eslint/no-require-imports
@@ -195,7 +195,7 @@ async function main(): Promise<void> {
   console.log('🚀 Bootstrap Admin Script');
   console.log('========================\n');
 
-  const email = process.argv[2];
+  const email = process.argv[3]
 
   if (!email) {
     console.error('❌ Error: Email address is required');

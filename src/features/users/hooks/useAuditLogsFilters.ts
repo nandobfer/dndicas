@@ -20,7 +20,7 @@ import { useSearchParams, useRouter, usePathname } from 'next/navigation';
 import type { AuditAction } from '../types/audit.types';
 
 export interface AuditLogsFilterState {
-  action?: AuditAction;
+  actions?: AuditAction[];
   entityType?: string;
   actorEmail?: string;
   startDate?: string;
@@ -37,15 +37,18 @@ export function useAuditLogsFilters() {
   const router = useRouter();
   const pathname = usePathname();
 
-  const filters: AuditLogsFilterState = useMemo(() => ({
-    action: (searchParams.get('action') as AuditAction) || undefined,
-    entityType: searchParams.get('entityType') || undefined,
-    actorEmail: searchParams.get('actorEmail') || undefined,
-    startDate: searchParams.get('startDate') || undefined,
-    endDate: searchParams.get('endDate') || undefined,
-    page: Number(searchParams.get('page')) || DEFAULT_PAGE,
-    limit: Number(searchParams.get('limit')) || DEFAULT_LIMIT,
-  }), [searchParams]);
+  const filters: AuditLogsFilterState = useMemo(() => {
+    const actionsParam = searchParams.get('actions');
+    return {
+      actions: actionsParam ? (actionsParam.split(',') as AuditAction[]) : undefined,
+      entityType: searchParams.get('entityType') || undefined,
+      actorEmail: searchParams.get('actorEmail') || undefined,
+      startDate: searchParams.get('startDate') || undefined,
+      endDate: searchParams.get('endDate') || undefined,
+      page: Number(searchParams.get('page')) || DEFAULT_PAGE,
+      limit: Number(searchParams.get('limit')) || DEFAULT_LIMIT,
+    };
+  }, [searchParams]);
 
   const setFilters = useCallback((updates: Partial<AuditLogsFilterState>) => {
     const params = new URLSearchParams(searchParams.toString());
@@ -58,6 +61,13 @@ export function useAuditLogsFilters() {
     Object.entries(updates).forEach(([key, value]) => {
       if (value === undefined || value === '' || value === null) {
         params.delete(key);
+      } else if (Array.isArray(value)) {
+        // Handle array values (like actions)
+        if (value.length === 0) {
+          params.delete(key);
+        } else {
+          params.set(key, value.join(','));
+        }
       } else {
         params.set(key, String(value));
       }
@@ -70,8 +80,8 @@ export function useAuditLogsFilters() {
     setFilters({ page });
   }, [setFilters]);
 
-  const setAction = useCallback((action: AuditAction | undefined) => {
-    setFilters({ action });
+  const setActions = useCallback((actions: AuditAction[]) => {
+    setFilters({ actions: actions.length > 0 ? actions : undefined });
   }, [setFilters]);
 
   const setEntityType = useCallback((entityType: string | undefined) => {
@@ -94,7 +104,7 @@ export function useAuditLogsFilters() {
     filters,
     setFilters,
     setPage,
-    setAction,
+    setActions,
     setEntityType,
     setActorEmail,
     setDateRange,

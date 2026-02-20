@@ -18,6 +18,8 @@ export interface RoleTabsProps {
   value: RoleFilter;
   /** Callback when role changes */
   onChange: (role: RoleFilter) => void;
+  /** Show "all" option (default: true) */
+  showAll?: boolean;
   /** Additional class names */
   className?: string;
 }
@@ -60,7 +62,9 @@ const tabs: Array<{
  * <RoleTabs value={role} onChange={setRole} />
  * ```
  */
-export function RoleTabs({ value, onChange, className }: RoleTabsProps) {
+export function RoleTabs({ value, onChange, showAll = true, className }: RoleTabsProps) {
+  const visibleTabs = showAll ? tabs : tabs.filter((tab) => tab.value !== 'all');
+
   return (
     <div
       className={cn(
@@ -70,7 +74,7 @@ export function RoleTabs({ value, onChange, className }: RoleTabsProps) {
       role="tablist"
       aria-label="Filtrar por função"
     >
-      {tabs.map((tab) => {
+      {visibleTabs.map((tab) => {
         const isSelected = value === tab.value;
 
         return (

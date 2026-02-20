@@ -31,7 +31,7 @@ export async function GET(request: NextRequest) {
     const startDate = searchParams.get('startDate');
     const endDate = searchParams.get('endDate');
     const filterUserId = searchParams.get('userId');
-    const action = searchParams.get('action');
+    const actions = searchParams.getAll('action');
     const collectionName = searchParams.get('collectionName');
     const actorEmail = searchParams.get("actorEmail")
     const entityType = searchParams.get("entityType")
@@ -58,8 +58,8 @@ export async function GET(request: NextRequest) {
     }
 
     // Filtro de ação
-    if (action) {
-        query.action = action
+    if (actions && actions.length > 0) {
+        query.action = { $in: actions }
     }
 
     // Filtro de coleção

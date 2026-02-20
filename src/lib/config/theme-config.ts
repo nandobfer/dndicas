@@ -11,9 +11,10 @@
  * const adminColor = themeConfig.colors.role.admin;
  */
 
-import { colors, type RarityColor, type ActionColor, type RoleColor } from './colors';
+import { colors, primaryColor, type RarityColor, type ActionColor, type RoleColor } from './colors';
 import { glassConfig, glassClasses } from './glass-config';
 import { motionConfig, transitions, easings } from './motion-configs';
+import { buttons } from './button-styles';
 
 /**
  * Spacing constants for layout components.
@@ -102,6 +103,7 @@ export const durations = {
  */
 export const themeConfig = {
   colors,
+  buttons,
   glass: glassConfig,
   motion: motionConfig,
   spacing,
@@ -111,7 +113,7 @@ export const themeConfig = {
 } as const;
 
 // Re-export sub-configs for convenience
-export { colors, glassConfig, glassClasses, motionConfig, transitions, easings };
+export { colors, primaryColor, glassConfig, glassClasses, motionConfig, transitions, easings, buttons };
 
 // Re-export types
 export type { RarityColor, ActionColor, RoleColor };

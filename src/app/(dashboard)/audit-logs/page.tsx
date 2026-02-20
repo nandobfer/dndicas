@@ -14,7 +14,7 @@ import { useAuditLogsFilters } from "@/features/users/hooks/useAuditLogsFilters"
 import type { AuditLog } from "@/features/users/types/audit.types"
 
 function AuditLogsContent() {
-    const { filters, setPage, setAction, setActorEmail, setDateRange, resetFilters } = useAuditLogsFilters()
+    const { filters, setPage, setActions, setActorEmail, setDateRange, resetFilters } = useAuditLogsFilters()
     const { data, isLoading, isError, refetch } = useAuditLogs(filters)
     const [selectedLog, setSelectedLog] = useState<AuditLog | null>(null)
     const [dialogOpen, setDialogOpen] = useState(false)
@@ -43,7 +43,7 @@ function AuditLogsContent() {
             </motion.div>
 
             {/* Filters */}
-            <AuditLogsFilters filters={filters} onActionChange={setAction} onActorEmailChange={setActorEmail} onDateRangeChange={setDateRange} onReset={resetFilters} />
+            <AuditLogsFilters filters={filters} onActionsChange={setActions} onActorEmailChange={setActorEmail} onDateRangeChange={setDateRange} onReset={resetFilters} />
 
             {/* Table */}
             <AuditLogsTable logs={logs} isLoading={isLoading} pagination={pagination} onPageChange={setPage} onRowClick={handleRowClick} />

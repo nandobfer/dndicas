@@ -84,7 +84,7 @@ export async function syncUserFromClerk(clerkUser: ClerkUserData): Promise<SyncR
     await dbConnect();
 
     // Check if user exists by Clerk ID
-    const existingUser = await User.findByClerkId(clerkUser.id);
+    let existingUser = await User.findByClerkId(clerkUser.id);
 
     const email = getPrimaryEmail(clerkUser);
     const username = generateUsername(clerkUser);
@@ -107,6 +107,28 @@ export async function syncUserFromClerk(clerkUser: ClerkUserData): Promise<SyncR
       return {
         success: true,
         user: existingUser,
+        action: 'updated',
+      };
+    }
+
+    // Check if user with same email exists (might have different clerkId)
+    const existingEmailUser = await User.findByEmail(email);
+    if (existingEmailUser) {
+      // Update the clerkId of the existing user
+      existingEmailUser.clerkId = clerkUser.id;
+      existingEmailUser.username = username;
+      existingEmailUser.name = name;
+      existingEmailUser.avatarUrl = clerkUser.image_url || undefined;
+      
+      if (clerkUser.public_metadata?.role) {
+        existingEmailUser.role = clerkUser.public_metadata.role;
+      }
+
+      await existingEmailUser.save();
+
+      return {
+        success: true,
+        user: existingEmailUser,
         action: 'updated',
       };
     }

@@ -126,7 +126,7 @@ export function UserFormModal({
                   glassConfig.input.blur,
                   glassConfig.input.background,
                   glassConfig.input.border,
-                  'focus:ring-2 focus:ring-white/20 outline-none',
+                  'focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500/50',
                   errors.name && 'border-rose-400/50 focus:ring-rose-400/30'
                 )}
                 placeholder="Nome completo"
@@ -163,7 +163,7 @@ export function UserFormModal({
                   glassConfig.input.blur,
                   glassConfig.input.background,
                   glassConfig.input.border,
-                  'focus:ring-2 focus:ring-white/20 outline-none',
+                  'focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500/50',
                   errors.username && 'border-rose-400/50 focus:ring-rose-400/30'
                 )}
                 placeholder="username_exemplo"
@@ -200,7 +200,7 @@ export function UserFormModal({
                   glassConfig.input.blur,
                   glassConfig.input.background,
                   glassConfig.input.border,
-                  'focus:ring-2 focus:ring-white/20 outline-none',
+                  'focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500/50',
                   errors.email && 'border-rose-400/50 focus:ring-rose-400/30'
                 )}
                 placeholder="email@exemplo.com"
@@ -233,6 +233,7 @@ export function UserFormModal({
                   setValue('role', newRole);
                 }
               }}
+              showAll={false}
             />
           </div>
 
@@ -255,7 +256,7 @@ export function UserFormModal({
               disabled={isSubmitting}
               className={cn(
                 'px-4 py-2 rounded-lg text-sm font-medium transition-colors',
-                'bg-emerald-500 text-white hover:bg-emerald-600',
+                'bg-blue-500 text-white hover:bg-blue-600',
                 'disabled:opacity-50 disabled:cursor-not-allowed',
                 'flex items-center gap-2'
               )}
