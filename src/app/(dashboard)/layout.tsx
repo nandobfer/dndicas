@@ -35,17 +35,17 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     return (
         <div className="flex min-h-screen w-full bg-background">
             {/* Desktop Sidebar - Fixed */}
-            <ExpandableSidebar 
-                isExpanded={isExpanded} 
-                onExpand={expand} 
-                onCollapse={collapse} 
-            />
+            <ExpandableSidebar isExpanded={isExpanded} onExpand={expand} onCollapse={collapse} />
 
             {/* Mobile Toggle - Floating when header is gone */}
             <div className="md:hidden fixed top-4 left-4 z-50">
                 <Sheet>
                     <SheetTrigger asChild>
-                        <Button variant="ghost" size="icon" className="shrink-0 text-white/70 hover:text-white hover:bg-white/10 bg-black/20 backdrop-blur-md border border-white/10 rounded-full h-10 w-10">
+                        <Button
+                            variant="ghost"
+                            size="icon"
+                            className="shrink-0 text-white/70 hover:text-white hover:bg-white/10 bg-black/20 backdrop-blur-md border border-white/10 rounded-full h-10 w-10"
+                        >
                             <Menu className="h-5 w-5" />
                             <span className="sr-only">Abrir menu</span>
                         </Button>
@@ -61,7 +61,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                             </Link>
                             <Sidebar className="mt-4" />
                         </nav>
-                        
+
                         <div className="mt-auto pt-4 border-t border-white/5 flex items-center justify-between">
                             <span className="text-sm text-white/70 font-medium">Minha Conta</span>
                             <UserButton afterSignOutUrl="/sign-in" />
@@ -71,11 +71,12 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             </div>
 
             {/* Main Content Area - With left margin to account for sidebar */}
-            <div
-                className="flex flex-1 flex-col transition-all duration-300"
-                style={{
+            <motion.div
+                className="flex flex-1 flex-col"
+                animate={{
                     marginLeft,
                 }}
+                transition={motionConfig.sidebarTransition}
             >
                 {/* Page Content */}
                 <motion.main
@@ -87,7 +88,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                 >
                     {children}
                 </motion.main>
-            </div>
+            </motion.div>
         </div>
     )
 }

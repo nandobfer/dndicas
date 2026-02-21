@@ -22,31 +22,22 @@ export function WipEntityCard({
     loading?: boolean
 }) {
     return (
-        <motion.div
-            initial={{ opacity: 0, scale: 0.95 }}
-            animate={{ opacity: 1, scale: 1 }}
-            transition={{ delay: 0.4 + index * 0.05 }}
-        >
+        <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: 0.4 + index * 0.05 }}>
             <GlassCard className="h-full border-white/5 bg-white/[0.02] hover:bg-white/[0.04] transition-colors relative group overflow-hidden">
                 <GlassCardHeader className="pb-0">
                     <div className="flex items-start justify-between">
                         <div className="p-2 rounded-lg bg-white/5 border border-white/10 text-white/40 group-hover:text-white/60 transition-colors">
                             {Icon ? <Icon className="h-5 w-5" /> : <Sparkles className="h-5 w-5" />}
                         </div>
-                        <div className="text-[10px] font-bold text-white/20 group-hover:text-white/40 transition-colors">
-                            v0.2-WIP
-                        </div>
+                        <div className="text-[10px] font-bold text-white/20 group-hover:text-white/40 transition-colors">WIP</div>
                     </div>
-                    <GlassCardTitle className="text-white/90 group-hover:text-white mt-3 transition-colors">
-                        {title}
-                    </GlassCardTitle>
+                    <GlassCardTitle className="text-white/90 group-hover:text-white mt-3 transition-colors">{title}</GlassCardTitle>
                     <GlassCardDescription className="text-white/40 text-xs min-h-[32px]">{description || "Em breve..."}</GlassCardDescription>
                 </GlassCardHeader>
                 <GlassCardContent className="pt-4">
                     <div className="space-y-3">
                         <div className="flex items-center gap-2">
-                            <div className="h-4 w-12 bg-white/5 rounded animate-pulse" />
-                            <div className="text-[10px] text-white/20 italic">Dados sincronizando...</div>
+                            <div className="text-[10px] text-white/20 italic">vem aí</div>
                         </div>
 
                         <div className="flex items-end gap-0.5 h-8 w-full opacity-20 group-hover:opacity-30 transition-opacity">
