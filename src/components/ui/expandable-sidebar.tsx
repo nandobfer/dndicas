@@ -16,7 +16,7 @@ import * as React from 'react';
 import { motion } from 'framer-motion';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Package2, Home, User, Sparkles, Upload, Mail, Palette, FileText, Users } from 'lucide-react';
+import { Package2, Home, User, Sparkles, Upload, Mail, Palette, FileText, Users, Ruler } from 'lucide-react';
 import { cn } from '@/core/utils';
 import { glassConfig } from '@/lib/config/glass-config';
 import { motionConfig, sidebarTransition } from '@/lib/config/motion-configs';
@@ -55,6 +55,7 @@ const exampleItems = [
 // T020: Renamed from "Módulos" to "Cadastros", removed "Empresas", added "Usuários"
 const cadastrosItems = [
   { label: 'Usuários', href: '/users', icon: Users },
+  { label: 'Regras', href: '/rules', icon: Ruler },
 ];
 
 const adminItems = [

@@ -59,7 +59,10 @@ export function AuditLogDetailModal({ log, open, onOpenChange }: AuditLogDetailM
                     </GlassModalTitle>
                     <GlassModalDescription className="flex items-center gap-2">
                         {formatEntityType(log.entity)} •{" "}
-                        <span className="font-mono text-[10px] bg-white/5 px-2 py-0.5 rounded cursor-pointer hover:bg-white/10 transition-colors" onClick={handleCopyId}>
+                        <span
+                            className="font-mono text-[10px] bg-white/5 px-2 py-0.5 rounded cursor-pointer hover:bg-white/10 transition-colors"
+                            onClick={handleCopyId}
+                        >
                             {log.entityId}
                         </span>
                     </GlassModalDescription>
@@ -69,14 +72,21 @@ export function AuditLogDetailModal({ log, open, onOpenChange }: AuditLogDetailM
                     {/* Metadata Grid */}
                     <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                         <InfoCard icon={<Database className="h-4 w-4" />} label="Entidade" value={formatEntityType(log.entity)} />
-                        <InfoCard icon={<ArrowRight className="h-4 w-4" />} label="ID da Entidade" value={log.entityId} isMono onClick={handleCopyId} className="cursor-pointer group/id" />
+                        <InfoCard
+                            icon={<ArrowRight className="h-4 w-4" />}
+                            label="ID da Entidade"
+                            value={log.entityId}
+                            isMono
+                            onClick={handleCopyId}
+                            className="cursor-pointer group/id"
+                        />
                         <InfoCard
                             icon={<User className="h-4 w-4" />}
                             label="Autor"
                             value={log.performedByUser?.name || log.performedByUser?.username || "Sistema"}
                             title={log.performedByUser?.email}
                         />
-                        <InfoCard icon={<Calendar className="h-4 w-4" />} label="Data" value={formatDate(log.createdAt || (log as any).timestamp)} />
+                        <InfoCard icon={<Calendar className="h-4 w-4" />} label="Data" value={formatDate(log.createdAt)} />
                     </div>
 
                     {/* Content based on action type */}

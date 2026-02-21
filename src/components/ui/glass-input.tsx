@@ -57,7 +57,11 @@ const GlassInput = React.forwardRef<HTMLInputElement, GlassInputProps>(
                 {/* Left Icon */}
                 {icon && (
                     <div className="absolute left-3 top-1/2 -translate-y-1/2 text-white/40 group-focus-within:text-blue-400 transition-colors z-10 pointer-events-none">
-                        {React.isValidElement(icon) ? React.cloneElement(icon as React.ReactElement<any>, { className: cn("h-4 w-4", (icon as any).props.className) }) : icon}
+                        {React.isValidElement(icon)
+                            ? React.cloneElement(icon as React.ReactElement<{ className?: string }>, {
+                                  className: cn("h-4 w-4", (icon as React.ReactElement<{ className?: string }>).props.className),
+                              })
+                            : icon}
                     </div>
                 )}
 
@@ -91,7 +95,12 @@ const GlassInput = React.forwardRef<HTMLInputElement, GlassInputProps>(
             {/* Error Message */}
             <AnimatePresence>
                 {error && (
-                    <motion.p initial={{ opacity: 0, y: -5 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -5 }} className="text-xs text-rose-400 font-medium">
+                    <motion.p
+                        initial={{ opacity: 0, y: -5 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0, y: -5 }}
+                        className="text-xs text-rose-400 font-medium"
+                    >
                         {error}
                     </motion.p>
                 )}

@@ -2,10 +2,13 @@
 
 import * as React from "react"
 import { GlassCard, GlassCardHeader, GlassCardTitle, GlassCardDescription, GlassCardContent } from "@/components/ui/glass-card"
-import { Users, FileText, Shield, Sparkles, Sword, Scroll, Zap, Wand2, Backpack, Map, Fingerprint, TrendingUp, Activity, Clock } from "lucide-react"
+import { Users, FileText, Shield, Sparkles, Sword, Zap, Wand2, Backpack, Map, Fingerprint, TrendingUp, Activity, Clock } from "lucide-react"
 import { motion } from "framer-motion"
+import { colors, entityColors } from "@/lib/config/colors"
 import { cn } from "@/core/utils"
-import { colors } from "@/lib/config/colors"
+import { MiniBarChart, MiniLineChart } from "./_components/charts"
+import { RulesEntityCard } from "./_components/rules-entity-card"
+import { WipEntityCard } from "./_components/wip-entity-card"
 
 // Types for the stats
 interface DashboardStats {
@@ -18,71 +21,58 @@ interface DashboardStats {
         total: number
         activity: Array<{ date: string; count: number }>
     }
+    rules: {
+        total: number
+        active: number
+        growth: Array<{ date: string; count: number }>
+    }
 }
 
-/**
- * Simple animated bar chart component for a modern look.
- */
-function MiniBarChart({ data, color }: { data: Array<{ count: number }>; color: string }) {
-    const max = Math.max(...data.map((d) => d.count), 1)
-
-    return (
-        <div className="flex items-end gap-1 h-12 w-full">
-            {data.map((d, i) => (
-                <motion.div
-                    key={i}
-                    initial={{ height: 0 }}
-                    animate={{ height: `${(d.count / max) * 100}%` }}
-                    transition={{ delay: i * 0.05, duration: 0.5 }}
-                    style={{ backgroundColor: color }}
-                    className="flex-1 rounded-t-sm opacity-60"
-                />
-            ))}
-        </div>
-    )
-}
-
-/**
- * Simple animated line chart using SVG.
- */
-function MiniLineChart({ data, color }: { data: Array<{ count: number }>; color: string }) {
-    const max = Math.max(...data.map((d) => d.count), 1)
-    const points = data
-        .map((d, i) => {
-            const x = (i / (data.length - 1)) * 100
-            const y = 100 - (d.count / max) * 100
-            return `${x},${y}`
-        })
-        .join(" ")
-
-    return (
-        <div className="h-12 w-full pt-2">
-            <svg viewBox="0 0 100 100" preserveAspectRatio="none" className="h-full w-full overflow-visible">
-                <motion.polyline
-                    fill="none"
-                    stroke={color}
-                    strokeWidth="4"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    points={points}
-                    initial={{ pathLength: 0, opacity: 0 }}
-                    animate={{ pathLength: 1, opacity: 0.8 }}
-                    transition={{ duration: 1, ease: "easeOut" }}
-                />
-            </svg>
-        </div>
-    )
-}
-
-const wipEntities = [
-    { title: "Classes", icon: Sword, description: "Classes de personagem (Guerreiro, Mago, etc.)" },
-    { title: "Raças", icon: Fingerprint, description: "Raças jogáveis (Humano, Elfo, etc.)" },
-    { title: "Regras", icon: Scroll, description: "Catálogo de regras do sistema" },
-    { title: "Talentos", icon: Zap, description: "Talentos e habilidades especiais" },
-    { title: "Habilidades", icon: Sparkles, description: "Traits e habilidades de classe/raça" },
-    { title: "Magias", icon: Wand2, description: "Catálogo completo de feitiços" },
-    { title: "Itens", icon: Backpack, description: "Equipamentos, armas e itens mágicos" },
-    { title: "Origens", icon: Map, description: "Antecedentes e origens dos heróis" },
+const dndEntities = [
+    { id: "rules", title: "Regras", component: RulesEntityCard },
+    {
+        id: "classes",
+        title: "Classes",
+        icon: Sword,
+        description: "Classes de personagem (Guerreiro, Mago, etc.)",
+        component: WipEntityCard,
+    },
+    {
+        id: "races",
+        title: "Raças",
+        icon: Fingerprint,
+        description: "Raças jogáveis (Humano, Elfo, etc.)",
+        component: WipEntityCard,
+    },
+    {
+        id: "feats",
+        title: "Talentos",
+        icon: Zap,
+        description: "Talentos e habilidades especiais",
+        component: WipEntityCard,
+    },
+    {
+        id: "traits",
+        title: "Habilidades",
+        icon: Sparkles,
+        description: "Traits e habilidades de classe/raça",
+        component: WipEntityCard,
+    },
+    { id: "spells", title: "Magias", icon: Wand2, description: "Catálogo completo de feitiços", component: WipEntityCard },
+    {
+        id: "items",
+        title: "Itens",
+        icon: Backpack,
+        description: "Equipamentos, armas e itens mágicos",
+        component: WipEntityCard,
+    },
+    {
+        id: "backgrounds",
+        title: "Origens",
+        icon: Map,
+        description: "Antecedentes e origens dos heróis",
+        component: WipEntityCard,
+    },
 ]
 
 export default function DashboardPage() {
@@ -115,7 +105,12 @@ export default function DashboardPage() {
                 >
                     Dashboard
                 </motion.h1>
-                <motion.p initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.1 }} className="text-white/60 text-lg">
+                <motion.p
+                    initial={{ opacity: 0, x: -20 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    transition={{ delay: 0.1 }}
+                    className="text-white/60 text-lg"
+                >
                     Visão geral dos dados e monitoramento do sistema D&Dicas.
                 </motion.p>
             </div>
@@ -124,18 +119,24 @@ export default function DashboardPage() {
             <div className="grid gap-6 md:grid-cols-2">
                 {/* Users Stat */}
                 <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }}>
-                    <GlassCard className="h-full border-blue-500/20 group hover:border-blue-500/40 transition-colors overflow-hidden">
+                    <GlassCard
+                        className={cn(
+                            "h-full group transition-colors overflow-hidden",
+                            entityColors.Usuário.border,
+                            entityColors.Usuário.hoverBorder,
+                        )}
+                    >
                         <GlassCardHeader className="pb-2">
                             <div className="flex items-center justify-between">
                                 <div className="space-y-1">
                                     <GlassCardTitle className="text-white/70 text-sm font-medium flex items-center gap-2">
-                                        <Users className="h-4 w-4 text-blue-400" />
+                                        <Users className={cn("h-4 w-4", entityColors.Usuário.text)} />
                                         Comunidade
                                     </GlassCardTitle>
                                     <div className="text-3xl font-bold text-white">{loading ? "..." : stats?.users.total || 0}</div>
                                 </div>
-                                <div className="p-3 rounded-xl bg-blue-500/10 border border-blue-500/20">
-                                    <TrendingUp className="h-6 w-6 text-blue-400" />
+                                <div className={cn("p-3 rounded-xl border", entityColors.Usuário.bgAlpha, entityColors.Usuário.border)}>
+                                    <TrendingUp className={cn("h-6 w-6", entityColors.Usuário.text)} />
                                 </div>
                             </div>
                         </GlassCardHeader>
@@ -143,30 +144,42 @@ export default function DashboardPage() {
                             <div className="space-y-4">
                                 <div className="flex items-end justify-between">
                                     <p className="text-xs text-white/40">Usuários ativos e crescimento semanal</p>
-                                    <div className="text-emerald-400 text-xs font-medium bg-emerald-400/10 px-2 py-0.5 rounded-full border border-emerald-400/20">
+                                    <div
+                                        className={cn(
+                                            "text-xs font-medium px-2 py-0.5 rounded-full border",
+                                            entityColors.Usuário.badge,
+                                            entityColors.Usuário.border,
+                                        )}
+                                    >
                                         +{loading ? 0 : stats?.users.active} ativos
                                     </div>
                                 </div>
-                                {stats?.users.growth && <MiniBarChart data={stats.users.growth} color={colors.rarity.uncommon} />}
+                                {stats?.users.growth && <MiniBarChart data={stats.users.growth} color={entityColors.Usuário.hex} />}
                             </div>
                         </GlassCardContent>
                     </GlassCard>
                 </motion.div>
 
                 {/* Audit Logs Stat */}
-                <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }}>
-                    <GlassCard className="h-full border-purple-500/20 group hover:border-purple-500/40 transition-colors overflow-hidden">
+                <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.25 }}>
+                    <GlassCard
+                        className={cn(
+                            "h-full group transition-colors overflow-hidden",
+                            entityColors.Segurança.border,
+                            entityColors.Segurança.hoverBorder,
+                        )}
+                    >
                         <GlassCardHeader className="pb-2">
                             <div className="flex items-center justify-between">
                                 <div className="space-y-1">
                                     <GlassCardTitle className="text-white/70 text-sm font-medium flex items-center gap-2">
-                                        <Activity className="h-4 w-4 text-purple-400" />
+                                        <Activity className={cn("h-4 w-4", entityColors.Segurança.text)} />
                                         Segurança
                                     </GlassCardTitle>
                                     <div className="text-3xl font-bold text-white">{loading ? "..." : stats?.auditLogs.total || 0}</div>
                                 </div>
-                                <div className="p-3 rounded-xl bg-purple-500/10 border border-purple-500/20">
-                                    <FileText className="h-6 w-6 text-purple-400" />
+                                <div className={cn("p-3 rounded-xl border", entityColors.Segurança.bgAlpha, entityColors.Segurança.border)}>
+                                    <FileText className={cn("h-6 w-6", entityColors.Segurança.text)} />
                                 </div>
                             </div>
                         </GlassCardHeader>
@@ -174,12 +187,18 @@ export default function DashboardPage() {
                             <div className="space-y-4">
                                 <div className="flex items-end justify-between">
                                     <p className="text-xs text-white/40">Atividades auditadas nas últimas 24h</p>
-                                    <div className="text-purple-400 text-xs font-medium bg-purple-500/10 px-2 py-0.5 rounded-full border border-purple-500/20 flex items-center gap-1">
+                                    <div
+                                        className={cn(
+                                            "text-xs font-medium px-2 py-0.5 rounded-full border flex items-center gap-1",
+                                            entityColors.Segurança.badge,
+                                            entityColors.Segurança.border,
+                                        )}
+                                    >
                                         <Clock className="h-3 w-3" />
                                         Em tempo real
                                     </div>
                                 </div>
-                                {stats?.auditLogs.activity && <MiniLineChart data={stats.auditLogs.activity} color={colors.rarity.veryRare} />}
+                                {stats?.auditLogs.activity && <MiniLineChart data={stats.auditLogs.activity} color={entityColors.Segurança.hex} />}
                             </div>
                         </GlassCardContent>
                     </GlassCard>
@@ -191,51 +210,16 @@ export default function DashboardPage() {
                 <div className="flex items-center justify-between">
                     <h2 className="text-2xl font-bold tracking-tight text-white flex items-center gap-2">
                         <Sparkles className="h-6 w-6 text-yellow-500" />
-                        Catálogo D&D (WIP)
+                        Catálogo D&D
                     </h2>
-                    <span className="text-xs font-semibold px-2 py-1 bg-white/5 border border-white/10 rounded-lg text-white/40 uppercase tracking-widest">Em Breve</span>
+                    <span className="text-xs font-semibold px-2 py-1 bg-white/5 border border-white/10 rounded-lg text-white/40 uppercase tracking-widest">
+                        Em Breve
+                    </span>
                 </div>
 
                 <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-                    {wipEntities.map((entity, index) => (
-                        <motion.div key={entity.title} initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: 0.4 + index * 0.05 }}>
-                            <GlassCard className="h-full border-white/5 bg-white/[0.02] hover:bg-white/[0.04] transition-colors relative group overflow-hidden">
-                                <GlassCardHeader className="pb-0">
-                                    <div className="flex items-start justify-between">
-                                        <div className="p-2 rounded-lg bg-white/5 border border-white/10 text-white/40 group-hover:text-white/60 transition-colors">
-                                            <entity.icon className="h-5 w-5" />
-                                        </div>
-                                        <div className="text-[10px] font-bold text-white/20 group-hover:text-white/40 transition-colors">v0.2-WIP</div>
-                                    </div>
-                                    <GlassCardTitle className="text-white/90 group-hover:text-white mt-3 transition-colors">{entity.title}</GlassCardTitle>
-                                    <GlassCardDescription className="text-white/40 text-xs min-h-[32px]">{entity.description}</GlassCardDescription>
-                                </GlassCardHeader>
-                                <GlassCardContent className="pt-4">
-                                    <div className="space-y-3">
-                                        {/* Placeholder Stat */}
-                                        <div className="flex items-center gap-2">
-                                            <div className="h-4 w-12 bg-white/5 rounded animate-pulse" />
-                                            <div className="text-[10px] text-white/20 italic">Dados sincronizando...</div>
-                                        </div>
-
-                                        {/* Placeholder Graph */}
-                                        <div className="flex items-end gap-0.5 h-8 w-full opacity-20 group-hover:opacity-30 transition-opacity">
-                                            {[...Array(12)].map((_, i) => (
-                                                <div key={i} className="flex-1 rounded-t-[1px] bg-white/40" style={{ height: `${Math.random() * 100}%` }} />
-                                            ))}
-                                        </div>
-                                    </div>
-                                </GlassCardContent>
-
-                                {/* Hover overlay with standard placeholder appearance */}
-                                <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center backdrop-blur-[2px]">
-                                    <div className="flex flex-col items-center gap-2">
-                                        <Clock className="h-6 w-6 text-white/60 animate-pulse" />
-                                        <span className="text-[10px] font-bold uppercase tracking-widest text-white/60">Coming Soon</span>
-                                    </div>
-                                </div>
-                            </GlassCard>
-                        </motion.div>
+                    {dndEntities.map(({ component: Card, ...entity }, index) => (
+                        <Card key={entity.id} {...entity} index={index} stats={stats?.rules} loading={loading} />
                     ))}
                 </div>
             </div>
@@ -249,7 +233,9 @@ export default function DashboardPage() {
                         </div>
                         <div>
                             <GlassCardTitle className="text-white">Repositório de Magias e Itens</GlassCardTitle>
-                            <GlassCardDescription className="text-white/60">Estamos processando o SRD (System Reference Document) para popular automaticamente o catálogo D&D 5e.</GlassCardDescription>
+                            <GlassCardDescription className="text-white/60">
+                                Estamos processando o SRD (System Reference Document) para popular automaticamente o catálogo D&D 5e.
+                            </GlassCardDescription>
                         </div>
                     </GlassCardHeader>
                 </GlassCard>

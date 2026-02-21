@@ -52,7 +52,14 @@ export default function EmailExamplePage() {
                         </div>
 
                         <div>
-                            <GlassInput id="subject" label="Assunto" type="text" placeholder="Assunto do email" value={subject} onChange={(e) => setSubject(e.target.value)} />
+                            <GlassInput
+                                id="subject"
+                                label="Assunto"
+                                type="text"
+                                placeholder="Assunto do email"
+                                value={subject}
+                                onChange={(e) => setSubject(e.target.value)}
+                            />
                         </div>
 
                         <div>
@@ -119,7 +126,11 @@ export default function EmailExamplePage() {
                     <CardTitle>Exemplos de HTML</CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-3">
-                    <Button variant="outline" size="sm" onClick={() => setHtml('<h1 style="color: #22c55e;">Bem-vindo!</h1><p>Este é um email de boas-vindas.</p>')}>
+                    <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setHtml('<h1 style="color: #22c55e;">Bem-vindo!</h1><p>Este é um email de boas-vindas.</p>')}
+                    >
                         Exemplo 1: Boas-vindas
                     </Button>
 
@@ -164,7 +175,7 @@ export default function EmailExamplePage() {
                     <p>
                         <strong>Provedor:</strong> Nodemailer (configurável via SMTP)
                     </p>
-                    <p className="text-xs">Se o SMTP não estiver configurado, o email será "mockado" (apenas log no console).</p>
+                    <p className="text-xs">Se o SMTP não estiver configurado, o email será &quot;mockado&quot; (apenas log no console).</p>
                 </CardContent>
             </Card>
         </div>

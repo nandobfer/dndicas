@@ -83,25 +83,20 @@ export async function hasAllRoles(roles: string[]): Promise<boolean> {
  * @param details - Detalhes adicionais
  */
 export async function logAuthAction(
-  action: 'LOGIN' | 'LOGOUT' | 'SIGNUP' | 'PASSWORD_RESET' | 'SESSION_EXPIRED',
-  details?: any
+    action: "LOGIN" | "LOGOUT" | "SIGNUP" | "PASSWORD_RESET" | "SESSION_EXPIRED",
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    details?: any,
 ) {
-  try {
-    const { userId } = await auth();
+    try {
+        const { userId } = await auth()
 
-    await logAction(
-      action,
-      'Auth',
-      userId || 'anonymous',
-      userId || undefined,
-      {
-        ...details,
-        timestamp: new Date().toISOString(),
-      }
-    );
-  } catch (error) {
-    console.error('Failed to log auth action:', error);
-  }
+        await logAction(action, "Auth", userId || "anonymous", userId || undefined, {
+            ...details,
+            timestamp: new Date().toISOString(),
+        })
+    } catch (error) {
+        console.error("Failed to log auth action:", error)
+    }
 }
 
 /**

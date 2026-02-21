@@ -30,7 +30,7 @@ const CreateCompanySchema = z.object({
  */
 export async function GET(request: NextRequest) {
   try {
-    const userId = await requireAuth();
+    await requireAuth()
     await dbConnect();
 
     const { searchParams } = new URL(request.url);

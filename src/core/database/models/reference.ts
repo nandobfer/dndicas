@@ -37,7 +37,16 @@ const ReferenceSchema = new Schema<IReference>(
     },
     {
         timestamps: true,
-    }
+        toJSON: {
+            virtuals: true,
+            versionKey: false,
+            transform: (_, ret) => {
+                ret.id = String(ret._id)
+                return ret
+            },
+        },
+        toObject: { virtuals: true },
+    },
 )
 
 // Indexes for common queries

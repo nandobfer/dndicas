@@ -2,10 +2,11 @@ import { NextRequest, NextResponse } from 'next/server';
 import dbConnect from "@/core/database/db"
 import { User } from "@/features/users/models/user"
 import { AuditLogExtended } from "@/features/users/models/audit-log-extended"
+import { Reference } from "@/core/database/models/reference"
 import { getCurrentUserFromDb } from "@/features/users/api/get-current-user"
 import { subDays, startOfDay, endOfDay, format } from "date-fns"
 
-export async function GET(request: NextRequest) {
+export async function GET(_request: NextRequest) {
     try {
         const { user: currentUser } = await getCurrentUserFromDb()
         if (!currentUser) {
@@ -15,10 +16,12 @@ export async function GET(request: NextRequest) {
         await dbConnect()
 
         // 1. Basic Counts
-        const [totalUsers, activeUsers, auditLogCount] = await Promise.all([
+        const [totalUsers, activeUsers, auditLogCount, totalRules, activeRules] = await Promise.all([
             User.countDocuments({ deleted: { $ne: true } }),
             User.countDocuments({ status: "active", deleted: { $ne: true } }),
-            AuditLogExtended.countDocuments()
+            AuditLogExtended.countDocuments(),
+            Reference.countDocuments(),
+            Reference.countDocuments({ status: "active" }),
         ])
 
         // 2. User Growth (last 7 days)
@@ -27,11 +30,11 @@ export async function GET(request: NextRequest) {
             const date = subDays(new Date(), i)
             const count = await User.countDocuments({
                 createdAt: { $lte: endOfDay(date) },
-                deleted: { $ne: true }
+                deleted: { $ne: true },
             })
             growthData.push({
                 date: format(date, "dd/MM"),
-                count
+                count,
             })
         }
 
@@ -40,14 +43,27 @@ export async function GET(request: NextRequest) {
         for (let i = 6; i >= 0; i--) {
             const date = subDays(new Date(), i)
             const count = await AuditLogExtended.countDocuments({
-                createdAt: { 
+                createdAt: {
                     $gte: startOfDay(date),
-                    $lte: endOfDay(date)
-                }
+                    $lte: endOfDay(date),
+                },
             })
             activityData.push({
                 date: format(date, "dd/MM"),
-                count
+                count,
+            })
+        }
+
+        // 4. Rules Growth (last 7 days)
+        const rulesGrowth = []
+        for (let i = 6; i >= 0; i--) {
+            const date = subDays(new Date(), i)
+            const count = await Reference.countDocuments({
+                createdAt: { $lte: endOfDay(date) },
+            })
+            rulesGrowth.push({
+                date: format(date, "dd/MM"),
+                count,
             })
         }
 
@@ -55,12 +71,17 @@ export async function GET(request: NextRequest) {
             users: {
                 total: totalUsers,
                 active: activeUsers,
-                growth: growthData
+                growth: growthData,
             },
             auditLogs: {
                 total: auditLogCount,
-                activity: activityData
-            }
+                activity: activityData,
+            },
+            rules: {
+                total: totalRules,
+                active: activeRules,
+                growth: rulesGrowth,
+            },
         })
     } catch (error) {
         console.error("[Dashboard Stats API] Error:", error)

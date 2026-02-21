@@ -87,3 +87,46 @@ export type ActionColor = keyof typeof actionColors;
 
 /** Type for role color keys */
 export type RoleColor = keyof typeof roleColors;
+
+/**
+ * Central configuration for entity colors across the app.
+ * Maps entity types to their designated styles and colors.
+ * Reverted to original colors: Users = Blue, Security = Purple, Rules = Emerald.
+ */
+export const entityColors = {
+  Regra: {
+    name: 'Regra',
+    color: 'emerald',
+    mention: "bg-emerald-500/10 text-emerald-400 border-emerald-400/20",
+    badge: "bg-emerald-400/20 text-emerald-400",
+    border: "border-emerald-500/20",
+    hoverBorder: "hover:border-emerald-500/40",
+    bgAlpha: "bg-emerald-500/10",
+    text: "text-emerald-400",
+    hex: rarityColors.uncommon,
+  },
+  Usuário: {
+    name: 'Usuário',
+    color: 'blue',
+    mention: "bg-blue-500/10 text-blue-400 border-blue-400/20",
+    badge: "bg-blue-400/20 text-blue-400",
+    border: "border-blue-500/20",
+    hoverBorder: "hover:border-blue-500/40",
+    bgAlpha: "bg-blue-500/10",
+    text: "text-blue-400",
+    hex: rarityColors.rare,
+  },
+  Segurança: {
+    name: 'Segurança',
+    color: 'purple',
+    mention: "bg-purple-500/10 text-purple-400 border-purple-400/20",
+    badge: "bg-purple-400/20 text-purple-400",
+    border: "border-purple-500/20",
+    hoverBorder: "hover:border-purple-500/40",
+    bgAlpha: "bg-purple-500/10",
+    text: "text-purple-400",
+    hex: rarityColors.veryRare,
+  },
+} as const;
+
+export type EntityType = keyof typeof entityColors;

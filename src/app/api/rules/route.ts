@@ -1,9 +1,10 @@
 import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@clerk/nextjs/server"
 import { Reference } from "@/core/database/models/reference"
-import { AuditLogExtended } from "@/features/users/models/audit-log-extended"
-import { connectDB } from "@/core/database/connect"
+import { createAuditLog } from "@/features/users/api/audit-service"
+import dbConnect from "@/core/database/db"
 import { z } from "zod"
+import mongoose from "mongoose"
 
 const createReferenceSchema = z.object({
   name: z.string().min(3).max(100),
@@ -14,27 +15,29 @@ const createReferenceSchema = z.object({
 
 export async function GET(req: NextRequest) {
   try {
-    await connectDB()
+    await dbConnect()
     const url = new URL(req.url)
     const page = parseInt(url.searchParams.get("page") || "1", 10)
     const limit = parseInt(url.searchParams.get("limit") || "10", 10)
     const search = url.searchParams.get("search") || ""
     const status = url.searchParams.get("status")
 
-    const query: any = {}
+    const query: Record<string, unknown> = {}
     if (search) {
       query.$or = [{ name: { $regex: search, $options: "i" } }, { description: { $regex: search, $options: "i" } }]
     }
     if (status && status !== "all") {
-      query.status = status
+        if (status === "active" || status === "inactive") {
+            query.status = status
+        }
     }
 
-    const items = await Reference.find(query)
-      .sort({ createdAt: -1 })
-      .skip((page - 1) * limit)
-      .limit(limit)
+const items = await Reference.find(query as any)
+    .sort({ createdAt: -1 })
+    .skip((page - 1) * limit)
+    .limit(limit)
 
-    const total = await Reference.countDocuments(query)
+    const total = await Reference.countDocuments(query as any)
 
     return NextResponse.json({
       items,
@@ -50,49 +53,47 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   try {
-    const session = await auth()
-    if (!session || !session.userId) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
-    }
+      const session = await auth()
+      if (!session || !session.userId) {
+          return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+      }
 
-    const body = await req.json()
-    const validatedData = createReferenceSchema.parse(body)
+      const body = await req.json()
+      const parseResult = createReferenceSchema.safeParse(body)
 
-    await connectDB()
+      if (!parseResult.success) {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          return NextResponse.json({ error: (parseResult.error as any).errors }, { status: 400 })
+      }
 
-    // Check uniqueness
-    const existing = await Reference.findOne({ name: validatedData.name })
-    if (existing) {
-      return NextResponse.json({ error: "Rule name already exists" }, { status: 409 })
-    }
+      const validatedData = parseResult.data
 
-    const newRule = await Reference.create(validatedData)
+      await dbConnect()
 
-    // Audit Log
-    try {
-        await AuditLogExtended.create({
-            action: "CREATE",
-            entity: "Reference",
-            entityId: newRule._id,
-            performedBy: session.userId,
-            performedByUser: {
-                _id: session.userId,
-                // We'd ideally fetch user details here or rely on the frontend to pass them if critical,
-                // but usually the backend should resolve this. For now, minimal.
-            },
-            newData: newRule.toObject(),
-            createdAt: new Date(),
-        })
-    } catch (auditError) {
-        console.warn("Failed to create audit log for rule creation", auditError)
-    }
+      // Check uniqueness
+      const existing = await Reference.findOne({ name: validatedData.name })
+      if (existing) {
+          return NextResponse.json({ error: "Rule name already exists" }, { status: 409 })
+      }
 
-    return NextResponse.json(newRule, { status: 201 })
+      const newRule = await Reference.create(validatedData)
+
+      // Audit Log using standard service
+      try {
+          await createAuditLog({
+              action: "CREATE",
+              entity: "Reference",
+              entityId: String(newRule._id),
+              performedBy: session.userId,
+              newData: newRule.toObject() as unknown as Record<string, unknown>,
+          })
+      } catch (auditError) {
+          console.warn("Failed to create audit log for rule creation", auditError)
+      }
+
+      return NextResponse.json(newRule, { status: 201 })
   } catch (error) {
-    if (error instanceof z.ZodError) {
-      return NextResponse.json({ error: error.errors }, { status: 400 })
-    }
-    console.error("Rules POST error:", error)
-    return NextResponse.json({ error: "Failed to create rule" }, { status: 500 })
+      console.error("Rules POST error:", error)
+      return NextResponse.json({ error: "Failed to create rule" }, { status: 500 })
   }
 }

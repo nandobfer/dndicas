@@ -1,0 +1,49 @@
+const CustomMention = Mention.extend({
+  addAttributes() {
+    return {
+      ...this.parent?.(),
+      type: {
+        default: 'Regra',
+        renderHTML: attributes => ({
+          'data-type': attributes.type,
+        }),
+        parseHTML: element => element.getAttribute('data-type'),
+      },
+    }
+  },
+
+  renderHTML({ node, HTMLAttributes }) {
+    const type = node.attrs.type || 'Regra'
+    const label = node.attrs.label ?? node.attrs.id
+    
+    // Type-based style mapping (Safe comparison for accented chars)
+    const getStyles = (t: string) => {
+        if (t.includes('Usu')) return "bg-emerald-500/10 text-emerald-400 border-emerald-400/20"
+        if (t.includes('Empresa')) return "bg-purple-500/10 text-purple-400 border-purple-400/20"
+        if (t.includes('Organiza')) return "bg-amber-500/10 text-amber-400 border-amber-400/20"
+        return "bg-blue-500/10 text-blue-400 border-blue-400/20"
+    }
+
+    return [
+      'span',
+      {
+        ...this.options.HTMLAttributes,
+        ...HTMLAttributes,
+        'data-type': type,
+        class: cn(
+          "mention inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md font-bold text-[13px] border transition-all align-baseline mx-0.5 pointer-events-none select-none",
+          getStyles(type)
+        ),
+      },
+      ['span', { 
+        class: "opacity-40 text-[9px] uppercase font-bold tracking-tight border-r border-current/20 pr-1 mr-1",
+        contenteditable: "false" 
+      }, type],
+      label,
+    ]
+  },
+
+  renderLabel({ node }) {
+    return `${node.attrs.label ?? node.attrs.id}`
+  },
+})

@@ -44,7 +44,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
 
         const response: UserResponse = {
             id: user._id.toString(),
-            clerkId: user.clerkId || (user as any).clerkId,
+            clerkId: user.clerkId || user.clerkId,
             username: user.username,
             email: user.email,
             name: user.name,
@@ -144,12 +144,14 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
             } else if (data.status === "active") {
                 await client.users.unbanUser(user.clerkId)
             }
-        } catch (clerkError: any) {
+        } catch (clerkError) {
             console.error("[Clerk API] Update error:", clerkError)
+            const details =
+                (clerkError as { errors?: { longMessage: string }[]; message?: string }).errors?.[0]?.longMessage || (clerkError as Error).message
             return NextResponse.json(
                 {
                     error: "Erro ao atualizar no provedor de autenticação (Clerk)",
-                    details: clerkError.errors?.[0]?.longMessage || clerkError.message,
+                    details: details,
                 },
                 { status: 400 },
             )
@@ -179,7 +181,7 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
 
         const response: UserResponse = {
             id: user._id.toString(),
-            clerkId: user.clerkId || (user as any).clerkId,
+            clerkId: user.clerkId || user.clerkId,
             username: user.username,
             email: user.email,
             name: user.name,
@@ -241,14 +243,16 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
         try {
             const client = await clerkClient()
             await client.users.deleteUser(user.clerkId)
-        } catch (clerkError: any) {
+        } catch (clerkError) {
             // If user not found in Clerk, we can still proceed with DB delete
-            if (clerkError.status !== 404) {
+            const errorObj = clerkError as { status?: number; errors?: { longMessage: string }[]; message?: string }
+            if (errorObj.status !== 404) {
                 console.error("[Clerk API] Delete error:", clerkError)
+                const details = errorObj.errors?.[0]?.longMessage || errorObj.message
                 return NextResponse.json(
                     {
                         error: "Erro ao excluir no provedor de autenticação (Clerk)",
-                        details: clerkError.errors?.[0]?.longMessage || clerkError.message,
+                        details,
                     },
                     { status: 400 },
                 )
@@ -258,13 +262,13 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
         // 2. Soft delete - use collection.updateOne to bypass ALL Mongoose schema logic
         const updateResult = await User.collection.updateOne(
             { _id: new mongoose.Types.ObjectId(id) },
-            { 
-                $set: { 
-                    deleted: true, 
+            {
+                $set: {
+                    deleted: true,
                     status: "inactive",
-                    updatedAt: new Date()
-                } 
-            }
+                    updatedAt: new Date(),
+                },
+            },
         )
 
         if (!updateResult.matchedCount) {
@@ -283,11 +287,14 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
         }
 
         return NextResponse.json({ success: true })
-    } catch (error: any) {
+    } catch (error) {
         console.error("[Users API] DELETE fatal error:", error)
-        return NextResponse.json({ 
-            error: "Erro ao excluir usuário", 
-            details: error instanceof Error ? error.message : "Erro desconhecido" 
-        }, { status: 500 })
+        return NextResponse.json(
+            {
+                error: "Erro ao excluir usuário",
+                details: error instanceof Error ? error.message : "Erro desconhecido",
+            },
+            { status: 500 },
+        )
     }
 }

@@ -3,8 +3,11 @@
  */
 
 // Tipos equivalentes para Mongoose 9
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 type FilterQuery<T> = Partial<T> & Record<string, any>;
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 type QueryOptions = Record<string, any>;
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 type UpdateQuery<T> = Partial<T> & Record<string, any>;
 
 /**
@@ -23,12 +26,13 @@ export type AuditAction =
  * Entrada de log de auditoria
  */
 export interface AuditLogEntry {
-  action: AuditAction;
-  collectionName: string;
-  documentId: string;
-  userId?: string;
-  details?: Record<string, any>;
-  timestamp: Date;
+    action: AuditAction
+    collectionName: string
+    documentId: string
+    userId?: string
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    details?: Record<string, any>
+    timestamp: Date
 }
 
 /**
@@ -112,6 +116,7 @@ export interface MongooseTimestamps {
  * Documento do Mongoose
  */
 export interface MongooseDocument extends MongooseTimestamps {
-  _id: any;
-  __v?: number;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    _id: any
+    __v?: number
 }

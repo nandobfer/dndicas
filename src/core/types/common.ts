@@ -6,17 +6,19 @@
  * Resposta padrão de API
  * Todas as rotas de API devem retornar este formato
  */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export interface ApiResponse<T = any> {
-  /** Indica se a operação foi bem-sucedida */
-  success: boolean;
-  /** Dados retornados em caso de sucesso */
-  data?: T;
-  /** Mensagem de erro em caso de falha */
-  error?: string;
-  /** Código de erro para tratamento programático */
-  code?: string;
-  /** Detalhes adicionais do erro (ex: erros de validação) */
-  details?: any;
+    /** Indica se a operação foi bem-sucedida */
+    success: boolean
+    /** Dados retornados em caso de sucesso */
+    data?: T
+    /** Mensagem de erro em caso de falha */
+    error?: string
+    /** Código de erro para tratamento programático */
+    code?: string
+    /** Detalhes adicionais do erro (ex: erros de validação) */
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    details?: any
 }
 
 /**
@@ -57,8 +59,9 @@ export interface SortParams {
  * Parâmetros de filtragem genéricos
  */
 export interface FilterParams {
-  search?: string;
-  [key: string]: any;
+    search?: string
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    [key: string]: any
 }
 
 /**

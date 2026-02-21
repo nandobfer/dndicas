@@ -92,45 +92,48 @@ export function useStorage<T>(
  * ```
  */
 export function useMultiStorage(keys: string[]) {
-  const [values, setValues] = useState<Record<string, any>>(() => {
-    const initial: Record<string, any> = {};
-    keys.forEach((key) => {
-      initial[key] = storage.get(key);
-    });
-    return initial;
-  });
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const [values, setValues] = useState<Record<string, any>>(() => {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const initial: Record<string, any> = {}
+        keys.forEach((key) => {
+            initial[key] = storage.get(key)
+        })
+        return initial
+    })
 
-  const get = useCallback(
-    <T>(key: string, defaultValue: T | null = null): T | null => {
-      return values[key] !== undefined ? values[key] : defaultValue;
-    },
-    [values]
-  );
+    const get = useCallback(
+        <T>(key: string, defaultValue: T | null = null): T | null => {
+            return values[key] !== undefined ? values[key] : defaultValue
+        },
+        [values],
+    )
 
-  const set = useCallback((key: string, value: any) => {
-    storage.set(key, value);
-    setValues((prev) => ({ ...prev, [key]: value }));
-  }, []);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const set = useCallback((key: string, value: any) => {
+        storage.set(key, value)
+        setValues((prev) => ({ ...prev, [key]: value }))
+    }, [])
 
-  const remove = useCallback((key: string) => {
-    storage.remove(key);
-    setValues((prev) => {
-      const newValues = { ...prev };
-      delete newValues[key];
-      return newValues;
-    });
-  }, []);
+    const remove = useCallback((key: string) => {
+        storage.remove(key)
+        setValues((prev) => {
+            const newValues = { ...prev }
+            delete newValues[key]
+            return newValues
+        })
+    }, [])
 
-  const clear = useCallback(() => {
-    keys.forEach((key) => storage.remove(key));
-    setValues({});
-  }, [keys]);
+    const clear = useCallback(() => {
+        keys.forEach((key) => storage.remove(key))
+        setValues({})
+    }, [keys])
 
-  return {
-    values,
-    get,
-    set,
-    remove,
-    clear,
-  };
+    return {
+        values,
+        get,
+        set,
+        remove,
+        clear,
+    }
 }
