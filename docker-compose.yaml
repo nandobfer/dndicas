@@ -1,0 +1,65 @@
+services:
+  mongodb:
+    image: mongo:latest
+    container_name: dndicas-mongodb
+    restart: always
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: root
+      MONGO_INITDB_ROOT_PASSWORD: root
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongodb_data:/data/db
+
+  minio:
+    image: minio/minio:latest
+    container_name: dndicas-minio
+    restart: always
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: nandoburgos
+      MINIO_ROOT_PASSWORD: mfux6xpj
+      # MINIO_LICENSE_KEY: path to license if using env, but user asked for volume
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - minio_data:/data
+      - ./minio/license:/etc/minio/license:ro
+
+  # Cria o bucket automaticamente no startup
+  minio-init:
+    image: minio/mc
+    container_name: dndicas-minio-init
+    depends_on:
+      - minio
+    entrypoint: >
+      /bin/sh -c "
+      until (/usr/bin/mc config host add local http://minio:9000 nandoburgos mfux6xpj); do echo '...waiting for minio...'; sleep 1; done;
+      /usr/bin/mc mb local/dndicas;
+      /usr/bin/mc anonymous set public local/dndicas;
+      exit 0;
+      "
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: nandoburgos/dndicas
+    container_name: dndicas-app
+    restart: always
+    ports:
+      - "3000:3000"
+    env_file:
+      - .env
+    environment:
+      # Apenas overrides necessários para a rede interna do Docker
+      MONGODB_URI: mongodb://root:root@mongodb:27017/dndicas?authSource=admin
+      S3_ENDPOINT: http://minio:9000
+    depends_on:
+      - mongodb
+      - minio
+
+volumes:
+  mongodb_data:
+  minio_data:
