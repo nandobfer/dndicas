@@ -51,9 +51,7 @@ const cadastrosItems = [
   { label: 'Regras', href: '/rules', icon: Ruler },
 ];
 
-const adminItems = [
-  { label: 'Logs de Auditoria', href: '/audit-logs', icon: FileText },
-];
+const adminItems = [{ label: "Logs", href: "/audit-logs", icon: FileText }]
 
 /**
  * Expandable sidebar component with Liquid Glass styling and smooth animations.
