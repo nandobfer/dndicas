@@ -9,7 +9,7 @@ interface RuleDescriptionProps {
     className?: string
 }
 
-export function RuleDescription({ html, className }: RuleDescriptionProps) {
+export function EntityDescription({ html, className }: RuleDescriptionProps) {
     // Basic regex-based parsing to replace mention spans with React components
     // Stored HTML: <span data-type="mention" data-id="..." data-label="..." data-entity-type="...">...</span>
     

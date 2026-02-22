@@ -1,6 +1,5 @@
 "use client";
 
-import * as React from 'react';
 import { motion, AnimatePresence } from "framer-motion"
 import { MoreHorizontal, Pencil, Trash2, ScrollText } from "lucide-react"
 import { GlassCard } from "@/components/ui/glass-card"
@@ -16,7 +15,7 @@ import {
 } from "@/components/ui/glass-dropdown-menu"
 import { motionConfig } from "@/lib/config/motion-configs"
 import { Reference } from "../types/rules.types"
-import { RuleDescription } from "./rule-description"
+import { EntityDescription } from "./entity-description"
 
 // Extend chipVariantMap or create a local one if "active"/"inactive" are standard
 const ruleStatusVariantMap: Record<string, "uncommon" | "common"> = {
@@ -100,7 +99,7 @@ export function RulesTable({
                                     <td className="px-6 py-4 whitespace-nowrap text-white font-medium">{rule.name}</td>
                                     <td className="px-6 py-4 text-white/40 text-sm max-w-0">
                                         <div className="min-h-[32px] flex items-center overflow-hidden">
-                                            <RuleDescription html={rule.description} className="w-full" />
+                                            <EntityDescription html={rule.description} className="w-full" />
                                         </div>
                                     </td>
                                     <td className="px-6 py-4 whitespace-nowrap text-white/70">{rule.source}</td>

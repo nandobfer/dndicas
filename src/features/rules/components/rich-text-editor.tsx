@@ -173,7 +173,10 @@ export function RichTextEditor({ value, onChange, placeholder = "Write something
                 body: formData,
             })
 
-            if (!res.ok) throw new Error("Upload failed")
+            if (!res.ok) {
+                const errorData = await res.json().catch(() => ({}))
+                throw new Error(errorData.error || "Upload failed")
+            }
 
             const data = await res.json()
             return data.url
