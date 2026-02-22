@@ -3,7 +3,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { cn } from '@/core/utils';
 import { Button } from '@/core/ui/button';
-import { Home, User, Sparkles, Upload, Mail, Building2, Palette, FileText } from 'lucide-react';
+import { Home, User, Sparkles, Upload, Mail, Building2, Palette, FileText, Users, Ruler } from "lucide-react"
 
 export const SidebarItems = [
     { label: "Início", href: "/", icon: Home },
@@ -18,8 +18,10 @@ export const ExampleItems = [
 ];
 
 export const FeatureItems = [
-    { label: "Empresas", href: "/companies", icon: Building2 },
-];
+    { label: "Empresas", href: "/companies", icon: Building2 }, // Legacy?
+    { label: "Usuários", href: "/users", icon: Users },
+    { label: "Regras", href: "/rules", icon: Ruler },
+]
 
 export const AdminItems = [
     { label: "Logs de Auditoria", href: "/audit-logs", icon: FileText },

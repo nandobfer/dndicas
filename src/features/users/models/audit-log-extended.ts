@@ -19,7 +19,7 @@ export interface IAuditLogExtended extends Document {
     entityId: string
     performedBy: string
     performedByUser?: {
-        _id: mongoose.Types.ObjectId
+        _id: string
         name?: string
         username: string
         email: string
@@ -60,7 +60,7 @@ const AuditLogExtendedSchema = new Schema<IAuditLogExtended>(
         entity: {
             type: String,
             required: true,
-            enum: ["User", "Auth"],
+            enum: ["User", "Auth", "Reference", "Rule", "Company", "Organization"],
             index: true,
         },
         entityId: {
@@ -74,7 +74,7 @@ const AuditLogExtendedSchema = new Schema<IAuditLogExtended>(
             index: true,
         },
         performedByUser: {
-            _id: { type: Schema.Types.ObjectId },
+            _id: { type: String },
             name: { type: String },
             username: { type: String },
             email: { type: String },

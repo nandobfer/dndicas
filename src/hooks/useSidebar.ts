@@ -25,13 +25,17 @@ export const useSidebar = () => {
 
   // Sync with sessionStorage on mount (client-side only)
   useEffect(() => {
-    if (typeof window === 'undefined') return;
+      if (typeof window === "undefined") return
 
-    const stored = sessionStorage.getItem(STORAGE_KEY);
-    // Default is collapsed (false) if no stored value
-    const initialValue = stored === 'true';
-    setIsExpanded(initialValue);
-    setIsHydrated(true);
+      const stored = sessionStorage.getItem(STORAGE_KEY)
+      // Default is collapsed (false) if no stored value
+      const initialValue = stored === "true"
+
+      // Delay state updates to avoid synchronous cascading renders during mount
+      requestAnimationFrame(() => {
+          setIsExpanded(initialValue)
+          setIsHydrated(true)
+      })
   }, []);
 
   /**

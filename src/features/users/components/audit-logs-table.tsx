@@ -67,6 +67,8 @@ function formatEntityType(entityType: string): string {
         User: "Usuário",
         Company: "Empresa",
         Organization: "Organização",
+        Rule: "Regra",
+        Reference: "Regra",
     }
     return labels[entityType] || entityType
 }
@@ -151,7 +153,11 @@ export function AuditLogsTable({ logs, isLoading, pagination, onPageChange, onRo
                             {columns.map((col) => (
                                 <th
                                     key={col.key}
-                                    className={cn("px-4 py-3 text-xs font-medium text-white/50 uppercase tracking-wider", !col.className?.includes("text-right") && "text-left", col.className)}
+                                    className={cn(
+                                        "px-4 py-3 text-xs font-medium text-white/50 uppercase tracking-wider",
+                                        !col.className?.includes("text-right") && "text-left",
+                                        col.className,
+                                    )}
                                 >
                                     {col.label}
                                 </th>
@@ -170,7 +176,11 @@ export function AuditLogsTable({ logs, isLoading, pagination, onPageChange, onRo
                                     animate="animate"
                                     exit="exit"
                                     transition={{ delay: index * 0.05 }}
-                                    className={cn("group transition-colors", onRowClick && "cursor-pointer hover:bg-white/5", isLoading && "opacity-50")}
+                                    className={cn(
+                                        "group transition-colors",
+                                        onRowClick && "cursor-pointer hover:bg-white/5",
+                                        isLoading && "opacity-50",
+                                    )}
                                     onClick={() => onRowClick?.(log)}
                                 >
                                     {/* Action */}
@@ -219,7 +229,7 @@ export function AuditLogsTable({ logs, isLoading, pagination, onPageChange, onRo
                                     </td>
 
                                     {/* Date */}
-                                    <td className="px-4 py-3 text-sm text-white/60 text-right whitespace-nowrap">{formatDate((log as any).createdAt || (log as any).timestamp)}</td>
+                                    <td className="px-4 py-3 text-sm text-white/60 text-right whitespace-nowrap">{formatDate(log.createdAt)}</td>
                                 </motion.tr>
                             ))}
                         </AnimatePresence>
@@ -228,7 +238,14 @@ export function AuditLogsTable({ logs, isLoading, pagination, onPageChange, onRo
             </div>
 
             {/* Pagination */}
-            <DataTablePagination page={pagination.page} totalPages={pagination.totalPages} total={pagination.total} limit={pagination.limit} onPageChange={onPageChange} itemLabel="logs" />
+            <DataTablePagination
+                page={pagination.page}
+                totalPages={pagination.totalPages}
+                total={pagination.total}
+                limit={pagination.limit}
+                onPageChange={onPageChange}
+                itemLabel="logs"
+            />
         </GlassCard>
     )
 }

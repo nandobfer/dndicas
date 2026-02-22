@@ -7,7 +7,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { clerkClient } from "@clerk/nextjs/server"
 import dbConnect from "@/core/database/db"
-import { User } from "@/features/users/models/user"
+import { User, IUser } from "@/features/users/models/user"
 import { requireAdmin, getCurrentUserFromDb } from "@/features/users/api/get-current-user"
 import { createUserSchema, userFiltersSchema } from "@/features/users/api/validation"
 import { logCreate } from "@/features/users/api/audit-service"
@@ -52,26 +52,31 @@ export async function GET(request: NextRequest) {
 
         // Build query
         // We use $and to ensure deleted filter is ALWAYS applied even if other filters are added
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const query: any = {
             $and: [{ deleted: { $ne: true } }],
         }
 
         // Status filter
         if (filters.status && filters.status !== "all") {
-            query.$and.push({ status: filters.status })
+            query.$and!.push({ status: filters.status })
         } else if (!filters.status || filters.status === "all") {
-            query.$and.push({ status: { $in: ["active", "inactive"] } })
+            query.$and!.push({ status: { $in: ["active", "inactive"] } })
         }
 
         // Role filter
         if (filters.role && filters.role !== "all") {
-            query.$and.push({ role: filters.role })
+            query.$and!.push({ role: filters.role })
         }
 
         // Search filter
         if (filters.search) {
-            query.$and.push({
-                $or: [{ username: { $regex: filters.search, $options: "i" } }, { email: { $regex: filters.search, $options: "i" } }, { name: { $regex: filters.search, $options: "i" } }],
+            query.$and!.push({
+                $or: [
+                    { username: { $regex: filters.search, $options: "i" } },
+                    { email: { $regex: filters.search, $options: "i" } },
+                    { name: { $regex: filters.search, $options: "i" } },
+                ],
             })
         }
 
@@ -81,7 +86,10 @@ export async function GET(request: NextRequest) {
         const skip = (page - 1) * limit
 
         // Execute query
-        const [users, total] = await Promise.all([User.find(query).sort({ createdAt: -1 }).skip(skip).limit(limit).lean(), User.countDocuments(query)])
+        const [users, total] = await Promise.all([
+            User.find(query).sort({ createdAt: -1 }).skip(skip).limit(limit).lean(),
+            User.countDocuments(query),
+        ])
 
         const response: UsersListResponse = {
             items: users.map((user) => ({
@@ -168,12 +176,14 @@ export async function POST(request: NextRequest) {
                     skipPasswordRequirement: true,
                 })
                 isNewClerkUser = true
-            } catch (clerkError: any) {
+            } catch (clerkError) {
                 console.error("[Clerk API] Create error:", clerkError)
+                const details =
+                    (clerkError as { errors?: { longMessage: string }[]; message?: string }).errors?.[0]?.longMessage || (clerkError as Error).message
                 return NextResponse.json(
                     {
                         error: "Erro ao criar usuário no Clerk",
-                        details: clerkError.errors?.[0]?.longMessage || clerkError.message,
+                        details: details,
                     },
                     { status: 400 },
                 )

@@ -89,6 +89,7 @@ async function getUserDetails(userId: string): Promise<
             email: user.email,
             avatarUrl: user.avatarUrl,
             role: user.role,
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
             status: (user.status as any) || "active",
         }
     } catch {

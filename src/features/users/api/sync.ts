@@ -84,7 +84,7 @@ export async function syncUserFromClerk(clerkUser: ClerkUserData): Promise<SyncR
     await dbConnect();
 
     // Check if user exists by Clerk ID
-    let existingUser = await User.findByClerkId(clerkUser.id);
+    const existingUser = await User.findByClerkId(clerkUser.id)
 
     const email = getPrimaryEmail(clerkUser);
     const username = generateUsername(clerkUser);
@@ -217,7 +217,7 @@ export async function ensureUserExists(
     await dbConnect();
 
     // Check if user exists
-    let existingUser = await User.findByClerkId(clerkId)
+    const existingUser = await User.findByClerkId(clerkId)
 
     // If user exists but is missing data we have, update it
     if (existingUser && clerkUser && !existingUser.avatarUrl && clerkUser.image_url) {

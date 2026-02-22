@@ -67,17 +67,22 @@ export const scaleUp: Variants = {
  * Transition duration: 350ms (under SC-002 target of 400ms).
  */
 export const sidebarVariants: Variants = {
-  expanded: { width: 280 },
-  collapsed: { width: 72 },
-};
+    expanded: { width: 280, minWidth: 280 },
+    collapsed: { width: 72, minWidth: 72 },
+}
 
 /**
  * Sidebar transition configuration.
+ * Switched to heavy-mass spring for premium "liquid" feel.
+ * Increased damping to 22 and normalized mass for a stable, premium feel.
  */
 export const sidebarTransition: Transition = {
-  duration: 0.35,
-  ease: easings.easeInOut,
-};
+    type: "spring",
+    stiffness: 60,
+    damping: 10,
+    mass: 0.5,
+    restDelta: 0.05,
+}
 
 /**
  * Table row animation for list transitions.

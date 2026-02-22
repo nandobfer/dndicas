@@ -9,12 +9,13 @@ import { AxiosError } from 'axios';
  * Resultado de chamada de API
  */
 interface UseApiResult<T> {
-  data: T | null;
-  error: string | null;
-  loading: boolean;
-  state: LoadingState;
-  execute: (...args: any[]) => Promise<T | null>;
-  reset: () => void;
+    data: T | null
+    error: string | null
+    loading: boolean
+    state: LoadingState
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    execute: (...args: any[]) => Promise<T | null>
+    reset: () => void
 }
 
 /**
@@ -38,73 +39,76 @@ interface UseApiResult<T> {
  * return <div>{data?.name}</div>;
  * ```
  */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function useApi<T = any>(
-  apiFunction: (...args: any[]) => Promise<any>
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    apiFunction: (...args: any[]) => Promise<any>,
 ): UseApiResult<T> {
-  const [data, setData] = useState<T | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [state, setState] = useState<LoadingState>('idle');
+    const [data, setData] = useState<T | null>(null)
+    const [error, setError] = useState<string | null>(null)
+    const [state, setState] = useState<LoadingState>("idle")
 
-  const execute = useCallback(
-    async (...args: any[]): Promise<T | null> => {
-      try {
-        setState('loading');
-        setError(null);
+    const execute = useCallback(
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        async (...args: any[]): Promise<T | null> => {
+            try {
+                setState("loading")
+                setError(null)
 
-        const response = await apiFunction(...args);
+                const response = await apiFunction(...args)
 
-        // Se a resposta já é do tipo ApiResponse
-        if (response.data?.success !== undefined) {
-          const apiResponse = response.data as ApiResponse<T>;
+                // Se a resposta já é do tipo ApiResponse
+                if (response.data?.success !== undefined) {
+                    const apiResponse = response.data as ApiResponse<T>
 
-          if (apiResponse.success) {
-            setData(apiResponse.data || null);
-            setState('success');
-            return apiResponse.data || null;
-          } else {
-            setError(apiResponse.error || 'Unknown error');
-            setState('error');
-            return null;
-          }
-        }
+                    if (apiResponse.success) {
+                        setData(apiResponse.data || null)
+                        setState("success")
+                        return apiResponse.data || null
+                    } else {
+                        setError(apiResponse.error || "Unknown error")
+                        setState("error")
+                        return null
+                    }
+                }
 
-        // Caso contrário, assume que response.data é o dado direto
-        setData(response.data);
-        setState('success');
-        return response.data;
-      } catch (err) {
-        const axiosError = err as AxiosError<ApiResponse>;
+                // Caso contrário, assume que response.data é o dado direto
+                setData(response.data)
+                setState("success")
+                return response.data
+            } catch (err) {
+                const axiosError = err as AxiosError<ApiResponse>
 
-        let errorMessage = 'An error occurred';
+                let errorMessage = "An error occurred"
 
-        if (axiosError.response?.data?.error) {
-          errorMessage = axiosError.response.data.error;
-        } else if (axiosError.message) {
-          errorMessage = axiosError.message;
-        }
+                if (axiosError.response?.data?.error) {
+                    errorMessage = axiosError.response.data.error
+                } else if (axiosError.message) {
+                    errorMessage = axiosError.message
+                }
 
-        setError(errorMessage);
-        setState('error');
-        return null;
-      }
-    },
-    [apiFunction]
-  );
+                setError(errorMessage)
+                setState("error")
+                return null
+            }
+        },
+        [apiFunction],
+    )
 
-  const reset = useCallback(() => {
-    setData(null);
-    setError(null);
-    setState('idle');
-  }, []);
+    const reset = useCallback(() => {
+        setData(null)
+        setError(null)
+        setState("idle")
+    }, [])
 
-  return {
-    data,
-    error,
-    loading: state === 'loading',
-    state,
-    execute,
-    reset,
-  };
+    return {
+        data,
+        error,
+        loading: state === "loading",
+        state,
+        execute,
+        reset,
+    }
 }
 
 /**
@@ -121,26 +125,28 @@ export function useApi<T = any>(
  * );
  * ```
  */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function useFetch<T = any>(
-  url: string,
-  dependencies: any[] = []
+    url: string,
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    dependencies: any[] = [],
 ): UseApiResult<T> & { refetch: () => void } {
-  const apiCall = useCallback(() => api.get(url), [url]);
-  const result = useApi<T>(apiCall);
+    const apiCall = useCallback(() => api.get(url), [url])
+    const result = useApi<T>(apiCall)
 
-  const refetch = useCallback(() => {
-    result.execute();
-  }, [result]);
+    const refetch = useCallback(() => {
+        result.execute()
+    }, [result])
 
-  // Auto-execute on mount and when dependencies change
-  React.useEffect(() => {
-    result.execute();
-  }, [url, ...dependencies]);
+    // Auto-execute on mount and when dependencies change
+    React.useEffect(() => {
+        result.execute()
+    }, [url, ...dependencies])
 
-  return {
-    ...result,
-    refetch,
-  };
+    return {
+        ...result,
+        refetch,
+    }
 }
 
 // Import React for useEffect in useFetch
@@ -161,6 +167,7 @@ import React from 'react';
  * };
  * ```
  */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function useMutation<TData = any, TResult = any>(
   method: 'POST' | 'PUT' | 'PATCH' | 'DELETE',
   url: string

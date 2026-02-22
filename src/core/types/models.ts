@@ -28,11 +28,11 @@ export interface IUsageLog extends BaseModel {
  * Log de auditoria
  */
 export interface IAuditLog extends BaseModel {
-  action: string;
-  collectionName: string;
-  documentId: string;
-  userId?: string;
-  details?: any;
+    action: string
+    collectionName: string
+    documentId: string
+    userId?: string
+    details?: Record<string, unknown>
 }
 
 /**
@@ -76,13 +76,13 @@ export interface INotification extends BaseModel {
  * Arquivo/Upload
  */
 export interface IFile extends BaseModel {
-  userId: string;
-  key: string;
-  name: string;
-  mimeType: string;
-  size: number;
-  url?: string;
-  metadata?: Record<string, any>;
+    userId: string
+    key: string
+    name: string
+    mimeType: string
+    size: number
+    url?: string
+    metadata?: Record<string, unknown>
 }
 
 /**
@@ -102,10 +102,10 @@ export interface IEmailLog extends Omit<BaseModel, 'status'> {
  * Configuração do sistema
  */
 export interface ISystemConfig extends BaseModel {
-  key: string;
-  value: any;
-  description?: string;
-  isPublic: boolean;
+    key: string
+    value: unknown
+    description?: string
+    isPublic: boolean
 }
 
 /**
