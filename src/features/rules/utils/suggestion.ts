@@ -12,11 +12,14 @@ export const getSuggestionConfig = (options?: { excludeId?: string }) => ({
         
         // Map Rule objects into a standard suggestion format, filtering current if provided
         return data.items
-            .filter((item: any) => options?.excludeId ? (item._id !== options.excludeId && item.id !== options.excludeId) : true)
+            .filter((item: any) => (options?.excludeId ? item._id !== options.excludeId && item.id !== options.excludeId : true))
             .map((item: any) => ({
                 id: item._id,
                 label: item.name,
-                entityType: 'Regra'
+                entityType: "Regra",
+                description: item.description,
+                source: item.source,
+                status: item.status,
             }))
     } catch (e) {
         console.error('Mention fetch failed:', e)

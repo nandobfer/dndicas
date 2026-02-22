@@ -1,6 +1,6 @@
 "use client"
 
-import { useEditor, EditorContent, type Editor } from "@tiptap/react"
+import { useEditor, EditorContent, type Editor, NodeViewWrapper, ReactNodeViewRenderer } from "@tiptap/react"
 import StarterKit from '@tiptap/starter-kit'
 import ImageExtension from "@tiptap/extension-image"
 import Placeholder from '@tiptap/extension-placeholder'
@@ -12,10 +12,23 @@ import { glassConfig } from "@/lib/config/glass-config"
 import { Bold, Italic, Strikethrough, List, ListOrdered, Undo, Redo, Image as ImageIcon } from "lucide-react"
 import { getSuggestionConfig } from "../utils/suggestion"
 import { entityColors } from "@/lib/config/colors"
+import { EntityPreviewTooltip } from "./entity-preview-tooltip"
+import { MentionBadge } from "./mention-badge"
+
+const MentionNode = (props: any) => {
+    const { node } = props
+    const type = node.attrs.entityType || "Regra"
+    const label = node.attrs.label ?? node.attrs.id
+    const id = node.attrs.id
+
+    return (
+        <NodeViewWrapper className="inline-block">
+            <MentionBadge id={id} label={label} type={type} />
+        </NodeViewWrapper>
+    )
+}
 
 const CustomMention = Mention.extend({
-    name: "mention", // Explicitly keep the name 'mention' for compatibility
-
     addAttributes() {
         return {
             ...this.parent?.(),
@@ -37,43 +50,12 @@ const CustomMention = Mention.extend({
         ]
     },
 
-    renderHTML({ node, HTMLAttributes }) {
-        const type = node.attrs.entityType || "Regra"
-        const label = node.attrs.label ?? node.attrs.id
-
-        // Type-based style mapping from central config
-        const getStyles = (t: string) => {
-            const typeKey = (Object.keys(entityColors).find((k) => t.includes(k.substring(0, 5))) || "Regra") as keyof typeof entityColors
-            return entityColors[typeKey]?.mention || entityColors.Regra.mention
-        }
-
-        return [
-            "span",
-            {
-                ...this.options.HTMLAttributes,
-                ...HTMLAttributes,
-                "data-type": "mention", // Standard for Tiptap to recognize the node
-                "data-entity-type": type,
-                class: cn(
-                    "mention inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md font-bold text-[13px] border transition-all align-baseline mx-0.5 pointer-events-none select-none",
-                    getStyles(type),
-                ),
-            },
-            [
-                "span",
-                {
-                    class: "opacity-40 text-[9px] uppercase font-bold tracking-tight border-r border-current/20 pr-1 mr-1",
-                    contenteditable: "false",
-                },
-                type,
-            ],
-            label,
-        ]
+    addNodeView() {
+        return ReactNodeViewRenderer(MentionNode)
     },
 
-    renderLabel({ node }: { node: any }) {
-        const label = node.attrs.label ?? node.attrs.id
-        return `${label}`
+    renderHTML({ node, HTMLAttributes }) {
+        return ["span", { ...HTMLAttributes, "data-type": "mention" }, node.attrs.label ?? node.attrs.id]
     },
 })
 

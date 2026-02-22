@@ -16,6 +16,7 @@ import {
 } from "@/components/ui/glass-dropdown-menu"
 import { motionConfig } from "@/lib/config/motion-configs"
 import { Reference } from "../types/rules.types"
+import { RuleDescription } from "./rule-description"
 
 // Extend chipVariantMap or create a local one if "active"/"inactive" are standard
 const ruleStatusVariantMap: Record<string, "uncommon" | "common"> = {
@@ -72,18 +73,11 @@ export function RulesTable({
                 <table className="w-full">
                     <thead>
                         <tr className="border-b border-white/5 bg-white/5">
-                            <th className="px-6 py-4 text-left text-xs font-semibold text-white/50 uppercase tracking-wider w-[100px]">
-                                Status
-                            </th>
-                            <th className="px-6 py-4 text-left text-xs font-semibold text-white/50 uppercase tracking-wider">
-                                Nome
-                            </th>
-                            <th className="px-6 py-4 text-left text-xs font-semibold text-white/50 uppercase tracking-wider">
-                                Fonte
-                            </th>
-                            <th className="px-6 py-4 text-right text-xs font-semibold text-white/50 uppercase tracking-wider w-[100px]">
-                                Ações
-                            </th>
+                            <th className="px-6 py-4 text-left text-xs font-semibold text-white/50 uppercase tracking-wider w-[100px]">Status</th>
+                            <th className="px-6 py-4 text-left text-xs font-semibold text-white/50 uppercase tracking-wider">Nome</th>
+                            <th className="px-6 py-4 text-left text-xs font-semibold text-white/50 uppercase tracking-wider w-full">Descrição</th>
+                            <th className="px-6 py-4 text-left text-xs font-semibold text-white/50 uppercase tracking-wider">Fonte</th>
+                            <th className="px-6 py-4 text-right text-xs font-semibold text-white/50 uppercase tracking-wider w-[100px]">Ações</th>
                         </tr>
                     </thead>
                     <tbody className="divide-y divide-white/5">
@@ -100,15 +94,16 @@ export function RulesTable({
                                 >
                                     <td className="px-6 py-4 whitespace-nowrap">
                                         <Chip variant={ruleStatusVariantMap[rule.status] || "common"}>
-                                            {rule.status === 'active' ? 'Ativo' : 'Inativo'}
+                                            {rule.status === "active" ? "Ativo" : "Inativo"}
                                         </Chip>
                                     </td>
-                                    <td className="px-6 py-4 whitespace-nowrap text-white font-medium">
-                                        {rule.name}
+                                    <td className="px-6 py-4 whitespace-nowrap text-white font-medium">{rule.name}</td>
+                                    <td className="px-6 py-4 text-white/40 text-sm max-w-0">
+                                        <div className="min-h-[32px] flex items-center overflow-hidden">
+                                            <RuleDescription html={rule.description} className="w-full" />
+                                        </div>
                                     </td>
-                                    <td className="px-6 py-4 whitespace-nowrap text-white/70">
-                                        {rule.source}
-                                    </td>
+                                    <td className="px-6 py-4 whitespace-nowrap text-white/70">{rule.source}</td>
                                     <td className="px-6 py-4 whitespace-nowrap text-right">
                                         <GlassDropdownMenu>
                                             <GlassDropdownMenuTrigger asChild>
@@ -121,7 +116,7 @@ export function RulesTable({
                                                     <Pencil className="mr-2 h-4 w-4" />
                                                     Editar
                                                 </GlassDropdownMenuItem>
-                                                <GlassDropdownMenuItem 
+                                                <GlassDropdownMenuItem
                                                     onClick={() => onDelete(rule)}
                                                     className="text-red-400 hover:text-red-300 focus:text-red-300"
                                                 >
@@ -137,16 +132,9 @@ export function RulesTable({
                     </tbody>
                 </table>
             </div>
-            
+
             <div className="p-4 border-t border-white/5">
-                <DataTablePagination 
-                    page={page} 
-                    totalPages={totalPages} 
-                    total={total} 
-                    limit={limit}
-                    onPageChange={onPageChange}
-                    itemLabel="regras"
-                />
+                <DataTablePagination page={page} totalPages={totalPages} total={total} limit={limit} onPageChange={onPageChange} itemLabel="regras" />
             </div>
         </GlassCard>
     )
