@@ -41,8 +41,11 @@ const ReferenceSchema = new Schema<IReference>(
             virtuals: true,
             versionKey: false,
             transform: (_, ret) => {
-                ret.id = String(ret._id)
-                return ret
+                const result = {
+                    ...ret,
+                    id: String(ret._id),
+                }
+                return result
             },
         },
         toObject: { virtuals: true },
