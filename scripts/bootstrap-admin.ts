@@ -37,19 +37,31 @@ interface BootstrapResult {
 /**
  * Connect to MongoDB with error handling.
  */
-async function connectDatabase(): Promise<void> {
-  const mongoUri = process.env.MONGODB_URI;
+async function connectDatabase(overrideHost?: string): Promise<void> {
+  let mongoUri = process.env.MONGODB_URI;
+
+  if (overrideHost && mongoUri) {
+    // Replace host in URI: mongodb://[user:pass@]host[:port]/db
+    // This regex looks for the part after @ (if exists) or after //
+    const parts = mongoUri.match(/^(mongodb(?:\+srv)?:\/\/(?:[^:]+:[^@]+@)?)([^:\/?]+)(.*)$/);
+    if (parts) {
+      const [, prefix, , suffix] = parts;
+      mongoUri = `${prefix}${overrideHost}${suffix}`;
+      console.log(`🌐 Using custom host: ${overrideHost}`);
+      console.log(`🔗 Target URI: ${mongoUri.replace(/:[^@]+@/, ":****@")}`); // Hide password in logs
+    }
+  }
 
   if (!mongoUri) {
-    throw new Error('MONGODB_URI environment variable is not set. Check your .env.local file.');
+    throw new Error("MONGODB_URI environment variable is not set. Check your .env file.");
   }
 
   try {
     await mongoose.connect(mongoUri);
-    console.log('✅ Connected to MongoDB');
+    console.log("✅ Connected to MongoDB");
   } catch (error) {
-    const message = error instanceof Error ? error.message : 'Unknown error';
-    throw new Error(`Failed to connect to MongoDB: ${message}`);
+    const message = error instanceof Error ? error.message : "Unknown error";
+    throw new Error(`Failed to connect to MongoDB at ${overrideHost || "default host"}: ${message}`);
   }
 }
 
@@ -192,23 +204,47 @@ async function bootstrapAdmin(email: string): Promise<BootstrapResult> {
  * Main CLI entry point.
  */
 async function main(): Promise<void> {
-  console.log('🚀 Bootstrap Admin Script');
-  console.log('========================\n');
+  console.log("🚀 Bootstrap Admin Script");
+  console.log("========================\n");
 
-  const email = process.argv[3]
+  const args = process.argv.slice(2);
+
+  function getArgValue(name: string): string | undefined {
+    const idx = args.findIndex((a) => a.startsWith(`--${name}`));
+    if (idx === -1) return undefined;
+
+    const arg = args[idx];
+    if (arg.includes("=")) {
+      return arg.split("=")[1];
+    }
+    // If next arg exists and doesn't start with --, it's the value
+    if (idx + 1 < args.length && !args[idx + 1].startsWith("--")) {
+      return args[idx + 1];
+    }
+    return undefined;
+  }
+
+  // Find email: looks for --email=VAL, --email VAL, or the first non-flag argument
+  let email = getArgValue("email");
+  if (!email) {
+    email = args.find((a) => !a.startsWith("--") && !a.endsWith(".ts"));
+  }
+
+  // Find optional --host flag
+  const customHost = getArgValue("host");
 
   if (!email) {
-    console.error('❌ Error: Email address is required');
-    console.log('\nUsage:');
-    console.log('  npx ts-node scripts/bootstrap-admin.ts <email>');
-    console.log('  npm run bootstrap-admin -- <email>');
-    console.log('\nExample:');
-    console.log('  npx ts-node scripts/bootstrap-admin.ts admin@example.com');
+    console.error("❌ Error: Email address is required");
+    console.log("\nUsage:");
+    console.log("  tsx scripts/bootstrap-admin.ts <email> [--host <mongodb_host>]");
+    console.log("  tsx scripts/bootstrap-admin.ts --email <email> [--host <mongodb_host>]");
+    console.log("\nExample (Remote DB from local):");
+    console.log("  tsx scripts/bootstrap-admin.ts nandobfer@gmail.com --host nandoburgos.dev");
     process.exit(1);
   }
 
   try {
-    await connectDatabase();
+    await connectDatabase(customHost);
     const result = await bootstrapAdmin(email);
 
     console.log('\n' + (result.success ? '✅' : '❌'), result.message);
