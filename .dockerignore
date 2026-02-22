@@ -1,0 +1,13 @@
+.dist
+out
+build
+dist
+.git
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.dockerignore
+Dockerfile
+docker-compose.yaml
+README.md
+LICENSE
