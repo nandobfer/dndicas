@@ -6,7 +6,8 @@
         "dev": "next dev",
         "build": "next build",
         "start": "next start",
-        "lint": "eslint"
+        "lint": "eslint",
+        "deploy": "dockerbp nandoburgos/dndicas && ssh boz \"cd /home/nandoburgos/dndicas && docker compose pull && docker compose up -d\""
     },
     "dependencies": {
         "@aws-sdk/client-s3": "^3.974.0",
