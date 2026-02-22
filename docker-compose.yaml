@@ -1,7 +1,7 @@
 services:
   mongodb:
     image: mongo:latest
-    container_name: dndicas-mongodb
+    container_name: mongodb
     restart: always
     environment:
       MONGO_INITDB_ROOT_USERNAME: root
@@ -13,7 +13,7 @@ services:
 
   minio:
     image: minio/minio:latest
-    container_name: dndicas-minio
+    container_name: minio
     restart: always
     command: server /data --console-address ":9001"
     environment:
@@ -46,10 +46,10 @@ services:
       context: .
       dockerfile: Dockerfile
     image: nandoburgos/dndicas
-    container_name: dndicas-app
+    container_name: dndicas
     restart: always
     ports:
-      - "3000:3000"
+      - "4107:4107"
     env_file:
       - .env
     environment:
