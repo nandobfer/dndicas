@@ -17,8 +17,8 @@ services:
     restart: always
     command: server /data --console-address ":9001"
     environment:
-      MINIO_ROOT_USER: minioadmin
-      MINIO_ROOT_PASSWORD: minioadmin
+      MINIO_ROOT_USER: nandoburgos
+      MINIO_ROOT_PASSWORD: mfux6xpj
       # MINIO_LICENSE_KEY: path to license if using env, but user asked for volume
     ports:
       - "9000:9000"
