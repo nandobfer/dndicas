@@ -3,11 +3,8 @@ FROM node:20-alpine AS deps
 RUN apk add --no-cache libc6-compat
 WORKDIR /app
 
-COPY package.json package-lock.json* yarn.lock* ./
-RUN if [ -f yarn.lock ]; then yarn --frozen-lockfile; \
-    elif [ -f package-lock.json ]; then npm ci; \
-    else echo "Lockfile not found." && exit 1; \
-    fi
+COPY package.json ./
+RUN npm install --legacy-peer-deps --ignore-scripts
 
 # Stage 2: Builder
 FROM node:20-alpine AS builder
