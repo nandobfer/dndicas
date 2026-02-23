@@ -108,6 +108,9 @@ export async function GET(request: NextRequest) {
             if (entityTypes.includes("User") || entityTypes.includes("Usuário")) {
                 if (!variations.includes("User")) variations.push("User")
             }
+            if (entityTypes.includes("Habilidade") || entityTypes.includes("Trait")) {
+                if (!variations.includes("Trait")) variations.push("Trait")
+            }
 
             andConditions.push({
                 $or: [{ entity: { $in: variations } }, { entityType: { $in: variations } }, { collectionName: { $in: variations } }]

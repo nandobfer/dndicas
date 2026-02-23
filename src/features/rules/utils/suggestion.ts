@@ -2,6 +2,41 @@ import { ReactRenderer } from '@tiptap/react'
 import tippy, { Instance as TippyInstance, GetReferenceClientRect } from 'tippy.js'
 import MentionList, { MentionListProps, MentionListRef } from '../components/mention-list'
 
+/**
+ * Entity configuration for the mention system.
+ * Easy to extend with more entities in the future.
+ */
+const ENTITY_PROVIDERS = [
+    {
+        name: "Regra",
+        endpoint: (query: string) => `/api/rules?search=${query}&limit=10&searchField=name`,
+        map: (item: any) => ({
+            id: item._id || item.id,
+            label: item.name,
+            entityType: "Regra",
+            description: item.description,
+            source: item.source,
+            status: item.status,
+        })
+    },
+    {
+        name: "Habilidade",
+        endpoint: (query: string) => `/api/traits/search?q=${query}&limit=10`,
+        map: (item: any) => ({
+            id: item._id || item.id,
+            label: item.name,
+            entityType: "Habilidade",
+            description: item.description,
+            source: item.source,
+            status: item.status,
+        })
+    }
+]
+
+/**
+ * T039: Updated to support both Regra and Habilidade entity types in mentions.
+ * Fetches from registered entity providers in parallel.
+ */
 export const getSuggestionConfig = (options?: { excludeId?: string }) => {
     let component: ReactRenderer<MentionListRef, MentionListProps> | null = null
     let loading = false
@@ -15,33 +50,38 @@ export const getSuggestionConfig = (options?: { excludeId?: string }) => {
             // Update component to show loading state if it exists
             if (component) {
                 component.updateProps({
-                    items: [], // Clear current items to avoid confusion
+                    items: [], 
                     loading: true,
                     query: query
                 })
             }
 
             try {
-                const res = await fetch(`/api/rules?search=${query}&limit=10&searchField=name`)
-                if (!res.ok) {
-                    loading = false
-                    return []
-                }
-                const data = await res.json()
+                // Fetch from all providers in parallel
+                const fetchPromises = ENTITY_PROVIDERS.map(async (provider) => {
+                    try {
+                        const res = await fetch(provider.endpoint(query))
+                        if (!res.ok) return []
+                        const data = await res.json()
+                        const items = data.items || []
+                        
+                        return items
+                            .filter((item: any) => (options?.excludeId ? (item._id !== options.excludeId && item.id !== options.excludeId) : true))
+                            .map(provider.map)
+                    } catch (e) {
+                        console.error(`Mention fetch failed for ${provider.name}:`, e)
+                        return []
+                    }
+                })
 
+                const results = await Promise.all(fetchPromises)
+                
                 loading = false
-                return data.items
-                    .filter((item: any) => (options?.excludeId ? item._id !== options.excludeId && item.id !== options.excludeId : true))
-                    .map((item: any) => ({
-                        id: item._id,
-                        label: item.name,
-                        entityType: "Regra",
-                        description: item.description,
-                        source: item.source,
-                        status: item.status
-                    }))
+
+                // Flatten and return all results combined
+                return results.flat()
             } catch (e) {
-                console.error("Mention fetch failed:", e)
+                console.error("Mention search system failed:", e)
                 loading = false
                 return []
             }

@@ -8,6 +8,7 @@ import { colors, entityColors } from "@/lib/config/colors"
 import { cn } from "@/core/utils"
 import { MiniBarChart, MiniLineChart } from "./_components/charts"
 import { RulesEntityCard } from "./_components/rules-entity-card"
+import { TraitsEntityCard } from "./_components/traits-entity-card"
 import { WipEntityCard } from "./_components/wip-entity-card"
 
 // Types for the stats
@@ -22,6 +23,11 @@ interface DashboardStats {
         activity: Array<{ date: string; count: number }>
     }
     rules: {
+        total: number
+        active: number
+        growth: Array<{ date: string; count: number }>
+    }
+    traits: {
         total: number
         active: number
         growth: Array<{ date: string; count: number }>
@@ -56,7 +62,7 @@ const dndEntities = [
         title: "Habilidades",
         icon: Sparkles,
         description: "Traits e habilidades de classe/raça",
-        component: WipEntityCard,
+        component: TraitsEntityCard,
     },
     { id: "spells", title: "Magias", icon: Wand2, description: "Catálogo completo de feitiços", component: WipEntityCard },
     {
@@ -105,12 +111,7 @@ export default function DashboardPage() {
                 >
                     Dashboard
                 </motion.h1>
-                <motion.p
-                    initial={{ opacity: 0, x: -20 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    transition={{ delay: 0.1 }}
-                    className="text-white/60 text-lg"
-                >
+                <motion.p initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.1 }} className="text-white/60 text-lg">
                     Visão geral dos dados e monitoramento do sistema D&Dicas.
                 </motion.p>
             </div>
@@ -119,13 +120,7 @@ export default function DashboardPage() {
             <div className="grid gap-6 md:grid-cols-2">
                 {/* Users Stat */}
                 <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }}>
-                    <GlassCard
-                        className={cn(
-                            "h-full group transition-colors overflow-hidden",
-                            entityColors.Usuário.border,
-                            entityColors.Usuário.hoverBorder
-                        )}
-                    >
+                    <GlassCard className={cn("h-full group transition-colors overflow-hidden", entityColors.Usuário.border, entityColors.Usuário.hoverBorder)}>
                         <GlassCardHeader className="pb-2">
                             <div className="flex items-center justify-between">
                                 <div className="space-y-1">
@@ -144,13 +139,7 @@ export default function DashboardPage() {
                             <div className="space-y-4">
                                 <div className="flex items-end justify-between">
                                     <p className="text-xs text-white/40">Usuários ativos e crescimento semanal</p>
-                                    <div
-                                        className={cn(
-                                            "text-xs font-medium px-2 py-0.5 rounded-full border",
-                                            entityColors.Usuário.badge,
-                                            entityColors.Usuário.border
-                                        )}
-                                    >
+                                    <div className={cn("text-xs font-medium px-2 py-0.5 rounded-full border", entityColors.Usuário.badge, entityColors.Usuário.border)}>
                                         +{loading ? 0 : stats?.users.active} ativos
                                     </div>
                                 </div>
@@ -162,13 +151,7 @@ export default function DashboardPage() {
 
                 {/* Audit Logs Stat */}
                 <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.25 }}>
-                    <GlassCard
-                        className={cn(
-                            "h-full group transition-colors overflow-hidden",
-                            entityColors.Segurança.border,
-                            entityColors.Segurança.hoverBorder
-                        )}
-                    >
+                    <GlassCard className={cn("h-full group transition-colors overflow-hidden", entityColors.Segurança.border, entityColors.Segurança.hoverBorder)}>
                         <GlassCardHeader className="pb-2">
                             <div className="flex items-center justify-between">
                                 <div className="space-y-1">
@@ -187,13 +170,7 @@ export default function DashboardPage() {
                             <div className="space-y-4">
                                 <div className="flex items-end justify-between">
                                     <p className="text-xs text-white/40">Atividades auditadas nas últimas 24h</p>
-                                    <div
-                                        className={cn(
-                                            "text-xs font-medium px-2 py-0.5 rounded-full border flex items-center gap-1",
-                                            entityColors.Segurança.badge,
-                                            entityColors.Segurança.border
-                                        )}
-                                    >
+                                    <div className={cn("text-xs font-medium px-2 py-0.5 rounded-full border flex items-center gap-1", entityColors.Segurança.badge, entityColors.Segurança.border)}>
                                         <Clock className="h-3 w-3" />
                                         Em tempo real
                                     </div>
@@ -212,14 +189,12 @@ export default function DashboardPage() {
                         <Sparkles className="h-6 w-6 text-yellow-500" />
                         Catálogo D&D
                     </h2>
-                    <span className="text-xs font-semibold px-2 py-1 bg-white/5 border border-white/10 rounded-lg text-white/40 uppercase tracking-widest">
-                        Em Breve
-                    </span>
+                    <span className="text-xs font-semibold px-2 py-1 bg-white/5 border border-white/10 rounded-lg text-white/40 uppercase tracking-widest">Em Breve</span>
                 </div>
 
                 <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-                    {dndEntities.map(({ component: Card, ...entity }, index) => (
-                        <Card key={entity.id} {...entity} index={index} stats={stats?.rules} loading={loading} />
+                    {dndEntities.map(({ component: Card, id, ...entity }, index) => (
+                        <Card key={id} {...entity} index={index} stats={id === "rules" ? stats?.rules : id === "traits" ? stats?.traits : undefined} loading={loading} />
                     ))}
                 </div>
             </div>
