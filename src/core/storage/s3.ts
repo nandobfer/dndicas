@@ -44,3 +44,12 @@ export const getFileUrl = async (key: string) => {
     });
     return getSignedUrl(s3Client, command, { expiresIn: 3600 });
 }
+
+export const getFile = async (key: string) => {
+    if (!s3Client) throw new Error("S3 Client not initialized");
+    const command = new GetObjectCommand({
+        Bucket: BUCKET,
+        Key: key
+    });
+    return s3Client.send(command);
+}
