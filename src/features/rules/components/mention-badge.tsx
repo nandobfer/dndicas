@@ -26,11 +26,13 @@ export function MentionContent({
     html,
     delayDuration = 200,
     mode = "inline",
+    imageWidth = "300px",
     className
 }: {
     html: string
     delayDuration?: number
     mode?: "inline" | "block"
+    imageWidth?: string | "small"
     className?: string
 }) {
     const [isMounted, setIsMounted] = React.useState(false)
@@ -72,26 +74,39 @@ export function MentionContent({
                 if (tagName === "img") {
                     const src = el.getAttribute("src") || ""
                     if (src) {
-                        return (
-                            <SimpleGlassTooltip
-                                key={`img-${index}`}
-                                delayDuration={100}
-                                content={
-                                    <div className="p-1">
+                        const isSmall = imageWidth === "small"
+
+                        if (isSmall) {
+                            return (
+                                <SimpleGlassTooltip
+                                    key={`img-${index}`}
+                                    delayDuration={100}
+                                    className="!p-1"
+                                    content={
                                         <img
                                             src={src}
-                                            className="max-w-[500px] max-h-[500px] rounded-lg shadow-2xl border border-white/10"
+                                            className="max-w-[500px] max-h-[500px] rounded-lg shadow-2xl border border-white/10 block"
                                             alt="Preview"
                                         />
-                                    </div>
-                                }
-                            >
-                                <img
-                                    src={src}
-                                    className="h-4 w-auto inline-block align-middle rounded-[2px] border border-white/20 mx-0.5 hover:scale-110 transition-transform cursor-zoom-in"
-                                    alt="Thumb"
-                                />
-                            </SimpleGlassTooltip>
+                                    }
+                                >
+                                    <img
+                                        src={src}
+                                        className="h-8 w-auto inline-block align-middle rounded-[2px] border border-white/20 mx-0.5 hover:scale-110 transition-transform cursor-zoom-in"
+                                        alt="Thumb"
+                                    />
+                                </SimpleGlassTooltip>
+                            )
+                        }
+
+                        return (
+                            <img
+                                key={`img-${index}`}
+                                src={src}
+                                style={{ width: imageWidth, height: "auto" }}
+                                className="rounded-lg border border-white/20 max-w-full block my-2"
+                                alt="Content Image"
+                            />
                         )
                     }
                 }

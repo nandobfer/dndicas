@@ -1,7 +1,7 @@
 "use client";
 
 import { motion, AnimatePresence } from "framer-motion"
-import { MoreHorizontal, Pencil, Trash2, ScrollText } from "lucide-react"
+import { MoreHorizontal, Pencil, Trash2, ScrollText, Eye } from "lucide-react"
 import { GlassCard } from "@/components/ui/glass-card"
 import { Chip } from "@/components/ui/chip"
 import { LoadingState } from "@/components/ui/loading-state"
@@ -16,6 +16,7 @@ import {
 import { motionConfig } from "@/lib/config/motion-configs"
 import { Reference } from "../types/rules.types"
 import { EntityDescription } from "./entity-description"
+import { EntityPreviewTooltip } from "./entity-preview-tooltip"
 
 // Extend chipVariantMap or create a local one if "active"/"inactive" are standard
 const ruleStatusVariantMap: Record<string, "uncommon" | "common"> = {
@@ -76,6 +77,7 @@ export function RulesTable({
                             <th className="px-6 py-4 text-left text-xs font-semibold text-white/50 uppercase tracking-wider">Nome</th>
                             <th className="px-6 py-4 text-left text-xs font-semibold text-white/50 uppercase tracking-wider w-full">Descrição</th>
                             <th className="px-6 py-4 text-left text-xs font-semibold text-white/50 uppercase tracking-wider">Fonte</th>
+                            <th className="px-6 py-4 text-center text-xs font-semibold text-white/50 uppercase tracking-wider w-[80px]">Prever</th>
                             <th className="px-6 py-4 text-right text-xs font-semibold text-white/50 uppercase tracking-wider w-[100px]">Ações</th>
                         </tr>
                     </thead>
@@ -103,6 +105,13 @@ export function RulesTable({
                                         </div>
                                     </td>
                                     <td className="px-6 py-4 whitespace-nowrap text-white/70">{rule.source}</td>
+                                    <td className="px-6 py-4 whitespace-nowrap text-center">
+                                        <EntityPreviewTooltip entityId={rule._id} entityType="Regra">
+                                            <button className="p-2 rounded-lg text-white/40 hover:text-white hover:bg-white/10 transition-colors">
+                                                <Eye className="h-4 w-4" />
+                                            </button>
+                                        </EntityPreviewTooltip>
+                                    </td>
                                     <td className="px-6 py-4 whitespace-nowrap text-right">
                                         <GlassDropdownMenu>
                                             <GlassDropdownMenuTrigger asChild>
