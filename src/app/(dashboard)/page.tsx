@@ -123,7 +123,7 @@ export default function DashboardPage() {
                         className={cn(
                             "h-full group transition-colors overflow-hidden",
                             entityColors.Usuário.border,
-                            entityColors.Usuário.hoverBorder,
+                            entityColors.Usuário.hoverBorder
                         )}
                     >
                         <GlassCardHeader className="pb-2">
@@ -148,7 +148,7 @@ export default function DashboardPage() {
                                         className={cn(
                                             "text-xs font-medium px-2 py-0.5 rounded-full border",
                                             entityColors.Usuário.badge,
-                                            entityColors.Usuário.border,
+                                            entityColors.Usuário.border
                                         )}
                                     >
                                         +{loading ? 0 : stats?.users.active} ativos
@@ -166,7 +166,7 @@ export default function DashboardPage() {
                         className={cn(
                             "h-full group transition-colors overflow-hidden",
                             entityColors.Segurança.border,
-                            entityColors.Segurança.hoverBorder,
+                            entityColors.Segurança.hoverBorder
                         )}
                     >
                         <GlassCardHeader className="pb-2">
@@ -191,7 +191,7 @@ export default function DashboardPage() {
                                         className={cn(
                                             "text-xs font-medium px-2 py-0.5 rounded-full border flex items-center gap-1",
                                             entityColors.Segurança.badge,
-                                            entityColors.Segurança.border,
+                                            entityColors.Segurança.border
                                         )}
                                     >
                                         <Clock className="h-3 w-3" />
@@ -232,10 +232,8 @@ export default function DashboardPage() {
                             <Shield className="h-6 w-6 text-yellow-500" />
                         </div>
                         <div>
-                            <GlassCardTitle className="text-white">Repositório de Magias e Itens</GlassCardTitle>
-                            <GlassCardDescription className="text-white/60">
-                                Estamos processando o SRD (System Reference Document) para popular automaticamente o catálogo D&D 5e.
-                            </GlassCardDescription>
+                            <GlassCardTitle className="text-white">Repositório</GlassCardTitle>
+                            <GlassCardDescription className="text-white/60">Estamos populando manualmente o catálogo D&D 5e.</GlassCardDescription>
                         </div>
                     </GlassCardHeader>
                 </GlassCard>
