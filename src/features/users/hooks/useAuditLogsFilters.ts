@@ -20,13 +20,13 @@ import { useSearchParams, useRouter, usePathname } from 'next/navigation';
 import type { AuditAction } from '../types/audit.types';
 
 export interface AuditLogsFilterState {
-  actions?: AuditAction[];
-  entityType?: string;
-  actorEmail?: string;
-  startDate?: string;
-  endDate?: string;
-  page: number;
-  limit: number;
+    actions?: AuditAction[]
+    entityTypes?: string[]
+    actorEmail?: string
+    startDate?: string
+    endDate?: string
+    page: number
+    limit: number
 }
 
 const DEFAULT_LIMIT = 10;
@@ -38,16 +38,24 @@ export function useAuditLogsFilters() {
   const pathname = usePathname();
 
   const filters: AuditLogsFilterState = useMemo(() => {
-    const actionsParam = searchParams.get('actions');
+    const actions = searchParams
+        .getAll("actions")
+        .flatMap((a) => a.split(","))
+        .filter(Boolean) as AuditAction[]
+    const entityTypes = searchParams
+        .getAll("entityType")
+        .flatMap((t) => t.split(","))
+        .filter(Boolean)
+
     return {
-      actions: actionsParam ? (actionsParam.split(',') as AuditAction[]) : undefined,
-      entityType: searchParams.get('entityType') || undefined,
-      actorEmail: searchParams.get('actorEmail') || undefined,
-      startDate: searchParams.get('startDate') || undefined,
-      endDate: searchParams.get('endDate') || undefined,
-      page: Number(searchParams.get('page')) || DEFAULT_PAGE,
-      limit: Number(searchParams.get('limit')) || DEFAULT_LIMIT,
-    };
+        actions: actions.length > 0 ? actions : undefined,
+        entityTypes: entityTypes.length > 0 ? entityTypes : undefined,
+        actorEmail: searchParams.get("actorEmail") || undefined,
+        startDate: searchParams.get("startDate") || undefined,
+        endDate: searchParams.get("endDate") || undefined,
+        page: Number(searchParams.get("page")) || DEFAULT_PAGE,
+        limit: Number(searchParams.get("limit")) || DEFAULT_LIMIT
+    }
   }, [searchParams]);
 
   const setFilters = useCallback((updates: Partial<AuditLogsFilterState>) => {
@@ -59,17 +67,19 @@ export function useAuditLogsFilters() {
     }
 
     Object.entries(updates).forEach(([key, value]) => {
+      const urlKey = key === "entityTypes" ? "entityType" : key
+      
       if (value === undefined || value === '' || value === null) {
-        params.delete(key);
+        params.delete(urlKey)
       } else if (Array.isArray(value)) {
-        // Handle array values (like actions)
-        if (value.length === 0) {
-          params.delete(key);
-        } else {
-          params.set(key, value.join(','));
-        }
+          // Handle array values (like actions and entityTypes)
+          if (value.length === 0) {
+              params.delete(urlKey)
+          } else {
+              params.set(urlKey, value.join(","))
+          }
       } else {
-        params.set(key, String(value));
+        params.set(urlKey, String(value))
       }
     });
 
@@ -84,9 +94,12 @@ export function useAuditLogsFilters() {
     setFilters({ actions: actions.length > 0 ? actions : undefined });
   }, [setFilters]);
 
-  const setEntityType = useCallback((entityType: string | undefined) => {
-    setFilters({ entityType });
-  }, [setFilters]);
+  const setEntityTypes = useCallback(
+      (entityTypes: string[]) => {
+          setFilters({ entityTypes: entityTypes.length > 0 ? entityTypes : undefined })
+      },
+      [setFilters]
+  )
 
   const setActorEmail = useCallback((actorEmail: string | undefined) => {
     setFilters({ actorEmail });
@@ -101,13 +114,13 @@ export function useAuditLogsFilters() {
   }, [router, pathname]);
 
   return {
-    filters,
-    setFilters,
-    setPage,
-    setActions,
-    setEntityType,
-    setActorEmail,
-    setDateRange,
-    resetFilters,
-  };
+      filters,
+      setFilters,
+      setPage,
+      setActions,
+      setEntityTypes,
+      setActorEmail,
+      setDateRange,
+      resetFilters
+  }
 }

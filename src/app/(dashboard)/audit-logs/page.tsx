@@ -15,7 +15,7 @@ import { useAuditLogsFilters } from "@/features/users/hooks/useAuditLogsFilters"
 import type { AuditLog } from "@/features/users/types/audit.types"
 
 function AuditLogsContent() {
-    const { filters, setPage, setActions, setActorEmail, setDateRange, resetFilters } = useAuditLogsFilters()
+    const { filters, setPage, setActions, setEntityTypes, setDateRange, resetFilters } = useAuditLogsFilters()
     const { data, isLoading, isError, refetch } = useAuditLogs(filters)
     const [selectedLog, setSelectedLog] = useState<AuditLog | null>(null)
     const [dialogOpen, setDialogOpen] = useState(false)
@@ -46,7 +46,14 @@ function AuditLogsContent() {
             {/* Filters */}
             <GlassCard>
                 <GlassCardContent className="py-4">
-                    <AuditLogsFilters filters={filters} isLoading={isLoading} onActionsChange={setActions} onActorEmailChange={setActorEmail} onDateRangeChange={setDateRange} onReset={resetFilters} />
+                    <AuditLogsFilters
+                        filters={filters}
+                        isLoading={isLoading}
+                        onActionsChange={setActions}
+                        onEntityTypesChange={setEntityTypes}
+                        onDateRangeChange={setDateRange}
+                        onReset={resetFilters}
+                    />
                 </GlassCardContent>
             </GlassCard>
 

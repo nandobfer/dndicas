@@ -20,7 +20,7 @@ export async function GET(request: NextRequest) {
             const response: ApiResponse = {
                 success: false,
                 error: "Acesso negado. Apenas administradores podem visualizar logs de auditoria.",
-                code: "FORBIDDEN",
+                code: "FORBIDDEN"
             }
             return NextResponse.json(response, { status: 403 })
         }
@@ -36,81 +36,92 @@ export async function GET(request: NextRequest) {
         const actions = searchParams.getAll("action")
         const collectionName = searchParams.get("collectionName")
         const actorEmail = searchParams.get("actorEmail")
-        const entityType = searchParams.get("entityType")
+        const entityTypes = searchParams.getAll("entityType")
 
         const skip = (page - 1) * limit
 
         // Construir query com filtros compatíveis com log legado e moderno
-        const query: Record<string, unknown> = {}
+        const andConditions: any[] = []
 
         // Filtro de data
         if (startDate || endDate) {
             const dateQuery: Record<string, Date> = {}
             if (startDate) {
-                // Ensure start of day in local time or consistent format
                 const start = new Date(startDate)
                 start.setUTCHours(0, 0, 0, 0)
                 dateQuery.$gte = start
             }
             if (endDate) {
-                // Ensure end of day (23:59:59.999)
                 const end = new Date(endDate)
                 end.setUTCHours(23, 59, 59, 999)
                 dateQuery.$lte = end
             }
 
             // Query both createdAt (modern) and timestamp (legacy)
-            query.$or = [{ createdAt: dateQuery }, { timestamp: dateQuery }]
+            andConditions.push({ $or: [{ createdAt: dateQuery }, { timestamp: dateQuery }] })
         }
 
         // Filtro de usuário (checa ambos os campos: legível e moderno)
         if (filterUserId) {
-            const orArray = (query.$or as unknown[]) || []
-            orArray.push({ performedBy: filterUserId }, { userId: filterUserId })
-            query.$or = orArray
+            andConditions.push({ $or: [{ performedBy: filterUserId }, { userId: filterUserId }] })
         }
 
         // Filtro de ação
         if (actions && actions.length > 0) {
-            query.action = { $in: actions }
+            andConditions.push({ action: { $in: actions } })
         }
 
-        // Filtro de entidade/coleção
+        // Filtro de entidade/coleção legado (parâmetro individual)
         if (collectionName) {
-            const orArray = (query.$or as unknown[]) || []
             const variations = [collectionName]
             if (collectionName === "Rule") variations.push("Reference")
             if (collectionName === "Reference") variations.push("Rule")
 
-            orArray.push({ entity: { $in: variations } }, { collectionName: { $in: variations } })
-            query.$or = orArray
+            andConditions.push({ $or: [{ entity: { $in: variations } }, { collectionName: { $in: variations } }] })
         }
 
-        // Filtro de email do ator (para logs legados/estendidos)
+        // O campo de busca (actorEmail) deve buscar APENAS pelo autor (nome, email ou username)
         if (actorEmail) {
-            const orArray = (query.$or as unknown[]) || []
-            orArray.push({ actorEmail: { $regex: actorEmail, $options: "i" } }, { "performedByUser.email": { $regex: actorEmail, $options: "i" } })
-            query.$or = orArray
+            andConditions.push({
+                $or: [
+                    { actorEmail: { $regex: actorEmail, $options: "i" } },
+                    { actorName: { $regex: actorEmail, $options: "i" } },
+                    { actorUsername: { $regex: actorEmail, $options: "i" } },
+                    { "performedByUser.email": { $regex: actorEmail, $options: "i" } },
+                    { "performedByUser.name": { $regex: actorEmail, $options: "i" } },
+                    { "performedByUser.username": { $regex: actorEmail, $options: "i" } }
+                ]
+            })
         }
 
-        // Filtro de tipo de entidade
-        if (entityType) {
-            const orArray = (query.$or as unknown[]) || []
+        // Filtro de tipo de entidade (múltiplas seleções)
+        if (entityTypes && entityTypes.length > 0) {
             // Mapeamento para suportar nomes amigáveis no filtro
-            const variations = [entityType]
-            if (entityType === "Rule") variations.push("Reference")
-            if (entityType === "Reference") variations.push("Rule")
+            const variations = [...entityTypes]
+            if (entityTypes.includes("Rule") || entityTypes.includes("Regra")) {
+                if (!variations.includes("Reference")) variations.push("Reference")
+                if (!variations.includes("Rule")) variations.push("Rule")
+            }
+            if (entityTypes.includes("Reference")) {
+                if (!variations.includes("Rule")) variations.push("Rule")
+            }
+            if (entityTypes.includes("User") || entityTypes.includes("Usuário")) {
+                if (!variations.includes("User")) variations.push("User")
+            }
 
-            orArray.push({ entity: { $in: variations } }, { entityType: { $in: variations } }, { collectionName: { $in: variations } })
-            query.$or = orArray
+            andConditions.push({
+                $or: [{ entity: { $in: variations } }, { entityType: { $in: variations } }, { collectionName: { $in: variations } }]
+            })
         }
+
+        const query = andConditions.length > 0 ? { $and: andConditions } : {}
 
         const [logs, total] = await Promise.all([
             AuditLogExtended.find(query as any)
                 .skip(skip)
                 .limit(limit)
                 .sort({ createdAt: -1, timestamp: -1 }),
-            AuditLogExtended.countDocuments(query as any),
+            AuditLogExtended.countDocuments(query as any)
         ])
 
         // Extrair IDs únicos de usuários para enriquecer logs
@@ -118,13 +129,13 @@ export async function GET(request: NextRequest) {
             new Set(
                 logs
                     .map((log) => log.performedBy || (log as unknown as Record<string, string>).userId)
-                    .filter((id): id is string => !!(id && id !== "system")),
-            ),
+                    .filter((id): id is string => !!(id && id !== "system"))
+            )
         )
 
         // Busca os usuários atuais para garantir que avatar e status estejam presentes (especialmente para logs antigos)
         const currentUsers = await User.find({
-            $or: [{ _id: { $in: performerIds.filter((id) => /^[0-9a-fA-F]{24}$/.test(id)) } }, { clerkId: { $in: performerIds } }],
+            $or: [{ _id: { $in: performerIds.filter((id) => /^[0-9a-fA-F]{24}$/.test(id)) } }, { clerkId: { $in: performerIds } }]
         }).lean()
 
         const userMap = new Map()
@@ -142,7 +153,7 @@ export async function GET(request: NextRequest) {
             const baseUser = (logObj.performedByUser || {
                 name: logObj.actorName,
                 email: logObj.actorEmail,
-                username: logObj.actorUsername, // Se existir no futuro
+                username: logObj.actorUsername // Se existir no futuro
             }) as Record<string, unknown>
 
             return {
@@ -160,8 +171,8 @@ export async function GET(request: NextRequest) {
                               status: baseUser.status || currentUser?.status || "active",
                               role: baseUser.role || currentUser?.role || "user",
                               name: baseUser.name || currentUser?.name || (baseUser.email as string)?.split("@")[0],
-                              username: baseUser.username || currentUser?.username || (baseUser.email as string)?.split("@")[0],
-                          },
+                              username: baseUser.username || currentUser?.username || (baseUser.email as string)?.split("@")[0]
+                          }
             }
         })
 
@@ -172,8 +183,8 @@ export async function GET(request: NextRequest) {
                 page,
                 limit,
                 total,
-                totalPages: Math.ceil(total / limit),
-            },
+                totalPages: Math.ceil(total / limit)
+            }
         }
 
         return NextResponse.json(response, { status: 200 })

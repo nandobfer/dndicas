@@ -18,13 +18,13 @@ import type { AuditLog, AuditAction } from '../types/audit.types';
 
 /** Filter options for audit logs query */
 export interface AuditLogsFilters {
-  actions?: AuditAction[];
-  entityType?: string;
-  actorEmail?: string;
-  startDate?: string;
-  endDate?: string;
-  page?: number;
-  limit?: number;
+    actions?: AuditAction[]
+    entityTypes?: string[]
+    actorEmail?: string
+    startDate?: string
+    endDate?: string
+    page?: number
+    limit?: number
 }
 
 /** Response shape from audit logs API */
@@ -44,7 +44,9 @@ async function fetchAuditLogs(filters: AuditLogsFilters): Promise<AuditLogsRespo
   if (filters.actions && filters.actions.length > 0) {
     filters.actions.forEach(action => params.append('action', action));
   }
-  if (filters.entityType) params.set('entityType', filters.entityType);
+  if (filters.entityTypes && filters.entityTypes.length > 0) {
+      filters.entityTypes.forEach((type) => params.append("entityType", type))
+  }
   if (filters.actorEmail) params.set('actorEmail', filters.actorEmail);
   if (filters.startDate) params.set('startDate', filters.startDate);
   if (filters.endDate) params.set('endDate', filters.endDate);
