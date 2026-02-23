@@ -1,0 +1,575 @@
+openapi: 3.0.3
+info:
+  title: Traits API
+  description: |
+    RESTful API for managing D&D 5e Traits (Habilidades) in the Dungeons & Dicas catalog.
+    
+    **Authentication**: All mutation endpoints (POST, PUT, DELETE) require Clerk authentication.
+    Query endpoints (GET) are accessible to authenticated users.
+    
+    **Authorization**: No role-based restrictions - all authenticated admins can manage traits.
+  version: 1.0.0
+  contact:
+    name: Dungeons & Dicas API Support
+    url: https://dndicas.com.br
+
+servers:
+  - url: http://localhost:3000/api
+    description: Local development server
+  - url: https://dndicas.com.br/api
+    description: Production server
+
+tags:
+  - name: Traits
+    description: CRUD operations for D&D traits (habilidades)
+
+paths:
+  /traits:
+    get:
+      tags:
+        - Traits
+      summary: List traits
+      description: |
+        Retrieve a paginated, searchable, filterable list of traits.
+        
+        **Query Parameters**:
+        - `page`: Page number (1-indexed, default: 1)
+        - `limit`: Items per page (default: 10, max: 100)
+        - `search`: Search term for name and description (case-insensitive)
+        - `searchField`: Field to search ('name' | 'all', default: 'all')
+        - `status`: Filter by status ('active' | 'inactive' | 'all', default: 'all')
+        
+        **Use Cases**:
+        - Traits table with pagination
+        - Search bar with real-time filtering
+        - Mention dropdown (use `searchField=name&limit=10`)
+      operationId: listTraits
+      parameters:
+        - name: page
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+          description: Page number (1-indexed)
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 10
+          description: Number of items per page
+        - name: search
+          in: query
+          schema:
+            type: string
+          description: Search term for name and description
+        - name: searchField
+          in: query
+          schema:
+            type: string
+            enum: [name, all]
+            default: all
+          description: Limit search to specific field
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [active, inactive, all]
+            default: all
+          description: Filter by trait status
+      responses:
+        '200':
+          description: Successful response with paginated traits
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TraitsResponse'
+              examples:
+                allTraits:
+                  summary: All traits (no filters)
+                  value:
+                    items:
+                      - _id: "507f1f77bcf86cd799439011"
+                        id: "507f1f77bcf86cd799439011"
+                        name: "Fúria Bárbara"
+                        description: "<p>Como ação bônus, você pode entrar em fúria...</p>"
+                        source: "PHB pg. 48"
+                        status: "active"
+                        createdAt: "2026-02-23T10:00:00.000Z"
+                        updatedAt: "2026-02-23T10:00:00.000Z"
+                      - _id: "507f1f77bcf86cd799439012"
+                        id: "507f1f77bcf86cd799439012"
+                        name: "Visão no Escuro"
+                        description: "<p>Você pode enxergar em penumbra até 60 pés...</p>"
+                        source: "PHB pg. 23"
+                        status: "active"
+                        createdAt: "2026-02-22T15:30:00.000Z"
+                        updatedAt: "2026-02-22T15:30:00.000Z"
+                    total: 42
+                    page: 1
+                    limit: 10
+                searchResults:
+                  summary: Search results for "fúria"
+                  value:
+                    items:
+                      - _id: "507f1f77bcf86cd799439011"
+                        id: "507f1f77bcf86cd799439011"
+                        name: "Fúria Bárbara"
+                        description: "<p>Como ação bônus, você pode entrar em fúria...</p>"
+                        source: "PHB pg. 48"
+                        status: "active"
+                        createdAt: "2026-02-23T10:00:00.000Z"
+                        updatedAt: "2026-02-23T10:00:00.000Z"
+                    total: 1
+                    page: 1
+                    limit: 10
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+    post:
+      tags:
+        - Traits
+      summary: Create new trait
+      description: |
+        Create a new trait in the catalog.
+        
+        **Authentication**: Required (Clerk session)
+        **Validation**: Name must be unique, all required fields must be provided
+        **Audit**: Automatically logs CREATE action with user ID
+      operationId: createTrait
+      security:
+        - ClerkAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateTraitInput'
+            examples:
+              barbarianRage:
+                summary: Barbarian Rage trait
+                value:
+                  name: "Fúria Bárbara"
+                  description: "<p>Como ação bônus, você pode entrar em fúria durante 1 minuto...</p>"
+                  source: "PHB pg. 48"
+                  status: "active"
+      responses:
+        '201':
+          description: Trait created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Trait'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '409':
+          description: Trait name already exists
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                    example: "Trait name already exists"
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /traits/{id}:
+    get:
+      tags:
+        - Traits
+      summary: Get single trait by ID
+      description: Retrieve detailed information about a specific trait
+      operationId: getTrait
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: MongoDB ObjectId of the trait
+      responses:
+        '200':
+          description: Trait found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Trait'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+    put:
+      tags:
+        - Traits
+      summary: Update existing trait
+      description: |
+        Update an existing trait. All fields are optional.
+        
+        **Authentication**: Required (Clerk session)
+        **Validation**: If name is provided, must not conflict with other traits
+        **Audit**: Automatically logs UPDATE action with before/after snapshots
+      operationId: updateTrait
+      security:
+        - ClerkAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: MongoDB ObjectId of the trait
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateTraitInput'
+            examples:
+              updateDescription:
+                summary: Update only description
+                value:
+                  description: "<p>Versão revisada: Como ação bônus...</p>"
+              updateStatus:
+                summary: Deactivate trait
+                value:
+                  status: "inactive"
+      responses:
+        '200':
+          description: Trait updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Trait'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: Updated name conflicts with existing trait
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                    example: "Trait name already exists"
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+    delete:
+      tags:
+        - Traits
+      summary: Delete trait
+      description: |
+        Permanently delete a trait from the catalog.
+        
+        **Authentication**: Required (Clerk session)
+        **Warning**: Mentions to this trait in other descriptions will become "broken" (show as unavailable)
+        **Audit**: Automatically logs DELETE action with deleted data
+      operationId: deleteTrait
+      security:
+        - ClerkAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: MongoDB ObjectId of the trait
+      responses:
+        '200':
+          description: Trait deleted successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: "Trait deleted successfully"
+                  id:
+                    type: string
+                    example: "507f1f77bcf86cd799439011"
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /traits/search:
+    get:
+      tags:
+        - Traits
+      summary: Search traits for mentions
+      description: |
+        Optimized endpoint for mention dropdown autocomplete.
+        Searches only in trait names, returns minimal fields, limited to 10 results.
+      operationId: searchTraitsForMentions
+      parameters:
+        - name: search
+          in: query
+          required: true
+          schema:
+            type: string
+          description: Search term for trait name
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 10
+          description: Maximum number of results
+      responses:
+        '200':
+          description: Search results
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        id:
+                          type: string
+                        label:
+                          type: string
+                        entityType:
+                          type: string
+                          enum: [Habilidade]
+                        source:
+                          type: string
+                        status:
+                          type: string
+                          enum: [active, inactive]
+              examples:
+                mentionResults:
+                  value:
+                    items:
+                      - id: "507f1f77bcf86cd799439011"
+                        label: "Fúria Bárbara"
+                        entityType: "Habilidade"
+                        source: "PHB pg. 48"
+                        status: "active"
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+components:
+  securitySchemes:
+    ClerkAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: Clerk session token (automatically handled by Clerk middleware)
+
+  schemas:
+    Trait:
+      type: object
+      required:
+        - _id
+        - id
+        - name
+        - description
+        - source
+        - status
+        - createdAt
+        - updatedAt
+      properties:
+        _id:
+          type: string
+          description: MongoDB ObjectId
+          example: "507f1f77bcf86cd799439011"
+        id:
+          type: string
+          description: Virtual field (same as _id), used by frontend
+          example: "507f1f77bcf86cd799439011"
+        name:
+          type: string
+          minLength: 3
+          maxLength: 100
+          description: Trait name (unique)
+          example: "Fúria Bárbara"
+        description:
+          type: string
+          minLength: 10
+          maxLength: 50000
+          description: HTML-formatted description with mentions and images
+          example: "<p>Como ação bônus, você pode entrar em fúria...</p>"
+        source:
+          type: string
+          maxLength: 200
+          description: Reference source (book, page number)
+          example: "PHB pg. 48"
+        status:
+          type: string
+          enum: [active, inactive]
+          description: Visibility status
+          example: "active"
+        createdAt:
+          type: string
+          format: date-time
+          description: ISO 8601 timestamp of creation
+          example: "2026-02-23T10:00:00.000Z"
+        updatedAt:
+          type: string
+          format: date-time
+          description: ISO 8601 timestamp of last update
+          example: "2026-02-23T10:00:00.000Z"
+
+    CreateTraitInput:
+      type: object
+      required:
+        - name
+        - description
+        - source
+        - status
+      properties:
+        name:
+          type: string
+          minLength: 3
+          maxLength: 100
+          description: Trait name (must be unique)
+          example: "Fúria Bárbara"
+        description:
+          type: string
+          minLength: 10
+          maxLength: 50000
+          description: HTML-formatted description
+          example: "<p>Como ação bônus, você pode entrar em fúria...</p>"
+        source:
+          type: string
+          minLength: 1
+          maxLength: 200
+          description: Reference source
+          example: "PHB pg. 48"
+        status:
+          type: string
+          enum: [active, inactive]
+          description: Initial status
+          default: active
+          example: "active"
+
+    UpdateTraitInput:
+      type: object
+      properties:
+        name:
+          type: string
+          minLength: 3
+          maxLength: 100
+          description: Updated trait name (optional)
+          example: "Fúria Bárbara (Atualizado)"
+        description:
+          type: string
+          minLength: 10
+          maxLength: 50000
+          description: Updated HTML description (optional)
+          example: "<p>Versão revisada...</p>"
+        source:
+          type: string
+          minLength: 1
+          maxLength: 200
+          description: Updated source reference (optional)
+          example: "PHB pg. 48, Errata 2023"
+        status:
+          type: string
+          enum: [active, inactive]
+          description: Updated status (optional)
+          example: "inactive"
+
+    TraitsResponse:
+      type: object
+      required:
+        - items
+        - total
+        - page
+        - limit
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Trait'
+          description: Array of traits for current page
+        total:
+          type: integer
+          description: Total number of traits matching filters
+          example: 42
+        page:
+          type: integer
+          description: Current page number (1-indexed)
+          example: 1
+        limit:
+          type: integer
+          description: Items per page
+          example: 10
+
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          type: string
+          description: Human-readable error message
+          example: "Failed to fetch traits"
+
+    ValidationErrorResponse:
+      type: object
+      properties:
+        error:
+          type: array
+          items:
+            type: object
+            properties:
+              path:
+                type: array
+                items:
+                  type: string
+                example: ["name"]
+              message:
+                type: string
+                example: "Nome deve ter pelo menos 3 caracteres"
+
+  responses:
+    ValidationError:
+      description: Validation error (Zod schema)
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ValidationErrorResponse'
+    
+    Unauthorized:
+      description: Unauthorized (missing or invalid Clerk session)
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            error: "Unauthorized"
+    
+    NotFound:
+      description: Trait not found
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            error: "Trait not found"
+    
+    InternalServerError:
+      description: Internal server error
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            error: "Failed to process request"
