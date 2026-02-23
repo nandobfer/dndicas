@@ -6,7 +6,7 @@ export const getSuggestionConfig = (options?: { excludeId?: string }) => ({
   items: async ({ query }: { query: string }) => {
     // Current focus is on Rules, but we can extend this easily later
     try {
-        const res = await fetch(`/api/rules?search=${query}&limit=10`)
+        const res = await fetch(`/api/rules?search=${query}&limit=10&searchField=name`)
         if (!res.ok) return []
         const data = await res.json()
         

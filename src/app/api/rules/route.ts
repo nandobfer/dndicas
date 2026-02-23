@@ -20,11 +20,16 @@ export async function GET(req: NextRequest) {
     const page = parseInt(url.searchParams.get("page") || "1", 10)
     const limit = parseInt(url.searchParams.get("limit") || "10", 10)
     const search = url.searchParams.get("search") || ""
+    const searchField = url.searchParams.get("searchField") || "all"
     const status = url.searchParams.get("status")
 
     const query: Record<string, unknown> = {}
     if (search) {
-      query.$or = [{ name: { $regex: search, $options: "i" } }, { description: { $regex: search, $options: "i" } }]
+        if (searchField === "name") {
+            query.name = { $regex: search, $options: "i" }
+        } else {
+            query.$or = [{ name: { $regex: search, $options: "i" } }, { description: { $regex: search, $options: "i" } }]
+        }
     }
     if (status && status !== "all") {
         if (status === "active" || status === "inactive") {
