@@ -8,6 +8,7 @@ yarn-debug.log*
 yarn-error.log*
 .dockerignore
 Dockerfile
+node_modules
 docker-compose.yaml
 README.md
 LICENSE
