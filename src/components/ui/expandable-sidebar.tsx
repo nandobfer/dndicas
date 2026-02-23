@@ -47,9 +47,11 @@ const mainItems = [
 ];
 
 // T020: Renamed from "Módulos" to "Cadastros", removed "Empresas", added "Usuários"
+// T032: Added "Habilidades" for traits catalog
 const cadastrosItems = [
     { label: "Usuários", href: "/users", icon: Users },
-    { label: "Regras", href: "/rules", icon: Scroll }
+    { label: "Regras", href: "/rules", icon: Scroll },
+    { label: "Habilidades", href: "/traits", icon: Sparkles }
 ]
 
 const adminItems = [{ label: "Logs", href: "/audit-logs", icon: FileText }]

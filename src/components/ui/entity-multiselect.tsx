@@ -6,7 +6,7 @@
  */
 
 import * as React from 'react';
-import { Check, Filter, Users, Scroll } from "lucide-react"
+import { Check, Filter, Users, Scroll, Sparkles } from "lucide-react"
 import { motion } from "framer-motion"
 import { cn } from "@/core/utils"
 import { GlassPopover, GlassPopoverContent, GlassPopoverTrigger } from "@/components/ui/glass-popover"
@@ -23,9 +23,11 @@ export interface EntityMultiSelectProps {
 }
 
 // Map of icons for each entity
+// T047: Added Sparkles icon for Habilidade entity type
 const entityIcons: Record<string, any> = {
-    "Usuário": Users,
-    "Regra": Scroll,
+    Usuário: Users,
+    Regra: Scroll,
+    Habilidade: Sparkles,
 }
 
 // Filter out Segurança and preparation for the component
@@ -39,12 +41,16 @@ const entities = Object.entries(entityColors)
         bgColor: config.bgAlpha,
         border: config.border,
         // Define explicit check colors based on entity color to avoid purge/dynamic issues
-        checkActive: config.color === "emerald" 
-            ? "bg-emerald-500 border-emerald-500 shadow-emerald-500/40" 
-            : config.color === "blue" 
-                ? "bg-blue-500 border-blue-500 shadow-blue-500/40"
-                : "bg-purple-500 border-purple-500 shadow-purple-500/40",
-        styles: config
+        // T047: Added slate color support for Habilidade
+        checkActive:
+            config.color === "emerald"
+                ? "bg-emerald-500 border-emerald-500 shadow-emerald-500/40"
+                : config.color === "blue"
+                  ? "bg-blue-500 border-blue-500 shadow-blue-500/40"
+                  : config.color === "slate"
+                    ? "bg-slate-500 border-slate-500 shadow-slate-500/40"
+                    : "bg-purple-500 border-purple-500 shadow-purple-500/40",
+        styles: config,
     }))
 
 export function EntityMultiSelect({ value, onChange, className }: EntityMultiSelectProps) {

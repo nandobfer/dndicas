@@ -92,6 +92,7 @@ export type RoleColor = keyof typeof roleColors;
  * Central configuration for entity colors across the app.
  * Maps entity types to their designated styles and colors.
  * Reverted to original colors: Users = Blue, Security = Purple, Rules = Emerald.
+ * T038: Added Habilidade entity color (Slate/Gray).
  */
 export const entityColors = {
   Regra: {
@@ -126,6 +127,17 @@ export const entityColors = {
     bgAlpha: "bg-purple-500/10",
     text: "text-purple-400",
     hex: rarityColors.veryRare,
+  },
+  Habilidade: {
+    name: 'Habilidade',
+    color: 'slate',
+    mention: "bg-slate-500/10 text-slate-400 border-slate-400/20",
+    badge: "bg-slate-400/20 text-slate-400",
+    border: "border-slate-500/20",
+    hoverBorder: "hover:border-slate-500/40",
+    bgAlpha: "bg-slate-500/10",
+    text: "text-slate-400",
+    hex: rarityColors.common, // #9CA3AF
   },
 } as const;
 
