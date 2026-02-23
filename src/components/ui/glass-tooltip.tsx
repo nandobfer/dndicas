@@ -77,27 +77,31 @@ GlassTooltipContent.displayName = 'GlassTooltipContent';
  * Use this when you need a simple tooltip without much customization.
  */
 interface SimpleGlassTooltipProps {
-  content: React.ReactNode;
-  children: React.ReactNode;
-  side?: 'top' | 'right' | 'bottom' | 'left';
-  delayDuration?: number;
-  className?: string;
+    content: React.ReactNode
+    children: React.ReactNode
+    side?: "top" | "right" | "bottom" | "left"
+    delayDuration?: number
+    className?: string
+    disableHoverableContent?: boolean
+    onOpenChange?: (open: boolean) => void
 }
 
 const SimpleGlassTooltip = ({
-  content,
-  children,
-  side = 'top',
-  delayDuration = 200,
-  className,
+    content,
+    children,
+    side = "top",
+    delayDuration = 200,
+    className,
+    disableHoverableContent = false,
+    onOpenChange
 }: SimpleGlassTooltipProps) => (
-  <GlassTooltip delayDuration={delayDuration}>
-    <GlassTooltipTrigger asChild>{children}</GlassTooltipTrigger>
-    <GlassTooltipContent side={side} className={className}>
-      {content}
-    </GlassTooltipContent>
-  </GlassTooltip>
-);
+    <GlassTooltip delayDuration={delayDuration} disableHoverableContent={disableHoverableContent} onOpenChange={onOpenChange}>
+        <GlassTooltipTrigger asChild>{children}</GlassTooltipTrigger>
+        <GlassTooltipContent side={side} className={className}>
+            {content}
+        </GlassTooltipContent>
+    </GlassTooltip>
+)
 SimpleGlassTooltip.displayName = 'SimpleGlassTooltip';
 
 export {

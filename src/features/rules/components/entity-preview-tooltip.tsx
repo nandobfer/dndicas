@@ -8,6 +8,8 @@ import { cn } from "@/core/utils"
 import { entityColors } from "@/lib/config/colors"
 import { Reference } from "../types/rules.types"
 import { SimpleGlassTooltip } from "@/components/ui/glass-tooltip"
+import { MentionContent } from "./mention-badge"
+import { GlassPopover, GlassPopoverTrigger, GlassPopoverContent } from "@/components/ui/glass-popover"
 
 interface RulePreviewProps {
     rule: Reference
@@ -18,10 +20,7 @@ const RulePreview = ({ rule }: RulePreviewProps) => {
         <div className="space-y-3 min-w-[300px] max-w-[400px]">
             <div className="flex items-start justify-between gap-4">
                 <div className="flex items-center gap-2">
-                    <div className={cn(
-                        "p-1.5 rounded-lg border",
-                        entityColors.Regra.badge
-                    )}>
+                    <div className={cn("p-1.5 rounded-lg border", entityColors.Regra.badge)}>
                         <ScrollText className="w-4 h-4" />
                     </div>
                     <div>
@@ -29,25 +28,26 @@ const RulePreview = ({ rule }: RulePreviewProps) => {
                         <p className="text-[10px] uppercase font-bold tracking-widest text-white/40 mt-0.5">Regra do Sistema</p>
                     </div>
                 </div>
-                <Chip variant={rule.status === 'active' ? 'uncommon' : 'common'} size="sm">
-                    {rule.status === 'active' ? 'Ativa' : 'Inativa'}
+                <Chip variant={rule.status === "active" ? "uncommon" : "common"} size="sm">
+                    {rule.status === "active" ? "Ativa" : "Inativa"}
                 </Chip>
             </div>
 
             {rule.description && (
                 <div className="relative">
                     <Quote className="absolute -top-1 -left-1 w-8 h-8 text-white/5 -z-10" />
-                    <div 
-                        className="text-xs text-white/70 line-clamp-4 prose prose-xs prose-invert [&_p]:m-0 italic pl-4 border-l border-white/10"
-                        dangerouslySetInnerHTML={{ __html: rule.description }}
-                    />
+                    <div className="text-xs text-white/70 line-clamp-4 italic pl-4 border-l border-white/10 py-1">
+                        <MentionContent html={rule.description} />
+                    </div>
                 </div>
             )}
 
             <div className="flex items-center gap-4 pt-2 border-t border-white/5 text-[10px] font-medium text-white/40">
                 <div className="flex items-center gap-1">
                     <BookOpen className="w-3 h-3" />
-                    <span>Fonte: <span className="text-white/60">{rule.source}</span></span>
+                    <span>
+                        Fonte: <span className="text-white/60">{rule.source}</span>
+                    </span>
                 </div>
             </div>
         </div>
@@ -71,14 +71,15 @@ export const EntityPreviewTooltip = ({
 }: EntityPreviewTooltipProps) => {
     const [data, setData] = React.useState<any>(null)
     const [loading, setLoading] = React.useState(false)
+    const [open, setOpen] = React.useState(false)
+    const timeoutRef = React.useRef<NodeJS.Timeout | null>(null)
 
     const fetchData = React.useCallback(async () => {
         if (data || loading) return
         
         setLoading(true)
         try {
-            // In the future, this can switch based on entityType
-            const endpoint = entityType === 'Regra' ? `/api/rules/${entityId}` : `/api/core/${entityType.toLowerCase()}/${entityId}`
+            const endpoint = entityType === "Regra" ? `/api/rules/${entityId}` : `/api/core/${entityType.toLowerCase()}/${entityId}`
             const res = await fetch(endpoint)
             if (res.ok) {
                 const json = await res.json()
@@ -91,17 +92,34 @@ export const EntityPreviewTooltip = ({
         }
     }, [entityId, entityType, data, loading])
 
+    const handleMouseEnter = () => {
+        if (timeoutRef.current) clearTimeout(timeoutRef.current)
+        timeoutRef.current = setTimeout(() => {
+            setOpen(true)
+            fetchData()
+        }, delayDuration)
+    }
+
+    const handleMouseLeave = () => {
+        if (timeoutRef.current) clearTimeout(timeoutRef.current)
+        timeoutRef.current = setTimeout(() => {
+            setOpen(false)
+        }, 300) // Small delay to allow moving between trigger and content
+    }
+
     const content = React.useMemo(() => {
         if (loading) return <div className="p-4 text-xs text-white/40 animate-pulse text-center w-[200px]">Carregando detalhes...</div>
         if (!data) return <div className="p-4 text-xs text-white/40 text-center w-[200px]">Sem informações disponíveis</div>
 
         switch (entityType) {
-            case 'Regra':
+            case "Regra":
                 return <RulePreview rule={data} />
             default:
                 return (
                     <div className="p-4">
-                        <p className="text-sm font-bold text-white">{data.name || data.label || entityId}</p>
+                        <p className="text-sm font-bold text-white">
+                            <MentionContent html={data.name || data.label || entityId} />
+                        </p>
                         <p className="text-xs text-white/40">{entityType}</p>
                     </div>
                 )
@@ -109,15 +127,19 @@ export const EntityPreviewTooltip = ({
     }, [entityType, data, loading, entityId])
 
     return (
-        <div onMouseEnter={fetchData}>
-            <SimpleGlassTooltip 
-                content={content} 
-                side={side} 
-                delayDuration={delayDuration}
-                className="p-4 max-w-none"
-            >
+        <GlassPopover open={open} onOpenChange={setOpen}>
+            <GlassPopoverTrigger asChild onMouseEnter={handleMouseEnter} onMouseLeave={handleMouseLeave}>
                 {children}
-            </SimpleGlassTooltip>
-        </div>
+            </GlassPopoverTrigger>
+            <GlassPopoverContent
+                side={side}
+                className="w-auto p-4 max-w-none"
+                onMouseEnter={handleMouseEnter}
+                onMouseLeave={handleMouseLeave}
+                onOpenAutoFocus={(e) => e.preventDefault()}
+            >
+                {content}
+            </GlassPopoverContent>
+        </GlassPopover>
     )
 }
