@@ -17,7 +17,7 @@ interface RulePreviewProps {
 
 const RulePreview = ({ rule }: RulePreviewProps) => {
     return (
-        <div className="space-y-3 min-w-[300px] max-w-[400px]">
+        <div className="space-y-4 min-w-[400px] max-w-[650px]">
             <div className="flex items-start justify-between gap-4">
                 <div className="flex items-center gap-2">
                     <div className={cn("p-1.5 rounded-lg border", entityColors.Regra.badge)}>
@@ -36,8 +36,8 @@ const RulePreview = ({ rule }: RulePreviewProps) => {
             {rule.description && (
                 <div className="relative">
                     <Quote className="absolute -top-1 -left-1 w-8 h-8 text-white/5 -z-10" />
-                    <div className="text-xs text-white/70 line-clamp-4 italic pl-4 border-l border-white/10 py-1">
-                        <MentionContent html={rule.description} />
+                    <div className="text-xs text-white/70 pl-4 border-l border-white/10 py-1">
+                        <MentionContent html={rule.description} mode="block" />
                     </div>
                 </div>
             )}

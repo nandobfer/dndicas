@@ -22,67 +22,124 @@ function decodeHTMLEntities(text: string) {
     return textArea.value
 }
 
-export function MentionContent({ html, delayDuration = 200 }: { html: string; delayDuration?: number }) {
-    const parts = useMemo(() => {
-        if (!html) return []
+export function MentionContent({
+    html,
+    delayDuration = 200,
+    mode = "inline",
+    className
+}: {
+    html: string
+    delayDuration?: number
+    mode?: "inline" | "block"
+    className?: string
+}) {
+    const [isMounted, setIsMounted] = React.useState(false)
 
-        const combinedRegex = /(<span[^>]*data-type="mention"[^>]*>.*?<\/span>|<img[^>]*>)/g
-        const tokens = html.split(combinedRegex)
+    React.useEffect(() => {
+        setIsMounted(true)
+    }, [])
 
-        const result: (string | React.ReactNode)[] = []
+    const contents = useMemo(() => {
+        if (!html) return null
 
-        tokens.forEach((token, i) => {
-            if (!token) return
+        // SSR Fallback or if document is not available
+        if (!isMounted || typeof document === "undefined") {
+            return <span dangerouslySetInnerHTML={{ __html: html }} />
+        }
 
-            if (token.startsWith("<span") && token.includes('data-type="mention"')) {
-                const idMatch = token.match(/data-id="([^"]*)"/)
-                const labelMatch = token.match(/data-label="([^"]*)"/)
-                const typeMatch = token.match(/data-entity-type="([^"]*)"/)
-                const labelContentMatch = token.match(/>([^<]*)<\/span>/)
+        const parser = new DOMParser()
+        const doc = parser.parseFromString(html, "text/html")
+        const body = doc.body
 
-                const id = idMatch ? idMatch[1] : ""
-                const labelRaw = labelMatch ? labelMatch[1] : labelContentMatch ? labelContentMatch[1] : ""
-                const label = decodeHTMLEntities(labelRaw)
-                const type = typeMatch ? typeMatch[1] : "Regra"
+        const convertNode = (node: Node, index: number): React.ReactNode => {
+            if (node.nodeType === Node.TEXT_NODE) {
+                return node.textContent
+            }
 
-                result.push(<MentionBadge key={`mention-${i}`} id={id} label={label} type={type} delayDuration={delayDuration} />)
-            } else if (token.startsWith("<img")) {
-                const srcMatch = token.match(/src="([^"]*)"/)
-                const srcRaw = srcMatch ? srcMatch[1] : ""
-                const src = decodeHTMLEntities(srcRaw)
+            if (node.nodeType === Node.ELEMENT_NODE) {
+                const el = node as HTMLElement
+                const tagName = el.tagName.toLowerCase()
 
-                if (src) {
-                    result.push(
-                        <SimpleGlassTooltip
-                            key={`img-${i}`}
-                            delayDuration={100}
-                            content={
-                                <div className="p-1">
-                                    <img
-                                        src={src}
-                                        className="max-w-[500px] max-h-[500px] rounded-lg shadow-2xl border border-white/10"
-                                        alt="Preview"
-                                    />
-                                </div>
-                            }
-                        >
-                            <img
-                                src={src}
-                                className="h-4 w-auto inline-block align-middle rounded-[2px] border border-white/20 mx-0.5 hover:scale-110 transition-transform cursor-zoom-in"
-                                alt="Thumb"
-                            />
-                        </SimpleGlassTooltip>
+                // Special handling for Mentions
+                if (tagName === "span" && el.getAttribute("data-type") === "mention") {
+                    const id = el.getAttribute("data-id") || ""
+                    const label = el.getAttribute("data-label") || el.textContent || ""
+                    const type = el.getAttribute("data-entity-type") || "Regra"
+                    return <MentionBadge key={`mention-${index}`} id={id} label={label} type={type} delayDuration={delayDuration} />
+                }
+
+                // Special handling for Images
+                if (tagName === "img") {
+                    const src = el.getAttribute("src") || ""
+                    if (src) {
+                        return (
+                            <SimpleGlassTooltip
+                                key={`img-${index}`}
+                                delayDuration={100}
+                                content={
+                                    <div className="p-1">
+                                        <img
+                                            src={src}
+                                            className="max-w-[500px] max-h-[500px] rounded-lg shadow-2xl border border-white/10"
+                                            alt="Preview"
+                                        />
+                                    </div>
+                                }
+                            >
+                                <img
+                                    src={src}
+                                    className="h-4 w-auto inline-block align-middle rounded-[2px] border border-white/20 mx-0.5 hover:scale-110 transition-transform cursor-zoom-in"
+                                    alt="Thumb"
+                                />
+                            </SimpleGlassTooltip>
+                        )
+                    }
+                }
+
+                // If inline mode, flatten structural blocks to avoid breaks
+                const blockTags = ["p", "div", "ul", "ol", "li", "h1", "h2", "h3", "h4", "h5", "h6", "blockquote", "pre"]
+                if (mode === "inline" && blockTags.includes(tagName)) {
+                    return (
+                        <React.Fragment key={`flat-${index}`}>{Array.from(node.childNodes).map((child, i) => convertNode(child, i))} </React.Fragment>
                     )
                 }
-            } else {
-                result.push(<span key={`text-${i}`} dangerouslySetInnerHTML={{ __html: token }} />)
+
+                // Default: Recreate the element while recursing for special nodes
+                const children = Array.from(node.childNodes).map((child, i) => convertNode(child, i))
+                const props: any = { key: `${tagName}-${index}` }
+
+                Array.from(el.attributes).forEach((attr) => {
+                    const name = attr.name === "class" ? "className" : attr.name
+                    props[name] = attr.value
+                })
+
+                return React.createElement(tagName, props, children.length > 0 ? children : undefined)
             }
-        })
+            return null
+        }
 
-        return result
-    }, [html, delayDuration])
+        return Array.from(body.childNodes).map((node, i) => convertNode(node, i))
+    }, [html, delayDuration, mode, isMounted])
 
-    return <span className="prose prose-xs prose-invert [&_*]:inline [&_p]:m-0 inline align-baseline">{parts}</span>
+    if (mode === "block") {
+        return (
+            <div
+                className={cn(
+                    "prose prose-invert prose-xs max-w-none",
+                    "prose-p:my-2 prose-headings:mb-4 prose-headings:mt-6",
+                    "prose-ul:list-disc prose-ol:list-decimal prose-li:my-1",
+                    "[&_ul]:list-disc [&_ul]:pl-5 [&_ol]:list-decimal [&_ol]:pl-5",
+                    "[&_li]:marker:text-white/30",
+                    "[&_p]:min-h-[1em]",
+                    className
+                )}
+            >
+                {contents}
+            </div>
+        )
+    }
+
+    return <span className={cn("inline align-baseline", className)}>{contents}</span>
 }
 
 export function MentionBadge({ 
@@ -98,7 +155,7 @@ export function MentionBadge({
     }
 
     return (
-        <span className={cn("inline-block relative group/mention mx-0.5 align-baseline translate-y-[1px]", className)}>
+        <span className={cn("inline-flex relative group/mention mx-0.5 align-baseline translate-y-[1px]", className)}>
             <EntityPreviewTooltip entityId={id} entityType={type} delayDuration={delayDuration}>
                 <span
                     className={cn(
