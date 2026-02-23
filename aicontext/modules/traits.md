@@ -264,12 +264,26 @@ Modal with React Hook Form + Zod validation.
 - Nome (text input, max 100 chars)
 - Fonte (text input, max 200 chars)
 - Status (switch toggle: Active/Inactive)
-- Descrição (RichTextEditor with mentions and image upload)
+- Descrição (RichTextEditor with mentions and S3-backed images)
 
 ### `TraitsFilters` - Search and Status
 
 - `SearchInput` for name/description search
 - `StatusChips` for active/inactive/all filtering
+
+---
+
+## Mentions and Preview
+
+### Mentions Rendering
+Traits use the `Habilidade` (gray) color scheme from `entityColors`. When an entity is deleted, mentions to it must be rendered with a "broken" visual style:
+- **Color**: Red (#EF4444)
+- **Decoration**: Line-through (Strikethrough)
+- **Opacity**: 50%
+- **Tooltip**: Displays "Entidade não encontrada"
+
+### Preview Eye Icon
+In the `TraitsTable`, the "Prever" column uses an **eye icon**. Clicking it opens a preview of the trait (name, source, and truncated description) using the `EntityPreviewTooltip` logic.
 
 ---
 

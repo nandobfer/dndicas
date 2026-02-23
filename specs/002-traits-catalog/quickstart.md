@@ -86,7 +86,7 @@
   - Copy structure from `rules-page.tsx`
 
 - [ ] **3.2** Create table: `components/traits-table.tsx`
-  - Columns: Status, Nome, Descrição, Fonte, Prever, Ações
+  - Columns: Status, Nome, Descrição, Fonte, Prever (eye icon), Ações
   - Pagination with `DataTablePagination`
   - Edit/delete actions via dropdown
   - Copy from `rules-table.tsx`, adjust prop names
@@ -212,9 +212,9 @@
   - [ ] Create trait via form modal
   - [ ] Search trait by name
   - [ ] Filter by status (active/inactive)
-  - [ ] Edit trait description with rich-text
+  - [ ] Edit trait description with rich-text (mentions, S3-backed images)
   - [ ] Create mention to another trait/rule
-  - [ ] Delete trait (confirm mentions become "broken")
+  - [ ] Delete trait (confirm mentions become "broken" - Red, Strikethrough, Low Opacity)
   - [ ] Verify audit log entries
   - [ ] Check dashboard card shows correct stats
 

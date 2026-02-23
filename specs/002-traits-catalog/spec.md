@@ -8,9 +8,9 @@
 ## Clarifications
 
 ### Session 2026-02-23
-- Q: Quais papéis podem gerenciar habilidades (Admin/Mestre/Usuário)? → A: Apenas Admins têm acesso ao dashboard administrativo; os termos são Admin e Usuário (sem "Mestre").
+- Q: Quais papéis podem gerenciar habilidades (Admin/Usuário)? → A: Acesso irrestrito por enquanto (será lidado pelo sidebar no futuro); os termos são Admin e Usuário.
 - Q: Qual a cor oficial da entidade no entityColors? → A: Gray/Slate (simbolizando raridade comum).
-- Q: Como tratar menções a entidades excluídas? → A: Estilo visual "quebrado" e tooltip "Habilidade não encontrada".
+- Q: Como tratar menções a entidades excluídas? → A: Estilo visual "quebrado" (vermelho, riscado, baixa opacidade) e tooltip "Habilidade não encontrada".
 - Q: Qual será o caminho da URL (rota)? → A: /traits (consistente com o nome interno).
 - Q: Quais ações de auditoria serão rastreadas e filtráveis? → A: Apenas o trio padrão: CREATE, UPDATE, DELETE.
 
@@ -26,7 +26,7 @@ Administradores e jogadores de D&D precisam visualizar rapidamente todas as habi
 
 **Acceptance Scenarios**:
 
-1. **Given** o usuário está autenticado e acessa /traits, **When** a página carrega, **Then** deve ver uma tabela listando todas as habilidades com colunas: Status, Nome, Descrição, Fonte, Prever e Ações
+1. **Given** o usuário acessa /traits, **When** a página carrega, **Then** deve ver uma tabela listando todas as habilidades com colunas: Status, Nome, Descrição, Fonte, Prever (ícone de olho) e Ações
 2. **Given** existem 50 habilidades cadastradas, **When** o usuário visualiza a página, **Then** deve ver paginação com 10 itens por página por padrão
 3. **Given** o usuário está na página de habilidades, **When** digita "Fúria" no campo de busca, **Then** a tabela filtra mostrando apenas habilidades cujo nome, descrição ou fonte contenham "Fúria"
 4. **Given** o usuário aplicou filtros de busca, **When** clica no chip de status "Ativo" ou "Inativo", **Then** a tabela filtra mostrando apenas habilidades com aquele status
@@ -141,19 +141,19 @@ Administradores precisam monitorar todas as operações realizadas em habilidade
 
 ### Edge Cases
 
-- O que acontece quando o usuário tenta criar uma habilidade com nome duplicado? (Sistema deve permitir, pois habilidades de diferentes fontes podem ter nomes iguais)
-- O que acontece quando o usuário tenta salvar uma habilidade com descrição vazia? (Campo opcional - deve permitir)
-- O que acontece quando uma habilidade é excluída mas está mencionada em outras entidades? (Menção deve continuar visível, mas tooltip pode indicar "Entidade não encontrada" ou mostrar cache dos dados)
-- Como o sistema lida com upload de imagens muito grandes no editor rich-text? (Deve validar tamanho máximo e comprimir/redimensionar antes de salvar)
+- O que acontece quando o usuário tenta criar uma habilidade com nome duplicado? (Sistema deve impedir, o nome da habilidade deve ser único, assim como nas Regras)
+- O que acontece quando o usuário tenta salvar uma habilidade com descrição vazia? (Campo obrigatório - deve impedir e mostrar mensagem de erro "Descrição obrigatória")
+- O que acontece quando uma habilidade é excluída mas está mencionada em outras entidades? (Menção deve continuar visível com estilo "quebrado": Vermelho (#EF4444), Riscado, Opacidade 50%. Tooltip mostra "Entidade não encontrada")
+- Como o sistema lida com upload de imagens no editor rich-text? (Imagens são enviadas para o bucket S3 seguindo o padrão do sistema e incorporadas na descrição)
 - O que acontece quando o usuário busca por um termo que não existe em nenhuma habilidade? (Exibir estado vazio com mensagem "Nenhuma habilidade encontrada" e sugestão para ajustar filtros)
 - Como funciona a paginação quando o usuário aplica filtros? (Deve resetar para página 1 e recalcular total de páginas baseado nos resultados filtrados)
-- O que acontece se dois usuários tentam editar a mesma habilidade simultaneamente? (Última gravação vence - comportamento padrão sem lock otimista, mas pode ser aprimorado futuramente)
+- O que acontece se dois usuários tentam editar a mesma habilidade simultaneamente? (Última gravação vence - comportamento padrão sem lock otimista)
 
 ## Requirements *(mandatory)*
 
 ### Functional Requirements
 
-- **FR-001**: Sistema DEVE permitir aos usuários visualizar uma lista paginada de todas as habilidades cadastradas, mostrando colunas: Status, Nome, Descrição, Fonte, Prever (checkbox) e Ações
+- **FR-001**: Sistema DEVE permitir aos usuários visualizar uma lista paginada de todas as habilidades cadastradas, mostrando colunas: Status, Nome, Descrição, Fonte, Prever (ícone de olho) e Ações
 - **FR-002**: Sistema DEVE fornecer campo de busca que filtra habilidades em tempo real por nome, descrição ou fonte
 - **FR-003**: Sistema DEVE permitir filtrar habilidades por status (Todas, Ativo, Inativo) através de chips interativos
 - **FR-004**: Sistema DEVE exibir paginação com navegação entre páginas, mostrando total de itens e limite por página (padrão: 10 itens)
@@ -161,9 +161,9 @@ Administradores precisam monitorar todas as operações realizadas em habilidade
 - **FR-006**: Sistema DEVE validar campos obrigatórios (Nome e Fonte) antes de permitir salvar habilidade
 - **FR-007**: Sistema DEVE permitir editar habilidades existentes através do mesmo modal usado para criação, pré-preenchido com dados atuais
 - **FR-008**: Sistema DEVE permitir excluir habilidades com confirmação obrigatória via dialog
-- **FR-009**: Sistema DEVE fornecer editor de texto rico (rich-text) para o campo Descrição, suportando: formatação (negrito, itálico, listas, cabeçalhos), menções a outras entidades, e upload/incorporação de imagens
+- **FR-009**: Sistema DEVE fornecer editor de texto rico (rich-text) para o campo Descrição, suportando: formatação (negrito, itálico, listas, cabeçalhos), menções a outras entidades, e upload/incorporação de imagens (via S3, conforme padrão do sistema)
 - **FR-010**: Sistema DEVE suportar menções a habilidades e regras no editor rich-text através do gatilho "@" seguido de pesquisa por nome
-- **FR-011**: Sistema DEVE renderizar menções como badges interativos com cor específica (cinza/branco para habilidades) e tooltip com prévia da entidade referenciada
+- **FR-011**: Sistema DEVE renderizar menções como badges interativos com cor específica (cinza/branco para habilidades) e tooltip com prévia da entidade referenciada (Nome, Fonte e resumo da Descrição)
 - **FR-012**: Sistema DEVE registrar todas as operações de criação, edição e exclusão de habilidades em logs de auditoria com ação, entidade, autor e timestamp
 - **FR-013**: Sistema DEVE permitir filtrar logs de auditoria por entidade "Habilidade" através do filtro de entidades multi-selecionável
 - **FR-014**: Sistema DEVE exibir item "Habilidades" no sidebar (menu lateral) na seção "Cadastros", entre "Regras" e outros cadastros

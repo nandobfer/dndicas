@@ -13,13 +13,13 @@ Implement a complete CRUD catalog for D&D Traits (Habilidades) following the exa
 
 **Language/Version**: TypeScript 5.x with strict mode enabled  
 **Primary Dependencies**: Next.js 15+ (App Router), React 18+, MongoDB, Mongoose, TanStack Query, React Hook Form, Zod, Clerk, Framer Motion, Tailwind CSS, Shadcn/ui  
-**Storage**: MongoDB (Atlas) with Mongoose ODM - new Trait collection following Reference pattern  
+**Storage**: MongoDB (Atlas) with Mongoose ODM - new Trait collection. Images stored in S3 via existing `rich-text-editor.tsx` pattern.  
 **Testing**: Jest + React Testing Library (tests in `__tests__/features/traits/`)  
 **Target Platform**: Web application (Next.js server + browser client)
 **Project Type**: Web application (Next.js full-stack)  
 **Performance Goals**: <2s page load, <500ms search filtering, <1s pagination, <400ms mention tooltip  
-**Constraints**: Must reuse existing Rules patterns 100%, maintain Liquid Glass theme consistency, ensure audit trail for all operations  
-**Scale/Scope**: Support 1000+ traits without degradation, server-side pagination, real-time search, rich-text descriptions with mentions and images
+**Constraints**: Must reuse existing Rules patterns 100%, maintain Liquid Glass theme consistency, ensure audit trail for all operations, use eye icon for interactive preview.  
+**Scale/Scope**: Support 1000+ traits without degradation, server-side pagination, real-time search, rich-text descriptions with mentions and images in S3.
 
 ## Constitution Check
 

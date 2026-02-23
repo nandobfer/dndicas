@@ -306,7 +306,7 @@ export const traitKeys = {
 | Scenario | Handling |
 |----------|----------|
 | Duplicate name | Return 409 Conflict error |
-| Mention to deleted entity | Render badge with "quebrado" style, tooltip shows "Entidade não encontrada" |
+| Mention to deleted entity | Render badge with "broken" style: Red color (#EF4444), Strikethrough, and Opacity 50%. Tooltip shows "Entidade não encontrada" |
 | Empty search query | Return all traits (paginated) |
 | Invalid status value | Return 400 Bad Request with Zod validation error |
 | Trait referenced in other descriptions | Allow deletion (mentions become "broken" but remain visible) |

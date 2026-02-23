@@ -72,7 +72,6 @@ src/features/traits/
 
 **Alternatives Considered**:
 - **Store description as JSON (structured blocks)**: Rejected - Adds complexity, HTML string works perfectly for TipTap editor
-- **Separate Status entity**: Rejected - Overkill for binary active/inactive state
 
 **References**:
 - Existing: `src/core/database/models/reference.ts`

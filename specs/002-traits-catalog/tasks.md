@@ -52,7 +52,7 @@
 
 - [ ] T009 [P] [US1] Create GET /api/traits route in src/app/api/traits/route.ts with query params (page, limit, search, searchField, status), pagination logic, text search using MongoDB text index, and status filtering
 - [ ] T010 [P] [US1] Create TraitsFilters component in src/features/traits/components/traits-filters.tsx with SearchInput for name/description search and StatusChips for active/inactive/all filtering
-- [ ] T011 [P] [US1] Create TraitsTable component in src/features/traits/components/traits-table.tsx with columns (Status badge, Nome, Descrição truncated, Fonte, Prever checkbox, Ações dropdown), sortable headers, and DataTablePagination integration
+- [ ] T011 [P] [US1] Create TraitsTable component in src/features/traits/components/traits-table.tsx with columns (Status badge, Nome, Descrição truncated, Fonte, Prever eye icon, Ações dropdown), sortable headers, and DataTablePagination integration
 - [ ] T012 [US1] Create TraitsPage orchestrator component in src/features/traits/components/traits-page.tsx integrating useTraits hook, TraitsFilters, TraitsTable, pagination state, loading/error/empty states, and page header with "Nova Habilidade" button
 - [ ] T013 [US1] Add TraitsPage export to src/features/traits/index.ts for clean imports
 - [ ] T014 [US1] Verify GET /api/traits endpoint returns correct pagination metadata (total, page, limit, totalPages) and filters work correctly
@@ -72,8 +72,8 @@
 - [ ] T015 [P] [US2] Create POST /api/traits route in src/app/api/traits/route.ts with Clerk authentication check, Zod validation, Mongoose create operation, and createAuditLog call for CREATE action
 - [ ] T016 [US2] Create TraitFormModal component in src/features/traits/components/trait-form-modal.tsx with React Hook Form, Zod resolver, fields (Nome text input, Fonte text input, Status switch, Descrição RichTextEditor), create mode logic, and submission handler calling useTraitMutations.create
 - [ ] T017 [US2] Integrate TraitFormModal into TraitsPage component with modal state management, open modal on "Nova Habilidade" button click, and close modal on successful save
-- [ ] T018 [US2] Reuse existing RichTextEditor component from src/core/ui/rich-text-editor/ for Descrição field with TipTap extensions (mentions, images, formatting)
-- [ ] T019 [US2] Add form validation error messages display in TraitFormModal for required fields (Nome, Fonte) and field constraints
+- [ ] T018 [US2] Reuse existing RichTextEditor component from src/core/ui/rich-text-editor/ for Descrição field with TipTap extensions (mentions, S3-backed images, formatting)
+- [ ] T019 [US2] Add form validation logic in TraitFormModal mirroring Rules patterns: required fields (Nome, Fonte, Descrição), unique name check, and preventing mentions/images in Nome and Fonte fields
 - [ ] T020 [US2] Add success toast notification after trait creation and automatic table refresh via TanStack Query cache invalidation
 
 **Checkpoint**: At this point, User Stories 1 AND 2 should both work independently - users can view and create traits
@@ -110,7 +110,7 @@
 - [ ] T027 [US4] Create DeleteTraitDialog component in src/features/traits/components/delete-trait-dialog.tsx with confirmation message including trait name, Cancel and Confirm buttons, and submission handler calling useTraitMutations.remove
 - [ ] T028 [US4] Add delete action to TraitsTable dropdown menu (trash icon) triggering setDeletingTrait in TraitsPage and opening DeleteTraitDialog
 - [ ] T029 [US4] Add success toast notification after trait deletion and automatic table refresh via TanStack Query cache invalidation
-- [ ] T030 [US4] Handle mentions to deleted traits by keeping mention visible with "broken" styling (if referenced entity not found during render)
+- [ ] T030 [US4] Handle mentions to deleted traits by keeping mention visible with visual "broken" styling: Red color (#EF4444), Strikethrough, and Opacity 50%
 
 **Checkpoint**: Full CRUD functionality complete - users can view, create, edit, and delete traits
 
