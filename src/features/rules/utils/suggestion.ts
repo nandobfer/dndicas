@@ -27,10 +27,8 @@ export const getSuggestionConfig = (options?: { excludeId?: string }) => {
 
             try {
                 // Fetch from both Rules and Traits endpoints in parallel
-                const [rulesRes, traitsRes] = await Promise.all([
-                    fetch(`/api/rules/search?query=${query}&limit=10`),
-                    fetch(`/api/traits/search?query=${query}&limit=10`)
-                ])
+                // T039: Fixed endpoints - Rules uses main API with search param, Traits uses specific search API
+                const [rulesRes, traitsRes] = await Promise.all([fetch(`/api/rules?search=${query}&limit=10&searchField=name`), fetch(`/api/traits/search?q=${query}&limit=10`)])
 
                 const rulesData = rulesRes.ok ? await rulesRes.json() : { items: [] }
                 const traitsData = traitsRes.ok ? await traitsRes.json() : { items: [] }
@@ -46,7 +44,7 @@ export const getSuggestionConfig = (options?: { excludeId?: string }) => {
                         entityType: "Regra",
                         description: item.description,
                         source: item.source,
-                        status: item.status
+                        status: item.status,
                     }))
 
                 // Map Traits results
@@ -58,7 +56,7 @@ export const getSuggestionConfig = (options?: { excludeId?: string }) => {
                         entityType: "Habilidade",
                         description: item.description,
                         source: item.source,
-                        status: item.status
+                        status: item.status,
                     }))
 
                 // Combine and return (Rules first, then Traits)

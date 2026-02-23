@@ -1,21 +1,21 @@
 // src/features/traits/api/traits-api.ts
-import { Trait, CreateTraitInput, TraitsFilters, TraitsResponse, UpdateTraitInput } from '../types/traits.types';
+import { Trait, CreateTraitInput, TraitFilterParams, TraitsResponse, UpdateTraitInput } from "../types/traits.types"
 
-const API_URL = '/api/traits';
+const API_URL = "/api/traits"
 
-export async function fetchTraits(params: TraitsFilters = {}): Promise<TraitsResponse> {
-  const query = new URLSearchParams();
-  if (params.page) query.append('page', params.page.toString());
-  if (params.limit) query.append('limit', params.limit.toString());
-  if (params.search) query.append('search', params.search);
-  if (params.status && params.status !== 'all') query.append('status', params.status);
+export async function fetchTraits(params: TraitFilterParams = {}): Promise<TraitsResponse> {
+    const query = new URLSearchParams()
+    if (params.page) query.append("page", params.page.toString())
+    if (params.limit) query.append("limit", params.limit.toString())
+    if (params.search) query.append("search", params.search)
+    if (params.status && params.status !== "all") query.append("status", params.status)
 
-  const res = await fetch(`${API_URL}?${query.toString()}`);
-  if (!res.ok) {
-    const error = await res.json().catch(() => ({}));
-    throw new Error(error.message || 'Failed to fetch traits');
-  }
-  return res.json();
+    const res = await fetch(`${API_URL}?${query.toString()}`)
+    if (!res.ok) {
+        const error = await res.json().catch(() => ({}))
+        throw new Error(error.message || "Failed to fetch traits")
+    }
+    return res.json()
 }
 
 export async function fetchTraitById(id: string): Promise<Trait> {

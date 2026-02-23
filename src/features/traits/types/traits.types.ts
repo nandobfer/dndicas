@@ -22,11 +22,11 @@ export interface UpdateTraitInput extends Partial<Omit<CreateTraitInput, 'name'>
     name?: string;
 }
 
-export interface TraitsFilters {
-    search?: string;
-    status?: 'active' | 'inactive' | 'all';
-    page?: number;
-    limit?: number;
+export interface TraitFilterParams {
+    search?: string
+    status?: "active" | "inactive" | "all"
+    page?: number
+    limit?: number
 }
 
 export interface TraitsResponse {

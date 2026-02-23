@@ -3,14 +3,14 @@
 import { SearchInput } from '@/components/ui/search-input';
 import { StatusChips, type StatusFilter } from '@/components/ui/status-chips';
 import { cn } from '@/core/utils';
-import type { TraitsFilters } from '../types/traits.types';
+import type { TraitFilterParams } from "../types/traits.types"
 
 export interface TraitsFiltersProps {
-  filters: TraitsFilters;
-  onSearchChange: (search: string) => void;
-  onStatusChange: (status: TraitsFilters['status']) => void;
-  isSearching?: boolean;
-  className?: string;
+    filters: TraitFilterParams
+    onSearchChange: (search: string) => void
+    onStatusChange: (status: TraitFilterParams["status"]) => void
+    isSearching?: boolean
+    className?: string
 }
 
 export function TraitsFilters({
