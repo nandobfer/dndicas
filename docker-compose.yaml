@@ -27,20 +27,6 @@ services:
       - minio_data:/data
       - ./minio/license:/etc/minio/license:ro
 
-  # Cria o bucket automaticamente no startup
-  minio-init:
-    image: minio/mc
-    container_name: dndicas-minio-init
-    depends_on:
-      - minio
-    entrypoint: >
-      /bin/sh -c "
-      until (/usr/bin/mc config host add local http://minio:9000 nandoburgos mfux6xpj); do echo '...waiting for minio...'; sleep 1; done;
-      /usr/bin/mc mb local/dndicas;
-      /usr/bin/mc anonymous set public local/dndicas;
-      exit 0;
-      "
-
   app:
     build:
       context: .
