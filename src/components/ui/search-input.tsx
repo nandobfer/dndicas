@@ -14,6 +14,7 @@ import { useDebounce } from '@/core/hooks';
 import { motion, AnimatePresence } from 'framer-motion';
 import { GlassInput } from "./glass-input"
 import { glassConfig } from "@/lib/config/glass-config"
+import { DebounceProgress } from "./debounce-progress"
 
 export interface SearchInputProps extends Omit<React.InputHTMLAttributes<HTMLInputElement>, "onChange"> {
     /** Current search value */
@@ -83,10 +84,20 @@ export function SearchInput({ value, onChange, debounceMs = 500, isLoading = fal
             rightElement={
                 <AnimatePresence mode="wait">
                     {showLoader ? (
-                        <motion.div key="loader" initial={{ opacity: 0, scale: 0.8 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.8 }} className="h-4 w-4">
+                        <motion.div
+                            key="loader"
+                            initial={{ opacity: 0, scale: 0.8 }}
+                            animate={{ opacity: 1, scale: 1 }}
+                            exit={{ opacity: 0, scale: 0.8 }}
+                            className="h-4 w-4"
+                        >
                             <svg className="animate-spin text-white/60" viewBox="0 0 24 24" fill="none">
                                 <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                                <path
+                                    className="opacity-75"
+                                    fill="currentColor"
+                                    d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                                />
                             </svg>
                         </motion.div>
                     ) : showClear ? (
@@ -107,19 +118,7 @@ export function SearchInput({ value, onChange, debounceMs = 500, isLoading = fal
             }
             {...props}
         >
-            {/* Progress bar reflects debounce period */}
-            <AnimatePresence>
-                {isDebouncing && (
-                    <motion.div
-                        key={localValue}
-                        initial={{ scaleX: 0, opacity: 0 }}
-                        animate={{ scaleX: 1, opacity: 1 }}
-                        exit={{ opacity: 0 }}
-                        transition={{ duration: debounceMs / 1000, ease: "linear" }}
-                        className="absolute bottom-0 left-0 right-0 h-0.5 bg-gradient-to-r from-blue-400 via-purple-400 to-blue-400 origin-left rounded-b-lg z-20"
-                    />
-                )}
-            </AnimatePresence>
+            <DebounceProgress isAnimating={isDebouncing} duration={debounceMs} animationKey={localValue} className="rounded-b-lg" />
         </GlassInput>
     )
 }

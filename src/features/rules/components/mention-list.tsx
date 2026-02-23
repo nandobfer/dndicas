@@ -3,10 +3,13 @@ import { cn } from '@/core/utils'
 import { glassConfig } from '@/lib/config/glass-config'
 import { entityColors } from '@/lib/config/colors'
 import { EntityPreviewTooltip } from "./entity-preview-tooltip"
+import { DebounceProgress } from "@/components/ui/debounce-progress"
 
 export interface MentionListProps {
     items: Array<{ id: string; label: string; entityType?: string; [key: string]: any }>
     command: (item: { id: string; label: string; entityType?: string }) => void
+    query?: string
+    loading?: boolean
 }
 
 export interface MentionListRef {
@@ -62,10 +65,10 @@ const MentionList = forwardRef<MentionListRef, MentionListProps>((props, ref) =>
   return (
       <div
           className={cn(
-              "flex flex-col gap-1 p-1 rounded-lg overflow-auto max-h-[250px] min-w-[200px] shadow-2xl z-[9999]",
+              "flex flex-col gap-1 p-1 rounded-lg overflow-auto max-h-[250px] min-w-[200px] shadow-2xl z-[9999] relative",
               glassConfig.sidebar.background,
               glassConfig.sidebar.blur,
-              "border border-white/10 pointer-events-auto",
+              "border border-white/10 pointer-events-auto"
           )}
           onMouseDown={(e) => e.preventDefault()}
           style={{ isolation: "isolate", pointerEvents: "all" }}
@@ -79,7 +82,7 @@ const MentionList = forwardRef<MentionListRef, MentionListProps>((props, ref) =>
                           onClick={() => selectItem(index)}
                           className={cn(
                               "flex flex-col w-full text-left px-3 py-2 rounded-md transition-colors cursor-pointer relative z-10",
-                              selectedIndex === index ? "bg-white/20" : "hover:bg-white/10",
+                              selectedIndex === index ? "bg-white/20" : "hover:bg-white/10"
                           )}
                           style={{ pointerEvents: "auto" }}
                       >
@@ -90,7 +93,7 @@ const MentionList = forwardRef<MentionListRef, MentionListProps>((props, ref) =>
                                       className={cn(
                                           "text-[10px] uppercase font-bold tracking-tight px-1.5 py-0.5 rounded transition-all",
                                           entityColors[item.entityType as keyof typeof entityColors]?.badge ||
-                                              "bg-gray-400/20 text-white/40 font-bold",
+                                              "bg-gray-400/20 text-white/40 font-bold"
                                       )}
                                   >
                                       {item.entityType}
@@ -100,9 +103,13 @@ const MentionList = forwardRef<MentionListRef, MentionListProps>((props, ref) =>
                       </button>
                   </EntityPreviewTooltip>
               ))
+          ) : props.loading ? (
+              <div className="px-3 py-4 text-sm text-white/40 text-center animate-pulse">Buscando...</div>
           ) : (
-              <div className="px-3 py-2 text-sm text-white/40 italic">Nenhum resultado encontrado</div>
+              <div className="px-3 py-3 text-sm text-white/40 text-center italic">Nenhum resultado encontrado</div>
           )}
+
+          <DebounceProgress isAnimating={props.loading ?? false} duration={500} animationKey={props.query} />
       </div>
   )
 })
