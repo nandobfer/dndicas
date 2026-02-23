@@ -5,11 +5,20 @@
 **Status**: Draft  
 **Input**: User description: "vamos especificar o cadastro de habilidades (traits) nesse catálogo de d&d. Vamos implementar uma tabela e formulário, seguindo exatamente o mesmo padrão, estrutura e componentes do cadastro de regras já existente."
 
+## Clarifications
+
+### Session 2026-02-23
+- Q: Quais papéis podem gerenciar habilidades (Admin/Mestre/Usuário)? → A: Apenas Admins têm acesso ao dashboard administrativo; os termos são Admin e Usuário (sem "Mestre").
+- Q: Qual a cor oficial da entidade no entityColors? → A: Gray/Slate (simbolizando raridade comum).
+- Q: Como tratar menções a entidades excluídas? → A: Estilo visual "quebrado" e tooltip "Habilidade não encontrada".
+- Q: Qual será o caminho da URL (rota)? → A: /traits (consistente com o nome interno).
+- Q: Quais ações de auditoria serão rastreadas e filtráveis? → A: Apenas o trio padrão: CREATE, UPDATE, DELETE.
+
 ## User Scenarios & Testing *(mandatory)*
 
 ### User Story 1 - Visualizar Catálogo de Habilidades (Priority: P1)
 
-Mestres e jogadores de D&D precisam visualizar rapidamente todas as habilidades disponíveis no sistema, filtrando por nome, descrição ou fonte, e verificando seu status (ativo/inativo).
+Administradores e jogadores de D&D precisam visualizar rapidamente todas as habilidades disponíveis no sistema, filtrando por nome, descrição ou fonte, e verificando seu status (ativo/inativo).
 
 **Why this priority**: Este é o caso de uso fundamental - os usuários precisam poder ver e buscar habilidades antes de criar ou editar. Sem visualização, nenhuma outra funcionalidade faz sentido.
 
@@ -27,7 +36,7 @@ Mestres e jogadores de D&D precisam visualizar rapidamente todas as habilidades 
 
 ### User Story 2 - Criar Nova Habilidade (Priority: P2)
 
-Mestres precisam cadastrar novas habilidades no catálogo, preenchendo nome, fonte e uma descrição rica com formatação, menções a outras entidades e imagens.
+Administradores precisam cadastrar novas habilidades no catálogo, preenchendo nome, fonte e uma descrição rica com formatação, menções a outras entidades e imagens.
 
 **Why this priority**: Criação de conteúdo é essencial após a visualização. Permite que o catálogo seja populado com habilidades personalizadas ou de livros oficiais.
 
