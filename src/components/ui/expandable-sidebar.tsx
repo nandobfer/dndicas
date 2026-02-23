@@ -24,6 +24,7 @@ import { themeConfig } from '@/lib/config/theme-config';
 import { SidebarItem, SidebarSection } from './sidebar-item';
 import { TooltipProvider } from '@/core/ui/tooltip';
 import { UserButton } from '@clerk/nextjs';
+import { APP_VERSION } from '@/lib/config/version';
 
 export interface ExpandableSidebarProps {
   /** Whether sidebar is expanded */
@@ -162,7 +163,7 @@ export const ExpandableSidebar: React.FC<ExpandableSidebarProps> = ({
                           transition={motionConfig.sidebarTransition}
                       >
                           <span className="text-sm font-medium text-white truncate">Minha Conta</span>
-                          <span className="text-xs text-white/50 truncate">Gerenciar perfil</span>
+                          <span className="text-[10px] font-mono tracking-wider text-white/30 uppercase mt-0.5">{APP_VERSION}</span>
                       </motion.div>
                   )}
               </div>
