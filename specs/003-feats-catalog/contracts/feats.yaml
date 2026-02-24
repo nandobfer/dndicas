@@ -1,0 +1,574 @@
+openapi: 3.0.3
+info:
+  title: Feats API - D&Dicas
+  description: |
+    API para gerenciamento do Catálogo de Talentos (Feats) de D&D 5e.
+    Endpoints para criar, listar, atualizar e deletar talentos, com suporte
+    a filtros por nível, status e busca de texto. Integração com sistema
+    de menções e logs de auditoria.
+  version: 1.0.0
+  contact:
+    name: D&Dicas Team
+
+servers:
+  - url: https://d7d-dndicas.vercel.app/api
+    description: Production
+  - url: http://localhost:3000/api
+    description: Local Development
+
+tags:
+  - name: Feats
+    description: Operações CRUD no catálogo de talentos
+  - name: Search
+    description: Busca para integração com sistema de menções
+
+paths:
+  /feats:
+    get:
+      tags:
+        - Feats
+      summary: Listar talentos com filtros e paginação
+      description: |
+        Retorna lista paginada de talentos com suporte a múltiplos filtros:
+        - Busca de texto (nome, descrição, fonte)
+        - Filtro por status (ativo/inativo)
+        - Filtro por nível (exato ou faixa)
+        
+        Ordenação padrão: mais recentes primeiro (createdAt desc)
+      operationId: listFeats
+      parameters:
+        - name: page
+          in: query
+          description: Número da página (baseado em 1)
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+          example: 1
+        - name: limit
+          in: query
+          description: Itens por página
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 10
+          example: 10
+        - name: search
+          in: query
+          description: Texto para busca em nome, descrição e fonte (case-insensitive)
+          schema:
+            type: string
+          example: "mage"
+        - name: searchField
+          in: query
+          description: Campo específico para buscar (padrão busca em todos)
+          schema:
+            type: string
+            enum: [all, name]
+            default: all
+        - name: status
+          in: query
+          description: Filtrar por status do talento
+          schema:
+            type: string
+            enum: [all, active, inactive]
+            default: all
+        - name: level
+          in: query
+          description: Filtrar por nível exato (mutuamente exclusivo com levelMax)
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 20
+          example: 5
+        - name: levelMax
+          in: query
+          description: Filtrar talentos até este nível (1 a levelMax, exclusivo com level)
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 20
+          example: 10
+      responses:
+        "200":
+          description: Lista de talentos retornada com sucesso
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Feat"
+                  total:
+                    type: integer
+                    description: Total de talentos que atendem os filtros
+                    example: 45
+                  page:
+                    type: integer
+                    example: 1
+                  limit:
+                    type: integer
+                    example: 10
+                  totalPages:
+                    type: integer
+                    example: 5
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+    post:
+      tags:
+        - Feats
+      summary: Criar novo talento
+      description: |
+        Cria um novo talento no catálogo. Requer autenticação via Clerk.
+        
+        **Regras de negócio:**
+        - Nome deve ser único (case-insensitive)
+        - Level default = 1 se não fornecido
+        - Prerequisites default = [] se não fornecido
+        - Status default = "active"
+        
+        **Side effects:**
+        - Cria log de auditoria (action: CREATE)
+        - Invalida cache TanStack Query
+      operationId: createFeat
+      security:
+        - ClerkAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateFeatInput"
+      responses:
+        "201":
+          description: Talento criado com sucesso
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Feat"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "409":
+          description: Conflito - nome de talento já existe
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                    example: "Feat name already exists"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /feats/{id}:
+    get:
+      tags:
+        - Feats
+      summary: Obter talento por ID
+      description: Retorna detalhes completos de um talento específico
+      operationId: getFeatById
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: MongoDB ObjectId do talento
+          schema:
+            type: string
+            pattern: '^[a-f\d]{24}$'
+          example: "507f1f77bcf86cd799439011"
+      responses:
+        "200":
+          description: Talento encontrado
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Feat"
+        "404":
+          description: Talento não encontrado
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                    example: "Feat not found"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+    put:
+      tags:
+        - Feats
+      summary: Atualizar talento existente
+      description: |
+        Atualiza campos de um talento. Campos não fornecidos permanecem inalterados.
+        Requer autenticação via Clerk.
+        
+        **Side effects:**
+        - Cria log de auditoria (action: UPDATE, com previousData e newData)
+        - Invalida cache TanStack Query (feats, audit-logs, dashboard-stats)
+      operationId: updateFeat
+      security:
+        - ClerkAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: MongoDB ObjectId do talento
+          schema:
+            type: string
+            pattern: '^[a-f\d]{24}$'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateFeatInput"
+      responses:
+        "200":
+          description: Talento atualizado com sucesso
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Feat"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          description: Talento não encontrado
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                    example: "Feat not found"
+        "409":
+          description: Conflito - novo nome já existe
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                    example: "Feat name already exists"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+    delete:
+      tags:
+        - Feats
+      summary: Deletar talento
+      description: |
+        Remove talento do banco de dados (hard delete).
+        Requer autenticação via Clerk.
+        
+        **Comportamento com menções:**
+        - Menções existentes em outros conteúdos mantêm o texto mas perdem link ativo
+        - Sistema renderiza menções órfãs com estilo visual diferenciado
+        
+        **Side effects:**
+        - Cria log de auditoria (action: DELETE, com previousData)
+        - Invalida cache TanStack Query
+      operationId: deleteFeat
+      security:
+        - ClerkAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: MongoDB ObjectId do talento
+          schema:
+            type: string
+            pattern: '^[a-f\d]{24}$'
+      responses:
+        "200":
+          description: Talento deletado com sucesso
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: "Feat deleted successfully"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          description: Talento não encontrado
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                    example: "Feat not found"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /feats/search:
+    get:
+      tags:
+        - Search
+      summary: Busca rápida para sistema de menções
+      description: |
+        Endpoint otimizado para autocompletar menções (@) no editor de texto rico.
+        
+        **Características:**
+        - Retorna apenas talentos ativos
+        - Busca em nome apenas (performance)
+        - Limite máximo de 10 resultados
+        - Formato simplificado (id, label, entityType)
+      operationId: searchFeatsForMentions
+      parameters:
+        - name: q
+          in: query
+          required: true
+          description: Query de busca (mínimo 2 caracteres)
+          schema:
+            type: string
+            minLength: 1
+          example: "mage"
+        - name: limit
+          in: query
+          description: Máximo de resultados (fixo em 10 para menções)
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 10
+            default: 10
+      responses:
+        "200":
+          description: Lista de sugestões para menções
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    id:
+                      type: string
+                      description: MongoDB ObjectId
+                      example: "507f1f77bcf86cd799439011"
+                    label:
+                      type: string
+                      description: Nome do talento
+                      example: "Mage Slayer"
+                    entityType:
+                      type: string
+                      enum: [Talento]
+                      example: "Talento"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+components:
+  schemas:
+    Feat:
+      type: object
+      required:
+        - _id
+        - name
+        - description
+        - source
+        - level
+        - prerequisites
+        - status
+        - createdAt
+        - updatedAt
+      properties:
+        _id:
+          type: string
+          description: MongoDB ObjectId
+          example: "507f1f77bcf86cd799439011"
+        name:
+          type: string
+          minLength: 3
+          maxLength: 100
+          description: Nome único do talento
+          example: "Mage Slayer"
+        description:
+          type: string
+          minLength: 10
+          maxLength: 50000
+          description: Descrição em HTML com suporte a menções e imagens S3
+          example: "<p>Você se tornou adepto a derrotar conjuradores...</p>"
+        source:
+          type: string
+          minLength: 1
+          maxLength: 200
+          description: Referência bibliográfica
+          example: "PHB pg. 168"
+        level:
+          type: integer
+          minimum: 1
+          maximum: 20
+          description: Nível mínimo do personagem necessário
+          example: 1
+        prerequisites:
+          type: array
+          items:
+            type: string
+            minLength: 1
+          description: Array de pré-requisitos (pode ser vazio)
+          example: ["Força 13 ou superior", "Proficiência em Armaduras Pesadas"]
+        status:
+          type: string
+          enum: [active, inactive]
+          description: Status de visibilidade
+          example: "active"
+        createdAt:
+          type: string
+          format: date-time
+          description: Timestamp de criação (ISO 8601)
+          example: "2026-02-24T10:30:00.000Z"
+        updatedAt:
+          type: string
+          format: date-time
+          description: Timestamp de última atualização
+          example: "2026-02-24T15:45:30.000Z"
+
+    CreateFeatInput:
+      type: object
+      required:
+        - name
+        - description
+        - source
+        - status
+      properties:
+        name:
+          type: string
+          minLength: 3
+          maxLength: 100
+          example: "Great Weapon Master"
+        description:
+          type: string
+          minLength: 10
+          maxLength: 50000
+          example: "<p>Você aprendeu a sacrificar precisão por golpes devastadores...</p>"
+        source:
+          type: string
+          minLength: 1
+          maxLength: 200
+          example: "PHB pg. 167"
+        level:
+          type: integer
+          minimum: 1
+          maximum: 20
+          default: 1
+          example: 1
+        prerequisites:
+          type: array
+          items:
+            type: string
+            minLength: 1
+          default: []
+          example: ["Força 13+"]
+        status:
+          type: string
+          enum: [active, inactive]
+          default: active
+          example: "active"
+
+    UpdateFeatInput:
+      type: object
+      description: Todos os campos são opcionais (partial update)
+      properties:
+        name:
+          type: string
+          minLength: 3
+          maxLength: 100
+        description:
+          type: string
+          minLength: 10
+          maxLength: 50000
+        source:
+          type: string
+          minLength: 1
+          maxLength: 200
+        level:
+          type: integer
+          minimum: 1
+          maximum: 20
+        prerequisites:
+          type: array
+          items:
+            type: string
+            minLength: 1
+        status:
+          type: string
+          enum: [active, inactive]
+
+  responses:
+    BadRequest:
+      description: Requisição inválida (validação falhou)
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              error:
+                oneOf:
+                  - type: string
+                    example: "Invalid level: must be between 1 and 20"
+                  - type: array
+                    items:
+                      type: object
+                      properties:
+                        path:
+                          type: array
+                          items:
+                            type: string
+                        message:
+                          type: string
+                    example:
+                      - path: ["name"]
+                        message: "Nome deve ter no mínimo 3 caracteres"
+
+    Unauthorized:
+      description: Não autenticado ou sessão expirada
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              error:
+                type: string
+                example: "Unauthorized"
+
+    InternalError:
+      description: Erro interno do servidor
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              error:
+                type: string
+                example: "Failed to process request"
+
+  securitySchemes:
+    ClerkAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: |
+        Autenticação via Clerk. Token JWT obtido automaticamente pelo
+        cliente (Next.js middleware injeta headers de auth).
+        
+        No código, use `auth()` from `@clerk/nextjs/server`.
