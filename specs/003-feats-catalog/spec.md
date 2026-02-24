@@ -5,6 +5,15 @@
 **Status**: Draft  
 **Input**: User description: "Implementar catálogo de talentos (Feats) no sistema D&D seguindo o padrão do cadastro de regras existente"
 
+## Clarifications
+
+### Session 2026-02-24
+- Q: Definição do campo "Nível" → A: Nível do Personagem (Representa o nível mínimo que o personagem deve ter para escolher o talento).
+- Q: Estrutura dos pré-requisitos → A: Texto com Menções (Permite usar o sistema de `@` dentro dos pré-requisitos para linkar a outras regras).
+- Q: Onde o recurso deve aparecer? → A: Sidebar + Dashboard + Lista de sugestões de menções.
+- Q: Interface de edição de pré-requisitos → A: Lista Dinâmica (O usuário adiciona campos de texto um por um usando um botão "+").
+- Q: Comportamento na exclusão → A: Soft Delete / Aviso de Quebra (Implementar exatamente como feito para os traits).
+
 ## User Scenarios & Testing *(mandatory)*
 
 ### User Story 1 - Visualizar Lista de Talentos (Priority: P1)
