@@ -31,6 +31,7 @@ const entityIcons: Record<string, any> = {
 }
 
 // Filter out Segurança and preparation for the component
+// todo: mover essa lógica para um hook ou contexto de configuração global para evitar repetição e garantir consistência (duplicata de lógica em EntityMultiSelect e AuditLogDetailModal)
 const entities = Object.entries(entityColors)
     .filter(([key]) => key !== "Segurança")
     .map(([key, config]) => ({

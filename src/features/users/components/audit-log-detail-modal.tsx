@@ -6,6 +6,7 @@ import { User, Calendar, Database, ArrowRight, Copy } from "lucide-react"
 import { GlassModal, GlassModalContent, GlassModalHeader, GlassModalTitle, GlassModalDescription } from "@/components/ui/glass-modal"
 import { ActionChip } from "@/components/ui/action-chip"
 import { DiffView } from "@/components/ui/diff-view"
+import { MentionContent } from "@/features/rules/components/mention-badge"
 import { glassClasses, cardGlass } from "@/lib/config/glass-config"
 import { fade } from "@/lib/config/motion-configs"
 import { toast } from "sonner"
@@ -43,6 +44,20 @@ function formatEntityType(entityType: string): string {
     return labels[entityType] || entityType || "Sistema"
 }
 
+const renderAuditValue = (value: unknown) => {
+    if (typeof value === "string" && (value.includes("<p>") || value.includes("<span"))) {
+        return (
+            <div className="max-w-full overflow-hidden bg-black/20 p-2 rounded border border-white/5">
+                <MentionContent html={value} mode="block" className="!text-[11px] prose-p:my-1 prose-ul:my-1" />
+            </div>
+        )
+    }
+
+    if (value === null || value === undefined) return "null"
+    if (typeof value === "object") return <span className="whitespace-pre-wrap">{JSON.stringify(value, null, 2)}</span>
+    return String(value)
+}
+
 export function AuditLogDetailModal({ log, open, onOpenChange }: AuditLogDetailModalProps) {
     if (!log) return null
 
@@ -54,7 +69,7 @@ export function AuditLogDetailModal({ log, open, onOpenChange }: AuditLogDetailM
 
     return (
         <GlassModal open={open} onOpenChange={onOpenChange}>
-            <GlassModalContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+            <GlassModalContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
                 <GlassModalHeader>
                     <GlassModalTitle className="flex items-center gap-3">
                         <span>Detalhes do Log</span>
@@ -113,7 +128,11 @@ export function AuditLogDetailModal({ log, open, onOpenChange }: AuditLogDetailM
                                 <span className="text-red-400">← Antes</span>
                                 <span className="text-green-400 text-right">Depois →</span>
                             </div>
-                            <DiffView previousData={log.previousData as Record<string, unknown>} newData={log.newData as Record<string, unknown>} />
+                            <DiffView
+                                previousData={log.previousData as Record<string, unknown>}
+                                newData={log.newData as Record<string, unknown>}
+                                renderValue={renderAuditValue}
+                            />
                         </div>
                     )}
 
@@ -123,7 +142,7 @@ export function AuditLogDetailModal({ log, open, onOpenChange }: AuditLogDetailM
                                 <span className="h-2 w-2 rounded-full bg-red-400" />
                                 Dados Excluídos
                             </h3>
-                            <DataDisplay data={log.previousData} variant="delete" />
+                            <DataDisplay data={log.previousData as Record<string, unknown>} variant="delete" />
                         </div>
                     )}
                 </motion.div>
@@ -167,19 +186,18 @@ function DataDisplay({ data, variant }: DataDisplayProps) {
   const bgColor = variant === 'create' ? 'bg-green-500/5' : 'bg-red-500/5';
 
   // Filter out internal fields
-  const displayData = Object.fromEntries(
-    Object.entries(data).filter(
-      ([key]) => !key.startsWith('_') && !['createdAt', 'updatedAt', '__v'].includes(key)
-    )
-  );
+  const displayEntries = Object.entries(data).filter(([key]) => !key.startsWith("_") && !["createdAt", "updatedAt", "__v"].includes(key))
 
   return (
-    <pre
-      className={`${cardGlass.blur} ${bgColor} border ${borderColor} p-4 text-xs font-mono overflow-x-auto rounded-lg`}
-    >
-      {JSON.stringify(displayData, null, 2)}
-    </pre>
-  );
+      <div className={`${cardGlass.blur} ${bgColor} border ${borderColor} p-4 rounded-lg space-y-4`}>
+          {displayEntries.map(([key, value]) => (
+              <div key={key} className="space-y-1">
+                  <p className="text-[10px] uppercase font-bold text-white/30 tracking-widest">{key}</p>
+                  <div className="text-xs font-mono text-white/80">{renderAuditValue(value)}</div>
+              </div>
+          ))}
+      </div>
+  )
 }
 
 AuditLogDetailModal.displayName = 'AuditLogDetailModal';

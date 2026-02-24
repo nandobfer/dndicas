@@ -4,20 +4,35 @@
  * @fileoverview Audit logs table component with server-side pagination.
  */
 
-import * as React from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Clock, User, Copy, Check } from "lucide-react"
+import { Clock, User, Copy, Check, Scroll, Users, Sparkles } from "lucide-react"
 import { cn } from "@/core/utils"
-import { toast } from "sonner"
 import { GlassCard, GlassCardContent } from "@/components/ui/glass-card"
 import { ActionChip } from "@/components/ui/action-chip"
 import { UserMini } from "@/components/ui/user-mini"
-import { LoadingState } from "@/components/ui/loading-state"
 import { EmptyState } from "@/components/ui/empty-state"
 import { Skeleton } from "@/core/ui/skeleton"
 import { DataTablePagination } from "@/components/ui/data-table-pagination"
 import { motionConfig } from "@/lib/config/motion-configs"
+import { entityColors } from "@/lib/config/colors"
 import type { AuditLog } from "../types/audit.types"
+
+// Map of icons for each entity
+const entityIcons: Record<string, any> = {
+    Usuário: Users,
+    Regra: Scroll,
+    Habilidade: Sparkles,
+}
+
+// todo: mover essa lógica para um hook ou contexto de configuração global para evitar repetição e garantir consistência (duplicata de lógica em EntityMultiSelect e AuditLogDetailModal)
+const entityLabels: Record<string, string> = {
+    User: "Usuário",
+    Company: "Empresa",
+    Organization: "Organização",
+    Rule: "Regra",
+    Reference: "Regra",
+    Trait: "Habilidade",
+}
 
 interface AuditLogsTableProps {
     logs: AuditLog[]
@@ -63,15 +78,12 @@ function formatDate(date: Date | string | undefined | null): string {
 
 function formatEntityType(entityType: string): string {
     if (!entityType) return "Sistema"
-    const labels: Record<string, string> = {
-        User: "Usuário",
-        Company: "Empresa",
-        Organization: "Organização",
-        Rule: "Regra",
-        Reference: "Regra",
-        Trait: "Habilidade", // T046: Added Trait entity type mapping
-    }
-    return labels[entityType] || entityType
+    return entityLabels[entityType] || entityType
+}
+
+function getEntityName(log: AuditLog): string {
+    const data = (log.newData || log.previousData || {}) as Record<string, any>
+    return data.name || data.title || data.username || data.label || log.entityId
 }
 
 export function AuditLogsTable({ logs, isLoading, pagination, onPageChange, onRowClick }: AuditLogsTableProps) {
@@ -157,7 +169,7 @@ export function AuditLogsTable({ logs, isLoading, pagination, onPageChange, onRo
                                     className={cn(
                                         "px-4 py-3 text-xs font-medium text-white/50 uppercase tracking-wider",
                                         !col.className?.includes("text-right") && "text-left",
-                                        col.className,
+                                        col.className
                                     )}
                                 >
                                     {col.label}
@@ -180,7 +192,7 @@ export function AuditLogsTable({ logs, isLoading, pagination, onPageChange, onRo
                                     className={cn(
                                         "group transition-colors",
                                         onRowClick && "cursor-pointer hover:bg-white/5",
-                                        isLoading && "opacity-50",
+                                        isLoading && "opacity-50"
                                     )}
                                     onClick={() => onRowClick?.(log)}
                                 >
@@ -191,22 +203,27 @@ export function AuditLogsTable({ logs, isLoading, pagination, onPageChange, onRo
 
                                     {/* Entity */}
                                     <td className="px-4 py-3">
-                                        <div className="flex flex-col gap-1">
-                                            <span className="text-sm font-medium text-white">{formatEntityType(log.entity)}</span>
-                                            <div className="flex items-center gap-2 group/id">
-                                                <span className="text-[10px] text-white/40 font-mono tracking-tight">{log.entityId}</span>
-                                                <button
-                                                    onClick={(e) => {
-                                                        e.stopPropagation()
-                                                        navigator.clipboard.writeText(log.entityId)
-                                                        toast.success("ID copiado com sucesso!")
-                                                    }}
-                                                    className="opacity-0 group-hover/id:opacity-100 p-1 rounded-md bg-white/5 hover:bg-white/10 text-white/40 hover:text-white transition-all"
-                                                    title="Copiar ID"
-                                                >
-                                                    <Copy className="h-2.5 w-2.5" />
-                                                </button>
-                                            </div>
+                                        <div className="flex flex-col gap-1.5">
+                                            {(() => {
+                                                const label = formatEntityType(log.entity)
+                                                const config = entityColors[label as keyof typeof entityColors] || entityColors.Regra
+                                                const Icon = entityIcons[label] || Scroll
+                                                return (
+                                                    <div
+                                                        className={cn(
+                                                            "inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md text-[10px] font-bold border uppercase tracking-wider w-fit",
+                                                            config.badge,
+                                                            config.border
+                                                        )}
+                                                    >
+                                                        <Icon className="w-3 h-3 opacity-70" />
+                                                        {label}
+                                                    </div>
+                                                )
+                                            })()}
+                                            <span className="text-sm font-medium text-white/90 truncate max-w-[250px]" title={getEntityName(log)}>
+                                                {getEntityName(log)}
+                                            </span>
                                         </div>
                                     </td>
 

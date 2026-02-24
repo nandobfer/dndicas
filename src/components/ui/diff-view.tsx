@@ -31,10 +31,11 @@ export interface DiffChange {
 }
 
 export interface DiffViewProps {
-  previousData?: Record<string, unknown>;
-  newData?: Record<string, unknown>;
-  changes?: DiffChange[];
-  className?: string;
+    previousData?: Record<string, unknown>
+    newData?: Record<string, unknown>
+    changes?: DiffChange[]
+    className?: string
+    renderValue?: (value: unknown, field: string) => React.ReactNode
 }
 
 function formatValue(value: unknown): string {
@@ -91,73 +92,63 @@ function getFieldLabel(field: string): string {
   return fieldLabels[field] || field;
 }
 
-export function DiffView({
-  previousData,
-  newData,
-  changes: providedChanges,
-  className,
-}: DiffViewProps) {
-  const changes = providedChanges || computeChanges(previousData, newData);
+export function DiffView({ previousData, newData, changes: providedChanges, className, renderValue }: DiffViewProps) {
+    const changes = providedChanges || computeChanges(previousData, newData)
 
-  if (changes.length === 0) {
+    if (changes.length === 0) {
+        return <div className={cn("text-center text-muted-foreground py-6", className)}>Nenhuma alteração detectada</div>
+    }
+
     return (
-      <div className={cn('text-center text-muted-foreground py-6', className)}>
-        Nenhuma alteração detectada
-      </div>
-    );
-  }
+        <div className={cn("space-y-3", className)}>
+            {changes.map((change) => (
+                <div key={change.field} className={`${glassClasses.card} p-3 rounded-lg`}>
+                    <div className="flex items-center justify-between mb-2">
+                        <span className="text-sm font-medium text-foreground">{getFieldLabel(change.field)}</span>
+                        <DiffBadge type={change.type} />
+                    </div>
 
-  return (
-    <div className={cn('space-y-3', className)}>
-      {changes.map((change) => (
-        <div
-          key={change.field}
-          className={`${glassClasses.card} p-3 rounded-lg`}
-        >
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-sm font-medium text-foreground">
-              {getFieldLabel(change.field)}
-            </span>
-            <DiffBadge type={change.type} />
-          </div>
+                    <div className="grid grid-cols-2 gap-3">
+                        {/* Before */}
+                        <div
+                            className={cn(
+                                "p-2 rounded text-sm font-mono",
+                                change.type === "added"
+                                    ? "bg-transparent text-muted-foreground/50"
+                                    : "bg-red-500/10 text-red-400 border border-red-500/20"
+                            )}
+                        >
+                            {change.type === "added" ? (
+                                <span className="italic">vazio</span>
+                            ) : renderValue ? (
+                                renderValue(change.before, change.field)
+                            ) : (
+                                formatValue(change.before)
+                            )}
+                        </div>
 
-          <div className="grid grid-cols-2 gap-3">
-            {/* Before */}
-            <div
-              className={cn(
-                'p-2 rounded text-sm font-mono',
-                change.type === 'added'
-                  ? 'bg-transparent text-muted-foreground/50'
-                  : 'bg-red-500/10 text-red-400 border border-red-500/20'
-              )}
-            >
-              {change.type === 'added' ? (
-                <span className="italic">vazio</span>
-              ) : (
-                formatValue(change.before)
-              )}
-            </div>
-
-            {/* After */}
-            <div
-              className={cn(
-                'p-2 rounded text-sm font-mono',
-                change.type === 'removed'
-                  ? 'bg-transparent text-muted-foreground/50'
-                  : 'bg-green-500/10 text-green-400 border border-green-500/20'
-              )}
-            >
-              {change.type === 'removed' ? (
-                <span className="italic">removido</span>
-              ) : (
-                formatValue(change.after)
-              )}
-            </div>
-          </div>
+                        {/* After */}
+                        <div
+                            className={cn(
+                                "p-2 rounded text-sm font-mono",
+                                change.type === "removed"
+                                    ? "bg-transparent text-muted-foreground/50"
+                                    : "bg-green-500/10 text-green-400 border border-green-500/20"
+                            )}
+                        >
+                            {change.type === "removed" ? (
+                                <span className="italic">removido</span>
+                            ) : renderValue ? (
+                                renderValue(change.after, change.field)
+                            ) : (
+                                formatValue(change.after)
+                            )}
+                        </div>
+                    </div>
+                </div>
+            ))}
         </div>
-      ))}
-    </div>
-  );
+    )
 }
 
 function DiffBadge({ type }: { type: DiffChange['type'] }) {
