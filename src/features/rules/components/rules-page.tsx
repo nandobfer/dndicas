@@ -101,32 +101,25 @@ export function RulesPage() {
     const total = data?.total || 0;
 
     return (
-        <motion.div
-            variants={motionConfig.variants.fadeInUp}
-            initial="initial"
-            animate="animate"
-            className="space-y-6"
-        >
+        <motion.div variants={motionConfig.variants.fadeInUp} initial="initial" animate="animate" className="space-y-6">
             {/* Header */}
             <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
                 <div>
                     <h1 className="text-2xl font-bold text-white flex items-center gap-2">
-                        <Ruler className="h-6 w-6 text-blue-400" />
+                        <Ruler className="h-6 w-6 text-slate-400" />
                         Catálogo de Regras
                     </h1>
-                    <p className="text-sm text-white/60 mt-1">
-                        Gerencie as regras de referência do sistema (D&D 5e)
-                    </p>
+                    <p className="text-sm text-white/60 mt-1">Gerencie as regras de referência do sistema (D&D 5e)</p>
                 </div>
 
                 <button
                     onClick={handleCreateClick}
                     className={cn(
-                        'inline-flex items-center gap-2 px-4 py-2 rounded-lg',
-                        'bg-blue-500 text-white font-medium text-sm',
-                        'hover:bg-blue-600 transition-colors',
-                        'focus:outline-none focus:ring-2 focus:ring-blue-500/50',
-                        'shadow-lg shadow-blue-500/20'
+                        "inline-flex items-center gap-2 px-4 py-2 rounded-lg",
+                        "bg-blue-500 text-white font-medium text-sm",
+                        "hover:bg-blue-600 transition-colors",
+                        "focus:outline-none focus:ring-2 focus:ring-blue-500/50",
+                        "shadow-lg shadow-blue-500/20",
                     )}
                 >
                     <Plus className="h-4 w-4" />
@@ -137,17 +130,12 @@ export function RulesPage() {
             {/* Filters */}
             <GlassCard>
                 <GlassCardContent className="py-4">
-                    <RulesFilter
-                        filters={{ search, status }}
-                        onSearchChange={handleSearchChange}
-                        onStatusChange={handleStatusChange}
-                        isSearching={isFetching && !isLoading}
-                    />
+                    <RulesFilter filters={{ search, status }} onSearchChange={handleSearchChange} onStatusChange={handleStatusChange} isSearching={isFetching && !isLoading} />
                 </GlassCardContent>
             </GlassCard>
 
             {/* Table */}
-            <RulesTable 
+            <RulesTable
                 rules={rules}
                 total={total}
                 page={filters.page || 1}
@@ -159,22 +147,10 @@ export function RulesPage() {
             />
 
             {/* Form Modal */}
-            <RuleFormModal 
-                isOpen={isFormOpen}
-                onClose={() => setIsFormOpen(false)}
-                onSubmit={handleFormSubmit}
-                rule={selectedRule}
-                isSubmitting={createRule.isPending || updateRule.isPending}
-            />
+            <RuleFormModal isOpen={isFormOpen} onClose={() => setIsFormOpen(false)} onSubmit={handleFormSubmit} rule={selectedRule} isSubmitting={createRule.isPending || updateRule.isPending} />
 
             {/* Delete Dialog */}
-            <DeleteRuleDialog 
-                isOpen={isDeleteOpen}
-                onClose={() => setIsDeleteOpen(false)}
-                onConfirm={handleDeleteConfirm}
-                rule={selectedRule}
-                isDeleting={deleteRule.isPending}
-            />
+            <DeleteRuleDialog isOpen={isDeleteOpen} onClose={() => setIsDeleteOpen(false)} onConfirm={handleDeleteConfirm} rule={selectedRule} isDeleting={deleteRule.isPending} />
         </motion.div>
-    );
+    )
 }

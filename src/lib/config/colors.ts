@@ -139,6 +139,17 @@ export const entityColors = {
         text: "text-slate-400",
         hex: rarityColors.common, // #9CA3AF
     },
+    Talento: {
+        name: "Talento",
+        color: "amber",
+        mention: "bg-amber-500/10 text-amber-400 border-amber-400/20",
+        badge: "bg-amber-400/20 text-amber-400",
+        border: "border-amber-500/20",
+        hoverBorder: "hover:border-amber-500/40",
+        bgAlpha: "bg-amber-500/10",
+        text: "text-amber-400",
+        hex: rarityColors.legendary, // #F59E0B
+    },
 } as const
 
 export type EntityType = keyof typeof entityColors;

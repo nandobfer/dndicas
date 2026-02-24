@@ -66,6 +66,8 @@ interface RichTextEditorProps {
     className?: string
     disabled?: boolean
     excludeId?: string
+    variant?: "full" | "simple"
+    autoFocus?: boolean
 }
 
 const MenuBar = ({ editor, addImage }: { editor: Editor | null; addImage: () => void }) => {
@@ -135,31 +137,17 @@ const MenuBar = ({ editor, addImage }: { editor: Editor | null; addImage: () => 
 
             <div className="w-px h-6 bg-white/10 mx-1 self-center" />
 
-            <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                onClick={() => editor.chain().focus().undo().run()}
-                disabled={!editor.can().chain().focus().undo().run()}
-                className="h-8 w-8 p-0"
-            >
+            <Button type="button" variant="ghost" size="sm" onClick={() => editor.chain().focus().undo().run()} disabled={!editor.can().chain().focus().undo().run()} className="h-8 w-8 p-0">
                 <Undo className="h-4 w-4" />
             </Button>
-            <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                onClick={() => editor.chain().focus().redo().run()}
-                disabled={!editor.can().chain().focus().redo().run()}
-                className="h-8 w-8 p-0"
-            >
+            <Button type="button" variant="ghost" size="sm" onClick={() => editor.chain().focus().redo().run()} disabled={!editor.can().chain().focus().redo().run()} className="h-8 w-8 p-0">
                 <Redo className="h-4 w-4" />
             </Button>
         </div>
     )
 }
 
-export function RichTextEditor({ value, onChange, placeholder = "Write something...", className, disabled = false, excludeId }: RichTextEditorProps) {
+export function RichTextEditor({ value, onChange, placeholder = "Write something...", className, disabled = false, excludeId, variant = "full", autoFocus = false }: RichTextEditorProps) {
     const [isUploading, setIsUploading] = useState(false)
 
     const uploadImage = useCallback(async (file: File) => {
@@ -190,6 +178,7 @@ export function RichTextEditor({ value, onChange, placeholder = "Write something
 
     const editor = useEditor({
         immediatelyRender: false,
+        autofocus: autoFocus,
         extensions: [
             StarterKit,
             ImageExtension,
@@ -208,8 +197,10 @@ export function RichTextEditor({ value, onChange, placeholder = "Write something
         editorProps: {
             attributes: {
                 class: cn(
-                    "prose prose-invert max-w-none focus:outline-none min-h-[150px] p-4",
-                    "prose-p:my-2 prose-headings:mb-4 prose-headings:mt-6",
+                    "prose prose-invert max-w-none focus:outline-none",
+                    variant === "full" ? "p-4 min-h-[150px]" : "px-3 py-1.5 min-h-[38px]",
+                    variant === "full" ? "prose-p:my-2" : "prose-p:my-0",
+                    "prose-headings:mb-4 prose-headings:mt-6",
                     "prose-ul:list-disc prose-ol:list-decimal prose-li:my-1",
                     "[&_ul]:list-disc [&_ul]:pl-5 [&_ol]:list-decimal [&_ol]:pl-5 [&_li]:my-1",
                     "prose-blockquote:border-l-4 prose-blockquote:border-primary/50 prose-blockquote:pl-4 prose-blockquote:italic",
@@ -303,7 +294,7 @@ export function RichTextEditor({ value, onChange, placeholder = "Write something
                 className,
             )}
         >
-            <MenuBar editor={editor} addImage={handleAddImageClick} />
+            {variant === "full" && <MenuBar editor={editor} addImage={handleAddImageClick} />}
             <div className="relative">
                 <EditorContent editor={editor} />
                 {isUploading && <div className="absolute inset-0 bg-black/50 flex items-center justify-center text-xs text-white">Uploading...</div>}

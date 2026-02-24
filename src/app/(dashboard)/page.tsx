@@ -9,6 +9,7 @@ import { cn } from "@/core/utils"
 import { MiniBarChart, MiniLineChart } from "./_components/charts"
 import { RulesEntityCard } from "./_components/rules-entity-card"
 import { TraitsEntityCard } from "./_components/traits-entity-card"
+import { FeatsEntityCard } from "./_components/feats-entity-card"
 import { WipEntityCard } from "./_components/wip-entity-card"
 
 // Types for the stats
@@ -28,6 +29,11 @@ interface DashboardStats {
         growth: Array<{ date: string; count: number }>
     }
     traits: {
+        total: number
+        active: number
+        growth: Array<{ date: string; count: number }>
+    }
+    feats: {
         total: number
         active: number
         growth: Array<{ date: string; count: number }>
@@ -53,9 +59,7 @@ const dndEntities = [
     {
         id: "feats",
         title: "Talentos",
-        icon: Zap,
-        description: "Talentos e habilidades especiais",
-        component: WipEntityCard,
+        component: FeatsEntityCard,
     },
     {
         id: "traits",
@@ -194,7 +198,13 @@ export default function DashboardPage() {
 
                 <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
                     {dndEntities.map(({ component: Card, id, ...entity }, index) => (
-                        <Card key={id} {...entity} index={index} stats={id === "rules" ? stats?.rules : id === "traits" ? stats?.traits : undefined} loading={loading} />
+                        <Card
+                            key={id}
+                            {...entity}
+                            index={index}
+                            stats={id === "rules" ? stats?.rules : id === "traits" ? stats?.traits : id === "feats" ? stats?.feats : undefined}
+                            loading={loading}
+                        />
                     ))}
                 </div>
             </div>

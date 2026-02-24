@@ -109,7 +109,7 @@ export function TraitsPage() {
             <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
                 <div>
                     <h1 className="text-2xl font-bold text-white flex items-center gap-2">
-                        <Sparkles className="h-6 w-6 text-gray-400" />
+                        <Sparkles className="h-6 w-6 text-emerald-400" />
                         Catálogo de Habilidades
                     </h1>
                     <p className="text-sm text-white/60 mt-1">Gerencie habilidades e traits do sistema (D&D 5e)</p>

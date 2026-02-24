@@ -5,7 +5,7 @@
  */
 
 import { motion, AnimatePresence } from 'framer-motion';
-import { Clock, User, Copy, Check, Scroll, Users, Sparkles } from "lucide-react"
+import { Clock, User, Copy, Check, Scroll, Users, Sparkles, Zap } from "lucide-react"
 import { cn } from "@/core/utils"
 import { GlassCard, GlassCardContent } from "@/components/ui/glass-card"
 import { ActionChip } from "@/components/ui/action-chip"
@@ -22,6 +22,7 @@ const entityIcons: Record<string, any> = {
     Usuário: Users,
     Regra: Scroll,
     Habilidade: Sparkles,
+    Talento: Zap,
 }
 
 // todo: mover essa lógica para um hook ou contexto de configuração global para evitar repetição e garantir consistência (duplicata de lógica em EntityMultiSelect e AuditLogDetailModal)
@@ -32,6 +33,7 @@ const entityLabels: Record<string, string> = {
     Rule: "Regra",
     Reference: "Regra",
     Trait: "Habilidade",
+    Feat: "Talento",
 }
 
 interface AuditLogsTableProps {

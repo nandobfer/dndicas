@@ -111,6 +111,9 @@ export async function GET(request: NextRequest) {
             if (entityTypes.includes("Habilidade") || entityTypes.includes("Trait")) {
                 if (!variations.includes("Trait")) variations.push("Trait")
             }
+            if (entityTypes.includes("Talento") || entityTypes.includes("Feat")) {
+                if (!variations.includes("Feat")) variations.push("Feat")
+            }
 
             andConditions.push({
                 $or: [{ entity: { $in: variations } }, { entityType: { $in: variations } }, { collectionName: { $in: variations } }]

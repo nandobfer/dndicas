@@ -10,6 +10,7 @@ import { Reference } from "../types/rules.types"
 import { SimpleGlassTooltip } from "@/components/ui/glass-tooltip"
 import { MentionContent } from "./mention-badge"
 import { GlassPopover, GlassPopoverTrigger, GlassPopoverContent } from "@/components/ui/glass-popover"
+import { FeatPreview } from "@/features/feats/components/feat-preview"
 
 interface RulePreviewProps {
     rule: Reference
@@ -119,12 +120,14 @@ export const EntityPreviewTooltip = ({ entityId, entityType, children, side = "t
 
         setLoading(true)
         try {
-            // T041: Updated endpoint logic to support Habilidade via /api/traits
+            // T041: Updated endpoint logic to support Habilidade via /api/traits and Talento via /api/feats
             let endpoint = `/api/core/${entityType.toLowerCase()}/${entityId}`
             if (entityType === "Regra") {
                 endpoint = `/api/rules/${entityId}`
             } else if (entityType === "Habilidade") {
                 endpoint = `/api/traits/${entityId}`
+            } else if (entityType === "Talento") {
+                endpoint = `/api/feats/${entityId}`
             }
 
             const res = await fetch(endpoint)
@@ -163,6 +166,8 @@ export const EntityPreviewTooltip = ({ entityId, entityType, children, side = "t
                 return <RulePreview rule={data} />
             case "Habilidade":
                 return <TraitPreview trait={data} />
+            case "Talento":
+                return <FeatPreview feat={data} />
             default:
                 return (
                     <div className="p-4">

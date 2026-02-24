@@ -27,7 +27,7 @@ export function MentionContent({
     delayDuration = 200,
     mode = "inline",
     imageWidth = "300px",
-    className
+    className,
 }: {
     html: string
     delayDuration?: number
@@ -82,13 +82,7 @@ export function MentionContent({
                                     key={`img-${index}`}
                                     delayDuration={100}
                                     className="!p-1"
-                                    content={
-                                        <img
-                                            src={src}
-                                            className="max-w-[500px] max-h-[500px] rounded-lg shadow-2xl border border-white/10 block"
-                                            alt="Preview"
-                                        />
-                                    }
+                                    content={<img src={src} className="max-w-[500px] max-h-[500px] rounded-lg shadow-2xl border border-white/10 block" alt="Preview" />}
                                 >
                                     <img
                                         src={src}
@@ -100,13 +94,7 @@ export function MentionContent({
                         }
 
                         return (
-                            <img
-                                key={`img-${index}`}
-                                src={src}
-                                style={{ width: imageWidth, height: "auto" }}
-                                className="rounded-lg border border-white/20 max-w-full block my-2"
-                                alt="Content Image"
-                            />
+                            <img key={`img-${index}`} src={src} style={{ width: imageWidth, height: "auto" }} className="rounded-lg border border-white/20 max-w-full block my-2" alt="Content Image" />
                         )
                     }
                 }
@@ -114,9 +102,7 @@ export function MentionContent({
                 // If inline mode, flatten structural blocks to avoid breaks
                 const blockTags = ["p", "div", "ul", "ol", "li", "h1", "h2", "h3", "h4", "h5", "h6", "blockquote", "pre"]
                 if (mode === "inline" && blockTags.includes(tagName)) {
-                    return (
-                        <React.Fragment key={`flat-${index}`}>{Array.from(node.childNodes).map((child, i) => convertNode(child, i))} </React.Fragment>
-                    )
+                    return <React.Fragment key={`flat-${index}`}>{Array.from(node.childNodes).map((child, i) => convertNode(child, i))} </React.Fragment>
                 }
 
                 // Default: Recreate the element while recursing for special nodes
@@ -146,7 +132,7 @@ export function MentionContent({
                     "[&_ul]:list-disc [&_ul]:pl-5 [&_ol]:list-decimal [&_ol]:pl-5",
                     "[&_li]:marker:text-white/30",
                     "[&_p]:min-h-[1em]",
-                    className
+                    className,
                 )}
             >
                 {contents}
@@ -154,30 +140,19 @@ export function MentionContent({
         )
     }
 
-    return <span className={cn("inline align-baseline", className)}>{contents}</span>
+    return <span className={cn("inline align-middle", className)}>{contents}</span>
 }
 
-export function MentionBadge({ 
-    id, 
-    label, 
-    type = "Regra", 
-    className,
-    delayDuration = 400 
-}: MentionBadgeProps) {
+export function MentionBadge({ id, label, type = "Regra", className, delayDuration = 400 }: MentionBadgeProps) {
     const getStyles = (t: string) => {
         const typeKey = (Object.keys(entityColors).find((k) => t.includes(k.substring(0, 5))) || "Regra") as keyof typeof entityColors
         return entityColors[typeKey]?.mention || entityColors.Regra.mention
     }
 
     return (
-        <span className={cn("inline-flex relative group/mention mx-0.5 align-baseline translate-y-[1px]", className)}>
+        <span className={cn("inline-flex relative group/mention mx-0.5 align-middle", className)}>
             <EntityPreviewTooltip entityId={id} entityType={type} delayDuration={delayDuration}>
-                <span
-                    className={cn(
-                        "mention inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md font-bold text-[13px] border transition-all cursor-help",
-                        getStyles(type)
-                    )}
-                >
+                <span className={cn("mention inline-flex items-center gap-1.5 px-1.5 py-0.5 rounded-md font-bold text-[12px] border transition-all cursor-help", getStyles(type))}>
                     <span className="opacity-40 text-[9px] uppercase font-bold tracking-tight border-r border-current/20 pr-1 shrink-0">{type}</span>
                     <span className="whitespace-nowrap">
                         <MentionContent html={label} delayDuration={delayDuration} />
