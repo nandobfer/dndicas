@@ -180,7 +180,13 @@ export const EntityPreviewTooltip = ({ entityId, entityType, children, side = "t
             <GlassPopoverTrigger asChild onMouseEnter={handleMouseEnter} onMouseLeave={handleMouseLeave}>
                 {children}
             </GlassPopoverTrigger>
-            <GlassPopoverContent side={side} className="w-auto p-4 max-w-none" onMouseEnter={handleMouseEnter} onMouseLeave={handleMouseLeave} onOpenAutoFocus={(e) => e.preventDefault()}>
+            <GlassPopoverContent
+                side={side}
+                className="w-auto max-w-none max-h-[400px] overflow-y-auto glass-scrollbar"
+                onMouseEnter={handleMouseEnter}
+                onMouseLeave={handleMouseLeave}
+                onOpenAutoFocus={(e) => e.preventDefault()}
+            >
                 {content}
             </GlassPopoverContent>
         </GlassPopover>
