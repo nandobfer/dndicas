@@ -80,13 +80,17 @@ function computeChanges(
 }
 
 const fieldLabels: Record<string, string> = {
-  name: 'Nome',
-  email: 'Email',
-  role: 'Papel',
-  status: 'Status',
-  imageUrl: 'Avatar',
-  clerkId: 'Clerk ID',
-};
+    name: "Nome",
+    email: "Email",
+    role: "Papel",
+    status: "Status",
+    imageUrl: "Avatar",
+    clerkId: "Clerk ID",
+    description: "Descrição",
+    source: "Fonte",
+    level: "Nível",
+    prerequisites: "Pré-requisitos",
+}
 
 function getFieldLabel(field: string): string {
   return fieldLabels[field] || field;

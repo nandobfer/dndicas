@@ -54,6 +54,23 @@ const renderAuditValue = (value: unknown) => {
         )
     }
 
+    if (Array.isArray(value)) {
+        return (
+            <div className="flex flex-wrap gap-1.5 p-1 bg-black/10 rounded border border-white/5 w-full">
+                {value.map((item, i) => (
+                    <div key={i} className="px-2 py-0.5 rounded bg-white/5 border border-white/10 text-[11px] text-white/70 flex items-center gap-1">
+                        {typeof item === "string" && (item.includes("<p>") || item.includes("<span")) ? (
+                            <MentionContent html={item} mode="inline" className="[&_p]:inline [&_p]:m-0 align-middle" />
+                        ) : (
+                            String(item)
+                        )}
+                    </div>
+                ))}
+                {value.length === 0 && <span className="text-[10px] text-white/30 italic px-1">Vazio</span>}
+            </div>
+        )
+    }
+
     if (value === null || value === undefined) return "null"
     if (typeof value === "object") return <span className="whitespace-pre-wrap">{JSON.stringify(value, null, 2)}</span>
     return String(value)

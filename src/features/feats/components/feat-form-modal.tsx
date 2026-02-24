@@ -23,6 +23,7 @@ export interface FeatFormModalProps {
 
 export function FeatFormModal({ isOpen, onClose, onSubmit, feat, isSubmitting = false }: FeatFormModalProps) {
     const isEditMode = !!feat;
+    const [lastAddedIndex, setLastAddedIndex] = React.useState<number | null>(null)
 
     const {
         register,
@@ -42,7 +43,7 @@ export function FeatFormModal({ isOpen, onClose, onSubmit, feat, isSubmitting = 
             prerequisites: feat?.prerequisites || [],
             status: feat?.status || "active",
         },
-    });
+    })
 
     // Type assertion needed: react-hook-form's useFieldArray has type inference issues
     // with Zod schemas containing array fields. The `as never` cast bypasses the narrowing
@@ -50,11 +51,12 @@ export function FeatFormModal({ isOpen, onClose, onSubmit, feat, isSubmitting = 
     const { fields, append, remove } = useFieldArray({
         control,
         name: "prerequisites" as never,
-    });
+    })
 
     // Reset form when modal opens/closes or feat changes
     React.useEffect(() => {
         if (isOpen) {
+            setLastAddedIndex(null)
             reset({
                 name: feat?.name || "",
                 description: feat?.description || "",
@@ -62,54 +64,43 @@ export function FeatFormModal({ isOpen, onClose, onSubmit, feat, isSubmitting = 
                 level: feat?.level || 1,
                 prerequisites: feat?.prerequisites || [],
                 status: feat?.status || "active",
-            });
+            })
         }
-    }, [isOpen, feat, reset]);
+    }, [isOpen, feat, reset])
 
     const handleFormSubmit = async (data: CreateFeatSchema) => {
-        // Filter out empty prerequisites
+        // Filter out empty prerequisites (considering TipTap might return <p></p>)
         const cleanedData = {
             ...data,
-            prerequisites: (data.prerequisites || []).filter((p: string) => p && p.trim().length > 0),
-        };
-        await onSubmit(cleanedData as CreateFeatInput | UpdateFeatInput);
-    };
+            prerequisites: (data.prerequisites || []).filter((p: string) => {
+                if (!p) return false
+                const plainText = p.replace(/<[^>]*>/g, "").trim()
+                return plainText.length > 0
+            }),
+        }
+        await onSubmit(cleanedData as CreateFeatInput | UpdateFeatInput)
+    }
 
     const handleAddPrerequisite = () => {
-        append("");
-    };
+        append("")
+        setLastAddedIndex(fields.length)
+    }
 
     return (
         <GlassModal open={isOpen} onOpenChange={(open) => !open && onClose()}>
             <GlassModalContent size="xl">
                 <GlassModalHeader>
                     <GlassModalTitle>{isEditMode ? "Editar Talento" : "Novo Talento"}</GlassModalTitle>
-                    <GlassModalDescription>
-                        {isEditMode ? "Atualize as informações do talento" : "Crie um novo registro no catálogo de talentos"}
-                    </GlassModalDescription>
+                    <GlassModalDescription>{isEditMode ? "Atualize as informações do talento" : "Crie um novo registro no catálogo de talentos"}</GlassModalDescription>
                 </GlassModalHeader>
 
                 <form onSubmit={handleSubmit(handleFormSubmit)} className="space-y-6 mt-4">
                     {/* Name */}
-                    <GlassInput
-                        id="name"
-                        label="Nome do Talento"
-                        placeholder="Ex: Mestre em Armas"
-                        icon={<Zap />}
-                        error={errors.name?.message}
-                        {...register("name")}
-                    />
+                    <GlassInput id="name" label="Nome do Talento" placeholder="Ex: Mestre em Armas" icon={<Zap />} error={errors.name?.message} {...register("name")} />
 
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                         {/* Source */}
-                        <GlassInput
-                            id="source"
-                            label="Fonte / Referência"
-                            placeholder="Ex: PHB pg. 167"
-                            icon={<Link />}
-                            error={errors.source?.message}
-                            {...register("source")}
-                        />
+                        <GlassInput id="source" label="Fonte / Referência" placeholder="Ex: PHB pg. 167" icon={<Link />} error={errors.source?.message} {...register("source")} />
 
                         {/* Level */}
                         <GlassInput
@@ -135,11 +126,7 @@ export function FeatFormModal({ isOpen, onClose, onSubmit, feat, isSubmitting = 
                             <label className="text-sm font-medium text-white">Status do Talento</label>
                             <p className="text-xs text-white/60">Talentos inativos não aparecem nas buscas públicas</p>
                         </div>
-                        <GlassSwitch
-                            checked={watch("status") === "active"}
-                            onCheckedChange={(checked) => setValue("status", checked ? "active" : "inactive")}
-                            disabled={isSubmitting}
-                        />
+                        <GlassSwitch checked={watch("status") === "active"} onCheckedChange={(checked) => setValue("status", checked ? "active" : "inactive")} disabled={isSubmitting} />
                     </div>
 
                     {/* Prerequisites Dynamic List */}
@@ -168,12 +155,7 @@ export function FeatFormModal({ isOpen, onClose, onSubmit, feat, isSubmitting = 
 
                         <AnimatePresence mode="popLayout">
                             {fields.length === 0 ? (
-                                <motion.div
-                                    initial={{ opacity: 0 }}
-                                    animate={{ opacity: 1 }}
-                                    exit={{ opacity: 0 }}
-                                    className="text-sm text-white/40 italic text-center py-4"
-                                >
+                                <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="text-sm text-white/40 italic text-center py-4">
                                     Nenhum pré-requisito adicionado
                                 </motion.div>
                             ) : (
@@ -188,22 +170,34 @@ export function FeatFormModal({ isOpen, onClose, onSubmit, feat, isSubmitting = 
                                             className="flex items-start gap-2"
                                         >
                                             <div className="flex-1">
-                                                <GlassInput
-                                                    id={`prerequisite-${index}`}
-                                                    placeholder="Ex: Força 13 ou superior"
-                                                    {...register(`prerequisites.${index}` as any)}
-                                                    error={errors.prerequisites?.[index]?.message as string}
+                                                <Controller
+                                                    name={`prerequisites.${index}` as any}
+                                                    control={control}
+                                                    render={({ field: controllerField }) => (
+                                                        <RichTextEditor
+                                                            variant="simple"
+                                                            value={controllerField.value || ""}
+                                                            onChange={controllerField.onChange}
+                                                            placeholder="Ex: Força 13 ou superior"
+                                                            className={errors.prerequisites?.[index] ? "border-rose-500/50" : ""}
+                                                            disabled={isSubmitting}
+                                                            excludeId={feat?._id}
+                                                            autoFocus={index === lastAddedIndex}
+                                                        />
+                                                    )}
                                                 />
+                                                {errors.prerequisites?.[index] && (
+                                                    <p className="text-xs text-rose-400 mt-1 flex items-center gap-1">
+                                                        <Info className="h-3 w-3" />
+                                                        {(errors.prerequisites[index] as any).message}
+                                                    </p>
+                                                )}
                                             </div>
                                             <button
                                                 type="button"
                                                 onClick={() => remove(index)}
                                                 disabled={isSubmitting}
-                                                className={cn(
-                                                    "p-2 rounded-lg transition-colors mt-1",
-                                                    "text-rose-400 hover:bg-rose-500/20",
-                                                    "disabled:opacity-50 disabled:cursor-not-allowed",
-                                                )}
+                                                className={cn("p-2 rounded-lg transition-colors mt-1", "text-rose-400 hover:bg-rose-500/20", "disabled:opacity-50 disabled:cursor-not-allowed")}
                                             >
                                                 <X className="h-4 w-4" />
                                             </button>
@@ -274,5 +268,5 @@ export function FeatFormModal({ isOpen, onClose, onSubmit, feat, isSubmitting = 
                 </form>
             </GlassModalContent>
         </GlassModal>
-    );
+    )
 }
