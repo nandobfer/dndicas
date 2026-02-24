@@ -4,6 +4,7 @@ import { User } from "@/features/users/models/user"
 import { AuditLogExtended } from "@/features/users/models/audit-log-extended"
 import { Reference } from "@/core/database/models/reference"
 import { Trait } from "@/features/traits/database/trait"
+import { Feat } from "@/features/feats/models/feat"
 import { getCurrentUserFromDb } from "@/features/users/api/get-current-user"
 import { subDays, startOfDay, endOfDay, format } from "date-fns"
 
@@ -17,7 +18,7 @@ export async function GET(_request: NextRequest) {
         await dbConnect()
 
         // 1. Basic Counts
-        const [totalUsers, activeUsers, auditLogCount, totalRules, activeRules, totalTraits, activeTraits] = await Promise.all([
+        const [totalUsers, activeUsers, auditLogCount, totalRules, activeRules, totalTraits, activeTraits, totalFeats, activeFeats] = await Promise.all([
             User.countDocuments({ deleted: { $ne: true } }),
             User.countDocuments({ status: "active", deleted: { $ne: true } }),
             AuditLogExtended.countDocuments(),
@@ -25,6 +26,8 @@ export async function GET(_request: NextRequest) {
             Reference.countDocuments({ status: "active" }),
             Trait.countDocuments(),
             Trait.countDocuments({ status: "active" }),
+            Feat.countDocuments(),
+            Feat.countDocuments({ status: "active" }),
         ])
 
         // 2. User Growth (last 7 days)
@@ -83,6 +86,19 @@ export async function GET(_request: NextRequest) {
             })
         }
 
+        // 6. Feats Growth (last 7 days)
+        const featsGrowth = []
+        for (let i = 6; i >= 0; i--) {
+            const date = subDays(new Date(), i)
+            const count = await Feat.countDocuments({
+                createdAt: { $lte: endOfDay(date) },
+            })
+            featsGrowth.push({
+                date: format(date, "dd/MM"),
+                count,
+            })
+        }
+
         return NextResponse.json({
             users: {
                 total: totalUsers,
@@ -102,6 +118,11 @@ export async function GET(_request: NextRequest) {
                 total: totalTraits,
                 active: activeTraits,
                 growth: traitsGrowth,
+            },
+            feats: {
+                total: totalFeats,
+                active: activeFeats,
+                growth: featsGrowth,
             },
         })
     } catch (error) {

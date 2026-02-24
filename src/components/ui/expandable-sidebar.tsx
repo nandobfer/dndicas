@@ -16,25 +16,25 @@ import * as React from 'react';
 import { motion } from 'framer-motion';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Package2, Home, User, Sparkles, Upload, Mail, Palette, FileText, Users, Scroll } from "lucide-react"
-import { cn } from '@/core/utils';
-import { glassConfig } from '@/lib/config/glass-config';
+import { Package2, Home, User, Sparkles, Upload, Mail, Palette, FileText, Users, Scroll, Zap } from "lucide-react"
+import { cn } from "@/core/utils"
+import { glassConfig } from "@/lib/config/glass-config"
 import { motionConfig } from "@/lib/config/motion-configs"
-import { themeConfig } from '@/lib/config/theme-config';
-import { SidebarItem, SidebarSection } from './sidebar-item';
-import { TooltipProvider } from '@/core/ui/tooltip';
-import { UserButton } from '@clerk/nextjs';
-import { APP_VERSION } from '@/lib/config/version';
+import { themeConfig } from "@/lib/config/theme-config"
+import { SidebarItem, SidebarSection } from "./sidebar-item"
+import { TooltipProvider } from "@/core/ui/tooltip"
+import { UserButton } from "@clerk/nextjs"
+import { APP_VERSION } from "@/lib/config/version"
 
 export interface ExpandableSidebarProps {
-  /** Whether sidebar is expanded */
-  isExpanded: boolean;
-  /** Expand callback */
-  onExpand: () => void;
-  /** Collapse callback */
-  onCollapse: () => void;
-  /** Additional CSS classes */
-  className?: string;
+    /** Whether sidebar is expanded */
+    isExpanded: boolean
+    /** Expand callback */
+    onExpand: () => void
+    /** Collapse callback */
+    onCollapse: () => void
+    /** Additional CSS classes */
+    className?: string
 }
 
 /**
@@ -42,16 +42,18 @@ export interface ExpandableSidebarProps {
  * Updated per T020: renamed "Módulos" to "Cadastros", removed "Empresas", added "Usuários".
  */
 const mainItems = [
-  { label: 'Início', href: '/', icon: Home },
-  { label: 'Perfil', href: '/profile', icon: User },
-];
+    { label: "Início", href: "/", icon: Home },
+    { label: "Perfil", href: "/profile", icon: User },
+]
 
 // T020: Renamed from "Módulos" to "Cadastros", removed "Empresas", added "Usuários"
 // T032: Added "Habilidades" for traits catalog
+// T008: Added "Talentos" for feats catalog
 const cadastrosItems = [
     { label: "Usuários", href: "/users", icon: Users },
     { label: "Regras", href: "/rules", icon: Scroll },
-    { label: "Habilidades", href: "/traits", icon: Sparkles }
+    { label: "Habilidades", href: "/traits", icon: Sparkles },
+    { label: "Talentos", href: "/feats", icon: Zap },
 ]
 
 const adminItems = [{ label: "Logs", href: "/audit-logs", icon: FileText }]

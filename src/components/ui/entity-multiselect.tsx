@@ -6,7 +6,7 @@
  */
 
 import * as React from 'react';
-import { Check, Filter, Users, Scroll, Sparkles } from "lucide-react"
+import { Check, Filter, Users, Scroll, Sparkles, Zap } from "lucide-react"
 import { motion } from "framer-motion"
 import { cn } from "@/core/utils"
 import { GlassPopover, GlassPopoverContent, GlassPopoverTrigger } from "@/components/ui/glass-popover"
@@ -23,36 +23,52 @@ export interface EntityMultiSelectProps {
 }
 
 // Map of icons for each entity
-// T047: Added Sparkles icon for Habilidade entity type
+// T047: Added Sparkles icon for Habilidade entity type and Zap icon for Talento entity type
 const entityIcons: Record<string, any> = {
     Usuário: Users,
     Regra: Scroll,
     Habilidade: Sparkles,
+    Talento: Zap,
+}
+
+// Map of internal entity names to display labels
+const entityLabelMap: Record<string, string> = {
+    User: "Usuário",
+    Rule: "Regra",
+    Reference: "Regra",
+    Trait: "Habilidade",
+    Feat: "Talento",
 }
 
 // Filter out Segurança and preparation for the component
 // todo: mover essa lógica para um hook ou contexto de configuração global para evitar repetição e garantir consistência (duplicata de lógica em EntityMultiSelect e AuditLogDetailModal)
-const entities = Object.entries(entityColors)
-    .filter(([key]) => key !== "Segurança")
-    .map(([key, config]) => ({
-        value: key,
-        label: config.name,
-        icon: entityIcons[key] || Scroll,
-        color: config.text,
-        bgColor: config.bgAlpha,
-        border: config.border,
-        // Define explicit check colors based on entity color to avoid purge/dynamic issues
-        // T047: Added slate color support for Habilidade
-        checkActive:
-            config.color === "emerald"
-                ? "bg-emerald-500 border-emerald-500 shadow-emerald-500/40"
-                : config.color === "blue"
-                  ? "bg-blue-500 border-blue-500 shadow-blue-500/40"
-                  : config.color === "slate"
-                    ? "bg-slate-500 border-slate-500 shadow-slate-500/40"
-                    : "bg-purple-500 border-purple-500 shadow-purple-500/40",
-        styles: config,
-    }))
+const entities = Object.entries(entityLabelMap)
+    .map(([internalName, label]) => {
+        const config = entityColors[label as keyof typeof entityColors] || entityColors.Regra
+        return {
+            value: internalName, // e.g. "Feat"
+            label: label, // e.g. "Talento"
+            icon: entityIcons[label] || Scroll,
+            color: config.text,
+            bgColor: config.bgAlpha,
+            border: config.border,
+            // Define explicit check colors based on entity color to avoid purge/dynamic issues
+            // T047: Added slate color support for Habilidade and amber color support for Talento
+            checkActive:
+                config.color === "emerald"
+                    ? "bg-emerald-500 border-emerald-500 shadow-emerald-500/40"
+                    : config.color === "blue"
+                      ? "bg-blue-500 border-blue-500 shadow-blue-500/40"
+                      : config.color === "slate"
+                        ? "bg-slate-500 border-slate-500 shadow-slate-500/40"
+                        : config.color === "amber"
+                          ? "bg-amber-500 border-amber-500 shadow-amber-500/40"
+                          : "bg-purple-500 border-purple-500 shadow-purple-500/40",
+            styles: config,
+        }
+    })
+    // Filter duplicates (like Rule/Reference both mapping to Regra)
+    .filter((entity, index, self) => index === self.findIndex((t) => t.label === entity.label))
 
 export function EntityMultiSelect({ value, onChange, className }: EntityMultiSelectProps) {
     const [isOpen, setIsOpen] = React.useState(false)

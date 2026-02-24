@@ -17,7 +17,7 @@ const ENTITY_PROVIDERS = [
             description: item.description,
             source: item.source,
             status: item.status,
-        })
+        }),
     },
     {
         name: "Habilidade",
@@ -29,8 +29,18 @@ const ENTITY_PROVIDERS = [
             description: item.description,
             source: item.source,
             status: item.status,
-        })
-    }
+        }),
+    },
+    {
+        name: "Talento",
+        endpoint: (query: string) => `/api/feats/search?query=${query}&limit=10`,
+        map: (item: any) => ({
+            id: item.id,
+            label: item.label,
+            entityType: "Talento",
+            metadata: item.metadata,
+        }),
+    },
 ]
 
 /**
@@ -50,9 +60,9 @@ export const getSuggestionConfig = (options?: { excludeId?: string }) => {
             // Update component to show loading state if it exists
             if (component) {
                 component.updateProps({
-                    items: [], 
+                    items: [],
                     loading: true,
-                    query: query
+                    query: query,
                 })
             }
 
@@ -63,11 +73,10 @@ export const getSuggestionConfig = (options?: { excludeId?: string }) => {
                         const res = await fetch(provider.endpoint(query))
                         if (!res.ok) return []
                         const data = await res.json()
-                        const items = data.items || []
-                        
-                        return items
-                            .filter((item: any) => (options?.excludeId ? (item._id !== options.excludeId && item.id !== options.excludeId) : true))
-                            .map(provider.map)
+                        // Ensure we always have an array of items, regardless of response structure
+                        const items = Array.isArray(data) ? data : data.items || []
+
+                        return items.filter((item: any) => (options?.excludeId ? item._id !== options.excludeId && item.id !== options.excludeId : true)).map(provider.map)
                     } catch (e) {
                         console.error(`Mention fetch failed for ${provider.name}:`, e)
                         return []
@@ -75,11 +84,14 @@ export const getSuggestionConfig = (options?: { excludeId?: string }) => {
                 })
 
                 const results = await Promise.all(fetchPromises)
-                
+
                 loading = false
 
                 // Flatten and return all results combined
-                return results.flat()
+                const allItems = results.flat()
+
+                // Final check to ensure we are returning something
+                return allItems
             } catch (e) {
                 console.error("Mention search system failed:", e)
                 loading = false
@@ -94,7 +106,7 @@ export const getSuggestionConfig = (options?: { excludeId?: string }) => {
                 onStart: (props: any) => {
                     component = new ReactRenderer(MentionList, {
                         props: { ...props, loading, query: currentQuery },
-                        editor: props.editor
+                        editor: props.editor,
                     })
 
                     if (!props.clientRect) {
@@ -114,10 +126,10 @@ export const getSuggestionConfig = (options?: { excludeId?: string }) => {
                             modifiers: [
                                 {
                                     name: "eventListeners",
-                                    options: { scroll: false }
-                                }
-                            ]
-                        }
+                                    options: { scroll: false },
+                                },
+                            ],
+                        },
                     })
                 },
 
@@ -131,7 +143,7 @@ export const getSuggestionConfig = (options?: { excludeId?: string }) => {
                     }
 
                     popup[0].setProps({
-                        getReferenceClientRect: props.clientRect
+                        getReferenceClientRect: props.clientRect,
                     })
                 },
 
@@ -152,8 +164,8 @@ export const getSuggestionConfig = (options?: { excludeId?: string }) => {
                         component.destroy()
                         component = null
                     }
-                }
+                },
             }
-        }
+        },
     }
 }

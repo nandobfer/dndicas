@@ -40,6 +40,7 @@ function formatEntityType(entityType: string): string {
         Rule: "Regra",
         Reference: "Regra",
         Trait: "Habilidade", // T046: Added Trait entity type mapping
+        Feat: "Talento", // T050: Added Feat entity type mapping
     }
     return labels[entityType] || entityType || "Sistema"
 }
