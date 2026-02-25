@@ -150,6 +150,17 @@ export const entityColors = {
         text: "text-amber-400",
         hex: rarityColors.legendary, // #F59E0B
     },
+    Magia: {
+        name: "Magia",
+        color: "purple",
+        mention: "bg-purple-500/10 text-purple-400 border-purple-400/20",
+        badge: "bg-purple-400/20 text-purple-400",
+        border: "border-purple-500/20",
+        hoverBorder: "hover:border-purple-500/40",
+        bgAlpha: "bg-purple-500/10",
+        text: "text-purple-400",
+        hex: rarityColors.veryRare, // #8B5CF6
+    },
 } as const
 
 /**
@@ -238,5 +249,131 @@ export const attributeColors = {
     },
 } as const
 
-export type EntityType = keyof typeof entityColors;
-export type AttributeType = keyof typeof attributeColors;
+export type EntityType = keyof typeof entityColors
+export type AttributeType = keyof typeof attributeColors
+
+/**
+ * D&D Spell Schools colors mapped from rarity system.
+ * Used for spell catalog UI - school chips and filtering.
+ *
+ * @see specs/004-spells-catalog/research.md - School-to-color mapping
+ *
+ * Mapping:
+ * - Abjuração (protection) → rare (blue)
+ * - Adivinhação (divination) → legendary (gold)
+ * - Conjuração (summoning) → uncommon (green)
+ * - Encantamento (enchantment) → veryRare (purple)
+ * - Evocação (evocation) → artifact (red)
+ * - Ilusão (illusion) → common (gray)
+ * - Necromancia (necromancy) → veryRare (purple)
+ * - Transmutação (transmutation) → uncommon (green)
+ */
+export const spellSchoolColors = {
+    Abjuração: "rare" as RarityColor,
+    Adivinhação: "legendary" as RarityColor,
+    Conjuração: "uncommon" as RarityColor,
+    Encantamento: "veryRare" as RarityColor,
+    Evocação: "artifact" as RarityColor,
+    Ilusão: "common" as RarityColor,
+    Necromancia: "veryRare" as RarityColor,
+    Transmutação: "uncommon" as RarityColor,
+} as const
+
+/**
+ * D&D Dice Types colors mapped from rarity system.
+ * Used for dice value display and selection UI.
+ *
+ * @see specs/004-spells-catalog/research.md - Dice type coloring
+ *
+ * Mapping (progressive power):
+ * - d4 → common (gray)
+ * - d6 → uncommon (green)
+ * - d8 → rare (blue)
+ * - d10 → veryRare (purple)
+ * - d12 → legendary (gold)
+ * - d20 → artifact (red)
+ */
+export const diceColors = {
+    d4: {
+        rarity: "common" as RarityColor,
+        text: "text-gray-400",
+        bg: "bg-gray-400/20",
+        border: "border-gray-400/20",
+    },
+    d6: {
+        rarity: "uncommon" as RarityColor,
+        text: "text-emerald-400",
+        bg: "bg-emerald-400/20",
+        border: "border-emerald-400/20",
+    },
+    d8: {
+        rarity: "rare" as RarityColor,
+        text: "text-blue-400",
+        bg: "bg-blue-400/20",
+        border: "border-blue-400/20",
+    },
+    d10: {
+        rarity: "veryRare" as RarityColor,
+        text: "text-purple-400",
+        bg: "bg-purple-400/20",
+        border: "border-purple-400/20",
+    },
+    d12: {
+        rarity: "legendary" as RarityColor,
+        text: "text-amber-400",
+        bg: "bg-amber-400/20",
+        border: "border-amber-400/20",
+    },
+    d20: {
+        rarity: "artifact" as RarityColor,
+        text: "text-red-400",
+        bg: "bg-red-400/20",
+        border: "border-red-400/20",
+    },
+} as const
+
+export type SpellSchool = keyof typeof spellSchoolColors
+export type DiceType = keyof typeof diceColors
+
+/**
+ * Maps rarity color names to Tailwind CSS bg/text class pairs.
+ * Used for applying rarity-based colors to UI components.
+ */
+export const rarityToTailwind: Record<RarityColor, { bg: string; text: string; border: string }> = {
+    common: { bg: "bg-gray-400/20", text: "text-gray-300", border: "border-gray-400/20" },
+    uncommon: { bg: "bg-emerald-400/20", text: "text-emerald-400", border: "border-emerald-400/20" },
+    rare: { bg: "bg-blue-400/20", text: "text-blue-400", border: "border-blue-400/20" },
+    veryRare: { bg: "bg-purple-400/20", text: "text-purple-400", border: "border-purple-400/20" },
+    legendary: { bg: "bg-amber-400/20", text: "text-amber-400", border: "border-amber-400/20" },
+    artifact: { bg: "bg-red-400/20", text: "text-red-400", border: "border-red-400/20" },
+} as const
+
+/**
+ * Maps a spell circle (0-9) or feat level (1-20) to a D&D rarity color key.
+ * Extracted from GlassLevelChip for shared use.
+ *
+ * @see src/components/ui/glass-level-chip.tsx
+ */
+export function getLevelRarityVariant(level: number, type: "level" | "circle" = "level"): RarityColor {
+    if (type === "circle") {
+        // Spell circles (0–9) — full spectrum progression
+        // Truque (0) is uncommon (green) — special cantrip tier
+        if (level === 0) return "uncommon"  // Truque → green
+        if (level <= 2)  return "common"    // 1-2   → gray
+        if (level <= 4)  return "uncommon"  // 3-4   → green
+        if (level <= 6)  return "rare"      // 5-6   → blue
+        if (level === 7) return "veryRare"  // 7     → purple
+        if (level === 8) return "legendary" // 8     → amber
+        if (level === 9) return "artifact"  // 9     → red
+        return "common"
+    } else {
+        if (level >= 1 && level <= 3) return "common"
+        if (level >= 4 && level <= 8) return "uncommon"
+        if (level >= 9 && level <= 13) return "rare"
+        if (level >= 14 && level <= 17) return "veryRare"
+        if (level >= 18 && level <= 19) return "legendary"
+        if (level === 20) return "artifact"
+        return "common"
+    }
+}
+

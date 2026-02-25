@@ -10,6 +10,7 @@ import { MiniBarChart, MiniLineChart } from "./_components/charts"
 import { RulesEntityCard } from "./_components/rules-entity-card"
 import { TraitsEntityCard } from "./_components/traits-entity-card"
 import { FeatsEntityCard } from "./_components/feats-entity-card"
+import { SpellsEntityCard } from "./_components/spells-entity-card"
 import { WipEntityCard } from "./_components/wip-entity-card"
 
 // Types for the stats
@@ -34,6 +35,11 @@ interface DashboardStats {
         growth: Array<{ date: string; count: number }>
     }
     feats: {
+        total: number
+        active: number
+        growth: Array<{ date: string; count: number }>
+    }
+    spells: {
         total: number
         active: number
         growth: Array<{ date: string; count: number }>
@@ -68,7 +74,7 @@ const dndEntities = [
         description: "Traits e habilidades de classe/raça",
         component: TraitsEntityCard,
     },
-    { id: "spells", title: "Magias", icon: Wand2, description: "Catálogo completo de feitiços", component: WipEntityCard },
+    { id: "spells", title: "Magias", component: SpellsEntityCard },
     {
         id: "items",
         title: "Itens",
@@ -197,15 +203,10 @@ export default function DashboardPage() {
                 </div>
 
                 <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-                    {dndEntities.map(({ component: Card, id, ...entity }, index) => (
-                        <Card
-                            key={id}
-                            {...entity}
-                            index={index}
-                            stats={id === "rules" ? stats?.rules : id === "traits" ? stats?.traits : id === "feats" ? stats?.feats : undefined}
-                            loading={loading}
-                        />
-                    ))}
+                    {dndEntities.map(({ component: Card, id, ...entity }, index) => {
+                        const entityStats = id === "rules" ? stats?.rules : id === "traits" ? stats?.traits : id === "feats" ? stats?.feats : id === "spells" ? stats?.spells : undefined
+                        return <Card key={id} {...entity} index={index} stats={entityStats} loading={loading} />
+                    })}
                 </div>
             </div>
 

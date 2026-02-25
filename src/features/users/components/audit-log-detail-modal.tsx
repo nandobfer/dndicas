@@ -6,10 +6,14 @@ import { User, Calendar, Database, ArrowRight, Copy } from "lucide-react"
 import { GlassModal, GlassModalContent, GlassModalHeader, GlassModalTitle, GlassModalDescription } from "@/components/ui/glass-modal"
 import { ActionChip } from "@/components/ui/action-chip"
 import { DiffView } from "@/components/ui/diff-view"
+import { GlassDiceValue } from "@/components/ui/glass-dice-value"
+import { GlassLevelChip } from "@/components/ui/glass-level-chip"
+import { GlassSpellSchool } from "@/components/ui/glass-spell-school"
+import { GlassAttributeChip } from "@/components/ui/glass-attribute-chip"
 import { MentionContent } from "@/features/rules/components/mention-badge"
 import { glassClasses, cardGlass } from "@/lib/config/glass-config"
 import { fade } from "@/lib/config/motion-configs"
-import { attributeColors, AttributeType } from "@/lib/config/colors"
+import { attributeColors, AttributeType, diceColors, DiceType, spellSchoolColors, SpellSchool, getLevelRarityVariant, rarityToTailwind } from "@/lib/config/colors"
 import { toast } from "sonner"
 import type { AuditLog } from "../types/audit.types"
 import { cn } from "@/core/utils"
@@ -42,17 +46,44 @@ function formatEntityType(entityType: string): string {
         Reference: "Regra",
         Trait: "Habilidade", // T046: Added Trait entity type mapping
         Feat: "Talento", // T050: Added Feat entity type mapping
+        Spell: "Magia", // Added Spell entity type mapping
     }
     return labels[entityType] || entityType || "Sistema"
 }
 
-const renderAuditValue = (value: unknown) => {
+const renderAuditValue = (value: unknown, fieldName?: string) => {
     if (typeof value === "string" && (value.includes("<p>") || value.includes("<span"))) {
         return (
             <div className="max-w-full overflow-hidden bg-black/20 p-2 rounded border border-white/5">
                 <MentionContent html={value} mode="block" className="!text-[11px] prose-p:my-1 prose-ul:my-1" />
             </div>
         )
+    }
+
+    // Handle DiceValue object structure
+    const isDice = value && typeof value === "object" && "quantidade" in value && "tipo" in value
+    if (isDice) {
+        return <GlassDiceValue value={value as any} showIcon className="scale-90 origin-left" />
+    }
+
+    // Handle Circle if field name is 'circle' or 'level'
+    if ((fieldName === "circle" || fieldName === "level") && typeof value === "number") {
+        return <GlassLevelChip level={value} type={fieldName === "circle" ? "circle" : "level"} />
+    }
+
+    // Handle School if field name is 'school'
+    if (fieldName === "school" && typeof value === "string") {
+        return <GlassSpellSchool school={value as SpellSchool} className="scale-90 origin-left" />
+    }
+
+    // Handle saveAttribute if field name is 'saveAttribute'
+    if (fieldName === "saveAttribute" && typeof value === "string") {
+        return <GlassAttributeChip attribute={value as AttributeType} className="scale-90 origin-left" />
+    }
+
+    // Handle DiceValue if field name is 'baseDice' or 'extraDicePerLevel'
+    if ((fieldName === "baseDice" || fieldName === "extraDicePerLevel" || fieldName === "extraDice") && value && typeof value === "object" && "quantidade" in value && "tipo" in value) {
+        return <GlassDiceValue value={value as any} showIcon className="scale-90 origin-left" />
     }
 
     if (Array.isArray(value)) {
@@ -64,21 +95,7 @@ const renderAuditValue = (value: unknown) => {
 
                     if (isAttributeBonus) {
                         const bonus = item as { attribute: string; value: number }
-                        const config = attributeColors[bonus.attribute as AttributeType]
-
-                        return (
-                            <div
-                                key={i}
-                                className={cn(
-                                    "px-2 py-0.5 rounded border text-[10px] font-bold flex items-center gap-1",
-                                    config?.badge || "bg-white/10 text-white/70 border-white/10",
-                                    config?.border || "",
-                                )}
-                            >
-                                <span>{bonus.attribute}</span>
-                                <span className="opacity-50">+{bonus.value}</span>
-                            </div>
-                        )
+                        return <GlassAttributeChip key={i} attribute={bonus.attribute as AttributeType} bonus={bonus.value} className="scale-90 origin-left" />
                     }
 
                     return (
@@ -120,10 +137,7 @@ export function AuditLogDetailModal({ log, open, onOpenChange }: AuditLogDetailM
                     </GlassModalTitle>
                     <GlassModalDescription className="flex items-center gap-2">
                         {formatEntityType(log.entity)} •{" "}
-                        <span
-                            className="font-mono text-[10px] bg-white/5 px-2 py-0.5 rounded cursor-pointer hover:bg-white/10 transition-colors"
-                            onClick={handleCopyId}
-                        >
+                        <span className="font-mono text-[10px] bg-white/5 px-2 py-0.5 rounded cursor-pointer hover:bg-white/10 transition-colors" onClick={handleCopyId}>
                             {log.entityId}
                         </span>
                     </GlassModalDescription>
@@ -133,14 +147,7 @@ export function AuditLogDetailModal({ log, open, onOpenChange }: AuditLogDetailM
                     {/* Metadata Grid */}
                     <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                         <InfoCard icon={<Database className="h-4 w-4" />} label="Entidade" value={formatEntityType(log.entity)} />
-                        <InfoCard
-                            icon={<ArrowRight className="h-4 w-4" />}
-                            label="ID da Entidade"
-                            value={log.entityId}
-                            isMono
-                            onClick={handleCopyId}
-                            className="cursor-pointer group/id"
-                        />
+                        <InfoCard icon={<ArrowRight className="h-4 w-4" />} label="ID da Entidade" value={log.entityId} isMono onClick={handleCopyId} className="cursor-pointer group/id" />
                         <InfoCard
                             icon={<User className="h-4 w-4" />}
                             label="Autor"
@@ -171,11 +178,7 @@ export function AuditLogDetailModal({ log, open, onOpenChange }: AuditLogDetailM
                                 <span className="text-red-400">← Antes</span>
                                 <span className="text-green-400 text-right">Depois →</span>
                             </div>
-                            <DiffView
-                                previousData={log.previousData as Record<string, unknown>}
-                                newData={log.newData as Record<string, unknown>}
-                                renderValue={renderAuditValue}
-                            />
+                            <DiffView previousData={log.previousData as Record<string, unknown>} newData={log.newData as Record<string, unknown>} renderValue={renderAuditValue} />
                         </div>
                     )}
 
@@ -220,27 +223,27 @@ function InfoCard({ icon, label, value, title, isMono, onClick, className }: Inf
 }
 
 interface DataDisplayProps {
-  data: Record<string, unknown>;
-  variant: 'create' | 'delete';
+    data: Record<string, unknown>
+    variant: "create" | "delete"
 }
 
 function DataDisplay({ data, variant }: DataDisplayProps) {
-  const borderColor = variant === 'create' ? 'border-green-500/20' : 'border-red-500/20';
-  const bgColor = variant === 'create' ? 'bg-green-500/5' : 'bg-red-500/5';
+    const borderColor = variant === "create" ? "border-green-500/20" : "border-red-500/20"
+    const bgColor = variant === "create" ? "bg-green-500/5" : "bg-red-500/5"
 
-  // Filter out internal fields
-  const displayEntries = Object.entries(data).filter(([key]) => !key.startsWith("_") && !["createdAt", "updatedAt", "__v"].includes(key))
+    // Filter out internal fields
+    const displayEntries = Object.entries(data).filter(([key]) => !key.startsWith("_") && !["createdAt", "updatedAt", "__v"].includes(key))
 
-  return (
-      <div className={`${cardGlass.blur} ${bgColor} border ${borderColor} p-4 rounded-lg space-y-4`}>
-          {displayEntries.map(([key, value]) => (
-              <div key={key} className="space-y-1">
-                  <p className="text-[10px] uppercase font-bold text-white/30 tracking-widest">{key}</p>
-                  <div className="text-xs font-mono text-white/80">{renderAuditValue(value)}</div>
-              </div>
-          ))}
-      </div>
-  )
+    return (
+        <div className={`${cardGlass.blur} ${bgColor} border ${borderColor} p-4 rounded-lg space-y-4`}>
+            {displayEntries.map(([key, value]) => (
+                <div key={key} className="space-y-1">
+                    <p className="text-[10px] uppercase font-bold text-white/30 tracking-widest">{key}</p>
+                    <div className="text-xs font-mono text-white/80">{renderAuditValue(value, key)}</div>
+                </div>
+            ))}
+        </div>
+    )
 }
 
 AuditLogDetailModal.displayName = 'AuditLogDetailModal';

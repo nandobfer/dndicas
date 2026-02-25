@@ -16,7 +16,7 @@ import * as React from 'react';
 import { motion } from 'framer-motion';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Package2, Home, User, Sparkles, Upload, Mail, Palette, FileText, Users, Scroll, Zap } from "lucide-react"
+import { Package2, Home, User, Sparkles, Upload, Mail, Palette, FileText, Users, Scroll, Zap, Wand } from "lucide-react"
 import { cn } from "@/core/utils"
 import { glassConfig } from "@/lib/config/glass-config"
 import { motionConfig } from "@/lib/config/motion-configs"
@@ -48,7 +48,7 @@ export interface ExpandableSidebarProps {
  */
 const mainItems = [
     { label: "Início", href: "/", icon: Home },
-    { label: "Perfil", href: "/profile", icon: User, authenticated: true }
+    { label: "Perfil", href: "/profile", icon: User, authenticated: true },
 ]
 
 // T020: Renamed from "Módulos" to "Cadastros", removed "Empresas", added "Usuários"
@@ -58,7 +58,8 @@ const cadastrosItems = [
     { label: "Usuários", href: "/users", icon: Users },
     { label: "Regras", href: "/rules", icon: Scroll },
     { label: "Habilidades", href: "/traits", icon: Sparkles },
-    { label: "Talentos", href: "/feats", icon: Zap }
+    { label: "Talentos", href: "/feats", icon: Zap },
+    { label: "Magias", href: "/spells", icon: Wand },
 ]
 
 const adminItems = [{ label: "Logs", href: "/audit-logs", icon: FileText }]

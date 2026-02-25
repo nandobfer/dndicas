@@ -34,27 +34,27 @@
 
 ### Data Layer Foundation
 
-- [ ] T004 Create Spell model with Mongoose schema in src/features/spells/models/spell.ts (includes ISpell, DiceValue, SpellSchema with validation and indexes)
-- [ ] T005 [P] Create TypeScript type definitions in src/features/spells/types/spells.types.ts (Spell, DiceValue, SpellSchool enum, AttributeType enum, CreateSpellInput, UpdateSpellInput, SpellsFilters)
-- [ ] T006 [P] Create Zod validation schemas in src/features/spells/api/validation.ts (diceValueSchema, createSpellSchema, updateSpellSchema, spellsQuerySchema)
-- [ ] T007 Implement spells service layer in src/features/spells/api/spells-service.ts (listSpells, getSpellById, createSpell, updateSpell, deleteSpell with audit logging)
-- [ ] T008 Create API route for list and create in src/app/api/spells/route.ts (GET with filters/pagination, POST with admin auth)
-- [ ] T009 Create API route for single spell operations in src/app/api/spells/[id]/route.ts (GET, PUT, DELETE with admin auth)
-- [ ] T010 [P] Create TanStack Query hooks in src/features/spells/api/spells-queries.ts (useSpells, useSpell, useCreateSpell, useUpdateSpell, useDeleteSpell with proper onSuccess callbacks including queryClient.invalidateQueries(['spells']) for immediate list refresh)
+- [X] T004 Create Spell model with Mongoose schema in src/features/spells/models/spell.ts (includes ISpell, DiceValue, SpellSchema with validation and indexes)
+- [X] T005 [P] Create TypeScript type definitions in src/features/spells/types/spells.types.ts (Spell, DiceValue, SpellSchool enum, AttributeType enum, CreateSpellInput, UpdateSpellInput, SpellsFilters)
+- [X] T006 [P] Create Zod validation schemas in src/features/spells/api/validation.ts (diceValueSchema, createSpellSchema, updateSpellSchema, spellsQuerySchema)
+- [X] T007 Implement spells service layer in src/features/spells/api/spells-service.ts (listSpells, getSpellById, createSpell, updateSpell, deleteSpell with audit logging)
+- [X] T008 Create API route for list and create in src/app/api/spells/route.ts (GET with filters/pagination, POST with admin auth)
+- [X] T009 Create API route for single spell operations in src/app/api/spells/[id]/route.ts (GET, PUT, DELETE with admin auth)
+- [X] T010 [P] Create TanStack Query hooks in src/features/spells/api/spells-queries.ts (useSpells, useSpell, useCreateSpell, useUpdateSpell, useDeleteSpell with proper onSuccess callbacks including queryClient.invalidateQueries(['spells']) for immediate list refresh)
 
 ### Reusable UI Components (Extracted from Rules/Feats)
 
-- [ ] T011 [P] Extract glass-level-chip component to src/components/ui/glass-level-chip.tsx (displays circle/level with rarity colors, handles "Truque" for circle 0)
-- [ ] T012 [P] Extract glass-attribute-chip component to src/components/ui/glass-attribute-chip.tsx (displays attribute abbreviation with color)
-- [ ] T013 [P] Create glass-dice-value component in src/components/ui/glass-dice-value.tsx (displays dice notation "2d6" with icon and color by type)
-- [ ] T014 [P] Create glass-dice-selector component in src/components/ui/glass-dice-selector.tsx (form input with quantity number + dice type select, manages own local state)
-- [ ] T014b [P] Create glass-empty-value component in src/components/ui/glass-empty-value.tsx (compact inline empty state displaying "—" for null/undefined values in table cells, inspired by glass-inline-empty-state but minimal)
-- [ ] T015 [P] Create glass-spell-school component in src/components/ui/glass-spell-school.tsx (chip with school name and mapped rarity color)
-- [ ] T016 [P] Extract glass-status-toggler component to src/components/ui/glass-status-toggler.tsx (active/inactive toggle for forms)
+- [X] T011 [P] Extract glass-level-chip component to src/components/ui/glass-level-chip.tsx (displays circle/level with rarity colors, handles "Truque" for circle 0)
+- [X] T012 [P] Extract glass-attribute-chip component to src/components/ui/glass-attribute-chip.tsx (displays attribute abbreviation with color)
+- [X] T013 [P] Create glass-dice-value component in src/components/ui/glass-dice-value.tsx (displays dice notation "2d6" with icon and color by type)
+- [X] T014 [P] Create glass-dice-selector component in src/components/ui/glass-dice-selector.tsx (form input with quantity number + dice type select, manages own local state)
+- [X] T014b [P] Create glass-empty-value component in src/components/ui/glass-empty-value.tsx (compact inline empty state displaying "—" for null/undefined values in table cells, inspired by glass-inline-empty-state but minimal)
+- [X] T015 [P] Create glass-spell-school component in src/components/ui/glass-spell-school.tsx (chip with school name and mapped rarity color)
+- [X] T016 [P] Extract glass-status-toggler component to src/components/ui/glass-status-toggler.tsx (active/inactive toggle for forms)
 
 ### Configuration Extensions
 
-- [ ] T017 [P] Extend colors config in src/lib/config/colors.ts (add spellSchoolColors mapping 8 schools to rarity, diceColors mapping d4-d20 to rarity, entityColors.Magia = veryRare)
+- [X] T017 [P] Extend colors config in src/lib/config/colors.ts (add spellSchoolColors mapping 8 schools to rarity, diceColors mapping d4-d20 to rarity, entityColors.Magia = veryRare)
 
 **Checkpoint**: Foundation ready - user story implementation can now begin in parallel
 
@@ -68,13 +68,13 @@
 
 ### Implementation for User Story 1
 
-- [ ] T018 [P] [US1] Create useSpellFilters custom hook in src/features/spells/hooks/useSpellFilters.ts (manages search text, pagination state, URL sync)
-- [ ] T019 [P] [US1] Create spell preview component in src/features/spells/components/spell-preview.tsx (tooltip content with circle, school, dice, description formatted)
-- [ ] T020 [US1] Create spells table component in src/features/spells/components/spells-table.tsx (mirrors rules-table.tsx pattern, columns: Status (admin only), Circle, Name, School, Save Attribute, Base Dice, Extra Dice, Actions)
-- [ ] T021 [US1] Create spells page route in src/app/(dashboard)/spells/page.tsx (SSR with initial data fetch, hydration via TanStack Query)
-- [ ] T022 [US1] Create loading state component in src/app/(dashboard)/spells/loading.tsx (skeleton with glassmorphism)
-- [ ] T023 [US1] Add spells navigation item to sidebar in src/app/(dashboard)/layout.tsx or sidebar component (label "Magias", icon Wand from lucide-react, route /spells, position below Talentos)
-- [ ] T024 [US1] Verify search functionality works with text input debounced to 300ms and filters by name or description content
+- [X] T018 [P] [US1] Create useSpellFilters custom hook in src/features/spells/hooks/useSpellFilters.ts (manages search text, pagination state, URL sync)
+- [X] T019 [P] [US1] Create spell preview component in src/features/spells/components/spell-preview.tsx (tooltip content with circle, school, dice, description formatted)
+- [X] T020 [US1] Create spells table component in src/features/spells/components/spells-table.tsx (mirrors rules-table.tsx pattern, columns: Status (admin only), Circle, Name, School, Save Attribute, Base Dice, Extra Dice, Actions)
+- [X] T021 [US1] Create spells page route in src/app/(dashboard)/spells/page.tsx (SSR with initial data fetch, hydration via TanStack Query)
+- [X] T022 [US1] Create loading state component in src/app/(dashboard)/spells/loading.tsx (skeleton with glassmorphism)
+- [X] T023 [US1] Add spells navigation item to sidebar in src/app/(dashboard)/layout.tsx or sidebar component (label "Magias", icon Wand from lucide-react, route /spells, position below Talentos)
+- [X] T024 [US1] Verify search functionality works with text input debounced to 300ms and filters by name or description content
 
 **Checkpoint**: At this point, User Story 1 should be fully functional - users can view paginated spell list and search by text
 
@@ -88,12 +88,12 @@
 
 ### Implementation for User Story 2
 
-- [ ] T025 [US2] Extend useSpellFilters hook in src/features/spells/hooks/useSpellFilters.ts (add state for circle, schools multiselect, attributes multiselect, diceTypes multiselect, circleMode "exact" or "upTo")
-- [ ] T026 [US2] Create spells filters panel component in src/features/spells/components/spells-filters.tsx (mirrors feats-filters.tsx pattern EXACTLY, includes: search input, circle numeric input with GlassSelector toggle for "Exato" vs "Até N" modes like level filter, schools multiselect with chips, attributes grid selector, dice types multiselect, clear filters button)
-- [ ] T027 [US2] Update spells page in src/app/(dashboard)/spells/page.tsx (integrate filters panel above table, pass filter state to API query)
-- [ ] T028 [US2] Update spells table in src/features/spells/components/spells-table.tsx (add filter result count display, empty state when no results match filters)
-- [ ] T029 [US2] Verify filters persist in URL query params and maintain state across page navigation and browser refresh
-- [ ] T030 [US2] Verify filter response time is under 500ms for combined filters with 100+ spells in database
+- [X] T025 [US2] Extend useSpellFilters hook in src/features/spells/hooks/useSpellFilters.ts (add state for circle, schools multiselect, attributes multiselect, diceTypes multiselect, circleMode "exact" or "upTo")
+- [X] T026 [US2] Create spells filters panel component in src/features/spells/components/spells-filters.tsx (mirrors feats-filters.tsx pattern EXACTLY, includes: search input, circle numeric input with GlassSelector toggle for "Exato" vs "Até N" modes like level filter, schools multiselect with chips, attributes grid selector, dice types multiselect, clear filters button)
+- [X] T027 [US2] Update spells page in src/app/(dashboard)/spells/page.tsx (integrate filters panel above table, pass filter state to API query)
+- [X] T028 [US2] Update spells table in src/features/spells/components/spells-table.tsx (add filter result count display, empty state when no results match filters)
+- [X] T029 [US2] Verify filters persist in URL query params and maintain state across page navigation and browser refresh
+- [X] T030 [US2] Verify filter response time is under 500ms for combined filters with 100+ spells in database
 
 **Checkpoint**: At this point, User Stories 1 AND 2 should both work independently - full view, search, and advanced filtering complete
 
@@ -107,13 +107,13 @@
 
 ### Implementation for User Story 3
 
-- [ ] T031 [P] [US3] Create useSpellForm custom hook in src/features/spells/hooks/useSpellForm.ts (React Hook Form + Zod validation, handles create/edit modes, unsaved changes warning)
-- [ ] T032 [US3] Create spell form modal component in src/features/spells/components/spell-form-modal.tsx (mirrors rule-form-modal.tsx, fields: name input, circle selector, school dropdown, attribute grid selector, baseDice selector, extraDicePerLevel selector, TipTap editor for description with mention support, source input, status toggle)
-- [ ] T033 [US3] Add "Nova Magia" button to spells page in src/app/(dashboard)/spells/page.tsx (visible only to admins, opens form modal in create mode)
-- [ ] T034 [US3] Add edit action to spells table in src/features/spells/components/spells-table.tsx (pencil icon button visible only to admins, opens form modal in edit mode with spell data)
-- [ ] T035 [US3] Implement unsaved changes dialog in spell-form-modal.tsx (detect form dirty state, show confirmation "Você tem alterações não salvas. Descartar?" with Cancel/Discard buttons on ESC, click outside, or X button)
-- [ ] T036 [US3] Implement error handling in spell-form-modal.tsx (show toast notification with error message on API failure - network, validation, server - keep modal open preserving form data for manual retry)
-- [ ] T037 [US3] Verify form validation works client-side (required fields, circle 0-9 range, positive dice quantity, valid dice types) and server-side (duplicate name check, schema validation)
+- [X] T031 [P] [US3] Create useSpellForm custom hook in src/features/spells/hooks/useSpellForm.ts (React Hook Form + Zod validation, handles create/edit modes, unsaved changes warning)
+- [X] T032 [US3] Create spell form modal component in src/features/spells/components/spell-form-modal.tsx (mirrors rule-form-modal.tsx, fields: name input, circle selector, school dropdown, attribute grid selector, baseDice selector, extraDicePerLevel selector, TipTap editor for description with mention support, source input, status toggle)
+- [X] T033 [US3] Add "Nova Magia" button to spells page in src/app/(dashboard)/spells/page.tsx (visible only to admins, opens form modal in create mode)
+- [X] T034 [US3] Add edit action to spells table in src/features/spells/components/spells-table.tsx (pencil icon button visible only to admins, opens form modal in edit mode with spell data)
+- [X] T035 [US3] Implement unsaved changes dialog in spell-form-modal.tsx (detect form dirty state, show confirmation "Você tem alterações não salvas. Descartar?" with Cancel/Discard buttons on ESC, click outside, or X button)
+- [X] T036 [US3] Implement error handling in spell-form-modal.tsx (show toast notification with error message on API failure - network, validation, server - keep modal open preserving form data for manual retry)
+- [X] T037 [US3] Verify form validation works client-side (required fields, circle 0-9 range, positive dice quantity, valid dice types) and server-side (duplicate name check, schema validation)
 
 **Checkpoint**: At this point, User Stories 1, 2, AND 3 should all work independently - admins can now create and edit spells with full validation
 
@@ -127,11 +127,11 @@
 
 ### Implementation for User Story 4
 
-- [ ] T038 [US4] Add delete action to spells table in src/features/spells/components/spells-table.tsx (trash icon button visible only to admins, opens confirmation dialog)
-- [ ] T039 [US4] Create delete confirmation dialog component (reusable or inline) showing spell name and "Tem certeza que deseja excluir esta magia?" with Cancel/Confirm buttons
-- [ ] T040 [US4] Connect delete mutation from spells-queries.ts to confirmation dialog confirm action, show success toast on completion, refresh table data
-- [ ] T041 [US4] Verify delete operation creates audit log entry with action DELETE, entity Spell, entityId, performedBy, and previousData containing full spell object
-- [ ] T042 [US4] Verify deleted spell no longer appears in spell list (for admins and users), searches, filters, or mention suggestions
+- [X] T038 [US4] Add delete action to spells table in src/features/spells/components/spells-table.tsx (trash icon button visible only to admins, opens confirmation dialog)
+- [X] T039 [US4] Create delete confirmation dialog component (reusable or inline) showing spell name and "Tem certeza que deseja excluir esta magia?" with Cancel/Confirm buttons
+- [X] T040 [US4] Connect delete mutation from spells-queries.ts to confirmation dialog confirm action, show success toast on completion, refresh table data
+- [X] T041 [US4] Verify delete operation creates audit log entry with action DELETE, entity Spell, entityId, performedBy, and previousData containing full spell object
+- [X] T042 [US4] Verify deleted spell no longer appears in spell list (for admins and users), searches, filters, or mention suggestions
 
 **Checkpoint**: All CRUD operations now functional - create, read, update, delete all working with proper validation, error handling, and audit logging
 
@@ -145,12 +145,12 @@
 
 ### Implementation for User Story 5
 
-- [ ] T043 [P] [US5] Extend mention suggestion system in src/features/rules/lib/suggestion.ts (add "Magia" type with query function that searches spells by name, returns spell._id, name, circle, school)
-- [ ] T044 [P] [US5] Extend mention badge component in src/features/rules/components/mention-badge.tsx (add case for type "Magia" with veryRare variant purple color, displays spell name)
-- [ ] T045 [P] [US5] Extend mention list dropdown in src/features/rules/components/mention-list.tsx (add "Magia" icon Wand from lucide-react, display circle and school in suggestion item)
-- [ ] T046 [US5] Update spell preview component in src/features/spells/components/spell-preview.tsx (ensure it can be triggered from mention badge hover tooltip context)
-- [ ] T047 [US5] Verify mention suggestions include active spells only for users, show inactive spells for admins with visual indicator (reduced opacity or "(Inativa)" label)
-- [ ] T048 [US5] Verify mention badge click behavior (navigate to /spells or open spell detail modal - follow Rules/Feats pattern for consistency)
+- [X] T043 [P] [US5] Extend mention suggestion system in src/features/rules/lib/suggestion.ts (add "Magia" type with query function that searches spells by name, returns spell._id, name, circle, school)
+- [X] T044 [P] [US5] Extend mention badge component in src/features/rules/components/mention-badge.tsx (add case for type "Magia" with veryRare variant purple color, displays spell name)
+- [X] T045 [P] [US5] Extend mention list dropdown in src/features/rules/components/mention-list.tsx (add "Magia" icon Wand from lucide-react, display circle and school in suggestion item)
+- [X] T046 [US5] Update spell preview component in src/features/spells/components/spell-preview.tsx (ensure it can be triggered from mention badge hover tooltip context)
+- [X] T047 [US5] Verify mention suggestions include active spells only for users, show inactive spells for admins with visual indicator (reduced opacity or "(Inativa)" label)
+- [X] T048 [US5] Verify mention badge click behavior (navigate to /spells or open spell detail modal - follow Rules/Feats pattern for consistency)
 
 **Checkpoint**: Cross-referencing system complete - spells can be mentioned in other content with rich previews and navigation
 
@@ -162,9 +162,9 @@
 
 ### Audit Log Integration
 
-- [ ] T049 [P] Extend audit log model in src/features/users/models/audit-log-extended.ts (add "Spell" to entity enum)
-- [ ] T050 [P] Update audit log detail modal in src/features/users/components/audit-log-detail-modal.tsx (add label "Magia" for entity type Spell, render spell-specific fields in detail view: name, circle with chip, school with color, base dice, extra dice, save attribute, description excerpt)
-- [ ] T051 [P] Update audit logs table in src/features/users/components/audit-logs-table.tsx (add Wand icon for Spell entity, display spell name from entityId, support entity type "Spell" filter)
+- [X] T049 [P] Extend audit log model in src/features/users/models/audit-log-extended.ts (add "Spell" to entity enum)
+- [X] T050 [P] Update audit log detail modal in src/features/users/components/audit-log-detail-modal.tsx (add label "Magia" for entity type Spell, render spell-specific fields in detail view: name, circle with chip, school with color, base dice, extra dice, save attribute, description excerpt)
+- [X] T051 [P] Update audit logs table in src/features/users/components/audit-logs-table.tsx (add Wand icon for Spell entity, display spell name from entityId, support entity type "Spell" filter)
 
 ### Dashboard Integration
 

@@ -8,7 +8,7 @@ import { cn } from "@/core/utils"
 // Ensure these imports point to the correct files
 import { GlassModal, GlassModalContent, GlassModalHeader, GlassModalTitle, GlassModalDescription } from "@/components/ui/glass-modal"
 import { GlassInput } from "@/components/ui/glass-input"
-import { GlassSwitch } from "@/components/ui/glass-switch"
+import { GlassStatusSwitch } from "@/components/ui/glass-status-switch"
 import { createReferenceSchema, updateReferenceSchema, type CreateReferenceSchema, type UpdateReferenceSchema } from "../api/validation"
 import { Reference, CreateReferenceInput, UpdateReferenceInput } from "../types/rules.types"
 import { RichTextEditor } from "./rich-text-editor"
@@ -70,38 +70,20 @@ export function RuleFormModal({ isOpen, onClose, onSubmit, rule, isSubmitting = 
                 <form onSubmit={handleSubmit(handleFormSubmit)} className="space-y-6 mt-4">
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                         {/* Name */}
-                        <GlassInput 
-                            id="name" 
-                            label="Nome da Regra" 
-                            placeholder="Ex: Agarrar (Grapple)" 
-                            icon={<ScrollText />} 
-                            error={errors.name?.message} 
-                            {...register("name")} 
-                        />
+                        <GlassInput id="name" label="Nome da Regra" placeholder="Ex: Agarrar (Grapple)" icon={<ScrollText />} error={errors.name?.message} {...register("name")} />
 
                         {/* Source */}
-                        <GlassInput 
-                            id="source" 
-                            label="Fonte / Referência" 
-                            placeholder="Ex: PHB pg. 195" 
-                            icon={<Link />} 
-                            error={errors.source?.message} 
-                            {...register("source")} 
-                        />
+                        <GlassInput id="source" label="Fonte / Referência" placeholder="Ex: PHB pg. 195" icon={<Link />} error={errors.source?.message} {...register("source")} />
                     </div>
 
                     {/* Status Switch */}
-                    <div className="flex items-center justify-between p-4 rounded-lg bg-white/5 border border-white/10">
-                        <div className="space-y-0.5">
-                            <label className="text-sm font-medium text-white">Status da Regra</label>
-                            <p className="text-xs text-white/60">Regras inativas não aparecem nas buscas públicas</p>
-                        </div>
-                        <GlassSwitch
-                            checked={watch("status") === "active"}
-                            onCheckedChange={(checked) => setValue("status", checked ? "active" : "inactive")}
-                            disabled={isSubmitting}
-                        />
-                    </div>
+                    <GlassStatusSwitch
+                        entityLabel="Status da Regra"
+                        description="Regras inativas não aparecem nas buscas públicas"
+                        checked={watch("status") === "active"}
+                        onCheckedChange={(checked) => setValue("status", checked ? "active" : "inactive")}
+                        disabled={isSubmitting}
+                    />
 
                     {/* Rich Text Description */}
                     <div className="space-y-2">

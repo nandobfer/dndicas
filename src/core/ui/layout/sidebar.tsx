@@ -4,26 +4,27 @@ import { usePathname } from 'next/navigation';
 import { useAuth } from "@/core/hooks/useAuth"
 import { cn } from '@/core/utils';
 import { Button } from '@/core/ui/button';
-import { Home, User, Sparkles, Upload, Mail, Building2, Palette, FileText, Users, Ruler, Zap } from "lucide-react"
+import { Home, User, Sparkles, Upload, Mail, Building2, Palette, FileText, Users, Ruler, Zap, Wand } from "lucide-react"
 
 export const SidebarItems = [
     { label: "Início", href: "/", icon: Home },
-    { label: "Perfil", href: "/profile", icon: User, authenticated: true }
+    { label: "Perfil", href: "/profile", icon: User, authenticated: true },
 ]
 
 export const ExampleItems = [
     { label: "Componentes UI", href: "/ui-components", icon: Palette },
     { label: "IA / Gemini", href: "/examples/ai", icon: Sparkles, admin: true },
     { label: "Storage / S3", href: "/examples/storage", icon: Upload, admin: true },
-    { label: "Email", href: "/examples/email", icon: Mail, admin: true }
+    { label: "Email", href: "/examples/email", icon: Mail, admin: true },
 ]
 
 export const FeatureItems = [
     { label: "Módulos", isHeader: true },
     { label: "Regras", href: "/rules", icon: Ruler },
     { label: "Talentos", href: "/feats", icon: Zap },
+    { label: "Magias", href: "/spells", icon: Wand },
     { label: "Habilidades", href: "/traits", icon: Sparkles },
-    { label: "Usuários", href: "/users", icon: Users }
+    { label: "Usuários", href: "/users", icon: Users },
 ]
 
 export const AdminItems = [
