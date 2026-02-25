@@ -2,7 +2,7 @@
 
 import * as React from 'react';
 import { cn } from '@/core/utils';
-import { motion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 
 export interface GlassSelectorOption<T extends string | number> {
     value: T;
@@ -118,16 +118,25 @@ export function GlassSelector<T extends string | number>({
                             itemDisabled && selected && "cursor-not-allowed",
                         )}
                     >
-                        {selected &&
-                            (mode === "single" ? (
+                        {selected && mode === "single" && (
+                            <motion.div
+                                layoutId={layoutId}
+                                className={cn("absolute inset-0 rounded-md z-0", option.activeColor || "bg-white/15")}
+                                transition={{ type: "spring", duration: 0.3, bounce: 0.2 }}
+                            />
+                        )}
+
+                        <AnimatePresence>
+                            {selected && mode === "multi" && (
                                 <motion.div
-                                    layoutId={layoutId}
+                                    initial={{ opacity: 0, scale: 0.9 }}
+                                    animate={{ opacity: 1, scale: 1 }}
+                                    exit={{ opacity: 0, scale: 0.9 }}
                                     className={cn("absolute inset-0 rounded-md z-0", option.activeColor || "bg-white/15")}
-                                    transition={{ type: "spring", duration: 0.3, bounce: 0.2 }}
+                                    transition={{ duration: 0.15, ease: "easeOut" }}
                                 />
-                            ) : (
-                                <div className={cn("absolute inset-0 rounded-md z-0", option.activeColor || "bg-white/15")} />
-                            ))}
+                            )}
+                        </AnimatePresence>
                         <span className="relative z-10">{option.label}</span>
                     </button>
                 )
