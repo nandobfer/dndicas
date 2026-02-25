@@ -1,0 +1,601 @@
+openapi: 3.0.3
+info:
+  title: Spells API
+  description: CRUD API for D&D Spells Catalog
+  version: 1.0.0
+  contact:
+    name: Dungeons & Dicas
+servers:
+  - url: /api/spells
+    description: Spells API endpoints
+
+tags:
+  - name: Spells
+    description: Spell CRUD operations
+
+paths:
+  /:
+    get:
+      tags:
+        - Spells
+      summary: List spells with filters and pagination
+      description: Retrieve paginated list of spells. Non-admin users see only active spells. Supports full-text search, multi-select filters, and sorting.
+      parameters:
+        - name: search
+          in: query
+          description: Full-text search query (searches name and description)
+          required: false
+          schema:
+            type: string
+            example: "bola de fogo"
+        - name: circles
+          in: query
+          description: Filter by circle(s) - comma-separated (0=Truque, 1-9=Spell levels)
+          required: false
+          schema:
+            type: string
+            example: "0,1,3"
+        - name: schools
+          in: query
+          description: Filter by school(s) - comma-separated
+          required: false
+          schema:
+            type: string
+            example: "Evocação,Abjuração"
+        - name: saveAttributes
+          in: query
+          description: Filter by save attribute(s) - comma-separated
+          required: false
+          schema:
+            type: string
+            example: "Destreza,Constituição"
+        - name: diceTypes
+          in: query
+          description: Filter by dice type(s) - comma-separated
+          required: false
+          schema:
+            type: string
+            example: "d6,d8"
+        - name: status
+          in: query
+          description: Filter by status (admin only; defaults to 'active' for non-admins)
+          required: false
+          schema:
+            type: string
+            enum: [all, active, inactive]
+            default: active
+        - name: page
+          in: query
+          description: Page number (1-indexed)
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+        - name: limit
+          in: query
+          description: Items per page (max 100)
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 10
+      responses:
+        '200':
+          description: Successful response with paginated spells
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SpellsListResponse'
+        '401':
+          description: Unauthorized - authentication required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+    post:
+      tags:
+        - Spells
+      summary: Create new spell
+      description: Create a new spell. **Admin only**. Returns the created spell with generated _id.
+      security:
+        - clerkAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateSpellInput'
+            examples:
+              evocationSpell:
+                summary: Evocation spell with damage dice
+                value:
+                  name: "Bola de Fogo"
+                  description: "<p>Uma explosão de fogo detona em um ponto à sua escolha...</p>"
+                  circle: 3
+                  school: "Evocação"
+                  saveAttribute: "Destreza"
+                  baseDice:
+                    quantidade: 8
+                    tipo: "d6"
+                  extraDicePerLevel:
+                    quantidade: 1
+                    tipo: "d6"
+                  source: "PHB pg. 241"
+                  status: "active"
+              utilityCantrip:
+                summary: Utility cantrip without dice
+                value:
+                  name: "Luz"
+                  description: "<p>Você toca um objeto...</p>"
+                  circle: 0
+                  school: "Evocação"
+                  source: "PHB pg. 255"
+                  status: "active"
+      responses:
+        '201':
+          description: Spell created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SpellResponse'
+        '400':
+          description: Validation error (invalid input, duplicate name)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationError'
+        '401':
+          description: Unauthorized - authentication required
+        '403':
+          description: Forbidden - admin access required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal server error
+
+  /{id}:
+    get:
+      tags:
+        - Spells
+      summary: Get single spell by ID
+      description: Retrieve detailed information for a specific spell. Non-admin users can only access active spells.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Spell MongoDB _id
+          schema:
+            type: string
+            example: "507f1f77bcf86cd799439011"
+      responses:
+        '200':
+          description: Spell found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SpellResponse'
+        '403':
+          description: Forbidden - spell is inactive and user is not admin
+        '404':
+          description: Spell not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal server error
+
+    put:
+      tags:
+        - Spells
+      summary: Update spell
+      description: Update an existing spell. **Admin only**. All fields are optional; only provided fields are updated.
+      security:
+        - clerkAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Spell MongoDB _id
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateSpellInput'
+            examples:
+              partialUpdate:
+                summary: Update only description and status
+                value:
+                  description: "<p>Updated spell description with more details...</p>"
+                  status: "inactive"
+              clearOptionalFields:
+                summary: Remove optional fields
+                value:
+                  saveAttribute: null
+                  baseDice: null
+                  extraDicePerLevel: null
+      responses:
+        '200':
+          description: Spell updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SpellResponse'
+        '400':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationError'
+        '401':
+          description: Unauthorized
+        '403':
+          description: Forbidden - admin access required
+        '404':
+          description: Spell not found
+        '500':
+          description: Internal server error
+
+    delete:
+      tags:
+        - Spells
+      summary: Delete spell
+      description: Permanently delete a spell. **Admin only**. Creates audit log entry with spell data before deletion.
+      security:
+        - clerkAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Spell MongoDB _id
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Spell deleted successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: "Spell deleted successfully"
+                  deletedId:
+                    type: string
+                    example: "507f1f77bcf86cd799439011"
+        '401':
+          description: Unauthorized
+        '403':
+          description: Forbidden - admin access required
+        '404':
+          description: Spell not found
+        '500':
+          description: Internal server error
+
+components:
+  securitySchemes:
+    clerkAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: Clerk JWT token (obtained via Clerk SDK)
+
+  schemas:
+    DiceValue:
+      type: object
+      required:
+        - quantidade
+        - tipo
+      properties:
+        quantidade:
+          type: integer
+          minimum: 1
+          description: Number of dice (positive integer, no upper limit)
+          example: 2
+        tipo:
+          type: string
+          enum: [d4, d6, d8, d10, d12, d20]
+          description: Dice type
+          example: "d6"
+
+    Spell:
+      type: object
+      required:
+        - _id
+        - name
+        - description
+        - circle
+        - school
+        - source
+        - status
+        - createdAt
+        - updatedAt
+      properties:
+        _id:
+          type: string
+          description: MongoDB ObjectId
+          example: "507f1f77bcf86cd799439011"
+        name:
+          type: string
+          minLength: 2
+          maxLength: 100
+          description: Spell name (unique)
+          example: "Bola de Fogo"
+        description:
+          type: string
+          minLength: 10
+          maxLength: 10000
+          description: Rich HTML description (from TipTap, may contain mentions)
+          example: "<p>Uma explosão de fogo detona...</p>"
+        circle:
+          type: integer
+          minimum: 0
+          maximum: 9
+          description: Spell circle (0 = Truque/Cantrip, 1-9 = Spell level)
+          example: 3
+        school:
+          type: string
+          enum:
+            - Abjuração
+            - Adivinhação
+            - Conjuração
+            - Encantamento
+            - Evocação
+            - Ilusão
+            - Necromancia
+            - Transmutação
+          description: Spell school
+          example: "Evocação"
+        saveAttribute:
+          type: string
+          nullable: true
+          enum:
+            - Força
+            - Destreza
+            - Constituição
+            - Inteligência
+            - Sabedoria
+            - Carisma
+          description: Saving throw attribute (optional)
+          example: "Destreza"
+        baseDice:
+          nullable: true
+          allOf:
+            - $ref: '#/components/schemas/DiceValue'
+          description: Base damage/effect dice (optional)
+        extraDicePerLevel:
+          nullable: true
+          allOf:
+            - $ref: '#/components/schemas/DiceValue'
+          description: Extra dice per spell slot level above base (optional)
+        source:
+          type: string
+          maxLength: 200
+          description: Source reference (free text)
+          example: "PHB pg. 241"
+        status:
+          type: string
+          enum: [active, inactive]
+          description: Spell status (admin toggle)
+          example: "active"
+        createdAt:
+          type: string
+          format: date-time
+          description: Creation timestamp
+          example: "2026-02-25T10:30:00.000Z"
+        updatedAt:
+          type: string
+          format: date-time
+          description: Last update timestamp
+          example: "2026-02-25T10:30:00.000Z"
+        circleLabel:
+          type: string
+          description: Virtual field - formatted circle label
+          example: "3º Círculo"
+
+    CreateSpellInput:
+      type: object
+      required:
+        - name
+        - description
+        - circle
+        - school
+        - status
+      properties:
+        name:
+          type: string
+          minLength: 2
+          maxLength: 100
+          example: "Bola de Fogo"
+        description:
+          type: string
+          minLength: 10
+          maxLength: 10000
+          example: "<p>Descrição rica...</p>"
+        circle:
+          type: integer
+          minimum: 0
+          maximum: 9
+          example: 3
+        school:
+          type: string
+          enum:
+            - Abjuração
+            - Adivinhação
+            - Conjuração
+            - Encantamento
+            - Evocação
+            - Ilusão
+            - Necromancia
+            - Transmutação
+          example: "Evocação"
+        saveAttribute:
+          type: string
+          nullable: true
+          enum:
+            - Força
+            - Destreza
+            - Constituição
+            - Inteligência
+            - Sabedoria
+            - Carisma
+          example: "Destreza"
+        baseDice:
+          nullable: true
+          allOf:
+            - $ref: '#/components/schemas/DiceValue'
+        extraDicePerLevel:
+          nullable: true
+          allOf:
+            - $ref: '#/components/schemas/DiceValue'
+        source:
+          type: string
+          maxLength: 200
+          example: "PHB pg. 241"
+        status:
+          type: string
+          enum: [active, inactive]
+          default: active
+          example: "active"
+
+    UpdateSpellInput:
+      type: object
+      description: All fields optional - only provided fields are updated. Use null to clear optional fields.
+      properties:
+        name:
+          type: string
+          minLength: 2
+          maxLength: 100
+        description:
+          type: string
+          minLength: 10
+          maxLength: 10000
+        circle:
+          type: integer
+          minimum: 0
+          maximum: 9
+        school:
+          type: string
+          enum:
+            - Abjuração
+            - Adivinhação
+            - Conjuração
+            - Encantamento
+            - Evocação
+            - Ilusão
+            - Necromancia
+            - Transmutação
+        saveAttribute:
+          nullable: true
+          type: string
+          enum:
+            - Força
+            - Destreza
+            - Constituição
+            - Inteligência
+            - Sabedoria
+            - Carisma
+        baseDice:
+          nullable: true
+          allOf:
+            - $ref: '#/components/schemas/DiceValue'
+        extraDicePerLevel:
+          nullable: true
+          allOf:
+            - $ref: '#/components/schemas/DiceValue'
+        source:
+          type: string
+          maxLength: 200
+        status:
+          type: string
+          enum: [active, inactive]
+
+    SpellResponse:
+      type: object
+      required:
+        - spell
+      properties:
+        spell:
+          $ref: '#/components/schemas/Spell'
+
+    SpellsListResponse:
+      type: object
+      required:
+        - spells
+        - total
+        - page
+        - limit
+        - totalPages
+      properties:
+        spells:
+          type: array
+          items:
+            $ref: '#/components/schemas/Spell'
+        total:
+          type: integer
+          description: Total number of spells matching filters
+          example: 42
+        page:
+          type: integer
+          description: Current page number (1-indexed)
+          example: 1
+        limit:
+          type: integer
+          description: Items per page
+          example: 10
+        totalPages:
+          type: integer
+          description: Total number of pages
+          example: 5
+
+    Error:
+      type: object
+      required:
+        - message
+      properties:
+        message:
+          type: string
+          description: Human-readable error message
+          example: "Spell not found"
+        code:
+          type: string
+          description: Machine-readable error code
+          example: "SPELL_NOT_FOUND"
+
+    ValidationError:
+      type: object
+      required:
+        - message
+        - errors
+      properties:
+        message:
+          type: string
+          example: "Validation failed"
+        errors:
+          type: array
+          items:
+            type: object
+            properties:
+              field:
+                type: string
+                description: Field name that failed validation
+                example: "circle"
+              message:
+                type: string
+                description: Validation error message
+                example: "Círculo deve ser entre 0 e 9"
