@@ -47,7 +47,10 @@ export function FeatPreview({ feat }: FeatPreviewProps) {
                   </div>
                   <div className="flex flex-wrap gap-2 items-center">
                       {feat.prerequisites.map((prereq, index) => (
-                          <div key={index} className="inline-flex items-center min-h-[24px] px-1 py-0.5 rounded-md bg-white/5 border border-white/10 text-[12px] text-white/80">
+                          <div
+                              key={index}
+                              className="inline-flex items-center min-h-[24px] px-1 py-0.5 rounded-md bg-white/5 border border-white/10 text-[12px] text-white/80"
+                          >
                               <MentionContent html={prereq} mode="inline" className="[&_p]:inline [&_p]:m-0 align-middle" />
                           </div>
                       ))}
@@ -62,7 +65,7 @@ export function FeatPreview({ feat }: FeatPreviewProps) {
                   <span>Descrição</span>
               </div>
               <div className="text-sm text-white/80 leading-relaxed">
-                  <MentionContent html={feat.description} mode="block" imageWidth="small" className="[&_p]:text-sm [&_p]:text-white/80 [&_ul]:text-sm [&_ol]:text-sm" />
+                  <MentionContent html={feat.description} mode="block" className="[&_p]:text-sm [&_p]:text-white/80 [&_ul]:text-sm [&_ol]:text-sm" />
               </div>
           </div>
 
