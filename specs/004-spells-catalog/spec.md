@@ -5,6 +5,21 @@
 **Status**: Draft  
 **Input**: User description: "Implementar catálogo de magias D&D com CRUD completo, filtros avançados, auditoria e sistema de menções, seguindo o padrão estabelecido pelas features de Regras e Talentos"
 
+## Clarifications
+
+### Session 2026-02-25
+
+- Q: Como o sistema deve representar e armazenar valores de dados (ex: "2d6", "1d8")? → A: Objeto estruturado: `{ quantidade: 2, tipo: "d6" }` para validação tipada e queries eficientes
+- Q: Qual paleta de cores deve ser usada para os chips de escola de magia (8 escolas D&D)? → A: Reutilizar paleta D&D rarity: distribuir as 8 escolas entre common/uncommon/rare/veryRare/legendary/artifact
+- Q: Qual esquema de cores deve ser usado para diferenciar os tipos de dado (d4, d6, d8, d10, d12, d20) no componente glass-dice-value? → A: Gradiente baseado em raridade: d4=common(cinza), d6=uncommon(verde), d8=rare(azul), d10=veryRare(roxo), d12=legendary(dourado), d20=artifact(vermelho)
+- Q: Quando o usuário filtra magias por círculo específico (ex: "3º Círculo"), o filtro deve incluir truques (círculo 0) nos resultados? → A: Truques separados: filtro por círculo N mostra APENAS círculo N; usuário precisa selecionar "Truque" explicitamente para vê-los
+- Q: Como o campo "fonte" (referência bibliográfica) deve ser apresentado no formulário de criação/edição de magias? → A: Input de texto simples: usuário digita livremente a fonte (ex: "PHB pg. 230", "Homebrew", "UA 2023")
+- Q: Qual deve ser a ordem de exibição das colunas na tabela de magias para otimizar a experiência de consulta? → A: Status (somente admin), Círculo, Nome, Escola, Atributo Resistência, Dado Base, Dado/Nível Extra, Ações (visualizar/editar/excluir)
+- Q: Como deve ser tratada a largura da coluna "Escola" que contém nomes longos (ex: "Transmutação", "Adivinhação")? → A: Nome completo sempre: mostra nome inteiro da escola no chip, mesmo que ocupe mais espaço horizontal
+- Q: Qual deve ser o limite superior de validação para quantidade de dados nas magias (ex: impedir "999d20")? → A: Sem limite superior: sistema valida apenas que quantidade seja inteiro positivo (>0), delegando sanidade ao julgamento do administrador
+- Q: Quando o usuário tem alterações não salvas no modal de criação/edição de magia e tenta fechá-lo (clique fora, ESC, ou botão X), o que deve acontecer? → A: Diálogo de confirmação: exibir "Você tem alterações não salvas. Descartar?" com botões Cancelar/Descartar para prevenir perda acidental de dados
+- Q: Quando uma operação de API falha (erro de rede, validação do backend, ou erro do servidor durante create/update/delete), como o sistema deve informar o usuário? → A: Toast de erro apenas: exibir notificação toast com mensagem de erro; usuário deve retentar manualmente clicando em salvar novamente
+
 ## User Scenarios & Testing *(mandatory)*
 
 ### User Story 1 - Visualizar e Buscar Magias (Priority: P1)
@@ -17,7 +32,7 @@ Jogadores e mestres precisam visualizar e buscar magias disponíveis no sistema 
 
 **Acceptance Scenarios**:
 
-1. **Given** o usuário está na página de magias, **When** a página carrega, **Then** exibe lista de magias com nome, círculo (chip colorido), escola (chip colorido), descrição truncada, atributo de resistência e dados de dano
+1. **Given** o usuário está na página de magias, **When** a página carrega, **Then** exibe lista de magias com colunas na ordem: Status (somente admin), Círculo (chip colorido), Nome, Escola (chip colorido), Atributo de Resistência (chip), Dado Base (com cor por tipo), Dado por Nível Extra (com cor por tipo), Ações (preview/editar/excluir)
 2. **Given** o usuário está visualizando a lista de magias, **When** digita "Bola de Fogo" no campo de busca, **Then** a lista filtra para mostrar apenas magias com "Bola de Fogo" no nome ou descrição
 3. **Given** o usuário visualiza uma magia nível 3, **When** observa o chip de círculo, **Then** vê "3º Círculo" com cor azul (rare/blue) seguindo a escala de raridade
 4. **Given** o usuário visualiza uma magia escola Evocação, **When** observa o chip de escola, **Then** vê "Evocação" com cor vermelha distintiva
@@ -113,6 +128,8 @@ Usuários precisam mencionar magias em descrições de regras, talentos e traits
 - **Magia inativa no sistema de menções**: Magias inativas aparecem em dropdown de @ mas com indicador visual (opacidade reduzida)
 - **Múltiplas edições simultâneas**: Última gravação vence. Futura implementação pode adicionar versionamento ou lock otimista
 - **Upload de imagem na descrição**: Rich text editor permite upload S3. Validar tamanho/tipo e exibir preview na descrição formatted
+- **Alterações não salvas no modal**: Ao tentar fechar modal (ESC, clique fora, botão X) com alterações pendentes, sistema exibe diálogo de confirmação "Você tem alterações não salvas. Descartar?" com botões Cancelar/Descartar
+- **Falhas de API (rede, validação, servidor)**: Sistema exibe toast de erro com mensagem descritiva; usuário retenta manualmente clicando em salvar novamente. Modal permanece aberto preservando dados do formulário
 
 ## Requirements *(mandatory)*
 
@@ -120,22 +137,22 @@ Usuários precisam mencionar magias em descrições de regras, talentos e traits
 
 **Data Management**
 - **FR-001**: Sistema DEVE permitir criação de magias com campos obrigatórios (nome, descrição, círculo, escola) e opcionais (atributo resistência, dado base, dado por nível)
-- **FR-002**: Sistema DEVE validar dados de entrada: círculo entre 0-9, escola em lista predefinida, formato de dado (quantidade + tipo: d4/d6/d8/d10/d12/d20)
+- **FR-002**: Sistema DEVE validar dados de entrada: círculo entre 0-9, escola em lista predefinida, formato de dado (quantidade inteira positiva >0 sem limite superior + tipo: d4/d6/d8/d10/d12/d20)
 - **FR-003**: Sistema DEVE persistir magias no banco de dados com status (ativo/inativo) controlado por administradores
 - **FR-004**: Sistema DEVE permitir edição de magias existentes preservando histórico via audit log
 - **FR-005**: Sistema DEVE permitir exclusão de magias apenas para administradores, com confirmação obrigatória
 
 **Visualização e Organização**
 - **FR-006**: Sistema DEVE exibir lista paginada de magias com 10 itens por página
-- **FR-007**: Sistema DEVE renderizar chips visuais diferenciados para: círculo (cor por raridade D&D), escola (cor específica por escola), atributo (cor por atributo)
-- **FR-008**: Sistema DEVE exibir dados de dano em formato legível (ex: "2d6") com ícone de dado
-- **FR-009**: Sistema DEVE truncar descrições longas na tabela com reticências, exibindo conteúdo completo no preview/modal
+- **FR-007**: Sistema DEVE renderizar colunas da tabela na seguinte ordem: Status (somente admin), Círculo, Nome, Escola, Atributo Resistência, Dado Base, Dado/Nível Extra, Ações; cada coluna com chips visuais diferenciados por cores
+- **FR-008**: Sistema DEVE exibir dados de dano em formato legível (ex: "2d6") com ícone de dado e cor baseada no tipo: d4=common(cinza), d6=uncommon(verde), d8=rare(azul), d10=veryRare(roxo), d12=legendary(dourado), d20=artifact(vermelho)
+- **FR-009**: Sistema DEVE exibir descrição completa da magia apenas no preview tooltip (botão de olho) e no modal de detalhes, não na tabela principal
 - **FR-010**: Sistema DEVE mostrar truques (círculo 0) com label "Truque" em chip cinza/common
 - **FR-011**: Sistema DEVE renderizar estados vazios elegantes para campos opcionais não preenchidos (atributo, dados)
 
 **Busca e Filtragem**
 - **FR-012**: Sistema DEVE permitir busca textual em tempo real por nome e descrição de magias
-- **FR-013**: Sistema DEVE permitir filtro por círculo único ou modo "até N", similar a filtro de nível de talentos
+- **FR-013**: Sistema DEVE permitir filtro por círculo único (0-9) ou modo "até N" (similar a filtro de nível de talentos); truques (círculo 0) são tratados como categoria separada e não incluídos automaticamente em outros filtros
 - **FR-014**: Sistema DEVE permitir filtro multiselect por escola (OR lógico entre escolas selecionadas)
 - **FR-015**: Sistema DEVE permitir filtro multiselect por atributo de resistência
 - **FR-016**: Sistema DEVE permitir filtro multiselect por tipo de dado base (d4, d6, d8, d10, d12, d20)
@@ -156,15 +173,15 @@ Usuários precisam mencionar magias em descrições de regras, talentos e traits
 
 **UI/UX**
 - **FR-027**: Sistema DEVE seguir padrão visual estabelecido por features Rules e Feats (glassmorphism, animações Framer Motion, cores D&D rarity)
-- **FR-028**: Sistema DEVE exibir modal de formulário responsivo com validação em tempo real
-- **FR-029**: Sistema DEVE exibir toast notifications para feedback de ações (sucesso, erro)
+- **FR-028**: Sistema DEVE exibir modal de formulário responsivo com validação em tempo real e proteção contra perda de dados (diálogo de confirmação ao fechar com alterações não salvas)
+- **FR-029**: Sistema DEVE exibir toast notifications para feedback de ações: sucesso (verde), erro de validação/rede/servidor (vermelho com mensagem descritiva); modal permanece aberto após erro preservando dados do formulário para retentativa manual
 - **FR-030**: Sistema DEVE adicionar item "Magias" no menu de navegação do dashboard, abaixo de "Talentos"
 
 ### Key Entities
 
-- **Spell (Magia)**: Representa uma magia de D&D. Atributos: nome (string), descrição (HTML rico), círculo (0-9), escola (enum: Abjuração, Adivinhação, Conjuração, Encantamento, Evocação, Ilusão, Necromancia, Transmutação), atributoResistencia (opcional: Força, Destreza, Constituição, Inteligência, Sabedoria, Carisma), dadoBase (opcional: quantidade + tipo), dadoPorNivel (opcional: quantidade + tipo), status (ativo/inativo), fonte (string), createdAt, updatedAt
-- **SpellSchool (Escola de Magia)**: Enum das 8 escolas oficiais de D&D, cada uma com cor distintiva para UI
-- **DiceValue (Valor de Dado)**: Estrutura para representar dados D&D com quantidade (número) e tipo (d4, d6, d8, d10, d12, d20)
+- **Spell (Magia)**: Representa uma magia de D&D. Atributos: nome (string), descrição (HTML rico), círculo (0-9), escola (enum: Abjuração, Adivinhação, Conjuração, Encantamento, Evocação, Ilusão, Necromancia, Transmutação), atributoResistencia (opcional: Força, Destreza, Constituição, Inteligência, Sabedoria, Carisma), dadoBase (opcional: DiceValue objeto `{ quantidade: number, tipo: 'd4'|'d6'|'d8'|'d10'|'d12'|'d20' }`), dadoPorNivel (opcional: DiceValue objeto), status (ativo/inativo), fonte (string), createdAt, updatedAt
+- **SpellSchool (Escola de Magia)**: Enum das 8 escolas oficiais de D&D (Abjuração, Adivinhação, Conjuração, Encantamento, Evocação, Ilusão, Necromancia, Transmutação), cada uma mapeada para uma cor da paleta de raridade D&D (common, uncommon, rare, veryRare, legendary, artifact) para chips visuais distintivos
+- **DiceValue (Valor de Dado)**: Estrutura para representar dados D&D com `quantidade` (number, inteiro positivo >0 sem limite superior - validação confia no julgamento do administrador) e `tipo` (enum: 'd4', 'd6', 'd8', 'd10', 'd12', 'd20')
 
 ## Success Criteria *(mandatory)*
 
