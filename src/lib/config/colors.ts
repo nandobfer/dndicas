@@ -152,4 +152,85 @@ export const entityColors = {
     },
 } as const
 
+/**
+ * D&D Attributes colors mapped from rarity system.
+ * Used for character sheet, traits, and ability checks UI.
+ *
+ * strenght: legendary
+ * constituition: artifact
+ * dexterity: uncommon
+ * inteligence: rare
+ * wisdom: common
+ * charisma: veryRare
+ */
+export const attributeColors = {
+    Força: {
+        name: "Força",
+        color: "amber",
+        mention: "bg-amber-500/10 text-amber-400 border-amber-400/20",
+        badge: "bg-amber-400/20 text-amber-400",
+        border: "border-amber-500/20",
+        hoverBorder: "hover:border-amber-500/40",
+        bgAlpha: "bg-amber-500/10",
+        text: "text-amber-400",
+        hex: rarityColors.legendary,
+    },
+    Destreza: {
+        name: "Destreza",
+        color: "emerald",
+        mention: "bg-emerald-500/10 text-emerald-400 border-emerald-400/20",
+        badge: "bg-emerald-400/20 text-emerald-400",
+        border: "border-emerald-500/20",
+        hoverBorder: "hover:border-emerald-500/40",
+        bgAlpha: "bg-emerald-500/10",
+        text: "text-emerald-400",
+        hex: rarityColors.uncommon,
+    },
+    Constituição: {
+        name: "Constituição",
+        color: "red",
+        mention: "bg-red-500/10 text-red-400 border-red-400/20",
+        badge: "bg-red-400/20 text-red-400",
+        border: "border-red-500/20",
+        hoverBorder: "hover:border-red-500/40",
+        bgAlpha: "bg-red-500/10",
+        text: "text-red-400",
+        hex: rarityColors.artifact,
+    },
+    Inteligência: {
+        name: "Inteligência",
+        color: "blue",
+        mention: "bg-blue-500/10 text-blue-400 border-blue-400/20",
+        badge: "bg-blue-400/20 text-blue-400",
+        border: "border-blue-500/20",
+        hoverBorder: "hover:border-blue-500/40",
+        bgAlpha: "bg-blue-500/10",
+        text: "text-blue-400",
+        hex: rarityColors.rare,
+    },
+    Sabedoria: {
+        name: "Sabedoria",
+        color: "slate",
+        mention: "bg-slate-500/10 text-slate-400 border-slate-400/20",
+        badge: "bg-slate-400/20 text-slate-400",
+        border: "border-slate-500/20",
+        hoverBorder: "hover:border-slate-500/40",
+        bgAlpha: "bg-slate-500/10",
+        text: "text-slate-400",
+        hex: rarityColors.common,
+    },
+    Carisma: {
+        name: "Carisma",
+        color: "purple",
+        mention: "bg-purple-500/10 text-purple-400 border-purple-400/20",
+        badge: "bg-purple-400/20 text-purple-400",
+        border: "border-purple-500/20",
+        hoverBorder: "hover:border-purple-500/40",
+        bgAlpha: "bg-purple-500/10",
+        text: "text-purple-400",
+        hex: rarityColors.veryRare,
+    },
+} as const
+
 export type EntityType = keyof typeof entityColors;
+export type AttributeType = keyof typeof attributeColors;
