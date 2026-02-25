@@ -25,7 +25,7 @@ export function SpellsEntityCard({
             index={index}
             title="Magias"
             icon={Wand2}
-            description="Catálogo completo de feitiços"
+            description="Catálogo completo de feitiços e truques"
         />
     )
 }

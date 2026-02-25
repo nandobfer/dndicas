@@ -2,7 +2,7 @@
 
 import * as React from "react"
 import { GlassCard, GlassCardHeader, GlassCardTitle, GlassCardDescription, GlassCardContent } from "@/components/ui/glass-card"
-import { Users, FileText, Shield, Sparkles, Sword, Zap, Wand2, Backpack, Map, Fingerprint, TrendingUp, Activity, Clock } from "lucide-react"
+import { Users, FileText, Shield, Sparkles, Sword, Zap, Wand2, Backpack, Map, Fingerprint, TrendingUp, Activity, Clock, Skull } from "lucide-react"
 import { motion } from "framer-motion"
 import { colors, entityConfig } from "@/lib/config/colors"
 import { cn } from "@/core/utils"
@@ -53,42 +53,49 @@ const dndEntities = [
         title: "Classes",
         icon: Sword,
         description: "Classes de personagem (Guerreiro, Mago, etc.)",
-        component: WipEntityCard,
+        component: WipEntityCard
     },
     {
         id: "races",
         title: "Raças",
         icon: Fingerprint,
         description: "Raças jogáveis (Humano, Elfo, etc.)",
-        component: WipEntityCard,
+        component: WipEntityCard
     },
     {
         id: "feats",
         title: "Talentos",
-        component: FeatsEntityCard,
+        component: FeatsEntityCard
     },
     {
         id: "traits",
         title: "Habilidades",
         icon: Sparkles,
         description: "Traits e habilidades de classe/raça",
-        component: TraitsEntityCard,
+        component: TraitsEntityCard
     },
-    { id: "spells", title: "Magias", component: SpellsEntityCard },
     {
         id: "items",
         title: "Itens",
         icon: Backpack,
         description: "Equipamentos, armas e itens mágicos",
-        component: WipEntityCard,
+        component: WipEntityCard
     },
+    { id: "spells", title: "Magias", component: SpellsEntityCard },
     {
         id: "backgrounds",
         title: "Origens",
         icon: Map,
         description: "Antecedentes e origens dos heróis",
-        component: WipEntityCard,
+        component: WipEntityCard
     },
+    {
+        id: "monsters",
+        title: "Monstros",
+        icon: Skull,
+        description: "Criaturas, feras e adversários",
+        component: WipEntityCard
+    }
 ]
 
 export default function DashboardPage() {
@@ -233,7 +240,7 @@ export default function DashboardPage() {
                     </span>
                 </div>
 
-                <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+                <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-3">
                     {dndEntities.map(({ component: Card, id, ...entity }, index) => {
                         const entityStats =
                             id === "rules"

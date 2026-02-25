@@ -29,7 +29,7 @@ export function WipEntityCard({
                         <div className="p-2 rounded-lg bg-white/5 border border-white/10 text-white/40 group-hover:text-white/60 transition-colors">
                             {Icon ? <Icon className="h-5 w-5" /> : <Sparkles className="h-5 w-5" />}
                         </div>
-                        <div className="text-[10px] font-bold text-white/20 group-hover:text-white/40 transition-colors">WIP</div>
+                        <div className="text-[10px] font-bold text-white/20 group-hover:text-white/40 transition-colors">Vem aí</div>
                     </div>
                     <GlassCardTitle className="text-white/90 group-hover:text-white mt-3 transition-colors">{title}</GlassCardTitle>
                     <GlassCardDescription className="text-white/40 text-xs min-h-[32px]">{description || "Em breve..."}</GlassCardDescription>
@@ -37,7 +37,7 @@ export function WipEntityCard({
                 <GlassCardContent className="pt-4">
                     <div className="space-y-3">
                         <div className="flex items-center gap-2">
-                            <div className="text-[10px] text-white/20 italic">vem aí</div>
+                            <div className="text-[10px] text-white/20 italic">em desenvolvimento</div>
                         </div>
 
                         <div className="flex items-end gap-0.5 h-8 w-full opacity-20 group-hover:opacity-30 transition-opacity">
