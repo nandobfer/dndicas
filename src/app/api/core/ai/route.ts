@@ -47,7 +47,7 @@ export async function POST(request: NextRequest) {
       const { prompt, model } = GenerateTextSchema.parse(body)
 
       // Gerar texto
-      const text = await generateText(prompt, model, userId)
+      const text = await generateText(prompt, model)
 
       const response: ApiResponse<{ text: string }> = {
           success: true,
