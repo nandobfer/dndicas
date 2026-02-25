@@ -6,7 +6,7 @@
  */
 
 import * as React from 'react';
-import { Check, Filter, Users, Scroll, Sparkles, Zap } from "lucide-react"
+import { Check, Filter, Users, Scroll, Sparkles, Zap, Wand } from "lucide-react"
 import { motion } from "framer-motion"
 import { cn } from "@/core/utils"
 import { GlassPopover, GlassPopoverContent, GlassPopoverTrigger } from "@/components/ui/glass-popover"
@@ -29,6 +29,7 @@ const entityIcons: Record<string, any> = {
     Regra: Scroll,
     Habilidade: Sparkles,
     Talento: Zap,
+    Magia: Wand,
 }
 
 // Map of internal entity names to display labels
@@ -38,6 +39,7 @@ const entityLabelMap: Record<string, string> = {
     Reference: "Regra",
     Trait: "Habilidade",
     Feat: "Talento",
+    Spell: "Magia",
 }
 
 // Filter out Segurança and preparation for the component

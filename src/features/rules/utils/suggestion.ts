@@ -41,6 +41,19 @@ const ENTITY_PROVIDERS = [
             metadata: item.metadata,
         }),
     },
+    {
+        name: "Magia",
+        endpoint: (query: string) => `/api/spells/search?q=${query}&limit=10`,
+        map: (item: any) => ({
+            id: item.id,
+            label: item.label,
+            entityType: "Magia",
+            description: item.description,
+            school: item.school,
+            circle: item.circle,
+            status: item.status || "active",
+        }),
+    },
 ]
 
 /**
@@ -73,10 +86,23 @@ export const getSuggestionConfig = (options?: { excludeId?: string }) => {
                         const res = await fetch(provider.endpoint(query))
                         if (!res.ok) return []
                         const data = await res.json()
-                        // Ensure we always have an array of items, regardless of response structure
-                        const items = Array.isArray(data) ? data : data.items || []
+                        // Ensure we always have an array of items, regardless of response structure (spells, traits, items, etc)
+                        let items: any[] = []
+                        if (Array.isArray(data)) {
+                            items = data
+                        } else if (data.items && Array.isArray(data.items)) {
+                            items = data.items
+                        } else if (data.spells && Array.isArray(data.spells)) {
+                            items = data.spells
+                        } else if (data.traits && Array.isArray(data.traits)) {
+                            items = data.traits
+                        } else if (data.rules && Array.isArray(data.rules)) {
+                            items = data.rules
+                        } else if (data.feats && Array.isArray(data.feats)) {
+                            items = data.feats
+                        }
 
-                        return items.filter((item: any) => (options?.excludeId ? item._id !== options.excludeId && item.id !== options.excludeId : true)).map(provider.map)
+                        return items.filter((item: any) => (options?.excludeId ? item._id !== options.excludeId && item.id !== options.excludeId : true)).map((item: any) => provider.map(item))
                     } catch (e) {
                         console.error(`Mention fetch failed for ${provider.name}:`, e)
                         return []

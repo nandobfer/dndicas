@@ -7,21 +7,21 @@ import { Loader2, Sparkles, Link, AlignLeft, Info } from "lucide-react";
 import { cn } from "@/core/utils";
 import { GlassModal, GlassModalContent, GlassModalHeader, GlassModalTitle, GlassModalDescription } from "@/components/ui/glass-modal";
 import { GlassInput } from "@/components/ui/glass-input";
-import { GlassSwitch } from "@/components/ui/glass-switch";
-import { createTraitSchema, updateTraitSchema, type CreateTraitSchema, type UpdateTraitSchema } from "../api/validation";
-import { Trait, CreateTraitInput, UpdateTraitInput } from "../types/traits.types";
-import { RichTextEditor } from "@/features/rules/components/rich-text-editor";
+import { GlassStatusSwitch } from "@/components/ui/glass-status-switch"
+import { createTraitSchema, updateTraitSchema, type CreateTraitSchema, type UpdateTraitSchema } from "../api/validation"
+import { Trait, CreateTraitInput, UpdateTraitInput } from "../types/traits.types"
+import { RichTextEditor } from "@/features/rules/components/rich-text-editor"
 
 export interface TraitFormModalProps {
-    isOpen: boolean;
-    onClose: () => void;
-    onSubmit: (data: CreateTraitInput | UpdateTraitInput) => Promise<void>;
-    trait?: Trait | null;
-    isSubmitting?: boolean;
+    isOpen: boolean
+    onClose: () => void
+    onSubmit: (data: CreateTraitInput | UpdateTraitInput) => Promise<void>
+    trait?: Trait | null
+    isSubmitting?: boolean
 }
 
 export function TraitFormModal({ isOpen, onClose, onSubmit, trait, isSubmitting = false }: TraitFormModalProps) {
-    const isEditMode = !!trait;
+    const isEditMode = !!trait
 
     const {
         register,
@@ -39,7 +39,7 @@ export function TraitFormModal({ isOpen, onClose, onSubmit, trait, isSubmitting 
             source: trait?.source || "",
             status: trait?.status || "active",
         },
-    });
+    })
 
     // Reset form when modal opens/closes or trait changes
     React.useEffect(() => {
@@ -49,60 +49,40 @@ export function TraitFormModal({ isOpen, onClose, onSubmit, trait, isSubmitting 
                 description: trait?.description || "",
                 source: trait?.source || "",
                 status: trait?.status || "active",
-            });
+            })
         }
-    }, [isOpen, trait, reset]);
+    }, [isOpen, trait, reset])
 
     const handleFormSubmit = async (data: CreateTraitSchema | UpdateTraitSchema) => {
         // Cast to appropriate input type as the schema infers slightly different types than the interface
-        await onSubmit(data as CreateTraitInput | UpdateTraitInput);
-    };
+        await onSubmit(data as CreateTraitInput | UpdateTraitInput)
+    }
 
     return (
         <GlassModal open={isOpen} onOpenChange={(open) => !open && onClose()}>
             <GlassModalContent size="xl">
                 <GlassModalHeader>
                     <GlassModalTitle>{isEditMode ? "Editar Habilidade" : "Nova Habilidade"}</GlassModalTitle>
-                    <GlassModalDescription>
-                        {isEditMode ? "Atualize as informações da habilidade" : "Crie um novo registro no catálogo de habilidades"}
-                    </GlassModalDescription>
+                    <GlassModalDescription>{isEditMode ? "Atualize as informações da habilidade" : "Crie um novo registro no catálogo de habilidades"}</GlassModalDescription>
                 </GlassModalHeader>
 
                 <form onSubmit={handleSubmit(handleFormSubmit)} className="space-y-6 mt-4">
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                         {/* Name */}
-                        <GlassInput 
-                            id="name" 
-                            label="Nome da Habilidade" 
-                            placeholder="Ex: Fúria Bárbara" 
-                            icon={<Sparkles />} 
-                            error={errors.name?.message} 
-                            {...register("name")} 
-                        />
+                        <GlassInput id="name" label="Nome da Habilidade" placeholder="Ex: Fúria Bárbara" icon={<Sparkles />} error={errors.name?.message} {...register("name")} />
 
                         {/* Source */}
-                        <GlassInput 
-                            id="source" 
-                            label="Fonte / Referência" 
-                            placeholder="Ex: PHB pg. 48" 
-                            icon={<Link />} 
-                            error={errors.source?.message} 
-                            {...register("source")} 
-                        />
+                        <GlassInput id="source" label="Fonte / Referência" placeholder="Ex: PHB pg. 48" icon={<Link />} error={errors.source?.message} {...register("source")} />
                     </div>
 
                     {/* Status Switch */}
-                    <div className="flex items-center justify-between p-4 rounded-lg bg-white/5 border border-white/10">
-                        <div className="space-y-0.5">
-                            <label className="text-sm font-medium text-white">Status da Habilidade</label>
-                            <p className="text-xs text-white/60">Habilidades inativas não aparecem nas buscas públicas</p>
-                        </div>
-                        <GlassSwitch
-                            checked={watch("status") === "active"}
-                            onCheckedChange={(checked) => setValue("status", checked ? "active" : "inactive")}
-                            disabled={isSubmitting}
-                        />
-                    </div>
+                    <GlassStatusSwitch
+                        entityLabel="Status da Habilidade"
+                        description="Habilidades inativas não aparecem nas buscas públicas"
+                        checked={watch("status") === "active"}
+                        onCheckedChange={(checked) => setValue("status", checked ? "active" : "inactive")}
+                        disabled={isSubmitting}
+                    />
 
                     {/* Rich Text Description */}
                     <div className="space-y-2">
@@ -163,5 +143,5 @@ export function TraitFormModal({ isOpen, onClose, onSubmit, trait, isSubmitting 
                 </form>
             </GlassModalContent>
         </GlassModal>
-    );
+    )
 }

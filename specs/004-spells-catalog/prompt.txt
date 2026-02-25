@@ -1,0 +1,44 @@
+/speckit.specify 
+vamos especificar o catalogo de magias do d&d, com CRUD e auditoria
+
+vamos seguir o mesmo padrão, exatamente, (a risca) já implementado no sistema.
+
+quero um novo menu no dashboard, abaixo de Talentos, para a página de Magias.
+
+a tabela de magias deve ser exatamente igual a #file:rules-table.tsx  , com os mesmos componentes e padrões de código. Deve ter as colunas:
+- status (visivel apenas para usuários admin)
+- circulo: o nivel da magia, deve ser renderizado em um chip identico ao usado para nivel minimo do talento em #file:feats-table.tsx  (extraia esse componente para reutilizar glass-level-chip )
+- nome
+- descrição: #file:entity-description.tsx  
+- escola: um chip moderno e bonito, com o nome e cor da escola da magia (configurado em #file:colors.ts , já em um componente generalizado glass-spell-school )
+- atributo de teste de resistência:  o mesmo chip usado para bonus de atributo em #file:feats-table.tsx  (extraia esse componente para reutilizarmos glass-attribute-chip)
+- dados base: um novo componente generalizado para renderizar valores de dados de d&d. glass-dice-value. Deve ser um componente moderno e bonito mostrando valores como 1d6, 2d10, etc. Com um icone de dado de d&d e cores diferentes para cada tipo de dado (d4, d6, d8, d10, d20) (configurados em #file:colors.ts  )
+- dado por nível extra: glass-dice-value
+-ações: visualizar, editar e exluir (editar e excluir apenas admin). Exatamente igual em #file:rules-table.tsx 
+
+lide com empty states de dado por nivel extra, dado base, atributo de teste de resistencia e circulo da magia (se for 0 a magia é um truque)
+
+os filtros da magia devem ser exatamente o mesmo modelo, design e padrão de código usados em #file:rules-filters.tsx  e devem conter:
+- busca por nome
+- filtro de circulo (aparencia e funcionalidade identicas ao filtro de nível minimo do #file:feats-filters.tsx  )
+- status: exatamente como implementado em #file:rules-filters.tsx 
+- escola: multiselect com os glass-spell-school
+- atributo de teste de resistencia: multiselect do #file:glass-selector.tsx  conforme implementado em #file:feats-filters.tsx 
+- dado base: multiselect do #file:glass-selector.tsx  com as 6 opções de dado, simiular ao anterior
+
+o formulário da magia deve ser exatamente como #file:rule-form-modal.tsx , mesma aparência, mesma estrutura, mesmo padrão de código e componentes. Deve conter:
+- acima da primeira linha: seletor de status exatamente como em #file:rule-form-modal.tsx (extraia para glass-status-toggler)
+- primeira linha: input de nome e input select para escola da magia, onde cada item é o glass-spell-school
+- segunda linha: #file:glass-selector.tsx layout horizontal com opções indo de truque a 9º
+- terceira linha: seleção de atributo de teste de resistência com #file:glass-selector.tsx grid igual usado em #file:feat-form-modal.tsx , seleção de dado base input de texto com *mascara* numérica para o valor do dado, e um select dentro do input para escolher o tipo de dado, usando as cores por tipo (extraia para um componente glass-dice-selector), seleção de dado por nivel extra, mesmo componente anterior glass-dice-selector
+- descrição: #file:rich-text-editor.tsx exatamente igual implementado em #file:rule-form-modal.tsx 
+
+toda ação de criar, editar e deletar deve ser registrado nos logs de auditoria em #file:audit-log-extended.ts e devem aparecer normalmente em #file:audit-logs-table.tsx , veja como é implementado para as rules
+
+a lista de sugestão deve mostrar também essa nova entidade de magias, está facilmente expandível em #file:suggestion.ts mas pode precisar de ajustes em #file:mention-badge.tsx , #file:mention-list.tsx 
+
+lembre-se de fazer um preview assim como #file:entity-preview-tooltip.tsx e #file:feat-preview.tsx 
+
+em #file:colors.ts , a cor dessa entidade Magia deve ser roxo/veryRare
+
+em #file:page.tsx devemos substituir o card de magia (WIP) por um #file:entity-card.tsx adequado, exatamente igual o #file:rules-entity-card.tsx 

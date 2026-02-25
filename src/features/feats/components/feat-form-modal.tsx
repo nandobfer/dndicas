@@ -8,7 +8,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { cn } from "@/core/utils";
 import { GlassModal, GlassModalContent, GlassModalHeader, GlassModalTitle, GlassModalDescription } from "@/components/ui/glass-modal";
 import { GlassInput } from "@/components/ui/glass-input";
-import { GlassSwitch } from "@/components/ui/glass-switch";
+import { GlassStatusSwitch } from "@/components/ui/glass-status-switch"
 import { GlassSelector } from "@/components/ui/glass-selector"
 import { GlassInlineEmptyState } from "@/components/ui/glass-inline-empty-state"
 import { createFeatSchema, type CreateFeatSchema } from "../api/validation"
@@ -159,13 +159,13 @@ export function FeatFormModal({ isOpen, onClose, onSubmit, feat, isSubmitting = 
                     </div>
 
                     {/* Status Switch */}
-                    <div className="flex items-center justify-between p-4 rounded-lg bg-white/5 border border-white/10">
-                        <div className="space-y-0.5">
-                            <label className="text-sm font-medium text-white">Status do Talento</label>
-                            <p className="text-xs text-white/60">Talentos inativos não aparecem nas buscas públicas</p>
-                        </div>
-                        <GlassSwitch checked={watch("status") === "active"} onCheckedChange={(checked) => setValue("status", checked ? "active" : "inactive")} disabled={isSubmitting} />
-                    </div>
+                    <GlassStatusSwitch
+                        entityLabel="Status do Talento"
+                        description="Talentos inativos não aparecem nas buscas públicas"
+                        checked={watch("status") === "active"}
+                        onCheckedChange={(checked) => setValue("status", checked ? "active" : "inactive")}
+                        disabled={isSubmitting}
+                    />
 
                     {/* Prerequisites Dynamic List */}
                     <div className="space-y-3">
