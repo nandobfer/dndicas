@@ -55,7 +55,7 @@ export function WipEntityCard({
                 <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center backdrop-blur-[2px]">
                     <div className="flex flex-col items-center gap-2">
                         <Clock className="h-6 w-6 text-white/60 animate-pulse" />
-                        <span className="text-[10px] font-bold uppercase tracking-widest text-white/60">Coming Soon</span>
+                        <span className="text-[10px] font-bold uppercase tracking-widest text-white/60">Vem aí</span>
                     </div>
                 </div>
             </GlassCard>
