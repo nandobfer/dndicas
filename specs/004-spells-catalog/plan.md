@@ -29,25 +29,11 @@ Implement a comprehensive D&D Spells catalog with full CRUD operations, advanced
 |-----------|--------|-------------------------|
 | **1. TypeScript Estrito e Código Seguro** | ✅ PASS | All code will be strict TypeScript with explicit types for Spell entity, DiceValue, SpellSchool enum, API schemas (Zod), component props, and hooks. No `any` or `@ts-ignore`. Follows naming conventions (camelCase, PascalCase, kebab-case files). |
 | **2. Core Imutável e Extensão por Features** | ✅ PASS | Implementation lives entirely in `src/features/spells/` and `src/app/spells/`. No modifications to `src/core/`. Reuses core components (`@/core/ui`, `@/core/hooks`, `@/core/database`) via imports. Extends audit-log-extended.ts (already in features layer) by adding "Spell" to entity enum. |
-| **3. Separação de Responsabilidades e Hooks** | ✅ PASS | Components focus on rendering. Business logic extracted to custom hooks: `useSpells` (data fetching), `useSpellFilters` (filter state), `useSpellForm` (form logic), `useDiceSelector` (dice input logic). TanStack Query manages server state with SSR hydration. All hooks co-located in `src/features/spells/hooks/`. |
+| **3. Separação de Responsabilidades e Hooks** | ✅ PASS | Components focus on rendering. Business logic extracted to custom hooks: `useSpells` (data fetching), `useSpellFilters` (filter state), `useSpellForm` (form logic). TanStack Query manages server state with SSR hydration. All hooks co-located in `src/features/spells/hooks/`. UI components like `glass-dice-selector` manage their own local state. |
 | **4. Documentação e Contexto** | ✅ PASS | Following spec → plan → tasks workflow. Will create `aicontext/modules/spells.md` documenting structure, schemas, APIs, and examples. Adheres to `aicontext/use-sempre-que-desenvolver.md`, `docs/regras_gerais.md`, and `docs/stack_tecnica.md`. All clarifications captured in spec.md. |
 | **5. Qualidade, Testes, Seg., Observabilidade** | ✅ PASS | Will include tests in `__tests__/features/spells/` (components, hooks, API routes). Error handling via toast notifications and form validation (Zod + React Hook Form). Auth via Clerk (admin role-based). Input validation client + server. Audit logging for all CREATE/UPDATE/DELETE. Empty states, loading states, Portuguese error messages. |
 
 **Constitution Gate**: ✅ **APPROVED** - All principles satisfied. No violations. Ready for Phase 0 research.
-
-## Project Structure
-
-### Documentation (this feature)
-
-```text
-specs/[###-feature]/
-├── plan.md              # This file (/speckit.plan command output)
-├── research.md          # Phase 0 output (/speckit.plan command)
-├── data-model.md        # Phase 1 output (/speckit.plan command)
-├── quickstart.md        # Phase 1 output (/speckit.plan command)
-├── contracts/           # Phase 1 output (/speckit.plan command)
-└── tasks.md             # Phase 2 output (/speckit.tasks command - NOT created by /speckit.plan)
-```
 
 ## Project Structure
 

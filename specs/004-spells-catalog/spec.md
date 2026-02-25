@@ -19,6 +19,7 @@
 - Q: Qual deve ser o limite superior de validação para quantidade de dados nas magias (ex: impedir "999d20")? → A: Sem limite superior: sistema valida apenas que quantidade seja inteiro positivo (>0), delegando sanidade ao julgamento do administrador
 - Q: Quando o usuário tem alterações não salvas no modal de criação/edição de magia e tenta fechá-lo (clique fora, ESC, ou botão X), o que deve acontecer? → A: Diálogo de confirmação: exibir "Você tem alterações não salvas. Descartar?" com botões Cancelar/Descartar para prevenir perda acidental de dados
 - Q: Quando uma operação de API falha (erro de rede, validação do backend, ou erro do servidor durante create/update/delete), como o sistema deve informar o usuário? → A: Toast de erro apenas: exibir notificação toast com mensagem de erro; usuário deve retentar manualmente clicando em salvar novamente
+- Q: Como devem ser renderizados campos opcionais vazios (atributo de resistência, dados) na tabela e formulários? → A: Usar componente genérico `<GlassEmptyValue />` que renderiza "—" (em dash) com estilo sutil e consistente, inspirado em `glass-inline-empty-state.tsx` mas compacto para uso inline em células de tabela
 
 ## User Scenarios & Testing *(mandatory)*
 
@@ -208,6 +209,7 @@ Usuários precisam mencionar magias em descrições de regras, talentos e traits
 - Design system de cores, glassmorphism e componentes UI (GlassCard, GlassModal, Chip, etc.) já está estabelecido
 - Padrão de 8 escolas de magia D&D 5e é fixo e não requer customização inicial (homebrew pode ser adicionado futuramente)
 - Sistema de navegação (sidebar menu) permite adicionar novos itens facilmente
+- **Dados iniciais de magias serão inseridos manualmente por administradores** via interface de criação; futura automação (seed scripts, importação SRD) pode ser implementada como melhoria
 
 ## Out of Scope
 

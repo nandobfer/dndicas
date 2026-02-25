@@ -40,14 +40,15 @@
 - [ ] T007 Implement spells service layer in src/features/spells/api/spells-service.ts (listSpells, getSpellById, createSpell, updateSpell, deleteSpell with audit logging)
 - [ ] T008 Create API route for list and create in src/app/api/spells/route.ts (GET with filters/pagination, POST with admin auth)
 - [ ] T009 Create API route for single spell operations in src/app/api/spells/[id]/route.ts (GET, PUT, DELETE with admin auth)
-- [ ] T010 [P] Create TanStack Query hooks in src/features/spells/api/spells-queries.ts (useSpells, useSpell, useCreateSpell, useUpdateSpell, useDeleteSpell)
+- [ ] T010 [P] Create TanStack Query hooks in src/features/spells/api/spells-queries.ts (useSpells, useSpell, useCreateSpell, useUpdateSpell, useDeleteSpell with proper onSuccess callbacks including queryClient.invalidateQueries(['spells']) for immediate list refresh)
 
 ### Reusable UI Components (Extracted from Rules/Feats)
 
 - [ ] T011 [P] Extract glass-level-chip component to src/components/ui/glass-level-chip.tsx (displays circle/level with rarity colors, handles "Truque" for circle 0)
 - [ ] T012 [P] Extract glass-attribute-chip component to src/components/ui/glass-attribute-chip.tsx (displays attribute abbreviation with color)
 - [ ] T013 [P] Create glass-dice-value component in src/components/ui/glass-dice-value.tsx (displays dice notation "2d6" with icon and color by type)
-- [ ] T014 [P] Create glass-dice-selector component in src/components/ui/glass-dice-selector.tsx (form input with quantity number + dice type select)
+- [ ] T014 [P] Create glass-dice-selector component in src/components/ui/glass-dice-selector.tsx (form input with quantity number + dice type select, manages own local state)
+- [ ] T014b [P] Create glass-empty-value component in src/components/ui/glass-empty-value.tsx (compact inline empty state displaying "—" for null/undefined values in table cells, inspired by glass-inline-empty-state but minimal)
 - [ ] T015 [P] Create glass-spell-school component in src/components/ui/glass-spell-school.tsx (chip with school name and mapped rarity color)
 - [ ] T016 [P] Extract glass-status-toggler component to src/components/ui/glass-status-toggler.tsx (active/inactive toggle for forms)
 
@@ -88,7 +89,7 @@
 ### Implementation for User Story 2
 
 - [ ] T025 [US2] Extend useSpellFilters hook in src/features/spells/hooks/useSpellFilters.ts (add state for circle, schools multiselect, attributes multiselect, diceTypes multiselect, circleMode "exact" or "upTo")
-- [ ] T026 [US2] Create spells filters panel component in src/features/spells/components/spells-filters.tsx (mirrors rules-filters.tsx, includes: search input, circle selector horizontal 0-9 with "Até N" toggle, schools multiselect with chips, attributes grid selector, dice types multiselect, clear filters button)
+- [ ] T026 [US2] Create spells filters panel component in src/features/spells/components/spells-filters.tsx (mirrors feats-filters.tsx pattern EXACTLY, includes: search input, circle numeric input with GlassSelector toggle for "Exato" vs "Até N" modes like level filter, schools multiselect with chips, attributes grid selector, dice types multiselect, clear filters button)
 - [ ] T027 [US2] Update spells page in src/app/(dashboard)/spells/page.tsx (integrate filters panel above table, pass filter state to API query)
 - [ ] T028 [US2] Update spells table in src/features/spells/components/spells-table.tsx (add filter result count display, empty state when no results match filters)
 - [ ] T029 [US2] Verify filters persist in URL query params and maintain state across page navigation and browser refresh
@@ -162,8 +163,8 @@
 ### Audit Log Integration
 
 - [ ] T049 [P] Extend audit log model in src/features/users/models/audit-log-extended.ts (add "Spell" to entity enum)
-- [ ] T050 [P] Update audit log detail modal in src/features/users/components/audit-log-detail-modal.tsx (add label "Magia" for entity type Spell, format spell data display)
-- [ ] T051 [P] Update audit logs table in src/features/users/components/audit-logs-table.tsx (add Wand icon for Spell entity, display spell name from entityId)
+- [ ] T050 [P] Update audit log detail modal in src/features/users/components/audit-log-detail-modal.tsx (add label "Magia" for entity type Spell, render spell-specific fields in detail view: name, circle with chip, school with color, base dice, extra dice, save attribute, description excerpt)
+- [ ] T051 [P] Update audit logs table in src/features/users/components/audit-logs-table.tsx (add Wand icon for Spell entity, display spell name from entityId, support entity type "Spell" filter)
 
 ### Dashboard Integration
 
@@ -217,7 +218,7 @@
 - T005-T006 (types, validation) can run parallel with T004
 - T007 (service) MUST complete before T008-T009 (API routes)
 - T008-T009 (API routes) MUST complete before T010 (TanStack Query hooks)
-- T011-T016 (UI components) can all run in parallel, no dependencies
+- T011-T016, T014b (UI components) can all run in parallel, no dependencies
 - T017 (colors config) can run parallel with components
 
 **Phase 3 User Story 1**:
@@ -269,6 +270,7 @@ Parallel Group A (no dependencies):
 - T012 (glass-attribute-chip)
 - T013 (glass-dice-value)
 - T014 (glass-dice-selector)
+- T014b (glass-empty-value)
 - T015 (glass-spell-school)
 - T016 (glass-status-toggler)
 - T017 (colors config)
@@ -373,6 +375,6 @@ Before marking any task complete, verify:
 
 ---
 
-**Total Tasks**: 63  
+**Total Tasks**: 64  
 **Estimated Effort**: 2-3 weeks (1 full-time developer) or 1-1.5 weeks (2 developers with parallel execution)  
-**MVP Scope**: Phase 1 + Phase 2 + Phase 3 (US1) = 24 tasks (can deliver read-only catalog in 1 week)
+**MVP Scope**: Phase 1 + Phase 2 + Phase 3 (US1) = 25 tasks (can deliver read-only catalog in 1 week)
