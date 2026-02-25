@@ -4,7 +4,7 @@ import * as React from "react"
 import { motion } from "framer-motion"
 import { GlassCard, GlassCardHeader, GlassCardTitle, GlassCardDescription, GlassCardContent } from "@/components/ui/glass-card"
 import { cn } from "@/core/utils"
-import { entityColors, EntityType } from "@/lib/config/colors"
+import { entityConfig, EntityType } from "@/lib/config/colors"
 import { MiniLineChart } from "./charts"
 import { LucideIcon } from "lucide-react"
 
@@ -34,7 +34,7 @@ export function EntityCard({
     icon: LucideIcon
     description?: string
 }) {
-    const config = entityColors[entityType]
+    const config = entityConfig[entityType]
 
     return (
         <motion.div

@@ -3,7 +3,7 @@
 import * as React from "react"
 import { useMemo } from "react"
 import { cn } from "@/core/utils"
-import { entityColors } from "@/lib/config/colors"
+import { entityConfig } from "@/lib/config/colors"
 import { EntityPreviewTooltip } from "./entity-preview-tooltip"
 import { SimpleGlassTooltip } from "@/components/ui/glass-tooltip"
 
@@ -145,8 +145,8 @@ export function MentionContent({
 
 export function MentionBadge({ id, label, type = "Regra", className, delayDuration = 400 }: MentionBadgeProps) {
     const getStyles = (t: string) => {
-        const typeKey = (Object.keys(entityColors).find((k) => t.includes(k.substring(0, 5))) || "Regra") as keyof typeof entityColors
-        return entityColors[typeKey]?.mention || entityColors.Regra.mention
+        const typeKey = (Object.keys(entityConfig).find((k) => t.includes(k.substring(0, 5))) || "Regra") as keyof typeof entityConfig
+        return entityConfig[typeKey]?.mention || entityConfig.Regra.mention
     }
 
     return (

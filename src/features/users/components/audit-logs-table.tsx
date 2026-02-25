@@ -14,7 +14,7 @@ import { EmptyState } from "@/components/ui/empty-state"
 import { Skeleton } from "@/core/ui/skeleton"
 import { DataTablePagination } from "@/components/ui/data-table-pagination"
 import { motionConfig } from "@/lib/config/motion-configs"
-import { entityColors } from "@/lib/config/colors"
+import { entityConfig } from "@/lib/config/colors"
 import type { AuditLog } from "../types/audit.types"
 
 // Map of icons for each entity
@@ -210,7 +210,7 @@ export function AuditLogsTable({ logs, isLoading, pagination, onPageChange, onRo
                                         <div className="flex flex-col gap-1.5">
                                             {(() => {
                                                 const label = formatEntityType(log.entity)
-                                                const config = entityColors[label as keyof typeof entityColors] || entityColors.Regra
+                                                const config = entityConfig[label as keyof typeof entityConfig] || entityConfig.Regra
                                                 const Icon = entityIcons[label] || Scroll
                                                 return (
                                                     <div

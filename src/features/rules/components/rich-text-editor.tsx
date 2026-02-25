@@ -11,7 +11,7 @@ import { Button } from '@/core/ui/button'
 import { glassConfig } from "@/lib/config/glass-config"
 import { Bold, Italic, Strikethrough, List, ListOrdered, Undo, Redo, Image as ImageIcon } from "lucide-react"
 import { getSuggestionConfig } from "../utils/suggestion"
-import { entityColors } from "@/lib/config/colors"
+import { entityConfig } from "@/lib/config/colors"
 import { EntityPreviewTooltip } from "./entity-preview-tooltip"
 import { MentionBadge } from "./mention-badge"
 

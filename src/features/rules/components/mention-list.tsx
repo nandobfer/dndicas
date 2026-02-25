@@ -1,7 +1,7 @@
 import React, { forwardRef, useEffect, useImperativeHandle, useState } from 'react'
 import { cn } from '@/core/utils'
 import { glassConfig } from '@/lib/config/glass-config'
-import { entityColors } from '@/lib/config/colors'
+import { entityConfig } from "@/lib/config/colors"
 import { EntityPreviewTooltip } from "./entity-preview-tooltip"
 import { DebounceProgress } from "@/components/ui/debounce-progress"
 import { Scroll, Sparkles, Zap, Wand } from "lucide-react"
@@ -76,7 +76,7 @@ const MentionList = forwardRef<MentionListRef, MentionListProps>((props, ref) =>
                 "flex flex-col gap-1 p-1 rounded-lg overflow-auto max-h-[250px] min-w-[200px] shadow-2xl z-[9999] relative",
                 glassConfig.sidebar.background,
                 glassConfig.sidebar.blur,
-                "border border-white/10 pointer-events-auto",
+                "border border-white/10 pointer-events-auto"
             )}
             onMouseDown={(e) => e.preventDefault()}
             style={{ isolation: "isolate", pointerEvents: "all" }}
@@ -90,7 +90,7 @@ const MentionList = forwardRef<MentionListRef, MentionListProps>((props, ref) =>
                             onClick={() => selectItem(index)}
                             className={cn(
                                 "flex flex-col w-full text-left px-3 py-2 rounded-md transition-colors cursor-pointer relative z-10",
-                                selectedIndex === index ? "bg-white/20" : "hover:bg-white/10",
+                                selectedIndex === index ? "bg-white/20" : "hover:bg-white/10"
                             )}
                             style={{ pointerEvents: "auto" }}
                         >
@@ -106,7 +106,9 @@ const MentionList = forwardRef<MentionListRef, MentionListProps>((props, ref) =>
                                 <div className="flex items-center gap-1.5 shrink-0 ml-2">
                                     {item.entityType === "Magia" && (
                                         <div className="flex items-center gap-1.5 mr-1">
-                                            <span className="text-[9px] text-white/40 italic">{item.circle === 0 ? "Truque" : `${item.circle}º Círculo`}</span>
+                                            <span className="text-[9px] text-white/40 italic">
+                                                {item.circle === 0 ? "Truque" : `${item.circle}º Círculo`}
+                                            </span>
                                             <span className="text-[9px] text-white/40">•</span>
                                             <span className="text-[9px] text-white/40">{item.school}</span>
                                         </div>
@@ -115,7 +117,8 @@ const MentionList = forwardRef<MentionListRef, MentionListProps>((props, ref) =>
                                         <span
                                             className={cn(
                                                 "text-[9px] uppercase font-bold tracking-tight px-1.5 py-0.5 rounded transition-all",
-                                                entityColors[item.entityType as keyof typeof entityColors]?.badge || "bg-gray-400/20 text-white/40 font-bold",
+                                                entityConfig[item.entityType as keyof typeof entityConfig]?.badge ||
+                                                    "bg-gray-400/20 text-white/40 font-bold"
                                             )}
                                         >
                                             {item.entityType}

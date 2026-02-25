@@ -94,7 +94,7 @@ export type RoleColor = keyof typeof roleColors;
  * Reverted to original colors: Users = Blue, Security = Purple, Rules = Emerald.
  * T038: Added Habilidade entity color (Slate/Gray).
  */
-export const entityColors = {
+export const entityConfig = {
     Habilidade: {
         name: "Habilidade",
         color: "emerald",
@@ -104,7 +104,7 @@ export const entityColors = {
         hoverBorder: "hover:border-emerald-500/40",
         bgAlpha: "bg-emerald-500/10",
         text: "text-emerald-400",
-        hex: rarityColors.uncommon,
+        hex: rarityColors.uncommon
     },
     Usuário: {
         name: "Usuário",
@@ -115,7 +115,7 @@ export const entityColors = {
         hoverBorder: "hover:border-blue-500/40",
         bgAlpha: "bg-blue-500/10",
         text: "text-blue-400",
-        hex: rarityColors.rare,
+        hex: rarityColors.rare
     },
     Segurança: {
         name: "Segurança",
@@ -126,7 +126,7 @@ export const entityColors = {
         hoverBorder: "hover:border-purple-500/40",
         bgAlpha: "bg-purple-500/10",
         text: "text-purple-400",
-        hex: rarityColors.veryRare,
+        hex: rarityColors.veryRare
     },
     Regra: {
         name: "Regra",
@@ -137,7 +137,7 @@ export const entityColors = {
         hoverBorder: "hover:border-slate-500/40",
         bgAlpha: "bg-slate-500/10",
         text: "text-slate-400",
-        hex: rarityColors.common, // #9CA3AF
+        hex: rarityColors.common // #9CA3AF
     },
     Talento: {
         name: "Talento",
@@ -148,7 +148,7 @@ export const entityColors = {
         hoverBorder: "hover:border-amber-500/40",
         bgAlpha: "bg-amber-500/10",
         text: "text-amber-400",
-        hex: rarityColors.legendary, // #F59E0B
+        hex: rarityColors.legendary // #F59E0B
     },
     Magia: {
         name: "Magia",
@@ -159,8 +159,8 @@ export const entityColors = {
         hoverBorder: "hover:border-purple-500/40",
         bgAlpha: "bg-purple-500/10",
         text: "text-purple-400",
-        hex: rarityColors.veryRare, // #8B5CF6
-    },
+        hex: rarityColors.veryRare // #8B5CF6
+    }
 } as const
 
 /**
@@ -249,7 +249,7 @@ export const attributeColors = {
     },
 } as const
 
-export type EntityType = keyof typeof entityColors
+export type EntityType = keyof typeof entityConfig
 export type AttributeType = keyof typeof attributeColors
 
 /**
