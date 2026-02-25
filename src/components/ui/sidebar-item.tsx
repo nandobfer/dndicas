@@ -106,35 +106,31 @@ export const SidebarItem: React.FC<SidebarItemProps> = ({
 
   // Wrap in tooltip when collapsed
   const wrappedContent = !isExpanded ? (
-    <Tooltip delayDuration={100}>
-      <TooltipTrigger asChild>
-        {onClick ? (
-          <button onClick={onClick} className="w-full">
-            {itemContent}
-          </button>
-        ) : (
-          <Link href={href}>{itemContent}</Link>
-        )}
-      </TooltipTrigger>
-      <TooltipContent
-        side="right"
-        className={cn(
-          'z-50',
-          glassConfig.tooltip.blur,
-          glassConfig.tooltip.background,
-          glassConfig.tooltip.border
-        )}
-      >
-        <p className="text-white text-sm">{label}</p>
-      </TooltipContent>
-    </Tooltip>
-  ) : onClick ? (
-    <button onClick={onClick} className="w-full">
-      {itemContent}
-    </button>
+      <Tooltip delayDuration={100}>
+          <TooltipTrigger asChild>
+              {href ? (
+                  <Link href={href} onClick={onClick}>
+                      {itemContent}
+                  </Link>
+              ) : (
+                  <button onClick={onClick} className="w-full">
+                      {itemContent}
+                  </button>
+              )}
+          </TooltipTrigger>
+          <TooltipContent side="right" className={cn("z-50", glassConfig.tooltip.blur, glassConfig.tooltip.background, glassConfig.tooltip.border)}>
+              <p className="text-white text-sm">{label}</p>
+          </TooltipContent>
+      </Tooltip>
+  ) : href ? (
+      <Link href={href} onClick={onClick}>
+          {itemContent}
+      </Link>
   ) : (
-    <Link href={href}>{itemContent}</Link>
-  );
+      <button onClick={onClick} className="w-full">
+          {itemContent}
+      </button>
+  )
 
   return wrappedContent;
 };
