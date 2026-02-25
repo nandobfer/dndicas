@@ -75,9 +75,7 @@ export function RulesTable({
                 <table className="w-full">
                     <thead>
                         <tr className="border-b border-white/5 bg-white/5">
-                            {isAdmin && (
-                                <th className="px-6 py-4 text-left text-xs font-semibold text-white/50 uppercase tracking-wider w-[100px]">Status</th>
-                            )}
+                            <th className="px-6 py-4 text-left text-xs font-semibold text-white/50 uppercase tracking-wider w-[100px]">Status</th>
                             <th className="px-6 py-4 text-left text-xs font-semibold text-white/50 uppercase tracking-wider">Nome</th>
                             <th className="px-6 py-4 text-left text-xs font-semibold text-white/50 uppercase tracking-wider w-full">Descrição</th>
                             <th className="px-6 py-4 text-left text-xs font-semibold text-white/50 uppercase tracking-wider">Fonte</th>
@@ -99,13 +97,11 @@ export function RulesTable({
                                     transition={{ delay: index * 0.05 }}
                                     className="group hover:bg-white/5 transition-colors"
                                 >
-                                    {isAdmin && (
-                                        <td className="px-6 py-4 whitespace-nowrap">
-                                            <Chip variant={ruleStatusVariantMap[rule.status] || "common"}>
-                                                {rule.status === "active" ? "Ativo" : "Inativo"}
-                                            </Chip>
-                                        </td>
-                                    )}
+                                    <td className="px-6 py-4 whitespace-nowrap">
+                                        <Chip variant={ruleStatusVariantMap[rule.status] || "common"}>
+                                            {rule.status === "active" ? "Ativo" : "Inativo"}
+                                        </Chip>
+                                    </td>
                                     <td className="px-6 py-4 whitespace-nowrap text-white font-medium">{rule.name}</td>
                                     <td className="px-6 py-4 text-white/40 text-sm max-w-0">
                                         <div className="min-h-[32px] flex items-center overflow-hidden">

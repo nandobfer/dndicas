@@ -73,14 +73,16 @@ export function FeatsTable({ feats, total, page, limit, isLoading = false, onEdi
                 <table className="w-full">
                     <thead>
                         <tr className="border-b border-white/5 bg-white/5">
-                            {isAdmin && <th className="px-6 py-4 text-left text-xs font-semibold text-white/50 uppercase tracking-wider w-[100px]">Status</th>}
+                            <th className="px-6 py-4 text-left text-xs font-semibold text-white/50 uppercase tracking-wider w-[100px]">Status</th>
                             <th className="px-6 py-4 text-left text-xs font-semibold text-white/50 uppercase tracking-wider">Nome</th>
                             <th className="px-6 py-4 text-left text-xs font-semibold text-white/50 uppercase tracking-wider w-[90px]">Nível</th>
                             <th className="px-6 py-4 text-left text-xs font-semibold text-white/50 uppercase tracking-wider w-[140px]">+ Atributo</th>
                             <th className="px-6 py-4 text-left text-xs font-semibold text-white/50 uppercase tracking-wider w-full">Descrição</th>
                             <th className="px-6 py-4 text-left text-xs font-semibold text-white/50 uppercase tracking-wider">Fonte</th>
                             <th className="px-6 py-4 text-center text-xs font-semibold text-white/50 uppercase tracking-wider w-[80px]">Preview</th>
-                            {isAdmin && <th className="px-6 py-4 text-right text-xs font-semibold text-white/50 uppercase tracking-wider w-[100px]">Ações</th>}
+                            {isAdmin && (
+                                <th className="px-6 py-4 text-right text-xs font-semibold text-white/50 uppercase tracking-wider w-[100px]">Ações</th>
+                            )}
                         </tr>
                     </thead>
                     <tbody className="divide-y divide-white/5">
@@ -95,11 +97,11 @@ export function FeatsTable({ feats, total, page, limit, isLoading = false, onEdi
                                     transition={{ delay: index * 0.05 }}
                                     className="group hover:bg-white/5 transition-colors"
                                 >
-                                    {isAdmin && (
-                                        <td className="px-6 py-4 whitespace-nowrap">
-                                            <Chip variant={featStatusVariantMap[feat.status] || "common"}>{feat.status === "active" ? "Ativo" : "Inativo"}</Chip>
-                                        </td>
-                                    )}
+                                    <td className="px-6 py-4 whitespace-nowrap">
+                                        <Chip variant={featStatusVariantMap[feat.status] || "common"}>
+                                            {feat.status === "active" ? "Ativo" : "Inativo"}
+                                        </Chip>
+                                    </td>
                                     <td className="px-6 py-4 whitespace-nowrap text-white font-medium">{feat.name}</td>
                                     <td className="px-6 py-4 whitespace-nowrap">
                                         <Chip variant={getLevelRarityVariant(feat.level)}>Nv. {feat.level}</Chip>
@@ -117,7 +119,7 @@ export function FeatsTable({ feats, total, page, limit, isLoading = false, onEdi
                                                                 className={cn(
                                                                     "text-[10px] py-0.5 px-1.5 h-auto border shrink-0",
                                                                     config?.badge || "bg-white/10 text-white/70 border-white/10",
-                                                                    config?.border || "",
+                                                                    config?.border || ""
                                                                 )}
                                                             >
                                                                 {config?.abbreviation || bonus.attribute.slice(0, 3)}. +{bonus.value}
@@ -140,7 +142,7 @@ export function FeatsTable({ feats, total, page, limit, isLoading = false, onEdi
                                                                                 className={cn(
                                                                                     "text-[10px] py-0.5 px-1.5 h-auto border w-full justify-start",
                                                                                     config?.badge || "bg-white/10 text-white/70 border-white/10",
-                                                                                    config?.border || "",
+                                                                                    config?.border || ""
                                                                                 )}
                                                                             >
                                                                                 {config?.abbreviation || bonus.attribute.slice(0, 3)}. +{bonus.value}
@@ -191,7 +193,10 @@ export function FeatsTable({ feats, total, page, limit, isLoading = false, onEdi
                                                         <Pencil className="mr-2 h-4 w-4" />
                                                         Editar
                                                     </GlassDropdownMenuItem>
-                                                    <GlassDropdownMenuItem onClick={() => onDelete(feat)} className="text-red-400 hover:text-red-300 focus:text-red-300">
+                                                    <GlassDropdownMenuItem
+                                                        onClick={() => onDelete(feat)}
+                                                        className="text-red-400 hover:text-red-300 focus:text-red-300"
+                                                    >
                                                         <Trash2 className="mr-2 h-4 w-4" />
                                                         Excluir
                                                     </GlassDropdownMenuItem>
@@ -207,7 +212,14 @@ export function FeatsTable({ feats, total, page, limit, isLoading = false, onEdi
             </div>
 
             <div className="p-4 border-t border-white/5">
-                <DataTablePagination page={page} totalPages={totalPages} total={total} limit={limit} onPageChange={onPageChange} itemLabel="talentos" />
+                <DataTablePagination
+                    page={page}
+                    totalPages={totalPages}
+                    total={total}
+                    limit={limit}
+                    onPageChange={onPageChange}
+                    itemLabel="talentos"
+                />
             </div>
         </GlassCard>
     )

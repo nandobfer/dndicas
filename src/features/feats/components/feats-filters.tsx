@@ -21,8 +21,15 @@ export interface FeatsFiltersProps {
     className?: string
 }
 
-export function FeatsFilters({ filters, onSearchChange, onStatusChange, onLevelChange, onAttributesChange, isSearching = false, className }: FeatsFiltersProps) {
-    const { isAdmin } = useAuth()
+export function FeatsFilters({
+    filters,
+    onSearchChange,
+    onStatusChange,
+    onLevelChange,
+    onAttributesChange,
+    isSearching = false,
+    className
+}: FeatsFiltersProps) {
     const [levelMode, setLevelMode] = useState<"exact" | "upto">("exact")
     const [selectedLevel, setSelectedLevel] = useState<number | undefined>(filters.level || filters.levelMax)
 
@@ -30,7 +37,7 @@ export function FeatsFilters({ filters, onSearchChange, onStatusChange, onLevelC
         value: key as AttributeType,
         label: config.name.slice(0, 3) + ".",
         activeColor: config.badge.split(" ")[0],
-        textColor: config.text,
+        textColor: config.text
     }))
 
     const handleLevelInput = (value: string) => {
@@ -56,7 +63,12 @@ export function FeatsFilters({ filters, onSearchChange, onStatusChange, onLevelC
         <div className={cn("flex flex-col lg:flex-row lg:items-center gap-4 justify-between", className)}>
             {/* Search */}
             <div className="flex-1 w-full lg:max-w-md">
-                <SearchInput value={filters.search || ""} onChange={onSearchChange} isLoading={isSearching} placeholder="Buscar talentos por nome ou fonte..." />
+                <SearchInput
+                    value={filters.search || ""}
+                    onChange={onSearchChange}
+                    isLoading={isSearching}
+                    placeholder="Buscar talentos por nome ou fonte..."
+                />
             </div>
 
             <div className="flex flex-wrap items-center gap-6">
@@ -102,7 +114,7 @@ export function FeatsFilters({ filters, onSearchChange, onStatusChange, onLevelC
                                                     </div>
                                                 ),
                                                 activeColor: "bg-blue-500/20",
-                                                textColor: "text-blue-400",
+                                                textColor: "text-blue-400"
                                             },
                                             {
                                                 value: "upto",
@@ -113,8 +125,8 @@ export function FeatsFilters({ filters, onSearchChange, onStatusChange, onLevelC
                                                     </div>
                                                 ),
                                                 activeColor: "bg-blue-500/20",
-                                                textColor: "text-blue-400",
-                                            },
+                                                textColor: "text-blue-400"
+                                            }
                                         ]}
                                         size="sm"
                                         className="h-10"
@@ -142,12 +154,10 @@ export function FeatsFilters({ filters, onSearchChange, onStatusChange, onLevelC
                 </div>
 
                 {/* Status */}
-                {isAdmin && (
-                    <div className="flex items-center gap-2">
-                        <span className="text-xs font-semibold text-white/40 uppercase tracking-wider whitespace-nowrap hidden sm:inline">Status:</span>
-                        <StatusChips value={filters.status || "all"} onChange={onStatusChange as (status: StatusFilter) => void} />
-                    </div>
-                )}
+                <div className="flex items-center gap-2">
+                    <span className="text-xs font-semibold text-white/40 uppercase tracking-wider whitespace-nowrap hidden sm:inline">Status:</span>
+                    <StatusChips value={filters.status || "all"} onChange={onStatusChange as (status: StatusFilter) => void} />
+                </div>
             </div>
         </div>
     )

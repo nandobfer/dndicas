@@ -145,159 +145,116 @@ export function SpellsTable({
   }
 
   return (
-    <GlassCard className="overflow-hidden">
-      <div className="overflow-x-auto">
-        <table className="w-full">
-          <thead>
-            <tr className="border-b border-white/5 bg-white/5">
-              {isAdmin && (
-                <th className="px-6 py-4 text-left text-xs font-semibold text-white/50 uppercase tracking-wider w-[100px]">
-                  Status
-                </th>
-              )}
-              <th className="px-6 py-4 text-left text-xs font-semibold text-white/50 uppercase tracking-wider w-[120px]">
-                Círculo
-              </th>
-              <th className="px-6 py-4 text-left text-xs font-semibold text-white/50 uppercase tracking-wider">
-                Nome
-              </th>
-              <th className="px-6 py-4 text-left text-xs font-semibold text-white/50 uppercase tracking-wider w-[140px]">
-                Escola
-              </th>
-              <th className="px-6 py-4 text-left text-xs font-semibold text-white/50 uppercase tracking-wider w-[120px]">
-                Resistência
-              </th>
-              <th className="px-6 py-4 text-left text-xs font-semibold text-white/50 uppercase tracking-wider w-[100px]">
-                Dado Base
-              </th>
-              <th className="px-6 py-4 text-left text-xs font-semibold text-white/50 uppercase tracking-wider w-[100px]">
-                Por Nível
-              </th>
-              <th className="px-6 py-4 text-center text-xs font-semibold text-white/50 uppercase tracking-wider w-[80px]">
-                Preview
-              </th>
-              {isAdmin && (
-                <th className="px-6 py-4 text-right text-xs font-semibold text-white/50 uppercase tracking-wider w-[100px]">
-                  Ações
-                </th>
-              )}
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-white/5">
-            <AnimatePresence mode="popLayout">
-              {spells.map((spell, index) => (
-                <motion.tr
-                  key={spell._id}
-                  variants={motionConfig.variants.tableRow}
-                  initial="initial"
-                  animate="animate"
-                  exit="exit"
-                  transition={{ delay: index * 0.05 }}
-                  className="group hover:bg-white/5 transition-colors"
-                >
-                  {/* Status (Admin Only) */}
-                  {isAdmin && (
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <Chip variant={spellStatusVariantMap[spell.status] || 'common'}>
-                        {spell.status === 'active' ? 'Ativo' : 'Inativo'}
-                      </Chip>
-                    </td>
-                  )}
+      <GlassCard className="overflow-hidden">
+          <div className="overflow-x-auto">
+              <table className="w-full">
+                  <thead>
+                      <tr className="border-b border-white/5 bg-white/5">
+                          <th className="px-6 py-4 text-left text-xs font-semibold text-white/50 uppercase tracking-wider w-[100px]">Status</th>
+                          <th className="px-6 py-4 text-left text-xs font-semibold text-white/50 uppercase tracking-wider w-[120px]">Círculo</th>
+                          <th className="px-6 py-4 text-left text-xs font-semibold text-white/50 uppercase tracking-wider">Nome</th>
+                          <th className="px-6 py-4 text-left text-xs font-semibold text-white/50 uppercase tracking-wider w-[140px]">Escola</th>
+                          <th className="px-6 py-4 text-left text-xs font-semibold text-white/50 uppercase tracking-wider w-[120px]">Resistência</th>
+                          <th className="px-6 py-4 text-left text-xs font-semibold text-white/50 uppercase tracking-wider w-[100px]">Dado Base</th>
+                          <th className="px-6 py-4 text-left text-xs font-semibold text-white/50 uppercase tracking-wider w-[100px]">Por Nível</th>
+                          <th className="px-6 py-4 text-center text-xs font-semibold text-white/50 uppercase tracking-wider w-[80px]">Preview</th>
+                          {isAdmin && (
+                              <th className="px-6 py-4 text-right text-xs font-semibold text-white/50 uppercase tracking-wider w-[100px]">Ações</th>
+                          )}
+                      </tr>
+                  </thead>
+                  <tbody className="divide-y divide-white/5">
+                      <AnimatePresence mode="popLayout">
+                          {spells.map((spell, index) => (
+                              <motion.tr
+                                  key={spell._id}
+                                  variants={motionConfig.variants.tableRow}
+                                  initial="initial"
+                                  animate="animate"
+                                  exit="exit"
+                                  transition={{ delay: index * 0.05 }}
+                                  className="group hover:bg-white/5 transition-colors"
+                              >
+                                  {/* Status */}
+                                  <td className="px-6 py-4 whitespace-nowrap">
+                                      <Chip variant={spellStatusVariantMap[spell.status] || "common"}>
+                                          {spell.status === "active" ? "Ativo" : "Inativo"}
+                                      </Chip>
+                                  </td>
 
-                  {/* Circle */}
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <GlassLevelChip level={spell.circle} type="circle" />
-                  </td>
+                                  {/* Circle */}
+                                  <td className="px-6 py-4 whitespace-nowrap">
+                                      <GlassLevelChip level={spell.circle} type="circle" />
+                                  </td>
 
-                  {/* Name */}
-                  <td className="px-6 py-4 whitespace-nowrap text-white font-medium">
-                    {spell.name}
-                  </td>
+                                  {/* Name */}
+                                  <td className="px-6 py-4 whitespace-nowrap text-white font-medium">{spell.name}</td>
 
-                  {/* School */}
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <GlassSpellSchool school={spell.school} />
-                  </td>
+                                  {/* School */}
+                                  <td className="px-6 py-4 whitespace-nowrap">
+                                      <GlassSpellSchool school={spell.school} />
+                                  </td>
 
-                  {/* Save Attribute */}
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    {spell.saveAttribute ? (
-                      <GlassAttributeChip attribute={spell.saveAttribute} />
-                    ) : (
-                      <GlassEmptyValue />
-                    )}
-                  </td>
+                                  {/* Save Attribute */}
+                                  <td className="px-6 py-4 whitespace-nowrap">
+                                      {spell.saveAttribute ? <GlassAttributeChip attribute={spell.saveAttribute} /> : <GlassEmptyValue />}
+                                  </td>
 
-                  {/* Base Dice */}
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    {spell.baseDice ? (
-                      <GlassDiceValue value={spell.baseDice} />
-                    ) : (
-                      <GlassEmptyValue />
-                    )}
-                  </td>
+                                  {/* Base Dice */}
+                                  <td className="px-6 py-4 whitespace-nowrap">
+                                      {spell.baseDice ? <GlassDiceValue value={spell.baseDice} /> : <GlassEmptyValue />}
+                                  </td>
 
-                  {/* Extra Dice Per Level */}
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    {spell.extraDicePerLevel ? (
-                      <GlassDiceValue value={spell.extraDicePerLevel} />
-                    ) : (
-                      <GlassEmptyValue />
-                    )}
-                  </td>
+                                  {/* Extra Dice Per Level */}
+                                  <td className="px-6 py-4 whitespace-nowrap">
+                                      {spell.extraDicePerLevel ? <GlassDiceValue value={spell.extraDicePerLevel} /> : <GlassEmptyValue />}
+                                  </td>
 
-                  {/* Preview */}
-                  <td className="px-6 py-4 whitespace-nowrap text-center">
-                    <EntityPreviewTooltip entityId={spell._id} entityType="Magia">
-                      <button className="p-2 rounded-lg text-white/40 hover:text-white hover:bg-white/10 transition-colors">
-                        <Eye className="h-4 w-4" />
-                      </button>
-                    </EntityPreviewTooltip>
-                  </td>
+                                  {/* Preview */}
+                                  <td className="px-6 py-4 whitespace-nowrap text-center">
+                                      <EntityPreviewTooltip entityId={spell._id} entityType="Magia">
+                                          <button className="p-2 rounded-lg text-white/40 hover:text-white hover:bg-white/10 transition-colors">
+                                              <Eye className="h-4 w-4" />
+                                          </button>
+                                      </EntityPreviewTooltip>
+                                  </td>
 
-                  {/* Actions (Admin Only) */}
-                  {isAdmin && (
-                    <td className="px-6 py-4 whitespace-nowrap text-right">
-                      <GlassDropdownMenu>
-                        <GlassDropdownMenuTrigger asChild>
-                          <button className="p-2 rounded-lg text-white/40 hover:text-white hover:bg-white/10 transition-colors">
-                            <MoreHorizontal className="h-4 w-4" />
-                          </button>
-                        </GlassDropdownMenuTrigger>
-                        <GlassDropdownMenuContent align="end">
-                          <GlassDropdownMenuItem onClick={() => onEdit(spell)}>
-                            <Pencil className="mr-2 h-4 w-4" />
-                            Editar
-                          </GlassDropdownMenuItem>
-                          <GlassDropdownMenuItem
-                            onClick={() => onDelete(spell)}
-                            className="text-red-400 hover:text-red-300 focus:text-red-300"
-                          >
-                            <Trash2 className="mr-2 h-4 w-4" />
-                            Excluir
-                          </GlassDropdownMenuItem>
-                        </GlassDropdownMenuContent>
-                      </GlassDropdownMenu>
-                    </td>
-                  )}
-                </motion.tr>
-              ))}
-            </AnimatePresence>
-          </tbody>
-        </table>
-      </div>
+                                  {/* Actions (Admin Only) */}
+                                  {isAdmin && (
+                                      <td className="px-6 py-4 whitespace-nowrap text-right">
+                                          <GlassDropdownMenu>
+                                              <GlassDropdownMenuTrigger asChild>
+                                                  <button className="p-2 rounded-lg text-white/40 hover:text-white hover:bg-white/10 transition-colors">
+                                                      <MoreHorizontal className="h-4 w-4" />
+                                                  </button>
+                                              </GlassDropdownMenuTrigger>
+                                              <GlassDropdownMenuContent align="end">
+                                                  <GlassDropdownMenuItem onClick={() => onEdit(spell)}>
+                                                      <Pencil className="mr-2 h-4 w-4" />
+                                                      Editar
+                                                  </GlassDropdownMenuItem>
+                                                  <GlassDropdownMenuItem
+                                                      onClick={() => onDelete(spell)}
+                                                      className="text-red-400 hover:text-red-300 focus:text-red-300"
+                                                  >
+                                                      <Trash2 className="mr-2 h-4 w-4" />
+                                                      Excluir
+                                                  </GlassDropdownMenuItem>
+                                              </GlassDropdownMenuContent>
+                                          </GlassDropdownMenu>
+                                      </td>
+                                  )}
+                              </motion.tr>
+                          ))}
+                      </AnimatePresence>
+                  </tbody>
+              </table>
+          </div>
 
-      {/* Pagination */}
-      <div className="p-4 border-t border-white/5">
-        <DataTablePagination
-          page={page}
-          totalPages={totalPages}
-          total={total}
-          limit={limit}
-          onPageChange={onPageChange}
-          itemLabel="magias"
-        />
-      </div>
-    </GlassCard>
-  );
+          {/* Pagination */}
+          <div className="p-4 border-t border-white/5">
+              <DataTablePagination page={page} totalPages={totalPages} total={total} limit={limit} onPageChange={onPageChange} itemLabel="magias" />
+          </div>
+      </GlassCard>
+  )
 }

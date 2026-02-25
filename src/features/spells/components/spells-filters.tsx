@@ -34,11 +34,10 @@ export function SpellsFilters({
     isSearching = false,
     className
 }: SpellsFiltersProps) {
-    const { isAdmin } = useAuth();
-    const [circleMode, setCircleMode] = useState<"exact" | "upTo">("exact");
+    const [circleMode, setCircleMode] = useState<"exact" | "upTo">("exact")
     const [selectedCircle, setSelectedCircle] = useState<number | undefined>(
         filters.circles && filters.circles.length === 1 ? filters.circles[0] : undefined
-    );
+    )
 
     // Build school options from spell school colors
     const schoolOptions = Object.entries(spellSchoolColors).map(([school, rarityColor]) => {
@@ -49,52 +48,52 @@ export function SpellsFilters({
             rare: { bg: "bg-blue-400/20", text: "text-blue-400" },
             veryRare: { bg: "bg-purple-400/20", text: "text-purple-400" },
             legendary: { bg: "bg-amber-400/20", text: "text-amber-400" },
-            artifact: { bg: "bg-red-400/20", text: "text-red-400" },
-        };
+            artifact: { bg: "bg-red-400/20", text: "text-red-400" }
+        }
 
-        const colors = colorMap[rarityColor];
+        const colors = colorMap[rarityColor]
         return {
             value: school as SpellSchool,
             label: school.slice(0, 4) + ".", // "Abju.", "Adiv.", etc.
             activeColor: colors.bg.split(" ")[0],
-            textColor: colors.text,
-        };
-    });
+            textColor: colors.text
+        }
+    })
 
     // Build attribute options
     const attributeOptions = Object.entries(attributeColors).map(([key, config]) => ({
         value: key as AttributeType,
         label: config.name.slice(0, 3) + ".", // "For.", "Des.", etc.
         activeColor: config.badge.split(" ")[0],
-        textColor: config.text,
-    }));
+        textColor: config.text
+    }))
 
     // Build dice type options
     const diceTypeOptions = Object.entries(diceColors).map(([key, config]) => ({
         value: key as DiceType,
         label: key, // "d4", "d6", etc.
         activeColor: config.bg.split(" ")[0],
-        textColor: config.text,
-    }));
+        textColor: config.text
+    }))
 
     const handleCircleInput = (value: string) => {
         // Remove any non-numeric characters
-        const cleanedValue = value.replace(/\D/g, "");
+        const cleanedValue = value.replace(/\D/g, "")
 
         if (cleanedValue === "") {
-            setSelectedCircle(undefined);
-            onCircleChange(undefined, circleMode);
+            setSelectedCircle(undefined)
+            onCircleChange(undefined, circleMode)
         } else {
-            let circle = parseInt(cleanedValue, 10);
+            let circle = parseInt(cleanedValue, 10)
 
             // Ensure range 0-9 (0 = Truque, 1-9 = Círculos)
-            if (circle > 9) circle = 9;
-            if (circle < 0) circle = 0;
+            if (circle > 9) circle = 9
+            if (circle < 0) circle = 0
 
-            setSelectedCircle(circle);
-            onCircleChange(circle, circleMode);
+            setSelectedCircle(circle)
+            onCircleChange(circle, circleMode)
         }
-    };
+    }
 
     return (
         <div className={cn("flex flex-col gap-4", className)}>
@@ -113,9 +112,7 @@ export function SpellsFilters({
 
                     {/* Circle Filter */}
                     <div className="flex items-center gap-3">
-                        <span className="text-xs font-semibold text-white/40 uppercase tracking-wider whitespace-nowrap">
-                            Círculo:
-                        </span>
+                        <span className="text-xs font-semibold text-white/40 uppercase tracking-wider whitespace-nowrap">Círculo:</span>
                         <div className="flex items-center gap-2">
                             <GlassInput
                                 type="text"
@@ -139,10 +136,10 @@ export function SpellsFilters({
                                         <GlassSelector
                                             value={circleMode}
                                             onChange={(val) => {
-                                                const newMode = val as "exact" | "upTo";
-                                                setCircleMode(newMode);
+                                                const newMode = val as "exact" | "upTo"
+                                                setCircleMode(newMode)
                                                 if (selectedCircle !== undefined) {
-                                                    onCircleChange(selectedCircle, newMode);
+                                                    onCircleChange(selectedCircle, newMode)
                                                 }
                                             }}
                                             options={[
@@ -155,7 +152,7 @@ export function SpellsFilters({
                                                         </div>
                                                     ),
                                                     activeColor: "bg-purple-500/20",
-                                                    textColor: "text-purple-400",
+                                                    textColor: "text-purple-400"
                                                 },
                                                 {
                                                     value: "upTo",
@@ -166,8 +163,8 @@ export function SpellsFilters({
                                                         </div>
                                                     ),
                                                     activeColor: "bg-purple-500/20",
-                                                    textColor: "text-purple-400",
-                                                },
+                                                    textColor: "text-purple-400"
+                                                }
                                             ]}
                                             size="sm"
                                             className="h-10"
@@ -181,26 +178,17 @@ export function SpellsFilters({
                 </div>
 
                 {/* Status */}
-                {isAdmin && (
-                    <div className="flex items-center gap-2">
-                        <span className="text-xs font-semibold text-white/40 uppercase tracking-wider whitespace-nowrap hidden sm:inline">
-                            Status:
-                        </span>
-                        <StatusChips
-                            value={filters.status || "all"}
-                            onChange={onStatusChange as (status: StatusFilter) => void}
-                        />
-                    </div>
-                )}
+                <div className="flex items-center gap-2">
+                    <span className="text-xs font-semibold text-white/40 uppercase tracking-wider whitespace-nowrap hidden sm:inline">Status:</span>
+                    <StatusChips value={filters.status || "all"} onChange={onStatusChange as (status: StatusFilter) => void} />
+                </div>
             </div>
 
             {/* Bottom Row: Advanced Filters */}
             <div className="flex flex-wrap items-center gap-6">
                 {/* Schools Filter */}
                 <div className="flex items-center gap-3">
-                    <span className="text-xs font-semibold text-white/40 uppercase tracking-wider whitespace-nowrap">
-                        Escola:
-                    </span>
+                    <span className="text-xs font-semibold text-white/40 uppercase tracking-wider whitespace-nowrap">Escola:</span>
                     <GlassSelector
                         value={filters.schools || []}
                         onChange={(vals) => onSchoolsChange(vals as SpellSchool[])}
@@ -215,9 +203,7 @@ export function SpellsFilters({
 
                 {/* Save Attributes Filter */}
                 <div className="flex items-center gap-3">
-                    <span className="text-xs font-semibold text-white/40 uppercase tracking-wider whitespace-nowrap">
-                        Resistência:
-                    </span>
+                    <span className="text-xs font-semibold text-white/40 uppercase tracking-wider whitespace-nowrap">Resistência:</span>
                     <GlassSelector
                         value={filters.saveAttributes || []}
                         onChange={(vals) => onAttributesChange(vals as AttributeType[])}
@@ -232,9 +218,7 @@ export function SpellsFilters({
 
                 {/* Dice Types Filter */}
                 <div className="flex items-center gap-3">
-                    <span className="text-xs font-semibold text-white/40 uppercase tracking-wider whitespace-nowrap">
-                        Dados:
-                    </span>
+                    <span className="text-xs font-semibold text-white/40 uppercase tracking-wider whitespace-nowrap">Dados:</span>
                     <GlassSelector
                         value={filters.diceTypes || []}
                         onChange={(vals) => onDiceTypesChange(vals as DiceType[])}
@@ -248,5 +232,5 @@ export function SpellsFilters({
                 </div>
             </div>
         </div>
-    );
+    )
 }
