@@ -10,8 +10,9 @@ import dbConnect from "@/core/database/db"
 import { User, IUser } from "@/features/users/models/user"
 import { requireAdmin, getCurrentUserFromDb } from "@/features/users/api/get-current-user"
 import { createUserSchema, userFiltersSchema } from "@/features/users/api/validation"
-import { logCreate } from "@/features/users/api/audit-service"
-import { UserFilters, UsersListResponse, UserResponse, UserStatus } from "@/features/users/types/user.types"
+import { logCreate, logUpdate } from "@/features/users/api/audit-service"
+import { syncUserFromClerk } from "@/features/users/api/sync"
+import { UserFilters, UsersListResponse, UserResponse, UserStatus, UserRole } from "@/features/users/types/user.types"
 
 /**
  * GET /api/users
@@ -142,7 +143,7 @@ export async function POST(request: NextRequest) {
 
         // 2. Check if user already exists in Clerk
         const clerkUsersResponse = await client.users.getUserList({
-            emailAddress: [data.email],
+            emailAddress: [data.email]
         })
 
         let clerkUser = clerkUsersResponse.data[0]
@@ -162,12 +163,12 @@ export async function POST(request: NextRequest) {
                     firstName: firstName,
                     lastName: lastName,
                     publicMetadata: {
-                        role: data.role || "user",
+                        role: data.role || "user"
                     },
                     // Important: we don't handle passwords here as per user schema
                     // Users will need to use forgot password or magic links
                     skipPasswordChecks: true,
-                    skipPasswordRequirement: true,
+                    skipPasswordRequirement: true
                 })
                 isNewClerkUser = true
             } catch (clerkError) {
@@ -177,49 +178,69 @@ export async function POST(request: NextRequest) {
                 return NextResponse.json(
                     {
                         error: "Erro ao criar usuário no Clerk",
-                        details: details,
+                        details: details
                     },
-                    { status: 400 },
+                    { status: 400 }
                 )
             }
         }
 
-        // 4. Check if user already exists in our DB by Clerk ID or Email
-        const existingDbUser = await User.findOne({
-            $or: [{ clerkId: clerkUser.id }, { email: data.email }],
-        })
-
-        if (existingDbUser) {
-            // If user was just created in Clerk but exists in DB, this is a conflict state
-            // that shouldn't happen normally but we handle it
-            return NextResponse.json({ error: "Usuário já cadastrado no banco de dados" }, { status: 409 })
+        // 4. Sync user with our database using the synchronization service
+        // This handles both creation and updating if user already exists
+        const clerkUserData = {
+            id: clerkUser.id,
+            username: clerkUser.username || data.username,
+            email_addresses: clerkUser.emailAddresses.map((e) => ({
+                id: e.id,
+                email_address: e.emailAddress
+            })),
+            primary_email_address_id: clerkUser.primaryEmailAddressId,
+            first_name: clerkUser.firstName,
+            last_name: clerkUser.lastName,
+            image_url: clerkUser.imageUrl,
+            public_metadata: {
+                role: (data.role as UserRole) || (clerkUser.publicMetadata?.role as UserRole) || "user"
+            }
         }
 
-        // 5. Create user in MongoDB using Clerk's data
-        const user = await User.create({
-            clerkId: clerkUser.id,
-            username: data.username,
-            email: data.email,
-            name: data.name,
-            role: data.role || "user",
-            status: "active",
-            avatarUrl: data.avatarUrl || clerkUser.imageUrl,
-        })
+        const syncResult = await syncUserFromClerk(clerkUserData)
+
+        if (!syncResult.success || !syncResult.user) {
+            return NextResponse.json({ error: "Erro ao sincronizar usuário com o banco", details: syncResult.error }, { status: 500 })
+        }
+
+        const user = syncResult.user
 
         // Get current user for audit logging
         const { user: currentUser } = await getCurrentUserFromDb()
 
-        // Log audit entry for CREATE operation
-        await logCreate("User", user._id.toString(), currentUser?._id.toString() || "unknown", {
-            _id: user._id.toString(),
-            username: user.username,
-            email: user.email,
-            name: user.name,
-            role: user.role,
-            status: user.status,
-            createdAt: user.createdAt,
-            updatedAt: user.updatedAt,
-        })
+        // 5. Log audit entry based on action
+        if (syncResult.action === "created") {
+            await logCreate("User", user._id.toString(), currentUser?._id.toString() || "unknown", {
+                _id: user._id.toString(),
+                username: user.username,
+                email: user.email,
+                name: user.name,
+                role: user.role,
+                status: user.status,
+                createdAt: user.createdAt,
+                updatedAt: user.updatedAt
+            })
+        } else if (syncResult.action === "updated") {
+            await logUpdate(
+                "User",
+                user._id.toString(),
+                currentUser?._id.toString() || "unknown",
+                {}, // prev data (simplified)
+                {
+                    username: user.username,
+                    email: user.email,
+                    name: user.name,
+                    role: user.role,
+                    status: user.status
+                }
+            )
+        }
 
         const response: UserResponse = {
             id: user._id.toString(),
@@ -232,7 +253,7 @@ export async function POST(request: NextRequest) {
             status: user.status as UserStatus,
             deleted: user.deleted || false,
             createdAt: user.createdAt.toISOString(),
-            updatedAt: user.updatedAt.toISOString(),
+            updatedAt: user.updatedAt.toISOString()
         }
 
         return NextResponse.json(response, { status: 201 })
