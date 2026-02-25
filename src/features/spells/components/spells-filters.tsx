@@ -54,7 +54,8 @@ export function SpellsFilters({
         const colors = colorMap[rarityColor]
         return {
             value: school as SpellSchool,
-            label: school.slice(0, 4) + ".", // "Abju.", "Adiv.", etc.
+            label: school,
+            // label: school.slice(0, 4) + ".", // "Abju.", "Adiv.", etc.
             activeColor: colors.bg.split(" ")[0],
             textColor: colors.text
         }
@@ -63,7 +64,8 @@ export function SpellsFilters({
     // Build attribute options
     const attributeOptions = Object.entries(attributeColors).map(([key, config]) => ({
         value: key as AttributeType,
-        label: config.name.slice(0, 3) + ".", // "For.", "Des.", etc.
+        label: config.name,
+        // label: config.name.slice(0, 3) + ".", // "For.", "Des.", etc.
         activeColor: config.badge.split(" ")[0],
         textColor: config.text
     }))
@@ -210,8 +212,8 @@ export function SpellsFilters({
                         options={attributeOptions}
                         mode="multi"
                         layout="horizontal"
-                        size="sm"
                         layoutId="filter-attr-selector"
+                        size="sm"
                         className="h-10"
                     />
                 </div>
@@ -225,7 +227,6 @@ export function SpellsFilters({
                         options={diceTypeOptions}
                         mode="multi"
                         layout="horizontal"
-                        size="sm"
                         layoutId="filter-dice-selector"
                         className="h-10"
                     />
