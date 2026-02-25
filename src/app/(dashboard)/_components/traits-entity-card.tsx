@@ -25,7 +25,7 @@ export function TraitsEntityCard({
             index={index}
             title="Habilidades"
             icon={Sparkles}
-            description="Catálogo de traços e habilidades de D&D"
+            description="Catálogo de traços e habilidades (traits)"
         />
     )
 }

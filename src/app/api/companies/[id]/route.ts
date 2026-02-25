@@ -28,34 +28,33 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    await requireAuth();
-    await dbConnect();
+      await dbConnect()
 
-    const { id } = await params;
-    const company = await Company.findById(id);
+      const { id } = await params
+      const company = await Company.findById(id)
 
-    if (!company) {
-      const response: ApiResponse = {
-        success: false,
-        error: 'Empresa não encontrada',
-        code: 'NOT_FOUND',
-      };
-      return NextResponse.json(response, { status: 404 });
-    }
+      if (!company) {
+          const response: ApiResponse = {
+              success: false,
+              error: "Empresa não encontrada",
+              code: "NOT_FOUND"
+          }
+          return NextResponse.json(response, { status: 404 })
+      }
 
-    const response: ApiResponse<typeof company> = {
-      success: true,
-      data: company,
-    };
+      const response: ApiResponse<typeof company> = {
+          success: true,
+          data: company
+      }
 
-    return NextResponse.json(response, { status: 200 });
+      return NextResponse.json(response, { status: 200 })
   } catch (error) {
-    const response: ApiResponse = {
-      success: false,
-      error: 'Erro ao buscar empresa',
-      code: 'FETCH_ERROR',
-    };
-    return NextResponse.json(response, { status: 500 });
+      const response: ApiResponse = {
+          success: false,
+          error: "Erro ao buscar empresa",
+          code: "FETCH_ERROR"
+      }
+      return NextResponse.json(response, { status: 500 })
   }
 }
 

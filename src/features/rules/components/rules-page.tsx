@@ -7,6 +7,7 @@ import { cn } from '@/core/utils';
 import { GlassCard, GlassCardContent } from '@/components/ui/glass-card';
 import { useRules } from '../hooks/useRules';
 import { useRuleMutations } from '../hooks/useRuleMutations';
+import { useAuth } from "@/core/hooks/useAuth"
 import { RulesFilter } from './rules-filters';
 import { RulesTable } from './rules-table';
 import { RuleFormModal } from './rule-form-modal';
@@ -16,6 +17,7 @@ import type { Reference, CreateReferenceInput, UpdateReferenceInput, RulesFilter
 import { useDebounce } from '@/core/hooks/useDebounce';
 
 export function RulesPage() {
+    const { isAdmin } = useAuth()
     // State
     const [page, setPage] = React.useState(1);
     const [search, setSearch] = React.useState("");
@@ -112,25 +114,32 @@ export function RulesPage() {
                     <p className="text-sm text-white/60 mt-1">Gerencie as regras de referência do sistema (D&D 5e)</p>
                 </div>
 
-                <button
-                    onClick={handleCreateClick}
-                    className={cn(
-                        "inline-flex items-center gap-2 px-4 py-2 rounded-lg",
-                        "bg-blue-500 text-white font-medium text-sm",
-                        "hover:bg-blue-600 transition-colors",
-                        "focus:outline-none focus:ring-2 focus:ring-blue-500/50",
-                        "shadow-lg shadow-blue-500/20",
-                    )}
-                >
-                    <Plus className="h-4 w-4" />
-                    Nova Regra
-                </button>
+                {isAdmin && (
+                    <button
+                        onClick={handleCreateClick}
+                        className={cn(
+                            "inline-flex items-center gap-2 px-4 py-2 rounded-lg",
+                            "bg-blue-500 text-white font-medium text-sm",
+                            "hover:bg-blue-600 transition-colors",
+                            "focus:outline-none focus:ring-2 focus:ring-blue-500/50",
+                            "shadow-lg shadow-blue-500/20"
+                        )}
+                    >
+                        <Plus className="h-4 w-4" />
+                        Nova Regra
+                    </button>
+                )}
             </div>
 
             {/* Filters */}
             <GlassCard>
                 <GlassCardContent className="py-4">
-                    <RulesFilter filters={{ search, status }} onSearchChange={handleSearchChange} onStatusChange={handleStatusChange} isSearching={isFetching && !isLoading} />
+                    <RulesFilter
+                        filters={{ search, status }}
+                        onSearchChange={handleSearchChange}
+                        onStatusChange={handleStatusChange}
+                        isSearching={isFetching && !isLoading}
+                    />
                 </GlassCardContent>
             </GlassCard>
 
@@ -147,10 +156,22 @@ export function RulesPage() {
             />
 
             {/* Form Modal */}
-            <RuleFormModal isOpen={isFormOpen} onClose={() => setIsFormOpen(false)} onSubmit={handleFormSubmit} rule={selectedRule} isSubmitting={createRule.isPending || updateRule.isPending} />
+            <RuleFormModal
+                isOpen={isFormOpen}
+                onClose={() => setIsFormOpen(false)}
+                onSubmit={handleFormSubmit}
+                rule={selectedRule}
+                isSubmitting={createRule.isPending || updateRule.isPending}
+            />
 
             {/* Delete Dialog */}
-            <DeleteRuleDialog isOpen={isDeleteOpen} onClose={() => setIsDeleteOpen(false)} onConfirm={handleDeleteConfirm} rule={selectedRule} isDeleting={deleteRule.isPending} />
+            <DeleteRuleDialog
+                isOpen={isDeleteOpen}
+                onClose={() => setIsDeleteOpen(false)}
+                onConfirm={handleDeleteConfirm}
+                rule={selectedRule}
+                isDeleting={deleteRule.isPending}
+            />
         </motion.div>
     )
 }

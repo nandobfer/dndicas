@@ -11,6 +11,7 @@ import { Plus } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { cn } from '@/core/utils';
 import { GlassCard, GlassCardContent, GlassCardHeader, GlassCardTitle } from '@/components/ui/glass-card';
+import { useAuth } from "@/core/hooks/useAuth"
 import { useUsersFilters } from '../hooks/useUsersFilters';
 import { useUsers, useCreateUser, useUpdateUser, useDeleteUser } from '../hooks/useUsers';
 import { UserFilters } from '../components/user-filters';
@@ -24,6 +25,7 @@ import type { User, UserResponse, CreateUserInput, UpdateUserInput } from '../ty
  * Users page component with full CRUD functionality.
  */
 export function UsersPage() {
+  const { isAdmin } = useAuth()
   // Filters state
   const {
     filters,
@@ -90,83 +92,78 @@ export function UsersPage() {
   const isSearching = isFetching && !isLoading;
 
   return (
-    <motion.div
-      variants={motionConfig.variants.fadeInUp}
-      initial="initial"
-      animate="animate"
-      className="space-y-6"
-    >
-      {/* Header */}
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-white">Usuários</h1>
-          <p className="text-sm text-white/60 mt-1">
-            Gerencie os usuários do sistema
-          </p>
-        </div>
+      <motion.div variants={motionConfig.variants.fadeInUp} initial="initial" animate="animate" className="space-y-6">
+          {/* Header */}
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                  <h1 className="text-2xl font-bold text-white">Usuários</h1>
+                  <p className="text-sm text-white/60 mt-1">Gerencie os usuários do sistema</p>
+              </div>
 
-        <button
-          onClick={handleCreateClick}
-          className={cn(
-            'inline-flex items-center gap-2 px-4 py-2 rounded-lg',
-            'bg-blue-500 text-white font-medium text-sm',
-            'hover:bg-blue-600 transition-colors',
-            'focus:outline-none focus:ring-2 focus:ring-blue-500/50'
-          )}
-        >
-          <Plus className="h-4 w-4" />
-          Novo Usuário
-        </button>
-      </div>
+              {isAdmin && (
+                  <button
+                      onClick={handleCreateClick}
+                      className={cn(
+                          "inline-flex items-center gap-2 px-4 py-2 rounded-lg",
+                          "bg-blue-600 text-white font-medium text-sm",
+                          "hover:bg-blue-700 transition-colors shadow-lg shadow-blue-600/20",
+                          "focus:outline-none focus:ring-2 focus:ring-blue-600/50"
+                      )}
+                  >
+                      <Plus className="h-4 w-4" />
+                      Novo Usuário
+                  </button>
+              )}
+          </div>
 
-      {/* Filters */}
-      <GlassCard>
-        <GlassCardContent className="py-4">
-          <UserFilters
-            filters={filters}
-            onSearchChange={setSearch}
-            onRoleChange={setRole}
-            onStatusChange={setStatus}
-            isSearching={isSearching}
+          {/* Filters */}
+          <GlassCard>
+              <GlassCardContent className="py-4">
+                  <UserFilters
+                      filters={filters}
+                      onSearchChange={setSearch}
+                      onRoleChange={setRole}
+                      onStatusChange={setStatus}
+                      isSearching={isSearching}
+                  />
+              </GlassCardContent>
+          </GlassCard>
+
+          {/* Table */}
+          <UsersTable
+              users={users}
+              total={total}
+              page={filters.page || 1}
+              limit={filters.limit || 10}
+              isLoading={isLoading}
+              onEdit={handleEditClick}
+              onDelete={handleDeleteClick}
+              onPageChange={setPage}
           />
-        </GlassCardContent>
-      </GlassCard>
 
-      {/* Table */}
-      <UsersTable
-        users={users}
-        total={total}
-        page={filters.page || 1}
-        limit={filters.limit || 10}
-        isLoading={isLoading}
-        onEdit={handleEditClick}
-        onDelete={handleDeleteClick}
-        onPageChange={setPage}
-      />
+          {/* Form Modal */}
+          <UserFormModal
+              isOpen={isFormModalOpen}
+              onClose={() => {
+                  setIsFormModalOpen(false)
+                  setSelectedUser(null)
+              }}
+              onSubmit={handleFormSubmit}
+              user={selectedUser}
+              isSubmitting={createMutation.isPending || updateMutation.isPending}
+          />
 
-      {/* Form Modal */}
-      <UserFormModal
-        isOpen={isFormModalOpen}
-        onClose={() => {
-          setIsFormModalOpen(false);
-          setSelectedUser(null);
-        }}
-        onSubmit={handleFormSubmit}
-        user={selectedUser}
-        isSubmitting={createMutation.isPending || updateMutation.isPending}
-      />
-
-      {/* Delete Dialog */}
-      <UserDeleteDialog
-        isOpen={isDeleteDialogOpen}
-        onClose={() => {
-          setIsDeleteDialogOpen(false);
-          setSelectedUser(null);
-        }}
-        onConfirm={handleDeleteConfirm}
-        user={selectedUser}
-        isDeleting={deleteMutation.isPending}
-      />
-    </motion.div>
-  );
+          {/* Delete Dialog */}
+          <UserDeleteDialog
+              isOpen={isDeleteDialogOpen}
+              onClose={() => {
+                  setIsDeleteDialogOpen(false)
+                  setSelectedUser(null)
+              }}
+              onConfirm={handleDeleteConfirm}
+              user={selectedUser}
+              isDeleting={deleteMutation.isPending}
+          />
+      </motion.div>
+  )
 }

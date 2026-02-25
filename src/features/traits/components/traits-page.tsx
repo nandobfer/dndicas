@@ -7,6 +7,7 @@ import { cn } from '@/core/utils';
 import { GlassCard, GlassCardContent } from '@/components/ui/glass-card';
 import { useTraits } from '../hooks/useTraits';
 import { useTraitMutations } from '../hooks/useTraitMutations';
+import { useAuth } from "@/core/hooks/useAuth"
 import { TraitsFilters } from './traits-filters';
 import { TraitsTable } from './traits-table';
 import { TraitFormModal } from './trait-form-modal';
@@ -16,6 +17,7 @@ import type { Trait, CreateTraitInput, UpdateTraitInput, TraitFilterParams } fro
 import { useDebounce } from "@/core/hooks/useDebounce"
 
 export function TraitsPage() {
+    const { isAdmin } = useAuth()
     // State
     const [page, setPage] = React.useState(1)
     const [search, setSearch] = React.useState("")
@@ -115,25 +117,32 @@ export function TraitsPage() {
                     <p className="text-sm text-white/60 mt-1">Gerencie habilidades e traits do sistema (D&D 5e)</p>
                 </div>
 
-                <button
-                    onClick={handleCreateClick}
-                    className={cn(
-                        "inline-flex items-center gap-2 px-4 py-2 rounded-lg",
-                        "bg-blue-500 text-white font-medium text-sm",
-                        "hover:bg-blue-600 transition-colors",
-                        "focus:outline-none focus:ring-2 focus:ring-blue-500/50",
-                        "shadow-lg shadow-blue-500/20",
-                    )}
-                >
-                    <Plus className="h-4 w-4" />
-                    Nova Habilidade
-                </button>
+                {isAdmin && (
+                    <button
+                        onClick={handleCreateClick}
+                        className={cn(
+                            "inline-flex items-center gap-2 px-4 py-2 rounded-lg",
+                            "bg-purple-500 text-white font-medium text-sm",
+                            "hover:bg-purple-600 transition-colors",
+                            "focus:outline-none focus:ring-2 focus:ring-purple-500/50",
+                            "shadow-lg shadow-purple-500/20"
+                        )}
+                    >
+                        <Plus className="h-4 w-4" />
+                        Nova Habilidade
+                    </button>
+                )}
             </div>
 
             {/* Filters */}
             <GlassCard>
                 <GlassCardContent className="py-4">
-                    <TraitsFilters filters={{ search, status }} onSearchChange={handleSearchChange} onStatusChange={handleStatusChange} isSearching={isFetching && !isLoading} />
+                    <TraitsFilters
+                        filters={{ search, status }}
+                        onSearchChange={handleSearchChange}
+                        onStatusChange={handleStatusChange}
+                        isSearching={isFetching && !isLoading}
+                    />
                 </GlassCardContent>
             </GlassCard>
 
@@ -150,10 +159,22 @@ export function TraitsPage() {
             />
 
             {/* Form Modal */}
-            <TraitFormModal isOpen={isFormOpen} onClose={() => setIsFormOpen(false)} onSubmit={handleFormSubmit} trait={selectedTrait} isSubmitting={create.isPending || update.isPending} />
+            <TraitFormModal
+                isOpen={isFormOpen}
+                onClose={() => setIsFormOpen(false)}
+                onSubmit={handleFormSubmit}
+                trait={selectedTrait}
+                isSubmitting={create.isPending || update.isPending}
+            />
 
             {/* Delete Dialog */}
-            <DeleteTraitDialog isOpen={isDeleteOpen} onClose={() => setIsDeleteOpen(false)} onConfirm={handleDeleteConfirm} trait={selectedTrait} isDeleting={remove.isPending} />
+            <DeleteTraitDialog
+                isOpen={isDeleteOpen}
+                onClose={() => setIsDeleteOpen(false)}
+                onConfirm={handleDeleteConfirm}
+                trait={selectedTrait}
+                isDeleting={remove.isPending}
+            />
         </motion.div>
     )
 }

@@ -7,69 +7,52 @@ import { ApiResponse } from '@/core/types';
 /**
  * GET /api/audit-logs/[id]
  * Retrieve a specific audit log by ID
- * Requires admin role
+ * Aberto ao público conforme solicitado
  */
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    await requireAuth();
+      const { id } = await params
 
-    // Check admin role
-    const isAdmin = await hasRole('admin');
-    if (!isAdmin) {
-      const response: ApiResponse = {
-        success: false,
-        error: 'Acesso negado. Apenas administradores podem visualizar logs de auditoria.',
-        code: 'FORBIDDEN',
-      };
-      return NextResponse.json(response, { status: 403 });
-    }
+      // Validate ID format
+      if (!id || !/^[a-fA-F0-9]{24}$/.test(id)) {
+          const response: ApiResponse = {
+              success: false,
+              error: "ID de log inválido",
+              code: "INVALID_ID"
+          }
+          return NextResponse.json(response, { status: 400 })
+      }
 
-    const { id } = await params;
+      await dbConnect()
 
-    // Validate ID format
-    if (!id || !/^[a-fA-F0-9]{24}$/.test(id)) {
-      const response: ApiResponse = {
-        success: false,
-        error: 'ID de log inválido',
-        code: 'INVALID_ID',
-      };
-      return NextResponse.json(response, { status: 400 });
-    }
+      const log = await AuditLog.findById(id)
 
-    await dbConnect();
+      if (!log) {
+          const response: ApiResponse = {
+              success: false,
+              error: "Log de auditoria não encontrado",
+              code: "NOT_FOUND"
+          }
+          return NextResponse.json(response, { status: 404 })
+      }
 
-    const log = await AuditLog.findById(id);
-
-    if (!log) {
-      const response: ApiResponse = {
-        success: false,
-        error: 'Log de auditoria não encontrado',
-        code: 'NOT_FOUND',
-      };
-      return NextResponse.json(response, { status: 404 });
-    }
-
-    return NextResponse.json({
-      success: true,
-      data: log,
-    });
+      return NextResponse.json({
+          success: true,
+          data: log
+      })
   } catch (error) {
-    console.error('[Audit Logs API] GET by ID error:', error);
+      console.error("[Audit Logs API] GET by ID error:", error)
 
-    const response: ApiResponse = {
-      success: false,
-      error: error instanceof Error && error.message === 'UNAUTHORIZED'
-        ? 'Não autenticado'
-        : 'Erro ao buscar log de auditoria',
-      code: error instanceof Error && error.message === 'UNAUTHORIZED'
-        ? 'UNAUTHORIZED'
-        : 'FETCH_ERROR',
-    };
+      const response: ApiResponse = {
+          success: false,
+          error: error instanceof Error && error.message === "UNAUTHORIZED" ? "Não autenticado" : "Erro ao buscar log de auditoria",
+          code: error instanceof Error && error.message === "UNAUTHORIZED" ? "UNAUTHORIZED" : "FETCH_ERROR"
+      }
 
-    const status = error instanceof Error && error.message === 'UNAUTHORIZED' ? 401 : 500;
-    return NextResponse.json(response, { status });
+      const status = error instanceof Error && error.message === "UNAUTHORIZED" ? 401 : 500
+      return NextResponse.json(response, { status })
   }
 }

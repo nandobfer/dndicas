@@ -25,7 +25,7 @@ export function FeatsEntityCard({
             index={index}
             title="Talentos"
             icon={Zap}
-            description="Catálogo de talentos e feats de D&D"
+            description="Catálogo de talentos (feats)"
         />
     )
 }

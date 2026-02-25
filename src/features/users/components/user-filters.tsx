@@ -9,6 +9,7 @@
 import { SearchInput } from '@/components/ui/search-input';
 import { RoleTabs, type RoleFilter } from '@/components/ui/role-tabs';
 import { StatusChips, type StatusFilter } from '@/components/ui/status-chips';
+import { useAuth } from "@/core/hooks/useAuth"
 import { cn } from '@/core/utils';
 import type { UserFilters } from '../types/user.types';
 
@@ -49,11 +50,18 @@ export function UserFilters({
   isSearching = false,
   className,
 }: UserFiltersProps) {
+  const { isAdmin } = useAuth()
+
   return (
       <div className={cn("flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between", className)}>
           {/* Left side: Search */}
           <div className="flex-1">
-              <SearchInput value={filters.search || ""} onChange={onSearchChange} isLoading={isSearching} placeholder="Buscar por nome, username ou email..." />
+              <SearchInput
+                  value={filters.search || ""}
+                  onChange={onSearchChange}
+                  isLoading={isSearching}
+                  placeholder="Buscar por nome, username ou email..."
+              />
           </div>
 
           {/* Right side: Filters */}

@@ -23,7 +23,8 @@ import { motionConfig } from "@/lib/config/motion-configs"
 import { themeConfig } from "@/lib/config/theme-config"
 import { SidebarItem, SidebarSection } from "./sidebar-item"
 import { TooltipProvider } from "@/core/ui/tooltip"
-import { UserButton } from "@clerk/nextjs"
+import { UserButton, SignedIn, SignedOut, SignInButton } from "@clerk/nextjs"
+import { useAuth } from "@/core/hooks/useAuth"
 import { APP_VERSION } from "@/lib/config/version"
 
 export interface ExpandableSidebarProps {
@@ -43,7 +44,7 @@ export interface ExpandableSidebarProps {
  */
 const mainItems = [
     { label: "Início", href: "/", icon: Home },
-    { label: "Perfil", href: "/profile", icon: User },
+    { label: "Perfil", href: "/profile", icon: User, authenticated: true }
 ]
 
 // T020: Renamed from "Módulos" to "Cadastros", removed "Empresas", added "Usuários"
@@ -53,7 +54,7 @@ const cadastrosItems = [
     { label: "Usuários", href: "/users", icon: Users },
     { label: "Regras", href: "/rules", icon: Scroll },
     { label: "Habilidades", href: "/traits", icon: Sparkles },
-    { label: "Talentos", href: "/feats", icon: Zap },
+    { label: "Talentos", href: "/feats", icon: Zap }
 ]
 
 const adminItems = [{ label: "Logs", href: "/audit-logs", icon: FileText }]
@@ -69,6 +70,18 @@ export const ExpandableSidebar: React.FC<ExpandableSidebarProps> = ({
   className,
 }) => {
   const pathname = usePathname();
+  const { isSignedIn, isAdmin } = useAuth()
+
+  const filterItems = (items: any[]) =>
+      items.filter((item) => {
+          if (item.admin && !isAdmin) return false
+          if (item.authenticated && !isSignedIn) return false
+          return true
+      })
+
+  const visibleMainItems = filterItems(mainItems)
+  const visibleCadastrosItems = filterItems(cadastrosItems)
+  const visibleAdminItems = filterItems(adminItems)
 
   return (
       <TooltipProvider>
@@ -81,7 +94,7 @@ export const ExpandableSidebar: React.FC<ExpandableSidebarProps> = ({
                   glassConfig.sidebar.blur,
                   glassConfig.sidebar.background,
                   isExpanded && "shadow-2xl shadow-black/50",
-                  className,
+                  className
               )}
               variants={motionConfig.variants.sidebar}
               initial={false}
@@ -111,7 +124,7 @@ export const ExpandableSidebar: React.FC<ExpandableSidebarProps> = ({
                   <div className="space-y-6">
                       {/* Main Items */}
                       <div className="space-y-1">
-                          {mainItems.map((item) => (
+                          {visibleMainItems.map((item) => (
                               <SidebarItem
                                   key={item.href}
                                   href={item.href}
@@ -124,52 +137,79 @@ export const ExpandableSidebar: React.FC<ExpandableSidebarProps> = ({
                       </div>
 
                       {/* Cadastros (formerly Módulos) - T020 */}
-                      <SidebarSection isExpanded={isExpanded}>
-                          {cadastrosItems.map((item) => (
-                              <SidebarItem
-                                  key={item.href}
-                                  href={item.href}
-                                  icon={item.icon}
-                                  label={item.label}
-                                  isExpanded={isExpanded}
-                                  isActive={pathname === item.href || pathname.startsWith(item.href + "/")}
-                              />
-                          ))}
-                      </SidebarSection>
+                      {visibleCadastrosItems.length > 0 && (
+                          <SidebarSection isExpanded={isExpanded}>
+                              {visibleCadastrosItems.map((item) => (
+                                  <SidebarItem
+                                      key={item.href}
+                                      href={item.href}
+                                      icon={item.icon}
+                                      label={item.label}
+                                      isExpanded={isExpanded}
+                                      isActive={pathname === item.href || pathname.startsWith(item.href + "/")}
+                                  />
+                              ))}
+                          </SidebarSection>
+                      )}
 
                       {/* Admin */}
-                      <SidebarSection isExpanded={isExpanded}>
-                          {adminItems.map((item) => (
-                              <SidebarItem
-                                  key={item.href}
-                                  href={item.href}
-                                  icon={item.icon}
-                                  label={item.label}
-                                  isExpanded={isExpanded}
-                                  isActive={pathname === item.href || pathname.startsWith(item.href + "/")}
-                              />
-                          ))}
-                      </SidebarSection>
+                      {visibleAdminItems.length > 0 && (
+                          <SidebarSection isExpanded={isExpanded}>
+                              {visibleAdminItems.map((item) => (
+                                  <SidebarItem
+                                      key={item.href}
+                                      href={item.href}
+                                      icon={item.icon}
+                                      label={item.label}
+                                      isExpanded={isExpanded}
+                                      isActive={pathname === item.href || pathname.startsWith(item.href + "/")}
+                                  />
+                              ))}
+                          </SidebarSection>
+                      )}
                   </div>
               </nav>
 
-              {/* User Button Area at the bottom */}
-              <div className={cn("border-t border-white/5 flex items-center gap-3 mt-auto py-4 px-2")}>
-                  <div className="flex-shrink-0 w-8 h-8 flex items-center justify-center ml-3">
-                      <UserButton afterSignOutUrl="/sign-in" />
-                  </div>
-                  {isExpanded && (
-                      <motion.div
-                          className="flex flex-col overflow-hidden"
-                          initial={{ opacity: 0, x: -10 }}
-                          animate={{ opacity: 1, x: 0 }}
-                          exit={{ opacity: 0, x: -10 }}
-                          transition={motionConfig.sidebarTransition}
-                      >
-                          <span className="text-sm font-medium text-white truncate">Minha Conta</span>
-                          <span className="text-[10px] font-mono tracking-wider text-white/30 uppercase mt-0.5">{APP_VERSION}</span>
-                      </motion.div>
-                  )}
+              {/* User Area Footer */}
+              <div className={cn("border-t border-white/5 mt-auto py-4 px-2")}>
+                  <SignedIn>
+                      <div className="flex items-center gap-3">
+                          <div className="flex-shrink-0 w-8 h-8 flex items-center justify-center ml-3">
+                              <UserButton afterSignOutUrl="/sign-in" />
+                          </div>
+                          {isExpanded && (
+                              <motion.div
+                                  className="flex flex-col overflow-hidden"
+                                  initial={{ opacity: 0, x: -10 }}
+                                  animate={{ opacity: 1, x: 0 }}
+                                  exit={{ opacity: 0, x: -10 }}
+                                  transition={motionConfig.sidebarTransition}
+                              >
+                                  <span className="text-sm font-medium text-white truncate">Minha Conta</span>
+                                  <span className="text-[10px] font-mono tracking-wider text-white/30 uppercase mt-0.5">{APP_VERSION}</span>
+                              </motion.div>
+                          )}
+                      </div>
+                  </SignedIn>
+                  <SignedOut>
+                      <div className={cn("flex items-center gap-3", !isExpanded && "justify-center")}>
+                          <Link
+                              href="/sign-in"
+                              className={cn("flex items-center transition-all", !isExpanded ? "justify-center ml-3" : "gap-3 ml-3")}
+                              title="Acessar conta"
+                          >
+                              <div className="w-8 h-8 rounded-full bg-white/10 flex items-center justify-center text-white/50 hover:bg-white/20 hover:text-white transition-colors">
+                                  <User className="h-4 w-4" />
+                              </div>
+                              {isExpanded && (
+                                  <div className="flex flex-col overflow-hidden">
+                                      <span className="text-sm font-medium text-white/70 truncate">Entrar / Cadastrar</span>
+                                      <span className="text-[10px] text-white/30 uppercase font-bold tracking-wider">Acessar</span>
+                                  </div>
+                              )}
+                          </Link>
+                      </div>
+                  </SignedOut>
               </div>
           </motion.aside>
       </TooltipProvider>

@@ -21,25 +21,27 @@ export function useAuth() {
   const { signOut, userId } = useClerkAuth();
 
   return {
-    /** Objeto do usuário autenticado (Clerk User) */
-    user,
-    /** ID do usuário (string) */
-    userId,
-    /** Se os dados do Clerk foram carregados */
-    isLoaded: userLoaded,
-    /** Se o usuário está autenticado */
-    isSignedIn,
-    /** Função para fazer logout */
-    signOut: () => signOut(),
-    /** Email do usuário */
-    email: user?.primaryEmailAddress?.emailAddress || null,
-    /** Nome completo do usuário */
-    fullName: user?.fullName || null,
-    /** Primeiro nome */
-    firstName: user?.firstName || null,
-    /** Sobrenome */
-    lastName: user?.lastName || null,
-    /** URL da imagem de perfil */
-    imageUrl: user?.imageUrl || null,
-  };
+      /** Objeto do usuário autenticado (Clerk User) */
+      user,
+      /** ID do usuário (string) */
+      userId,
+      /** Se os dados do Clerk foram carregados */
+      isLoaded: userLoaded,
+      /** Se o usuário está autenticado */
+      isSignedIn,
+      /** Função para fazer logout */
+      signOut: () => signOut(),
+      /** Email do usuário */
+      email: user?.primaryEmailAddress?.emailAddress || null,
+      /** Nome completo do usuário */
+      fullName: user?.fullName || null,
+      /** Primeiro nome */
+      firstName: user?.firstName || null,
+      /** Sobrenome */
+      lastName: user?.lastName || null,
+      /** URL da imagem de perfil */
+      imageUrl: user?.imageUrl || null,
+      /** Se o usuário é um administrador */
+      isAdmin: (user?.publicMetadata?.roles as string[])?.includes("admin") || false
+  }
 }

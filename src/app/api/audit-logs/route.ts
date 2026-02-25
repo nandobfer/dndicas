@@ -8,23 +8,10 @@ import { ApiResponse, PaginatedResponse } from "@/core/types"
 
 /**
  * Lista logs de auditoria com paginação e filtros
- * Apenas administradores têm acesso
+ * Aberto ao público conforme solicitado
  */
 export async function GET(request: NextRequest) {
     try {
-        await requireAuth()
-
-        // Verifica se o usuário é admin
-        const isAdmin = await hasRole("admin")
-        if (!isAdmin) {
-            const response: ApiResponse = {
-                success: false,
-                error: "Acesso negado. Apenas administradores podem visualizar logs de auditoria.",
-                code: "FORBIDDEN"
-            }
-            return NextResponse.json(response, { status: 403 })
-        }
-
         await dbConnect()
 
         const { searchParams } = new URL(request.url)
@@ -200,7 +187,7 @@ export async function GET(request: NextRequest) {
         const response: ApiResponse = {
             success: false,
             error: error instanceof Error && error.message === "UNAUTHORIZED" ? "Não autenticado" : "Erro ao buscar logs de auditoria",
-            code: error instanceof Error && error.message === "UNAUTHORIZED" ? "UNAUTHORIZED" : "FETCH_ERROR",
+            code: error instanceof Error && error.message === "UNAUTHORIZED" ? "UNAUTHORIZED" : "FETCH_ERROR"
         }
 
         const status = error instanceof Error && error.message === "UNAUTHORIZED" ? 401 : 500

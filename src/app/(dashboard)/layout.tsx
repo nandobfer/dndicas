@@ -1,10 +1,10 @@
 "use client"
 
-import { UserButton } from "@clerk/nextjs"
+import { UserButton, SignedIn, SignedOut, SignInButton } from "@clerk/nextjs"
 import { Sheet, SheetContent, SheetTrigger, SheetTitle } from "@/core/ui/sheet"
 import { Button } from "@/core/ui/button"
 import { VisuallyHidden } from "@/core/ui/visually-hidden"
-import { Menu, Package2 } from "lucide-react"
+import { Menu, Package2, User } from "lucide-react"
 import Link from "next/link"
 import { motion } from "framer-motion"
 import { useSidebar } from "@/hooks/useSidebar"
@@ -62,9 +62,24 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                             <Sidebar className="mt-4" />
                         </nav>
 
-                        <div className="mt-auto pt-4 border-t border-white/5 flex items-center justify-between">
-                            <span className="text-sm text-white/70 font-medium">Minha Conta</span>
-                            <UserButton afterSignOutUrl="/sign-in" />
+                        <div className="mt-auto pt-4 border-t border-white/5">
+                            <SignedIn>
+                                <div className="flex items-center justify-between">
+                                    <span className="text-sm text-white/70 font-medium">Minha Conta</span>
+                                    <UserButton afterSignOutUrl="/sign-in" />
+                                </div>
+                            </SignedIn>
+                            <SignedOut>
+                                <Link
+                                    href="/sign-in"
+                                    className="flex items-center justify-between w-full h-10 px-3 rounded-lg bg-white/5 hover:bg-white/10 transition-colors"
+                                >
+                                    <span className="text-sm font-medium text-white/70">Acessar conta</span>
+                                    <div className="w-8 h-8 rounded-full bg-white/10 flex items-center justify-center text-white/50">
+                                        <User className="h-4 w-4" />
+                                    </div>
+                                </Link>
+                            </SignedOut>
                         </div>
                     </SheetContent>
                 </Sheet>
@@ -74,7 +89,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             <motion.div
                 className="flex flex-1 flex-col"
                 animate={{
-                    marginLeft,
+                    marginLeft
                 }}
                 transition={motionConfig.sidebarTransition}
             >

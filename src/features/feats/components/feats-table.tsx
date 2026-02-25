@@ -2,6 +2,7 @@
 
 import { motion, AnimatePresence } from "framer-motion";
 import { MoreHorizontal, Pencil, Trash2, Zap, Eye } from "lucide-react";
+import { useAuth } from "@/core/hooks/useAuth"
 import { GlassCard } from "@/components/ui/glass-card";
 import { Chip } from "@/components/ui/chip";
 import { LoadingState } from "@/components/ui/loading-state";
@@ -58,6 +59,7 @@ export function FeatsTable({
   onDelete,
   onPageChange,
 }: FeatsTableProps) {
+  const { isAdmin } = useAuth()
   const totalPages = Math.ceil(total / limit);
 
   if (isLoading && feats.length === 0) {
@@ -86,14 +88,18 @@ export function FeatsTable({
               <table className="w-full">
                   <thead>
                       <tr className="border-b border-white/5 bg-white/5">
-                          <th className="px-6 py-4 text-left text-xs font-semibold text-white/50 uppercase tracking-wider w-[100px]">Status</th>
+                          {isAdmin && (
+                              <th className="px-6 py-4 text-left text-xs font-semibold text-white/50 uppercase tracking-wider w-[100px]">Status</th>
+                          )}
                           <th className="px-6 py-4 text-left text-xs font-semibold text-white/50 uppercase tracking-wider">Nome</th>
                           <th className="px-6 py-4 text-left text-xs font-semibold text-white/50 uppercase tracking-wider w-[90px]">Nível</th>
                           <th className="px-6 py-4 text-left text-xs font-semibold text-white/50 uppercase tracking-wider">Requisitos</th>
                           <th className="px-6 py-4 text-left text-xs font-semibold text-white/50 uppercase tracking-wider w-full">Descrição</th>
                           <th className="px-6 py-4 text-left text-xs font-semibold text-white/50 uppercase tracking-wider">Fonte</th>
                           <th className="px-6 py-4 text-center text-xs font-semibold text-white/50 uppercase tracking-wider w-[80px]">Preview</th>
-                          <th className="px-6 py-4 text-right text-xs font-semibold text-white/50 uppercase tracking-wider w-[100px]">Ações</th>
+                          {isAdmin && (
+                              <th className="px-6 py-4 text-right text-xs font-semibold text-white/50 uppercase tracking-wider w-[100px]">Ações</th>
+                          )}
                       </tr>
                   </thead>
                   <tbody className="divide-y divide-white/5">
@@ -108,9 +114,13 @@ export function FeatsTable({
                                   transition={{ delay: index * 0.05 }}
                                   className="group hover:bg-white/5 transition-colors"
                               >
-                                  <td className="px-6 py-4 whitespace-nowrap">
-                                      <Chip variant={featStatusVariantMap[feat.status] || "common"}>{feat.status === "active" ? "Ativo" : "Inativo"}</Chip>
-                                  </td>
+                                  {isAdmin && (
+                                      <td className="px-6 py-4 whitespace-nowrap">
+                                          <Chip variant={featStatusVariantMap[feat.status] || "common"}>
+                                              {feat.status === "active" ? "Ativo" : "Inativo"}
+                                          </Chip>
+                                      </td>
+                                  )}
                                   <td className="px-6 py-4 whitespace-nowrap text-white font-medium">{feat.name}</td>
                                   <td className="px-6 py-4 whitespace-nowrap">
                                       <Chip variant={getLevelRarityVariant(feat.level)}>Nv. {feat.level}</Chip>
@@ -119,10 +129,18 @@ export function FeatsTable({
                                       <div className="flex items-center gap-1.5 max-w-[200px]">
                                           {feat.prerequisites.length > 0 ? (
                                               <>
-                                                  <Chip variant="common" size="sm" className="bg-white/5 border-white/5 text-[10px] py-0.5 px-2 h-auto max-w-[150px] truncate block">
+                                                  <Chip
+                                                      variant="common"
+                                                      size="sm"
+                                                      className="bg-white/5 border-white/5 text-[10px] py-0.5 px-2 h-auto max-w-[150px] truncate block"
+                                                  >
                                                       {feat.prerequisites[0].replace(/<[^>]*>/g, "")}
                                                   </Chip>
-                                                  {feat.prerequisites.length > 1 && <span className="text-[10px] text-white/40 font-medium shrink-0">+{feat.prerequisites.length - 1}</span>}
+                                                  {feat.prerequisites.length > 1 && (
+                                                      <span className="text-[10px] text-white/40 font-medium shrink-0">
+                                                          +{feat.prerequisites.length - 1}
+                                                      </span>
+                                                  )}
                                               </>
                                           ) : (
                                               <span className="text-xs text-white/30 italic">Nenhum</span>
@@ -142,25 +160,30 @@ export function FeatsTable({
                                           </button>
                                       </EntityPreviewTooltip>
                                   </td>
-                                  <td className="px-6 py-4 whitespace-nowrap text-right">
-                                      <GlassDropdownMenu>
-                                          <GlassDropdownMenuTrigger asChild>
-                                              <button className="p-2 rounded-lg text-white/40 hover:text-white hover:bg-white/10 transition-colors">
-                                                  <MoreHorizontal className="h-4 w-4" />
-                                              </button>
-                                          </GlassDropdownMenuTrigger>
-                                          <GlassDropdownMenuContent align="end">
-                                              <GlassDropdownMenuItem onClick={() => onEdit(feat)}>
-                                                  <Pencil className="mr-2 h-4 w-4" />
-                                                  Editar
-                                              </GlassDropdownMenuItem>
-                                              <GlassDropdownMenuItem onClick={() => onDelete(feat)} className="text-red-400 hover:text-red-300 focus:text-red-300">
-                                                  <Trash2 className="mr-2 h-4 w-4" />
-                                                  Excluir
-                                              </GlassDropdownMenuItem>
-                                          </GlassDropdownMenuContent>
-                                      </GlassDropdownMenu>
-                                  </td>
+                                  {isAdmin && (
+                                      <td className="px-6 py-4 whitespace-nowrap text-right">
+                                          <GlassDropdownMenu>
+                                              <GlassDropdownMenuTrigger asChild>
+                                                  <button className="p-2 rounded-lg text-white/40 hover:text-white hover:bg-white/10 transition-colors">
+                                                      <MoreHorizontal className="h-4 w-4" />
+                                                  </button>
+                                              </GlassDropdownMenuTrigger>
+                                              <GlassDropdownMenuContent align="end">
+                                                  <GlassDropdownMenuItem onClick={() => onEdit(feat)}>
+                                                      <Pencil className="mr-2 h-4 w-4" />
+                                                      Editar
+                                                  </GlassDropdownMenuItem>
+                                                  <GlassDropdownMenuItem
+                                                      onClick={() => onDelete(feat)}
+                                                      className="text-red-400 hover:text-red-300 focus:text-red-300"
+                                                  >
+                                                      <Trash2 className="mr-2 h-4 w-4" />
+                                                      Excluir
+                                                  </GlassDropdownMenuItem>
+                                              </GlassDropdownMenuContent>
+                                          </GlassDropdownMenu>
+                                      </td>
+                                  )}
                               </motion.tr>
                           ))}
                       </AnimatePresence>

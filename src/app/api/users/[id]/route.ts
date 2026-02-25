@@ -29,12 +29,6 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     try {
         const { id } = await params
 
-        // Verify authentication
-        const { user: currentUser } = await getCurrentUserFromDb()
-        if (!currentUser) {
-            return NextResponse.json({ error: "Não autenticado" }, { status: 401 })
-        }
-
         await dbConnect()
 
         const user = await User.findOne({ _id: id, deleted: { $ne: true } }).lean()

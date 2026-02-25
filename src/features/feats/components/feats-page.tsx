@@ -7,6 +7,7 @@ import { toast } from 'sonner';
 import { cn } from '@/core/utils';
 import { useFeats } from '../hooks/useFeats';
 import { useFeatMutations } from '../hooks/useFeatMutations';
+import { useAuth } from "@/core/hooks/useAuth"
 import { FeatsTable } from './feats-table';
 import { FeatsFilters } from './feats-filters';
 import { FeatFormModal } from './feat-form-modal';
@@ -17,6 +18,7 @@ import { motionConfig } from '@/lib/config/motion-configs';
 import { useDebounce } from '@/core/hooks/useDebounce';
 
 export function FeatsPage() {
+  const { isAdmin } = useAuth()
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState<FeatsFiltersType['status']>('all');
@@ -121,81 +123,76 @@ export function FeatsPage() {
   };
 
   return (
-    <motion.div
-      variants={motionConfig.variants.fadeInUp}
-      initial="initial"
-      animate="animate"
-      className="space-y-6"
-    >
-      {/* Header */}
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-white flex items-center gap-2">
-            <Zap className="h-6 w-6 text-amber-400" />
-            Catálogo de Talentos
-          </h1>
-          <p className="text-sm text-white/60 mt-1">
-            Gerencie os talentos disponíveis para personagens (D&D 5e)
-          </p>
-        </div>
+      <motion.div variants={motionConfig.variants.fadeInUp} initial="initial" animate="animate" className="space-y-6">
+          {/* Header */}
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                  <h1 className="text-2xl font-bold text-white flex items-center gap-2">
+                      <Zap className="h-6 w-6 text-amber-400" />
+                      Catálogo de Talentos
+                  </h1>
+                  <p className="text-sm text-white/60 mt-1">Gerencie os talentos disponíveis para personagens (D&D 5e)</p>
+              </div>
 
-        <button
-          onClick={handleNewFeat}
-          className={cn(
-            'inline-flex items-center gap-2 px-4 py-2 rounded-lg',
-            'bg-blue-500 text-white font-medium text-sm',
-            'hover:bg-blue-600 transition-colors',
-            'focus:outline-none focus:ring-2 focus:ring-blue-500/50',
-            'shadow-lg shadow-blue-500/20'
-          )}
-        >
-          <Plus className="h-4 w-4" />
-          Novo Talento
-        </button>
-      </div>
+              {isAdmin && (
+                  <button
+                      onClick={handleNewFeat}
+                      className={cn(
+                          "inline-flex items-center gap-2 px-4 py-2 rounded-lg",
+                          "bg-blue-500 text-white font-medium text-sm",
+                          "hover:bg-blue-600 transition-colors",
+                          "focus:outline-none focus:ring-2 focus:ring-blue-500/50",
+                          "shadow-lg shadow-blue-500/20"
+                      )}
+                  >
+                      <Plus className="h-4 w-4" />
+                      Novo Talento
+                  </button>
+              )}
+          </div>
 
-      {/* Filters */}
-      <GlassCard>
-        <GlassCardContent className="py-4">
-          <FeatsFilters
-            filters={{ search, status, level, levelMax }}
-            onSearchChange={handleSearchChange}
-            onStatusChange={handleStatusChange}
-            onLevelChange={handleLevelChange}
-            isSearching={isFetching && !isLoading}
+          {/* Filters */}
+          <GlassCard>
+              <GlassCardContent className="py-4">
+                  <FeatsFilters
+                      filters={{ search, status, level, levelMax }}
+                      onSearchChange={handleSearchChange}
+                      onStatusChange={handleStatusChange}
+                      onLevelChange={handleLevelChange}
+                      isSearching={isFetching && !isLoading}
+                  />
+              </GlassCardContent>
+          </GlassCard>
+
+          {/* Table */}
+          <FeatsTable
+              feats={data?.items || []}
+              isLoading={isLoading}
+              total={data?.total || 0}
+              page={filters.page || 1}
+              limit={filters.limit || 10}
+              onPageChange={setPage}
+              onEdit={handleEdit}
+              onDelete={handleDelete}
           />
-        </GlassCardContent>
-      </GlassCard>
 
-      {/* Table */}
-      <FeatsTable
-        feats={data?.items || []}
-        isLoading={isLoading}
-        total={data?.total || 0}
-        page={filters.page || 1}
-        limit={filters.limit || 10}
-        onPageChange={setPage}
-        onEdit={handleEdit}
-        onDelete={handleDelete}
-      />
+          {/* Form Modal */}
+          <FeatFormModal
+              isOpen={isModalOpen}
+              onClose={handleModalClose}
+              onSubmit={handleFormSubmit}
+              feat={selectedFeat}
+              isSubmitting={createFeat.isPending || updateFeat.isPending}
+          />
 
-      {/* Form Modal */}
-      <FeatFormModal
-        isOpen={isModalOpen}
-        onClose={handleModalClose}
-        onSubmit={handleFormSubmit}
-        feat={selectedFeat}
-        isSubmitting={createFeat.isPending || updateFeat.isPending}
-      />
-
-      {/* Delete Confirmation Dialog */}
-      <DeleteFeatDialog
-        isOpen={isDeleteOpen}
-        onClose={() => setIsDeleteOpen(false)}
-        onConfirm={handleDeleteConfirm}
-        feat={selectedFeat}
-        isDeleting={deleteFeat.isPending}
-      />
-    </motion.div>
-  );
+          {/* Delete Confirmation Dialog */}
+          <DeleteFeatDialog
+              isOpen={isDeleteOpen}
+              onClose={() => setIsDeleteOpen(false)}
+              onConfirm={handleDeleteConfirm}
+              feat={selectedFeat}
+              isDeleting={deleteFeat.isPending}
+          />
+      </motion.div>
+  )
 }

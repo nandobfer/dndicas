@@ -30,51 +30,44 @@ const CreateCompanySchema = z.object({
  */
 export async function GET(request: NextRequest) {
   try {
-    await requireAuth()
-    await dbConnect();
+      await dbConnect()
 
-    const { searchParams } = new URL(request.url);
-    const page = parseInt(searchParams.get('page') || '1');
-    const limit = parseInt(searchParams.get('limit') || '10');
-    const search = searchParams.get('search') || '';
-    const skip = (page - 1) * limit;
+      const { searchParams } = new URL(request.url)
+      const page = parseInt(searchParams.get("page") || "1")
+      const limit = parseInt(searchParams.get("limit") || "10")
+      const search = searchParams.get("search") || ""
+      const skip = (page - 1) * limit
 
-    const query = search
-      ? { $text: { $search: search } }
-      : {};
+      const query = search ? { $text: { $search: search } } : {}
 
-    const [companies, total] = await Promise.all([
-      Company.find(query).skip(skip).limit(limit).sort({ createdAt: -1 }),
-      Company.countDocuments(query),
-    ]);
+      const [companies, total] = await Promise.all([
+          Company.find(query).skip(skip).limit(limit).sort({ createdAt: -1 }),
+          Company.countDocuments(query)
+      ])
 
-    const response: PaginatedResponse<typeof companies[0]> = {
-      success: true,
-      data: companies,
-      pagination: {
-        page,
-        limit,
-        total,
-        totalPages: Math.ceil(total / limit),
-      },
-    };
+      const response: PaginatedResponse<(typeof companies)[0]> = {
+          success: true,
+          data: companies,
+          pagination: {
+              page,
+              limit,
+              total,
+              totalPages: Math.ceil(total / limit)
+          }
+      }
 
-    return NextResponse.json(response, { status: 200 });
+      return NextResponse.json(response, { status: 200 })
   } catch (error) {
-    console.error('Error fetching companies:', error);
+      console.error("Error fetching companies:", error)
 
-    const response: ApiResponse = {
-      success: false,
-      error: error instanceof Error && error.message === 'UNAUTHORIZED'
-        ? 'Não autenticado'
-        : 'Erro ao buscar empresas',
-      code: error instanceof Error && error.message === 'UNAUTHORIZED'
-        ? 'UNAUTHORIZED'
-        : 'FETCH_ERROR',
-    };
+      const response: ApiResponse = {
+          success: false,
+          error: error instanceof Error && error.message === "UNAUTHORIZED" ? "Não autenticado" : "Erro ao buscar empresas",
+          code: error instanceof Error && error.message === "UNAUTHORIZED" ? "UNAUTHORIZED" : "FETCH_ERROR"
+      }
 
-    const status = error instanceof Error && error.message === 'UNAUTHORIZED' ? 401 : 500;
-    return NextResponse.json(response, { status });
+      const status = error instanceof Error && error.message === "UNAUTHORIZED" ? 401 : 500
+      return NextResponse.json(response, { status })
   }
 }
 

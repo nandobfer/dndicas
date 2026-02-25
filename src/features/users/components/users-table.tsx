@@ -56,10 +56,16 @@ const columns = [
  * UsersTable component with animations and pagination.
  */
 export function UsersTable({ users, total, page, limit, isLoading = false, onEdit, onDelete, onPageChange }: UsersTableProps) {
-    const { userId } = useAuth()
+    const { userId, isAdmin } = useAuth()
     const totalPages = Math.ceil(total / limit)
-    const hasNextPage = page < totalPages
-    const hasPrevPage = page > 1
+
+    // Filter columns based on role
+    const visibleColumns = columns.filter((col) => {
+        if (col.key === "actions") {
+            return isAdmin
+        }
+        return true
+    })
 
     // Loading state
     if (isLoading && users.length === 0) {
@@ -91,8 +97,11 @@ export function UsersTable({ users, total, page, limit, isLoading = false, onEdi
                     {/* Header */}
                     <thead>
                         <tr className="border-b border-white/10">
-                            {columns.map((col) => (
-                                <th key={col.key} className={cn("px-4 py-3 text-left text-xs font-medium text-white/50 uppercase tracking-wider", col.className)}>
+                            {visibleColumns.map((col) => (
+                                <th
+                                    key={col.key}
+                                    className={cn("px-4 py-3 text-left text-xs font-medium text-white/50 uppercase tracking-wider", col.className)}
+                                >
                                     {col.label}
                                 </th>
                             ))}
@@ -132,48 +141,54 @@ export function UsersTable({ users, total, page, limit, isLoading = false, onEdi
                                     </td>
 
                                     {/* Actions */}
-                                    <td className="px-4 py-3 text-right">
-                                        <GlassDropdownMenu>
-                                            <GlassDropdownMenuTrigger asChild>
-                                                <button
-                                                    className={cn(
-                                                        "p-2 rounded-lg transition-colors",
-                                                        "text-white/40 hover:text-white hover:bg-white/10",
-                                                        "opacity-0 group-hover:opacity-100 focus:opacity-100",
-                                                    )}
-                                                    aria-label="Ações do usuário"
-                                                >
-                                                    <MoreHorizontal className="h-4 w-4" />
-                                                </button>
-                                            </GlassDropdownMenuTrigger>
-                                            <GlassDropdownMenuContent align="end">
-                                                <GlassDropdownMenuItem onClick={() => onEdit(user)}>
-                                                    <Pencil className="h-4 w-4" />
-                                                    Editar
-                                                </GlassDropdownMenuItem>
-                                                {user.clerkId === userId ? (
-                                                    <GlassTooltip>
-                                                        <GlassTooltipTrigger asChild>
-                                                            <div>
-                                                                <GlassDropdownMenuItem disabled className="text-rose-400/50 cursor-not-allowed opacity-50">
-                                                                    <Trash2 className="h-4 w-4" />
-                                                                    Excluir
-                                                                </GlassDropdownMenuItem>
-                                                            </div>
-                                                        </GlassTooltipTrigger>
-                                                        <GlassTooltipContent side="left">
-                                                            Você não pode excluir a si mesmo
-                                                        </GlassTooltipContent>
-                                                    </GlassTooltip>
-                                                ) : (
-                                                    <GlassDropdownMenuItem onClick={() => onDelete(user)} className="text-rose-400 focus:text-rose-400">
-                                                        <Trash2 className="h-4 w-4" />
-                                                        Excluir
+                                    {isAdmin && (
+                                        <td className="px-4 py-3 text-right">
+                                            <GlassDropdownMenu>
+                                                <GlassDropdownMenuTrigger asChild>
+                                                    <button
+                                                        className={cn(
+                                                            "p-2 rounded-lg transition-colors",
+                                                            "text-white/40 hover:text-white hover:bg-white/10",
+                                                            "opacity-0 group-hover:opacity-100 focus:opacity-100"
+                                                        )}
+                                                        aria-label="Ações do usuário"
+                                                    >
+                                                        <MoreHorizontal className="h-4 w-4" />
+                                                    </button>
+                                                </GlassDropdownMenuTrigger>
+                                                <GlassDropdownMenuContent align="end">
+                                                    <GlassDropdownMenuItem onClick={() => onEdit(user)}>
+                                                        <Pencil className="h-4 w-4" />
+                                                        Editar
                                                     </GlassDropdownMenuItem>
-                                                )}
-                                            </GlassDropdownMenuContent>
-                                        </GlassDropdownMenu>
-                                    </td>
+                                                    {user.clerkId === userId ? (
+                                                        <GlassTooltip>
+                                                            <GlassTooltipTrigger asChild>
+                                                                <div>
+                                                                    <GlassDropdownMenuItem
+                                                                        disabled
+                                                                        className="text-rose-400/50 cursor-not-allowed opacity-50"
+                                                                    >
+                                                                        <Trash2 className="h-4 w-4" />
+                                                                        Excluir
+                                                                    </GlassDropdownMenuItem>
+                                                                </div>
+                                                            </GlassTooltipTrigger>
+                                                            <GlassTooltipContent side="left">Você não pode excluir a si mesmo</GlassTooltipContent>
+                                                        </GlassTooltip>
+                                                    ) : (
+                                                        <GlassDropdownMenuItem
+                                                            onClick={() => onDelete(user)}
+                                                            className="text-rose-400 focus:text-rose-400"
+                                                        >
+                                                            <Trash2 className="h-4 w-4" />
+                                                            Excluir
+                                                        </GlassDropdownMenuItem>
+                                                    )}
+                                                </GlassDropdownMenuContent>
+                                            </GlassDropdownMenu>
+                                        </td>
+                                    )}
                                 </motion.tr>
                             ))}
                         </AnimatePresence>

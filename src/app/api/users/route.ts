@@ -19,12 +19,6 @@ import { UserFilters, UsersListResponse, UserResponse, UserStatus } from "@/feat
  */
 export async function GET(request: NextRequest) {
     try {
-        // Verify authentication
-        const { user: currentUser } = await getCurrentUserFromDb()
-        if (!currentUser) {
-            return NextResponse.json({ error: "Não autenticado" }, { status: 401 })
-        }
-
         await dbConnect()
 
         // Parse query parameters
@@ -34,14 +28,14 @@ export async function GET(request: NextRequest) {
             role: searchParams.get("role") || "all",
             status: searchParams.get("status") || "active",
             page: searchParams.get("page") || "1",
-            limit: searchParams.get("limit") || "10",
+            limit: searchParams.get("limit") || "10"
         }
 
         // Validate filters
         const parseResult = userFiltersSchema.safeParse({
             ...rawFilters,
             page: parseInt(rawFilters.page, 10),
-            limit: parseInt(rawFilters.limit, 10),
+            limit: parseInt(rawFilters.limit, 10)
         })
 
         if (!parseResult.success) {
@@ -54,7 +48,7 @@ export async function GET(request: NextRequest) {
         // We use $and to ensure deleted filter is ALWAYS applied even if other filters are added
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const query: any = {
-            $and: [{ deleted: { $ne: true } }],
+            $and: [{ deleted: { $ne: true } }]
         }
 
         // Status filter
@@ -75,8 +69,8 @@ export async function GET(request: NextRequest) {
                 $or: [
                     { username: { $regex: filters.search, $options: "i" } },
                     { email: { $regex: filters.search, $options: "i" } },
-                    { name: { $regex: filters.search, $options: "i" } },
-                ],
+                    { name: { $regex: filters.search, $options: "i" } }
+                ]
             })
         }
 
@@ -88,7 +82,7 @@ export async function GET(request: NextRequest) {
         // Execute query
         const [users, total] = await Promise.all([
             User.find(query).sort({ createdAt: -1 }).skip(skip).limit(limit).lean(),
-            User.countDocuments(query),
+            User.countDocuments(query)
         ])
 
         const response: UsersListResponse = {
@@ -103,11 +97,11 @@ export async function GET(request: NextRequest) {
                 status: user.status as UserStatus,
                 deleted: user.deleted || false,
                 createdAt: user.createdAt.toISOString(),
-                updatedAt: user.updatedAt.toISOString(),
+                updatedAt: user.updatedAt.toISOString()
             })),
             total,
             page,
-            totalPages: Math.ceil(total / limit),
+            totalPages: Math.ceil(total / limit)
         }
 
         return NextResponse.json(response)

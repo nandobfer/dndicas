@@ -28,53 +28,50 @@ import { ApiResponse } from '@/core/types';
  */
 export async function GET(request: NextRequest) {
   try {
-    // Autenticação
-    await requireAuth();
+      // Obter key dos query params
+      const { searchParams } = new URL(request.url)
+      const key = searchParams.get("key")
 
-    // Obter key dos query params
-    const { searchParams } = new URL(request.url);
-    const key = searchParams.get('key');
+      if (!key) {
+          const response: ApiResponse = {
+              success: false,
+              error: "Chave do arquivo não fornecida",
+              code: "KEY_REQUIRED"
+          }
+          return NextResponse.json(response, { status: 400 })
+      }
 
-    if (!key) {
+      // Gerar URL assinada
+      const url = await getFileUrl(key)
+
       const response: ApiResponse = {
-        success: false,
-        error: 'Chave do arquivo não fornecida',
-        code: 'KEY_REQUIRED',
-      };
-      return NextResponse.json(response, { status: 400 });
-    }
+          success: true,
+          data: {
+              url,
+              key,
+              expiresIn: 3600 // 1 hora
+          }
+      }
 
-    // Gerar URL assinada
-    const url = await getFileUrl(key);
-
-    const response: ApiResponse = {
-      success: true,
-      data: {
-        url,
-        key,
-        expiresIn: 3600, // 1 hora
-      },
-    };
-
-    return NextResponse.json(response, { status: 200 });
+      return NextResponse.json(response, { status: 200 })
   } catch (error) {
-    console.error('Download URL error:', error);
+      console.error("Download URL error:", error)
 
-    if (error instanceof Error && error.message === 'UNAUTHORIZED') {
+      if (error instanceof Error && error.message === "UNAUTHORIZED") {
+          const response: ApiResponse = {
+              success: false,
+              error: "Não autenticado",
+              code: "UNAUTHORIZED"
+          }
+          return NextResponse.json(response, { status: 401 })
+      }
+
       const response: ApiResponse = {
-        success: false,
-        error: 'Não autenticado',
-        code: 'UNAUTHORIZED',
-      };
-      return NextResponse.json(response, { status: 401 });
-    }
+          success: false,
+          error: "Erro ao gerar URL de download",
+          code: "DOWNLOAD_URL_ERROR"
+      }
 
-    const response: ApiResponse = {
-      success: false,
-      error: 'Erro ao gerar URL de download',
-      code: 'DOWNLOAD_URL_ERROR',
-    };
-
-    return NextResponse.json(response, { status: 500 });
+      return NextResponse.json(response, { status: 500 })
   }
 }

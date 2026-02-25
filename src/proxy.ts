@@ -32,16 +32,16 @@ export default clerkMiddleware(async (auth, req) => {
 
   // Protege todas as rotas que NÃO são públicas
   if (!isPublicRoute(req)) {
-    if (!userId) {
-      // Log de tentativa não autorizada (opcional, apenas em desenvolvimento)
-      if (process.env.NODE_ENV === 'development') {
-        console.log(`🔒 Unauthorized access attempt to: ${req.nextUrl.pathname}`);
+      if (!userId) {
+          // Log de tentativa não autorizada (opcional, apenas em desenvolvimento)
+          if (process.env.NODE_ENV === "development") {
+              // console.log(`🔒 Unauthorized access attempt to: ${req.nextUrl.pathname}`);
+          }
       }
-    }
 
-    // CRÍTICO: Esta linha protege a rota
-    // Remove ou comente esta linha e a autenticação para de funcionar
-    await auth.protect();
+      // A autenticação agora é opcional.
+      // Removido auth.protect() para todas as rotas.
+      // await auth.protect();
   }
 
   // Log de acesso para rotas protegidas (opcional)
