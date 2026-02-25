@@ -47,7 +47,6 @@ interface DashboardStats {
 }
 
 const dndEntities = [
-    { id: "rules", title: "Regras", component: RulesEntityCard },
     {
         id: "classes",
         title: "Classes",
@@ -63,16 +62,16 @@ const dndEntities = [
         component: WipEntityCard
     },
     {
-        id: "feats",
-        title: "Talentos",
-        component: FeatsEntityCard
-    },
-    {
         id: "traits",
         title: "Habilidades",
         icon: Sparkles,
         description: "Traits e habilidades de classe/raça",
         component: TraitsEntityCard
+    },
+    {
+        id: "feats",
+        title: "Talentos",
+        component: FeatsEntityCard
     },
     {
         id: "items",
@@ -183,49 +182,7 @@ export default function DashboardPage() {
                     </GlassCard>
                 </motion.div>
 
-                {/* Audit Logs Stat */}
-                <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.25 }}>
-                    <GlassCard
-                        className={cn(
-                            "h-full group transition-colors overflow-hidden",
-                            entityConfig.Segurança.border,
-                            entityConfig.Segurança.hoverBorder
-                        )}
-                    >
-                        <GlassCardHeader className="pb-2">
-                            <div className="flex items-center justify-between">
-                                <div className="space-y-1">
-                                    <GlassCardTitle className="text-white/70 text-sm font-medium flex items-center gap-2">
-                                        <Activity className={cn("h-4 w-4", entityConfig.Segurança.text)} />
-                                        Segurança
-                                    </GlassCardTitle>
-                                    <div className="text-3xl font-bold text-white">{loading ? "..." : stats?.auditLogs.total || 0}</div>
-                                </div>
-                                <div className={cn("p-3 rounded-xl border", entityConfig.Segurança.bgAlpha, entityConfig.Segurança.border)}>
-                                    <FileText className={cn("h-6 w-6", entityConfig.Segurança.text)} />
-                                </div>
-                            </div>
-                        </GlassCardHeader>
-                        <GlassCardContent>
-                            <div className="space-y-4">
-                                <div className="flex items-end justify-between">
-                                    <p className="text-xs text-white/40">Atividades auditadas nas últimas 24h</p>
-                                    <div
-                                        className={cn(
-                                            "text-xs font-medium px-2 py-0.5 rounded-full border flex items-center gap-1",
-                                            entityConfig.Segurança.badge,
-                                            entityConfig.Segurança.border
-                                        )}
-                                    >
-                                        <Clock className="h-3 w-3" />
-                                        Em tempo real
-                                    </div>
-                                </div>
-                                {stats?.auditLogs.activity && <MiniLineChart data={stats.auditLogs.activity} color={entityConfig.Segurança.hex} />}
-                            </div>
-                        </GlassCardContent>
-                    </GlassCard>
-                </motion.div>
+                <RulesEntityCard stats={stats?.rules} loading={loading} index={1} />
             </div>
 
             {/* In Development Features */}
@@ -240,7 +197,7 @@ export default function DashboardPage() {
                     </span>
                 </div>
 
-                <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-3">
+                <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
                     {dndEntities.map(({ component: Card, id, ...entity }, index) => {
                         const entityStats =
                             id === "rules"
