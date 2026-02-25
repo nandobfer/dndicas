@@ -103,7 +103,7 @@ export function SpellsFilters({
             <div className="flex flex-col lg:flex-row lg:items-center gap-4 justify-between">
                 <div className="flex flex-col md:flex-row items-start md:items-center gap-4 flex-1">
                     {/* Search */}
-                    <div className="flex-1 w-full lg:max-w-md">
+                    <div className="flex-1 w-full lg:max-w-sm">
                         <SearchInput
                             value={filters.search || ""}
                             onChange={onSearchChange}
@@ -177,6 +177,20 @@ export function SpellsFilters({
                             </AnimatePresence>
                         </div>
                     </div>
+
+                    {/* Dice Types Filter */}
+                    <div className="flex items-center gap-3">
+                        <span className="text-xs font-semibold text-white/40 uppercase tracking-wider whitespace-nowrap">Dados:</span>
+                        <GlassSelector
+                            value={filters.diceTypes || []}
+                            onChange={(vals) => onDiceTypesChange(vals as DiceType[])}
+                            options={diceTypeOptions}
+                            mode="multi"
+                            layout="horizontal"
+                            layoutId="filter-dice-selector"
+                            className="h-10"
+                        />
+                    </div>
                 </div>
 
                 {/* Status */}
@@ -214,20 +228,6 @@ export function SpellsFilters({
                         layout="horizontal"
                         layoutId="filter-attr-selector"
                         size="sm"
-                        className="h-10"
-                    />
-                </div>
-
-                {/* Dice Types Filter */}
-                <div className="flex items-center gap-3">
-                    <span className="text-xs font-semibold text-white/40 uppercase tracking-wider whitespace-nowrap">Dados:</span>
-                    <GlassSelector
-                        value={filters.diceTypes || []}
-                        onChange={(vals) => onDiceTypesChange(vals as DiceType[])}
-                        options={diceTypeOptions}
-                        mode="multi"
-                        layout="horizontal"
-                        layoutId="filter-dice-selector"
                         className="h-10"
                     />
                 </div>
