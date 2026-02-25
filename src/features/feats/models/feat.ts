@@ -22,6 +22,11 @@ export interface IFeat extends Document {
   level: number;
   /** Array of prerequisite strings (can be empty) */
   prerequisites: string[];
+  /** Array of attribute bonuses */
+  attributeBonuses: {
+    attribute: string;
+    value: number;
+  }[];
   /** Feat visibility status */
   status: 'active' | 'inactive';
   /** Creation timestamp */
@@ -74,6 +79,15 @@ const FeatSchema = new Schema<IFeat>(
         message: 'Pré-requisitos não podem ser strings vazias',
       },
     },
+    attributeBonuses: {
+      type: [
+        {
+          attribute: { type: String, required: true },
+          value: { type: Number, required: true, min: 1, max: 3 },
+        },
+      ],
+      default: [],
+    },
     status: {
       type: String,
       enum: {
@@ -103,6 +117,7 @@ const FeatSchema = new Schema<IFeat>(
 FeatSchema.index({ name: 'text', description: 'text' }); // Full-text search
 FeatSchema.index({ status: 1 }); // Filter by status
 FeatSchema.index({ level: 1 }); // Filter/sort by level
+FeatSchema.index({ 'attributeBonuses.attribute': 1 }); // Filter by attributes
 FeatSchema.index({ createdAt: -1 }); // Sort by creation date
 
 export const Feat: Model<IFeat> =

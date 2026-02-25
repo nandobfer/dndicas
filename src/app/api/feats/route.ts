@@ -20,43 +20,45 @@ export async function GET(req: NextRequest) {
     const status = url.searchParams.get('status');
     const level = url.searchParams.get('level');
     const levelMax = url.searchParams.get('levelMax');
+    const attributes = url.searchParams.get("attributes")?.split(",").filter(Boolean)
 
-    const query: Record<string, unknown> = {};
+    const query: Record<string, unknown> = {}
 
     // Search filter
     if (search) {
-      if (searchField === 'name') {
-        query.name = { $regex: search, $options: 'i' };
-      } else {
-        query.$or = [
-          { name: { $regex: search, $options: 'i' } },
-          { description: { $regex: search, $options: 'i' } },
-          { source: { $regex: search, $options: 'i' } },
-        ];
-      }
+        if (searchField === "name") {
+            query.name = { $regex: search, $options: "i" }
+        } else {
+            query.$or = [{ name: { $regex: search, $options: "i" } }, { description: { $regex: search, $options: "i" } }, { source: { $regex: search, $options: "i" } }]
+        }
     }
 
     // Status filter
-    if (status && status !== 'all') {
-      if (status === 'active' || status === 'inactive') {
-        query.status = status;
-      }
+    if (status && status !== "all") {
+        if (status === "active" || status === "inactive") {
+            query.status = status
+        }
     }
 
     // Level filter (exact match)
     if (level) {
-      const levelNum = parseInt(level, 10);
-      if (!isNaN(levelNum) && levelNum >= 1 && levelNum <= 20) {
-        query.level = levelNum;
-      }
+        const levelNum = parseInt(level, 10)
+        if (!isNaN(levelNum) && levelNum >= 1 && levelNum <= 20) {
+            query.level = levelNum
+        }
     }
 
     // Level range filter (1 to levelMax)
     if (levelMax && !level) {
-      const levelMaxNum = parseInt(levelMax, 10);
-      if (!isNaN(levelMaxNum) && levelMaxNum >= 1 && levelMaxNum <= 20) {
-        query.level = { $lte: levelMaxNum };
-      }
+        const levelMaxNum = parseInt(levelMax, 10)
+        if (!isNaN(levelMaxNum) && levelMaxNum >= 1 && levelMaxNum <= 20) {
+            query.level = { $lte: levelMaxNum }
+        }
+    }
+
+    // Attributes filter (multi-select)
+    if (attributes && attributes.length > 0) {
+        query["attributeBonuses.attribute"] = { $in: attributes }
     }
 
     const items = await Feat.find(query as any)

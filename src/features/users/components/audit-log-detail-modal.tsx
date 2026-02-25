@@ -9,6 +9,7 @@ import { DiffView } from "@/components/ui/diff-view"
 import { MentionContent } from "@/features/rules/components/mention-badge"
 import { glassClasses, cardGlass } from "@/lib/config/glass-config"
 import { fade } from "@/lib/config/motion-configs"
+import { attributeColors, AttributeType } from "@/lib/config/colors"
 import { toast } from "sonner"
 import type { AuditLog } from "../types/audit.types"
 import { cn } from "@/core/utils"
@@ -57,15 +58,39 @@ const renderAuditValue = (value: unknown) => {
     if (Array.isArray(value)) {
         return (
             <div className="flex flex-wrap gap-1.5 p-1 bg-black/10 rounded border border-white/5 w-full">
-                {value.map((item, i) => (
-                    <div key={i} className="px-2 py-0.5 rounded bg-white/5 border border-white/10 text-[11px] text-white/70 flex items-center gap-1">
-                        {typeof item === "string" && (item.includes("<p>") || item.includes("<span")) ? (
-                            <MentionContent html={item} mode="inline" className="[&_p]:inline [&_p]:m-0 align-middle" />
-                        ) : (
-                            String(item)
-                        )}
-                    </div>
-                ))}
+                {value.map((item, i) => {
+                    // Check if it's an attribute bonus object
+                    const isAttributeBonus = item && typeof item === "object" && "attribute" in item && "value" in item
+
+                    if (isAttributeBonus) {
+                        const bonus = item as { attribute: string; value: number }
+                        const config = attributeColors[bonus.attribute as AttributeType]
+
+                        return (
+                            <div
+                                key={i}
+                                className={cn(
+                                    "px-2 py-0.5 rounded border text-[10px] font-bold flex items-center gap-1",
+                                    config?.badge || "bg-white/10 text-white/70 border-white/10",
+                                    config?.border || "",
+                                )}
+                            >
+                                <span>{bonus.attribute}</span>
+                                <span className="opacity-50">+{bonus.value}</span>
+                            </div>
+                        )
+                    }
+
+                    return (
+                        <div key={i} className="px-2 py-0.5 rounded bg-white/5 border border-white/10 text-[11px] text-white/70 flex items-center gap-1">
+                            {typeof item === "string" && (item.includes("<p>") || item.includes("<span")) ? (
+                                <MentionContent html={item} mode="inline" className="[&_p]:inline [&_p]:m-0 align-middle" />
+                            ) : (
+                                String(item)
+                            )}
+                        </div>
+                    )
+                })}
                 {value.length === 0 && <span className="text-[10px] text-white/30 italic px-1">Vazio</span>}
             </div>
         )

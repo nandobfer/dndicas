@@ -9,9 +9,9 @@
 
 import * as React from 'react';
 import { cn } from '@/core/utils';
-import { motion } from 'framer-motion';
+import { GlassSelector } from "./glass-selector"
 
-export type RoleFilter = 'all' | 'admin' | 'user';
+export type RoleFilter = "all" | "admin" | "user"
 
 export interface RoleTabsProps {
     /** Current selected role */
@@ -70,43 +70,15 @@ export function RoleTabs({ value, onChange, showAll = true, fullWidth = false, d
     const visibleTabs = showAll ? tabs : tabs.filter((tab) => tab.value !== "all")
 
     return (
-        <div
-            className={cn(
-                fullWidth ? "flex" : "inline-flex",
-                "p-1 rounded-lg bg-white/5 border border-white/10",
-                disabled && "opacity-50 pointer-events-none cursor-not-allowed grayscale-[0.5]",
-                className,
-            )}
-            role="tablist"
-            aria-label="Filtrar por função"
-        >
-            {visibleTabs.map((tab) => {
-                const isSelected = value === tab.value
-
-                return (
-                    <button
-                        key={tab.value}
-                        type="button"
-                        role="tab"
-                        aria-selected={isSelected}
-                        disabled={disabled}
-                        onClick={() => !disabled && onChange(tab.value)}
-                        className={cn(
-                            "relative px-4 py-1.5 text-sm font-medium rounded-md transition-colors",
-                            fullWidth && "flex-1 justify-center",
-                            "focus:outline-none focus-visible:ring-2 focus-visible:ring-white/20",
-                            isSelected ? tab.textColor : "text-white/50 hover:text-white/70",
-                            disabled && "cursor-not-allowed",
-                        )}
-                    >
-                        {isSelected && (
-                            <motion.div layoutId="role-tabs-indicator" className={cn("absolute inset-0 rounded-md", tab.activeColor)} transition={{ type: "spring", duration: 0.3, bounce: 0.2 }} />
-                        )}
-                        <span className="relative z-10">{tab.label}</span>
-                    </button>
-                )
-            })}
-        </div>
+        <GlassSelector
+            value={value}
+            onChange={(val) => onChange(val as RoleFilter)}
+            options={visibleTabs}
+            fullWidth={fullWidth}
+            disabled={disabled}
+            className={className}
+            layoutId="role-tabs-indicator"
+        />
     )
 }
 

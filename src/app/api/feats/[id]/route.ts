@@ -77,49 +77,51 @@ export async function PUT(
 
     // Capture previous state for audit
     const previousData = {
-      name: existingFeat.name,
-      description: existingFeat.description,
-      source: existingFeat.source,
-      level: existingFeat.level,
-      prerequisites: existingFeat.prerequisites,
-      status: existingFeat.status,
-    };
+        name: existingFeat.name,
+        description: existingFeat.description,
+        source: existingFeat.source,
+        level: existingFeat.level,
+        prerequisites: existingFeat.prerequisites,
+        attributeBonuses: existingFeat.attributeBonuses,
+        status: existingFeat.status,
+    }
 
     // Apply updates
-    if (validation.data.name) existingFeat.name = validation.data.name;
-    if (validation.data.description) existingFeat.description = validation.data.description;
-    if (validation.data.source) existingFeat.source = validation.data.source;
-    if (validation.data.level !== undefined) existingFeat.level = validation.data.level;
-    if (validation.data.prerequisites !== undefined)
-      existingFeat.prerequisites = validation.data.prerequisites;
-    if (validation.data.status) existingFeat.status = validation.data.status;
+    if (validation.data.name) existingFeat.name = validation.data.name
+    if (validation.data.description) existingFeat.description = validation.data.description
+    if (validation.data.source) existingFeat.source = validation.data.source
+    if (validation.data.level !== undefined) existingFeat.level = validation.data.level
+    if (validation.data.prerequisites !== undefined) existingFeat.prerequisites = validation.data.prerequisites
+    if (validation.data.attributeBonuses !== undefined) existingFeat.attributeBonuses = validation.data.attributeBonuses
+    if (validation.data.status) existingFeat.status = validation.data.status
 
-    const updatedFeat = await existingFeat.save();
+    const updatedFeat = await existingFeat.save()
 
     // Create Audit Log
     try {
-      await createAuditLog({
-        action: 'UPDATE',
-        entity: 'Feat' as any,
-        entityId: updatedFeat._id.toString(),
-        performedBy: userId,
-        previousData,
-        newData: {
-          name: updatedFeat.name,
-          description: updatedFeat.description,
-          source: updatedFeat.source,
-          level: updatedFeat.level,
-          prerequisites: updatedFeat.prerequisites,
-          status: updatedFeat.status,
-        },
-        metadata: {
-          reason: 'API Update',
-          userAgent: req.headers.get('user-agent') || 'Unknown',
-          ip: req.headers.get('x-forwarded-for') || 'Unknown',
-        },
-      });
+        await createAuditLog({
+            action: "UPDATE",
+            entity: "Feat" as any,
+            entityId: updatedFeat._id.toString(),
+            performedBy: userId,
+            previousData,
+            newData: {
+                name: updatedFeat.name,
+                description: updatedFeat.description,
+                source: updatedFeat.source,
+                level: updatedFeat.level,
+                prerequisites: updatedFeat.prerequisites,
+                attributeBonuses: updatedFeat.attributeBonuses,
+                status: updatedFeat.status,
+            },
+            metadata: {
+                reason: "API Update",
+                userAgent: req.headers.get("user-agent") || "Unknown",
+                ip: req.headers.get("x-forwarded-for") || "Unknown",
+            },
+        })
     } catch (auditError) {
-      console.error('Failed to create audit log for update:', auditError);
+        console.error("Failed to create audit log for update:", auditError)
     }
 
     return NextResponse.json(updatedFeat);
