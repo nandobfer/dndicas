@@ -24,103 +24,108 @@ export function FeatsPage() {
   const [status, setStatus] = useState<FeatsFiltersType['status']>('all');
   const [level, setLevel] = useState<number | undefined>(undefined);
   const [levelMax, setLevelMax] = useState<number | undefined>(undefined);
+  const [attributes, setAttributes] = useState<string[]>([])
 
   // Debounced search
-  const debouncedSearch = useDebounce(search, 500);
+  const debouncedSearch = useDebounce(search, 500)
 
   // Filters object for query
-  const filters: FeatsFiltersType = useMemo(() => ({
-    page,
-    limit: 10,
-    search: debouncedSearch,
-    status,
-    level,
-    levelMax,
-  }), [page, debouncedSearch, status, level, levelMax]);
+  const filters: FeatsFiltersType = useMemo(
+      () => ({
+          page,
+          limit: 10,
+          search: debouncedSearch,
+          status,
+          level,
+          levelMax,
+          attributes,
+      }),
+      [page, debouncedSearch, status, level, levelMax, attributes],
+  )
 
-  const [isModalOpen, setIsModalOpen] = useState(false);
-  const [isDeleteOpen, setIsDeleteOpen] = useState(false);
-  const [selectedFeat, setSelectedFeat] = useState<Feat | null>(null);
+  const [isModalOpen, setIsModalOpen] = useState(false)
+  const [isDeleteOpen, setIsDeleteOpen] = useState(false)
+  const [selectedFeat, setSelectedFeat] = useState<Feat | null>(null)
 
-  const { data, isLoading, isFetching } = useFeats(filters);
-  const { createFeat, updateFeat, deleteFeat } = useFeatMutations();
+  const { data, isLoading, isFetching } = useFeats(filters)
+  const { createFeat, updateFeat, deleteFeat } = useFeatMutations()
 
   const handleSearchChange = (value: string) => {
-    setSearch(value);
-    setPage(1);
-  };
+      setSearch(value)
+      setPage(1)
+  }
 
-  const handleStatusChange = (value: FeatsFiltersType['status']) => {
-    setStatus(value);
-    setPage(1);
-  };
+  const handleStatusChange = (value: FeatsFiltersType["status"]) => {
+      setStatus(value)
+      setPage(1)
+  }
 
-  const handleLevelChange = (value: number | undefined, mode: 'exact' | 'upto') => {
-    if (value === undefined) {
-      setLevel(undefined);
-      setLevelMax(undefined);
-    } else if (mode === 'exact') {
-      setLevel(value);
-      setLevelMax(undefined);
-    } else {
-      setLevelMax(value);
-      setLevel(undefined);
-    }
-    setPage(1);
-  };
+  const handleLevelChange = (value: number | undefined, mode: "exact" | "upto") => {
+      if (value === undefined) {
+          setLevel(undefined)
+          setLevelMax(undefined)
+      } else if (mode === "exact") {
+          setLevel(value)
+          setLevelMax(undefined)
+      } else {
+          setLevelMax(value)
+          setLevel(undefined)
+      }
+      setPage(1)
+  }
 
   const handleEdit = (feat: Feat) => {
-    setSelectedFeat(feat);
-    setIsModalOpen(true);
-  };
+      setSelectedFeat(feat)
+      setIsModalOpen(true)
+  }
 
   const handleDelete = (feat: Feat) => {
-    setSelectedFeat(feat);
-    setIsDeleteOpen(true);
-  };
+      setSelectedFeat(feat)
+      setIsDeleteOpen(true)
+  }
 
   const handleDeleteConfirm = async () => {
-    if (selectedFeat) {
-      try {
-        await deleteFeat.mutateAsync(selectedFeat._id);
-        setIsDeleteOpen(false);
-        setSelectedFeat(null);
-        toast.success('Talento deletado com sucesso!');
-      } catch (error: any) {
-        toast.error(error.message || 'Erro ao deletar talento');
+      if (selectedFeat) {
+          try {
+              await deleteFeat.mutateAsync(selectedFeat._id)
+              setIsDeleteOpen(false)
+              setSelectedFeat(null)
+              toast.success("Talento deletado com sucesso!")
+          } catch (error: any) {
+              toast.error(error.message || "Erro ao deletar talento")
+          }
       }
-    }
-  };
+  }
 
   const handleNewFeat = () => {
-    setSelectedFeat(null);
-    setIsModalOpen(true);
-  };
+      setSelectedFeat(null)
+      setIsModalOpen(true)
+  }
 
   const handleModalClose = () => {
-    setIsModalOpen(false);
-    setSelectedFeat(null);
-  };
+      setIsModalOpen(false)
+      setSelectedFeat(null)
+  }
 
   const handleFormSubmit = async (formData: CreateFeatInput | UpdateFeatInput) => {
-    try {
-      if (selectedFeat) {
-        // Update existing feat
-        await updateFeat.mutateAsync({
-          id: selectedFeat._id,
-          data: formData as UpdateFeatInput,
-        });
-        toast.success('Talento atualizado com sucesso!');
-      } else {
-        // Create new feat
-        await createFeat.mutateAsync(formData as CreateFeatInput);
-        toast.success('Talento criado com sucesso!');
+      try {
+          if (selectedFeat) {
+              // Update existing feat
+              await updateFeat.mutateAsync({
+                  id: selectedFeat._id,
+                  data: formData as UpdateFeatInput,
+              })
+              toast.success("Talento atualizado com sucesso!")
+          } else {
+              // Create new feat
+              await createFeat.mutateAsync(formData as CreateFeatInput)
+              toast.success("Talento criado com sucesso!")
+          }
+          handleModalClose()
+      } catch (error: any) {
+          toast.error(error.message || "Erro ao salvar talento")
       }
-      handleModalClose();
-    } catch (error: any) {
-      toast.error(error.message || 'Erro ao salvar talento');
-    }
-  };
+  }
 
   return (
       <motion.div variants={motionConfig.variants.fadeInUp} initial="initial" animate="animate" className="space-y-6">
@@ -142,7 +147,7 @@ export function FeatsPage() {
                           "bg-blue-500 text-white font-medium text-sm",
                           "hover:bg-blue-600 transition-colors",
                           "focus:outline-none focus:ring-2 focus:ring-blue-500/50",
-                          "shadow-lg shadow-blue-500/20"
+                          "shadow-lg shadow-blue-500/20",
                       )}
                   >
                       <Plus className="h-4 w-4" />
@@ -155,10 +160,14 @@ export function FeatsPage() {
           <GlassCard>
               <GlassCardContent className="py-4">
                   <FeatsFilters
-                      filters={{ search, status, level, levelMax }}
+                      filters={{ ...filters, search, status, level, levelMax }}
                       onSearchChange={handleSearchChange}
                       onStatusChange={handleStatusChange}
                       onLevelChange={handleLevelChange}
+                      onAttributesChange={(val) => {
+                          setAttributes(val)
+                          setPage(1)
+                      }}
                       isSearching={isFetching && !isLoading}
                   />
               </GlassCardContent>
@@ -177,22 +186,10 @@ export function FeatsPage() {
           />
 
           {/* Form Modal */}
-          <FeatFormModal
-              isOpen={isModalOpen}
-              onClose={handleModalClose}
-              onSubmit={handleFormSubmit}
-              feat={selectedFeat}
-              isSubmitting={createFeat.isPending || updateFeat.isPending}
-          />
+          <FeatFormModal isOpen={isModalOpen} onClose={handleModalClose} onSubmit={handleFormSubmit} feat={selectedFeat} isSubmitting={createFeat.isPending || updateFeat.isPending} />
 
           {/* Delete Confirmation Dialog */}
-          <DeleteFeatDialog
-              isOpen={isDeleteOpen}
-              onClose={() => setIsDeleteOpen(false)}
-              onConfirm={handleDeleteConfirm}
-              feat={selectedFeat}
-              isDeleting={deleteFeat.isPending}
-          />
+          <DeleteFeatDialog isOpen={isDeleteOpen} onClose={() => setIsDeleteOpen(false)} onConfirm={handleDeleteConfirm} feat={selectedFeat} isDeleting={deleteFeat.isPending} />
       </motion.div>
   )
 }

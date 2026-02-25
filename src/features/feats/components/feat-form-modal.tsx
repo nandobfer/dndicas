@@ -9,20 +9,23 @@ import { cn } from "@/core/utils";
 import { GlassModal, GlassModalContent, GlassModalHeader, GlassModalTitle, GlassModalDescription } from "@/components/ui/glass-modal";
 import { GlassInput } from "@/components/ui/glass-input";
 import { GlassSwitch } from "@/components/ui/glass-switch";
-import { createFeatSchema, type CreateFeatSchema } from "../api/validation";
-import { Feat, CreateFeatInput, UpdateFeatInput } from "../types/feats.types";
-import { RichTextEditor } from "@/features/rules/components/rich-text-editor";
+import { GlassSelector } from "@/components/ui/glass-selector"
+import { GlassInlineEmptyState } from "@/components/ui/glass-inline-empty-state"
+import { createFeatSchema, type CreateFeatSchema } from "../api/validation"
+import { Feat, CreateFeatInput, UpdateFeatInput } from "../types/feats.types"
+import { RichTextEditor } from "@/features/rules/components/rich-text-editor"
+import { attributeColors, AttributeType } from "@/lib/config/colors"
 
 export interface FeatFormModalProps {
-    isOpen: boolean;
-    onClose: () => void;
-    onSubmit: (data: CreateFeatInput | UpdateFeatInput) => Promise<void>;
-    feat?: Feat | null;
-    isSubmitting?: boolean;
+    isOpen: boolean
+    onClose: () => void
+    onSubmit: (data: CreateFeatInput | UpdateFeatInput) => Promise<void>
+    feat?: Feat | null
+    isSubmitting?: boolean
 }
 
 export function FeatFormModal({ isOpen, onClose, onSubmit, feat, isSubmitting = false }: FeatFormModalProps) {
-    const isEditMode = !!feat;
+    const isEditMode = !!feat
     const [lastAddedIndex, setLastAddedIndex] = React.useState<number | null>(null)
 
     const {
@@ -41,6 +44,7 @@ export function FeatFormModal({ isOpen, onClose, onSubmit, feat, isSubmitting = 
             source: feat?.source || "",
             level: feat?.level || 1,
             prerequisites: feat?.prerequisites || [],
+            attributeBonuses: feat?.attributeBonuses || [],
             status: feat?.status || "active",
         },
     })
@@ -48,9 +52,22 @@ export function FeatFormModal({ isOpen, onClose, onSubmit, feat, isSubmitting = 
     // Type assertion needed: react-hook-form's useFieldArray has type inference issues
     // with Zod schemas containing array fields. The `as never` cast bypasses the narrowing
     // issue while keeping proper runtime behavior. See: https://github.com/react-hook-form/react-hook-form/issues/6679
-    const { fields, append, remove } = useFieldArray({
+    const {
+        fields: prereqFields,
+        append: appendPrereq,
+        remove: removePrereq,
+    } = useFieldArray({
         control,
         name: "prerequisites" as never,
+    })
+
+    const {
+        fields: bonusFields,
+        append: appendBonus,
+        remove: removeBonus,
+    } = useFieldArray({
+        control,
+        name: "attributeBonuses" as never,
     })
 
     // Reset form when modal opens/closes or feat changes
@@ -63,6 +80,7 @@ export function FeatFormModal({ isOpen, onClose, onSubmit, feat, isSubmitting = 
                 source: feat?.source || "",
                 level: feat?.level || 1,
                 prerequisites: feat?.prerequisites || [],
+                attributeBonuses: feat?.attributeBonuses || [],
                 status: feat?.status || "active",
             })
         }
@@ -77,14 +95,34 @@ export function FeatFormModal({ isOpen, onClose, onSubmit, feat, isSubmitting = 
                 const plainText = p.replace(/<[^>]*>/g, "").trim()
                 return plainText.length > 0
             }),
+            attributeBonuses: (data.attributeBonuses || []).filter((b) => b.attribute && b.value),
         }
         await onSubmit(cleanedData as CreateFeatInput | UpdateFeatInput)
     }
 
     const handleAddPrerequisite = () => {
-        append("")
-        setLastAddedIndex(fields.length)
+        appendPrereq("")
+        setLastAddedIndex(prereqFields.length)
     }
+
+    const handleAddBonus = () => {
+        appendBonus({ attribute: "", value: 1 })
+    }
+
+    const attributeOptions = Object.entries(attributeColors).map(([key, config]) => ({
+        value: key as AttributeType,
+        label: config.abbreviation,
+        activeColor: config.mention.split(" ")[0], // bg-amber-500/10
+        textColor: config.text,
+    }))
+
+    const bonusValueOptions = [
+        { value: 1, label: "+1" },
+        { value: 2, label: "+2" },
+        { value: 3, label: "+3" },
+    ]
+
+    const selectedAttributes = watch("attributeBonuses")?.map((b) => b.attribute) || []
 
     return (
         <GlassModal open={isOpen} onOpenChange={(open) => !open && onClose()}>
@@ -154,13 +192,11 @@ export function FeatFormModal({ isOpen, onClose, onSubmit, feat, isSubmitting = 
                         </div>
 
                         <AnimatePresence mode="popLayout">
-                            {fields.length === 0 ? (
-                                <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="text-sm text-white/40 italic text-center py-4">
-                                    Nenhum pré-requisito adicionado
-                                </motion.div>
+                            {prereqFields.length === 0 ? (
+                                <GlassInlineEmptyState message="Nenhum pré-requisito adicionado" />
                             ) : (
                                 <div className="space-y-2">
-                                    {fields.map((field, index) => (
+                                    {prereqFields.map((field, index) => (
                                         <motion.div
                                             key={field.id}
                                             initial={{ opacity: 0, x: -20 }}
@@ -195,9 +231,101 @@ export function FeatFormModal({ isOpen, onClose, onSubmit, feat, isSubmitting = 
                                             </div>
                                             <button
                                                 type="button"
-                                                onClick={() => remove(index)}
+                                                onClick={() => removePrereq(index)}
                                                 disabled={isSubmitting}
                                                 className={cn("p-2 rounded-lg transition-colors mt-1", "text-rose-400 hover:bg-rose-500/20", "disabled:opacity-50 disabled:cursor-not-allowed")}
+                                            >
+                                                <X className="h-4 w-4" />
+                                            </button>
+                                        </motion.div>
+                                    ))}
+                                </div>
+                            )}
+                        </AnimatePresence>
+                    </div>
+
+                    {/* Attribute Bonuses Dynamic List */}
+                    <div className="space-y-4">
+                        <div className="flex items-center justify-between">
+                            <label className="text-sm font-medium text-white/80 flex items-center gap-2">
+                                <Plus className="h-4 w-4" />
+                                Bônus de Atributo
+                            </label>
+                            <button
+                                type="button"
+                                onClick={handleAddBonus}
+                                disabled={isSubmitting || bonusFields.length >= 6}
+                                className={cn(
+                                    "px-3 py-1.5 rounded-lg text-xs font-medium transition-colors",
+                                    "bg-emerald-500/20 text-emerald-400 hover:bg-emerald-500/30",
+                                    "border border-emerald-500/30",
+                                    "disabled:opacity-50 disabled:cursor-not-allowed",
+                                    "flex items-center gap-1.5",
+                                )}
+                            >
+                                <Plus className="h-3 w-3" />
+                                Adicionar Bônus
+                            </button>
+                        </div>
+
+                        <AnimatePresence mode="popLayout">
+                            {bonusFields.length === 0 ? (
+                                <GlassInlineEmptyState message="Nenhum bônus de atributo selecionado" />
+                            ) : (
+                                <div className="space-y-2">
+                                    {bonusFields.map((field, index) => (
+                                        <motion.div
+                                            key={field.id}
+                                            initial={{ opacity: 0, x: -20 }}
+                                            animate={{ opacity: 1, x: 0 }}
+                                            exit={{ opacity: 0, x: 20 }}
+                                            transition={{ duration: 0.2 }}
+                                            className="flex items-center gap-2"
+                                        >
+                                            <div className="flex-1 grid grid-cols-1 md:grid-cols-2 gap-2">
+                                                <Controller
+                                                    name={`attributeBonuses.${index}.attribute` as any}
+                                                    control={control}
+                                                    render={({ field: controllerField }) => (
+                                                        <GlassSelector
+                                                            value={controllerField.value}
+                                                            onChange={controllerField.onChange}
+                                                            options={attributeOptions.map((opt) => ({
+                                                                ...opt,
+                                                                disabled: selectedAttributes.includes(opt.value) && controllerField.value !== opt.value,
+                                                            }))}
+                                                            layout="grid"
+                                                            cols={3}
+                                                            size="sm"
+                                                            layoutId={`attr-selector-${field.id}`}
+                                                            className="w-full"
+                                                            disabled={isSubmitting}
+                                                        />
+                                                    )}
+                                                />
+                                                <Controller
+                                                    name={`attributeBonuses.${index}.value` as any}
+                                                    control={control}
+                                                    render={({ field: controllerField }) => (
+                                                        <GlassSelector
+                                                            value={controllerField.value}
+                                                            onChange={controllerField.onChange}
+                                                            options={bonusValueOptions}
+                                                            layout="horizontal"
+                                                            fullWidth
+                                                            layoutId={`value-selector-${field.id}`}
+                                                            className="w-full"
+                                                            disabled={isSubmitting}
+                                                        />
+                                                    )}
+                                                />
+                                            </div>
+                                            <button
+                                                type="button"
+                                                onClick={() => removeBonus(index)}
+                                                disabled={isSubmitting}
+                                                className={cn("p-2 rounded-lg transition-colors", "text-rose-400 hover:bg-rose-500/20", "disabled:opacity-50 disabled:cursor-not-allowed")}
+                                                title="Remover bônus"
                                             >
                                                 <X className="h-4 w-4" />
                                             </button>

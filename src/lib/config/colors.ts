@@ -166,6 +166,7 @@ export const entityColors = {
 export const attributeColors = {
     Força: {
         name: "Força",
+        abbreviation: "FOR",
         color: "amber",
         mention: "bg-amber-500/10 text-amber-400 border-amber-400/20",
         badge: "bg-amber-400/20 text-amber-400",
@@ -177,6 +178,7 @@ export const attributeColors = {
     },
     Destreza: {
         name: "Destreza",
+        abbreviation: "DES",
         color: "emerald",
         mention: "bg-emerald-500/10 text-emerald-400 border-emerald-400/20",
         badge: "bg-emerald-400/20 text-emerald-400",
@@ -188,6 +190,7 @@ export const attributeColors = {
     },
     Constituição: {
         name: "Constituição",
+        abbreviation: "CON",
         color: "red",
         mention: "bg-red-500/10 text-red-400 border-red-400/20",
         badge: "bg-red-400/20 text-red-400",
@@ -199,6 +202,7 @@ export const attributeColors = {
     },
     Inteligência: {
         name: "Inteligência",
+        abbreviation: "INT",
         color: "blue",
         mention: "bg-blue-500/10 text-blue-400 border-blue-400/20",
         badge: "bg-blue-400/20 text-blue-400",
@@ -210,6 +214,7 @@ export const attributeColors = {
     },
     Sabedoria: {
         name: "Sabedoria",
+        abbreviation: "SAB",
         color: "slate",
         mention: "bg-slate-500/10 text-slate-400 border-slate-400/20",
         badge: "bg-slate-400/20 text-slate-400",
@@ -221,6 +226,7 @@ export const attributeColors = {
     },
     Carisma: {
         name: "Carisma",
+        abbreviation: "CAR",
         color: "purple",
         mention: "bg-purple-500/10 text-purple-400 border-purple-400/20",
         badge: "bg-purple-400/20 text-purple-400",

@@ -7,101 +7,58 @@
 
 import * as React from 'react';
 import { cn } from '@/core/utils';
-import { motion } from 'framer-motion';
+import { GlassSelector } from "./glass-selector"
 
-export type StatusFilter = 'all' | 'active' | 'inactive';
+export type StatusFilter = "all" | "active" | "inactive"
 
 export interface StatusChipsProps {
-  /** Current selected status */
-  value: StatusFilter;
-  /** Callback when status changes */
-  onChange: (status: StatusFilter) => void;
-  /** Additional class names */
-  className?: string;
+    /** Current selected status */
+    value: StatusFilter
+    /** Callback when status changes */
+    onChange: (status: StatusFilter) => void
+    /** Additional class names */
+    className?: string
 }
 
 /**
- * Chip configuration.
- */
-const chips: Array<{
-  value: StatusFilter;
-  label: string;
-  activeColor: string;
-  dotColor: string;
-}> = [
-  {
-    value: 'all',
-    label: 'Todos',
-    activeColor: 'bg-purple-500/20',
-    dotColor: 'bg-purple-400',
-  },
-  {
-    value: 'active',
-    label: 'Ativos',
-    activeColor: 'bg-emerald-500/20',
-    dotColor: 'bg-emerald-400',
-  },
-  {
-    value: 'inactive',
-    label: 'Inativos',
-    activeColor: 'bg-gray-500/20',
-    dotColor: 'bg-gray-400',
-  },
-];
-
-/**
  * StatusChips component for filtering by status.
- *
- * @example
- * ```tsx
- * const [status, setStatus] = useState<StatusFilter>('active');
- * <StatusChips value={status} onChange={setStatus} />
- * ```
  */
 export function StatusChips({ value, onChange, className }: StatusChipsProps) {
-  return (
-    <div
-      className={cn(
-        'inline-flex p-1 rounded-lg bg-white/5 border border-white/10',
-        className
-      )}
-      role="group"
-      aria-label="Filtrar por status"
-    >
-      {chips.map((chip) => {
-        const isSelected = value === chip.value;
+    const options = [
+        {
+            value: "all" as StatusFilter,
+            label: (
+                <div className="flex items-center gap-2">
+                    <div className="w-2 h-2 rounded-full bg-purple-400" />
+                    <span>Todos</span>
+                </div>
+            ),
+            activeColor: "bg-purple-500/20",
+            textColor: "text-white",
+        },
+        {
+            value: "active" as StatusFilter,
+            label: (
+                <div className="flex items-center gap-2">
+                    <div className="w-2 h-2 rounded-full bg-emerald-400" />
+                    <span>Ativos</span>
+                </div>
+            ),
+            activeColor: "bg-emerald-500/20",
+            textColor: "text-white",
+        },
+        {
+            value: "inactive" as StatusFilter,
+            label: (
+                <div className="flex items-center gap-2">
+                    <div className="w-2 h-2 rounded-full bg-gray-400" />
+                    <span>Inativos</span>
+                </div>
+            ),
+            activeColor: "bg-gray-500/20",
+            textColor: "text-white",
+        },
+    ]
 
-        return (
-          <button
-            key={chip.value}
-            type="button"
-            onClick={() => onChange(chip.value)}
-            className={cn(
-              'relative px-4 py-1.5 text-sm font-medium rounded-md transition-colors',
-              'focus:outline-none focus-visible:ring-2 focus-visible:ring-white/20',
-              'flex items-center gap-2',
-              isSelected
-                ? 'text-white'
-                : 'text-white/50 hover:text-white/70'
-            )}
-          >
-            {isSelected && (
-              <motion.div
-                layoutId="status-chips-indicator"
-                className={cn('absolute inset-0 rounded-md', chip.activeColor)}
-                transition={{ type: 'spring', duration: 0.3, bounce: 0.2 }}
-              />
-            )}
-            <span
-              className={cn(
-                'relative z-10 w-2 h-2 rounded-full',
-                chip.dotColor
-              )}
-            />
-            <span className="relative z-10">{chip.label}</span>
-          </button>
-        );
-      })}
-    </div>
-  );
+    return <GlassSelector value={value} onChange={(val) => onChange(val as StatusFilter)} options={options} className={className} layoutId="status-chips-indicator" />
 }
