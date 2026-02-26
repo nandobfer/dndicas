@@ -7,6 +7,7 @@ import { cn } from "@/core/utils"
 import { entityConfig, EntityType } from "@/lib/config/colors"
 import { MiniLineChart } from "./charts"
 import { LucideIcon } from "lucide-react"
+import { AnimatedNumber } from "@/components/ui/animated-number"
 
 /**
  * T033: Generalized entity card component for dashboard catalog grid.
@@ -35,6 +36,7 @@ export function EntityCard({
     description?: string
 }) {
     const config = entityConfig[entityType]
+    const isMasculine = entityType === "Talento" || entityType === "Usuário"
 
     return (
         <motion.div
@@ -48,8 +50,12 @@ export function EntityCard({
                         <div className={cn("p-2 rounded-lg border transition-colors", config.bgAlpha, config.border, config.text, "group-hover:text-white")}>
                             <Icon className="h-5 w-5" />
                         </div>
-                        <div className={cn("text-[10px] font-bold px-1.5 py-0.5 rounded border", config.badge, config.border)}>
-                            {loading ? 0 : stats?.active} ativas
+                        <div className={cn("text-[10px] font-bold px-1.5 py-0.5 rounded border flex items-center gap-0.5", config.badge, config.border)}>
+                            <AnimatedNumber 
+                                value={loading ? 0 : (stats?.active || 0)} 
+                                formatter={(val) => `${Math.floor(val)}`}
+                            />
+                            <span>{isMasculine ? "ativos" : "ativas"}</span>
                         </div>
                     </div>
                     <GlassCardTitle className="text-white/90 group-hover:text-white mt-3 transition-colors">

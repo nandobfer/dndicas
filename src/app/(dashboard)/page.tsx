@@ -12,6 +12,7 @@ import { TraitsEntityCard } from "./_components/traits-entity-card"
 import { FeatsEntityCard } from "./_components/feats-entity-card"
 import { SpellsEntityCard } from "./_components/spells-entity-card"
 import { WipEntityCard } from "./_components/wip-entity-card"
+import { AnimatedNumber } from "@/components/ui/animated-number"
 
 // Types for the stats
 interface DashboardStats {
@@ -155,7 +156,12 @@ export default function DashboardPage() {
                                         <Users className={cn("h-4 w-4", entityConfig.Usuário.text)} />
                                         Comunidade
                                     </GlassCardTitle>
-                                    <div className="text-3xl font-bold text-white">{loading ? "..." : stats?.users.total || 0}</div>
+                                    <div className="text-3xl font-bold text-white leading-none">
+                                        <AnimatedNumber 
+                                            value={loading ? 0 : (stats?.users.total || 0)} 
+                                            formatter={(val) => `${Math.floor(val)}`}
+                                        />
+                                    </div>
                                 </div>
                                 <div className={cn("p-3 rounded-xl border", entityConfig.Usuário.bgAlpha, entityConfig.Usuário.border)}>
                                     <TrendingUp className={cn("h-6 w-6", entityConfig.Usuário.text)} />
@@ -168,12 +174,17 @@ export default function DashboardPage() {
                                     <p className="text-xs text-white/40">Usuários ativos e crescimento semanal</p>
                                     <div
                                         className={cn(
-                                            "text-xs font-medium px-2 py-0.5 rounded-full border",
+                                            "text-xs font-medium px-2 py-0.5 rounded-full border flex items-center gap-1",
                                             entityConfig.Usuário.badge,
                                             entityConfig.Usuário.border
                                         )}
                                     >
-                                        +{loading ? 0 : stats?.users.active} ativos
+                                        <span>+</span>
+                                        <AnimatedNumber 
+                                            value={loading ? 0 : (stats?.users.active || 0)} 
+                                            formatter={(val) => `${Math.floor(val)}`}
+                                        />
+                                        <span>ativos</span>
                                     </div>
                                 </div>
                                 {stats?.users.growth && <MiniBarChart data={stats.users.growth} color={entityConfig.Usuário.hex} />}
