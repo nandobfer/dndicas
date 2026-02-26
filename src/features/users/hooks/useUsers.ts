@@ -6,7 +6,7 @@
 
 "use client";
 
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient, useInfiniteQuery } from '@tanstack/react-query';
 import type {
   User,
   UserResponse,
@@ -42,12 +42,27 @@ export const usersKeys = {
  * const { data, isLoading, error } = useUsers(filters);
  * ```
  */
-export function useUsers(filters: UserFilters) {
+export function useUsers(filters: UserFilters, options: { enabled?: boolean } = {}) {
   return useQuery<UsersListResponse, Error>({
     queryKey: usersKeys.list(filters),
     queryFn: () => fetchUsers(filters),
     staleTime: 30 * 1000, // 30 seconds
     placeholderData: (previousData) => previousData,
+    ...options
+  });
+}
+
+/**
+ * Hook for fetching users list with infinite scrolling.
+ */
+export function useInfiniteUsers(filters: UserFilters, options: { enabled?: boolean } = {}) {
+  return useInfiniteQuery<UsersListResponse, Error>({
+    queryKey: [...usersKeys.list(filters), 'infinite'],
+    queryFn: ({ pageParam = 1 }) => fetchUsers({ ...filters, page: pageParam as number }),
+    getNextPageParam: (lastPage) => (lastPage.page < lastPage.totalPages ? lastPage.page + 1 : undefined),
+    initialPageParam: 1,
+    staleTime: 30 * 1000,
+    ...options
   });
 }
 

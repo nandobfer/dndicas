@@ -16,98 +16,42 @@ import { useUsersFilters } from '../hooks/useUsersFilters';
 import { useUsers, useCreateUser, useUpdateUser, useDeleteUser } from '../hooks/useUsers';
 import { UserFilters } from '../components/user-filters';
 import { UsersTable } from '../components/users-table';
+import { UserList } from '../components/user-list';
 import { UserFormModal } from '../components/user-form-modal';
 import { UserDeleteDialog } from '../components/user-delete-dialog';
 import { motionConfig } from '@/lib/config/motion-configs';
-import type { User, UserResponse, CreateUserInput, UpdateUserInput } from '../types/user.types';
+import { useUsersPage } from '../hooks/useUsersPage';
+import type { UserResponse, CreateUserInput, UpdateUserInput } from '../types/user.types';
 
 /**
  * Users page component with full CRUD functionality.
  */
 export function UsersPage() {
   const { isAdmin } = useAuth()
-  // Filters state
-  const {
-    filters,
-    setSearch,
-    setRole,
-    setStatus,
-    setPage,
-  } = useUsersFilters();
+  
+  // Responsive logic moved to custom hook for better maintainability
+  const { isMobile, filters, pagination, data, actions, modals } = useUsersPage();
 
-  // Data fetching
-  const { data, isLoading, isFetching } = useUsers(filters);
-
-  // Mutations
-  const createMutation = useCreateUser();
-  const updateMutation = useUpdateUser();
-  const deleteMutation = useDeleteUser();
-
-  // Modal state
-  const [isFormModalOpen, setIsFormModalOpen] = React.useState(false);
-  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = React.useState(false);
-  const [selectedUser, setSelectedUser] = React.useState<UserResponse | null>(null);
-
-  // Handlers
-  const handleCreateClick = () => {
-    setSelectedUser(null);
-    setIsFormModalOpen(true);
-  };
-
-  const handleEditClick = (user: UserResponse) => {
-    setSelectedUser(user);
-    setIsFormModalOpen(true);
-  };
-
-  const handleDeleteClick = (user: UserResponse) => {
-    setSelectedUser(user);
-    setIsDeleteDialogOpen(true);
-  };
-
-  const handleFormSubmit = async (formData: CreateUserInput | UpdateUserInput) => {
-    if (selectedUser) {
-      // Update
-      await updateMutation.mutateAsync({
-        id: selectedUser.id,
-        data: formData as UpdateUserInput,
-      });
-    } else {
-      // Create
-      await createMutation.mutateAsync(formData as CreateUserInput);
-    }
-    setIsFormModalOpen(false);
-    setSelectedUser(null);
-  };
-
-  const handleDeleteConfirm = async () => {
-    if (selectedUser) {
-      await deleteMutation.mutateAsync(selectedUser.id);
-      setIsDeleteDialogOpen(false);
-      setSelectedUser(null);
-    }
-  };
-
-  const users = data?.items || [];
-  const total = data?.total || 0;
-  const isSearching = isFetching && !isLoading;
+  const isSearching = data.desktop.isFetching || data.mobile.isFetchingNextPage;
 
   return (
       <motion.div variants={motionConfig.variants.fadeInUp} initial="initial" animate="animate" className="space-y-6">
           {/* Header */}
           <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
               <div>
-                  <h1 className="text-2xl font-bold text-white">Usuários</h1>
-                  <p className="text-sm text-white/60 mt-1">Gerencie os usuários do sistema</p>
+                  <h1 className="text-xl sm:text-2xl font-bold text-white">Usuários</h1>
+                  <p className="text-xs sm:text-sm text-white/60 mt-1">Gerencie os usuários do sistema</p>
               </div>
 
               {isAdmin && (
                   <button
-                      onClick={handleCreateClick}
+                      onClick={actions.handleCreateClick}
                       className={cn(
-                          "inline-flex items-center gap-2 px-4 py-2 rounded-lg",
+                          "inline-flex items-center justify-center gap-2 px-4 py-2 rounded-lg",
                           "bg-blue-600 text-white font-medium text-sm",
                           "hover:bg-blue-700 transition-colors shadow-lg shadow-blue-600/20",
-                          "focus:outline-none focus:ring-2 focus:ring-blue-600/50"
+                          "focus:outline-none focus:ring-2 focus:ring-blue-600/50",
+                          "w-full sm:w-auto" // Full width on mobile
                       )}
                   >
                       <Plus className="h-4 w-4" />
@@ -120,49 +64,60 @@ export function UsersPage() {
           <GlassCard>
               <GlassCardContent className="py-4">
                   <UserFilters
-                      filters={filters}
-                      onSearchChange={setSearch}
-                      onRoleChange={setRole}
-                      onStatusChange={setStatus}
+                      filters={filters as any}
+                      onSearchChange={actions.handleSearchChange}
+                      onRoleChange={actions.handleRoleChange}
+                      onStatusChange={actions.handleStatusChange}
                       isSearching={isSearching}
                   />
               </GlassCardContent>
           </GlassCard>
 
-          {/* Table */}
-          <UsersTable
-              users={users}
-              total={total}
-              page={filters.page || 1}
-              limit={filters.limit || 10}
-              isLoading={isLoading}
-              onEdit={handleEditClick}
-              onDelete={handleDeleteClick}
-              onPageChange={setPage}
-          />
+          {/* Content: Table for Desktop, List for Mobile */}
+          {isMobile ? (
+              <UserList
+                  items={data.mobile.items}
+                  isLoading={data.mobile.isLoading}
+                  hasNextPage={data.mobile.hasNextPage}
+                  isFetchingNextPage={data.mobile.isFetchingNextPage}
+                  onLoadMore={data.mobile.fetchNextPage}
+                  onEdit={actions.handleEditClick}
+                  onDelete={actions.handleDeleteClick}
+                  isAdmin={isAdmin}
+              />
+          ) : (
+              <UsersTable
+                  users={data.desktop.items}
+                  total={pagination.total}
+                  page={pagination.page}
+                  limit={pagination.limit}
+                  isLoading={data.desktop.isLoading}
+                  onEdit={actions.handleEditClick}
+                  onDelete={actions.handleDeleteClick}
+                  onPageChange={pagination.setPage}
+              />
+          )}
 
           {/* Form Modal */}
           <UserFormModal
-              isOpen={isFormModalOpen}
+              isOpen={modals.isFormOpen}
               onClose={() => {
-                  setIsFormModalOpen(false)
-                  setSelectedUser(null)
+                  modals.setIsFormOpen(false)
               }}
-              onSubmit={handleFormSubmit}
-              user={selectedUser}
-              isSubmitting={createMutation.isPending || updateMutation.isPending}
+              onSubmit={actions.handleFormSubmit}
+              user={modals.selectedUser}
+              isSubmitting={modals.isSaving}
           />
 
           {/* Delete Dialog */}
           <UserDeleteDialog
-              isOpen={isDeleteDialogOpen}
+              isOpen={modals.isDeleteOpen}
               onClose={() => {
-                  setIsDeleteDialogOpen(false)
-                  setSelectedUser(null)
+                  modals.setIsDeleteOpen(false)
               }}
-              onConfirm={handleDeleteConfirm}
-              user={selectedUser}
-              isDeleting={deleteMutation.isPending}
+              onConfirm={actions.handleDeleteConfirm}
+              user={modals.selectedUser}
+              isDeleting={modals.isDeleting}
           />
       </motion.div>
   )

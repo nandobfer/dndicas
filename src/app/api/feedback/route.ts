@@ -8,6 +8,8 @@ const createFeedbackSchema = z.object({
   title: z.string().min(3).max(200),
   description: z.string().min(10).max(50000),
   type: z.enum(["bug", "melhoria"]),
+  status: z.enum(["pendente", "concluido", "cancelado"]).optional(),
+  priority: z.enum(["baixa", "media", "alta"]).optional(),
 })
 
 export async function GET(req: NextRequest) {
@@ -60,6 +62,14 @@ export async function POST(req: NextRequest) {
 
     const body = await req.json()
     const validated = createFeedbackSchema.parse(body)
+
+    const isAdmin = user.publicMetadata?.role === "admin"
+    
+    // Non-admins can't set status or priority on creation
+    if (!isAdmin) {
+      delete validated.status
+      delete validated.priority
+    }
 
     await dbConnect()
 

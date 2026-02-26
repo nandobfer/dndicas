@@ -16,6 +16,8 @@ export interface StatusChipsProps {
     value: StatusFilter
     /** Callback when status changes */
     onChange: (status: StatusFilter) => void
+    /** Whether the chips should take full width */
+    fullWidth?: boolean
     /** Additional class names */
     className?: string
 }
@@ -23,7 +25,7 @@ export interface StatusChipsProps {
 /**
  * StatusChips component for filtering by status.
  */
-export function StatusChips({ value, onChange, className }: StatusChipsProps) {
+export function StatusChips({ value, onChange, fullWidth = false, className }: StatusChipsProps) {
     const options = [
         {
             value: "all" as StatusFilter,
@@ -60,5 +62,5 @@ export function StatusChips({ value, onChange, className }: StatusChipsProps) {
         },
     ]
 
-    return <GlassSelector value={value} onChange={(val) => onChange(val as StatusFilter)} options={options} className={className} layoutId="status-chips-indicator" />
+    return <GlassSelector value={value} onChange={(val) => onChange(val as StatusFilter)} options={options} className={className} fullWidth={fullWidth} layoutId="status-chips-indicator" />
 }

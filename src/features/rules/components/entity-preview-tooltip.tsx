@@ -15,14 +15,15 @@ import { SpellPreview } from "@/features/spells/components/spell-preview"
 
 interface RulePreviewProps {
     rule: Reference
+    showStatus?: boolean
 }
 
-const RulePreview = ({ rule }: RulePreviewProps) => {
+export const RulePreview = ({ rule, showStatus = true }: RulePreviewProps) => {
     return (
-        <div className="space-y-4 min-w-[400px] max-w-[650px]">
-            <div className="flex items-start justify-between gap-4">
+        <div className="space-y-4 w-auto max-w-full sm:max-w-[500px] md:max-w-[600px]">
+            <div className="flex flex-col sm:flex-row items-start sm:justify-between gap-4">
                 <div className="flex items-center gap-2">
-                    <div className={cn("p-1.5 rounded-lg border", entityConfig.Regra.badge)}>
+                    <div className={cn("p-1.5 rounded-lg border flex-shrink-0", entityConfig.Regra.badge)}>
                         <ScrollText className="w-4 h-4" />
                     </div>
                     <div>
@@ -30,15 +31,19 @@ const RulePreview = ({ rule }: RulePreviewProps) => {
                         <p className="text-[10px] uppercase font-bold tracking-widest text-white/40 mt-0.5">Regra do Sistema</p>
                     </div>
                 </div>
-                <Chip variant={rule.status === "active" ? "uncommon" : "common"} size="sm">
-                    {rule.status === "active" ? "Ativa" : "Inativa"}
-                </Chip>
+                {showStatus && (
+                    <div className="self-end sm:self-auto">
+                        <Chip variant={rule.status === "active" ? "uncommon" : "common"} size="sm">
+                            {rule.status === "active" ? "Ativa" : "Inativa"}
+                        </Chip>
+                    </div>
+                )}
             </div>
 
             {rule.description && (
                 <div className="relative">
                     <Quote className="absolute -top-1 -left-1 w-8 h-8 text-white/5 -z-10" />
-                    <div className="text-xs text-white/70 pl-4 border-l border-white/10 py-1">
+                    <div className="text-xs text-white/70 pl-4 border-l border-white/10 py-1 break-words">
                         <MentionContent html={rule.description} mode="block" />
                     </div>
                 </div>
@@ -61,11 +66,12 @@ const RulePreview = ({ rule }: RulePreviewProps) => {
  */
 interface TraitPreviewProps {
     trait: any // Trait type from features/traits
+    showStatus?: boolean
 }
 
-const TraitPreview = ({ trait }: TraitPreviewProps) => {
+export const TraitPreview = ({ trait, showStatus = true }: TraitPreviewProps) => {
     return (
-        <div className="space-y-4 min-w-[400px] max-w-[650px]">
+        <div className="space-y-4 w-auto max-w-full sm:max-w-[500px] md:max-w-[600px]">
             <div className="flex items-start justify-between gap-4">
                 <div className="flex items-center gap-2">
                     <div className={cn("p-1.5 rounded-lg border", entityConfig.Habilidade.badge)}>
@@ -76,15 +82,17 @@ const TraitPreview = ({ trait }: TraitPreviewProps) => {
                         <p className="text-[10px] uppercase font-bold tracking-widest text-white/40 mt-0.5">Habilidade D&D</p>
                     </div>
                 </div>
-                <Chip variant={trait.status === "active" ? "uncommon" : "common"} size="sm">
-                    {trait.status === "active" ? "Ativa" : "Inativa"}
-                </Chip>
+                {showStatus && (
+                    <Chip variant={trait.status === "active" ? "uncommon" : "common"} size="sm">
+                        {trait.status === "active" ? "Ativa" : "Inativa"}
+                    </Chip>
+                )}
             </div>
 
             {trait.description && (
                 <div className="relative">
                     <Quote className="absolute -top-1 -left-1 w-8 h-8 text-white/5 -z-10" />
-                    <div className="text-xs text-white/70 pl-4 border-l border-white/10 py-1">
+                    <div className="text-xs text-white/70 pl-4 border-l border-white/10 py-1 break-words">
                         <MentionContent html={trait.description} mode="block" />
                     </div>
                 </div>
@@ -145,11 +153,17 @@ export const EntityPreviewTooltip = ({ entityId, entityType, children, side = "t
         }
     }, [entityId, entityType, data, loading])
 
+    // Fetch data when popover opens, ensuring mobile clicks and desktop hovers both trigger loading
+    React.useEffect(() => {
+        if (open) {
+            fetchData()
+        }
+    }, [open, fetchData])
+
     const handleMouseEnter = () => {
         if (timeoutRef.current) clearTimeout(timeoutRef.current)
         timeoutRef.current = setTimeout(() => {
             setOpen(true)
-            fetchData()
         }, delayDuration)
     }
 
@@ -192,7 +206,7 @@ export const EntityPreviewTooltip = ({ entityId, entityType, children, side = "t
             </GlassPopoverTrigger>
             <GlassPopoverContent
                 side={side}
-                className="w-auto max-w-none max-h-[400px] overflow-y-auto glass-scrollbar"
+                className="w-[calc(100vw-2rem)] sm:w-auto max-w-[95vw] sm:max-w-xl md:max-w-2xl max-h-[85vh] sm:max-h-[400px] overflow-y-auto glass-scrollbar"
                 onMouseEnter={handleMouseEnter}
                 onMouseLeave={handleMouseLeave}
                 onOpenAutoFocus={(e) => e.preventDefault()}

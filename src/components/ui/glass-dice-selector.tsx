@@ -15,6 +15,10 @@ export interface GlassDiceSelectorProps {
   disabled?: boolean;
   className?: string;
   allowClear?: boolean;
+  /** Layout for the dice type selector */
+  layout?: 'horizontal' | 'grid';
+  /** Number of columns for grid layout */
+  cols?: 1 | 2 | 3 | 4 | 6;
   /** Unique ID for Framer Motion layout animations */
   layoutId?: string;
 }
@@ -37,6 +41,8 @@ export function GlassDiceSelector({
   disabled = false,
   className,
   allowClear = false,
+  layout = 'horizontal',
+  cols,
   layoutId,
 }: GlassDiceSelectorProps) {
   const [localQuantity, setLocalQuantity] = useState<string>(
@@ -110,7 +116,8 @@ export function GlassDiceSelector({
               setLocalType(newType);
               emitChange(localQuantity, newType);
             }}
-            layout="horizontal"
+            layout={layout}
+            cols={cols}
             fullWidth
             size="md"
             disabled={disabled}

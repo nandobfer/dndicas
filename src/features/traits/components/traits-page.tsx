@@ -4,128 +4,44 @@ import * as React from 'react';
 import { Plus, Sparkles } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { cn } from '@/core/utils';
-import { GlassCard, GlassCardContent } from '@/components/ui/glass-card';
-import { useTraits } from '../hooks/useTraits';
-import { useTraitMutations } from '../hooks/useTraitMutations';
+import { GlassCard, GlassCardContent } from "@/components/ui/glass-card"
 import { useAuth } from "@/core/hooks/useAuth"
-import { TraitsFilters } from './traits-filters';
-import { TraitsTable } from './traits-table';
-import { TraitFormModal } from './trait-form-modal';
-import { DeleteTraitDialog } from './delete-trait-dialog';
-import { motionConfig } from '@/lib/config/motion-configs';
-import type { Trait, CreateTraitInput, UpdateTraitInput, TraitFilterParams } from "../types/traits.types"
-import { useDebounce } from "@/core/hooks/useDebounce"
+import { TraitsFilters } from "./traits-filters"
+import { TraitsTable } from "./traits-table"
+import { EntityList } from "@/features/rules/components/entity-list"
+import { TraitFormModal } from "./trait-form-modal"
+import { DeleteTraitDialog } from "./delete-trait-dialog"
+import { motionConfig } from "@/lib/config/motion-configs"
+import { useTraitsPage } from "../hooks/useTraitsPage"
 
 export function TraitsPage() {
     const { isAdmin } = useAuth()
-    // State
-    const [page, setPage] = React.useState(1)
-    const [search, setSearch] = React.useState("")
-    const [status, setStatus] = React.useState<TraitFilterParams["status"]>("all")
 
-    // Debounced search
-    const debouncedSearch = useDebounce(search, 500)
-
-    // Filters object for query
-    const filters: TraitFilterParams = React.useMemo(
-        () => ({
-            page,
-            limit: 10,
-            search: debouncedSearch,
-            status,
-        }),
-        [page, debouncedSearch, status],
-    )
-
-    // Data fetching
-    const { data, isLoading, isFetching } = useTraits(filters)
-    const { create, update, remove } = useTraitMutations()
-
-    // Modal state
-    const [isFormOpen, setIsFormOpen] = React.useState(false)
-    const [isDeleteOpen, setIsDeleteOpen] = React.useState(false)
-    const [selectedTrait, setSelectedTrait] = React.useState<Trait | null>(null)
-
-    // Handlers
-    const handleSearchChange = (value: string) => {
-        setSearch(value)
-        setPage(1) // Reset to page 1 on search
-    }
-
-    const handleStatusChange = (value: TraitFilterParams["status"]) => {
-        setStatus(value)
-        setPage(1)
-    }
-
-    const handleCreateClick = () => {
-        setSelectedTrait(null)
-        setIsFormOpen(true)
-    }
-
-    const handleEditClick = (trait: Trait) => {
-        setSelectedTrait(trait)
-        setIsFormOpen(true)
-    }
-
-    const handleDeleteClick = (trait: Trait) => {
-        setSelectedTrait(trait)
-        setIsDeleteOpen(true)
-    }
-
-    const handleFormSubmit = async (formData: CreateTraitInput | UpdateTraitInput) => {
-        try {
-            if (selectedTrait) {
-                await update.mutateAsync({
-                    id: selectedTrait._id, // Using _id directly from Mongoose
-                    data: formData as UpdateTraitInput,
-                })
-            } else {
-                await create.mutateAsync(formData as CreateTraitInput)
-            }
-            setIsFormOpen(false)
-            setSelectedTrait(null)
-        } catch (error) {
-            console.error("Failed to save trait:", error)
-            // Error handling usually handled by global toast or mutation onError
-        }
-    }
-
-    const handleDeleteConfirm = async () => {
-        if (selectedTrait) {
-            try {
-                await remove.mutateAsync(selectedTrait._id)
-                setIsDeleteOpen(false)
-                setSelectedTrait(null)
-            } catch (error) {
-                console.error("Failed to delete trait:", error)
-            }
-        }
-    }
-
-    const traits = data?.items || []
-    const total = data?.total || 0
+    // Logic moved to custom hook for better maintainability (T044)
+    const { isMobile, filters, pagination, data, actions, modals } = useTraitsPage()
 
     return (
         <motion.div variants={motionConfig.variants.fadeInUp} initial="initial" animate="animate" className="space-y-6">
             {/* Header */}
             <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
                 <div>
-                    <h1 className="text-2xl font-bold text-white flex items-center gap-2">
-                        <Sparkles className="h-6 w-6 text-emerald-400" />
+                    <h1 className="text-xl sm:text-2xl font-bold text-white flex items-center gap-2">
+                        <Sparkles className="h-5 w-5 sm:h-6 sm:w-6 text-emerald-400" />
                         Catálogo de Habilidades
                     </h1>
-                    <p className="text-sm text-white/60 mt-1">Gerencie habilidades e traits do sistema (D&D 5e)</p>
+                    <p className="text-[10px] sm:text-sm text-white/60 mt-1">Gerencie habilidades e traits do sistema (D&D 5e)</p>
                 </div>
 
                 {isAdmin && (
                     <button
-                        onClick={handleCreateClick}
+                        onClick={actions.handleCreateClick}
                         className={cn(
-                            "inline-flex items-center gap-2 px-4 py-2 rounded-lg",
-                            "bg-purple-500 text-white font-medium text-sm",
-                            "hover:bg-purple-600 transition-colors",
-                            "focus:outline-none focus:ring-2 focus:ring-purple-500/50",
-                            "shadow-lg shadow-purple-500/20"
+                            "inline-flex items-center justify-center gap-2 px-4 py-2 rounded-lg",
+                            "bg-blue-500 text-white font-medium text-sm",
+                            "hover:bg-blue-600 transition-colors",
+                            "focus:outline-none focus:ring-2 focus:ring-blue-500/50",
+                            "shadow-lg shadow-blue-500/20",
+                            "w-full sm:w-auto", // Full width on mobile
                         )}
                     >
                         <Plus className="h-4 w-4" />
@@ -138,42 +54,50 @@ export function TraitsPage() {
             <GlassCard>
                 <GlassCardContent className="py-4">
                     <TraitsFilters
-                        filters={{ search, status }}
-                        onSearchChange={handleSearchChange}
-                        onStatusChange={handleStatusChange}
-                        isSearching={isFetching && !isLoading}
+                        filters={{ search: filters.search, status: filters.status }}
+                        onSearchChange={actions.handleSearchChange}
+                        onStatusChange={actions.handleStatusChange}
+                        isSearching={data.desktop.isFetching || data.mobile.isFetching}
                     />
                 </GlassCardContent>
             </GlassCard>
 
-            {/* Table */}
-            <TraitsTable
-                traits={traits}
-                total={total}
-                page={filters.page || 1}
-                limit={filters.limit || 10}
-                isLoading={isLoading}
-                onEdit={handleEditClick}
-                onDelete={handleDeleteClick}
-                onPageChange={setPage}
-            />
+            {/* Content: Table for Desktop, List for Mobile (T042) */}
+            {isMobile ? (
+                <EntityList
+                    items={data.mobile.items}
+                    entityType="Habilidade"
+                    isLoading={data.mobile.isLoading}
+                    hasNextPage={data.mobile.hasNextPage}
+                    isFetchingNextPage={data.mobile.isFetchingNextPage}
+                    onLoadMore={data.mobile.fetchNextPage}
+                    onEdit={actions.handleEditClick}
+                    onDelete={actions.handleDeleteClick}
+                    isAdmin={isAdmin}
+                />
+            ) : (
+                <TraitsTable
+                    traits={data.desktop.items}
+                    total={pagination.total}
+                    page={pagination.page}
+                    limit={pagination.limit}
+                    isLoading={data.desktop.isLoading}
+                    onEdit={actions.handleEditClick}
+                    onDelete={actions.handleDeleteClick}
+                    onPageChange={pagination.setPage}
+                />
+            )}
 
             {/* Form Modal */}
-            <TraitFormModal
-                isOpen={isFormOpen}
-                onClose={() => setIsFormOpen(false)}
-                onSubmit={handleFormSubmit}
-                trait={selectedTrait}
-                isSubmitting={create.isPending || update.isPending}
-            />
+            <TraitFormModal isOpen={modals.isFormOpen} onClose={() => modals.setIsFormOpen(false)} onSubmit={actions.handleFormSubmit} trait={modals.selectedTrait} isSubmitting={modals.isSaving} />
 
             {/* Delete Dialog */}
             <DeleteTraitDialog
-                isOpen={isDeleteOpen}
-                onClose={() => setIsDeleteOpen(false)}
-                onConfirm={handleDeleteConfirm}
-                trait={selectedTrait}
-                isDeleting={remove.isPending}
+                isOpen={modals.isDeleteOpen}
+                onClose={() => modals.setIsDeleteOpen(false)}
+                onConfirm={actions.handleDeleteConfirm}
+                trait={modals.selectedTrait}
+                isDeleting={modals.isDeleting}
             />
         </motion.div>
     )

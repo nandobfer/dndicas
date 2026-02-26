@@ -7,188 +7,98 @@
 
 "use client";
 
-import { useState } from 'react';
 import { Plus, Wand } from 'lucide-react';
-import { motion } from 'framer-motion';
-import { toast } from 'sonner';
-import { cn } from '@/core/utils';
-import { useAuth } from '@/core/hooks/useAuth';
-import { useSpells } from '../api/spells-queries';
-import { useSpellFilters } from '../hooks/useSpellFilters';
-import { SpellsTable } from './spells-table';
-import { SpellsFilters } from './spells-filters';
-import { SpellFormModal } from './spell-form-modal';
-import type { Spell, SpellSchool, AttributeType, DiceType } from '../types/spells.types';
-import { GlassCard, GlassCardContent } from '@/components/ui/glass-card';
-import { motionConfig } from '@/lib/config/motion-configs';
+import { motion } from "framer-motion"
+import { cn } from "@/core/utils"
+import { useAuth } from "@/core/hooks/useAuth"
+import { SpellsTable } from "./spells-table"
+import { SpellsFilters } from "./spells-filters"
+import { EntityList } from "@/features/rules/components/entity-list"
+import { SpellFormModal } from "./spell-form-modal"
+import { GlassCard, GlassCardContent } from "@/components/ui/glass-card"
+import { motionConfig } from "@/lib/config/motion-configs"
+import { useSpellsPage } from "../hooks/useSpellsPage"
 
-/**
- * Spells Page Component
- *
- * Main page for viewing and searching spells.
- * Features:
- * - Text search with 300ms debouncing
- * - Paginated table with formatted chips
- * - Admin-only create/edit/delete actions
- * - Preview tooltips for quick reference
- *
- * @example
- * ```tsx
- * // In app/(dashboard)/spells/page.tsx
- * export default function Page() {
- *   return <SpellsPage />;
- * }
- * ```
- */
 export function SpellsPage() {
-  const { isAdmin } = useAuth();
-  const [isModalOpen, setIsModalOpen] = useState(false);
-  const [selectedSpell, setSelectedSpell] = useState<Spell | null>(null);
+    const { isAdmin } = useAuth()
 
-  const {
-    filters,
-    search,
-    setSearch,
-    setStatus,
-    setCircles,
-    setSchools,
-    setSaveAttributes,
-    setDiceTypes,
-    circleMode,
-    setCircleMode,
-    setPage,
-  } = useSpellFilters();
+    // Logic moved to custom hook for better maintainability (T044)
+    const { isMobile, filters, pagination, data, actions, modals } = useSpellsPage()
 
-  const { data, isLoading, isFetching, refetch } = useSpells(filters, filters.page, filters.limit);
+    return (
+        <motion.div variants={motionConfig.variants.fadeInUp} initial="initial" animate="animate" className="space-y-6">
+            {/* Header */}
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                    <h1 className="text-xl sm:text-2xl font-bold text-white flex items-center gap-2">
+                        <Wand className="h-5 w-5 sm:h-6 sm:w-6 text-purple-400" />
+                        Catálogo de Magias
+                    </h1>
+                    <p className="text-[10px] sm:text-sm text-white/60 mt-1">Explore as magias disponíveis para conjuradores (D&D 5e)</p>
+                </div>
 
-  // Check if any filters are active (beyond defaults)
-  const hasActiveFilters =
-    !!filters.search ||
-    (filters.circles && filters.circles.length > 0) ||
-    (filters.schools && filters.schools.length > 0) ||
-    (filters.saveAttributes && filters.saveAttributes.length > 0) ||
-    (filters.diceTypes && filters.diceTypes.length > 0) ||
-    (filters.status && filters.status !== 'all');
+                {isAdmin && (
+                    <button
+                        onClick={actions.handleCreateClick}
+                        className={cn(
+                            "inline-flex items-center justify-center gap-2 px-4 py-2 rounded-lg",
+                            "bg-blue-500 text-white font-medium text-sm",
+                            "hover:bg-blue-600 transition-colors",
+                            "focus:outline-none focus:ring-2 focus:ring-blue-500/50",
+                            "shadow-lg shadow-blue-500/20",
+                            "w-full sm:w-auto", // Full width on mobile
+                        )}
+                    >
+                        <Plus className="h-4 w-4" />
+                        Nova Magia
+                    </button>
+                )}
+            </div>
 
-  const handleSearchChange = (value: string) => {
-    setSearch(value);
-  };
+            {/* Filters Panel */}
+            <GlassCard>
+                <GlassCardContent className="py-4">
+                    <SpellsFilters
+                        filters={filters}
+                        onSearchChange={actions.handleSearchChange}
+                        onStatusChange={actions.handleStatusChange}
+                        onCircleChange={actions.handleCircleChange}
+                        onSchoolsChange={actions.handleSchoolsChange}
+                        onAttributesChange={actions.handleAttributesChange}
+                        onDiceTypesChange={actions.handleDiceTypesChange}
+                        isSearching={data.desktop.isFetching || data.mobile.isFetching}
+                    />
+                </GlassCardContent>
+            </GlassCard>
 
-  const handleCircleChange = (circle: number | undefined, mode: "exact" | "upTo") => {
-    setCircleMode(mode);
-    if (circle === undefined) {
-      setCircles([]);
-    } else if (mode === "exact") {
-      setCircles([circle]);
-    } else {
-      // "upTo" mode: include circles 0 to selected circle
-      const circleRange = Array.from({ length: circle + 1 }, (_, i) => i);
-      setCircles(circleRange);
-    }
-  };
-
-  const handleEdit = (spell: Spell) => {
-    setSelectedSpell(spell);
-    setIsModalOpen(true);
-  };
-
-  const handleDelete = async (spell: Spell) => {
-    if (!confirm(`Deseja realmente excluir a magia "${spell.name}"?`)) return;
-
-    try {
-      const response = await fetch(`/api/spells/${spell._id}`, {
-        method: "DELETE",
-      });
-
-      if (!response.ok) throw new Error("Erro ao excluir magia");
-
-      toast.success("Magia excluída com sucesso!");
-      refetch();
-    } catch (error) {
-      toast.error("Erro ao excluir magia");
-    }
-  };
-
-  const handleNewSpell = () => {
-    setSelectedSpell(null);
-    setIsModalOpen(true);
-  };
-
-  const handleSuccess = () => {
-    refetch();
-  };
-
-  return (
-    <motion.div
-      variants={motionConfig.variants.fadeInUp}
-      initial="initial"
-      animate="animate"
-      className="space-y-6"
-    >
-      {/* Header */}
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-white flex items-center gap-2">
-            <Wand className="h-6 w-6 text-purple-400" />
-            Catálogo de Magias
-          </h1>
-          <p className="text-sm text-white/60 mt-1">
-            Explore as magias disponíveis para conjuradores (D&D 5e)
-          </p>
-        </div>
-
-        {isAdmin && (
-          <button
-            onClick={handleNewSpell}
-            className={cn(
-              'inline-flex items-center gap-2 px-4 py-2 rounded-lg',
-              'bg-blue-500 text-white font-medium text-sm',
-              'hover:bg-blue-600 transition-colors',
-              'focus:outline-none focus:ring-2 focus:ring-blue-500/50',
-              'shadow-lg shadow-blue-500/20'
+            {/* Content: Table for Desktop, List for Mobile (T042) */}
+            {isMobile ? (
+                <EntityList
+                    items={data.mobile.items}
+                    entityType="Magia"
+                    isLoading={data.mobile.isLoading}
+                    hasNextPage={data.mobile.hasNextPage}
+                    isFetchingNextPage={data.mobile.isFetchingNextPage}
+                    onLoadMore={data.mobile.fetchNextPage}
+                    onEdit={actions.handleEditClick}
+                    onDelete={actions.handleDeleteClick}
+                    isAdmin={isAdmin}
+                />
+            ) : (
+                <SpellsTable
+                    spells={data.desktop.items}
+                    isLoading={data.desktop.isLoading}
+                    total={pagination.total}
+                    page={pagination.page}
+                    limit={pagination.limit}
+                    hasActiveFilters={modals.hasActiveFilters}
+                    onPageChange={pagination.setPage}
+                    onEdit={actions.handleEditClick}
+                    onDelete={actions.handleDeleteClick}
+                />
             )}
-          >
-            <Plus className="h-4 w-4" />
-            Nova Magia
-          </button>
-        )}
-      </div>
 
-      {/* Filters Panel */}
-      <GlassCard>
-        <GlassCardContent className="py-4">
-          <SpellsFilters
-            filters={filters}
-            onSearchChange={handleSearchChange}
-            onStatusChange={setStatus}
-            onCircleChange={handleCircleChange}
-            onSchoolsChange={setSchools}
-            onAttributesChange={setSaveAttributes}
-            onDiceTypesChange={setDiceTypes}
-            isSearching={isFetching && !isLoading}
-          />
-        </GlassCardContent>
-      </GlassCard>
-
-      {/* Table */}
-      <SpellsTable
-        spells={data?.spells || []}
-        isLoading={isLoading}
-        total={data?.total || 0}
-        page={filters.page}
-        limit={filters.limit}
-        hasActiveFilters={hasActiveFilters}
-        onPageChange={setPage}
-        onEdit={handleEdit}
-        onDelete={handleDelete}
-      />
-
-      <SpellFormModal
-        isOpen={isModalOpen}
-        spell={selectedSpell}
-        onClose={() => setIsModalOpen(false)}
-        onSuccess={handleSuccess}
-      />
-    </motion.div>
-  );
+            <SpellFormModal isOpen={modals.isFormOpen} spell={modals.selectedSpell} onClose={() => modals.setIsFormOpen(false)} onSuccess={actions.handleFormSuccess} />
+        </motion.div>
+    )
 }

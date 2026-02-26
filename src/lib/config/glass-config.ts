@@ -43,13 +43,13 @@ export const cardGlass = {
  * Strong blur with higher opacity for persistent navigation.
  */
 export const sidebarGlass = {
-  /** Large blur effect (16px) for sidebar */
-  blur: 'backdrop-blur-lg',
-  /** 60% black background for contrast against page */
-  background: 'bg-black/60',
-  /** Right border separator */
-  border: 'border-r border-white/5',
-} as const;
+    /** Large blur effect (16px) for sidebar */
+    blur: "backdrop-blur-sm",
+    /** 60% black background for contrast against page */
+    background: "bg-black/60",
+    /** Right border separator */
+    border: "border-r border-white/5",
+} as const
 
 /**
  * Glass configuration for input components.

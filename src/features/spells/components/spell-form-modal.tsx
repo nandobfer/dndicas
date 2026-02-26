@@ -23,6 +23,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { Loader2, Wand, Link, AlignLeft, Info, Shield, Dices, Zap, Plus, X, MapPin, Target } from "lucide-react"
 import { toast } from "sonner"
 import { cn } from "@/core/utils"
+import { useIsMobile } from "@/core/hooks/useMediaQuery"
 
 import { GlassModal, GlassModalContent, GlassModalHeader, GlassModalTitle, GlassModalDescription } from "@/components/ui/glass-modal"
 import { GlassInput } from "@/components/ui/glass-input"
@@ -90,6 +91,7 @@ interface SpellFormModalProps {
 }
 
 export function SpellFormModal({ spell, isOpen, onClose, onSuccess }: SpellFormModalProps) {
+    const isMobile = useIsMobile()
     const isEditMode = !!spell
     const createMutation = useCreateSpell()
     const updateMutation = useUpdateSpell()
@@ -231,7 +233,7 @@ export function SpellFormModal({ spell, isOpen, onClose, onSuccess }: SpellFormM
                                     value={field.value as SpellSchool}
                                     onChange={(val) => field.onChange(Array.isArray(val) ? val[0] : val)}
                                     layout="grid"
-                                    cols={4}
+                                    cols={isMobile ? 3 : 4}
                                     size="md"
                                     fullWidth
                                     layoutId="spell-school-selector"
@@ -369,7 +371,15 @@ export function SpellFormModal({ spell, isOpen, onClose, onSuccess }: SpellFormM
                                         <Controller
                                             name="baseDice"
                                             control={control}
-                                            render={({ field }) => <GlassDiceSelector value={field.value || undefined} onChange={field.onChange} layoutId="base-dice-selector" />}
+                                            render={({ field }) => (
+                                                <GlassDiceSelector
+                                                    value={field.value || undefined}
+                                                    onChange={field.onChange}
+                                                    layoutId="base-dice-selector"
+                                                    layout={isMobile ? "grid" : "horizontal"}
+                                                    cols={isMobile ? 3 : undefined}
+                                                />
+                                            )}
                                         />
                                     </div>
                                     <button
@@ -420,7 +430,15 @@ export function SpellFormModal({ spell, isOpen, onClose, onSuccess }: SpellFormM
                                         <Controller
                                             name="extraDicePerLevel"
                                             control={control}
-                                            render={({ field }) => <GlassDiceSelector value={field.value || undefined} onChange={field.onChange} layoutId="extra-dice-selector" />}
+                                            render={({ field }) => (
+                                                <GlassDiceSelector
+                                                    value={field.value || undefined}
+                                                    onChange={field.onChange}
+                                                    layoutId="extra-dice-selector"
+                                                    layout={isMobile ? "grid" : "horizontal"}
+                                                    cols={isMobile ? 3 : undefined}
+                                                />
+                                            )}
                                         />
                                     </div>
                                     <button

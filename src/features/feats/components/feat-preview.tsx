@@ -10,13 +10,14 @@ import type { Feat } from "../types/feats.types"
 
 export interface FeatPreviewProps {
     feat: Feat
+    showStatus?: boolean
 }
 
-export function FeatPreview({ feat }: FeatPreviewProps) {
+export function FeatPreview({ feat, showStatus = true }: FeatPreviewProps) {
     const rarityVariant = getLevelRarityVariant(feat.level)
 
     return (
-        <div className="space-y-4 min-w-[320px] max-w-[500px]">
+        <div className="space-y-4 w-auto max-w-full sm:max-w-[450px]">
             {/* Header */}
             <div className="flex items-start justify-between gap-4">
                 <div className="flex items-center gap-3">
@@ -24,20 +25,22 @@ export function FeatPreview({ feat }: FeatPreviewProps) {
                         <Zap className="h-4 w-4 text-amber-400" />
                     </div>
                     <div>
-                        <h3 className="text-sm font-bold text-white leading-tight">{feat.name}</h3>
+                        <div className="flex items-center gap-2">
+                            <h3 className="text-sm font-bold text-white leading-tight">{feat.name}</h3>
+                            <Chip variant={rarityVariant} size="sm">
+                                Nv. {feat.level}
+                            </Chip>
+                        </div>
                         <p className="text-[10px] uppercase font-bold tracking-widest text-white/40 mt-0.5">Talento de Personagem</p>
                     </div>
                 </div>
-                <div className="flex flex-col items-end gap-2">
-                    <Chip variant={rarityVariant} size="sm">
-                        Nv. {feat.level}
-                    </Chip>
-                    {feat.status === "inactive" && (
+                {showStatus && feat.status === "inactive" && (
+                    <div className="flex flex-col items-end">
                         <Chip variant="common" size="sm" className="opacity-50">
                             Inativo
                         </Chip>
-                    )}
-                </div>
+                    </div>
+                )}
             </div>
 
             {/* Prerequisites */}
@@ -85,7 +88,7 @@ export function FeatPreview({ feat }: FeatPreviewProps) {
                     <Info className="h-3 w-3" />
                     <span>Descrição</span>
                 </div>
-                <div className="text-sm text-white/80 leading-relaxed">
+                <div className="text-sm text-white/80 leading-relaxed break-words">
                     <MentionContent html={feat.description} mode="block" className="[&_p]:text-sm [&_p]:text-white/80 [&_ul]:text-sm [&_ol]:text-sm" />
                 </div>
             </div>

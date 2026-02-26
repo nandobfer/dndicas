@@ -5,6 +5,7 @@ import { StatusChips, type StatusFilter } from '@/components/ui/status-chips';
 import { GlassInput } from '@/components/ui/glass-input';
 import { GlassSelector } from "@/components/ui/glass-selector"
 import { useAuth } from "@/core/hooks/useAuth"
+import { useIsMobile } from "@/core/hooks/useMediaQuery"
 import { cn } from "@/core/utils"
 import { attributeColors, AttributeType } from "@/lib/config/colors"
 import type { FeatsFilters } from "../types/feats.types"
@@ -21,15 +22,8 @@ export interface FeatsFiltersProps {
     className?: string
 }
 
-export function FeatsFilters({
-    filters,
-    onSearchChange,
-    onStatusChange,
-    onLevelChange,
-    onAttributesChange,
-    isSearching = false,
-    className
-}: FeatsFiltersProps) {
+export function FeatsFilters({ filters, onSearchChange, onStatusChange, onLevelChange, onAttributesChange, isSearching = false, className }: FeatsFiltersProps) {
+    const isMobile = useIsMobile()
     const [levelMode, setLevelMode] = useState<"exact" | "upto">("exact")
     const [selectedLevel, setSelectedLevel] = useState<number | undefined>(filters.level || filters.levelMax)
 
@@ -37,7 +31,7 @@ export function FeatsFilters({
         value: key as AttributeType,
         label: config.name.slice(0, 3) + ".",
         activeColor: config.badge.split(" ")[0],
-        textColor: config.text
+        textColor: config.text,
     }))
 
     const handleLevelInput = (value: string) => {
@@ -63,12 +57,7 @@ export function FeatsFilters({
         <div className={cn("flex flex-col lg:flex-row lg:items-center gap-4 justify-between", className)}>
             {/* Search */}
             <div className="flex-1 w-full lg:max-w-md">
-                <SearchInput
-                    value={filters.search || ""}
-                    onChange={onSearchChange}
-                    isLoading={isSearching}
-                    placeholder="Buscar talentos por nome ou fonte..."
-                />
+                <SearchInput value={filters.search || ""} onChange={onSearchChange} isLoading={isSearching} placeholder="Buscar talentos por nome ou fonte..." />
             </div>
 
             <div className="flex flex-wrap items-center gap-6">
@@ -114,7 +103,7 @@ export function FeatsFilters({
                                                     </div>
                                                 ),
                                                 activeColor: "bg-blue-500/20",
-                                                textColor: "text-blue-400"
+                                                textColor: "text-blue-400",
                                             },
                                             {
                                                 value: "upto",
@@ -125,8 +114,8 @@ export function FeatsFilters({
                                                     </div>
                                                 ),
                                                 activeColor: "bg-blue-500/20",
-                                                textColor: "text-blue-400"
-                                            }
+                                                textColor: "text-blue-400",
+                                            },
                                         ]}
                                         size="sm"
                                         className="h-10"
@@ -139,24 +128,26 @@ export function FeatsFilters({
                 </div>
 
                 {/* Attributes Filter */}
-                <div className="flex items-center gap-3">
-                    <span className="text-xs font-semibold text-white/40 uppercase tracking-wider whitespace-nowrap">Atributos:</span>
+                <div className="flex items-center gap-3 w-full sm:w-auto">
+                    <span className={cn("text-xs font-semibold text-white/40 uppercase tracking-wider whitespace-nowrap", isMobile && "hidden")}>Atributos:</span>
                     <GlassSelector
                         value={filters.attributes || []}
                         onChange={(vals) => onAttributesChange(vals as string[])}
                         options={attributeOptions}
                         mode="multi"
-                        layout="horizontal"
+                        layout={isMobile ? "grid" : "horizontal"}
+                        cols={isMobile ? 3 : undefined}
+                        fullWidth={isMobile}
                         size="sm"
                         layoutId="filter-attr-selector"
-                        className="h-10"
+                        className={isMobile ? "w-full" : "h-10"}
                     />
                 </div>
 
                 {/* Status */}
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 w-full sm:w-auto">
                     <span className="text-xs font-semibold text-white/40 uppercase tracking-wider whitespace-nowrap hidden sm:inline">Status:</span>
-                    <StatusChips value={filters.status || "all"} onChange={onStatusChange as (status: StatusFilter) => void} />
+                    <StatusChips value={filters.status || "all"} onChange={onStatusChange as (status: StatusFilter) => void} fullWidth={isMobile} className={isMobile ? "w-full" : ""} />
                 </div>
             </div>
         </div>
