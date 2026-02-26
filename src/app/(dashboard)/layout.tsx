@@ -40,7 +40,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                         variant="ghost"
                         size="icon"
                         onClick={expand}
-                        className="shrink-0 text-white/70 hover:text-white hover:bg-white/10 bg-black/20 backdrop-blur-md border border-white/10 rounded-full h-10 w-10 shadow-lg"
+                        className="shrink-0 text-white/70 hover:text-white hover:bg-white/10 bg-black/20 backdrop-blur-sm border border-white/10 rounded-full h-10 w-10 shadow-lg"
                     >
                         <Menu className="h-5 w-5" />
                         <span className="sr-only">Abrir menu</span>
@@ -52,7 +52,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             <motion.div
                 className="flex flex-1 flex-col"
                 animate={{
-                    marginLeft
+                    marginLeft,
                 }}
                 transition={motionConfig.sidebarTransition}
             >
