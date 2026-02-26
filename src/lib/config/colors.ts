@@ -371,6 +371,70 @@ export type SpellComponent = keyof typeof spellComponentConfig
 export type DiceType = keyof typeof diceColors
 
 /**
+ * Feedback configuration for status, types and priority.
+ */
+export const feedbackStatusConfig = {
+    pendente: {
+        label: "Pendente",
+        color: "legendary",
+        badge: "bg-amber-400/20 text-amber-400",
+        hex: rarityColors.legendary,
+    },
+    concluido: {
+        label: "Concluído",
+        color: "uncommon",
+        badge: "bg-emerald-400/20 text-emerald-400",
+        hex: rarityColors.uncommon,
+    },
+    cancelado: {
+        label: "Cancelado",
+        color: "artifact",
+        badge: "bg-red-400/20 text-red-400",
+        hex: rarityColors.artifact,
+    },
+} as const;
+
+export const feedbackTypeConfig = {
+    bug: {
+        label: "Bug",
+        color: "artifact",
+        badge: "bg-red-400/20 text-red-400",
+        hex: rarityColors.artifact,
+    },
+    melhoria: {
+        label: "Melhoria",
+        color: "rare",
+        badge: "bg-blue-400/20 text-blue-400",
+        hex: rarityColors.rare,
+    },
+} as const;
+
+export const feedbackPriorityConfig = {
+    baixa: {
+        label: "Baixa",
+        color: "uncommon",
+        badge: "bg-emerald-400/20 text-emerald-400",
+        hex: rarityColors.uncommon,
+    },
+    media: {
+        label: "Média",
+        color: "legendary",
+        badge: "bg-amber-400/20 text-amber-400",
+        hex: rarityColors.legendary,
+    },
+    alta: {
+        label: "Alta",
+        color: "artifact",
+        badge: "bg-red-400/20 text-red-400",
+        hex: rarityColors.artifact,
+    },
+} as const;
+
+export type FeedbackStatus = keyof typeof feedbackStatusConfig;
+export type FeedbackType = keyof typeof feedbackTypeConfig;
+export type FeedbackPriority = keyof typeof feedbackPriorityConfig;
+
+/**
  * Maps rarity color names to Tailwind CSS bg/text class pairs.
  * Used for applying rarity-based colors to UI components.
  */

@@ -16,7 +16,7 @@ import * as React from 'react';
 import { motion } from 'framer-motion';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Package2, Home, User, Sparkles, Upload, Palette, FileText, Users, Scroll, Zap, Wand, AtSign } from "lucide-react"
+import { Package2, Home, User, Sparkles, Upload, Palette, FileText, Users, Scroll, Zap, Wand, AtSign, MessageSquare } from "lucide-react"
 import { cn } from "@/core/utils"
 import { glassConfig } from "@/lib/config/glass-config"
 import { motionConfig } from "@/lib/config/motion-configs"
@@ -63,6 +63,7 @@ const cadastrosItems = [
 ]
 
 const adminItems = [
+    { label: "Feedback", href: "/feedback", icon: MessageSquare },
     { label: "Logs", href: "/audit-logs", icon: FileText },
     { label: "Referências Pendentes", href: "/admin/mentions", icon: AtSign, admin: true },
 ]
