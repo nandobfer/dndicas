@@ -6,9 +6,11 @@ import { GlassCard, GlassCardContent } from "@/components/ui/glass-card"
 import { LoadingState } from "@/components/ui/loading-state"
 import { EmptyState } from "@/components/ui/empty-state"
 import { Chip } from "@/components/ui/chip"
-import { ScrollText, MoreHorizontal, Pencil, Trash2 } from "lucide-react"
+import { ScrollText, Sparkles, Wand, Zap, MoreHorizontal, Pencil, Trash2 } from "lucide-react"
 import { motionConfig } from "@/lib/config/motion-configs"
-import { RulePreview } from "./entity-preview-tooltip"
+import { RulePreview, TraitPreview } from "./entity-preview-tooltip"
+import { FeatPreview } from "@/features/feats/components/feat-preview"
+import { SpellPreview } from "@/features/spells/components/spell-preview"
 import { GlassDropdownMenu, GlassDropdownMenuTrigger, GlassDropdownMenuContent, GlassDropdownMenuItem } from "@/components/ui/glass-dropdown-menu"
 
 /**
@@ -17,8 +19,9 @@ import { GlassDropdownMenu, GlassDropdownMenuTrigger, GlassDropdownMenuContent, 
  */
 const ENTITY_RENDERERS: Record<string, (item: any) => React.ReactNode> = {
     Regra: (item) => <RulePreview rule={item} showStatus={false} />,
-    // Future entities will be added here:
-    // "Habilidade": (item) => <TraitPreview trait={item} showStatus={false} />,
+    Habilidade: (item) => <TraitPreview trait={item} showStatus={false} />,
+    Talento: (item) => <FeatPreview feat={item} showStatus={false} />,
+    Magia: (item) => <SpellPreview spell={item} showStatus={false} />,
 }
 
 interface EntityListProps {

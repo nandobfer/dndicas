@@ -69,7 +69,7 @@ interface TraitPreviewProps {
     showStatus?: boolean
 }
 
-const TraitPreview = ({ trait, showStatus = true }: TraitPreviewProps) => {
+export const TraitPreview = ({ trait, showStatus = true }: TraitPreviewProps) => {
     return (
         <div className="space-y-4 w-auto max-w-full sm:max-w-[500px] md:max-w-[600px]">
             <div className="flex items-start justify-between gap-4">

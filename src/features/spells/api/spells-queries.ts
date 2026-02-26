@@ -108,17 +108,17 @@ export function useSpell(id: string | null) {
  * ```
  */
 export function useCreateSpell() {
-  const queryClient = useQueryClient();
+    const queryClient = useQueryClient()
 
-  return useMutation({
-    mutationFn: (data: CreateSpellInput) => createSpell(data),
-    onSuccess: () => {
-      // Invalidate all spell lists to refetch with new spell
-      queryClient.invalidateQueries({ queryKey: spellsKeys.lists() });
-      queryClient.invalidateQueries({ queryKey: ['audit-logs'] });
-      queryClient.invalidateQueries({ queryKey: ['dashboard-stats'] });
-    },
-  });
+    return useMutation({
+        mutationFn: (data: CreateSpellInput) => createSpell(data),
+        onSuccess: () => {
+            // Invalidate all spell lists to refetch with new spell
+            queryClient.invalidateQueries({ queryKey: spellsKeys.all })
+            queryClient.invalidateQueries({ queryKey: ["audit-logs"] })
+            queryClient.invalidateQueries({ queryKey: ["dashboard-stats"] })
+        },
+    })
 }
 
 /**
@@ -131,7 +131,7 @@ export function useCreateSpell() {
  * @example
  * ```tsx
  * const mutation = useUpdateSpell();
- * 
+ *
  * const handleUpdate = () => {
  *   mutation.mutate({
  *     id: spellId,
@@ -141,20 +141,17 @@ export function useCreateSpell() {
  * ```
  */
 export function useUpdateSpell() {
-  const queryClient = useQueryClient();
+    const queryClient = useQueryClient()
 
-  return useMutation({
-    mutationFn: ({ id, data }: { id: string; data: UpdateSpellInput }) =>
-      updateSpell(id, data),
-    onSuccess: (_, { id }) => {
-      // Invalidate lists to reflect the update
-      queryClient.invalidateQueries({ queryKey: spellsKeys.lists() });
-      // Invalidate the specific spell detail
-      queryClient.invalidateQueries({ queryKey: spellsKeys.detail(id) });
-      queryClient.invalidateQueries({ queryKey: ['audit-logs'] });
-      queryClient.invalidateQueries({ queryKey: ['dashboard-stats'] });
-    },
-  });
+    return useMutation({
+        mutationFn: ({ id, data }: { id: string; data: UpdateSpellInput }) => updateSpell(id, data),
+        onSuccess: (_, { id }) => {
+            // Invalidate lists to reflect the update
+            queryClient.invalidateQueries({ queryKey: spellsKeys.all })
+            queryClient.invalidateQueries({ queryKey: ["audit-logs"] })
+            queryClient.invalidateQueries({ queryKey: ["dashboard-stats"] })
+        },
+    })
 }
 
 /**
@@ -167,23 +164,22 @@ export function useUpdateSpell() {
  * @example
  * ```tsx
  * const mutation = useDeleteSpell();
- * 
+ *
  * const handleDelete = () => {
  *   mutation.mutate(spellId);
  * };
  * ```
  */
 export function useDeleteSpell() {
-  const queryClient = useQueryClient();
+    const queryClient = useQueryClient()
 
-  return useMutation({
-    mutationFn: (id: string) => deleteSpell(id),
-    onSuccess: (_, id) => {
-      // Invalidate all spell lists to refetch without deleted spell
-      queryClient.invalidateQueries({ queryKey: spellsKeys.lists() });
-      queryClient.invalidateQueries({ queryKey: spellsKeys.detail(id) });
-      queryClient.invalidateQueries({ queryKey: ['audit-logs'] });
-      queryClient.invalidateQueries({ queryKey: ['dashboard-stats'] });
-    },
-  });
+    return useMutation({
+        mutationFn: (id: string) => deleteSpell(id),
+        onSuccess: (_, id) => {
+            // Invalidate all spell lists to refetch without deleted spell
+            queryClient.invalidateQueries({ queryKey: spellsKeys.all })
+            queryClient.invalidateQueries({ queryKey: ["audit-logs"] })
+            queryClient.invalidateQueries({ queryKey: ["dashboard-stats"] })
+        },
+    })
 }

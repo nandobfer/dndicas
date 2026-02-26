@@ -10,7 +10,7 @@ export function useTraitMutations() {
   const create = useMutation<Trait, Error, CreateTraitInput>({
     mutationFn: createTrait,
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: traitKeys.lists() });
+      queryClient.invalidateQueries({ queryKey: traitKeys.all })
     },
   });
 
