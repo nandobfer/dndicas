@@ -280,18 +280,52 @@ export const spellSchoolColors = {
 } as const
 
 /**
+ * D&D Spell Component colors and configurations.
+ * Used for spell catalog UI - component chips.
+ * 
+ * Mapping:
+ * - Concentração → red (artifact)
+ * - Somático → emerald (uncommon)
+ * - Verboso → blue (rare)
+ * - Material → amber (legendary)
+ */
+export const spellComponentConfig = {
+    Concentração: {
+        name: "Concentração",
+        color: "red",
+        badge: "bg-red-400/20 text-red-400",
+        border: "border-red-400/20",
+        text: "text-red-400",
+        hex: rarityColors.artifact,
+    },
+    Somático: {
+        name: "Somático",
+        color: "emerald",
+        badge: "bg-emerald-400/20 text-emerald-400",
+        border: "border-emerald-400/20",
+        text: "text-emerald-400",
+        hex: rarityColors.uncommon,
+    },
+    Verboso: {
+        name: "Verboso",
+        color: "blue",
+        badge: "bg-blue-400/20 text-blue-400",
+        border: "border-blue-400/20",
+        text: "text-blue-400",
+        hex: rarityColors.rare,
+    },
+    Material: {
+        name: "Material",
+        color: "amber",
+        badge: "bg-amber-400/20 text-amber-400",
+        border: "border-amber-400/20",
+        text: "text-amber-400",
+        hex: rarityColors.legendary,
+    },
+} as const
+
+/**
  * D&D Dice Types colors mapped from rarity system.
- * Used for dice value display and selection UI.
- *
- * @see specs/004-spells-catalog/research.md - Dice type coloring
- *
- * Mapping (progressive power):
- * - d4 → common (gray)
- * - d6 → uncommon (green)
- * - d8 → rare (blue)
- * - d10 → veryRare (purple)
- * - d12 → legendary (gold)
- * - d20 → artifact (red)
  */
 export const diceColors = {
     d4: {
@@ -333,6 +367,7 @@ export const diceColors = {
 } as const
 
 export type SpellSchool = keyof typeof spellSchoolColors
+export type SpellComponent = keyof typeof spellComponentConfig
 export type DiceType = keyof typeof diceColors
 
 /**

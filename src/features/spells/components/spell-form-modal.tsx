@@ -20,50 +20,23 @@ import * as React from "react";
 import { useForm, Controller } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { motion, AnimatePresence } from "framer-motion";
-import {
-    Loader2,
-    Wand,
-    Link,
-    AlignLeft,
-    Info,
-    Shield,
-    Dices,
-    Zap,
-    Plus,
-    X,
-} from "lucide-react";
-import { toast } from "sonner";
-import { cn } from "@/core/utils";
+import { Loader2, Wand, Link, AlignLeft, Info, Shield, Dices, Zap, Plus, X, MapPin, Target } from "lucide-react"
+import { toast } from "sonner"
+import { cn } from "@/core/utils"
 
-import {
-    GlassModal,
-    GlassModalContent,
-    GlassModalHeader,
-    GlassModalTitle,
-    GlassModalDescription,
-} from "@/components/ui/glass-modal";
-import { GlassInput } from "@/components/ui/glass-input";
-import { GlassSelector } from "@/components/ui/glass-selector";
-import { GlassStatusSwitch } from "@/components/ui/glass-status-switch";
-import { GlassInlineEmptyState } from "@/components/ui/glass-inline-empty-state";
-import { GlassDiceSelector } from "@/components/ui/glass-dice-selector";
-import { RichTextEditor } from "@/features/rules/components/rich-text-editor";
+import { GlassModal, GlassModalContent, GlassModalHeader, GlassModalTitle, GlassModalDescription } from "@/components/ui/glass-modal"
+import { GlassInput } from "@/components/ui/glass-input"
+import { GlassSelector } from "@/components/ui/glass-selector"
+import { GlassStatusSwitch } from "@/components/ui/glass-status-switch"
+import { GlassInlineEmptyState } from "@/components/ui/glass-inline-empty-state"
+import { GlassDiceSelector } from "@/components/ui/glass-dice-selector"
+import { RichTextEditor } from "@/features/rules/components/rich-text-editor"
 
-import {
-    spellSchoolColors,
-    attributeColors,
-    getLevelRarityVariant,
-    rarityToTailwind,
-    type SpellSchool,
-    type AttributeType,
-} from "@/lib/config/colors";
+import { spellSchoolColors, spellComponentConfig, attributeColors, getLevelRarityVariant, rarityToTailwind, type SpellSchool, type SpellComponent, type AttributeType } from "@/lib/config/colors"
 
-import {
-    createSpellSchema,
-    type CreateSpellSchema,
-} from "../api/validation";
-import type { Spell, CreateSpellInput, UpdateSpellInput } from "../types/spells.types";
-import { useCreateSpell, useUpdateSpell } from "../api/spells-queries";
+import { createSpellSchema, type CreateSpellSchema } from "../api/validation"
+import type { Spell, CreateSpellInput, UpdateSpellInput } from "../types/spells.types"
+import { useCreateSpell, useUpdateSpell } from "../api/spells-queries"
 
 // ─── Derived selector options (module-level, static) ────────────────────────
 
@@ -73,19 +46,27 @@ const SCHOOL_OPTIONS = (Object.keys(spellSchoolColors) as SpellSchool[]).map((sc
     label: school,
     activeColor: rarityToTailwind[spellSchoolColors[school]].bg,
     textColor: rarityToTailwind[spellSchoolColors[school]].text,
-}));
+}))
+
+/** Component options — text label with rarity colors derived from spellComponentConfig */
+const COMPONENT_OPTIONS = (Object.keys(spellComponentConfig) as SpellComponent[]).map((comp) => ({
+    value: comp,
+    label: comp,
+    activeColor: spellComponentConfig[comp].badge.split(" ")[0],
+    textColor: spellComponentConfig[comp].text,
+}))
 
 /** Circle options (0–9) with rarity-based colors */
 const CIRCLE_OPTIONS = Array.from({ length: 10 }, (_, i) => {
-    const rarity = getLevelRarityVariant(i, "circle");
-    const c = rarityToTailwind[rarity];
+    const rarity = getLevelRarityVariant(i, "circle")
+    const c = rarityToTailwind[rarity]
     return {
         value: i,
         label: i === 0 ? "Truque" : `${i}º`,
         activeColor: c.bg,
         textColor: c.text,
-    };
-});
+    }
+})
 
 /** Attribute options — abbreviated label with rarity colors */
 const ATTRIBUTE_OPTIONS = (Object.entries(attributeColors) as [string, any][]).map(([key, config]) => ({
@@ -93,26 +74,26 @@ const ATTRIBUTE_OPTIONS = (Object.entries(attributeColors) as [string, any][]).m
     label: config.abbreviation,
     activeColor: config.bgAlpha,
     textColor: config.text,
-}));
+}))
 
 // ─── Component ───────────────────────────────────────────────────────────────
 
 interface SpellFormModalProps {
     /** Spell to edit (null for creation) */
-    spell: Spell | null;
+    spell: Spell | null
     /** Modal open state */
-    isOpen: boolean;
+    isOpen: boolean
     /** Modal close handler */
-    onClose: () => void;
+    onClose: () => void
     /** Success callback */
-    onSuccess: () => void;
+    onSuccess: () => void
 }
 
 export function SpellFormModal({ spell, isOpen, onClose, onSuccess }: SpellFormModalProps) {
-    const isEditMode = !!spell;
-    const createMutation = useCreateSpell();
-    const updateMutation = useUpdateSpell();
-    const isSubmitting = createMutation.isPending || updateMutation.isPending;
+    const isEditMode = !!spell
+    const createMutation = useCreateSpell()
+    const updateMutation = useUpdateSpell()
+    const isSubmitting = createMutation.isPending || updateMutation.isPending
 
     const {
         register,
@@ -123,19 +104,25 @@ export function SpellFormModal({ spell, isOpen, onClose, onSuccess }: SpellFormM
         reset,
         formState: { errors },
     } = useForm<CreateSpellSchema>({
-        resolver: zodResolver(createSpellSchema),
+        resolver: zodResolver(createSpellSchema) as any,
         defaultValues: {
             name: spell?.name ?? "",
             description: spell?.description ?? "",
             circle: spell?.circle ?? 0,
             school: (spell?.school as SpellSchool) ?? "Evocação",
+            component: (spell?.component as SpellComponent[]) ?? [],
+            range: spell?.range || undefined,
+            area: spell?.area || undefined,
             saveAttribute: spell?.saveAttribute,
             baseDice: spell?.baseDice,
             extraDicePerLevel: spell?.extraDicePerLevel,
             source: spell?.source ?? "",
             status: (spell?.status as "active" | "inactive") ?? "active",
         },
-    });
+    })
+
+    const rangeValue = watch("range")
+    const areaValue = watch("area")
 
     // Reset form when modal opens or spell changes
     React.useEffect(() => {
@@ -145,14 +132,17 @@ export function SpellFormModal({ spell, isOpen, onClose, onSuccess }: SpellFormM
                 description: spell?.description ?? "",
                 circle: spell?.circle ?? 0,
                 school: (spell?.school as SpellSchool) ?? "Evocação",
+                component: (spell?.component as SpellComponent[]) ?? [],
+                range: spell?.range || undefined,
+                area: spell?.area || undefined,
                 saveAttribute: spell?.saveAttribute,
                 baseDice: spell?.baseDice,
                 extraDicePerLevel: spell?.extraDicePerLevel,
                 source: spell?.source ?? "",
                 status: (spell?.status as "active" | "inactive") ?? "active",
-            });
+            })
         }
-    }, [spell, isOpen, reset]);
+    }, [spell, isOpen, reset])
 
     const onSubmit = async (values: CreateSpellSchema) => {
         try {
@@ -160,64 +150,71 @@ export function SpellFormModal({ spell, isOpen, onClose, onSuccess }: SpellFormM
                 await updateMutation.mutateAsync({
                     id: spell._id,
                     data: values as UpdateSpellInput,
-                });
+                })
             } else {
-                await createMutation.mutateAsync(values as CreateSpellInput);
+                await createMutation.mutateAsync(values as CreateSpellInput)
             }
-            toast.success(spell ? "Magia atualizada com sucesso!" : "Magia criada com sucesso!");
-            onSuccess();
-            onClose();
+            toast.success(spell ? "Magia atualizada com sucesso!" : "Magia criada com sucesso!")
+            onSuccess()
+            onClose()
         } catch (error) {
-            console.error("[SpellFormModal] Error:", error);
-            toast.error(error instanceof Error ? error.message : "Erro ao salvar magia");
+            console.error("[SpellFormModal] Error:", error)
+            toast.error(error instanceof Error ? error.message : "Erro ao salvar magia")
         }
-    };
+    }
 
     return (
         <GlassModal open={isOpen} onOpenChange={(open) => !open && onClose()}>
             <GlassModalContent size="xl">
                 <GlassModalHeader>
-                    <GlassModalTitle>
-                        {isEditMode ? `Editar ${spell!.name}` : "Nova Magia"}
-                    </GlassModalTitle>
-                    <GlassModalDescription>
-                        {isEditMode
-                            ? "Atualize as informações da magia"
-                            : "Crie um novo registro no catálogo de magias"}
-                    </GlassModalDescription>
+                    <GlassModalTitle>{isEditMode ? `Editar ${spell!.name}` : "Nova Magia"}</GlassModalTitle>
+                    <GlassModalDescription>{isEditMode ? "Atualize as informações da magia" : "Crie um novo registro no catálogo de magias"}</GlassModalDescription>
                 </GlassModalHeader>
 
-                <form onSubmit={handleSubmit(onSubmit)} className="space-y-6 mt-4">
+                <form onSubmit={handleSubmit(onSubmit as any)} className="space-y-6 mt-4">
                     {/* Row 1: Status switch — full width */}
                     <GlassStatusSwitch
                         entityLabel="Status da Magia"
                         description="Magias inativas não aparecem nas buscas públicas"
                         checked={watch("status") === "active"}
-                        onCheckedChange={(checked) =>
-                            setValue("status", checked ? "active" : "inactive")
-                        }
+                        onCheckedChange={(checked) => setValue("status", checked ? "active" : "inactive")}
                         disabled={isSubmitting}
                     />
 
                     {/* Row 2: Name + Source */}
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <GlassInput
-                            id="name"
-                            label="Nome da Magia"
-                            placeholder="Ex: Bola de Fogo"
-                            icon={<Wand />}
-                            required
-                            error={errors.name?.message}
-                            {...register("name")}
+                        <GlassInput id="name" label="Nome da Magia" placeholder="Ex: Bola de Fogo" icon={<Wand />} required error={errors.name?.message} {...register("name")} />
+                        <GlassInput id="source" label="Fonte" placeholder="Ex: PHB pg. 230" icon={<Link />} error={errors.source?.message} {...register("source")} />
+                    </div>
+
+                    {/* Row: Components — multi-select */}
+                    <div className="space-y-2">
+                        <label className="text-sm font-medium text-white/80 flex items-center gap-2">
+                            <Zap className="h-4 w-4" />
+                            Componentes da Magia
+                        </label>
+                        <Controller
+                            name="component"
+                            control={control}
+                            render={({ field }) => (
+                                <GlassSelector<SpellComponent>
+                                    options={COMPONENT_OPTIONS}
+                                    value={field.value as SpellComponent[]}
+                                    onChange={(val) => field.onChange(val)}
+                                    mode="multi"
+                                    layout="horizontal"
+                                    size="md"
+                                    fullWidth
+                                    layoutId="spell-components-selector"
+                                />
+                            )}
                         />
-                        <GlassInput
-                            id="source"
-                            label="Fonte"
-                            placeholder="Ex: PHB pg. 230"
-                            icon={<Link />}
-                            error={errors.source?.message}
-                            {...register("source")}
-                        />
+                        {errors.component && (
+                            <p className="text-xs text-rose-400 flex items-center gap-1">
+                                <Info className="h-3 w-3" />
+                                {errors.component.message}
+                            </p>
+                        )}
                     </div>
 
                     {/* Row 3: School — full row, grid 4 cols, text labels + rarity colors */}
@@ -232,9 +229,7 @@ export function SpellFormModal({ spell, isOpen, onClose, onSuccess }: SpellFormM
                                 <GlassSelector<SpellSchool>
                                     options={SCHOOL_OPTIONS}
                                     value={field.value as SpellSchool}
-                                    onChange={(val) =>
-                                        field.onChange(Array.isArray(val) ? val[0] : val)
-                                    }
+                                    onChange={(val) => field.onChange(Array.isArray(val) ? val[0] : val)}
                                     layout="grid"
                                     cols={4}
                                     size="md"
@@ -263,9 +258,7 @@ export function SpellFormModal({ spell, isOpen, onClose, onSuccess }: SpellFormM
                                 <GlassSelector<number>
                                     options={CIRCLE_OPTIONS}
                                     value={field.value}
-                                    onChange={(val) =>
-                                        field.onChange(Array.isArray(val) ? val[0] : val)
-                                    }
+                                    onChange={(val) => field.onChange(Array.isArray(val) ? val[0] : val)}
                                     layout="horizontal"
                                     fullWidth
                                     layoutId="spell-circle-selector"
@@ -309,12 +302,7 @@ export function SpellFormModal({ spell, isOpen, onClose, onSuccess }: SpellFormM
                             {!watch("saveAttribute") ? (
                                 <GlassInlineEmptyState message="Nenhum teste de resistência definido" />
                             ) : (
-                                <motion.div
-                                    initial={{ opacity: 0, y: -10 }}
-                                    animate={{ opacity: 1, y: 0 }}
-                                    exit={{ opacity: 0, y: -10 }}
-                                    className="flex items-center gap-4"
-                                >
+                                <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} className="flex items-center gap-4">
                                     <div className="flex-1">
                                         <Controller
                                             name="saveAttribute"
@@ -323,9 +311,7 @@ export function SpellFormModal({ spell, isOpen, onClose, onSuccess }: SpellFormM
                                                 <GlassSelector<AttributeType>
                                                     options={ATTRIBUTE_OPTIONS}
                                                     value={field.value as AttributeType}
-                                                    onChange={(val) =>
-                                                        field.onChange(Array.isArray(val) ? val[0] : val)
-                                                    }
+                                                    onChange={(val) => field.onChange(Array.isArray(val) ? val[0] : val)}
                                                     layout="grid"
                                                     cols={6}
                                                     size="md"
@@ -378,23 +364,12 @@ export function SpellFormModal({ spell, isOpen, onClose, onSuccess }: SpellFormM
                             {!watch("baseDice") ? (
                                 <GlassInlineEmptyState message="Esta magia não possui dano/cura base" />
                             ) : (
-                                <motion.div
-                                    initial={{ opacity: 0, y: -10 }}
-                                    animate={{ opacity: 1, y: 0 }}
-                                    exit={{ opacity: 0, y: -10 }}
-                                    className="flex items-center gap-4"
-                                >
+                                <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} className="flex items-center gap-4">
                                     <div className="flex-1">
                                         <Controller
                                             name="baseDice"
                                             control={control}
-                                            render={({ field }) => (
-                                                <GlassDiceSelector
-                                                    value={field.value || undefined}
-                                                    onChange={field.onChange}
-                                                    layoutId="base-dice-selector"
-                                                />
-                                            )}
+                                            render={({ field }) => <GlassDiceSelector value={field.value || undefined} onChange={field.onChange} layoutId="base-dice-selector" />}
                                         />
                                     </div>
                                     <button
@@ -421,9 +396,7 @@ export function SpellFormModal({ spell, isOpen, onClose, onSuccess }: SpellFormM
                             {!watch("extraDicePerLevel") && (
                                 <button
                                     type="button"
-                                    onClick={() =>
-                                        setValue("extraDicePerLevel", { quantidade: 1, tipo: "d8" })
-                                    }
+                                    onClick={() => setValue("extraDicePerLevel", { quantidade: 1, tipo: "d8" })}
                                     disabled={isSubmitting}
                                     className={cn(
                                         "px-3 py-1.5 rounded-lg text-xs font-medium transition-colors",
@@ -442,23 +415,12 @@ export function SpellFormModal({ spell, isOpen, onClose, onSuccess }: SpellFormM
                             {!watch("extraDicePerLevel") ? (
                                 <GlassInlineEmptyState message="Esta magia não escala com o nível" />
                             ) : (
-                                <motion.div
-                                    initial={{ opacity: 0, y: -10 }}
-                                    animate={{ opacity: 1, y: 0 }}
-                                    exit={{ opacity: 0, y: -10 }}
-                                    className="flex items-center gap-4"
-                                >
+                                <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} className="flex items-center gap-4">
                                     <div className="flex-1">
                                         <Controller
                                             name="extraDicePerLevel"
                                             control={control}
-                                            render={({ field }) => (
-                                                <GlassDiceSelector
-                                                    value={field.value || undefined}
-                                                    onChange={field.onChange}
-                                                    layoutId="extra-dice-selector"
-                                                />
-                                            )}
+                                            render={({ field }) => <GlassDiceSelector value={field.value || undefined} onChange={field.onChange} layoutId="extra-dice-selector" />}
                                         />
                                     </div>
                                     <button
@@ -473,6 +435,100 @@ export function SpellFormModal({ spell, isOpen, onClose, onSuccess }: SpellFormM
                                 </motion.div>
                             )}
                         </AnimatePresence>
+                    </div>
+
+                    {/* Row 5.4: Range and Area */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div className="space-y-3">
+                            <div className="flex items-center justify-between">
+                                <label className="text-sm font-medium text-white/80 flex items-center gap-2">
+                                    <MapPin className="h-4 w-4 text-emerald-400" />
+                                    Alcance
+                                </label>
+                                {rangeValue === undefined && (
+                                    <button
+                                        type="button"
+                                        onClick={() => setValue("range", "")}
+                                        disabled={isSubmitting}
+                                        className={cn(
+                                            "px-3 py-1.5 rounded-lg text-xs font-medium transition-colors",
+                                            "bg-emerald-500/20 text-emerald-400 hover:bg-emerald-500/30",
+                                            "border border-emerald-500/30",
+                                            "disabled:opacity-50 disabled:cursor-not-allowed",
+                                            "flex items-center gap-1.5",
+                                        )}
+                                    >
+                                        <Plus className="h-3 w-3" />
+                                        Adicionar Alcance
+                                    </button>
+                                )}
+                            </div>
+                            <AnimatePresence mode="popLayout">
+                                {rangeValue === undefined ? (
+                                    <GlassInlineEmptyState message="Sem alcance definido" />
+                                ) : (
+                                    <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }} className="flex items-center gap-2">
+                                        <div className="flex-1">
+                                            <GlassInput id="range" placeholder="Ex: 18 metros" error={errors.range?.message} {...register("range")} className="mb-0" icon={<MapPin />} />
+                                        </div>
+                                        <button
+                                            type="button"
+                                            onClick={() => setValue("range", undefined)}
+                                            disabled={isSubmitting}
+                                            className="p-2.5 rounded-xl bg-rose-500/10 text-rose-400 hover:bg-rose-500/20 hover:text-rose-300 transition-colors border border-rose-500/20"
+                                        >
+                                            <X className="h-4 w-4" />
+                                        </button>
+                                    </motion.div>
+                                )}
+                            </AnimatePresence>
+                        </div>
+
+                        {/* Area */}
+                        <div className="space-y-3">
+                            <div className="flex items-center justify-between">
+                                <label className="text-sm font-medium text-white/80 flex items-center gap-2">
+                                    <Target className="h-4 w-4 text-amber-400" />
+                                    Área
+                                </label>
+                                {areaValue === undefined && (
+                                    <button
+                                        type="button"
+                                        onClick={() => setValue("area", "")}
+                                        disabled={isSubmitting}
+                                        className={cn(
+                                            "px-3 py-1.5 rounded-lg text-xs font-medium transition-colors",
+                                            "bg-amber-500/20 text-amber-400 hover:bg-amber-500/30",
+                                            "border border-amber-500/30",
+                                            "disabled:opacity-50 disabled:cursor-not-allowed",
+                                            "flex items-center gap-1.5",
+                                        )}
+                                    >
+                                        <Plus className="h-3 w-3" />
+                                        Adicionar Área
+                                    </button>
+                                )}
+                            </div>
+                            <AnimatePresence mode="popLayout">
+                                {areaValue === undefined ? (
+                                    <GlassInlineEmptyState message="Sem área de efeito" />
+                                ) : (
+                                    <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }} className="flex items-center gap-2">
+                                        <div className="flex-1">
+                                            <GlassInput id="area" placeholder="Ex: Cone de 4,5m" error={errors.area?.message} {...register("area")} className="mb-0" icon={<Target />} />
+                                        </div>
+                                        <button
+                                            type="button"
+                                            onClick={() => setValue("area", undefined)}
+                                            disabled={isSubmitting}
+                                            className="p-2.5 rounded-xl bg-rose-500/10 text-rose-400 hover:bg-rose-500/20 hover:text-rose-300 transition-colors border border-rose-500/20"
+                                        >
+                                            <X className="h-4 w-4" />
+                                        </button>
+                                    </motion.div>
+                                )}
+                            </AnimatePresence>
+                        </div>
                     </div>
 
                     {/* Row 6: Description */}
@@ -534,5 +590,5 @@ export function SpellFormModal({ spell, isOpen, onClose, onSuccess }: SpellFormM
                 </form>
             </GlassModalContent>
         </GlassModal>
-    );
+    )
 }
