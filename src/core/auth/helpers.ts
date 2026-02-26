@@ -43,8 +43,8 @@ export async function hasRole(role: string): Promise<boolean> {
   const user = await currentUser();
   if (!user) return false;
 
-  const roles = user.publicMetadata?.roles as string[] | undefined;
-  return roles ? roles.includes(role) : false;
+  const userRole = user.publicMetadata?.role as string | undefined;
+  return userRole === role;
 }
 
 /**
@@ -56,14 +56,16 @@ export async function hasAnyRole(roles: string[]): Promise<boolean> {
   const user = await currentUser();
   if (!user) return false;
 
-  const userRoles = user.publicMetadata?.roles as string[] | undefined;
-  if (!userRoles) return false;
+  const userRole = user.publicMetadata?.role as string | undefined;
+  if (!userRole) return false;
 
-  return roles.some((role) => userRoles.includes(role));
+  return roles.includes(userRole);
 }
 
 /**
  * Verifica se o usuário tem todas as roles especificadas
+ * (Como o sistema tem apenas uma role por usuário, retorna true apenas se 
+ * o array contiver apenas a role do usuário ou se for redundante)
  * @param roles - Array de roles
  * @returns boolean
  */
@@ -71,10 +73,12 @@ export async function hasAllRoles(roles: string[]): Promise<boolean> {
   const user = await currentUser();
   if (!user) return false;
 
-  const userRoles = user.publicMetadata?.roles as string[] | undefined;
-  if (!userRoles) return false;
+  const userRole = user.publicMetadata?.role as string | undefined;
+  if (!userRole) return false;
 
-  return roles.every((role) => userRoles.includes(role));
+  // Se pedir múltiplas roles, mas o usuário só pode ter uma,
+  // nunca terá "todas" se pedir mais de uma diferente.
+  return roles.length === 1 && roles[0] === userRole;
 }
 
 /**

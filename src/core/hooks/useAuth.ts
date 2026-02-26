@@ -42,6 +42,6 @@ export function useAuth() {
       /** URL da imagem de perfil */
       imageUrl: user?.imageUrl || null,
       /** Se o usuário é um administrador */
-      isAdmin: (user?.publicMetadata?.roles as string[])?.includes("admin") || false
+      isAdmin: user?.publicMetadata?.role === "admin"
   }
 }
