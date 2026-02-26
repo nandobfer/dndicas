@@ -139,8 +139,12 @@ export function SpellPreview({ spell, showStatus = true }: SpellPreviewProps) {
                     <Info className="h-3 w-3" />
                     <span>Descrição</span>
                 </div>
-                <div className="text-sm text-white/80 leading-relaxed max-h-[200px] overflow-y-auto glass-scrollbar break-words">
-                    <MentionContent html={spell.description} mode="block" className="[&_p]:text-sm [&_p]:text-white/80 [&_ul]:text-sm [&_ol]:text-sm" />
+                <div className="text-sm text-white/80 leading-relaxed break-words">
+                    <MentionContent
+                        html={spell.description}
+                        mode="block"
+                        className="[&_p]:text-sm [&_p]:text-white/80 [&_ul]:text-sm [&_ol]:text-sm"
+                    />
                 </div>
             </div>
 
