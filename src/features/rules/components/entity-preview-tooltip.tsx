@@ -17,12 +17,12 @@ interface RulePreviewProps {
     rule: Reference
 }
 
-const RulePreview = ({ rule }: RulePreviewProps) => {
+export const RulePreview = ({ rule }: RulePreviewProps) => {
     return (
-        <div className="space-y-4 min-w-[400px] max-w-[650px]">
-            <div className="flex items-start justify-between gap-4">
+        <div className="space-y-4 w-full sm:min-w-[400px] max-w-[650px]">
+            <div className="flex flex-col sm:flex-row items-start sm:justify-between gap-4">
                 <div className="flex items-center gap-2">
-                    <div className={cn("p-1.5 rounded-lg border", entityConfig.Regra.badge)}>
+                    <div className={cn("p-1.5 rounded-lg border flex-shrink-0", entityConfig.Regra.badge)}>
                         <ScrollText className="w-4 h-4" />
                     </div>
                     <div>
@@ -30,9 +30,11 @@ const RulePreview = ({ rule }: RulePreviewProps) => {
                         <p className="text-[10px] uppercase font-bold tracking-widest text-white/40 mt-0.5">Regra do Sistema</p>
                     </div>
                 </div>
-                <Chip variant={rule.status === "active" ? "uncommon" : "common"} size="sm">
-                    {rule.status === "active" ? "Ativa" : "Inativa"}
-                </Chip>
+                <div className="self-end sm:self-auto">
+                    <Chip variant={rule.status === "active" ? "uncommon" : "common"} size="sm">
+                        {rule.status === "active" ? "Ativa" : "Inativa"}
+                    </Chip>
+                </div>
             </div>
 
             {rule.description && (
