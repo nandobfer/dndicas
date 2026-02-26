@@ -72,7 +72,11 @@ export function EntityList({ items, entityType, isLoading, hasNextPage, isFetchi
         )
     }
 
-    const renderEntity = ENTITY_RENDERERS[entityType] || ((item) => <div>{item.name || "Unknown item"}</div>)
+    const renderEntity = (item: any) => {
+        const type = entityType === "Mixed" ? item.type : entityType
+        const renderer = ENTITY_RENDERERS[type]
+        return renderer ? renderer(item) : <div>{item.name || "Unknown item"}</div>
+    }
 
     return (
         <div className="space-y-4">
