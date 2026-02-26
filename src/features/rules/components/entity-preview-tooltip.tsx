@@ -20,7 +20,7 @@ interface RulePreviewProps {
 
 export const RulePreview = ({ rule, showStatus = true }: RulePreviewProps) => {
     return (
-        <div className="space-y-4 w-full sm:min-w-[400px] max-w-[650px]">
+        <div className="space-y-4 w-auto max-w-full sm:max-w-[500px] md:max-w-[600px]">
             <div className="flex flex-col sm:flex-row items-start sm:justify-between gap-4">
                 <div className="flex items-center gap-2">
                     <div className={cn("p-1.5 rounded-lg border flex-shrink-0", entityConfig.Regra.badge)}>
@@ -43,7 +43,7 @@ export const RulePreview = ({ rule, showStatus = true }: RulePreviewProps) => {
             {rule.description && (
                 <div className="relative">
                     <Quote className="absolute -top-1 -left-1 w-8 h-8 text-white/5 -z-10" />
-                    <div className="text-xs text-white/70 pl-4 border-l border-white/10 py-1">
+                    <div className="text-xs text-white/70 pl-4 border-l border-white/10 py-1 break-words">
                         <MentionContent html={rule.description} mode="block" />
                     </div>
                 </div>
@@ -71,7 +71,7 @@ interface TraitPreviewProps {
 
 const TraitPreview = ({ trait, showStatus = true }: TraitPreviewProps) => {
     return (
-        <div className="space-y-4 min-w-[400px] max-w-[650px]">
+        <div className="space-y-4 w-auto max-w-full sm:max-w-[500px] md:max-w-[600px]">
             <div className="flex items-start justify-between gap-4">
                 <div className="flex items-center gap-2">
                     <div className={cn("p-1.5 rounded-lg border", entityConfig.Habilidade.badge)}>
@@ -92,7 +92,7 @@ const TraitPreview = ({ trait, showStatus = true }: TraitPreviewProps) => {
             {trait.description && (
                 <div className="relative">
                     <Quote className="absolute -top-1 -left-1 w-8 h-8 text-white/5 -z-10" />
-                    <div className="text-xs text-white/70 pl-4 border-l border-white/10 py-1">
+                    <div className="text-xs text-white/70 pl-4 border-l border-white/10 py-1 break-words">
                         <MentionContent html={trait.description} mode="block" />
                     </div>
                 </div>
@@ -200,7 +200,7 @@ export const EntityPreviewTooltip = ({ entityId, entityType, children, side = "t
             </GlassPopoverTrigger>
             <GlassPopoverContent
                 side={side}
-                className="w-auto max-w-none max-h-[400px] overflow-y-auto glass-scrollbar"
+                className="w-[calc(100vw-2rem)] sm:w-auto max-w-[95vw] sm:max-w-xl md:max-w-2xl max-h-[85vh] sm:max-h-[400px] overflow-y-auto glass-scrollbar"
                 onMouseEnter={handleMouseEnter}
                 onMouseLeave={handleMouseLeave}
                 onOpenAutoFocus={(e) => e.preventDefault()}
