@@ -54,18 +54,23 @@ export function SearchInput({ value, onChange, debounceMs = 500, isLoading = fal
 
     // Handle debounced value change
     React.useEffect(() => {
-        if (debouncedValue !== value) {
-            onChange(debouncedValue)
+        // Only trigger changes and stop animation when debounced value matches local input
+        if (debouncedValue === localValue) {
+            if (debouncedValue !== value) {
+                onChange(debouncedValue)
+            }
+            setIsDebouncing(false)
         }
-        setIsDebouncing(false)
-    }, [debouncedValue, value, onChange])
+    }, [debouncedValue, value, onChange, localValue])
 
     const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         setLocalValue(e.target.value)
         setIsDebouncing(true)
     }
 
-    const handleClear = () => {
+    const handleClear = (e: React.MouseEvent) => {
+        e.preventDefault()
+        e.stopPropagation()
         setLocalValue("")
         onChange("")
         setIsDebouncing(false)
