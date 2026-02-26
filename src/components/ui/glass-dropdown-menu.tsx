@@ -8,6 +8,7 @@
 import * as React from 'react';
 import * as DropdownMenuPrimitive from '@radix-ui/react-dropdown-menu';
 import { Check, ChevronRight, Circle } from 'lucide-react';
+import { motion, AnimatePresence } from "framer-motion"
 import { cn } from '@/core/utils';
 import { glassConfig } from '@/lib/config/glass-config';
 import { GlassBackdrop } from "./glass-backdrop"
@@ -22,30 +23,43 @@ const GlassDropdownMenuRadioGroup = DropdownMenuPrimitive.RadioGroup
 /**
  * Glass-styled dropdown menu content.
  */
-const GlassDropdownMenuContent = React.forwardRef<React.ElementRef<typeof DropdownMenuPrimitive.Content>, React.ComponentPropsWithoutRef<typeof DropdownMenuPrimitive.Content>>(
-    ({ className, sideOffset = 4, children, ...props }, ref) => (
-        <DropdownMenuPrimitive.Portal>
-            <DropdownMenuPrimitive.Content
-                ref={ref}
-                sideOffset={sideOffset}
-                className={cn(
-                    "z-50 min-w-[8rem] overflow-hidden rounded-xl p-1 relative backdrop-blur-sm",
-                    "border border-white/10",
-                    "data-[state=open]:animate-in data-[state=closed]:animate-out",
-                    "data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0",
-                    "data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95",
-                    "data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2",
-                    "data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2",
-                    className,
-                )}
-                {...props}
+const GlassDropdownMenuContent = React.forwardRef<
+    React.ElementRef<typeof DropdownMenuPrimitive.Content>,
+    React.ComponentPropsWithoutRef<typeof DropdownMenuPrimitive.Content>
+>(({ className, sideOffset = 4, children, ...props }, ref) => (
+    <DropdownMenuPrimitive.Portal>
+        <DropdownMenuPrimitive.Content
+            ref={ref}
+            sideOffset={sideOffset}
+            className={cn(
+                "z-50 min-w-[8rem] overflow-hidden rounded-xl p-1 relative backdrop-blur-md",
+                "border border-white/10 shadow-2xl shadow-black/50",
+                "data-[state=open]:animate-in data-[state=closed]:animate-out",
+                "data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0",
+                "data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95",
+                "data-[side=bottom]:slide-in-from-top-4 data-[side=left]:slide-in-from-right-4",
+                "data-[side=right]:slide-in-from-left-4 data-[side=top]:slide-in-from-bottom-4",
+                "duration-300 ease-out",
+                className
+            )}
+            {...props}
+        >
+            <GlassBackdrop />
+            <motion.div
+                initial={{ opacity: 0, y: 10, scale: 0.95 }}
+                animate={{ opacity: 1, y: 0, scale: 1 }}
+                transition={{
+                    type: "spring",
+                    stiffness: 300,
+                    damping: 25,
+                    mass: 0.5
+                }}
             >
-                <GlassBackdrop />
                 {children}
-            </DropdownMenuPrimitive.Content>
-        </DropdownMenuPrimitive.Portal>
-    ),
-)
+            </motion.div>
+        </DropdownMenuPrimitive.Content>
+    </DropdownMenuPrimitive.Portal>
+))
 GlassDropdownMenuContent.displayName = 'GlassDropdownMenuContent';
 
 /**
@@ -207,27 +221,39 @@ GlassDropdownMenuSubTrigger.displayName = 'GlassDropdownMenuSubTrigger';
  * Glass dropdown sub-content.
  */
 const GlassDropdownMenuSubContent = React.forwardRef<
-  React.ElementRef<typeof DropdownMenuPrimitive.SubContent>,
-  React.ComponentPropsWithoutRef<typeof DropdownMenuPrimitive.SubContent>
->(({ className, ...props }, ref) => (
-  <DropdownMenuPrimitive.SubContent
-    ref={ref}
-    className={cn(
-      'z-50 min-w-[8rem] overflow-hidden rounded-xl p-1',
-      glassConfig.overlay.blur,
-      glassConfig.overlay.background,
-      glassConfig.overlay.border,
-      glassConfig.overlay.shadow,
-      'data-[state=open]:animate-in data-[state=closed]:animate-out',
-      'data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0',
-      'data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95',
-      'data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2',
-      'data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2',
-      className
-    )}
-    {...props}
-  />
-));
+    React.ElementRef<typeof DropdownMenuPrimitive.SubContent>,
+    React.ComponentPropsWithoutRef<typeof DropdownMenuPrimitive.SubContent>
+>(({ className, children, ...props }, ref) => (
+    <DropdownMenuPrimitive.SubContent
+        ref={ref}
+        className={cn(
+            "z-50 min-w-[8rem] overflow-hidden rounded-xl p-1 backdrop-blur-md relative",
+            "border border-white/10 shadow-2xl shadow-black/50",
+            "data-[state=open]:animate-in data-[state=closed]:animate-out",
+            "data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0",
+            "data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95",
+            "data-[side=bottom]:slide-in-from-top-4 data-[side=left]:slide-in-from-right-4",
+            "data-[side=right]:slide-in-from-left-4 data-[side=top]:slide-in-from-bottom-4",
+            "duration-300 ease-out",
+            className
+        )}
+        {...props}
+    >
+        <GlassBackdrop />
+        <motion.div
+            initial={{ opacity: 0, x: 10, scale: 0.95 }}
+            animate={{ opacity: 1, x: 0, scale: 1 }}
+            transition={{
+                type: "spring",
+                stiffness: 300,
+                damping: 25,
+                mass: 0.5
+            }}
+        >
+            {children}
+        </motion.div>
+    </DropdownMenuPrimitive.SubContent>
+))
 GlassDropdownMenuSubContent.displayName = 'GlassDropdownMenuSubContent';
 
 export {
