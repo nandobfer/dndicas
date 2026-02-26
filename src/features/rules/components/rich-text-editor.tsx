@@ -273,10 +273,15 @@ export function RichTextEditor({ value, onChange, placeholder = "Write something
     // Update content if value changes externally
     useEffect(() => {
         if (editor && value && value !== editor.getHTML()) {
-            // Avoid cursor jumps validation omitted for brevity
-            if (editor.getText() === "" && value === "<p></p>") return
+            // Avoid cursor jumps validation
+            if (editor.getText() === "" && (value === "<p></p>" || value === "")) return
             if (!editor.isFocused) {
-                editor.commands.setContent(value)
+                // Ensure the update happens outside the current rendering cycle to avoid flushSync errors
+                setTimeout(() => {
+                    if (editor && !editor.isDestroyed) {
+                        editor.commands.setContent(value)
+                    }
+                }, 0)
             }
         }
     }, [value, editor])
