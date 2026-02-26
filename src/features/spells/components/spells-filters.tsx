@@ -5,39 +5,29 @@ import { StatusChips, type StatusFilter } from '@/components/ui/status-chips';
 import { GlassInput } from '@/components/ui/glass-input';
 import { GlassSelector } from "@/components/ui/glass-selector";
 import { useAuth } from "@/core/hooks/useAuth";
-import { cn } from "@/core/utils";
-import { attributeColors, AttributeType, spellSchoolColors, SpellSchool, diceColors, DiceType, rarityColors } from "@/lib/config/colors";
-import type { SpellsFilters } from "../types/spells.types";
-import { useState } from "react";
-import { motion, AnimatePresence } from "framer-motion";
+import { useIsMobile } from "@/core/hooks/useMediaQuery"
+import { cn } from "@/core/utils"
+import { attributeColors, AttributeType, spellSchoolColors, SpellSchool, diceColors, DiceType, rarityColors } from "@/lib/config/colors"
+import type { SpellsFilters } from "../types/spells.types"
+import { useState } from "react"
+import { motion, AnimatePresence } from "framer-motion"
 
 export interface SpellsFiltersProps {
-    filters: SpellsFilters;
-    onSearchChange: (search: string) => void;
-    onStatusChange: (status: SpellsFilters["status"]) => void;
-    onCircleChange: (circle: number | undefined, mode: "exact" | "upTo") => void;
-    onSchoolsChange: (schools: SpellSchool[]) => void;
-    onAttributesChange: (attributes: AttributeType[]) => void;
-    onDiceTypesChange: (diceTypes: DiceType[]) => void;
-    isSearching?: boolean;
-    className?: string;
+    filters: SpellsFilters
+    onSearchChange: (search: string) => void
+    onStatusChange: (status: SpellsFilters["status"]) => void
+    onCircleChange: (circle: number | undefined, mode: "exact" | "upTo") => void
+    onSchoolsChange: (schools: SpellSchool[]) => void
+    onAttributesChange: (attributes: AttributeType[]) => void
+    onDiceTypesChange: (diceTypes: DiceType[]) => void
+    isSearching?: boolean
+    className?: string
 }
 
-export function SpellsFilters({
-    filters,
-    onSearchChange,
-    onStatusChange,
-    onCircleChange,
-    onSchoolsChange,
-    onAttributesChange,
-    onDiceTypesChange,
-    isSearching = false,
-    className
-}: SpellsFiltersProps) {
+export function SpellsFilters({ filters, onSearchChange, onStatusChange, onCircleChange, onSchoolsChange, onAttributesChange, onDiceTypesChange, isSearching = false, className }: SpellsFiltersProps) {
+    const isMobile = useIsMobile()
     const [circleMode, setCircleMode] = useState<"exact" | "upTo">("exact")
-    const [selectedCircle, setSelectedCircle] = useState<number | undefined>(
-        filters.circles && filters.circles.length === 1 ? filters.circles[0] : undefined
-    )
+    const [selectedCircle, setSelectedCircle] = useState<number | undefined>(filters.circles && filters.circles.length === 1 ? filters.circles[0] : undefined)
 
     // Build school options from spell school colors
     const schoolOptions = Object.entries(spellSchoolColors).map(([school, rarityColor]) => {
@@ -48,16 +38,15 @@ export function SpellsFilters({
             rare: { bg: "bg-blue-400/20", text: "text-blue-400" },
             veryRare: { bg: "bg-purple-400/20", text: "text-purple-400" },
             legendary: { bg: "bg-amber-400/20", text: "text-amber-400" },
-            artifact: { bg: "bg-red-400/20", text: "text-red-400" }
+            artifact: { bg: "bg-red-400/20", text: "text-red-400" },
         }
 
         const colors = colorMap[rarityColor]
         return {
             value: school as SpellSchool,
             label: school,
-            // label: school.slice(0, 4) + ".", // "Abju.", "Adiv.", etc.
             activeColor: colors.bg.split(" ")[0],
-            textColor: colors.text
+            textColor: colors.text,
         }
     })
 
@@ -65,9 +54,8 @@ export function SpellsFilters({
     const attributeOptions = Object.entries(attributeColors).map(([key, config]) => ({
         value: key as AttributeType,
         label: config.name,
-        // label: config.name.slice(0, 3) + ".", // "For.", "Des.", etc.
         activeColor: config.badge.split(" ")[0],
-        textColor: config.text
+        textColor: config.text,
     }))
 
     // Build dice type options
@@ -75,7 +63,7 @@ export function SpellsFilters({
         value: key as DiceType,
         label: key, // "d4", "d6", etc.
         activeColor: config.bg.split(" ")[0],
-        textColor: config.text
+        textColor: config.text,
     }))
 
     const handleCircleInput = (value: string) => {
@@ -104,12 +92,7 @@ export function SpellsFilters({
                 <div className="flex flex-col md:flex-row items-start md:items-center gap-4 flex-1">
                     {/* Search */}
                     <div className="flex-1 w-full lg:max-w-sm">
-                        <SearchInput
-                            value={filters.search || ""}
-                            onChange={onSearchChange}
-                            isLoading={isSearching}
-                            placeholder="Buscar magias por nome ou descrição..."
-                        />
+                        <SearchInput value={filters.search || ""} onChange={onSearchChange} isLoading={isSearching} placeholder="Buscar magias por nome ou descrição..." />
                     </div>
 
                     {/* Circle Filter */}
@@ -127,7 +110,7 @@ export function SpellsFilters({
                             />
 
                             <AnimatePresence mode="popLayout">
-                                {selectedCircle !== undefined && (
+                                {(selectedCircle !== undefined || isMobile) && (
                                     <motion.div
                                         key="circle-mode-selector-wrapper"
                                         initial={{ opacity: 0, scale: 0.8, x: -10 }}
@@ -154,19 +137,19 @@ export function SpellsFilters({
                                                         </div>
                                                     ),
                                                     activeColor: "bg-purple-500/20",
-                                                    textColor: "text-purple-400"
+                                                    textColor: "text-purple-400",
                                                 },
                                                 {
                                                     value: "upTo",
                                                     label: (
                                                         <div className="flex items-center gap-1.5 leading-none">
                                                             <span className="text-base">≤</span>
-                                                            <span>Até {selectedCircle}º</span>
+                                                            <span>Até {selectedCircle ?? "#"}º</span>
                                                         </div>
                                                     ),
                                                     activeColor: "bg-purple-500/20",
-                                                    textColor: "text-purple-400"
-                                                }
+                                                    textColor: "text-purple-400",
+                                                },
                                             ]}
                                             size="sm"
                                             className="h-10"
@@ -179,56 +162,67 @@ export function SpellsFilters({
                     </div>
 
                     {/* Dice Types Filter */}
-                    <div className="flex items-center gap-3">
-                        <span className="text-xs font-semibold text-white/40 uppercase tracking-wider whitespace-nowrap">Dados:</span>
+                    <div className="flex items-center gap-3 w-full sm:w-auto">
+                        <span className={cn("text-xs font-semibold text-white/40 uppercase tracking-wider whitespace-nowrap", isMobile && "hidden")}>Dados:</span>
                         <GlassSelector
                             value={filters.diceTypes || []}
                             onChange={(vals) => onDiceTypesChange(vals as DiceType[])}
                             options={diceTypeOptions}
                             mode="multi"
-                            layout="horizontal"
+                            layout={isMobile ? "grid" : "horizontal"}
+                            cols={isMobile ? 3 : undefined}
+                            fullWidth={isMobile}
                             layoutId="filter-dice-selector"
-                            className="h-10"
+                            className={isMobile ? "w-full" : "h-10"}
                         />
                     </div>
                 </div>
 
                 {/* Status */}
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 w-full sm:w-auto">
                     <span className="text-xs font-semibold text-white/40 uppercase tracking-wider whitespace-nowrap hidden sm:inline">Status:</span>
-                    <StatusChips value={filters.status || "all"} onChange={onStatusChange as (status: StatusFilter) => void} />
+                    <StatusChips 
+                        value={filters.status || "all"} 
+                        onChange={onStatusChange as (status: StatusFilter) => void} 
+                        fullWidth={isMobile}
+                        className={isMobile ? "w-full" : ""}
+                    />
                 </div>
             </div>
 
             {/* Bottom Row: Advanced Filters */}
             <div className="flex flex-wrap items-center gap-6">
                 {/* Schools Filter */}
-                <div className="flex items-center gap-3">
-                    <span className="text-xs font-semibold text-white/40 uppercase tracking-wider whitespace-nowrap">Escola:</span>
+                <div className="flex items-center gap-3 w-full sm:w-auto">
+                    <span className={cn("text-xs font-semibold text-white/40 uppercase tracking-wider whitespace-nowrap", isMobile && "hidden")}>Escola:</span>
                     <GlassSelector
                         value={filters.schools || []}
                         onChange={(vals) => onSchoolsChange(vals as SpellSchool[])}
                         options={schoolOptions}
                         mode="multi"
-                        layout="horizontal"
+                        layout={isMobile ? "grid" : "horizontal"}
+                        cols={isMobile ? 2 : undefined}
+                        fullWidth={isMobile}
                         size="sm"
                         layoutId="filter-school-selector"
-                        className="h-10"
+                        className={isMobile ? "w-full" : "h-10"}
                     />
                 </div>
 
                 {/* Save Attributes Filter */}
-                <div className="flex items-center gap-3">
-                    <span className="text-xs font-semibold text-white/40 uppercase tracking-wider whitespace-nowrap">Resistência:</span>
+                <div className="flex items-center gap-3 w-full sm:w-auto">
+                    <span className={cn("text-xs font-semibold text-white/40 uppercase tracking-wider whitespace-nowrap", isMobile && "hidden")}>Resistência:</span>
                     <GlassSelector
                         value={filters.saveAttributes || []}
                         onChange={(vals) => onAttributesChange(vals as AttributeType[])}
                         options={attributeOptions}
                         mode="multi"
-                        layout="horizontal"
+                        layout={isMobile ? "grid" : "horizontal"}
+                        cols={isMobile ? 3 : undefined}
+                        fullWidth={isMobile}
                         layoutId="filter-attr-selector"
                         size="sm"
-                        className="h-10"
+                        className={isMobile ? "w-full" : "h-10"}
                     />
                 </div>
             </div>

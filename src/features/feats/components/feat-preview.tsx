@@ -25,20 +25,22 @@ export function FeatPreview({ feat, showStatus = true }: FeatPreviewProps) {
                         <Zap className="h-4 w-4 text-amber-400" />
                     </div>
                     <div>
-                        <h3 className="text-sm font-bold text-white leading-tight">{feat.name}</h3>
+                        <div className="flex items-center gap-2">
+                            <h3 className="text-sm font-bold text-white leading-tight">{feat.name}</h3>
+                            <Chip variant={rarityVariant} size="sm">
+                                Nv. {feat.level}
+                            </Chip>
+                        </div>
                         <p className="text-[10px] uppercase font-bold tracking-widest text-white/40 mt-0.5">Talento de Personagem</p>
                     </div>
                 </div>
-                <div className="flex flex-col items-end gap-2">
-                    <Chip variant={rarityVariant} size="sm">
-                        Nv. {feat.level}
-                    </Chip>
-                    {showStatus && feat.status === "inactive" && (
+                {showStatus && feat.status === "inactive" && (
+                    <div className="flex flex-col items-end">
                         <Chip variant="common" size="sm" className="opacity-50">
                             Inativo
                         </Chip>
-                    )}
-                </div>
+                    </div>
+                )}
             </div>
 
             {/* Prerequisites */}

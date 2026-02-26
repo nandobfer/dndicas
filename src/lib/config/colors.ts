@@ -456,14 +456,13 @@ export const rarityToTailwind: Record<RarityColor, { bg: string; text: string; b
 export function getLevelRarityVariant(level: number, type: "level" | "circle" = "level"): RarityColor {
     if (type === "circle") {
         // Spell circles (0–9) — full spectrum progression
-        // Truque (0) is uncommon (green) — special cantrip tier
-        if (level === 0) return "uncommon"  // Truque → green
-        if (level <= 2)  return "common"    // 1-2   → gray
-        if (level <= 4)  return "uncommon"  // 3-4   → green
-        if (level <= 6)  return "rare"      // 5-6   → blue
-        if (level === 7) return "veryRare"  // 7     → purple
-        if (level === 8) return "legendary" // 8     → amber
-        if (level === 9) return "artifact"  // 9     → red
+        // Truque (0) is common (gray) — special cantrip tier
+        if (level === 0) return "common" // Truque → gray
+        if (level <= 2) return "uncommon" // 1-2   → green
+        if (level <= 4) return "rare" // 3-4   → blue
+        if (level <= 6) return "veryRare" // 5-6   → purple
+        if (level <= 8) return "legendary" // 7-8   → amber
+        if (level === 9) return "artifact" // 9     → red
         return "common"
     } else {
         if (level >= 1 && level <= 3) return "common"

@@ -6,33 +6,21 @@
 
 "use client";
 
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import type {
-  Spell,
-  CreateSpellInput,
-  UpdateSpellInput,
-  SpellsFilters,
-  SpellsListResponse,
-} from '../types/spells.types';
-import {
-  fetchSpells,
-  fetchSpell,
-  createSpell,
-  updateSpell,
-  deleteSpell,
-} from './spells-api';
+import { useQuery, useMutation, useQueryClient, useInfiniteQuery } from "@tanstack/react-query"
+import type { Spell, CreateSpellInput, UpdateSpellInput, SpellsFilters, SpellsListResponse } from "../types/spells.types"
+import { fetchSpells, fetchSpell, createSpell, updateSpell, deleteSpell } from "./spells-api"
 
 /**
  * Query keys factory for spells.
  */
 export const spellsKeys = {
-  all: ['spells'] as const,
-  lists: () => [...spellsKeys.all, 'list'] as const,
-  list: (filters: SpellsFilters & { page?: number; limit?: number }) =>
-    [...spellsKeys.lists(), filters] as const,
-  details: () => [...spellsKeys.all, 'detail'] as const,
-  detail: (id: string) => [...spellsKeys.details(), id] as const,
-};
+    all: ["spells"] as const,
+    lists: () => [...spellsKeys.all, "list"] as const,
+    list: (filters: SpellsFilters & { page?: number; limit?: number }) => [...spellsKeys.lists(), filters] as const,
+    infinite: (filters: SpellsFilters & { limit?: number }) => [...spellsKeys.all, "infinite", filters] as const,
+    details: () => [...spellsKeys.all, "detail"] as const,
+    detail: (id: string) => [...spellsKeys.details(), id] as const,
+}
 
 /**
  * Hook for fetching spells list with pagination and filters.
@@ -51,17 +39,38 @@ export const spellsKeys = {
  * );
  * ```
  */
-export function useSpells(
-  filters: SpellsFilters = {},
-  page = 1,
-  limit = 10
-) {
-  return useQuery<SpellsListResponse, Error>({
-    queryKey: spellsKeys.list({ ...filters, page, limit }),
-    queryFn: () => fetchSpells({ ...filters, page, limit }),
-    staleTime: 30 * 1000, // 30 seconds
-    placeholderData: (previousData) => previousData, // Keep previous data while fetching
-  });
+export function useSpells(filters: SpellsFilters = {}, page = 1, limit = 10, options: { enabled?: boolean } = {}) {
+    return useQuery<SpellsListResponse, Error>({
+        queryKey: spellsKeys.list({ ...filters, page, limit }),
+        queryFn: () => fetchSpells({ ...filters, page, limit }),
+        staleTime: 30 * 1000, // 30 seconds
+        placeholderData: (previousData) => previousData, // Keep previous data while fetching
+        ...options,
+    })
+}
+
+/**
+ * Hook for fetching spells with infinite scroll.
+ */
+export function useInfiniteSpells(filters: SpellsFilters = {}, options: { enabled?: boolean; limit?: number } = {}) {
+    const limit = options.limit || 10
+
+    return useInfiniteQuery({
+        queryKey: spellsKeys.infinite({ ...filters, limit }),
+        queryFn: async ({ pageParam = 1 }) => {
+            return fetchSpells({
+                ...filters,
+                page: pageParam as number,
+                limit,
+            })
+        },
+        initialPageParam: 1,
+        getNextPageParam: (lastPage) => {
+            const totalPages = Math.ceil(lastPage.total / lastPage.limit)
+            return lastPage.page < totalPages ? lastPage.page + 1 : undefined
+        },
+        ...options,
+    })
 }
 
 /**

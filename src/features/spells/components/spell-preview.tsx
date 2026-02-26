@@ -56,18 +56,20 @@ export function SpellPreview({ spell, showStatus = true }: SpellPreviewProps) {
                         <Wand className="h-4 w-4 text-purple-400" />
                     </div>
                     <div>
-                        <h3 className="text-sm font-bold text-white leading-tight">{spell.name}</h3>
+                        <div className="flex items-center gap-2">
+                            <h3 className="text-sm font-bold text-white leading-tight">{spell.name}</h3>
+                            <GlassLevelChip level={spell.circle} type="circle" size="sm" />
+                        </div>
                         <p className="text-[10px] uppercase font-bold tracking-widest text-white/40 mt-0.5">Magia D&D 5e</p>
                     </div>
                 </div>
-                <div className="flex flex-col items-end gap-2">
-                    <GlassLevelChip level={spell.circle} type="circle" size="sm" />
-                    {showStatus && spell.status === "inactive" && (
+                {showStatus && spell.status === "inactive" && (
+                    <div className="flex flex-col items-end">
                         <Chip variant="common" size="sm" className="opacity-50">
                             Inativa
                         </Chip>
-                    )}
-                </div>
+                    </div>
+                )}
             </div>
 
             {/* School & Properties */}
