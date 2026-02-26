@@ -147,7 +147,7 @@ const MenuBar = ({ editor, addImage }: { editor: Editor | null; addImage: () => 
     )
 }
 
-export function RichTextEditor({ value, onChange, placeholder = "Write something...", className, disabled = false, excludeId, variant = "full", autoFocus = false }: RichTextEditorProps) {
+export function RichTextEditor({ value, onChange, className, disabled = false, excludeId, variant = "full", autoFocus = false }: RichTextEditorProps) {
     const [isUploading, setIsUploading] = useState(false)
 
     const uploadImage = useCallback(async (file: File) => {
@@ -183,7 +183,7 @@ export function RichTextEditor({ value, onChange, placeholder = "Write something
             StarterKit,
             ImageExtension,
             Placeholder.configure({
-                placeholder,
+                placeholder: "Dica: digite '@' para referenciar regras, habilidades, magias, etc.",
             }),
             CustomMention.configure({
                 suggestion: getSuggestionConfig({ excludeId }),
@@ -206,6 +206,8 @@ export function RichTextEditor({ value, onChange, placeholder = "Write something
                     "prose-blockquote:border-l-4 prose-blockquote:border-primary/50 prose-blockquote:pl-4 prose-blockquote:italic",
                     "prose-img:rounded-md prose-img:border prose-img:border-white/10",
                     "dark:prose-invert",
+                    // TipTap placeholder CSS logic
+                    "relative [&_p.is-editor-empty:first-child]:before:content-[attr(data-placeholder)] [&_p.is-editor-empty:first-child]:before:text-white/30 [&_p.is-editor-empty:first-child]:before:float-left [&_p.is-editor-empty:first-child]:before:h-0 [&_p.is-editor-empty:first-child]:before:pointer-events-none",
                 ),
             },
             handlePaste: (view, event) => {
