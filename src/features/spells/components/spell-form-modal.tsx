@@ -372,10 +372,10 @@ export function SpellFormModal({ spell, isOpen, onClose, onSuccess }: SpellFormM
                                             name="baseDice"
                                             control={control}
                                             render={({ field }) => (
-                                                <GlassDiceSelector 
-                                                    value={field.value || undefined} 
-                                                    onChange={field.onChange} 
-                                                    layoutId="base-dice-selector" 
+                                                <GlassDiceSelector
+                                                    value={field.value || undefined}
+                                                    onChange={field.onChange}
+                                                    layoutId="base-dice-selector"
                                                     layout={isMobile ? "grid" : "horizontal"}
                                                     cols={isMobile ? 3 : undefined}
                                                 />
@@ -431,10 +431,10 @@ export function SpellFormModal({ spell, isOpen, onClose, onSuccess }: SpellFormM
                                             name="extraDicePerLevel"
                                             control={control}
                                             render={({ field }) => (
-                                                <GlassDiceSelector 
-                                                    value={field.value || undefined} 
-                                                    onChange={field.onChange} 
-                                                    layoutId="extra-dice-selector" 
+                                                <GlassDiceSelector
+                                                    value={field.value || undefined}
+                                                    onChange={field.onChange}
+                                                    layoutId="extra-dice-selector"
                                                     layout={isMobile ? "grid" : "horizontal"}
                                                     cols={isMobile ? 3 : undefined}
                                                 />
