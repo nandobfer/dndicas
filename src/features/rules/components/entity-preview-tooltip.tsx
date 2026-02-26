@@ -153,11 +153,17 @@ export const EntityPreviewTooltip = ({ entityId, entityType, children, side = "t
         }
     }, [entityId, entityType, data, loading])
 
+    // Fetch data when popover opens, ensuring mobile clicks and desktop hovers both trigger loading
+    React.useEffect(() => {
+        if (open) {
+            fetchData()
+        }
+    }, [open, fetchData])
+
     const handleMouseEnter = () => {
         if (timeoutRef.current) clearTimeout(timeoutRef.current)
         timeoutRef.current = setTimeout(() => {
             setOpen(true)
-            fetchData()
         }, delayDuration)
     }
 
