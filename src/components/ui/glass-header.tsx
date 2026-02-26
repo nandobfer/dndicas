@@ -16,7 +16,7 @@ interface GlassHeaderProps {
  */
 export function GlassHeader({ onExpand, title = "Dungeons & Dicas" }: GlassHeaderProps) {
     return (
-        <header className="md:hidden fixed top-0 left-0 right-0 h-16 z-30 bg-black/40 backdrop-blur-xl border-b border-white/10 flex items-center justify-between px-4">
+        <header className="md:hidden fixed top-0 left-0 right-0 h-16 z-30 bg-black/40 backdrop-blur-sm border-b border-white/10 flex items-center justify-between px-4">
             <div className="flex items-center gap-3">
                 <Button
                     variant="ghost"
@@ -27,9 +27,7 @@ export function GlassHeader({ onExpand, title = "Dungeons & Dicas" }: GlassHeade
                     <Menu className="h-5 w-5" />
                     <span className="sr-only">Abrir menu</span>
                 </Button>
-                <span className="text-sm font-bold text-white tracking-widest uppercase truncate">
-                    {title}
-                </span>
+                <span className="text-sm font-bold text-white tracking-widest uppercase truncate">{title}</span>
             </div>
 
             <div className="flex items-center">
@@ -39,8 +37,8 @@ export function GlassHeader({ onExpand, title = "Dungeons & Dicas" }: GlassHeade
                         appearance={{
                             elements: {
                                 userButtonAvatarBox: "h-8 w-8 border border-white/10 shadow-lg",
-                                userButtonTrigger: "focus:outline-none focus:ring-2 focus:ring-white/20 transition-all",
-                            },
+                                userButtonTrigger: "focus:outline-none focus:ring-2 focus:ring-white/20 transition-all"
+                            }
                         }}
                     />
                 </SignedIn>
