@@ -4,6 +4,7 @@ import { SearchInput } from '@/components/ui/search-input';
 import { GlassSelector } from '@/components/ui/glass-selector';
 import { feedbackStatusConfig, feedbackPriorityConfig, FeedbackStatus, FeedbackPriority } from '@/lib/config/colors';
 import { cn } from '@/core/utils';
+import { useIsMobile } from "@/core/hooks/useMediaQuery"
 import type { FeedbackFilters } from '../types/feedback.types';
 
 export interface FeedbackFiltersProps {
@@ -23,6 +24,7 @@ export function FeedbackFilters({
   isSearching = false,
   className,
 }: FeedbackFiltersProps) {
+  const isMobile = useIsMobile()
   
   const statusOptions = [
     { value: "all", label: "Todos" },
@@ -53,19 +55,25 @@ export function FeedbackFilters({
               />
           </div>
 
-          <div className="flex flex-wrap items-center gap-3">
+          <div className="flex flex-wrap items-center gap-3 w-full sm:w-auto">
               <GlassSelector
                   value={filters.status || "all"}
                   onChange={(v) => onStatusChange(v as any)}
                   options={statusOptions as any}
-                  layoutId='status-selector'
+                  layoutId="status-selector"
+                  layout={isMobile ? "grid" : "horizontal"}
+                  cols={isMobile ? 2 : 3}
+                  fullWidth={isMobile}
+                  className={cn(isMobile && "w-full")}
               />
 
               <GlassSelector
                   value={filters.priority || "all"}
                   onChange={(v) => onPriorityChange(v as any)}
                   options={priorityOptions as any}
-                  layoutId='priority-selector'
+                  layoutId="priority-selector"
+                  fullWidth={isMobile}
+                  className={cn(isMobile && "w-full")}
               />
           </div>
       </div>

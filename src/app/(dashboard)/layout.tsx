@@ -1,12 +1,9 @@
 "use client"
 
-import { UserButton, SignedIn, SignedOut } from "@clerk/nextjs"
-import { Button } from "@/core/ui/button"
-import { Menu, Package2, User } from "lucide-react"
-import Link from "next/link"
 import { motion } from "framer-motion"
 import { useSidebar } from "@/hooks/useSidebar"
 import { ExpandableSidebar } from "@/components/ui/expandable-sidebar"
+import { GlassHeader } from "@/components/ui/glass-header"
 import { motionConfig } from "@/lib/config/motion-configs"
 import { themeConfig } from "@/lib/config/theme-config"
 import { cn } from "@/core/utils"
@@ -33,26 +30,14 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             {/* Unified Sidebar for Desktop and Mobile */}
             <ExpandableSidebar isExpanded={isExpanded} onExpand={expand} onCollapse={collapse} isMobile={isMobile} onToggle={toggle} />
 
-            {/* Mobile Toggle Trigger */}
-            {isMobile && !isExpanded && (
-                <div className="md:hidden fixed top-4 left-4 z-50">
-                    <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={expand}
-                        className="shrink-0 text-white/70 hover:text-white hover:bg-white/10 bg-black/20 backdrop-blur-sm border border-white/10 rounded-full h-10 w-10 shadow-lg"
-                    >
-                        <Menu className="h-5 w-5" />
-                        <span className="sr-only">Abrir menu</span>
-                    </Button>
-                </div>
-            )}
+            {/* Mobile Header */}
+            {isMobile && <GlassHeader onExpand={expand} />}
 
             {/* Main Content Area - With left margin only on desktop */}
             <motion.div
-                className="flex flex-1 flex-col"
+                className={cn("flex flex-1 flex-col min-w-0", isMobile && "pt-16")}
                 animate={{
-                    marginLeft,
+                    marginLeft
                 }}
                 transition={motionConfig.sidebarTransition}
             >

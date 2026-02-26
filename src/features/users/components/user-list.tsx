@@ -67,16 +67,27 @@ export function UserList({ items, isLoading, hasNextPage, isFetchingNextPage, on
         <div className="space-y-4">
             <AnimatePresence mode="popLayout">
                 {items.map((item, index) => (
-                    <motion.div key={item.id} variants={motionConfig.variants.fadeInUp} initial="initial" animate="animate" exit="exit" transition={{ delay: (index % 10) * 0.05 }}>
+                    <motion.div
+                        key={item.id}
+                        variants={motionConfig.variants.fadeInUp}
+                        initial="initial"
+                        animate="animate"
+                        exit="exit"
+                        transition={{ delay: (index % 10) * 0.05 }}
+                    >
                         <GlassCard className="relative overflow-hidden">
                             <GlassCardContent className="p-4 pt-6">
                                 <div className="absolute top-2 right-2 z-10 flex flex-col items-end gap-2">
                                     {isAdmin && (onEdit || onDelete) && (
                                         <GlassDropdownMenu>
                                             <GlassDropdownMenuTrigger asChild>
-                                                <button className="p-2 rounded-lg text-white/40 hover:text-white hover:bg-white/10 transition-colors">
+                                                <motion.button
+                                                    whileHover={{ scale: 1.1 }}
+                                                    whileTap={{ scale: 0.9 }}
+                                                    className="p-2 rounded-lg text-white/40 hover:text-white hover:bg-white/10 transition-colors"
+                                                >
                                                     <MoreHorizontal className="h-4 w-4" />
-                                                </button>
+                                                </motion.button>
                                             </GlassDropdownMenuTrigger>
                                             <GlassDropdownMenuContent align="end">
                                                 {onEdit && (
@@ -86,7 +97,10 @@ export function UserList({ items, isLoading, hasNextPage, isFetchingNextPage, on
                                                     </GlassDropdownMenuItem>
                                                 )}
                                                 {onDelete && (
-                                                    <GlassDropdownMenuItem onClick={() => onDelete(item)} className="text-red-400 hover:text-red-300 focus:text-red-300">
+                                                    <GlassDropdownMenuItem
+                                                        onClick={() => onDelete(item)}
+                                                        className="text-red-400 hover:text-red-300 focus:text-red-300"
+                                                    >
                                                         <Trash2 className="mr-2 h-4 w-4" />
                                                         Excluir
                                                     </GlassDropdownMenuItem>

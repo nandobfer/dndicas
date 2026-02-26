@@ -1,9 +1,10 @@
 "use client"
 
 import * as React from "react"
-import { useMemo } from "react"
+import { useMemo, useEffect, useState } from "react"
 import { cn } from "@/core/utils"
 import { entityConfig } from "@/lib/config/colors"
+import { useIsMobile } from "@/core/hooks/useMediaQuery"
 import { EntityPreviewTooltip } from "./entity-preview-tooltip"
 import { SimpleGlassTooltip } from "@/components/ui/glass-tooltip"
 
@@ -35,6 +36,7 @@ export function MentionContent({
     imageWidth?: string | "small"
     className?: string
 }) {
+    const isMobile = useIsMobile()
     const [isMounted, setIsMounted] = React.useState(false)
 
     React.useEffect(() => {
@@ -82,7 +84,13 @@ export function MentionContent({
                                     key={`img-${index}`}
                                     delayDuration={100}
                                     className="!p-1"
-                                    content={<img src={src} className="max-w-[500px] max-h-[500px] rounded-lg shadow-2xl border border-white/10 block" alt="Preview" />}
+                                    content={
+                                        <img
+                                            src={src}
+                                            className="max-w-[500px] max-h-[500px] rounded-lg shadow-2xl border border-white/10 block"
+                                            alt="Preview"
+                                        />
+                                    }
                                 >
                                     <img
                                         src={src}
@@ -94,7 +102,13 @@ export function MentionContent({
                         }
 
                         return (
-                            <img key={`img-${index}`} src={src} style={{ width: imageWidth, height: "auto" }} className="rounded-lg border border-white/20 max-w-full block my-2" alt="Content Image" />
+                            <img
+                                key={`img-${index}`}
+                                src={src}
+                                style={{ width: isMobile ? "100%" : imageWidth, height: "auto" }}
+                                className="rounded-lg border border-white/20 max-w-full block my-2"
+                                alt="Content Image"
+                            />
                         )
                     }
                 }
@@ -102,7 +116,9 @@ export function MentionContent({
                 // If inline mode, flatten structural blocks to avoid breaks
                 const blockTags = ["p", "div", "ul", "ol", "li", "h1", "h2", "h3", "h4", "h5", "h6", "blockquote", "pre"]
                 if (mode === "inline" && blockTags.includes(tagName)) {
-                    return <React.Fragment key={`flat-${index}`}>{Array.from(node.childNodes).map((child, i) => convertNode(child, i))} </React.Fragment>
+                    return (
+                        <React.Fragment key={`flat-${index}`}>{Array.from(node.childNodes).map((child, i) => convertNode(child, i))} </React.Fragment>
+                    )
                 }
 
                 // Default: Recreate the element while recursing for special nodes
@@ -120,7 +136,7 @@ export function MentionContent({
         }
 
         return Array.from(body.childNodes).map((node, i) => convertNode(node, i))
-    }, [html, delayDuration, mode, isMounted])
+    }, [html, delayDuration, mode, isMounted, isMobile, imageWidth])
 
     if (mode === "block") {
         return (
