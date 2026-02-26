@@ -7,27 +7,30 @@ export function useRuleMutations() {
   const queryClient = useQueryClient();
 
   const createRuleMutation = useMutation<Reference, Error, CreateReferenceInput>({
-    mutationFn: createRule,
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['rules'] });
-    },
-  });
+      mutationFn: createRule,
+      onSuccess: () => {
+          queryClient.invalidateQueries({ queryKey: ["rules"] })
+          queryClient.invalidateQueries({ queryKey: ["rules-infinite"] })
+      },
+  })
 
   const updateRuleMutation = useMutation<Reference, Error, { id: string; data: UpdateReferenceInput }>({
-    mutationFn: ({ id, data }) => updateRule(id, data),
-    onSuccess: (_, { id }) => {
-      queryClient.invalidateQueries({ queryKey: ['rules'] });
-      queryClient.invalidateQueries({ queryKey: ['rule', id] });
-    },
-  });
+      mutationFn: ({ id, data }) => updateRule(id, data),
+      onSuccess: (_, { id }) => {
+          queryClient.invalidateQueries({ queryKey: ["rules"] })
+          queryClient.invalidateQueries({ queryKey: ["rules-infinite"] })
+          queryClient.invalidateQueries({ queryKey: ["rule", id] })
+      },
+  })
 
   const deleteRuleMutation = useMutation<void, Error, string>({
-    mutationFn: deleteRule,
-    onSuccess: (_, id) => {
-      queryClient.invalidateQueries({ queryKey: ['rules'] });
-      queryClient.invalidateQueries({ queryKey: ['rule', id] });
-    },
-  });
+      mutationFn: deleteRule,
+      onSuccess: (_, id) => {
+          queryClient.invalidateQueries({ queryKey: ["rules"] })
+          queryClient.invalidateQueries({ queryKey: ["rules-infinite"] })
+          queryClient.invalidateQueries({ queryKey: ["rule", id] })
+      },
+  })
 
   return {
     createRule: createRuleMutation,

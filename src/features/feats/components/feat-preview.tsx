@@ -10,9 +10,10 @@ import type { Feat } from "../types/feats.types"
 
 export interface FeatPreviewProps {
     feat: Feat
+    showStatus?: boolean
 }
 
-export function FeatPreview({ feat }: FeatPreviewProps) {
+export function FeatPreview({ feat, showStatus = true }: FeatPreviewProps) {
     const rarityVariant = getLevelRarityVariant(feat.level)
 
     return (
@@ -32,7 +33,7 @@ export function FeatPreview({ feat }: FeatPreviewProps) {
                     <Chip variant={rarityVariant} size="sm">
                         Nv. {feat.level}
                     </Chip>
-                    {feat.status === "inactive" && (
+                    {showStatus && feat.status === "inactive" && (
                         <Chip variant="common" size="sm" className="opacity-50">
                             Inativo
                         </Chip>

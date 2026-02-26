@@ -15,9 +15,10 @@ import { SpellPreview } from "@/features/spells/components/spell-preview"
 
 interface RulePreviewProps {
     rule: Reference
+    showStatus?: boolean
 }
 
-export const RulePreview = ({ rule }: RulePreviewProps) => {
+export const RulePreview = ({ rule, showStatus = true }: RulePreviewProps) => {
     return (
         <div className="space-y-4 w-full sm:min-w-[400px] max-w-[650px]">
             <div className="flex flex-col sm:flex-row items-start sm:justify-between gap-4">
@@ -30,11 +31,13 @@ export const RulePreview = ({ rule }: RulePreviewProps) => {
                         <p className="text-[10px] uppercase font-bold tracking-widest text-white/40 mt-0.5">Regra do Sistema</p>
                     </div>
                 </div>
-                <div className="self-end sm:self-auto">
-                    <Chip variant={rule.status === "active" ? "uncommon" : "common"} size="sm">
-                        {rule.status === "active" ? "Ativa" : "Inativa"}
-                    </Chip>
-                </div>
+                {showStatus && (
+                    <div className="self-end sm:self-auto">
+                        <Chip variant={rule.status === "active" ? "uncommon" : "common"} size="sm">
+                            {rule.status === "active" ? "Ativa" : "Inativa"}
+                        </Chip>
+                    </div>
+                )}
             </div>
 
             {rule.description && (
@@ -63,9 +66,10 @@ export const RulePreview = ({ rule }: RulePreviewProps) => {
  */
 interface TraitPreviewProps {
     trait: any // Trait type from features/traits
+    showStatus?: boolean
 }
 
-const TraitPreview = ({ trait }: TraitPreviewProps) => {
+const TraitPreview = ({ trait, showStatus = true }: TraitPreviewProps) => {
     return (
         <div className="space-y-4 min-w-[400px] max-w-[650px]">
             <div className="flex items-start justify-between gap-4">
@@ -78,9 +82,11 @@ const TraitPreview = ({ trait }: TraitPreviewProps) => {
                         <p className="text-[10px] uppercase font-bold tracking-widest text-white/40 mt-0.5">Habilidade D&D</p>
                     </div>
                 </div>
-                <Chip variant={trait.status === "active" ? "uncommon" : "common"} size="sm">
-                    {trait.status === "active" ? "Ativa" : "Inativa"}
-                </Chip>
+                {showStatus && (
+                    <Chip variant={trait.status === "active" ? "uncommon" : "common"} size="sm">
+                        {trait.status === "active" ? "Ativa" : "Inativa"}
+                    </Chip>
+                )}
             </div>
 
             {trait.description && (
