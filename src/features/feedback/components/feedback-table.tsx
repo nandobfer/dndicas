@@ -31,7 +31,7 @@ const columns = [
     { key: "type", label: "Tipo", className: "w-[120px]" },
     { key: "title", label: "Título", className: "w-full pl-0" },
     { key: "priority", label: "Prioridade", className: "w-[120px]" },
-    { key: "updatedAt", label: "Última Atualização", className: "w-[180px] text-right" },
+    { key: "updatedAt", label: "Última Atualização", className: "w-[180px] text-right whitespace-nowrap" },
     { key: "actions", label: "", className: "w-[80px] text-right" },
 ]
 
@@ -83,7 +83,7 @@ export function FeedbackTable({ feedbacks, total, page, limit, isLoading = false
                     </thead>
 
                     <tbody className="divide-y divide-white/5">
-                        <AnimatePresence mode="popLayout" initial={false}>
+                        <AnimatePresence mode="popLayout">
                             {feedbacks.map((feedback, index) => {
                                 const statusInfo = feedbackStatusConfig[feedback.status as FeedbackStatus];
                                 const typeInfo = feedbackTypeConfig[feedback.type as FeedbackType];

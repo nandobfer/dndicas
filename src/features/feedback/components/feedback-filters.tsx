@@ -49,32 +49,24 @@ export function FeedbackFilters({
                   value={filters.search || ""}
                   onChange={onSearchChange}
                   isLoading={isSearching}
-                  placeholder="Buscar feedbacks..."
+                  placeholder="Buscar por título ou descrição..."
               />
           </div>
 
           <div className="flex flex-wrap items-center gap-3">
-              <div className="flex bg-white/5 border border-white/10 rounded-lg p-0.5 items-center">
-                  <span className="text-[10px] font-bold text-white/30 uppercase px-2">Status</span>
-                  <GlassSelector
-                      value={filters.status || "all"}
-                      onChange={(v) => onStatusChange(v as any)}
-                      options={statusOptions as any}
-            className="border-none bg-transparent p-0"
-            layoutId='status-selector'
-                  />
-              </div>
+              <GlassSelector
+                  value={filters.status || "all"}
+                  onChange={(v) => onStatusChange(v as any)}
+                  options={statusOptions as any}
+                  layoutId='status-selector'
+              />
 
-               <div className="flex bg-white/5 border border-white/10 rounded-lg p-0.5 items-center">
-                  <span className="text-[10px] font-bold text-white/30 uppercase px-2">Prioridade</span>
-                  <GlassSelector
-                      value={filters.priority || "all"}
-                      onChange={(v) => onPriorityChange(v as any)}
-                      options={priorityOptions as any}
-            className="border-none bg-transparent p-0"
-            layoutId='priority-selector'
-                  />
-              </div>
+              <GlassSelector
+                  value={filters.priority || "all"}
+                  onChange={(v) => onPriorityChange(v as any)}
+                  options={priorityOptions as any}
+                  layoutId='priority-selector'
+              />
           </div>
       </div>
   )
