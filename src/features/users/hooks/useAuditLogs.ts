@@ -13,7 +13,7 @@
  * ```
  */
 
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient, useInfiniteQuery } from "@tanstack/react-query"
 import type { AuditLog, AuditAction } from '../types/audit.types';
 
 /** Filter options for audit logs query */
@@ -67,13 +67,33 @@ async function fetchAuditLogs(filters: AuditLogsFilters): Promise<AuditLogsRespo
   }
 }
 
-export function useAuditLogs(filters: AuditLogsFilters = {}) {
-  return useQuery({
-    queryKey: ['audit-logs', filters],
-    queryFn: () => fetchAuditLogs(filters),
-    staleTime: 30 * 1000, // 30 seconds
-    refetchOnWindowFocus: false,
-  });
+export const auditLogKeys = {
+    all: ["audit-logs"] as const,
+    lists: () => [...auditLogKeys.all, "list"] as const,
+    list: (filters: AuditLogsFilters) => [...auditLogKeys.lists(), filters] as const,
+    infinite: (filters: Omit<AuditLogsFilters, "page">) => [...auditLogKeys.lists(), "infinite", filters] as const
+}
+
+export function useAuditLogs(filters: AuditLogsFilters = {}, options?: { enabled?: boolean }) {
+    return useQuery({
+        queryKey: auditLogKeys.list(filters),
+        queryFn: () => fetchAuditLogs(filters),
+        staleTime: 30 * 1000, // 30 seconds
+        refetchOnWindowFocus: false,
+        ...options
+    })
+}
+
+export function useInfiniteAuditLogs(filters: Omit<AuditLogsFilters, "page"> = {}, options?: { enabled?: boolean }) {
+    return useInfiniteQuery<AuditLogsResponse, Error>({
+        queryKey: auditLogKeys.infinite(filters),
+        queryFn: ({ pageParam = 1 }) => fetchAuditLogs({ ...filters, page: pageParam as number }),
+        getNextPageParam: (lastPage) => {
+            return lastPage.pagination.page < lastPage.pagination.totalPages ? lastPage.pagination.page + 1 : undefined
+        },
+        initialPageParam: 1,
+        ...options
+    })
 }
 
 export function useRefreshAuditLogs() {

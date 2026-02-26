@@ -1,6 +1,6 @@
 "use client"
 
-import { Suspense, useState } from "react"
+import { Suspense } from "react"
 import { motion } from "framer-motion"
 import { Clock } from "lucide-react"
 import { LoadingState } from "@/components/ui/loading-state"
@@ -9,28 +9,24 @@ import { GlassCard, GlassCardContent } from "@/components/ui/glass-card"
 import { fade } from "@/lib/config/motion-configs"
 import { AuditLogsFilters } from "@/features/users/components/audit-logs-filters"
 import { AuditLogsTable } from "@/features/users/components/audit-logs-table"
+import { AuditLogList } from "@/features/users/components/audit-log-list"
 import { AuditLogDetailModal } from "@/features/users/components/audit-log-detail-modal"
-import { useAuditLogs } from "@/features/users/hooks/useAuditLogs"
-import { useAuditLogsFilters } from "@/features/users/hooks/useAuditLogsFilters"
-import type { AuditLog } from "@/features/users/types/audit.types"
+import { useAuditLogsPage } from "@/features/users/hooks/useAuditLogsPage"
 
 function AuditLogsContent() {
-    const { filters, setPage, setActions, setEntityTypes, setDateRange, resetFilters } = useAuditLogsFilters()
-    const { data, isLoading, isError, refetch } = useAuditLogs(filters)
-    const [selectedLog, setSelectedLog] = useState<AuditLog | null>(null)
-    const [dialogOpen, setDialogOpen] = useState(false)
+    const { isMobile, filters, pagination, data, actions, modals } = useAuditLogsPage()
 
-    const handleRowClick = (log: AuditLog) => {
-        setSelectedLog(log)
-        setDialogOpen(true)
+    const activeData = isMobile ? data.mobile : data.desktop
+
+    if (activeData.isError) {
+        return (
+            <ErrorState
+                title="Erro ao carregar logs"
+                description="Não foi possível carregar os logs de auditoria."
+                onRetry={() => activeData.refetch()}
+            />
+        )
     }
-
-    if (isError) {
-        return <ErrorState title="Erro ao carregar logs" description="Não foi possível carregar os logs de auditoria." onRetry={() => refetch()} />
-    }
-
-    const logs = data?.logs || []
-    const pagination = data?.pagination || { total: 0, page: 1, limit: 10, totalPages: 1 }
 
     return (
         <div className="flex flex-col gap-6">
@@ -48,20 +44,37 @@ function AuditLogsContent() {
                 <GlassCardContent className="py-4">
                     <AuditLogsFilters
                         filters={filters}
-                        isLoading={isLoading}
-                        onActionsChange={setActions}
-                        onEntityTypesChange={setEntityTypes}
-                        onDateRangeChange={setDateRange}
-                        onReset={resetFilters}
+                        isLoading={activeData.isLoading}
+                        onActionsChange={actions.setActions}
+                        onEntityTypesChange={actions.setEntityTypes}
+                        onDateRangeChange={actions.setDateRange}
+                        onReset={actions.resetFilters}
                     />
                 </GlassCardContent>
             </GlassCard>
 
-            {/* Table */}
-            <AuditLogsTable logs={logs} isLoading={isLoading} pagination={pagination} onPageChange={setPage} onRowClick={handleRowClick} />
+            {/* Content: Table for Desktop, List for Mobile */}
+            {isMobile ? (
+                <AuditLogList
+                    items={data.mobile.items}
+                    isLoading={data.mobile.isLoading}
+                    hasNextPage={data.mobile.hasNextPage}
+                    isFetchingNextPage={data.mobile.isFetchingNextPage}
+                    onLoadMore={data.mobile.fetchNextPage}
+                    onLogClick={actions.handleLogClick}
+                />
+            ) : (
+                <AuditLogsTable
+                    logs={data.desktop.items}
+                    isLoading={data.desktop.isLoading}
+                    pagination={pagination}
+                    onPageChange={pagination.setPage}
+                    onRowClick={actions.handleLogClick}
+                />
+            )}
 
             {/* Detail Modal with Diff View */}
-            <AuditLogDetailModal log={selectedLog} open={dialogOpen} onOpenChange={setDialogOpen} />
+            <AuditLogDetailModal log={modals.selectedLog} open={modals.isDetailOpen} onOpenChange={modals.setIsDetailOpen} />
         </div>
     )
 }

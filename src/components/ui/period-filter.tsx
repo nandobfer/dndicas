@@ -15,6 +15,7 @@ import {
 } from '@/components/ui/glass-popover';
 import { GlassInput } from "@/components/ui/glass-input"
 import { glassConfig } from "@/lib/config/glass-config"
+import { useIsMobile } from "@/core/hooks/useMediaQuery"
 
 export interface PeriodFilterProps {
     /** Start date (ISO string or empty) */
@@ -134,6 +135,7 @@ function formatDateRange(startDate?: string, endDate?: string): string {
  * ```
  */
 export function PeriodFilter({ startDate, endDate, onChange, className }: PeriodFilterProps) {
+    const isMobile = useIsMobile()
     const [localStartDate, setLocalStartDate] = React.useState(startDate || "")
     const [localEndDate, setLocalEndDate] = React.useState(endDate || "")
     const [isOpen, setIsOpen] = React.useState(false)
@@ -179,7 +181,7 @@ export function PeriodFilter({ startDate, endDate, onChange, className }: Period
                         "hover:border-white/20",
                         "focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/50",
                         hasValue ? "text-white" : "text-white/60",
-                        className,
+                        className
                     )}
                 >
                     <Calendar className="h-4 w-4" />
@@ -197,23 +199,37 @@ export function PeriodFilter({ startDate, endDate, onChange, className }: Period
             </GlassPopoverTrigger>
             <GlassPopoverContent className="w-80 p-4" align="end">
                 <div className="space-y-4">
-                    <GlassInput id="period-start" label="De" type="date" value={localStartDate} onChange={(e) => setLocalStartDate(e.target.value)} className="h-9" />
+                    <GlassInput
+                        id="period-start"
+                        label="De"
+                        type="date"
+                        value={localStartDate}
+                        onChange={(e) => setLocalStartDate(e.target.value)}
+                        className="h-9"
+                    />
 
-                    <GlassInput id="period-end" label="Até" type="date" value={localEndDate} onChange={(e) => setLocalEndDate(e.target.value)} className="h-9" />
+                    <GlassInput
+                        id="period-end"
+                        label="Até"
+                        type="date"
+                        value={localEndDate}
+                        onChange={(e) => setLocalEndDate(e.target.value)}
+                        className="h-9"
+                    />
 
                     <div className="pt-2 border-t border-white/10">
                         <p className="text-xs font-medium text-white/60 mb-2">Seleção Rápida</p>
-                        <div className="flex flex-wrap gap-2">
+                        <div className={cn("flex gap-2", isMobile ? "flex-col" : "flex-wrap")}>
                             {presets.map((preset) => (
                                 <button
                                     key={preset.label}
                                     type="button"
                                     onClick={() => handlePreset(preset)}
                                     className={cn(
-                                        "px-3 py-1.5 rounded-md text-xs font-medium",
+                                        "px-3 py-1.5 rounded-md text-xs font-medium transition-colors",
                                         "bg-white/5 text-white/70 border border-white/10",
                                         "hover:bg-white/10 hover:text-white",
-                                        "transition-colors",
+                                        isMobile && "w-full text-left"
                                     )}
                                 >
                                     {preset.label}
@@ -223,10 +239,18 @@ export function PeriodFilter({ startDate, endDate, onChange, className }: Period
                     </div>
 
                     <div className="flex justify-end gap-2 pt-2 border-t border-white/10">
-                        <button type="button" onClick={() => setIsOpen(false)} className="px-3 py-1.5 rounded-md text-sm text-white/60 hover:text-white transition-colors">
+                        <button
+                            type="button"
+                            onClick={() => setIsOpen(false)}
+                            className="px-3 py-1.5 rounded-md text-sm text-white/60 hover:text-white transition-colors"
+                        >
                             Cancelar
                         </button>
-                        <button type="button" onClick={handleApply} className="px-3 py-1.5 rounded-md text-sm bg-blue-500 text-white hover:bg-blue-600 transition-colors">
+                        <button
+                            type="button"
+                            onClick={handleApply}
+                            className="px-3 py-1.5 rounded-md text-sm bg-blue-500 text-white hover:bg-blue-600 transition-colors"
+                        >
                             Aplicar
                         </button>
                     </div>
