@@ -5,6 +5,7 @@ import { motion, AnimatePresence } from "framer-motion"
 import { AtSign, RefreshCw } from "lucide-react"
 import { motionConfig, fade } from "@/lib/config/motion-configs"
 import { cn } from "@/core/utils"
+import { GlassSelector } from "@/components/ui/glass-selector"
 
 // Import hooks and modals for editing
 import { useMentionAuditPage } from "@/features/rules/hooks/useMentionAuditPage"
@@ -20,7 +21,7 @@ import type { UpdateTraitInput } from "@/features/traits/types/traits.types"
 import type { UpdateFeatInput } from "@/features/feats/types/feats.types"
 
 function MentionAuditContent() {
-    const { isMobile, isLoading, isRefreshing, errorAtFetch, data, actions, modals } = useMentionAuditPage()
+    const { isMobile, isLoading, isRefreshing, errorAtFetch, data, actions, modals, viewMode, setViewMode, isDefault } = useMentionAuditPage()
 
     return (
         <div className="flex flex-col gap-6">
@@ -31,6 +32,18 @@ function MentionAuditContent() {
                         <h1 className="text-2xl font-bold text-white flex items-center gap-2">
                             <AtSign className="h-6 w-6 text-amber-400" />
                             Referências Pendentes
+                            {!isMobile && (
+                                <GlassSelector
+                                    value={viewMode}
+                                    onChange={(v) => setViewMode(v as any)}
+                                    options={[
+                                        { value: "default", label: "Padrão" },
+                                        { value: "table", label: "Tabela" },
+                                    ]}
+                                    size="sm"
+                                    layoutId="mentions-view-selector"
+                                />
+                            )}
                         </h1>
                         <p className="text-sm text-white/60 mt-1">Identifique e corrija pendências em referências dinâmicas nas descrições.</p>
                     </div>
@@ -41,7 +54,7 @@ function MentionAuditContent() {
                         className={cn(
                             "inline-flex items-center gap-2 px-4 py-2 rounded-lg transition-all",
                             "bg-white/5 border border-white/10 text-white font-medium text-sm",
-                            "hover:bg-white/10 disabled:opacity-50"
+                            "hover:bg-white/10 disabled:opacity-50",
                         )}
                     >
                         <RefreshCw className={cn("h-4 w-4", isRefreshing && !isLoading && "animate-spin")} />
@@ -50,7 +63,7 @@ function MentionAuditContent() {
                 </div>
             </motion.div>
 
-            {isMobile ? (
+            {isDefault ? (
                 <EntityList
                     items={data.items}
                     entityType="Mixed"
@@ -62,13 +75,7 @@ function MentionAuditContent() {
                     onEdit={(item) => actions.handleEdit(item._id, item.type)}
                 />
             ) : (
-                <MentionAuditTable
-                    items={data.items}
-                    isLoading={isLoading}
-                    errorAtFetch={errorAtFetch}
-                    onRefresh={actions.handleRefresh}
-                    onEdit={actions.handleEdit}
-                />
+                <MentionAuditTable items={data.items} isLoading={isLoading} errorAtFetch={errorAtFetch} onRefresh={actions.handleRefresh} onEdit={actions.handleEdit} />
             )}
 
             <RuleFormModal
@@ -80,7 +87,7 @@ function MentionAuditContent() {
                     if (modals.selectedRule?._id) {
                         await actions.updateRule.mutateAsync({
                             id: modals.selectedRule._id,
-                            data: formData as UpdateReferenceInput
+                            data: formData as UpdateReferenceInput,
                         })
                         actions.closeModals()
                         actions.fetchIssues(true)
@@ -107,7 +114,7 @@ function MentionAuditContent() {
                     if (modals.editingEntity?.id) {
                         await actions.updateTrait.mutateAsync({
                             id: modals.editingEntity.id,
-                            data: formData as UpdateTraitInput
+                            data: formData as UpdateTraitInput,
                         })
                         actions.closeModals()
                         actions.fetchIssues(true)
@@ -124,7 +131,7 @@ function MentionAuditContent() {
                     if (modals.editingEntity?.id) {
                         await actions.updateFeat.mutateAsync({
                             id: modals.editingEntity.id,
-                            data: formData as UpdateFeatInput
+                            data: formData as UpdateFeatInput,
                         })
                         actions.closeModals()
                         actions.fetchIssues(true)
