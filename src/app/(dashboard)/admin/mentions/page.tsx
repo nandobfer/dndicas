@@ -1,11 +1,11 @@
 "use client"
 
 import * as React from "react"
-import { motion, AnimatePresence } from "framer-motion"
+import { motion } from "framer-motion"
 import { AtSign, RefreshCw } from "lucide-react"
-import { motionConfig, fade } from "@/lib/config/motion-configs"
+import { fade } from "@/lib/config/motion-configs"
 import { cn } from "@/core/utils"
-import { GlassSelector } from "@/components/ui/glass-selector"
+import { GlassViewSelector } from "@/components/ui/glass-view-selector"
 
 // Import hooks and modals for editing
 import { useMentionAuditPage } from "@/features/rules/hooks/useMentionAuditPage"
@@ -21,7 +21,7 @@ import type { UpdateTraitInput } from "@/features/traits/types/traits.types"
 import type { UpdateFeatInput } from "@/features/feats/types/feats.types"
 
 function MentionAuditContent() {
-    const { isMobile, isLoading, isRefreshing, errorAtFetch, data, actions, modals, viewMode, setViewMode, isDefault } = useMentionAuditPage()
+    const { isLoading, isRefreshing, errorAtFetch, data, actions, modals, viewMode, setViewMode, isDefault } = useMentionAuditPage()
 
     return (
         <div className="flex flex-col gap-6">
@@ -32,18 +32,7 @@ function MentionAuditContent() {
                         <h1 className="text-2xl font-bold text-white flex items-center gap-2">
                             <AtSign className="h-6 w-6 text-amber-400" />
                             Referências Pendentes
-                            {!isMobile && (
-                                <GlassSelector
-                                    value={viewMode}
-                                    onChange={(v) => setViewMode(v as any)}
-                                    options={[
-                                        { value: "default", label: "Padrão" },
-                                        { value: "table", label: "Tabela" },
-                                    ]}
-                                    size="sm"
-                                    layoutId="mentions-view-selector"
-                                />
-                            )}
+                            <GlassViewSelector viewMode={viewMode} setViewMode={setViewMode} layoutId="mentions-view-selector" />
                         </h1>
                         <p className="text-sm text-white/60 mt-1">Identifique e corrija pendências em referências dinâmicas nas descrições.</p>
                     </div>

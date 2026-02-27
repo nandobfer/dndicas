@@ -4,7 +4,7 @@ import { Plus, Zap } from 'lucide-react';
 import { motion } from "framer-motion"
 import { cn } from "@/core/utils"
 import { GlassCard, GlassCardContent } from "@/components/ui/glass-card"
-import { GlassSelector } from "@/components/ui/glass-selector"
+import { GlassViewSelector } from "@/components/ui/glass-view-selector"
 import { useAuth } from "@/core/hooks/useAuth"
 import { FeatsTable } from "./feats-table"
 import { motionConfig } from "@/lib/config/motion-configs"
@@ -28,18 +28,7 @@ export function FeatsPage() {
                     <h1 className="text-xl sm:text-2xl font-bold text-white flex items-center gap-2">
                         <Zap className="h-5 w-5 sm:h-6 sm:w-6 text-amber-400" />
                         Catálogo de Talentos
-                        {!isMobile && (
-                            <GlassSelector
-                                value={viewMode}
-                                onChange={(v) => setViewMode(v as any)}
-                                options={[
-                                    { value: "default", label: "Padrão" },
-                                    { value: "table", label: "Tabela" },
-                                ]}
-                                size="sm"
-                                layoutId="feats-view-selector"
-                            />
-                        )}
+                        <GlassViewSelector viewMode={viewMode} setViewMode={setViewMode} layoutId="feats-view-selector" />
                     </h1>
                     <p className="text-[10px] sm:text-sm text-white/60 mt-1">Gerencie os talentos disponíveis para personagens (D&D 5e)</p>
                 </div>

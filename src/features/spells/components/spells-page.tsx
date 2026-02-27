@@ -16,7 +16,7 @@ import { SpellsFilters } from "./spells-filters"
 import { EntityList } from "@/features/rules/components/entity-list"
 import { SpellFormModal } from "./spell-form-modal"
 import { GlassCard, GlassCardContent } from "@/components/ui/glass-card"
-import { GlassSelector } from "@/components/ui/glass-selector"
+import { GlassViewSelector } from "@/components/ui/glass-view-selector"
 import { motionConfig } from "@/lib/config/motion-configs"
 import { useSpellsPage } from "../hooks/useSpellsPage"
 
@@ -34,18 +34,7 @@ export function SpellsPage() {
                     <h1 className="text-xl sm:text-2xl font-bold text-white flex items-center gap-2">
                         <Wand className="h-5 w-5 sm:h-6 sm:w-6 text-purple-400" />
                         Catálogo de Magias
-                        {!isMobile && (
-                            <GlassSelector
-                                value={viewMode}
-                                onChange={(v) => setViewMode(v as any)}
-                                options={[
-                                    { value: "default", label: "Padrão" },
-                                    { value: "table", label: "Tabela" },
-                                ]}
-                                size="sm"
-                                layoutId="spells-view-selector"
-                            />
-                        )}
+                        <GlassViewSelector viewMode={viewMode} setViewMode={setViewMode} layoutId="spells-view-selector" />
                     </h1>
                     <p className="text-[10px] sm:text-sm text-white/60 mt-1">Explore as magias disponíveis para conjuradores (D&D 5e)</p>
                 </div>

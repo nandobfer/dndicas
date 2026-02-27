@@ -1,13 +1,11 @@
 "use client";
 
-import * as React from 'react';
 import { Plus, Ruler } from 'lucide-react';
-import { motion, AnimatePresence } from "framer-motion"
+import { motion } from "framer-motion"
 import { cn } from "@/core/utils"
 import { GlassCard, GlassCardContent } from "@/components/ui/glass-card"
-import { GlassSelector } from "@/components/ui/glass-selector"
+import { GlassViewSelector } from "@/components/ui/glass-view-selector"
 import { useAuth } from "@/core/hooks/useAuth"
-import { useViewMode } from "@/core/hooks/useViewMode"
 import { RulesFilter } from "./rules-filters"
 import { RulesTable } from "./rules-table"
 import { EntityList } from "./entity-list"
@@ -30,18 +28,7 @@ export function RulesPage() {
                     <h1 className="text-xl sm:text-2xl font-bold text-white flex items-center gap-2">
                         <Ruler className="h-5 w-5 sm:h-6 sm:w-6 text-slate-400 items-center" />
                         Catálogo de Regras
-                        {!isMobile && (
-                            <GlassSelector
-                                value={viewMode}
-                                onChange={(v) => setViewMode(v as any)}
-                                options={[
-                                    { value: "default", label: "Padrão" },
-                                    { value: "table", label: "Tabela" },
-                                ]}
-                                size="sm"
-                                layoutId="rules-view-selector"
-                            />
-                        )}
+                        <GlassViewSelector viewMode={viewMode} setViewMode={setViewMode} layoutId="rules-view-selector" />
                     </h1>
                     <p className="text-[xs] sm:text-sm text-white/60 mt-1">Gerencie as regras de referência do sistema (D&D 5e)</p>
                 </div>
