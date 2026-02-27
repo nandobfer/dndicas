@@ -374,6 +374,12 @@ export type DiceType = keyof typeof diceColors
  * Feedback configuration for status, types and priority.
  */
 export const feedbackStatusConfig = {
+  cancelado: {
+        label: "Cancelado",
+        color: "artifact",
+        badge: "bg-red-400/20 text-red-400",
+        hex: rarityColors.artifact,
+    },
     pendente: {
         label: "Pendente",
         color: "legendary",
@@ -386,12 +392,7 @@ export const feedbackStatusConfig = {
         badge: "bg-emerald-400/20 text-emerald-400",
         hex: rarityColors.uncommon,
     },
-    cancelado: {
-        label: "Cancelado",
-        color: "artifact",
-        badge: "bg-red-400/20 text-red-400",
-        hex: rarityColors.artifact,
-    },
+    
 } as const;
 
 export const feedbackTypeConfig = {
