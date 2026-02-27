@@ -68,7 +68,6 @@ export default function FeedbackPage() {
                   isFetchingNextPage={data.mobile.isFetchingNextPage}
                   onLoadMore={data.mobile.fetchNextPage}
                   onEdit={actions.handleEditClick}
-                  isAdmin={isAdmin}
               />
           ) : (
               <FeedbackTable

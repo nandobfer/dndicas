@@ -5,12 +5,10 @@ import { motion, AnimatePresence } from "framer-motion"
 import { GlassCard, GlassCardContent } from "@/components/ui/glass-card"
 import { LoadingState } from "@/components/ui/loading-state"
 import { EmptyState } from "@/components/ui/empty-state"
-import { MessageSquare, MoreHorizontal, Pencil } from "lucide-react"
+import { MessageSquare } from "lucide-react"
 import { motionConfig } from "@/lib/config/motion-configs"
 import { FeedbackCard } from "./feedback-card"
-import { GlassDropdownMenu, GlassDropdownMenuTrigger, GlassDropdownMenuContent, GlassDropdownMenuItem } from "@/components/ui/glass-dropdown-menu"
 import type { Feedback } from "../types/feedback.types"
-import { useAuth } from "@/core/hooks/useAuth"
 
 interface FeedbackListProps {
     items: Feedback[]
@@ -19,15 +17,13 @@ interface FeedbackListProps {
     isFetchingNextPage: boolean
     onLoadMore: () => void
     onEdit?: (item: Feedback) => void
-    isAdmin?: boolean
 }
 
 /**
  * Responsive Feedback List for mobile view.
  * Features infinite scroll and specialized FeedbackCard renderer.
  */
-export function FeedbackList({ items, isLoading, hasNextPage, isFetchingNextPage, onLoadMore, onEdit, isAdmin }: FeedbackListProps) {
-    const { userId } = useAuth();
+export function FeedbackList({ items, isLoading, hasNextPage, isFetchingNextPage, onLoadMore, onEdit }: FeedbackListProps) {
     const observer = React.useRef<IntersectionObserver | null>(null)
 
     // Intersection observer for infinite scroll
@@ -67,35 +63,11 @@ export function FeedbackList({ items, isLoading, hasNextPage, isFetchingNextPage
         <div className="space-y-4">
             <AnimatePresence mode="popLayout">
                 {items.map((item, index) => {
-                    const isOwner = item.createdBy === userId;
-                    const canEdit = isAdmin || isOwner;
-
                     return (
                         <motion.div key={item.id} variants={motionConfig.variants.fadeInUp} initial="initial" animate="animate" exit="exit" transition={{ delay: (index % 10) * 0.05 }}>
                             <GlassCard className="relative overflow-hidden">
                                 <GlassCardContent className="p-4 pt-6">
-                                    <div className="absolute top-2 right-2 z-10 flex flex-col items-end gap-2">
-                                        {canEdit && onEdit && (
-                                            <GlassDropdownMenu>
-                                                <GlassDropdownMenuTrigger asChild>
-                                                    <motion.button 
-                                                        whileHover={{ scale: 1.1 }}
-                                                        whileTap={{ scale: 0.9 }}
-                                                        className="p-2 rounded-lg text-white/40 hover:text-white hover:bg-white/10 transition-colors"
-                                                    >
-                                                        <MoreHorizontal className="h-4 w-4" />
-                                                    </motion.button>
-                                                </GlassDropdownMenuTrigger>
-                                                <GlassDropdownMenuContent align="end">
-                                                    <GlassDropdownMenuItem onClick={() => onEdit(item)}>
-                                                        <Pencil className="mr-2 h-4 w-4" />
-                                                        Editar / Ver Detalhes
-                                                    </GlassDropdownMenuItem>
-                                                </GlassDropdownMenuContent>
-                                            </GlassDropdownMenu>
-                                        )}
-                                    </div>
-                                    <FeedbackCard feedback={item} />
+                                    <FeedbackCard feedback={item} onEdit={onEdit} />
                                 </GlassCardContent>
                             </GlassCard>
                         </motion.div>
