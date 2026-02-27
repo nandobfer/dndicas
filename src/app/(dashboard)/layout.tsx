@@ -4,6 +4,7 @@ import { motion } from "framer-motion"
 import { useSidebar } from "@/hooks/useSidebar"
 import { ExpandableSidebar } from "@/components/ui/expandable-sidebar"
 import { GlassHeader } from "@/components/ui/glass-header"
+import { GlobalSearchFAB } from "@/components/ui/global-search-fab"
 import { motionConfig } from "@/lib/config/motion-configs"
 import { themeConfig } from "@/lib/config/theme-config"
 import { cn } from "@/core/utils"
@@ -23,7 +24,13 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         return () => window.removeEventListener("resize", checkMobile)
     }, [])
 
-    const marginLeft = isMobile ? "0" : isHydrated ? (isExpanded ? `${themeConfig.spacing.sidebar.expanded}px` : `${themeConfig.spacing.sidebar.collapsed}px`) : `${themeConfig.spacing.sidebar.collapsed}px`
+    const marginLeft = isMobile
+        ? "0"
+        : isHydrated
+          ? isExpanded
+              ? `${themeConfig.spacing.sidebar.expanded}px`
+              : `${themeConfig.spacing.sidebar.collapsed}px`
+          : `${themeConfig.spacing.sidebar.collapsed}px`
 
     return (
         <div className="flex min-h-screen w-full bg-background">
@@ -37,7 +44,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             <motion.div
                 className={cn("flex flex-1 flex-col min-w-0", isMobile && "pt-16")}
                 animate={{
-                    marginLeft
+                    marginLeft,
                 }}
                 transition={motionConfig.sidebarTransition}
             >
@@ -52,6 +59,9 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                     {children}
                 </motion.main>
             </motion.div>
+
+            {/* Global Search FAB */}
+            <GlobalSearchFAB />
         </div>
     )
 }

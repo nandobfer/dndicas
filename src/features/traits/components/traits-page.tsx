@@ -5,6 +5,7 @@ import { Plus, Sparkles } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { cn } from '@/core/utils';
 import { GlassCard, GlassCardContent } from "@/components/ui/glass-card"
+import { GlassViewSelector } from "@/components/ui/glass-view-selector"
 import { useAuth } from "@/core/hooks/useAuth"
 import { TraitsFilters } from "./traits-filters"
 import { TraitsTable } from "./traits-table"
@@ -18,7 +19,7 @@ export function TraitsPage() {
     const { isAdmin } = useAuth()
 
     // Logic moved to custom hook for better maintainability (T044)
-    const { isMobile, filters, pagination, data, actions, modals } = useTraitsPage()
+    const { isMobile, filters, pagination, data, actions, modals, viewMode, setViewMode, isDefault } = useTraitsPage()
 
     return (
         <motion.div variants={motionConfig.variants.fadeInUp} initial="initial" animate="animate" className="space-y-6">
@@ -28,6 +29,7 @@ export function TraitsPage() {
                     <h1 className="text-xl sm:text-2xl font-bold text-white flex items-center gap-2">
                         <Sparkles className="h-5 w-5 sm:h-6 sm:w-6 text-emerald-400" />
                         Catálogo de Habilidades
+                        <GlassViewSelector viewMode={viewMode} setViewMode={setViewMode} layoutId="traits-view-selector" />
                     </h1>
                     <p className="text-[10px] sm:text-sm text-white/60 mt-1">Gerencie habilidades e traits do sistema (D&D 5e)</p>
                 </div>
@@ -57,31 +59,31 @@ export function TraitsPage() {
                         filters={{ search: filters.search, status: filters.status }}
                         onSearchChange={actions.handleSearchChange}
                         onStatusChange={actions.handleStatusChange}
-                        isSearching={data.desktop.isFetching || data.mobile.isFetching}
+                        isSearching={data.paginated.isFetching || data.infinite.isFetching}
                     />
                 </GlassCardContent>
             </GlassCard>
 
-            {/* Content: Table for Desktop, List for Mobile (T042) */}
-            {isMobile ? (
+            {/* Content: Conditional rendering based on viewMode */}
+            {isDefault ? (
                 <EntityList
-                    items={data.mobile.items}
+                    items={data.infinite.items}
                     entityType="Habilidade"
-                    isLoading={data.mobile.isLoading}
-                    hasNextPage={data.mobile.hasNextPage}
-                    isFetchingNextPage={data.mobile.isFetchingNextPage}
-                    onLoadMore={data.mobile.fetchNextPage}
+                    isLoading={data.infinite.isLoading}
+                    hasNextPage={data.infinite.hasNextPage}
+                    isFetchingNextPage={data.infinite.isFetchingNextPage}
+                    onLoadMore={data.infinite.fetchNextPage}
                     onEdit={actions.handleEditClick}
                     onDelete={actions.handleDeleteClick}
                     isAdmin={isAdmin}
                 />
             ) : (
                 <TraitsTable
-                    traits={data.desktop.items}
+                    traits={data.paginated.items}
                     total={pagination.total}
                     page={pagination.page}
                     limit={pagination.limit}
-                    isLoading={data.desktop.isLoading}
+                    isLoading={data.paginated.isLoading}
                     onEdit={actions.handleEditClick}
                     onDelete={actions.handleDeleteClick}
                     onPageChange={pagination.setPage}

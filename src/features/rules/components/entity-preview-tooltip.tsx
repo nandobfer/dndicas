@@ -3,7 +3,7 @@
 import * as React from "react"
 import { GlassCard } from "@/components/ui/glass-card"
 import { Chip } from "@/components/ui/chip"
-import { ScrollText, BookOpen, Quote, Sparkles } from "lucide-react"
+import { ScrollText, BookOpen, Quote, Sparkles, ExternalLink } from "lucide-react"
 import { cn } from "@/core/utils"
 import { entityConfig } from "@/lib/config/colors"
 import { Reference } from "../types/rules.types"
@@ -12,6 +12,8 @@ import { MentionContent } from "./mention-badge"
 import { GlassPopover, GlassPopoverTrigger, GlassPopoverContent } from "@/components/ui/glass-popover"
 import { FeatPreview } from "@/features/feats/components/feat-preview"
 import { SpellPreview } from "@/features/spells/components/spell-preview"
+import { useWindows } from "@/core/context/window-context"
+import { motion } from "framer-motion"
 
 interface RulePreviewProps {
     rule: Reference
@@ -19,6 +21,7 @@ interface RulePreviewProps {
 }
 
 export const RulePreview = ({ rule, showStatus = true }: RulePreviewProps) => {
+    const { addWindow } = useWindows()
     return (
         <div className="space-y-4 w-auto max-w-full sm:max-w-[500px] md:max-w-[600px]">
             <div className="flex flex-col sm:flex-row items-start sm:justify-between gap-4">
@@ -31,13 +34,29 @@ export const RulePreview = ({ rule, showStatus = true }: RulePreviewProps) => {
                         <p className="text-[10px] uppercase font-bold tracking-widest text-white/40 mt-0.5">Regra do Sistema</p>
                     </div>
                 </div>
-                {showStatus && (
-                    <div className="self-end sm:self-auto">
+                <div className="flex items-center gap-2 self-end sm:self-auto">
+                    {showStatus && (
+                        <motion.button
+                            whileHover={{ scale: 1.1 }}
+                            whileTap={{ scale: 0.9 }}
+                            onClick={() => addWindow({
+                                title: rule.name || "Regra",
+                                content: null,
+                                item: rule,
+                                entityType: "Regra"
+                            })}
+                            className="p-1.5 rounded-lg text-white/40 hover:text-white hover:bg-white/10 transition-colors"
+                            title="Abrir em nova janela"
+                        >
+                            <ExternalLink className="h-4 w-4" />
+                        </motion.button>
+                    )}
+                    {showStatus && (
                         <Chip variant={rule.status === "active" ? "uncommon" : "common"} size="sm">
                             {rule.status === "active" ? "Ativa" : "Inativa"}
                         </Chip>
-                    </div>
-                )}
+                    )}
+                </div>
             </div>
 
             {rule.description && (
@@ -70,6 +89,7 @@ interface TraitPreviewProps {
 }
 
 export const TraitPreview = ({ trait, showStatus = true }: TraitPreviewProps) => {
+    const { addWindow } = useWindows()
     return (
         <div className="space-y-4 w-auto max-w-full sm:max-w-[500px] md:max-w-[600px]">
             <div className="flex items-start justify-between gap-4">
@@ -82,11 +102,29 @@ export const TraitPreview = ({ trait, showStatus = true }: TraitPreviewProps) =>
                         <p className="text-[10px] uppercase font-bold tracking-widest text-white/40 mt-0.5">Habilidade D&D</p>
                     </div>
                 </div>
-                {showStatus && (
-                    <Chip variant={trait.status === "active" ? "uncommon" : "common"} size="sm">
-                        {trait.status === "active" ? "Ativa" : "Inativa"}
-                    </Chip>
-                )}
+                <div className="flex items-center gap-2">
+                    {showStatus && (
+                        <motion.button
+                            whileHover={{ scale: 1.1 }}
+                            whileTap={{ scale: 0.9 }}
+                            onClick={() => addWindow({
+                                title: trait.name || "Habilidade",
+                                content: null,
+                                item: trait,
+                                entityType: "Habilidade"
+                            })}
+                            className="p-1.5 rounded-lg text-white/40 hover:text-white hover:bg-white/10 transition-colors"
+                            title="Abrir em nova janela"
+                        >
+                            <ExternalLink className="h-4 w-4" />
+                        </motion.button>
+                    )}
+                    {showStatus && (
+                        <Chip variant={trait.status === "active" ? "uncommon" : "common"} size="sm">
+                            {trait.status === "active" ? "Ativa" : "Inativa"}
+                        </Chip>
+                    )}
+                </div>
             </div>
 
             {trait.description && (

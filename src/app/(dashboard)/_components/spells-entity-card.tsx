@@ -17,15 +17,5 @@ export function SpellsEntityCard({
     loading: boolean
     index: number
 }) {
-    return (
-        <EntityCard
-            entityType="Magia"
-            stats={stats}
-            loading={loading}
-            index={index}
-            title="Magias"
-            icon={Wand2}
-            description="Catálogo completo de feitiços e truques"
-        />
-    )
+    return <EntityCard entityType="Magia" stats={stats} loading={loading} index={index} title="Magias" icon={Wand2} description="Catálogo completo de feitiços e truques" href="/spells" />
 }

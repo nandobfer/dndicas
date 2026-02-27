@@ -5,121 +5,130 @@ import { useRules, useInfiniteRules } from './useRules';
 import { useRuleMutations } from './useRuleMutations';
 import { useDebounce } from '@/core/hooks/useDebounce';
 import { useIsMobile } from '@/core/hooks/useMediaQuery';
-import type { Reference, CreateReferenceInput, UpdateReferenceInput, RulesFilters } from '../types/rules.types';
+import { useViewMode } from "@/core/hooks/useViewMode"
+import type { Reference, CreateReferenceInput, UpdateReferenceInput, RulesFilters } from "../types/rules.types"
 
 /**
  * T044: Logic for the Rules page, including filters, modals, and responsive data fetching.
  */
 export function useRulesPage() {
-    const isMobile = useIsMobile();
-    
+    const isMobile = useIsMobile()
+    const { viewMode, setViewMode, isTable, isDefault } = useViewMode()
+
     // State
-    const [page, setPage] = React.useState(1);
-    const [search, setSearch] = React.useState("");
-    const [status, setStatus] = React.useState<RulesFilters['status']>('all');
-    
+    const [page, setPage] = React.useState(1)
+    const [search, setSearch] = React.useState("")
+    const [status, setStatus] = React.useState<RulesFilters["status"]>("all")
+
     // Debounced search
-    const debouncedSearch = useDebounce(search, 500);
+    const debouncedSearch = useDebounce(search, 500)
 
     // Common filters object
-    const filters = React.useMemo(() => ({
-        search: debouncedSearch,
-        status,
-        limit: 10,
-    }), [debouncedSearch, status]);
+    const filters = React.useMemo(
+        () => ({
+            search: debouncedSearch,
+            status,
+            limit: 10,
+        }),
+        [debouncedSearch, status],
+    )
 
     /**
      * Data Fetching
-     * Uses regular query for desktop table and infinite query for mobile list.
+     * Uses regular query for table view and infinite query for list/grid view.
      */
-    
-    // Desktop View Data
-    const decktopData = useRules({
-        ...filters,
-        page,
-    }, { enabled: !isMobile });
 
-    // Mobile View Data
-    const mobileData = useInfiniteRules(filters, { enabled: isMobile });
+    const paginatedData = useRules(
+        {
+            ...filters,
+            page,
+        },
+        { enabled: isTable },
+    )
+
+    const infiniteData = useInfiniteRules(filters, { enabled: !isTable })
 
     // Mutations
-    const { createRule, updateRule, deleteRule } = useRuleMutations();
+    const { createRule, updateRule, deleteRule } = useRuleMutations()
 
     // UI state
-    const [isFormOpen, setIsFormOpen] = React.useState(false);
-    const [isDeleteOpen, setIsDeleteOpen] = React.useState(false);
-    const [selectedRule, setSelectedRule] = React.useState<Reference | null>(null);
+    const [isFormOpen, setIsFormOpen] = React.useState(false)
+    const [isDeleteOpen, setIsDeleteOpen] = React.useState(false)
+    const [selectedRule, setSelectedRule] = React.useState<Reference | null>(null)
 
     // Handlers
     const handleSearchChange = (value: string) => {
-        setSearch(value);
-        setPage(1);
-    };
+        setSearch(value)
+        setPage(1)
+    }
 
-    const handleStatusChange = (value: RulesFilters['status']) => {
-        setStatus(value);
-        setPage(1);
-    };
+    const handleStatusChange = (value: RulesFilters["status"]) => {
+        setStatus(value)
+        setPage(1)
+    }
 
     const handleCreateClick = () => {
-        setSelectedRule(null);
-        setIsFormOpen(true);
-    };
+        setSelectedRule(null)
+        setIsFormOpen(true)
+    }
 
     const handleEditClick = (rule: Reference) => {
-        setSelectedRule(rule);
-        setIsFormOpen(true);
-    };
+        setSelectedRule(rule)
+        setIsFormOpen(true)
+    }
 
     const handleDeleteClick = (rule: Reference) => {
-        setSelectedRule(rule);
-        setIsDeleteOpen(true);
-    };
+        setSelectedRule(rule)
+        setIsDeleteOpen(true)
+    }
 
     const handleFormSubmit = async (formData: CreateReferenceInput | UpdateReferenceInput) => {
         if (selectedRule) {
             await updateRule.mutateAsync({
                 id: selectedRule._id,
-                data: formData as UpdateReferenceInput
-            });
+                data: formData as UpdateReferenceInput,
+            })
         } else {
-            await createRule.mutateAsync(formData as CreateReferenceInput);
+            await createRule.mutateAsync(formData as CreateReferenceInput)
         }
-        setIsFormOpen(false);
-        setSelectedRule(null);
-    };
+        setIsFormOpen(false)
+        setSelectedRule(null)
+    }
 
     const handleDeleteConfirm = async () => {
         if (selectedRule) {
-            await deleteRule.mutateAsync(selectedRule._id);
-            setIsDeleteOpen(false);
-            setSelectedRule(null);
+            await deleteRule.mutateAsync(selectedRule._id)
+            setIsDeleteOpen(false)
+            setSelectedRule(null)
         }
-    };
+    }
 
     return {
         isMobile,
+        viewMode,
+        setViewMode,
+        isDefault,
         filters: { search, status },
-        pagination: { 
-            page, 
-            setPage, 
-            total: decktopData.data?.total || 0,
-            limit: 10 
+        pagination: {
+            page,
+            setPage,
+            total: paginatedData.data?.total || 0,
+            limit: 10,
         },
         data: {
-            desktop: {
-                items: decktopData.data?.items || [],
-                isLoading: decktopData.isLoading,
-                isFetching: decktopData.isFetching
+            paginated: {
+                items: paginatedData.data?.items || [],
+                isLoading: paginatedData.isLoading,
+                isFetching: paginatedData.isFetching,
             },
-            mobile: {
-                items: mobileData.data?.pages.flatMap(page => page.items) || [],
-                isLoading: mobileData.isLoading,
-                isFetching: mobileData.isFetching,
-                isFetchingNextPage: mobileData.isFetchingNextPage,
-                hasNextPage: !!mobileData.hasNextPage,
-                fetchNextPage: mobileData.fetchNextPage
-            }
+            infinite: {
+                items: infiniteData.data?.pages.flatMap((page) => page.items) || [],
+                isLoading: infiniteData.isLoading,
+                isFetching: infiniteData.isFetching,
+                isFetchingNextPage: infiniteData.isFetchingNextPage,
+                hasNextPage: !!infiniteData.hasNextPage,
+                fetchNextPage: infiniteData.fetchNextPage,
+            },
         },
         actions: {
             handleSearchChange,
@@ -128,7 +137,7 @@ export function useRulesPage() {
             handleEditClick,
             handleDeleteClick,
             handleFormSubmit,
-            handleDeleteConfirm
+            handleDeleteConfirm,
         },
         modals: {
             isFormOpen,
@@ -137,7 +146,7 @@ export function useRulesPage() {
             setIsDeleteOpen,
             selectedRule,
             isSaving: createRule.isPending || updateRule.isPending,
-            isDeleting: deleteRule.isPending
-        }
-    };
+            isDeleting: deleteRule.isPending,
+        },
+    }
 }

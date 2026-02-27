@@ -17,15 +17,5 @@ export function FeatsEntityCard({
     loading: boolean
     index: number
 }) {
-    return (
-        <EntityCard
-            entityType="Talento"
-            stats={stats}
-            loading={loading}
-            index={index}
-            title="Talentos"
-            icon={Zap}
-            description="Catálogo de talentos (feats)"
-        />
-    )
+    return <EntityCard entityType="Talento" stats={stats} loading={loading} index={index} title="Talentos" icon={Zap} description="Catálogo de talentos (feats)" href="/feats" />
 }

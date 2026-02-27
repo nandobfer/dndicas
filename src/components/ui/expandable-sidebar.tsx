@@ -16,11 +16,10 @@ import * as React from 'react';
 import { motion } from 'framer-motion';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Package2, Home, User, Sparkles, Upload, Palette, FileText, Users, Scroll, Zap, Wand, AtSign, MessageSquare } from "lucide-react"
+import { Package2, Home, User, Sparkles, FileText, Users, Scroll, Zap, Wand, AtSign, MessageSquare } from "lucide-react"
 import { cn } from "@/core/utils"
 import { glassConfig } from "@/lib/config/glass-config"
 import { motionConfig } from "@/lib/config/motion-configs"
-import { themeConfig } from "@/lib/config/theme-config"
 import { SidebarItem, SidebarSection } from "./sidebar-item"
 import { TooltipProvider } from "@/core/ui/tooltip"
 import { UserButton, SignedIn, SignedOut, SignInButton } from "@clerk/nextjs"
@@ -55,7 +54,7 @@ const mainItems = [
 // T032: Added "Habilidades" for traits catalog
 // T008: Added "Talentos" for feats catalog
 const cadastrosItems = [
-    { label: "Usuários", href: "/users", icon: Users },
+    { label: "Usuários", href: "/users", icon: Users, admin: true },
     { label: "Regras", href: "/rules", icon: Scroll },
     { label: "Habilidades", href: "/traits", icon: Sparkles },
     { label: "Talentos", href: "/feats", icon: Zap },
@@ -64,7 +63,7 @@ const cadastrosItems = [
 
 const adminItems = [
     { label: "Feedback", href: "/feedback", icon: MessageSquare },
-    { label: "Logs", href: "/audit-logs", icon: FileText },
+    { label: "Logs", href: "/audit-logs", icon: FileText, admin: true },
     { label: "Referências Pendentes", href: "/admin/mentions", icon: AtSign, admin: true },
 ]
 

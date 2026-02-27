@@ -3,21 +3,22 @@
 import { Plus, Zap } from 'lucide-react';
 import { motion } from "framer-motion"
 import { cn } from "@/core/utils"
+import { GlassCard, GlassCardContent } from "@/components/ui/glass-card"
+import { GlassViewSelector } from "@/components/ui/glass-view-selector"
 import { useAuth } from "@/core/hooks/useAuth"
 import { FeatsTable } from "./feats-table"
-import { FeatsFilters } from "./feats-filters"
-import { EntityList } from "@/features/rules/components/entity-list"
-import { FeatFormModal } from "./feat-form-modal"
-import { DeleteFeatDialog } from "./delete-feat-dialog"
-import { GlassCard, GlassCardContent } from "@/components/ui/glass-card"
 import { motionConfig } from "@/lib/config/motion-configs"
 import { useFeatsPage } from "../hooks/useFeatsPage"
+import { FeatsFilters } from "./feats-filters"
+import { FeatFormModal } from "./feat-form-modal"
+import { DeleteFeatDialog } from "./delete-feat-dialog"
+import { EntityList } from "@/features/rules/components/entity-list"
 
 export function FeatsPage() {
     const { isAdmin } = useAuth()
 
     // Logic moved to custom hook for better maintainability (T044)
-    const { isMobile, filters, pagination, data, actions, modals } = useFeatsPage()
+    const { isMobile, filters, pagination, data, actions, modals, viewMode, setViewMode, isDefault } = useFeatsPage()
 
     return (
         <motion.div variants={motionConfig.variants.fadeInUp} initial="initial" animate="animate" className="space-y-6">
@@ -27,6 +28,7 @@ export function FeatsPage() {
                     <h1 className="text-xl sm:text-2xl font-bold text-white flex items-center gap-2">
                         <Zap className="h-5 w-5 sm:h-6 sm:w-6 text-amber-400" />
                         Catálogo de Talentos
+                        <GlassViewSelector viewMode={viewMode} setViewMode={setViewMode} layoutId="feats-view-selector" />
                     </h1>
                     <p className="text-[10px] sm:text-sm text-white/60 mt-1">Gerencie os talentos disponíveis para personagens (D&D 5e)</p>
                 </div>
@@ -65,31 +67,31 @@ export function FeatsPage() {
                         onStatusChange={actions.handleStatusChange}
                         onLevelChange={actions.handleLevelChange}
                         onAttributesChange={actions.handleAttributesChange}
-                        isSearching={data.desktop.isFetching || data.mobile.isFetching}
+                        isSearching={data.paginated.isFetching || data.infinite.isFetching}
                     />
                 </GlassCardContent>
             </GlassCard>
 
-            {/* Content: Table for Desktop, List for Mobile (T042) */}
-            {isMobile ? (
+            {/* Content: Conditional rendering based on viewMode */}
+            {isDefault ? (
                 <EntityList
-                    items={data.mobile.items}
+                    items={data.infinite.items}
                     entityType="Talento"
-                    isLoading={data.mobile.isLoading}
-                    hasNextPage={data.mobile.hasNextPage}
-                    isFetchingNextPage={data.mobile.isFetchingNextPage}
-                    onLoadMore={data.mobile.fetchNextPage}
+                    isLoading={data.infinite.isLoading}
+                    hasNextPage={data.infinite.hasNextPage}
+                    isFetchingNextPage={data.infinite.isFetchingNextPage}
+                    onLoadMore={data.infinite.fetchNextPage}
                     onEdit={actions.handleEditClick}
                     onDelete={actions.handleDeleteClick}
                     isAdmin={isAdmin}
                 />
             ) : (
                 <FeatsTable
-                    feats={data.desktop.items}
+                    feats={data.paginated.items}
                     total={pagination.total}
                     page={pagination.page}
                     limit={pagination.limit}
-                    isLoading={data.desktop.isLoading}
+                    isLoading={data.paginated.isLoading}
                     onEdit={actions.handleEditClick}
                     onDelete={actions.handleDeleteClick}
                     onPageChange={pagination.setPage}
