@@ -6,23 +6,11 @@ import { GlassCard, GlassCardContent } from "@/components/ui/glass-card"
 import { LoadingState } from "@/components/ui/loading-state"
 import { EmptyState } from "@/components/ui/empty-state"
 import { Chip } from "@/components/ui/chip"
-import { ScrollText, Sparkles, Wand, Zap, MoreHorizontal, Pencil, Trash2 } from "lucide-react"
+import { ScrollText, Sparkles, Wand, Zap, MoreHorizontal, Pencil, Trash2, ExternalLink } from "lucide-react"
 import { motionConfig } from "@/lib/config/motion-configs"
-import { RulePreview, TraitPreview } from "./entity-preview-tooltip"
-import { FeatPreview } from "@/features/feats/components/feat-preview"
-import { SpellPreview } from "@/features/spells/components/spell-preview"
 import { GlassDropdownMenu, GlassDropdownMenuTrigger, GlassDropdownMenuContent, GlassDropdownMenuItem } from "@/components/ui/glass-dropdown-menu"
-
-/**
- * Registry of renderers for different entity types.
- * T042: Generalized entity renderer configuration.
- */
-const ENTITY_RENDERERS: Record<string, (item: any) => React.ReactNode> = {
-    Regra: (item) => <RulePreview rule={item} showStatus={false} />,
-    Habilidade: (item) => <TraitPreview trait={item} showStatus={false} />,
-    Talento: (item) => <FeatPreview feat={item} showStatus={false} />,
-    Magia: (item) => <SpellPreview spell={item} showStatus={false} />,
-}
+import { renderEntity } from "./entity-renderers"
+import { useWindows } from "@/core/context/window-context"
 
 interface EntityListProps {
     items: any[]
@@ -38,6 +26,7 @@ interface EntityListProps {
 
 export function EntityList({ items, entityType, isLoading, hasNextPage, isFetchingNextPage, onLoadMore, onEdit, onDelete, isAdmin }: EntityListProps) {
     const observer = React.useRef<IntersectionObserver | null>(null)
+    const { addWindow } = useWindows()
 
     // Intersection observer for infinite scroll
     const lastElementRef = React.useCallback(
@@ -70,12 +59,6 @@ export function EntityList({ items, entityType, isLoading, hasNextPage, isFetchi
                 <EmptyState title={`Nenhuma ${entityType.toLowerCase()} encontrada`} description="Tente ajustar os filtros." icon={ScrollText} />
             </div>
         )
-    }
-
-    const renderEntity = (item: any) => {
-        const type = entityType === "Mixed" ? item.type : entityType
-        const renderer = ENTITY_RENDERERS[type]
-        return renderer ? renderer(item) : <div>{item.name || "Unknown item"}</div>
     }
 
     return (
@@ -124,11 +107,27 @@ export function EntityList({ items, entityType, isLoading, hasNextPage, isFetchi
                                         </GlassDropdownMenu>
                                     )}
 
-                                    <Chip variant={item.status === "active" ? "uncommon" : "common"} size="sm">
-                                        {item.status === "active" ? "Ativa" : "Inativa"}
-                                    </Chip>
+                                    <div className="flex items-center gap-2">
+                                        <motion.button
+                                            whileHover={{ scale: 1.1 }}
+                                            whileTap={{ scale: 0.9 }}
+                                            onClick={() => addWindow({
+                                                title: item.name || "Detalhes",
+                                                content: null, // content will be handled by item/entityType in GlassWindow
+                                                item,
+                                                entityType: entityType === "Mixed" ? item.type : entityType
+                                            })}
+                                            className="p-1.5 rounded-lg text-white/40 hover:text-white hover:bg-white/10 transition-colors"
+                                            title="Abrir em nova janela"
+                                        >
+                                            <ExternalLink className="h-4 w-4" />
+                                        </motion.button>
+                                        <Chip variant={item.status === "active" ? "uncommon" : "common"} size="sm">
+                                            {item.status === "active" ? "Ativa" : "Inativa"}
+                                        </Chip>
+                                    </div>
                                 </div>
-                                <div className="max-w-full overflow-hidden">{renderEntity(item)}</div>
+                                <div className="max-w-full overflow-hidden">{renderEntity(item, entityType)}</div>
                             </GlassCardContent>
                         </GlassCard>
                     </motion.div>

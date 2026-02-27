@@ -9,6 +9,7 @@ import { ptBR } from "@clerk/localizations"
 import { Toaster } from "@/core/ui/toast"
 import { GlassTooltipProvider } from "@/components/ui/glass-tooltip"
 import { ScrollToTop } from "@/core/ui/scroll-to-top"
+import { WindowProvider } from "@/core/context/window-context"
 
 const geistSans = Geist({
     variable: "--font-geist-sans",
@@ -68,10 +69,12 @@ export default function RootLayout({
                 <body className={cn("min-h-screen bg-background font-sans antialiased", geistSans.variable, geistMono.variable)}>
                     <ScrollToTop />
                     <AppProvider>
-                        <GlassTooltipProvider>
-                            {children}
-                            <Toaster />
-                        </GlassTooltipProvider>
+                        <WindowProvider>
+                            <GlassTooltipProvider>
+                                {children}
+                                <Toaster />
+                            </GlassTooltipProvider>
+                        </WindowProvider>
                     </AppProvider>
                 </body>
             </html>
