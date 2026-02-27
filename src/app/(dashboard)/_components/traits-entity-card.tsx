@@ -18,14 +18,6 @@ export function TraitsEntityCard({
     index: number
 }) {
     return (
-        <EntityCard
-            entityType="Habilidade"
-            stats={stats}
-            loading={loading}
-            index={index}
-            title="Habilidades"
-            icon={Sparkles}
-            description="Catálogo de traços e habilidades (traits)"
-        />
+        <EntityCard entityType="Habilidade" stats={stats} loading={loading} index={index} title="Habilidades" icon={Sparkles} description="Catálogo de traços e habilidades (traits)" href="/traits" />
     )
 }
