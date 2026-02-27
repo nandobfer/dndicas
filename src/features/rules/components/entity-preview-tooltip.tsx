@@ -23,7 +23,7 @@ interface RulePreviewProps {
 export const RulePreview = ({ rule, showStatus = true }: RulePreviewProps) => {
     const { addWindow } = useWindows()
     return (
-        <div className="space-y-4 w-auto max-w-full sm:max-w-[500px] md:max-w-[600px]">
+        <div className="space-y-4 w-full">
             <div className="flex flex-col sm:flex-row items-start sm:justify-between gap-4">
                 <div className="flex items-center gap-2">
                     <div className={cn("p-1.5 rounded-lg border flex-shrink-0", entityConfig.Regra.badge)}>
@@ -39,12 +39,14 @@ export const RulePreview = ({ rule, showStatus = true }: RulePreviewProps) => {
                         <motion.button
                             whileHover={{ scale: 1.1 }}
                             whileTap={{ scale: 0.9 }}
-                            onClick={() => addWindow({
-                                title: rule.name || "Regra",
-                                content: null,
-                                item: rule,
-                                entityType: "Regra"
-                            })}
+                            onClick={() =>
+                                addWindow({
+                                    title: rule.name || "Regra",
+                                    content: null,
+                                    item: rule,
+                                    entityType: "Regra"
+                                })
+                            }
                             className="p-1.5 rounded-lg text-white/40 hover:text-white hover:bg-white/10 transition-colors"
                             title="Abrir em nova janela"
                         >
@@ -91,7 +93,7 @@ interface TraitPreviewProps {
 export const TraitPreview = ({ trait, showStatus = true }: TraitPreviewProps) => {
     const { addWindow } = useWindows()
     return (
-        <div className="space-y-4 w-auto max-w-full sm:max-w-[500px] md:max-w-[600px]">
+        <div className="space-y-4 w-full">
             <div className="flex items-start justify-between gap-4">
                 <div className="flex items-center gap-2">
                     <div className={cn("p-1.5 rounded-lg border", entityConfig.Habilidade.badge)}>
@@ -107,12 +109,14 @@ export const TraitPreview = ({ trait, showStatus = true }: TraitPreviewProps) =>
                         <motion.button
                             whileHover={{ scale: 1.1 }}
                             whileTap={{ scale: 0.9 }}
-                            onClick={() => addWindow({
-                                title: trait.name || "Habilidade",
-                                content: null,
-                                item: trait,
-                                entityType: "Habilidade"
-                            })}
+                            onClick={() =>
+                                addWindow({
+                                    title: trait.name || "Habilidade",
+                                    content: null,
+                                    item: trait,
+                                    entityType: "Habilidade"
+                                })
+                            }
                             className="p-1.5 rounded-lg text-white/40 hover:text-white hover:bg-white/10 transition-colors"
                             title="Abrir em nova janela"
                         >

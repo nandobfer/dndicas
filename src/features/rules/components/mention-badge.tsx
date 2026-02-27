@@ -143,12 +143,12 @@ export function MentionContent({
             <div
                 className={cn(
                     "prose prose-invert prose-xs max-w-none",
-                    "prose-p:my-2 prose-headings:mb-4 prose-headings:mt-6",
-                    "prose-ul:list-disc prose-ol:list-decimal prose-li:my-1",
+                    "prose-p:my-0 [&_p+p]:mt-2 prose-headings:mb-4 prose-headings:mt-6",
+                    "prose-ul:list-disc prose-ol:list-decimal prose-li:my-0.5",
                     "[&_ul]:list-disc [&_ul]:pl-5 [&_ol]:list-decimal [&_ol]:pl-5",
                     "[&_li]:marker:text-white/30",
                     "[&_p]:min-h-[1em]",
-                    className,
+                    className
                 )}
             >
                 {contents}
