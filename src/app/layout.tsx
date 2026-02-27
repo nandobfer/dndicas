@@ -4,10 +4,11 @@ import { dark } from "@clerk/themes";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { cn } from "@/core/utils";
-import { AppProvider } from "@/core/context/app-context";
-import { ptBR } from "@clerk/localizations";
-import { Toaster } from "@/core/ui/toast";
+import { AppProvider } from "@/core/context/app-context"
+import { ptBR } from "@clerk/localizations"
+import { Toaster } from "@/core/ui/toast"
 import { GlassTooltipProvider } from "@/components/ui/glass-tooltip"
+import { ScrollToTop } from "@/core/ui/scroll-to-top"
 
 const geistSans = Geist({
     variable: "--font-geist-sans",
@@ -65,6 +66,7 @@ export default function RootLayout({
         >
             <html lang="pt-BR" className="dark">
                 <body className={cn("min-h-screen bg-background font-sans antialiased", geistSans.variable, geistMono.variable)}>
+                    <ScrollToTop />
                     <AppProvider>
                         <GlassTooltipProvider>
                             {children}
