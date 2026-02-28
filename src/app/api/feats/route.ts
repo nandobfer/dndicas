@@ -55,7 +55,7 @@ export async function GET(req: NextRequest) {
 
     // ALWAYS fetch items matching non-search filters
     // We fetch EVERYTHING without DB-level limit/search to let applyFuzzySearch do its job properly
-    const items = await Feat.find(query as any).sort({ name: 1 })
+    const items = await Feat.find(query as any).sort({ createdAt: -1 })
 
     // Apply fuzzy search locally using the shared function
     const searchedItems = search ? applyFuzzySearch(items, search) : items

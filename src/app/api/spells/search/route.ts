@@ -17,7 +17,7 @@ export async function GET(req: NextRequest) {
 
         // Search only active spells
         const filter: any = { status: "active" }
-        const spells = await Spell.find(filter).select("_id name circle school source description").sort({ name: 1 }).lean()
+        const spells = await Spell.find(filter).select("_id name circle school source description").sort({ createdAt: -1 }).lean()
 
         // Apply fuzzy search locally using the shared function
         const searchedSpells = query ? applyFuzzySearch(spells, query) : spells

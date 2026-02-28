@@ -19,7 +19,7 @@ export async function GET(req: NextRequest) {
         // Search only active feats
         const searchQuery = { status: "active" }
 
-        const feats = await Feat.find(searchQuery).select("_id name level description source").sort({ name: 1 }).lean()
+        const feats = await Feat.find(searchQuery).select("_id name level description source").sort({ createdAt: -1 }).lean()
 
         // Apply fuzzy search locally using the shared function
         const searchedFeats = query ? applyFuzzySearch(feats, query) : feats

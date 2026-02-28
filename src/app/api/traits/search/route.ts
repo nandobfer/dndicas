@@ -13,7 +13,7 @@ export async function GET(req: NextRequest) {
 
       // Search only active traits
       const filter: any = { status: "active" }
-      const items = await Trait.find(filter).select("_id name source description").sort({ name: 1 })
+      const items = await Trait.find(filter).select("_id name source description").sort({ createdAt: -1 })
 
       // Apply fuzzy search locally using the shared function
       const searchedItems = query ? applyFuzzySearch(items, query) : items
