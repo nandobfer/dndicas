@@ -212,6 +212,8 @@ export function RichTextEditor({ value, onChange, className, disabled = false, e
             },
             handlePaste: (view, event) => {
                 const item = event.clipboardData?.items[0]
+
+                // Handle image paste
                 if (item?.type.indexOf("image") === 0) {
                     event.preventDefault()
                     const file = item.getAsFile()
@@ -227,6 +229,34 @@ export function RichTextEditor({ value, onChange, className, disabled = false, e
                     }
                     return true
                 }
+
+                // Handle PDF text cleanup on Ctrl+Shift+V or specific detection
+                const text = event.clipboardData?.getData("text/plain")
+                if (text) {
+                    // Logic to detect or force cleanup:
+                    // 1. If it's a "Paste as plain text" (often triggered by browser/OS shortcuts)
+                    // 2. Or we can try to detect common PDF patterns (hyphenation at EOL)
+
+                    const hasHyphenatedLineBreak = /-[\n\r]+/.test(text)
+                    const hasMidSentenceLineBreak = /[a-z,]\s*[\n\r]+\s*[a-z]/.test(text)
+
+                    // If we detect PDF-like breaks, we clean it up
+                    if (hasHyphenatedLineBreak || hasMidSentenceLineBreak) {
+                        event.preventDefault()
+
+                        let cleanedText = text
+                            // Remove hyphenation: "apre-\nsentados" -> "apresentados"
+                            .replace(/(\w+)-\s*[\n\r]+\s*(\w+)/g, "$1$2")
+                            // Join lines that end with a word and start with a word (mid-sentence)
+                            .replace(/([a-z,])\s*[\n\r]+\s*([a-z])/g, "$1 $2")
+                            // Optionally handle multiple spaces
+                            .replace(/[ ]{2,}/g, " ")
+
+                        view.dispatch(view.state.tr.insertText(cleanedText))
+                        return true
+                    }
+                }
+
                 return false
             },
             handleDrop: (view, event, _slice, moved) => {
