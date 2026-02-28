@@ -3,6 +3,7 @@ import { auth } from '@clerk/nextjs/server';
 import { Feat } from '@/features/feats/models/feat';
 import { createAuditLog } from '@/features/users/api/audit-service';
 import dbConnect from '@/core/database/db';
+import { applyFuzzySearch } from "@/core/utils/search-engine"
 import { createFeatSchema } from '@/features/feats/api/validation';
 
 /**
@@ -23,15 +24,6 @@ export async function GET(req: NextRequest) {
     const attributes = url.searchParams.get("attributes")?.split(",").filter(Boolean)
 
     const query: Record<string, unknown> = {}
-
-    // Search filter
-    if (search) {
-        if (searchField === "name") {
-            query.name = { $regex: search, $options: "i" }
-        } else {
-            query.$or = [{ name: { $regex: search, $options: "i" } }, { description: { $regex: search, $options: "i" } }, { source: { $regex: search, $options: "i" } }]
-        }
-    }
 
     // Status filter
     if (status && status !== "all") {
@@ -61,19 +53,29 @@ export async function GET(req: NextRequest) {
         query["attributeBonuses.attribute"] = { $in: attributes }
     }
 
-    const items = await Feat.find(query as any)
-      .sort({ createdAt: -1 })
-      .skip((page - 1) * limit)
-      .limit(limit);
+    // ALWAYS fetch items matching non-search filters
+    // We fetch EVERYTHING without DB-level limit/search to let applyFuzzySearch do its job properly
+    const items = await Feat.find(query as any).sort({ createdAt: -1 })
 
-    const total = await Feat.countDocuments(query as any);
-    const totalPages = Math.ceil(total / limit);
+    // Apply fuzzy search locally using the shared function
+    const searchedItems = search ? applyFuzzySearch(items, search) : items
+
+    const total = searchedItems.length
+
+    // Manual pagination if limit is provided (for table/page views)
+    let paginatedItems = searchedItems
+    if (limit) {
+        const offset = (page - 1) * limit
+        paginatedItems = searchedItems.slice(offset, offset + limit)
+    }
+
+    const totalPages = limit ? Math.ceil(total / limit) : 1
 
     return NextResponse.json({
-      items,
+      items: paginatedItems,
       total,
       page,
-      limit,
+      limit: limit || total,
       totalPages,
     });
   } catch (error) {

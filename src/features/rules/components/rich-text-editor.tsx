@@ -29,6 +29,22 @@ const MentionNode = (props: any) => {
 }
 
 const CustomMention = Mention.extend({
+    addKeyboardShortcuts() {
+        return {
+            'Mod-Enter': () => {
+                const element = this.editor.options.element
+                if (element instanceof HTMLElement) {
+                    const form = element.closest('form')
+                    if (form) {
+                        form.requestSubmit()
+                        return true
+                    }
+                }
+                return false
+            },
+        }
+    },
+
     addAttributes() {
         return {
             ...this.parent?.(),
@@ -81,6 +97,7 @@ const MenuBar = ({ editor, addImage }: { editor: Editor | null; addImage: () => 
                 type="button"
                 variant="ghost"
                 size="sm"
+                tabIndex={-1}
                 onClick={() => editor.chain().focus().toggleBold().run()}
                 disabled={!editor.can().chain().focus().toggleBold().run()}
                 className={cn(editor.isActive("bold") ? "bg-white/10" : "", "h-8 w-8 p-0")}
@@ -91,6 +108,7 @@ const MenuBar = ({ editor, addImage }: { editor: Editor | null; addImage: () => 
                 type="button"
                 variant="ghost"
                 size="sm"
+                tabIndex={-1}
                 onClick={() => editor.chain().focus().toggleItalic().run()}
                 disabled={!editor.can().chain().focus().toggleItalic().run()}
                 className={cn(editor.isActive("italic") ? "bg-white/10" : "", "h-8 w-8 p-0")}
@@ -101,6 +119,7 @@ const MenuBar = ({ editor, addImage }: { editor: Editor | null; addImage: () => 
                 type="button"
                 variant="ghost"
                 size="sm"
+                tabIndex={-1}
                 onClick={() => editor.chain().focus().toggleStrike().run()}
                 disabled={!editor.can().chain().focus().toggleStrike().run()}
                 className={cn(editor.isActive("strike") ? "bg-white/10" : "", "h-8 w-8 p-0")}
@@ -114,6 +133,7 @@ const MenuBar = ({ editor, addImage }: { editor: Editor | null; addImage: () => 
                 type="button"
                 variant="ghost"
                 size="sm"
+                tabIndex={-1}
                 onClick={() => editor.chain().focus().toggleBulletList().run()}
                 className={cn(editor.isActive("bulletList") ? "bg-white/10" : "", "h-8 w-8 p-0")}
             >
@@ -123,6 +143,7 @@ const MenuBar = ({ editor, addImage }: { editor: Editor | null; addImage: () => 
                 type="button"
                 variant="ghost"
                 size="sm"
+                tabIndex={-1}
                 onClick={() => editor.chain().focus().toggleOrderedList().run()}
                 className={cn(editor.isActive("orderedList") ? "bg-white/10" : "", "h-8 w-8 p-0")}
             >
@@ -131,16 +152,16 @@ const MenuBar = ({ editor, addImage }: { editor: Editor | null; addImage: () => 
 
             <div className="w-px h-6 bg-white/10 mx-1 self-center" />
 
-            <Button type="button" variant="ghost" size="sm" onClick={addImage} className="h-8 w-8 p-0" title="Upload Image">
+            <Button type="button" variant="ghost" size="sm" tabIndex={-1} onClick={addImage} className="h-8 w-8 p-0" title="Upload Image">
                 <ImageIcon className="h-4 w-4" />
             </Button>
 
             <div className="w-px h-6 bg-white/10 mx-1 self-center" />
 
-            <Button type="button" variant="ghost" size="sm" onClick={() => editor.chain().focus().undo().run()} disabled={!editor.can().chain().focus().undo().run()} className="h-8 w-8 p-0">
+            <Button type="button" variant="ghost" size="sm" tabIndex={-1} onClick={() => editor.chain().focus().undo().run()} disabled={!editor.can().chain().focus().undo().run()} className="h-8 w-8 p-0">
                 <Undo className="h-4 w-4" />
             </Button>
-            <Button type="button" variant="ghost" size="sm" onClick={() => editor.chain().focus().redo().run()} disabled={!editor.can().chain().focus().redo().run()} className="h-8 w-8 p-0">
+            <Button type="button" variant="ghost" size="sm" tabIndex={-1} onClick={() => editor.chain().focus().redo().run()} disabled={!editor.can().chain().focus().redo().run()} className="h-8 w-8 p-0">
                 <Redo className="h-4 w-4" />
             </Button>
         </div>
@@ -212,6 +233,8 @@ export function RichTextEditor({ value, onChange, className, disabled = false, e
             },
             handlePaste: (view, event) => {
                 const item = event.clipboardData?.items[0]
+
+                // Handle image paste
                 if (item?.type.indexOf("image") === 0) {
                     event.preventDefault()
                     const file = item.getAsFile()
@@ -227,6 +250,34 @@ export function RichTextEditor({ value, onChange, className, disabled = false, e
                     }
                     return true
                 }
+
+                // Handle PDF text cleanup on Ctrl+Shift+V or specific detection
+                const text = event.clipboardData?.getData("text/plain")
+                if (text) {
+                    // Logic to detect or force cleanup:
+                    // 1. If it's a "Paste as plain text" (often triggered by browser/OS shortcuts)
+                    // 2. Or we can try to detect common PDF patterns (hyphenation at EOL)
+
+                    const hasHyphenatedLineBreak = /-[\n\r]+/.test(text)
+                    const hasMidSentenceLineBreak = /[a-z,]\s*[\n\r]+\s*[a-z]/.test(text)
+
+                    // If we detect PDF-like breaks, we clean it up
+                    if (hasHyphenatedLineBreak || hasMidSentenceLineBreak) {
+                        event.preventDefault()
+
+                        let cleanedText = text
+                            // Remove hyphenation: "apre-\nsentados" -> "apresentados"
+                            .replace(/(\w+)-\s*[\n\r]+\s*(\w+)/g, "$1$2")
+                            // Join lines that end with a word and start with a word (mid-sentence)
+                            .replace(/([a-z,])\s*[\n\r]+\s*([a-z])/g, "$1 $2")
+                            // Optionally handle multiple spaces
+                            .replace(/[ ]{2,}/g, " ")
+
+                        view.dispatch(view.state.tr.insertText(cleanedText))
+                        return true
+                    }
+                }
+
                 return false
             },
             handleDrop: (view, event, _slice, moved) => {

@@ -44,6 +44,7 @@
         "date-fns": "^4.1.0",
         "dotenv": "^17.2.3",
         "framer-motion": "^12.29.0",
+        "fuse.js": "^7.1.0",
         "lucide-react": "^0.563.0",
         "mini-svg-data-uri": "^1.4.4",
         "mongoose": "^9.1.5",
