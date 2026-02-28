@@ -29,6 +29,22 @@ const MentionNode = (props: any) => {
 }
 
 const CustomMention = Mention.extend({
+    addKeyboardShortcuts() {
+        return {
+            'Mod-Enter': () => {
+                const element = this.editor.options.element
+                if (element instanceof HTMLElement) {
+                    const form = element.closest('form')
+                    if (form) {
+                        form.requestSubmit()
+                        return true
+                    }
+                }
+                return false
+            },
+        }
+    },
+
     addAttributes() {
         return {
             ...this.parent?.(),
@@ -81,6 +97,7 @@ const MenuBar = ({ editor, addImage }: { editor: Editor | null; addImage: () => 
                 type="button"
                 variant="ghost"
                 size="sm"
+                tabIndex={-1}
                 onClick={() => editor.chain().focus().toggleBold().run()}
                 disabled={!editor.can().chain().focus().toggleBold().run()}
                 className={cn(editor.isActive("bold") ? "bg-white/10" : "", "h-8 w-8 p-0")}
@@ -91,6 +108,7 @@ const MenuBar = ({ editor, addImage }: { editor: Editor | null; addImage: () => 
                 type="button"
                 variant="ghost"
                 size="sm"
+                tabIndex={-1}
                 onClick={() => editor.chain().focus().toggleItalic().run()}
                 disabled={!editor.can().chain().focus().toggleItalic().run()}
                 className={cn(editor.isActive("italic") ? "bg-white/10" : "", "h-8 w-8 p-0")}
@@ -101,6 +119,7 @@ const MenuBar = ({ editor, addImage }: { editor: Editor | null; addImage: () => 
                 type="button"
                 variant="ghost"
                 size="sm"
+                tabIndex={-1}
                 onClick={() => editor.chain().focus().toggleStrike().run()}
                 disabled={!editor.can().chain().focus().toggleStrike().run()}
                 className={cn(editor.isActive("strike") ? "bg-white/10" : "", "h-8 w-8 p-0")}
@@ -114,6 +133,7 @@ const MenuBar = ({ editor, addImage }: { editor: Editor | null; addImage: () => 
                 type="button"
                 variant="ghost"
                 size="sm"
+                tabIndex={-1}
                 onClick={() => editor.chain().focus().toggleBulletList().run()}
                 className={cn(editor.isActive("bulletList") ? "bg-white/10" : "", "h-8 w-8 p-0")}
             >
@@ -123,6 +143,7 @@ const MenuBar = ({ editor, addImage }: { editor: Editor | null; addImage: () => 
                 type="button"
                 variant="ghost"
                 size="sm"
+                tabIndex={-1}
                 onClick={() => editor.chain().focus().toggleOrderedList().run()}
                 className={cn(editor.isActive("orderedList") ? "bg-white/10" : "", "h-8 w-8 p-0")}
             >
@@ -131,16 +152,16 @@ const MenuBar = ({ editor, addImage }: { editor: Editor | null; addImage: () => 
 
             <div className="w-px h-6 bg-white/10 mx-1 self-center" />
 
-            <Button type="button" variant="ghost" size="sm" onClick={addImage} className="h-8 w-8 p-0" title="Upload Image">
+            <Button type="button" variant="ghost" size="sm" tabIndex={-1} onClick={addImage} className="h-8 w-8 p-0" title="Upload Image">
                 <ImageIcon className="h-4 w-4" />
             </Button>
 
             <div className="w-px h-6 bg-white/10 mx-1 self-center" />
 
-            <Button type="button" variant="ghost" size="sm" onClick={() => editor.chain().focus().undo().run()} disabled={!editor.can().chain().focus().undo().run()} className="h-8 w-8 p-0">
+            <Button type="button" variant="ghost" size="sm" tabIndex={-1} onClick={() => editor.chain().focus().undo().run()} disabled={!editor.can().chain().focus().undo().run()} className="h-8 w-8 p-0">
                 <Undo className="h-4 w-4" />
             </Button>
-            <Button type="button" variant="ghost" size="sm" onClick={() => editor.chain().focus().redo().run()} disabled={!editor.can().chain().focus().redo().run()} className="h-8 w-8 p-0">
+            <Button type="button" variant="ghost" size="sm" tabIndex={-1} onClick={() => editor.chain().focus().redo().run()} disabled={!editor.can().chain().focus().redo().run()} className="h-8 w-8 p-0">
                 <Redo className="h-4 w-4" />
             </Button>
         </div>
