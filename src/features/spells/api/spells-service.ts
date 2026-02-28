@@ -7,6 +7,7 @@
 import dbConnect from '@/core/database/db';
 import { Spell, type ISpell } from '../models/spell';
 import { logCreate, logUpdate, logDelete } from '@/features/users/api/audit-service';
+import { applyFuzzySearch } from "@/core/utils/search-engine"
 import type {
   CreateSpellInput,
   UpdateSpellInput,
@@ -40,71 +41,62 @@ export async function listSpells(
   isAdmin = false
 ): Promise<SpellsListResponse> {
   try {
-    await dbConnect();
+      await dbConnect()
 
-    // Build query
-    const query: Record<string, unknown> = {};
+      // Build query
+      const query: Record<string, unknown> = {}
 
-    // Text search
-    if (filters.search && filters.search.trim() !== '') {
-      query.$text = { $search: filters.search.trim() };
-    }
+      // Circle filter
+      if (filters.circles && filters.circles.length > 0) {
+          query.circle = { $in: filters.circles }
+      }
 
-    // Circle filter
-    if (filters.circles && filters.circles.length > 0) {
-      query.circle = { $in: filters.circles };
-    }
+      // School filter
+      if (filters.schools && filters.schools.length > 0) {
+          query.school = { $in: filters.schools }
+      }
 
-    // School filter
-    if (filters.schools && filters.schools.length > 0) {
-      query.school = { $in: filters.schools };
-    }
+      // Save attribute filter
+      if (filters.saveAttributes && filters.saveAttributes.length > 0) {
+          query.saveAttribute = { $in: filters.saveAttributes }
+      }
 
-    // Save attribute filter
-    if (filters.saveAttributes && filters.saveAttributes.length > 0) {
-      query.saveAttribute = { $in: filters.saveAttributes };
-    }
+      // Dice type filter (base dice or extra dice per level)
+      if (filters.diceTypes && filters.diceTypes.length > 0) {
+          query.$or = [{ "baseDice.tipo": { $in: filters.diceTypes } }, { "extraDicePerLevel.tipo": { $in: filters.diceTypes } }]
+      }
 
-    // Dice type filter (base dice or extra dice per level)
-    if (filters.diceTypes && filters.diceTypes.length > 0) {
-      query.$or = [
-        { 'baseDice.tipo': { $in: filters.diceTypes } },
-        { 'extraDicePerLevel.tipo': { $in: filters.diceTypes } },
-      ];
-    }
+      // Status filter
+      if (!isAdmin) {
+          query.status = "active"
+      } else if (filters.status) {
+          query.status = filters.status
+      }
 
-    // Status filter
-    if (!isAdmin) {
-      query.status = 'active';
-    } else if (filters.status) {
-      query.status = filters.status;
-    }
+      // Fetch ALL items matching filters (except search) to apply fuzzy search locally
+      const items = await Spell.find(query).sort({ circle: 1, name: 1 }).lean()
 
-    // Count total matching documents
-    const total = await Spell.countDocuments(query);
+      // Apply fuzzy search locally using the shared function
+      const searchedItems = filters.search ? applyFuzzySearch(items, filters.search) : items
 
-    // Calculate pagination
-    const skip = (page - 1) * limit;
-    const totalPages = Math.ceil(total / limit);
+      const total = searchedItems.length
+      const totalPages = limit ? Math.ceil(total / limit) : 1
 
-    // Fetch paginated results
-    const spells = await Spell.find(query)
-      .sort({ circle: 1, name: 1 }) // Sort by circle then name
-      .skip(skip)
-      .limit(limit)
-      .lean();
+      // Manual pagination
+      const offset = (page - 1) * limit
+      const paginatedItems = searchedItems.slice(offset, offset + limit)
 
-    return {
-      spells: spells.map((spell) => ({
-        ...spell,
-        _id: String(spell._id),
-        circleLabel: spell.circle === 0 ? 'Truque' : `${spell.circle}º Círculo`,
-      })),
-      total,
-      page,
-      limit,
-      totalPages,
-    };
+      return {
+          spells: paginatedItems.map((spell: any) => ({
+              ...spell,
+              _id: String(spell._id),
+              circleLabel: spell.circle === 0 ? "Truque" : `${spell.circle}º Círculo`
+          })),
+          total,
+          page,
+          limit,
+          totalPages
+      }
   } catch (error) {
     console.error('[SpellsService] Error listing spells:', error);
     throw new Error('Erro ao listar magias. Por favor, tente novamente.');

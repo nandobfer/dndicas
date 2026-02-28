@@ -23,7 +23,7 @@ export interface UnifiedEntity {
 export const ENTITY_PROVIDERS = [
     {
         name: "Regra" as const,
-        endpoint: () => `/api/rules?limit=1000`, // Fetch all/many
+        endpoint: () => `/api/rules`, // No query, no limit
         map: (item: any): UnifiedEntity => ({
             id: item._id || item.id,
             _id: item._id,
@@ -37,7 +37,7 @@ export const ENTITY_PROVIDERS = [
     },
     {
         name: "Habilidade" as const,
-        endpoint: () => `/api/traits?limit=1000`, // Using main traits API to get all
+        endpoint: () => `/api/traits/search`, // No query, no limit
         map: (item: any): UnifiedEntity => ({
             id: item._id || item.id,
             _id: item._id,
@@ -51,7 +51,7 @@ export const ENTITY_PROVIDERS = [
     },
     {
         name: "Talento" as const,
-        endpoint: () => `/api/feats?limit=1000`,
+        endpoint: () => `/api/feats/search`, // No query, no limit
         map: (item: any): UnifiedEntity => ({
             id: item.id || item._id,
             _id: item._id,
@@ -66,7 +66,7 @@ export const ENTITY_PROVIDERS = [
     },
     {
         name: "Magia" as const,
-        endpoint: () => `/api/spells?limit=1000`,
+        endpoint: () => `/api/spells/search`, // No query, no limit
         map: (item: any): UnifiedEntity => ({
             id: item.id || item._id,
             _id: item._id,
@@ -121,31 +121,57 @@ async function getSearchData(): Promise<UnifiedEntity[]> {
 }
 
 /**
- * Performs a fuzzy search across all entities with weighted scoring.
+ * Applies weighted fuzzy search to a list of entities.
  */
-export async function performUnifiedSearch(query: string, limit = 20, offset = 0): Promise<UnifiedEntity[]> {
-    if (!query.trim()) return []
+export function applyFuzzySearch<T extends { name?: string; label?: string; source?: string; description?: string }>(
+    items: T[],
+    query: string,
+    limit?: number,
+    offset = 0
+): T[] {
+    if (!query.trim()) {
+        const sliced = items.slice(offset, limit ? offset + limit : undefined)
+        return sliced
+    }
 
-    const allEntities = await getSearchData()
-
-    const fuse = new Fuse(allEntities, {
+    const fuse = new Fuse(items, {
         keys: [
             { name: "name", weight: 10 },
             { name: "label", weight: 10 },
             { name: "source", weight: 5 },
             { name: "description", weight: 1 }
         ],
-        threshold: 0.3, // Allow some typo/error
+        threshold: 0.35,
         includeScore: true,
         shouldSort: true,
         minMatchCharLength: 2
     })
 
     const fuseResults = fuse.search(query)
+    const mapped = fuseResults.map((result) => {
+        // Handle both plain objects and Mongoose/class instances
+        const baseItem = typeof (result.item as any).toObject === "function" ? (result.item as any).toObject() : { ...result.item }
 
-    // Sort by score (lower is better in Fuse) and handle pagination
-    return fuseResults.slice(offset, offset + limit).map((result) => ({
-        ...result.item,
-        score: result.score
-    }))
+        // Ensure ID compatibility
+        const id = baseItem._id?.toString() || baseItem.id?.toString()
+
+        return {
+            ...baseItem,
+            id: id,
+            _id: id,
+            score: result.score
+        }
+    })
+
+    return limit ? mapped.slice(offset, offset + limit) : mapped
+}
+
+/**
+ * Performs a fuzzy search across all entities with weighted scoring.
+ */
+export async function performUnifiedSearch(query: string, limit = 20, offset = 0): Promise<UnifiedEntity[]> {
+    if (!query.trim()) return []
+
+    const allEntities = await getSearchData()
+    return applyFuzzySearch(allEntities, query, limit, offset)
 }

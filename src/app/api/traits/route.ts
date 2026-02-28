@@ -3,6 +3,7 @@ import { auth } from "@clerk/nextjs/server";
 import { Trait } from "@/features/traits/database/trait";
 import { createAuditLog } from "@/features/users/api/audit-service";
 import dbConnect from "@/core/database/db";
+import { applyFuzzySearch } from "@/core/utils/search-engine"
 import { z } from "zod";
 
 const createTraitSchema = z.object({
@@ -22,36 +23,35 @@ export async function GET(req: NextRequest) {
     const searchField = url.searchParams.get("searchField") || "all";
     const status = url.searchParams.get("status");
 
-    const query: Record<string, unknown> = {};
-    if (search) {
-      if (searchField === "name") {
-        query.name = { $regex: search, $options: "i" };
-      } else {
-        query.$or = [
-          { name: { $regex: search, $options: "i" } },
-          { description: { $regex: search, $options: "i" } },
-        ];
-      }
-    }
+    const query: Record<string, unknown> = {}
     if (status && status !== "all") {
-      if (status === "active" || status === "inactive") {
-        query.status = status;
-      }
+        if (status === "active" || status === "inactive") {
+            query.status = status
+        }
     }
 
-    const items = await Trait.find(query as any)
-      .sort({ createdAt: -1 })
-      .skip((page - 1) * limit)
-      .limit(limit);
+    // ALWAYS fetch items matching non-search filters (like status)
+    // We fetch EVERYTHING without DB-level limit/search to let applyFuzzySearch do its job properly
+    const items = await Trait.find(query as any).sort({ name: 1 })
 
-    const total = await Trait.countDocuments(query as any);
+    // Apply fuzzy search locally using the shared function
+    const searchedItems = search ? applyFuzzySearch(items, search) : items
+
+    const total = searchedItems.length
+
+    // Manual pagination if limit is provided (for table/page views)
+    let paginatedItems = searchedItems
+    if (limit) {
+        const offset = (page - 1) * limit
+        paginatedItems = searchedItems.slice(offset, offset + limit)
+    }
 
     return NextResponse.json({
-      items,
-      total,
-      page,
-      limit,
-    });
+        items: paginatedItems,
+        total,
+        page,
+        limit
+    })
   } catch (error) {
     console.error("Traits GET error:", error);
     return NextResponse.json({ error: "Failed to fetch traits" }, { status: 500 });

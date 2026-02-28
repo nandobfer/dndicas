@@ -5,6 +5,7 @@ import { createAuditLog } from "@/features/users/api/audit-service"
 import dbConnect from "@/core/database/db"
 import { z } from "zod"
 import mongoose from "mongoose"
+import { applyFuzzySearch } from "@/core/utils/search-engine"
 
 const createReferenceSchema = z.object({
   name: z.string().min(3).max(100),
@@ -15,41 +16,43 @@ const createReferenceSchema = z.object({
 
 export async function GET(req: NextRequest) {
   try {
-    await dbConnect()
-    const url = new URL(req.url)
-    const page = parseInt(url.searchParams.get("page") || "1", 10)
-    const limit = parseInt(url.searchParams.get("limit") || "10", 10)
-    const search = url.searchParams.get("search") || ""
-    const searchField = url.searchParams.get("searchField") || "all"
-    const status = url.searchParams.get("status")
+      await dbConnect()
+      const url = new URL(req.url)
+      const page = parseInt(url.searchParams.get("page") || "1", 10)
+      const search = url.searchParams.get("search") || ""
+      const limitParam = url.searchParams.get("limit")
+      const limit = limitParam ? parseInt(limitParam, 10) : undefined // Use undefined if not specified
+      const status = url.searchParams.get("status")
 
-    const query: Record<string, unknown> = {}
-    if (search) {
-        if (searchField === "name") {
-            query.name = { $regex: search, $options: "i" }
-        } else {
-            query.$or = [{ name: { $regex: search, $options: "i" } }, { description: { $regex: search, $options: "i" } }]
-        }
-    }
-    if (status && status !== "all") {
-        if (status === "active" || status === "inactive") {
-            query.status = status
-        }
-    }
+      const query: Record<string, unknown> = {}
+      if (status && status !== "all") {
+          if (status === "active" || status === "inactive") {
+              query.status = status
+          }
+      }
 
-const items = await Reference.find(query as any)
-    .sort({ createdAt: -1 })
-    .skip((page - 1) * limit)
-    .limit(limit)
+      // ALWAYS fetch items matching non-search filters (like status)
+      // We fetch EVERYTHING without DB-level limit/search to let applyFuzzySearch do its job properly
+      const items = await Reference.find(query as any).sort({ name: 1 })
 
-    const total = await Reference.countDocuments(query as any)
+      // Apply fuzzy search locally using the shared function
+      const searchedItems = search ? applyFuzzySearch(items, search) : items
 
-    return NextResponse.json({
-      items,
-      total,
-      page,
-      limit,
-    })
+      const total = searchedItems.length
+
+      // Manual pagination if limit is provided (for table/page views)
+      let paginatedItems = searchedItems
+      if (limit) {
+          const offset = (page - 1) * limit
+          paginatedItems = searchedItems.slice(offset, offset + limit)
+      }
+
+      return NextResponse.json({
+          items: paginatedItems,
+          total,
+          page,
+          limit: limit || total
+      })
   } catch (error) {
     console.error("Rules GET error:", error)
     return NextResponse.json({ error: "Failed to fetch rules" }, { status: 500 })
