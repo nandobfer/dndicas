@@ -14,6 +14,7 @@ import { FeatPreview } from "@/features/feats/components/feat-preview"
 import { SpellPreview } from "@/features/spells/components/spell-preview"
 import { useWindows } from "@/core/context/window-context"
 import { motion } from "framer-motion"
+import { EntityTitleLink } from "./entity-title-link"
 
 interface RulePreviewProps {
     rule: Reference
@@ -30,7 +31,7 @@ export const RulePreview = ({ rule, showStatus = true }: RulePreviewProps) => {
                         <ScrollText className="w-4 h-4" />
                     </div>
                     <div>
-                        <h4 className="text-sm font-bold text-white leading-tight">{rule.name}</h4>
+                        <EntityTitleLink name={rule.name} entityType="Regra" />
                         <p className="text-[10px] uppercase font-bold tracking-widest text-white/40 mt-0.5">Regra do Sistema</p>
                     </div>
                 </div>
@@ -44,7 +45,7 @@ export const RulePreview = ({ rule, showStatus = true }: RulePreviewProps) => {
                                     title: rule.name || "Regra",
                                     content: null,
                                     item: rule,
-                                    entityType: "Regra"
+                                    entityType: "Regra",
                                 })
                             }
                             className="p-1.5 rounded-lg text-white/40 hover:text-white hover:bg-white/10 transition-colors"
@@ -100,7 +101,7 @@ export const TraitPreview = ({ trait, showStatus = true }: TraitPreviewProps) =>
                         <Sparkles className="w-4 h-4" />
                     </div>
                     <div>
-                        <h4 className="text-sm font-bold text-white leading-tight">{trait.name}</h4>
+                        <EntityTitleLink name={trait.name} entityType="Habilidade" />
                         <p className="text-[10px] uppercase font-bold tracking-widest text-white/40 mt-0.5">Habilidade D&D</p>
                     </div>
                 </div>
@@ -114,7 +115,7 @@ export const TraitPreview = ({ trait, showStatus = true }: TraitPreviewProps) =>
                                     title: trait.name || "Habilidade",
                                     content: null,
                                     item: trait,
-                                    entityType: "Habilidade"
+                                    entityType: "Habilidade",
                                 })
                             }
                             className="p-1.5 rounded-lg text-white/40 hover:text-white hover:bg-white/10 transition-colors"

@@ -14,10 +14,10 @@ import { GlassAttributeChip } from '@/components/ui/glass-attribute-chip';
 import { GlassDiceValue } from '@/components/ui/glass-dice-value';
 import { GlassEmptyValue } from '@/components/ui/glass-empty-value';
 import { Chip } from '@/components/ui/chip';
-import { MentionContent } from '@/features/rules/components/mention-badge';
+import { MentionContent, EntityTitleLink } from "@/features/rules/components/mention-badge"
 import { entityColors } from "@/lib/config/colors"
-import { cn } from '@/core/utils';
-import type { Spell } from '../types/spells.types';
+import { cn } from "@/core/utils"
+import type { Spell } from "../types/spells.types"
 
 export interface SpellPreviewProps {
     /** Spell data to display */
@@ -57,7 +57,7 @@ export function SpellPreview({ spell, showStatus = true }: SpellPreviewProps) {
                     </div>
                     <div>
                         <div className="flex items-center gap-2">
-                            <h3 className="text-sm font-bold text-white leading-tight">{spell.name}</h3>
+                            <EntityTitleLink name={spell.name} entityType="Magia" />
                             <GlassLevelChip level={spell.circle} type="circle" size="sm" />
                         </div>
                         <p className="text-[10px] uppercase font-bold tracking-widest text-white/40 mt-0.5">Magia D&D 5e</p>
@@ -140,11 +140,7 @@ export function SpellPreview({ spell, showStatus = true }: SpellPreviewProps) {
                     <span>Descrição</span>
                 </div>
                 <div className="text-sm text-white/80 leading-relaxed break-words">
-                    <MentionContent
-                        html={spell.description}
-                        mode="block"
-                        className="[&_p]:text-sm [&_p]:text-white/80 [&_ul]:text-sm [&_ol]:text-sm"
-                    />
+                    <MentionContent html={spell.description} mode="block" className="[&_p]:text-sm [&_p]:text-white/80 [&_ul]:text-sm [&_ol]:text-sm" />
                 </div>
             </div>
 

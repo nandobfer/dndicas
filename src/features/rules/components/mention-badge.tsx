@@ -7,6 +7,7 @@ import { entityColors } from "@/lib/config/colors"
 import { useIsMobile } from "@/core/hooks/useMediaQuery"
 import { EntityPreviewTooltip } from "./entity-preview-tooltip"
 import { SimpleGlassTooltip } from "@/components/ui/glass-tooltip"
+export { EntityTitleLink } from "./entity-title-link"
 
 interface MentionBadgeProps {
     id: string
