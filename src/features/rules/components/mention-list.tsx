@@ -1,7 +1,7 @@
 import React, { forwardRef, useEffect, useImperativeHandle, useState } from 'react'
 import { cn } from '@/core/utils'
 import { glassConfig } from '@/lib/config/glass-config'
-import { entityConfig } from "@/lib/config/colors"
+import { entityColors } from "@/lib/config/colors"
 import { EntityPreviewTooltip } from "./entity-preview-tooltip"
 import { DebounceProgress } from "@/components/ui/debounce-progress"
 import { Scroll, Sparkles, Zap, Wand } from "lucide-react"
@@ -117,7 +117,7 @@ const MentionList = forwardRef<MentionListRef, MentionListProps>((props, ref) =>
                                         <span
                                             className={cn(
                                                 "text-[9px] uppercase font-bold tracking-tight px-1.5 py-0.5 rounded transition-all",
-                                                entityConfig[item.entityType as keyof typeof entityConfig]?.badge || "bg-gray-400/20 text-white/40 font-bold",
+                                                entityColors[item.entityType as keyof typeof entityColors]?.badge || "bg-gray-400/20 text-white/40 font-bold",
                                             )}
                                         >
                                             {item.entityType}

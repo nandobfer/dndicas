@@ -5,7 +5,7 @@ import { GlassCard } from "@/components/ui/glass-card"
 import { Chip } from "@/components/ui/chip"
 import { ScrollText, BookOpen, Quote, Sparkles, ExternalLink } from "lucide-react"
 import { cn } from "@/core/utils"
-import { entityConfig } from "@/lib/config/colors"
+import { entityColors } from "@/lib/config/colors"
 import { Reference } from "../types/rules.types"
 import { SimpleGlassTooltip } from "@/components/ui/glass-tooltip"
 import { MentionContent } from "./mention-badge"
@@ -26,7 +26,7 @@ export const RulePreview = ({ rule, showStatus = true }: RulePreviewProps) => {
         <div className="space-y-4 w-full">
             <div className="flex flex-col sm:flex-row items-start sm:justify-between gap-4">
                 <div className="flex items-center gap-2">
-                    <div className={cn("p-1.5 rounded-lg border flex-shrink-0", entityConfig.Regra.badge)}>
+                    <div className={cn("p-1.5 rounded-lg border flex-shrink-0", entityColors.Regra.badge)}>
                         <ScrollText className="w-4 h-4" />
                     </div>
                     <div>
@@ -96,7 +96,7 @@ export const TraitPreview = ({ trait, showStatus = true }: TraitPreviewProps) =>
         <div className="space-y-4 w-full">
             <div className="flex items-start justify-between gap-4">
                 <div className="flex items-center gap-2">
-                    <div className={cn("p-1.5 rounded-lg border", entityConfig.Habilidade.badge)}>
+                    <div className={cn("p-1.5 rounded-lg border", entityColors.Habilidade.badge)}>
                         <Sparkles className="w-4 h-4" />
                     </div>
                     <div>

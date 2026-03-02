@@ -15,7 +15,7 @@ import { GlassDiceValue } from '@/components/ui/glass-dice-value';
 import { GlassEmptyValue } from '@/components/ui/glass-empty-value';
 import { Chip } from '@/components/ui/chip';
 import { MentionContent } from '@/features/rules/components/mention-badge';
-import { entityConfig } from "@/lib/config/colors"
+import { entityColors } from "@/lib/config/colors"
 import { cn } from '@/core/utils';
 import type { Spell } from '../types/spells.types';
 
@@ -52,7 +52,7 @@ export function SpellPreview({ spell, showStatus = true }: SpellPreviewProps) {
             {/* Header */}
             <div className="flex items-start justify-between gap-4">
                 <div className="flex items-center gap-3">
-                    <div className={cn("p-1.5 rounded-lg border", entityConfig.Magia.badge, entityConfig.Magia.border)}>
+                    <div className={cn("p-1.5 rounded-lg border", entityColors.Magia.badge, entityColors.Magia.border)}>
                         <Wand className="h-4 w-4 text-purple-400" />
                     </div>
                     <div>
