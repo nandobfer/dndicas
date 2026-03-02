@@ -4,7 +4,7 @@ import * as React from "react"
 import { GlassCard, GlassCardHeader, GlassCardTitle, GlassCardDescription, GlassCardContent } from "@/components/ui/glass-card"
 import { Users, FileText, Shield, Sparkles, Sword, Zap, Wand2, Backpack, Map, Fingerprint, TrendingUp, Activity, Clock, Skull } from "lucide-react"
 import { motion } from "framer-motion"
-import { colors, entityConfig } from "@/lib/config/colors"
+import { colors, entityColors } from "@/lib/config/colors"
 import { cn } from "@/core/utils"
 import { MiniBarChart, MiniLineChart } from "./_components/charts"
 import { RulesEntityCard } from "./_components/rules-entity-card"
@@ -139,12 +139,12 @@ export default function DashboardPage() {
                 {/* Users Stat */}
                 <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }} whileHover={{ y: -4 }}>
                     <Link href="/users">
-                        <GlassCard className={cn("h-full group transition-all overflow-hidden cursor-pointer hover:bg-white/[0.04]", entityConfig.Usuário.border, entityConfig.Usuário.hoverBorder)}>
+                        <GlassCard className={cn("h-full group transition-all overflow-hidden cursor-pointer hover:bg-white/[0.04]", entityColors.Usuário.border, entityColors.Usuário.hoverBorder)}>
                             <GlassCardHeader className="pb-2">
                                 <div className="flex items-center justify-between">
                                     <div className="space-y-1">
                                         <GlassCardTitle className="text-white/70 text-sm font-medium flex items-center gap-2">
-                                            <Users className={cn("h-4 w-4", entityConfig.Usuário.text)} />
+                                            <Users className={cn("h-4 w-4", entityColors.Usuário.text)} />
                                             Comunidade
                                         </GlassCardTitle>
                                         <div className="text-3xl font-bold text-white leading-none">
@@ -154,12 +154,12 @@ export default function DashboardPage() {
                                     <div
                                         className={cn(
                                             "p-3 rounded-xl border transition-colors",
-                                            entityConfig.Usuário.bgAlpha,
-                                            entityConfig.Usuário.border,
+                                            entityColors.Usuário.bgAlpha,
+                                            entityColors.Usuário.border,
                                             "group-hover:bg-white/10 group-hover:text-white",
                                         )}
                                     >
-                                        <TrendingUp className={cn("h-6 w-6", entityConfig.Usuário.text, "group-hover:text-white")} />
+                                        <TrendingUp className={cn("h-6 w-6", entityColors.Usuário.text, "group-hover:text-white")} />
                                     </div>
                                 </div>
                             </GlassCardHeader>
@@ -167,13 +167,13 @@ export default function DashboardPage() {
                                 <div className="space-y-4">
                                     <div className="flex items-end justify-between">
                                         <p className="text-xs text-white/40">Usuários ativos e crescimento semanal</p>
-                                        <div className={cn("text-xs font-medium px-2 py-0.5 rounded-full border flex items-center gap-1", entityConfig.Usuário.badge, entityConfig.Usuário.border)}>
+                                        <div className={cn("text-xs font-medium px-2 py-0.5 rounded-full border flex items-center gap-1", entityColors.Usuário.badge, entityColors.Usuário.border)}>
                                             <span>+</span>
                                             <AnimatedNumber value={loading ? 0 : stats?.users.active || 0} formatter={(val) => `${Math.floor(val)}`} />
                                             <span>ativos</span>
                                         </div>
                                     </div>
-                                    {stats?.users.growth && <MiniBarChart data={stats.users.growth} color={entityConfig.Usuário.hex} />}
+                                    {stats?.users.growth && <MiniBarChart data={stats.users.growth} color={entityColors.Usuário.hex} />}
                                 </div>
                             </GlassCardContent>
                         </GlassCard>

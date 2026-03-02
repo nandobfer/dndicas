@@ -8,7 +8,7 @@ import { GlassEmptyValue } from "@/components/ui/glass-empty-value"
 import { SimpleGlassTooltip } from "@/components/ui/glass-tooltip"
 import { motionConfig } from "@/lib/config/motion-configs"
 import { cn } from "@/core/utils"
-import { entityConfig } from "@/lib/config/colors"
+import { entityColors } from "@/lib/config/colors"
 import type { MentionIssue } from "@/features/rules/hooks/useMentionAuditPage"
 
 interface MentionAuditTableProps {
@@ -81,7 +81,7 @@ export function MentionAuditTable({ items, isLoading, errorAtFetch, onRefresh, o
                 </motion.tr>
               ) : (
                 items.map((issue) => {
-                  const config = entityConfig[issue.type] || entityConfig.Regra;
+                  const config = entityColors[issue.type] || entityColors.Regra;
                   const EntityIcon = ENTITY_ICONS[issue.type] || Scroll;
 
                   return (

@@ -3,10 +3,11 @@
 import * as React from "react"
 import { useMemo, useEffect, useState } from "react"
 import { cn } from "@/core/utils"
-import { entityConfig } from "@/lib/config/colors"
+import { entityColors } from "@/lib/config/colors"
 import { useIsMobile } from "@/core/hooks/useMediaQuery"
 import { EntityPreviewTooltip } from "./entity-preview-tooltip"
 import { SimpleGlassTooltip } from "@/components/ui/glass-tooltip"
+export { EntityTitleLink } from "./entity-title-link"
 
 interface MentionBadgeProps {
     id: string
@@ -161,8 +162,8 @@ export function MentionContent({
 
 export function MentionBadge({ id, label, type = "Regra", className, delayDuration = 400 }: MentionBadgeProps) {
     const getStyles = (t: string) => {
-        const typeKey = (Object.keys(entityConfig).find((k) => t.includes(k.substring(0, 5))) || "Regra") as keyof typeof entityConfig
-        return entityConfig[typeKey]?.mention || entityConfig.Regra.mention
+        const typeKey = (Object.keys(entityColors).find((k) => t.includes(k.substring(0, 5))) || "Regra") as keyof typeof entityColors
+        return entityColors[typeKey]?.mention || entityColors.Regra.mention
     }
 
     return (

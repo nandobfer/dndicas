@@ -6,7 +6,7 @@ import { UserMini } from "@/components/ui/user-mini"
 import { cn } from "@/core/utils"
 import { format } from "date-fns"
 import { ptBR } from "date-fns/locale"
-import { entityConfig } from "@/lib/config/colors"
+import { entityConfig } from "@/lib/config/entities"
 import type { AuditLog } from "../types/audit.types"
 
 export interface AuditLogCardProps {

@@ -2,7 +2,7 @@
 
 import { Zap, BookOpen, Info, Trophy, PlusCircle } from "lucide-react"
 import { Chip } from "@/components/ui/chip"
-import { MentionContent } from "@/features/rules/components/mention-badge"
+import { MentionContent, EntityTitleLink } from "@/features/rules/components/mention-badge"
 import { getLevelRarityVariant } from "./feats-table"
 import { attributeColors, AttributeType } from "@/lib/config/colors"
 import { cn } from "@/core/utils"
@@ -26,7 +26,7 @@ export function FeatPreview({ feat, showStatus = true }: FeatPreviewProps) {
                     </div>
                     <div>
                         <div className="flex items-center gap-2">
-                            <h3 className="text-sm font-bold text-white leading-tight">{feat.name}</h3>
+                            <EntityTitleLink name={feat.name} entityType="Talento" />
                             <Chip variant={rarityVariant} size="sm">
                                 Nv. {feat.level}
                             </Chip>

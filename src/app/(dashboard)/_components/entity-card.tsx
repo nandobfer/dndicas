@@ -3,7 +3,7 @@
 import { motion } from "framer-motion"
 import { GlassCard, GlassCardHeader, GlassCardTitle, GlassCardDescription, GlassCardContent } from "@/components/ui/glass-card"
 import { cn } from "@/core/utils"
-import { entityConfig, EntityType } from "@/lib/config/colors"
+import { entityColors, EntityType } from "@/lib/config/colors"
 import { MiniLineChart } from "./charts"
 import { LucideIcon } from "lucide-react"
 import { AnimatedNumber } from "@/components/ui/animated-number"
@@ -37,7 +37,7 @@ export function EntityCard({
     description?: string
     href?: string
 }) {
-    const config = entityConfig[entityType]
+    const config = entityColors[entityType]
     const isMasculine = entityType === "Talento" || entityType === "Usuário"
 
     const content = (
