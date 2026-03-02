@@ -16,7 +16,7 @@ import * as React from 'react';
 import { motion } from 'framer-motion';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Package2, Home, User, Sparkles, FileText, Users, Scroll, Zap, Wand, AtSign, MessageSquare } from "lucide-react"
+import { Package2, Home, User, Sparkles, FileText, Users, Scroll, Zap, Wand, AtSign, MessageSquare, Sword } from "lucide-react"
 import { cn } from "@/core/utils"
 import { glassConfig } from "@/lib/config/glass-config"
 import { motionConfig } from "@/lib/config/motion-configs"
@@ -54,6 +54,7 @@ const mainItems = [
 // T032: Added "Habilidades" for traits catalog
 // T008: Added "Talentos" for feats catalog
 const cadastrosItems = [
+    { label: "Classes", href: "/classes", icon: Sword },
     { label: "Usuários", href: "/users", icon: Users, admin: true },
     { label: "Regras", href: "/rules", icon: Scroll },
     { label: "Habilidades", href: "/traits", icon: Sparkles },

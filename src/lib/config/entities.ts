@@ -26,8 +26,8 @@ export const ENTITY_PROVIDERS: EntityProvider[] = [
             type: "Regra",
             description: item.description,
             source: item.source,
-            status: item.status || "active"
-        })
+            status: item.status || "active",
+        }),
     },
     {
         name: "Habilidade",
@@ -41,8 +41,8 @@ export const ENTITY_PROVIDERS: EntityProvider[] = [
             type: "Habilidade",
             description: item.description,
             source: item.source,
-            status: item.status || "active"
-        })
+            status: item.status || "active",
+        }),
     },
     {
         name: "Talento",
@@ -57,8 +57,8 @@ export const ENTITY_PROVIDERS: EntityProvider[] = [
             description: item.metadata?.description || item.description,
             source: item.source || item.metadata?.source,
             status: "active",
-            metadata: item.metadata
-        })
+            metadata: item.metadata,
+        }),
     },
     {
         name: "Magia",
@@ -74,9 +74,24 @@ export const ENTITY_PROVIDERS: EntityProvider[] = [
             school: item.school,
             circle: item.circle,
             source: item.source,
-            status: item.status || "active"
-        })
-    }
+            status: item.status || "active",
+        }),
+    },
+    {
+        name: "Classe",
+        label: "Classes",
+        endpoint: () => `/api/classes/search`,
+        map: (item: any): UnifiedEntity => ({
+            id: item.id || item._id,
+            _id: item._id,
+            name: item.label || item.name,
+            label: item.label || item.name,
+            type: "Classe",
+            description: item.description,
+            source: item.source,
+            status: item.status || "active",
+        }),
+    },
 ]
 
 export const entityConfig = ENTITY_PROVIDERS.reduce((acc, provider) => {

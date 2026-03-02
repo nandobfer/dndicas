@@ -1,6 +1,6 @@
 "use client";
 
-import { Clock, User, Scroll, Users, Sparkles, Zap, Wand, ChevronRight, Shield } from "lucide-react"
+import { Clock, User, Scroll, Users, Sparkles, Zap, Wand, ChevronRight, Shield, Sword } from "lucide-react"
 import { ActionChip } from "@/components/ui/action-chip"
 import { UserMini } from "@/components/ui/user-mini"
 import { cn } from "@/core/utils"
@@ -21,6 +21,7 @@ const ENTITY_MAP: Record<string, keyof typeof entityConfig> = {
     Trait: "Habilidade",
     Feat: "Talento",
     Spell: "Magia",
+    CharacterClass: "Classe",
     Auth: "Segurança",
     Company: "Regra", // Fallback
     Organization: "Regra", // Fallback
@@ -36,6 +37,7 @@ const ENTITY_ICONS: Record<keyof typeof entityConfig, any> = {
     Regra: Scroll,
     Habilidade: Sparkles,
     Talento: Zap,
+    Classe: Sword,
     Magia: Wand,
     Segurança: Shield, // I'll add Shield to imports if available, otherwise User
 }

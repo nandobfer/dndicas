@@ -11,6 +11,7 @@ import { RulesEntityCard } from "./_components/rules-entity-card"
 import { TraitsEntityCard } from "./_components/traits-entity-card"
 import { FeatsEntityCard } from "./_components/feats-entity-card"
 import { SpellsEntityCard } from "./_components/spells-entity-card"
+import { ClassesEntityCard } from "./_components/classes-entity-card"
 import { WipEntityCard } from "./_components/wip-entity-card"
 import { AnimatedNumber } from "@/components/ui/animated-number"
 import Link from "next/link"
@@ -46,6 +47,11 @@ interface DashboardStats {
         active: number
         growth: Array<{ date: string; count: number }>
     }
+    classes: {
+        total: number
+        active: number
+        growth: Array<{ date: string; count: number }>
+    }
 }
 
 const dndEntities = [
@@ -54,7 +60,7 @@ const dndEntities = [
         title: "Classes",
         icon: Sword,
         description: "Classes de personagem (Guerreiro, Mago, etc.)",
-        component: WipEntityCard,
+        component: ClassesEntityCard,
     },
     {
         id: "races",
@@ -195,7 +201,19 @@ export default function DashboardPage() {
 
                 <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
                     {dndEntities.map(({ component: Card, id, ...entity }, index) => {
-                        const entityStats = id === "rules" ? stats?.rules : id === "traits" ? stats?.traits : id === "feats" ? stats?.feats : id === "spells" ? stats?.spells : undefined
+                        const entityStats =
+                            id === "rules"
+                                ? stats?.rules
+                                : id === "traits"
+                                  ? stats?.traits
+                                  : id === "feats"
+                                    ? stats?.feats
+                                    : id === "spells"
+                                      ? stats?.spells
+                                      : id === "classes"
+                                        ? stats?.classes
+                                        : undefined
+
                         return <Card key={id} {...entity} index={index} stats={entityStats} loading={loading} />
                     })}
                 </div>
