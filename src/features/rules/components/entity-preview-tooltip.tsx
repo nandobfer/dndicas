@@ -12,6 +12,7 @@ import { MentionContent } from "./mention-badge"
 import { GlassPopover, GlassPopoverTrigger, GlassPopoverContent } from "@/components/ui/glass-popover"
 import { FeatPreview } from "@/features/feats/components/feat-preview"
 import { SpellPreview } from "@/features/spells/components/spell-preview"
+import { ClassPreview } from "@/features/classes/components/class-preview"
 import { useWindows } from "@/core/context/window-context"
 import { motion } from "framer-motion"
 import { EntityTitleLink } from "./entity-title-link"
@@ -182,6 +183,8 @@ export const EntityPreviewTooltip = ({ entityId, entityType, children, side = "t
                 endpoint = `/api/feats/${entityId}`
             } else if (entityType === "Magia") {
                 endpoint = `/api/spells/${entityId}`
+            } else if (entityType === "Classe") {
+                endpoint = `/api/classes/${entityId}`
             }
 
             const res = await fetch(endpoint)
@@ -230,6 +233,8 @@ export const EntityPreviewTooltip = ({ entityId, entityType, children, side = "t
                 return <FeatPreview feat={data} />
             case "Magia":
                 return <SpellPreview spell={data} />
+            case "Classe":
+                return <ClassPreview characterClass={data} showStatus={true} />
             default:
                 return (
                     <div className="p-4">

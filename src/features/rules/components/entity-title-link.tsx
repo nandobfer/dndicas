@@ -15,10 +15,11 @@ interface EntityTitleLinkProps {
 export function EntityTitleLink({ name, entityType, className }: EntityTitleLinkProps) {
     // Determine route based on entity type
     const routeMap: Record<string, string> = {
-        "Regra": "rules",
-        "Habilidade": "traits",
-        "Talento": "feats",
-        "Magia": "spells"
+        Regra: "rules",
+        Habilidade: "traits",
+        Talento: "feats",
+        Magia: "spells",
+        Classe: "classes",
     }
 
     const route = routeMap[entityType] || "rules"

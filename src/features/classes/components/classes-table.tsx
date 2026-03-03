@@ -16,6 +16,7 @@ import {
     GlassDropdownMenuTrigger,
 } from "@/components/ui/glass-dropdown-menu"
 import { GlassEmptyValue } from "@/components/ui/glass-empty-value"
+import { EntityTitleLink } from "@/features/rules/components/entity-title-link"
 import { motionConfig } from "@/lib/config/motion-configs"
 import { diceColors } from "@/lib/config/colors"
 import type { CharacterClass } from "../types/classes.types"
@@ -26,10 +27,8 @@ const classStatusVariantMap: Record<string, "uncommon" | "common"> = {
 }
 
 const spellcastingColorMap: Record<string, string> = {
-    Nenhum: "text-slate-400",
-    Terço: "text-blue-400",
-    Metade: "text-purple-400",
-    Completo: "text-amber-400",
+    true: "text-amber-400",
+    false: "text-slate-400",
 }
 
 export interface ClassesTableProps {
@@ -44,17 +43,7 @@ export interface ClassesTableProps {
     onPageChange: (page: number) => void
 }
 
-export function ClassesTable({
-    classes,
-    total,
-    page,
-    limit,
-    isLoading = false,
-    hasActiveFilters = false,
-    onEdit,
-    onDelete,
-    onPageChange,
-}: ClassesTableProps) {
+export function ClassesTable({ classes, total, page, limit, isLoading = false, hasActiveFilters = false, onEdit, onDelete, onPageChange }: ClassesTableProps) {
     const { isAdmin } = useAuth()
     const totalPages = Math.ceil(total / limit)
 
@@ -90,14 +79,11 @@ export function ClassesTable({
                     <p className="text-sm text-white/60">
                         {hasActiveFilters ? (
                             <>
-                                Encontrada{total === 1 ? "" : "s"}{" "}
-                                <span className="font-medium text-white">{total}</span>{" "}
-                                classe{total === 1 ? "" : "s"} com os filtros aplicados
+                                Encontrada{total === 1 ? "" : "s"} <span className="font-medium text-white">{total}</span> classe{total === 1 ? "" : "s"} com os filtros aplicados
                             </>
                         ) : (
                             <>
-                                Total de <span className="font-medium text-white">{total}</span>{" "}
-                                classe{total === 1 ? "" : "s"} cadastrada{total === 1 ? "" : "s"}
+                                Total de <span className="font-medium text-white">{total}</span> classe{total === 1 ? "" : "s"} cadastrada{total === 1 ? "" : "s"}
                             </>
                         )}
                     </p>
@@ -108,32 +94,18 @@ export function ClassesTable({
                 <table className="w-full">
                     <thead>
                         <tr className="border-b border-white/5 bg-white/5">
-                            <th className="px-6 py-4 text-left text-xs font-semibold text-white/50 uppercase tracking-wider w-[100px]">
-                                Status
-                            </th>
-                            <th className="px-6 py-4 text-left text-xs font-semibold text-white/50 uppercase tracking-wider w-[80px]">
-                                Dado
-                            </th>
+                            <th className="px-6 py-4 text-left text-xs font-semibold text-white/50 uppercase tracking-wider w-[100px]">Status</th>
+                            <th className="px-6 py-4 text-left text-xs font-semibold text-white/50 uppercase tracking-wider w-[80px]">Dado</th>
                             <th className="px-6 py-4 text-left text-xs font-semibold text-white/50 uppercase tracking-wider">
                                 <div className="flex items-center gap-1.5">
                                     <Sword className="h-3 w-3" />
                                     Nome
                                 </div>
                             </th>
-                            <th className="px-6 py-4 text-left text-xs font-semibold text-white/50 uppercase tracking-wider w-[120px]">
-                                Conjuração
-                            </th>
-                            <th className="px-6 py-4 text-left text-xs font-semibold text-white/50 uppercase tracking-wider w-[100px]">
-                                Subclasses
-                            </th>
-                            <th className="px-6 py-4 text-left text-xs font-semibold text-white/50 uppercase tracking-wider w-[120px]">
-                                Fonte
-                            </th>
-                            {isAdmin && (
-                                <th className="px-6 py-4 text-right text-xs font-semibold text-white/50 uppercase tracking-wider w-[80px]">
-                                    Ações
-                                </th>
-                            )}
+                            <th className="px-6 py-4 text-left text-xs font-semibold text-white/50 uppercase tracking-wider w-[120px]">Conjuração</th>
+                            <th className="px-6 py-4 text-left text-xs font-semibold text-white/50 uppercase tracking-wider w-[100px]">Subclasses</th>
+                            <th className="px-6 py-4 text-left text-xs font-semibold text-white/50 uppercase tracking-wider w-[120px]">Fonte</th>
+                            {isAdmin && <th className="px-6 py-4 text-right text-xs font-semibold text-white/50 uppercase tracking-wider w-[80px]">Ações</th>}
                         </tr>
                     </thead>
                     <tbody className="divide-y divide-white/5">
@@ -152,67 +124,42 @@ export function ClassesTable({
                                     >
                                         {/* Status */}
                                         <td className="px-6 py-4">
-                                            <Chip
-                                                variant={classStatusVariantMap[c.status] || "common"}
-                                                size="sm"
-                                            >
+                                            <Chip variant={classStatusVariantMap[c.status] || "common"} size="sm">
                                                 {c.status === "active" ? "Ativo" : "Inativo"}
                                             </Chip>
                                         </td>
 
                                         {/* Hit Dice */}
                                         <td className="px-6 py-4">
-                                            <span
-                                                className={cn(
-                                                    "inline-flex items-center px-2 py-0.5 rounded text-xs font-bold",
-                                                    diceColor?.bg,
-                                                    diceColor?.text
-                                                )}
-                                            >
-                                                {c.hitDice}
-                                            </span>
+                                            <span className={cn("inline-flex items-center px-2 py-0.5 rounded text-xs font-bold", diceColor?.bg, diceColor?.text)}>{c.hitDice}</span>
                                         </td>
 
                                         {/* Name */}
                                         <td className="px-6 py-4">
-                                            <span className="text-sm font-medium text-white/90 group-hover:text-white transition-colors">
-                                                {c.name}
-                                            </span>
+                                            <EntityTitleLink name={c.name} entityType="Classe" />
                                         </td>
 
                                         {/* Spellcasting */}
                                         <td className="px-6 py-4">
-                                            <span
-                                                className={cn(
-                                                    "text-sm font-medium",
-                                                    spellcastingColorMap[c.spellcasting] || "text-white/60"
+                                            <span className={cn("text-sm font-medium", spellcastingColorMap[String(c.spellcasting)] || "text-white/60")}>
+                                                {c.spellcasting ? (
+                                                    <span className="flex items-center gap-1.5">
+                                                        <div className="h-1.5 w-1.5 rounded-full bg-amber-400" />
+                                                        Sim
+                                                    </span>
+                                                ) : (
+                                                    "Não"
                                                 )}
-                                            >
-                                                {c.spellcasting}
                                             </span>
                                         </td>
 
                                         {/* Subclasses count */}
                                         <td className="px-6 py-4">
-                                            {c.subclasses && c.subclasses.length > 0 ? (
-                                                <span className="text-sm text-white/60">
-                                                    {c.subclasses.length}
-                                                </span>
-                                            ) : (
-                                                <GlassEmptyValue />
-                                            )}
+                                            {c.subclasses && c.subclasses.length > 0 ? <span className="text-sm text-white/60">{c.subclasses.length}</span> : <GlassEmptyValue />}
                                         </td>
 
                                         {/* Source */}
-                                        <td className="px-6 py-4">
-                                            {c.source ? (
-                                                <span className="text-sm text-white/50 truncate max-w-[100px] block">
-                                                    {c.source}
-                                                </span>
-                                            ) : (
-                                                <GlassEmptyValue />
-                                            )}
-                                        </td>
+                                        <td className="px-6 py-4">{c.source ? <span className="text-sm text-white/50 truncate max-w-[100px] block">{c.source}</span> : <GlassEmptyValue />}</td>
 
                                         {/* Actions */}
                                         {isAdmin && (
@@ -228,10 +175,7 @@ export function ClassesTable({
                                                             <Pencil className="h-4 w-4 mr-2" />
                                                             Editar
                                                         </GlassDropdownMenuItem>
-                                                        <GlassDropdownMenuItem
-                                                            onClick={() => onDelete(c)}
-                                                            className="text-rose-400 hover:text-rose-300"
-                                                        >
+                                                        <GlassDropdownMenuItem onClick={() => onDelete(c)} className="text-rose-400 hover:text-rose-300">
                                                             <Trash2 className="h-4 w-4 mr-2" />
                                                             Excluir
                                                         </GlassDropdownMenuItem>
@@ -249,15 +193,7 @@ export function ClassesTable({
 
             {/* Pagination */}
             {totalPages > 1 && (
-                <DataTablePagination
-                    page={page}
-                    totalPages={totalPages}
-                    total={total}
-                    limit={limit}
-                    onPageChange={onPageChange}
-                    itemLabel="classes"
-                    className="border-t border-white/5"
-                />
+                <DataTablePagination page={page} totalPages={totalPages} total={total} limit={limit} onPageChange={onPageChange} itemLabel="classes" className="border-t border-white/5" />
             )}
         </GlassCard>
     )

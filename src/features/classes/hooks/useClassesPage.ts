@@ -19,6 +19,7 @@ export function useClassesPage() {
     const deleteMutation = useDeleteClass()
 
     const [isFormOpen, setIsFormOpen] = React.useState(false)
+    const [isDeleteOpen, setIsDeleteOpen] = React.useState(false)
     const [selectedClass, setSelectedClass] = React.useState<CharacterClass | null>(null)
 
     const handleSearchChange = (value: string) => setSearch(value)
@@ -36,12 +37,19 @@ export function useClassesPage() {
         setIsFormOpen(true)
     }
 
-    const handleDeleteClick = async (characterClass: CharacterClass) => {
-        if (!confirm(`Deseja realmente excluir a classe "${characterClass.name}"?`)) return
+    const handleDeleteClick = (characterClass: CharacterClass) => {
+        setSelectedClass(characterClass)
+        setIsDeleteOpen(true)
+    }
+
+    const handleDeleteConfirm = async () => {
+        if (!selectedClass) return
 
         try {
-            await deleteMutation.mutateAsync(characterClass._id)
+            await deleteMutation.mutateAsync(selectedClass._id)
             toast.success("Classe excluída com sucesso!")
+            setIsDeleteOpen(false)
+            setSelectedClass(null)
         } catch {
             toast.error("Erro ao excluir classe")
         }
@@ -53,10 +61,7 @@ export function useClassesPage() {
     }
 
     const hasActiveFilters =
-        !!filters.search ||
-        (filters.hitDice && filters.hitDice.length > 0) ||
-        (filters.spellcasting && filters.spellcasting.length > 0) ||
-        (filters.status && filters.status !== "all")
+        !!filters.search || (filters.hitDice && filters.hitDice.length > 0) || (filters.spellcasting && filters.spellcasting.length > 0) || (filters.status && filters.status !== "all")
 
     return {
         isMobile,
@@ -93,13 +98,17 @@ export function useClassesPage() {
             handleCreateClick,
             handleEditClick,
             handleDeleteClick,
+            handleDeleteConfirm,
             handleFormSuccess,
         },
         modals: {
             isFormOpen,
             setIsFormOpen,
+            isDeleteOpen,
+            setIsDeleteOpen,
             selectedClass,
             hasActiveFilters,
+            isSaving: deleteMutation.isPending,
         },
     }
 }

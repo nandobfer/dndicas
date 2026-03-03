@@ -5,8 +5,9 @@ import { SpellPreview } from "@/features/spells/components/spell-preview"
 import { ClassPreview } from "@/features/classes/components/class-preview"
 import { fetchTraitById } from "@/features/traits/api/traits-api"
 import { fetchSpell } from "@/features/spells/api/spells-api"
+import { getClassById } from "@/features/classes/api/classes-service"
 import { LoadingState } from "@/components/ui/loading-state"
-import { Wand } from "lucide-react"
+import { Wand, GraduationCap } from "lucide-react"
 
 /**
  * Registry of renderers for different entity types.
@@ -17,7 +18,7 @@ export const ENTITY_RENDERERS: Record<string, (item: any) => React.ReactNode> = 
     Habilidade: (id) => <TraitAsyncRenderer id={id} />,
     Talento: (item) => <FeatPreview feat={item} showStatus={false} />,
     Magia: (idOrItem) => <SpellAsyncRenderer item={idOrItem} />,
-    Classe: (item) => <ClassPreview characterClass={item} showStatus={false} />,
+    Classe: (idOrItem) => <ClassAsyncRenderer item={idOrItem} />,
 }
 
 function TraitAsyncRenderer({ id }: { id: string }) {
@@ -97,6 +98,57 @@ function SpellAsyncRenderer({ item }: { item: any }) {
     return (
         <div className="p-4">
             <SpellPreview spell={spell} showStatus={true} />
+        </div>
+    )
+}
+
+function ClassAsyncRenderer({ item }: { item: any }) {
+    const [characterClass, setCharacterClass] = React.useState<any>(null)
+    const [loading, setLoading] = React.useState(true)
+
+    const id = typeof item === "string" ? item : item?._id || item?.id
+
+    React.useEffect(() => {
+        // Se já temos o objeto completo (com atributos primários ou subclasses), não precisamos buscar
+        if (item && typeof item === "object" && (item.primaryAttributes?.length > 0 || item.subclasses?.length > 0)) {
+            setCharacterClass(item)
+            setLoading(false)
+            return
+        }
+
+        if (!id) {
+            setLoading(false)
+            return
+        }
+
+        // Fetch via client-side API to get the full profile
+        fetch(`/api/classes/${id}`)
+            .then(res => res.json())
+            .then(setCharacterClass)
+            .catch(console.error)
+            .finally(() => setLoading(false))
+    }, [id, item])
+
+    if (loading)
+        return (
+            <div className="p-8 flex flex-col items-center justify-center gap-3 bg-white/[0.02] rounded-xl border border-white/5 animate-in fade-in duration-300">
+                <LoadingState variant="spinner" size="md" />
+                <span className="text-[10px] uppercase font-bold tracking-widest text-white/20">Buscando Classe...</span>
+            </div>
+        )
+    if (!characterClass)
+        return (
+            <div className="p-8 text-center bg-blue-500/5 rounded-xl border border-dashed border-blue-500/20 flex flex-col items-center justify-center gap-2">
+                <div className="p-2 rounded-full bg-blue-500/10 text-blue-400">
+                    <GraduationCap className="h-4 w-4" />
+                </div>
+                <p className="text-xs text-blue-400/60 italic">Classe não encontrada no catálogo.</p>
+            </div>
+        )
+
+    return (
+        <div className="p-4">
+            <ClassPreview characterClass={characterClass} showStatus={true} />
         </div>
     )
 }

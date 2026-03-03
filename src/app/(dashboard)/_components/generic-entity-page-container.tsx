@@ -10,15 +10,18 @@ import { useRulesPage } from "@/features/rules/hooks/useRulesPage"
 import { useTraitsPage } from "@/features/traits/hooks/useTraitsPage"
 import { useFeatsPage } from "@/features/feats/hooks/useFeatsPage"
 import { useSpellsPage } from "@/features/spells/hooks/useSpellsPage"
+import { useClassesPage } from "@/features/classes/hooks/useClassesPage"
 import { RuleFormModal } from "@/features/rules/components/rule-form-modal"
 import { DeleteRuleDialog } from "@/features/rules/components/delete-rule-dialog"
 import { TraitFormModal } from "@/features/traits/components/trait-form-modal"
 import { DeleteTraitDialog } from "@/features/traits/components/delete-trait-dialog"
 import { FeatFormModal } from "@/features/feats/components/feat-form-modal"
 import { DeleteFeatDialog } from "@/features/feats/components/delete-feat-dialog"
+import { ClassFormModal } from "@/features/classes/components/class-form-modal"
+import { DeleteClassDialog } from "@/features/classes/components/delete-class-dialog"
 
 interface GenericEntityPageProps {
-    entityTypeKey: "Regra" | "Habilidade" | "Talento" | "Magia"
+    entityTypeKey: "Regra" | "Habilidade" | "Talento" | "Magia" | "Classe"
 }
 
 export default function GenericEntityPage({ entityTypeKey }: GenericEntityPageProps) {
@@ -34,6 +37,7 @@ export default function GenericEntityPage({ entityTypeKey }: GenericEntityPagePr
     const traitsPage = useTraitsPage()
     const featsPage = useFeatsPage()
     const spellsPage = useSpellsPage()
+    const classesPage = useClassesPage()
 
     const queryKey = [entityTypeKey.toLowerCase(), slug]
 
@@ -43,6 +47,7 @@ export default function GenericEntityPage({ entityTypeKey }: GenericEntityPagePr
         Habilidade: traitsPage,
         Talento: featsPage,
         Magia: spellsPage,
+        Classe: classesPage,
     }
 
     const routeMap = {
@@ -50,6 +55,7 @@ export default function GenericEntityPage({ entityTypeKey }: GenericEntityPagePr
         Habilidade: "traits",
         Talento: "feats",
         Magia: "spells",
+        Classe: "classes",
     }
 
     const currentPage = hookMap[entityTypeKey]
@@ -80,19 +86,31 @@ export default function GenericEntityPage({ entityTypeKey }: GenericEntityPagePr
             // Decodes slug to possible name (slug is the name from URL)
             const name = decodeURIComponent(slug).replace(/-/g, " ")
 
-            // Search by name in the API
+            // 1. First, search to get the basic record and ID
             const endpoint = config.provider!.endpoint()
             const separator = endpoint.includes("?") ? "&" : "?"
-            const res = await fetch(`${endpoint}${separator}search=${encodeURIComponent(name)}&searchField=name`)
+            const searchRes = await fetch(`${endpoint}${separator}search=${encodeURIComponent(name)}&searchField=name`)
 
-            if (!res.ok) return null
-            const data = await res.json()
+            if (!searchRes.ok) return null
+            const searchData = await searchRes.json()
 
             // The search might return one or more items, pick the best match
-            const items = Array.isArray(data) ? data : data.items || data.spells || data.traits || data.rules || data.feats || []
+            const items = Array.isArray(searchData) ? searchData : searchData.items || searchData.spells || searchData.traits || searchData.rules || searchData.feats || []
 
             // Find exact name match
-            return items.find((i: any) => i.name.toLowerCase() === name.toLowerCase()) || items[0] || null
+            const basicItem = items.find((i: any) => i.name.toLowerCase() === name.toLowerCase()) || items[0]
+
+            if (!basicItem) return null
+
+            // 2. If it's a "Classe", we MUST fetch the full profile by ID because search is too lean
+            if (entityTypeKey === "Classe" && basicItem._id) {
+                const fullRes = await fetch(`/api/classes/${basicItem._id}`)
+                if (fullRes.ok) {
+                    return await fullRes.json()
+                }
+            }
+
+            return basicItem
         },
         enabled: !!slug && !!config.provider,
     })
@@ -152,6 +170,24 @@ export default function GenericEntityPage({ entityTypeKey }: GenericEntityPagePr
                         onClose={() => featsPage.modals.setIsDeleteOpen(false)}
                         onConfirm={featsPage.actions.handleDeleteConfirm}
                         feat={featsPage.modals.selectedFeat}
+                    />
+                </>
+            )}
+
+            {entityTypeKey === "Classe" && (
+                <>
+                    <ClassFormModal
+                        isOpen={classesPage.modals.isFormOpen}
+                        onClose={() => classesPage.modals.setIsFormOpen(false)}
+                        onSuccess={classesPage.actions.handleFormSuccess}
+                        characterClass={classesPage.modals.selectedClass}
+                    />
+                    <DeleteClassDialog
+                        isOpen={classesPage.modals.isDeleteOpen}
+                        onClose={() => classesPage.modals.setIsDeleteOpen(false)}
+                        onConfirm={classesPage.actions.handleDeleteConfirm}
+                        classData={classesPage.modals.selectedClass}
+                        isDeleting={classesPage.modals.isSaving}
                     />
                 </>
             )}

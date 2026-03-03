@@ -196,9 +196,11 @@ export function ClassPreview({ characterClass, showStatus = true }: ClassPreview
     const [filterMode, setFilterMode] = useState<"upTo" | "exact">("upTo")
     const [selectedSubclassIds, setSelectedSubclassIds] = useState<string[]>([])
 
+    const subclasses = characterClass.subclasses || []
+
     const selectedSubclasses = useMemo(() => {
-        return characterClass.subclasses.filter((s) => selectedSubclassIds.includes(s._id || s.name))
-    }, [characterClass.subclasses, selectedSubclassIds])
+        return subclasses.filter((s) => selectedSubclassIds.includes(s._id || s.name))
+    }, [subclasses, selectedSubclassIds])
 
     const diceColor = diceColors[characterClass.hitDice as keyof typeof diceColors]
 
@@ -276,7 +278,7 @@ export function ClassPreview({ characterClass, showStatus = true }: ClassPreview
                         <span>Resistências</span>
                     </div>
                     <div className="flex flex-wrap gap-1">
-                        {characterClass.savingThrows.map((attr) => (
+                        {(characterClass.savingThrows || []).map((attr) => (
                             <GlassAttributeChip key={attr} attribute={attr} size="sm" />
                         ))}
                     </div>
@@ -287,7 +289,7 @@ export function ClassPreview({ characterClass, showStatus = true }: ClassPreview
                         <span>Primários</span>
                     </div>
                     <div className="flex flex-wrap gap-1">
-                        {characterClass.primaryAttributes.map((attr) => (
+                        {(characterClass.primaryAttributes || []).map((attr) => (
                             <GlassAttributeChip key={attr} attribute={attr} size="sm" />
                         ))}
                     </div>
@@ -303,8 +305,8 @@ export function ClassPreview({ characterClass, showStatus = true }: ClassPreview
                     <div className="flex items-center gap-2 text-xs">
                         <span className="text-white/40 w-16">Armaduras:</span>
                         <div className="flex-1 flex flex-wrap gap-1">
-                            {characterClass.armorProficiencies.length > 0 ? (
-                                characterClass.armorProficiencies.map((p) => (
+                            {(characterClass.armorProficiencies || []).length > 0 ? (
+                                (characterClass.armorProficiencies || []).map((p) => (
                                     <span key={p} className="text-white/70 italic">
                                         {p}
                                     </span>
@@ -317,14 +319,14 @@ export function ClassPreview({ characterClass, showStatus = true }: ClassPreview
                     <div className="flex items-center gap-2 text-xs">
                         <span className="text-white/40 w-16">Armas:</span>
                         <div className="flex-1 text-white/70 italic truncate">
-                            {characterClass.weaponProficiencies.length > 0 ? <MentionContent html={characterClass.weaponProficiencies.join(", ")} mode="inline" /> : "Nenhuma"}
+                            {(characterClass.weaponProficiencies || []).length > 0 ? <MentionContent html={(characterClass.weaponProficiencies || []).join(", ")} mode="inline" /> : "Nenhuma"}
                         </div>
                     </div>
                     <div className="flex items-start gap-2 text-xs">
                         <span className="text-white/40 w-16 shrink-0 mt-1">Perícias:</span>
                         <div className="flex-1 flex flex-wrap items-center gap-1.5 p-1 bg-black/20 rounded-lg border border-white/5">
-                            <span className="text-[10px] font-bold text-white/50 uppercase tracking-tighter ml-1 mr-1">Escolha {characterClass.skillCount}:</span>
-                            {characterClass.availableSkills.map((skill) => {
+                            <span className="text-[10px] font-bold text-white/50 uppercase tracking-tighter ml-1 mr-1">Escolha {characterClass.skillCount || 0}:</span>
+                            {(characterClass.availableSkills || []).map((skill) => {
                                 const attr = SKILL_TO_ATTR[skill] || "Sabedoria"
                                 const config = attributeColors[attr as keyof typeof attributeColors]
                                 return (
@@ -342,7 +344,7 @@ export function ClassPreview({ characterClass, showStatus = true }: ClassPreview
                 <SpellcastingSection spellcasting={characterClass.spellcasting} spellcastingAttribute={characterClass.spellcastingAttribute} spells={characterClass.spells} />
             )}
 
-            {characterClass.subclasses.length > 0 && (
+            {subclasses.length > 0 && (
                 <div className="space-y-4 pt-2">
                     <div className="space-y-2">
                         <div className="flex items-center gap-2 text-[10px] font-bold text-white/40 uppercase tracking-widest">
@@ -352,7 +354,7 @@ export function ClassPreview({ characterClass, showStatus = true }: ClassPreview
                         <GlassSelector
                             value={selectedSubclassIds}
                             onChange={(val) => setSelectedSubclassIds(val as string[])}
-                            options={characterClass.subclasses.map((s) => ({
+                            options={subclasses.map((s) => ({
                                 value: s._id || s.name,
                                 label: s.name,
                                 activeColor: s.color, // Cor Hex (ex: #facc15)
@@ -457,7 +459,7 @@ export function ClassPreview({ characterClass, showStatus = true }: ClassPreview
             <div className="flex items-center justify-between pt-2">
                 <div className="flex items-center gap-1.5 text-[10px] uppercase font-bold text-white/40">
                     <Users className="h-3 w-3" />
-                    <span>{characterClass.subclasses.length} Subclasses</span>
+                    <span>{subclasses.length} Subclasses</span>
                 </div>
                 {characterClass.source && (
                     <div className="flex items-center gap-1.5 text-[10px] text-white/20">
