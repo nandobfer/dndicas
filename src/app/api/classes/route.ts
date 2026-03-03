@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { auth, currentUser } from "@clerk/nextjs/server"
 import { listClasses, createClass } from "@/features/classes/api/classes-service"
 import { classesQuerySchema, createClassSchema } from "@/features/classes/api/validation"
-import type { ClassesFilters, HitDiceType, SpellcastingTier } from "@/features/classes/types/classes.types"
+import type { ClassesFilters, HitDiceType } from "@/features/classes/types/classes.types"
 
 /**
  * GET /api/classes
@@ -19,7 +19,12 @@ export async function GET(req: NextRequest) {
         const queryParams = {
             search: url.searchParams.get("search") || undefined,
             hitDice: url.searchParams.get("hitDice")?.split(",").filter(Boolean) as HitDiceType[] | undefined,
-            spellcasting: url.searchParams.get("spellcasting")?.split(",").filter(Boolean) as SpellcastingTier[] | undefined,
+            spellcasting:
+                url.searchParams
+                    .get("spellcasting")
+                    ?.split(",")
+                    .filter(Boolean)
+                    .map((v) => v === "true") || undefined,
             status: (url.searchParams.get("status") || undefined) as "active" | "inactive" | "all" | undefined,
             page: parseInt(url.searchParams.get("page") || "1", 10),
             limit: parseInt(url.searchParams.get("limit") || "10", 10),
@@ -28,10 +33,7 @@ export async function GET(req: NextRequest) {
         const validation = classesQuerySchema.safeParse(queryParams)
 
         if (!validation.success) {
-            return NextResponse.json(
-                { error: "Parâmetros de consulta inválidos", details: validation.error.flatten() },
-                { status: 400 }
-            )
+            return NextResponse.json({ error: "Parâmetros de consulta inválidos", details: validation.error.flatten() }, { status: 400 })
         }
 
         const { page, limit, ...filters } = validation.data
