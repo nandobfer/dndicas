@@ -109,10 +109,10 @@ const SKILL_MAP: Record<AttributeType, SkillType[]> = {
 
 const SPELLCASTING_OPTIONS: { value: SpellcastingTier; label: string; activeColor: string; textColor: string }[] = [
     { value: "Nenhum", label: "Nenhum", activeColor: "bg-slate-400/20", textColor: "text-slate-400" },
-    { value: "Terço", label: "Terço", activeColor: "bg-blue-400/20", textColor: "text-blue-400" },
-    { value: "Metade", label: "Metade", activeColor: "bg-purple-400/20", textColor: "text-purple-400" },
     { value: "Completo", label: "Completo", activeColor: "bg-amber-400/20", textColor: "text-amber-400" },
-]
+    { value: "Metade", label: "Metade", activeColor: "bg-purple-400/20", textColor: "text-purple-400" },
+    { value: "Terço", label: "Terço", activeColor: "bg-blue-400/20", textColor: "text-blue-400" },
+] as const
 
 // ─── Subclass Traits Wrapper ──────────────────────────────────────────────────
 

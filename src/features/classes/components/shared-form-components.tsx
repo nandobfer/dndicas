@@ -5,21 +5,27 @@
 "use client";
 
 import * as React from "react"
-import { Controller, Control, UseFormRegister, FieldErrors, UseFormWatch, UseFormSetValue } from "react-hook-form"
-import { Info, BookOpen, Zap, Plus, X, Dices } from "lucide-react"
+import { Controller, Control, UseFormRegister, FieldErrors, UseFormWatch, UseFormSetValue, useFieldArray } from "react-hook-form"
+import { Info, BookOpen, Zap, Plus, X, Dices, Wand } from "lucide-react"
 import { motion, AnimatePresence } from "framer-motion"
 import { cn } from "@/core/utils"
 import { GlassInput } from "@/components/ui/glass-input"
 import { GlassImageUploader } from "@/components/ui/glass-image-uploader"
 import { GlassSelector } from "@/components/ui/glass-selector"
 import { GlassInlineEmptyState } from "@/components/ui/glass-inline-empty-state"
+import { GlassEntityChooser } from "@/components/ui/glass-entity-chooser"
 import { RichTextEditor } from "@/features/rules/components/rich-text-editor"
 import { attributeColors, type AttributeType } from "@/lib/config/colors"
+import { ENTITY_PROVIDERS } from "@/lib/config/entities"
 import type { HitDiceType, SpellcastingTier, WeaponProficiency } from "../types/classes.types"
 import type { CreateClassSchema } from "../api/validation"
 import { SPELLCASTING_TIER_OPTIONS } from "../types/classes.types"
 
 // ── Shared Constants ─────────────────────────────────────────────────────────
+
+const providerHabilidade = ENTITY_PROVIDERS.find(p => p.name === "Habilidade")
+const providerRegra = ENTITY_PROVIDERS.find(p => p.name === "Regra")
+const providerMagia = ENTITY_PROVIDERS.find(p => p.name === "Magia")
 
 const ATTRIBUTE_OPTIONS = (Object.entries(attributeColors) as [AttributeType, (typeof attributeColors)[AttributeType]][]).map(([key, config]) => ({
     value: key,
@@ -30,10 +36,10 @@ const ATTRIBUTE_OPTIONS = (Object.entries(attributeColors) as [AttributeType, (t
 
 const SPELLCASTING_OPTIONS: { value: SpellcastingTier; label: string; activeColor: string; textColor: string }[] = [
     { value: "Nenhum", label: "Nenhum", activeColor: "bg-slate-400/20", textColor: "text-slate-400" },
-    { value: "Terço", label: "Terço", activeColor: "bg-blue-400/20", textColor: "text-blue-400" },
-    { value: "Metade", label: "Metade", activeColor: "bg-purple-400/20", textColor: "text-purple-400" },
     { value: "Completo", label: "Completo", activeColor: "bg-amber-400/20", textColor: "text-amber-400" },
-]
+    { value: "Metade", label: "Metade", activeColor: "bg-purple-400/20", textColor: "text-purple-400" },
+    { value: "Terço", label: "Terço", activeColor: "bg-blue-400/20", textColor: "text-blue-400" },
+] as const
 
 // ── Components ───────────────────────────────────────────────────────────────
 
@@ -127,68 +133,123 @@ export function SpellcastingSection({
     layoutIdPrefix = "base"
 }: SpellcastingSectionProps) {
     const spellcasting = watch(spellcastingFieldName)
+    
+    // We'll use a hidden field to store spells if we had it in the schema, 
+    // for now we'll just implement the UI for adding spells
+    const { fields: spellFields, append: appendSpell, remove: removeSpell } = useFieldArray({
+        control,
+        name: `${spellcastingFieldName.split('.')[0]}.spells` as any // Fallback logic for field naming
+    })
 
     return (
-        <div className="space-y-3">
-            <div className="space-y-2">
-                <label className="text-sm font-medium text-white/80 flex items-center gap-2">
-                    <Zap className="h-4 w-4" />
-                    Conjuração
-                </label>
-                <Controller
-                    name={spellcastingFieldName}
-                    control={control}
-                    render={({ field }) => (
-                        <GlassSelector
-                            options={SPELLCASTING_OPTIONS}
-                            value={field.value as SpellcastingTier}
-                            onChange={(v) => {
-                                field.onChange(v)
-                                if (v === "Nenhum") setValue(attributeFieldName, undefined)
-                            }}
-                            mode="single"
-                            layout="horizontal"
-                            fullWidth
-                            size="md"
-                            disabled={isSubmitting}
-                            layoutId={`${layoutIdPrefix}-spellcasting`}
-                        />
-                    )}
-                />
-            </div>
+        <div className="space-y-4">
+            <div className="space-y-3">
+                <div className="space-y-2">
+                    <label className="text-sm font-medium text-white/80 flex items-center gap-2">
+                        <Zap className="h-4 w-4" />
+                        Conjuração
+                    </label>
+                    <Controller
+                        name={spellcastingFieldName}
+                        control={control}
+                        render={({ field }) => (
+                            <GlassSelector
+                                options={SPELLCASTING_OPTIONS}
+                                value={field.value as SpellcastingTier}
+                                onChange={(v) => {
+                                    field.onChange(v)
+                                    if (v === "Nenhum") setValue(attributeFieldName, undefined)
+                                }}
+                                mode="single"
+                                layout="horizontal"
+                                fullWidth
+                                size="md"
+                                disabled={isSubmitting}
+                                layoutId={`${layoutIdPrefix}-spellcasting`}
+                            />
+                        )}
+                    />
+                </div>
 
-            <AnimatePresence>
-                {spellcasting !== "Nenhum" && (
-                    <motion.div 
-                        initial={{ opacity: 0, height: 0 }} 
-                        animate={{ opacity: 1, height: "auto" }} 
-                        exit={{ opacity: 0, height: 0 }} 
-                        className="space-y-2 overflow-hidden"
-                    >
-                        <label className="text-sm font-medium text-white/80 flex items-center gap-2">
-                            <Zap className="h-4 w-4 text-amber-400" />
-                            Atributo de Conjuração
-                        </label>
-                        <Controller
-                            name={attributeFieldName}
-                            control={control}
-                            render={({ field }) => (
-                                <GlassSelector
-                                    options={ATTRIBUTE_OPTIONS}
-                                    value={field.value as AttributeType | undefined}
-                                    onChange={(v) => field.onChange(v)}
-                                    mode="single"
-                                    layout="horizontal"
-                                    fullWidth
-                                    size="md"
-                                    disabled={isSubmitting}
-                                    layoutId={`${layoutIdPrefix}-spellcasting-attr`}
+                <AnimatePresence>
+                    {spellcasting !== "Nenhum" && (
+                        <motion.div 
+                            initial={{ opacity: 0, height: 0 }} 
+                            animate={{ opacity: 1, height: "auto" }} 
+                            exit={{ opacity: 0, height: 0 }} 
+                            className="space-y-3 overflow-hidden"
+                        >
+                            <div className="space-y-2">
+                                <label className="text-sm font-medium text-white/80 flex items-center gap-2">
+                                    <Zap className="h-4 w-4 text-amber-400" />
+                                    Atributo de Conjuração
+                                </label>
+                                <Controller
+                                    name={attributeFieldName}
+                                    control={control}
+                                    render={({ field }) => (
+                                        <GlassSelector
+                                            options={ATTRIBUTE_OPTIONS}
+                                            value={field.value as AttributeType | undefined}
+                                            onChange={(v) => field.onChange(v)}
+                                            mode="single"
+                                            layout="horizontal"
+                                            fullWidth
+                                            size="md"
+                                            disabled={isSubmitting}
+                                            layoutId={`${layoutIdPrefix}-spellcasting-attr`}
+                                        />
+                                    )}
                                 />
-                            )}
-                        />
-                    </motion.div>
-                )}
-            </AnimatePresence>
+                            </div>
+
+                            <div className="space-y-2 pt-2 border-t border-white/5">
+                                <div className="flex items-center justify-between">
+                                    <label className="text-sm font-medium text-white/80 flex items-center gap-2">
+                                        <Wand className="h-4 w-4 text-blue-400" />
+                                        Magias Conhecidas / Preparadas
+                                    </label>
+                                    <div className="w-48">
+                                        <GlassEntityChooser 
+                                            provider={providerMagia}
+                                            placeholder="Adicionar magia..."
+                                            onChange={(val) => {
+                                                if (val) {
+                                                    appendSpell({ id: val.id, name: val.label })
+                                                }
+                                            }}
+                                            disabled={isSubmitting}
+                                        />
+                                    </div>
+                                </div>
+                                
+                                <div className="flex flex-wrap gap-2">
+                                    {spellFields.map((field: any, index: number) => (
+                                        <motion.div
+                                            key={field.id}
+                                            initial={{ opacity: 0, scale: 0.8 }}
+                                            animate={{ opacity: 1, scale: 1 }}
+                                            className="flex items-center gap-2 px-2 py-1 rounded-lg bg-blue-500/10 border border-blue-500/20 text-blue-400 text-xs font-medium"
+                                        >
+                                            <span>{field.name}</span>
+                                            <button 
+                                                type="button"
+                                                onClick={() => removeSpell(index)}
+                                                className="hover:text-blue-200 transition-colors"
+                                            >
+                                                <X className="h-3 w-3" />
+                                            </button>
+                                        </motion.div>
+                                    ))}
+                                    {spellFields.length === 0 && (
+                                        <span className="text-[11px] text-white/20 italic">Nenhuma magia adicionada</span>
+                                    )}
+                                </div>
+                            </div>
+                        </motion.div>
+                    )}
+                </AnimatePresence>
+            </div>
         </div>
     )
 }
@@ -274,20 +335,27 @@ export function TraitsSection({
                                 </div>
                                 <div className="flex-1 self-stretch flex flex-col">
                                     <div className="space-y-1.5 flex-1 flex flex-col">
-                                        <label className="text-sm font-medium text-white/80 block shrink-0">Traços / Regras (Habilidade)</label>
+                                        <label className="text-sm font-medium text-white/80 block shrink-0">Habilidade (Traço ou Regra)</label>
                                         <Controller
                                             name={`${traitsFieldName}.${index}.description`}
                                             control={control}
                                             render={({ field: descField }) => (
                                                 <div className="space-y-1">
-                                                    <RichTextEditor
-                                                        value={descField.value || ""}
-                                                        onChange={descField.onChange}
-                                                        variant="simple"
-                                                        placeholder="Mencione uma habilidade @..."
+                                                    <GlassEntityChooser
+                                                        value={descField.value ? { label: descField.value.replace(/<[^>]*>/g, ""), id: field.id } : undefined}
+                                                        onChange={(val) => {
+                                                            if (val) {
+                                                                // If it's a mention-like style, we can format it as a mention span
+                                                                // but for simplicity here we'll store the label or a specific mention format
+                                                                descField.onChange(`<span data-type="mention" data-id="${val.id}" data-entity-type="${val.entityType}" class="mention">${val.label}</span>`)
+                                                            } else {
+                                                                descField.onChange("")
+                                                            }
+                                                        }}
+                                                        provider={providerHabilidade}
+                                                        placeholder="Vincular @Habilidade..."
                                                         disabled={isSubmitting}
                                                         className={cn(
-                                                            "flex-1 min-h-[38px]",
                                                             ((errors as any)?.[traitsFieldName.split('.')[0]]?.[index]?.description || 
                                                              (errors as any)?.[traitsFieldName]?. [index]?.description) && "border-rose-500/50"
                                                         )}

@@ -27,6 +27,90 @@ const SKILL_TO_ATTR: Record<string, string> = {
     "Enganação": "Carisma", "Intimidação": "Carisma", "Atuação": "Carisma", "Persuasão": "Carisma"
 }
 
+function SpellcastingSection({ spellcasting, spellcastingAttribute, color }: { spellcasting: string; spellcastingAttribute?: string; color?: string }) {
+    const [isOpen, setIsOpen] = useState(false)
+    const [spellSearch, setSpellSearch] = useState("")
+    const [spellLevel, setSpellLevel] = useState<number | undefined>(undefined)
+    const [filterMode, setFilterMode] = useState<"upTo" | "exact">("exact")
+
+    if (spellcasting === "Nenhum") return null
+
+    return (
+        <div
+            className="rounded-xl overflow-hidden border transition-all"
+            style={{
+                borderColor: color ? `${color}20` : "rgba(255,255,255,0.1)",
+                backgroundColor: color ? `${color}05` : "rgba(255,255,255,0.02)",
+            }}
+        >
+            <button onClick={() => setIsOpen(!isOpen)} className="w-full flex items-center justify-between p-2.5 hover:bg-white/[0.02] transition-colors">
+                <div className="flex items-center gap-3">
+                    <div
+                        className="p-1 px-1.5 rounded-lg border"
+                        style={{
+                            backgroundColor: color ? `${color}15` : "rgba(59,130,246,0.1)",
+                            borderColor: color ? `${color}30` : "rgba(59,130,246,0.2)",
+                        }}
+                    >
+                        <Zap className="h-3.5 w-3.5" style={{ color: color || "#60a5fa" }} />
+                    </div>
+                    <div className="text-left">
+                        <span className="text-[10px] font-bold text-white/40 uppercase tracking-widest block">Magias</span>
+                        <div className="flex items-center gap-2">
+                            <span className="text-xs font-semibold text-white/90">{spellcasting}</span>
+                            {spellcastingAttribute && <GlassAttributeChip attribute={spellcastingAttribute as AttributeType} size="sm" />}
+                        </div>
+                    </div>
+                </div>
+                <motion.div animate={{ rotate: isOpen ? 90 : 0 }} transition={{ duration: 0.2 }}>
+                    <ChevronRight className="h-4 w-4 text-white/20" />
+                </motion.div>
+            </button>
+
+            <AnimatePresence>
+                {isOpen && (
+                    <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: "auto", opacity: 1 }} exit={{ height: 0, opacity: 0 }} className="border-t border-white/5">
+                        <div className="p-3 space-y-3">
+                            <div className="flex items-center gap-2">
+                                <GlassInput placeholder="Buscar magia..." value={spellSearch} onChange={(e) => setSpellSearch(e.target.value)} className="h-8 text-xs flex-1" />
+                                <div className="flex items-center gap-1.5">
+                                    <GlassInput
+                                        type="text"
+                                        inputMode="numeric"
+                                        value={spellLevel !== undefined ? String(spellLevel) : ""}
+                                        onChange={(e) => {
+                                            const val = e.target.value.replace(/\D/g, "")
+                                            setSpellLevel(val === "" ? undefined : Math.min(9, parseInt(val)))
+                                        }}
+                                        placeholder="Círculo"
+                                        className="w-auto px-2 h-8 text-center text-xs"
+                                        containerClassName="w-auto"
+                                    />
+                                    <GlassSelector
+                                        value={filterMode}
+                                        onChange={(val) => setFilterMode(val as "exact" | "upTo")}
+                                        options={[
+                                            { value: "exact", label: "=", activeColor: color || "bg-blue-500/20", textColor: color ? "white" : "text-blue-400" },
+                                            { value: "upTo", label: "≤", activeColor: color || "bg-blue-500/20", textColor: color ? "white" : "text-blue-400" },
+                                        ]}
+                                        className="h-8"
+                                        layoutId={color ? `spell-level-mode-${color}` : "spell-level-mode-main"}
+                                    />
+                                </div>
+                            </div>
+
+                            <div className="py-8 text-center bg-black/20 rounded-lg border border-dashed border-white/5">
+                                <p className="text-xs text-white/30 italic">Nenhuma magia disponível ou encontrada.</p>
+                                <p className="text-[10px] text-white/10 uppercase mt-1 tracking-tighter">Módulo de Grimório em desenvolvimento</p>
+                            </div>
+                        </div>
+                    </motion.div>
+                )}
+            </AnimatePresence>
+        </div>
+    )
+}
+
 function TraitMentionRenderer({ trait, color }: { trait: any; color?: string }) {
     const mention = useMemo(() => {
         if (!trait.description) return null
@@ -69,7 +153,7 @@ function TraitMentionRenderer({ trait, color }: { trait: any; color?: string }) 
                     className="rounded-xl border border-white/10 overflow-hidden group/trait transition-all"
                     style={{
                         borderColor: color ? `${color}40` : undefined,
-                        backgroundColor: color ? `${color}05` : undefined
+                        backgroundColor: color ? `${color}05` : undefined,
                     }}
                 >
                     {mention.type === "Habilidade" ? (Renderer as any)(mention.id) : (Renderer as any)({ _id: mention.id })}
@@ -83,7 +167,7 @@ function TraitMentionRenderer({ trait, color }: { trait: any; color?: string }) 
             className="flex items-start gap-2.5 p-2.5 rounded-xl bg-white/[0.03] border border-white/5 group/trait hover:bg-white/[0.06] transition-all"
             style={{
                 borderColor: color ? `${color}40` : undefined,
-                backgroundColor: color ? `${color}05` : undefined
+                backgroundColor: color ? `${color}05` : undefined,
             }}
         >
             <div className="flex-1 min-w-0">
@@ -281,19 +365,7 @@ export function ClassPreview({ characterClass, showStatus = true }: ClassPreview
                 </div>
             </div>
 
-            {characterClass.spellcasting !== "Nenhum" && (
-                <div className="p-2.5 rounded-xl bg-white/5 border border-white/10 flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                        <div className="p-1 px-1.5 rounded-lg bg-blue-500/10 border border-blue-500/20">
-                            <Zap className="h-3 w-3 text-blue-400" />
-                        </div>
-                        <div>
-                            <span className="text-[10px] font-bold text-white/40 uppercase tracking-widest block">Atributo de Conjuração</span>
-                            <span className="text-xs font-semibold text-white/90">{characterClass.spellcasting}</span>
-                        </div>
-                    </div>
-                </div>
-            )}
+            {characterClass.spellcasting !== "Nenhum" && <SpellcastingSection spellcasting={characterClass.spellcasting} spellcastingAttribute={characterClass.spellcastingAttribute} />}
 
             {characterClass.subclasses.length > 0 && (
                 <div className="space-y-4 pt-2">
@@ -338,26 +410,7 @@ export function ClassPreview({ characterClass, showStatus = true }: ClassPreview
 
                                 <ClassVisualHeader name={subclass.name} description={subclass.description || ""} image={subclass.image} color={subclass.color} />
 
-                                {subclass.spellcasting !== "Nenhum" && (
-                                    <div
-                                        className="p-2 rounded-lg bg-white/5 border border-white/10 flex items-center justify-between"
-                                        style={{ borderColor: subclass.color ? `${subclass.color}20` : undefined }}
-                                    >
-                                        <div className="flex items-center gap-3">
-                                            <Zap className="h-3 w-3" style={{ color: subclass.color }} />
-                                            <div>
-                                                <span className="text-[9px] font-bold text-white/40 uppercase block">Magias da Subclasse</span>
-                                                <span className="text-[11px] font-medium text-white/80">{subclass.spellcasting}</span>
-                                            </div>
-                                        </div>
-                                        {subclass.spellcastingAttribute && (
-                                            <div className="flex items-center gap-2">
-                                                <span className="text-[9px] text-white/40 uppercase font-medium">Atributo:</span>
-                                                <GlassAttributeChip attribute={subclass.spellcastingAttribute as AttributeType} size="sm" />
-                                            </div>
-                                        )}
-                                    </div>
-                                )}
+                                <SpellcastingSection spellcasting={subclass.spellcasting} spellcastingAttribute={subclass.spellcastingAttribute} color={subclass.color} />
                             </motion.div>
                         ))}
                     </AnimatePresence>
