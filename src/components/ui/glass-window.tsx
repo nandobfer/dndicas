@@ -51,8 +51,8 @@ export function GlassWindow({
     }, [initialPosition])
 
     const [size, setSize] = React.useState<{ width: number | string, height: number | string }>({ 
-        width: isMinimized ? 200 : "auto", 
-        height: isMinimized ? "auto" : "auto" 
+        width: isMinimized ? 200 : "min(450px, 35vw)", 
+        height: isMinimized ? "auto" : "min(400px, 40vh)" 
     })
     const [isResizing, setIsResizing] = React.useState(false)
     // Constraints logic

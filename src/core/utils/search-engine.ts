@@ -1,4 +1,5 @@
 import Fuse from "fuse.js"
+import { ENTITY_PROVIDERS } from "@/lib/config/entities"
 
 /**
  * @fileoverview Central search engine for multi-entity lookups.
@@ -10,7 +11,7 @@ export interface UnifiedEntity {
     _id?: string
     name: string
     label?: string // For compatibility
-    type: "Regra" | "Magia" | "Habilidade" | "Talento"
+    type: "Regra" | "Magia" | "Habilidade" | "Talento" | "Classe"
     description?: string
     source?: string
     status: "active" | "inactive"
@@ -19,68 +20,6 @@ export interface UnifiedEntity {
     circle?: number
     score?: number // Added for weighted sorting visibility if needed
 }
-
-export const ENTITY_PROVIDERS = [
-    {
-        name: "Regra" as const,
-        endpoint: () => `/api/rules`, // No query, no limit
-        map: (item: any): UnifiedEntity => ({
-            id: item._id || item.id,
-            _id: item._id,
-            name: item.name,
-            label: item.name,
-            type: "Regra",
-            description: item.description,
-            source: item.source,
-            status: item.status || "active"
-        })
-    },
-    {
-        name: "Habilidade" as const,
-        endpoint: () => `/api/traits/search`, // No query, no limit
-        map: (item: any): UnifiedEntity => ({
-            id: item._id || item.id,
-            _id: item._id,
-            name: item.name,
-            label: item.name,
-            type: "Habilidade",
-            description: item.description,
-            source: item.source,
-            status: item.status || "active"
-        })
-    },
-    {
-        name: "Talento" as const,
-        endpoint: () => `/api/feats/search`, // No query, no limit
-        map: (item: any): UnifiedEntity => ({
-            id: item.id || item._id,
-            _id: item._id,
-            name: item.label || item.name,
-            label: item.label || item.name,
-            type: "Talento",
-            description: item.metadata?.description || item.description,
-            source: item.source || item.metadata?.source,
-            status: "active",
-            metadata: item.metadata
-        })
-    },
-    {
-        name: "Magia" as const,
-        endpoint: () => `/api/spells/search`, // No query, no limit
-        map: (item: any): UnifiedEntity => ({
-            id: item.id || item._id,
-            _id: item._id,
-            name: item.label || item.name,
-            label: item.label || item.name,
-            type: "Magia",
-            description: item.description,
-            school: item.school,
-            circle: item.circle,
-            source: item.source,
-            status: item.status || "active"
-        })
-    }
-]
 
 // Simple in-memory cache for search data
 let cachedData: UnifiedEntity[] | null = null

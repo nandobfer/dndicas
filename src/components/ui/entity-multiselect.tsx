@@ -11,7 +11,7 @@ import { motion } from "framer-motion"
 import { cn } from "@/core/utils"
 import { GlassPopover, GlassPopoverContent, GlassPopoverTrigger } from "@/components/ui/glass-popover"
 import { glassConfig } from "@/lib/config/glass-config"
-import { entityConfig } from "@/lib/config/colors"
+import { entityColors } from "@/lib/config/colors"
 
 export interface EntityMultiSelectProps {
     /** Currently selected entity types */
@@ -31,8 +31,8 @@ const entityIcons: Record<string, any> = {
     Magia: Wand,
 }
 
-// Preparation for the component using entityConfig from colors.ts
-const entities = Object.entries(entityConfig)
+// Preparation for the component using entityColors from colors.ts
+const entities = Object.entries(entityColors)
     .filter(([label]) => label !== "Segurança")
     .map(([label, config]) => {
         // Dynamic map for shadow colors based on the semantic color name

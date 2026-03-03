@@ -5,15 +5,17 @@ import { GlassCard } from "@/components/ui/glass-card"
 import { Chip } from "@/components/ui/chip"
 import { ScrollText, BookOpen, Quote, Sparkles, ExternalLink } from "lucide-react"
 import { cn } from "@/core/utils"
-import { entityConfig } from "@/lib/config/colors"
+import { entityColors } from "@/lib/config/colors"
 import { Reference } from "../types/rules.types"
 import { SimpleGlassTooltip } from "@/components/ui/glass-tooltip"
 import { MentionContent } from "./mention-badge"
 import { GlassPopover, GlassPopoverTrigger, GlassPopoverContent } from "@/components/ui/glass-popover"
 import { FeatPreview } from "@/features/feats/components/feat-preview"
 import { SpellPreview } from "@/features/spells/components/spell-preview"
+import { ClassPreview } from "@/features/classes/components/class-preview"
 import { useWindows } from "@/core/context/window-context"
 import { motion } from "framer-motion"
+import { EntityTitleLink } from "./entity-title-link"
 
 interface RulePreviewProps {
     rule: Reference
@@ -26,11 +28,11 @@ export const RulePreview = ({ rule, showStatus = true }: RulePreviewProps) => {
         <div className="space-y-4 w-full">
             <div className="flex flex-col sm:flex-row items-start sm:justify-between gap-4">
                 <div className="flex items-center gap-2">
-                    <div className={cn("p-1.5 rounded-lg border flex-shrink-0", entityConfig.Regra.badge)}>
+                    <div className={cn("p-1.5 rounded-lg border flex-shrink-0", entityColors.Regra.badge)}>
                         <ScrollText className="w-4 h-4" />
                     </div>
                     <div>
-                        <h4 className="text-sm font-bold text-white leading-tight">{rule.name}</h4>
+                        <EntityTitleLink name={rule.name} entityType="Regra" />
                         <p className="text-[10px] uppercase font-bold tracking-widest text-white/40 mt-0.5">Regra do Sistema</p>
                     </div>
                 </div>
@@ -44,7 +46,7 @@ export const RulePreview = ({ rule, showStatus = true }: RulePreviewProps) => {
                                     title: rule.name || "Regra",
                                     content: null,
                                     item: rule,
-                                    entityType: "Regra"
+                                    entityType: "Regra",
                                 })
                             }
                             className="p-1.5 rounded-lg text-white/40 hover:text-white hover:bg-white/10 transition-colors"
@@ -96,11 +98,11 @@ export const TraitPreview = ({ trait, showStatus = true }: TraitPreviewProps) =>
         <div className="space-y-4 w-full">
             <div className="flex items-start justify-between gap-4">
                 <div className="flex items-center gap-2">
-                    <div className={cn("p-1.5 rounded-lg border", entityConfig.Habilidade.badge)}>
+                    <div className={cn("p-1.5 rounded-lg border", entityColors.Habilidade.badge)}>
                         <Sparkles className="w-4 h-4" />
                     </div>
                     <div>
-                        <h4 className="text-sm font-bold text-white leading-tight">{trait.name}</h4>
+                        <EntityTitleLink name={trait.name} entityType="Habilidade" />
                         <p className="text-[10px] uppercase font-bold tracking-widest text-white/40 mt-0.5">Habilidade D&D</p>
                     </div>
                 </div>
@@ -114,7 +116,7 @@ export const TraitPreview = ({ trait, showStatus = true }: TraitPreviewProps) =>
                                     title: trait.name || "Habilidade",
                                     content: null,
                                     item: trait,
-                                    entityType: "Habilidade"
+                                    entityType: "Habilidade",
                                 })
                             }
                             className="p-1.5 rounded-lg text-white/40 hover:text-white hover:bg-white/10 transition-colors"
@@ -181,6 +183,8 @@ export const EntityPreviewTooltip = ({ entityId, entityType, children, side = "t
                 endpoint = `/api/feats/${entityId}`
             } else if (entityType === "Magia") {
                 endpoint = `/api/spells/${entityId}`
+            } else if (entityType === "Classe") {
+                endpoint = `/api/classes/${entityId}`
             }
 
             const res = await fetch(endpoint)
@@ -229,6 +233,8 @@ export const EntityPreviewTooltip = ({ entityId, entityType, children, side = "t
                 return <FeatPreview feat={data} />
             case "Magia":
                 return <SpellPreview spell={data} />
+            case "Classe":
+                return <ClassPreview characterClass={data} showStatus={true} />
             default:
                 return (
                     <div className="p-4">

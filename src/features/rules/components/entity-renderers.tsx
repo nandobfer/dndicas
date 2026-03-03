@@ -2,6 +2,12 @@ import * as React from "react"
 import { RulePreview, TraitPreview } from "@/features/rules/components/entity-preview-tooltip"
 import { FeatPreview } from "@/features/feats/components/feat-preview"
 import { SpellPreview } from "@/features/spells/components/spell-preview"
+import { ClassPreview } from "@/features/classes/components/class-preview"
+import { fetchTraitById } from "@/features/traits/api/traits-api"
+import { fetchSpell } from "@/features/spells/api/spells-api"
+import { getClassById } from "@/features/classes/api/classes-service"
+import { LoadingState } from "@/components/ui/loading-state"
+import { Wand, GraduationCap } from "lucide-react"
 
 /**
  * Registry of renderers for different entity types.
@@ -9,9 +15,142 @@ import { SpellPreview } from "@/features/spells/components/spell-preview"
  */
 export const ENTITY_RENDERERS: Record<string, (item: any) => React.ReactNode> = {
     Regra: (item) => <RulePreview rule={item} showStatus={false} />,
-    Habilidade: (item) => <TraitPreview trait={item} showStatus={false} />,
+    Habilidade: (id) => <TraitAsyncRenderer id={id} />,
     Talento: (item) => <FeatPreview feat={item} showStatus={false} />,
-    Magia: (item) => <SpellPreview spell={item} showStatus={false} />,
+    Magia: (idOrItem) => <SpellAsyncRenderer item={idOrItem} />,
+    Classe: (idOrItem) => <ClassAsyncRenderer item={idOrItem} />,
+}
+
+function TraitAsyncRenderer({ id }: { id: string }) {
+    const [trait, setTrait] = React.useState<any>(null)
+    const [loading, setLoading] = React.useState(true)
+
+    React.useEffect(() => {
+        if (typeof id !== "string") {
+            setTrait(id)
+            setLoading(false)
+            return
+        }
+
+        fetchTraitById(id)
+            .then(setTrait)
+            .catch(console.error)
+            .finally(() => setLoading(false))
+    }, [id])
+
+    if (loading)
+        return (
+            <div className="p-4 flex justify-center">
+                <LoadingState variant="spinner" size="sm" />
+            </div>
+        )
+    if (!trait) return <div className="p-4 text-xs text-white/20 italic text-center">Habilidade não encontrada</div>
+
+    return (
+        <div className="p-4">
+            <TraitPreview trait={trait} showStatus={true} />
+        </div>
+    )
+}
+
+function SpellAsyncRenderer({ item }: { item: any }) {
+    const [spell, setSpell] = React.useState<any>(null)
+    const [loading, setLoading] = React.useState(true)
+
+    const id = typeof item === "string" ? item : item?._id || item?.id
+
+    React.useEffect(() => {
+        // Se já temos o objeto completo (com escola ou descrição), não precisamos buscar
+        if (item && typeof item === "object" && (item.school || item.description)) {
+            setSpell(item)
+            setLoading(false)
+            return
+        }
+
+        if (!id) {
+            setLoading(false)
+            return
+        }
+
+        fetchSpell(id)
+            .then(setSpell)
+            .catch(console.error)
+            .finally(() => setLoading(false))
+    }, [id, item])
+
+    if (loading)
+        return (
+            <div className="p-8 flex flex-col items-center justify-center gap-3 bg-white/[0.02] rounded-xl border border-white/5 animate-in fade-in duration-300">
+                <LoadingState variant="spinner" size="md" />
+                <span className="text-[10px] uppercase font-bold tracking-widest text-white/20">Buscando Magia...</span>
+            </div>
+        )
+    if (!spell)
+        return (
+            <div className="p-8 text-center bg-rose-500/5 rounded-xl border border-dashed border-rose-500/20 flex flex-col items-center justify-center gap-2">
+                <div className="p-2 rounded-full bg-rose-500/10 text-rose-400">
+                    <Wand className="h-4 w-4" />
+                </div>
+                <p className="text-xs text-rose-400/60 italic">Magia não encontrada no catálogo.</p>
+            </div>
+        )
+
+    return (
+        <div className="p-4">
+            <SpellPreview spell={spell} showStatus={true} />
+        </div>
+    )
+}
+
+function ClassAsyncRenderer({ item }: { item: any }) {
+    const [characterClass, setCharacterClass] = React.useState<any>(null)
+    const [loading, setLoading] = React.useState(true)
+
+    const id = typeof item === "string" ? item : item?._id || item?.id
+
+    React.useEffect(() => {
+        // Se já temos o objeto completo (com atributos primários ou subclasses), não precisamos buscar
+        if (item && typeof item === "object" && (item.primaryAttributes?.length > 0 || item.subclasses?.length > 0)) {
+            setCharacterClass(item)
+            setLoading(false)
+            return
+        }
+
+        if (!id) {
+            setLoading(false)
+            return
+        }
+
+        // Fetch via client-side API to get the full profile
+        fetch(`/api/classes/${id}`)
+            .then(res => res.json())
+            .then(setCharacterClass)
+            .catch(console.error)
+            .finally(() => setLoading(false))
+    }, [id, item])
+
+    if (loading)
+        return (
+            <div className="p-8 flex flex-col items-center justify-center gap-3 bg-white/[0.02] rounded-xl border border-white/5 animate-in fade-in duration-300">
+                <LoadingState variant="spinner" size="md" />
+                <span className="text-[10px] uppercase font-bold tracking-widest text-white/20">Buscando Classe...</span>
+            </div>
+        )
+    if (!characterClass)
+        return (
+            <div className="p-8 text-center bg-blue-500/5 rounded-xl border border-dashed border-blue-500/20 flex flex-col items-center justify-center gap-2">
+                <div className="p-2 rounded-full bg-blue-500/10 text-blue-400">
+                    <GraduationCap className="h-4 w-4" />
+                </div>
+                <p className="text-xs text-blue-400/60 italic">Classe não encontrada no catálogo.</p>
+            </div>
+        )
+
+    return (
+        <div className="p-4">
+            <ClassPreview characterClass={characterClass} showStatus={true} />
+        </div>
+    )
 }
 
 export const renderEntity = (item: any, entityType: string) => {
