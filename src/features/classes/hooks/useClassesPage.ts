@@ -12,7 +12,7 @@ export function useClassesPage() {
     const isMobile = useIsMobile()
     const { viewMode, setViewMode, isTable, isDefault } = useViewMode()
 
-    const { filters, search, setSearch, setStatus, setHitDice, setSpellcasting, setPage } = useClassFilters()
+    const { filters, search, setSearch, setStatus, setPage } = useClassFilters()
 
     const paginatedData = useClasses(filters, filters.page, filters.limit, { enabled: isTable })
     const infiniteData = useInfiniteClasses(filters, { enabled: !isTable })
@@ -24,8 +24,6 @@ export function useClassesPage() {
 
     const handleSearchChange = (value: string) => setSearch(value)
     const handleStatusChange = (value: "all" | "active" | "inactive") => setStatus(value)
-    const handleHitDiceChange = (value: string[]) => setHitDice(value as any)
-    const handleSpellcastingChange = (value: string[]) => setSpellcasting(value as any)
 
     const handleCreateClick = () => {
         setSelectedClass(null)
@@ -73,13 +71,13 @@ export function useClassesPage() {
             page: filters.page,
             setPage,
             total: paginatedData.data?.total || 0,
-            limit: filters.limit,
+            limit: filters.limit
         },
         data: {
             paginated: {
                 items: paginatedData.data?.classes || [],
                 isLoading: paginatedData.isLoading,
-                isFetching: paginatedData.isFetching,
+                isFetching: paginatedData.isFetching
             },
             infinite: {
                 items: infiniteData.data?.pages.flatMap((page) => page.classes) || [],
@@ -87,19 +85,17 @@ export function useClassesPage() {
                 isFetchingNextPage: infiniteData.isFetchingNextPage,
                 isFetching: infiniteData.isFetching,
                 hasNextPage: !!infiniteData.hasNextPage,
-                fetchNextPage: infiniteData.fetchNextPage,
-            },
+                fetchNextPage: infiniteData.fetchNextPage
+            }
         },
         actions: {
             handleSearchChange,
             handleStatusChange,
-            handleHitDiceChange,
-            handleSpellcastingChange,
             handleCreateClick,
             handleEditClick,
             handleDeleteClick,
             handleDeleteConfirm,
-            handleFormSuccess,
+            handleFormSuccess
         },
         modals: {
             isFormOpen,
@@ -108,7 +104,7 @@ export function useClassesPage() {
             setIsDeleteOpen,
             selectedClass,
             hasActiveFilters,
-            isSaving: deleteMutation.isPending,
-        },
+            isSaving: deleteMutation.isPending
+        }
     }
 }

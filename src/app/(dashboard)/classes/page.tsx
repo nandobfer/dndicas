@@ -4,6 +4,7 @@
 
 import { ClassesPage } from "@/features/classes/components/classes-page"
 import { Metadata } from "next"
+import { Suspense } from "react"
 
 export const metadata: Metadata = {
     title: "Catálogo de Classes | D&Dicas",
@@ -11,5 +12,9 @@ export const metadata: Metadata = {
 }
 
 export default function Page() {
-    return <ClassesPage />
+    return (
+        <Suspense fallback={<div>Carregando catálogo de classes...</div>}>
+            <ClassesPage />
+        </Suspense>
+    )
 }

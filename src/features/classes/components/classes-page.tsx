@@ -46,7 +46,7 @@ export function ClassesPage() {
                             "hover:bg-blue-600 transition-colors",
                             "focus:outline-none focus:ring-2 focus:ring-blue-500/50",
                             "shadow-lg shadow-blue-500/20",
-                            "w-full sm:w-auto",
+                            "w-full sm:w-auto"
                         )}
                     >
                         <Plus className="h-4 w-4" />
@@ -62,8 +62,6 @@ export function ClassesPage() {
                         filters={filters}
                         onSearchChange={actions.handleSearchChange}
                         onStatusChange={(v) => actions.handleStatusChange(v as "all" | "active" | "inactive")}
-                        onHitDiceChange={actions.handleHitDiceChange}
-                        onSpellcastingChange={actions.handleSpellcastingChange}
                         isSearching={data.paginated.isFetching || data.infinite.isFetching}
                     />
                 </GlassCardContent>
@@ -96,7 +94,12 @@ export function ClassesPage() {
                 />
             )}
 
-            <ClassFormModal isOpen={modals.isFormOpen} characterClass={modals.selectedClass} onClose={() => modals.setIsFormOpen(false)} onSuccess={actions.handleFormSuccess} />
+            <ClassFormModal
+                isOpen={modals.isFormOpen}
+                characterClass={modals.selectedClass}
+                onClose={() => modals.setIsFormOpen(false)}
+                onSuccess={actions.handleFormSuccess}
+            />
 
             <DeleteClassDialog
                 isOpen={modals.isDeleteOpen}
