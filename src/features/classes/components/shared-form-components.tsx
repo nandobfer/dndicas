@@ -365,7 +365,7 @@ export function TraitsSection({
                 </label>
                 <button
                     type="button"
-                    onClick={() => append({ level: 1, description: "" }, { shouldFocus: true, focusName: `${traitsFieldName}.0.description` })}
+                    onClick={() => append({ level: 1, description: "" })}
                     disabled={isSubmitting}
                     className={cn(
                         "px-3 py-1.5 rounded-lg text-xs font-medium transition-colors",
