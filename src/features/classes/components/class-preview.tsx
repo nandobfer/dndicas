@@ -164,13 +164,7 @@ export function ClassPreview({ characterClass, showStatus = true }: ClassPreview
                     <div>
                         <div className="flex items-center gap-2">
                             <EntityTitleLink name={characterClass.name} entityType="Classe" />
-                            <span className={cn(
-                                "inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold uppercase",
-                                diceColor?.bg,
-                                diceColor?.text
-                            )}>
-                                {characterClass.hitDice}
-                            </span>
+                            <span className={cn("inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold uppercase", diceColor?.bg, diceColor?.text)}>{characterClass.hitDice}</span>
                         </div>
                         <p className="text-[10px] uppercase font-bold tracking-widest text-white/40 mt-0.5">Classe D&D 5e</p>
                     </div>
@@ -187,13 +181,9 @@ export function ClassPreview({ characterClass, showStatus = true }: ClassPreview
             {/* Visual Description Row (New) */}
             <div className="flex flex-col md:flex-row gap-4 py-3 border-y border-white/5">
                 {characterClass.image && (
-                    <div className="w-full md:w-40 lg:w-48 shrink-0">
+                    <div className="w-full md:w-2/5 shrink-0">
                         <div className="aspect-square rounded-xl border border-white/10 bg-white/5 overflow-hidden shadow-2xl group/image relative">
-                            <img 
-                                src={characterClass.image} 
-                                alt={characterClass.name}
-                                className="w-full h-full object-cover transition-transform duration-500 group-hover/image:scale-110"
-                            />
+                            <img src={characterClass.image} alt={characterClass.name} className="w-full h-full object-cover transition-transform duration-500 group-hover/image:scale-110" />
                             <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent opacity-0 group-hover/image:opacity-100 transition-opacity duration-300" />
                         </div>
                     </div>
@@ -204,11 +194,7 @@ export function ClassPreview({ characterClass, showStatus = true }: ClassPreview
                         <span>Descrição</span>
                     </div>
                     <div className="text-sm text-white/80 leading-relaxed max-h-[200px] overflow-y-auto pr-2 scrollbar-thin scrollbar-thumb-white/10 scrollbar-track-transparent">
-                        <MentionContent 
-                            html={characterClass.description} 
-                            mode="block" 
-                            className="[&_p]:text-sm [&_p]:text-white/80 [&_ul]:text-sm [&_ol]:text-sm [&_p]:leading-relaxed" 
-                        />
+                        <MentionContent html={characterClass.description} mode="block" className="[&_p]:text-sm [&_p]:text-white/80 [&_ul]:text-sm [&_ol]:text-sm [&_p]:leading-relaxed" />
                     </div>
                 </div>
             </div>
@@ -222,7 +208,7 @@ export function ClassPreview({ characterClass, showStatus = true }: ClassPreview
                         <span>Resistências</span>
                     </div>
                     <div className="flex flex-wrap gap-1">
-                        {characterClass.savingThrows.map(attr => (
+                        {characterClass.savingThrows.map((attr) => (
                             <GlassAttributeChip key={attr} attribute={attr} size="sm" />
                         ))}
                     </div>
@@ -235,7 +221,7 @@ export function ClassPreview({ characterClass, showStatus = true }: ClassPreview
                         <span>Primários</span>
                     </div>
                     <div className="flex flex-wrap gap-1">
-                        {characterClass.primaryAttributes.map(attr => (
+                        {characterClass.primaryAttributes.map((attr) => (
                             <GlassAttributeChip key={attr} attribute={attr} size="sm" />
                         ))}
                     </div>
@@ -253,18 +239,20 @@ export function ClassPreview({ characterClass, showStatus = true }: ClassPreview
                         <span className="text-white/40 w-16">Armaduras:</span>
                         <div className="flex-1 flex flex-wrap gap-1">
                             {characterClass.armorProficiencies.length > 0 ? (
-                                characterClass.armorProficiencies.map(p => (
-                                    <span key={p} className="text-white/70 italic">{p}</span>
+                                characterClass.armorProficiencies.map((p) => (
+                                    <span key={p} className="text-white/70 italic">
+                                        {p}
+                                    </span>
                                 ))
-                            ) : <span className="text-white/20">Nenhuma</span>}
+                            ) : (
+                                <span className="text-white/20">Nenhuma</span>
+                            )}
                         </div>
                     </div>
                     <div className="flex items-center gap-2 text-xs">
                         <span className="text-white/40 w-16">Armas:</span>
                         <div className="flex-1 text-white/70 italic truncate">
-                             {characterClass.weaponProficiencies.length > 0 ? (
-                                <MentionContent html={characterClass.weaponProficiencies.join(", ")} mode="inline" />
-                             ) : "Nenhuma"}
+                            {characterClass.weaponProficiencies.length > 0 ? <MentionContent html={characterClass.weaponProficiencies.join(", ")} mode="inline" /> : "Nenhuma"}
                         </div>
                     </div>
                     <div className="flex items-start gap-2 text-xs">
@@ -275,14 +263,7 @@ export function ClassPreview({ characterClass, showStatus = true }: ClassPreview
                                 const attr = SKILL_TO_ATTR[skill] || "Sabedoria"
                                 const config = attributeColors[attr as keyof typeof attributeColors]
                                 return (
-                                    <span 
-                                        key={skill}
-                                        className={cn(
-                                            "inline-flex items-center px-1.5 py-0.5 rounded-full text-[9px] font-medium border",
-                                            config?.badge,
-                                            config?.border
-                                        )}
-                                    >
+                                    <span key={skill} className={cn("inline-flex items-center px-1.5 py-0.5 rounded-full text-[9px] font-medium border", config?.badge, config?.border)}>
                                         {skill}
                                     </span>
                                 )
@@ -307,8 +288,8 @@ export function ClassPreview({ characterClass, showStatus = true }: ClassPreview
                             inputMode="numeric"
                             value={levelFilter !== undefined ? String(levelFilter) : ""}
                             onChange={(e) => handleLevelInput(e.target.value)}
-                            placeholder="Todos"
-                            className="w-14 px-2 h-8 text-center text-xs"
+                            placeholder="Todos os níveis"
+                            className="w-24 px-2 h-8 text-center text-xs"
                             containerClassName="w-auto"
                         />
                         <GlassSelector
@@ -339,13 +320,7 @@ export function ClassPreview({ characterClass, showStatus = true }: ClassPreview
                     <AnimatePresence mode="popLayout" initial={false}>
                         {filteredTraitsByLevel.length > 0 ? (
                             filteredTraitsByLevel.map((group) => (
-                                <motion.div
-                                    key={`group-${group.level}`}
-                                    initial={{ opacity: 0, y: 10 }}
-                                    animate={{ opacity: 1, y: 0 }}
-                                    exit={{ opacity: 0, scale: 0.95 }}
-                                    className="space-y-2"
-                                >
+                                <motion.div key={`group-${group.level}`} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, scale: 0.95 }} className="space-y-2">
                                     <div className="flex items-center gap-2">
                                         <div className="h-px flex-1 bg-white/5" />
                                         <span className="text-[10px] font-black text-amber-500/50 uppercase tracking-[0.2em] px-2 bg-black/20 rounded-full border border-amber-500/10">
