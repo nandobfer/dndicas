@@ -278,6 +278,7 @@ export function ClassFormModal({ characterClass, isOpen, onClose, onSuccess }: C
                 spellcastingAttribute: characterClass?.spellcastingAttribute ?? undefined,
                 subclasses: characterClass?.subclasses ?? [],
                 traits: characterClass?.traits ?? [],
+                image: characterClass?.image ?? "",
             })
         }
     }, [isOpen, characterClass, reset])
