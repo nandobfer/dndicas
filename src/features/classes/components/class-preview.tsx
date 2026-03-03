@@ -160,29 +160,37 @@ function ClassVisualHeader({ image, name, description, color }: { image?: string
             className="flex flex-col md:flex-row gap-4 py-3 border-y border-white/5"
             style={{
                 borderColor: color ? `${color}20` : undefined,
-                backgroundColor: color ? `${color}05` : undefined,
+                backgroundColor: color ? `${color}05` : undefined
             }}
         >
+            <div className="flex-1 space-y-2">
+                <div className="flex items-center gap-2 text-[10px] font-bold text-white/40 uppercase tracking-widest">
+                    <Info className="h-3 w-3" />
+                    <span>Descrição</span>
+                </div>
+                <div className="text-sm text-white/80 leading-relaxed pr-2">
+                    <MentionContent
+                        html={description}
+                        mode="block"
+                        className="[&_p]:text-sm [&_p]:text-white/80 [&_ul]:text-sm [&_ol]:text-sm [&_p]:leading-relaxed"
+                    />
+                </div>
+            </div>
             {image && (
                 <div className="w-full md:w-2/5 shrink-0">
                     <div
                         className="aspect-square rounded-xl border border-white/10 bg-white/5 overflow-hidden shadow-2xl group/image relative"
                         style={{ borderColor: color ? `${color}40` : undefined }}
                     >
-                        <img src={image} alt={name} className="w-full h-full object-cover transition-transform duration-500 group-hover/image:scale-110" />
+                        <img
+                            src={image}
+                            alt={name}
+                            className="w-full h-full object-cover transition-transform duration-500 group-hover/image:scale-110"
+                        />
                         <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent opacity-0 group-hover/image:opacity-100 transition-opacity duration-300" />
                     </div>
                 </div>
             )}
-            <div className="flex-1 space-y-2">
-                <div className="flex items-center gap-2 text-[10px] font-bold text-white/40 uppercase tracking-widest">
-                    <Info className="h-3 w-3" />
-                    <span>Descrição</span>
-                </div>
-                <div className="text-sm text-white/80 leading-relaxed max-h-[200px] overflow-y-auto pr-2 scrollbar-thin scrollbar-thumb-white/10 scrollbar-track-transparent">
-                    <MentionContent html={description} mode="block" className="[&_p]:text-sm [&_p]:text-white/80 [&_ul]:text-sm [&_ol]:text-sm [&_p]:leading-relaxed" />
-                </div>
-            </div>
         </div>
     )
 }

@@ -365,14 +365,14 @@ export function TraitsSection({
                 </label>
                 <button
                     type="button"
-                    onClick={() => append({ level: 1, description: "" })}
+                    onClick={() => append({ level: 1, description: "" }, { shouldFocus: true, focusName: `${traitsFieldName}.0.description` })}
                     disabled={isSubmitting}
                     className={cn(
                         "px-3 py-1.5 rounded-lg text-xs font-medium transition-colors",
                         "bg-amber-500/20 text-amber-400 hover:bg-amber-500/30",
                         "border border-amber-500/30",
                         "disabled:opacity-50 disabled:cursor-not-allowed",
-                        "flex items-center gap-1.5",
+                        "flex items-center gap-1.5"
                     )}
                 >
                     <Plus className="h-3 w-3" />
@@ -384,7 +384,7 @@ export function TraitsSection({
                 {fields.length === 0 ? (
                     <GlassInlineEmptyState message="Nenhuma habilidade adicionada" />
                 ) : (
-                    <div className="space-y-3">
+                    <div className="flex flex-col-reverse gap-3">
                         {fields.map((field, index) => (
                             <motion.div
                                 key={field.id}
@@ -425,12 +425,18 @@ export function TraitsSection({
                                             render={({ field: descField }) => (
                                                 <div className="space-y-1">
                                                     <GlassEntityChooser
-                                                        value={descField.value ? { label: descField.value.replace(/<[^>]*>/g, ""), id: field.id } : undefined}
+                                                        value={
+                                                            descField.value
+                                                                ? { label: descField.value.replace(/<[^>]*>/g, ""), id: field.id }
+                                                                : undefined
+                                                        }
                                                         onChange={(val) => {
                                                             if (val) {
                                                                 // If it's a mention-like style, we can format it as a mention span
                                                                 // but for simplicity here we'll store the label or a specific mention format
-                                                                descField.onChange(`<span data-type="mention" data-id="${val.id}" data-entity-type="${val.entityType}" class="mention">${val.label}</span>`)
+                                                                descField.onChange(
+                                                                    `<span data-type="mention" data-id="${val.id}" data-entity-type="${val.entityType}" class="mention">${val.label}</span>`
+                                                                )
                                                             } else {
                                                                 descField.onChange("")
                                                             }
@@ -439,15 +445,16 @@ export function TraitsSection({
                                                         placeholder="Vincular @Habilidade..."
                                                         disabled={isSubmitting}
                                                         className={cn(
-                                                            ((errors as any)?.[traitsFieldName.split('.')[0]]?.[index]?.description || 
-                                                             (errors as any)?.[traitsFieldName]?. [index]?.description) && "border-rose-500/50"
+                                                            ((errors as any)?.[traitsFieldName.split(".")[0]]?.[index]?.description ||
+                                                                (errors as any)?.[traitsFieldName]?.[index]?.description) &&
+                                                                "border-rose-500/50"
                                                         )}
                                                     />
-                                                    {((errors as any)?.[traitsFieldName.split('.')[0]]?.[index]?.description || 
-                                                      (errors as any)?.[traitsFieldName]?. [index]?.description) && (
+                                                    {((errors as any)?.[traitsFieldName.split(".")[0]]?.[index]?.description ||
+                                                        (errors as any)?.[traitsFieldName]?.[index]?.description) && (
                                                         <p className="text-[10px] text-rose-400 font-medium pl-1">
-                                                            {(errors as any)?.[traitsFieldName.split('.')[0]]?.[index]?.description?.message || 
-                                                             (errors as any)?.[traitsFieldName]?. [index]?.description?.message}
+                                                            {(errors as any)?.[traitsFieldName.split(".")[0]]?.[index]?.description?.message ||
+                                                                (errors as any)?.[traitsFieldName]?.[index]?.description?.message}
                                                         </p>
                                                     )}
                                                 </div>
