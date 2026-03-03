@@ -1,13 +1,5 @@
 import mongoose, { Schema, Document } from "mongoose"
-import type {
-    HitDiceType,
-    ArmorProficiency,
-    WeaponProficiency,
-    SkillType,
-    SpellcastingTier,
-    Subclass,
-    ClassTrait,
-} from "../types/classes.types"
+import type { HitDiceType, ArmorProficiency, WeaponProficiency, SkillType, Subclass, ClassTrait } from "../types/classes.types"
 import type { AttributeType } from "@/lib/config/colors"
 
 export interface ICharacterClass extends Document {
@@ -24,8 +16,9 @@ export interface ICharacterClass extends Document {
     weaponProficiencies: WeaponProficiency[]
     skillCount: number
     availableSkills: SkillType[]
-    spellcasting: SpellcastingTier
+    spellcasting: boolean
     spellcastingAttribute?: AttributeType
+    spells: any[]
     subclasses: Subclass[]
     traits: ClassTrait[]
     createdAt: Date
@@ -34,17 +27,27 @@ export interface ICharacterClass extends Document {
 
 const ATTRIBUTES = ["Força", "Destreza", "Constituição", "Inteligência", "Sabedoria", "Carisma"] as const
 const HIT_DICE = ["d6", "d8", "d10", "d12"] as const
-const SPELLCASTING_TIERS = ["Nenhum", "Completo", "Metade", "Terço"] as const
 const ARMOR_PROFICIENCIES = ["Nenhuma", "Armaduras Leves", "Armaduras Médias", "Armaduras Pesadas", "Escudos"] as const
-const WEAPON_PROFICIENCIES = [
-    "Armas Simples", "Armas Marciais", "Armas de Fogo", "Besta Leve", "Besta Pesada",
-    "Balestras", "Espadas Longas", "Espadas Curtas", "Adagas", "Arcos",
-] as const
+const WEAPON_PROFICIENCIES = ["Armas Simples", "Armas Marciais", "Armas de Fogo", "Besta Leve", "Besta Pesada", "Balestras", "Espadas Longas", "Espadas Curtas", "Adagas", "Arcos"] as const
 const SKILLS = [
-    "Acrobacia", "Arcanismo", "Atletismo", "Atuação", "Enganação", "Furtividade",
-    "História", "Intimidação", "Intuição", "Investigação", "Lidar com Animais",
-    "Medicina", "Natureza", "Percepção", "Persuasão", "Prestidigitação",
-    "Religião", "Sobrevivência",
+    "Acrobacia",
+    "Arcanismo",
+    "Atletismo",
+    "Atuação",
+    "Enganação",
+    "Furtividade",
+    "História",
+    "Intimidação",
+    "Intuição",
+    "Investigação",
+    "Lidar com Animais",
+    "Medicina",
+    "Natureza",
+    "Percepção",
+    "Persuasão",
+    "Prestidigitação",
+    "Religião",
+    "Sobrevivência",
 ] as const
 
 const ClassTraitSchema = new Schema<ClassTrait>(
@@ -91,14 +94,17 @@ const SubclassSchema = new Schema<Subclass>(
             required: false,
         },
         spellcasting: {
-            type: String,
-            enum: SPELLCASTING_TIERS,
-            default: "Nenhum",
+            type: Boolean,
+            default: false,
         },
         spellcastingAttribute: {
             type: String,
             enum: ATTRIBUTES,
             required: false,
+        },
+        spells: {
+            type: [Schema.Types.Mixed],
+            default: [],
         },
         traits: {
             type: [ClassTraitSchema],
@@ -188,16 +194,16 @@ const CharacterClassSchema = new Schema<ICharacterClass>(
             default: [],
         },
         spellcasting: {
-            type: String,
-            required: [true, "Nível de conjuração é obrigatório"],
-            enum: { values: SPELLCASTING_TIERS, message: "{VALUE} não é um nível de conjuração válido" },
-            default: "Nenhum",
+            type: Boolean,
+            required: [true, "Habilitação de conjuração é obrigatória"],
+            default: false,
         },
         spellcastingAttribute: {
             type: String,
             required: false,
             enum: { values: [...ATTRIBUTES], message: "{VALUE} não é um atributo válido" },
         },
+        spells: [Schema.Types.Mixed],
         subclasses: {
             type: [SubclassSchema],
             required: true,

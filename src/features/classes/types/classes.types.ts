@@ -52,9 +52,6 @@ export type SkillType = (typeof SKILL_OPTIONS)[number]
 export const HIT_DICE_OPTIONS = ["d6", "d8", "d10", "d12"] as const
 export type HitDiceType = (typeof HIT_DICE_OPTIONS)[number]
 
-export const SPELLCASTING_TIER_OPTIONS = ["Nenhum", "Completo", "Metade", "Terço"] as const
-export type SpellcastingTier = (typeof SPELLCASTING_TIER_OPTIONS)[number]
-
 // ─── Subclass ────────────────────────────────────────────────────────────────
 
 export interface Subclass {
@@ -64,8 +61,9 @@ export interface Subclass {
     image?: string
     description?: string
     color?: string
-    spellcasting: SpellcastingTier
+    spellcasting: boolean
     spellcastingAttribute?: AttributeType
+    spells?: any[]
     traits: ClassTrait[]
 }
 
@@ -93,8 +91,9 @@ export interface CharacterClass {
     weaponProficiencies: WeaponProficiency[]
     skillCount: number // how many skills the player chooses
     availableSkills: SkillType[] // which skills are available to the class
-    spellcasting: SpellcastingTier
+    spellcasting: boolean
     spellcastingAttribute?: AttributeType
+    spells?: any[]
     subclasses: Subclass[]
     traits: ClassTrait[]
     createdAt: Date
@@ -116,8 +115,9 @@ export interface CreateClassInput {
     weaponProficiencies: WeaponProficiency[]
     skillCount: number
     availableSkills: SkillType[]
-    spellcasting: SpellcastingTier
+    spellcasting: boolean
     spellcastingAttribute?: AttributeType
+    spells?: any[]
     subclasses?: Subclass[]
     traits?: ClassTrait[]
 }
@@ -135,8 +135,9 @@ export interface UpdateClassInput {
     weaponProficiencies?: WeaponProficiency[]
     skillCount?: number
     availableSkills?: SkillType[]
-    spellcasting?: SpellcastingTier
+    spellcasting?: boolean
     spellcastingAttribute?: AttributeType | null
+    spells?: any[]
     subclasses?: Subclass[]
 }
 
@@ -145,7 +146,7 @@ export interface UpdateClassInput {
 export interface ClassesFilters {
     search?: string
     hitDice?: HitDiceType[]
-    spellcasting?: SpellcastingTier[]
+    spellcasting?: boolean[]
     status?: "all" | "active" | "inactive"
 }
 

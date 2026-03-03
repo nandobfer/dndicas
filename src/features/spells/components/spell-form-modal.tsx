@@ -87,7 +87,7 @@ interface SpellFormModalProps {
     /** Modal close handler */
     onClose: () => void
     /** Success callback */
-    onSuccess: () => void
+    onSuccess: (spell?: any) => void
 }
 
 export function SpellFormModal({ spell, isOpen, onClose, onSuccess }: SpellFormModalProps) {
@@ -148,16 +148,17 @@ export function SpellFormModal({ spell, isOpen, onClose, onSuccess }: SpellFormM
 
     const onSubmit = async (values: CreateSpellSchema) => {
         try {
+            let result
             if (isEditMode && spell) {
-                await updateMutation.mutateAsync({
+                result = await updateMutation.mutateAsync({
                     id: spell._id,
                     data: values as UpdateSpellInput,
                 })
             } else {
-                await createMutation.mutateAsync(values as CreateSpellInput)
+                result = await createMutation.mutateAsync(values as CreateSpellInput)
             }
             toast.success(spell ? "Magia atualizada com sucesso!" : "Magia criada com sucesso!")
-            onSuccess()
+            onSuccess(result)
             onClose()
         } catch (error) {
             console.error("[SpellFormModal] Error:", error)

@@ -4,7 +4,9 @@ import { FeatPreview } from "@/features/feats/components/feat-preview"
 import { SpellPreview } from "@/features/spells/components/spell-preview"
 import { ClassPreview } from "@/features/classes/components/class-preview"
 import { fetchTraitById } from "@/features/traits/api/traits-api"
+import { fetchSpell } from "@/features/spells/api/spells-api"
 import { LoadingState } from "@/components/ui/loading-state"
+import { Wand } from "lucide-react"
 
 /**
  * Registry of renderers for different entity types.
@@ -14,7 +16,7 @@ export const ENTITY_RENDERERS: Record<string, (item: any) => React.ReactNode> = 
     Regra: (item) => <RulePreview rule={item} showStatus={false} />,
     Habilidade: (id) => <TraitAsyncRenderer id={id} />,
     Talento: (item) => <FeatPreview feat={item} showStatus={false} />,
-    Magia: (item) => <SpellPreview spell={item} showStatus={false} />,
+    Magia: (idOrItem) => <SpellAsyncRenderer item={idOrItem} />,
     Classe: (item) => <ClassPreview characterClass={item} showStatus={false} />,
 }
 
@@ -46,6 +48,55 @@ function TraitAsyncRenderer({ id }: { id: string }) {
     return (
         <div className="p-4">
             <TraitPreview trait={trait} showStatus={true} />
+        </div>
+    )
+}
+
+function SpellAsyncRenderer({ item }: { item: any }) {
+    const [spell, setSpell] = React.useState<any>(null)
+    const [loading, setLoading] = React.useState(true)
+
+    const id = typeof item === "string" ? item : item?._id || item?.id
+
+    React.useEffect(() => {
+        // Se já temos o objeto completo (com escola ou descrição), não precisamos buscar
+        if (item && typeof item === "object" && (item.school || item.description)) {
+            setSpell(item)
+            setLoading(false)
+            return
+        }
+
+        if (!id) {
+            setLoading(false)
+            return
+        }
+
+        fetchSpell(id)
+            .then(setSpell)
+            .catch(console.error)
+            .finally(() => setLoading(false))
+    }, [id, item])
+
+    if (loading)
+        return (
+            <div className="p-8 flex flex-col items-center justify-center gap-3 bg-white/[0.02] rounded-xl border border-white/5 animate-in fade-in duration-300">
+                <LoadingState variant="spinner" size="md" />
+                <span className="text-[10px] uppercase font-bold tracking-widest text-white/20">Buscando Magia...</span>
+            </div>
+        )
+    if (!spell)
+        return (
+            <div className="p-8 text-center bg-rose-500/5 rounded-xl border border-dashed border-rose-500/20 flex flex-col items-center justify-center gap-2">
+                <div className="p-2 rounded-full bg-rose-500/10 text-rose-400">
+                    <Wand className="h-4 w-4" />
+                </div>
+                <p className="text-xs text-rose-400/60 italic">Magia não encontrada no catálogo.</p>
+            </div>
+        )
+
+    return (
+        <div className="p-4">
+            <SpellPreview spell={spell} showStatus={true} />
         </div>
     )
 }

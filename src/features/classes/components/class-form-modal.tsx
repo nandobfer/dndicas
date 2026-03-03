@@ -49,15 +49,14 @@ import {
     ArmorProficiency,
     WeaponProficiency,
     SkillType,
-    SpellcastingTier,
     Subclass,
     ARMOR_PROFICIENCY_OPTIONS,
     SKILL_OPTIONS,
     HIT_DICE_OPTIONS,
-    SPELLCASTING_TIER_OPTIONS,
     WEAPON_PROFICIENCY_OPTIONS,
 } from "../types/classes.types"
 import { useCreateClass, useUpdateClass } from "../api/classes-queries"
+import { GlassSwitch } from "@/components/ui/glass-switch"
 
 // ── Shared Constants ─────────────────────────────────────────────────────────
 
@@ -107,12 +106,10 @@ const SKILL_MAP: Record<AttributeType, SkillType[]> = {
     Carisma: ["Atuação", "Enganação", "Intimidação", "Persuasão"],
 }
 
-const SPELLCASTING_OPTIONS: { value: SpellcastingTier; label: string; activeColor: string; textColor: string }[] = [
-    { value: "Nenhum", label: "Nenhum", activeColor: "bg-slate-400/20", textColor: "text-slate-400" },
-    { value: "Completo", label: "Completo", activeColor: "bg-amber-400/20", textColor: "text-amber-400" },
-    { value: "Metade", label: "Metade", activeColor: "bg-purple-400/20", textColor: "text-purple-400" },
-    { value: "Terço", label: "Terço", activeColor: "bg-blue-400/20", textColor: "text-blue-400" },
-] as const
+const SPELLCASTING_OPTIONS: { value: boolean; label: string; activeColor: string; textColor: string }[] = [
+    { value: false, label: "Não", activeColor: "bg-slate-400/20", textColor: "text-slate-400" },
+    { value: true, label: "Sim", activeColor: "bg-amber-400/20", textColor: "text-amber-400" },
+]
 
 // ─── Subclass Traits Wrapper ──────────────────────────────────────────────────
 
@@ -248,8 +245,9 @@ export function ClassFormModal({ characterClass, isOpen, onClose, onSuccess }: C
             weaponProficiencies: characterClass?.weaponProficiencies ?? ["Armas simples" as WeaponProficiency],
             skillCount: characterClass?.skillCount ?? 2,
             availableSkills: characterClass?.availableSkills ?? [],
-            spellcasting: characterClass?.spellcasting ?? "Nenhum",
+            spellcasting: characterClass?.spellcasting ?? false,
             spellcastingAttribute: characterClass?.spellcastingAttribute ?? undefined,
+            spells: characterClass?.spells ?? [],
             subclasses: characterClass?.subclasses ?? [],
             traits: characterClass?.traits ?? [],
             image: characterClass?.image ?? "",
@@ -293,9 +291,14 @@ export function ClassFormModal({ characterClass, isOpen, onClose, onSuccess }: C
                 weaponProficiencies: characterClass?.weaponProficiencies ?? ["Armas simples" as WeaponProficiency],
                 skillCount: characterClass?.skillCount ?? 2,
                 availableSkills: characterClass?.availableSkills ?? [],
-                spellcasting: characterClass?.spellcasting ?? "Nenhum",
+                spellcasting: Boolean(characterClass?.spellcasting),
                 spellcastingAttribute: characterClass?.spellcastingAttribute ?? undefined,
-                subclasses: characterClass?.subclasses ?? [],
+                spells: characterClass?.spells ?? [],
+                subclasses: (characterClass?.subclasses || []).map((s) => ({
+                    ...s,
+                    spellcasting: Boolean(s.spellcasting),
+                    spells: s.spells ?? [],
+                })),
                 traits: characterClass?.traits ?? [],
                 image: characterClass?.image ?? "",
             })
@@ -314,11 +317,13 @@ export function ClassFormModal({ characterClass, isOpen, onClose, onSuccess }: C
         const sourceTrimmed = newSubclassSource.trim()
         const color = SUBCLASS_COLORS[subclasses.length % SUBCLASS_COLORS.length]
 
-        const newSubclass: Subclass = {
+        const newSubclass: CreateClassSchema["subclasses"][number] = {
             name: nameTrimmed,
             source: sourceTrimmed || undefined,
             color: color,
-            spellcasting: "Nenhum",
+            spellcasting: false,
+            spellcastingAttribute: undefined,
+            spells: [],
             traits: [],
             description: "",
             image: "",
@@ -365,8 +370,28 @@ export function ClassFormModal({ characterClass, isOpen, onClose, onSuccess }: C
 
     // ── Submit ───────────────────────────────────────────────────────────────
 
-    const onSubmit = async (values: CreateClassSchema) => {
-        console.log("[ClassFormModal] Submitting values:", values)
+    const onSubmit = async (data: CreateClassSchema) => {
+        // Create a copy of values to modify
+        const values = { ...data };
+
+        // Ensure all objects in spells have at least an id or _id
+        const cleanSpells = (spells: any[]) => 
+            (spells || []).filter(s => s.id || s._id).map(s => ({
+                id: s.id || s._id,
+                name: s.name,
+                circle: s.circle
+            }));
+
+        values.spells = cleanSpells(values.spells);
+        
+        if (values.subclasses) {
+            values.subclasses = values.subclasses.map(s => ({
+                ...s,
+                spells: cleanSpells(s.spells)
+            }));
+        }
+
+        console.log("[ClassFormModal] Submitting cleaned values:", values)
         try {
             if (isEditMode && characterClass) {
                 await updateMutation.mutateAsync({ id: characterClass._id, data: values as UpdateClassInput })
@@ -410,14 +435,14 @@ export function ClassFormModal({ characterClass, isOpen, onClose, onSuccess }: C
                                 "relative flex-shrink-0 px-4 py-1.5 rounded-md text-sm font-medium transition-all focus:outline-none",
                                 activeTab === tab.id ? "text-white shadow-sm" : "text-white/50 hover:text-white/70",
                             )}
-                            style={activeTab === tab.id ? {
-                                backgroundColor: typeof tab.id === 'number' && subclasses[tab.id]?.color 
-                                    ? `${subclasses[tab.id].color}33` 
-                                    : 'rgba(255, 255, 255, 0.15)',
-                                color: typeof tab.id === 'number' && subclasses[tab.id]?.color 
-                                    ? subclasses[tab.id].color 
-                                    : 'white'
-                            } : undefined}
+                            style={
+                                activeTab === tab.id
+                                    ? {
+                                          backgroundColor: typeof tab.id === "number" && subclasses[tab.id]?.color ? `${subclasses[tab.id].color}33` : "rgba(255, 255, 255, 0.15)",
+                                          color: typeof tab.id === "number" && subclasses[tab.id]?.color ? subclasses[tab.id].color : "white",
+                                      }
+                                    : undefined
+                            }
                         >
                             {tab.label}
                         </button>
@@ -571,8 +596,8 @@ export function ClassFormModal({ characterClass, isOpen, onClose, onSuccess }: C
                                         )}
                                     />
                                 </div>
-                                <GlassStatusSwitch
-                                    entityLabel="Escudos"
+                                <GlassSwitch
+                                    label="Escudos"
                                     description="Proficiência no uso de escudos"
                                     checked={(watch("armorProficiencies") || []).includes("Escudos")}
                                     onCheckedChange={(checked) => {
@@ -794,7 +819,7 @@ export function ClassFormModal({ characterClass, isOpen, onClose, onSuccess }: C
                                                     {subclasses.map((s, i) => (
                                                         <SubclassTabItem
                                                             key={s._id || i}
-                                                            subclass={s}
+                                                            subclass={s as any}
                                                             index={i}
                                                             isRenaming={renamingIndex === i}
                                                             renameValue={renameValue}

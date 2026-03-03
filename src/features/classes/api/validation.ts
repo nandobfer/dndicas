@@ -16,8 +16,13 @@ const subclassSchema = z.object({
     image: z.string().optional().or(z.literal("")),
     description: z.string().max(20000).optional(),
     color: z.string().optional(),
-    spellcasting: z.enum(SPELLCASTING_TIER_OPTIONS).default("Nenhum"),
-    spellcastingAttribute: z.enum(ATTRIBUTES).optional(),
+    spellcasting: z.boolean().default(false),
+    spellcastingAttribute: z
+        .string()
+        .optional()
+        .nullable()
+        .transform((val) => val || undefined),
+    spells: z.array(z.any()).default([]),
     traits: z
         .array(
             z.object({
@@ -42,25 +47,19 @@ export const createClassSchema = z.object({
     source: z.string().max(200, "Fonte muito longa").optional(),
     status: z.enum(["active", "inactive"]),
     hitDice: z.enum(HIT_DICE_OPTIONS, { message: "Dado de vida inválido" }),
-    primaryAttributes: z
-        .array(z.enum(ATTRIBUTES))
-        .min(1, "Selecione ao menos 1 atributo primário"),
-    savingThrows: z
-        .array(z.enum(ATTRIBUTES))
-        .min(2, "Selecione exatamente 2 testes de resistência")
-        .max(2, "Selecione exatamente 2 testes de resistência"),
+    primaryAttributes: z.array(z.enum(ATTRIBUTES)).min(1, "Selecione ao menos 1 atributo primário"),
+    savingThrows: z.array(z.enum(ATTRIBUTES)).min(2, "Selecione exatamente 2 testes de resistência").max(2, "Selecione exatamente 2 testes de resistência"),
     armorProficiencies: z.array(z.string()).default([]),
     weaponProficiencies: z.array(z.string()).default([]),
-    skillCount: z
-        .number()
-        .int({ message: "Deve ser um número inteiro" })
-        .min(1, "Mínimo 1 perícia")
-        .max(10, "Máximo 10 perícias"),
-    availableSkills: z
-        .array(z.enum(SKILL_OPTIONS))
-        .min(1, "Selecione ao menos 1 perícia disponível"),
-    spellcasting: z.enum(SPELLCASTING_TIER_OPTIONS, { message: "Tipo de conjuração inválido" }),
-    spellcastingAttribute: z.enum(ATTRIBUTES).optional(),
+    skillCount: z.number().int({ message: "Deve ser um número inteiro" }).min(1, "Mínimo 1 perícia").max(10, "Máximo 10 perícias"),
+    availableSkills: z.array(z.enum(SKILL_OPTIONS)).min(1, "Selecione ao menos 1 perícia disponível"),
+    spellcasting: z.boolean().default(false),
+    spellcastingAttribute: z
+        .string()
+        .optional()
+        .nullable()
+        .transform((val) => val || undefined),
+    spells: z.array(z.any()).default([]),
     subclasses: z.array(subclassSchema).default([]),
     traits: z.array(classTraitSchema).default([]),
 })
@@ -78,18 +77,17 @@ export const updateClassSchema = z.object({
     weaponProficiencies: z.array(z.string()).optional(),
     skillCount: z.number().int().min(1).max(10).optional(),
     availableSkills: z.array(z.enum(SKILL_OPTIONS)).optional(),
-    spellcasting: z.enum(SPELLCASTING_TIER_OPTIONS).optional(),
+    spellcasting: z.boolean().optional(),
     spellcastingAttribute: z.enum(ATTRIBUTES).nullable().optional(),
+    spells: z.array(z.any()).optional(),
     subclasses: z.array(subclassSchema).optional(),
     traits: z.array(classTraitSchema).optional(),
 })
 
 export const classesQuerySchema = z.object({
     search: z.string().optional(),
-    hitDice: z
-        .array(z.enum(HIT_DICE_OPTIONS))
-        .optional(),
-    spellcasting: z.array(z.enum(SPELLCASTING_TIER_OPTIONS)).optional(),
+    hitDice: z.array(z.enum(HIT_DICE_OPTIONS)).optional(),
+    spellcasting: z.array(z.boolean()).optional(),
     status: z.enum(["all", "active", "inactive"]).default("active"),
     page: z.number().int().positive().default(1),
     limit: z.number().int().positive().max(100).default(10),

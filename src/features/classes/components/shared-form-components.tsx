@@ -5,27 +5,23 @@
 "use client";
 
 import * as React from "react"
-import { Controller, Control, UseFormRegister, FieldErrors, UseFormWatch, UseFormSetValue, useFieldArray } from "react-hook-form"
-import { Info, BookOpen, Zap, Plus, X, Dices, Wand } from "lucide-react"
+import { Controller, Control, FieldErrors, UseFormWatch, UseFormSetValue, useFieldArray } from "react-hook-form"
+import { Info, BookOpen, Zap, Plus, X, Wand, ChevronDown } from "lucide-react"
 import { motion, AnimatePresence } from "framer-motion"
 import { cn } from "@/core/utils"
-import { GlassInput } from "@/components/ui/glass-input"
 import { GlassImageUploader } from "@/components/ui/glass-image-uploader"
 import { GlassSelector } from "@/components/ui/glass-selector"
+import { GlassSwitch } from "@/components/ui/glass-switch"
 import { GlassInlineEmptyState } from "@/components/ui/glass-inline-empty-state"
 import { GlassEntityChooser } from "@/components/ui/glass-entity-chooser"
 import { RichTextEditor } from "@/features/rules/components/rich-text-editor"
 import { attributeColors, type AttributeType } from "@/lib/config/colors"
 import { ENTITY_PROVIDERS } from "@/lib/config/entities"
-import type { HitDiceType, SpellcastingTier, WeaponProficiency } from "../types/classes.types"
-import type { CreateClassSchema } from "../api/validation"
-import { SPELLCASTING_TIER_OPTIONS } from "../types/classes.types"
 
 // ── Shared Constants ─────────────────────────────────────────────────────────
 
-const providerHabilidade = ENTITY_PROVIDERS.find(p => p.name === "Habilidade")
-const providerRegra = ENTITY_PROVIDERS.find(p => p.name === "Regra")
-const providerMagia = ENTITY_PROVIDERS.find(p => p.name === "Magia")
+const providerHabilidade = ENTITY_PROVIDERS.find((p) => p.name === "Habilidade")
+const providerMagia = ENTITY_PROVIDERS.find((p) => p.name === "Magia")
 
 const ATTRIBUTE_OPTIONS = (Object.entries(attributeColors) as [AttributeType, (typeof attributeColors)[AttributeType]][]).map(([key, config]) => ({
     value: key,
@@ -34,14 +30,54 @@ const ATTRIBUTE_OPTIONS = (Object.entries(attributeColors) as [AttributeType, (t
     textColor: config.text,
 }))
 
-const SPELLCASTING_OPTIONS: { value: SpellcastingTier; label: string; activeColor: string; textColor: string }[] = [
-    { value: "Nenhum", label: "Nenhum", activeColor: "bg-slate-400/20", textColor: "text-slate-400" },
-    { value: "Completo", label: "Completo", activeColor: "bg-amber-400/20", textColor: "text-amber-400" },
-    { value: "Metade", label: "Metade", activeColor: "bg-purple-400/20", textColor: "text-purple-400" },
-    { value: "Terço", label: "Terço", activeColor: "bg-blue-400/20", textColor: "text-blue-400" },
-] as const
-
 // ── Components ───────────────────────────────────────────────────────────────
+
+function SpellCircleAccordion({ circle, spells, onRemove }: { circle: number; spells: any[]; onRemove: (index: number) => void }) {
+    const [isExpanded, setIsExpanded] = React.useState(true)
+
+    return (
+        <div className="rounded-xl border border-white/10 bg-white/5 overflow-hidden">
+            <button type="button" onClick={() => setIsExpanded(!isExpanded)} className="w-full flex items-center justify-between px-3 py-2 hover:bg-white/5 transition-colors group">
+                <div className="flex items-center gap-2">
+                    <div
+                        className={cn(
+                            "w-5 h-5 rounded flex items-center justify-center text-[10px] font-bold border",
+                            circle === 0 ? "bg-slate-500/20 border-slate-500/30 text-slate-400" : "bg-blue-500/20 border-blue-500/30 text-blue-400",
+                        )}
+                    >
+                        {circle === 0 ? "T" : circle}
+                    </div>
+                    <span className="text-sm font-medium text-white/80">{circle === 0 ? "Truques" : `${circle}º Círculo`}</span>
+                    <span className="text-[10px] text-white/20 uppercase tracking-widest font-bold ml-2 group-hover:text-white/40 transition-colors">
+                        {spells.length} {spells.length === 1 ? "magia" : "magias"}
+                    </span>
+                </div>
+                <ChevronDown className={cn("w-4 h-4 text-white/20 group-hover:text-white/40 transition-all", isExpanded ? "rotate-180" : "")} />
+            </button>
+            <AnimatePresence>
+                {isExpanded && (
+                    <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: "auto", opacity: 1 }} exit={{ height: 0, opacity: 0 }} className="overflow-hidden bg-black/20">
+                        <div className="p-2 flex flex-wrap gap-2">
+                            {spells.map((spell) => (
+                                <motion.div
+                                    key={spell.id}
+                                    initial={{ opacity: 0, scale: 0.95 }}
+                                    animate={{ opacity: 1, scale: 1 }}
+                                    className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg bg-white/5 border border-white/10 hover:border-white/20 transition-all group/item"
+                                >
+                                    <span className="text-xs font-medium text-white/70 group-hover/item:text-white transition-colors">{spell.name}</span>
+                                    <button type="button" onClick={() => onRemove(spell.originalIndex)} className="text-white/10 hover:text-rose-400 transition-colors">
+                                        <X className="w-3 h-3" />
+                                    </button>
+                                </motion.div>
+                            ))}
+                        </div>
+                    </motion.div>
+                )}
+            </AnimatePresence>
+        </div>
+    )
+}
 
 interface ImageAndDescriptionSectionProps {
     control: Control<any>
@@ -60,7 +96,7 @@ export function ImageAndDescriptionSection({
     imageFieldName,
     descriptionFieldName,
     entityId,
-    placeholder = "Descreva detalhadamente..."
+    placeholder = "Descreva detalhadamente...",
 }: ImageAndDescriptionSectionProps) {
     return (
         <div className="grid grid-cols-1 md:grid-cols-[250px_1fr] gap-6">
@@ -73,13 +109,7 @@ export function ImageAndDescriptionSection({
                     name={imageFieldName}
                     control={control}
                     render={({ field }) => (
-                        <GlassImageUploader
-                            value={field.value || ""}
-                            onChange={field.onChange}
-                            onRemove={() => field.onChange("")}
-                            disabled={isSubmitting}
-                            className="w-full flex-1"
-                        />
+                        <GlassImageUploader value={field.value || ""} onChange={field.onChange} onRemove={() => field.onChange("")} disabled={isSubmitting} className="w-full flex-1" />
                     )}
                 />
             </div>
@@ -105,9 +135,7 @@ export function ImageAndDescriptionSection({
                         )}
                     />
                 </div>
-                {errors[descriptionFieldName] && (
-                    <p className="text-xs text-rose-400">{errors[descriptionFieldName]?.message as string}</p>
-                )}
+                {errors[descriptionFieldName] && <p className="text-xs text-rose-400">{errors[descriptionFieldName]?.message as string}</p>}
             </div>
         </div>
     )
@@ -123,61 +151,59 @@ interface SpellcastingSectionProps {
     layoutIdPrefix?: string
 }
 
-export function SpellcastingSection({
-    control,
-    watch,
-    setValue,
-    isSubmitting,
-    spellcastingFieldName,
-    attributeFieldName,
-    layoutIdPrefix = "base"
-}: SpellcastingSectionProps) {
+export function SpellcastingSection({ control, watch, setValue, isSubmitting, spellcastingFieldName, attributeFieldName, layoutIdPrefix = "base" }: SpellcastingSectionProps) {
     const spellcasting = watch(spellcastingFieldName)
-    
-    // We'll use a hidden field to store spells if we had it in the schema, 
+
+    // Ensure we have a valid initial state for comparison
+    const isSpellcaster = spellcasting === true
+
+    // We'll use a hidden field to store spells if we had it in the schema,
     // for now we'll just implement the UI for adding spells
-    const { fields: spellFields, append: appendSpell, remove: removeSpell } = useFieldArray({
+    const {
+        fields: spellFields,
+        append: appendSpell,
+        remove: removeSpell,
+    } = useFieldArray({
         control,
-        name: `${spellcastingFieldName.split('.')[0]}.spells` as any // Fallback logic for field naming
+        name: spellcastingFieldName.includes(".") ? `${spellcastingFieldName.split(".")[0]}.${spellcastingFieldName.split(".")[1]}.spells` : "spells",
     })
 
     return (
         <div className="space-y-4">
             <div className="space-y-3">
-                <div className="space-y-2">
-                    <label className="text-sm font-medium text-white/80 flex items-center gap-2">
-                        <Zap className="h-4 w-4" />
-                        Conjuração
-                    </label>
+                <div className="p-4 rounded-xl bg-white/5 border border-white/10">
                     <Controller
                         name={spellcastingFieldName}
                         control={control}
                         render={({ field }) => (
-                            <GlassSelector
-                                options={SPELLCASTING_OPTIONS}
-                                value={field.value as SpellcastingTier}
-                                onChange={(v) => {
-                                    field.onChange(v)
-                                    if (v === "Nenhum") setValue(attributeFieldName, undefined)
+                            <GlassSwitch
+                                label="Habilitar Conjuração"
+                                description="Ative para adicionar magias e definir o atributo de conjuração desta classe"
+                                checked={field.value === true}
+                                onCheckedChange={(checked) => {
+                                    field.onChange(checked)
+                                    if (!checked) {
+                                        setValue(attributeFieldName, undefined, { shouldDirty: true, shouldValidate: true })
+                                        // Também precisamos limpar as magias
+                                        const parts = spellcastingFieldName.split(".")
+                                        const spellsPath = parts.length > 1 ? `subclasses.${parts[1]}.spells` : "spells"
+                                        setValue(spellsPath as any, [], { shouldDirty: true, shouldValidate: true })
+                                    }
                                 }}
-                                mode="single"
-                                layout="horizontal"
-                                fullWidth
-                                size="md"
                                 disabled={isSubmitting}
-                                layoutId={`${layoutIdPrefix}-spellcasting`}
                             />
                         )}
                     />
                 </div>
 
-                <AnimatePresence>
-                    {spellcasting !== "Nenhum" && (
-                        <motion.div 
-                            initial={{ opacity: 0, height: 0 }} 
-                            animate={{ opacity: 1, height: "auto" }} 
-                            exit={{ opacity: 0, height: 0 }} 
-                            className="space-y-3 overflow-hidden"
+                <AnimatePresence mode="wait">
+                    {isSpellcaster ? (
+                        <motion.div
+                            key={`${layoutIdPrefix}-spellcasting-fields`}
+                            initial={{ opacity: 0, height: 0 }}
+                            animate={{ opacity: 1, height: "auto" }}
+                            exit={{ opacity: 0, height: 0 }}
+                            className="space-y-4 pt-2 overflow-hidden"
                         >
                             <div className="space-y-2">
                                 <label className="text-sm font-medium text-white/80 flex items-center gap-2">
@@ -203,51 +229,108 @@ export function SpellcastingSection({
                                 />
                             </div>
 
-                            <div className="space-y-2 pt-2 border-t border-white/5">
-                                <div className="flex items-center justify-between">
+                            <div className="space-y-4 pt-4 border-t border-white/5">
+                                <div className="flex items-center justify-between group/title">
                                     <label className="text-sm font-medium text-white/80 flex items-center gap-2">
-                                        <Wand className="h-4 w-4 text-blue-400" />
-                                        Magias Conhecidas / Preparadas
+                                        <Wand className="h-4 w-4 text-blue-400 group-hover/title:rotate-12 transition-transform" />
+                                        Magias
                                     </label>
-                                    <div className="w-48">
-                                        <GlassEntityChooser 
-                                            provider={providerMagia}
-                                            placeholder="Adicionar magia..."
-                                            onChange={(val) => {
-                                                if (val) {
-                                                    appendSpell({ id: val.id, name: val.label })
-                                                }
-                                            }}
-                                            disabled={isSubmitting}
-                                        />
-                                    </div>
+                                    <button
+                                        type="button"
+                                        onClick={() => {
+                                            // Adicionamos um item vazio com circle undefined/null para a linha de escolha
+                                            appendSpell({ id: "", name: "", circle: -1, isPending: true })
+                                        }}
+                                        disabled={isSubmitting}
+                                        className={cn(
+                                            "px-3 py-1.5 rounded-lg text-xs font-medium transition-all",
+                                            "bg-blue-500/20 text-blue-400 hover:bg-blue-500/30",
+                                            "border border-blue-500/30",
+                                            "disabled:opacity-50 disabled:cursor-not-allowed",
+                                            "flex items-center gap-1.5 active:scale-95",
+                                        )}
+                                    >
+                                        <Plus className="h-3 w-3" />
+                                        Adicionar Magia
+                                    </button>
                                 </div>
-                                
-                                <div className="flex flex-wrap gap-2">
-                                    {spellFields.map((field: any, index: number) => (
-                                        <motion.div
-                                            key={field.id}
-                                            initial={{ opacity: 0, scale: 0.8 }}
-                                            animate={{ opacity: 1, scale: 1 }}
-                                            className="flex items-center gap-2 px-2 py-1 rounded-lg bg-blue-500/10 border border-blue-500/20 text-blue-400 text-xs font-medium"
-                                        >
-                                            <span>{field.name}</span>
-                                            <button 
-                                                type="button"
-                                                onClick={() => removeSpell(index)}
-                                                className="hover:text-blue-200 transition-colors"
-                                            >
-                                                <X className="h-3 w-3" />
-                                            </button>
-                                        </motion.div>
-                                    ))}
-                                    {spellFields.length === 0 && (
-                                        <span className="text-[11px] text-white/20 italic">Nenhuma magia adicionada</span>
-                                    )}
+
+                                {/* Area de Escolha (Linha igual a TraitsSection) */}
+                                {(() => {
+                                    const pendingFields = spellFields.map((f, i) => ({ ...f, index: i })).filter((f: any) => f.isPending)
+                                    if (pendingFields.length === 0) return null
+
+                                    return (
+                                        <div className="space-y-2">
+                                            {pendingFields.map((field: any) => (
+                                                <motion.div
+                                                    key={field.id}
+                                                    initial={{ opacity: 0, y: -10 }}
+                                                    animate={{ opacity: 1, y: 0 }}
+                                                    className="flex items-center gap-2 p-3 rounded-xl bg-blue-500/5 border border-blue-500/20"
+                                                >
+                                                    <div className="flex-1">
+                                                        <GlassEntityChooser
+                                                            provider={providerMagia}
+                                                            placeholder="Escolha a magia para adicionar..."
+                                                            onChange={(val) => {
+                                                                if (val) {
+                                                                    const circle = val.circle !== undefined ? val.circle : 0
+                                                                    // Atualizamos o item pendente para ser uma magia real
+                                                                    removeSpell(field.index)
+                                                                    appendSpell({
+                                                                        id: val.id,
+                                                                        _id: val.id, // Ensure both are present for compatibility
+                                                                        name: val.label,
+                                                                        circle,
+                                                                    })
+                                                                }
+                                                            }}
+                                                            disabled={isSubmitting}
+                                                        />
+                                                    </div>
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => removeSpell(field.index)}
+                                                        className="h-10 px-3 rounded-lg border border-white/10 bg-white/5 text-rose-400 hover:bg-rose-500/20 transition-colors"
+                                                    >
+                                                        <X className="h-4 w-4" />
+                                                    </button>
+                                                </motion.div>
+                                            ))}
+                                        </div>
+                                    )
+                                })()}
+
+                                <div className="space-y-2">
+                                    {(() => {
+                                        // Agrupamos as magias JA VINCULADAS (não pendentes) por círculo
+                                        const groupedSpells: Record<number, any[]> = {}
+                                        let totalSpells = 0
+
+                                        spellFields.forEach((field: any, index: number) => {
+                                            if (field.isPending) return
+                                            totalSpells++
+                                            const circle = field.circle || 0
+                                            if (!groupedSpells[circle]) groupedSpells[circle] = []
+                                            groupedSpells[circle].push({ ...field, originalIndex: index })
+                                        })
+
+                                        // Ordenamos os círculos
+                                        const sortedCircles = Object.keys(groupedSpells)
+                                            .map(Number)
+                                            .sort((a, b) => a - b)
+
+                                        if (totalSpells === 0 && spellFields.filter((f: any) => f.isPending).length === 0) {
+                                            return <GlassInlineEmptyState message="Nenhuma magia vinculada" />
+                                        }
+
+                                        return sortedCircles.map((circle) => <SpellCircleAccordion key={circle} circle={circle} spells={groupedSpells[circle]} onRemove={(idx) => removeSpell(idx)} />)
+                                    })()}
                                 </div>
                             </div>
                         </motion.div>
-                    )}
+                    ) : null}
                 </AnimatePresence>
             </div>
         </div>

@@ -18,6 +18,8 @@ import type { CharacterClass, SkillType, AttributeType } from "../types/classes.
 import { useState, useMemo } from "react"
 import { motion, AnimatePresence } from "framer-motion"
 import { ENTITY_RENDERERS } from "@/features/rules/components/entity-renderers"
+import { MentionRenderer } from "./mention-renderer"
+import { Wand } from "lucide-react"
 
 const SKILL_TO_ATTR: Record<string, string> = {
     "Atletismo": "Força",
@@ -27,13 +29,25 @@ const SKILL_TO_ATTR: Record<string, string> = {
     "Enganação": "Carisma", "Intimidação": "Carisma", "Atuação": "Carisma", "Persuasão": "Carisma"
 }
 
-function SpellcastingSection({ spellcasting, spellcastingAttribute, color }: { spellcasting: string; spellcastingAttribute?: string; color?: string }) {
+function SpellcastingSection({ spellcasting, spellcastingAttribute, spells = [], color }: { spellcasting: boolean; spellcastingAttribute?: string; spells?: any[]; color?: string }) {
     const [isOpen, setIsOpen] = useState(false)
     const [spellSearch, setSpellSearch] = useState("")
     const [spellLevel, setSpellLevel] = useState<number | undefined>(undefined)
     const [filterMode, setFilterMode] = useState<"upTo" | "exact">("exact")
 
-    if (spellcasting === "Nenhum") return null
+    const filteredSpells = useMemo(() => {
+        return spells
+            .filter((spell) => {
+                const matchesSearch = !spellSearch || spell.name?.toLowerCase().includes(spellSearch.toLowerCase()) || spell.description?.toLowerCase().includes(spellSearch.toLowerCase())
+
+                const matchesLevel = spellLevel === undefined || (filterMode === "exact" ? spell.circle === spellLevel : spell.circle <= spellLevel)
+
+                return matchesSearch && matchesLevel
+            })
+            .sort((a, b) => (a.circle ?? 0) - (b.circle ?? 0) || (a.name || "").localeCompare(b.name || ""))
+    }, [spells, spellSearch, spellLevel, filterMode])
+
+    if (!spellcasting) return null
 
     return (
         <div
@@ -57,7 +71,7 @@ function SpellcastingSection({ spellcasting, spellcastingAttribute, color }: { s
                     <div className="text-left">
                         <span className="text-[10px] font-bold text-white/40 uppercase tracking-widest block">Magias</span>
                         <div className="flex items-center gap-2">
-                            <span className="text-xs font-semibold text-white/90">{spellcasting}</span>
+                            <span className="text-xs font-semibold text-white/90">Habilitada</span>
                             {spellcastingAttribute && <GlassAttributeChip attribute={spellcastingAttribute as AttributeType} size="sm" />}
                         </div>
                     </div>
@@ -99,83 +113,42 @@ function SpellcastingSection({ spellcasting, spellcastingAttribute, color }: { s
                                 </div>
                             </div>
 
-                            <div className="py-8 text-center bg-black/20 rounded-lg border border-dashed border-white/5">
-                                <p className="text-xs text-white/30 italic">Nenhuma magia disponível ou encontrada.</p>
-                                <p className="text-[10px] text-white/10 uppercase mt-1 tracking-tighter">Módulo de Grimório em desenvolvimento</p>
-                            </div>
+                            <AnimatePresence mode="popLayout" initial={false}>
+                                {filteredSpells.length > 0 ? (
+                                    <motion.div key="spell-list" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="space-y-2">
+                                        {filteredSpells.map((spell, idx) => (
+                                            <motion.div
+                                                key={spell._id || spell.id || `spell-${idx}`}
+                                                layout
+                                                initial={{ opacity: 0, scale: 0.98, y: 10 }}
+                                                animate={{ opacity: 1, scale: 1, y: 0 }}
+                                                exit={{ opacity: 0, scale: 0.98, y: -10 }}
+                                                transition={{
+                                                    duration: 0.2,
+                                                    delay: Math.min(idx * 0.03, 0.3), // Staggered entry
+                                                }}
+                                            >
+                                                <MentionRenderer item={spell} color={color} icon={<Wand className="h-3 w-3" style={{ color: color || "#60a5fa" }} />} />
+                                            </motion.div>
+                                        ))}
+                                    </motion.div>
+                                ) : (
+                                    <motion.div
+                                        key="spell-empty"
+                                        initial={{ opacity: 0, scale: 0.95 }}
+                                        animate={{ opacity: 1, scale: 1 }}
+                                        exit={{ opacity: 0, scale: 0.95 }}
+                                        className="py-10 text-center bg-black/20 rounded-xl border border-dashed border-white/5 flex flex-col items-center justify-center gap-2"
+                                    >
+                                        <Wand className="h-5 w-5 text-white/10" />
+                                        <p className="text-xs text-white/30 italic">Nenhuma magia disponível ou encontrada.</p>
+                                    </motion.div>
+                                )}
+                            </AnimatePresence>
                         </div>
                     </motion.div>
                 )}
             </AnimatePresence>
-        </div>
-    )
-}
-
-function TraitMentionRenderer({ trait, color }: { trait: any; color?: string }) {
-    const mention = useMemo(() => {
-        if (!trait.description) return null
-
-        const parser = new DOMParser()
-        const doc = parser.parseFromString(trait.description, "text/html")
-        const link = doc.querySelector('span[data-type="mention"]')
-
-        if (link) {
-            return {
-                id: link.getAttribute("data-id") || "",
-                type: link.getAttribute("data-entity-type") || "Regra",
-            }
-        }
-
-        const match = trait.description.match(/@\[([^\]]+)\]\(([^)]+)\)/)
-        if (match) {
-            const parts = match[2].split(":")
-            const typeMap: Record<string, string> = {
-                traits: "Habilidade",
-                rules: "Regra",
-                feats: "Talento",
-                spells: "Magia",
-                classes: "Classe",
-            }
-            return {
-                id: parts[1] || parts[0],
-                type: typeMap[parts[0]] || parts[0],
-            }
-        }
-
-        return null
-    }, [trait.description])
-
-    if (mention) {
-        const Renderer = ENTITY_RENDERERS[mention.type]
-        if (Renderer) {
-            return (
-                <div
-                    className="rounded-xl border border-white/10 overflow-hidden group/trait transition-all"
-                    style={{
-                        borderColor: color ? `${color}40` : undefined,
-                        backgroundColor: color ? `${color}05` : undefined,
-                    }}
-                >
-                    {mention.type === "Habilidade" ? (Renderer as any)(mention.id) : (Renderer as any)({ _id: mention.id })}
-                </div>
-            )
-        }
-    }
-
-    return (
-        <div
-            className="flex items-start gap-2.5 p-2.5 rounded-xl bg-white/[0.03] border border-white/5 group/trait hover:bg-white/[0.06] transition-all"
-            style={{
-                borderColor: color ? `${color}40` : undefined,
-                backgroundColor: color ? `${color}05` : undefined,
-            }}
-        >
-            <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2 mb-1">
-                    <Zap className="h-3 w-3" style={{ color: color || "#f59e0b" }} />
-                </div>
-                <MentionContent html={trait.description} mode="block" className="[&_p]:text-[13px] [&_p]:text-white/80 [&_p]:leading-relaxed [&_ul]:my-1 [&_li]:text-[13px]" />
-            </div>
         </div>
     )
 }
@@ -365,7 +338,9 @@ export function ClassPreview({ characterClass, showStatus = true }: ClassPreview
                 </div>
             </div>
 
-            {characterClass.spellcasting !== "Nenhum" && <SpellcastingSection spellcasting={characterClass.spellcasting} spellcastingAttribute={characterClass.spellcastingAttribute} />}
+            {characterClass.spellcasting && (
+                <SpellcastingSection spellcasting={characterClass.spellcasting} spellcastingAttribute={characterClass.spellcastingAttribute} spells={characterClass.spells} />
+            )}
 
             {characterClass.subclasses.length > 0 && (
                 <div className="space-y-4 pt-2">
@@ -410,7 +385,7 @@ export function ClassPreview({ characterClass, showStatus = true }: ClassPreview
 
                                 <ClassVisualHeader name={subclass.name} description={subclass.description || ""} image={subclass.image} color={subclass.color} />
 
-                                <SpellcastingSection spellcasting={subclass.spellcasting} spellcastingAttribute={subclass.spellcastingAttribute} color={subclass.color} />
+                                <SpellcastingSection spellcasting={subclass.spellcasting} spellcastingAttribute={subclass.spellcastingAttribute} spells={subclass.spells} color={subclass.color} />
                             </motion.div>
                         ))}
                     </AnimatePresence>
@@ -461,7 +436,7 @@ export function ClassPreview({ characterClass, showStatus = true }: ClassPreview
                                     </div>
                                     <div className="grid gap-3">
                                         {group.items.map((trait: any, idx) => (
-                                            <TraitMentionRenderer key={trait._id || `trait-${group.level}-${idx}`} trait={trait} color={trait.subclassColor} />
+                                            <MentionRenderer key={trait._id || `trait-${group.level}-${idx}`} item={trait} color={trait.subclassColor} />
                                         ))}
                                     </div>
                                 </motion.div>

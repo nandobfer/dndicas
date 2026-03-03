@@ -17,12 +17,7 @@ import type {
 /**
  * List classes with filters and pagination.
  */
-export async function listClasses(
-    filters: ClassesFilters,
-    page = 1,
-    limit = 10,
-    isAdmin = false
-): Promise<ClassesListResponse> {
+export async function listClasses(filters: ClassesFilters, page = 1, limit = 10, isAdmin = false): Promise<ClassesListResponse> {
     await dbConnect()
 
     const query: Record<string, unknown> = {}
@@ -56,11 +51,13 @@ export async function listClasses(
             subclasses: (c.subclasses || []).map((s: any) => ({
                 ...s,
                 _id: String(s._id),
+                spells: (s.spells || []).map((p: any) => ({ ...p, _id: p._id ? String(p._id) : undefined })),
             })),
             traits: (c.traits || []).map((t: any) => ({
                 ...t,
                 _id: String(t._id),
             })),
+            spells: (c.spells || []).map((p: any) => ({ ...p, _id: p._id ? String(p._id) : undefined })),
         })),
         total,
         page,
@@ -85,21 +82,20 @@ export async function getClassById(id: string, isAdmin = false): Promise<Charact
         subclasses: ((doc as any).subclasses || []).map((s: any) => ({
             ...s,
             _id: String(s._id),
+            spells: (s.spells || []).map((p: any) => ({ ...p, _id: p._id ? String(p._id) : undefined })),
         })),
         traits: ((doc as any).traits || []).map((t: any) => ({
             ...t,
             _id: String(t._id),
         })),
+        spells: ((doc as any).spells || []).map((p: any) => ({ ...p, _id: p._id ? String(p._id) : undefined })),
     }
 }
 
 /**
  * Create a new class (admin only).
  */
-export async function createClass(
-    data: CreateClassInput,
-    actorId?: string
-): Promise<CharacterClassType> {
+export async function createClass(data: CreateClassInput, actorId?: string): Promise<CharacterClassType> {
     await dbConnect()
 
     const existing = await CharacterClass.findOne({ name: data.name })
@@ -117,22 +113,20 @@ export async function createClass(
         subclasses: (doc.subclasses || []).map((s: any) => ({
             ...s,
             _id: String(s._id),
+            spells: (s.spells || []).map((p: any) => ({ ...p, _id: p._id ? String(p._id) : undefined })),
         })),
         traits: (doc.traits || []).map((t: any) => ({
             ...t,
             _id: String(t._id),
         })),
+        spells: (doc.spells || []).map((p: any) => ({ ...p, _id: p._id ? String(p._id) : undefined })),
     }
 }
 
 /**
  * Update a class (admin only).
  */
-export async function updateClass(
-    id: string,
-    data: UpdateClassInput,
-    actorId?: string
-): Promise<CharacterClassType> {
+export async function updateClass(id: string, data: UpdateClassInput, actorId?: string): Promise<CharacterClassType> {
     await dbConnect()
 
     if (data.name) {
@@ -140,6 +134,7 @@ export async function updateClass(
         if (existing) throw new Error("Já existe uma classe com esse nome")
     }
 
+    // Ensure we are sending the full object for spells if present
     const doc = await CharacterClass.findByIdAndUpdate(id, data, { new: true, runValidators: true }).lean()
     if (!doc) throw new Error("Classe não encontrada")
 
@@ -153,11 +148,13 @@ export async function updateClass(
         subclasses: ((doc as any).subclasses || []).map((s: any) => ({
             ...s,
             _id: String(s._id),
+            spells: (s.spells || []).map((p: any) => ({ ...p, _id: p._id ? String(p._id) : undefined })),
         })),
         traits: ((doc as any).traits || []).map((t: any) => ({
             ...t,
             _id: String(t._id),
         })),
+        spells: ((doc as any).spells || []).map((p: any) => ({ ...p, _id: p._id ? String(p._id) : undefined })),
     }
 }
 
@@ -190,10 +187,12 @@ export async function searchClasses(query: string, limit = 10): Promise<Characte
         subclasses: (c.subclasses || []).map((s: any) => ({
             ...s,
             _id: String(s._id),
+            spells: (s.spells || []).map((p: any) => ({ ...p, _id: p._id ? String(p._id) : undefined })),
         })),
         traits: (c.traits || []).map((t: any) => ({
             ...t,
             _id: String(t._id),
         })),
+        spells: (c.spells || []).map((p: any) => ({ ...p, _id: p._id ? String(p._id) : undefined })),
     }))
 }
