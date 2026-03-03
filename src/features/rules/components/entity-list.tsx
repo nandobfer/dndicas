@@ -65,17 +65,31 @@ export function EntityList({ items, entityType, isLoading, hasNextPage, isFetchi
         <div className="space-y-4">
             <AnimatePresence mode="popLayout">
                 {items.map((item, index) => (
-                    <motion.div
-                        key={item._id || item.id}
-                        variants={motionConfig.variants.fadeInUp}
-                        initial="initial"
-                        animate="animate"
-                        exit="exit"
-                        transition={{ delay: (index % 10) * 0.05 }}
-                    >
+                    <motion.div key={item._id || item.id} variants={motionConfig.variants.fadeInUp} initial="initial" animate="animate" exit="exit" transition={{ delay: (index % 10) * 0.05 }}>
                         <GlassCard className="relative overflow-hidden">
                             <GlassCardContent className="p-4 pt-6">
-                                <div className="absolute top-2 right-2 z-10 flex flex-col items-end gap-2">
+                                <div className="absolute top-2 right-2 z-10 flex items-center gap-2">
+                                    <Chip variant={item.status === "active" ? "uncommon" : "common"} size="sm">
+                                        {item.status === "active" ? "Ativa" : "Inativa"}
+                                    </Chip>
+
+                                    <motion.button
+                                        whileHover={{ scale: 1.1 }}
+                                        whileTap={{ scale: 0.9 }}
+                                        onClick={() =>
+                                            addWindow({
+                                                title: item.name || "Detalhes",
+                                                content: null, // content will be handled by item/entityType in GlassWindow
+                                                item,
+                                                entityType: entityType === "Mixed" ? item.type : entityType,
+                                            })
+                                        }
+                                        className="p-1.5 rounded-lg text-white/40 hover:text-white hover:bg-white/10 transition-colors"
+                                        title="Abrir em nova janela"
+                                    >
+                                        <ExternalLink className="h-4 w-4" />
+                                    </motion.button>
+
                                     {isAdmin && (onEdit || onDelete) && (
                                         <GlassDropdownMenu>
                                             <GlassDropdownMenuTrigger asChild>
@@ -95,10 +109,7 @@ export function EntityList({ items, entityType, isLoading, hasNextPage, isFetchi
                                                     </GlassDropdownMenuItem>
                                                 )}
                                                 {onDelete && (
-                                                    <GlassDropdownMenuItem
-                                                        onClick={() => onDelete(item)}
-                                                        className="text-red-400 hover:text-red-300 focus:text-red-300"
-                                                    >
+                                                    <GlassDropdownMenuItem onClick={() => onDelete(item)} className="text-red-400 hover:text-red-300 focus:text-red-300">
                                                         <Trash2 className="mr-2 h-4 w-4" />
                                                         Excluir
                                                     </GlassDropdownMenuItem>
@@ -106,28 +117,8 @@ export function EntityList({ items, entityType, isLoading, hasNextPage, isFetchi
                                             </GlassDropdownMenuContent>
                                         </GlassDropdownMenu>
                                     )}
-
-                                    <div className="flex items-center gap-2">
-                                        <motion.button
-                                            whileHover={{ scale: 1.1 }}
-                                            whileTap={{ scale: 0.9 }}
-                                            onClick={() => addWindow({
-                                                title: item.name || "Detalhes",
-                                                content: null, // content will be handled by item/entityType in GlassWindow
-                                                item,
-                                                entityType: entityType === "Mixed" ? item.type : entityType
-                                            })}
-                                            className="p-1.5 rounded-lg text-white/40 hover:text-white hover:bg-white/10 transition-colors"
-                                            title="Abrir em nova janela"
-                                        >
-                                            <ExternalLink className="h-4 w-4" />
-                                        </motion.button>
-                                        <Chip variant={item.status === "active" ? "uncommon" : "common"} size="sm">
-                                            {item.status === "active" ? "Ativa" : "Inativa"}
-                                        </Chip>
-                                    </div>
                                 </div>
-                                <div className="max-w-full overflow-hidden">{renderEntity(item, entityType)}</div>
+                                <div className="max-w-full overflow-hidden -mt-2">{renderEntity(item, entityType, { showStatus: false })}</div>
                             </GlassCardContent>
                         </GlassCard>
                     </motion.div>

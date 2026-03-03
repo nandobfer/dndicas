@@ -5,14 +5,14 @@
 
 "use client";
 
-import { Sword, BookOpen, Info, Shield, Zap, Star, Users, GraduationCap, Filter, ChevronRight, GraduationCap as ClassIcon } from "lucide-react"
+import { Sword, BookOpen, Info, Shield, Zap, Star, Users, GraduationCap, Filter, ChevronRight, GraduationCap as ClassIcon, Dices } from "lucide-react"
 import { GlassAttributeChip } from "@/components/ui/glass-attribute-chip"
 import { GlassEmptyValue } from "@/components/ui/glass-empty-value"
 import { GlassInput } from "@/components/ui/glass-input"
 import { GlassSelector } from "@/components/ui/glass-selector"
 import { Chip } from "@/components/ui/chip"
 import { MentionContent, EntityTitleLink } from "@/features/rules/components/mention-badge"
-import { entityColors, diceColors, attributeColors } from "@/lib/config/colors"
+import { entityColors, diceColors, attributeColors, DiceType } from "@/lib/config/colors"
 import { cn } from "@/core/utils"
 import type { CharacterClass, SkillType, AttributeType } from "../types/classes.types"
 import { useState, useMemo } from "react"
@@ -20,6 +20,7 @@ import { motion, AnimatePresence } from "framer-motion"
 import { ENTITY_RENDERERS } from "@/features/rules/components/entity-renderers"
 import { MentionRenderer } from "./mention-renderer"
 import { Wand } from "lucide-react"
+import { GlassDiceValue } from "@/components/ui/glass-dice-value"
 
 const SKILL_TO_ATTR: Record<string, string> = {
     "Atletismo": "Força",
@@ -257,7 +258,6 @@ export function ClassPreview({ characterClass, showStatus = true }: ClassPreview
                     <div>
                         <div className="flex items-center gap-2">
                             <EntityTitleLink name={characterClass.name} entityType="Classe" />
-                            <span className={cn("inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold uppercase", diceColor?.bg, diceColor?.text)}>{characterClass.hitDice}</span>
                         </div>
                         <p className="text-[10px] uppercase font-bold tracking-widest text-white/40 mt-0.5">Classe D&D 5e</p>
                     </div>
@@ -271,7 +271,7 @@ export function ClassPreview({ characterClass, showStatus = true }: ClassPreview
 
             <ClassVisualHeader name={characterClass.name} description={characterClass.description} image={characterClass.image} />
 
-            <div className="grid grid-cols-2 gap-4 pb-2 border-b border-white/5">
+            <div className="grid grid-cols-3 gap-4 pb-2 border-b border-white/5">
                 <div className="space-y-1">
                     <div className="flex items-center gap-2 text-[10px] font-bold text-white/40 uppercase tracking-widest">
                         <Shield className="h-3 w-3" />
@@ -279,19 +279,28 @@ export function ClassPreview({ characterClass, showStatus = true }: ClassPreview
                     </div>
                     <div className="flex flex-wrap gap-1">
                         {(characterClass.savingThrows || []).map((attr) => (
-                            <GlassAttributeChip key={attr} attribute={attr} size="sm" />
+                            <GlassAttributeChip key={attr} attribute={attr} size="sm" showFull />
                         ))}
                     </div>
                 </div>
                 <div className="space-y-1">
                     <div className="flex items-center gap-2 text-[10px] font-bold text-white/40 uppercase tracking-widest">
                         <Star className="h-3 w-3" />
-                        <span>Primários</span>
+                        <span>Atributos Primários</span>
                     </div>
                     <div className="flex flex-wrap gap-1">
                         {(characterClass.primaryAttributes || []).map((attr) => (
-                            <GlassAttributeChip key={attr} attribute={attr} size="sm" />
+                            <GlassAttributeChip key={attr} attribute={attr} size="sm" showFull />
                         ))}
+                    </div>
+                </div>
+                <div className="space-y-1">
+                    <div className="flex items-center gap-2 text-[10px] font-bold text-white/40 uppercase tracking-widest">
+                        <Dices className="h-3 w-3" />
+                        <span>Dado de Vida</span>
+                    </div>
+                    <div className="flex items-center mt-1">
+                        <GlassDiceValue value={{ quantidade: 1, tipo: characterClass.hitDice as DiceType }} />
                     </div>
                 </div>
             </div>

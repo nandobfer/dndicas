@@ -13,21 +13,27 @@ import { Wand, GraduationCap } from "lucide-react"
  * Registry of renderers for different entity types.
  * T042: Shared entity renderer configuration for EntityList and GlassWindow.
  */
-export const ENTITY_RENDERERS: Record<string, (item: any) => React.ReactNode> = {
-    Regra: (item) => <RulePreview rule={item} showStatus={false} />,
-    Habilidade: (id) => <TraitAsyncRenderer id={id} />,
-    Talento: (item) => <FeatPreview feat={item} showStatus={false} />,
-    Magia: (idOrItem) => <SpellAsyncRenderer item={idOrItem} />,
-    Classe: (idOrItem) => <ClassAsyncRenderer item={idOrItem} />,
+export const ENTITY_RENDERERS: Record<string, (item: any, options?: { showStatus?: boolean }) => React.ReactNode> = {
+    Regra: (item, opts) => <RulePreview rule={item} showStatus={opts?.showStatus ?? false} />,
+    Habilidade: (id, opts) => <TraitAsyncRenderer id={id} showStatus={opts?.showStatus ?? true} />,
+    Talento: (item, opts) => <FeatPreview feat={item} showStatus={opts?.showStatus ?? false} />,
+    Magia: (idOrItem, opts) => <SpellAsyncRenderer item={idOrItem} showStatus={opts?.showStatus ?? true} />,
+    Classe: (idOrItem, opts) => <ClassAsyncRenderer item={idOrItem} showStatus={opts?.showStatus ?? true} />,
 }
 
-function TraitAsyncRenderer({ id }: { id: string }) {
+function TraitAsyncRenderer({ id, showStatus = true }: { id: any; showStatus?: boolean }) {
     const [trait, setTrait] = React.useState<any>(null)
     const [loading, setLoading] = React.useState(true)
 
     React.useEffect(() => {
-        if (typeof id !== "string") {
+        if (id && typeof id === "object") {
             setTrait(id)
+            setLoading(false)
+            return
+        }
+
+        if (typeof id !== "string") {
+            setTrait(null)
             setLoading(false)
             return
         }
@@ -48,12 +54,12 @@ function TraitAsyncRenderer({ id }: { id: string }) {
 
     return (
         <div className="p-4">
-            <TraitPreview trait={trait} showStatus={true} />
+            <TraitPreview trait={trait} showStatus={showStatus} />
         </div>
     )
 }
 
-function SpellAsyncRenderer({ item }: { item: any }) {
+function SpellAsyncRenderer({ item, showStatus = true }: { item: any; showStatus?: boolean }) {
     const [spell, setSpell] = React.useState<any>(null)
     const [loading, setLoading] = React.useState(true)
 
@@ -97,12 +103,12 @@ function SpellAsyncRenderer({ item }: { item: any }) {
 
     return (
         <div className="p-4">
-            <SpellPreview spell={spell} showStatus={true} />
+            <SpellPreview spell={spell} showStatus={showStatus} />
         </div>
     )
 }
 
-function ClassAsyncRenderer({ item }: { item: any }) {
+function ClassAsyncRenderer({ item, showStatus = true }: { item: any; showStatus?: boolean }) {
     const [characterClass, setCharacterClass] = React.useState<any>(null)
     const [loading, setLoading] = React.useState(true)
 
@@ -123,7 +129,7 @@ function ClassAsyncRenderer({ item }: { item: any }) {
 
         // Fetch via client-side API to get the full profile
         fetch(`/api/classes/${id}`)
-            .then(res => res.json())
+            .then((res) => res.json())
             .then(setCharacterClass)
             .catch(console.error)
             .finally(() => setLoading(false))
@@ -148,13 +154,13 @@ function ClassAsyncRenderer({ item }: { item: any }) {
 
     return (
         <div className="p-4">
-            <ClassPreview characterClass={characterClass} showStatus={true} />
+            <ClassPreview characterClass={characterClass} showStatus={showStatus} />
         </div>
     )
 }
 
-export const renderEntity = (item: any, entityType: string) => {
+export const renderEntity = (item: any, entityType: string, options?: { showStatus?: boolean }) => {
     const type = entityType === "Mixed" ? item.type : entityType
     const renderer = ENTITY_RENDERERS[type]
-    return renderer ? renderer(item) : <div>{item.name || "Unknown item"}</div>
+    return renderer ? renderer(item, options) : <div>{item.name || "Unknown item"}</div>
 }
