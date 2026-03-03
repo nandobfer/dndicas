@@ -45,6 +45,7 @@ async function getSearchData(): Promise<UnifiedEntity[]> {
             else if (data.traits) rawItems = data.traits
             else if (data.rules) rawItems = data.rules
             else if (data.feats) rawItems = data.feats
+            else if (data.classes) rawItems = data.classes
 
             return rawItems.map(provider.map)
         } catch (err) {

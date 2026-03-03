@@ -55,17 +55,17 @@ const mainItems = [
 // T008: Added "Talentos" for feats catalog
 const cadastrosItems = [
     { label: "Classes", href: "/classes", icon: Sword },
-    { label: "Usuários", href: "/users", icon: Users, admin: true },
     { label: "Regras", href: "/rules", icon: Scroll },
     { label: "Habilidades", href: "/traits", icon: Sparkles },
     { label: "Talentos", href: "/feats", icon: Zap },
-    { label: "Magias", href: "/spells", icon: Wand },
+    { label: "Magias", href: "/spells", icon: Wand }
 ]
 
 const adminItems = [
     { label: "Feedback", href: "/feedback", icon: MessageSquare },
+    { label: "Usuários", href: "/users", icon: Users, admin: true },
     { label: "Logs", href: "/audit-logs", icon: FileText, admin: true },
-    { label: "Referências Pendentes", href: "/admin/mentions", icon: AtSign, admin: true },
+    { label: "Referências Pendentes", href: "/admin/mentions", icon: AtSign, admin: true }
 ]
 
 /**
