@@ -47,24 +47,6 @@ const SKILLS = [
     "Religião", "Sobrevivência",
 ] as const
 
-const SubclassSchema = new Schema<Subclass>(
-    {
-        name: {
-            type: String,
-            required: [true, "Nome da subclasse é obrigatório"],
-            trim: true,
-            minlength: [2, "Nome deve ter pelo menos 2 caracteres"],
-            maxlength: [100, "Nome deve ter no máximo 100 caracteres"],
-        },
-        description: {
-            type: String,
-            required: false,
-            maxlength: [1000, "Descrição da subclasse deve ter no máximo 1000 caracteres"],
-        },
-    },
-    { _id: true },
-)
-
 const ClassTraitSchema = new Schema<ClassTrait>(
     {
         level: {
@@ -77,6 +59,50 @@ const ClassTraitSchema = new Schema<ClassTrait>(
             type: String,
             required: [true, "Descrição da habilidade é obrigatória"],
             maxlength: [5000, "Descrição da habilidade deve ter no máximo 5000 caracteres"],
+        },
+    },
+    { _id: true },
+)
+
+const SubclassSchema = new Schema<Subclass>(
+    {
+        name: {
+            type: String,
+            required: [true, "Nome da subclasse é obrigatório"],
+            trim: true,
+            minlength: [2, "Nome deve ter pelo menos 2 caracteres"],
+            maxlength: [100, "Nome deve ter no máximo 100 caracteres"],
+        },
+        source: {
+            type: String,
+            required: false,
+        },
+        image: {
+            type: String,
+            required: false,
+            default: "",
+        },
+        description: {
+            type: String,
+            required: false,
+        },
+        color: {
+            type: String,
+            required: false,
+        },
+        spellcasting: {
+            type: String,
+            enum: SPELLCASTING_TIERS,
+            default: "Nenhum",
+        },
+        spellcastingAttribute: {
+            type: String,
+            enum: ATTRIBUTES,
+            required: false,
+        },
+        traits: {
+            type: [ClassTraitSchema],
+            default: [],
         },
     },
     { _id: true },

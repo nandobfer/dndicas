@@ -113,12 +113,21 @@ export function GlassSelector<T extends string | number>({
                             size === "sm" && "px-2 py-0.5 text-[8px]",
                             size === "lg" && "px-6 py-2.5 text-base",
                             "focus:outline-none focus-visible:ring-2 focus-visible:ring-white/20",
-                            selected ? option.textColor || "text-white" : "text-white/50 hover:text-white/70",
                             itemDisabled && !selected && "opacity-30 cursor-not-allowed",
                             itemDisabled && selected && "cursor-not-allowed",
                         )}
+                        style={
+                            selected
+                                ? {
+                                      backgroundColor: option.activeColor?.startsWith("#") ? `${option.activeColor}20` : undefined,
+                                      color: option.textColor?.startsWith("#") ? option.textColor : "white",
+                                  }
+                                : {
+                                      color: "rgba(255, 255, 255, 0.5)",
+                                  }
+                        }
                     >
-                        {selected && mode === "single" && (
+                        {selected && mode === "single" && !option.activeColor?.startsWith("#") && (
                             <motion.div
                                 layoutId={layoutId}
                                 className={cn("absolute inset-0 rounded-md z-0", option.activeColor || "bg-white/15")}
@@ -127,7 +136,7 @@ export function GlassSelector<T extends string | number>({
                         )}
 
                         <AnimatePresence>
-                            {selected && mode === "multi" && (
+                            {selected && mode === "multi" && !option.activeColor?.startsWith("#") && (
                                 <motion.div
                                     initial={{ opacity: 0, scale: 0.9 }}
                                     animate={{ opacity: 1, scale: 1 }}

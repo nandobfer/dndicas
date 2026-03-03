@@ -60,7 +60,13 @@ export type SpellcastingTier = (typeof SPELLCASTING_TIER_OPTIONS)[number]
 export interface Subclass {
     _id?: string
     name: string
+    source?: string
+    image?: string
     description?: string
+    color?: string
+    spellcasting: SpellcastingTier
+    spellcastingAttribute?: AttributeType
+    traits: ClassTrait[]
 }
 
 // ─── Class Traits ────────────────────────────────────────────────────────────

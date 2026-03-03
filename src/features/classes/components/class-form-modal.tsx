@@ -37,7 +37,8 @@ import { GlassImageUploader } from "@/components/ui/glass-image-uploader"
 import { GlassInlineEmptyState } from "@/components/ui/glass-inline-empty-state"
 import { RichTextEditor } from "@/features/rules/components/rich-text-editor"
 
-import { attributeColors, diceColors, type AttributeType } from "@/lib/config/colors"
+import { attributeColors, diceColors, rarityColors, type AttributeType } from "@/lib/config/colors"
+import { ImageAndDescriptionSection, SpellcastingSection, TraitsSection } from "./shared-form-components"
 
 import { createClassSchema, type CreateClassSchema } from "../api/validation"
 import {
@@ -57,6 +58,17 @@ import {
     WEAPON_PROFICIENCY_OPTIONS,
 } from "../types/classes.types"
 import { useCreateClass, useUpdateClass } from "../api/classes-queries"
+
+// ── Shared Constants ─────────────────────────────────────────────────────────
+
+const SUBCLASS_COLORS = [
+    rarityColors.uncommon,
+    rarityColors.rare,
+    rarityColors.veryRare,
+    rarityColors.legendary,
+    rarityColors.artifact,
+    rarityColors.common, // Adicionando common no final para rotacionar completo
+]
 
 // ─── Static derived options ─────────────────────────────────────────────────
 
@@ -80,19 +92,19 @@ const ARMOR_OPTIONS: { value: ArmorProficiency; label: string; activeColor: stri
     { value: "Armaduras Pesadas", label: "Pesadas", activeColor: "bg-amber-400/20", textColor: "text-amber-400" },
 ]
 
-const WEAPON_PROF_ALL_OPTIONS = WEAPON_PROFICIENCY_OPTIONS.map(opt => ({
+const WEAPON_PROF_ALL_OPTIONS = WEAPON_PROFICIENCY_OPTIONS.map((opt) => ({
     value: opt,
-    label: opt
+    label: opt,
 }))
 
 // Group skills by their associated primary attribute in D&D 5e
 const SKILL_MAP: Record<AttributeType, SkillType[]> = {
-    "Força": ["Atletismo"],
-    "Destreza": ["Acrobacia", "Furtividade", "Prestidigitação"],
-    "Constituição": [],
-    "Inteligência": ["Arcanismo", "História", "Investigação", "Natureza", "Religião"],
-    "Sabedoria": ["Lidar com Animais", "Intuição", "Medicina", "Percepção", "Sobrevivência"],
-    "Carisma": ["Atuação", "Enganação", "Intimidação", "Persuasão"]
+    Força: ["Atletismo"],
+    Destreza: ["Acrobacia", "Furtividade", "Prestidigitação"],
+    Constituição: [],
+    Inteligência: ["Arcanismo", "História", "Investigação", "Natureza", "Religião"],
+    Sabedoria: ["Lidar com Animais", "Intuição", "Medicina", "Percepção", "Sobrevivência"],
+    Carisma: ["Atuação", "Enganação", "Intimidação", "Persuasão"],
 }
 
 const SPELLCASTING_OPTIONS: { value: SpellcastingTier; label: string; activeColor: string; textColor: string }[] = [
@@ -101,6 +113,22 @@ const SPELLCASTING_OPTIONS: { value: SpellcastingTier; label: string; activeColo
     { value: "Metade", label: "Metade", activeColor: "bg-purple-400/20", textColor: "text-purple-400" },
     { value: "Completo", label: "Completo", activeColor: "bg-amber-400/20", textColor: "text-amber-400" },
 ]
+
+// ─── Subclass Traits Wrapper ──────────────────────────────────────────────────
+
+/**
+ * Isolated component to handle subclass traits useFieldArray.
+ * This fixes the Rules of Hooks violation by ensuring useFieldArray is always called,
+ * but with a stable path or conditionally rendered inside this component.
+ */
+function SubclassTraitsWrapper({ control, activeTab, isSubmitting, errors }: { control: any; activeTab: number; isSubmitting: boolean; errors: any }) {
+    const { fields, append, remove } = useFieldArray({
+        control,
+        name: `subclasses.${activeTab}.traits` as any,
+    })
+
+    return <TraitsSection fields={fields} append={append} remove={remove} control={control} isSubmitting={isSubmitting} traitsFieldName={`subclasses.${activeTab}.traits`} errors={errors} />
+}
 
 // ─── Subclass Tab Item ───────────────────────────────────────────────────────
 
@@ -117,18 +145,7 @@ interface SubclassTabItemProps {
     disabled?: boolean
 }
 
-function SubclassTabItem({
-    subclass,
-    index,
-    isRenaming,
-    renameValue,
-    onStartRename,
-    onRenameChange,
-    onConfirmRename,
-    onCancelRename,
-    onDelete,
-    disabled = false,
-}: SubclassTabItemProps) {
+function SubclassTabItem({ subclass, index, isRenaming, renameValue, onStartRename, onRenameChange, onConfirmRename, onCancelRename, onDelete, disabled = false }: SubclassTabItemProps) {
     return (
         <motion.div
             layout
@@ -136,8 +153,10 @@ function SubclassTabItem({
             animate={{ opacity: 1, x: 0 }}
             exit={{ opacity: 0, x: -8 }}
             className="flex items-center gap-2 px-3 py-2 rounded-lg bg-white/5 border border-white/10 group"
+            style={{ borderColor: subclass.color ? `${subclass.color}40` : undefined }}
         >
             {isRenaming ? (
+                /* ... (keeping the renaming logic unchanged) */
                 <>
                     <input
                         autoFocus
@@ -149,38 +168,28 @@ function SubclassTabItem({
                             if (e.key === "Escape") onCancelRename()
                         }}
                     />
-                    <button
-                        type="button"
-                        onClick={() => onConfirmRename(index)}
-                        className="text-emerald-400 hover:text-emerald-300 transition-colors"
-                    >
+                    <button type="button" onClick={() => onConfirmRename(index)} className="text-emerald-400 hover:text-emerald-300 transition-colors">
                         <Check className="h-4 w-4" />
                     </button>
-                    <button
-                        type="button"
-                        onClick={onCancelRename}
-                        className="text-white/40 hover:text-white/60 transition-colors"
-                    >
+                    <button type="button" onClick={onCancelRename} className="text-white/40 hover:text-white/60 transition-colors">
                         <X className="h-4 w-4" />
                     </button>
                 </>
             ) : (
                 <>
-                    <span className="flex-1 text-sm text-white/80 truncate">{subclass.name}</span>
+                    <div className="flex-1 min-w-0 flex items-center gap-2">
+                        <span className="text-sm text-white/80 truncate">{subclass.name}</span>
+                        {subclass.source && (
+                            <span className="px-1.5 py-0.5 rounded bg-white/5 border border-white/10 text-[9px] font-bold text-white/40 uppercase tracking-tight truncate">{subclass.source}</span>
+                        )}
+                        {subclass.color && <div className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: subclass.color }} />}
+                    </div>
                     {!disabled && (
                         <>
-                            <button
-                                type="button"
-                                onClick={() => onStartRename(index, subclass.name)}
-                                className="text-white/30 hover:text-white/60 transition-colors opacity-0 group-hover:opacity-100"
-                            >
+                            <button type="button" onClick={() => onStartRename(index, subclass.name)} className="text-white/30 hover:text-white/60 transition-colors opacity-0 group-hover:opacity-100">
                                 <Pencil className="h-3.5 w-3.5" />
                             </button>
-                            <button
-                                type="button"
-                                onClick={() => onDelete(index)}
-                                className="text-white/30 hover:text-rose-400 transition-colors opacity-0 group-hover:opacity-100"
-                            >
+                            <button type="button" onClick={() => onDelete(index)} className="text-white/30 hover:text-rose-400 transition-colors opacity-0 group-hover:opacity-100">
                                 <X className="h-3.5 w-3.5" />
                             </button>
                         </>
@@ -213,6 +222,7 @@ export function ClassFormModal({ characterClass, isOpen, onClose, onSuccess }: C
 
     // Subclass add field
     const [newSubclassName, setNewSubclassName] = React.useState("")
+    const [newSubclassSource, setNewSubclassSource] = React.useState("")
     const [renamingIndex, setRenamingIndex] = React.useState<number | null>(null)
     const [renameValue, setRenameValue] = React.useState("")
 
@@ -246,14 +256,22 @@ export function ClassFormModal({ characterClass, isOpen, onClose, onSuccess }: C
         },
     })
 
-    const { fields: weaponFields, append: appendWeapon, remove: removeWeapon } = useFieldArray({
+    const {
+        fields: weaponFields,
+        append: appendWeapon,
+        remove: removeWeapon,
+    } = useFieldArray({
         control,
         name: "weaponProficiencies" as never,
     })
 
-    const { fields: traitFields, append: appendTrait, remove: removeTrait } = useFieldArray({
+    const {
+        fields: traitFields,
+        append: appendTrait,
+        remove: removeTrait,
+    } = useFieldArray({
         control,
-        name: "traits" as never,
+        name: "traits",
     })
 
     // Reset when modal opens/closes or class changes
@@ -261,6 +279,7 @@ export function ClassFormModal({ characterClass, isOpen, onClose, onSuccess }: C
         if (isOpen) {
             setActiveTab("base")
             setNewSubclassName("")
+            setNewSubclassSource("")
             setRenamingIndex(null)
             reset({
                 name: characterClass?.name ?? "",
@@ -289,10 +308,38 @@ export function ClassFormModal({ characterClass, isOpen, onClose, onSuccess }: C
     // ── Subclass management ──────────────────────────────────────────────────
 
     const handleAddSubclass = () => {
-        const trimmed = newSubclassName.trim()
-        if (!trimmed) return
-        setValue("subclasses", [...subclasses, { name: trimmed }])
+        const nameTrimmed = newSubclassName.trim()
+        if (!nameTrimmed) return
+
+        const sourceTrimmed = newSubclassSource.trim()
+        const color = SUBCLASS_COLORS[subclasses.length % SUBCLASS_COLORS.length]
+
+        const newSubclass: Subclass = {
+            name: nameTrimmed,
+            source: sourceTrimmed || undefined,
+            color: color,
+            spellcasting: "Nenhum",
+            traits: [],
+            description: "",
+            image: "",
+        }
+
+        setValue("subclasses", [...subclasses, newSubclass])
         setNewSubclassName("")
+        setNewSubclassSource("")
+
+        // Auto-navigate to the new subclass tab
+        const newIndex = subclasses.length
+        setActiveTab(newIndex)
+
+        // Scroll to top of the modal content when switching to a new tab
+        // Adicionado um delay maior (300ms) para evitar scrollar antes da renderização da nova aba
+        setTimeout(() => {
+            const modalContent = document.querySelector('[role="dialog"]')
+            if (modalContent) {
+                modalContent.scrollTo({ top: 0, behavior: "smooth" })
+            }
+        }, 300)
     }
 
     const handleDeleteSubclass = (index: number) => {
@@ -349,9 +396,7 @@ export function ClassFormModal({ characterClass, isOpen, onClose, onSuccess }: C
             <GlassModalContent size="xl" className="max-w-[70vw]">
                 <GlassModalHeader>
                     <GlassModalTitle>{isEditMode ? `Editar ${characterClass!.name}` : "Nova Classe"}</GlassModalTitle>
-                    <GlassModalDescription>
-                        {isEditMode ? "Atualize as informações da classe" : "Crie um novo registro no catálogo de classes"}
-                    </GlassModalDescription>
+                    <GlassModalDescription>{isEditMode ? "Atualize as informações da classe" : "Crie um novo registro no catálogo de classes"}</GlassModalDescription>
                 </GlassModalHeader>
 
                 {/* Tab bar */}
@@ -362,9 +407,17 @@ export function ClassFormModal({ characterClass, isOpen, onClose, onSuccess }: C
                             type="button"
                             onClick={() => setActiveTab(tab.id)}
                             className={cn(
-                                "relative flex-shrink-0 px-4 py-1.5 rounded-md text-sm font-medium transition-colors focus:outline-none",
-                                activeTab === tab.id ? "text-white bg-white/15" : "text-white/50 hover:text-white/70"
+                                "relative flex-shrink-0 px-4 py-1.5 rounded-md text-sm font-medium transition-all focus:outline-none",
+                                activeTab === tab.id ? "text-white shadow-sm" : "text-white/50 hover:text-white/70",
                             )}
+                            style={activeTab === tab.id ? {
+                                backgroundColor: typeof tab.id === 'number' && subclasses[tab.id]?.color 
+                                    ? `${subclasses[tab.id].color}33` 
+                                    : 'rgba(255, 255, 255, 0.15)',
+                                color: typeof tab.id === 'number' && subclasses[tab.id]?.color 
+                                    ? subclasses[tab.id].color 
+                                    : 'white'
+                            } : undefined}
                         >
                             {tab.label}
                         </button>
@@ -394,71 +447,20 @@ export function ClassFormModal({ characterClass, isOpen, onClose, onSuccess }: C
 
                             {/* Row 2: Name + Source */}
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                <GlassInput
-                                    id="name"
-                                    label="Nome da Classe"
-                                    placeholder="Ex: Guerreiro"
-                                    icon={<GraduationCap />}
-                                    required
-                                    error={errors.name?.message}
-                                    {...register("name")}
-                                />
-                                <GlassInput
-                                    id="source"
-                                    label="Fonte"
-                                    placeholder="Ex: PHB pg. 70"
-                                    icon={<Link />}
-                                    error={errors.source?.message}
-                                    {...register("source")}
-                                />
+                                <GlassInput id="name" label="Nome da Classe" placeholder="Ex: Guerreiro" icon={<GraduationCap />} required error={errors.name?.message} {...register("name")} />
+                                <GlassInput id="source" label="Fonte" placeholder="Ex: PHB pg. 70" icon={<Link />} error={errors.source?.message} {...register("source")} />
                             </div>
 
                             {/* Row 3: Image + Description (Newly relocated) */}
-                            <div className="grid grid-cols-1 md:grid-cols-[250px_1fr] gap-6">
-                                <div className="space-y-2 flex flex-col">
-                                    <label className="text-sm font-medium text-white/80 flex items-center gap-2">
-                                        <Info className="h-4 w-4" />
-                                        Arte da Classe
-                                    </label>
-                                    <Controller
-                                        name="image"
-                                        control={control}
-                                        render={({ field }) => (
-                                            <GlassImageUploader
-                                                value={field.value || ""}
-                                                onChange={field.onChange}
-                                                onRemove={() => field.onChange("")}
-                                                disabled={isSubmitting}
-                                                className="w-full flex-1"
-                                            />
-                                        )}
-                                    />
-                                </div>
-                                <div className="space-y-2 flex flex-col">
-                                    <label className="text-sm font-medium text-white/80 flex items-center gap-2">
-                                        <BookOpen className="h-4 w-4" />
-                                        Descrição
-                                        <span className="text-rose-400">*</span>
-                                    </label>
-                                    <div className="flex-1 min-h-[250px]">
-                                        <Controller
-                                            name="description"
-                                            control={control}
-                                            render={({ field }) => (
-                                                <RichTextEditor
-                                                    value={field.value || ""}
-                                                    onChange={field.onChange}
-                                                    placeholder="Descreva a classe detalhadamente... (Suporta imagens S3 e formatação)"
-                                                    className={cn("h-full min-h-[250px]", errors.description ? "border-rose-500/50" : "")}
-                                                    disabled={isSubmitting}
-                                                    excludeId={characterClass?._id}
-                                                />
-                                            )}
-                                        />
-                                    </div>
-                                    {errors.description && <p className="text-xs text-rose-400">{errors.description.message}</p>}
-                                </div>
-                            </div>
+                            <ImageAndDescriptionSection
+                                control={control}
+                                isSubmitting={isSubmitting}
+                                errors={errors}
+                                imageFieldName="image"
+                                descriptionFieldName="description"
+                                entityId={characterClass?._id}
+                                placeholder="Descreva a classe detalhadamente... (Suporta imagens S3 e formatação)"
+                            />
 
                             {/* Row 4: Hit Dice */}
                             <div className="space-y-2">
@@ -514,9 +516,7 @@ export function ClassFormModal({ characterClass, isOpen, onClose, onSuccess }: C
                                         />
                                     )}
                                 />
-                                {errors.savingThrows && (
-                                    <p className="text-xs text-rose-400">{errors.savingThrows.message as string}</p>
-                                )}
+                                {errors.savingThrows && <p className="text-xs text-rose-400">{errors.savingThrows.message as string}</p>}
                             </div>
 
                             {/* Row 5: Primary Attributes */}
@@ -543,9 +543,7 @@ export function ClassFormModal({ characterClass, isOpen, onClose, onSuccess }: C
                                         />
                                     )}
                                 />
-                                {errors.primaryAttributes && (
-                                    <p className="text-xs text-rose-400">{errors.primaryAttributes.message as string}</p>
-                                )}
+                                {errors.primaryAttributes && <p className="text-xs text-rose-400">{errors.primaryAttributes.message as string}</p>}
                             </div>
 
                             {/* Row 6: Armor Proficiencies */}
@@ -573,20 +571,23 @@ export function ClassFormModal({ characterClass, isOpen, onClose, onSuccess }: C
                                         )}
                                     />
                                 </div>
-                                    <GlassStatusSwitch
-                                        entityLabel="Escudos"
-                                        description="Proficiência no uso de escudos"
-                                        checked={(watch("armorProficiencies") || []).includes("Escudos")}
-                                        onCheckedChange={(checked) => {
-                                            const current = watch("armorProficiencies") || []
-                                            if (checked) {
-                                                if (!current.includes("Escudos")) setValue("armorProficiencies", [...current, "Escudos"])
-                                            } else {
-                                                setValue("armorProficiencies", current.filter((v: string) => v !== "Escudos"))
-                                            }
-                                        }}
-                                        disabled={isSubmitting}
-                                    />
+                                <GlassStatusSwitch
+                                    entityLabel="Escudos"
+                                    description="Proficiência no uso de escudos"
+                                    checked={(watch("armorProficiencies") || []).includes("Escudos")}
+                                    onCheckedChange={(checked) => {
+                                        const current = watch("armorProficiencies") || []
+                                        if (checked) {
+                                            if (!current.includes("Escudos")) setValue("armorProficiencies", [...current, "Escudos"])
+                                        } else {
+                                            setValue(
+                                                "armorProficiencies",
+                                                current.filter((v: string) => v !== "Escudos"),
+                                            )
+                                        }
+                                    }}
+                                    disabled={isSubmitting}
+                                />
                             </div>
 
                             {/* Row 7: Weapon Proficiencies */}
@@ -649,7 +650,7 @@ export function ClassFormModal({ characterClass, isOpen, onClose, onSuccess }: C
                                                         className={cn(
                                                             "p-2 rounded-lg transition-colors border border-white/10 bg-white/5",
                                                             "text-rose-400 hover:bg-rose-500/20",
-                                                            "disabled:opacity-50 disabled:cursor-not-allowed"
+                                                            "disabled:opacity-50 disabled:cursor-not-allowed",
                                                         )}
                                                         title="Remover proficiência"
                                                     >
@@ -683,7 +684,7 @@ export function ClassFormModal({ characterClass, isOpen, onClose, onSuccess }: C
                                     />
                                     <span className="text-xs text-white/60 font-medium uppercase tracking-wider whitespace-nowrap">Perícias dentre:</span>
                                 </div>
-                                
+
                                 <div className="grid grid-cols-1 md:grid-cols-3 lg:flex lg:flex-wrap gap-6">
                                     {(Object.keys(SKILL_MAP) as AttributeType[]).map((attr) => {
                                         const skills = SKILL_MAP[attr]
@@ -693,16 +694,14 @@ export function ClassFormModal({ characterClass, isOpen, onClose, onSuccess }: C
 
                                         return (
                                             <div key={attr} className="space-y-3 flex-1 min-w-[140px]">
-                                                <h4 className={cn("text-[10px] font-bold uppercase tracking-widest pb-1 border-b border-white/10 text-center", attrConfig.text)}>
-                                                    {attr}
-                                                </h4>
+                                                <h4 className={cn("text-[10px] font-bold uppercase tracking-widest pb-1 border-b border-white/10 text-center", attrConfig.text)}>{attr}</h4>
                                                 <div className="flex flex-col gap-1.5">
                                                     <Controller
                                                         name="availableSkills"
                                                         control={control}
                                                         render={({ field }) => (
                                                             <GlassSelector
-                                                                options={skills.map(skill => ({
+                                                                options={skills.map((skill) => ({
                                                                     value: skill,
                                                                     label: skill,
                                                                     activeColor: attrConfig.bgAlpha,
@@ -724,75 +723,24 @@ export function ClassFormModal({ characterClass, isOpen, onClose, onSuccess }: C
                                         )
                                     })}
                                 </div>
-                                {errors.availableSkills && (
-                                    <p className="text-xs text-rose-400">{errors.availableSkills.message as string}</p>
-                                )}
+                                {errors.availableSkills && <p className="text-xs text-rose-400">{errors.availableSkills.message as string}</p>}
                             </div>
 
                             {/* Row 9: Spellcasting */}
-                            <div className="space-y-3">
-                                <div className="space-y-2">
-                                    <label className="text-sm font-medium text-white/80 flex items-center gap-2">
-                                        <Zap className="h-4 w-4" />
-                                        Conjuração
-                                    </label>
-                                    <Controller
-                                        name="spellcasting"
-                                        control={control}
-                                        render={({ field }) => (
-                                            <GlassSelector
-                                                options={SPELLCASTING_OPTIONS}
-                                                value={field.value as SpellcastingTier}
-                                                onChange={(v) => {
-                                                    field.onChange(v)
-                                                    if (v === "Nenhum") setValue("spellcastingAttribute", undefined)
-                                                }}
-                                                mode="single"
-                                                layout="horizontal"
-                                                fullWidth
-                                                size="md"
-                                                disabled={isSubmitting}
-                                                layoutId="class-spellcasting"
-                                            />
-                                        )}
-                                    />
-                                </div>
+                            <SpellcastingSection
+                                control={control}
+                                watch={watch}
+                                setValue={setValue}
+                                isSubmitting={isSubmitting}
+                                spellcastingFieldName="spellcasting"
+                                attributeFieldName="spellcastingAttribute"
+                                layoutIdPrefix="base"
+                            />
 
-                                <AnimatePresence>
-                                    {spellcasting !== "Nenhum" && (
-                                        <motion.div
-                                            initial={{ opacity: 0, height: 0 }}
-                                            animate={{ opacity: 1, height: "auto" }}
-                                            exit={{ opacity: 0, height: 0 }}
-                                            className="space-y-2 overflow-hidden"
-                                        >
-                                            <label className="text-sm font-medium text-white/80 flex items-center gap-2">
-                                                <Zap className="h-4 w-4 text-amber-400" />
-                                                Atributo de Conjuração
-                                            </label>
-                                            <Controller
-                                                name="spellcastingAttribute"
-                                                control={control}
-                                                render={({ field }) => (
-                                                    <GlassSelector
-                                                        options={ATTRIBUTE_OPTIONS}
-                                                        value={field.value as AttributeType | undefined}
-                                                        onChange={(v) => field.onChange(v)}
-                                                        mode="single"
-                                                        layout="horizontal"
-                                                        fullWidth
-                                                        size="md"
-                                                        disabled={isSubmitting}
-                                                        layoutId="class-spellcasting-attr"
-                                                    />
-                                                )}
-                                            />
-                                        </motion.div>
-                                    )}
-                                </AnimatePresence>
-                            </div>
+                            {/* Row 10: Class Traits */}
+                            <TraitsSection fields={traitFields} append={appendTrait} remove={removeTrait} control={control} isSubmitting={isSubmitting} traitsFieldName="traits" errors={errors} />
 
-                            {/* Row 10: Subclasses management */}
+                            {/* Row 11: Subclasses management */}
                             <div className="space-y-3">
                                 <label className="text-sm font-medium text-white/80 flex items-center gap-2">
                                     <Users className="h-4 w-4" />
@@ -800,13 +748,11 @@ export function ClassFormModal({ characterClass, isOpen, onClose, onSuccess }: C
                                 </label>
 
                                 {!isEditMode ? (
-                                    <div className="px-4 py-3 rounded-lg bg-white/5 border border-white/10 text-sm text-white/40 italic">
-                                        Salve a classe primeiro para adicionar subclasses.
-                                    </div>
+                                    <div className="px-4 py-3 rounded-lg bg-white/5 border border-white/10 text-sm text-white/40 italic">Salve a classe primeiro para adicionar subclasses.</div>
                                 ) : (
                                     <>
                                         {/* Add subclass */}
-                                        <div className="flex gap-2">
+                                        <div className="flex flex-col sm:flex-row gap-2">
                                             <input
                                                 type="text"
                                                 value={newSubclassName}
@@ -816,6 +762,15 @@ export function ClassFormModal({ characterClass, isOpen, onClose, onSuccess }: C
                                                 disabled={isSubmitting}
                                                 className="flex-1 bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm text-white placeholder:text-white/30 outline-none focus:border-white/25 transition-colors disabled:opacity-50"
                                             />
+                                            <input
+                                                type="text"
+                                                value={newSubclassSource}
+                                                onChange={(e) => setNewSubclassSource(e.target.value)}
+                                                onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), handleAddSubclass())}
+                                                placeholder="Fonte..."
+                                                disabled={isSubmitting}
+                                                className="sm:w-1/3 bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm text-white placeholder:text-white/30 outline-none focus:border-white/25 transition-colors disabled:opacity-50"
+                                            />
                                             <button
                                                 type="button"
                                                 onClick={handleAddSubclass}
@@ -823,7 +778,7 @@ export function ClassFormModal({ characterClass, isOpen, onClose, onSuccess }: C
                                                 className={cn(
                                                     "flex items-center justify-center px-3 py-2 rounded-lg transition-colors",
                                                     "bg-white/10 hover:bg-white/15 text-white/60 hover:text-white",
-                                                    "disabled:opacity-30 disabled:cursor-not-allowed"
+                                                    "disabled:opacity-30 disabled:cursor-not-allowed",
                                                 )}
                                             >
                                                 <Plus className="h-4 w-4" />
@@ -858,105 +813,6 @@ export function ClassFormModal({ characterClass, isOpen, onClose, onSuccess }: C
                                 )}
                             </div>
 
-                            {/* Row 12: Class Traits */}
-                            <div className="space-y-3">
-                                <div className="flex items-center justify-between">
-                                    <label className="text-sm font-medium text-white/80 flex items-center gap-2">
-                                        <Zap className="h-4 w-4 text-amber-400" />
-                                        Habilidades de Classe
-                                    </label>
-                                    <button
-                                        type="button"
-                                        onClick={() => appendTrait({ level: 1, description: "" })}
-                                        disabled={isSubmitting}
-                                        className={cn(
-                                            "px-3 py-1.5 rounded-lg text-xs font-medium transition-colors",
-                                            "bg-amber-500/20 text-amber-400 hover:bg-amber-500/30",
-                                            "border border-amber-500/30",
-                                            "disabled:opacity-50 disabled:cursor-not-allowed",
-                                            "flex items-center gap-1.5",
-                                        )}
-                                    >
-                                        <Plus className="h-3 w-3" />
-                                        Adicionar Habilidade
-                                    </button>
-                                </div>
-
-                                <AnimatePresence mode="popLayout">
-                                    {traitFields.length === 0 ? (
-                                        <GlassInlineEmptyState message="Nenhuma habilidade de classe adicionada" />
-                                    ) : (
-                                        <div className="space-y-3">
-                                            {traitFields.map((field, index) => (
-                                                <motion.div
-                                                    key={field.id}
-                                                    initial={{ opacity: 0, y: 10 }}
-                                                    animate={{ opacity: 1, y: 0 }}
-                                                    exit={{ opacity: 0, scale: 0.95 }}
-                                                    className="flex items-end gap-2 p-3 rounded-xl bg-white/5 border border-white/10"
-                                                >
-                                                    <div className="w-20 self-stretch flex flex-col">
-                                                        <Controller
-                                                            name={`traits.${index}.level`}
-                                                            control={control}
-                                                            render={({ field: levelField }) => (
-                                                                <div className="space-y-1.5 flex-1 flex flex-col group/level">
-                                                                    <label className="text-sm font-medium text-white/80 block shrink-0">Nível</label>
-                                                                    <div className="flex-1 rounded-lg bg-white/5 border border-white/10 hover:border-white/20 transition-all flex items-center justify-center min-h-[38px] focus-within:ring-2 focus-within:ring-blue-500/50 focus-within:border-blue-500/50">
-                                                                        <input
-                                                                            type="text"
-                                                                            inputMode="numeric"
-                                                                            value={levelField.value}
-                                                                            onChange={(e) => {
-                                                                                const val = e.target.value.replace(/\D/g, "")
-                                                                                levelField.onChange(val ? parseInt(val) : "")
-                                                                            }}
-                                                                            className="bg-transparent border-none outline-none w-full text-center font-bold text-amber-400 text-sm h-full"
-                                                                        />
-                                                                    </div>
-                                                                </div>
-                                                            )}
-                                                        />
-                                                    </div>
-                                                    <div className="flex-1 self-stretch flex flex-col">
-                                                        <div className="space-y-1.5 flex-1 flex flex-col">
-                                                            <label className="text-sm font-medium text-white/80 block shrink-0">Traços / Regras (Habilidade)</label>
-                                                            <Controller
-                                                                name={`traits.${index}.description`}
-                                                                control={control}
-                                                                render={({ field: descField }) => (
-                                                                    <RichTextEditor
-                                                                        value={descField.value || ""}
-                                                                        onChange={descField.onChange}
-                                                                        variant="simple"
-                                                                        placeholder="Mencione uma habilidade ou digite sua descrição"
-                                                                        disabled={isSubmitting}
-                                                                        className="flex-1 min-h-[38px]"
-                                                                    />
-                                                                )}
-                                                            />
-                                                        </div>
-                                                    </div>
-                                                    <button
-                                                        type="button"
-                                                        onClick={() => removeTrait(index)}
-                                                        disabled={isSubmitting}
-                                                        className={cn(
-                                                            "h-10 px-3 rounded-lg transition-colors border border-white/10 bg-white/5",
-                                                            "text-rose-400 hover:bg-rose-500/20",
-                                                            "disabled:opacity-50 disabled:cursor-not-allowed",
-                                                            "mb-[1px]" // Fine-tuning alignment with text editor border
-                                                        )}
-                                                    >
-                                                        <X className="h-4 w-4" />
-                                                    </button>
-                                                </motion.div>
-                                            ))}
-                                        </div>
-                                    )}
-                                </AnimatePresence>
-                            </div>
-
                             {/* Footer */}
                             <div className="flex flex-col-reverse sm:flex-row justify-end gap-3 pt-6 border-t border-white/10">
                                 <button
@@ -981,34 +837,83 @@ export function ClassFormModal({ characterClass, isOpen, onClose, onSuccess }: C
 
                     {/* Subclass tab content */}
                     {typeof activeTab === "number" && (
-                        <motion.div
+                        <motion.form
                             key={`subclass-${activeTab}`}
                             initial={{ opacity: 0, y: 4 }}
                             animate={{ opacity: 1, y: 0 }}
                             exit={{ opacity: 0, y: -4 }}
                             transition={{ duration: 0.15 }}
-                            className="mt-6 space-y-4"
+                            onSubmit={handleSubmit(onSubmit as any, onFormError)}
+                            className="mt-6 space-y-6"
                         >
-                            <div className="rounded-lg bg-white/5 border border-white/10 p-6 text-center">
-                                <Users className="h-8 w-8 text-amber-400/60 mx-auto mb-3" />
-                                <h3 className="text-base font-semibold text-white/80">
-                                    {subclasses[activeTab]?.name}
-                                </h3>
-                                <p className="text-sm text-white/40 mt-1">
-                                    O formulário de subclasse será implementado em breve.
-                                </p>
+                            <div className="flex items-center justify-between pb-4 border-b border-white/10">
+                                <div className="flex items-center gap-3">
+                                    <div
+                                        className="w-10 h-10 rounded-xl flex items-center justify-center border border-white/10 bg-white/5"
+                                        style={{ borderColor: subclasses[activeTab]?.color ? `${subclasses[activeTab]?.color}40` : undefined }}
+                                    >
+                                        <Users className="h-5 w-5" style={{ color: subclasses[activeTab]?.color }} />
+                                    </div>
+                                    <div>
+                                        <h3 className="text-lg font-bold text-white leading-none">{subclasses[activeTab]?.name}</h3>
+                                        <p className="text-xs text-white/40 mt-1 uppercase tracking-widest font-medium">Configuração de Subclasse</p>
+                                    </div>
+                                </div>
+                                {subclasses[activeTab]?.source && (
+                                    <div className="flex items-center gap-2 px-3 py-1 rounded-full bg-white/5 border border-white/10 text-[10px] font-bold text-white/40 uppercase">
+                                        <Link className="h-3 w-3" />
+                                        {subclasses[activeTab]?.source}
+                                    </div>
+                                )}
                             </div>
 
-                            <div className="flex justify-end pt-2 border-t border-white/10">
+                            <ImageAndDescriptionSection
+                                control={control}
+                                isSubmitting={isSubmitting}
+                                errors={errors}
+                                imageFieldName={`subclasses.${activeTab}.image`}
+                                descriptionFieldName={`subclasses.${activeTab}.description`}
+                                entityId={characterClass?._id}
+                                placeholder={`Descreva a subclasse ${subclasses[activeTab]?.name} detalhadamente...`}
+                            />
+
+                            <div
+                                className="p-4 rounded-xl bg-white/5 border border-white/10 space-y-6"
+                                style={{ borderColor: subclasses[activeTab]?.color ? `${subclasses[activeTab]?.color}40` : undefined }}
+                            >
+                                <SpellcastingSection
+                                    control={control}
+                                    watch={watch}
+                                    setValue={setValue}
+                                    isSubmitting={isSubmitting}
+                                    spellcastingFieldName={`subclasses.${activeTab}.spellcasting`}
+                                    attributeFieldName={`subclasses.${activeTab}.spellcastingAttribute`}
+                                    layoutIdPrefix={`subclass-${activeTab}`}
+                                />
+
+                                <div className="h-px bg-white/5" />
+
+                                <SubclassTraitsWrapper control={control} activeTab={activeTab} isSubmitting={isSubmitting} errors={errors} />
+                            </div>
+
+                            <div className="flex flex-col-reverse sm:flex-row justify-end gap-3 pt-6 border-t border-white/10">
                                 <button
                                     type="button"
-                                    onClick={onClose}
+                                    onClick={() => setActiveTab("base")}
                                     className="px-6 py-2.5 rounded-lg text-sm font-medium text-white/60 hover:text-white/80 hover:bg-white/5 transition-colors"
                                 >
-                                    Fechar
+                                    Voltar para Base
+                                </button>
+                                <button
+                                    type="submit"
+                                    disabled={isSubmitting}
+                                    className="flex flex-1 sm:flex-none items-center justify-center gap-2 px-6 py-2.5 rounded-lg bg-blue-500 hover:bg-blue-600 text-white text-sm font-medium shadow-lg shadow-blue-500/20 transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
+                                >
+                                    {isSubmitting && <Loader2 className="h-4 w-4 animate-spin" />}
+                                    {isSubmitting ? "Salvando..." : isEditMode ? "Salvar Alterações" : "Criar Classe"}
                                 </button>
                             </div>
-                        </motion.div>
+                        </motion.form>
                     )}
                 </AnimatePresence>
             </GlassModalContent>

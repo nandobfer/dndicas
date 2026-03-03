@@ -12,13 +12,27 @@ const ATTRIBUTES = ["Força", "Destreza", "Constituição", "Inteligência", "Sa
 const subclassSchema = z.object({
     _id: z.string().optional(),
     name: z.string().min(2, "Nome da subclasse deve ter pelo menos 2 caracteres").max(100, "Nome muito longo"),
-    description: z.string().max(1000).optional(),
+    source: z.string().max(200, "Fonte muito longa").optional(),
+    image: z.string().optional().or(z.literal("")),
+    description: z.string().max(20000).optional(),
+    color: z.string().optional(),
+    spellcasting: z.enum(SPELLCASTING_TIER_OPTIONS).default("Nenhum"),
+    spellcastingAttribute: z.enum(ATTRIBUTES).optional(),
+    traits: z
+        .array(
+            z.object({
+                _id: z.string().optional(),
+                level: z.number().int().min(1).max(20),
+                description: z.string().min(1, "Descrição da habilidade é obrigatória").max(10000),
+            }),
+        )
+        .default([]),
 })
 
 const classTraitSchema = z.object({
     _id: z.string().optional(),
     level: z.number().int().min(1).max(20),
-    description: z.string().min(1, "Descrição da habilidade é obrigatória").max(5000),
+    description: z.string().min(1, "Descrição da habilidade é obrigatória").max(10000),
 })
 
 export const createClassSchema = z.object({
