@@ -9,6 +9,7 @@ import { cn } from "@/core/utils"
 import { GlassModal, GlassModalContent, GlassModalHeader, GlassModalTitle, GlassModalDescription } from "@/components/ui/glass-modal"
 import { GlassInput } from "@/components/ui/glass-input"
 import { GlassStatusSwitch } from "@/components/ui/glass-status-switch"
+import { GlassConfirmClosing } from "@/components/ui/glass-confirm-closing"
 import { createReferenceSchema, updateReferenceSchema, type CreateReferenceSchema, type UpdateReferenceSchema } from "../api/validation"
 import { Reference, CreateReferenceInput, UpdateReferenceInput } from "../types/rules.types"
 import { RichTextEditor } from "./rich-text-editor"
@@ -23,6 +24,7 @@ export interface RuleFormModalProps {
 
 export function RuleFormModal({ isOpen, onClose, onSubmit, rule, isSubmitting = false }: RuleFormModalProps) {
     const isEditMode = !!rule
+    const [showConfirmClose, setShowConfirmClose] = React.useState(false)
 
     const {
         register,
@@ -31,20 +33,21 @@ export function RuleFormModal({ isOpen, onClose, onSubmit, rule, isSubmitting = 
         setValue,
         control,
         reset,
-        formState: { errors },
+        formState: { errors, isDirty }
     } = useForm<CreateReferenceSchema | UpdateReferenceSchema>({
         resolver: zodResolver(isEditMode ? updateReferenceSchema : createReferenceSchema),
         defaultValues: {
             name: rule?.name || "",
             description: rule?.description || "",
             source: rule?.source || "",
-            status: rule?.status || "active",
-        },
+            status: rule?.status || "active"
+        }
     })
 
     // Reset form when modal opens/closes or rule changes
     React.useEffect(() => {
         if (isOpen) {
+            setShowConfirmClose(false)
             reset({
                 name: rule?.name || "",
                 description: rule?.description || "",
@@ -57,92 +60,130 @@ export function RuleFormModal({ isOpen, onClose, onSubmit, rule, isSubmitting = 
     const handleFormSubmit = async (data: CreateReferenceSchema | UpdateReferenceSchema) => {
         // Cast to appropriate input type as the schema infers slightly different types than the interface
         await onSubmit(data as CreateReferenceInput | UpdateReferenceInput)
+        setShowConfirmClose(false)
+    }
+
+    const handleCloseAttempt = () => {
+        if (isDirty) {
+            setShowConfirmClose(true)
+        } else {
+            onClose()
+        }
     }
 
     return (
-        <GlassModal open={isOpen} onOpenChange={(open) => !open && onClose()}>
-            <GlassModalContent size="xl">
-                <GlassModalHeader>
-                    <GlassModalTitle>{isEditMode ? "Editar Regra" : "Nova Regra"}</GlassModalTitle>
-                    <GlassModalDescription>{isEditMode ? "Atualize as informações da regra de referência" : "Crie um novo registro no catálogo de regras"}</GlassModalDescription>
-                </GlassModalHeader>
+        <>
+            <GlassModal open={isOpen} onOpenChange={(open) => !open && handleCloseAttempt()}>
+                <GlassModalContent size="xl">
+                    <GlassModalHeader>
+                        <GlassModalTitle>{isEditMode ? "Editar Regra" : "Nova Regra"}</GlassModalTitle>
+                        <GlassModalDescription>
+                            {isEditMode ? "Atualize as informações da regra de referência" : "Crie um novo registro no catálogo de regras"}
+                        </GlassModalDescription>
+                    </GlassModalHeader>
 
-                <form onSubmit={handleSubmit(handleFormSubmit)} className="space-y-6 mt-4">
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                        {/* Name */}
-                        <GlassInput id="name" label="Nome da Regra" placeholder="Ex: Agarrar (Grapple)" icon={<ScrollText />} error={errors.name?.message} {...register("name")} />
+                    <form onSubmit={handleSubmit(handleFormSubmit)} className="space-y-6 mt-4">
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                            {/* Name */}
+                            <GlassInput
+                                id="name"
+                                label="Nome da Regra"
+                                placeholder="Ex: Agarrar (Grapple)"
+                                icon={<ScrollText />}
+                                error={errors.name?.message}
+                                {...register("name")}
+                            />
 
-                        {/* Source */}
-                        <GlassInput id="source" label="Fonte / Referência" placeholder="Ex: PHB pg. 195" icon={<Link />} error={errors.source?.message} {...register("source")} />
-                    </div>
+                            {/* Source */}
+                            <GlassInput
+                                id="source"
+                                label="Fonte / Referência"
+                                placeholder="Ex: PHB pg. 195"
+                                icon={<Link />}
+                                error={errors.source?.message}
+                                {...register("source")}
+                            />
+                        </div>
 
-                    {/* Status Switch */}
-                    <GlassStatusSwitch
-                        entityLabel="Status da Regra"
-                        description="Regras inativas não aparecem nas buscas públicas"
-                        checked={watch("status") === "active"}
-                        onCheckedChange={(checked) => setValue("status", checked ? "active" : "inactive")}
-                        disabled={isSubmitting}
-                    />
-
-                    {/* Rich Text Description */}
-                    <div className="space-y-2">
-                        <label className="text-sm font-medium text-white/80 flex items-center gap-2">
-                            <AlignLeft className="h-4 w-4" />
-                            Descrição <span className="text-rose-400">*</span>
-                        </label>
-                        <Controller
-                            name="description"
-                            control={control}
-                            render={({ field }) => (
-                                <RichTextEditor
-                                    value={field.value || ""}
-                                    onChange={field.onChange}
-                                    placeholder="Descreva a regra detalhadamente... (Suporta imagens e formatação)"
-                                    className={errors.description ? "border-rose-500/50" : ""}
-                                    disabled={isSubmitting}
-                                    excludeId={rule?._id}
-                                />
-                            )}
+                        {/* Status Switch */}
+                        <GlassStatusSwitch
+                            entityLabel="Status da Regra"
+                            description="Regras inativas não aparecem nas buscas públicas"
+                            checked={watch("status") === "active"}
+                            onCheckedChange={(checked) => setValue("status", checked ? "active" : "inactive")}
+                            disabled={isSubmitting}
                         />
-                        {errors.description && (
-                            <p className="text-xs text-rose-400 animate-slide-down flex items-center gap-1 mt-1">
-                                <Info className="h-3 w-3" />
-                                {errors.description.message}
-                            </p>
-                        )}
-                    </div>
 
-                    {/* Actions */}
-                    <div className="flex justify-end gap-3 pt-6 border-t border-white/10">
-                        <button
-                            type="button"
-                            onClick={onClose}
-                            disabled={isSubmitting}
-                            className={cn(
-                                "px-4 py-2 rounded-lg text-sm font-medium transition-colors",
-                                "text-white/60 hover:text-white hover:bg-white/10",
-                                "disabled:opacity-50 disabled:cursor-not-allowed",
+                        {/* Rich Text Description */}
+                        <div className="space-y-2">
+                            <label className="text-sm font-medium text-white/80 flex items-center gap-2">
+                                <AlignLeft className="h-4 w-4" />
+                                Descrição <span className="text-rose-400">*</span>
+                            </label>
+                            <Controller
+                                name="description"
+                                control={control}
+                                render={({ field }) => (
+                                    <RichTextEditor
+                                        value={field.value || ""}
+                                        onChange={field.onChange}
+                                        placeholder="Descreva a regra detalhadamente... (Suporta imagens e formatação)"
+                                        className={errors.description ? "border-rose-500/50" : ""}
+                                        disabled={isSubmitting}
+                                        excludeId={rule?._id}
+                                    />
+                                )}
+                            />
+                            {errors.description && (
+                                <p className="text-xs text-rose-400 animate-slide-down flex items-center gap-1 mt-1">
+                                    <Info className="h-3 w-3" />
+                                    {errors.description.message}
+                                </p>
                             )}
-                        >
-                            Cancelar
-                        </button>
-                        <button
-                            type="submit"
-                            disabled={isSubmitting}
-                            className={cn(
-                                "px-4 py-2 rounded-lg text-sm font-medium transition-colors",
-                                "bg-blue-500 text-white hover:bg-blue-600",
-                                "disabled:opacity-50 disabled:cursor-not-allowed",
-                                "flex items-center gap-2",
-                            )}
-                        >
-                            {isSubmitting && <Loader2 className="h-4 w-4 animate-spin" />}
-                            {isEditMode ? "Salvar Alterações" : "Criar Regra"}
-                        </button>
-                    </div>
-                </form>
-            </GlassModalContent>
-        </GlassModal>
+                        </div>
+
+                        {/* Actions */}
+                        <div className="flex justify-end gap-3 pt-6 border-t border-white/10">
+                            <button
+                                type="button"
+                                onClick={handleCloseAttempt}
+                                disabled={isSubmitting}
+                                className={cn(
+                                    "px-4 py-2 rounded-lg text-sm font-medium transition-colors",
+                                    "text-white/60 hover:text-white hover:bg-white/10",
+                                    "disabled:opacity-50 disabled:cursor-not-allowed"
+                                )}
+                            >
+                                Cancelar
+                            </button>
+                            <button
+                                type="submit"
+                                disabled={isSubmitting}
+                                className={cn(
+                                    "px-4 py-2 rounded-lg text-sm font-medium transition-colors",
+                                    "bg-blue-500 text-white hover:bg-blue-600",
+                                    "disabled:opacity-50 disabled:cursor-not-allowed",
+                                    "flex items-center gap-2"
+                                )}
+                            >
+                                {isSubmitting && <Loader2 className="h-4 w-4 animate-spin" />}
+                                {isEditMode ? "Salvar Alterações" : "Criar Regra"}
+                            </button>
+                        </div>
+                    </form>
+                </GlassModalContent>
+            </GlassModal>
+
+            <GlassConfirmClosing
+                isOpen={showConfirmClose}
+                onClose={() => setShowConfirmClose(false)}
+                onConfirmExit={() => {
+                    setShowConfirmClose(false)
+                    onClose()
+                }}
+                onSaveAndExit={handleSubmit(handleFormSubmit)}
+                isSaving={isSubmitting}
+            />
+        </>
     )
 }
