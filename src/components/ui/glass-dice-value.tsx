@@ -59,15 +59,9 @@ export function GlassDiceValue({
   const notation = `${value.quantidade}${value.tipo}`;
 
   return (
-    <div
-      className={cn(
-        'inline-flex items-center gap-1.5',
-        colorConfig?.text || 'text-white/70',
-        className
-      )}
-    >
-      {showIcon && <Dices className="w-3.5 h-3.5" />}
-      <span className="text-sm font-medium">{notation}</span>
-    </div>
-  );
+      <span className={cn("inline-flex items-center gap-1.5", colorConfig?.text || "text-white/70", className)}>
+          {showIcon && <Dices className="w-3.5 h-3.5" />}
+          <span className="text-sm font-medium">{notation}</span>
+      </span>
+  )
 }
