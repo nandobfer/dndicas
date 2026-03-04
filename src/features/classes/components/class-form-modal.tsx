@@ -39,7 +39,7 @@ import { GlassInlineEmptyState } from "@/components/ui/glass-inline-empty-state"
 import { RichTextEditor } from "@/features/rules/components/rich-text-editor"
 
 import { attributeColors, diceColors, rarityColors, type AttributeType } from "@/lib/config/colors"
-import { ImageAndDescriptionSection, SpellcastingSection, TraitsSection } from "./shared-form-components"
+import { ImageAndDescriptionSection, SpellcastingSection, TraitsSection, SkillSelection } from "./shared-form-components"
 
 import { createClassSchema, type CreateClassSchema } from "../api/validation"
 import {
@@ -232,7 +232,7 @@ export function ClassFormModal({ characterClass, isOpen, onClose, onSuccess }: C
         setValue,
         control,
         reset,
-        formState: { errors, isDirty }
+        formState: { errors, isDirty },
     } = useForm<CreateClassSchema>({
         resolver: zodResolver(createClassSchema) as any,
         defaultValues: {
@@ -252,8 +252,8 @@ export function ClassFormModal({ characterClass, isOpen, onClose, onSuccess }: C
             spells: characterClass?.spells ?? [],
             subclasses: characterClass?.subclasses ?? [],
             traits: characterClass?.traits ?? [],
-            image: characterClass?.image ?? ""
-        }
+            image: characterClass?.image ?? "",
+        },
     })
 
     const {
@@ -383,23 +383,25 @@ export function ClassFormModal({ characterClass, isOpen, onClose, onSuccess }: C
 
     const onSubmit = async (data: CreateClassSchema) => {
         // Create a copy of values to modify
-        const values = { ...data };
+        const values = { ...data }
 
         // Ensure all objects in spells have at least an id or _id
-        const cleanSpells = (spells: any[]) => 
-            (spells || []).filter(s => s.id || s._id).map(s => ({
-                id: s.id || s._id,
-                name: s.name,
-                circle: s.circle
-            }));
+        const cleanSpells = (spells: any[]) =>
+            (spells || [])
+                .filter((s) => s.id || s._id)
+                .map((s) => ({
+                    id: s.id || s._id,
+                    name: s.name,
+                    circle: s.circle,
+                }))
 
-        values.spells = cleanSpells(values.spells);
-        
+        values.spells = cleanSpells(values.spells)
+
         if (values.subclasses) {
-            values.subclasses = values.subclasses.map(s => ({
+            values.subclasses = values.subclasses.map((s) => ({
                 ...s,
-                spells: cleanSpells(s.spells)
-            }));
+                spells: cleanSpells(s.spells),
+            }))
         }
 
         console.log("[ClassFormModal] Submitting cleaned values:", values)
@@ -434,9 +436,7 @@ export function ClassFormModal({ characterClass, isOpen, onClose, onSuccess }: C
                 <GlassModalContent size="xl" className="max-w-[70vw]">
                     <GlassModalHeader>
                         <GlassModalTitle>{isEditMode ? `Editar ${characterClass!.name}` : "Nova Classe"}</GlassModalTitle>
-                        <GlassModalDescription>
-                            {isEditMode ? "Atualize as informações da classe" : "Crie um novo registro no catálogo de classes"}
-                        </GlassModalDescription>
+                        <GlassModalDescription>{isEditMode ? "Atualize as informações da classe" : "Crie um novo registro no catálogo de classes"}</GlassModalDescription>
                     </GlassModalHeader>
 
                     {/* Tab bar */}
@@ -448,16 +448,13 @@ export function ClassFormModal({ characterClass, isOpen, onClose, onSuccess }: C
                                 onClick={() => setActiveTab(tab.id)}
                                 className={cn(
                                     "relative flex-shrink-0 px-4 py-1.5 rounded-md text-sm font-medium transition-all focus:outline-none",
-                                    activeTab === tab.id ? "text-white shadow-sm" : "text-white/50 hover:text-white/70"
+                                    activeTab === tab.id ? "text-white shadow-sm" : "text-white/50 hover:text-white/70",
                                 )}
                                 style={
                                     activeTab === tab.id
                                         ? {
-                                              backgroundColor:
-                                                  typeof tab.id === "number" && subclasses[tab.id]?.color
-                                                      ? `${subclasses[tab.id].color}33`
-                                                      : "rgba(255, 255, 255, 0.15)",
-                                              color: typeof tab.id === "number" && subclasses[tab.id]?.color ? subclasses[tab.id].color : "white"
+                                              backgroundColor: typeof tab.id === "number" && subclasses[tab.id]?.color ? `${subclasses[tab.id].color}33` : "rgba(255, 255, 255, 0.15)",
+                                              color: typeof tab.id === "number" && subclasses[tab.id]?.color ? subclasses[tab.id].color : "white",
                                           }
                                         : undefined
                                 }
@@ -490,23 +487,8 @@ export function ClassFormModal({ characterClass, isOpen, onClose, onSuccess }: C
 
                                 {/* Row 2: Name + Source */}
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                    <GlassInput
-                                        id="name"
-                                        label="Nome da Classe"
-                                        placeholder="Ex: Guerreiro"
-                                        icon={<GraduationCap />}
-                                        required
-                                        error={errors.name?.message}
-                                        {...register("name")}
-                                    />
-                                    <GlassInput
-                                        id="source"
-                                        label="Fonte"
-                                        placeholder="Ex: PHB pg. 70"
-                                        icon={<Link />}
-                                        error={errors.source?.message}
-                                        {...register("source")}
-                                    />
+                                    <GlassInput id="name" label="Nome da Classe" placeholder="Ex: Guerreiro" icon={<GraduationCap />} required error={errors.name?.message} {...register("name")} />
+                                    <GlassInput id="source" label="Fonte" placeholder="Ex: PHB pg. 70" icon={<Link />} error={errors.source?.message} {...register("source")} />
                                 </div>
 
                                 {/* Row 3: Image + Description (Newly relocated) */}
@@ -601,9 +583,7 @@ export function ClassFormModal({ characterClass, isOpen, onClose, onSuccess }: C
                                             />
                                         )}
                                     />
-                                    {errors.primaryAttributes && (
-                                        <p className="text-xs text-rose-400">{errors.primaryAttributes.message as string}</p>
-                                    )}
+                                    {errors.primaryAttributes && <p className="text-xs text-rose-400">{errors.primaryAttributes.message as string}</p>}
                                 </div>
 
                                 {/* Row 6: Armor Proficiencies */}
@@ -642,7 +622,7 @@ export function ClassFormModal({ characterClass, isOpen, onClose, onSuccess }: C
                                             } else {
                                                 setValue(
                                                     "armorProficiencies",
-                                                    current.filter((v: string) => v !== "Escudos")
+                                                    current.filter((v: string) => v !== "Escudos"),
                                                 )
                                             }
                                         }}
@@ -666,7 +646,7 @@ export function ClassFormModal({ characterClass, isOpen, onClose, onSuccess }: C
                                                 "bg-rose-500/20 text-rose-400 hover:bg-rose-500/30",
                                                 "border border-rose-500/30",
                                                 "disabled:opacity-50 disabled:cursor-not-allowed",
-                                                "flex items-center gap-1.5"
+                                                "flex items-center gap-1.5",
                                             )}
                                         >
                                             <Plus className="h-3 w-3" />
@@ -710,7 +690,7 @@ export function ClassFormModal({ characterClass, isOpen, onClose, onSuccess }: C
                                                             className={cn(
                                                                 "p-2 rounded-lg transition-colors border border-white/10 bg-white/5",
                                                                 "text-rose-400 hover:bg-rose-500/20",
-                                                                "disabled:opacity-50 disabled:cursor-not-allowed"
+                                                                "disabled:opacity-50 disabled:cursor-not-allowed",
                                                             )}
                                                             title="Remover proficiência"
                                                         >
@@ -724,78 +704,7 @@ export function ClassFormModal({ characterClass, isOpen, onClose, onSuccess }: C
                                 </div>
 
                                 {/* Row 8: Skills */}
-                                <div className="space-y-4">
-                                    <label className="text-sm font-medium text-white/80 flex items-center gap-2 w-full pb-2 border-b border-white/5">
-                                        <BookOpen className="h-4 w-4" />
-                                        Perícias
-                                    </label>
-
-                                    <div className="flex items-center gap-3 bg-white/5 px-4 py-2 rounded-lg border border-white/10 w-fit">
-                                        <span className="text-xs text-white/60 font-medium uppercase tracking-wider whitespace-nowrap">
-                                            O jogador escolhe
-                                        </span>
-                                        <GlassInput
-                                            id="skillCount"
-                                            type="text"
-                                            inputMode="numeric"
-                                            label=""
-                                            placeholder="2"
-                                            error={errors.skillCount?.message}
-                                            className="w-14"
-                                            {...register("skillCount", { valueAsNumber: true })}
-                                        />
-                                        <span className="text-xs text-white/60 font-medium uppercase tracking-wider whitespace-nowrap">
-                                            Perícias dentre:
-                                        </span>
-                                    </div>
-
-                                    <div className="grid grid-cols-1 md:grid-cols-3 lg:flex lg:flex-wrap gap-6">
-                                        {(Object.keys(SKILL_MAP) as AttributeType[]).map((attr) => {
-                                            const skills = SKILL_MAP[attr]
-                                            if (skills.length === 0) return null
-
-                                            const attrConfig = attributeColors[attr]
-
-                                            return (
-                                                <div key={attr} className="space-y-3 flex-1 min-w-[140px]">
-                                                    <h4
-                                                        className={cn(
-                                                            "text-[10px] font-bold uppercase tracking-widest pb-1 border-b border-white/10 text-center",
-                                                            attrConfig.text
-                                                        )}
-                                                    >
-                                                        {attr}
-                                                    </h4>
-                                                    <div className="flex flex-col gap-1.5">
-                                                        <Controller
-                                                            name="availableSkills"
-                                                            control={control}
-                                                            render={({ field }) => (
-                                                                <GlassSelector
-                                                                    options={skills.map((skill) => ({
-                                                                        value: skill,
-                                                                        label: skill,
-                                                                        activeColor: attrConfig.bgAlpha,
-                                                                        textColor: attrConfig.text
-                                                                    }))}
-                                                                    value={(field.value as string[]) || []}
-                                                                    onChange={(v) => field.onChange(v)}
-                                                                    mode="multi"
-                                                                    layout="grid"
-                                                                    cols={1}
-                                                                    disabled={isSubmitting}
-                                                                    layoutId={`skills-${attr}`}
-                                                                    className="bg-transparent border-none p-0 gap-1"
-                                                                />
-                                                            )}
-                                                        />
-                                                    </div>
-                                                </div>
-                                            )
-                                        })}
-                                    </div>
-                                    {errors.availableSkills && <p className="text-xs text-rose-400">{errors.availableSkills.message as string}</p>}
-                                </div>
+                                <SkillSelection control={control} isSubmitting={isSubmitting} errors={errors} availableSkillsFieldName="availableSkills" skillCountFieldName="skillCount" />
 
                                 {/* Row 9: Spellcasting */}
                                 <SpellcastingSection
@@ -809,15 +718,7 @@ export function ClassFormModal({ characterClass, isOpen, onClose, onSuccess }: C
                                 />
 
                                 {/* Row 10: Class Traits */}
-                                <TraitsSection
-                                    fields={traitFields}
-                                    append={appendTrait}
-                                    remove={removeTrait}
-                                    control={control}
-                                    isSubmitting={isSubmitting}
-                                    traitsFieldName="traits"
-                                    errors={errors}
-                                />
+                                <TraitsSection fields={traitFields} append={appendTrait} remove={removeTrait} control={control} isSubmitting={isSubmitting} traitsFieldName="traits" errors={errors} />
 
                                 {/* Row 11: Subclasses management */}
                                 <div className="space-y-3">
@@ -827,9 +728,7 @@ export function ClassFormModal({ characterClass, isOpen, onClose, onSuccess }: C
                                     </label>
 
                                     {!isEditMode ? (
-                                        <div className="px-4 py-3 rounded-lg bg-white/5 border border-white/10 text-sm text-white/40 italic">
-                                            Salve a classe primeiro para adicionar subclasses.
-                                        </div>
+                                        <div className="px-4 py-3 rounded-lg bg-white/5 border border-white/10 text-sm text-white/40 italic">Salve a classe primeiro para adicionar subclasses.</div>
                                     ) : (
                                         <>
                                             {/* Add subclass */}
@@ -859,7 +758,7 @@ export function ClassFormModal({ characterClass, isOpen, onClose, onSuccess }: C
                                                     className={cn(
                                                         "flex items-center justify-center px-3 py-2 rounded-lg transition-colors",
                                                         "bg-white/10 hover:bg-white/15 text-white/60 hover:text-white",
-                                                        "disabled:opacity-30 disabled:cursor-not-allowed"
+                                                        "disabled:opacity-30 disabled:cursor-not-allowed",
                                                     )}
                                                 >
                                                     <Plus className="h-4 w-4" />
@@ -937,9 +836,7 @@ export function ClassFormModal({ characterClass, isOpen, onClose, onSuccess }: C
                                         </div>
                                         <div>
                                             <h3 className="text-lg font-bold text-white leading-none">{subclasses[activeTab]?.name}</h3>
-                                            <p className="text-xs text-white/40 mt-1 uppercase tracking-widest font-medium">
-                                                Configuração de Subclasse
-                                            </p>
+                                            <p className="text-xs text-white/40 mt-1 uppercase tracking-widest font-medium">Configuração de Subclasse</p>
                                         </div>
                                     </div>
                                     {subclasses[activeTab]?.source && (

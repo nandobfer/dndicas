@@ -6,17 +6,20 @@
 
 import * as React from "react"
 import { Controller, Control, FieldErrors, UseFormWatch, UseFormSetValue, useFieldArray } from "react-hook-form"
-import { Info, BookOpen, Zap, Plus, X, Wand, ChevronDown } from "lucide-react"
+import { Info, BookOpen, Zap, Plus, X, Wand, ChevronDown, Check, Package } from "lucide-react"
 import { motion, AnimatePresence } from "framer-motion"
 import { cn } from "@/core/utils"
+import { Button } from "@/core/ui/button"
 import { GlassImageUploader } from "@/components/ui/glass-image-uploader"
 import { GlassSelector } from "@/components/ui/glass-selector"
 import { GlassSwitch } from "@/components/ui/glass-switch"
+import { GlassInput } from "@/components/ui/glass-input"
 import { GlassInlineEmptyState } from "@/components/ui/glass-inline-empty-state"
 import { GlassEntityChooser } from "@/components/ui/glass-entity-chooser"
 import { RichTextEditor } from "@/features/rules/components/rich-text-editor"
 import { attributeColors, type AttributeType } from "@/lib/config/colors"
 import { ENTITY_PROVIDERS } from "@/lib/config/entities"
+import { type SkillType } from "@/features/classes/types/classes.types"
 
 // ── Shared Constants ─────────────────────────────────────────────────────────
 
@@ -30,7 +33,99 @@ const ATTRIBUTE_OPTIONS = (Object.entries(attributeColors) as [AttributeType, (t
     textColor: config.text,
 }))
 
+// Group skills by their associated primary attribute in D&D 5e
+const SKILL_MAP: Record<AttributeType, SkillType[]> = {
+    Força: ["Atletismo"],
+    Destreza: ["Acrobacia", "Furtividade", "Prestidigitação"],
+    Constituição: [],
+    Inteligência: ["Arcanismo", "História", "Investigação", "Natureza", "Religião"],
+    Sabedoria: ["Lidar com Animais", "Intuição", "Medicina", "Percepção", "Sobrevivência"],
+    Carisma: ["Atuação", "Enganação", "Intimidação", "Persuasão"],
+}
+
 // ── Components ───────────────────────────────────────────────────────────────
+
+interface SkillSelectionProps {
+    control: Control<any>
+    isSubmitting: boolean
+    errors: FieldErrors<any>
+    availableSkillsFieldName: string
+    skillCountFieldName?: string
+    label?: string
+}
+
+export function SkillSelection({ control, isSubmitting, errors, availableSkillsFieldName, skillCountFieldName, label = "Perícias" }: SkillSelectionProps) {
+    return (
+        <div className="space-y-4">
+            <label className="text-sm font-medium text-white/80 flex items-center gap-2 w-full pb-2 border-b border-white/5">
+                <BookOpen className="h-4 w-4" />
+                {label}
+            </label>
+
+            {skillCountFieldName && (
+                <div className="flex items-center gap-3 bg-white/5 px-4 py-2 rounded-lg border border-white/10 w-fit">
+                    <span className="text-xs text-white/60 font-medium uppercase tracking-wider whitespace-nowrap">O jogador escolhe</span>
+                    <Controller
+                        name={skillCountFieldName}
+                        control={control}
+                        render={({ field }) => (
+                            <GlassInput
+                                type="text"
+                                inputMode="numeric"
+                                placeholder="2"
+                                className="w-14"
+                                value={field.value}
+                                onChange={(e) => field.onChange(parseInt(e.target.value) || 0)}
+                                disabled={isSubmitting}
+                            />
+                        )}
+                    />
+                    <span className="text-xs text-white/60 font-medium uppercase tracking-wider whitespace-nowrap">Perícias dentre:</span>
+                </div>
+            )}
+
+            <div className="grid grid-cols-1 md:grid-cols-3 lg:flex lg:flex-wrap gap-6">
+                {(Object.keys(SKILL_MAP) as AttributeType[]).map((attr) => {
+                    const skills = SKILL_MAP[attr]
+                    if (skills.length === 0) return null
+
+                    const attrConfig = attributeColors[attr]
+
+                    return (
+                        <div key={attr} className="space-y-3 flex-1 min-w-[140px]">
+                            <h4 className={cn("text-[10px] font-bold uppercase tracking-widest pb-1 border-b border-white/10 text-center", attrConfig.text)}>{attr}</h4>
+                            <div className="flex flex-col gap-1.5">
+                                <Controller
+                                    name={availableSkillsFieldName}
+                                    control={control}
+                                    render={({ field }) => (
+                                        <GlassSelector
+                                            options={skills.map((skill) => ({
+                                                value: skill,
+                                                label: skill,
+                                                activeColor: attrConfig.bgAlpha,
+                                                textColor: attrConfig.text,
+                                            }))}
+                                            value={(field.value as string[]) || []}
+                                            onChange={(v) => field.onChange(v)}
+                                            mode="multi"
+                                            layout="grid"
+                                            cols={1}
+                                            disabled={isSubmitting}
+                                            layoutId={`skills-${attr}`}
+                                            className="bg-transparent border-none p-0 gap-1"
+                                        />
+                                    )}
+                                />
+                            </div>
+                        </div>
+                    )
+                })}
+            </div>
+            {errors[availableSkillsFieldName] && <p className="text-xs text-rose-400">{errors[availableSkillsFieldName]?.message as string}</p>}
+        </div>
+    )
+}
 
 function SpellCircleAccordion({ circle, spells, onRemove }: { circle: number; spells: any[]; onRemove: (index: number) => void }) {
     const [isExpanded, setIsExpanded] = React.useState(true)
@@ -347,15 +442,48 @@ interface TraitsSectionProps {
     errors: FieldErrors<any>
 }
 
-export function TraitsSection({
-    fields,
-    append,
-    remove,
-    control,
-    isSubmitting,
-    traitsFieldName,
-    errors
-}: TraitsSectionProps) {
+/**
+ * Section for managing equipment/items. Currently disabled as Items entity is not yet implemented.
+ */
+export function EquipmentSection({ isSubmitting }: { isSubmitting: boolean }) {
+    return (
+        <div className="space-y-3 opacity-60">
+            <div className="flex items-center justify-between">
+                <label className="text-sm font-medium text-white/80 flex items-center gap-2">
+                    <Package className="h-4 w-4 text-emerald-400" />
+                    Equipamento Inicial
+                </label>
+                <div className="px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-widest bg-emerald-500/10 text-emerald-400/50 border border-emerald-500/20">Em Breve</div>
+            </div>
+
+            <div className="rounded-xl border border-white/10 bg-white/5 overflow-hidden p-6 flex flex-col items-center justify-center text-center gap-3">
+                <div className="p-3 rounded-full bg-white/5">
+                    <Package className="w-6 h-6 text-white/20" />
+                </div>
+                <div className="space-y-1">
+                    <p className="text-sm font-medium text-white/40">Gerenciador de Equipamentos</p>
+                    <p className="text-xs text-white/20 max-w-[300px]">A funcionalidade de lista de itens será habilitada assim que o catálogo de equipamentos for implementado.</p>
+                </div>
+                <button
+                    type="button"
+                    disabled
+                    className={cn(
+                        "px-3 py-1.5 rounded-lg text-xs font-medium transition-colors mt-2",
+                        "bg-emerald-500/10 text-emerald-400/30",
+                        "border border-emerald-500/10",
+                        "cursor-not-allowed",
+                        "flex items-center gap-1.5",
+                    )}
+                >
+                    <Plus className="w-3 h-3 mr-2" />
+                    Adicionar Item
+                </button>
+            </div>
+        </div>
+    )
+}
+
+export function TraitsSection({ fields, append, remove, control, isSubmitting, traitsFieldName, errors }: TraitsSectionProps) {
     const [isExpanded, setIsExpanded] = React.useState(fields.length === 0)
 
     return (
@@ -377,7 +505,7 @@ export function TraitsSection({
                         "bg-amber-500/20 text-amber-400 hover:bg-amber-500/30",
                         "border border-amber-500/30",
                         "disabled:opacity-50 disabled:cursor-not-allowed",
-                        "flex items-center gap-1.5"
+                        "flex items-center gap-1.5",
                     )}
                 >
                     <Plus className="h-3 w-3" />
@@ -386,11 +514,7 @@ export function TraitsSection({
             </div>
 
             <div className="rounded-xl border border-white/10 bg-white/5 overflow-hidden">
-                <button
-                    type="button"
-                    onClick={() => setIsExpanded(!isExpanded)}
-                    className="w-full flex items-center justify-between px-3 py-2 hover:bg-white/5 transition-colors group"
-                >
+                <button type="button" onClick={() => setIsExpanded(!isExpanded)} className="w-full flex items-center justify-between px-3 py-2 hover:bg-white/5 transition-colors group">
                     <div className="flex items-center gap-2">
                         <span className="text-sm font-medium text-white/80">Lista de Habilidades</span>
                         <span className="text-[10px] text-white/20 uppercase tracking-widest font-bold ml-2 group-hover:text-white/40 transition-colors">
@@ -402,12 +526,7 @@ export function TraitsSection({
 
                 <AnimatePresence>
                     {isExpanded && (
-                        <motion.div
-                            initial={{ height: 0, opacity: 0 }}
-                            animate={{ height: "auto", opacity: 1 }}
-                            exit={{ height: 0, opacity: 0 }}
-                            className="overflow-hidden bg-black/20"
-                        >
+                        <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: "auto", opacity: 1 }} exit={{ height: 0, opacity: 0 }} className="overflow-hidden bg-black/20">
                             <div className="p-3 space-y-3">
                                 {fields.length === 0 ? (
                                     <GlassInlineEmptyState message="Nenhuma habilidade adicionada" />
@@ -432,7 +551,7 @@ export function TraitsSection({
                                                                     <input
                                                                         type="text"
                                                                         inputMode="numeric"
-                                                                        value={levelField.value}
+                                                                        value={levelField.value ?? ""}
                                                                         onChange={(e) => {
                                                                             const val = e.target.value.replace(/\D/g, "")
                                                                             levelField.onChange(val ? parseInt(val) : "")
@@ -446,24 +565,18 @@ export function TraitsSection({
                                                 </div>
                                                 <div className="flex-1 self-stretch flex flex-col">
                                                     <div className="space-y-1.5 flex-1 flex flex-col">
-                                                        <label className="text-sm font-medium text-white/80 block shrink-0">
-                                                            Habilidade (Traço ou Regra)
-                                                        </label>
+                                                        <label className="text-sm font-medium text-white/80 block shrink-0">Habilidade (Traço ou Regra)</label>
                                                         <Controller
                                                             name={`${traitsFieldName}.${index}.description`}
                                                             control={control}
                                                             render={({ field: descField }) => (
                                                                 <div className="space-y-1">
                                                                     <GlassEntityChooser
-                                                                        value={
-                                                                            descField.value
-                                                                                ? { label: descField.value.replace(/<[^>]*>/g, ""), id: field.id }
-                                                                                : undefined
-                                                                        }
+                                                                        value={descField.value ? { label: descField.value.replace(/<[^>]*>/g, ""), id: field.id } : undefined}
                                                                         onChange={(val) => {
                                                                             if (val) {
                                                                                 descField.onChange(
-                                                                                    `<span data-type="mention" data-id="${val.id}" data-entity-type="${val.entityType}" class="mention">${val.label}</span>`
+                                                                                    `<span data-type="mention" data-id="${val.id}" data-entity-type="${val.entityType}" class="mention">${val.label}</span>`,
                                                                                 )
                                                                             } else {
                                                                                 descField.onChange("")
@@ -475,14 +588,13 @@ export function TraitsSection({
                                                                         className={cn(
                                                                             ((errors as any)?.[traitsFieldName.split(".")[0]]?.[index]?.description ||
                                                                                 (errors as any)?.[traitsFieldName]?.[index]?.description) &&
-                                                                                "border-rose-500/50"
+                                                                                "border-rose-500/50",
                                                                         )}
                                                                     />
                                                                     {((errors as any)?.[traitsFieldName.split(".")[0]]?.[index]?.description ||
                                                                         (errors as any)?.[traitsFieldName]?.[index]?.description) && (
                                                                         <p className="text-[10px] text-rose-400 font-medium pl-1">
-                                                                            {(errors as any)?.[traitsFieldName.split(".")[0]]?.[index]?.description
-                                                                                ?.message ||
+                                                                            {(errors as any)?.[traitsFieldName.split(".")[0]]?.[index]?.description?.message ||
                                                                                 (errors as any)?.[traitsFieldName]?.[index]?.description?.message}
                                                                         </p>
                                                                     )}
@@ -499,7 +611,7 @@ export function TraitsSection({
                                                         "h-10 px-3 rounded-lg transition-colors border border-white/10 bg-white/5",
                                                         "text-rose-400 hover:bg-rose-500/20",
                                                         "disabled:opacity-50 disabled:cursor-not-allowed",
-                                                        "mb-[1px]"
+                                                        "mb-[1px]",
                                                     )}
                                                 >
                                                     <X className="h-4 w-4" />

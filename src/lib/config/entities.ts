@@ -92,6 +92,21 @@ export const ENTITY_PROVIDERS: EntityProvider[] = [
             status: item.status || "active",
         }),
     },
+    {
+        name: "Origem",
+        label: "Origens",
+        endpoint: () => `/api/backgrounds/search`,
+        map: (item: any): UnifiedEntity => ({
+            id: item.id || item._id,
+            _id: item._id,
+            name: item.label || item.name,
+            label: item.label || item.name,
+            type: "Origem",
+            description: item.description,
+            source: item.source,
+            status: item.status || "active",
+        }),
+    },
 ]
 
 export const entityConfig = ENTITY_PROVIDERS.reduce((acc, provider) => {

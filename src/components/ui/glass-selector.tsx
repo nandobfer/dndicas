@@ -54,50 +54,79 @@ export function GlassSelector<T extends string | number>({
     layoutId = "glass-selector-indicator"
 }: GlassSelectorProps<T>) {
     
+    const [mounted, setMounted] = React.useState(false)
+
+    React.useEffect(() => {
+        setMounted(true)
+    }, [])
+
     const isSelected = (optionValue: T) => {
         if (Array.isArray(value)) {
-            return value.includes(optionValue);
+            return value.includes(optionValue)
         }
-        return value === optionValue;
-    };
+        return value === optionValue
+    }
 
     const handleSelect = (optionValue: T) => {
-        if (disabled) return;
+        if (disabled) return
 
-        if (mode === 'multi') {
-            const currentValues = Array.isArray(value) ? [...value] : (value !== undefined ? [value] : []);
-            const index = currentValues.indexOf(optionValue);
-            
+        if (mode === "multi") {
+            const currentValues = Array.isArray(value) ? [...value] : value !== undefined ? [value] : []
+            const index = currentValues.indexOf(optionValue)
+
             if (index > -1) {
-                currentValues.splice(index, 1);
+                currentValues.splice(index, 1)
             } else {
-                currentValues.push(optionValue);
+                currentValues.push(optionValue)
             }
-            onChange(currentValues);
+            onChange(currentValues)
         } else {
-            onChange(optionValue);
+            onChange(optionValue)
         }
-    };
+    }
+
+    const containerClasses = cn(
+        "p-1 rounded-lg bg-white/5 border border-white/10 overflow-hidden",
+        layout === "horizontal" ? (fullWidth ? "flex" : "inline-flex") : "grid",
+        layout === "grid" && {
+            "grid-cols-1": cols === 1,
+            "grid-cols-2": cols === 2,
+            "grid-cols-3": cols === 3,
+            "grid-cols-4": cols === 4,
+            "grid-cols-6": cols === 6,
+        },
+        disabled && "opacity-50 pointer-events-none cursor-not-allowed grayscale-[0.5]",
+        className,
+    )
+
+    if (!mounted) {
+        return (
+            <div className={containerClasses}>
+                {options.map((option) => (
+                    <button
+                        key={String(option.value)}
+                        type="button"
+                        className={cn(
+                            "relative font-medium rounded-md transition-colors inline-block text-center",
+                            size === "sm" && "px-3 py-1 text-xs",
+                            size === "md" && "px-4 py-2 text-sm",
+                            size === "lg" && "px-6 py-3 text-base",
+                            fullWidth && "flex-1",
+                            "text-white/50",
+                        )}
+                    >
+                        <span className="relative z-10">{option.label}</span>
+                    </button>
+                ))}
+            </div>
+        )
+    }
 
     return (
-        <div
-            className={cn(
-                "p-1 rounded-lg bg-white/5 border border-white/10 overflow-hidden",
-                layout === 'horizontal' ? (fullWidth ? "flex" : "inline-flex") : "grid",
-                layout === 'grid' && {
-                    'grid-cols-1': cols === 1,
-                    'grid-cols-2': cols === 2,
-                    'grid-cols-3': cols === 3,
-                    'grid-cols-4': cols === 4,
-                    'grid-cols-6': cols === 6,
-                },
-                disabled && "opacity-50 pointer-events-none cursor-not-allowed grayscale-[0.5]",
-                className,
-            )}
-        >
+        <div className={containerClasses}>
             {options.map((option) => {
-                const selected = isSelected(option.value);
-                const itemDisabled = disabled || option.disabled;
+                const selected = isSelected(option.value)
+                const itemDisabled = disabled || option.disabled
 
                 return (
                     <button
@@ -151,5 +180,5 @@ export function GlassSelector<T extends string | number>({
                 )
             })}
         </div>
-    );
+    )
 }

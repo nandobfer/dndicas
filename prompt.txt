@@ -1,0 +1,34 @@
+agora vamos implementar o catalogo de origens
+
+é a origem do d&d, que determina o background o personagem)
+
+seguindo o padrão estabelecido em #file:page.tsx   bem como sua página individual /classes/slug, quero que implemente uma nova página para listar as origens. implemente a visualização de tabela e #file:entity-list.tsx   exatamente como foi feito em #file:classes-page.tsx  . Suas configurações deve ser feitas em #file:entities.ts   bem como suas cores em #file:colors.ts   (use azul/raro) para ele. 
+
+também quero seu card em #file:page.tsx (não um wip, mas um card igual as outras entidades).
+
+Também quero seu menu em #file:expandable-sidebar.tsx 
+
+quero sua tabela igual #file:classes-table.tsx  e seu preview igual #file:class-preview.tsx  
+
+quero seu formulário igual #file:class-form-modal.tsx 
+esse formulário não precisa de nenhuma aba
+
+ Aqui o usuário vai definir o nome e a fonte, exatamente igual, bem como o status (ativo ou não)
+
+ quero a descrição na esquerda com #file:rich-text-editor.tsx  e a imagem na direita com #file:glass-image-uploader.tsx  exatamente igual no #file:class-form-modal.tsx  
+
+para a seleção de atributos, quero um #file:glass-selector.tsx  multiselect
+
+deve ter um #file:glass-entity-chooser.tsx  para escolher o feat da origem
+
+também teve ter uma lista de habilidades, que existe em #file:shared-form-components.tsx 
+
+abaixo, crie um componente novo, customizado, que será os equipamentos que a origem concede. Mas esse componente deve ser um placeholder, pois ainda não implementamos um catálogo de itens
+
+quero que siga exatamente os modelos fornecidos, com os mesmos padrões de código, estrutura e design
+
+lembre-se de definir o modelo, schema, rotas devidamente, bem como cadastrá-lo em #sym:ENTITY_PROVIDERS  para que preview apareça em #file:global-search-fab.tsx  e #file:mention-list.tsx e #file:suggestion.ts 
+
+
+
+

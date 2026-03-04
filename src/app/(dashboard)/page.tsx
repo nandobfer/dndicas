@@ -12,6 +12,7 @@ import { TraitsEntityCard } from "./_components/traits-entity-card"
 import { FeatsEntityCard } from "./_components/feats-entity-card"
 import { SpellsEntityCard } from "./_components/spells-entity-card"
 import { ClassesEntityCard } from "./_components/classes-entity-card"
+import { BackgroundsEntityCard } from "./_components/backgrounds-entity-card"
 import { WipEntityCard } from "./_components/wip-entity-card"
 import { AnimatedNumber } from "@/components/ui/animated-number"
 import Link from "next/link"
@@ -94,7 +95,7 @@ const dndEntities = [
         title: "Origens",
         icon: Map,
         description: "Antecedentes e origens dos heróis",
-        component: WipEntityCard,
+        component: BackgroundsEntityCard,
     },
     {
         id: "monsters",

@@ -3,11 +3,13 @@ import { RulePreview, TraitPreview } from "@/features/rules/components/entity-pr
 import { FeatPreview } from "@/features/feats/components/feat-preview"
 import { SpellPreview } from "@/features/spells/components/spell-preview"
 import { ClassPreview } from "@/features/classes/components/class-preview"
+import { BackgroundPreview } from "@/features/backgrounds/components/background-preview"
 import { fetchTraitById } from "@/features/traits/api/traits-api"
 import { fetchSpell } from "@/features/spells/api/spells-api"
+import { fetchFeat } from "@/features/feats/api/feats-api"
 import { getClassById } from "@/features/classes/api/classes-service"
 import { LoadingState } from "@/components/ui/loading-state"
-import { Wand, GraduationCap } from "lucide-react"
+import { Wand, GraduationCap, Star } from "lucide-react"
 
 /**
  * Registry of renderers for different entity types.
@@ -16,9 +18,10 @@ import { Wand, GraduationCap } from "lucide-react"
 export const ENTITY_RENDERERS: Record<string, (item: any, options?: { showStatus?: boolean }) => React.ReactNode> = {
     Regra: (item, opts) => <RulePreview rule={item} showStatus={opts?.showStatus ?? false} />,
     Habilidade: (id, opts) => <TraitAsyncRenderer id={id} showStatus={opts?.showStatus ?? true} />,
-    Talento: (item, opts) => <FeatPreview feat={item} showStatus={opts?.showStatus ?? false} />,
+    Talento: (idOrItem, opts) => <FeatAsyncRenderer item={idOrItem} showStatus={opts?.showStatus ?? true} />,
     Magia: (idOrItem, opts) => <SpellAsyncRenderer item={idOrItem} showStatus={opts?.showStatus ?? true} />,
     Classe: (idOrItem, opts) => <ClassAsyncRenderer item={idOrItem} showStatus={opts?.showStatus ?? true} />,
+    Origem: (idOrItem, opts) => <BackgroundAsyncRenderer item={idOrItem} />,
 }
 
 function TraitAsyncRenderer({ id, showStatus = true }: { id: any; showStatus?: boolean }) {
@@ -158,6 +161,103 @@ function ClassAsyncRenderer({ item, showStatus = true }: { item: any; showStatus
         </div>
     )
 }
+
+function FeatAsyncRenderer({ item, showStatus = true }: { item: any; showStatus?: boolean }) {
+    const [feat, setFeat] = React.useState<any>(null)
+    const [loading, setLoading] = React.useState(true)
+
+    const id = typeof item === "string" ? item : item?._id || item?.id
+
+    React.useEffect(() => {
+        // Se já temos o objeto completo, não precisamos buscar
+        if (item && typeof item === "object" && item.description && item.name) {
+            setFeat(item)
+            setLoading(false)
+            return
+        }
+
+        if (!id) {
+            setLoading(false)
+            return
+        }
+
+        fetchFeat(id)
+            .then(setFeat)
+            .catch(console.error)
+            .finally(() => setLoading(false))
+    }, [id, item])
+
+    if (loading)
+        return (
+            <div className="p-8 flex flex-col items-center justify-center gap-3 bg-white/[0.02] rounded-xl border border-white/5 animate-in fade-in duration-300">
+                <LoadingState variant="spinner" size="md" />
+                <span className="text-[10px] uppercase font-bold tracking-widest text-white/20">Buscando Talento...</span>
+            </div>
+        )
+    if (!feat)
+        return (
+            <div className="p-8 text-center bg-amber-500/5 rounded-xl border border-dashed border-amber-500/20 flex flex-col items-center justify-center gap-2">
+                <div className="p-2 rounded-full bg-amber-500/10 text-amber-500">
+                    <Star className="h-4 w-4" />
+                </div>
+                <p className="text-xs text-amber-500/60 italic">Talento não encontrado.</p>
+            </div>
+        )
+
+    return (
+        <div className="p-4">
+            <FeatPreview feat={feat} showStatus={showStatus} />
+        </div>
+    )
+}
+
+function BackgroundAsyncRenderer({ item }: { item: any }) {
+    const [background, setBackground] = React.useState<any>(null)
+    const [loading, setLoading] = React.useState(true)
+
+    const id = typeof item === "string" ? item : item?._id || item?.id
+
+    React.useEffect(() => {
+        // Se já temos o objeto completo, não precisamos buscar
+        if (item && typeof item === "object" && item.description && (item.traits || item.skillProficiencies)) {
+            setBackground(item)
+            setLoading(false)
+            return
+        }
+
+        if (!id) {
+            setLoading(false)
+            return
+        }
+
+        fetch(`/api/backgrounds/${id}`)
+            .then((res) => res.json())
+            .then(setBackground)
+            .catch(console.error)
+            .finally(() => setLoading(false))
+    }, [id, item])
+
+    if (loading)
+        return (
+            <div className="p-8 flex flex-col items-center justify-center gap-3 bg-white/[0.02] rounded-xl border border-white/5">
+                <LoadingState variant="spinner" size="md" />
+                <span className="text-[10px] uppercase font-bold tracking-widest text-white/20">Buscando Origem...</span>
+            </div>
+        )
+    if (!background)
+        return (
+            <div className="p-8 text-center bg-blue-500/5 rounded-xl border border-dashed border-blue-500/20 flex flex-col items-center justify-center gap-2">
+                <p className="text-xs text-blue-400/60 italic">Origem não encontrada.</p>
+            </div>
+        )
+
+    return (
+        <div className="p-6">
+            <BackgroundPreview background={background} />
+        </div>
+    )
+}
+
 
 export const renderEntity = (item: any, entityType: string, options?: { showStatus?: boolean }) => {
     const type = entityType === "Mixed" ? item.type : entityType
