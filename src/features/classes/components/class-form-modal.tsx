@@ -32,6 +32,7 @@ import { cn } from "@/core/utils"
 import { GlassModal, GlassModalContent, GlassModalHeader, GlassModalTitle, GlassModalDescription } from "@/components/ui/glass-modal"
 import { GlassInput } from "@/components/ui/glass-input"
 import { GlassSelector } from "@/components/ui/glass-selector"
+import { GlassConfirmClosing } from "@/components/ui/glass-confirm-closing"
 import { GlassStatusSwitch } from "@/components/ui/glass-status-switch"
 import { GlassImageUploader } from "@/components/ui/glass-image-uploader"
 import { GlassInlineEmptyState } from "@/components/ui/glass-inline-empty-state"
@@ -213,6 +214,7 @@ export function ClassFormModal({ characterClass, isOpen, onClose, onSuccess }: C
     const createMutation = useCreateClass()
     const updateMutation = useUpdateClass()
     const isSubmitting = createMutation.isPending || updateMutation.isPending
+    const [showConfirmClose, setShowConfirmClose] = React.useState(false)
 
     // Tabs
     const [activeTab, setActiveTab] = React.useState<"base" | number>("base")
@@ -230,7 +232,7 @@ export function ClassFormModal({ characterClass, isOpen, onClose, onSuccess }: C
         setValue,
         control,
         reset,
-        formState: { errors },
+        formState: { errors, isDirty }
     } = useForm<CreateClassSchema>({
         resolver: zodResolver(createClassSchema) as any,
         defaultValues: {
@@ -250,8 +252,8 @@ export function ClassFormModal({ characterClass, isOpen, onClose, onSuccess }: C
             spells: characterClass?.spells ?? [],
             subclasses: characterClass?.subclasses ?? [],
             traits: characterClass?.traits ?? [],
-            image: characterClass?.image ?? "",
-        },
+            image: characterClass?.image ?? ""
+        }
     })
 
     const {
@@ -275,6 +277,7 @@ export function ClassFormModal({ characterClass, isOpen, onClose, onSuccess }: C
     // Reset when modal opens/closes or class changes
     React.useEffect(() => {
         if (isOpen) {
+            setShowConfirmClose(false)
             setActiveTab("base")
             setNewSubclassName("")
             setNewSubclassSource("")
@@ -368,6 +371,14 @@ export function ClassFormModal({ characterClass, isOpen, onClose, onSuccess }: C
 
     const handleCancelRename = () => setRenamingIndex(null)
 
+    const handleCloseAttempt = () => {
+        if (isDirty) {
+            setShowConfirmClose(true)
+        } else {
+            onClose()
+        }
+    }
+
     // ── Submit ───────────────────────────────────────────────────────────────
 
     const onSubmit = async (data: CreateClassSchema) => {
@@ -399,6 +410,7 @@ export function ClassFormModal({ characterClass, isOpen, onClose, onSuccess }: C
                 await createMutation.mutateAsync(values as CreateClassInput)
             }
             toast.success(characterClass ? "Classe atualizada com sucesso!" : "Classe criada com sucesso!")
+            setShowConfirmClose(false)
             onSuccess()
             onClose()
         } catch (error) {
@@ -417,531 +429,589 @@ export function ClassFormModal({ characterClass, isOpen, onClose, onSuccess }: C
     const tabs = [{ id: "base" as const, label: "Base" }, ...subclasses.map((s, i) => ({ id: i as number, label: s.name }))]
 
     return (
-        <GlassModal open={isOpen} onOpenChange={(open) => !open && onClose()}>
-            <GlassModalContent size="xl" className="max-w-[70vw]">
-                <GlassModalHeader>
-                    <GlassModalTitle>{isEditMode ? `Editar ${characterClass!.name}` : "Nova Classe"}</GlassModalTitle>
-                    <GlassModalDescription>{isEditMode ? "Atualize as informações da classe" : "Crie um novo registro no catálogo de classes"}</GlassModalDescription>
-                </GlassModalHeader>
+        <>
+            <GlassModal open={isOpen} onOpenChange={(open) => !open && handleCloseAttempt()}>
+                <GlassModalContent size="xl" className="max-w-[70vw]">
+                    <GlassModalHeader>
+                        <GlassModalTitle>{isEditMode ? `Editar ${characterClass!.name}` : "Nova Classe"}</GlassModalTitle>
+                        <GlassModalDescription>
+                            {isEditMode ? "Atualize as informações da classe" : "Crie um novo registro no catálogo de classes"}
+                        </GlassModalDescription>
+                    </GlassModalHeader>
 
-                {/* Tab bar */}
-                <div className="flex items-center gap-1 mt-4 p-1 rounded-lg bg-white/5 border border-white/10 overflow-x-auto">
-                    {tabs.map((tab) => (
-                        <button
-                            key={String(tab.id)}
-                            type="button"
-                            onClick={() => setActiveTab(tab.id)}
-                            className={cn(
-                                "relative flex-shrink-0 px-4 py-1.5 rounded-md text-sm font-medium transition-all focus:outline-none",
-                                activeTab === tab.id ? "text-white shadow-sm" : "text-white/50 hover:text-white/70",
-                            )}
-                            style={
-                                activeTab === tab.id
-                                    ? {
-                                          backgroundColor: typeof tab.id === "number" && subclasses[tab.id]?.color ? `${subclasses[tab.id].color}33` : "rgba(255, 255, 255, 0.15)",
-                                          color: typeof tab.id === "number" && subclasses[tab.id]?.color ? subclasses[tab.id].color : "white",
-                                      }
-                                    : undefined
-                            }
-                        >
-                            {tab.label}
-                        </button>
-                    ))}
-                </div>
+                    {/* Tab bar */}
+                    <div className="flex items-center gap-1 mt-4 p-1 rounded-lg bg-white/5 border border-white/10 overflow-x-auto">
+                        {tabs.map((tab) => (
+                            <button
+                                key={String(tab.id)}
+                                type="button"
+                                onClick={() => setActiveTab(tab.id)}
+                                className={cn(
+                                    "relative flex-shrink-0 px-4 py-1.5 rounded-md text-sm font-medium transition-all focus:outline-none",
+                                    activeTab === tab.id ? "text-white shadow-sm" : "text-white/50 hover:text-white/70"
+                                )}
+                                style={
+                                    activeTab === tab.id
+                                        ? {
+                                              backgroundColor:
+                                                  typeof tab.id === "number" && subclasses[tab.id]?.color
+                                                      ? `${subclasses[tab.id].color}33`
+                                                      : "rgba(255, 255, 255, 0.15)",
+                                              color: typeof tab.id === "number" && subclasses[tab.id]?.color ? subclasses[tab.id].color : "white"
+                                          }
+                                        : undefined
+                                }
+                            >
+                                {tab.label}
+                            </button>
+                        ))}
+                    </div>
 
-                {/* Base tab content */}
-                <AnimatePresence mode="wait">
-                    {activeTab === "base" && (
-                        <motion.form
-                            key="base"
-                            initial={{ opacity: 0, y: 4 }}
-                            animate={{ opacity: 1, y: 0 }}
-                            exit={{ opacity: 0, y: -4 }}
-                            transition={{ duration: 0.15 }}
-                            onSubmit={handleSubmit(onSubmit as any, onFormError)}
-                            className="space-y-6 mt-4"
-                        >
-                            {/* Row 1: Status switch */}
-                            <GlassStatusSwitch
-                                entityLabel="Status da Classe"
-                                description="Classes inativas não aparecem nas buscas públicas"
-                                checked={watch("status") === "active"}
-                                onCheckedChange={(checked) => setValue("status", checked ? "active" : "inactive")}
-                                disabled={isSubmitting}
-                            />
-
-                            {/* Row 2: Name + Source */}
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                <GlassInput id="name" label="Nome da Classe" placeholder="Ex: Guerreiro" icon={<GraduationCap />} required error={errors.name?.message} {...register("name")} />
-                                <GlassInput id="source" label="Fonte" placeholder="Ex: PHB pg. 70" icon={<Link />} error={errors.source?.message} {...register("source")} />
-                            </div>
-
-                            {/* Row 3: Image + Description (Newly relocated) */}
-                            <ImageAndDescriptionSection
-                                control={control}
-                                isSubmitting={isSubmitting}
-                                errors={errors}
-                                imageFieldName="image"
-                                descriptionFieldName="description"
-                                entityId={characterClass?._id}
-                                placeholder="Descreva a classe detalhadamente... (Suporta imagens S3 e formatação)"
-                            />
-
-                            {/* Row 4: Hit Dice */}
-                            <div className="space-y-2">
-                                <label className="text-sm font-medium text-white/80 flex items-center gap-2">
-                                    <Dices className="h-4 w-4" />
-                                    Dado de Vida
-                                    <span className="text-xs text-white/40 font-normal">(hit dice da classe)</span>
-                                </label>
-                                <Controller
-                                    name="hitDice"
-                                    control={control}
-                                    render={({ field }) => (
-                                        <GlassSelector
-                                            options={HIT_DICE_SELECTOR_OPTIONS}
-                                            value={field.value as HitDiceType}
-                                            onChange={(v) => field.onChange(v)}
-                                            mode="single"
-                                            layout="horizontal"
-                                            fullWidth
-                                            size="md"
-                                            disabled={isSubmitting}
-                                            layoutId="class-hit-dice"
-                                        />
-                                    )}
+                    {/* Base tab content */}
+                    <AnimatePresence mode="wait">
+                        {activeTab === "base" && (
+                            <motion.form
+                                key="base"
+                                initial={{ opacity: 0, y: 4 }}
+                                animate={{ opacity: 1, y: 0 }}
+                                exit={{ opacity: 0, y: -4 }}
+                                transition={{ duration: 0.15 }}
+                                onSubmit={handleSubmit(onSubmit as any, onFormError)}
+                                className="space-y-6 mt-4"
+                            >
+                                {/* Row 1: Status switch */}
+                                <GlassStatusSwitch
+                                    entityLabel="Status da Classe"
+                                    description="Classes inativas não aparecem nas buscas públicas"
+                                    checked={watch("status") === "active"}
+                                    onCheckedChange={(checked) => setValue("status", checked ? "active" : "inactive")}
+                                    disabled={isSubmitting}
                                 />
-                                {errors.hitDice && <p className="text-xs text-rose-400">{errors.hitDice.message}</p>}
-                            </div>
 
-                            {/* Row 4: Saving Throws */}
-                            <div className="space-y-2">
-                                <label className="text-sm font-medium text-white/80 flex items-center gap-2">
-                                    <Shield className="h-4 w-4" />
-                                    Testes de Resistência
-                                    <span className="text-xs text-white/40 font-normal">(exatamente 2)</span>
-                                </label>
-                                <Controller
-                                    name="savingThrows"
+                                {/* Row 2: Name + Source */}
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    <GlassInput
+                                        id="name"
+                                        label="Nome da Classe"
+                                        placeholder="Ex: Guerreiro"
+                                        icon={<GraduationCap />}
+                                        required
+                                        error={errors.name?.message}
+                                        {...register("name")}
+                                    />
+                                    <GlassInput
+                                        id="source"
+                                        label="Fonte"
+                                        placeholder="Ex: PHB pg. 70"
+                                        icon={<Link />}
+                                        error={errors.source?.message}
+                                        {...register("source")}
+                                    />
+                                </div>
+
+                                {/* Row 3: Image + Description (Newly relocated) */}
+                                <ImageAndDescriptionSection
                                     control={control}
-                                    render={({ field }) => (
-                                        <GlassSelector
-                                            options={ATTRIBUTE_OPTIONS}
-                                            value={(field.value as AttributeType[]) || []}
-                                            onChange={(v) => {
-                                                const arr = Array.isArray(v) ? v : [v]
-                                                if (arr.length <= 2) field.onChange(arr)
-                                            }}
-                                            mode="multi"
-                                            layout="horizontal"
-                                            fullWidth
-                                            size="md"
-                                            disabled={isSubmitting}
-                                            layoutId="class-saving-throws"
-                                        />
-                                    )}
+                                    isSubmitting={isSubmitting}
+                                    errors={errors}
+                                    imageFieldName="image"
+                                    descriptionFieldName="description"
+                                    entityId={characterClass?._id}
+                                    placeholder="Descreva a classe detalhadamente... (Suporta imagens S3 e formatação)"
                                 />
-                                {errors.savingThrows && <p className="text-xs text-rose-400">{errors.savingThrows.message as string}</p>}
-                            </div>
 
-                            {/* Row 5: Primary Attributes */}
-                            <div className="space-y-2">
-                                <label className="text-sm font-medium text-white/80 flex items-center gap-2">
-                                    <Star className="h-4 w-4" />
-                                    Atributos Primários
-                                    <span className="text-xs text-white/40 font-normal">(pré-requisito de multiclasse)</span>
-                                </label>
-                                <Controller
-                                    name="primaryAttributes"
-                                    control={control}
-                                    render={({ field }) => (
-                                        <GlassSelector
-                                            options={ATTRIBUTE_OPTIONS}
-                                            value={(field.value as AttributeType[]) || []}
-                                            onChange={(v) => field.onChange(Array.isArray(v) ? v : [v])}
-                                            mode="multi"
-                                            layout="horizontal"
-                                            fullWidth
-                                            size="md"
-                                            disabled={isSubmitting}
-                                            layoutId="class-primary-attrs"
-                                        />
-                                    )}
-                                />
-                                {errors.primaryAttributes && <p className="text-xs text-rose-400">{errors.primaryAttributes.message as string}</p>}
-                            </div>
-
-                            {/* Row 6: Armor Proficiencies */}
-                            <div className="space-y-4">
+                                {/* Row 4: Hit Dice */}
                                 <div className="space-y-2">
                                     <label className="text-sm font-medium text-white/80 flex items-center gap-2">
-                                        <Shield className="h-4 w-4 text-blue-400" />
-                                        Proficiências de Armadura
+                                        <Dices className="h-4 w-4" />
+                                        Dado de Vida
+                                        <span className="text-xs text-white/40 font-normal">(hit dice da classe)</span>
                                     </label>
                                     <Controller
-                                        name="armorProficiencies"
+                                        name="hitDice"
                                         control={control}
                                         render={({ field }) => (
                                             <GlassSelector
-                                                options={ARMOR_OPTIONS}
-                                                value={(field.value as ArmorProficiency[]) || []}
-                                                onChange={(v) => field.onChange(Array.isArray(v) ? v : [v])}
-                                                mode="multi"
-                                                layout="grid"
-                                                cols={3}
+                                                options={HIT_DICE_SELECTOR_OPTIONS}
+                                                value={field.value as HitDiceType}
+                                                onChange={(v) => field.onChange(v)}
+                                                mode="single"
+                                                layout="horizontal"
+                                                fullWidth
                                                 size="md"
                                                 disabled={isSubmitting}
-                                                className="w-full"
+                                                layoutId="class-hit-dice"
                                             />
                                         )}
                                     />
+                                    {errors.hitDice && <p className="text-xs text-rose-400">{errors.hitDice.message}</p>}
                                 </div>
-                                <GlassSwitch
-                                    label="Escudos"
-                                    description="Proficiência no uso de escudos"
-                                    checked={(watch("armorProficiencies") || []).includes("Escudos")}
-                                    onCheckedChange={(checked) => {
-                                        const current = watch("armorProficiencies") || []
-                                        if (checked) {
-                                            if (!current.includes("Escudos")) setValue("armorProficiencies", [...current, "Escudos"])
-                                        } else {
-                                            setValue(
-                                                "armorProficiencies",
-                                                current.filter((v: string) => v !== "Escudos"),
-                                            )
-                                        }
-                                    }}
-                                    disabled={isSubmitting}
-                                />
-                            </div>
 
-                            {/* Row 7: Weapon Proficiencies */}
-                            <div className="space-y-3">
-                                <div className="flex items-center justify-between">
+                                {/* Row 4: Saving Throws */}
+                                <div className="space-y-2">
                                     <label className="text-sm font-medium text-white/80 flex items-center gap-2">
-                                        <Sword className="h-4 w-4 text-rose-400" />
-                                        Proficiências de Arma
+                                        <Shield className="h-4 w-4" />
+                                        Testes de Resistência
+                                        <span className="text-xs text-white/40 font-normal">(exatamente 2)</span>
                                     </label>
-                                    <button
-                                        type="button"
-                                        onClick={() => appendWeapon("" as WeaponProficiency)}
-                                        disabled={isSubmitting}
-                                        className={cn(
-                                            "px-3 py-1.5 rounded-lg text-xs font-medium transition-colors",
-                                            "bg-rose-500/20 text-rose-400 hover:bg-rose-500/30",
-                                            "border border-rose-500/30",
-                                            "disabled:opacity-50 disabled:cursor-not-allowed",
-                                            "flex items-center gap-1.5",
+                                    <Controller
+                                        name="savingThrows"
+                                        control={control}
+                                        render={({ field }) => (
+                                            <GlassSelector
+                                                options={ATTRIBUTE_OPTIONS}
+                                                value={(field.value as AttributeType[]) || []}
+                                                onChange={(v) => {
+                                                    const arr = Array.isArray(v) ? v : [v]
+                                                    if (arr.length <= 2) field.onChange(arr)
+                                                }}
+                                                mode="multi"
+                                                layout="horizontal"
+                                                fullWidth
+                                                size="md"
+                                                disabled={isSubmitting}
+                                                layoutId="class-saving-throws"
+                                            />
                                         )}
-                                    >
-                                        <Plus className="h-3 w-3" />
-                                        Adicionar Proficiência
-                                    </button>
+                                    />
+                                    {errors.savingThrows && <p className="text-xs text-rose-400">{errors.savingThrows.message as string}</p>}
                                 </div>
 
-                                <AnimatePresence mode="popLayout">
-                                    {weaponFields.length === 0 ? (
-                                        <GlassInlineEmptyState message="Nenhuma proficiência de arma adicionada" />
-                                    ) : (
-                                        <div className="space-y-2">
-                                            {weaponFields.map((field, index) => (
-                                                <motion.div
-                                                    key={field.id}
-                                                    initial={{ opacity: 0, x: -20 }}
-                                                    animate={{ opacity: 1, x: 0 }}
-                                                    exit={{ opacity: 0, x: 20 }}
-                                                    transition={{ duration: 0.2 }}
-                                                    className="flex items-center gap-2"
-                                                >
-                                                    <div className="flex-1">
+                                {/* Row 5: Primary Attributes */}
+                                <div className="space-y-2">
+                                    <label className="text-sm font-medium text-white/80 flex items-center gap-2">
+                                        <Star className="h-4 w-4" />
+                                        Atributos Primários
+                                        <span className="text-xs text-white/40 font-normal">(pré-requisito de multiclasse)</span>
+                                    </label>
+                                    <Controller
+                                        name="primaryAttributes"
+                                        control={control}
+                                        render={({ field }) => (
+                                            <GlassSelector
+                                                options={ATTRIBUTE_OPTIONS}
+                                                value={(field.value as AttributeType[]) || []}
+                                                onChange={(v) => field.onChange(Array.isArray(v) ? v : [v])}
+                                                mode="multi"
+                                                layout="horizontal"
+                                                fullWidth
+                                                size="md"
+                                                disabled={isSubmitting}
+                                                layoutId="class-primary-attrs"
+                                            />
+                                        )}
+                                    />
+                                    {errors.primaryAttributes && (
+                                        <p className="text-xs text-rose-400">{errors.primaryAttributes.message as string}</p>
+                                    )}
+                                </div>
+
+                                {/* Row 6: Armor Proficiencies */}
+                                <div className="space-y-4">
+                                    <div className="space-y-2">
+                                        <label className="text-sm font-medium text-white/80 flex items-center gap-2">
+                                            <Shield className="h-4 w-4 text-blue-400" />
+                                            Proficiências de Armadura
+                                        </label>
+                                        <Controller
+                                            name="armorProficiencies"
+                                            control={control}
+                                            render={({ field }) => (
+                                                <GlassSelector
+                                                    options={ARMOR_OPTIONS}
+                                                    value={(field.value as ArmorProficiency[]) || []}
+                                                    onChange={(v) => field.onChange(Array.isArray(v) ? v : [v])}
+                                                    mode="multi"
+                                                    layout="grid"
+                                                    cols={3}
+                                                    size="md"
+                                                    disabled={isSubmitting}
+                                                    className="w-full"
+                                                />
+                                            )}
+                                        />
+                                    </div>
+                                    <GlassSwitch
+                                        label="Escudos"
+                                        description="Proficiência no uso de escudos"
+                                        checked={(watch("armorProficiencies") || []).includes("Escudos")}
+                                        onCheckedChange={(checked) => {
+                                            const current = watch("armorProficiencies") || []
+                                            if (checked) {
+                                                if (!current.includes("Escudos")) setValue("armorProficiencies", [...current, "Escudos"])
+                                            } else {
+                                                setValue(
+                                                    "armorProficiencies",
+                                                    current.filter((v: string) => v !== "Escudos")
+                                                )
+                                            }
+                                        }}
+                                        disabled={isSubmitting}
+                                    />
+                                </div>
+
+                                {/* Row 7: Weapon Proficiencies */}
+                                <div className="space-y-3">
+                                    <div className="flex items-center justify-between">
+                                        <label className="text-sm font-medium text-white/80 flex items-center gap-2">
+                                            <Sword className="h-4 w-4 text-rose-400" />
+                                            Proficiências de Arma
+                                        </label>
+                                        <button
+                                            type="button"
+                                            onClick={() => appendWeapon("" as WeaponProficiency)}
+                                            disabled={isSubmitting}
+                                            className={cn(
+                                                "px-3 py-1.5 rounded-lg text-xs font-medium transition-colors",
+                                                "bg-rose-500/20 text-rose-400 hover:bg-rose-500/30",
+                                                "border border-rose-500/30",
+                                                "disabled:opacity-50 disabled:cursor-not-allowed",
+                                                "flex items-center gap-1.5"
+                                            )}
+                                        >
+                                            <Plus className="h-3 w-3" />
+                                            Adicionar Proficiência
+                                        </button>
+                                    </div>
+
+                                    <AnimatePresence mode="popLayout">
+                                        {weaponFields.length === 0 ? (
+                                            <GlassInlineEmptyState message="Nenhuma proficiência de arma adicionada" />
+                                        ) : (
+                                            <div className="space-y-2">
+                                                {weaponFields.map((field, index) => (
+                                                    <motion.div
+                                                        key={field.id}
+                                                        initial={{ opacity: 0, x: -20 }}
+                                                        animate={{ opacity: 1, x: 0 }}
+                                                        exit={{ opacity: 0, x: 20 }}
+                                                        transition={{ duration: 0.2 }}
+                                                        className="flex items-center gap-2"
+                                                    >
+                                                        <div className="flex-1">
+                                                            <Controller
+                                                                name={`weaponProficiencies.${index}` as any}
+                                                                control={control}
+                                                                render={({ field: controllerField }) => (
+                                                                    <RichTextEditor
+                                                                        value={controllerField.value || ""}
+                                                                        onChange={controllerField.onChange}
+                                                                        variant="simple"
+                                                                        placeholder="Ex: Armas simples, Espadas longas, etc."
+                                                                        disabled={isSubmitting}
+                                                                    />
+                                                                )}
+                                                            />
+                                                        </div>
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => removeWeapon(index)}
+                                                            disabled={isSubmitting}
+                                                            className={cn(
+                                                                "p-2 rounded-lg transition-colors border border-white/10 bg-white/5",
+                                                                "text-rose-400 hover:bg-rose-500/20",
+                                                                "disabled:opacity-50 disabled:cursor-not-allowed"
+                                                            )}
+                                                            title="Remover proficiência"
+                                                        >
+                                                            <X className="h-4 w-4" />
+                                                        </button>
+                                                    </motion.div>
+                                                ))}
+                                            </div>
+                                        )}
+                                    </AnimatePresence>
+                                </div>
+
+                                {/* Row 8: Skills */}
+                                <div className="space-y-4">
+                                    <label className="text-sm font-medium text-white/80 flex items-center gap-2 w-full pb-2 border-b border-white/5">
+                                        <BookOpen className="h-4 w-4" />
+                                        Perícias
+                                    </label>
+
+                                    <div className="flex items-center gap-3 bg-white/5 px-4 py-2 rounded-lg border border-white/10 w-fit">
+                                        <span className="text-xs text-white/60 font-medium uppercase tracking-wider whitespace-nowrap">
+                                            O jogador escolhe
+                                        </span>
+                                        <GlassInput
+                                            id="skillCount"
+                                            type="text"
+                                            inputMode="numeric"
+                                            label=""
+                                            placeholder="2"
+                                            error={errors.skillCount?.message}
+                                            className="w-14"
+                                            {...register("skillCount", { valueAsNumber: true })}
+                                        />
+                                        <span className="text-xs text-white/60 font-medium uppercase tracking-wider whitespace-nowrap">
+                                            Perícias dentre:
+                                        </span>
+                                    </div>
+
+                                    <div className="grid grid-cols-1 md:grid-cols-3 lg:flex lg:flex-wrap gap-6">
+                                        {(Object.keys(SKILL_MAP) as AttributeType[]).map((attr) => {
+                                            const skills = SKILL_MAP[attr]
+                                            if (skills.length === 0) return null
+
+                                            const attrConfig = attributeColors[attr]
+
+                                            return (
+                                                <div key={attr} className="space-y-3 flex-1 min-w-[140px]">
+                                                    <h4
+                                                        className={cn(
+                                                            "text-[10px] font-bold uppercase tracking-widest pb-1 border-b border-white/10 text-center",
+                                                            attrConfig.text
+                                                        )}
+                                                    >
+                                                        {attr}
+                                                    </h4>
+                                                    <div className="flex flex-col gap-1.5">
                                                         <Controller
-                                                            name={`weaponProficiencies.${index}` as any}
+                                                            name="availableSkills"
                                                             control={control}
-                                                            render={({ field: controllerField }) => (
-                                                                <RichTextEditor
-                                                                    value={controllerField.value || ""}
-                                                                    onChange={controllerField.onChange}
-                                                                    variant="simple"
-                                                                    placeholder="Ex: Armas simples, Espadas longas, etc."
+                                                            render={({ field }) => (
+                                                                <GlassSelector
+                                                                    options={skills.map((skill) => ({
+                                                                        value: skill,
+                                                                        label: skill,
+                                                                        activeColor: attrConfig.bgAlpha,
+                                                                        textColor: attrConfig.text
+                                                                    }))}
+                                                                    value={(field.value as string[]) || []}
+                                                                    onChange={(v) => field.onChange(v)}
+                                                                    mode="multi"
+                                                                    layout="grid"
+                                                                    cols={1}
                                                                     disabled={isSubmitting}
+                                                                    layoutId={`skills-${attr}`}
+                                                                    className="bg-transparent border-none p-0 gap-1"
                                                                 />
                                                             )}
                                                         />
                                                     </div>
-                                                    <button
-                                                        type="button"
-                                                        onClick={() => removeWeapon(index)}
-                                                        disabled={isSubmitting}
-                                                        className={cn(
-                                                            "p-2 rounded-lg transition-colors border border-white/10 bg-white/5",
-                                                            "text-rose-400 hover:bg-rose-500/20",
-                                                            "disabled:opacity-50 disabled:cursor-not-allowed",
-                                                        )}
-                                                        title="Remover proficiência"
-                                                    >
-                                                        <X className="h-4 w-4" />
-                                                    </button>
-                                                </motion.div>
-                                            ))}
-                                        </div>
-                                    )}
-                                </AnimatePresence>
-                            </div>
-
-                            {/* Row 8: Skills */}
-                            <div className="space-y-4">
-                                <label className="text-sm font-medium text-white/80 flex items-center gap-2 w-full pb-2 border-b border-white/5">
-                                    <BookOpen className="h-4 w-4" />
-                                    Perícias
-                                </label>
-
-                                <div className="flex items-center gap-3 bg-white/5 px-4 py-2 rounded-lg border border-white/10 w-fit">
-                                    <span className="text-xs text-white/60 font-medium uppercase tracking-wider whitespace-nowrap">O jogador escolhe</span>
-                                    <GlassInput
-                                        id="skillCount"
-                                        type="text"
-                                        inputMode="numeric"
-                                        label=""
-                                        placeholder="2"
-                                        error={errors.skillCount?.message}
-                                        className="w-14"
-                                        {...register("skillCount", { valueAsNumber: true })}
-                                    />
-                                    <span className="text-xs text-white/60 font-medium uppercase tracking-wider whitespace-nowrap">Perícias dentre:</span>
-                                </div>
-
-                                <div className="grid grid-cols-1 md:grid-cols-3 lg:flex lg:flex-wrap gap-6">
-                                    {(Object.keys(SKILL_MAP) as AttributeType[]).map((attr) => {
-                                        const skills = SKILL_MAP[attr]
-                                        if (skills.length === 0) return null
-
-                                        const attrConfig = attributeColors[attr]
-
-                                        return (
-                                            <div key={attr} className="space-y-3 flex-1 min-w-[140px]">
-                                                <h4 className={cn("text-[10px] font-bold uppercase tracking-widest pb-1 border-b border-white/10 text-center", attrConfig.text)}>{attr}</h4>
-                                                <div className="flex flex-col gap-1.5">
-                                                    <Controller
-                                                        name="availableSkills"
-                                                        control={control}
-                                                        render={({ field }) => (
-                                                            <GlassSelector
-                                                                options={skills.map((skill) => ({
-                                                                    value: skill,
-                                                                    label: skill,
-                                                                    activeColor: attrConfig.bgAlpha,
-                                                                    textColor: attrConfig.text,
-                                                                }))}
-                                                                value={(field.value as string[]) || []}
-                                                                onChange={(v) => field.onChange(v)}
-                                                                mode="multi"
-                                                                layout="grid"
-                                                                cols={1}
-                                                                disabled={isSubmitting}
-                                                                layoutId={`skills-${attr}`}
-                                                                className="bg-transparent border-none p-0 gap-1"
-                                                            />
-                                                        )}
-                                                    />
                                                 </div>
-                                            </div>
-                                        )
-                                    })}
+                                            )
+                                        })}
+                                    </div>
+                                    {errors.availableSkills && <p className="text-xs text-rose-400">{errors.availableSkills.message as string}</p>}
                                 </div>
-                                {errors.availableSkills && <p className="text-xs text-rose-400">{errors.availableSkills.message as string}</p>}
-                            </div>
 
-                            {/* Row 9: Spellcasting */}
-                            <SpellcastingSection
-                                control={control}
-                                watch={watch}
-                                setValue={setValue}
-                                isSubmitting={isSubmitting}
-                                spellcastingFieldName="spellcasting"
-                                attributeFieldName="spellcastingAttribute"
-                                layoutIdPrefix="base"
-                            />
-
-                            {/* Row 10: Class Traits */}
-                            <TraitsSection fields={traitFields} append={appendTrait} remove={removeTrait} control={control} isSubmitting={isSubmitting} traitsFieldName="traits" errors={errors} />
-
-                            {/* Row 11: Subclasses management */}
-                            <div className="space-y-3">
-                                <label className="text-sm font-medium text-white/80 flex items-center gap-2">
-                                    <Users className="h-4 w-4" />
-                                    Subclasses
-                                </label>
-
-                                {!isEditMode ? (
-                                    <div className="px-4 py-3 rounded-lg bg-white/5 border border-white/10 text-sm text-white/40 italic">Salve a classe primeiro para adicionar subclasses.</div>
-                                ) : (
-                                    <>
-                                        {/* Add subclass */}
-                                        <div className="flex flex-col sm:flex-row gap-2">
-                                            <input
-                                                type="text"
-                                                value={newSubclassName}
-                                                onChange={(e) => setNewSubclassName(e.target.value)}
-                                                onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), handleAddSubclass())}
-                                                placeholder="Nome da subclasse..."
-                                                disabled={isSubmitting}
-                                                className="flex-1 bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm text-white placeholder:text-white/30 outline-none focus:border-white/25 transition-colors disabled:opacity-50"
-                                            />
-                                            <input
-                                                type="text"
-                                                value={newSubclassSource}
-                                                onChange={(e) => setNewSubclassSource(e.target.value)}
-                                                onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), handleAddSubclass())}
-                                                placeholder="Fonte..."
-                                                disabled={isSubmitting}
-                                                className="sm:w-1/3 bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm text-white placeholder:text-white/30 outline-none focus:border-white/25 transition-colors disabled:opacity-50"
-                                            />
-                                            <button
-                                                type="button"
-                                                onClick={handleAddSubclass}
-                                                disabled={isSubmitting || !newSubclassName.trim()}
-                                                className={cn(
-                                                    "flex items-center justify-center px-3 py-2 rounded-lg transition-colors",
-                                                    "bg-white/10 hover:bg-white/15 text-white/60 hover:text-white",
-                                                    "disabled:opacity-30 disabled:cursor-not-allowed",
-                                                )}
-                                            >
-                                                <Plus className="h-4 w-4" />
-                                            </button>
-                                        </div>
-
-                                        {/* Subclass list */}
-                                        {subclasses.length === 0 ? (
-                                            <GlassInlineEmptyState message="Nenhuma subclasse adicionada. Subclasses aparecem como abas acima." />
-                                        ) : (
-                                            <div className="space-y-2">
-                                                <AnimatePresence>
-                                                    {subclasses.map((s, i) => (
-                                                        <SubclassTabItem
-                                                            key={s._id || i}
-                                                            subclass={s as any}
-                                                            index={i}
-                                                            isRenaming={renamingIndex === i}
-                                                            renameValue={renameValue}
-                                                            onStartRename={handleStartRename}
-                                                            onRenameChange={setRenameValue}
-                                                            onConfirmRename={handleConfirmRename}
-                                                            onCancelRename={handleCancelRename}
-                                                            onDelete={handleDeleteSubclass}
-                                                            disabled={isSubmitting}
-                                                        />
-                                                    ))}
-                                                </AnimatePresence>
-                                            </div>
-                                        )}
-                                    </>
-                                )}
-                            </div>
-
-                            {/* Footer */}
-                            <div className="flex flex-col-reverse sm:flex-row justify-end gap-3 pt-6 border-t border-white/10">
-                                <button
-                                    type="button"
-                                    onClick={onClose}
-                                    disabled={isSubmitting}
-                                    className="px-6 py-2.5 rounded-lg text-sm font-medium text-white/60 hover:text-white/80 hover:bg-white/5 transition-colors disabled:opacity-50"
-                                >
-                                    Cancelar
-                                </button>
-                                <button
-                                    type="submit"
-                                    disabled={isSubmitting}
-                                    className="flex flex-1 sm:flex-none items-center justify-center gap-2 px-6 py-2.5 rounded-lg bg-blue-500 hover:bg-blue-600 text-white text-sm font-medium shadow-lg shadow-blue-500/20 transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
-                                >
-                                    {isSubmitting && <Loader2 className="h-4 w-4 animate-spin" />}
-                                    {isSubmitting ? "Salvando..." : isEditMode ? "Salvar Alterações" : "Criar Classe"}
-                                </button>
-                            </div>
-                        </motion.form>
-                    )}
-
-                    {/* Subclass tab content */}
-                    {typeof activeTab === "number" && (
-                        <motion.form
-                            key={`subclass-${activeTab}`}
-                            initial={{ opacity: 0, y: 4 }}
-                            animate={{ opacity: 1, y: 0 }}
-                            exit={{ opacity: 0, y: -4 }}
-                            transition={{ duration: 0.15 }}
-                            onSubmit={handleSubmit(onSubmit as any, onFormError)}
-                            className="mt-6 space-y-6"
-                        >
-                            <div className="flex items-center justify-between pb-4 border-b border-white/10">
-                                <div className="flex items-center gap-3">
-                                    <div
-                                        className="w-10 h-10 rounded-xl flex items-center justify-center border border-white/10 bg-white/5"
-                                        style={{ borderColor: subclasses[activeTab]?.color ? `${subclasses[activeTab]?.color}40` : undefined }}
-                                    >
-                                        <Users className="h-5 w-5" style={{ color: subclasses[activeTab]?.color }} />
-                                    </div>
-                                    <div>
-                                        <h3 className="text-lg font-bold text-white leading-none">{subclasses[activeTab]?.name}</h3>
-                                        <p className="text-xs text-white/40 mt-1 uppercase tracking-widest font-medium">Configuração de Subclasse</p>
-                                    </div>
-                                </div>
-                                {subclasses[activeTab]?.source && (
-                                    <div className="flex items-center gap-2 px-3 py-1 rounded-full bg-white/5 border border-white/10 text-[10px] font-bold text-white/40 uppercase">
-                                        <Link className="h-3 w-3" />
-                                        {subclasses[activeTab]?.source}
-                                    </div>
-                                )}
-                            </div>
-
-                            <ImageAndDescriptionSection
-                                control={control}
-                                isSubmitting={isSubmitting}
-                                errors={errors}
-                                imageFieldName={`subclasses.${activeTab}.image`}
-                                descriptionFieldName={`subclasses.${activeTab}.description`}
-                                entityId={characterClass?._id}
-                                placeholder={`Descreva a subclasse ${subclasses[activeTab]?.name} detalhadamente...`}
-                            />
-
-                            <div
-                                className="p-4 rounded-xl bg-white/5 border border-white/10 space-y-6"
-                                style={{ borderColor: subclasses[activeTab]?.color ? `${subclasses[activeTab]?.color}40` : undefined }}
-                            >
+                                {/* Row 9: Spellcasting */}
                                 <SpellcastingSection
                                     control={control}
                                     watch={watch}
                                     setValue={setValue}
                                     isSubmitting={isSubmitting}
-                                    spellcastingFieldName={`subclasses.${activeTab}.spellcasting`}
-                                    attributeFieldName={`subclasses.${activeTab}.spellcastingAttribute`}
-                                    layoutIdPrefix={`subclass-${activeTab}`}
+                                    spellcastingFieldName="spellcasting"
+                                    attributeFieldName="spellcastingAttribute"
+                                    layoutIdPrefix="base"
                                 />
 
-                                <div className="h-px bg-white/5" />
+                                {/* Row 10: Class Traits */}
+                                <TraitsSection
+                                    fields={traitFields}
+                                    append={appendTrait}
+                                    remove={removeTrait}
+                                    control={control}
+                                    isSubmitting={isSubmitting}
+                                    traitsFieldName="traits"
+                                    errors={errors}
+                                />
 
-                                <SubclassTraitsWrapper control={control} activeTab={activeTab} isSubmitting={isSubmitting} errors={errors} />
-                            </div>
+                                {/* Row 11: Subclasses management */}
+                                <div className="space-y-3">
+                                    <label className="text-sm font-medium text-white/80 flex items-center gap-2">
+                                        <Users className="h-4 w-4" />
+                                        Subclasses
+                                    </label>
 
-                            <div className="flex flex-col-reverse sm:flex-row justify-end gap-3 pt-6 border-t border-white/10">
-                                <button
-                                    type="button"
-                                    onClick={() => setActiveTab("base")}
-                                    className="px-6 py-2.5 rounded-lg text-sm font-medium text-white/60 hover:text-white/80 hover:bg-white/5 transition-colors"
+                                    {!isEditMode ? (
+                                        <div className="px-4 py-3 rounded-lg bg-white/5 border border-white/10 text-sm text-white/40 italic">
+                                            Salve a classe primeiro para adicionar subclasses.
+                                        </div>
+                                    ) : (
+                                        <>
+                                            {/* Add subclass */}
+                                            <div className="flex flex-col sm:flex-row gap-2">
+                                                <input
+                                                    type="text"
+                                                    value={newSubclassName}
+                                                    onChange={(e) => setNewSubclassName(e.target.value)}
+                                                    onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), handleAddSubclass())}
+                                                    placeholder="Nome da subclasse..."
+                                                    disabled={isSubmitting}
+                                                    className="flex-1 bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm text-white placeholder:text-white/30 outline-none focus:border-white/25 transition-colors disabled:opacity-50"
+                                                />
+                                                <input
+                                                    type="text"
+                                                    value={newSubclassSource}
+                                                    onChange={(e) => setNewSubclassSource(e.target.value)}
+                                                    onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), handleAddSubclass())}
+                                                    placeholder="Fonte..."
+                                                    disabled={isSubmitting}
+                                                    className="sm:w-1/3 bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm text-white placeholder:text-white/30 outline-none focus:border-white/25 transition-colors disabled:opacity-50"
+                                                />
+                                                <button
+                                                    type="button"
+                                                    onClick={handleAddSubclass}
+                                                    disabled={isSubmitting || !newSubclassName.trim()}
+                                                    className={cn(
+                                                        "flex items-center justify-center px-3 py-2 rounded-lg transition-colors",
+                                                        "bg-white/10 hover:bg-white/15 text-white/60 hover:text-white",
+                                                        "disabled:opacity-30 disabled:cursor-not-allowed"
+                                                    )}
+                                                >
+                                                    <Plus className="h-4 w-4" />
+                                                </button>
+                                            </div>
+
+                                            {/* Subclass list */}
+                                            {subclasses.length === 0 ? (
+                                                <GlassInlineEmptyState message="Nenhuma subclasse adicionada. Subclasses aparecem como abas acima." />
+                                            ) : (
+                                                <div className="space-y-2">
+                                                    <AnimatePresence>
+                                                        {subclasses.map((s, i) => (
+                                                            <SubclassTabItem
+                                                                key={s._id || i}
+                                                                subclass={s as any}
+                                                                index={i}
+                                                                isRenaming={renamingIndex === i}
+                                                                renameValue={renameValue}
+                                                                onStartRename={handleStartRename}
+                                                                onRenameChange={setRenameValue}
+                                                                onConfirmRename={handleConfirmRename}
+                                                                onCancelRename={handleCancelRename}
+                                                                onDelete={handleDeleteSubclass}
+                                                                disabled={isSubmitting}
+                                                            />
+                                                        ))}
+                                                    </AnimatePresence>
+                                                </div>
+                                            )}
+                                        </>
+                                    )}
+                                </div>
+
+                                {/* Footer */}
+                                <div className="flex flex-col-reverse sm:flex-row justify-end gap-3 pt-6 border-t border-white/10">
+                                    <button
+                                        type="button"
+                                        onClick={handleCloseAttempt}
+                                        disabled={isSubmitting}
+                                        className="px-6 py-2.5 rounded-lg text-sm font-medium text-white/60 hover:text-white/80 hover:bg-white/5 transition-colors disabled:opacity-50"
+                                    >
+                                        Cancelar
+                                    </button>
+                                    <button
+                                        type="submit"
+                                        disabled={isSubmitting}
+                                        className="flex flex-1 sm:flex-none items-center justify-center gap-2 px-6 py-2.5 rounded-lg bg-blue-500 hover:bg-blue-600 text-white text-sm font-medium shadow-lg shadow-blue-500/20 transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
+                                    >
+                                        {isSubmitting && <Loader2 className="h-4 w-4 animate-spin" />}
+                                        {isSubmitting ? "Salvando..." : isEditMode ? "Salvar Alterações" : "Criar Classe"}
+                                    </button>
+                                </div>
+                            </motion.form>
+                        )}
+
+                        {/* Subclass tab content */}
+                        {typeof activeTab === "number" && (
+                            <motion.form
+                                key={`subclass-${activeTab}`}
+                                initial={{ opacity: 0, y: 4 }}
+                                animate={{ opacity: 1, y: 0 }}
+                                exit={{ opacity: 0, y: -4 }}
+                                transition={{ duration: 0.15 }}
+                                onSubmit={handleSubmit(onSubmit as any, onFormError)}
+                                className="mt-6 space-y-6"
+                            >
+                                <div className="flex items-center justify-between pb-4 border-b border-white/10">
+                                    <div className="flex items-center gap-3">
+                                        <div
+                                            className="w-10 h-10 rounded-xl flex items-center justify-center border border-white/10 bg-white/5"
+                                            style={{ borderColor: subclasses[activeTab]?.color ? `${subclasses[activeTab]?.color}40` : undefined }}
+                                        >
+                                            <Users className="h-5 w-5" style={{ color: subclasses[activeTab]?.color }} />
+                                        </div>
+                                        <div>
+                                            <h3 className="text-lg font-bold text-white leading-none">{subclasses[activeTab]?.name}</h3>
+                                            <p className="text-xs text-white/40 mt-1 uppercase tracking-widest font-medium">
+                                                Configuração de Subclasse
+                                            </p>
+                                        </div>
+                                    </div>
+                                    {subclasses[activeTab]?.source && (
+                                        <div className="flex items-center gap-2 px-3 py-1 rounded-full bg-white/5 border border-white/10 text-[10px] font-bold text-white/40 uppercase">
+                                            <Link className="h-3 w-3" />
+                                            {subclasses[activeTab]?.source}
+                                        </div>
+                                    )}
+                                </div>
+
+                                <ImageAndDescriptionSection
+                                    control={control}
+                                    isSubmitting={isSubmitting}
+                                    errors={errors}
+                                    imageFieldName={`subclasses.${activeTab}.image`}
+                                    descriptionFieldName={`subclasses.${activeTab}.description`}
+                                    entityId={characterClass?._id}
+                                    placeholder={`Descreva a subclasse ${subclasses[activeTab]?.name} detalhadamente...`}
+                                />
+
+                                <div
+                                    className="p-4 rounded-xl bg-white/5 border border-white/10 space-y-6"
+                                    style={{ borderColor: subclasses[activeTab]?.color ? `${subclasses[activeTab]?.color}40` : undefined }}
                                 >
-                                    Voltar para Base
-                                </button>
-                                <button
-                                    type="submit"
-                                    disabled={isSubmitting}
-                                    className="flex flex-1 sm:flex-none items-center justify-center gap-2 px-6 py-2.5 rounded-lg bg-blue-500 hover:bg-blue-600 text-white text-sm font-medium shadow-lg shadow-blue-500/20 transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
-                                >
-                                    {isSubmitting && <Loader2 className="h-4 w-4 animate-spin" />}
-                                    {isSubmitting ? "Salvando..." : isEditMode ? "Salvar Alterações" : "Criar Classe"}
-                                </button>
-                            </div>
-                        </motion.form>
-                    )}
-                </AnimatePresence>
-            </GlassModalContent>
-        </GlassModal>
+                                    <SpellcastingSection
+                                        control={control}
+                                        watch={watch}
+                                        setValue={setValue}
+                                        isSubmitting={isSubmitting}
+                                        spellcastingFieldName={`subclasses.${activeTab}.spellcasting`}
+                                        attributeFieldName={`subclasses.${activeTab}.spellcastingAttribute`}
+                                        layoutIdPrefix={`subclass-${activeTab}`}
+                                    />
+
+                                    <div className="h-px bg-white/5" />
+
+                                    <SubclassTraitsWrapper control={control} activeTab={activeTab} isSubmitting={isSubmitting} errors={errors} />
+                                </div>
+
+                                <div className="flex flex-col-reverse sm:flex-row justify-end gap-3 pt-6 border-t border-white/10">
+                                    <button
+                                        type="button"
+                                        onClick={() => setActiveTab("base")}
+                                        className="px-6 py-2.5 rounded-lg text-sm font-medium text-white/60 hover:text-white/80 hover:bg-white/5 transition-colors"
+                                    >
+                                        Voltar para Base
+                                    </button>
+                                    <button
+                                        type="submit"
+                                        disabled={isSubmitting}
+                                        className="flex flex-1 sm:flex-none items-center justify-center gap-2 px-6 py-2.5 rounded-lg bg-blue-500 hover:bg-blue-600 text-white text-sm font-medium shadow-lg shadow-blue-500/20 transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
+                                    >
+                                        {isSubmitting && <Loader2 className="h-4 w-4 animate-spin" />}
+                                        {isSubmitting ? "Salvando..." : isEditMode ? "Salvar Alterações" : "Criar Classe"}
+                                    </button>
+                                </div>
+                            </motion.form>
+                        )}
+                    </AnimatePresence>
+                </GlassModalContent>
+            </GlassModal>
+
+            <GlassConfirmClosing
+                isOpen={showConfirmClose}
+                onClose={() => setShowConfirmClose(false)}
+                onConfirmExit={() => {
+                    setShowConfirmClose(false)
+                    onClose()
+                }}
+                onSaveAndExit={handleSubmit(onSubmit as any)}
+                isSaving={isSubmitting}
+            />
+        </>
     )
 }

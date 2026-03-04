@@ -356,6 +356,8 @@ export function TraitsSection({
     traitsFieldName,
     errors
 }: TraitsSectionProps) {
+    const [isExpanded, setIsExpanded] = React.useState(fields.length === 0)
+
     return (
         <div className="space-y-3">
             <div className="flex items-center justify-between">
@@ -365,7 +367,10 @@ export function TraitsSection({
                 </label>
                 <button
                     type="button"
-                    onClick={() => append({ level: 1, description: "" })}
+                    onClick={() => {
+                        append({ level: 1, description: "" })
+                        setIsExpanded(true)
+                    }}
                     disabled={isSubmitting}
                     className={cn(
                         "px-3 py-1.5 rounded-lg text-xs font-medium transition-colors",
@@ -380,106 +385,134 @@ export function TraitsSection({
                 </button>
             </div>
 
-            <AnimatePresence mode="popLayout">
-                {fields.length === 0 ? (
-                    <GlassInlineEmptyState message="Nenhuma habilidade adicionada" />
-                ) : (
-                    <div className="flex flex-col-reverse gap-3">
-                        {fields.map((field, index) => (
-                            <motion.div
-                                key={field.id}
-                                initial={{ opacity: 0, scale: 0.95 }}
-                                animate={{ opacity: 1, scale: 1 }}
-                                exit={{ opacity: 0, scale: 0.95 }}
-                                className="flex items-end gap-2 p-3 rounded-xl bg-white/5 border border-white/10"
-                            >
-                                <div className="w-20 self-stretch flex flex-col">
-                                    <Controller
-                                        name={`${traitsFieldName}.${index}.level`}
-                                        control={control}
-                                        render={({ field: levelField }) => (
-                                            <div className="space-y-1.5 flex-1 flex flex-col group/level">
-                                                <label className="text-sm font-medium text-white/80 block shrink-0">Nível</label>
-                                                <div className="flex-1 rounded-lg bg-white/5 border border-white/10 hover:border-white/20 transition-all flex items-center justify-center min-h-[38px] focus-within:ring-2 focus-within:ring-blue-500/50 focus-within:border-blue-500/50">
-                                                    <input
-                                                        type="text"
-                                                        inputMode="numeric"
-                                                        value={levelField.value}
-                                                        onChange={(e) => {
-                                                            const val = e.target.value.replace(/\D/g, "")
-                                                            levelField.onChange(val ? parseInt(val) : "")
-                                                        }}
-                                                        className="bg-transparent border-none outline-none w-full text-center font-bold text-amber-400 text-sm h-full"
-                                                    />
-                                                </div>
-                                            </div>
-                                        )}
-                                    />
-                                </div>
-                                <div className="flex-1 self-stretch flex flex-col">
-                                    <div className="space-y-1.5 flex-1 flex flex-col">
-                                        <label className="text-sm font-medium text-white/80 block shrink-0">Habilidade (Traço ou Regra)</label>
-                                        <Controller
-                                            name={`${traitsFieldName}.${index}.description`}
-                                            control={control}
-                                            render={({ field: descField }) => (
-                                                <div className="space-y-1">
-                                                    <GlassEntityChooser
-                                                        value={
-                                                            descField.value
-                                                                ? { label: descField.value.replace(/<[^>]*>/g, ""), id: field.id }
-                                                                : undefined
-                                                        }
-                                                        onChange={(val) => {
-                                                            if (val) {
-                                                                // If it's a mention-like style, we can format it as a mention span
-                                                                // but for simplicity here we'll store the label or a specific mention format
-                                                                descField.onChange(
-                                                                    `<span data-type="mention" data-id="${val.id}" data-entity-type="${val.entityType}" class="mention">${val.label}</span>`
-                                                                )
-                                                            } else {
-                                                                descField.onChange("")
-                                                            }
-                                                        }}
-                                                        provider={providerHabilidade}
-                                                        placeholder="Vincular @Habilidade..."
-                                                        disabled={isSubmitting}
-                                                        className={cn(
-                                                            ((errors as any)?.[traitsFieldName.split(".")[0]]?.[index]?.description ||
-                                                                (errors as any)?.[traitsFieldName]?.[index]?.description) &&
-                                                                "border-rose-500/50"
+            <div className="rounded-xl border border-white/10 bg-white/5 overflow-hidden">
+                <button
+                    type="button"
+                    onClick={() => setIsExpanded(!isExpanded)}
+                    className="w-full flex items-center justify-between px-3 py-2 hover:bg-white/5 transition-colors group"
+                >
+                    <div className="flex items-center gap-2">
+                        <span className="text-sm font-medium text-white/80">Lista de Habilidades</span>
+                        <span className="text-[10px] text-white/20 uppercase tracking-widest font-bold ml-2 group-hover:text-white/40 transition-colors">
+                            {fields.length} {fields.length === 1 ? "habilidade" : "habilidades"}
+                        </span>
+                    </div>
+                    <ChevronDown className={cn("w-4 h-4 text-white/20 group-hover:text-white/40 transition-all", isExpanded ? "rotate-180" : "")} />
+                </button>
+
+                <AnimatePresence>
+                    {isExpanded && (
+                        <motion.div
+                            initial={{ height: 0, opacity: 0 }}
+                            animate={{ height: "auto", opacity: 1 }}
+                            exit={{ height: 0, opacity: 0 }}
+                            className="overflow-hidden bg-black/20"
+                        >
+                            <div className="p-3 space-y-3">
+                                {fields.length === 0 ? (
+                                    <GlassInlineEmptyState message="Nenhuma habilidade adicionada" />
+                                ) : (
+                                    <div className="flex flex-col-reverse gap-3">
+                                        {fields.map((field, index) => (
+                                            <motion.div
+                                                key={field.id}
+                                                initial={{ opacity: 0, scale: 0.95 }}
+                                                animate={{ opacity: 1, scale: 1 }}
+                                                exit={{ opacity: 0, scale: 0.95 }}
+                                                className="flex items-end gap-2 p-3 rounded-xl bg-white/5 border border-white/10"
+                                            >
+                                                <div className="w-20 self-stretch flex flex-col">
+                                                    <Controller
+                                                        name={`${traitsFieldName}.${index}.level`}
+                                                        control={control}
+                                                        render={({ field: levelField }) => (
+                                                            <div className="space-y-1.5 flex-1 flex flex-col group/level">
+                                                                <label className="text-sm font-medium text-white/80 block shrink-0">Nível</label>
+                                                                <div className="flex-1 rounded-lg bg-white/5 border border-white/10 hover:border-white/20 transition-all flex items-center justify-center min-h-[38px] focus-within:ring-2 focus-within:ring-blue-500/50 focus-within:border-blue-500/50">
+                                                                    <input
+                                                                        type="text"
+                                                                        inputMode="numeric"
+                                                                        value={levelField.value}
+                                                                        onChange={(e) => {
+                                                                            const val = e.target.value.replace(/\D/g, "")
+                                                                            levelField.onChange(val ? parseInt(val) : "")
+                                                                        }}
+                                                                        className="bg-transparent border-none outline-none w-full text-center font-bold text-amber-400 text-sm h-full"
+                                                                    />
+                                                                </div>
+                                                            </div>
                                                         )}
                                                     />
-                                                    {((errors as any)?.[traitsFieldName.split(".")[0]]?.[index]?.description ||
-                                                        (errors as any)?.[traitsFieldName]?.[index]?.description) && (
-                                                        <p className="text-[10px] text-rose-400 font-medium pl-1">
-                                                            {(errors as any)?.[traitsFieldName.split(".")[0]]?.[index]?.description?.message ||
-                                                                (errors as any)?.[traitsFieldName]?.[index]?.description?.message}
-                                                        </p>
-                                                    )}
                                                 </div>
-                                            )}
-                                        />
+                                                <div className="flex-1 self-stretch flex flex-col">
+                                                    <div className="space-y-1.5 flex-1 flex flex-col">
+                                                        <label className="text-sm font-medium text-white/80 block shrink-0">
+                                                            Habilidade (Traço ou Regra)
+                                                        </label>
+                                                        <Controller
+                                                            name={`${traitsFieldName}.${index}.description`}
+                                                            control={control}
+                                                            render={({ field: descField }) => (
+                                                                <div className="space-y-1">
+                                                                    <GlassEntityChooser
+                                                                        value={
+                                                                            descField.value
+                                                                                ? { label: descField.value.replace(/<[^>]*>/g, ""), id: field.id }
+                                                                                : undefined
+                                                                        }
+                                                                        onChange={(val) => {
+                                                                            if (val) {
+                                                                                descField.onChange(
+                                                                                    `<span data-type="mention" data-id="${val.id}" data-entity-type="${val.entityType}" class="mention">${val.label}</span>`
+                                                                                )
+                                                                            } else {
+                                                                                descField.onChange("")
+                                                                            }
+                                                                        }}
+                                                                        provider={providerHabilidade}
+                                                                        placeholder="Vincular @Habilidade..."
+                                                                        disabled={isSubmitting}
+                                                                        className={cn(
+                                                                            ((errors as any)?.[traitsFieldName.split(".")[0]]?.[index]?.description ||
+                                                                                (errors as any)?.[traitsFieldName]?.[index]?.description) &&
+                                                                                "border-rose-500/50"
+                                                                        )}
+                                                                    />
+                                                                    {((errors as any)?.[traitsFieldName.split(".")[0]]?.[index]?.description ||
+                                                                        (errors as any)?.[traitsFieldName]?.[index]?.description) && (
+                                                                        <p className="text-[10px] text-rose-400 font-medium pl-1">
+                                                                            {(errors as any)?.[traitsFieldName.split(".")[0]]?.[index]?.description
+                                                                                ?.message ||
+                                                                                (errors as any)?.[traitsFieldName]?.[index]?.description?.message}
+                                                                        </p>
+                                                                    )}
+                                                                </div>
+                                                            )}
+                                                        />
+                                                    </div>
+                                                </div>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => remove(index)}
+                                                    disabled={isSubmitting}
+                                                    className={cn(
+                                                        "h-10 px-3 rounded-lg transition-colors border border-white/10 bg-white/5",
+                                                        "text-rose-400 hover:bg-rose-500/20",
+                                                        "disabled:opacity-50 disabled:cursor-not-allowed",
+                                                        "mb-[1px]"
+                                                    )}
+                                                >
+                                                    <X className="h-4 w-4" />
+                                                </button>
+                                            </motion.div>
+                                        ))}
                                     </div>
-                                </div>
-                                <button
-                                    type="button"
-                                    onClick={() => remove(index)}
-                                    disabled={isSubmitting}
-                                    className={cn(
-                                        "h-10 px-3 rounded-lg transition-colors border border-white/10 bg-white/5",
-                                        "text-rose-400 hover:bg-rose-500/20",
-                                        "disabled:opacity-50 disabled:cursor-not-allowed",
-                                        "mb-[1px]"
-                                    )}
-                                >
-                                    <X className="h-4 w-4" />
-                                </button>
-                            </motion.div>
-                        ))}
-                    </div>
-                )}
-            </AnimatePresence>
+                                )}
+                            </div>
+                        </motion.div>
+                    )}
+                </AnimatePresence>
+            </div>
         </div>
     )
 }

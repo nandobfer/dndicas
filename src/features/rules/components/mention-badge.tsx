@@ -7,6 +7,8 @@ import { entityColors } from "@/lib/config/colors"
 import { useIsMobile } from "@/core/hooks/useMediaQuery"
 import { EntityPreviewTooltip } from "./entity-preview-tooltip"
 import { SimpleGlassTooltip } from "@/components/ui/glass-tooltip"
+import { GlassDiceValue } from "@/components/ui/glass-dice-value"
+import type { DiceType } from "@/features/spells/types/spells.types"
 export { EntityTitleLink } from "./entity-title-link"
 
 interface MentionBadgeProps {
@@ -58,7 +60,28 @@ export function MentionContent({
 
         const convertNode = (node: Node, index: number): React.ReactNode => {
             if (node.nodeType === Node.TEXT_NODE) {
-                return node.textContent
+                const text = node.textContent || ""
+                // Regex para capturar notação de dados (ex: 1d8, 2d6, 1d20)
+                const diceRegex = /(\d+)d(4|6|8|10|12|20|100)/g
+                const parts = text.split(diceRegex)
+
+                if (parts.length === 1) return text
+
+                const elements: React.ReactNode[] = []
+                for (let i = 0; i < parts.length; i++) {
+                    if (i % 3 === 0) {
+                        // Texto normal
+                        if (parts[i]) elements.push(parts[i])
+                    } else if (i % 3 === 1) {
+                        // Quantidade (capturada no primeiro grupo)
+                        const quantidade = parseInt(parts[i], 10)
+                        const tipo = `d${parts[i + 1]}` as DiceType
+                        elements.push(<GlassDiceValue key={`dice-${index}-${i}`} value={{ quantidade, tipo }} className="mx-0.5" />)
+                        // Pula o próximo pois ele é o 'tipo' capturado no segundo grupo
+                        i++
+                    }
+                }
+                return <React.Fragment key={`text-parts-${index}`}>{elements}</React.Fragment>
             }
 
             if (node.nodeType === Node.ELEMENT_NODE) {

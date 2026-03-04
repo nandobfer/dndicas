@@ -10,6 +10,7 @@ import { GlassModal, GlassModalContent, GlassModalHeader, GlassModalTitle, Glass
 import { GlassInput } from "@/components/ui/glass-input";
 import { GlassStatusSwitch } from "@/components/ui/glass-status-switch"
 import { GlassSelector } from "@/components/ui/glass-selector"
+import { GlassConfirmClosing } from "@/components/ui/glass-confirm-closing"
 import { GlassInlineEmptyState } from "@/components/ui/glass-inline-empty-state"
 import { createFeatSchema, type CreateFeatSchema } from "../api/validation"
 import { Feat, CreateFeatInput, UpdateFeatInput } from "../types/feats.types"
@@ -27,6 +28,7 @@ export interface FeatFormModalProps {
 export function FeatFormModal({ isOpen, onClose, onSubmit, feat, isSubmitting = false }: FeatFormModalProps) {
     const isEditMode = !!feat
     const [lastAddedIndex, setLastAddedIndex] = React.useState<number | null>(null)
+    const [showConfirmClose, setShowConfirmClose] = React.useState(false)
 
     const {
         register,
@@ -35,7 +37,7 @@ export function FeatFormModal({ isOpen, onClose, onSubmit, feat, isSubmitting = 
         setValue,
         control,
         reset,
-        formState: { errors },
+        formState: { errors, isDirty }
     } = useForm<CreateFeatSchema>({
         resolver: zodResolver(createFeatSchema) as any,
         defaultValues: {
@@ -45,8 +47,8 @@ export function FeatFormModal({ isOpen, onClose, onSubmit, feat, isSubmitting = 
             level: feat?.level || 1,
             prerequisites: feat?.prerequisites || [],
             attributeBonuses: feat?.attributeBonuses || [],
-            status: feat?.status || "active",
-        },
+            status: feat?.status || "active"
+        }
     })
 
     // Type assertion needed: react-hook-form's useFieldArray has type inference issues
@@ -73,6 +75,7 @@ export function FeatFormModal({ isOpen, onClose, onSubmit, feat, isSubmitting = 
     // Reset form when modal opens/closes or feat changes
     React.useEffect(() => {
         if (isOpen) {
+            setShowConfirmClose(false)
             setLastAddedIndex(null)
             reset({
                 name: feat?.name || "",
@@ -95,9 +98,18 @@ export function FeatFormModal({ isOpen, onClose, onSubmit, feat, isSubmitting = 
                 const plainText = p.replace(/<[^>]*>/g, "").trim()
                 return plainText.length > 0
             }),
-            attributeBonuses: (data.attributeBonuses || []).filter((b) => b.attribute && b.value),
+            attributeBonuses: (data.attributeBonuses || []).filter((b) => b.attribute && b.value)
         }
         await onSubmit(cleanedData as CreateFeatInput | UpdateFeatInput)
+        setShowConfirmClose(false)
+    }
+
+    const handleCloseAttempt = () => {
+        if (isDirty) {
+            setShowConfirmClose(true)
+        } else {
+            onClose()
+        }
     }
 
     const handleAddPrerequisite = () => {
@@ -125,276 +137,314 @@ export function FeatFormModal({ isOpen, onClose, onSubmit, feat, isSubmitting = 
     const selectedAttributes = watch("attributeBonuses")?.map((b) => b.attribute) || []
 
     return (
-        <GlassModal open={isOpen} onOpenChange={(open) => !open && onClose()}>
-            <GlassModalContent size="xl">
-                <GlassModalHeader>
-                    <GlassModalTitle>{isEditMode ? "Editar Talento" : "Novo Talento"}</GlassModalTitle>
-                    <GlassModalDescription>{isEditMode ? "Atualize as informações do talento" : "Crie um novo registro no catálogo de talentos"}</GlassModalDescription>
-                </GlassModalHeader>
+        <>
+            <GlassModal open={isOpen} onOpenChange={(open) => !open && handleCloseAttempt()}>
+                <GlassModalContent size="xl">
+                    <GlassModalHeader>
+                        <GlassModalTitle>{isEditMode ? "Editar Talento" : "Novo Talento"}</GlassModalTitle>
+                        <GlassModalDescription>
+                            {isEditMode ? "Atualize as informações do talento" : "Crie um novo registro no catálogo de talentos"}
+                        </GlassModalDescription>
+                    </GlassModalHeader>
 
-                <form onSubmit={handleSubmit(handleFormSubmit)} className="space-y-6 mt-4">
-                    {/* Name */}
-                    <GlassInput id="name" label="Nome do Talento" placeholder="Ex: Mestre em Armas" icon={<Zap />} error={errors.name?.message} {...register("name")} />
-
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                        {/* Source */}
-                        <GlassInput id="source" label="Fonte / Referência" placeholder="Ex: PHB pg. 167" icon={<Link />} error={errors.source?.message} {...register("source")} />
-
-                        {/* Level */}
+                    <form onSubmit={handleSubmit(handleFormSubmit)} className="space-y-6 mt-4">
+                        {/* Name */}
                         <GlassInput
-                            id="level"
-                            type="text"
-                            inputMode="numeric"
-                            label="Nível Mínimo"
-                            placeholder="1"
-                            icon={<Trophy />}
-                            error={errors.level?.message}
-                            {...register("level", {
-                                setValueAs: (v) => (v === "" ? undefined : parseInt(v, 10)),
-                                onChange: (e) => {
-                                    e.target.value = e.target.value.replace(/\D/g, "")
-                                },
-                            })}
+                            id="name"
+                            label="Nome do Talento"
+                            placeholder="Ex: Mestre em Armas"
+                            icon={<Zap />}
+                            error={errors.name?.message}
+                            {...register("name")}
                         />
-                    </div>
 
-                    {/* Status Switch */}
-                    <GlassStatusSwitch
-                        entityLabel="Status do Talento"
-                        description="Talentos inativos não aparecem nas buscas públicas"
-                        checked={watch("status") === "active"}
-                        onCheckedChange={(checked) => setValue("status", checked ? "active" : "inactive")}
-                        disabled={isSubmitting}
-                    />
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                            {/* Source */}
+                            <GlassInput
+                                id="source"
+                                label="Fonte / Referência"
+                                placeholder="Ex: PHB pg. 167"
+                                icon={<Link />}
+                                error={errors.source?.message}
+                                {...register("source")}
+                            />
 
-                    {/* Prerequisites Dynamic List */}
-                    <div className="space-y-3">
-                        <div className="flex items-center justify-between">
+                            {/* Level */}
+                            <GlassInput
+                                id="level"
+                                type="text"
+                                inputMode="numeric"
+                                label="Nível Mínimo"
+                                placeholder="1"
+                                icon={<Trophy />}
+                                error={errors.level?.message}
+                                {...register("level", {
+                                    setValueAs: (v) => (v === "" ? undefined : parseInt(v, 10)),
+                                    onChange: (e) => {
+                                        e.target.value = e.target.value.replace(/\D/g, "")
+                                    }
+                                })}
+                            />
+                        </div>
+
+                        {/* Status Switch */}
+                        <GlassStatusSwitch
+                            entityLabel="Status do Talento"
+                            description="Talentos inativos não aparecem nas buscas públicas"
+                            checked={watch("status") === "active"}
+                            onCheckedChange={(checked) => setValue("status", checked ? "active" : "inactive")}
+                            disabled={isSubmitting}
+                        />
+
+                        {/* Prerequisites Dynamic List */}
+                        <div className="space-y-3">
+                            <div className="flex items-center justify-between">
+                                <label className="text-sm font-medium text-white/80 flex items-center gap-2">
+                                    <Info className="h-4 w-4" />
+                                    Pré-requisitos
+                                </label>
+                                <button
+                                    type="button"
+                                    onClick={handleAddPrerequisite}
+                                    disabled={isSubmitting}
+                                    className={cn(
+                                        "px-3 py-1.5 rounded-lg text-xs font-medium transition-colors",
+                                        "bg-blue-500/20 text-blue-400 hover:bg-blue-500/30",
+                                        "border border-blue-500/30",
+                                        "disabled:opacity-50 disabled:cursor-not-allowed",
+                                        "flex items-center gap-1.5"
+                                    )}
+                                >
+                                    <Plus className="h-3 w-3" />
+                                    Adicionar Pré-requisito
+                                </button>
+                            </div>
+
+                            <AnimatePresence mode="popLayout">
+                                {prereqFields.length === 0 ? (
+                                    <GlassInlineEmptyState message="Nenhum pré-requisito adicionado" />
+                                ) : (
+                                    <div className="space-y-2">
+                                        {prereqFields.map((field, index) => (
+                                            <motion.div
+                                                key={field.id}
+                                                initial={{ opacity: 0, x: -20 }}
+                                                animate={{ opacity: 1, x: 0 }}
+                                                exit={{ opacity: 0, x: 20 }}
+                                                transition={{ duration: 0.2 }}
+                                                className="flex items-start gap-2"
+                                            >
+                                                <div className="flex-1">
+                                                    <Controller
+                                                        name={`prerequisites.${index}` as any}
+                                                        control={control}
+                                                        render={({ field: controllerField }) => (
+                                                            <RichTextEditor
+                                                                variant="simple"
+                                                                value={controllerField.value || ""}
+                                                                onChange={controllerField.onChange}
+                                                                placeholder="Ex: Força 13 ou superior"
+                                                                className={errors.prerequisites?.[index] ? "border-rose-500/50" : ""}
+                                                                disabled={isSubmitting}
+                                                                excludeId={feat?._id}
+                                                                autoFocus={index === lastAddedIndex}
+                                                            />
+                                                        )}
+                                                    />
+                                                    {errors.prerequisites?.[index] && (
+                                                        <p className="text-xs text-rose-400 mt-1 flex items-center gap-1">
+                                                            <Info className="h-3 w-3" />
+                                                            {(errors.prerequisites[index] as any).message}
+                                                        </p>
+                                                    )}
+                                                </div>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => removePrereq(index)}
+                                                    disabled={isSubmitting}
+                                                    className={cn(
+                                                        "p-2 rounded-lg transition-colors mt-1",
+                                                        "text-rose-400 hover:bg-rose-500/20",
+                                                        "disabled:opacity-50 disabled:cursor-not-allowed"
+                                                    )}
+                                                >
+                                                    <X className="h-4 w-4" />
+                                                </button>
+                                            </motion.div>
+                                        ))}
+                                    </div>
+                                )}
+                            </AnimatePresence>
+                        </div>
+
+                        {/* Attribute Bonuses Dynamic List */}
+                        <div className="space-y-4">
+                            <div className="flex items-center justify-between">
+                                <label className="text-sm font-medium text-white/80 flex items-center gap-2">
+                                    <Plus className="h-4 w-4" />
+                                    Bônus de Atributo
+                                </label>
+                                <button
+                                    type="button"
+                                    onClick={handleAddBonus}
+                                    disabled={isSubmitting || bonusFields.length >= 6}
+                                    className={cn(
+                                        "px-3 py-1.5 rounded-lg text-xs font-medium transition-colors",
+                                        "bg-emerald-500/20 text-emerald-400 hover:bg-emerald-500/30",
+                                        "border border-emerald-500/30",
+                                        "disabled:opacity-50 disabled:cursor-not-allowed",
+                                        "flex items-center gap-1.5"
+                                    )}
+                                >
+                                    <Plus className="h-3 w-3" />
+                                    Adicionar Bônus
+                                </button>
+                            </div>
+
+                            <AnimatePresence mode="popLayout">
+                                {bonusFields.length === 0 ? (
+                                    <GlassInlineEmptyState message="Nenhum bônus de atributo selecionado" />
+                                ) : (
+                                    <div className="space-y-2">
+                                        {bonusFields.map((field, index) => (
+                                            <motion.div
+                                                key={field.id}
+                                                initial={{ opacity: 0, x: -20 }}
+                                                animate={{ opacity: 1, x: 0 }}
+                                                exit={{ opacity: 0, x: 20 }}
+                                                transition={{ duration: 0.2 }}
+                                                className="flex items-center gap-2"
+                                            >
+                                                <div className="flex-1 grid grid-cols-1 md:grid-cols-2 gap-2">
+                                                    <Controller
+                                                        name={`attributeBonuses.${index}.attribute` as any}
+                                                        control={control}
+                                                        render={({ field: controllerField }) => (
+                                                            <GlassSelector
+                                                                value={controllerField.value}
+                                                                onChange={controllerField.onChange}
+                                                                options={attributeOptions.map((opt) => ({
+                                                                    ...opt,
+                                                                    disabled:
+                                                                        selectedAttributes.includes(opt.value) && controllerField.value !== opt.value
+                                                                }))}
+                                                                layout="grid"
+                                                                cols={3}
+                                                                size="sm"
+                                                                layoutId={`attr-selector-${field.id}`}
+                                                                className="w-full"
+                                                                disabled={isSubmitting}
+                                                            />
+                                                        )}
+                                                    />
+                                                    <Controller
+                                                        name={`attributeBonuses.${index}.value` as any}
+                                                        control={control}
+                                                        render={({ field: controllerField }) => (
+                                                            <GlassSelector
+                                                                value={controllerField.value}
+                                                                onChange={controllerField.onChange}
+                                                                options={bonusValueOptions}
+                                                                layout="horizontal"
+                                                                fullWidth
+                                                                layoutId={`value-selector-${field.id}`}
+                                                                className="w-full"
+                                                                disabled={isSubmitting}
+                                                            />
+                                                        )}
+                                                    />
+                                                </div>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => removeBonus(index)}
+                                                    disabled={isSubmitting}
+                                                    className={cn(
+                                                        "p-2 rounded-lg transition-colors",
+                                                        "text-rose-400 hover:bg-rose-500/20",
+                                                        "disabled:opacity-50 disabled:cursor-not-allowed"
+                                                    )}
+                                                    title="Remover bônus"
+                                                >
+                                                    <X className="h-4 w-4" />
+                                                </button>
+                                            </motion.div>
+                                        ))}
+                                    </div>
+                                )}
+                            </AnimatePresence>
+                        </div>
+
+                        {/* Rich Text Description */}
+                        <div className="space-y-2">
                             <label className="text-sm font-medium text-white/80 flex items-center gap-2">
-                                <Info className="h-4 w-4" />
-                                Pré-requisitos
+                                <AlignLeft className="h-4 w-4" />
+                                Descrição <span className="text-rose-400">*</span>
                             </label>
+                            <Controller
+                                name="description"
+                                control={control}
+                                render={({ field }) => (
+                                    <RichTextEditor
+                                        value={field.value || ""}
+                                        onChange={field.onChange}
+                                        placeholder="Descreva o talento detalhadamente... (Suporta imagens S3 e formatação)"
+                                        className={errors.description ? "border-rose-500/50" : ""}
+                                        disabled={isSubmitting}
+                                        excludeId={feat?._id}
+                                    />
+                                )}
+                            />
+                            {errors.description && (
+                                <p className="text-xs text-rose-400 animate-slide-down flex items-center gap-1 mt-1">
+                                    <Info className="h-3 w-3" />
+                                    {errors.description.message}
+                                </p>
+                            )}
+                        </div>
+
+                        {/* Actions */}
+                        <div className="flex justify-end gap-3 pt-6 border-t border-white/10">
                             <button
                                 type="button"
-                                onClick={handleAddPrerequisite}
+                                onClick={handleCloseAttempt}
                                 disabled={isSubmitting}
                                 className={cn(
-                                    "px-3 py-1.5 rounded-lg text-xs font-medium transition-colors",
-                                    "bg-blue-500/20 text-blue-400 hover:bg-blue-500/30",
-                                    "border border-blue-500/30",
-                                    "disabled:opacity-50 disabled:cursor-not-allowed",
-                                    "flex items-center gap-1.5",
+                                    "px-4 py-2 rounded-lg text-sm font-medium transition-colors",
+                                    "text-white/60 hover:text-white hover:bg-white/10",
+                                    "disabled:opacity-50 disabled:cursor-not-allowed"
                                 )}
                             >
-                                <Plus className="h-3 w-3" />
-                                Adicionar Pré-requisito
+                                Cancelar
                             </button>
-                        </div>
-
-                        <AnimatePresence mode="popLayout">
-                            {prereqFields.length === 0 ? (
-                                <GlassInlineEmptyState message="Nenhum pré-requisito adicionado" />
-                            ) : (
-                                <div className="space-y-2">
-                                    {prereqFields.map((field, index) => (
-                                        <motion.div
-                                            key={field.id}
-                                            initial={{ opacity: 0, x: -20 }}
-                                            animate={{ opacity: 1, x: 0 }}
-                                            exit={{ opacity: 0, x: 20 }}
-                                            transition={{ duration: 0.2 }}
-                                            className="flex items-start gap-2"
-                                        >
-                                            <div className="flex-1">
-                                                <Controller
-                                                    name={`prerequisites.${index}` as any}
-                                                    control={control}
-                                                    render={({ field: controllerField }) => (
-                                                        <RichTextEditor
-                                                            variant="simple"
-                                                            value={controllerField.value || ""}
-                                                            onChange={controllerField.onChange}
-                                                            placeholder="Ex: Força 13 ou superior"
-                                                            className={errors.prerequisites?.[index] ? "border-rose-500/50" : ""}
-                                                            disabled={isSubmitting}
-                                                            excludeId={feat?._id}
-                                                            autoFocus={index === lastAddedIndex}
-                                                        />
-                                                    )}
-                                                />
-                                                {errors.prerequisites?.[index] && (
-                                                    <p className="text-xs text-rose-400 mt-1 flex items-center gap-1">
-                                                        <Info className="h-3 w-3" />
-                                                        {(errors.prerequisites[index] as any).message}
-                                                    </p>
-                                                )}
-                                            </div>
-                                            <button
-                                                type="button"
-                                                onClick={() => removePrereq(index)}
-                                                disabled={isSubmitting}
-                                                className={cn("p-2 rounded-lg transition-colors mt-1", "text-rose-400 hover:bg-rose-500/20", "disabled:opacity-50 disabled:cursor-not-allowed")}
-                                            >
-                                                <X className="h-4 w-4" />
-                                            </button>
-                                        </motion.div>
-                                    ))}
-                                </div>
-                            )}
-                        </AnimatePresence>
-                    </div>
-
-                    {/* Attribute Bonuses Dynamic List */}
-                    <div className="space-y-4">
-                        <div className="flex items-center justify-between">
-                            <label className="text-sm font-medium text-white/80 flex items-center gap-2">
-                                <Plus className="h-4 w-4" />
-                                Bônus de Atributo
-                            </label>
                             <button
-                                type="button"
-                                onClick={handleAddBonus}
-                                disabled={isSubmitting || bonusFields.length >= 6}
+                                type="submit"
+                                disabled={isSubmitting}
                                 className={cn(
-                                    "px-3 py-1.5 rounded-lg text-xs font-medium transition-colors",
-                                    "bg-emerald-500/20 text-emerald-400 hover:bg-emerald-500/30",
-                                    "border border-emerald-500/30",
+                                    "px-4 py-2 rounded-lg text-sm font-medium transition-colors",
+                                    "bg-blue-500 text-white hover:bg-blue-600",
                                     "disabled:opacity-50 disabled:cursor-not-allowed",
-                                    "flex items-center gap-1.5",
+                                    "flex items-center gap-2",
+                                    "shadow-lg shadow-blue-500/20"
                                 )}
                             >
-                                <Plus className="h-3 w-3" />
-                                Adicionar Bônus
+                                {isSubmitting && <Loader2 className="h-4 w-4 animate-spin" />}
+                                {isEditMode ? "Salvar Alterações" : "Criar Talento"}
                             </button>
                         </div>
+                    </form>
+                </GlassModalContent>
+            </GlassModal>
 
-                        <AnimatePresence mode="popLayout">
-                            {bonusFields.length === 0 ? (
-                                <GlassInlineEmptyState message="Nenhum bônus de atributo selecionado" />
-                            ) : (
-                                <div className="space-y-2">
-                                    {bonusFields.map((field, index) => (
-                                        <motion.div
-                                            key={field.id}
-                                            initial={{ opacity: 0, x: -20 }}
-                                            animate={{ opacity: 1, x: 0 }}
-                                            exit={{ opacity: 0, x: 20 }}
-                                            transition={{ duration: 0.2 }}
-                                            className="flex items-center gap-2"
-                                        >
-                                            <div className="flex-1 grid grid-cols-1 md:grid-cols-2 gap-2">
-                                                <Controller
-                                                    name={`attributeBonuses.${index}.attribute` as any}
-                                                    control={control}
-                                                    render={({ field: controllerField }) => (
-                                                        <GlassSelector
-                                                            value={controllerField.value}
-                                                            onChange={controllerField.onChange}
-                                                            options={attributeOptions.map((opt) => ({
-                                                                ...opt,
-                                                                disabled: selectedAttributes.includes(opt.value) && controllerField.value !== opt.value,
-                                                            }))}
-                                                            layout="grid"
-                                                            cols={3}
-                                                            size="sm"
-                                                            layoutId={`attr-selector-${field.id}`}
-                                                            className="w-full"
-                                                            disabled={isSubmitting}
-                                                        />
-                                                    )}
-                                                />
-                                                <Controller
-                                                    name={`attributeBonuses.${index}.value` as any}
-                                                    control={control}
-                                                    render={({ field: controllerField }) => (
-                                                        <GlassSelector
-                                                            value={controllerField.value}
-                                                            onChange={controllerField.onChange}
-                                                            options={bonusValueOptions}
-                                                            layout="horizontal"
-                                                            fullWidth
-                                                            layoutId={`value-selector-${field.id}`}
-                                                            className="w-full"
-                                                            disabled={isSubmitting}
-                                                        />
-                                                    )}
-                                                />
-                                            </div>
-                                            <button
-                                                type="button"
-                                                onClick={() => removeBonus(index)}
-                                                disabled={isSubmitting}
-                                                className={cn("p-2 rounded-lg transition-colors", "text-rose-400 hover:bg-rose-500/20", "disabled:opacity-50 disabled:cursor-not-allowed")}
-                                                title="Remover bônus"
-                                            >
-                                                <X className="h-4 w-4" />
-                                            </button>
-                                        </motion.div>
-                                    ))}
-                                </div>
-                            )}
-                        </AnimatePresence>
-                    </div>
-
-                    {/* Rich Text Description */}
-                    <div className="space-y-2">
-                        <label className="text-sm font-medium text-white/80 flex items-center gap-2">
-                            <AlignLeft className="h-4 w-4" />
-                            Descrição <span className="text-rose-400">*</span>
-                        </label>
-                        <Controller
-                            name="description"
-                            control={control}
-                            render={({ field }) => (
-                                <RichTextEditor
-                                    value={field.value || ""}
-                                    onChange={field.onChange}
-                                    placeholder="Descreva o talento detalhadamente... (Suporta imagens S3 e formatação)"
-                                    className={errors.description ? "border-rose-500/50" : ""}
-                                    disabled={isSubmitting}
-                                    excludeId={feat?._id}
-                                />
-                            )}
-                        />
-                        {errors.description && (
-                            <p className="text-xs text-rose-400 animate-slide-down flex items-center gap-1 mt-1">
-                                <Info className="h-3 w-3" />
-                                {errors.description.message}
-                            </p>
-                        )}
-                    </div>
-
-                    {/* Actions */}
-                    <div className="flex justify-end gap-3 pt-6 border-t border-white/10">
-                        <button
-                            type="button"
-                            onClick={onClose}
-                            disabled={isSubmitting}
-                            className={cn(
-                                "px-4 py-2 rounded-lg text-sm font-medium transition-colors",
-                                "text-white/60 hover:text-white hover:bg-white/10",
-                                "disabled:opacity-50 disabled:cursor-not-allowed",
-                            )}
-                        >
-                            Cancelar
-                        </button>
-                        <button
-                            type="submit"
-                            disabled={isSubmitting}
-                            className={cn(
-                                "px-4 py-2 rounded-lg text-sm font-medium transition-colors",
-                                "bg-blue-500 text-white hover:bg-blue-600",
-                                "disabled:opacity-50 disabled:cursor-not-allowed",
-                                "flex items-center gap-2",
-                                "shadow-lg shadow-blue-500/20",
-                            )}
-                        >
-                            {isSubmitting && <Loader2 className="h-4 w-4 animate-spin" />}
-                            {isEditMode ? "Salvar Alterações" : "Criar Talento"}
-                        </button>
-                    </div>
-                </form>
-            </GlassModalContent>
-        </GlassModal>
+            <GlassConfirmClosing
+                isOpen={showConfirmClose}
+                onClose={() => setShowConfirmClose(false)}
+                onConfirmExit={() => {
+                    setShowConfirmClose(false)
+                    onClose()
+                }}
+                onSaveAndExit={handleSubmit(handleFormSubmit)}
+                isSaving={isSubmitting}
+            />
+        </>
     )
 }
