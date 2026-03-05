@@ -16,6 +16,7 @@ import { Feat } from "../types/feats.types"
 import { attributeColors, AttributeType } from "@/lib/config/colors"
 import { EntityDescription } from "@/features/rules/components/entity-description"
 import { EntityPreviewTooltip } from "@/features/rules/components/entity-preview-tooltip"
+import { EntityTitleLink } from "@/features/rules/components/entity-title-link"
 
 const featStatusVariantMap: Record<string, "uncommon" | "common"> = {
     active: "uncommon",
@@ -102,7 +103,9 @@ export function FeatsTable({ feats, total, page, limit, isLoading = false, onEdi
                                             {feat.status === "active" ? "Ativo" : "Inativo"}
                                         </Chip>
                                     </td>
-                                    <td className="px-6 py-4 whitespace-nowrap text-white font-medium">{feat.name}</td>
+                                    <td className="px-6 py-4">
+                                        <EntityTitleLink name={feat.name} entityType="Talento" />
+                                    </td>
                                     <td className="px-6 py-4 whitespace-nowrap">
                                         <Chip variant={getLevelRarityVariant(feat.level)}>Nv. {feat.level}</Chip>
                                     </td>
