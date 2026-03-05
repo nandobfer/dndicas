@@ -12,7 +12,7 @@ export async function GET(req: NextRequest) {
         await dbConnect()
 
         const { searchParams } = new URL(req.url)
-        const query = searchParams.get("query") || ""
+        const query = searchParams.get("query") || searchParams.get("q") || ""
         const limitParam = searchParams.get("limit")
         const limit = limitParam ? parseInt(limitParam, 10) : undefined
 
