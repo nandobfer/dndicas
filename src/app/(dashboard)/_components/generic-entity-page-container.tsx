@@ -56,6 +56,11 @@ export default function GenericEntityPage({ entityTypeKey }: GenericEntityPagePr
         Origem: backgroundsPage,
     }
 
+    const currentPage = hookMap[entityTypeKey]
+
+    const onEdit = currentPage?.actions?.handleEditClick || (currentPage as any)?.handleEditClick
+    const onDelete = currentPage?.actions?.handleDeleteClick || (currentPage as any)?.handleDeleteClick
+
     const routeMap = {
         Regra: "rules",
         Habilidade: "traits",
@@ -64,8 +69,6 @@ export default function GenericEntityPage({ entityTypeKey }: GenericEntityPagePr
         Classe: "classes",
         Origem: "backgrounds",
     }
-
-    const currentPage = hookMap[entityTypeKey]
 
     // Wrap the submit handler to invalidate the query and handle slug changes
     const handleWrappedSubmit = async (originalSubmit: Function, formData: any) => {
@@ -109,13 +112,11 @@ export default function GenericEntityPage({ entityTypeKey }: GenericEntityPagePr
 
             if (!basicItem) return null
 
-            // 2. If it's a "Classe" or "Origem", we MUST fetch the full profile by ID because search is too lean
-            if ((entityTypeKey === "Classe" || entityTypeKey === "Origem") && basicItem._id) {
-                const route = routeMap[entityTypeKey]
-                const fullRes = await fetch(`/api/${route}/${basicItem._id}`)
-                if (fullRes.ok) {
-                    return await fullRes.json()
-                }
+            // We fetch the full profile by ID because search/list results are often too lean (missing status, full description, etc.)
+            const route = routeMap[entityTypeKey]
+            const fullRes = await fetch(`/api/${route}/${basicItem._id}`)
+            if (fullRes.ok) {
+                return await fullRes.json()
             }
 
             return basicItem
@@ -125,7 +126,7 @@ export default function GenericEntityPage({ entityTypeKey }: GenericEntityPagePr
 
     return (
         <>
-            <EntityPage item={item} entityType={entityTypeKey} isLoading={isLoading} isAdmin={isAdmin} onEdit={currentPage.actions.handleEditClick} onDelete={currentPage.actions.handleDeleteClick} />
+            <EntityPage item={item} entityType={entityTypeKey} isLoading={isLoading} isAdmin={isAdmin} onEdit={onEdit} onDelete={onDelete} hideActionIcons={true} />
 
             {/* Entity-specific Modals (imported from hooks) */}
             {entityTypeKey === "Regra" && (

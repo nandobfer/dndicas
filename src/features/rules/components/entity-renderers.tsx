@@ -259,7 +259,7 @@ function BackgroundAsyncRenderer({ item }: { item: any }) {
 }
 
 
-export const renderEntity = (item: any, entityType: string, options?: { showStatus?: boolean }) => {
+export const renderEntity = (item: any, entityType: string, options?: { showStatus?: boolean; hideStatusChip?: boolean; hideActionIcons?: boolean }) => {
     const type = entityType === "Mixed" ? item.type : entityType
     const renderer = ENTITY_RENDERERS[type]
     return renderer ? renderer(item, options) : <div>{item.name || "Unknown item"}</div>

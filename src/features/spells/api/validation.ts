@@ -15,7 +15,7 @@ export const createSpellSchema = z.object({
         message: "Escola inválida",
     }),
     component: z
-        .array(z.enum(["Concentração", "Somático", "Verboso", "Material"]))
+        .array(z.enum(["Concentração", "Somático", "Verbal", "Material"]))
         .optional()
         .default([]),
     range: z.string().max(100).optional(),
@@ -33,7 +33,7 @@ export const updateSpellSchema = z.object({
     description: z.string().min(10).max(10000).optional(),
     circle: z.number().int().min(0).max(9).optional(),
     school: z.enum(["Abjuração", "Adivinhação", "Conjuração", "Encantamento", "Evocação", "Ilusão", "Necromancia", "Transmutação"]).optional(),
-    component: z.array(z.enum(["Concentração", "Somático", "Verboso", "Material"])).optional(),
+    component: z.array(z.enum(["Concentração", "Somático", "Verbal", "Material"])).optional(),
     range: z.string().max(100).nullable().optional(),
     area: z.string().max(100).nullable().optional(),
     saveAttribute: z.enum(["Força", "Destreza", "Constituição", "Inteligência", "Sabedoria", "Carisma"]).nullable().optional(),

@@ -24,9 +24,11 @@ interface EntityPageProps {
     isAdmin?: boolean
     onEdit?: (item: any) => void
     onDelete?: (item: any) => void
+    /** Whether to hide action icons (like open in window) when already in a page */
+    hideActionIcons?: boolean
 }
 
-export function EntityPage({ item, entityType, isLoading, isAdmin, onEdit, onDelete }: EntityPageProps) {
+export function EntityPage({ item, entityType, isLoading, isAdmin, onEdit, onDelete, hideActionIcons = false }: EntityPageProps) {
     const router = useRouter()
     const { addWindow } = useWindows()
 
@@ -84,57 +86,59 @@ export function EntityPage({ item, entityType, isLoading, isAdmin, onEdit, onDel
                 <GlassCard className="relative overflow-hidden w-full">
                     <GlassCardContent className="p-6 md:p-8">
                         <div className="absolute top-4 right-4 z-10 flex flex-col items-end gap-2">
-                            {isAdmin && (onEdit || onDelete) && (
-                                <GlassDropdownMenu>
-                                    <GlassDropdownMenuTrigger asChild>
-                                        <motion.button
-                                            whileHover={{ scale: 1.1 }}
-                                            whileTap={{ scale: 0.9 }}
-                                            className="p-2 rounded-lg text-white/40 hover:text-white hover:bg-white/10 transition-colors"
-                                        >
-                                            <MoreHorizontal className="h-4 w-4" />
-                                        </motion.button>
-                                    </GlassDropdownMenuTrigger>
-                                    <GlassDropdownMenuContent align="end">
-                                        {onEdit && (
-                                            <GlassDropdownMenuItem onClick={() => onEdit(item)}>
-                                                <Pencil className="mr-2 h-4 w-4" />
-                                                Editar
-                                            </GlassDropdownMenuItem>
-                                        )}
-                                        {onDelete && (
-                                            <GlassDropdownMenuItem onClick={() => onDelete(item)} className="text-red-400 hover:text-red-300 focus:text-red-300">
-                                                <Trash2 className="mr-2 h-4 w-4" />
-                                                Excluir
-                                            </GlassDropdownMenuItem>
-                                        )}
-                                    </GlassDropdownMenuContent>
-                                </GlassDropdownMenu>
-                            )}
-
                             <div className="flex items-center gap-2">
-                                <motion.button
-                                    whileHover={{ scale: 1.1 }}
-                                    whileTap={{ scale: 0.9 }}
-                                    onClick={() =>
-                                        addWindow({
-                                            title: item.name || "Detalhes",
-                                            content: null,
-                                            item,
-                                            entityType: entityType === "Mixed" ? item.type : entityType,
-                                        })
-                                    }
-                                    className="p-1.5 rounded-lg text-white/40 hover:text-white hover:bg-white/10 transition-colors"
-                                    title="Abrir em nova janela"
-                                >
-                                    <ExternalLink className="h-4 w-4" />
-                                </motion.button>
+                                {isAdmin && (onEdit || onDelete) && (
+                                    <GlassDropdownMenu>
+                                        <GlassDropdownMenuTrigger asChild>
+                                            <motion.button
+                                                whileHover={{ scale: 1.1 }}
+                                                whileTap={{ scale: 0.9 }}
+                                                className="p-2 rounded-lg text-white/40 hover:text-white hover:bg-white/10 transition-colors"
+                                            >
+                                                <MoreHorizontal className="h-4 w-4" />
+                                            </motion.button>
+                                        </GlassDropdownMenuTrigger>
+                                        <GlassDropdownMenuContent align="end">
+                                            {onEdit && (
+                                                <GlassDropdownMenuItem onClick={() => onEdit(item)}>
+                                                    <Pencil className="mr-2 h-4 w-4" />
+                                                    Editar
+                                                </GlassDropdownMenuItem>
+                                            )}
+                                            {onDelete && (
+                                                <GlassDropdownMenuItem onClick={() => onDelete(item)} className="text-red-400 hover:text-red-300 focus:text-red-300">
+                                                    <Trash2 className="mr-2 h-4 w-4" />
+                                                    Excluir
+                                                </GlassDropdownMenuItem>
+                                            )}
+                                        </GlassDropdownMenuContent>
+                                    </GlassDropdownMenu>
+                                )}
+
+                                {!hideActionIcons && (
+                                    <motion.button
+                                        whileHover={{ scale: 1.1 }}
+                                        whileTap={{ scale: 0.9 }}
+                                        onClick={() =>
+                                            addWindow({
+                                                title: item.name || "Detalhes",
+                                                content: null,
+                                                item,
+                                                entityType: entityType === "Mixed" ? item.type : entityType,
+                                            })
+                                        }
+                                        className="p-1.5 rounded-lg text-white/40 hover:text-white hover:bg-white/10 transition-colors"
+                                        title="Abrir em nova janela"
+                                    >
+                                        <ExternalLink className="h-4 w-4" />
+                                    </motion.button>
+                                )}
                                 <Chip variant={item.status === "active" || item.status === true ? "uncommon" : "common"} size="sm">
                                     {item.status === "active" || item.status === true ? "Ativa" : "Inativa"}
                                 </Chip>
                             </div>
                         </div>
-                        <div className="max-w-full overflow-hidden">{renderEntity(item, entityType)}</div>
+                        <div className="max-w-full overflow-hidden">{renderEntity(item, entityType, { showStatus: false, hideActionIcons: true })}</div>
                     </GlassCardContent>
                 </GlassCard>
 
@@ -145,13 +149,13 @@ export function EntityPage({ item, entityType, isLoading, isAdmin, onEdit, onDel
                             <h4 className="text-sm font-bold text-white/60 uppercase tracking-widest">Referências encontradas</h4>
                         </div>
 
-                        <div 
+                        <div
                             className="overflow-x-auto no-scrollbar scroll-smooth"
-                            style={{ 
-                                marginLeft: negativeMargin, 
+                            style={{
+                                marginLeft: negativeMargin,
                                 marginRight: negativeMargin,
                                 paddingLeft: `${pagePadding}px`,
-                                paddingRight: `${pagePadding}px`
+                                paddingRight: `${pagePadding}px`,
                             }}
                         >
                             <div className="flex gap-4 pb-4">

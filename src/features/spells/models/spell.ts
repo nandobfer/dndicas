@@ -154,6 +154,13 @@ SpellSchema.virtual('circleLabel').get(function () {
 SpellSchema.set('toJSON', { virtuals: true });
 SpellSchema.set('toObject', { virtuals: true });
 
+// Logics to migrate "Verboso" to "Verbal" automatically on retrieval
+SpellSchema.post('init', function (doc) {
+    if (doc.component && Array.isArray(doc.component)) {
+        doc.component = doc.component.map((comp: string) => comp === "Verboso" ? "Verbal" : comp) as any;
+    }
+});
+
 // Robust model export for Next.js dev mode (handles schema changes)
 if (mongoose.models.Spell && !(mongoose.models.Spell.schema as any).path('range')) {
     delete (mongoose.models as any).Spell;

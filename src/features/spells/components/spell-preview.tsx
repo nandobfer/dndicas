@@ -7,7 +7,7 @@
 
 "use client";
 
-import { Wand, BookOpen, Info, Shield, Sparkles, ExternalLink } from "lucide-react"
+import { Wand, BookOpen, Info, Shield, Sparkles, ExternalLink, Brain, Mic, Hand, Package } from "lucide-react"
 import { GlassLevelChip } from "@/components/ui/glass-level-chip"
 import { motion } from "framer-motion"
 import { useWindows } from "@/core/context/window-context"
@@ -16,10 +16,25 @@ import { GlassAttributeChip } from "@/components/ui/glass-attribute-chip"
 import { GlassDiceValue } from "@/components/ui/glass-dice-value"
 import { GlassEmptyValue } from "@/components/ui/glass-empty-value"
 import { Chip } from "@/components/ui/chip"
+import { SimpleGlassTooltip } from "@/components/ui/glass-tooltip"
 import { MentionContent, EntityTitleLink } from "@/features/rules/components/mention-badge"
-import { entityColors } from "@/lib/config/colors"
+import { entityColors, spellComponentConfig, type SpellComponent } from "@/lib/config/colors"
 import { cn } from "@/core/utils"
 import type { Spell } from "../types/spells.types"
+
+const COMPONENT_ICONS: Record<string, any> = {
+    Concentração: Brain,
+    Verbal: Mic,
+    Somático: Hand,
+    Material: Package,
+}
+
+const COMPONENT_DESCRIPTIONS: Record<string, string> = {
+    Concentração: "Requer concentração para manter os efeitos ativos.",
+    Verbal: "Requer a entonação de palavras místicas.",
+    Somático: "Requer gestos manuais precisos.",
+    Material: "Requer componentes físicos ou um foco arcano.",
+}
 
 export interface SpellPreviewProps {
     /** Spell data to display */
@@ -105,19 +120,46 @@ export function SpellPreview({ spell, showStatus = true, hideStatusChip = false,
                     <Sparkles className="h-3 w-3" />
                     <span>Propriedades</span>
                 </div>
-                <div className="flex flex-wrap gap-2 items-center">
+                <div className="flex flex-wrap gap-x-4 gap-y-2 items-center">
                     {/* School */}
                     <div className="flex items-center gap-2">
                         <span className="text-xs text-white/50">Escola:</span>
                         <GlassSpellSchool school={spell.school} size="sm" />
                     </div>
 
+                    {/* Components */}
+                    {spell.component && spell.component.length > 0 && (
+                        <div className="flex items-center gap-2">
+                            <span className="text-xs text-white/50">Componentes:</span>
+                            <div className="flex flex-wrap gap-1.5">
+                                {spell.component.map((comp) => {
+                                    const config = spellComponentConfig[comp as keyof typeof spellComponentConfig]
+                                    if (!config) return null
+                                    const Icon = COMPONENT_ICONS[comp] || Sparkles
+                                    return (
+                                        <SimpleGlassTooltip key={comp} content={COMPONENT_DESCRIPTIONS[comp] || comp}>
+                                            <div
+                                                className={cn(
+                                                    "px-2 py-0.5 rounded-full text-[10px] font-bold flex items-center gap-1.5 border border-white/5 transition-colors hover:border-white/20",
+                                                    config.badge,
+                                                )}
+                                            >
+                                                <Icon className="h-3 w-3" />
+                                                <span>{comp}</span>
+                                            </div>
+                                        </SimpleGlassTooltip>
+                                    )
+                                })}
+                            </div>
+                        </div>
+                    )}
+
                     {/* Save Attribute */}
                     {spell.saveAttribute && (
                         <div className="flex items-center gap-2">
                             <Shield className="h-3 w-3 text-white/40" />
                             <span className="text-xs text-white/50">Resistência:</span>
-                            <GlassAttributeChip attribute={spell.saveAttribute} size="sm" />
+                            <GlassAttributeChip attribute={spell.saveAttribute} size="sm" showFull />
                         </div>
                     )}
                 </div>

@@ -34,73 +34,75 @@ import type {
  * );
  * ```
  */
-export async function listSpells(
-  filters: SpellsFilters,
-  page = 1,
-  limit = 10,
-  isAdmin = false
-): Promise<SpellsListResponse> {
-  try {
-      await dbConnect()
+export async function listSpells(filters: SpellsFilters, page = 1, limit = 10, isAdmin = false): Promise<SpellsListResponse> {
+    try {
+        await dbConnect()
 
-      // Build query
-      const query: Record<string, unknown> = {}
+        // Build query
+        const query: Record<string, unknown> = {}
 
-      // Circle filter
-      if (filters.circles && filters.circles.length > 0) {
-          query.circle = { $in: filters.circles }
-      }
+        // Circle filter
+        if (filters.circles && filters.circles.length > 0) {
+            query.circle = { $in: filters.circles }
+        }
 
-      // School filter
-      if (filters.schools && filters.schools.length > 0) {
-          query.school = { $in: filters.schools }
-      }
+        // School filter
+        if (filters.schools && filters.schools.length > 0) {
+            query.school = { $in: filters.schools }
+        }
 
-      // Save attribute filter
-      if (filters.saveAttributes && filters.saveAttributes.length > 0) {
-          query.saveAttribute = { $in: filters.saveAttributes }
-      }
+        // Save attribute filter
+        if (filters.saveAttributes && filters.saveAttributes.length > 0) {
+            query.saveAttribute = { $in: filters.saveAttributes }
+        }
 
-      // Dice type filter (base dice or extra dice per level)
-      if (filters.diceTypes && filters.diceTypes.length > 0) {
-          query.$or = [{ "baseDice.tipo": { $in: filters.diceTypes } }, { "extraDicePerLevel.tipo": { $in: filters.diceTypes } }]
-      }
+        // Dice type filter (base dice or extra dice per level)
+        if (filters.diceTypes && filters.diceTypes.length > 0) {
+            query.$or = [{ "baseDice.tipo": { $in: filters.diceTypes } }, { "extraDicePerLevel.tipo": { $in: filters.diceTypes } }]
+        }
 
-      // Status filter
-      if (!isAdmin) {
-          query.status = "active"
-      } else if (filters.status) {
-          query.status = filters.status
-      }
+        // Status filter
+        if (!isAdmin) {
+            query.status = "active"
+        } else if (filters.status) {
+            query.status = filters.status
+        }
 
-      // Fetch ALL items matching filters (except search) to apply fuzzy search locally
-      const items = await Spell.find(query).sort({ circle: 1, name: 1 }).lean()
+        // Fetch ALL items matching filters (except search) to apply fuzzy search locally
+        const items = await Spell.find(query).sort({ circle: 1, name: 1 }).lean()
 
-      // Apply fuzzy search locally using the shared function
-      const searchedItems = filters.search ? applyFuzzySearch(items, filters.search) : items
+        // Apply fuzzy search locally using the shared function
+        const searchedItems = filters.search ? applyFuzzySearch(items, filters.search) : items
 
-      const total = searchedItems.length
-      const totalPages = limit ? Math.ceil(total / limit) : 1
+        const total = searchedItems.length
+        const totalPages = limit ? Math.ceil(total / limit) : 1
 
-      // Manual pagination
-      const offset = (page - 1) * limit
-      const paginatedItems = searchedItems.slice(offset, offset + limit)
+        // Manual pagination
+        const offset = (page - 1) * limit
+        const paginatedItems = searchedItems.slice(offset, offset + limit)
 
-      return {
-          spells: paginatedItems.map((spell: any) => ({
-              ...spell,
-              _id: String(spell._id),
-              circleLabel: spell.circle === 0 ? "Truque" : `${spell.circle}º Círculo`
-          })),
-          total,
-          page,
-          limit,
-          totalPages
-      }
-  } catch (error) {
-    console.error('[SpellsService] Error listing spells:', error);
-    throw new Error('Erro ao listar magias. Por favor, tente novamente.');
-  }
+        return {
+            spells: paginatedItems.map((spell: any) => {
+                // Ensure component migration from "Verboso" to "Verbal"
+                if (spell.component && Array.isArray(spell.component)) {
+                    spell.component = spell.component.map((comp: string) => (comp === "Verboso" ? "Verbal" : comp))
+                }
+
+                return {
+                    ...spell,
+                    _id: String(spell._id),
+                    circleLabel: spell.circle === 0 ? "Truque" : `${spell.circle}º Círculo`,
+                }
+            }),
+            total,
+            page,
+            limit,
+            totalPages,
+        }
+    } catch (error) {
+        console.error("[SpellsService] Error listing spells:", error)
+        throw new Error("Erro ao listar magias. Por favor, tente novamente.")
+    }
 }
 
 /**
@@ -116,36 +118,38 @@ export async function listSpells(
  * const spell = await getSpellById('507f1f77bcf86cd799439011', false);
  * ```
  */
-export async function getSpellById(
-  id: string,
-  isAdmin = false
-): Promise<ISpell | null> {
-  try {
-    await dbConnect();
+export async function getSpellById(id: string, isAdmin = false): Promise<ISpell | null> {
+    try {
+        await dbConnect()
 
-    const spell = await Spell.findById(id).lean();
+        const spell = await Spell.findById(id).lean()
 
-    if (!spell) {
-      return null;
+        if (!spell) {
+            return null
+        }
+
+        // Non-admins can only see active spells
+        if (!isAdmin && spell.status === "inactive") {
+            throw new Error("Magia não encontrada ou inativa.")
+        }
+
+        // Ensure component migration from "Verboso" to "Verbal"
+        if (spell.component && Array.isArray(spell.component)) {
+            spell.component = (spell.component as string[]).map((comp) => (comp === "Verboso" ? "Verbal" : comp))
+        }
+
+        return {
+            ...spell,
+            _id: String(spell._id),
+            circleLabel: spell.circle === 0 ? "Truque" : `${spell.circle}º Círculo`,
+        } as any
+    } catch (error) {
+        if (error instanceof Error && error.message.includes("não encontrada")) {
+            throw error
+        }
+        console.error("[SpellsService] Error fetching spell:", error)
+        throw new Error("Erro ao buscar magia. Por favor, tente novamente.")
     }
-
-    // Non-admins can only see active spells
-    if (!isAdmin && spell.status === 'inactive') {
-      throw new Error('Magia não encontrada ou inativa.');
-    }
-
-    return {
-      ...spell,
-      _id: String(spell._id),
-      circleLabel: spell.circle === 0 ? 'Truque' : `${spell.circle}º Círculo`,
-    };
-  } catch (error) {
-    if (error instanceof Error && error.message.includes('não encontrada')) {
-      throw error;
-    }
-    console.error('[SpellsService] Error fetching spell:', error);
-    throw new Error('Erro ao buscar magia. Por favor, tente novamente.');
-  }
 }
 
 /**

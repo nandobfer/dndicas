@@ -320,8 +320,8 @@ export const spellComponentConfig = {
         text: "text-emerald-400",
         hex: rarityColors.uncommon,
     },
-    Verboso: {
-        name: "Verboso",
+    Verbal: {
+        name: "Verbal",
         color: "blue",
         badge: "bg-blue-400/20 text-blue-400",
         border: "border-blue-400/20",
