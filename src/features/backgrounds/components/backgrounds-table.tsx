@@ -85,7 +85,7 @@ export function BackgroundsTable({ data, isLoading, onEdit, onDelete }: Backgrou
                     <tbody className="divide-y divide-white/5">
                         <AnimatePresence mode="popLayout">
                             {data.map((background, idx) => (
-                                <motion.tr 
+                                <motion.tr
                                     key={background._id}
                                     variants={motionConfig.variants.fadeInUp}
                                     initial="initial"
@@ -111,11 +111,7 @@ export function BackgroundsTable({ data, isLoading, onEdit, onDelete }: Backgrou
                                                 </div>
                                             )}
                                             <div className="flex flex-col min-w-0">
-                                                <EntityTitleLink 
-                                                    name={background.name} 
-                                                    entityType="Origem"
-                                                    className="font-bold text-white group-hover:text-blue-400 transition-colors truncate"
-                                                />
+                                                <EntityTitleLink name={background.name} entityType="Origem" className="font-bold text-white group-hover:text-blue-400 transition-colors truncate" />
                                                 <span className="text-[10px] text-white/30 truncate flex items-center gap-1">
                                                     <ScrollText className="w-2.5 h-2.5" />
                                                     {background.source}
@@ -146,10 +142,10 @@ export function BackgroundsTable({ data, isLoading, onEdit, onDelete }: Backgrou
                                                         )
                                                     })}
                                                     {background.skillProficiencies.length > 2 && (
-                                                        <SimpleGlassTooltip 
+                                                        <SimpleGlassTooltip
                                                             content={
                                                                 <div className="flex flex-wrap gap-1.5 p-1 max-w-[280px]">
-                                                                    {background.skillProficiencies.slice(2).map(skill => {
+                                                                    {background.skillProficiencies.slice(2).map((skill) => {
                                                                         const attr = SKILL_TO_ATTR[skill] || "Sabedoria"
                                                                         const config = attributeColors[attr as keyof typeof attributeColors]
                                                                         return (
@@ -183,24 +179,18 @@ export function BackgroundsTable({ data, isLoading, onEdit, onDelete }: Backgrou
                                     </td>
                                     <td className="px-6 py-4">
                                         <div className="flex flex-wrap gap-1">
-                                            {background.suggestedAttributes?.map(attr => (
-                                                <GlassAttributeChip key={attr} attribute={attr as AttributeType} size="sm" showFull={true} />
-                                            )) || <GlassEmptyValue />}
+                                            {background.suggestedAttributes?.map((attr) => <GlassAttributeChip key={attr} attribute={attr as AttributeType} size="sm" showFull={true} />) || (
+                                                <GlassEmptyValue />
+                                            )}
                                         </div>
                                     </td>
                                     <td className="px-6 py-4 whitespace-nowrap">
-                                        <span className="text-[10px] text-white/60 font-medium">
-                                            {background.source || <GlassEmptyValue />}
-                                        </span>
+                                        <span className="text-[10px] text-white/60 font-medium">{background.source || <GlassEmptyValue />}</span>
                                     </td>
                                     <td className="px-6 py-4 text-right">
                                         <GlassDropdownMenu>
                                             <GlassDropdownMenuTrigger asChild>
-                                                <Button 
-                                                    variant="ghost" 
-                                                    size="icon"
-                                                    className="w-8 h-8 hover:bg-white/10 text-white/40 group-hover:text-white"
-                                                >
+                                                <Button variant="ghost" size="icon" className="w-8 h-8 hover:bg-white/10 text-white/40 group-hover:text-white">
                                                     <MoreHorizontal className="w-4 h-4" />
                                                 </Button>
                                             </GlassDropdownMenuTrigger>
@@ -209,10 +199,7 @@ export function BackgroundsTable({ data, isLoading, onEdit, onDelete }: Backgrou
                                                     <Pencil className="w-4 h-4 mr-2" /> Editar
                                                 </GlassDropdownMenuItem>
                                                 {isAdmin && (
-                                                    <GlassDropdownMenuItem 
-                                                        onClick={() => onDelete(background)}
-                                                        className="text-red-400 focus:text-red-400"
-                                                    >
+                                                    <GlassDropdownMenuItem onClick={() => onDelete(background)} className="text-red-400 focus:text-red-400">
                                                         <Trash2 className="w-4 h-4 mr-2" /> Excluir
                                                     </GlassDropdownMenuItem>
                                                 )}
@@ -227,13 +214,7 @@ export function BackgroundsTable({ data, isLoading, onEdit, onDelete }: Backgrou
             </div>
             {/* Pagination placeholder if needed by parent */}
             <div className="px-6 py-4 border-t border-white/5">
-                <DataTablePagination 
-                    page={1} 
-                    totalPages={1} 
-                    total={data.length}
-                    limit={10}
-                    onPageChange={() => {}}
-                />
+                <DataTablePagination page={1} totalPages={1} total={data.length} limit={10} onPageChange={() => {}} />
             </div>
         </div>
     )
