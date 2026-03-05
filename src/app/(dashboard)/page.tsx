@@ -53,6 +53,11 @@ interface DashboardStats {
         active: number
         growth: Array<{ date: string; count: number }>
     }
+    backgrounds: {
+        total: number
+        active: number
+        growth: Array<{ date: string; count: number }>
+    }
 }
 
 const dndEntities = [
@@ -213,7 +218,9 @@ export default function DashboardPage() {
                                       ? stats?.spells
                                       : id === "classes"
                                         ? stats?.classes
-                                        : undefined
+                                        : id === "backgrounds"
+                                          ? stats?.backgrounds
+                                          : undefined
 
                         return <Card key={id} {...entity} index={index} stats={entityStats} loading={loading} />
                     })}

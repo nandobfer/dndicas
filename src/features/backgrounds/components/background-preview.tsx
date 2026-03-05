@@ -110,35 +110,29 @@ export function BackgroundPreview({ background, showStatus = true, className }: 
                     <BackgroundSword className="h-3 w-3" />
                     <span>Proficiência nas Perícias</span>
                 </div>
-                <div className="grid gap-1.5">
-                    <div className="flex items-start gap-2 text-xs">
-                        <div className="flex-1 flex flex-wrap items-center gap-1.5 p-1 bg-black/20 rounded-lg border border-white/5">
-                            {(background.skillProficiencies || []).length > 0 ? (
-                                background.skillProficiencies.map((skill) => {
-                                    const attr = SKILL_TO_ATTR[skill] || "Sabedoria"
-                                    const config = attributeColors[attr as keyof typeof attributeColors]
-                                    return (
-                                        <div
-                                            key={skill}
-                                            className={cn(
-                                                "flex items-center gap-1.5 px-2 py-0.5 rounded-md border text-[10px] font-medium transition-all group/chip",
-                                                config.bgAlpha,
-                                                config.border,
-                                                config.text
-                                            )}
-                                        >
-                                            <span className="opacity-70 group-hover/chip:opacity-100">{skill}</span>
-                                            <span className="text-[8px] font-bold px-1 rounded bg-black/20 border border-white/5 opacity-50 uppercase">
-                                                {config.abbreviation}
-                                            </span>
-                                        </div>
-                                    )
-                                })
-                            ) : (
-                                <span className="text-[10px] text-white/20 italic ml-2">Nenhuma perícia selecionada</span>
-                            )}
-                        </div>
-                    </div>
+                <div className="space-y-2">
+                    {(background.skillProficiencies || []).length > 0 ? (
+                        background.skillProficiencies.map((skill) => {
+                            const attr = SKILL_TO_ATTR[skill] || "Sabedoria"
+                            const config = attributeColors[attr as keyof typeof attributeColors]
+                            return (
+                                <div
+                                    key={skill}
+                                    className={cn(
+                                        "inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md border text-[10px] font-medium transition-all group/chip mr-1.5 mb-1.5",
+                                        config.bgAlpha,
+                                        config.border,
+                                        config.text,
+                                    )}
+                                >
+                                    <span className="opacity-70 group-hover/chip:opacity-100">{skill}</span>
+                                    <span className="text-[8px] font-bold px-1 rounded bg-black/20 border border-white/5 opacity-50 uppercase">{config.abbreviation}</span>
+                                </div>
+                            )
+                        })
+                    ) : (
+                        <span className="text-[10px] text-white/20 italic">Nenhuma perícia selecionada</span>
+                    )}
                 </div>
 
                 {background.featId && (
@@ -147,8 +141,8 @@ export function BackgroundPreview({ background, showStatus = true, className }: 
                             <Star className="h-3 w-3 text-amber-400" />
                             <span>Talento de Origem</span>
                         </div>
-                        <div className="rounded-xl border border-white/10 bg-white/5 overflow-hidden shadow-sm">
-                            {ENTITY_RENDERERS.Talento(background.featId)}
+                        <div className="rounded-xl border border-white/10 overflow-hidden group/item transition-all bg-white/[0.02] hover:bg-white/[0.05]">
+                            {ENTITY_RENDERERS.Talento(background.featId, { hideStatusChip: true })}
                         </div>
                     </div>
                 )}
@@ -159,18 +153,18 @@ export function BackgroundPreview({ background, showStatus = true, className }: 
                     <BackgroundZap className="h-3 w-3 text-blue-400" />
                     <span>Habilidades de Origem</span>
                 </div>
-                
-                <div className="space-y-2">
+
+                <div className="space-y-3">
                     {(background.traits || []).length > 0 ? (
                         (background.traits || []).map((trait, idx) => (
-                            <div key={trait._id || idx} className="rounded-xl border border-white/10 bg-white/5 overflow-hidden">
-                                {ENTITY_RENDERERS.Habilidade(trait)}
+                            <div key={trait._id || idx} className="rounded-xl border border-white/10 bg-white/[0.02] overflow-hidden hover:bg-white/[0.05] transition-all">
+                                {ENTITY_RENDERERS.Habilidade(trait, { hideStatusChip: true })}
                             </div>
                         ))
                     ) : (
-                        <div className="p-4 rounded-xl border border-dashed border-white/10 flex flex-col items-center justify-center gap-2 bg-white/[0.01]">
-                            <Sparkle className="h-4 w-4 text-white/10" />
-                            <span className="text-[10px] text-white/20 uppercase font-bold tracking-widest italic text-center">Nenhuma característica extra configurada</span>
+                        <div className="py-8 text-center bg-black/20 rounded-xl border border-dashed border-white/5 flex flex-col items-center justify-center gap-2">
+                            <Sparkle className="h-5 w-5 text-white/10" />
+                            <span className="text-xs text-white/20 italic">Nenhuma característica extra configurada</span>
                         </div>
                     )}
                 </div>

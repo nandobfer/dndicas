@@ -24,10 +24,32 @@ export function useBackgroundsPage() {
     const infiniteData = useInfiniteBackgrounds(filters)
 
     // Modal states
-    const [isCreateOpen, setIsCreateOpen] = React.useState(false)
-    const [isEditOpen, setIsEditOpen] = React.useState(false)
+    const [isFormOpen, setIsFormOpen] = React.useState(false)
     const [isDeleteOpen, setIsDeleteOpen] = React.useState(false)
     const [selectedBackground, setSelectedBackground] = React.useState<Background | null>(null)
+
+    const handleSearchChange = (value: string) => setSearch(value)
+
+    const handleCreateClick = () => {
+        setSelectedBackground(null)
+        setIsFormOpen(true)
+    }
+
+    const handleEditClick = (bg: Background) => {
+        setSelectedBackground(bg)
+        setIsFormOpen(true)
+    }
+
+    const handleDeleteClick = (bg: Background) => {
+        setSelectedBackground(bg)
+        setIsDeleteOpen(true)
+    }
+
+    const closeAll = () => {
+        setIsFormOpen(false)
+        setIsDeleteOpen(false)
+        setSelectedBackground(null)
+    }
 
     return {
         isMobile,
@@ -45,29 +67,19 @@ export function useBackgroundsPage() {
             isFetchingNextPage: !!infiniteData.isFetchingNextPage,
             total: tableData.data?.total || 0,
         },
+        actions: {
+            handleSearchChange,
+            handleCreateClick,
+            handleEditClick,
+            handleDeleteClick,
+        },
         modals: {
-            isCreateOpen,
-            isEditOpen,
+            isFormOpen,
+            setIsFormOpen,
             isDeleteOpen,
+            setIsDeleteOpen,
             selectedBackground,
-            openCreate: () => {
-                setSelectedBackground(null)
-                setIsCreateOpen(true)
-            },
-            openEdit: (bg: Background) => {
-                setSelectedBackground(bg)
-                setIsEditOpen(true)
-            },
-            openDelete: (bg: Background) => {
-                setSelectedBackground(bg)
-                setIsDeleteOpen(true)
-            },
-            closeAll: () => {
-                setIsCreateOpen(false)
-                setIsEditOpen(false)
-                setIsDeleteOpen(false)
-                setSelectedBackground(null)
-            }
+            closeAll
         }
     }
 }

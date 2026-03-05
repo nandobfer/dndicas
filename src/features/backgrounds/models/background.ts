@@ -24,7 +24,7 @@ const SKILLS = [
     "Sobrevivência",
 ] as const
 
-const BackgroundTraitSchema = new Schema<BackgroundTrait>(
+const BackgroundTraitSchema = new Schema(
     {
         name: {
             type: String,

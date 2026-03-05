@@ -29,11 +29,19 @@ export function MiniBarChart({ data, color }: { data: Array<{ count: number }>; 
  * Simple animated line chart using SVG.
  */
 export function MiniLineChart({ data, color }: { data: Array<{ count: number }>; color: string }) {
+    if (!data || data.length === 0) return <div className="h-12 w-full" />
+
     const max = Math.max(...data.map((d) => d.count), 1)
+
+    // Se todos os valores forem iguais e maiores que zero, ajustamos a visualização
+    // para que a linha não fique colada no topo (o que acontece quando count === max)
+    const allSameAndNonZero = data.length > 0 && data.every((d) => d.count === data[0].count && d.count > 0)
+    const displayMax = allSameAndNonZero ? max * 2 : max
+
     const points = data
         .map((d, i) => {
             const x = (i / (data.length - 1)) * 100
-            const y = 100 - (d.count / max) * 100
+            const y = 100 - (d.count / displayMax) * 100
             return `${x},${y}`
         })
         .join(" ")

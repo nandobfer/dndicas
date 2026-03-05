@@ -7,13 +7,15 @@
 
 "use client";
 
-import { Wand, BookOpen, Info, Shield, Sparkles } from 'lucide-react';
-import { GlassLevelChip } from '@/components/ui/glass-level-chip';
-import { GlassSpellSchool } from '@/components/ui/glass-spell-school';
-import { GlassAttributeChip } from '@/components/ui/glass-attribute-chip';
-import { GlassDiceValue } from '@/components/ui/glass-dice-value';
-import { GlassEmptyValue } from '@/components/ui/glass-empty-value';
-import { Chip } from '@/components/ui/chip';
+import { Wand, BookOpen, Info, Shield, Sparkles, ExternalLink } from "lucide-react"
+import { GlassLevelChip } from "@/components/ui/glass-level-chip"
+import { motion } from "framer-motion"
+import { useWindows } from "@/core/context/window-context"
+import { GlassSpellSchool } from "@/components/ui/glass-spell-school"
+import { GlassAttributeChip } from "@/components/ui/glass-attribute-chip"
+import { GlassDiceValue } from "@/components/ui/glass-dice-value"
+import { GlassEmptyValue } from "@/components/ui/glass-empty-value"
+import { Chip } from "@/components/ui/chip"
 import { MentionContent, EntityTitleLink } from "@/features/rules/components/mention-badge"
 import { entityColors } from "@/lib/config/colors"
 import { cn } from "@/core/utils"
@@ -24,6 +26,10 @@ export interface SpellPreviewProps {
     spell: Spell
     /** Whether to show the status chip */
     showStatus?: boolean
+    /** Whether to hide only the status chip while keeping action icons */
+    hideStatusChip?: boolean
+    /** Whether to hide action icons (like open in window) */
+    hideActionIcons?: boolean
 }
 
 /**
@@ -46,7 +52,8 @@ export interface SpellPreviewProps {
  * <SpellPreview spell={spellData} />
  * ```
  */
-export function SpellPreview({ spell, showStatus = true }: SpellPreviewProps) {
+export function SpellPreview({ spell, showStatus = true, hideStatusChip = false, hideActionIcons = false }: SpellPreviewProps) {
+    const { addWindow } = useWindows()
     return (
         <div className="space-y-4 w-full">
             {/* Header */}
@@ -63,13 +70,33 @@ export function SpellPreview({ spell, showStatus = true }: SpellPreviewProps) {
                         <p className="text-[10px] uppercase font-bold tracking-widest text-white/40 mt-0.5">Magia D&D 5e</p>
                     </div>
                 </div>
-                {showStatus && spell.status === "inactive" && (
-                    <div className="flex flex-col items-end">
-                        <Chip variant="common" size="sm" className="opacity-50">
-                            Inativa
-                        </Chip>
-                    </div>
-                )}
+                <div className="flex items-center gap-2">
+                    {!hideActionIcons && (
+                        <motion.button
+                            whileHover={{ scale: 1.1 }}
+                            whileTap={{ scale: 0.9 }}
+                            onClick={() =>
+                                addWindow({
+                                    title: spell.name || "Magia",
+                                    content: null,
+                                    item: spell,
+                                    entityType: "Magia",
+                                })
+                            }
+                            className="p-1.5 rounded-lg text-white/40 hover:text-white hover:bg-white/10 transition-colors"
+                            title="Abrir em nova janela"
+                        >
+                            <ExternalLink className="h-4 w-4" />
+                        </motion.button>
+                    )}
+                    {showStatus && !hideStatusChip && spell.status === "inactive" && (
+                        <div className="flex flex-col items-end">
+                            <Chip variant="common" size="sm" className="opacity-50">
+                                Inativa
+                            </Chip>
+                        </div>
+                    )}
+                </div>
             </div>
 
             {/* School & Properties */}

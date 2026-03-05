@@ -129,7 +129,7 @@ function SpellcastingSection({ spellcasting, spellcastingAttribute, spells = [],
                                                     delay: Math.min(idx * 0.03, 0.3), // Staggered entry
                                                 }}
                                             >
-                                                <MentionRenderer item={spell} color={color} icon={<Wand className="h-3 w-3" style={{ color: color || "#60a5fa" }} />} />
+                                                <MentionRenderer item={spell} color={color} hideStatusChip icon={<Wand className="h-3 w-3" style={{ color: color || "#60a5fa" }} />} />
                                             </motion.div>
                                         ))}
                                     </motion.div>

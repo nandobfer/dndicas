@@ -11,6 +11,7 @@ import { useTraitsPage } from "@/features/traits/hooks/useTraitsPage"
 import { useFeatsPage } from "@/features/feats/hooks/useFeatsPage"
 import { useSpellsPage } from "@/features/spells/hooks/useSpellsPage"
 import { useClassesPage } from "@/features/classes/hooks/useClassesPage"
+import { useBackgroundsPage } from "@/features/backgrounds/hooks/useBackgroundsPage"
 import { RuleFormModal } from "@/features/rules/components/rule-form-modal"
 import { DeleteRuleDialog } from "@/features/rules/components/delete-rule-dialog"
 import { TraitFormModal } from "@/features/traits/components/trait-form-modal"
@@ -19,9 +20,12 @@ import { FeatFormModal } from "@/features/feats/components/feat-form-modal"
 import { DeleteFeatDialog } from "@/features/feats/components/delete-feat-dialog"
 import { ClassFormModal } from "@/features/classes/components/class-form-modal"
 import { DeleteClassDialog } from "@/features/classes/components/delete-class-dialog"
+import { SpellFormModal } from "@/features/spells/components/spell-form-modal"
+import { BackgroundFormModal } from "@/features/backgrounds/components/background-form-modal"
+import { DeleteBackgroundDialog } from "@/features/backgrounds/components/delete-background-dialog"
 
 interface GenericEntityPageProps {
-    entityTypeKey: "Regra" | "Habilidade" | "Talento" | "Magia" | "Classe"
+    entityTypeKey: "Regra" | "Habilidade" | "Talento" | "Magia" | "Classe" | "Origem"
 }
 
 export default function GenericEntityPage({ entityTypeKey }: GenericEntityPageProps) {
@@ -38,6 +42,7 @@ export default function GenericEntityPage({ entityTypeKey }: GenericEntityPagePr
     const featsPage = useFeatsPage()
     const spellsPage = useSpellsPage()
     const classesPage = useClassesPage()
+    const backgroundsPage = useBackgroundsPage()
 
     const queryKey = [entityTypeKey.toLowerCase(), slug]
 
@@ -48,6 +53,7 @@ export default function GenericEntityPage({ entityTypeKey }: GenericEntityPagePr
         Talento: featsPage,
         Magia: spellsPage,
         Classe: classesPage,
+        Origem: backgroundsPage,
     }
 
     const routeMap = {
@@ -56,6 +62,7 @@ export default function GenericEntityPage({ entityTypeKey }: GenericEntityPagePr
         Talento: "feats",
         Magia: "spells",
         Classe: "classes",
+        Origem: "backgrounds",
     }
 
     const currentPage = hookMap[entityTypeKey]
@@ -95,16 +102,17 @@ export default function GenericEntityPage({ entityTypeKey }: GenericEntityPagePr
             const searchData = await searchRes.json()
 
             // The search might return one or more items, pick the best match
-            const items = Array.isArray(searchData) ? searchData : searchData.items || searchData.spells || searchData.traits || searchData.rules || searchData.feats || []
+            const items = Array.isArray(searchData) ? searchData : searchData.items || searchData.spells || searchData.traits || searchData.rules || searchData.feats || searchData.backgrounds || []
 
             // Find exact name match
             const basicItem = items.find((i: any) => i.name.toLowerCase() === name.toLowerCase()) || items[0]
 
             if (!basicItem) return null
 
-            // 2. If it's a "Classe", we MUST fetch the full profile by ID because search is too lean
-            if (entityTypeKey === "Classe" && basicItem._id) {
-                const fullRes = await fetch(`/api/classes/${basicItem._id}`)
+            // 2. If it's a "Classe" or "Origem", we MUST fetch the full profile by ID because search is too lean
+            if ((entityTypeKey === "Classe" || entityTypeKey === "Origem") && basicItem._id) {
+                const route = routeMap[entityTypeKey]
+                const fullRes = await fetch(`/api/${route}/${basicItem._id}`)
                 if (fullRes.ok) {
                     return await fullRes.json()
                 }
@@ -174,6 +182,20 @@ export default function GenericEntityPage({ entityTypeKey }: GenericEntityPagePr
                 </>
             )}
 
+            {entityTypeKey === "Magia" && (
+                <>
+                    <SpellFormModal
+                        isOpen={spellsPage.modals.isFormOpen}
+                        onClose={() => spellsPage.modals.setIsFormOpen(false)}
+                        onSuccess={() => {
+                            spellsPage.modals.setIsFormOpen(false)
+                            queryClient.invalidateQueries({ queryKey })
+                        }}
+                        spell={spellsPage.modals.selectedSpell}
+                    />
+                </>
+            )}
+
             {entityTypeKey === "Classe" && (
                 <>
                     <ClassFormModal
@@ -188,6 +210,25 @@ export default function GenericEntityPage({ entityTypeKey }: GenericEntityPagePr
                         onConfirm={classesPage.actions.handleDeleteConfirm}
                         classData={classesPage.modals.selectedClass}
                         isDeleting={classesPage.modals.isSaving}
+                    />
+                </>
+            )}
+
+            {entityTypeKey === "Origem" && (
+                <>
+                    <BackgroundFormModal
+                        isOpen={backgroundsPage.modals.isFormOpen}
+                        onClose={() => backgroundsPage.modals.setIsFormOpen(false)}
+                        onSuccess={() => {
+                            backgroundsPage.modals.setIsFormOpen(false)
+                            queryClient.invalidateQueries({ queryKey })
+                        }}
+                        background={backgroundsPage.modals.selectedBackground}
+                    />
+                    <DeleteBackgroundDialog
+                        isOpen={backgroundsPage.modals.isDeleteOpen}
+                        onClose={() => backgroundsPage.modals.setIsDeleteOpen(false)}
+                        background={backgroundsPage.modals.selectedBackground}
                     />
                 </>
             )}

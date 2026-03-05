@@ -23,7 +23,7 @@ import { cn } from "@/core/utils/index"
 export function BackgroundsPage() {
     const { isAdmin } = useAuth()
 
-    const { isMobile, filters, data, modals, viewMode, setViewMode } = useBackgroundsPage()
+    const { isMobile, filters, data, modals, viewMode, setViewMode, actions } = useBackgroundsPage()
 
     return (
         <motion.div variants={motionConfig.variants.fadeInUp} initial="initial" animate="animate" className="space-y-6">
@@ -40,7 +40,7 @@ export function BackgroundsPage() {
 
                 {isAdmin && (
                     <button
-                        onClick={() => modals.openCreate()}
+                        onClick={actions.handleCreateClick}
                         className={cn(
                             "inline-flex items-center justify-center gap-2 px-4 py-2 rounded-lg",
                             "bg-blue-500 text-white font-medium text-sm",
@@ -61,7 +61,7 @@ export function BackgroundsPage() {
                 <GlassCardContent className="py-4">
                     <BackgroundFilters
                         filters={filters}
-                        onSearchChange={filters.setSearch}
+                        onSearchChange={actions.handleSearchChange}
                         isSearching={data.isLoading}
                     />
                 </GlassCardContent>
@@ -74,8 +74,8 @@ export function BackgroundsPage() {
                         <BackgroundsTable
                             data={data.backgrounds}
                             isLoading={data.isLoading}
-                            onEdit={modals.openEdit}
-                            onDelete={modals.openDelete}
+                            onEdit={actions.handleEditClick}
+                            onDelete={actions.handleDeleteClick}
                         />
                     ) : (
                         <EntityList
@@ -85,8 +85,8 @@ export function BackgroundsPage() {
                             onLoadMore={data.fetchNextPage}
                             isFetchingNextPage={data.isFetchingNextPage}
                             entityType="Origem"
-                            onEdit={modals.openEdit}
-                            onDelete={modals.openDelete}
+                            onEdit={actions.handleEditClick}
+                            onDelete={actions.handleDeleteClick}
                             isAdmin={isAdmin}
                         />
                     )}
@@ -95,7 +95,7 @@ export function BackgroundsPage() {
 
             {/* Modals & Dialogs */}
             <BackgroundFormModal
-                isOpen={modals.isCreateOpen || modals.isEditOpen}
+                isOpen={modals.isFormOpen}
                 background={modals.selectedBackground}
                 onClose={modals.closeAll}
                 onSuccess={modals.closeAll}

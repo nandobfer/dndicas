@@ -13,6 +13,7 @@ import { GlassPopover, GlassPopoverTrigger, GlassPopoverContent } from "@/compon
 import { FeatPreview } from "@/features/feats/components/feat-preview"
 import { SpellPreview } from "@/features/spells/components/spell-preview"
 import { ClassPreview } from "@/features/classes/components/class-preview"
+import { BackgroundPreview } from "@/features/backgrounds/components/background-preview"
 import { useWindows } from "@/core/context/window-context"
 import { motion } from "framer-motion"
 import { EntityTitleLink } from "./entity-title-link"
@@ -92,7 +93,7 @@ interface TraitPreviewProps {
     showStatus?: boolean
 }
 
-export const TraitPreview = ({ trait, showStatus = true }: TraitPreviewProps) => {
+export const TraitPreview = ({ trait, showStatus = true, hideStatusChip = false, hideActionIcons = false }: TraitPreviewProps & { hideStatusChip?: boolean; hideActionIcons?: boolean }) => {
     const { addWindow } = useWindows()
     return (
         <div className="space-y-4 w-full">
@@ -107,7 +108,7 @@ export const TraitPreview = ({ trait, showStatus = true }: TraitPreviewProps) =>
                     </div>
                 </div>
                 <div className="flex items-center gap-2">
-                    {showStatus && (
+                    {!hideActionIcons && (
                         <motion.button
                             whileHover={{ scale: 1.1 }}
                             whileTap={{ scale: 0.9 }}
@@ -125,7 +126,7 @@ export const TraitPreview = ({ trait, showStatus = true }: TraitPreviewProps) =>
                             <ExternalLink className="h-4 w-4" />
                         </motion.button>
                     )}
-                    {showStatus && (
+                    {showStatus && !hideStatusChip && (
                         <Chip variant={trait.status === "active" ? "uncommon" : "common"} size="sm">
                             {trait.status === "active" ? "Ativa" : "Inativa"}
                         </Chip>
@@ -185,6 +186,8 @@ export const EntityPreviewTooltip = ({ entityId, entityType, children, side = "t
                 endpoint = `/api/spells/${entityId}`
             } else if (entityType === "Classe") {
                 endpoint = `/api/classes/${entityId}`
+            } else if (entityType === "Origem") {
+                endpoint = `/api/backgrounds/${entityId}`
             }
 
             const res = await fetch(endpoint)
@@ -235,6 +238,8 @@ export const EntityPreviewTooltip = ({ entityId, entityType, children, side = "t
                 return <SpellPreview spell={data} />
             case "Classe":
                 return <ClassPreview characterClass={data} showStatus={true} />
+            case "Origem":
+                return <BackgroundPreview background={data} />
             default:
                 return (
                     <div className="p-4">
@@ -254,10 +259,12 @@ export const EntityPreviewTooltip = ({ entityId, entityType, children, side = "t
             </GlassPopoverTrigger>
             <GlassPopoverContent
                 side={side}
-                className="w-[calc(100vw-2rem)] sm:w-auto max-w-[95vw] sm:max-w-xl md:max-w-2xl max-h-[85vh] sm:max-h-[400px] overflow-y-auto glass-scrollbar"
+                className="w-[calc(100vw-2rem)] sm:w-auto max-w-[95vw] sm:max-w-xl md:max-w-2xl max-h-[85vh] sm:max-h-[400px] overflow-y-auto glass-scrollbar pointer-events-auto"
                 onMouseEnter={handleMouseEnter}
                 onMouseLeave={handleMouseLeave}
                 onOpenAutoFocus={(e) => e.preventDefault()}
+                onWheel={(e) => e.stopPropagation()}
+                style={{ isolation: "isolate" }}
             >
                 {content}
             </GlassPopoverContent>

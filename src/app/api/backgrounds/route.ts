@@ -109,14 +109,14 @@ export async function POST(req: NextRequest) {
         const existing = await BackgroundModel.findOne({ name: validated.name })
         if (existing) return NextResponse.json({ error: "Background name already exists" }, { status: 409 })
 
-        const newBackground = await BackgroundModel.create(validated)
+        const newBackground = (await BackgroundModel.create(validated as any)) as any
 
         await createAuditLog({
             action: "CREATE",
             entity: "Background",
             entityId: String(newBackground._id),
             performedBy: userId,
-            newData: newBackground.toObject() as unknown as Record<string, unknown>
+            newData: (newBackground.toObject ? newBackground.toObject() : newBackground) as unknown as Record<string, unknown>,
         })
 
         return NextResponse.json(newBackground)

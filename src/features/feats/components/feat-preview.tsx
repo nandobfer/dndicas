@@ -1,7 +1,9 @@
 "use client";
 
-import { Zap, BookOpen, Info, Trophy, PlusCircle } from "lucide-react"
+import { Zap, BookOpen, Info, Trophy, PlusCircle, ExternalLink } from "lucide-react"
 import { Chip } from "@/components/ui/chip"
+import { motion } from "framer-motion"
+import { useWindows } from "@/core/context/window-context"
 import { MentionContent, EntityTitleLink } from "@/features/rules/components/mention-badge"
 import { getLevelRarityVariant } from "./feats-table"
 import { attributeColors, AttributeType } from "@/lib/config/colors"
@@ -13,8 +15,9 @@ export interface FeatPreviewProps {
     showStatus?: boolean
 }
 
-export function FeatPreview({ feat, showStatus = true }: FeatPreviewProps) {
+export function FeatPreview({ feat, showStatus = true, hideStatusChip = false, hideActionIcons = false }: FeatPreviewProps & { hideStatusChip?: boolean; hideActionIcons?: boolean }) {
     const rarityVariant = getLevelRarityVariant(feat.level)
+    const { addWindow } = useWindows()
 
     return (
         <div className="space-y-4 w-full">
@@ -34,13 +37,33 @@ export function FeatPreview({ feat, showStatus = true }: FeatPreviewProps) {
                         <p className="text-[10px] uppercase font-bold tracking-widest text-white/40 mt-0.5">Talento de Personagem</p>
                     </div>
                 </div>
-                {showStatus && feat.status === "inactive" && (
-                    <div className="flex flex-col items-end">
-                        <Chip variant="common" size="sm" className="opacity-50">
-                            Inativo
-                        </Chip>
-                    </div>
-                )}
+                <div className="flex items-center gap-2">
+                    {!hideActionIcons && (
+                        <motion.button
+                            whileHover={{ scale: 1.1 }}
+                            whileTap={{ scale: 0.9 }}
+                            onClick={() =>
+                                addWindow({
+                                    title: feat.name || "Talento",
+                                    content: null,
+                                    item: feat,
+                                    entityType: "Talento",
+                                })
+                            }
+                            className="p-1.5 rounded-lg text-white/40 hover:text-white hover:bg-white/10 transition-colors"
+                            title="Abrir em nova janela"
+                        >
+                            <ExternalLink className="h-4 w-4" />
+                        </motion.button>
+                    )}
+                    {showStatus && !hideStatusChip && feat.status === "inactive" && (
+                        <div className="flex flex-col items-end">
+                            <Chip variant="common" size="sm" className="opacity-50">
+                                Inativo
+                            </Chip>
+                        </div>
+                    )}
+                </div>
             </div>
 
             {/* Prerequisites */}

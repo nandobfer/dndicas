@@ -15,16 +15,16 @@ import { Wand, GraduationCap, Star } from "lucide-react"
  * Registry of renderers for different entity types.
  * T042: Shared entity renderer configuration for EntityList and GlassWindow.
  */
-export const ENTITY_RENDERERS: Record<string, (item: any, options?: { showStatus?: boolean }) => React.ReactNode> = {
+export const ENTITY_RENDERERS: Record<string, (item: any, options?: { showStatus?: boolean; hideStatusChip?: boolean; hideActionIcons?: boolean }) => React.ReactNode> = {
     Regra: (item, opts) => <RulePreview rule={item} showStatus={opts?.showStatus ?? false} />,
-    Habilidade: (id, opts) => <TraitAsyncRenderer id={id} showStatus={opts?.showStatus ?? true} />,
-    Talento: (idOrItem, opts) => <FeatAsyncRenderer item={idOrItem} showStatus={opts?.showStatus ?? true} />,
-    Magia: (idOrItem, opts) => <SpellAsyncRenderer item={idOrItem} showStatus={opts?.showStatus ?? true} />,
+    Habilidade: (id, opts) => <TraitAsyncRenderer id={id} showStatus={opts?.showStatus ?? true} hideStatusChip={opts?.hideStatusChip} hideActionIcons={opts?.hideActionIcons} />,
+    Talento: (idOrItem, opts) => <FeatAsyncRenderer item={idOrItem} showStatus={opts?.showStatus ?? true} hideStatusChip={opts?.hideStatusChip} hideActionIcons={opts?.hideActionIcons} />,
+    Magia: (idOrItem, opts) => <SpellAsyncRenderer item={idOrItem} showStatus={opts?.showStatus ?? true} hideStatusChip={opts?.hideStatusChip} hideActionIcons={opts?.hideActionIcons} />,
     Classe: (idOrItem, opts) => <ClassAsyncRenderer item={idOrItem} showStatus={opts?.showStatus ?? true} />,
     Origem: (idOrItem, opts) => <BackgroundAsyncRenderer item={idOrItem} />,
 }
 
-function TraitAsyncRenderer({ id, showStatus = true }: { id: any; showStatus?: boolean }) {
+function TraitAsyncRenderer({ id, showStatus = true, hideStatusChip, hideActionIcons }: { id: any; showStatus?: boolean; hideStatusChip?: boolean; hideActionIcons?: boolean }) {
     const [trait, setTrait] = React.useState<any>(null)
     const [loading, setLoading] = React.useState(true)
 
@@ -57,12 +57,12 @@ function TraitAsyncRenderer({ id, showStatus = true }: { id: any; showStatus?: b
 
     return (
         <div className="p-4">
-            <TraitPreview trait={trait} showStatus={showStatus} />
+            <TraitPreview trait={trait} showStatus={showStatus} hideStatusChip={hideStatusChip} hideActionIcons={hideActionIcons} />
         </div>
     )
 }
 
-function SpellAsyncRenderer({ item, showStatus = true }: { item: any; showStatus?: boolean }) {
+function SpellAsyncRenderer({ item, showStatus = true, hideStatusChip, hideActionIcons }: { item: any; showStatus?: boolean; hideStatusChip?: boolean; hideActionIcons?: boolean }) {
     const [spell, setSpell] = React.useState<any>(null)
     const [loading, setLoading] = React.useState(true)
 
@@ -106,7 +106,7 @@ function SpellAsyncRenderer({ item, showStatus = true }: { item: any; showStatus
 
     return (
         <div className="p-4">
-            <SpellPreview spell={spell} showStatus={showStatus} />
+            <SpellPreview spell={spell} showStatus={showStatus} hideStatusChip={hideStatusChip} hideActionIcons={hideActionIcons} />
         </div>
     )
 }
@@ -162,7 +162,7 @@ function ClassAsyncRenderer({ item, showStatus = true }: { item: any; showStatus
     )
 }
 
-function FeatAsyncRenderer({ item, showStatus = true }: { item: any; showStatus?: boolean }) {
+function FeatAsyncRenderer({ item, showStatus = true, hideStatusChip, hideActionIcons }: { item: any; showStatus?: boolean; hideStatusChip?: boolean; hideActionIcons?: boolean }) {
     const [feat, setFeat] = React.useState<any>(null)
     const [loading, setLoading] = React.useState(true)
 
@@ -206,7 +206,7 @@ function FeatAsyncRenderer({ item, showStatus = true }: { item: any; showStatus?
 
     return (
         <div className="p-4">
-            <FeatPreview feat={feat} showStatus={showStatus} />
+            <FeatPreview feat={feat} showStatus={showStatus} hideStatusChip={hideStatusChip} hideActionIcons={hideActionIcons} />
         </div>
     )
 }
