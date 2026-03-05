@@ -229,6 +229,11 @@ export default function DashboardPage() {
 
             {/* Full Width Info */}
             <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.8 }}>
+                <WipEntityCard index={0} title="Fichas" description="Fichas de jogador para integrar com Owlbear Rodeo" />
+            </motion.div>
+
+            {/* Full Width Info */}
+            <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.8 }}>
                 <GlassCard className="border-yellow-500/20 bg-yellow-500/[0.02]">
                     <GlassCardHeader className="flex flex-row items-center gap-4 space-y-0">
                         <div className="p-3 rounded-full bg-yellow-500/10 border border-yellow-500/20">
