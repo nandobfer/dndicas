@@ -21,7 +21,7 @@ export async function GET(req: NextRequest) {
       const limitParam = url.searchParams.get("limit")
       const page = pageParam ? parseInt(pageParam, 10) : 1
       const limit = limitParam ? parseInt(limitParam, 10) : 10
-      const search = url.searchParams.get("search") || ""
+      const search = url.searchParams.get("search") || url.searchParams.get("q") || ""
       const searchField = url.searchParams.get("searchField") || "all"
       const status = url.searchParams.get("status")
 
