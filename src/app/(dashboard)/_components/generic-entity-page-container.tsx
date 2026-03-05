@@ -6,8 +6,11 @@ import { useQuery, useQueryClient } from "@tanstack/react-query"
 import { EntityPage } from "@/features/rules/components/entity-page"
 import { entityConfig } from "@/lib/config/entities"
 import { useAuth } from "@/core/hooks/useAuth"
+import { useWindows } from "@/core/context/window-context"
 import { useRulesPage } from "@/features/rules/hooks/useRulesPage"
 import { useTraitsPage } from "@/features/traits/hooks/useTraitsPage"
+import { ExternalLink } from "lucide-react"
+import { motion } from "framer-motion"
 import { useFeatsPage } from "@/features/feats/hooks/useFeatsPage"
 import { useSpellsPage } from "@/features/spells/hooks/useSpellsPage"
 import { useClassesPage } from "@/features/classes/hooks/useClassesPage"
@@ -32,6 +35,7 @@ export default function GenericEntityPage({ entityTypeKey }: GenericEntityPagePr
     const params = useParams()
     const router = useRouter()
     const queryClient = useQueryClient()
+    const { addWindow } = useWindows()
     const { isAdmin } = useAuth()
     const slug = params.slug as string
     const config = entityConfig[entityTypeKey]
@@ -126,7 +130,29 @@ export default function GenericEntityPage({ entityTypeKey }: GenericEntityPagePr
 
     return (
         <>
-            <EntityPage item={item} entityType={entityTypeKey} isLoading={isLoading} isAdmin={isAdmin} onEdit={onEdit} onDelete={onDelete} hideActionIcons={true} />
+            <div className="relative">
+                {item && (
+                    <motion.button
+                        initial={{ opacity: 0, x: 20 }}
+                        animate={{ opacity: 1, x: 0 }}
+                        whileHover={{ scale: 1.02 }}
+                        whileTap={{ scale: 0.98 }}
+                        onClick={() =>
+                            addWindow({
+                                title: item.name || entityTypeKey,
+                                content: null,
+                                item: item,
+                                entityType: entityTypeKey,
+                            })
+                        }
+                        className="absolute top-4 right-4 z-50 flex items-center gap-2 px-3 py-1.5 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 text-white/50 hover:text-white transition-all text-[10px] font-bold uppercase tracking-widest"
+                    >
+                        <ExternalLink className="h-3.5 w-3.5" />
+                        <span>Janela Solta</span>
+                    </motion.button>
+                )}
+                <EntityPage item={item} entityType={entityTypeKey} isLoading={isLoading} isAdmin={isAdmin} onEdit={onEdit} onDelete={onDelete} hideActionIcons={true} />
+            </div>
 
             {/* Entity-specific Modals (imported from hooks) */}
             {entityTypeKey === "Regra" && (
