@@ -73,6 +73,10 @@ export const ENTITY_PROVIDERS: EntityProvider[] = [
             description: item.description,
             school: item.school,
             circle: item.circle,
+            saveAttribute: item.saveAttribute,
+            component: item.component, // Em SpellPreview o campo usado é 'component' (singular)
+            baseDice: item.baseDice,
+            extraDicePerLevel: item.extraDicePerLevel,
             source: item.source,
             status: item.status || "active",
         }),

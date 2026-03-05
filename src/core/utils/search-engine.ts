@@ -18,6 +18,10 @@ export interface UnifiedEntity {
     metadata?: any
     school?: string
     circle?: number
+    saveAttribute?: string
+    component?: string[]
+    baseDice?: any
+    extraDicePerLevel?: any
     score?: number // Added for weighted sorting visibility if needed
 }
 
