@@ -18,6 +18,7 @@ import { motionConfig } from "@/lib/config/motion-configs"
 import { Reference } from "../types/rules.types"
 import { EntityDescription } from "./entity-description"
 import { EntityPreviewTooltip } from "./entity-preview-tooltip"
+import { EntityTitleLink } from "./entity-title-link"
 
 // Extend chipVariantMap or create a local one if "active"/"inactive" are standard
 const ruleStatusVariantMap: Record<string, "uncommon" | "common"> = {
@@ -102,7 +103,9 @@ export function RulesTable({
                                             {rule.status === "active" ? "Ativo" : "Inativo"}
                                         </Chip>
                                     </td>
-                                    <td className="px-6 py-4 whitespace-nowrap text-white font-medium">{rule.name}</td>
+                                    <td className="px-6 py-4">
+                                        <EntityTitleLink name={rule.name} entityType="Regra" />
+                                    </td>
                                     <td className="px-6 py-4 text-white/40 text-sm max-w-0">
                                         <div className="min-h-[32px] flex items-center overflow-hidden">
                                             <EntityDescription html={rule.description} className="w-full" />

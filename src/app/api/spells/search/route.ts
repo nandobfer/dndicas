@@ -17,13 +17,13 @@ export async function GET(req: NextRequest) {
 
         // Search only active spells
         const filter: any = { status: "active" }
-        const spells = await Spell.find(filter).select("_id name circle school source description").sort({ createdAt: -1 }).lean()
+        const spells = await Spell.find(filter).select("_id name circle school source description saveAttribute component baseDice extraDicePerLevel").sort({ createdAt: -1 }).lean()
 
         // Apply fuzzy search locally using the shared function
         const searchedSpells = query ? applyFuzzySearch(spells, query) : spells
 
         // Transform to output format and apply limit if present
-        const results = searchedSpells.map((spell) => ({
+        const results = searchedSpells.map((spell: any) => ({
             id: String(spell._id),
             _id: String(spell._id),
             label: spell.name,
@@ -32,7 +32,11 @@ export async function GET(req: NextRequest) {
             circle: spell.circle,
             school: spell.school,
             source: spell.source,
-            description: spell.description
+            description: spell.description,
+            saveAttribute: spell.saveAttribute,
+            component: spell.component,
+            baseDice: spell.baseDice,
+            extraDicePerLevel: spell.extraDicePerLevel,
         }))
 
         const finalResults = limit ? results.slice(0, limit) : results

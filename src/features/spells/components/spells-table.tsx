@@ -29,6 +29,7 @@ import { GlassDiceValue } from '@/components/ui/glass-dice-value';
 import { GlassEmptyValue } from '@/components/ui/glass-empty-value';
 import { SimpleGlassTooltip, GlassTooltipProvider } from "@/components/ui/glass-tooltip"
 import { EntityPreviewTooltip } from "@/features/rules/components/entity-preview-tooltip"
+import { EntityTitleLink } from "@/features/rules/components/entity-title-link"
 import { motionConfig } from "@/lib/config/motion-configs"
 import { spellComponentConfig } from "@/lib/config/colors"
 import type { Spell } from "../types/spells.types"
@@ -182,7 +183,9 @@ export function SpellsTable({ spells, total, page, limit, isLoading = false, has
                                     </td>
 
                                     {/* Name */}
-                                    <td className="px-6 py-4 whitespace-nowrap text-white font-medium">{spell.name}</td>
+                                    <td className="px-6 py-4">
+                                        <EntityTitleLink name={spell.name} entityType="Magia" />
+                                    </td>
 
                                     {/* Components */}
                                     <td className="px-6 py-4 whitespace-nowrap">

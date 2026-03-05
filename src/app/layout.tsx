@@ -69,12 +69,12 @@ export default function RootLayout({
                 <body className={cn("min-h-screen bg-background font-sans antialiased", geistSans.variable, geistMono.variable)}>
                     <ScrollToTop />
                     <AppProvider>
-                        <WindowProvider>
-                            <GlassTooltipProvider>
+                        <GlassTooltipProvider>
+                            <WindowProvider>
                                 {children}
                                 <Toaster />
-                            </GlassTooltipProvider>
-                        </WindowProvider>
+                            </WindowProvider>
+                        </GlassTooltipProvider>
                     </AppProvider>
                 </body>
             </html>

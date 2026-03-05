@@ -145,6 +145,16 @@ export const entityColors = {
         text: "text-amber-400",
         hex: rarityColors.legendary, // #F59E0B
     },
+    Origem: {
+        color: "blue",
+        mention: "bg-blue-500/10 text-blue-400 border-blue-400/20",
+        badge: "bg-blue-400/20 text-blue-400",
+        border: "border-blue-500/20",
+        hoverBorder: "hover:border-blue-500/40",
+        bgAlpha: "bg-blue-500/10",
+        text: "text-blue-400",
+        hex: rarityColors.rare, // #3B82F6
+    },
     Magia: {
         color: "purple",
         mention: "bg-purple-500/10 text-purple-400 border-purple-400/20",
@@ -310,8 +320,8 @@ export const spellComponentConfig = {
         text: "text-emerald-400",
         hex: rarityColors.uncommon,
     },
-    Verboso: {
-        name: "Verboso",
+    Verbal: {
+        name: "Verbal",
         color: "blue",
         badge: "bg-blue-400/20 text-blue-400",
         border: "border-blue-400/20",

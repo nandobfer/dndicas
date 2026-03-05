@@ -3,7 +3,7 @@ import { cn } from '@/core/utils'
 import { glassConfig } from '@/lib/config/glass-config'
 import { entityColors } from "@/lib/config/colors"
 import { performUnifiedSearch } from '@/core/utils/search-engine'
-import { Search, X, Check, Scroll, Sparkles, Zap, Wand, Sword, User, Plus } from "lucide-react"
+import { Search, X, Check, Scroll, Sparkles, Zap, Wand, Sword, User, Plus, ShieldCheck } from "lucide-react"
 import { motion, AnimatePresence } from "framer-motion"
 import { DebounceProgress } from "@/components/ui/debounce-progress"
 import { EntityProvider } from "@/lib/config/entities"
@@ -133,6 +133,7 @@ const entityIcons: Record<string, any> = {
     Talento: Zap,
     Magia: Wand,
     Classe: Sword,
+    Origem: ShieldCheck,
     Atores: User,
 }
 

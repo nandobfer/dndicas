@@ -15,10 +15,8 @@ export async function POST(req: Request) {
   const WEBHOOK_SECRET = process.env.CLERK_WEBHOOK_SECRET
 
   if (!WEBHOOK_SECRET) {
-    console.warn('[Clerk Webhook] CLERK_WEBHOOK_SECRET is not set. Webhook verification skipped (NOT RECOMMENDED FOR PRODUCTION)')
-    // In dev we might want to allow it? No, it's dangerous. 
-    // But if we want it to work immediately without user action:
-    // return new Response('Webhook secret not configured', { status: 500 })
+    console.error("[Clerk Webhook] CLERK_WEBHOOK_SECRET is not set. Webhook verification failed.")
+    return new Response("Webhook secret not configured", { status: 500 })
   }
 
   // Get the headers

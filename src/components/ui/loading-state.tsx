@@ -49,12 +49,19 @@ const textSizeClasses = {
 /**
  * Spinner loading indicator with rotation animation.
  */
-const Spinner = ({ size = 'md' }: { size?: 'sm' | 'md' | 'lg' }) => (
-  <Loader2
-    className={cn(sizeClasses[size], 'animate-spin text-white/60')}
-    aria-hidden="true"
-  />
-);
+const Spinner = ({ size = "md" }: { size?: "sm" | "md" | "lg" }) => {
+    const [mounted, setMounted] = React.useState(false)
+
+    React.useEffect(() => {
+        setMounted(true)
+    }, [])
+
+    return (
+        <div className={cn(sizeClasses[size], "flex items-center justify-center")}>
+            {mounted ? <Loader2 className="w-full h-full animate-spin text-white/60" aria-hidden="true" /> : <div className="w-full h-full" />}
+        </div>
+    )
+}
 
 /**
  * Skeleton loading lines with shimmer effect.

@@ -21,13 +21,27 @@ import { ENTITY_RENDERERS } from "@/features/rules/components/entity-renderers"
 import { MentionRenderer } from "./mention-renderer"
 import { Wand } from "lucide-react"
 import { GlassDiceValue } from "@/components/ui/glass-dice-value"
+import { EntitySource } from "@/features/rules/components/entity-source"
 
 const SKILL_TO_ATTR: Record<string, string> = {
-    "Atletismo": "Força",
-    "Acrobacia": "Destreza", "Furtividade": "Destreza", "Prestidigitação": "Destreza",
-    "Arcanismo": "Inteligência", "História": "Inteligência", "Investigação": "Inteligência", "Natureza": "Inteligência", "Religião": "Inteligência",
-    "Lidar com Animais": "Sabedoria", "Intuição": "Sabedoria", "Medicina": "Sabedoria", "Percepção": "Sabedoria", "Sobrevivência": "Sabedoria",
-    "Enganação": "Carisma", "Intimidação": "Carisma", "Atuação": "Carisma", "Persuasão": "Carisma"
+    Atletismo: "Força",
+    Acrobacia: "Destreza",
+    Furtividade: "Destreza",
+    Prestidigitação: "Destreza",
+    Arcanismo: "Inteligência",
+    História: "Inteligência",
+    Investigação: "Inteligência",
+    Natureza: "Inteligência",
+    Religião: "Inteligência",
+    "Lidar com Animais": "Sabedoria",
+    Intuição: "Sabedoria",
+    Medicina: "Sabedoria",
+    Percepção: "Sabedoria",
+    Sobrevivência: "Sabedoria",
+    Enganação: "Carisma",
+    Intimidação: "Carisma",
+    Atuação: "Carisma",
+    Persuasão: "Carisma",
 }
 
 function SpellcastingSection({ spellcasting, spellcastingAttribute, spells = [], color }: { spellcasting: boolean; spellcastingAttribute?: string; spells?: any[]; color?: string }) {
@@ -129,7 +143,7 @@ function SpellcastingSection({ spellcasting, spellcastingAttribute, spells = [],
                                                     delay: Math.min(idx * 0.03, 0.3), // Staggered entry
                                                 }}
                                             >
-                                                <MentionRenderer item={spell} color={color} icon={<Wand className="h-3 w-3" style={{ color: color || "#60a5fa" }} />} />
+                                                <MentionRenderer item={spell} color={color} hideStatusChip icon={<Wand className="h-3 w-3" style={{ color: color || "#60a5fa" }} />} />
                                             </motion.div>
                                         ))}
                                     </motion.div>
@@ -160,7 +174,7 @@ function ClassVisualHeader({ image, name, description, color }: { image?: string
             className="flex flex-col md:flex-row gap-4 py-3 border-y border-white/5"
             style={{
                 borderColor: color ? `${color}20` : undefined,
-                backgroundColor: color ? `${color}05` : undefined
+                backgroundColor: color ? `${color}05` : undefined,
             }}
         >
             <div className="flex-1 space-y-2">
@@ -169,11 +183,7 @@ function ClassVisualHeader({ image, name, description, color }: { image?: string
                     <span>Descrição</span>
                 </div>
                 <div className="text-sm text-white/80 leading-relaxed pr-2">
-                    <MentionContent
-                        html={description}
-                        mode="block"
-                        className="[&_p]:text-sm [&_p]:text-white/80 [&_ul]:text-sm [&_ol]:text-sm [&_p]:leading-relaxed"
-                    />
+                    <MentionContent html={description} mode="block" className="[&_p]:text-sm [&_p]:text-white/80 [&_ul]:text-sm [&_ol]:text-sm [&_p]:leading-relaxed" />
                 </div>
             </div>
             {image && (
@@ -182,11 +192,7 @@ function ClassVisualHeader({ image, name, description, color }: { image?: string
                         className="aspect-square rounded-xl border border-white/10 bg-white/5 overflow-hidden shadow-2xl group/image relative"
                         style={{ borderColor: color ? `${color}40` : undefined }}
                     >
-                        <img
-                            src={image}
-                            alt={name}
-                            className="w-full h-full object-cover transition-transform duration-500 group-hover/image:scale-110"
-                        />
+                        <img src={image} alt={name} className="w-full h-full object-cover transition-transform duration-500 group-hover/image:scale-110" />
                         <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent opacity-0 group-hover/image:opacity-100 transition-opacity duration-300" />
                     </div>
                 </div>
@@ -473,17 +479,8 @@ export function ClassPreview({ characterClass, showStatus = true }: ClassPreview
                 </div>
             </div>
 
-            <div className="flex items-center justify-between pt-2">
-                <div className="flex items-center gap-1.5 text-[10px] uppercase font-bold text-white/40">
-                    <Users className="h-3 w-3" />
-                    <span>{subclasses.length} Subclasses</span>
-                </div>
-                {characterClass.source && (
-                    <div className="flex items-center gap-1.5 text-[10px] text-white/20">
-                        <BookOpen className="h-3 w-3" />
-                        <span>{characterClass.source}</span>
-                    </div>
-                )}
+            <div className="pt-2">
+                <EntitySource source={characterClass.source} className="pt-0 border-t-0" />
             </div>
         </div>
     )

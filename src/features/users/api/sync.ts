@@ -80,85 +80,73 @@ function generateName(clerkUser: ClerkUserData): string | undefined {
  * @returns SyncResult with operation outcome
  */
 export async function syncUserFromClerk(clerkUser: ClerkUserData): Promise<SyncResult> {
-  try {
-    await dbConnect();
+    try {
+        await dbConnect()
 
-    // Check if user exists by Clerk ID
-    const existingUser = await User.findByClerkId(clerkUser.id)
+        // Check if user exists by Clerk ID (including soft-deleted)
+        let existingUser = await User.findOne({ clerkId: clerkUser.id })
 
-    const email = getPrimaryEmail(clerkUser);
-    const username = generateUsername(clerkUser);
-    const name = generateName(clerkUser);
+        const email = getPrimaryEmail(clerkUser)
+        const username = generateUsername(clerkUser)
+        const name = generateName(clerkUser)
 
-    if (existingUser) {
-      // Update existing user
-      existingUser.email = email;
-      existingUser.username = username;
-      existingUser.name = name;
-      existingUser.avatarUrl = clerkUser.image_url || undefined;
-      
-      // Only update role if explicitly set in Clerk metadata
-      if (clerkUser.public_metadata?.role) {
-        existingUser.role = clerkUser.public_metadata.role;
-      }
+        // If not found by clerkId, try finding by email (including soft-deleted)
+        // This handles cases where a user was deleted and signs up again with same email
+        if (!existingUser && email) {
+            existingUser = await User.findOne({ email: email.toLowerCase() })
+        }
 
-      await existingUser.save();
+        if (existingUser) {
+            // Update/Reactivate existing user
+            existingUser.clerkId = clerkUser.id // Ensure current clerkId is set
+            existingUser.email = email
+            existingUser.username = username
+            existingUser.name = name
+            existingUser.avatarUrl = clerkUser.image_url || undefined
+            existingUser.status = "active"
+            existingUser.deleted = false
 
-      return {
-        success: true,
-        user: existingUser,
-        action: 'updated',
-      };
+            // Only update role if explicitly set in Clerk metadata
+            if (clerkUser.public_metadata?.role) {
+                existingUser.role = clerkUser.public_metadata.role
+            }
+
+            await existingUser.save()
+
+            return {
+                success: true,
+                user: existingUser,
+                action: "updated",
+            }
+        }
+
+        // Create new user if absolutely no record exists
+        const newUser = await User.create({
+            clerkId: clerkUser.id,
+            email,
+            username,
+            name,
+            avatarUrl: clerkUser.image_url || undefined,
+            role: clerkUser.public_metadata?.role || "user", // Default to 'user'
+            status: "active" as UserStatus,
+            deleted: false,
+        })
+
+        return {
+            success: true,
+            user: newUser,
+            action: "created",
+        }
+    } catch (error) {
+        const message = error instanceof Error ? error.message : "Unknown error"
+        console.error("[UserSync] Failed to sync user:", message)
+
+        return {
+            success: false,
+            action: "error",
+            error: message,
+        }
     }
-
-    // Check if user with same email exists (might have different clerkId)
-    const existingEmailUser = await User.findByEmail(email);
-    if (existingEmailUser) {
-      // Update the clerkId of the existing user
-      existingEmailUser.clerkId = clerkUser.id;
-      existingEmailUser.username = username;
-      existingEmailUser.name = name;
-      existingEmailUser.avatarUrl = clerkUser.image_url || undefined;
-      
-      if (clerkUser.public_metadata?.role) {
-        existingEmailUser.role = clerkUser.public_metadata.role;
-      }
-
-      await existingEmailUser.save();
-
-      return {
-        success: true,
-        user: existingEmailUser,
-        action: 'updated',
-      };
-    }
-
-    // Create new user
-    const newUser = await User.create({
-      clerkId: clerkUser.id,
-      email,
-      username,
-      name,
-      avatarUrl: clerkUser.image_url || undefined,
-      role: clerkUser.public_metadata?.role || 'user', // Default to 'user'
-      status: 'active' as UserStatus,
-    });
-
-    return {
-      success: true,
-      user: newUser,
-      action: 'created',
-    };
-  } catch (error) {
-    const message = error instanceof Error ? error.message : 'Unknown error';
-    console.error('[UserSync] Failed to sync user:', message);
-
-    return {
-      success: false,
-      action: 'error',
-      error: message,
-    };
-  }
 }
 
 /**
@@ -169,36 +157,36 @@ export async function syncUserFromClerk(clerkUser: ClerkUserData): Promise<SyncR
  * @returns SyncResult with operation outcome
  */
 export async function deleteUserFromClerk(clerkId: string): Promise<SyncResult> {
-  try {
-    await dbConnect();
+    try {
+        await dbConnect()
 
-    const user = await User.findByClerkId(clerkId);
+        const user = await User.findByClerkId(clerkId)
 
-    if (!user) {
-      return {
-        success: true,
-        action: 'skipped',
-      };
+        if (!user) {
+            return {
+                success: true,
+                action: "skipped",
+            }
+        }
+
+        user.status = "inactive"
+        await user.save()
+
+        return {
+            success: true,
+            user,
+            action: "deleted",
+        }
+    } catch (error) {
+        const message = error instanceof Error ? error.message : "Unknown error"
+        console.error("[UserSync] Failed to delete user:", message)
+
+        return {
+            success: false,
+            action: "error",
+            error: message,
+        }
     }
-
-    user.status = 'inactive';
-    await user.save();
-
-    return {
-      success: true,
-      user,
-      action: 'deleted',
-    };
-  } catch (error) {
-    const message = error instanceof Error ? error.message : 'Unknown error';
-    console.error('[UserSync] Failed to delete user:', message);
-
-    return {
-      success: false,
-      action: 'error',
-      error: message,
-    };
-  }
 }
 
 /**
@@ -209,37 +197,59 @@ export async function deleteUserFromClerk(clerkId: string): Promise<SyncResult> 
  * @param clerkUser - Optional Clerk user data (if already fetched)
  * @returns The local user document
  */
-export async function ensureUserExists(
-  clerkId: string,
-  clerkUser?: ClerkUserData
-): Promise<IUser | null> {
-  try {
-    await dbConnect();
+export async function ensureUserExists(clerkId: string, clerkUser?: ClerkUserData): Promise<IUser | null> {
+    try {
+        await dbConnect()
 
-    // Check if user exists
-    const existingUser = await User.findByClerkId(clerkId)
+        // Check if user exists (including soft-deleted)
+        let existingUser = await User.findOne({ clerkId })
 
-    // If user exists but is missing data we have, update it
-    if (existingUser && clerkUser && !existingUser.avatarUrl && clerkUser.image_url) {
-        existingUser.avatarUrl = clerkUser.image_url
-        await existingUser.save()
+        // If user exists but is missing data we have, update it (also handles reactivation)
+        if (existingUser) {
+            if (clerkUser && !existingUser.avatarUrl && clerkUser.image_url) {
+                existingUser.avatarUrl = clerkUser.image_url
+            }
+
+            // If found as deleted, reactivate
+            if (existingUser.deleted) {
+                existingUser.deleted = false
+                existingUser.status = "active"
+            }
+
+            if (existingUser.isModified()) {
+                await existingUser.save()
+            }
+
+            return existingUser
+        }
+
+        // Try finding by email from Clerk data if provided
+        if (clerkUser) {
+            const email = getPrimaryEmail(clerkUser)
+            if (email) {
+                existingUser = await User.findOne({ email: email.toLowerCase() })
+                if (existingUser) {
+                    existingUser.clerkId = clerkId
+                    existingUser.deleted = false
+                    existingUser.status = "active"
+                    if (clerkUser.image_url) existingUser.avatarUrl = clerkUser.image_url
+                    await existingUser.save()
+                    return existingUser
+                }
+            }
+        }
+
+        // If no Clerk user data provided, we can't create the user
+        if (!clerkUser) {
+            console.warn("[UserSync] Cannot create user without Clerk data")
+            return null
+        }
+
+        // Sync user from Clerk (this will handle creation)
+        const result = await syncUserFromClerk(clerkUser)
+        return result.user || null
+    } catch (error) {
+        console.error("[UserSync] ensureUserExists failed:", error)
+        return null
     }
-
-    if (existingUser) {
-      return existingUser;
-    }
-
-    // If no Clerk user data provided, we can't create the user
-    if (!clerkUser) {
-      console.warn('[UserSync] Cannot create user without Clerk data');
-      return null;
-    }
-
-    // Sync user from Clerk
-    const result = await syncUserFromClerk(clerkUser);
-    return result.user || null;
-  } catch (error) {
-    console.error('[UserSync] ensureUserExists failed:', error);
-    return null;
-  }
 }

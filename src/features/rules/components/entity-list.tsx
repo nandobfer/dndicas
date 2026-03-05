@@ -118,7 +118,7 @@ export function EntityList({ items, entityType, isLoading, hasNextPage, isFetchi
                                         </GlassDropdownMenu>
                                     )}
                                 </div>
-                                <div className="max-w-full overflow-hidden -mt-2">{renderEntity(item, entityType, { showStatus: false })}</div>
+                                <div className="max-w-full overflow-hidden -mt-2">{renderEntity(item, entityType, { showStatus: false, hideActionIcons: true } as any)}</div>
                             </GlassCardContent>
                         </GlassCard>
                     </motion.div>

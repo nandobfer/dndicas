@@ -18,6 +18,7 @@ import { motionConfig } from "@/lib/config/motion-configs";
 import { Trait } from "../types/traits.types";
 import { EntityDescription } from "@/features/rules/components/entity-description";
 import { EntityPreviewTooltip } from "@/features/rules/components/entity-preview-tooltip";
+import { EntityTitleLink } from "@/features/rules/components/entity-title-link";
 
 // Extend chipVariantMap or create a local one if "active"/"inactive" are standard
 const traitStatusVariantMap: Record<string, "uncommon" | "common"> = {
@@ -102,7 +103,9 @@ export function TraitsTable({
                                             {trait.status === "active" ? "Ativo" : "Inativo"}
                                         </Chip>
                                     </td>
-                                    <td className="px-6 py-4 whitespace-nowrap text-white font-medium">{trait.name}</td>
+                                    <td className="px-6 py-4">
+                                        <EntityTitleLink name={trait.name} entityType="Habilidade" />
+                                    </td>
                                     <td className="px-6 py-4 text-white/40 text-sm max-w-0">
                                         <div className="min-h-[32px] flex items-center overflow-hidden">
                                             <EntityDescription html={trait.description} className="w-full" />

@@ -4,7 +4,7 @@ import { glassConfig } from '@/lib/config/glass-config'
 import { entityColors } from "@/lib/config/colors"
 import { EntityPreviewTooltip } from "./entity-preview-tooltip"
 import { DebounceProgress } from "@/components/ui/debounce-progress"
-import { Scroll, Sparkles, Zap, Wand, Sword } from "lucide-react"
+import { Scroll, Sparkles, Zap, Wand, Sword, ShieldCheck } from "lucide-react"
 
 const entityIcons: Record<string, any> = {
     Regra: Scroll,
@@ -12,6 +12,7 @@ const entityIcons: Record<string, any> = {
     Talento: Zap,
     Magia: Wand,
     Classe: Sword,
+    Origem: ShieldCheck,
 }
 
 export interface MentionListProps {

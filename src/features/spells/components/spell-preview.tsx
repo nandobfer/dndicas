@@ -7,23 +7,45 @@
 
 "use client";
 
-import { Wand, BookOpen, Info, Shield, Sparkles } from 'lucide-react';
-import { GlassLevelChip } from '@/components/ui/glass-level-chip';
-import { GlassSpellSchool } from '@/components/ui/glass-spell-school';
-import { GlassAttributeChip } from '@/components/ui/glass-attribute-chip';
-import { GlassDiceValue } from '@/components/ui/glass-dice-value';
-import { GlassEmptyValue } from '@/components/ui/glass-empty-value';
-import { Chip } from '@/components/ui/chip';
+import { Wand, BookOpen, Info, Shield, Sparkles, ExternalLink, Brain, Mic, Hand, Package } from "lucide-react"
+import { GlassLevelChip } from "@/components/ui/glass-level-chip"
+import { motion } from "framer-motion"
+import { useWindows } from "@/core/context/window-context"
+import { GlassSpellSchool } from "@/components/ui/glass-spell-school"
+import { GlassAttributeChip } from "@/components/ui/glass-attribute-chip"
+import { GlassDiceValue } from "@/components/ui/glass-dice-value"
+import { GlassEmptyValue } from "@/components/ui/glass-empty-value"
+import { Chip } from "@/components/ui/chip"
+import { SimpleGlassTooltip } from "@/components/ui/glass-tooltip"
 import { MentionContent, EntityTitleLink } from "@/features/rules/components/mention-badge"
-import { entityColors } from "@/lib/config/colors"
+import { entityColors, spellComponentConfig, type SpellComponent } from "@/lib/config/colors"
 import { cn } from "@/core/utils"
 import type { Spell } from "../types/spells.types"
+import { EntitySource } from "@/features/rules/components/entity-source"
+
+const COMPONENT_ICONS: Record<string, any> = {
+    Concentração: Brain,
+    Verbal: Mic,
+    Somático: Hand,
+    Material: Package,
+}
+
+const COMPONENT_DESCRIPTIONS: Record<string, string> = {
+    Concentração: "Requer concentração para manter os efeitos ativos.",
+    Verbal: "Requer a entonação de palavras místicas.",
+    Somático: "Requer gestos manuais precisos.",
+    Material: "Requer componentes físicos ou um foco arcano.",
+}
 
 export interface SpellPreviewProps {
     /** Spell data to display */
     spell: Spell
     /** Whether to show the status chip */
     showStatus?: boolean
+    /** Whether to hide only the status chip while keeping action icons */
+    hideStatusChip?: boolean
+    /** Whether to hide action icons (like open in window) */
+    hideActionIcons?: boolean
 }
 
 /**
@@ -46,7 +68,8 @@ export interface SpellPreviewProps {
  * <SpellPreview spell={spellData} />
  * ```
  */
-export function SpellPreview({ spell, showStatus = true }: SpellPreviewProps) {
+export function SpellPreview({ spell, showStatus = true, hideStatusChip = false, hideActionIcons = false }: SpellPreviewProps) {
+    const { addWindow } = useWindows()
     return (
         <div className="space-y-4 w-full">
             {/* Header */}
@@ -63,13 +86,33 @@ export function SpellPreview({ spell, showStatus = true }: SpellPreviewProps) {
                         <p className="text-[10px] uppercase font-bold tracking-widest text-white/40 mt-0.5">Magia D&D 5e</p>
                     </div>
                 </div>
-                {showStatus && spell.status === "inactive" && (
-                    <div className="flex flex-col items-end">
-                        <Chip variant="common" size="sm" className="opacity-50">
-                            Inativa
-                        </Chip>
-                    </div>
-                )}
+                <div className="flex items-center gap-2">
+                    {!hideActionIcons && (
+                        <motion.button
+                            whileHover={{ scale: 1.1 }}
+                            whileTap={{ scale: 0.9 }}
+                            onClick={() =>
+                                addWindow({
+                                    title: spell.name || "Magia",
+                                    content: null,
+                                    item: spell,
+                                    entityType: "Magia",
+                                })
+                            }
+                            className="p-1.5 rounded-lg text-white/40 hover:text-white hover:bg-white/10 transition-colors"
+                            title="Abrir em nova janela"
+                        >
+                            <ExternalLink className="h-4 w-4" />
+                        </motion.button>
+                    )}
+                    {showStatus && !hideStatusChip && spell.status === "inactive" && (
+                        <div className="flex flex-col items-end">
+                            <Chip variant="common" size="sm" className="opacity-50">
+                                Inativa
+                            </Chip>
+                        </div>
+                    )}
+                </div>
             </div>
 
             {/* School & Properties */}
@@ -78,19 +121,46 @@ export function SpellPreview({ spell, showStatus = true }: SpellPreviewProps) {
                     <Sparkles className="h-3 w-3" />
                     <span>Propriedades</span>
                 </div>
-                <div className="flex flex-wrap gap-2 items-center">
+                <div className="flex flex-wrap gap-x-4 gap-y-2 items-center">
                     {/* School */}
                     <div className="flex items-center gap-2">
                         <span className="text-xs text-white/50">Escola:</span>
                         <GlassSpellSchool school={spell.school} size="sm" />
                     </div>
 
+                    {/* Components */}
+                    {spell.component && spell.component.length > 0 && (
+                        <div className="flex items-center gap-2">
+                            <span className="text-xs text-white/50">Componentes:</span>
+                            <div className="flex flex-wrap gap-1.5">
+                                {spell.component.map((comp) => {
+                                    const config = spellComponentConfig[comp as keyof typeof spellComponentConfig]
+                                    if (!config) return null
+                                    const Icon = COMPONENT_ICONS[comp] || Sparkles
+                                    return (
+                                        <SimpleGlassTooltip key={comp} content={COMPONENT_DESCRIPTIONS[comp] || comp}>
+                                            <div
+                                                className={cn(
+                                                    "px-2 py-0.5 rounded-full text-[10px] font-bold flex items-center gap-1.5 border border-white/5 transition-colors hover:border-white/20",
+                                                    config.badge,
+                                                )}
+                                            >
+                                                <Icon className="h-3 w-3" />
+                                                <span>{comp}</span>
+                                            </div>
+                                        </SimpleGlassTooltip>
+                                    )
+                                })}
+                            </div>
+                        </div>
+                    )}
+
                     {/* Save Attribute */}
                     {spell.saveAttribute && (
                         <div className="flex items-center gap-2">
                             <Shield className="h-3 w-3 text-white/40" />
                             <span className="text-xs text-white/50">Resistência:</span>
-                            <GlassAttributeChip attribute={spell.saveAttribute} size="sm" />
+                            <GlassAttributeChip attribute={spell.saveAttribute} size="sm" showFull />
                         </div>
                     )}
                 </div>
@@ -145,12 +215,7 @@ export function SpellPreview({ spell, showStatus = true }: SpellPreviewProps) {
             </div>
 
             {/* Source */}
-            {spell.source && (
-                <div className="pt-3 border-t border-white/10 flex items-center gap-2 text-xs text-white/40">
-                    <BookOpen className="h-3.5 w-3.5" />
-                    <span>Fonte: {spell.source}</span>
-                </div>
-            )}
+            <EntitySource source={spell.source} />
         </div>
     )
 }
