@@ -21,6 +21,7 @@ import { MentionContent, EntityTitleLink } from "@/features/rules/components/men
 import { entityColors, spellComponentConfig, type SpellComponent } from "@/lib/config/colors"
 import { cn } from "@/core/utils"
 import type { Spell } from "../types/spells.types"
+import { EntitySource } from "@/features/rules/components/entity-source"
 
 const COMPONENT_ICONS: Record<string, any> = {
     Concentração: Brain,
@@ -214,12 +215,7 @@ export function SpellPreview({ spell, showStatus = true, hideStatusChip = false,
             </div>
 
             {/* Source */}
-            {spell.source && (
-                <div className="pt-3 border-t border-white/10 flex items-center gap-2 text-xs text-white/40">
-                    <BookOpen className="h-3.5 w-3.5" />
-                    <span>Fonte: {spell.source}</span>
-                </div>
-            )}
+            <EntitySource source={spell.source} />
         </div>
     )
 }

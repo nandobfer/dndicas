@@ -15,6 +15,7 @@ import { AttributeType, entityColors, attributeColors } from "@/lib/config/color
 import type { Background } from "../types/backgrounds.types"
 import { MentionContent } from "@/features/rules/components/mention-badge";
 import { ENTITY_RENDERERS } from "@/features/rules/components/entity-renderers"
+import { EntitySource } from "@/features/rules/components/entity-source"
 
 interface BackgroundPreviewProps {
     background: Background
@@ -23,11 +24,24 @@ interface BackgroundPreviewProps {
 }
 
 const SKILL_TO_ATTR: Record<string, string> = {
-    "Atletismo": "Força",
-    "Acrobacia": "Destreza", "Furtividade": "Destreza", "Prestidigitação": "Destreza",
-    "Arcanismo": "Inteligência", "História": "Inteligência", "Investigação": "Inteligência", "Natureza": "Inteligência", "Religião": "Inteligência",
-    "Lidar com Animais": "Sabedoria", "Intuição": "Sabedoria", "Medicina": "Sabedoria", "Percepção": "Sabedoria", "Sobrevivência": "Sabedoria",
-    "Enganação": "Carisma", "Intimidação": "Carisma", "Atuação": "Carisma", "Persuasão": "Carisma"
+    Atletismo: "Força",
+    Acrobacia: "Destreza",
+    Furtividade: "Destreza",
+    Prestidigitação: "Destreza",
+    Arcanismo: "Inteligência",
+    História: "Inteligência",
+    Investigação: "Inteligência",
+    Natureza: "Inteligência",
+    Religião: "Inteligência",
+    "Lidar com Animais": "Sabedoria",
+    Intuição: "Sabedoria",
+    Medicina: "Sabedoria",
+    Percepção: "Sabedoria",
+    Sobrevivência: "Sabedoria",
+    Enganação: "Carisma",
+    Intimidação: "Carisma",
+    Atuação: "Carisma",
+    Persuasão: "Carisma",
 }
 
 function BackgroundVisualHeader({ image, name, description }: { image?: string; name: string; description: string }) {
@@ -39,21 +53,13 @@ function BackgroundVisualHeader({ image, name, description }: { image?: string; 
                     <span>Descrição</span>
                 </div>
                 <div className="text-sm text-white/80 leading-relaxed pr-2">
-                    <MentionContent
-                        html={description}
-                        mode="block"
-                        className="[&_p]:text-sm [&_p]:text-white/80 [&_ul]:text-sm [&_ol]:text-sm [&_p]:leading-relaxed"
-                    />
+                    <MentionContent html={description} mode="block" className="[&_p]:text-sm [&_p]:text-white/80 [&_ul]:text-sm [&_ol]:text-sm [&_p]:leading-relaxed" />
                 </div>
             </div>
             {image && (
                 <div className="w-full md:w-2/5 shrink-0">
                     <div className="aspect-square rounded-xl border border-white/10 bg-white/5 overflow-hidden shadow-2xl group/image relative">
-                        <img 
-                            src={image} 
-                            alt={name}
-                            className="w-full h-full object-cover transition-transform duration-500 group-hover/image:scale-110"
-                        />
+                        <img src={image} alt={name} className="w-full h-full object-cover transition-transform duration-500 group-hover/image:scale-110" />
                         <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent opacity-0 group-hover/image:opacity-100 transition-opacity duration-300" />
                     </div>
                 </div>
@@ -66,7 +72,7 @@ export function BackgroundPreview({ background, showStatus = true, className }: 
     if (!background) return null
 
     // Debug to check data flow
-    console.log("[BackgroundPreview] rendering:", { name: background.name, featId: background.featId });
+    console.log("[BackgroundPreview] rendering:", { name: background.name, featId: background.featId })
 
     return (
         <div className={cn("space-y-4 w-full text-left", className)}>
@@ -181,18 +187,7 @@ export function BackgroundPreview({ background, showStatus = true, className }: 
                 </div>
             </div>
 
-            <div className="flex items-center justify-between pt-2">
-                <div className="flex items-center gap-1.5 text-[10px] uppercase font-bold text-white/40">
-                    <ShieldCheck className="h-3 w-3" />
-                    <span>Origem</span>
-                </div>
-                {background.source && (
-                    <div className="flex items-center gap-1.5 text-[10px] text-white/20">
-                        <BookOpen className="h-3 w-3" />
-                        <span>{background.source}</span>
-                    </div>
-                )}
-            </div>
+            <EntitySource source={background.source} />
         </div>
     )
 }

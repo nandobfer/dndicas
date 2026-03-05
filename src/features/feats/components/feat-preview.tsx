@@ -9,6 +9,7 @@ import { getLevelRarityVariant } from "./feats-table"
 import { attributeColors, AttributeType } from "@/lib/config/colors"
 import { cn } from "@/core/utils"
 import type { Feat } from "../types/feats.types"
+import { EntitySource } from "@/features/rules/components/entity-source"
 
 export interface FeatPreviewProps {
     feat: Feat
@@ -117,10 +118,7 @@ export function FeatPreview({ feat, showStatus = true, hideStatusChip = false, h
             </div>
 
             {/* Source */}
-            <div className="pt-3 border-t border-white/10 flex items-center gap-2 text-xs text-white/40">
-                <BookOpen className="h-3.5 w-3.5" />
-                <span>Fonte: {feat.source}</span>
-            </div>
+            <EntitySource source={feat.source} />
         </div>
     )
 }

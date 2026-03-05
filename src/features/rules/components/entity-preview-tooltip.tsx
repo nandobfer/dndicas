@@ -8,7 +8,7 @@ import { cn } from "@/core/utils"
 import { entityColors } from "@/lib/config/colors"
 import { Reference } from "../types/rules.types"
 import { SimpleGlassTooltip } from "@/components/ui/glass-tooltip"
-import { MentionContent } from "./mention-badge"
+import { EntityTitleLink, MentionContent } from "./mention-badge"
 import { GlassPopover, GlassPopoverTrigger, GlassPopoverContent } from "@/components/ui/glass-popover"
 import { FeatPreview } from "@/features/feats/components/feat-preview"
 import { SpellPreview } from "@/features/spells/components/spell-preview"
@@ -16,7 +16,7 @@ import { ClassPreview } from "@/features/classes/components/class-preview"
 import { BackgroundPreview } from "@/features/backgrounds/components/background-preview"
 import { useWindows } from "@/core/context/window-context"
 import { motion } from "framer-motion"
-import { EntityTitleLink } from "./entity-title-link"
+import { EntitySource } from "./entity-source"
 
 interface RulePreviewProps {
     rule: Reference
@@ -73,14 +73,7 @@ export const RulePreview = ({ rule, showStatus = true }: RulePreviewProps) => {
                 </div>
             )}
 
-            <div className="flex items-center gap-4 pt-2 border-t border-white/5 text-[10px] font-medium text-white/40">
-                <div className="flex items-center gap-1">
-                    <BookOpen className="w-3 h-3" />
-                    <span>
-                        Fonte: <span className="text-white/60">{rule.source}</span>
-                    </span>
-                </div>
-            </div>
+            <EntitySource source={rule.source} />
         </div>
     )
 }
@@ -143,14 +136,7 @@ export const TraitPreview = ({ trait, showStatus = true, hideStatusChip = false,
                 </div>
             )}
 
-            <div className="flex items-center gap-4 pt-2 border-t border-white/5 text-[10px] font-medium text-white/40">
-                <div className="flex items-center gap-1">
-                    <BookOpen className="w-3 h-3" />
-                    <span>
-                        Fonte: <span className="text-white/60">{trait.source}</span>
-                    </span>
-                </div>
-            </div>
+            <EntitySource source={trait.source} />
         </div>
     )
 }
