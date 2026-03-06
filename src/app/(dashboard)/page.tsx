@@ -14,6 +14,7 @@ import { SpellsEntityCard } from "./_components/spells-entity-card"
 import { ClassesEntityCard } from "./_components/classes-entity-card"
 import { RacesEntityCard } from "./_components/races-entity-card"
 import { BackgroundsEntityCard } from "./_components/backgrounds-entity-card"
+import { ItemsEntityCard } from "./_components/items-entity-card"
 import { WipEntityCard } from "./_components/wip-entity-card"
 import { AnimatedNumber } from "@/components/ui/animated-number"
 import Link from "next/link"
@@ -94,9 +95,7 @@ const dndEntities = [
     {
         id: "items",
         title: "Itens",
-        icon: Backpack,
-        description: "Equipamentos, armas e itens mágicos",
-        component: WipEntityCard,
+        component: ItemsEntityCard,
     },
     { id: "spells", title: "Magias", component: SpellsEntityCard },
     {

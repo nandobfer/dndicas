@@ -126,6 +126,31 @@ export const ENTITY_PROVIDERS: EntityProvider[] = [
             status: item.status || "active",
         }),
     },
+    {
+        name: "Item",
+        label: "Itens",
+        endpoint: () => `/api/items/search`,
+        map: (item: any): UnifiedEntity => ({
+            id: item._id || item.id,
+            _id: item._id,
+            name: item.name,
+            label: item.name,
+            type: "Item",
+            description: item.description,
+            rarity: item.rarity,
+            itemType: item.type,
+            price: item.price,
+            damageDice: item.damageDice,
+            damageType: item.damageType,
+            ac: item.ac,
+            acType: item.acType,
+            armorType: item.armorType,
+            acBonus: item.acBonus,
+            attributeUsed: item.attributeUsed,
+            source: item.source,
+            status: item.status || "active",
+        }),
+    },
 ]
 
 export const entityConfig = ENTITY_PROVIDERS.reduce((acc, provider) => {

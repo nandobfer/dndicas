@@ -11,7 +11,7 @@ export interface UnifiedEntity {
     _id?: string
     name: string
     label?: string // For compatibility
-    type: "Regra" | "Magia" | "Habilidade" | "Talento" | "Classe" | "Origem" | "Raça"
+    type: "Regra" | "Magia" | "Habilidade" | "Talento" | "Classe" | "Origem" | "Raça" | "Item"
     description?: string
     source?: string
     status: "active" | "inactive"
@@ -22,6 +22,16 @@ export interface UnifiedEntity {
     component?: string[]
     baseDice?: any
     extraDicePerLevel?: any
+    rarity?: string
+    itemType?: string
+    price?: string
+    damageDice?: any
+    damageType?: string
+    ac?: number
+    acType?: string
+    armorType?: string
+    acBonus?: number
+    attributeUsed?: string
     score?: number // Added for weighted sorting visibility if needed
 }
 

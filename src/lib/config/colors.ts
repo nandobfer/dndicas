@@ -187,6 +187,16 @@ export const entityColors = {
         text: "text-red-400",
         hex: rarityColors.artifact, // #EF4444
     },
+    Item: {
+        color: "slate",
+        mention: "bg-slate-500/10 text-slate-400 border-slate-400/20",
+        badge: "bg-slate-400/20 text-slate-400",
+        border: "border-slate-500/20",
+        hoverBorder: "hover:border-slate-500/40",
+        bgAlpha: "bg-slate-500/10",
+        text: "text-slate-400",
+        hex: rarityColors.common, // #9CA3AF
+    },
 } as const
 
 /**
@@ -653,6 +663,28 @@ export function getLevelRarityVariant(level: number, type: "level" | "circle" = 
         if (level >= 18 && level <= 19) return "legendary"
         if (level === 20) return "artifact"
         return "common"
+    }
+}
+
+/**
+ * Maps a Item rarity string to a D&D rarity color key.
+ */
+export function getItemRarityVariant(rarity: string): RarityColor {
+    switch (rarity) {
+        case "comum":
+            return "common"
+        case "incomum":
+            return "uncommon"
+        case "raro":
+            return "rare"
+        case "muito raro":
+            return "veryRare"
+        case "lendário":
+            return "legendary"
+        case "artefato":
+            return "artifact"
+        default:
+            return "common"
     }
 }
 
