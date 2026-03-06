@@ -29,6 +29,7 @@ import { DeleteBackgroundDialog } from "@/features/backgrounds/components/delete
 import { useRacesPage } from "@/features/races/hooks/useRacesPage"
 import { RaceFormModal } from "@/features/races/components/race-form-modal"
 import { DeleteRaceDialog } from "@/features/races/components/delete-race-dialog"
+import { DeleteSpellDialog } from "@/features/spells/components/delete-spell-dialog"
 
 interface GenericEntityPageProps {
     entityTypeKey: "Regra" | "Habilidade" | "Talento" | "Magia" | "Classe" | "Origem" | "Raça"
@@ -226,6 +227,7 @@ export default function GenericEntityPage({ entityTypeKey }: GenericEntityPagePr
                         }}
                         spell={spellsPage.modals.selectedSpell}
                     />
+                    <DeleteSpellDialog isOpen={spellsPage.modals.isDeleteDialogOpen} onClose={() => spellsPage.modals.setIsDeleteDialogOpen(false)} spell={spellsPage.modals.selectedSpell} />
                 </>
             )}
 
@@ -277,11 +279,7 @@ export default function GenericEntityPage({ entityTypeKey }: GenericEntityPagePr
                         }}
                         race={racesPage.modals.selectedRace}
                     />
-                    <DeleteRaceDialog
-                        isOpen={racesPage.modals.isDeleteOpen}
-                        onClose={() => racesPage.modals.setIsDeleteOpen(false)}
-                        race={racesPage.modals.selectedRace}
-                    />
+                    <DeleteRaceDialog isOpen={racesPage.modals.isDeleteOpen} onClose={() => racesPage.modals.setIsDeleteOpen(false)} race={racesPage.modals.selectedRace} />
                 </>
             )}
         </>
