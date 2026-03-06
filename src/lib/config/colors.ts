@@ -450,7 +450,7 @@ export const damageTypeColors = {
     },
     cold: {
         hex: damageTypeHex.cold,
-        keys: ["frio", "cold", "gelo", "glacial"],
+        keys: ["frio", "cold", "gelo", "glacial", "gélido"],
         color: "cyan",
         bgAlpha: `bg-[${damageTypeHex.cold}]/10`,
         text: `text-[${damageTypeHex.cold}]`,
@@ -520,7 +520,7 @@ export const damageTypeColors = {
     },
     physical: {
         hex: damageTypeHex.physical,
-        keys: ["físico", "physical", "pancada", "corte", "perfuração", "concussão"],
+        keys: ["físico", "physical", "pancada", "corte", "perfuração", "concussão", "perfurante", "cortante", "contundente"],
         color: "slate",
         bgAlpha: `bg-[${damageTypeHex.physical}]/10`,
         text: `text-[${damageTypeHex.physical}]`,
