@@ -175,6 +175,16 @@ export const entityColors = {
         text: "text-amber-400",
         hex: rarityColors.legendary, // #F59E0B
     },
+    Raça: {
+        color: "red",
+        mention: "bg-red-500/10 text-red-400 border-red-400/20",
+        badge: "bg-red-400/20 text-red-400",
+        border: "border-red-500/20",
+        hoverBorder: "hover:border-red-500/40",
+        bgAlpha: "bg-red-500/10",
+        text: "text-red-400",
+        hex: rarityColors.artifact, // #EF4444
+    },
 } as const
 
 /**
@@ -296,7 +306,7 @@ export const spellSchoolColors = {
 /**
  * D&D Spell Component colors and configurations.
  * Used for spell catalog UI - component chips.
- * 
+ *
  * Mapping:
  * - Concentração → red (artifact)
  * - Somático → emerald (uncommon)
@@ -388,7 +398,7 @@ export type DiceType = keyof typeof diceColors
  * Feedback configuration for status, types and priority.
  */
 export const feedbackStatusConfig = {
-  cancelado: {
+    cancelado: {
         label: "Cancelado",
         color: "artifact",
         badge: "bg-red-400/20 text-red-400",
@@ -406,8 +416,7 @@ export const feedbackStatusConfig = {
         badge: "bg-emerald-400/20 text-emerald-400",
         hex: rarityColors.uncommon,
     },
-    
-} as const;
+} as const
 
 export const feedbackTypeConfig = {
     bug: {
@@ -422,7 +431,7 @@ export const feedbackTypeConfig = {
         badge: "bg-blue-400/20 text-blue-400",
         hex: rarityColors.rare,
     },
-} as const;
+} as const
 
 export const feedbackPriorityConfig = {
     baixa: {
@@ -443,11 +452,11 @@ export const feedbackPriorityConfig = {
         badge: "bg-red-400/20 text-red-400",
         hex: rarityColors.artifact,
     },
-} as const;
+} as const
 
-export type FeedbackStatus = keyof typeof feedbackStatusConfig;
-export type FeedbackType = keyof typeof feedbackTypeConfig;
-export type FeedbackPriority = keyof typeof feedbackPriorityConfig;
+export type FeedbackStatus = keyof typeof feedbackStatusConfig
+export type FeedbackType = keyof typeof feedbackTypeConfig
+export type FeedbackPriority = keyof typeof feedbackPriorityConfig
 
 /**
  * Maps rarity color names to Tailwind CSS bg/text class pairs.
@@ -460,6 +469,30 @@ export const rarityToTailwind: Record<RarityColor, { bg: string; text: string; b
     veryRare: { bg: "bg-purple-400/20", text: "text-purple-400", border: "border-purple-400/20" },
     legendary: { bg: "bg-amber-400/20", text: "text-amber-400", border: "border-amber-400/20" },
     artifact: { bg: "bg-red-400/20", text: "text-red-400", border: "border-red-400/20" },
+} as const
+
+/**
+ * D&D Size categories colors.
+ */
+export const sizeColors = {
+    Pequeno: {
+        color: "emerald",
+        bgAlpha: "bg-emerald-500/10",
+        text: "text-emerald-400",
+        hex: rarityColors.uncommon,
+    },
+    Médio: {
+        color: "blue",
+        bgAlpha: "bg-blue-500/10",
+        text: "text-blue-400",
+        hex: rarityColors.rare,
+    },
+    Grande: {
+        color: "amber",
+        bgAlpha: "bg-amber-500/10",
+        text: "text-amber-400",
+        hex: rarityColors.legendary,
+    },
 } as const
 
 /**

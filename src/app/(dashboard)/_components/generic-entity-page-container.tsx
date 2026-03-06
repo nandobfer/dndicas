@@ -26,9 +26,12 @@ import { DeleteClassDialog } from "@/features/classes/components/delete-class-di
 import { SpellFormModal } from "@/features/spells/components/spell-form-modal"
 import { BackgroundFormModal } from "@/features/backgrounds/components/background-form-modal"
 import { DeleteBackgroundDialog } from "@/features/backgrounds/components/delete-background-dialog"
+import { useRacesPage } from "@/features/races/hooks/useRacesPage"
+import { RaceFormModal } from "@/features/races/components/race-form-modal"
+import { DeleteRaceDialog } from "@/features/races/components/delete-race-dialog"
 
 interface GenericEntityPageProps {
-    entityTypeKey: "Regra" | "Habilidade" | "Talento" | "Magia" | "Classe" | "Origem"
+    entityTypeKey: "Regra" | "Habilidade" | "Talento" | "Magia" | "Classe" | "Origem" | "Raça"
 }
 
 export default function GenericEntityPage({ entityTypeKey }: GenericEntityPageProps) {
@@ -47,6 +50,7 @@ export default function GenericEntityPage({ entityTypeKey }: GenericEntityPagePr
     const spellsPage = useSpellsPage()
     const classesPage = useClassesPage()
     const backgroundsPage = useBackgroundsPage()
+    const racesPage = useRacesPage()
 
     const queryKey = [entityTypeKey.toLowerCase(), slug]
 
@@ -58,6 +62,7 @@ export default function GenericEntityPage({ entityTypeKey }: GenericEntityPagePr
         Magia: spellsPage,
         Classe: classesPage,
         Origem: backgroundsPage,
+        Raça: racesPage,
     }
 
     const currentPage = hookMap[entityTypeKey]
@@ -72,6 +77,7 @@ export default function GenericEntityPage({ entityTypeKey }: GenericEntityPagePr
         Magia: "spells",
         Classe: "classes",
         Origem: "backgrounds",
+        Raça: "races",
     }
 
     // Wrap the submit handler to invalidate the query and handle slug changes
@@ -256,6 +262,25 @@ export default function GenericEntityPage({ entityTypeKey }: GenericEntityPagePr
                         isOpen={backgroundsPage.modals.isDeleteOpen}
                         onClose={() => backgroundsPage.modals.setIsDeleteOpen(false)}
                         background={backgroundsPage.modals.selectedBackground}
+                    />
+                </>
+            )}
+
+            {entityTypeKey === "Raça" && (
+                <>
+                    <RaceFormModal
+                        isOpen={racesPage.modals.isFormOpen}
+                        onClose={() => racesPage.modals.setIsFormOpen(false)}
+                        onSuccess={() => {
+                            racesPage.modals.setIsFormOpen(false)
+                            queryClient.invalidateQueries({ queryKey })
+                        }}
+                        race={racesPage.modals.selectedRace}
+                    />
+                    <DeleteRaceDialog
+                        isOpen={racesPage.modals.isDeleteOpen}
+                        onClose={() => racesPage.modals.setIsDeleteOpen(false)}
+                        race={racesPage.modals.selectedRace}
                     />
                 </>
             )}

@@ -12,6 +12,7 @@ import { TraitsEntityCard } from "./_components/traits-entity-card"
 import { FeatsEntityCard } from "./_components/feats-entity-card"
 import { SpellsEntityCard } from "./_components/spells-entity-card"
 import { ClassesEntityCard } from "./_components/classes-entity-card"
+import { RacesEntityCard } from "./_components/races-entity-card"
 import { BackgroundsEntityCard } from "./_components/backgrounds-entity-card"
 import { WipEntityCard } from "./_components/wip-entity-card"
 import { AnimatedNumber } from "@/components/ui/animated-number"
@@ -58,6 +59,11 @@ interface DashboardStats {
         active: number
         growth: Array<{ date: string; count: number }>
     }
+    races: {
+        total: number
+        active: number
+        growth: Array<{ date: string; count: number }>
+    }
 }
 
 const dndEntities = [
@@ -71,9 +77,7 @@ const dndEntities = [
     {
         id: "races",
         title: "Raças",
-        icon: Fingerprint,
-        description: "Raças jogáveis (Humano, Elfo, etc.)",
-        component: WipEntityCard,
+        component: RacesEntityCard,
     },
     {
         id: "traits",
@@ -220,7 +224,9 @@ export default function DashboardPage() {
                                         ? stats?.classes
                                         : id === "backgrounds"
                                           ? stats?.backgrounds
-                                          : undefined
+                                          : id === "races"
+                                            ? stats?.races
+                                            : undefined
 
                         return <Card key={id} {...entity} index={index} stats={entityStats} loading={loading} />
                     })}
