@@ -11,12 +11,17 @@ import type { DiceValue, DiceType } from '@/features/spells/types/spells.types';
 import { diceColors } from '@/lib/config/colors';
 
 export interface GlassDiceValueProps {
-  /** Dice value object with quantidade and tipo */
-  value: DiceValue;
-  /** Show dice icon */
-  showIcon?: boolean;
-  /** Custom class name */
-  className?: string;
+    /** Dice value object with quantidade and tipo */
+    value: DiceValue
+    /** Show dice icon */
+    showIcon?: boolean
+    /** Custom color configuration (overrides default dice type color) */
+    colorOverride?: {
+        text: string
+        bgAlpha?: string
+    }
+    /** Custom class name */
+    className?: string
 }
 
 /**
@@ -39,29 +44,25 @@ export interface GlassDiceValueProps {
  * <GlassDiceValue value={{ quantidade: 2, tipo: 'd6' }} />
  * // Renders: "2d6" with green color
  *
- * // With icon
- * <GlassDiceValue value={{ quantidade: 1, tipo: 'd20' }} showIcon />
- * // Renders: <DiceIcon> "1d20" with red color
- *
- * // Custom styling
- * <GlassDiceValue
- *   value={{ quantidade: 3, tipo: 'd8' }}
- *   className="text-base font-bold"
- * />
+ * // With custom damage color override
+ * <GlassDiceValue value={{ quantidade: 1, tipo: 'd8' }} colorOverride={{ text: 'text-orange-500' }} />
  * ```
  */
-export function GlassDiceValue({
-  value,
-  showIcon = true,
-  className,
-}: GlassDiceValueProps) {
-  const colorConfig = diceColors[value.tipo as DiceType];
-  const notation = `${value.quantidade}${value.tipo}`;
+export function GlassDiceValue({ value, showIcon = true, colorOverride, className }: GlassDiceValueProps) {
+    const colorConfig = colorOverride || diceColors[value.tipo as DiceType]
+    const notation = `${value.quantidade}${value.tipo}`
 
-  return (
-      <span className={cn("inline-flex items-center gap-1.5", colorConfig?.text || "text-white/70", className)}>
-          {showIcon && <Dices className="w-3.5 h-3.5" />}
-          <span className="text-sm font-medium">{notation}</span>
-      </span>
-  )
+    // Use inline style for text color if hex is provided to avoid Tailwind JIT issues with arbitrary values in strings
+    const isCustomHex = colorOverride?.text.includes("#")
+    const customTextColor = isCustomHex ? colorOverride!.text.match(/#(?:[0-9a-fA-F]{3}){1,2}/)?.[0] : undefined
+
+    return (
+        <span
+            className={cn("inline-flex items-center gap-1.5 transition-colors", !isCustomHex && (colorConfig?.text || "text-white/70"), className)}
+            style={customTextColor ? { color: customTextColor } : undefined}
+        >
+            {showIcon && <Dices className="w-3.5 h-3.5" />}
+            <span className="text-sm font-medium">{notation}</span>
+        </span>
+    )
 }

@@ -16,7 +16,7 @@ import * as React from 'react';
 import { motion } from 'framer-motion';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Package2, Home, User, Sparkles, FileText, Users, Scroll, Zap, Wand, AtSign, MessageSquare, Sword, ShieldCheck } from "lucide-react"
+import { Package2, Home, User, Sparkles, FileText, Users, Scroll, Zap, Wand, AtSign, MessageSquare, Sword, ShieldCheck, Fingerprint } from "lucide-react"
 import { cn } from "@/core/utils"
 import { glassConfig } from "@/lib/config/glass-config"
 import { motionConfig } from "@/lib/config/motion-configs"
@@ -55,6 +55,7 @@ const mainItems = [
 // T008: Added "Talentos" for feats catalog
 const cadastrosItems = [
     { label: "Classes", href: "/classes", icon: Sword },
+    { label: "Raças", href: "/races", icon: Fingerprint },
     { label: "Origens", href: "/backgrounds", icon: ShieldCheck },
     { label: "Regras", href: "/rules", icon: Scroll },
     { label: "Habilidades", href: "/traits", icon: Sparkles },

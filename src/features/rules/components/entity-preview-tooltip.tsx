@@ -3,7 +3,7 @@
 import * as React from "react"
 import { GlassCard } from "@/components/ui/glass-card"
 import { Chip } from "@/components/ui/chip"
-import { ScrollText, BookOpen, Quote, Sparkles, ExternalLink } from "lucide-react"
+import { ScrollText, BookOpen, Quote, Sparkles, ExternalLink, Fingerprint } from "lucide-react"
 import { cn } from "@/core/utils"
 import { entityColors } from "@/lib/config/colors"
 import { Reference } from "../types/rules.types"
@@ -14,8 +14,9 @@ import { FeatPreview } from "@/features/feats/components/feat-preview"
 import { SpellPreview } from "@/features/spells/components/spell-preview"
 import { ClassPreview } from "@/features/classes/components/class-preview"
 import { BackgroundPreview } from "@/features/backgrounds/components/background-preview"
+import { RacePreview } from "@/features/races/components/race-preview"
 import { useWindows } from "@/core/context/window-context"
-import { motion } from "framer-motion"
+import { motion, AnimatePresence } from "framer-motion"
 import { EntitySource } from "./entity-source"
 
 interface RulePreviewProps {
@@ -141,6 +142,53 @@ export const TraitPreview = ({ trait, showStatus = true, hideStatusChip = false,
     )
 }
 
+/**
+ * RacePreview specialized for the tooltip with actions.
+ */
+export const RacePreviewWithActions = ({ race, showStatus = true }: { race: any; showStatus?: boolean }) => {
+    const { addWindow } = useWindows()
+    return (
+        <div className="space-y-4 w-full">
+            <div className="flex items-start justify-between gap-4">
+                <div className="flex items-center gap-2">
+                    <div className={cn("p-1.5 rounded-lg border", entityColors.Raça.badge)}>
+                        <Fingerprint className="w-4 h-4" />
+                    </div>
+                    <div>
+                        <EntityTitleLink name={race.name} entityType="Raça" />
+                        <p className="text-[10px] uppercase font-bold tracking-widest text-white/40 mt-0.5">Raça D&D 5e</p>
+                    </div>
+                </div>
+                <div className="flex items-center gap-2">
+                    <motion.button
+                        whileHover={{ scale: 1.1 }}
+                        whileTap={{ scale: 0.9 }}
+                        onClick={() =>
+                            addWindow({
+                                title: race.name || "Raça",
+                                content: null,
+                                item: race,
+                                entityType: "Raça",
+                            })
+                        }
+                        className="p-1.5 rounded-lg text-white/40 hover:text-white hover:bg-white/10 transition-colors"
+                        title="Abrir em nova janela"
+                    >
+                        <ExternalLink className="h-4 w-4" />
+                    </motion.button>
+                    {showStatus && race.status === "inactive" && (
+                        <Chip variant="common" size="sm" className="opacity-50">
+                            Inativa
+                        </Chip>
+                    )}
+                </div>
+            </div>
+
+            <RacePreview race={race} showStatus={false} />
+        </div>
+    )
+}
+
 interface EntityPreviewTooltipProps {
     entityId: string
     entityType: string
@@ -174,6 +222,8 @@ export const EntityPreviewTooltip = ({ entityId, entityType, children, side = "t
                 endpoint = `/api/classes/${entityId}`
             } else if (entityType === "Origem") {
                 endpoint = `/api/backgrounds/${entityId}`
+            } else if (entityType === "Raça") {
+                endpoint = `/api/races/${entityId}`
             }
 
             const res = await fetch(endpoint)
@@ -226,6 +276,8 @@ export const EntityPreviewTooltip = ({ entityId, entityType, children, side = "t
                 return <ClassPreview characterClass={data} showStatus={true} />
             case "Origem":
                 return <BackgroundPreview background={data} />
+            case "Raça":
+                return <RacePreviewWithActions race={data} showStatus={true} />
             default:
                 return (
                     <div className="p-4">

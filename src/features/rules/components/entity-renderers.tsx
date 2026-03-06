@@ -4,6 +4,7 @@ import { FeatPreview } from "@/features/feats/components/feat-preview"
 import { SpellPreview } from "@/features/spells/components/spell-preview"
 import { ClassPreview } from "@/features/classes/components/class-preview"
 import { BackgroundPreview } from "@/features/backgrounds/components/background-preview"
+import { RacePreview } from "@/features/races/components/race-preview"
 import { fetchTraitById } from "@/features/traits/api/traits-api"
 import { fetchSpell } from "@/features/spells/api/spells-api"
 import { fetchFeat } from "@/features/feats/api/feats-api"
@@ -22,6 +23,7 @@ export const ENTITY_RENDERERS: Record<string, (item: any, options?: { showStatus
     Magia: (idOrItem, opts) => <SpellAsyncRenderer item={idOrItem} showStatus={opts?.showStatus ?? true} hideStatusChip={opts?.hideStatusChip} hideActionIcons={opts?.hideActionIcons} />,
     Classe: (idOrItem, opts) => <ClassAsyncRenderer item={idOrItem} showStatus={opts?.showStatus ?? true} />,
     Origem: (idOrItem, opts) => <BackgroundAsyncRenderer item={idOrItem} />,
+    Raça: (idOrItem, opts) => <RaceAsyncRenderer item={idOrItem} />,
 }
 
 function TraitAsyncRenderer({ id, showStatus = true, hideStatusChip, hideActionIcons }: { id: any; showStatus?: boolean; hideStatusChip?: boolean; hideActionIcons?: boolean }) {
@@ -254,6 +256,53 @@ function BackgroundAsyncRenderer({ item }: { item: any }) {
     return (
         <div className="p-6">
             <BackgroundPreview background={background} />
+        </div>
+    )
+}
+
+function RaceAsyncRenderer({ item }: { item: any }) {
+    const [race, setRace] = React.useState<any>(null)
+    const [loading, setLoading] = React.useState(true)
+
+    const id = typeof item === "string" ? item : item?._id || item?.id
+
+    React.useEffect(() => {
+        // Se já temos o objeto completo, não precisamos buscar
+        if (item && typeof item === "object" && item.description && item.traits) {
+            setRace(item)
+            setLoading(false)
+            return
+        }
+
+        if (!id) {
+            setLoading(false)
+            return
+        }
+
+        fetch(`/api/races/${id}`)
+            .then((res) => res.json())
+            .then(setRace)
+            .catch(console.error)
+            .finally(() => setLoading(false))
+    }, [id, item])
+
+    if (loading)
+        return (
+            <div className="p-8 flex flex-col items-center justify-center gap-3 bg-white/[0.02] rounded-xl border border-white/5">
+                <LoadingState variant="spinner" size="md" />
+                <span className="text-[10px] uppercase font-bold tracking-widest text-white/20">Buscando Raça...</span>
+            </div>
+        )
+    if (!race)
+        return (
+            <div className="p-8 text-center bg-emerald-500/5 rounded-xl border border-dashed border-emerald-500/20 flex flex-col items-center justify-center gap-2">
+                <p className="text-xs text-emerald-400/60 italic">Raça não encontrada.</p>
+            </div>
+        )
+
+    return (
+        <div className="p-6">
+            <RacePreview race={race} />
         </div>
     )
 }

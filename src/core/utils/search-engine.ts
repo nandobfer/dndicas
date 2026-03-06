@@ -11,7 +11,7 @@ export interface UnifiedEntity {
     _id?: string
     name: string
     label?: string // For compatibility
-    type: "Regra" | "Magia" | "Habilidade" | "Talento" | "Classe" | "Origem"
+    type: "Regra" | "Magia" | "Habilidade" | "Talento" | "Classe" | "Origem" | "Raça"
     description?: string
     source?: string
     status: "active" | "inactive"

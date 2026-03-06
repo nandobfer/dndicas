@@ -6,87 +6,89 @@
  * @see specs/000/research.md - Decision 3
  */
 
+import { damageTypeHex } from "./damage-types-hex"
+
 /**
  * Primary color used for main actions (buttons, links, primary interactions).
  * Based on D&D rare (blue) - #3B82F6
  */
-export const primaryColor = '#3B82F6';
+export const primaryColor = "#3B82F6"
 
 /**
  * D&D 5e rarity colors mapped to hex values.
  * Used throughout the app for consistent visual hierarchy.
  */
 export const rarityColors = {
-  /** Common items - neutral/default state */
-  common: '#9CA3AF',
-  /** Uncommon items - success state (CREATE actions) */
-  uncommon: '#10B981',
-  /** Rare items - info state (UPDATE actions) */
-  rare: primaryColor,
-  /** Very Rare items - highlight state (regular users) */
-  veryRare: '#8B5CF6',
-  /** Legendary items - warning state */
-  legendary: '#F59E0B',
-  /** Artifact items - danger state (DELETE actions, admins) */
-  artifact: '#EF4444',
-} as const;
+    /** Common items - neutral/default state */
+    common: "#9CA3AF",
+    /** Uncommon items - success state (CREATE actions) */
+    uncommon: "#10B981",
+    /** Rare items - info state (UPDATE actions) */
+    rare: primaryColor,
+    /** Very Rare items - highlight state (regular users) */
+    veryRare: "#8B5CF6",
+    /** Legendary items - warning state */
+    legendary: "#F59E0B",
+    /** Artifact items - danger state (DELETE actions, admins) */
+    artifact: "#EF4444",
+} as const
 
 /**
  * Action colors mapped from rarity system.
  * Used for audit log chips and status indicators.
  */
 export const actionColors = {
-  create: rarityColors.uncommon,
-  update: rarityColors.rare,
-  delete: rarityColors.artifact,
-} as const;
+    create: rarityColors.uncommon,
+    update: rarityColors.rare,
+    delete: rarityColors.artifact,
+} as const
 
 /**
  * Role colors for user badges and indicators.
  * Admin = artifact (red), User = veryRare (purple).
  */
 export const roleColors = {
-  admin: rarityColors.artifact,
-  user: rarityColors.veryRare,
-} as const;
+    admin: rarityColors.artifact,
+    user: rarityColors.veryRare,
+} as const
 
 /**
  * Liquid Glass effect colors with varying opacity levels.
  * Used for glassmorphism backgrounds and borders.
  */
 export const glassColors = {
-  /** Light glass overlay (5-10% white) */
-  light: 'rgba(255, 255, 255, 0.1)',
-  /** Medium glass overlay (15% white) */
-  medium: 'rgba(255, 255, 255, 0.15)',
-  /** Dark glass overlay (40% black) */
-  dark: 'rgba(0, 0, 0, 0.4)',
-  /** Subtle border for glass elements */
-  border: 'rgba(255, 255, 255, 0.1)',
-  /** Glow effect for highlights */
-  glow: 'rgba(255, 255, 255, 0.05)',
-} as const;
+    /** Light glass overlay (5-10% white) */
+    light: "rgba(255, 255, 255, 0.1)",
+    /** Medium glass overlay (15% white) */
+    medium: "rgba(255, 255, 255, 0.15)",
+    /** Dark glass overlay (40% black) */
+    dark: "rgba(0, 0, 0, 0.4)",
+    /** Subtle border for glass elements */
+    border: "rgba(255, 255, 255, 0.1)",
+    /** Glow effect for highlights */
+    glow: "rgba(255, 255, 255, 0.05)",
+} as const
 
 /**
  * Complete color configuration object.
  * Import this for access to all color palettes.
  */
 export const colors = {
-  primary: primaryColor,
-  rarity: rarityColors,
-  action: actionColors,
-  role: roleColors,
-  glass: glassColors,
-} as const;
+    primary: primaryColor,
+    rarity: rarityColors,
+    action: actionColors,
+    role: roleColors,
+    glass: glassColors,
+} as const
 
 /** Type for rarity color keys */
-export type RarityColor = keyof typeof rarityColors;
+export type RarityColor = keyof typeof rarityColors
 
 /** Type for action color keys */
-export type ActionColor = keyof typeof actionColors;
+export type ActionColor = keyof typeof actionColors
 
 /** Type for role color keys */
-export type RoleColor = keyof typeof roleColors;
+export type RoleColor = keyof typeof roleColors
 
 /**
  * Central configuration for entity colors across the app.
@@ -174,6 +176,16 @@ export const entityColors = {
         bgAlpha: "bg-amber-500/10",
         text: "text-amber-400",
         hex: rarityColors.legendary, // #F59E0B
+    },
+    Raça: {
+        color: "red",
+        mention: "bg-red-500/10 text-red-400 border-red-400/20",
+        badge: "bg-red-400/20 text-red-400",
+        border: "border-red-500/20",
+        hoverBorder: "hover:border-red-500/40",
+        bgAlpha: "bg-red-500/10",
+        text: "text-red-400",
+        hex: rarityColors.artifact, // #EF4444
     },
 } as const
 
@@ -296,7 +308,7 @@ export const spellSchoolColors = {
 /**
  * D&D Spell Component colors and configurations.
  * Used for spell catalog UI - component chips.
- * 
+ *
  * Mapping:
  * - Concentração → red (artifact)
  * - Somático → emerald (uncommon)
@@ -342,37 +354,37 @@ export const spellComponentConfig = {
  * D&D Dice Types colors mapped from rarity system.
  */
 export const diceColors = {
-    d4: {
+    d20: {
         rarity: "common" as RarityColor,
         text: "text-gray-400",
         bg: "bg-gray-400/20",
         border: "border-gray-400/20",
     },
-    d6: {
+    d4: {
         rarity: "uncommon" as RarityColor,
         text: "text-emerald-400",
         bg: "bg-emerald-400/20",
         border: "border-emerald-400/20",
     },
-    d8: {
+    d6: {
         rarity: "rare" as RarityColor,
         text: "text-blue-400",
         bg: "bg-blue-400/20",
         border: "border-blue-400/20",
     },
-    d10: {
+    d8: {
         rarity: "veryRare" as RarityColor,
         text: "text-purple-400",
         bg: "bg-purple-400/20",
         border: "border-purple-400/20",
     },
-    d12: {
+    d10: {
         rarity: "legendary" as RarityColor,
         text: "text-amber-400",
         bg: "bg-amber-400/20",
         border: "border-amber-400/20",
     },
-    d20: {
+    d12: {
         rarity: "artifact" as RarityColor,
         text: "text-red-400",
         bg: "bg-red-400/20",
@@ -383,12 +395,143 @@ export const diceColors = {
 export type SpellSchool = keyof typeof spellSchoolColors
 export type SpellComponent = keyof typeof spellComponentConfig
 export type DiceType = keyof typeof diceColors
+export type DamageType = keyof typeof damageTypeColors
+
+/**
+ * Helper to find damage color by a key (e.g., "veneno", "fire")
+ */
+export function getDamageColorByKey(key: string) {
+    if (!key) return null
+
+    // Função interna para remover acentos e normalizar
+    const normalize = (str: string) =>
+        str
+            .toLowerCase()
+            .normalize("NFD")
+            .replace(/[\u0300-\u036f]/g, "")
+            .trim()
+            .replace(/[\[\]]/g, "")
+
+    const normalizedKey = normalize(key)
+
+    const damageType = Object.values(damageTypeColors).find((dt) => dt.keys.some((k) => normalize(k) === normalizedKey))
+
+    return damageType ? { text: damageType.text, bgAlpha: damageType.bgAlpha } : null
+}
+
+/**
+ * D&D Damage Types colors.
+ * Refined based on BG3/Modern D&D visual cues.
+ *
+ * Mapping logic:
+ * - Physical (Pancada, Corte, Perfuração) → common (gray/iron)
+ * - Fire (Fogo) → artifact (bright orange/red)
+ * - Cold (Frio) → rare (light blue/ice)
+ * - Lightning (Elétrico) → legendary (bright yellow/gold)
+ * - Poison (Veneno) → uncommon (toxic green)
+ * - Acid (Ácido) → uncommon (yellow-green/lime)
+ * - Psychic (Psíquico) → veryRare (magenta/pink-purple)
+ * - Necrotic (Necrótico) → veryRare (dark purple/decay)
+ * - Radiant (Radiante) → legendary (white-gold/radiant)
+ * - Thunder (Trovão) → rare (deep blue/storm)
+ * - Force (Força) → rare (cyan/arcane pure)
+ */
+/**
+ * Damage type colors based on Baldur's Gate 3 color codes.
+ * Includes common naming keys for each type to facilitate text matching.
+ */
+export const damageTypeColors = {
+    acid: {
+        hex: damageTypeHex.acid,
+        keys: ["ácido", "acid", "corrosivo"],
+        color: "lime",
+        bgAlpha: `bg-[${damageTypeHex.acid}]/10`,
+        text: `text-[${damageTypeHex.acid}]`,
+    },
+    cold: {
+        hex: damageTypeHex.cold,
+        keys: ["frio", "cold", "gelo", "glacial"],
+        color: "cyan",
+        bgAlpha: `bg-[${damageTypeHex.cold}]/10`,
+        text: `text-[${damageTypeHex.cold}]`,
+    },
+    fire: {
+        hex: damageTypeHex.fire,
+        keys: ["fogo", "fire", "ígneo", "chamas"],
+        color: "orange",
+        bgAlpha: `bg-[${damageTypeHex.fire}]/10`,
+        text: `text-[${damageTypeHex.fire}]`,
+    },
+    force: {
+        hex: damageTypeHex.force,
+        keys: ["força", "force", "arcano", "puro"],
+        color: "red",
+        bgAlpha: `bg-[${damageTypeHex.force}]/10`,
+        text: `text-[${damageTypeHex.force}]`,
+    },
+    healing: {
+        hex: damageTypeHex.healing,
+        keys: ["cura", "healing", "vitalidade", "regeneração"],
+        color: "teal",
+        bgAlpha: `bg-[${damageTypeHex.healing}]/10`,
+        text: `text-[${damageTypeHex.healing}]`,
+    },
+    lightning: {
+        hex: damageTypeHex.lightning,
+        keys: ["elétrico", "lightning", "choque", "relâmpago", "raio"],
+        color: "blue",
+        bgAlpha: `bg-[${damageTypeHex.lightning}]/10`,
+        text: `text-[${damageTypeHex.lightning}]`,
+    },
+    necrotic: {
+        hex: damageTypeHex.necrotic,
+        keys: ["necrótico", "necrotic", "decomposição", "morte"],
+        color: "emerald",
+        bgAlpha: `bg-[${damageTypeHex.necrotic}]/10`,
+        text: `text-[${damageTypeHex.necrotic}]`,
+    },
+    poison: {
+        hex: damageTypeHex.poison,
+        keys: ["veneno", "poison", "tóxico", "peçonha"],
+        color: "green",
+        bgAlpha: `bg-[${damageTypeHex.poison}]/10`,
+        text: `text-[${damageTypeHex.poison}]`,
+    },
+    radiant: {
+        hex: damageTypeHex.radiant,
+        keys: ["radiante", "radiant", "sagrado", "luz"],
+        color: "amber",
+        bgAlpha: `bg-[${damageTypeHex.radiant}]/10`,
+        text: `text-[${damageTypeHex.radiant}]`,
+    },
+    thunder: {
+        hex: damageTypeHex.thunder,
+        keys: ["trovão", "thunder", "som", "sônico"],
+        color: "purple",
+        bgAlpha: `bg-[${damageTypeHex.thunder}]/10`,
+        text: `text-[${damageTypeHex.thunder}]`,
+    },
+    psychic: {
+        hex: damageTypeHex.psychic,
+        keys: ["psíquico", "psychic", "mental", "mente"],
+        color: "pink",
+        bgAlpha: `bg-[${damageTypeHex.psychic}]/10`,
+        text: `text-[${damageTypeHex.psychic}]`,
+    },
+    physical: {
+        hex: damageTypeHex.physical,
+        keys: ["físico", "physical", "pancada", "corte", "perfuração", "concussão"],
+        color: "slate",
+        bgAlpha: `bg-[${damageTypeHex.physical}]/10`,
+        text: `text-[${damageTypeHex.physical}]`,
+    },
+} as const
 
 /**
  * Feedback configuration for status, types and priority.
  */
 export const feedbackStatusConfig = {
-  cancelado: {
+    cancelado: {
         label: "Cancelado",
         color: "artifact",
         badge: "bg-red-400/20 text-red-400",
@@ -406,8 +549,7 @@ export const feedbackStatusConfig = {
         badge: "bg-emerald-400/20 text-emerald-400",
         hex: rarityColors.uncommon,
     },
-    
-} as const;
+} as const
 
 export const feedbackTypeConfig = {
     bug: {
@@ -422,7 +564,7 @@ export const feedbackTypeConfig = {
         badge: "bg-blue-400/20 text-blue-400",
         hex: rarityColors.rare,
     },
-} as const;
+} as const
 
 export const feedbackPriorityConfig = {
     baixa: {
@@ -443,11 +585,11 @@ export const feedbackPriorityConfig = {
         badge: "bg-red-400/20 text-red-400",
         hex: rarityColors.artifact,
     },
-} as const;
+} as const
 
-export type FeedbackStatus = keyof typeof feedbackStatusConfig;
-export type FeedbackType = keyof typeof feedbackTypeConfig;
-export type FeedbackPriority = keyof typeof feedbackPriorityConfig;
+export type FeedbackStatus = keyof typeof feedbackStatusConfig
+export type FeedbackType = keyof typeof feedbackTypeConfig
+export type FeedbackPriority = keyof typeof feedbackPriorityConfig
 
 /**
  * Maps rarity color names to Tailwind CSS bg/text class pairs.
@@ -460,6 +602,30 @@ export const rarityToTailwind: Record<RarityColor, { bg: string; text: string; b
     veryRare: { bg: "bg-purple-400/20", text: "text-purple-400", border: "border-purple-400/20" },
     legendary: { bg: "bg-amber-400/20", text: "text-amber-400", border: "border-amber-400/20" },
     artifact: { bg: "bg-red-400/20", text: "text-red-400", border: "border-red-400/20" },
+} as const
+
+/**
+ * D&D Size categories colors.
+ */
+export const sizeColors = {
+    Pequeno: {
+        color: "emerald",
+        bgAlpha: "bg-emerald-500/10",
+        text: "text-emerald-400",
+        hex: rarityColors.uncommon,
+    },
+    Médio: {
+        color: "blue",
+        bgAlpha: "bg-blue-500/10",
+        text: "text-blue-400",
+        hex: rarityColors.rare,
+    },
+    Grande: {
+        color: "amber",
+        bgAlpha: "bg-amber-500/10",
+        text: "text-amber-400",
+        hex: rarityColors.legendary,
+    },
 } as const
 
 /**

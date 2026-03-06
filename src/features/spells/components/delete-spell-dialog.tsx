@@ -1,36 +1,37 @@
 /**
- * @fileoverview Delete background confirmation dialog.
+ * @fileoverview Delete Spell confirmation dialog.
  */
 
 "use client";
 
-import * as React from "react"
-import { AlertTriangle, Loader2, Landmark } from "lucide-react"
-import { cn } from "@/core/utils"
+import * as React from 'react';
+import { AlertTriangle, Loader2, Sparkles } from 'lucide-react';
+import { cn } from '@/core/utils';
 import { GlassModal, GlassModalContent, GlassModalHeader, GlassModalTitle, GlassModalDescription } from "@/components/ui/glass-modal"
 import { toast } from "sonner"
-import { useDeleteBackground } from "../api/backgrounds-queries"
-import type { Background } from "../types/backgrounds.types"
+import { useDeleteSpell } from "../api/spells-queries"
+import type { Spell } from "../types/spells.types"
 
-interface DeleteBackgroundDialogProps {
+export interface DeleteSpellDialogProps {
     isOpen: boolean
     onClose: () => void
-    background?: Background | null
+    spell: Spell | null
 }
 
-export function DeleteBackgroundDialog({ isOpen, onClose, background }: DeleteBackgroundDialogProps) {
-    const deleteMutation = useDeleteBackground()
+export function DeleteSpellDialog({ isOpen, onClose, spell }: DeleteSpellDialogProps) {
+    const deleteMutation = useDeleteSpell()
     const isDeleting = deleteMutation.isPending
 
-    if (!background) return null
+    if (!spell) return null
 
     const handleConfirm = async () => {
         try {
-            await deleteMutation.mutateAsync(background._id)
-            toast.success("Origem excluída com sucesso!")
+            await deleteMutation.mutateAsync(spell._id)
+            toast.success(`Magia "${spell.name}" excluída com sucesso!`)
             onClose()
-        } catch (error: any) {
-            toast.error(error.message || "Erro ao excluir origem")
+        } catch (error) {
+            console.error("[DeleteSpellDialog] Error deleting:", error)
+            toast.error("Ocorreu um erro ao excluir a magia.")
         }
     }
 
@@ -38,8 +39,10 @@ export function DeleteBackgroundDialog({ isOpen, onClose, background }: DeleteBa
         <GlassModal open={isOpen} onOpenChange={(open) => !open && onClose()}>
             <GlassModalContent size="md">
                 <GlassModalHeader>
-                    <GlassModalTitle>Excluir Origem</GlassModalTitle>
-                    <GlassModalDescription>Esta ação removerá a origem do catálogo permanentemente. Referências existentes em outros lugares podem ser afetadas.</GlassModalDescription>
+                    <GlassModalTitle>Excluir Magia</GlassModalTitle>
+                    <GlassModalDescription>
+                        Esta ação removerá a magia do catálogo permanentemente. Referências existentes em outros lugares podem ser afetadas.
+                    </GlassModalDescription>
                 </GlassModalHeader>
 
                 <div className="mt-6 space-y-6">
@@ -49,19 +52,21 @@ export function DeleteBackgroundDialog({ isOpen, onClose, background }: DeleteBa
                             <AlertTriangle className="h-5 w-5 text-rose-400 shrink-0 mt-0.5" />
                             <div className="text-sm text-white/80">
                                 <p className="font-medium text-rose-400 mb-1">Atenção!</p>
-                                <p>Esta ação é irreversível. A origem será removida definitivamente do banco de dados.</p>
+                                <p>Esta ação é irreversível. A magia será removida definitivamente do banco de dados.</p>
                             </div>
                         </div>
 
-                        {/* Background info */}
+                        {/* Spell info */}
                         <div className="p-4 rounded-lg bg-white/5 border border-white/10 flex items-center gap-4">
-                            <div className="h-12 w-12 rounded-full bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center shrink-0">
-                                <Landmark className="h-6 w-6 text-emerald-400" />
+                             <div className="h-12 w-12 rounded-full bg-amber-500/10 border border-amber-500/20 flex items-center justify-center shrink-0">
+                                <Sparkles className="h-6 w-6 text-amber-400" />
                             </div>
                             <div className="space-y-1 min-w-0">
-                                <p className="text-xs text-white/40 uppercase tracking-wider">Origem a ser excluída</p>
-                                <p className="text-base font-semibold text-white truncate">{background.name}</p>
-                                <p className="text-sm text-white/60">{background.source}</p>
+                                <p className="text-xs text-white/40 uppercase tracking-wider">Magia a ser excluída</p>
+                                <p className="text-base font-semibold text-white truncate">{spell.name}</p>
+                                <p className="text-sm text-white/60">
+                                    {spell.circle === 0 ? "Truque" : `${spell.circle}º Círculo`} • {spell.school}
+                                </p>
                             </div>
                         </div>
                     </div>
@@ -92,7 +97,7 @@ export function DeleteBackgroundDialog({ isOpen, onClose, background }: DeleteBa
                             )}
                         >
                             {isDeleting && <Loader2 className="h-4 w-4 animate-spin" />}
-                            {isDeleting ? "Excluindo..." : "Excluir Origem"}
+                            {isDeleting ? "Excluindo..." : "Excluir Magia"}
                         </button>
                     </div>
                 </div>
@@ -100,4 +105,3 @@ export function DeleteBackgroundDialog({ isOpen, onClose, background }: DeleteBa
         </GlassModal>
     )
 }
-

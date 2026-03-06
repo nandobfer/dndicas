@@ -8,6 +8,7 @@ import { Feat } from "@/features/feats/models/feat"
 import { Spell } from "@/features/spells/models/spell"
 import { CharacterClass } from "@/features/classes/models/character-class"
 import { BackgroundModel as Background } from "@/features/backgrounds/models/background"
+import { RaceModel as Race } from "@/features/races/models/race"
 import { getCurrentUserFromDb } from "@/features/users/api/get-current-user"
 import { subDays, startOfDay, endOfDay, format } from "date-fns"
 
@@ -32,6 +33,8 @@ export async function GET(_request: NextRequest) {
             activeClasses,
             totalBackgrounds,
             activeBackgrounds,
+            totalRaces,
+            activeRaces,
         ] = await Promise.all([
             User.countDocuments({ deleted: { $ne: true } }),
             User.countDocuments({ status: "active", deleted: { $ne: true } }),
@@ -48,6 +51,8 @@ export async function GET(_request: NextRequest) {
             CharacterClass.countDocuments({ status: "active" }),
             Background.countDocuments(),
             Background.countDocuments({ status: "active" }),
+            Race.countDocuments(),
+            Race.countDocuments({ status: "active" }),
         ])
 
         // Helper to get growth data for any model from the first record until now
@@ -82,8 +87,8 @@ export async function GET(_request: NextRequest) {
             return growth
         }
 
-        // 3. User Growth (Total time)
-        const [growthData, rulesGrowth, traitsGrowth, featsGrowth, spellsGrowth, classesGrowth, backgroundsGrowth] = await Promise.all([
+        // 3. Growth data
+        const [growthData, rulesGrowth, traitsGrowth, featsGrowth, spellsGrowth, classesGrowth, backgroundsGrowth, racesGrowth] = await Promise.all([
             getFullGrowth(User),
             getFullGrowth(Reference),
             getFullGrowth(Trait),
@@ -91,6 +96,7 @@ export async function GET(_request: NextRequest) {
             getFullGrowth(Spell),
             getFullGrowth(CharacterClass),
             getFullGrowth(Background),
+            getFullGrowth(Race),
         ])
 
         // 4. Audit Logs activity (last 7 days - keeping this as activity is usually short-term)
@@ -148,6 +154,11 @@ export async function GET(_request: NextRequest) {
                 total: totalBackgrounds,
                 active: activeBackgrounds,
                 growth: backgroundsGrowth,
+            },
+            races: {
+                total: totalRaces,
+                active: activeRaces,
+                growth: racesGrowth,
             },
         })
     } catch (error) {

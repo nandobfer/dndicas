@@ -33,6 +33,7 @@ export function useSpellsPage() {
 
     // UI state
     const [isFormOpen, setIsFormOpen] = React.useState(false)
+    const [isDeleteDialogOpen, setIsDeleteDialogOpen] = React.useState(false)
     const [selectedSpell, setSelectedSpell] = React.useState<Spell | null>(null)
 
     // Handlers
@@ -62,19 +63,18 @@ export function useSpellsPage() {
         setIsFormOpen(true)
     }
 
-    const handleDeleteClick = async (spell: Spell) => {
-        if (!confirm(`Deseja realmente excluir a magia "${spell.name}"?`)) return
-
-        try {
-            await deleteMutation.mutateAsync(spell._id)
-            toast.success("Magia excluída com sucesso!")
-        } catch (error) {
-            toast.error("Erro ao excluir magia")
-        }
+    const handleDeleteClick = (spell: Spell) => {
+        setSelectedSpell(spell)
+        setIsDeleteDialogOpen(true)
     }
 
     const handleFormSuccess = () => {
         setIsFormOpen(false)
+        setSelectedSpell(null)
+    }
+
+    const handleDeleteSuccess = () => {
+        setIsDeleteDialogOpen(false)
         setSelectedSpell(null)
     }
 
@@ -128,10 +128,13 @@ export function useSpellsPage() {
             handleEditClick,
             handleDeleteClick,
             handleFormSuccess,
+            handleDeleteSuccess,
         },
         modals: {
             isFormOpen,
             setIsFormOpen,
+            isDeleteDialogOpen,
+            setIsDeleteDialogOpen,
             selectedSpell,
             hasActiveFilters,
         },

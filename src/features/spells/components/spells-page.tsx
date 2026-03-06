@@ -15,6 +15,7 @@ import { SpellsTable } from "./spells-table"
 import { SpellsFilters } from "./spells-filters"
 import { EntityList } from "@/features/rules/components/entity-list"
 import { SpellFormModal } from "./spell-form-modal"
+import { DeleteSpellDialog } from "./delete-spell-dialog"
 import { GlassCard, GlassCardContent } from "@/components/ui/glass-card"
 import { GlassViewSelector } from "@/components/ui/glass-view-selector"
 import { motionConfig } from "@/lib/config/motion-configs"
@@ -101,6 +102,7 @@ export function SpellsPage() {
             )}
 
             <SpellFormModal isOpen={modals.isFormOpen} spell={modals.selectedSpell} onClose={() => modals.setIsFormOpen(false)} onSuccess={actions.handleFormSuccess} />
+            <DeleteSpellDialog isOpen={modals.isDeleteDialogOpen} spell={modals.selectedSpell} onClose={() => modals.setIsDeleteDialogOpen(false)} />
         </motion.div>
     )
 }
