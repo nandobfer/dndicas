@@ -1,11 +1,12 @@
 "use client"
 
 import * as React from "react"
-import { useMemo, useEffect, useState } from "react"
+import { useMemo } from "react"
 import { cn } from "@/core/utils"
-import { entityColors } from "@/lib/config/colors"
+import { entityColors, getDamageColorByKey, damageTypeColors } from "@/lib/config/colors"
 import { useIsMobile } from "@/core/hooks/useMediaQuery"
 import { EntityPreviewTooltip } from "./entity-preview-tooltip"
+import Fuse from "fuse.js"
 import { SimpleGlassTooltip } from "@/components/ui/glass-tooltip"
 import { GlassDiceValue } from "@/components/ui/glass-dice-value"
 import type { DiceType } from "@/features/spells/types/spells.types"
@@ -18,6 +19,24 @@ interface MentionBadgeProps {
     className?: string
     delayDuration?: number
 }
+
+/**
+ * Pre-flattening damage keys for Fuse.js search
+ */
+const fuseData = Object.entries(damageTypeColors).flatMap(([id, config]) =>
+    config.keys.map((key) => ({
+        id,
+        key,
+        color: { text: config.text, bgAlpha: config.bgAlpha },
+        hex: config.hex,
+    })),
+)
+
+const fuse = new Fuse(fuseData, {
+    keys: ["key"],
+    threshold: 0.3, // Permite buscas aproximadas mas não excessivamente soltas
+    ignoreLocation: true,
+})
 
 function decodeHTMLEntities(text: string) {
     if (typeof document === "undefined") return text.replace(/&amp;/g, "&")
@@ -61,26 +80,102 @@ export function MentionContent({
         const convertNode = (node: Node, index: number): React.ReactNode => {
             if (node.nodeType === Node.TEXT_NODE) {
                 const text = node.textContent || ""
-                // Regex para capturar notação de dados (ex: 1d8, 2d6, 1d20)
-                const diceRegex = /(\d+)d(4|6|8|10|12|20|100)/g
-                const parts = text.split(diceRegex)
 
-                if (parts.length === 1) return text
+                /**
+                 * Caso 1: Detecção de dados com colchetes de estilo [fogo]
+                 * Esses são puramente para estilização e são REMOVIDOS do texto.
+                 */
+                const diceBracketRegex = /(\d+)d(4|6|8|10|12|20|100)(?:\s*\[([^\]]+)\])/g
+
+                /**
+                 * Caso 2: Detecção de dano em linguagem natural (ex: "de dano de fogo", "de dano psíquico")
+                 * Esses são COLORIDOS mas mantidos no texto.
+                 */
+                const naturalDamageRegex = /(de dano (?:de )?)([a-zA-Záàâãéèêíïóôõöúçñ]+)/gi
+
+                /**
+                 * Caso 3: Dados simples sem colchetes
+                 */
+                const simpleDiceRegex = /(\d+)d(4|6|8|10|12|20|100)/g
 
                 const elements: React.ReactNode[] = []
-                for (let i = 0; i < parts.length; i++) {
-                    if (i % 3 === 0) {
-                        // Texto normal
-                        if (parts[i]) elements.push(parts[i])
-                    } else if (i % 3 === 1) {
-                        // Quantidade (capturada no primeiro grupo)
-                        const quantidade = parseInt(parts[i], 10)
-                        const tipo = `d${parts[i + 1]}` as DiceType
-                        elements.push(<GlassDiceValue key={`dice-${index}-${i}`} value={{ quantidade, tipo }} className="mx-0.5" />)
-                        // Pula o próximo pois ele é o 'tipo' capturado no segundo grupo
-                        i++
+                let lastIndex = 0
+
+                // Combinamos as regex em uma lógica sequencial de parsing ou usamos uma abordagem de "marcador"
+                // Para manter a simplicidade e performance, vamos usar um regex unificado que prioriza o colchete
+                const unifiedRegex = /(\d+)d(4|6|8|10|12|20|100)(?:\s*\[([^\]]+)\])?|de dano (?:de )?([a-zA-Záàâãéèêíïóôõöúçñ]+)/gi
+
+                let match
+                while ((match = unifiedRegex.exec(text)) !== null) {
+                    const matchIndex = match.index
+
+                    if (matchIndex > lastIndex) {
+                        elements.push(text.substring(lastIndex, matchIndex))
                     }
+
+                    const [fullMatch, qty, faces, bracketType, naturalType] = match
+
+                    // Se for um dado (match no grupo 1/2)
+                    if (qty && faces) {
+                        const quantidade = parseInt(qty, 10)
+                        const tipo = `d${faces}` as DiceType
+
+                        // Se houver tipo em colchetes, usamos Fuse para encontrar a cor e ESCONDEMOS o colchete
+                        if (bracketType) {
+                            const fuseResult = fuse.search(bracketType)
+                            const item = fuseResult.length > 0 ? fuseResult[0].item : null
+
+                            elements.push(
+                                <GlassDiceValue
+                                    key={`dice-bracket-${index}-${matchIndex}`}
+                                    value={{ quantidade, tipo }}
+                                    colorOverride={item ? { text: `text-[${item.hex}]`, bgAlpha: item.color.bgAlpha } : undefined}
+                                    className="mx-0.5"
+                                />,
+                            )
+                        } else {
+                            // Se for apenas o dado, olhamos se o próximo texto é "de dano de X"
+                            // Vamos espiar o resto do texto para ver se há um match de dano natural logo após
+                            const remainingText = text.substring(unifiedRegex.lastIndex)
+                            const nextNaturalMatch = /^\s*de dano (?:de )?([a-zA-Záàâãéèêíïóôõöúçñ]+)/i.exec(remainingText)
+
+                            let colorOverride = undefined
+                            if (nextNaturalMatch) {
+                                const naturalType = nextNaturalMatch[1]
+                                const fuseResult = fuse.search(naturalType)
+                                if (fuseResult.length > 0) {
+                                    const item = fuseResult[0].item
+                                    colorOverride = { text: `text-[${item.hex}]`, bgAlpha: item.color.bgAlpha }
+                                }
+                            }
+
+                            elements.push(<GlassDiceValue key={`dice-simple-${index}-${matchIndex}`} value={{ quantidade, tipo }} colorOverride={colorOverride} className="mx-0.5" />)
+                        }
+                    }
+                    // Se for um texto de dano natural (match no grupo 4)
+                    else if (naturalType) {
+                        const fuseResult = fuse.search(naturalType)
+                        const item = fuseResult.length > 0 ? fuseResult[0].item : null
+
+                        if (item) {
+                            elements.push(
+                                <span key={`natural-dmg-${index}-${matchIndex}`} className="font-medium transition-colors" style={{ color: item.hex }}>
+                                    {fullMatch}
+                                </span>,
+                            )
+                        } else {
+                            elements.push(fullMatch)
+                        }
+                    }
+
+                    lastIndex = unifiedRegex.lastIndex
                 }
+
+                if (lastIndex < text.length) {
+                    elements.push(text.substring(lastIndex))
+                }
+
+                if (elements.length === 0) return text
                 return <React.Fragment key={`text-parts-${index}`}>{elements}</React.Fragment>
             }
 
@@ -108,13 +203,7 @@ export function MentionContent({
                                     key={`img-${index}`}
                                     delayDuration={100}
                                     className="!p-1"
-                                    content={
-                                        <img
-                                            src={src}
-                                            className="max-w-[500px] max-h-[500px] rounded-lg shadow-2xl border border-white/10 block"
-                                            alt="Preview"
-                                        />
-                                    }
+                                    content={<img src={src} className="max-w-[500px] max-h-[500px] rounded-lg shadow-2xl border border-white/10 block" alt="Preview" />}
                                 >
                                     <img
                                         src={src}
@@ -140,9 +229,7 @@ export function MentionContent({
                 // If inline mode, flatten structural blocks to avoid breaks
                 const blockTags = ["p", "div", "ul", "ol", "li", "h1", "h2", "h3", "h4", "h5", "h6", "blockquote", "pre"]
                 if (mode === "inline" && blockTags.includes(tagName)) {
-                    return (
-                        <React.Fragment key={`flat-${index}`}>{Array.from(node.childNodes).map((child, i) => convertNode(child, i))} </React.Fragment>
-                    )
+                    return <React.Fragment key={`flat-${index}`}>{Array.from(node.childNodes).map((child, i) => convertNode(child, i))} </React.Fragment>
                 }
 
                 // Default: Recreate the element while recursing for special nodes
@@ -172,7 +259,7 @@ export function MentionContent({
                     "[&_ul]:list-disc [&_ul]:pl-5 [&_ol]:list-decimal [&_ol]:pl-5",
                     "[&_li]:marker:text-white/30",
                     "[&_p]:min-h-[1em]",
-                    className
+                    className,
                 )}
             >
                 {contents}
