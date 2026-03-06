@@ -34,8 +34,9 @@ const fuseData = Object.entries(damageTypeColors).flatMap(([id, config]) =>
 
 const fuse = new Fuse(fuseData, {
     keys: ["key"],
-    threshold: 0.3, // Permite buscas aproximadas mas não excessivamente soltas
+    threshold: 0.25, // Rigoroso: só aceita matches muito próximos para evitar falsos positivos
     ignoreLocation: true,
+    minMatchCharLength: 4, // Evita matches em palavras muito curtas como "do", "de", etc.
 })
 
 function decodeHTMLEntities(text: string) {
@@ -103,7 +104,7 @@ export function MentionContent({
 
                 // Combinamos as regex em uma lógica sequencial de parsing ou usamos uma abordagem de "marcador"
                 // Para manter a simplicidade e performance, vamos usar um regex unificado que prioriza o colchete
-                const unifiedRegex = /(\d+)d(4|6|8|10|12|20|100)(?:\s*\[([^\]]+)\])?|de dano (?:de )?([a-zA-Záàâãéèêíïóôõöúçñ]+)/gi
+                const unifiedRegex = /(\d+)d(4|6|8|10|12|20|100)(?:\s*\[([^\]]+)\])?|(?:pontos de dano|de dano) (?:de )?([a-zA-Záàâãéèêíïóôõöúçñ]+)/gi
 
                 let match
                 while ((match = unifiedRegex.exec(text)) !== null) {
@@ -134,10 +135,10 @@ export function MentionContent({
                                 />,
                             )
                         } else {
-                            // Se for apenas o dado, olhamos se o próximo texto é "de dano de X"
+                            // Se for apenas o dado, olhamos se o próximo texto é "de dano de X" ou "pontos de dano de X"
                             // Vamos espiar o resto do texto para ver se há um match de dano natural logo após
                             const remainingText = text.substring(unifiedRegex.lastIndex)
-                            const nextNaturalMatch = /^\s*de dano (?:de )?([a-zA-Záàâãéèêíïóôõöúçñ]+)/i.exec(remainingText)
+                            const nextNaturalMatch = /^\s*(?:pontos de dano|de dano) (?:de )?([a-zA-Záàâãéèêíïóôõöúçñ]+)/i.exec(remainingText)
 
                             let colorOverride = undefined
                             if (nextNaturalMatch) {
