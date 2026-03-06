@@ -520,7 +520,7 @@ export const damageTypeColors = {
     },
     physical: {
         hex: damageTypeHex.physical,
-        keys: ["físico", "physical", "pancada", "corte", "perfuração", "concussão"],
+        keys: ["físico", "physical", "pancada", "corte", "perfuração", "concussão", "perfurante", "cortante", "contundente"],
         color: "slate",
         bgAlpha: `bg-[${damageTypeHex.physical}]/10`,
         text: `text-[${damageTypeHex.physical}]`,
