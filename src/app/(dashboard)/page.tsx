@@ -138,17 +138,21 @@ export default function DashboardPage() {
     return (
         <div className="flex flex-col gap-8 pb-12">
             {/* Header */}
-            <div className="space-y-4">
-                <motion.div initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} className="relative w-60 h-30">
+            <div className="flex flex-col items-center justify-center text-center space-y-6 py-8 md:py-12">
+                <motion.div
+                    initial={{ opacity: 0, scale: 0.9 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    className="relative w-full md:w-[500px] aspect-[2/1]"
+                >
                     <Image src="/dndicas-logo.webp" alt="Dungeons & Dicas" fill className="object-contain" priority />
                 </motion.div>
                 <motion.p
-                    initial={{ opacity: 0, x: -20 }}
-                    animate={{ opacity: 1, x: 0 }}
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
                     transition={{ delay: 0.1 }}
-                    className="text-white/60 text-lg"
+                    className="text-white/60 text-lg md:text-xl max-w-2xl px-4"
                 >
-                    Um catálogo em português, criado para ajudar mestres e jogadores a encontrarem rapidamente as informações que precisam.
+                    Dungeons & Dicas: Um catálogo em português, para mestres e jogadores encontrarem rapidamente as informações que precisam
                 </motion.p>
             </div>
 
