@@ -16,6 +16,7 @@ import { RacesEntityCard } from "./_components/races-entity-card"
 import { BackgroundsEntityCard } from "./_components/backgrounds-entity-card"
 import { WipEntityCard } from "./_components/wip-entity-card"
 import { AnimatedNumber } from "@/components/ui/animated-number"
+import { InlineSearch } from "@/components/ui/inline-search"
 import Image from "next/image"
 import Link from "next/link"
 
@@ -73,31 +74,12 @@ const dndEntities = [
         title: "Classes",
         icon: Sword,
         description: "Classes de personagem (Guerreiro, Mago, etc.)",
-        component: ClassesEntityCard,
+        component: ClassesEntityCard
     },
     {
         id: "races",
         title: "Raças",
-        component: RacesEntityCard,
-    },
-    {
-        id: "traits",
-        title: "Habilidades",
-        icon: Sparkles,
-        description: "Traits e habilidades de classe/raça",
-        component: TraitsEntityCard,
-    },
-    {
-        id: "feats",
-        title: "Talentos",
-        component: FeatsEntityCard,
-    },
-    {
-        id: "items",
-        title: "Itens",
-        icon: Backpack,
-        description: "Equipamentos, armas e itens mágicos",
-        component: WipEntityCard,
+        component: RacesEntityCard
     },
     { id: "spells", title: "Magias", component: SpellsEntityCard },
     {
@@ -105,15 +87,35 @@ const dndEntities = [
         title: "Origens",
         icon: Map,
         description: "Antecedentes e origens dos heróis",
-        component: BackgroundsEntityCard,
+        component: BackgroundsEntityCard
     },
+    {
+        id: "traits",
+        title: "Habilidades",
+        icon: Sparkles,
+        description: "Traits e habilidades de classe/raça",
+        component: TraitsEntityCard
+    },
+    {
+        id: "feats",
+        title: "Talentos",
+        component: FeatsEntityCard
+    },
+    {
+        id: "items",
+        title: "Itens",
+        icon: Backpack,
+        description: "Equipamentos, armas e itens mágicos",
+        component: WipEntityCard
+    },
+
     {
         id: "monsters",
         title: "Monstros",
         icon: Skull,
         description: "Criaturas, feras e adversários",
-        component: WipEntityCard,
-    },
+        component: WipEntityCard
+    }
 ]
 
 export default function DashboardPage() {
@@ -138,7 +140,7 @@ export default function DashboardPage() {
     return (
         <div className="flex flex-col gap-8 pb-12">
             {/* Header */}
-            <div className="flex flex-col items-center justify-center text-center space-y-6 py-8 md:py-12">
+            <div className="flex flex-col items-center justify-center text-center space-y-4 pt-8 md:pt-12">
                 <motion.div
                     initial={{ opacity: 0, scale: 0.9 }}
                     animate={{ opacity: 1, scale: 1 }}
@@ -154,6 +156,37 @@ export default function DashboardPage() {
                 >
                     Dungeons & Dicas: Um catálogo em português, para mestres e jogadores encontrarem rapidamente as informações que precisam
                 </motion.p>
+            </div>
+
+            {/* Inline Search */}
+            <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }}>
+                <InlineSearch />
+            </motion.div>
+
+            {/* Catalog */}
+            <div className="space-y-4">
+                <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+                    {dndEntities.map(({ component: Card, id, ...entity }, index) => {
+                        const entityStats =
+                            id === "rules"
+                                ? stats?.rules
+                                : id === "traits"
+                                  ? stats?.traits
+                                  : id === "feats"
+                                    ? stats?.feats
+                                    : id === "spells"
+                                      ? stats?.spells
+                                      : id === "classes"
+                                        ? stats?.classes
+                                        : id === "backgrounds"
+                                          ? stats?.backgrounds
+                                          : id === "races"
+                                            ? stats?.races
+                                            : undefined
+
+                        return <Card key={id} {...entity} index={index} stats={entityStats} loading={loading} />
+                    })}
+                </div>
             </div>
 
             {/* Real Data Stats */}
@@ -218,42 +251,6 @@ export default function DashboardPage() {
                 </motion.div>
 
                 <RulesEntityCard stats={stats?.rules} loading={loading} index={1} />
-            </div>
-
-            {/* In Development Features */}
-            <div className="space-y-6">
-                <div className="flex items-center justify-between">
-                    <h2 className="text-2xl font-bold tracking-tight text-white flex items-center gap-2">
-                        <Sparkles className="h-6 w-6 text-yellow-500" />
-                        Catálogo
-                    </h2>
-                    <span className="text-xs font-semibold px-2 py-1 bg-white/5 border border-white/10 rounded-lg text-white/40 uppercase tracking-widest">
-                        Em Breve
-                    </span>
-                </div>
-
-                <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-                    {dndEntities.map(({ component: Card, id, ...entity }, index) => {
-                        const entityStats =
-                            id === "rules"
-                                ? stats?.rules
-                                : id === "traits"
-                                  ? stats?.traits
-                                  : id === "feats"
-                                    ? stats?.feats
-                                    : id === "spells"
-                                      ? stats?.spells
-                                      : id === "classes"
-                                        ? stats?.classes
-                                        : id === "backgrounds"
-                                          ? stats?.backgrounds
-                                          : id === "races"
-                                            ? stats?.races
-                                            : undefined
-
-                        return <Card key={id} {...entity} index={index} stats={entityStats} loading={loading} />
-                    })}
-                </div>
             </div>
 
             {/* Full Width Info */}
