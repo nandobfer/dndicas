@@ -9,6 +9,7 @@ import { motionConfig } from "@/lib/config/motion-configs"
 import { themeConfig } from "@/lib/config/theme-config"
 import { cn } from "@/core/utils"
 import { useState, useEffect } from "react"
+import Image from "next/image"
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
     const { isExpanded, expand, collapse, toggle, isHydrated } = useSidebar()
@@ -33,7 +34,14 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           : `${themeConfig.spacing.sidebar.collapsed}px`
 
     return (
-        <div className="flex min-h-screen w-full bg-background">
+        <div className="relative flex min-h-screen w-full bg-background overflow-hidden">
+            {/* Liquid Glass Background Image */}
+            <div className="fixed inset-0 z-0 overflow-hidden pointer-events-none">
+                <Image src="/dndicas-logo.webp" alt="Background" fill priority className="object-cover opacity-40 scale-80" />
+                {/* Overlay to ensure readability */}
+                <div className="absolute inset-0 bg-background/30 backdrop-blur-md" />
+            </div>
+
             {/* Unified Sidebar for Desktop and Mobile */}
             <ExpandableSidebar isExpanded={isExpanded} onExpand={expand} onCollapse={collapse} isMobile={isMobile} onToggle={toggle} />
 
@@ -42,9 +50,9 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
             {/* Main Content Area - With left margin only on desktop */}
             <motion.div
-                className={cn("flex flex-1 flex-col min-w-0", isMobile && "pt-16")}
+                className={cn("relative z-10 flex flex-1 flex-col min-w-0", isMobile && "pt-16")}
                 animate={{
-                    marginLeft,
+                    marginLeft
                 }}
                 transition={motionConfig.sidebarTransition}
             >

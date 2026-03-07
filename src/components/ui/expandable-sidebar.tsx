@@ -15,6 +15,7 @@
 import * as React from 'react';
 import { motion } from 'framer-motion';
 import Link from 'next/link';
+import Image from "next/image"
 import { usePathname } from 'next/navigation';
 import { Package2, Home, User, Sparkles, FileText, Users, Scroll, Zap, Wand, AtSign, MessageSquare, Sword, ShieldCheck, Fingerprint } from "lucide-react"
 import { cn } from "@/core/utils"
@@ -136,9 +137,13 @@ export const ExpandableSidebar: React.FC<ExpandableSidebarProps> = ({ isExpanded
                 transition={transition}
             >
                 {/* Logo/Brand Header Area */}
-                <div className={cn("flex h-14 items-center border-b border-white/5 px-2 lg:h-[60px]")}>
-                    <Link href="/" className="flex items-center gap-2 font-semibold text-white truncate pl-4" onClick={handleItemClick}>
-                        <Package2 className="h-6 w-6 shrink-0" />
+                <div className={cn("flex h-14 items-center border-b border-white/5 lg:h-[60px]")}>
+                    <Link href="/" className="flex items-center gap-2 font-semibold text-white truncate w-full" onClick={handleItemClick}>
+                        <div className="flex-shrink-0 w-[72px] flex items-center justify-center">
+                            {pathname !== "/" && (
+                                <Image src="/dndicas-logo.webp" alt="Dungeons & Dicas" width={44} height={44} className="w-15 object-contain" />
+                            )}
+                        </div>
                         {isExpanded && (
                             <motion.span
                                 className="truncate"

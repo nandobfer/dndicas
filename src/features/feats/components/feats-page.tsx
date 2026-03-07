@@ -27,10 +27,10 @@ export function FeatsPage() {
                 <div>
                     <h1 className="text-xl sm:text-2xl font-bold text-white flex items-center gap-2">
                         <Zap className="h-5 w-5 sm:h-6 sm:w-6 text-amber-400" />
-                        Catálogo de Talentos
+                        Talentos
                         <GlassViewSelector viewMode={viewMode} setViewMode={setViewMode} layoutId="feats-view-selector" />
                     </h1>
-                    <p className="text-[10px] sm:text-sm text-white/60 mt-1">Gerencie os talentos disponíveis para personagens (D&D 5e)</p>
+                    <p className="text-[10px] sm:text-sm text-white/60 mt-1">Gerencie os talentos disponíveis para personagens</p>
                 </div>
 
                 {isAdmin && (
@@ -42,7 +42,7 @@ export function FeatsPage() {
                             "hover:bg-blue-600 transition-colors",
                             "focus:outline-none focus:ring-2 focus:ring-blue-500/50",
                             "shadow-lg shadow-blue-500/20",
-                            "w-full sm:w-auto", // Full width on mobile
+                            "w-full sm:w-auto" // Full width on mobile
                         )}
                     >
                         <Plus className="h-4 w-4" />
@@ -61,7 +61,7 @@ export function FeatsPage() {
                             status: filters.status,
                             level: filters.level,
                             levelMax: filters.levelMax,
-                            attributes: filters.attributes,
+                            attributes: filters.attributes
                         }}
                         onSearchChange={actions.handleSearchChange}
                         onStatusChange={actions.handleStatusChange}
@@ -99,7 +99,13 @@ export function FeatsPage() {
             )}
 
             {/* Form Modal */}
-            <FeatFormModal isOpen={modals.isFormOpen} onClose={() => modals.setIsFormOpen(false)} onSubmit={actions.handleFormSubmit} feat={modals.selectedFeat} isSubmitting={modals.isSaving} />
+            <FeatFormModal
+                isOpen={modals.isFormOpen}
+                onClose={() => modals.setIsFormOpen(false)}
+                onSubmit={actions.handleFormSubmit}
+                feat={modals.selectedFeat}
+                isSubmitting={modals.isSaving}
+            />
 
             {/* Delete Confirmation Dialog */}
             <DeleteFeatDialog

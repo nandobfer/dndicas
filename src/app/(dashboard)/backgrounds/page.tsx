@@ -7,8 +7,8 @@ import { Metadata } from "next"
 import { Suspense } from "react"
 
 export const metadata: Metadata = {
-    title: "Catálogo de Origens | D&Dicas",
-    description: "Explore as origens (backgrounds) disponíveis para personagens D&D 5e.",
+    title: "Origens | D&Dicas",
+    description: "Explore as origens (backgrounds) disponíveis para personagens D&D 5e."
 }
 
 export default function Page() {

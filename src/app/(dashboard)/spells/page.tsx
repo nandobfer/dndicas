@@ -9,9 +9,9 @@ import { SpellsPage } from '@/features/spells/components/spells-page';
 import { Metadata } from 'next';
 
 export const metadata: Metadata = {
-  title: 'Catálogo de Magias | D&Dicas',
-  description: 'Explore as magias disponíveis para conjuradores D&D 5e.',
-};
+    title: "Magias | D&Dicas",
+    description: "Explore as magias disponíveis para conjuradores D&D 5e."
+}
 
 export default function Page() {
   return <SpellsPage />;

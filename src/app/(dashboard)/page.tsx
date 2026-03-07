@@ -16,6 +16,7 @@ import { RacesEntityCard } from "./_components/races-entity-card"
 import { BackgroundsEntityCard } from "./_components/backgrounds-entity-card"
 import { WipEntityCard } from "./_components/wip-entity-card"
 import { AnimatedNumber } from "@/components/ui/animated-number"
+import Image from "next/image"
 import Link from "next/link"
 
 // Types for the stats
@@ -137,16 +138,17 @@ export default function DashboardPage() {
     return (
         <div className="flex flex-col gap-8 pb-12">
             {/* Header */}
-            <div className="space-y-2">
-                <motion.h1
+            <div className="space-y-4">
+                <motion.div initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} className="relative w-60 h-30">
+                    <Image src="/dndicas-logo.webp" alt="Dungeons & Dicas" fill className="object-contain" priority />
+                </motion.div>
+                <motion.p
                     initial={{ opacity: 0, x: -20 }}
                     animate={{ opacity: 1, x: 0 }}
-                    className="text-4xl font-bold tracking-tight text-white bg-clip-text text-transparent bg-gradient-to-r from-white to-white/40"
+                    transition={{ delay: 0.1 }}
+                    className="text-white/60 text-lg"
                 >
-                    Dashboard
-                </motion.h1>
-                <motion.p initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.1 }} className="text-white/60 text-lg">
-                    Visão geral dos dados e monitoramento do sistema D&Dicas.
+                    Um catálogo em português, criado para ajudar mestres e jogadores a encontrarem rapidamente as informações que precisam.
                 </motion.p>
             </div>
 
@@ -155,7 +157,13 @@ export default function DashboardPage() {
                 {/* Users Stat */}
                 <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }} whileHover={{ y: -4 }}>
                     <Link href="/users">
-                        <GlassCard className={cn("h-full group transition-all overflow-hidden cursor-pointer hover:bg-white/[0.04]", entityColors.Usuário.border, entityColors.Usuário.hoverBorder)}>
+                        <GlassCard
+                            className={cn(
+                                "h-full group transition-all overflow-hidden cursor-pointer hover:bg-white/[0.04]",
+                                entityColors.Usuário.border,
+                                entityColors.Usuário.hoverBorder
+                            )}
+                        >
                             <GlassCardHeader className="pb-2">
                                 <div className="flex items-center justify-between">
                                     <div className="space-y-1">
@@ -172,7 +180,7 @@ export default function DashboardPage() {
                                             "p-3 rounded-xl border transition-colors",
                                             entityColors.Usuário.bgAlpha,
                                             entityColors.Usuário.border,
-                                            "group-hover:bg-white/10 group-hover:text-white",
+                                            "group-hover:bg-white/10 group-hover:text-white"
                                         )}
                                     >
                                         <TrendingUp className={cn("h-6 w-6", entityColors.Usuário.text, "group-hover:text-white")} />
@@ -183,9 +191,18 @@ export default function DashboardPage() {
                                 <div className="space-y-4">
                                     <div className="flex items-end justify-between">
                                         <p className="text-xs text-white/40">Usuários ativos e crescimento semanal</p>
-                                        <div className={cn("text-xs font-medium px-2 py-0.5 rounded-full border flex items-center gap-1", entityColors.Usuário.badge, entityColors.Usuário.border)}>
+                                        <div
+                                            className={cn(
+                                                "text-xs font-medium px-2 py-0.5 rounded-full border flex items-center gap-1",
+                                                entityColors.Usuário.badge,
+                                                entityColors.Usuário.border
+                                            )}
+                                        >
                                             <span>+</span>
-                                            <AnimatedNumber value={loading ? 0 : stats?.users.active || 0} formatter={(val) => `${Math.floor(val)}`} />
+                                            <AnimatedNumber
+                                                value={loading ? 0 : stats?.users.active || 0}
+                                                formatter={(val) => `${Math.floor(val)}`}
+                                            />
                                             <span>ativos</span>
                                         </div>
                                     </div>
@@ -204,9 +221,11 @@ export default function DashboardPage() {
                 <div className="flex items-center justify-between">
                     <h2 className="text-2xl font-bold tracking-tight text-white flex items-center gap-2">
                         <Sparkles className="h-6 w-6 text-yellow-500" />
-                        Catálogo D&D
+                        Catálogo
                     </h2>
-                    <span className="text-xs font-semibold px-2 py-1 bg-white/5 border border-white/10 rounded-lg text-white/40 uppercase tracking-widest">Em Breve</span>
+                    <span className="text-xs font-semibold px-2 py-1 bg-white/5 border border-white/10 rounded-lg text-white/40 uppercase tracking-widest">
+                        Em Breve
+                    </span>
                 </div>
 
                 <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">

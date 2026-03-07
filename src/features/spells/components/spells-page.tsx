@@ -34,10 +34,10 @@ export function SpellsPage() {
                 <div>
                     <h1 className="text-xl sm:text-2xl font-bold text-white flex items-center gap-2">
                         <Wand className="h-5 w-5 sm:h-6 sm:w-6 text-purple-400" />
-                        Catálogo de Magias
+                        Magias
                         <GlassViewSelector viewMode={viewMode} setViewMode={setViewMode} layoutId="spells-view-selector" />
                     </h1>
-                    <p className="text-[10px] sm:text-sm text-white/60 mt-1">Explore as magias disponíveis para conjuradores (D&D 5e)</p>
+                    <p className="text-[10px] sm:text-sm text-white/60 mt-1">Explore as magias disponíveis para conjuradores</p>
                 </div>
 
                 {isAdmin && (
@@ -49,7 +49,7 @@ export function SpellsPage() {
                             "hover:bg-blue-600 transition-colors",
                             "focus:outline-none focus:ring-2 focus:ring-blue-500/50",
                             "shadow-lg shadow-blue-500/20",
-                            "w-full sm:w-auto", // Full width on mobile
+                            "w-full sm:w-auto" // Full width on mobile
                         )}
                     >
                         <Plus className="h-4 w-4" />
@@ -101,7 +101,12 @@ export function SpellsPage() {
                 />
             )}
 
-            <SpellFormModal isOpen={modals.isFormOpen} spell={modals.selectedSpell} onClose={() => modals.setIsFormOpen(false)} onSuccess={actions.handleFormSuccess} />
+            <SpellFormModal
+                isOpen={modals.isFormOpen}
+                spell={modals.selectedSpell}
+                onClose={() => modals.setIsFormOpen(false)}
+                onSuccess={actions.handleFormSuccess}
+            />
             <DeleteSpellDialog isOpen={modals.isDeleteDialogOpen} spell={modals.selectedSpell} onClose={() => modals.setIsDeleteDialogOpen(false)} />
         </motion.div>
     )
