@@ -30,15 +30,10 @@ export function ClassesFilters({ filters, onSearchChange, onStatusChange, isSear
                     />
                 </div>
 
-                {isAdmin && (
-                    <div className="flex items-center gap-3">
-                        <span className="text-xs font-semibold text-white/40 uppercase tracking-wider whitespace-nowrap">Status:</span>
-                        <StatusChips
-                            value={(filters.status as StatusFilter) || "all"}
-                            onChange={(v) => onStatusChange(v as ClassesFilters["status"])}
-                        />
-                    </div>
-                )}
+                <div className="flex items-center gap-3">
+                    <span className="text-xs font-semibold text-white/40 uppercase tracking-wider whitespace-nowrap">Status:</span>
+                    <StatusChips value={(filters.status as StatusFilter) || "all"} onChange={(v) => onStatusChange(v as ClassesFilters["status"])} />
+                </div>
             </div>
         </div>
     )

@@ -44,23 +44,108 @@ const SKILL_TO_ATTR: Record<string, string> = {
     Persuasão: "Carisma",
 }
 
+function SpellCircleAccordion({ circle, items, color }: { circle: number; items: any[]; color?: string }) {
+    const [isOpen, setIsOpen] = useState(false)
+
+    return (
+        <div className="space-y-2">
+            <button
+                onClick={() => setIsOpen(!isOpen)}
+                className="w-full flex items-center gap-2 group"
+            >
+                <div className="h-px flex-1 bg-white/5 group-hover:bg-white/10 transition-colors" />
+                <div
+                    className="flex items-center gap-2 px-2 py-0.5 bg-black/20 rounded-full border transition-colors group-hover:bg-black/40"
+                    style={{
+                        borderColor: color ? `${color}30` : "rgba(96, 165, 250, 0.2)"
+                    }}
+                >
+                    <span
+                        className="text-[10px] font-black uppercase tracking-[0.2em]"
+                        style={{
+                            color: color ? `${color}dd` : "rgba(96, 165, 250, 0.7)",
+                        }}
+                    >
+                        {circle === 0 ? "Truques" : `${circle}º Círculo`}
+                    </span>
+                    <span className="text-[9px] font-bold opacity-40 px-1.5 py-0.5 bg-white/5 rounded-md border border-white/5">
+                        {items.length}
+                    </span>
+                    <AnimatePresence>
+                        {!isOpen && (
+                            <motion.span 
+                                initial={{ opacity: 0, x: -5 }}
+                                animate={{ opacity: 1, x: 0 }}
+                                exit={{ opacity: 0, x: -5 }}
+                                className="text-[8px] font-bold uppercase tracking-tighter text-white/20 ml-1 italic"
+                            >
+                                expandir
+                            </motion.span>
+                        )}
+                    </AnimatePresence>
+                    <motion.div animate={{ rotate: isOpen ? 90 : 0 }} transition={{ duration: 0.2 }}>
+                        <ChevronRight className="h-3 w-3 text-white/20" />
+                    </motion.div>
+                </div>
+                <div className="h-px flex-1 bg-white/5 group-hover:bg-white/10 transition-colors" />
+            </button>
+
+            <AnimatePresence>
+                {isOpen && (
+                    <motion.div
+                        initial={{ height: 0, opacity: 0 }}
+                        animate={{ height: "auto", opacity: 1 }}
+                        exit={{ height: 0, opacity: 0 }}
+                        className="overflow-hidden"
+                    >
+                        <div className="grid gap-2 py-1">
+                            {items.map((spell, idx) => (
+                                <motion.div
+                                    key={spell._id || spell.id || `spell-${circle}-${idx}`}
+                                    layout
+                                    initial={{ opacity: 0, scale: 0.98, y: 10 }}
+                                    animate={{ opacity: 1, scale: 1, y: 0 }}
+                                    exit={{ opacity: 0, scale: 0.98, y: -10 }}
+                                    transition={{
+                                        duration: 0.2,
+                                        delay: Math.min(idx * 0.03, 0.3),
+                                    }}
+                                >
+                                    <MentionRenderer item={spell} color={color} hideStatusChip icon={<Wand className="h-3 w-3" style={{ color: color || "#60a5fa" }} />} />
+                                </motion.div>
+                            ))}
+                        </div>
+                    </motion.div>
+                )}
+            </AnimatePresence>
+        </div>
+    )
+}
+
 function SpellcastingSection({ spellcasting, spellcastingAttribute, spells = [], color }: { spellcasting: boolean; spellcastingAttribute?: string; spells?: any[]; color?: string }) {
     const [isOpen, setIsOpen] = useState(false)
     const [spellSearch, setSpellSearch] = useState("")
-    const [spellLevel, setSpellLevel] = useState<number | undefined>(undefined)
-    const [filterMode, setFilterMode] = useState<"upTo" | "exact">("exact")
 
     const filteredSpells = useMemo(() => {
         return spells
             .filter((spell) => {
                 const matchesSearch = !spellSearch || spell.name?.toLowerCase().includes(spellSearch.toLowerCase()) || spell.description?.toLowerCase().includes(spellSearch.toLowerCase())
-
-                const matchesLevel = spellLevel === undefined || (filterMode === "exact" ? spell.circle === spellLevel : spell.circle <= spellLevel)
-
-                return matchesSearch && matchesLevel
+                return matchesSearch
             })
             .sort((a, b) => (a.circle ?? 0) - (b.circle ?? 0) || (a.name || "").localeCompare(b.name || ""))
-    }, [spells, spellSearch, spellLevel, filterMode])
+    }, [spells, spellSearch])
+
+    const groupedSpells = useMemo(() => {
+        const groups: Record<number, any[]> = {}
+        filteredSpells.forEach((spell) => {
+            const circle = spell.circle ?? 0
+            if (!groups[circle]) groups[circle] = []
+            groups[circle].push(spell)
+        })
+        return Object.entries(groups)
+            .map(([circle, items]) => ({ circle: parseInt(circle), items }))
+            .sort((a, b) => a.circle - b.circle)
+    }, [filteredSpells])
 
     if (!spellcasting) return null
 
@@ -68,8 +153,8 @@ function SpellcastingSection({ spellcasting, spellcastingAttribute, spells = [],
         <div
             className="rounded-xl overflow-hidden border transition-all"
             style={{
-                borderColor: color ? `${color}20` : "rgba(255,255,255,0.1)",
-                backgroundColor: color ? `${color}05` : "rgba(255,255,255,0.02)",
+                borderColor: color ? `${color}20` : "rgba(100, 116, 139, 0.2)",
+                backgroundColor: color ? `${color}05` : "rgba(100, 116, 139, 0.05)",
             }}
         >
             <button onClick={() => setIsOpen(!isOpen)} className="w-full flex items-center justify-between p-2.5 hover:bg-white/[0.02] transition-colors">
@@ -102,49 +187,13 @@ function SpellcastingSection({ spellcasting, spellcastingAttribute, spells = [],
                         <div className="p-3 space-y-3">
                             <div className="flex items-center gap-2">
                                 <GlassInput placeholder="Buscar magia..." value={spellSearch} onChange={(e) => setSpellSearch(e.target.value)} className="h-8 text-xs flex-1" />
-                                <div className="flex items-center gap-1.5">
-                                    <GlassInput
-                                        type="text"
-                                        inputMode="numeric"
-                                        value={spellLevel !== undefined ? String(spellLevel) : ""}
-                                        onChange={(e) => {
-                                            const val = e.target.value.replace(/\D/g, "")
-                                            setSpellLevel(val === "" ? undefined : Math.min(9, parseInt(val)))
-                                        }}
-                                        placeholder="Círculo"
-                                        className="w-auto px-2 h-8 text-center text-xs"
-                                        containerClassName="w-auto"
-                                    />
-                                    <GlassSelector
-                                        value={filterMode}
-                                        onChange={(val) => setFilterMode(val as "exact" | "upTo")}
-                                        options={[
-                                            { value: "exact", label: "=", activeColor: color || "bg-blue-500/20", textColor: color ? "white" : "text-blue-400" },
-                                            { value: "upTo", label: "≤", activeColor: color || "bg-blue-500/20", textColor: color ? "white" : "text-blue-400" },
-                                        ]}
-                                        className="h-8"
-                                        layoutId={color ? `spell-level-mode-${color}` : "spell-level-mode-main"}
-                                    />
-                                </div>
                             </div>
 
                             <AnimatePresence mode="popLayout" initial={false}>
-                                {filteredSpells.length > 0 ? (
-                                    <motion.div key="spell-list" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="space-y-2">
-                                        {filteredSpells.map((spell, idx) => (
-                                            <motion.div
-                                                key={spell._id || spell.id || `spell-${idx}`}
-                                                layout
-                                                initial={{ opacity: 0, scale: 0.98, y: 10 }}
-                                                animate={{ opacity: 1, scale: 1, y: 0 }}
-                                                exit={{ opacity: 0, scale: 0.98, y: -10 }}
-                                                transition={{
-                                                    duration: 0.2,
-                                                    delay: Math.min(idx * 0.03, 0.3), // Staggered entry
-                                                }}
-                                            >
-                                                <MentionRenderer item={spell} color={color} hideStatusChip icon={<Wand className="h-3 w-3" style={{ color: color || "#60a5fa" }} />} />
-                                            </motion.div>
+                                {groupedSpells.length > 0 ? (
+                                    <motion.div key="spell-list" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="space-y-4">
+                                        {groupedSpells.map((group) => (
+                                            <SpellCircleAccordion key={group.circle} circle={group.circle} items={group.items} color={color} />
                                         ))}
                                     </motion.div>
                                 ) : (
@@ -210,6 +259,7 @@ export function ClassPreview({ characterClass, showStatus = true }: ClassPreview
     const [levelFilter, setLevelFilter] = useState<number | undefined>(undefined)
     const [filterMode, setFilterMode] = useState<"upTo" | "exact">("upTo")
     const [selectedSubclassIds, setSelectedSubclassIds] = useState<string[]>([])
+    const [isTraitsOpen, setIsTraitsOpen] = useState(false)
 
     const subclasses = characterClass.subclasses || []
 
@@ -283,8 +333,6 @@ export function ClassPreview({ characterClass, showStatus = true }: ClassPreview
                 )}
             </div>
 
-            <ClassVisualHeader name={characterClass.name} description={characterClass.description} image={characterClass.image} />
-
             <div className="grid grid-cols-3 gap-4 pb-2 border-b border-white/5">
                 <div className="space-y-1">
                     <div className="flex items-center gap-2 text-[10px] font-bold text-white/40 uppercase tracking-widest">
@@ -319,18 +367,18 @@ export function ClassPreview({ characterClass, showStatus = true }: ClassPreview
                 </div>
             </div>
 
-            <div className="space-y-2 pb-2 border-b border-white/5">
+            <div className="space-y-3 pb-2 border-b border-white/5">
                 <div className="flex items-center gap-2 text-[10px] font-bold text-white/40 uppercase tracking-widest">
                     <Sword className="h-3 w-3" />
                     <span>Proficiências & Perícias</span>
                 </div>
-                <div className="grid gap-1.5">
-                    <div className="flex items-center gap-2 text-xs">
-                        <span className="text-white/40 w-16">Armaduras:</span>
-                        <div className="flex-1 flex flex-wrap gap-1">
+                <div className="flex flex-col gap-2.5">
+                    <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-2 text-xs">
+                        <span className="text-white/40 sm:w-16 shrink-0">Armaduras:</span>
+                        <div className="flex-1 flex flex-wrap gap-x-2 gap-y-1">
                             {(characterClass.armorProficiencies || []).length > 0 ? (
                                 (characterClass.armorProficiencies || []).map((p) => (
-                                    <span key={p} className="text-white/70 italic">
+                                    <span key={p} className="text-white/70 italic leading-tight">
                                         {p}
                                     </span>
                                 ))
@@ -339,21 +387,34 @@ export function ClassPreview({ characterClass, showStatus = true }: ClassPreview
                             )}
                         </div>
                     </div>
-                    <div className="flex items-center gap-2 text-xs">
-                        <span className="text-white/40 w-16">Armas:</span>
-                        <div className="flex-1 text-white/70 italic truncate">
-                            {(characterClass.weaponProficiencies || []).length > 0 ? <MentionContent html={(characterClass.weaponProficiencies || []).join(", ")} mode="inline" /> : "Nenhuma"}
+                    <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-2 text-xs">
+                        <span className="text-white/40 sm:w-16 shrink-0">Armas:</span>
+                        <div className="flex-1 text-white/70 italic leading-tight">
+                            {(characterClass.weaponProficiencies || []).length > 0 ? (
+                                <MentionContent html={(characterClass.weaponProficiencies || []).join(", ")} mode="inline" className="[&_p]:leading-tight" />
+                            ) : (
+                                "Nenhuma"
+                            )}
                         </div>
                     </div>
-                    <div className="flex items-start gap-2 text-xs">
-                        <span className="text-white/40 w-16 shrink-0 mt-1">Perícias:</span>
-                        <div className="flex-1 flex flex-wrap items-center gap-1.5 p-1 bg-black/20 rounded-lg border border-white/5">
-                            <span className="text-[10px] font-bold text-white/50 uppercase tracking-tighter ml-1 mr-1">Escolha {characterClass.skillCount || 0}:</span>
+                    <div className="flex flex-col gap-2 text-xs">
+                        <span className="text-white/40 shrink-0">Perícias:</span>
+                        <div className="flex-1 flex flex-wrap items-center gap-1.5 p-1.5 bg-black/20 rounded-lg border border-white/5">
+                            <span className="text-[10px] font-bold text-white/50 uppercase tracking-tighter ml-1 mr-1">
+                                Escolha {characterClass.skillCount || 0}:
+                            </span>
                             {(characterClass.availableSkills || []).map((skill) => {
                                 const attr = SKILL_TO_ATTR[skill] || "Sabedoria"
                                 const config = attributeColors[attr as keyof typeof attributeColors]
                                 return (
-                                    <span key={skill} className={cn("inline-flex items-center px-1.5 py-0.5 rounded-full text-[9px] font-medium border", config?.badge, config?.border)}>
+                                    <span
+                                        key={skill}
+                                        className={cn(
+                                            "inline-flex items-center px-1.5 py-0.5 rounded-full text-[9px] font-medium border whitespace-nowrap",
+                                            config?.badge,
+                                            config?.border
+                                        )}
+                                    >
                                         {skill}
                                     </span>
                                 )
@@ -363,8 +424,14 @@ export function ClassPreview({ characterClass, showStatus = true }: ClassPreview
                 </div>
             </div>
 
+            <ClassVisualHeader name={characterClass.name} description={characterClass.description} image={characterClass.image} />
+
             {characterClass.spellcasting && (
-                <SpellcastingSection spellcasting={characterClass.spellcasting} spellcastingAttribute={characterClass.spellcastingAttribute} spells={characterClass.spells} />
+                <SpellcastingSection
+                    spellcasting={characterClass.spellcasting}
+                    spellcastingAttribute={characterClass.spellcastingAttribute}
+                    spells={characterClass.spells}
+                />
             )}
 
             {subclasses.length > 0 && (
@@ -381,12 +448,13 @@ export function ClassPreview({ characterClass, showStatus = true }: ClassPreview
                                 value: s._id || s.name,
                                 label: s.name,
                                 activeColor: s.color, // Cor Hex (ex: #facc15)
-                                textColor: s.color, // Cor Hex
+                                textColor: s.color // Cor Hex
                             }))}
                             fullWidth
                             mode="multi"
                             layout="grid"
-                            cols={3}
+                            cols={1}
+                            smCols={3}
                             layoutId={`class-subclass-selector-${characterClass._id}`}
                         />
                     </div>
@@ -408,75 +476,134 @@ export function ClassPreview({ characterClass, showStatus = true }: ClassPreview
                                     </span>
                                 </div>
 
-                                <ClassVisualHeader name={subclass.name} description={subclass.description || ""} image={subclass.image} color={subclass.color} />
+                                <ClassVisualHeader
+                                    name={subclass.name}
+                                    description={subclass.description || ""}
+                                    image={subclass.image}
+                                    color={subclass.color}
+                                />
 
-                                <SpellcastingSection spellcasting={subclass.spellcasting} spellcastingAttribute={subclass.spellcastingAttribute} spells={subclass.spells} color={subclass.color} />
+                                <SpellcastingSection
+                                    spellcasting={subclass.spellcasting}
+                                    spellcastingAttribute={subclass.spellcastingAttribute}
+                                    spells={subclass.spells}
+                                    color={subclass.color}
+                                />
                             </motion.div>
                         ))}
                     </AnimatePresence>
                 </div>
             )}
 
-            <div className="space-y-4 pt-4 border-t border-white/10">
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                    <div className="flex items-center gap-2 text-[10px] font-bold text-white/40 uppercase tracking-widest">
-                        <Zap className="h-3 w-3 text-amber-400" />
-                        <span>Habilidades por Nível</span>
+            <div
+                className="rounded-xl overflow-hidden border transition-all"
+                style={{
+                    borderColor: "rgba(100, 116, 139, 0.2)",
+                    backgroundColor: "rgba(100, 116, 139, 0.05)",
+                }}
+            >
+                <button
+                    onClick={() => setIsTraitsOpen(!isTraitsOpen)}
+                    className="w-full flex items-center justify-between p-2.5 hover:bg-white/[0.02] transition-colors"
+                >
+                    <div className="flex items-center gap-3">
+                        <div
+                            className="p-1 px-1.5 rounded-lg border"
+                            style={{
+                                backgroundColor: "rgba(251, 191, 36, 0.15)",
+                                borderColor: "rgba(251, 191, 36, 0.3)",
+                            }}
+                        >
+                            <Zap className="h-3.5 w-3.5 text-amber-400" />
+                        </div>
+                        <div className="text-left">
+                            <span className="text-[10px] font-bold text-white/40 uppercase tracking-widest block">Habilidades</span>
+                            <span className="text-xs font-semibold text-white/90">Por Nível</span>
+                        </div>
                     </div>
-                    <div className="flex items-center gap-2">
-                        <GlassInput
-                            type="text"
-                            inputMode="numeric"
-                            value={levelFilter !== undefined ? String(levelFilter) : ""}
-                            onChange={(e) => handleLevelInput(e.target.value)}
-                            placeholder="Nível"
-                            className="w-14 px-2 h-8 text-center text-xs"
-                            containerClassName="w-auto"
-                        />
-                        <GlassSelector
-                            value={filterMode}
-                            onChange={(val) => setFilterMode(val as "exact" | "upTo")}
-                            options={[
-                                { value: "exact", label: "=", activeColor: "bg-amber-500/20", textColor: "text-amber-400" },
-                                { value: "upTo", label: "≤", activeColor: "bg-amber-500/20", textColor: "text-amber-400" },
-                            ]}
-                            size="sm"
-                            className="h-8"
-                            layoutId="class-level-mode"
-                        />
-                    </div>
-                </div>
+                    <motion.div animate={{ rotate: isTraitsOpen ? 90 : 0 }} transition={{ duration: 0.2 }}>
+                        <ChevronRight className="h-4 w-4 text-white/20" />
+                    </motion.div>
+                </button>
 
-                <div className="space-y-4">
-                    <AnimatePresence mode="popLayout" initial={false}>
-                        {filteredTraitsByLevel.length > 0 ? (
-                            filteredTraitsByLevel.map((group) => (
-                                <motion.div key={`group-${group.level}`} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, scale: 0.95 }} className="space-y-2">
+                <AnimatePresence>
+                    {isTraitsOpen && (
+                        <motion.div
+                            initial={{ height: 0, opacity: 0 }}
+                            animate={{ height: "auto", opacity: 1 }}
+                            exit={{ height: 0, opacity: 0 }}
+                            className="border-t border-white/5"
+                        >
+                            <div className="p-3 space-y-4">
+                                <div className="flex flex-col sm:flex-row sm:items-center justify-end gap-3">
                                     <div className="flex items-center gap-2">
-                                        <div className="h-px flex-1 bg-white/5" />
-                                        <span className="text-[10px] font-black text-amber-500/50 uppercase tracking-[0.2em] px-2 bg-black/20 rounded-full border border-amber-500/10">
-                                            Nível {group.level}º
-                                        </span>
-                                        <div className="h-px flex-1 bg-white/5" />
+                                        <GlassInput
+                                            type="text"
+                                            inputMode="numeric"
+                                            value={levelFilter !== undefined ? String(levelFilter) : ""}
+                                            onChange={(e) => handleLevelInput(e.target.value)}
+                                            placeholder="Nível"
+                                            className="w-14 px-2 h-8 text-center text-xs"
+                                            containerClassName="w-auto"
+                                        />
+                                        <GlassSelector
+                                            value={filterMode}
+                                            onChange={(val) => setFilterMode(val as "exact" | "upTo")}
+                                            options={[
+                                                { value: "exact", label: "=", activeColor: "bg-amber-500/20", textColor: "text-amber-400" },
+                                                { value: "upTo", label: "≤", activeColor: "bg-amber-500/20", textColor: "text-amber-400" }
+                                            ]}
+                                            size="sm"
+                                            className="h-8"
+                                            layoutId="class-level-mode"
+                                        />
                                     </div>
-                                    <div className="grid gap-3">
-                                        {group.items.map((trait: any, idx) => (
-                                            <MentionRenderer key={trait._id || `trait-${group.level}-${idx}`} item={trait} color={trait.subclassColor} />
-                                        ))}
-                                    </div>
-                                </motion.div>
-                            ))
-                        ) : (
-                            <motion.div
-                                initial={{ opacity: 0 }}
-                                animate={{ opacity: 1 }}
-                                className="text-center py-4 text-xs text-white/20 italic bg-white/5 rounded-lg border border-dashed border-white/10"
-                            >
-                                Nenhuma habilidade encontrada para os filtros.
-                            </motion.div>
-                        )}
-                    </AnimatePresence>
-                </div>
+                                </div>
+
+                                <div className="space-y-4">
+                                    <AnimatePresence mode="popLayout" initial={false}>
+                                        {filteredTraitsByLevel.length > 0 ? (
+                                            filteredTraitsByLevel.map((group) => (
+                                                <motion.div
+                                                    key={`group-${group.level}`}
+                                                    initial={{ opacity: 0, y: 10 }}
+                                                    animate={{ opacity: 1, y: 0 }}
+                                                    exit={{ opacity: 0, scale: 0.95 }}
+                                                    className="space-y-2"
+                                                >
+                                                    <div className="flex items-center gap-2">
+                                                        <div className="h-px flex-1 bg-white/5" />
+                                                        <span className="text-[10px] font-black text-amber-500/50 uppercase tracking-[0.2em] px-2 bg-black/20 rounded-full border border-amber-500/10">
+                                                            Nível {group.level}º
+                                                        </span>
+                                                        <div className="h-px flex-1 bg-white/5" />
+                                                    </div>
+                                                    <div className="grid gap-3">
+                                                        {group.items.map((trait: any, idx) => (
+                                                            <MentionRenderer
+                                                                key={trait._id || `trait-${group.level}-${idx}`}
+                                                                item={trait}
+                                                                color={trait.subclassColor}
+                                                            />
+                                                        ))}
+                                                    </div>
+                                                </motion.div>
+                                            ))
+                                        ) : (
+                                            <motion.div
+                                                initial={{ opacity: 0 }}
+                                                animate={{ opacity: 1 }}
+                                                className="text-center py-4 text-xs text-white/20 italic bg-white/5 rounded-lg border border-dashed border-white/10"
+                                            >
+                                                Nenhuma habilidade encontrada para os filtros.
+                                            </motion.div>
+                                        )}
+                                    </AnimatePresence>
+                                </div>
+                            </div>
+                        </motion.div>
+                    )}
+                </AnimatePresence>
             </div>
 
             <div className="pt-2">

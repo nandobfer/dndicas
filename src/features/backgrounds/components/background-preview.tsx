@@ -78,7 +78,13 @@ export function BackgroundPreview({ background, showStatus = true, className }: 
         <div className={cn("space-y-4 w-full text-left", className)}>
             <div className="flex items-start justify-between gap-4">
                 <div className="flex items-center gap-3">
-                    <div className={cn("p-1.5 rounded-lg border", entityColors.Origem?.badge || "bg-blue-500/10", entityColors.Origem?.border || "border-blue-500/20")}>
+                    <div
+                        className={cn(
+                            "p-1.5 rounded-lg border",
+                            entityColors.Origem?.badge || "bg-blue-500/10",
+                            entityColors.Origem?.border || "border-blue-500/20"
+                        )}
+                    >
                         <ShieldCheck className="h-4 w-4 text-blue-400" />
                     </div>
                     <div>
@@ -94,8 +100,6 @@ export function BackgroundPreview({ background, showStatus = true, className }: 
                     </Chip>
                 )}
             </div>
-
-            <BackgroundVisualHeader name={background.name} description={background.description} image={background.image} />
 
             <div className="grid grid-cols-2 gap-4 pb-2 border-b border-white/5">
                 <div className="space-y-1">
@@ -128,11 +132,13 @@ export function BackgroundPreview({ background, showStatus = true, className }: 
                                         "inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md border text-[10px] font-medium transition-all group/chip mr-1.5 mb-1.5",
                                         config.bgAlpha,
                                         config.border,
-                                        config.text,
+                                        config.text
                                     )}
                                 >
                                     <span className="opacity-70 group-hover/chip:opacity-100">{skill}</span>
-                                    <span className="text-[8px] font-bold px-1 rounded bg-black/20 border border-white/5 opacity-50 uppercase">{config.abbreviation}</span>
+                                    <span className="text-[8px] font-bold px-1 rounded bg-black/20 border border-white/5 opacity-50 uppercase">
+                                        {config.abbreviation}
+                                    </span>
                                 </div>
                             )
                         })
@@ -140,7 +146,11 @@ export function BackgroundPreview({ background, showStatus = true, className }: 
                         <span className="text-[10px] text-white/20 italic">Nenhuma perícia selecionada</span>
                     )}
                 </div>
+            </div>
 
+            <BackgroundVisualHeader name={background.name} description={background.description} image={background.image} />
+
+            <div className="space-y-3 pb-2 border-b border-white/5">
                 {background.featId && (
                     <div className="mt-4 space-y-2">
                         <div className="flex items-center gap-2 text-[10px] font-bold text-white/40 uppercase tracking-widest">
@@ -163,7 +173,10 @@ export function BackgroundPreview({ background, showStatus = true, className }: 
                 <div className="space-y-3">
                     {(background.traits || []).length > 0 ? (
                         (background.traits || []).map((trait, idx) => (
-                            <div key={trait._id || idx} className="rounded-xl border border-white/10 bg-white/[0.02] overflow-hidden hover:bg-white/[0.05] transition-all">
+                            <div
+                                key={trait._id || idx}
+                                className="rounded-xl border border-white/10 bg-white/[0.02] overflow-hidden hover:bg-white/[0.05] transition-all"
+                            >
                                 {ENTITY_RENDERERS.Habilidade(trait, { hideStatusChip: true })}
                             </div>
                         ))

@@ -37,7 +37,7 @@ export async function GET(req: NextRequest) {
         }
 
         const { page, limit, ...filters } = validation.data
-        const result = await listClasses(filters as ClassesFilters, page, limit, isAdmin)
+        const result = await listClasses(filters as ClassesFilters, page || 1, limit || 10, true)
 
         return NextResponse.json(result)
     } catch (error) {

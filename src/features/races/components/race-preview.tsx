@@ -64,6 +64,7 @@ export function RacePreview({ race, showStatus = true }: RacePreviewProps) {
     const [levelFilter, setLevelFilter] = useState<number | undefined>(undefined)
     const [filterMode, setFilterMode] = useState<"upTo" | "exact">("upTo")
     const [selectedVariationIds, setSelectedVariationIds] = useState<string[]>([])
+    const [isFeaturesOpen, setIsFeaturesOpen] = useState(false)
 
     const variations = race.variations || []
 
@@ -224,7 +225,8 @@ export function RacePreview({ race, showStatus = true }: RacePreviewProps) {
                             fullWidth
                             mode="multi"
                             layout="grid"
-                            cols={3}
+                            cols={1}
+                            smCols={3}
                             layoutId={`race-variation-selector-${race._id}`}
                         />
                     </div>
@@ -310,77 +312,116 @@ export function RacePreview({ race, showStatus = true }: RacePreviewProps) {
             )}
 
             {/* Unified Chronological Features List */}
-            <div className="space-y-4 pt-4 border-t border-white/10">
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                    <div className="flex items-center gap-2 text-[10px] font-bold text-white/40 uppercase tracking-widest">
-                        <Zap className="h-3 w-3 text-amber-400" />
-                        <span>Habilidades e Magias por Nível</span>
+            <div
+                className="rounded-xl overflow-hidden border transition-all"
+                style={{
+                    borderColor: "rgba(100, 116, 139, 0.2)",
+                    backgroundColor: "rgba(100, 116, 139, 0.05)",
+                }}
+            >
+                <button
+                    onClick={() => setIsFeaturesOpen(!isFeaturesOpen)}
+                    className="w-full flex items-center justify-between p-2.5 hover:bg-white/[0.02] transition-colors"
+                >
+                    <div className="flex items-center gap-3">
+                        <div
+                            className="p-1 px-1.5 rounded-lg border"
+                            style={{
+                                backgroundColor: "rgba(251, 191, 36, 0.15)",
+                                borderColor: "rgba(251, 191, 36, 0.3)",
+                            }}
+                        >
+                            <Zap className="h-3.5 w-3.5 text-amber-400" />
+                        </div>
+                        <div className="text-left">
+                            <span className="text-[10px] font-bold text-white/40 uppercase tracking-widest block">Habilidades & Magias</span>
+                            <span className="text-xs font-semibold text-white/90">Por Nível</span>
+                        </div>
                     </div>
-                    <div className="flex items-center gap-2">
-                        <GlassInput
-                            type="text"
-                            inputMode="numeric"
-                            value={levelFilter !== undefined ? String(levelFilter) : ""}
-                            onChange={(e) => handleLevelInput(e.target.value)}
-                            placeholder="Nível"
-                            className="w-14 px-2 h-8 text-center text-xs"
-                            containerClassName="w-auto"
-                        />
-                        <GlassSelector
-                            value={filterMode}
-                            onChange={(val) => setFilterMode(val as "exact" | "upTo")}
-                            options={[
-                                { value: "exact", label: "=", activeColor: "bg-amber-500/20", textColor: "text-amber-400" },
-                                { value: "upTo", label: "≤", activeColor: "bg-amber-500/20", textColor: "text-amber-400" },
-                            ]}
-                            size="sm"
-                            className="h-8"
-                            layoutId="race-level-mode"
-                        />
-                    </div>
-                </div>
+                    <motion.div animate={{ rotate: isFeaturesOpen ? 90 : 0 }} transition={{ duration: 0.2 }}>
+                        <ChevronRight className="h-4 w-4 text-white/20" />
+                    </motion.div>
+                </button>
 
-                <div className="space-y-4">
-                    <AnimatePresence mode="popLayout" initial={false}>
-                        {filteredFeaturesByLevel.length > 0 ? (
-                            filteredFeaturesByLevel.map((group) => (
-                                <motion.div 
-                                    key={`group-${group.level}`} 
-                                    initial={{ opacity: 0, y: 10 }} 
-                                    animate={{ opacity: 1, y: 0 }} 
-                                    exit={{ opacity: 0, scale: 0.95 }} 
-                                    className="space-y-2"
-                                >
+                <AnimatePresence>
+                    {isFeaturesOpen && (
+                        <motion.div
+                            initial={{ height: 0, opacity: 0 }}
+                            animate={{ height: "auto", opacity: 1 }}
+                            exit={{ height: 0, opacity: 0 }}
+                            className="border-t border-white/5"
+                        >
+                            <div className="p-3 space-y-4">
+                                <div className="flex flex-col sm:flex-row sm:items-center justify-end gap-3">
                                     <div className="flex items-center gap-2">
-                                        <div className="h-px flex-1 bg-white/5" />
-                                        <span className="text-[10px] font-black text-amber-500/50 uppercase tracking-[0.2em] px-2 bg-black/20 rounded-full border border-amber-500/10">
-                                            Nível {group.level}º
-                                        </span>
-                                        <div className="h-px flex-1 bg-white/5" />
+                                        <GlassInput
+                                            type="text"
+                                            inputMode="numeric"
+                                            value={levelFilter !== undefined ? String(levelFilter) : ""}
+                                            onChange={(e) => handleLevelInput(e.target.value)}
+                                            placeholder="Nível"
+                                            className="w-14 px-2 h-8 text-center text-xs"
+                                            containerClassName="w-auto"
+                                        />
+                                        <GlassSelector
+                                            value={filterMode}
+                                            onChange={(val) => setFilterMode(val as "exact" | "upTo")}
+                                            options={[
+                                                { value: "exact", label: "=", activeColor: "bg-amber-500/20", textColor: "text-amber-400" },
+                                                { value: "upTo", label: "≤", activeColor: "bg-amber-500/20", textColor: "text-amber-400" },
+                                            ]}
+                                            size="sm"
+                                            className="h-8"
+                                            layoutId="race-level-mode"
+                                        />
                                     </div>
+                                </div>
 
-                                    <div className="grid gap-3">
-                                        {group.items.map((item, idx) => (
-                                            <MentionRenderer 
-                                                key={item._id || `trait-${group.level}-${idx}`} 
-                                                item={item} 
-                                                color={item.variationColor} 
-                                            />
-                                        ))}
-                                    </div>
-                                </motion.div>
-                            ))
-                        ) : (
-                            <motion.div
-                                initial={{ opacity: 0 }}
-                                animate={{ opacity: 1 }}
-                                className="text-center py-4 text-xs text-white/20 italic bg-white/5 rounded-lg border border-dashed border-white/10"
-                            >
-                                Nenhuma habilidade ou magia para os filtros.
-                            </motion.div>
-                        )}
-                    </AnimatePresence>
-                </div>
+                                <div className="space-y-4">
+                                    <AnimatePresence mode="popLayout" initial={false}>
+                                        {filteredFeaturesByLevel.length > 0 ? (
+                                            filteredFeaturesByLevel.map((group) => (
+                                                <motion.div 
+                                                    key={`group-${group.level}`} 
+                                                    initial={{ opacity: 0, y: 10 }} 
+                                                    animate={{ opacity: 1, y: 0 }} 
+                                                    exit={{ opacity: 0, scale: 0.95 }} 
+                                                    className="space-y-2"
+                                                >
+                                                    <div className="flex items-center gap-2">
+                                                        <div className="h-px flex-1 bg-white/5" />
+                                                        <span className="text-[10px] font-black text-amber-500/50 uppercase tracking-[0.2em] px-2 bg-black/20 rounded-full border border-amber-500/10">
+                                                            Nível {group.level}º
+                                                        </span>
+                                                        <div className="h-px flex-1 bg-white/5" />
+                                                    </div>
+
+                                                    <div className="grid gap-3">
+                                                        {group.items.map((item: any, idx) => (
+                                                            <MentionRenderer 
+                                                                key={item._id || `trait-${group.level}-${idx}`} 
+                                                                item={item} 
+                                                                color={item.variationColor} 
+                                                            />
+                                                        ))}
+                                                    </div>
+                                                </motion.div>
+                                            ))
+                                        ) : (
+                                            <motion.div
+                                                initial={{ opacity: 0 }}
+                                                animate={{ opacity: 1 }}
+                                                className="text-center py-4 text-xs text-white/20 italic bg-white/5 rounded-lg border border-dashed border-white/10"
+                                            >
+                                                Nenhuma habilidade ou magia para os filtros.
+                                            </motion.div>
+                                        )}
+                                    </AnimatePresence>
+                                </div>
+                            </div>
+                        </motion.div>
+                    )}
+                </AnimatePresence>
             </div>
 
             <div className="pt-2">
