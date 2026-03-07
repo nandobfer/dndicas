@@ -351,6 +351,40 @@ export const spellComponentConfig = {
 } as const
 
 /**
+ * D&D Spell Casting Time colors and configurations.
+ */
+export const castingTimeConfig = {
+    Ação: {
+        name: "Ação",
+        color: "emerald",
+        badge: "bg-emerald-500/20 text-emerald-400",
+        border: "border-emerald-500/30",
+        text: "text-emerald-400",
+    },
+    "Ação Bônus": {
+        name: "Ação Bônus",
+        color: "sky",
+        badge: "bg-sky-500/20 text-sky-400",
+        border: "border-sky-500/30",
+        text: "text-sky-400",
+    },
+    Reação: {
+        name: "Reação",
+        color: "rose",
+        badge: "bg-rose-500/20 text-rose-400",
+        border: "border-rose-500/30",
+        text: "text-rose-400",
+    },
+    Ritual: {
+        name: "Ritual",
+        color: "violet",
+        badge: "bg-violet-500/20 text-violet-400",
+        border: "border-violet-500/30",
+        text: "text-violet-400",
+    },
+} as const
+
+/**
  * D&D Dice Types colors mapped from rarity system.
  */
 export const diceColors = {
@@ -394,6 +428,7 @@ export const diceColors = {
 
 export type SpellSchool = keyof typeof spellSchoolColors
 export type SpellComponent = keyof typeof spellComponentConfig
+export type CastingTime = keyof typeof castingTimeConfig
 export type DiceType = keyof typeof diceColors
 export type DamageType = keyof typeof damageTypeColors
 

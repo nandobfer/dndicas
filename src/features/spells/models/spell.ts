@@ -5,7 +5,7 @@ export interface DiceValue {
   tipo: 'd4' | 'd6' | 'd8' | 'd10' | 'd12' | 'd20';
 }
 
-import { type SpellSchool, type SpellComponent, type AttributeType } from "../types/spells.types"
+import { type SpellSchool, type SpellComponent, type AttributeType, type CastingTime } from "../types/spells.types"
 
 export interface ISpell extends Document {
     _id: mongoose.Types.ObjectId
@@ -13,12 +13,16 @@ export interface ISpell extends Document {
     description: string // Rich HTML (TipTap output with mentions)
     circle: number // 0-9 (0 = Truque/Cantrip)
     school: SpellSchool // One of 8 D&D schools
+    castingTime?: CastingTime // Action, Bonus Action, Reaction, Ritual
     component: SpellComponent[] // Concentration, Somatic, Verbal, Material
     range?: string // Optional - range description
     area?: string // Optional - area description
+    duration?: string // Optional - duration description
     saveAttribute?: AttributeType // Optional - saving throw attribute
     baseDice?: DiceValue // Optional - base damage dice
+    additionalBaseDice?: DiceValue[] // Optional - extra permanent dice
     extraDicePerLevel?: DiceValue // Optional - dice added per spell slot level above base
+    additionalExtraDicePerLevel?: DiceValue[] // Optional - extra level-scaling dice
     source: string // Free text (e.g., "PHB pg. 230", "Homebrew")
     status: "active" | "inactive" // Admin toggle
     createdAt: Date
@@ -57,84 +61,106 @@ const SpellSchema = new Schema<ISpell>(
             minlength: [2, "Nome deve ter pelo menos 2 caracteres"],
             maxlength: [100, "Nome deve ter no máximo 100 caracteres"],
             index: true,
-            unique: true,
+            unique: true
         },
         description: {
             type: String,
             required: [true, "Descrição é obrigatória"],
             minlength: [10, "Descrição deve ter pelo menos 10 caracteres"],
-            maxlength: [10000, "Descrição deve ter no máximo 10000 caracteres"],
+            maxlength: [10000, "Descrição deve ter no máximo 10000 caracteres"]
         },
         circle: {
             type: Number,
             required: [true, "Círculo é obrigatório"],
             min: [0, "Círculo deve ser entre 0 (truque) e 9"],
             max: [9, "Círculo deve ser entre 0 (truque) e 9"],
-            index: true,
+            index: true
         },
         school: {
             type: String,
             required: [true, "Escola de magia é obrigatória"],
             enum: {
                 values: ["Abjuração", "Adivinhação", "Conjuração", "Encantamento", "Evocação", "Ilusão", "Necromancia", "Transmutação"],
-                message: "{VALUE} não é uma escola de magia válida",
+                message: "{VALUE} não é uma escola de magia válida"
             },
-            index: true,
+            index: true
+        },
+        castingTime: {
+            type: String,
+            required: false,
+            enum: {
+                values: ["Ação", "Ação Bônus", "Reação", "Ritual"],
+                message: "{VALUE} não é um tempo de conjuração válido"
+            },
+            index: true
         },
         component: {
             type: [String],
             required: true,
-            default: [],
+            default: []
         },
         range: {
             type: String,
             required: false,
-            trim: true,
+            trim: true
         },
         area: {
             type: String,
             required: false,
+            trim: true
+        },        duration: {
+            type: String,
+            required: false,
             trim: true,
-        },
-        saveAttribute: {
+        },        saveAttribute: {
             type: String,
             required: false,
             enum: {
                 values: ["Força", "Destreza", "Constituição", "Inteligência", "Sabedoria", "Carisma"],
-                message: "{VALUE} não é um atributo válido",
+                message: "{VALUE} não é um atributo válido"
             },
-            index: true,
+            index: true
         },
         baseDice: {
             type: DiceValueSchema,
+            required: false
+        },
+        additionalBaseDice: {
+            type: [DiceValueSchema],
             required: false,
+            default: undefined,
         },
         extraDicePerLevel: {
             type: DiceValueSchema,
             required: false,
+        },
+        additionalExtraDicePerLevel: {
+            type: [DiceValueSchema],
+            required: false,
+            default: undefined,
         },
         source: {
             type: String,
             required: false,
             trim: true,
             maxlength: [200, "Fonte deve ter no máximo 200 caracteres"],
-            default: "",
+            default: ""
         },
         status: {
             type: String,
             required: true,
             enum: {
                 values: ["active", "inactive"],
-                message: "{VALUE} não é um status válido",
+                message: "{VALUE} não é um status válido"
             },
             default: "active",
-            index: true,
-        },
+            index: true
+        }
     },
     {
         timestamps: true,
-        collection: "spells",
-    },
+        collection: "spells"
+    }
 )
 
 // Indexes for common queries

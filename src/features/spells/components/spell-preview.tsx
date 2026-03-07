@@ -7,7 +7,7 @@
 
 "use client";
 
-import { Wand, BookOpen, Info, Shield, Sparkles, ExternalLink, Brain, Mic, Hand, Package } from "lucide-react"
+import { Wand, BookOpen, Info, Shield, Sparkles, ExternalLink, Brain, Mic, Hand, Package, Clock, Hourglass, Target, MapPin, Dices } from "lucide-react"
 import { GlassLevelChip } from "@/components/ui/glass-level-chip"
 import { motion } from "framer-motion"
 import { useWindows } from "@/core/context/window-context"
@@ -18,7 +18,7 @@ import { GlassEmptyValue } from "@/components/ui/glass-empty-value"
 import { Chip } from "@/components/ui/chip"
 import { SimpleGlassTooltip } from "@/components/ui/glass-tooltip"
 import { MentionContent, EntityTitleLink } from "@/features/rules/components/mention-badge"
-import { entityColors, spellComponentConfig, type SpellComponent } from "@/lib/config/colors"
+import { entityColors, spellComponentConfig, castingTimeConfig, type SpellComponent } from "@/lib/config/colors"
 import { cn } from "@/core/utils"
 import type { Spell } from "../types/spells.types"
 import { EntitySource } from "@/features/rules/components/entity-source"
@@ -128,6 +128,49 @@ export function SpellPreview({ spell, showStatus = true, hideStatusChip = false,
                         <GlassSpellSchool school={spell.school} size="sm" />
                     </div>
 
+                    {/* Casting Time */}
+                    {spell.castingTime && (
+                        <div className="flex items-center gap-2">
+                            <Clock className="h-3 w-3 text-white/40" />
+                            <span className="text-xs text-white/50">Conjuração:</span>
+                            <div
+                                className={cn(
+                                    "px-2 py-0.5 rounded-full text-[10px] font-bold border border-white/5",
+                                    castingTimeConfig[spell.castingTime as keyof typeof castingTimeConfig]?.badge
+                                )}
+                            >
+                                {spell.castingTime}
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Duration */}
+                    {spell.duration && (
+                        <div className="flex items-center gap-2">
+                            <Hourglass className="h-3 w-3 text-white/40" />
+                            <span className="text-xs text-white/50">Duração:</span>
+                            <span className="text-xs text-white/80 font-medium">{spell.duration}</span>
+                        </div>
+                    )}
+
+                    {/* Range */}
+                    {spell.range && (
+                        <div className="flex items-center gap-2">
+                            <MapPin className="h-3 w-3 text-white/40" />
+                            <span className="text-xs text-white/50">Alcance:</span>
+                            <span className="text-xs text-white/80 font-medium">{spell.range}</span>
+                        </div>
+                    )}
+
+                    {/* Area */}
+                    {spell.area && (
+                        <div className="flex items-center gap-2">
+                            <Target className="h-3 w-3 text-white/40" />
+                            <span className="text-xs text-white/50">Área:</span>
+                            <span className="text-xs text-white/80 font-medium">{spell.area}</span>
+                        </div>
+                    )}
+
                     {/* Components */}
                     {spell.component && spell.component.length > 0 && (
                         <div className="flex items-center gap-2">
@@ -167,36 +210,42 @@ export function SpellPreview({ spell, showStatus = true, hideStatusChip = false,
             </div>
 
             {/* Dice Values */}
-            {(spell.baseDice || spell.extraDicePerLevel) && (
+            {(spell.baseDice || (spell.additionalBaseDice && spell.additionalBaseDice.length > 0) || spell.extraDicePerLevel || (spell.additionalExtraDicePerLevel && spell.additionalExtraDicePerLevel.length > 0)) && (
                 <div className="space-y-2 pb-2 border-b border-white/5">
                     <div className="flex items-center gap-2 text-[10px] font-bold text-white/40 uppercase tracking-widest">
-                        <Sparkles className="h-3 w-3" />
-                        <span>Dados</span>
+                        <Dices className="h-3 w-3" />
+                        <span>Dados e Escalonamento</span>
                     </div>
                     <div className="flex flex-col gap-2">
-                        {/* Base Dice */}
-                        {spell.baseDice ? (
-                            <div className="flex items-center gap-2">
-                                <span className="text-xs text-white/50 w-24">Dado Base:</span>
-                                <GlassDiceValue value={spell.baseDice} />
-                            </div>
-                        ) : (
-                            <div className="flex items-center gap-2">
-                                <span className="text-xs text-white/50 w-24">Dado Base:</span>
-                                <GlassEmptyValue />
+                        {/* Base Dice & Additional Base Dice */}
+                        {(spell.baseDice || (spell.additionalBaseDice && spell.additionalBaseDice.length > 0)) && (
+                            <div className="flex items-start gap-2">
+                                <span className="text-xs text-white/50 w-24 shrink-0 pt-0.5">Dado Base:</span>
+                                <div className="flex flex-wrap gap-2">
+                                    {spell.baseDice && <GlassDiceValue value={spell.baseDice} />}
+                                    {spell.additionalBaseDice?.map((dice, i) => (
+                                        <div key={i} className="flex items-center gap-1.5">
+                                            <span className="text-[10px] text-white/30 font-bold">+</span>
+                                            <GlassDiceValue value={dice} />
+                                        </div>
+                                    ))}
+                                </div>
                             </div>
                         )}
 
-                        {/* Extra Dice Per Level */}
-                        {spell.extraDicePerLevel ? (
-                            <div className="flex items-center gap-2">
-                                <span className="text-xs text-white/50 w-24">Por Nível:</span>
-                                <GlassDiceValue value={spell.extraDicePerLevel} />
-                            </div>
-                        ) : (
-                            <div className="flex items-center gap-2">
-                                <span className="text-xs text-white/50 w-24">Por Nível:</span>
-                                <GlassEmptyValue />
+                        {/* Extra Dice Per Level & Additional Extra Dice */}
+                        {(spell.extraDicePerLevel || (spell.additionalExtraDicePerLevel && spell.additionalExtraDicePerLevel.length > 0)) && (
+                            <div className="flex items-start gap-2">
+                                <span className="text-xs text-white/50 w-24 shrink-0 pt-0.5">Por Nível:</span>
+                                <div className="flex flex-wrap gap-2">
+                                    {spell.extraDicePerLevel && <GlassDiceValue value={spell.extraDicePerLevel} />}
+                                    {spell.additionalExtraDicePerLevel?.map((dice, i) => (
+                                        <div key={i} className="flex items-center gap-1.5">
+                                            <span className="text-[10px] text-white/30 font-bold">+</span>
+                                            <GlassDiceValue value={dice} />
+                                        </div>
+                                    ))}
+                                </div>
                             </div>
                         )}
                     </div>
