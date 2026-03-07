@@ -21,9 +21,6 @@ export function GlobalSearchFAB() {
   const { query, setQuery, results, isLoading, isSearching, isFetchingNextPage, hasNextPage, loadMore } = useGlobalSearch()
   const containerRef = React.useRef<HTMLDivElement>(null)
 
-  // Avoid showing FAB on Dashboard since it has an inline search
-  if (pathname === "/") return null
-
   useClickAway(containerRef, () => {
     if (isOpen) setIsOpen(false)
   })
@@ -48,6 +45,9 @@ export function GlobalSearchFAB() {
     window.addEventListener("keydown", handleKeyDown)
     return () => window.removeEventListener("keydown", handleKeyDown)
   }, [])
+
+  // Avoid showing FAB on Dashboard since it has an inline search
+  if (pathname === "/") return null
 
   return (
       <div className="fixed bottom-6 right-6 z-[99]" ref={containerRef}>
