@@ -1,4 +1,4 @@
-"use client";
+"use client"
 
 /**
  * @fileoverview ExpandableSidebar component with Liquid Glass styling.
@@ -12,12 +12,12 @@
  * ```
  */
 
-import * as React from 'react';
-import { motion } from 'framer-motion';
-import Link from 'next/link';
+import * as React from "react"
+import { motion } from "framer-motion"
+import Link from "next/link"
 import Image from "next/image"
-import { usePathname } from 'next/navigation';
-import { Package2, Home, User, Sparkles, FileText, Users, Scroll, Zap, Wand, AtSign, MessageSquare, Sword, ShieldCheck, Fingerprint } from "lucide-react"
+import { usePathname } from "next/navigation"
+import { Home, User, Sparkles, FileText, Users, Scroll, Zap, Wand, AtSign, MessageSquare, Sword, ShieldCheck, Fingerprint } from "lucide-react"
 import { cn } from "@/core/utils"
 import { glassConfig } from "@/lib/config/glass-config"
 import { motionConfig } from "@/lib/config/motion-configs"
@@ -48,7 +48,7 @@ export interface ExpandableSidebarProps {
  */
 const mainItems = [
     { label: "Início", href: "/", icon: Home },
-    { label: "Perfil", href: "/profile", icon: User, authenticated: true },
+    { label: "Perfil", href: "/profile", icon: User, authenticated: true }
 ]
 
 // T020: Renamed from "Módulos" to "Cadastros", removed "Empresas", added "Usuários"
@@ -61,7 +61,7 @@ const cadastrosItems = [
     { label: "Regras", href: "/rules", icon: Scroll },
     { label: "Habilidades", href: "/traits", icon: Sparkles },
     { label: "Talentos", href: "/feats", icon: Zap },
-    { label: "Magias", href: "/spells", icon: Wand },
+    { label: "Magias", href: "/spells", icon: Wand }
 ]
 
 const adminItems = [
@@ -140,9 +140,7 @@ export const ExpandableSidebar: React.FC<ExpandableSidebarProps> = ({ isExpanded
                 <div className={cn("flex h-14 items-center border-b border-white/5 lg:h-[60px]")}>
                     <Link href="/" className="flex items-center gap-2 font-semibold text-white truncate w-full" onClick={handleItemClick}>
                         <div className="flex-shrink-0 w-[72px] flex items-center justify-center">
-                            {pathname !== "/" && (
-                                <Image src="/dndicas-logo.webp" alt="Dungeons & Dicas" width={44} height={44} className="w-15 object-contain" />
-                            )}
+                            <Image src="/dndicas-logo.webp" alt="Dungeons & Dicas" width={44} height={44} className="w-15 object-contain" />
                         </div>
                         {isExpanded && (
                             <motion.span
@@ -259,4 +257,4 @@ export const ExpandableSidebar: React.FC<ExpandableSidebarProps> = ({ isExpanded
     )
 }
 
-ExpandableSidebar.displayName = 'ExpandableSidebar';
+ExpandableSidebar.displayName = "ExpandableSidebar"
