@@ -43,7 +43,7 @@ export function FeatFormModal({ isOpen, onClose, onSubmit, feat, isSubmitting = 
         defaultValues: {
             name: feat?.name || "",
             description: feat?.description || "",
-            source: feat?.source || "",
+            source: feat?.source || "LDJ pág. ",
             level: feat?.level || 1,
             prerequisites: feat?.prerequisites || [],
             attributeBonuses: feat?.attributeBonuses || [],

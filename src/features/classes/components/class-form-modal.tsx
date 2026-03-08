@@ -285,7 +285,7 @@ export function ClassFormModal({ characterClass, isOpen, onClose, onSuccess }: C
             reset({
                 name: characterClass?.name ?? "",
                 description: characterClass?.description ?? "",
-                source: characterClass?.source ?? "",
+                source: characterClass?.source ?? "LDJ pág. ",
                 status: characterClass?.status ?? "active",
                 hitDice: characterClass?.hitDice ?? "d8",
                 primaryAttributes: characterClass?.primaryAttributes ?? [],
@@ -300,10 +300,10 @@ export function ClassFormModal({ characterClass, isOpen, onClose, onSuccess }: C
                 subclasses: (characterClass?.subclasses || []).map((s) => ({
                     ...s,
                     spellcasting: Boolean(s.spellcasting),
-                    spells: s.spells ?? [],
+                    spells: s.spells ?? []
                 })),
                 traits: characterClass?.traits ?? [],
-                image: characterClass?.image ?? "",
+                image: characterClass?.image ?? ""
             })
         }
     }, [isOpen, characterClass, reset])

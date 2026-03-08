@@ -39,7 +39,7 @@ export function RuleFormModal({ isOpen, onClose, onSubmit, rule, isSubmitting = 
         defaultValues: {
             name: rule?.name || "",
             description: rule?.description || "",
-            source: rule?.source || "",
+            source: rule?.source || "LDJ pág. ",
             status: rule?.status || "active"
         }
     })
