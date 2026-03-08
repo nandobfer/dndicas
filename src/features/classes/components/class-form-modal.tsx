@@ -433,7 +433,7 @@ export function ClassFormModal({ characterClass, isOpen, onClose, onSuccess }: C
     return (
         <>
             <GlassModal open={isOpen} onOpenChange={(open) => !open && handleCloseAttempt()}>
-                <GlassModalContent size="xl" className="max-w-[70vw]">
+                <GlassModalContent size="xl" className="max-w-full md:max-w-[70vw]">
                     <GlassModalHeader>
                         <GlassModalTitle>{isEditMode ? `Editar ${characterClass!.name}` : "Nova Classe"}</GlassModalTitle>
                         <GlassModalDescription>{isEditMode ? "Atualize as informações da classe" : "Crie um novo registro no catálogo de classes"}</GlassModalDescription>
