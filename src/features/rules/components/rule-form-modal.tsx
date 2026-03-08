@@ -51,8 +51,8 @@ export function RuleFormModal({ isOpen, onClose, onSubmit, rule, isSubmitting = 
             reset({
                 name: rule?.name || "",
                 description: rule?.description || "",
-                source: rule?.source || "",
-                status: rule?.status || "active",
+                source: rule?.source || "LDJ pág. ",
+                status: rule?.status || "active"
             })
         }
     }, [isOpen, rule, reset])

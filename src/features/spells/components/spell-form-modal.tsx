@@ -189,7 +189,7 @@ export function SpellFormModal({ spell, isOpen, onClose, onSuccess }: SpellFormM
                 additionalBaseDice: spell?.additionalBaseDice || [],
                 extraDicePerLevel: spell?.extraDicePerLevel,
                 additionalExtraDicePerLevel: spell?.additionalExtraDicePerLevel || [],
-                source: spell?.source ?? "",
+                source: spell?.source ?? "LDJ pág. ",
                 status: (spell?.status as "active" | "inactive") ?? "active"
             })
         }

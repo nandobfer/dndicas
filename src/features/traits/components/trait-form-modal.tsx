@@ -50,8 +50,8 @@ export function TraitFormModal({ isOpen, onClose, onSubmit, trait, isSubmitting 
             reset({
                 name: trait?.name || "",
                 description: trait?.description || "",
-                source: trait?.source || "",
-                status: trait?.status || "active",
+                source: trait?.source || "LDJ pág. ",
+                status: trait?.status || "active"
             })
         }
     }, [isOpen, trait, reset])
