@@ -45,7 +45,7 @@ export function RacesPage() {
                             "hover:bg-blue-600 transition-colors",
                             "focus:outline-none focus:ring-2 focus:ring-blue-500/50",
                             "shadow-lg shadow-blue-500/20",
-                            "w-full sm:w-auto"
+                            "w-full sm:w-auto",
                         )}
                     >
                         <Plus className="h-4 w-4" />
@@ -57,11 +57,7 @@ export function RacesPage() {
             {/* Filters Panel */}
             <GlassCard>
                 <GlassCardContent className="py-4">
-                    <RaceFilters
-                        filters={{ search: filters.search }}
-                        onSearchChange={actions.handleSearchChange}
-                        isSearching={data.isLoading}
-                    />
+                    <RaceFilters filters={filters} onSearchChange={actions.handleSearchChange} onStatusChange={actions.handleStatusChange} isSearching={data.isLoading} />
                 </GlassCardContent>
             </GlassCard>
 
@@ -69,12 +65,7 @@ export function RacesPage() {
             <GlassCard className="border-white/5 overflow-hidden">
                 <GlassCardContent className="p-0">
                     {viewMode === "table" && !isMobile ? (
-                        <RacesTable
-                            data={data.races}
-                            isLoading={data.isLoading}
-                            onEdit={actions.handleEditClick}
-                            onDelete={actions.handleDeleteClick}
-                        />
+                        <RacesTable data={data.races} isLoading={data.isLoading} onEdit={actions.handleEditClick} onDelete={actions.handleDeleteClick} />
                     ) : (
                         <EntityList
                             items={data.races as any}
@@ -92,18 +83,9 @@ export function RacesPage() {
             </GlassCard>
 
             {/* Modals & Dialogs */}
-            <RaceFormModal
-                isOpen={modals.isFormOpen}
-                race={modals.selectedRace}
-                onClose={modals.closeAll}
-                onSuccess={modals.closeAll}
-            />
+            <RaceFormModal isOpen={modals.isFormOpen} race={modals.selectedRace} onClose={modals.closeAll} onSuccess={modals.closeAll} />
 
-            <DeleteRaceDialog
-                isOpen={modals.isDeleteOpen}
-                race={modals.selectedRace}
-                onClose={modals.closeAll}
-            />
+            <DeleteRaceDialog isOpen={modals.isDeleteOpen} race={modals.selectedRace} onClose={modals.closeAll} />
         </motion.div>
     )
 }

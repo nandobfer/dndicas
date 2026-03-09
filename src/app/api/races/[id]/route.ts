@@ -3,11 +3,12 @@ import { auth } from "@clerk/nextjs/server"
 import { RaceModel } from "@/features/races/models/race"
 import dbConnect from "@/core/database/db"
 import { z } from "zod"
+import { createAuditLog } from "@/features/users/api/audit-service"
 
 const raceTraitSchema = z.object({
     name: z.string().min(1),
     level: z.coerce.number().default(1),
-    description: z.string().min(1)
+    description: z.string().min(1),
 })
 
 const raceVariationSchema = z.object({
@@ -19,7 +20,7 @@ const raceVariationSchema = z.object({
     traits: z.array(raceTraitSchema).default([]),
     spells: z.array(z.any()).default([]),
     size: z.enum(["Pequeno", "Médio", "Grande"]).optional(),
-    speed: z.string().optional()
+    speed: z.string().optional(),
 })
 
 const raceSchema = z.object({
@@ -32,13 +33,10 @@ const raceSchema = z.object({
     speed: z.string().min(1),
     traits: z.array(raceTraitSchema).default([]),
     spells: z.array(z.any()).default([]),
-    variations: z.array(raceVariationSchema).default([])
+    variations: z.array(raceVariationSchema).default([]),
 })
 
-export async function GET(
-    req: NextRequest,
-    { params }: { params: Promise<{ id: string }> }
-) {
+export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
     try {
         await dbConnect()
         const { id } = await params
@@ -50,7 +48,7 @@ export async function GET(
 
         return NextResponse.json({
             ...item,
-            id: item._id.toString()
+            id: item._id.toString(),
         })
     } catch (error) {
         console.error("Race GET error:", error)
@@ -58,10 +56,7 @@ export async function GET(
     }
 }
 
-export async function PUT(
-    req: NextRequest,
-    { params }: { params: Promise<{ id: string }> }
-) {
+export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
     try {
         const { userId } = await auth()
         if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
@@ -71,10 +66,28 @@ export async function PUT(
         const validated = raceSchema.parse(body)
         await dbConnect()
 
-        const race = await RaceModel.findByIdAndUpdate(id, validated, { new: true })
+        // Get previous data for audit log
+        const previousRace = await RaceModel.findById(id).lean()
+        if (!previousRace) {
+            return NextResponse.json({ error: "Race not found" }, { status: 404 })
+        }
+
+        const race = await RaceModel.findByIdAndUpdate(id, validated, { new: true }).lean()
 
         if (!race) {
             return NextResponse.json({ error: "Race not found" }, { status: 404 })
+        }
+
+        // Audit log
+        if (userId) {
+            await createAuditLog({
+                performedBy: userId,
+                action: "UPDATE",
+                entity: "Race",
+                entityId: id,
+                previousData: previousRace as any,
+                newData: race as any,
+            })
         }
 
         return NextResponse.json(race)
@@ -87,10 +100,7 @@ export async function PUT(
     }
 }
 
-export async function DELETE(
-    req: NextRequest,
-    { params }: { params: Promise<{ id: string }> }
-) {
+export async function DELETE(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
     try {
         const { userId } = await auth()
         if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
@@ -102,6 +112,17 @@ export async function DELETE(
 
         if (!race) {
             return NextResponse.json({ error: "Race not found" }, { status: 404 })
+        }
+
+        // Audit log
+        if (userId) {
+            await createAuditLog({
+                performedBy: userId,
+                action: "DELETE",
+                entity: "Race",
+                entityId: id,
+                previousData: (race.toObject ? race.toObject() : race) as any,
+            })
         }
 
         return NextResponse.json({ message: "Race deleted successfully" })

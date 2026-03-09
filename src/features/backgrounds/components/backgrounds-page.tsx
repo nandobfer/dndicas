@@ -47,7 +47,7 @@ export function BackgroundsPage() {
                             "hover:bg-blue-600 transition-colors",
                             "focus:outline-none focus:ring-2 focus:ring-blue-500/50",
                             "shadow-lg shadow-blue-500/20",
-                            "w-full sm:w-auto"
+                            "w-full sm:w-auto",
                         )}
                     >
                         <Plus className="h-4 w-4" />
@@ -59,11 +59,7 @@ export function BackgroundsPage() {
             {/* Filters Panel */}
             <GlassCard>
                 <GlassCardContent className="py-4">
-                    <BackgroundFilters
-                        filters={filters}
-                        onSearchChange={actions.handleSearchChange}
-                        isSearching={data.isLoading}
-                    />
+                    <BackgroundFilters filters={filters} onSearchChange={actions.handleSearchChange} onStatusChange={actions.handleStatusChange} isSearching={data.isLoading} />
                 </GlassCardContent>
             </GlassCard>
 
@@ -71,12 +67,7 @@ export function BackgroundsPage() {
             <GlassCard className="border-white/5 overflow-hidden">
                 <GlassCardContent className="p-0">
                     {viewMode === "table" && !isMobile ? (
-                        <BackgroundsTable
-                            data={data.backgrounds}
-                            isLoading={data.isLoading}
-                            onEdit={actions.handleEditClick}
-                            onDelete={actions.handleDeleteClick}
-                        />
+                        <BackgroundsTable data={data.backgrounds} isLoading={data.isLoading} onEdit={actions.handleEditClick} onDelete={actions.handleDeleteClick} />
                     ) : (
                         <EntityList
                             items={data.backgrounds as any}
@@ -94,18 +85,9 @@ export function BackgroundsPage() {
             </GlassCard>
 
             {/* Modals & Dialogs */}
-            <BackgroundFormModal
-                isOpen={modals.isFormOpen}
-                background={modals.selectedBackground}
-                onClose={modals.closeAll}
-                onSuccess={modals.closeAll}
-            />
+            <BackgroundFormModal isOpen={modals.isFormOpen} background={modals.selectedBackground} onClose={modals.closeAll} onSuccess={modals.closeAll} />
 
-            <DeleteBackgroundDialog
-                isOpen={modals.isDeleteOpen}
-                background={modals.selectedBackground}
-                onClose={modals.closeAll}
-            />
+            <DeleteBackgroundDialog isOpen={modals.isDeleteOpen} background={modals.selectedBackground} onClose={modals.closeAll} />
         </motion.div>
     )
 }

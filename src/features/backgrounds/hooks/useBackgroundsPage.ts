@@ -16,9 +16,10 @@ export function useBackgroundsPage() {
     const { viewMode, setViewMode } = useViewMode()
 
     const [search, setSearch] = React.useState("")
+    const [status, setStatus] = React.useState<"active" | "inactive" | "all">("all")
 
     // Filters for query
-    const filters = { search }
+    const filters = { search, status }
 
     const tableData = useBackgrounds(filters, 1, 100) // Simple non-infinite for table
     const infiniteData = useInfiniteBackgrounds(filters)
@@ -29,6 +30,7 @@ export function useBackgroundsPage() {
     const [selectedBackground, setSelectedBackground] = React.useState<Background | null>(null)
 
     const handleSearchChange = (value: string) => setSearch(value)
+    const handleStatusChange = (value: "active" | "inactive" | "all") => setStatus(value)
 
     const handleCreateClick = () => {
         setSelectedBackground(null)
@@ -57,11 +59,13 @@ export function useBackgroundsPage() {
         setViewMode,
         filters: {
             search,
-            setSearch
+            setSearch,
+            status,
+            setStatus,
         },
         data: {
-            backgrounds: viewMode === "table" ? (tableData.data?.items || []) : (infiniteData.data?.pages.flatMap(p => p.items) || []),
-            isLoading: viewMode === "table" ? tableData.isLoading : (infiniteData.isLoading || infiniteData.isFetching),
+            backgrounds: viewMode === "table" ? tableData.data?.items || [] : infiniteData.data?.pages.flatMap((p) => p.items) || [],
+            isLoading: viewMode === "table" ? tableData.isLoading : infiniteData.isLoading || infiniteData.isFetching,
             hasNextPage: !!infiniteData.hasNextPage,
             fetchNextPage: infiniteData.fetchNextPage,
             isFetchingNextPage: !!infiniteData.isFetchingNextPage,
@@ -69,6 +73,7 @@ export function useBackgroundsPage() {
         },
         actions: {
             handleSearchChange,
+            handleStatusChange,
             handleCreateClick,
             handleEditClick,
             handleDeleteClick,
@@ -79,7 +84,7 @@ export function useBackgroundsPage() {
             isDeleteOpen,
             setIsDeleteOpen,
             selectedBackground,
-            closeAll
-        }
+            closeAll,
+        },
     }
 }
