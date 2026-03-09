@@ -23,6 +23,7 @@ export function EntityTitleLink({ name, entityType, className, style }: EntityTi
         Classe: "classes",
         Origem: "backgrounds",
         Raça: "races",
+        Item: "items",
     }
 
     const route = routeMap[entityType] || "rules"
