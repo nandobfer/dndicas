@@ -211,20 +211,14 @@ export function ItemFormModal({ item, isOpen, onClose, onSuccess }: ItemFormModa
     return (
         <>
             <GlassModal open={isOpen} onOpenChange={(open) => !open && handleCloseAttempt()}>
-                <GlassModalContent
-                    size="xl"
-                    className="w-[100vw] h-[100vh] md:w-[70vw] md:h-auto md:max-h-[90vh] md:max-w-[1200px] md:rounded-3xl border-none md:border border-white/10 flex flex-col p-0"
-                >
-                    <div className="px-6 py-4 border-b border-white/5 shrink-0">
-                        <GlassModalHeader>
-                            <GlassModalTitle>{isEditMode ? `Editar ${item?.name}` : "Novo Item"}</GlassModalTitle>
-                            <GlassModalDescription>{isEditMode ? "Atualize as informações do item" : "Crie um novo registro no catálogo de itens"}</GlassModalDescription>
-                        </GlassModalHeader>
-                    </div>
+                <GlassModalContent size="xl" className="max-w-full md:max-w-[70vw]">
+                    <GlassModalHeader>
+                        <GlassModalTitle>{isEditMode ? `Editar ${item?.name}` : "Novo Item"}</GlassModalTitle>
+                        <GlassModalDescription>{isEditMode ? "Atualize as informações do item" : "Crie um novo registro no catálogo de itens"}</GlassModalDescription>
+                    </GlassModalHeader>
 
-                    <div className="flex-1 overflow-y-auto px-6 py-4 scrollbar-thin scrollbar-thumb-white/10 scrollbar-track-transparent">
-                        <form id="item-form" onSubmit={handleSubmit(onSubmit as any)} className="space-y-6">
-                            {/* Status Switch */}
+                    <form id="item-form" onSubmit={handleSubmit(onSubmit as any)} className="space-y-6 mt-4">
+                        {/* Status Switch */}
                             <GlassStatusSwitch
                                 entityLabel="Status do Item"
                                 description="Itens inativos não aparecem nas buscas públicas"
@@ -378,7 +372,7 @@ export function ItemFormModal({ item, isOpen, onClose, onSuccess }: ItemFormModa
                             </AnimatePresence>
 
                             {/* Tool Specifics */}
-                            {selectedType === "ferramenta" && <ToolFormFields register={register} />}
+                            {selectedType === "ferramenta" && <ToolFormFields watch={watch} setValue={setValue} />}
 
                             {/* Public Traits Section (Global/Non-Weapon specific traits) */}
                             <EntityListChooser
@@ -391,35 +385,33 @@ export function ItemFormModal({ item, isOpen, onClose, onSuccess }: ItemFormModa
                                 errors={errors}
                                 entityType="Habilidade"
                             />
-                        </form>
-                    </div>
 
-                    {/* Footer Actions */}
-                    <div className="px-6 py-4 border-t border-white/10 bg-black/20 shrink-0 flex flex-col-reverse sm:flex-row justify-end gap-3">
-                        <button
-                            type="button"
-                            onClick={handleCloseAttempt}
-                            className="px-6 py-2.5 rounded-lg text-sm font-medium text-white/60 hover:text-white/80 hover:bg-white/5 transition-colors disabled:opacity-50"
-                            disabled={isSubmitting}
-                        >
-                            Cancelar
-                        </button>
-                        <button
-                            type="submit"
-                            form="item-form"
-                            className={cn(
-                                "flex flex-1 sm:flex-none items-center justify-center gap-2 px-6 py-2.5 rounded-lg text-sm font-medium transition-all shadow-lg active:scale-95",
-                                "bg-blue-500 text-white shadow-blue-500/20 hover:bg-blue-600",
-                                isSubmitting && "opacity-50 cursor-not-allowed",
-                            )}
-                            disabled={isSubmitting}
-                        >
-                            {isSubmitting && <Loader2 className="h-4 w-4 animate-spin" />}
-                            {isEditMode ? "Salvar Alterações" : "Criar Item"}
-                        </button>
-                    </div>
-                </GlassModalContent>
-            </GlassModal>
+                            {/* Footer Actions - Agora dentro do form para paridade com ClassFormModal */}
+                            <div className="flex flex-col-reverse sm:flex-row justify-end gap-3 pt-6 border-t border-white/10">
+                                <button
+                                    type="button"
+                                    onClick={handleCloseAttempt}
+                                    className="px-6 py-2.5 rounded-lg text-sm font-medium text-white/60 hover:text-white/80 hover:bg-white/5 transition-colors disabled:opacity-50"
+                                    disabled={isSubmitting}
+                                >
+                                    Cancelar
+                                </button>
+                                <button
+                                    type="submit"
+                                    className={cn(
+                                        "flex flex-1 sm:flex-none items-center justify-center gap-2 px-6 py-2.5 rounded-lg text-sm font-medium transition-all shadow-lg active:scale-95",
+                                        "bg-blue-500 text-white shadow-blue-500/20 hover:bg-blue-600",
+                                        isSubmitting && "opacity-50 cursor-not-allowed",
+                                    )}
+                                    disabled={isSubmitting}
+                                >
+                                    {isSubmitting && <Loader2 className="h-4 w-4 animate-spin" />}
+                                    {isEditMode ? "Salvar Alterações" : "Criar Item"}
+                                </button>
+                            </div>
+                        </form>
+                    </GlassModalContent>
+                </GlassModal>
 
             <GlassConfirmClosing
                 isOpen={showConfirmClose}
