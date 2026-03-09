@@ -65,7 +65,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Item name already exists" }, { status: 409 });
     }
 
-    const newItem = await ItemModel.create(parseResult.data);
+    const newItem = (await ItemModel.create(parseResult.data as any)) as any
 
     try {
       await createAuditLog({

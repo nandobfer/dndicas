@@ -11,10 +11,10 @@ export interface DiceValue {
 }
 
 export interface ItemTrait {
-    _id?: string;
-    name?: string;
-    level?: number;
-    description: string;
+    _id?: string
+    name?: string
+    level?: number
+    description: string
 }
 
 export interface Item {
@@ -35,6 +35,10 @@ export interface Item {
     properties?: ItemTrait[]
     damageDice?: DiceValue
     damageType?: DamageType
+    additionalDamage?: Array<{
+        damageDice: DiceValue
+        damageType: DamageType
+    }>
     mastery?: string // Talent-like rule field
 
     // Tool specifics

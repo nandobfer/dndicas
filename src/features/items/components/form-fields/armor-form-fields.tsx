@@ -112,14 +112,42 @@ export function ArmorFormFields({ selectedType, setValue, watch, errors }: Armor
                             />
                         </div>
 
-                        <GlassInput
-                            type="number"
-                            label="Classe de Armadura (CA)"
-                            placeholder="Ex: 15"
-                            value={watch("ac") || ""}
-                            onChange={(e) => setValue("ac", parseInt(e.target.value) || undefined)}
-                            className="[appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-                        />
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div className="space-y-3">
+                                <label className="text-sm font-medium text-white/80 flex items-center gap-2">
+                                    <Target className="h-4 w-4 text-orange-400/60" />
+                                    Força Requerida
+                                </label>
+                                <GlassInput
+                                    type="number"
+                                    placeholder="Ex: 13"
+                                    value={watch("strReq") || ""}
+                                    onChange={(e) => {
+                                        const val = parseInt(e.target.value)
+                                        setValue("strReq", isNaN(val) ? undefined : (val as any))
+                                    }}
+                                    className="[appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                                />
+                            </div>
+
+                            <div className="space-y-3">
+                                <label className="text-sm font-medium text-white/80 flex items-center gap-2">
+                                    <ShieldAlert className="h-4 w-4 text-purple-400/60" />
+                                    Furtividade
+                                </label>
+                                <GlassSelector
+                                    options={[
+                                        { value: "nenhuma", label: "Normal" },
+                                        { value: "desvantagem", label: "Desvantagem" },
+                                    ]}
+                                    value={watch("stealthDis") ? "desvantagem" : "nenhuma"}
+                                    onChange={(val) => setValue("stealthDis", val === "desvantagem")}
+                                    layoutId="stealth-dis-selector"
+                                    layout="horizontal"
+                                    fullWidth
+                                />
+                            </div>
+                        </div>
                     </>
                 ) : (
                     <GlassInput

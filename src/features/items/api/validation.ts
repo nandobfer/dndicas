@@ -5,11 +5,20 @@ const diceValueSchema = z.object({
     tipo: z.enum(["d4", "d6", "d8", "d10", "d12", "d20"])
 });
 
-const itemTraitSchema = z.object({
-    name: z.string().max(100).optional(),
-    level: z.number().default(1),
-    description: z.string().min(1, "Campo obrigatório").max(5000)
-});
+const additionalDamageSchema = z.object({
+    damageDice: diceValueSchema,
+    damageType: z.enum(["cortante", "perfurante", "concussão", "ácido", "fogo", "frio", "relâmpago", "trovão", "veneno", "psíquico", "radiante", "necrótico", "força"]),
+})
+
+const itemTraitIdSchema = z.union([
+    z.string(),
+    z.object({
+        _id: z.string().optional(),
+        name: z.string().optional(),
+        description: z.string().optional(),
+        level: z.number().optional().default(1),
+    }),
+])
 
 export const createItemSchema = z.object({
     name: z.string().min(2, "Nome deve ter pelo menos 2 caracteres").max(100, "Nome deve ter no máximo 100 caracteres"),
@@ -18,15 +27,16 @@ export const createItemSchema = z.object({
     status: z.enum(["active", "inactive"]),
     image: z.string().optional().default(""),
     price: z.string().optional().default(""),
+    weight: z.number().optional().default(0),
     isMagic: z.boolean().default(false),
     type: z.enum(["ferramenta", "arma", "armadura", "escudo", "consumível", "munição", "qualquer"]),
     rarity: z.enum(["comum", "incomum", "raro", "muito raro", "lendário", "artefato"]),
-    traits: z.array(itemTraitSchema).default([]),
-
+    traits: z.array(itemTraitIdSchema).default([]),
     // Weapon specifics
-    properties: z.array(itemTraitSchema).optional().default([]),
-    damageDice: diceValueSchema.optional(),
-    damageType: z.enum(["cortante", "perfurante", "concussão", "ácido", "fogo", "frio", "relâmpago", "trovão", "veneno", "psíquico", "radiante", "necrótico", "força"]).optional(),
+    properties: z.array(itemTraitIdSchema).optional().default([]),
+    damageDice: diceValueSchema.default({ quantidade: 1, tipo: "d6" }),
+    damageType: z.enum(["cortante", "perfurante", "concussão", "ácido", "fogo", "frio", "relâmpago", "trovão", "veneno", "psíquico", "radiante", "necrótico", "força"]).default("cortante"),
+    additionalDamage: z.array(additionalDamageSchema).optional().default([]),
     mastery: z.any().optional(),
 
     // Tool specifics
@@ -36,6 +46,8 @@ export const createItemSchema = z.object({
     ac: z.number().optional(),
     acType: z.enum(["base", "bonus"]).optional(),
     armorType: z.enum(["leve", "média", "pesada", "nenhuma"]).optional(),
+    strReq: z.number().optional().default(0),
+    stealthDis: z.boolean().optional().default(false),
 
     // Shield specifics
     acBonus: z.number().optional(),

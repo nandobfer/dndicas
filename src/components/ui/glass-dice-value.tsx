@@ -53,7 +53,7 @@ export function GlassDiceValue({ value, showIcon = true, colorOverride, classNam
     const notation = `${value.quantidade}${value.tipo}`
 
     // Use inline style for text color if hex is provided to avoid Tailwind JIT issues with arbitrary values in strings
-    const isCustomHex = colorOverride?.text.includes("#")
+    const isCustomHex = colorOverride?.text?.includes("#")
     const customTextColor = isCustomHex ? colorOverride!.text.match(/#(?:[0-9a-fA-F]{3}){1,2}/)?.[0] : undefined
 
     return (

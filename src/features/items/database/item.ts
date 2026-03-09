@@ -9,6 +9,7 @@ export interface IItem extends Document {
     status: "active" | "inactive"
     image?: string
     price?: string
+    weight?: number
     isMagic: boolean
     type: ItemType
     rarity: ItemRarity
@@ -18,6 +19,10 @@ export interface IItem extends Document {
     properties?: ItemTrait[]
     damageDice?: DiceValue
     damageType?: DamageType
+    additionalDamage?: Array<{
+        damageDice: DiceValue
+        damageType: DamageType
+    }>
     mastery?: string
 
     // Tool specifics
@@ -27,6 +32,8 @@ export interface IItem extends Document {
     ac?: number
     acType?: "base" | "bonus"
     armorType?: ArmorType
+    strReq?: number
+    stealthDis?: boolean
 
     // Shield specifics
     acBonus?: number
@@ -81,6 +88,7 @@ const ItemSchema = new Schema<IItem>(
         },
         image: { type: String, default: "" },
         price: { type: String, default: "" },
+        weight: { type: Number, default: 0 },
         isMagic: { type: Boolean, default: false },
         type: {
             type: String,
@@ -95,12 +103,23 @@ const ItemSchema = new Schema<IItem>(
         traits: { type: [ItemTraitSchema], default: [] },
 
         // Weapon specifics
-        properties: { type: [ItemTraitSchema], default: [] },
+        properties: { type: [Schema.Types.Mixed], default: [] },
         damageDice: { type: DiceValueSchema },
         damageType: {
             type: String,
             enum: ["cortante", "perfurante", "concussão", "ácido", "fogo", "frio", "relâmpago", "trovão", "veneno", "psíquico", "radiante", "necrótico", "força"],
         },
+        additionalDamage: [
+            {
+                damageDice: { type: DiceValueSchema, required: true },
+                damageType: {
+                    type: String,
+                    required: true,
+                    enum: ["cortante", "perfurante", "concussão", "ácido", "fogo", "frio", "relâmpago", "trovão", "veneno", "psíquico", "radiante", "necrótico", "força"],
+                },
+                _id: false,
+            },
+        ],
         mastery: { type: Schema.Types.Mixed }, // Similar to background featId or spell rule reference
 
         // Tool specifics
@@ -113,6 +132,8 @@ const ItemSchema = new Schema<IItem>(
         ac: { type: Number },
         acType: { type: String, enum: ["base", "bonus"] },
         armorType: { type: String, enum: ["leve", "média", "pesada", "nenhuma"] },
+        strReq: { type: Number, default: 0 },
+        stealthDis: { type: Boolean, default: false },
 
         // Shield specifics
         acBonus: { type: Number },

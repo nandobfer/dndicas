@@ -58,7 +58,7 @@ export function ItemsPage() {
                             "hover:bg-blue-600 transition-colors",
                             "focus:outline-none focus:ring-2 focus:ring-blue-500/50",
                             "shadow-lg shadow-blue-500/20",
-                            "w-full sm:w-auto"
+                            "w-full sm:w-auto",
                         )}
                     >
                         <Plus className="h-4 w-4" />
@@ -71,11 +71,11 @@ export function ItemsPage() {
             <GlassCard>
                 <GlassCardContent className="py-4">
                     <ItemFilters
-                        filters={{ 
+                        filters={{
                             search: filters.search,
                             type: filters.type,
                             rarity: filters.rarity,
-                            status: filters.status
+                            status: filters.status,
                         }}
                         onSearchChange={actions.handleSearchChange}
                         onTypeChange={actions.handleTypeChange}
@@ -87,7 +87,7 @@ export function ItemsPage() {
             </GlassCard>
 
             {/* Content Area */}
-            <GlassCard className="border-white/5 overflow-hidden">
+            <div className="overflow-hidden">
                 <GlassCardContent className="p-0">
                     {viewMode === "default" ? (
                         <EntityList
@@ -102,31 +102,15 @@ export function ItemsPage() {
                             isAdmin={isAdmin}
                         />
                     ) : (
-                        <ItemsTable
-                            items={data.items as any}
-                            onEdit={actions.handleEditClick}
-                            onDelete={actions.handleDeleteClick}
-                            isAdmin={isAdmin}
-                        />
+                        <ItemsTable items={data.items as any} onEdit={actions.handleEditClick} onDelete={actions.handleDeleteClick} isAdmin={isAdmin} />
                     )}
                 </GlassCardContent>
-            </GlassCard>
+            </div>
 
             {/* Modals & Dialogs */}
-            <ItemFormModal
-                item={modals.selectedItem}
-                isOpen={modals.isFormOpen}
-                onClose={modals.closeAll}
-                onSuccess={() => {}}
-            />
+            <ItemFormModal item={modals.selectedItem} isOpen={modals.isFormOpen} onClose={modals.closeAll} onSuccess={() => {}} />
 
-            <DeleteItemDialog
-                item={modals.selectedItem}
-                isOpen={modals.isDeleteOpen}
-                onClose={modals.closeAll}
-                onConfirm={handleConfirmDelete}
-                isDeleting={deleteMutation.isPending}
-            />
+            <DeleteItemDialog item={modals.selectedItem} isOpen={modals.isDeleteOpen} onClose={modals.closeAll} onConfirm={handleConfirmDelete} isDeleting={deleteMutation.isPending} />
         </motion.div>
     )
 }

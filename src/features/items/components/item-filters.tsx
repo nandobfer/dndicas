@@ -61,7 +61,8 @@ export function ItemFilters({
 
     return (
         <div className={cn("flex flex-col gap-4", className)}>
-            <div className="flex flex-col lg:flex-row gap-4">
+            {/* Top Row: Search + Rarity */}
+            <div className="flex flex-col lg:flex-row lg:items-center gap-4 justify-between">
                 <div className="flex-1 min-w-0">
                     <SearchInput
                         value={filters.search || ""}
@@ -71,32 +72,34 @@ export function ItemFilters({
                     />
                 </div>
 
-                <div className="flex items-center gap-2 min-w-[200px]">
-                    <span className="text-[10px] sm:text-xs font-semibold text-white/40 uppercase tracking-wider whitespace-nowrap">Tipo:</span>
-                    <GlassSelector
-                        value={filters.type || "all"}
-                        onChange={(val) => onTypeChange?.(val as any)}
-                        options={ITEM_TYPES}
-                        className="w-full"
-                        layoutId="item-type-selector"
-                    />
-                </div>
-            </div>
-
-            <div className="flex flex-col sm:flex-row gap-4 justify-between items-center bg-white/[0.02] p-2 rounded-lg border border-white/5">
-                <div className="flex items-center gap-2 min-w-[200px] w-full sm:w-auto">
+                <div className="flex items-center gap-2 w-full lg:w-auto">
                     <span className="text-[10px] sm:text-xs font-semibold text-white/40 uppercase tracking-wider whitespace-nowrap">Raridade:</span>
                     <GlassSelector
                         value={filters.rarity || "all"}
                         onChange={(val) => onRarityChange?.(val as any)}
                         options={ITEM_RARITIES}
-                        className="w-full sm:w-auto"
+                        className="w-full lg:w-auto"
                         layoutId="item-rarity-selector"
+                    />
+                </div>
+            </div>
+
+            {/* Bottom Row: Type + Status */}
+            <div className="flex flex-wrap items-center gap-6">
+                <div className="flex items-center gap-2 w-full sm:w-auto">
+                    <span className="text-[10px] sm:text-xs font-semibold text-white/40 uppercase tracking-wider whitespace-nowrap">Tipo:</span>
+                    <GlassSelector
+                        value={filters.type || "all"}
+                        onChange={(val) => onRarityChange?.(val as any)}
+                        options={ITEM_TYPES}
+                        className="w-full sm:w-auto"
+                        layoutId="item-type-selector"
+                        size='sm'
                     />
                 </div>
 
                 {isAdmin && (
-                    <div className="flex items-center gap-3 w-full sm:w-auto justify-end">
+                    <div className="flex items-center gap-3 w-full sm:w-auto ml-auto">
                         <span className="text-[10px] sm:text-xs font-semibold text-white/40 uppercase tracking-wider whitespace-nowrap">Status:</span>
                         <StatusChips
                             value={(filters.status as StatusFilter) || "all"}

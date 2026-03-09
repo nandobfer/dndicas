@@ -461,7 +461,7 @@ export function getDamageColorByKey(key: string) {
 
     const damageType = Object.values(damageTypeColors).find((dt) => dt.keys.some((k) => normalize(k) === normalizedKey))
 
-    return damageType ? { text: damageType.text, bgAlpha: damageType.bgAlpha } : null
+    return damageType ? { text: damageType.text, bgAlpha: damageType.bgAlpha, hex: damageType.hex } : null
 }
 
 /**
