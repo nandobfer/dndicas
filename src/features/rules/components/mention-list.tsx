@@ -4,7 +4,7 @@ import { glassConfig } from '@/lib/config/glass-config'
 import { entityColors } from "@/lib/config/colors"
 import { EntityPreviewTooltip } from "./entity-preview-tooltip"
 import { DebounceProgress } from "@/components/ui/debounce-progress"
-import { Scroll, Sparkles, Zap, Wand, Sword, ShieldCheck } from "lucide-react"
+import { Scroll, Sparkles, Zap, Wand, Sword, ShieldCheck, Box, Fingerprint } from "lucide-react"
 
 const entityIcons: Record<string, any> = {
     Regra: Scroll,
@@ -13,6 +13,8 @@ const entityIcons: Record<string, any> = {
     Magia: Wand,
     Classe: Sword,
     Origem: ShieldCheck,
+    Item: Box,
+    Raça: Fingerprint,
 }
 
 export interface MentionListProps {
@@ -113,6 +115,19 @@ const MentionList = forwardRef<MentionListRef, MentionListProps>((props, ref) =>
                                             <span className="text-[9px] text-white/40 italic">{item.circle === 0 ? "Truque" : `${item.circle}º Círculo`}</span>
                                             <span className="text-[9px] text-white/40">•</span>
                                             <span className="text-[9px] text-white/40">{item.school}</span>
+                                        </div>
+                                    )}
+                                    {item.entityType === "Item" && (
+                                        <div className="flex items-center gap-1.5 mr-1">
+                                            <span className="text-[9px] text-white/40 italic capitalize">{item.itemType}</span>
+                                            <span className="text-[9px] text-white/40">•</span>
+                                            <span className="text-[9px] text-white/40 capitalize">{item.rarity}</span>
+                                            {item.price && (
+                                                <>
+                                                    <span className="text-[9px] text-white/40">•</span>
+                                                    <span className="text-[9px] text-white/40">{item.price}</span>
+                                                </>
+                                            )}
                                         </div>
                                     )}
                                     {item.entityType && (

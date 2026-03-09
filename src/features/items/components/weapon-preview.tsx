@@ -26,7 +26,8 @@ interface WeaponPreviewProps {
  * - Mastery (MentionContent)
  */
 export function WeaponPreview({ item }: WeaponPreviewProps) {
-    if (item.type !== "arma") return null
+    const type = (item as any).itemType || item.type;
+    if (type !== "arma") return null
 
     // Helper to get damage color config
     const getDamageStyle = (type?: string) => {

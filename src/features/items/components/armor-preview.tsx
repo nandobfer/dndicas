@@ -15,7 +15,8 @@ interface ArmorPreviewProps {
 }
 
 export function ArmorPreview({ item }: ArmorPreviewProps) {
-    if (item.type !== "armadura" && item.type !== "escudo") return null
+    const type = (item as any).itemType || item.type;
+    if (type !== "armadura" && type !== "escudo") return null
 
     return (
         <div className="space-y-4 pt-2 border-t border-white/5">
@@ -33,7 +34,7 @@ export function ArmorPreview({ item }: ArmorPreviewProps) {
                             {item.type === "armadura" ? (item.acType === "bonus" ? "CA Bônus" : "CA Base") : "Bônus de CA"}
                         </span>
                         <div className="px-2.5 py-0.5 rounded-md text-sm font-bold border border-white/10 bg-white/5 text-white/70">
-                            {item.type === "armadura" ? item.ac : `+${item.acBonus}`}
+                            {item.type === "armadura" ? (item.ac ?? item.acBonus) : `+${item.acBonus ?? item.ac}`}
                         </div>
                     </div>
 
