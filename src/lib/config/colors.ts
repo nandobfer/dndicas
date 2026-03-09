@@ -637,6 +637,21 @@ export type FeedbackType = keyof typeof feedbackTypeConfig
 export type FeedbackPriority = keyof typeof feedbackPriorityConfig
 
 /**
+ * Armor and AC Type configurations for selectors.
+ */
+export const armorTypeConfig = {
+    nenhuma: { label: "Nenhuma", color: "common" as RarityColor },
+    leve: { label: "Leve", color: "uncommon" as RarityColor },
+    média: { label: "Média", color: "rare" as RarityColor },
+    pesada: { label: "Pesada", color: "veryRare" as RarityColor },
+} as const
+
+export const acTypeConfig = {
+    base: { label: "Base", color: "common" as RarityColor },
+    bonus: { label: "Bônus", color: "uncommon" as RarityColor },
+} as const
+
+/**
  * Maps rarity color names to Tailwind CSS bg/text class pairs.
  * Used for applying rarity-based colors to UI components.
  */

@@ -211,7 +211,10 @@ export function ItemFormModal({ item, isOpen, onClose, onSuccess }: ItemFormModa
     return (
         <>
             <GlassModal open={isOpen} onOpenChange={(open) => !open && handleCloseAttempt()}>
-                <GlassModalContent size="xl" className="w-[100vw] h-[100vh] md:w-[70vw] md:h-auto md:max-h-[90vh] md:max-w-[1200px] md:rounded-3xl border-none md:border border-white/10 flex flex-col p-0">
+                <GlassModalContent
+                    size="xl"
+                    className="w-[100vw] h-[100vh] md:w-[70vw] md:h-auto md:max-h-[90vh] md:max-w-[1200px] md:rounded-3xl border-none md:border border-white/10 flex flex-col p-0"
+                >
                     <div className="px-6 py-4 border-b border-white/5 shrink-0">
                         <GlassModalHeader>
                             <GlassModalTitle>{isEditMode ? `Editar ${item?.name}` : "Novo Item"}</GlassModalTitle>
@@ -230,166 +233,168 @@ export function ItemFormModal({ item, isOpen, onClose, onSuccess }: ItemFormModa
                                 disabled={isSubmitting}
                             />
 
-                        {/* Name + Source */}
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            <GlassInput
-                                id="name"
-                                label="Nome do Item"
-                                placeholder="Ex: Espada Longa +1"
-                                icon={<Backpack className="h-4 w-4" />}
-                                required
-                                error={errors.name?.message}
-                                {...register("name")}
-                            />
-                            <GlassInput id="source" label="Fonte" placeholder="Ex: PHB pg. 150" icon={<Link className="h-4 w-4" />} error={errors.source?.message} {...register("source")} />
-                        </div>
-
-                        {/* Image + Description Section */}
-                        <ImageAndDescriptionSection
-                            control={control}
-                            isSubmitting={isSubmitting}
-                            errors={errors}
-                            imageFieldName="image"
-                            descriptionFieldName="description"
-                            entityId={item?._id}
-                            placeholder="Descreva o item detalhadamente... (Suporta imagens e formatação)"
-                        />
-
-                        {/* Magic Item Toggle */}
-                        <div className="flex items-center justify-between p-4 rounded-2xl border border-white/5 bg-white/5 relative overflow-hidden group">
-                            <div className="flex items-center gap-3">
-                                <div className={cn("p-2 rounded-xl transition-colors", watch("isMagic") ? "bg-blue-400/20 text-blue-400" : "bg-white/5 text-white/40")}>
-                                    <Wand2 className="h-5 w-5" />
-                                </div>
-                                <div className="space-y-0.5">
-                                    <h4 className="text-sm font-bold text-white tracking-tight uppercase">Item Mágico</h4>
-                                    <p className="text-[11px] text-white/40 font-medium leading-tight">Define se este item possui propriedades mágicas ou é mundano</p>
-                                </div>
+                            {/* Name + Source */}
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <GlassInput
+                                    id="name"
+                                    label="Nome do Item"
+                                    placeholder="Ex: Espada Longa +1"
+                                    icon={<Backpack className="h-4 w-4" />}
+                                    required
+                                    error={errors.name?.message}
+                                    {...register("name")}
+                                />
+                                <GlassInput id="source" label="Fonte" placeholder="Ex: PHB pg. 150" icon={<Link className="h-4 w-4" />} error={errors.source?.message} {...register("source")} />
                             </div>
-                            <Controller
-                                control={control}
-                                name="isMagic"
-                                render={({ field: { value, onChange } }) => <GlassSwitch checked={value} onCheckedChange={onChange} disabled={isSubmitting} />}
-                            />
-                            {/* Decorative logic shine */}
-                            {watch("isMagic") && <motion.div layoutId="magic-glow" className="absolute inset-0 bg-blue-400/5 pointer-events-none" initial={{ opacity: 0 }} animate={{ opacity: 1 }} />}
-                        </div>
 
-                        {/* Price (Following Spell Range pattern) */}
-                        <div className="space-y-3">
-                            <div className="flex items-center justify-between">
-                                <label className="text-sm font-medium text-white/80 flex items-center gap-2">
-                                    <Coins className="h-4 w-4 text-amber-400/60" />
-                                    Preço / Custo
-                                </label>
-                                {!isPriceActive && (
-                                    <button
-                                        type="button"
-                                        onClick={() => setIsPriceActive(true)}
-                                        className="text-[10px] font-bold text-amber-400 hover:text-amber-300 transition-colors uppercase tracking-widest flex items-center gap-1.5"
-                                    >
-                                        <Plus className="h-3 w-3" /> Definir Preço
-                                    </button>
+                            {/* Image + Description Section */}
+                            <ImageAndDescriptionSection
+                                control={control}
+                                isSubmitting={isSubmitting}
+                                errors={errors}
+                                imageFieldName="image"
+                                descriptionFieldName="description"
+                                entityId={item?._id}
+                                placeholder="Descreva o item detalhadamente... (Suporta imagens e formatação)"
+                            />
+
+                            {/* Magic Item Toggle */}
+                            <div className="flex items-center justify-between p-4 rounded-2xl border border-white/5 bg-white/5 relative overflow-hidden group">
+                                <div className="flex items-center gap-3">
+                                    <div className={cn("p-2 rounded-xl transition-colors", watch("isMagic") ? "bg-blue-400/20 text-blue-400" : "bg-white/5 text-white/40")}>
+                                        <Wand2 className="h-5 w-5" />
+                                    </div>
+                                    <div className="space-y-0.5">
+                                        <h4 className="text-sm font-bold text-white tracking-tight uppercase">Item Mágico</h4>
+                                        <p className="text-[11px] text-white/40 font-medium leading-tight">Define se este item possui propriedades mágicas ou é mundano</p>
+                                    </div>
+                                </div>
+                                <Controller
+                                    control={control}
+                                    name="isMagic"
+                                    render={({ field: { value, onChange } }) => <GlassSwitch checked={value} onCheckedChange={onChange} disabled={isSubmitting} />}
+                                />
+                                {/* Decorative logic shine */}
+                                {watch("isMagic") && (
+                                    <motion.div layoutId="magic-glow" className="absolute inset-0 bg-blue-400/5 pointer-events-none" initial={{ opacity: 0 }} animate={{ opacity: 1 }} />
                                 )}
                             </div>
 
-                            <AnimatePresence>
-                                {isPriceActive ? (
-                                    <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} exit={{ opacity: 0, height: 0 }} className="flex items-end gap-2">
-                                        <div className="flex-1">
-                                            <GlassInput id="price" placeholder="Ex: 15 po" {...register("price")} error={errors.price?.message} autoFocus />
-                                        </div>
+                            {/* Price (Following Spell Range pattern) */}
+                            <div className="space-y-3">
+                                <div className="flex items-center justify-between">
+                                    <label className="text-sm font-medium text-white/80 flex items-center gap-2">
+                                        <Coins className="h-4 w-4 text-amber-400/60" />
+                                        Preço / Custo
+                                    </label>
+                                    {!isPriceActive && (
                                         <button
                                             type="button"
-                                            onClick={() => {
-                                                setIsPriceActive(false)
-                                                setValue("price", "")
-                                            }}
-                                            className="p-2.5 rounded-xl border border-white/10 bg-white/5 text-white/40 hover:text-rose-400 hover:bg-rose-400/10 transition-all mb-[1px]"
-                                            title="Remover preço"
+                                            onClick={() => setIsPriceActive(true)}
+                                            className="text-[10px] font-bold text-amber-400 hover:text-amber-300 transition-colors uppercase tracking-widest flex items-center gap-1.5"
                                         >
-                                            <X className="h-4 w-4" />
+                                            <Plus className="h-3 w-3" /> Definir Preço
                                         </button>
-                                    </motion.div>
-                                ) : (
-                                    <GlassInlineEmptyState message="Nenhum preço definido para este item" />
-                                )}
-                            </AnimatePresence>
-                        </div>
+                                    )}
+                                </div>
 
-                        {/* Rarity (Single row) */}
-                        <div className="space-y-2">
-                            <label className="text-sm font-medium text-white/80 flex items-center gap-2">
-                                <Scale className="h-4 w-4" />
-                                Raridade
-                            </label>
-                            <GlassSelector 
-                                options={RARITY_OPTIONS} 
-                                value={watch("rarity")} 
-                                onChange={(val) => setValue("rarity", val as ItemRarity)} 
-                                layoutId="item-rarity-form" 
-                                layout={isMobile ? "grid" : "horizontal"}
-                                cols={isMobile ? 1 : 3}
-                                fullWidth 
-                            />
-                        </div>
+                                <AnimatePresence>
+                                    {isPriceActive ? (
+                                        <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} exit={{ opacity: 0, height: 0 }} className="flex items-end gap-2">
+                                            <div className="flex-1">
+                                                <GlassInput id="price" placeholder="Ex: 15 po" {...register("price")} error={errors.price?.message} autoFocus />
+                                            </div>
+                                            <button
+                                                type="button"
+                                                onClick={() => {
+                                                    setIsPriceActive(false)
+                                                    setValue("price", "")
+                                                }}
+                                                className="p-2.5 rounded-xl border border-white/10 bg-white/5 text-white/40 hover:text-rose-400 hover:bg-rose-400/10 transition-all mb-[1px]"
+                                                title="Remover preço"
+                                            >
+                                                <X className="h-4 w-4" />
+                                            </button>
+                                        </motion.div>
+                                    ) : (
+                                        <GlassInlineEmptyState message="Nenhum preço definido para este item" />
+                                    )}
+                                </AnimatePresence>
+                            </div>
 
-                        {/* Type (Single row, Qualqer first) */}
-                        <div className="space-y-2">
-                            <label className="text-sm font-medium text-white/80 flex items-center gap-2">
-                                <Boxes className="h-4 w-4" />
-                                Tipo de Item
-                            </label>
-                            <GlassSelector 
-                                options={TYPE_OPTIONS} 
-                                value={watch("type")} 
-                                onChange={(val) => setValue("type", val as ItemType)} 
-                                layoutId="item-type-form" 
-                                layout={isMobile ? "grid" : "horizontal"}
-                                cols={isMobile ? 1 : 3}
-                                fullWidth 
-                            />
-                        </div>
-
-                        {/* Dynamic fields based on type */}
-                        <AnimatePresence mode="popLayout">
-                            {/* Weapon Specifics */}
-                            {selectedType === "arma" && (
-                                <WeaponFormFields
-                                    register={register}
-                                    setValue={setValue}
-                                    watch={watch}
-                                    control={control}
-                                    errors={errors}
-                                    isSubmitting={isSubmitting}
-                                    propertyFields={propertyFields}
-                                    appendProperty={appendProperty}
-                                    removeProperty={removeProperty}
+                            {/* Rarity (Single row) */}
+                            <div className="space-y-2">
+                                <label className="text-sm font-medium text-white/80 flex items-center gap-2">
+                                    <Scale className="h-4 w-4" />
+                                    Raridade
+                                </label>
+                                <GlassSelector
+                                    options={RARITY_OPTIONS}
+                                    value={watch("rarity")}
+                                    onChange={(val) => setValue("rarity", val as ItemRarity)}
+                                    layoutId="item-rarity-form"
+                                    layout={isMobile ? "grid" : "horizontal"}
+                                    cols={isMobile ? 1 : 3}
+                                    fullWidth
                                 />
-                            )}
+                            </div>
 
-                            {/* Armor/Shield Specifics */}
-                            {(selectedType === "armadura" || selectedType === "escudo") && <ArmorFormFields selectedType={selectedType} setValue={setValue} watch={watch} errors={errors} />}
-                        </AnimatePresence>
+                            {/* Type (Single row, Qualqer first) */}
+                            <div className="space-y-2">
+                                <label className="text-sm font-medium text-white/80 flex items-center gap-2">
+                                    <Boxes className="h-4 w-4" />
+                                    Tipo de Item
+                                </label>
+                                <GlassSelector
+                                    options={TYPE_OPTIONS}
+                                    value={watch("type")}
+                                    onChange={(val) => setValue("type", val as ItemType)}
+                                    layoutId="item-type-form"
+                                    layout={isMobile ? "grid" : "horizontal"}
+                                    cols={isMobile ? 1 : 3}
+                                    fullWidth
+                                />
+                            </div>
 
-                        {/* Tool Specifics */}
-                        {selectedType === "ferramenta" && <ToolFormFields register={register} />}
+                            {/* Dynamic fields based on type */}
+                            <AnimatePresence mode="popLayout">
+                                {/* Weapon Specifics */}
+                                {selectedType === "arma" && (
+                                    <WeaponFormFields
+                                        register={register}
+                                        setValue={setValue}
+                                        watch={watch}
+                                        control={control}
+                                        errors={errors}
+                                        isSubmitting={isSubmitting}
+                                        propertyFields={propertyFields}
+                                        appendProperty={appendProperty}
+                                        removeProperty={removeProperty}
+                                    />
+                                )}
 
-                        {/* Public Traits Section (Global/Non-Weapon specific traits) */}
-                        <EntityListChooser
-                            fields={traitFields}
-                            append={appendTrait}
-                            remove={removeTrait}
-                            control={control}
-                            isSubmitting={isSubmitting}
-                            fieldName="traits"
-                            errors={errors}
-                            entityType="Habilidade"
-                        />
-                    </form>
-                </div>
+                                {/* Armor/Shield Specifics */}
+                                {(selectedType === "armadura" || selectedType === "escudo") && <ArmorFormFields selectedType={selectedType} setValue={setValue} watch={watch} errors={errors} />}
+                            </AnimatePresence>
 
-                {/* Footer Actions */}
+                            {/* Tool Specifics */}
+                            {selectedType === "ferramenta" && <ToolFormFields register={register} />}
+
+                            {/* Public Traits Section (Global/Non-Weapon specific traits) */}
+                            <EntityListChooser
+                                fields={traitFields}
+                                append={appendTrait}
+                                remove={removeTrait}
+                                control={control}
+                                isSubmitting={isSubmitting}
+                                fieldName="traits"
+                                errors={errors}
+                                entityType="Habilidade"
+                            />
+                        </form>
+                    </div>
+
+                    {/* Footer Actions */}
                     <div className="px-6 py-4 border-t border-white/10 bg-black/20 shrink-0 flex flex-col-reverse sm:flex-row justify-end gap-3">
                         <button
                             type="button"
