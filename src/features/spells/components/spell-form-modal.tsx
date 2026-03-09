@@ -17,10 +17,10 @@
 "use client";
 
 import * as React from "react";
-import { useForm, Controller } from "react-hook-form";
+import { useForm, Controller, useFieldArray } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod";
 import { motion, AnimatePresence } from "framer-motion";
-import { Loader2, Wand, Link, AlignLeft, Info, Shield, Dices, Zap, Plus, X, MapPin, Target } from "lucide-react"
+import { Loader2, Wand, Link, AlignLeft, Info, Shield, Dices, Zap, Plus, X, MapPin, Target, Clock, Hourglass } from "lucide-react"
 import { toast } from "sonner"
 import { cn } from "@/core/utils"
 import { useIsMobile } from "@/core/hooks/useMediaQuery"
@@ -34,7 +34,18 @@ import { GlassInlineEmptyState } from "@/components/ui/glass-inline-empty-state"
 import { GlassDiceSelector } from "@/components/ui/glass-dice-selector"
 import { RichTextEditor } from "@/features/rules/components/rich-text-editor"
 
-import { spellSchoolColors, spellComponentConfig, attributeColors, getLevelRarityVariant, rarityToTailwind, type SpellSchool, type SpellComponent, type AttributeType } from "@/lib/config/colors"
+import {
+    spellSchoolColors,
+    spellComponentConfig,
+    castingTimeConfig,
+    attributeColors,
+    getLevelRarityVariant,
+    rarityToTailwind,
+    type SpellSchool,
+    type SpellComponent,
+    type AttributeType,
+    type CastingTime
+} from "@/lib/config/colors"
 
 import { createSpellSchema, type CreateSpellSchema } from "../api/validation"
 import type { Spell, CreateSpellInput, UpdateSpellInput } from "../types/spells.types"
@@ -78,6 +89,14 @@ const ATTRIBUTE_OPTIONS = (Object.entries(attributeColors) as [string, any][]).m
     textColor: config.text,
 }))
 
+/** Casting time options */
+const CASTING_TIME_OPTIONS = (Object.keys(castingTimeConfig) as CastingTime[]).map((time) => ({
+    value: time,
+    label: time,
+    activeColor: castingTimeConfig[time].badge,
+    textColor: castingTimeConfig[time].text,
+}))
+
 // ─── Component ───────────────────────────────────────────────────────────────
 
 interface SpellFormModalProps {
@@ -114,19 +133,42 @@ export function SpellFormModal({ spell, isOpen, onClose, onSuccess }: SpellFormM
             description: spell?.description ?? "",
             circle: spell?.circle ?? 0,
             school: (spell?.school as SpellSchool) ?? "Evocação",
+            castingTime: (spell?.castingTime as CastingTime) || undefined,
             component: (spell?.component as SpellComponent[]) ?? [],
             range: spell?.range || undefined,
             area: spell?.area || undefined,
+            duration: spell?.duration || undefined,
             saveAttribute: spell?.saveAttribute,
             baseDice: spell?.baseDice,
+            additionalBaseDice: spell?.additionalBaseDice || [],
             extraDicePerLevel: spell?.extraDicePerLevel,
-            source: spell?.source ?? "",
+            additionalExtraDicePerLevel: spell?.additionalExtraDicePerLevel || [],
+            source: spell?.source ?? "LDJ pág. ",
             status: (spell?.status as "active" | "inactive") ?? "active"
         }
     })
 
+    const {
+        fields: additionalBaseFields,
+        append: appendBase,
+        remove: removeBase
+    } = useFieldArray({
+        control,
+        name: "additionalBaseDice" as any
+    })
+
+    const {
+        fields: additionalExtraFields,
+        append: appendExtra,
+        remove: removeExtra
+    } = useFieldArray({
+        control,
+        name: "additionalExtraDicePerLevel" as any
+    })
+
     const rangeValue = watch("range")
     const areaValue = watch("area")
+    const durationValue = watch("duration")
 
     // Reset form when modal opens or spell changes
     React.useEffect(() => {
@@ -137,14 +179,18 @@ export function SpellFormModal({ spell, isOpen, onClose, onSuccess }: SpellFormM
                 description: spell?.description ?? "",
                 circle: spell?.circle ?? 0,
                 school: (spell?.school as SpellSchool) ?? "Evocação",
+                castingTime: (spell?.castingTime as CastingTime) || undefined,
                 component: (spell?.component as SpellComponent[]) ?? [],
                 range: spell?.range || undefined,
                 area: spell?.area || undefined,
+                duration: spell?.duration || undefined,
                 saveAttribute: spell?.saveAttribute,
                 baseDice: spell?.baseDice,
+                additionalBaseDice: spell?.additionalBaseDice || [],
                 extraDicePerLevel: spell?.extraDicePerLevel,
-                source: spell?.source ?? "",
-                status: (spell?.status as "active" | "inactive") ?? "active",
+                additionalExtraDicePerLevel: spell?.additionalExtraDicePerLevel || [],
+                source: spell?.source ?? "LDJ pág. ",
+                status: (spell?.status as "active" | "inactive") ?? "active"
             })
         }
     }, [spell, isOpen, reset])
@@ -218,6 +264,37 @@ export function SpellFormModal({ spell, isOpen, onClose, onSuccess }: SpellFormM
                                 error={errors.source?.message}
                                 {...register("source")}
                             />
+                        </div>
+
+                        {/* Row: Casting Time — grid select */}
+                        <div className="space-y-2">
+                            <label className="text-sm font-medium text-white/80 flex items-center gap-2">
+                                <Clock className="h-4 w-4" />
+                                Tempo de Conjuração
+                            </label>
+                            <Controller
+                                name="castingTime"
+                                control={control}
+                                render={({ field }) => (
+                                    <GlassSelector<CastingTime>
+                                        options={CASTING_TIME_OPTIONS}
+                                        value={field.value as CastingTime}
+                                        onChange={(val) => field.onChange(Array.isArray(val) ? val[0] : val)}
+                                        layout="grid"
+                                        cols={2}
+                                        smCols={4}
+                                        size="md"
+                                        fullWidth
+                                        layoutId="spell-casting-time-selector"
+                                    />
+                                )}
+                            />
+                            {errors.castingTime && (
+                                <p className="text-xs text-rose-400 flex items-center gap-1">
+                                    <Info className="h-3 w-3" />
+                                    {errors.castingTime.message}
+                                </p>
+                            )}
                         </div>
 
                         {/* Row: Components — multi-select */}
@@ -437,6 +514,64 @@ export function SpellFormModal({ spell, isOpen, onClose, onSuccess }: SpellFormM
                             </AnimatePresence>
                         </div>
 
+                        {/* Row: Additional Base Dice */}
+                        <div className="space-y-3 pl-6 border-l-2 border-blue-500/20">
+                            <div className="flex items-center justify-between">
+                                <label className="text-xs font-medium text-white/50 flex items-center gap-2">
+                                    <Plus className="h-3 w-3" />
+                                    Dados Adicionais Base
+                                </label>
+                                <button
+                                    type="button"
+                                    onClick={() => appendBase({ quantidade: 1, tipo: "d6" })}
+                                    disabled={isSubmitting}
+                                    className="px-2 py-1 rounded-md text-[10px] font-bold uppercase tracking-wider bg-blue-500/10 text-blue-400 hover:bg-blue-500/20 transition-colors border border-blue-500/20"
+                                >
+                                    + Adicionar
+                                </button>
+                            </div>
+
+                            <AnimatePresence mode="popLayout">
+                                {additionalBaseFields.length === 0 ? (
+                                    <p className="text-[10px] text-white/30 italic">Nenhum dado adicional</p>
+                                ) : (
+                                    <div className="space-y-3">
+                                        {additionalBaseFields.map((field, index) => (
+                                            <motion.div
+                                                key={field.id}
+                                                initial={{ opacity: 0, x: -10 }}
+                                                animate={{ opacity: 1, x: 0 }}
+                                                exit={{ opacity: 0, x: -10 }}
+                                                className="flex items-center gap-3"
+                                            >
+                                                <div className="flex-1">
+                                                    <Controller
+                                                        name={`additionalBaseDice.${index}`}
+                                                        control={control}
+                                                        render={({ field: diceField }) => (
+                                                            <GlassDiceSelector
+                                                                value={diceField.value}
+                                                                onChange={diceField.onChange}
+                                                                layoutId={`add-base-dice-${index}`}
+                                                                layout="horizontal"
+                                                            />
+                                                        )}
+                                                    />
+                                                </div>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => removeBase(index)}
+                                                    className="p-1.5 rounded-lg bg-rose-500/10 text-rose-400 hover:bg-rose-500/20 transition-colors"
+                                                >
+                                                    <X className="h-3 w-3" />
+                                                </button>
+                                            </motion.div>
+                                        ))}
+                                    </div>
+                                )}
+                            </AnimatePresence>
+                        </div>
+
                         {/* Row 5.3: Extra Dice per Level */}
                         <div className="space-y-3">
                             <div className="flex items-center justify-between">
@@ -497,6 +632,64 @@ export function SpellFormModal({ spell, isOpen, onClose, onSuccess }: SpellFormM
                                             <X className="h-4 w-4" />
                                         </button>
                                     </motion.div>
+                                )}
+                            </AnimatePresence>
+                        </div>
+
+                        {/* Row: Additional Extra Dice */}
+                        <div className="space-y-3 pl-6 border-l-2 border-purple-500/20">
+                            <div className="flex items-center justify-between">
+                                <label className="text-xs font-medium text-white/50 flex items-center gap-2">
+                                    <Plus className="h-3 w-3" />
+                                    Dados Adicionais por Nível Extra
+                                </label>
+                                <button
+                                    type="button"
+                                    onClick={() => appendExtra({ quantidade: 1, tipo: "d6" })}
+                                    disabled={isSubmitting}
+                                    className="px-2 py-1 rounded-md text-[10px] font-bold uppercase tracking-wider bg-purple-500/10 text-purple-400 hover:bg-purple-500/20 transition-colors border border-purple-500/20"
+                                >
+                                    + Adicionar
+                                </button>
+                            </div>
+
+                            <AnimatePresence mode="popLayout">
+                                {additionalExtraFields.length === 0 ? (
+                                    <p className="text-[10px] text-white/30 italic">Nenhum dado adicional</p>
+                                ) : (
+                                    <div className="space-y-3">
+                                        {additionalExtraFields.map((field, index) => (
+                                            <motion.div
+                                                key={field.id}
+                                                initial={{ opacity: 0, x: -10 }}
+                                                animate={{ opacity: 1, x: 0 }}
+                                                exit={{ opacity: 0, x: -10 }}
+                                                className="flex items-center gap-3"
+                                            >
+                                                <div className="flex-1">
+                                                    <Controller
+                                                        name={`additionalExtraDicePerLevel.${index}`}
+                                                        control={control}
+                                                        render={({ field: diceField }) => (
+                                                            <GlassDiceSelector
+                                                                value={diceField.value}
+                                                                onChange={diceField.onChange}
+                                                                layoutId={`add-extra-dice-${index}`}
+                                                                layout="horizontal"
+                                                            />
+                                                        )}
+                                                    />
+                                                </div>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => removeExtra(index)}
+                                                    className="p-1.5 rounded-lg bg-rose-500/10 text-rose-400 hover:bg-rose-500/20 transition-colors"
+                                                >
+                                                    <X className="h-3 w-3" />
+                                                </button>
+                                            </motion.div>
+                                        ))}
+                                    </div>
                                 )}
                             </AnimatePresence>
                         </div>
@@ -617,6 +810,64 @@ export function SpellFormModal({ spell, isOpen, onClose, onSuccess }: SpellFormM
                                     )}
                                 </AnimatePresence>
                             </div>
+                        </div>
+
+                        {/* Row: Duration */}
+                        <div className="space-y-3">
+                            <div className="flex items-center justify-between">
+                                <label className="text-sm font-medium text-white/80 flex items-center gap-2">
+                                    <Hourglass className="h-4 w-4 text-sky-400" />
+                                    Duração
+                                </label>
+                                {durationValue === undefined && (
+                                    <button
+                                        type="button"
+                                        onClick={() => setValue("duration", "")}
+                                        disabled={isSubmitting}
+                                        className={cn(
+                                            "px-3 py-1.5 rounded-lg text-xs font-medium transition-colors",
+                                            "bg-sky-500/20 text-sky-400 hover:bg-sky-500/30",
+                                            "border border-sky-500/30",
+                                            "disabled:opacity-50 disabled:cursor-not-allowed",
+                                            "flex items-center gap-1.5"
+                                        )}
+                                    >
+                                        <Plus className="h-3 w-3" />
+                                        Adicionar Duração
+                                    </button>
+                                )}
+                            </div>
+                            <AnimatePresence mode="popLayout">
+                                {durationValue === undefined ? (
+                                    <GlassInlineEmptyState message="Sem duração definida" />
+                                ) : (
+                                    <motion.div
+                                        initial={{ opacity: 0, scale: 0.95 }}
+                                        animate={{ opacity: 1, scale: 1 }}
+                                        exit={{ opacity: 0, scale: 0.95 }}
+                                        className="flex items-center gap-2"
+                                    >
+                                        <div className="flex-1">
+                                            <GlassInput
+                                                id="duration"
+                                                placeholder="Ex: 1 minuto, Concentração (até 10 minutos)"
+                                                error={errors.duration?.message}
+                                                {...register("duration")}
+                                                className="mb-0"
+                                                icon={<Hourglass />}
+                                            />
+                                        </div>
+                                        <button
+                                            type="button"
+                                            onClick={() => setValue("duration", undefined)}
+                                            disabled={isSubmitting}
+                                            className="p-2.5 rounded-xl bg-rose-500/10 text-rose-400 hover:bg-rose-500/20 hover:text-rose-300 transition-colors border border-rose-500/20"
+                                        >
+                                            <X className="h-4 w-4" />
+                                        </button>
+                                    </motion.div>
+                                )}
+                            </AnimatePresence>
                         </div>
 
                         {/* Row 6: Description */}

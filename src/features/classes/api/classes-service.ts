@@ -30,13 +30,11 @@ export async function listClasses(filters: ClassesFilters, page = 1, limit = 10,
         query.spellcasting = { $in: filters.spellcasting }
     }
 
-    if (!isAdmin) {
-        query.status = "active"
-    } else if (filters.status && filters.status !== "all") {
+    if (filters.status && filters.status !== "all") {
         query.status = filters.status
     }
 
-    const items = await CharacterClass.find(query).sort({ name: 1 }).lean()
+    const items = await CharacterClass.find(query).sort({ createdAt: 1 }).lean()
 
     const searchedItems = filters.search ? applyFuzzySearch(items, filters.search) : items
 

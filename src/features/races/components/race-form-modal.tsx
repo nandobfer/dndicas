@@ -511,7 +511,7 @@ export function RaceFormModal({ race, isOpen, onClose, onSuccess }: RaceFormModa
     return (
         <>
             <GlassModal open={isOpen} onOpenChange={(open) => !open && handleCloseAttempt()}>
-                <GlassModalContent size="xl" className="max-w-[70vw]">
+                <GlassModalContent size="xl" className="max-w-full md:max-w-[70vw]">
                     <GlassModalHeader>
                         <div className="flex items-center gap-4">
                             <div className="p-3 rounded-xl bg-blue-500/20 text-blue-400 ring-1 ring-blue-500/30">

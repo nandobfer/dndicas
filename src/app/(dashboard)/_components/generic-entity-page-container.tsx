@@ -110,22 +110,37 @@ export default function GenericEntityPage({ entityTypeKey }: GenericEntityPagePr
             // 1. First, search to get the basic record and ID
             const endpoint = config.provider!.endpoint()
             const separator = endpoint.includes("?") ? "&" : "?"
-            const searchRes = await fetch(`${endpoint}${separator}search=${encodeURIComponent(name)}&searchField=name`)
+
+            // For search endpoints that use 'q' like /api/classes/search?q=bruxo
+            // we use q instead of search
+            const isSearchEndpoint = endpoint.endsWith("/search")
+            const searchParam = isSearchEndpoint ? "q" : "search"
+
+            const searchRes = await fetch(`${endpoint}${separator}${searchParam}=${encodeURIComponent(name)}&searchField=name`)
 
             if (!searchRes.ok) return null
             const searchData = await searchRes.json()
 
             // The search might return one or more items, pick the best match
-            const items = Array.isArray(searchData) ? searchData : searchData.items || searchData.spells || searchData.traits || searchData.rules || searchData.feats || searchData.backgrounds || []
+            const items = Array.isArray(searchData)
+                ? searchData
+                : searchData.items ||
+                  searchData.spells ||
+                  searchData.traits ||
+                  searchData.rules ||
+                  searchData.feats ||
+                  searchData.backgrounds ||
+                  searchData.classes ||
+                  []
 
             // Find exact name match
-            const basicItem = items.find((i: any) => i.name.toLowerCase() === name.toLowerCase()) || items[0]
+            const basicItem = items.find((i: any) => (i.name || i.label).toLowerCase() === name.toLowerCase()) || items[0]
 
             if (!basicItem) return null
 
             // We fetch the full profile by ID because search/list results are often too lean (missing status, full description, etc.)
             const route = routeMap[entityTypeKey]
-            const fullRes = await fetch(`/api/${route}/${basicItem._id}`)
+            const fullRes = await fetch(`/api/${route}/${basicItem._id || basicItem.id || basicItem.id}`)
             if (fullRes.ok) {
                 return await fullRes.json()
             }

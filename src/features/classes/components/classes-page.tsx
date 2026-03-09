@@ -31,10 +31,10 @@ export function ClassesPage() {
                 <div>
                     <h1 className="text-xl sm:text-2xl font-bold text-white flex items-center gap-2">
                         <Sword className="h-5 w-5 sm:h-6 sm:w-6 text-amber-400" />
-                        Catálogo de Classes
+                        Classes
                         <GlassViewSelector viewMode={viewMode} setViewMode={setViewMode} layoutId="classes-view-selector" />
                     </h1>
-                    <p className="text-[10px] sm:text-sm text-white/60 mt-1">Explore as classes disponíveis para personagens (D&D 5e)</p>
+                    <p className="text-[10px] sm:text-sm text-white/60 mt-1">Explore as classes disponíveis para personagens</p>
                 </div>
 
                 {isAdmin && (

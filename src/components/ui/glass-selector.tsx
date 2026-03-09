@@ -14,27 +14,29 @@ export interface GlassSelectorOption<T extends string | number> {
 
 export interface GlassSelectorProps<T extends string | number> {
     /** Current selected value or array of values for multi-select */
-    value: T | T[] | undefined;
+    value: T | T[] | undefined
     /** Callback when value changes */
-    onChange: (value: T | T[]) => void;
+    onChange: (value: T | T[]) => void
     /** Options to display */
-    options: GlassSelectorOption<T>[];
+    options: GlassSelectorOption<T>[]
     /** Selection mode */
-    mode?: 'single' | 'multi';
+    mode?: "single" | "multi"
     /** Layout orientation/type */
-    layout?: 'horizontal' | 'grid';
+    layout?: "horizontal" | "grid"
     /** Grid columns (only for layout='grid') */
-    cols?: number;
+    cols?: number
+    /** Small screen grid columns */
+    smCols?: number
     /** Whether the tabs should take full width */
-    fullWidth?: boolean;
+    fullWidth?: boolean
     /** Size variant */
-    size?: 'sm' | 'md' | 'lg';
+    size?: "sm" | "md" | "lg"
     /** Whether the component is disabled */
-    disabled?: boolean;
+    disabled?: boolean
     /** Additional class names */
-    className?: string;
+    className?: string
     /** Unique ID for Framer Motion layout animations */
-    layoutId?: string;
+    layoutId?: string
 }
 
 /**
@@ -44,16 +46,16 @@ export function GlassSelector<T extends string | number>({
     value,
     onChange,
     options,
-    mode = 'single',
-    layout = 'horizontal',
+    mode = "single",
+    layout = "horizontal",
     cols = 3,
+    smCols,
     fullWidth = false,
-    size = 'md',
+    size = "md",
     disabled = false,
     className,
     layoutId = "glass-selector-indicator"
 }: GlassSelectorProps<T>) {
-    
     const [mounted, setMounted] = React.useState(false)
 
     React.useEffect(() => {
@@ -94,9 +96,14 @@ export function GlassSelector<T extends string | number>({
             "grid-cols-3": cols === 3,
             "grid-cols-4": cols === 4,
             "grid-cols-6": cols === 6,
+            "sm:grid-cols-1": smCols === 1,
+            "sm:grid-cols-2": smCols === 2,
+            "sm:grid-cols-3": smCols === 3,
+            "sm:grid-cols-4": smCols === 4,
+            "sm:grid-cols-6": smCols === 6
         },
         disabled && "opacity-50 pointer-events-none cursor-not-allowed grayscale-[0.5]",
-        className,
+        className
     )
 
     if (!mounted) {
@@ -112,7 +119,7 @@ export function GlassSelector<T extends string | number>({
                             size === "md" && "px-4 py-2 text-sm",
                             size === "lg" && "px-6 py-3 text-base",
                             fullWidth && "flex-1",
-                            "text-white/50",
+                            "text-white/50"
                         )}
                     >
                         <span className="relative z-10">{option.label}</span>
@@ -143,16 +150,16 @@ export function GlassSelector<T extends string | number>({
                             size === "lg" && "px-6 py-2.5 text-base",
                             "focus:outline-none focus-visible:ring-2 focus-visible:ring-white/20",
                             itemDisabled && !selected && "opacity-30 cursor-not-allowed",
-                            itemDisabled && selected && "cursor-not-allowed",
+                            itemDisabled && selected && "cursor-not-allowed"
                         )}
                         style={
                             selected
                                 ? {
                                       backgroundColor: option.activeColor?.startsWith("#") ? `${option.activeColor}20` : undefined,
-                                      color: option.textColor?.startsWith("#") ? option.textColor : "white",
+                                      color: option.textColor?.startsWith("#") ? option.textColor : "white"
                                   }
                                 : {
-                                      color: "rgba(255, 255, 255, 0.5)",
+                                      color: "rgba(255, 255, 255, 0.5)"
                                   }
                         }
                     >

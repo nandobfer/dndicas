@@ -9,12 +9,16 @@ export interface Spell {
     description: string // HTML string from TipTap
     circle: number // 0-9
     school: SpellSchool
+    castingTime?: CastingTime
     component: SpellComponent[]
     range?: string
     area?: string
+    duration?: string
     saveAttribute?: AttributeType
     baseDice?: DiceValue
+    additionalBaseDice?: DiceValue[]
     extraDicePerLevel?: DiceValue
+    additionalExtraDicePerLevel?: DiceValue[]
     source: string
     status: "active" | "inactive"
     createdAt: Date
@@ -34,18 +38,25 @@ export interface DiceValue {
 // D&D attributes (for save throws)
 export type AttributeType = "Força" | "Destreza" | "Constituição" | "Inteligência" | "Sabedoria" | "Carisma"
 
+// Casting time types
+export type CastingTime = "Ação" | "Ação Bônus" | "Reação" | "Ritual"
+
 // API input types
 export interface CreateSpellInput {
     name: string
     description: string
     circle: number
     school: SpellSchool
+    castingTime?: CastingTime
     component: SpellComponent[]
     range?: string
     area?: string
+    duration?: string
     saveAttribute?: AttributeType
     baseDice?: DiceValue
+    additionalBaseDice?: DiceValue[]
     extraDicePerLevel?: DiceValue
+    additionalExtraDicePerLevel?: DiceValue[]
     source?: string
     status: "active" | "inactive"
 }
@@ -55,12 +66,16 @@ export interface UpdateSpellInput {
     description?: string
     circle?: number
     school?: SpellSchool
+    castingTime?: CastingTime | null
     component?: SpellComponent[]
     range?: string | null
     area?: string | null
+    duration?: string | null
     saveAttribute?: AttributeType | null // null to clear
     baseDice?: DiceValue | null
+    additionalBaseDice?: DiceValue[] | null
     extraDicePerLevel?: DiceValue | null
+    additionalExtraDicePerLevel?: DiceValue[] | null
     source?: string
     status?: "active" | "inactive"
 }

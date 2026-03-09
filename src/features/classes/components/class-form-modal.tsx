@@ -285,7 +285,7 @@ export function ClassFormModal({ characterClass, isOpen, onClose, onSuccess }: C
             reset({
                 name: characterClass?.name ?? "",
                 description: characterClass?.description ?? "",
-                source: characterClass?.source ?? "",
+                source: characterClass?.source ?? "LDJ pág. ",
                 status: characterClass?.status ?? "active",
                 hitDice: characterClass?.hitDice ?? "d8",
                 primaryAttributes: characterClass?.primaryAttributes ?? [],
@@ -300,10 +300,10 @@ export function ClassFormModal({ characterClass, isOpen, onClose, onSuccess }: C
                 subclasses: (characterClass?.subclasses || []).map((s) => ({
                     ...s,
                     spellcasting: Boolean(s.spellcasting),
-                    spells: s.spells ?? [],
+                    spells: s.spells ?? []
                 })),
                 traits: characterClass?.traits ?? [],
-                image: characterClass?.image ?? "",
+                image: characterClass?.image ?? ""
             })
         }
     }, [isOpen, characterClass, reset])
@@ -433,7 +433,7 @@ export function ClassFormModal({ characterClass, isOpen, onClose, onSuccess }: C
     return (
         <>
             <GlassModal open={isOpen} onOpenChange={(open) => !open && handleCloseAttempt()}>
-                <GlassModalContent size="xl" className="max-w-[70vw]">
+                <GlassModalContent size="xl" className="max-w-full md:max-w-[70vw]">
                     <GlassModalHeader>
                         <GlassModalTitle>{isEditMode ? `Editar ${characterClass!.name}` : "Nova Classe"}</GlassModalTitle>
                         <GlassModalDescription>{isEditMode ? "Atualize as informações da classe" : "Crie um novo registro no catálogo de classes"}</GlassModalDescription>

@@ -10,12 +10,14 @@ import { EntityList } from "@/features/rules/components/entity-list"
 import { GlassCard } from "./glass-card"
 import { useIsMobile } from "@/core/hooks/useMediaQuery"
 import { useClickAway } from "@/core/hooks/useClickAway"
+import { usePathname } from "next/navigation"
 
 const GLASS_STYLE = "bg-black/40 backdrop-blur-[4px]"
 
 export function GlobalSearchFAB() {
   const [isOpen, setIsOpen] = React.useState(false)
   const isMobile = useIsMobile()
+  const pathname = usePathname()
   const { query, setQuery, results, isLoading, isSearching, isFetchingNextPage, hasNextPage, loadMore } = useGlobalSearch()
   const containerRef = React.useRef<HTMLDivElement>(null)
 
@@ -43,6 +45,9 @@ export function GlobalSearchFAB() {
     window.addEventListener("keydown", handleKeyDown)
     return () => window.removeEventListener("keydown", handleKeyDown)
   }, [])
+
+  // Avoid showing FAB on Dashboard since it has an inline search
+  if (pathname === "/") return null
 
   return (
       <div className="fixed bottom-6 right-6 z-[99]" ref={containerRef}>

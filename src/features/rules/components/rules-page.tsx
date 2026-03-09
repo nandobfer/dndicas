@@ -27,10 +27,10 @@ export function RulesPage() {
                 <div>
                     <h1 className="text-xl sm:text-2xl font-bold text-white flex items-center gap-2">
                         <Ruler className="h-5 w-5 sm:h-6 sm:w-6 text-slate-400 items-center" />
-                        Catálogo de Regras
+                        Regras
                         <GlassViewSelector viewMode={viewMode} setViewMode={setViewMode} layoutId="rules-view-selector" />
                     </h1>
-                    <p className="text-[xs] sm:text-sm text-white/60 mt-1">Gerencie as regras de referência do sistema (D&D 5e)</p>
+                    <p className="text-[xs] sm:text-sm text-white/60 mt-1">Gerencie as regras de referência do sistema</p>
                 </div>
 
                 {isAdmin && (
@@ -42,7 +42,7 @@ export function RulesPage() {
                             "hover:bg-blue-600 transition-colors",
                             "focus:outline-none focus:ring-2 focus:ring-blue-500/50",
                             "shadow-lg shadow-blue-500/20",
-                            "w-full sm:w-auto", // Full width on mobile
+                            "w-full sm:w-auto" // Full width on mobile
                         )}
                     >
                         <Plus className="h-4 w-4" />
@@ -90,7 +90,13 @@ export function RulesPage() {
             )}
 
             {/* Form Modal */}
-            <RuleFormModal isOpen={modals.isFormOpen} onClose={() => modals.setIsFormOpen(false)} onSubmit={actions.handleFormSubmit} rule={modals.selectedRule} isSubmitting={modals.isSaving} />
+            <RuleFormModal
+                isOpen={modals.isFormOpen}
+                onClose={() => modals.setIsFormOpen(false)}
+                onSubmit={actions.handleFormSubmit}
+                rule={modals.selectedRule}
+                isSubmitting={modals.isSaving}
+            />
 
             {/* Delete Dialog */}
             <DeleteRuleDialog

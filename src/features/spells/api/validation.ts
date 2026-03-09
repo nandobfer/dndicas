@@ -12,19 +12,27 @@ export const createSpellSchema = z.object({
     description: z.string().min(10, "Descrição deve ter pelo menos 10 caracteres").max(10000, "Descrição muito longa"),
     circle: z.number().int().min(0, "Círculo mínimo é 0 (truque)").max(9, "Círculo máximo é 9"),
     school: z.enum(["Abjuração", "Adivinhação", "Conjuração", "Encantamento", "Evocação", "Ilusão", "Necromancia", "Transmutação"], {
-        message: "Escola inválida",
+        message: "Escola inválida"
     }),
+    castingTime: z
+        .enum(["Ação", "Ação Bônus", "Reação", "Ritual"], {
+            message: "Tempo de conjuração inválido"
+        })
+        .optional(),
     component: z
         .array(z.enum(["Concentração", "Somático", "Verbal", "Material"]))
         .optional()
         .default([]),
     range: z.string().max(100).optional(),
     area: z.string().max(100).optional(),
+    duration: z.string().max(100).optional(),
     saveAttribute: z.enum(["Força", "Destreza", "Constituição", "Inteligência", "Sabedoria", "Carisma"]).optional(),
     baseDice: diceValueSchema.optional(),
+    additionalBaseDice: z.array(diceValueSchema).optional(),
     extraDicePerLevel: diceValueSchema.optional(),
+    additionalExtraDicePerLevel: z.array(diceValueSchema).optional(),
     source: z.string().max(200, "Fonte muito longa").optional(),
-    status: z.enum(["active", "inactive"]),
+    status: z.enum(["active", "inactive"])
 })
 
 // Update spell schema (all fields optional)
@@ -33,14 +41,18 @@ export const updateSpellSchema = z.object({
     description: z.string().min(10).max(10000).optional(),
     circle: z.number().int().min(0).max(9).optional(),
     school: z.enum(["Abjuração", "Adivinhação", "Conjuração", "Encantamento", "Evocação", "Ilusão", "Necromancia", "Transmutação"]).optional(),
+    castingTime: z.enum(["Ação", "Ação Bônus", "Reação", "Ritual"]).nullable().optional(),
     component: z.array(z.enum(["Concentração", "Somático", "Verbal", "Material"])).optional(),
     range: z.string().max(100).nullable().optional(),
     area: z.string().max(100).nullable().optional(),
+    duration: z.string().max(100).nullable().optional(),
     saveAttribute: z.enum(["Força", "Destreza", "Constituição", "Inteligência", "Sabedoria", "Carisma"]).nullable().optional(),
     baseDice: diceValueSchema.nullable().optional(),
+    additionalBaseDice: z.array(diceValueSchema).nullable().optional(),
     extraDicePerLevel: diceValueSchema.nullable().optional(),
+    additionalExtraDicePerLevel: z.array(diceValueSchema).nullable().optional(),
     source: z.string().max(200).optional(),
-    status: z.enum(["active", "inactive"]).optional(),
+    status: z.enum(["active", "inactive"]).optional()
 })
 
 // Query/filter schema

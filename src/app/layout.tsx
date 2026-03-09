@@ -10,6 +10,7 @@ import { Toaster } from "@/core/ui/toast"
 import { GlassTooltipProvider } from "@/components/ui/glass-tooltip"
 import { ScrollToTop } from "@/core/ui/scroll-to-top"
 import { WindowProvider } from "@/core/context/window-context"
+import { Analytics } from "@vercel/analytics/next"
 
 const geistSans = Geist({
     variable: "--font-geist-sans",
@@ -76,6 +77,7 @@ export default function RootLayout({
                             </WindowProvider>
                         </GlassTooltipProvider>
                     </AppProvider>
+                    <Analytics />
                 </body>
             </html>
         </ClerkProvider>

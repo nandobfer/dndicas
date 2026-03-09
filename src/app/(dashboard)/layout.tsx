@@ -5,6 +5,7 @@ import { useSidebar } from "@/hooks/useSidebar"
 import { ExpandableSidebar } from "@/components/ui/expandable-sidebar"
 import { GlassHeader } from "@/components/ui/glass-header"
 import { GlobalSearchFAB } from "@/components/ui/global-search-fab"
+import { LiquidGlassBackground } from "@/components/ui/glass-background"
 import { motionConfig } from "@/lib/config/motion-configs"
 import { themeConfig } from "@/lib/config/theme-config"
 import { cn } from "@/core/utils"
@@ -33,7 +34,10 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           : `${themeConfig.spacing.sidebar.collapsed}px`
 
     return (
-        <div className="flex min-h-screen w-full bg-background">
+        <div className="relative flex min-h-screen w-full bg-background overflow-hidden">
+            {/* Liquid Glass Background */}
+            <LiquidGlassBackground />
+
             {/* Unified Sidebar for Desktop and Mobile */}
             <ExpandableSidebar isExpanded={isExpanded} onExpand={expand} onCollapse={collapse} isMobile={isMobile} onToggle={toggle} />
 
@@ -42,9 +46,9 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
             {/* Main Content Area - With left margin only on desktop */}
             <motion.div
-                className={cn("flex flex-1 flex-col min-w-0", isMobile && "pt-16")}
+                className={cn("relative z-10 flex flex-1 flex-col min-w-0", isMobile && "pt-16")}
                 animate={{
-                    marginLeft,
+                    marginLeft
                 }}
                 transition={motionConfig.sidebarTransition}
             >

@@ -7,8 +7,8 @@ import { Metadata } from "next"
 import { Suspense } from "react"
 
 export const metadata: Metadata = {
-    title: "Catálogo de Classes | D&Dicas",
-    description: "Explore as classes disponíveis para personagens D&D 5e.",
+    title: "Classes | D&Dicas",
+    description: "Explore as classes disponíveis para personagens D&D 5e."
 }
 
 export default function Page() {

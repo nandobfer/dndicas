@@ -361,6 +361,40 @@ export const spellComponentConfig = {
 } as const
 
 /**
+ * D&D Spell Casting Time colors and configurations.
+ */
+export const castingTimeConfig = {
+    Ação: {
+        name: "Ação",
+        color: "emerald",
+        badge: "bg-emerald-500/20 text-emerald-400",
+        border: "border-emerald-500/30",
+        text: "text-emerald-400",
+    },
+    "Ação Bônus": {
+        name: "Ação Bônus",
+        color: "sky",
+        badge: "bg-sky-500/20 text-sky-400",
+        border: "border-sky-500/30",
+        text: "text-sky-400",
+    },
+    Reação: {
+        name: "Reação",
+        color: "rose",
+        badge: "bg-rose-500/20 text-rose-400",
+        border: "border-rose-500/30",
+        text: "text-rose-400",
+    },
+    Ritual: {
+        name: "Ritual",
+        color: "violet",
+        badge: "bg-violet-500/20 text-violet-400",
+        border: "border-violet-500/30",
+        text: "text-violet-400",
+    },
+} as const
+
+/**
  * D&D Dice Types colors mapped from rarity system.
  */
 export const diceColors = {
@@ -404,6 +438,7 @@ export const diceColors = {
 
 export type SpellSchool = keyof typeof spellSchoolColors
 export type SpellComponent = keyof typeof spellComponentConfig
+export type CastingTime = keyof typeof castingTimeConfig
 export type DiceType = keyof typeof diceColors
 export type DamageType = keyof typeof damageTypeColors
 
@@ -456,85 +491,85 @@ export const damageTypeColors = {
         keys: ["ácido", "acid", "corrosivo"],
         color: "lime",
         bgAlpha: `bg-[${damageTypeHex.acid}]/10`,
-        text: `text-[${damageTypeHex.acid}]`,
+        text: `text-[${damageTypeHex.acid}]`
     },
     cold: {
         hex: damageTypeHex.cold,
         keys: ["frio", "cold", "gelo", "glacial", "gélido"],
         color: "cyan",
         bgAlpha: `bg-[${damageTypeHex.cold}]/10`,
-        text: `text-[${damageTypeHex.cold}]`,
+        text: `text-[${damageTypeHex.cold}]`
     },
     fire: {
         hex: damageTypeHex.fire,
         keys: ["fogo", "fire", "ígneo", "chamas"],
         color: "orange",
         bgAlpha: `bg-[${damageTypeHex.fire}]/10`,
-        text: `text-[${damageTypeHex.fire}]`,
+        text: `text-[${damageTypeHex.fire}]`
     },
     force: {
         hex: damageTypeHex.force,
-        keys: ["força", "force", "arcano", "puro"],
+        keys: ["força", "force", "arcano", "puro", "energético"],
         color: "red",
         bgAlpha: `bg-[${damageTypeHex.force}]/10`,
-        text: `text-[${damageTypeHex.force}]`,
+        text: `text-[${damageTypeHex.force}]`
     },
     healing: {
         hex: damageTypeHex.healing,
         keys: ["cura", "healing", "vitalidade", "regeneração"],
         color: "teal",
         bgAlpha: `bg-[${damageTypeHex.healing}]/10`,
-        text: `text-[${damageTypeHex.healing}]`,
+        text: `text-[${damageTypeHex.healing}]`
     },
     lightning: {
         hex: damageTypeHex.lightning,
         keys: ["elétrico", "lightning", "choque", "relâmpago", "raio"],
         color: "blue",
         bgAlpha: `bg-[${damageTypeHex.lightning}]/10`,
-        text: `text-[${damageTypeHex.lightning}]`,
+        text: `text-[${damageTypeHex.lightning}]`
     },
     necrotic: {
         hex: damageTypeHex.necrotic,
         keys: ["necrótico", "necrotic", "decomposição", "morte"],
         color: "emerald",
         bgAlpha: `bg-[${damageTypeHex.necrotic}]/10`,
-        text: `text-[${damageTypeHex.necrotic}]`,
+        text: `text-[${damageTypeHex.necrotic}]`
     },
     poison: {
         hex: damageTypeHex.poison,
         keys: ["veneno", "poison", "tóxico", "peçonha"],
         color: "green",
         bgAlpha: `bg-[${damageTypeHex.poison}]/10`,
-        text: `text-[${damageTypeHex.poison}]`,
+        text: `text-[${damageTypeHex.poison}]`
     },
     radiant: {
         hex: damageTypeHex.radiant,
         keys: ["radiante", "radiant", "sagrado", "luz"],
         color: "amber",
         bgAlpha: `bg-[${damageTypeHex.radiant}]/10`,
-        text: `text-[${damageTypeHex.radiant}]`,
+        text: `text-[${damageTypeHex.radiant}]`
     },
     thunder: {
         hex: damageTypeHex.thunder,
         keys: ["trovão", "thunder", "som", "sônico"],
         color: "purple",
         bgAlpha: `bg-[${damageTypeHex.thunder}]/10`,
-        text: `text-[${damageTypeHex.thunder}]`,
+        text: `text-[${damageTypeHex.thunder}]`
     },
     psychic: {
         hex: damageTypeHex.psychic,
         keys: ["psíquico", "psychic", "mental", "mente"],
         color: "pink",
         bgAlpha: `bg-[${damageTypeHex.psychic}]/10`,
-        text: `text-[${damageTypeHex.psychic}]`,
+        text: `text-[${damageTypeHex.psychic}]`
     },
     physical: {
         hex: damageTypeHex.physical,
         keys: ["físico", "physical", "pancada", "corte", "perfuração", "concussão", "perfurante", "cortante", "contundente"],
         color: "slate",
         bgAlpha: `bg-[${damageTypeHex.physical}]/10`,
-        text: `text-[${damageTypeHex.physical}]`,
-    },
+        text: `text-[${damageTypeHex.physical}]`
+    }
 } as const
 
 /**

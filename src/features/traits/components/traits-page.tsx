@@ -28,10 +28,10 @@ export function TraitsPage() {
                 <div>
                     <h1 className="text-xl sm:text-2xl font-bold text-white flex items-center gap-2">
                         <Sparkles className="h-5 w-5 sm:h-6 sm:w-6 text-emerald-400" />
-                        Catálogo de Habilidades
+                        Habilidades
                         <GlassViewSelector viewMode={viewMode} setViewMode={setViewMode} layoutId="traits-view-selector" />
                     </h1>
-                    <p className="text-[10px] sm:text-sm text-white/60 mt-1">Gerencie habilidades e traits do sistema (D&D 5e)</p>
+                    <p className="text-[10px] sm:text-sm text-white/60 mt-1">Gerencie habilidades e traits do sistema</p>
                 </div>
 
                 {isAdmin && (
@@ -43,7 +43,7 @@ export function TraitsPage() {
                             "hover:bg-blue-600 transition-colors",
                             "focus:outline-none focus:ring-2 focus:ring-blue-500/50",
                             "shadow-lg shadow-blue-500/20",
-                            "w-full sm:w-auto", // Full width on mobile
+                            "w-full sm:w-auto" // Full width on mobile
                         )}
                     >
                         <Plus className="h-4 w-4" />
@@ -91,7 +91,13 @@ export function TraitsPage() {
             )}
 
             {/* Form Modal */}
-            <TraitFormModal isOpen={modals.isFormOpen} onClose={() => modals.setIsFormOpen(false)} onSubmit={actions.handleFormSubmit} trait={modals.selectedTrait} isSubmitting={modals.isSaving} />
+            <TraitFormModal
+                isOpen={modals.isFormOpen}
+                onClose={() => modals.setIsFormOpen(false)}
+                onSubmit={actions.handleFormSubmit}
+                trait={modals.selectedTrait}
+                isSubmitting={modals.isSaving}
+            />
 
             {/* Delete Dialog */}
             <DeleteTraitDialog

@@ -34,8 +34,13 @@ export interface GlassCardProps extends Omit<HTMLMotionProps<"div">, "children">
  */
 const GlassCard = React.forwardRef<HTMLDivElement, GlassCardProps>(({ className, animate = true, children, ...props }, ref) => {
     const cardClasses = cn("rounded-xl relative", "border border-white/10", className)
+    const [isMounted, setIsMounted] = React.useState(false)
 
-    if (animate) {
+    React.useEffect(() => {
+        setIsMounted(true)
+    }, [])
+
+    if (animate && isMounted) {
         return (
             <motion.div
                 ref={ref}
