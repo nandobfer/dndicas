@@ -23,7 +23,7 @@ export async function GET(req: NextRequest) {
       const limit = limitParam ? parseInt(limitParam, 10) : 10
       const search = url.searchParams.get("search") || url.searchParams.get("q") || ""
       const searchField = url.searchParams.get("searchField") || "all"
-      const status = url.searchParams.get("status")
+      const status = url.searchParams.get("status") || "active"
 
       const query: Record<string, unknown> = {}
       if (search) {
@@ -34,9 +34,7 @@ export async function GET(req: NextRequest) {
           }
       }
       if (status && status !== "all") {
-          if (status === "active" || status === "inactive") {
-              query.status = status
-          }
+          query.status = status
       }
 
       // Build the promise for items

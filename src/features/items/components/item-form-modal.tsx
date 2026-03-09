@@ -45,8 +45,14 @@ import { GlassStatusSwitch } from "@/components/ui/glass-status-switch"
 import { GlassEntityChooser } from "@/components/ui/glass-entity-chooser"
 import { GlassInlineEmptyState } from "@/components/ui/glass-inline-empty-state"
 import { GlassSwitch } from "@/components/ui/glass-switch"
-import { ImageAndDescriptionSection, TraitsSection } from "@/features/classes/components/shared-form-components"
+import { ImageAndDescriptionSection } from "@/features/classes/components/shared-form-components"
+import { EntityListChooser } from "./shared/entity-list-chooser"
 import { ENTITY_PROVIDERS } from "@/lib/config/entities"
+import { useIsMobile } from "@/core/hooks/useMediaQuery"
+
+import { WeaponFormFields } from "./form-fields/weapon-form-fields"
+import { ArmorFormFields } from "./form-fields/armor-form-fields"
+import { ToolFormFields } from "./form-fields/tool-form-fields"
 
 import { diceColors } from "@/lib/config/colors"
 import { createItemSchema, type CreateItemSchema } from "../api/validation"
@@ -74,27 +80,6 @@ const RARITY_OPTIONS = [
     { value: "artefato", label: "Artefato", activeColor: "bg-rose-400/20", textColor: "text-rose-400" },
 ]
 
-const ARMOR_TYPE_OPTIONS = [
-    { value: "nenhuma", label: "Nenhuma" },
-    { value: "leve", label: "Leve" },
-    { value: "média", label: "Média" },
-    { value: "pesada", label: "Pesada" },
-]
-
-const DICE_TYPE_OPTIONS = [
-    { value: "d4", label: "d4", activeColor: diceColors.d4.bg, textColor: diceColors.d4.text },
-    { value: "d6", label: "d6", activeColor: diceColors.d6.bg, textColor: diceColors.d6.text },
-    { value: "d8", label: "d8", activeColor: diceColors.d8.bg, textColor: diceColors.d8.text },
-    { value: "d10", label: "d10", activeColor: diceColors.d10.bg, textColor: diceColors.d10.text },
-    { value: "d12", label: "d12", activeColor: diceColors.d12.bg, textColor: diceColors.d12.text },
-    { value: "d20", label: "d20", activeColor: diceColors.d20.bg, textColor: diceColors.d20.text },
-]
-
-const DAMAGE_TYPE_OPTIONS = ["cortante", "perfurante", "concussão", "ácido", "fogo", "frio", "relâmpago", "trovão", "veneno", "psíquico", "radiante", "necrótico", "força"].map((t) => ({
-    value: t,
-    label: t.charAt(0).toUpperCase() + t.slice(1),
-}))
-
 // ─── Props ───────────────────────────────────────────────────────────────────
 
 export interface ItemFormModalProps {
@@ -107,6 +92,7 @@ export interface ItemFormModalProps {
 // ─── Component ───────────────────────────────────────────────────────────────
 
 export function ItemFormModal({ item, isOpen, onClose, onSuccess }: ItemFormModalProps) {
+    const isMobile = useIsMobile()
     const isEditMode = !!item
     const createMutation = useCreateItem()
     const updateMutation = useUpdateItem()
@@ -129,7 +115,7 @@ export function ItemFormModal({ item, isOpen, onClose, onSuccess }: ItemFormModa
         defaultValues: {
             name: item?.name ?? "",
             description: item?.description ?? "",
-            source: item?.source ?? "",
+            source: item?.source ?? "LDJ pág. ",
             status: item?.status ?? "active",
             type: item?.type ?? "qualquer",
             rarity: item?.rarity ?? "comum",
@@ -174,7 +160,7 @@ export function ItemFormModal({ item, isOpen, onClose, onSuccess }: ItemFormModa
             reset({
                 name: item?.name ?? "",
                 description: item?.description ?? "",
-                source: item?.source ?? "",
+                source: item?.source ?? "LDJ pág. ",
                 status: item?.status ?? "active",
                 type: item?.type ?? "qualquer",
                 rarity: item?.rarity ?? "comum",
@@ -225,21 +211,24 @@ export function ItemFormModal({ item, isOpen, onClose, onSuccess }: ItemFormModa
     return (
         <>
             <GlassModal open={isOpen} onOpenChange={(open) => !open && handleCloseAttempt()}>
-                <GlassModalContent size="xl" className="max-w-[70vw]">
-                    <GlassModalHeader>
-                        <GlassModalTitle>{isEditMode ? `Editar ${item?.name}` : "Novo Item"}</GlassModalTitle>
-                        <GlassModalDescription>{isEditMode ? "Atualize as informações do item" : "Crie um novo registro no catálogo de itens"}</GlassModalDescription>
-                    </GlassModalHeader>
+                <GlassModalContent size="xl" className="w-[100vw] h-[100vh] md:w-[70vw] md:h-auto md:max-h-[90vh] md:max-w-[1200px] md:rounded-3xl border-none md:border border-white/10 flex flex-col p-0">
+                    <div className="px-6 py-4 border-b border-white/5 shrink-0">
+                        <GlassModalHeader>
+                            <GlassModalTitle>{isEditMode ? `Editar ${item?.name}` : "Novo Item"}</GlassModalTitle>
+                            <GlassModalDescription>{isEditMode ? "Atualize as informações do item" : "Crie um novo registro no catálogo de itens"}</GlassModalDescription>
+                        </GlassModalHeader>
+                    </div>
 
-                    <form onSubmit={handleSubmit(onSubmit as any)} className="space-y-6 mt-4">
-                        {/* Status Switch */}
-                        <GlassStatusSwitch
-                            entityLabel="Status do Item"
-                            description="Itens inativos não aparecem nas buscas públicas"
-                            checked={watch("status") === "active"}
-                            onCheckedChange={(checked) => setValue("status", checked ? "active" : "inactive")}
-                            disabled={isSubmitting}
-                        />
+                    <div className="flex-1 overflow-y-auto px-6 py-4 scrollbar-thin scrollbar-thumb-white/10 scrollbar-track-transparent">
+                        <form id="item-form" onSubmit={handleSubmit(onSubmit as any)} className="space-y-6">
+                            {/* Status Switch */}
+                            <GlassStatusSwitch
+                                entityLabel="Status do Item"
+                                description="Itens inativos não aparecem nas buscas públicas"
+                                checked={watch("status") === "active"}
+                                onCheckedChange={(checked) => setValue("status", checked ? "active" : "inactive")}
+                                disabled={isSubmitting}
+                            />
 
                         {/* Name + Source */}
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -334,7 +323,15 @@ export function ItemFormModal({ item, isOpen, onClose, onSuccess }: ItemFormModa
                                 <Scale className="h-4 w-4" />
                                 Raridade
                             </label>
-                            <GlassSelector options={RARITY_OPTIONS} value={watch("rarity")} onChange={(val) => setValue("rarity", val as ItemRarity)} layoutId="item-rarity-form" fullWidth />
+                            <GlassSelector 
+                                options={RARITY_OPTIONS} 
+                                value={watch("rarity")} 
+                                onChange={(val) => setValue("rarity", val as ItemRarity)} 
+                                layoutId="item-rarity-form" 
+                                layout={isMobile ? "grid" : "horizontal"}
+                                cols={isMobile ? 1 : 3}
+                                fullWidth 
+                            />
                         </div>
 
                         {/* Type (Single row, Qualqer first) */}
@@ -343,173 +340,79 @@ export function ItemFormModal({ item, isOpen, onClose, onSuccess }: ItemFormModa
                                 <Boxes className="h-4 w-4" />
                                 Tipo de Item
                             </label>
-                            <GlassSelector options={TYPE_OPTIONS} value={watch("type")} onChange={(val) => setValue("type", val as ItemType)} layoutId="item-type-form" fullWidth />
+                            <GlassSelector 
+                                options={TYPE_OPTIONS} 
+                                value={watch("type")} 
+                                onChange={(val) => setValue("type", val as ItemType)} 
+                                layoutId="item-type-form" 
+                                layout={isMobile ? "grid" : "horizontal"}
+                                cols={isMobile ? 1 : 3}
+                                fullWidth 
+                            />
                         </div>
 
                         {/* Dynamic fields based on type */}
                         <AnimatePresence mode="popLayout">
                             {/* Weapon Specifics */}
                             {selectedType === "arma" && (
-                                <motion.div
-                                    key="weapon-attrs"
-                                    initial={{ opacity: 0, height: 0 }}
-                                    animate={{ opacity: 1, height: "auto" }}
-                                    exit={{ opacity: 0, height: 0 }}
-                                    className="p-4 rounded-xl bg-white/[0.03] border border-white/5 space-y-4"
-                                >
-                                    <div className="flex items-center gap-2">
-                                        <Sword className="h-4 w-4 text-rose-400" />
-                                        <h3 className="text-sm font-medium text-white/60">Atributos de Arma</h3>
-                                    </div>
-
-                                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                                        <div className="space-y-2">
-                                            <label className="text-xs font-medium text-white/40">Dano (Dados)</label>
-                                            <div className="flex gap-2">
-                                                <GlassInput
-                                                    type="number"
-                                                    className="w-16"
-                                                    placeholder="Qty"
-                                                    value={watch("damageDice.quantidade") || ""}
-                                                    onChange={(e) => setValue("damageDice.quantidade", parseInt(e.target.value) || 0)}
-                                                />
-                                                <GlassSelector
-                                                    options={DICE_TYPE_OPTIONS}
-                                                    value={watch("damageDice.tipo") || "d6"}
-                                                    onChange={(val) => setValue("damageDice.tipo", val as any)}
-                                                    layoutId="damage-dice-type"
-                                                    size="sm"
-                                                />
-                                            </div>
-                                        </div>
-
-                                        <div className="space-y-2">
-                                            <label className="text-xs font-medium text-white/40">Tipo de Dano</label>
-                                            <GlassSelector
-                                                options={DAMAGE_TYPE_OPTIONS}
-                                                value={watch("damageType") || "cortante"}
-                                                onChange={(val) => setValue("damageType", val as DamageType)}
-                                                layoutId="damage-type-selector"
-                                                size="sm"
-                                            />
-                                        </div>
-
-                                        <GlassInput label="Maestria" placeholder="Ex: Cleave" {...register("mastery" as any)} />
-                                    </div>
-
-                                    {/* Properties (Rules) nested inside Weapon */}
-                                    <TraitsSection
-                                        fields={propertyFields}
-                                        append={appendProperty}
-                                        remove={removeProperty}
-                                        control={control}
-                                        isSubmitting={isSubmitting}
-                                        traitsFieldName="properties"
-                                        errors={errors}
-                                    />
-                                </motion.div>
+                                <WeaponFormFields
+                                    register={register}
+                                    setValue={setValue}
+                                    watch={watch}
+                                    control={control}
+                                    errors={errors}
+                                    isSubmitting={isSubmitting}
+                                    propertyFields={propertyFields}
+                                    appendProperty={appendProperty}
+                                    removeProperty={removeProperty}
+                                />
                             )}
 
                             {/* Armor/Shield Specifics */}
-                            {(selectedType === "armadura" || selectedType === "escudo") && (
-                                <motion.div
-                                    key="armor-attrs"
-                                    initial={{ opacity: 0, height: 0 }}
-                                    animate={{ opacity: 1, height: "auto" }}
-                                    exit={{ opacity: 0, height: 0 }}
-                                    className="p-4 rounded-xl bg-white/[0.03] border border-white/5 space-y-4"
-                                >
-                                    <div className="flex items-center gap-2">
-                                        <Shield className="h-4 w-4 text-blue-400" />
-                                        <h3 className="text-sm font-medium text-white/60">Atributos de Defesa</h3>
-                                    </div>
-
-                                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                                        {selectedType === "armadura" ? (
-                                            <>
-                                                <GlassInput
-                                                    type="number"
-                                                    label="Classe de Armadura (CA)"
-                                                    placeholder="Ex: 15"
-                                                    value={watch("ac") || ""}
-                                                    onChange={(e) => setValue("ac", parseInt(e.target.value) || undefined)}
-                                                />
-                                                <div className="space-y-2">
-                                                    <label className="text-xs font-medium text-white/40">Tipo de Armadura</label>
-                                                    <GlassSelector
-                                                        options={ARMOR_TYPE_OPTIONS}
-                                                        value={watch("armorType") || "nenhuma"}
-                                                        onChange={(val) => setValue("armorType", val as ArmorType)}
-                                                        layoutId="armor-type-selector"
-                                                        size="sm"
-                                                    />
-                                                </div>
-                                                <div className="space-y-2">
-                                                    <label className="text-xs font-medium text-white/40">Tipo de CA</label>
-                                                    <GlassSelector
-                                                        options={[
-                                                            { value: "base", label: "Base" },
-                                                            { value: "bonus", label: "Bônus" },
-                                                        ]}
-                                                        value={watch("acType") || "base"}
-                                                        onChange={(val) => setValue("acType", val as any)}
-                                                        layoutId="ac-type-selector"
-                                                        size="sm"
-                                                    />
-                                                </div>
-                                            </>
-                                        ) : (
-                                            <GlassInput
-                                                type="number"
-                                                label="Bônus de CA"
-                                                placeholder="Ex: 2"
-                                                value={watch("acBonus") || ""}
-                                                onChange={(e) => setValue("acBonus", parseInt(e.target.value) || undefined)}
-                                            />
-                                        )}
-                                    </div>
-                                </motion.div>
-                            )}
+                            {(selectedType === "armadura" || selectedType === "escudo") && <ArmorFormFields selectedType={selectedType} setValue={setValue} watch={watch} errors={errors} />}
                         </AnimatePresence>
 
                         {/* Tool Specifics */}
-                        {selectedType === "ferramenta" && (
-                            <div className="p-4 rounded-xl bg-white/[0.03] border border-white/5 space-y-4">
-                                <div className="flex items-center gap-2">
-                                    <Hammer className="h-4 w-4 text-amber-400" />
-                                    <h3 className="text-sm font-medium text-white/60">Atributos de Ferramenta</h3>
-                                </div>
-                                <GlassInput label="Atributo Associado" placeholder="Ex: Destreza, Inteligência..." {...register("attributeUsed" as any)} />
-                            </div>
-                        )}
+                        {selectedType === "ferramenta" && <ToolFormFields register={register} />}
 
                         {/* Public Traits Section (Global/Non-Weapon specific traits) */}
-                        <TraitsSection fields={traitFields} append={appendTrait} remove={removeTrait} control={control} isSubmitting={isSubmitting} traitsFieldName="traits" errors={errors} />
-
-                        {/* Footer Actions */}
-                        <div className="flex flex-col-reverse sm:flex-row justify-end gap-3 pt-6 border-t border-white/10">
-                            <button
-                                type="button"
-                                onClick={handleCloseAttempt}
-                                className="px-6 py-2.5 rounded-lg text-sm font-medium text-white/60 hover:text-white/80 hover:bg-white/5 transition-colors disabled:opacity-50"
-                                disabled={isSubmitting}
-                            >
-                                Cancelar
-                            </button>
-                            <button
-                                type="submit"
-                                className={cn(
-                                    "flex flex-1 sm:flex-none items-center justify-center gap-2 px-6 py-2.5 rounded-lg text-sm font-medium transition-all shadow-lg active:scale-95",
-                                    "bg-blue-500 text-white shadow-blue-500/20 hover:bg-blue-600",
-                                    isSubmitting && "opacity-50 cursor-not-allowed",
-                                )}
-                                disabled={isSubmitting}
-                            >
-                                {isSubmitting && <Loader2 className="h-4 w-4 animate-spin" />}
-                                {isEditMode ? "Salvar Alterações" : "Criar Item"}
-                            </button>
-                        </div>
+                        <EntityListChooser
+                            fields={traitFields}
+                            append={appendTrait}
+                            remove={removeTrait}
+                            control={control}
+                            isSubmitting={isSubmitting}
+                            fieldName="traits"
+                            errors={errors}
+                            entityType="Habilidade"
+                        />
                     </form>
+                </div>
+
+                {/* Footer Actions */}
+                    <div className="px-6 py-4 border-t border-white/10 bg-black/20 shrink-0 flex flex-col-reverse sm:flex-row justify-end gap-3">
+                        <button
+                            type="button"
+                            onClick={handleCloseAttempt}
+                            className="px-6 py-2.5 rounded-lg text-sm font-medium text-white/60 hover:text-white/80 hover:bg-white/5 transition-colors disabled:opacity-50"
+                            disabled={isSubmitting}
+                        >
+                            Cancelar
+                        </button>
+                        <button
+                            type="submit"
+                            form="item-form"
+                            className={cn(
+                                "flex flex-1 sm:flex-none items-center justify-center gap-2 px-6 py-2.5 rounded-lg text-sm font-medium transition-all shadow-lg active:scale-95",
+                                "bg-blue-500 text-white shadow-blue-500/20 hover:bg-blue-600",
+                                isSubmitting && "opacity-50 cursor-not-allowed",
+                            )}
+                            disabled={isSubmitting}
+                        >
+                            {isSubmitting && <Loader2 className="h-4 w-4 animate-spin" />}
+                            {isEditMode ? "Salvar Alterações" : "Criar Item"}
+                        </button>
+                    </div>
                 </GlassModalContent>
             </GlassModal>
 
