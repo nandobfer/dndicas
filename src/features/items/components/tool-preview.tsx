@@ -15,7 +15,8 @@ interface ToolPreviewProps {
 }
 
 export function ToolPreview({ item }: ToolPreviewProps) {
-    if (item.type !== "ferramenta") return null
+    const type = (item as any).itemType || item.type
+    if (type !== "ferramenta") return null
 
     return (
         <div className="space-y-4 pt-2 border-t border-white/5">

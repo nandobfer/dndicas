@@ -32,6 +32,12 @@ export interface UnifiedEntity {
     armorType?: string
     acBonus?: number
     attributeUsed?: string
+    image?: string
+    isMagic?: boolean
+    traits?: any[]
+    properties?: any[]
+    additionalDamage?: any[]
+    mastery?: string
     score?: number // Added for weighted sorting visibility if needed
 }
 
@@ -48,6 +54,8 @@ async function getSearchData(): Promise<UnifiedEntity[]> {
 
     const fetchPromises = ENTITY_PROVIDERS.map(async (provider) => {
         try {
+            // Se o endpoint termina em /search, não passamos query no cache inicial para pegar todos ativos
+            // Mas as rotas /search sem 'q' devem retornar a lista completa
             const res = await fetch(provider.endpoint())
             if (!res.ok) return []
             const data = await res.json()
@@ -60,6 +68,9 @@ async function getSearchData(): Promise<UnifiedEntity[]> {
             else if (data.rules) rawItems = data.rules
             else if (data.feats) rawItems = data.feats
             else if (data.classes) rawItems = data.classes
+            else if (data.backgrounds) rawItems = data.backgrounds
+            else if (data.races) rawItems = data.races
+            else if (data.data) rawItems = data.data // Fallback para padrões comuns
 
             return rawItems.map(provider.map)
         } catch (err) {

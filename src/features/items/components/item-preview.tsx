@@ -52,7 +52,8 @@ export interface ItemPreviewProps {
  */
 export function ItemPreview({ item, showStatus = true, hideStatusChip = false, hideActionIcons = false }: ItemPreviewProps) {
     const { addWindow } = useWindows()
-    const TypeIcon = TYPE_ICONS[item.type] || Backpack
+    const type = (item as any).itemType || item.type
+    const TypeIcon = TYPE_ICONS[type as ItemType] || Backpack
 
     return (
         <div className="space-y-4 w-full text-left">
@@ -67,7 +68,7 @@ export function ItemPreview({ item, showStatus = true, hideStatusChip = false, h
                             <EntityTitleLink name={item.name} entityType="Item" className="text-base font-bold" style={{ color: rarityColors[getItemRarityVariant(item.rarity)] }} />
                         </div>
                         <p className="text-[10px] uppercase font-bold tracking-widest text-white/40 mt-0.5">
-                            {item.type} {item.rarity}
+                            {type} {item.rarity}
                         </p>
                     </div>
                 </div>
@@ -125,7 +126,7 @@ export function ItemPreview({ item, showStatus = true, hideStatusChip = false, h
             </div>
 
             {/* Specialized Previews baseados no tipo */}
-            <div className="empty:hidden">
+            <div>
                 <WeaponPreview item={item} />
                 <ArmorPreview item={item} />
                 <ToolPreview item={item} />

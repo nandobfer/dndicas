@@ -15,6 +15,7 @@ import { SpellPreview } from "@/features/spells/components/spell-preview"
 import { ClassPreview } from "@/features/classes/components/class-preview"
 import { BackgroundPreview } from "@/features/backgrounds/components/background-preview"
 import { RacePreview } from "@/features/races/components/race-preview"
+import { ItemPreview } from "@/features/items/components/item-preview"
 import { useWindows } from "@/core/context/window-context"
 import { motion, AnimatePresence } from "framer-motion"
 import { EntitySource } from "./entity-source"
@@ -224,6 +225,8 @@ export const EntityPreviewTooltip = ({ entityId, entityType, children, side = "t
                 endpoint = `/api/backgrounds/${entityId}`
             } else if (entityType === "Raça") {
                 endpoint = `/api/races/${entityId}`
+            } else if (entityType === "Item") {
+                endpoint = `/api/items/${entityId}`
             }
 
             const res = await fetch(endpoint)
@@ -278,6 +281,8 @@ export const EntityPreviewTooltip = ({ entityId, entityType, children, side = "t
                 return <BackgroundPreview background={data} />
             case "Raça":
                 return <RacePreviewWithActions race={data} showStatus={true} />
+            case "Item":
+                return <ItemPreview item={data} showStatus={true} />
             default:
                 return (
                     <div className="p-4">

@@ -8,18 +8,19 @@ export async function GET(req: NextRequest) {
     const { searchParams } = new URL(req.url);
     const query = searchParams.get("q") || "";
 
-    if (!query || query.length < 2) {
-      return NextResponse.json({ items: [] });
-    }
-
     await dbConnect();
     // Fetch active items for mentions/search
     const items = await ItemModel.find({ status: "active" });
 
+    // If no query, return all active items for caching (search-engine)
+    if (!query) {
+      return NextResponse.json({ items });
+    }
+
     const filtered = applyFuzzySearch(items, query);
 
     return NextResponse.json({
-      items: filtered.slice(0, 10), // Limit results for mentions
+      items: filtered.slice(0, 15), // Slightly more results for context
     });
   } catch (error) {
     console.error("Items search error:", error);
