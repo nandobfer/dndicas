@@ -1,56 +1,57 @@
 /**
- * @fileoverview Hook for managing backgrounds list state.
- * Centralizes filter management, pagination, and modal control.
+ * @fileoverview Hook for managing items list state.
  */
 
 "use client";
 
 import * as React from "react"
-import { useBackgrounds, useInfiniteBackgrounds } from "../api/backgrounds-queries"
+import { useItems, useInfiniteItems } from "../api/items-queries"
 import { useIsMobile } from "@/core/hooks/useMediaQuery"
 import { useViewMode } from "@/core/hooks/useViewMode"
-import type { Background } from "../types/backgrounds.types"
+import type { Item, ItemType, ItemRarity } from "../types/items.types"
 
-export function useBackgroundsPage() {
+export function useItemsPage() {
     const isMobile = useIsMobile()
     const { viewMode, setViewMode } = useViewMode()
 
     const [search, setSearch] = React.useState("")
+    const [type, setType] = React.useState<ItemType | "all">("all")
+    const [rarity, setRarity] = React.useState<ItemRarity | "all">("all")
     const [status, setStatus] = React.useState<"active" | "inactive" | "all">("all")
 
-    // Filters for query
-    const filters = { search, status }
+    const filters = { search, type, rarity, status }
 
-    const tableData = useBackgrounds(filters, 1, 100) // Simple non-infinite for table
-    const infiniteData = useInfiniteBackgrounds(filters)
+    const tableData = useItems(filters, 1, 100)
+    const infiniteData = useInfiniteItems(filters)
 
-    // Modal states
     const [isFormOpen, setIsFormOpen] = React.useState(false)
     const [isDeleteOpen, setIsDeleteOpen] = React.useState(false)
-    const [selectedBackground, setSelectedBackground] = React.useState<Background | null>(null)
+    const [selectedItem, setSelectedItem] = React.useState<Item | null>(null)
 
     const handleSearchChange = (value: string) => setSearch(value)
+    const handleTypeChange = (value: ItemType | "all") => setType(value)
+    const handleRarityChange = (value: ItemRarity | "all") => setRarity(value)
     const handleStatusChange = (value: "active" | "inactive" | "all") => setStatus(value)
 
     const handleCreateClick = () => {
-        setSelectedBackground(null)
+        setSelectedItem(null)
         setIsFormOpen(true)
     }
 
-    const handleEditClick = (bg: Background) => {
-        setSelectedBackground(bg)
+    const handleEditClick = (item: Item) => {
+        setSelectedItem(item)
         setIsFormOpen(true)
     }
 
-    const handleDeleteClick = (bg: Background) => {
-        setSelectedBackground(bg)
+    const handleDeleteClick = (item: Item) => {
+        setSelectedItem(item)
         setIsDeleteOpen(true)
     }
 
     const closeAll = () => {
         setIsFormOpen(false)
         setIsDeleteOpen(false)
-        setSelectedBackground(null)
+        setSelectedItem(null)
     }
 
     return {
@@ -60,12 +61,16 @@ export function useBackgroundsPage() {
         filters: {
             search,
             setSearch,
+            type,
+            setType,
+            rarity,
+            setRarity,
             status,
-            setStatus,
+            setStatus
         },
         data: {
-            backgrounds: viewMode === "table" ? tableData.data?.items || [] : infiniteData.data?.pages.flatMap((p) => p.items) || [],
-            isLoading: viewMode === "table" ? tableData.isLoading : infiniteData.isLoading || infiniteData.isFetching,
+            items: viewMode === "table" ? (tableData.data?.items || []) : (infiniteData.data?.pages.flatMap(p => p.items) || []),
+            isLoading: viewMode === "table" ? tableData.isLoading : (infiniteData.isLoading || infiniteData.isFetching),
             hasNextPage: !!infiniteData.hasNextPage,
             fetchNextPage: infiniteData.fetchNextPage,
             isFetchingNextPage: !!infiniteData.isFetchingNextPage,
@@ -73,6 +78,8 @@ export function useBackgroundsPage() {
         },
         actions: {
             handleSearchChange,
+            handleTypeChange,
+            handleRarityChange,
             handleStatusChange,
             handleCreateClick,
             handleEditClick,
@@ -83,8 +90,11 @@ export function useBackgroundsPage() {
             setIsFormOpen,
             isDeleteOpen,
             setIsDeleteOpen,
-            selectedBackground,
-            closeAll,
-        },
+            selectedItem,
+            handleCreateClick,
+            handleEditClick,
+            handleDeleteClick,
+            closeAll
+        }
     }
 }

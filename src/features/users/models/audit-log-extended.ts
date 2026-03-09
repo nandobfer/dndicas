@@ -60,7 +60,6 @@ const AuditLogExtendedSchema = new Schema<IAuditLogExtended>(
         entity: {
             type: String,
             required: true,
-            enum: ["User", "Auth", "Reference", "Rule", "Company", "Organization", "Trait", "Feat", "Spell"],
             index: true,
         },
         entityId: {

@@ -5,25 +5,125 @@ import { SpellPreview } from "@/features/spells/components/spell-preview"
 import { ClassPreview } from "@/features/classes/components/class-preview"
 import { BackgroundPreview } from "@/features/backgrounds/components/background-preview"
 import { RacePreview } from "@/features/races/components/race-preview"
+import { ItemPreview } from "@/features/items/components/item-preview"
 import { fetchTraitById } from "@/features/traits/api/traits-api"
 import { fetchSpell } from "@/features/spells/api/spells-api"
 import { fetchFeat } from "@/features/feats/api/feats-api"
 import { getClassById } from "@/features/classes/api/classes-service"
+import { fetchItemById } from "@/features/items/api/items-api"
 import { LoadingState } from "@/components/ui/loading-state"
-import { Wand, GraduationCap, Star } from "lucide-react"
+import { Wand, GraduationCap, Star, Backpack, ScrollText } from "lucide-react"
 
 /**
  * Registry of renderers for different entity types.
  * T042: Shared entity renderer configuration for EntityList and GlassWindow.
  */
 export const ENTITY_RENDERERS: Record<string, (item: any, options?: { showStatus?: boolean; hideStatusChip?: boolean; hideActionIcons?: boolean }) => React.ReactNode> = {
-    Regra: (item, opts) => <RulePreview rule={item} showStatus={opts?.showStatus ?? false} />,
+    Regra: (idOrItem, opts) => <RuleAsyncRenderer item={idOrItem} showStatus={opts?.showStatus ?? false} />,
     Habilidade: (id, opts) => <TraitAsyncRenderer id={id} showStatus={opts?.showStatus ?? true} hideStatusChip={opts?.hideStatusChip} hideActionIcons={opts?.hideActionIcons} />,
     Talento: (idOrItem, opts) => <FeatAsyncRenderer item={idOrItem} showStatus={opts?.showStatus ?? true} hideStatusChip={opts?.hideStatusChip} hideActionIcons={opts?.hideActionIcons} />,
     Magia: (idOrItem, opts) => <SpellAsyncRenderer item={idOrItem} showStatus={opts?.showStatus ?? true} hideStatusChip={opts?.hideStatusChip} hideActionIcons={opts?.hideActionIcons} />,
     Classe: (idOrItem, opts) => <ClassAsyncRenderer item={idOrItem} showStatus={opts?.showStatus ?? true} />,
     Origem: (idOrItem, opts) => <BackgroundAsyncRenderer item={idOrItem} />,
     Raça: (idOrItem, opts) => <RaceAsyncRenderer item={idOrItem} />,
+    Item: (idOrItem, opts) => <ItemAsyncRenderer item={idOrItem} showStatus={opts?.showStatus ?? true} hideStatusChip={opts?.hideStatusChip} hideActionIcons={opts?.hideActionIcons} />,
+}
+
+function RuleAsyncRenderer({ item, showStatus = true }: { item: any; showStatus?: boolean }) {
+    const [rule, setRule] = React.useState<any>(null)
+    const [loading, setLoading] = React.useState(true)
+
+    const id = typeof item === "string" ? item : item?._id || item?.id
+
+    React.useEffect(() => {
+        if (item && typeof item === "object" && item.description && item.name) {
+            setRule(item)
+            setLoading(false)
+            return
+        }
+
+        if (!id) {
+            setLoading(false)
+            return
+        }
+
+        import("@/features/rules/api/rules-api").then(({ fetchRule }) => {
+            fetchRule(id)
+                .then(setRule)
+                .catch(console.error)
+                .finally(() => setLoading(false))
+        })
+    }, [id, item])
+
+    if (loading)
+        return (
+            <div className="p-8 flex flex-col items-center justify-center gap-3 bg-white/[0.02] rounded-xl border border-white/5 animate-in fade-in duration-300">
+                <LoadingState variant="spinner" size="md" />
+                <span className="text-[10px] uppercase font-bold tracking-widest text-white/20">Buscando Regra...</span>
+            </div>
+        )
+
+    if (!rule)
+        return (
+            <div className="p-8 text-center bg-slate-500/5 rounded-xl border border-dashed border-slate-500/20 flex flex-col items-center justify-center gap-2">
+                <div className="p-2 rounded-full bg-slate-500/10 text-slate-400">
+                    <ScrollText className="h-4 w-4" />
+                </div>
+                <p className="text-xs text-slate-400/60 italic">Regra não encontrada.</p>
+            </div>
+        )
+
+    return (
+        <div className="p-4">
+            <RulePreview rule={rule} showStatus={showStatus} />
+        </div>
+    )
+}
+
+function ItemAsyncRenderer({ item, showStatus = true, hideStatusChip, hideActionIcons }: { item: any; showStatus?: boolean; hideStatusChip?: boolean; hideActionIcons?: boolean }) {
+    const [itemData, setItemData] = React.useState<any>(null)
+    const [loading, setLoading] = React.useState(true)
+
+    const id = typeof item === "string" ? item : item?._id || item?.id
+
+    React.useEffect(() => {
+        if (item && typeof item === "object" && (item.type || item.description)) {
+            setItemData(item)
+            setLoading(false)
+            return
+        }
+
+        if (!id) {
+            setLoading(false)
+            return
+        }
+
+        fetchItemById(id)
+            .then(setItemData)
+            .catch(console.error)
+            .finally(() => setLoading(false))
+    }, [id, item])
+
+    if (loading)
+        return (
+            <div className="p-8 flex flex-col items-center justify-center gap-3 bg-white/[0.02] rounded-xl border border-white/5 animate-in fade-in duration-300">
+                <LoadingState variant="spinner" size="md" />
+                <span className="text-[10px] uppercase font-bold tracking-widest text-white/20">Buscando Item...</span>
+            </div>
+        )
+    if (!itemData)
+        return (
+            <div className="p-8 flex flex-col items-center justify-center gap-3 bg-white/[0.02] rounded-xl border border-white/5 text-center">
+                <Backpack className="h-8 w-8 text-white/10" />
+                <p className="text-xs text-white/20 italic">Item não encontrado</p>
+            </div>
+        )
+
+    return (
+        <div className="p-4">
+            <ItemPreview item={itemData} showStatus={showStatus} hideStatusChip={hideStatusChip} hideActionIcons={hideActionIcons} />
+        </div>
+    )
 }
 
 function TraitAsyncRenderer({ id, showStatus = true, hideStatusChip, hideActionIcons }: { id: any; showStatus?: boolean; hideStatusChip?: boolean; hideActionIcons?: boolean }) {

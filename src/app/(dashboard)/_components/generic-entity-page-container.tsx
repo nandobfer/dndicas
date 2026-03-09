@@ -30,9 +30,12 @@ import { useRacesPage } from "@/features/races/hooks/useRacesPage"
 import { RaceFormModal } from "@/features/races/components/race-form-modal"
 import { DeleteRaceDialog } from "@/features/races/components/delete-race-dialog"
 import { DeleteSpellDialog } from "@/features/spells/components/delete-spell-dialog"
+import { useItemsPage } from "@/features/items/hooks/useItemsPage"
+import { ItemFormModal } from "@/features/items/components/item-form-modal"
+import { DeleteItemDialog } from "@/features/items/components/delete-item-dialog"
 
 interface GenericEntityPageProps {
-    entityTypeKey: "Regra" | "Habilidade" | "Talento" | "Magia" | "Classe" | "Origem" | "Raça"
+    entityTypeKey: "Regra" | "Habilidade" | "Talento" | "Magia" | "Classe" | "Origem" | "Raça" | "Item"
 }
 
 export default function GenericEntityPage({ entityTypeKey }: GenericEntityPageProps) {
@@ -52,6 +55,7 @@ export default function GenericEntityPage({ entityTypeKey }: GenericEntityPagePr
     const classesPage = useClassesPage()
     const backgroundsPage = useBackgroundsPage()
     const racesPage = useRacesPage()
+    const itemsPage = useItemsPage()
 
     const queryKey = [entityTypeKey.toLowerCase(), slug]
 
@@ -64,6 +68,7 @@ export default function GenericEntityPage({ entityTypeKey }: GenericEntityPagePr
         Classe: classesPage,
         Origem: backgroundsPage,
         Raça: racesPage,
+        Item: itemsPage,
     }
 
     const currentPage = hookMap[entityTypeKey]
@@ -77,6 +82,7 @@ export default function GenericEntityPage({ entityTypeKey }: GenericEntityPagePr
         Talento: "feats",
         Magia: "spells",
         Classe: "classes",
+        Item: "items",
         Origem: "backgrounds",
         Raça: "races",
     }
@@ -295,6 +301,30 @@ export default function GenericEntityPage({ entityTypeKey }: GenericEntityPagePr
                         race={racesPage.modals.selectedRace}
                     />
                     <DeleteRaceDialog isOpen={racesPage.modals.isDeleteOpen} onClose={() => racesPage.modals.setIsDeleteOpen(false)} race={racesPage.modals.selectedRace} />
+                </>
+            )}
+
+            {entityTypeKey === "Item" && (
+                <>
+                    <ItemFormModal
+                        item={itemsPage.modals.selectedItem}
+                        isOpen={itemsPage.modals.isFormOpen}
+                        onClose={() => itemsPage.modals.setIsFormOpen(false)}
+                        onSuccess={() => {
+                            itemsPage.modals.setIsFormOpen(false)
+                            queryClient.invalidateQueries({ queryKey })
+                        }}
+                    />
+                    <DeleteItemDialog
+                        item={itemsPage.modals.selectedItem}
+                        isOpen={itemsPage.modals.isDeleteOpen}
+                        onClose={() => itemsPage.modals.setIsDeleteOpen(false)}
+                        onConfirm={async () => {
+                            await itemsPage.modals.closeAll()
+                            queryClient.invalidateQueries({ queryKey })
+                            router.push("/items")
+                        }}
+                    />
                 </>
             )}
         </>

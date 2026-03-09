@@ -15,8 +15,9 @@ export function useRacesPage() {
     const { viewMode, setViewMode } = useViewMode()
 
     const [search, setSearch] = React.useState("")
+    const [status, setStatus] = React.useState<"active" | "inactive" | "all">("all")
 
-    const filters = { search }
+    const filters = { search, status }
 
     const tableData = useRaces(filters, 1, 100)
     const infiniteData = useInfiniteRaces(filters)
@@ -26,6 +27,7 @@ export function useRacesPage() {
     const [selectedRace, setSelectedRace] = React.useState<Race | null>(null)
 
     const handleSearchChange = (value: string) => setSearch(value)
+    const handleStatusChange = (value: "active" | "inactive" | "all") => setStatus(value)
 
     const handleCreateClick = () => {
         setSelectedRace(null)
@@ -54,11 +56,13 @@ export function useRacesPage() {
         setViewMode,
         filters: {
             search,
-            setSearch
+            setSearch,
+            status,
+            setStatus,
         },
         data: {
-            races: viewMode === "table" ? (tableData.data?.items || []) : (infiniteData.data?.pages.flatMap(p => p.items) || []),
-            isLoading: viewMode === "table" ? tableData.isLoading : (infiniteData.isLoading || infiniteData.isFetching),
+            races: viewMode === "table" ? tableData.data?.items || [] : infiniteData.data?.pages.flatMap((p) => p.items) || [],
+            isLoading: viewMode === "table" ? tableData.isLoading : infiniteData.isLoading || infiniteData.isFetching,
             hasNextPage: !!infiniteData.hasNextPage,
             fetchNextPage: infiniteData.fetchNextPage,
             isFetchingNextPage: !!infiniteData.isFetchingNextPage,
@@ -66,6 +70,7 @@ export function useRacesPage() {
         },
         actions: {
             handleSearchChange,
+            handleStatusChange,
             handleCreateClick,
             handleEditClick,
             handleDeleteClick,
@@ -79,7 +84,7 @@ export function useRacesPage() {
             handleCreateClick,
             handleEditClick,
             handleDeleteClick,
-            closeAll
-        }
+            closeAll,
+        },
     }
 }

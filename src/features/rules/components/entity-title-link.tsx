@@ -10,9 +10,10 @@ interface EntityTitleLinkProps {
     name: string
     entityType: string
     className?: string
+    style?: React.CSSProperties
 }
 
-export function EntityTitleLink({ name, entityType, className }: EntityTitleLinkProps) {
+export function EntityTitleLink({ name, entityType, className, style }: EntityTitleLinkProps) {
     // Determine route based on entity type
     const routeMap: Record<string, string> = {
         Regra: "rules",
@@ -22,31 +23,29 @@ export function EntityTitleLink({ name, entityType, className }: EntityTitleLink
         Classe: "classes",
         Origem: "backgrounds",
         Raça: "races",
+        Item: "items",
     }
 
     const route = routeMap[entityType] || "rules"
+    if (!name)
+        return (
+            <h3 className={cn("text-sm font-bold text-white", className)} style={style}>
+                {name}
+            </h3>
+        )
+
     const slug = encodeURIComponent(name.toLowerCase().replace(/\s+/g, "-"))
 
     return (
-        <Link 
+        <Link
             href={`/${route}/${slug}`}
-            className={cn(
-                "group relative inline-flex items-center gap-2 cursor-pointer transition-colors",
-                "hover:text-white group-hover:text-white",
-                className
-            )}
+            className={cn("group relative inline-flex items-center gap-2 cursor-pointer transition-colors", "hover:text-white group-hover:text-white", className)}
+            style={style}
         >
-            <motion.div
-                whileHover={{ x: 4 }}
-                className="flex items-center"
-            >
-                <h3 className="text-sm font-bold text-white relative">
+            <motion.div whileHover={{ x: 4 }} className="flex items-center">
+                <h3 className={cn("text-sm font-bold text-white relative", className)} style={style}>
                     {name}
-                    <motion.span 
-                        className="absolute -bottom-0.5 left-0 w-0 h-px bg-current opacity-50"
-                        whileHover={{ width: "100%" }}
-                        transition={{ duration: 0.2 }}
-                    />
+                    <motion.span className="absolute -bottom-0.5 left-0 w-0 h-px bg-current opacity-50" whileHover={{ width: "100%" }} transition={{ duration: 0.2 }} />
                 </h3>
             </motion.div>
         </Link>

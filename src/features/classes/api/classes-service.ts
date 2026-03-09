@@ -102,7 +102,7 @@ export async function createClass(data: CreateClassInput, actorId?: string): Pro
     const doc = await CharacterClass.create(data)
 
     if (actorId) {
-        await logCreate("CharacterClass", String(doc._id), actorId, { name: doc.name }).catch(() => {})
+        await logCreate("CharacterClass", String(doc._id), actorId, doc.toObject()).catch(() => {})
     }
 
     return {
@@ -132,12 +132,14 @@ export async function updateClass(id: string, data: UpdateClassInput, actorId?: 
         if (existing) throw new Error("Já existe uma classe com esse nome")
     }
 
-    // Ensure we are sending the full object for spells if present
+    const previousDoc = await CharacterClass.findById(id).lean()
+    if (!previousDoc) throw new Error("Classe não encontrada")
+
     const doc = await CharacterClass.findByIdAndUpdate(id, data, { new: true, runValidators: true }).lean()
     if (!doc) throw new Error("Classe não encontrada")
 
     if (actorId) {
-        await logUpdate("CharacterClass", id, actorId, {}, data as Record<string, unknown>).catch(() => {})
+        await logUpdate("CharacterClass", id, actorId, previousDoc as any, doc as any).catch(() => {})
     }
 
     return {
@@ -162,11 +164,13 @@ export async function updateClass(id: string, data: UpdateClassInput, actorId?: 
 export async function deleteClass(id: string, actorId?: string): Promise<void> {
     await dbConnect()
 
-    const doc = await CharacterClass.findByIdAndDelete(id)
+    const doc = await CharacterClass.findById(id).lean()
     if (!doc) throw new Error("Classe não encontrada")
 
+    await CharacterClass.findByIdAndDelete(id)
+
     if (actorId) {
-        await logDelete("CharacterClass", id, actorId, { name: doc.name }).catch(() => {})
+        await logDelete("CharacterClass", id, actorId, doc as any).catch(() => {})
     }
 }
 

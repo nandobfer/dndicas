@@ -17,7 +17,7 @@ import { motion } from "framer-motion"
 import Link from "next/link"
 import Image from "next/image"
 import { usePathname } from "next/navigation"
-import { Home, User, Sparkles, FileText, Users, Scroll, Zap, Wand, AtSign, MessageSquare, Sword, ShieldCheck, Fingerprint } from "lucide-react"
+import { Home, User, Sparkles, FileText, Users, Scroll, Zap, Wand, AtSign, MessageSquare, Sword, ShieldCheck, Fingerprint, Backpack } from "lucide-react"
 import { cn } from "@/core/utils"
 import { glassConfig } from "@/lib/config/glass-config"
 import { motionConfig } from "@/lib/config/motion-configs"
@@ -61,7 +61,8 @@ const cadastrosItems = [
     { label: "Regras", href: "/rules", icon: Scroll },
     { label: "Habilidades", href: "/traits", icon: Sparkles },
     { label: "Talentos", href: "/feats", icon: Zap },
-    { label: "Magias", href: "/spells", icon: Wand }
+    { label: "Magias", href: "/spells", icon: Wand },
+    { label: "Itens", href: "/items", icon: Backpack },
 ]
 
 const adminItems = [

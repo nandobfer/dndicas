@@ -3,11 +3,12 @@ import { auth } from "@clerk/nextjs/server"
 import { RaceModel } from "@/features/races/models/race"
 import dbConnect from "@/core/database/db"
 import { z } from "zod"
+import { createAuditLog } from "@/features/users/api/audit-service"
 
 const raceTraitSchema = z.object({
     name: z.string().min(1),
     level: z.coerce.number().default(1),
-    description: z.string().min(1)
+    description: z.string().min(1),
 })
 
 const raceVariationSchema = z.object({
@@ -19,7 +20,7 @@ const raceVariationSchema = z.object({
     traits: z.array(raceTraitSchema).default([]),
     spells: z.array(z.any()).default([]),
     size: z.enum(["Pequeno", "Médio", "Grande"]).optional(),
-    speed: z.string().optional()
+    speed: z.string().optional(),
 })
 
 const raceSchema = z.object({
@@ -32,7 +33,7 @@ const raceSchema = z.object({
     speed: z.string().min(1),
     traits: z.array(raceTraitSchema).default([]),
     spells: z.array(z.any()).default([]),
-    variations: z.array(raceVariationSchema).default([])
+    variations: z.array(raceVariationSchema).default([]),
 })
 
 export async function GET(req: NextRequest) {
@@ -46,10 +47,7 @@ export async function GET(req: NextRequest) {
 
         const query: any = {}
         if (search) {
-            query.$or = [
-                { name: { $regex: search, $options: "i" } },
-                { description: { $regex: search, $options: "i" } }
-            ]
+            query.$or = [{ name: { $regex: search, $options: "i" } }, { description: { $regex: search, $options: "i" } }]
         }
         if (status && status !== "all") {
             query.status = status
@@ -63,7 +61,7 @@ export async function GET(req: NextRequest) {
 
         const formattedItems = items.map((item: any) => ({
             ...item,
-            id: item._id.toString()
+            id: item._id.toString(),
         }))
 
         const total = await RaceModel.countDocuments(query)
@@ -72,7 +70,7 @@ export async function GET(req: NextRequest) {
             items: formattedItems,
             total,
             page,
-            limit
+            limit,
         })
     } catch (error) {
         console.error("Races GET error:", error)
@@ -90,9 +88,9 @@ export async function POST(req: NextRequest) {
         // Normalize traits for Mongoose
         if (body.traits && Array.isArray(body.traits)) {
             body.traits = body.traits.map((t: any) => ({
-                name: (t.name && t.name.trim() !== "") ? t.name : "Traço Racial",
+                name: t.name && t.name.trim() !== "" ? t.name : "Traço Racial",
                 level: t.level || 1,
-                description: t.description
+                description: t.description,
             }))
         }
 
@@ -100,6 +98,17 @@ export async function POST(req: NextRequest) {
         await dbConnect()
 
         const race = await RaceModel.create(validated)
+
+        // Audit configuration
+        if (userId) {
+            await createAuditLog({
+                performedBy: userId,
+                action: "CREATE",
+                entity: "Race",
+                entityId: race._id.toString(),
+                newData: (race.toObject ? race.toObject() : race) as any,
+            })
+        }
 
         return NextResponse.json(race)
     } catch (error) {

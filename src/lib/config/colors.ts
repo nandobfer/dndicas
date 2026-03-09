@@ -187,6 +187,16 @@ export const entityColors = {
         text: "text-red-400",
         hex: rarityColors.artifact, // #EF4444
     },
+    Item: {
+        color: "slate",
+        mention: "bg-slate-500/10 text-slate-400 border-slate-400/20",
+        badge: "bg-slate-400/20 text-slate-400",
+        border: "border-slate-500/20",
+        hoverBorder: "hover:border-slate-500/40",
+        bgAlpha: "bg-slate-500/10",
+        text: "text-slate-400",
+        hex: rarityColors.common, // #9CA3AF
+    },
 } as const
 
 /**
@@ -451,7 +461,7 @@ export function getDamageColorByKey(key: string) {
 
     const damageType = Object.values(damageTypeColors).find((dt) => dt.keys.some((k) => normalize(k) === normalizedKey))
 
-    return damageType ? { text: damageType.text, bgAlpha: damageType.bgAlpha } : null
+    return damageType ? { text: damageType.text, bgAlpha: damageType.bgAlpha, hex: damageType.hex } : null
 }
 
 /**
@@ -627,6 +637,21 @@ export type FeedbackType = keyof typeof feedbackTypeConfig
 export type FeedbackPriority = keyof typeof feedbackPriorityConfig
 
 /**
+ * Armor and AC Type configurations for selectors.
+ */
+export const armorTypeConfig = {
+    nenhuma: { label: "Nenhuma", color: "common" as RarityColor },
+    leve: { label: "Leve", color: "uncommon" as RarityColor },
+    média: { label: "Média", color: "rare" as RarityColor },
+    pesada: { label: "Pesada", color: "veryRare" as RarityColor },
+} as const
+
+export const acTypeConfig = {
+    base: { label: "Base", color: "common" as RarityColor },
+    bonus: { label: "Bônus", color: "uncommon" as RarityColor },
+} as const
+
+/**
  * Maps rarity color names to Tailwind CSS bg/text class pairs.
  * Used for applying rarity-based colors to UI components.
  */
@@ -688,6 +713,28 @@ export function getLevelRarityVariant(level: number, type: "level" | "circle" = 
         if (level >= 18 && level <= 19) return "legendary"
         if (level === 20) return "artifact"
         return "common"
+    }
+}
+
+/**
+ * Maps a Item rarity string to a D&D rarity color key.
+ */
+export function getItemRarityVariant(rarity: string): RarityColor {
+    switch (rarity) {
+        case "comum":
+            return "common"
+        case "incomum":
+            return "uncommon"
+        case "raro":
+            return "rare"
+        case "muito raro":
+            return "veryRare"
+        case "lendário":
+            return "legendary"
+        case "artefato":
+            return "artifact"
+        default:
+            return "common"
     }
 }
 

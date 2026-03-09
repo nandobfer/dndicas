@@ -2,11 +2,11 @@
 
 import * as React from "react"
 import { GlassCard, GlassCardHeader, GlassCardTitle, GlassCardDescription, GlassCardContent } from "@/components/ui/glass-card"
-import { Users, FileText, Shield, Sparkles, Sword, Zap, Wand2, Backpack, Map, Fingerprint, TrendingUp, Activity, Clock, Skull } from "lucide-react"
+import { Users, Shield, Sparkles, Sword, Zap, Wand2, Backpack, Map, Fingerprint, TrendingUp, Activity, Clock, Skull } from "lucide-react"
 import { motion } from "framer-motion"
-import { colors, entityColors } from "@/lib/config/colors"
+import { entityColors } from "@/lib/config/colors"
 import { cn } from "@/core/utils"
-import { MiniBarChart, MiniLineChart } from "./_components/charts"
+import { MiniBarChart } from "./_components/charts"
 import { RulesEntityCard } from "./_components/rules-entity-card"
 import { TraitsEntityCard } from "./_components/traits-entity-card"
 import { FeatsEntityCard } from "./_components/feats-entity-card"
@@ -14,6 +14,7 @@ import { SpellsEntityCard } from "./_components/spells-entity-card"
 import { ClassesEntityCard } from "./_components/classes-entity-card"
 import { RacesEntityCard } from "./_components/races-entity-card"
 import { BackgroundsEntityCard } from "./_components/backgrounds-entity-card"
+import { ItemsEntityCard } from "./_components/items-entity-card"
 import { WipEntityCard } from "./_components/wip-entity-card"
 import { AnimatedNumber } from "@/components/ui/animated-number"
 import { InlineSearch } from "@/components/ui/inline-search"
@@ -106,7 +107,7 @@ const dndEntities = [
         title: "Itens",
         icon: Backpack,
         description: "Equipamentos, armas e itens mágicos",
-        component: WipEntityCard
+        component: ItemsEntityCard
     },
 
     {
