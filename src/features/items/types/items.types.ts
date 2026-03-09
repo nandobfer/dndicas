@@ -18,40 +18,41 @@ export interface ItemTrait {
 }
 
 export interface Item {
-    _id: string;
-    id: string; // Used in frontend, mapped from _id
-    name: string;
-    description: string;
-    source: string;
-    status: "active" | "inactive";
-    image?: string;
-    price?: string;
-    type: ItemType;
-    rarity: ItemRarity;
-    traits: ItemTrait[];
-    
+    _id: string
+    id: string // Used in frontend, mapped from _id
+    name: string
+    description: string
+    source: string
+    status: "active" | "inactive"
+    image?: string
+    price?: string
+    isMagic: boolean
+    type: ItemType
+    rarity: ItemRarity
+    traits: ItemTrait[]
+
     // Weapon specifics
-    properties?: ItemTrait[];
-    damageDice?: DiceValue;
-    damageType?: DamageType;
-    mastery?: string; // Talent-like rule field
-    
+    properties?: ItemTrait[]
+    damageDice?: DiceValue
+    damageType?: DamageType
+    mastery?: string // Talent-like rule field
+
     // Tool specifics
-    attributeUsed?: string;
-    
+    attributeUsed?: string
+
     // Armor specifics
-    ac?: number;
-    acType?: "base" | "bonus";
-    armorType?: ArmorType;
-    
+    ac?: number
+    acType?: "base" | "bonus"
+    armorType?: ArmorType
+
     // Shield specifics
-    acBonus?: number;
-    
+    acBonus?: number
+
     // Consumable specifics
-    effectDice?: DiceValue;
-    
-    createdAt: string;
-    updatedAt: string;
+    effectDice?: DiceValue
+
+    createdAt: string
+    updatedAt: string
 }
 
 export type CreateItemInput = Omit<Item, "_id" | "id" | "createdAt" | "updatedAt">;

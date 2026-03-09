@@ -9,11 +9,30 @@ import * as React from "react"
 import { useForm, useFieldArray, Controller } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { motion, AnimatePresence } from "framer-motion"
-import { 
-    Backpack, Plus, X, Pencil, Check, Sword, Shield, 
-    Hammer, Package, Coins, Anchor, Info, Tag, 
-    Search, Link, Library, Scale, Weight, Boxes,
-    Loader2, ScrollText, Sparkles
+import {
+    Backpack,
+    Plus,
+    X,
+    Pencil,
+    Check,
+    Sword,
+    Shield,
+    Hammer,
+    Package,
+    Coins,
+    Anchor,
+    Info,
+    Tag,
+    Search,
+    Link,
+    Library,
+    Scale,
+    Weight,
+    Boxes,
+    Loader2,
+    ScrollText,
+    Sparkles,
+    Wand2,
 } from "lucide-react"
 import { toast } from "sonner"
 import { cn } from "@/core/utils"
@@ -24,20 +43,14 @@ import { GlassSelector } from "@/components/ui/glass-selector"
 import { GlassConfirmClosing } from "@/components/ui/glass-confirm-closing"
 import { GlassStatusSwitch } from "@/components/ui/glass-status-switch"
 import { GlassEntityChooser } from "@/components/ui/glass-entity-chooser"
+import { GlassInlineEmptyState } from "@/components/ui/glass-inline-empty-state"
+import { GlassSwitch } from "@/components/ui/glass-switch"
 import { ImageAndDescriptionSection, TraitsSection } from "@/features/classes/components/shared-form-components"
 import { ENTITY_PROVIDERS } from "@/lib/config/entities"
 
 import { diceColors } from "@/lib/config/colors"
 import { createItemSchema, type CreateItemSchema } from "../api/validation"
-import { 
-    Item, 
-    ItemType, 
-    ItemRarity, 
-    ArmorType, 
-    DamageType,
-    CreateItemInput,
-    UpdateItemInput
-} from "../types/items.types"
+import { Item, ItemType, ItemRarity, ArmorType, DamageType, CreateItemInput, UpdateItemInput } from "../types/items.types"
 import { useCreateItem, useUpdateItem } from "../api/items-queries"
 
 // ── Shared Constants ─────────────────────────────────────────────────────────
@@ -77,20 +90,10 @@ const DICE_TYPE_OPTIONS = [
     { value: "d20", label: "d20", activeColor: diceColors.d20.bg, textColor: diceColors.d20.text },
 ]
 
-const DAMAGE_TYPE_OPTIONS = [
-    "cortante", "perfurante", "concussão", "ácido", "fogo", "frio", 
-    "relâmpago", "trovão", "veneno", "psíquico", "radiante", "necrótico", "força"
-].map(t => ({ value: t, label: t.charAt(0).toUpperCase() + t.slice(1) }))
-
-// ─── Empty States (following spell pattern) ───────────────────────────────────
-
-function GlassInlineEmptyState({ message }: { message: string }) {
-    return (
-        <div className="px-4 py-3 rounded-xl bg-white/[0.03] border border-white/5 text-xs text-white/30 italic">
-            {message}
-        </div>
-    )
-}
+const DAMAGE_TYPE_OPTIONS = ["cortante", "perfurante", "concussão", "ácido", "fogo", "frio", "relâmpago", "trovão", "veneno", "psíquico", "radiante", "necrótico", "força"].map((t) => ({
+    value: t,
+    label: t.charAt(0).toUpperCase() + t.slice(1),
+}))
 
 // ─── Props ───────────────────────────────────────────────────────────────────
 
@@ -146,12 +149,20 @@ export function ItemFormModal({ item, isOpen, onClose, onSuccess }: ItemFormModa
         },
     })
 
-    const { fields: traitFields, append: appendTrait, remove: removeTrait } = useFieldArray({
+    const {
+        fields: traitFields,
+        append: appendTrait,
+        remove: removeTrait,
+    } = useFieldArray({
         control,
         name: "traits" as any,
     })
 
-    const { fields: propertyFields, append: appendProperty, remove: removeProperty } = useFieldArray({
+    const {
+        fields: propertyFields,
+        append: appendProperty,
+        remove: removeProperty,
+    } = useFieldArray({
         control,
         name: "properties" as any,
     })
@@ -168,6 +179,7 @@ export function ItemFormModal({ item, isOpen, onClose, onSuccess }: ItemFormModa
                 type: item?.type ?? "qualquer",
                 rarity: item?.rarity ?? "comum",
                 price: item?.price ?? "",
+                isMagic: item?.isMagic ?? false,
                 traits: (item?.traits || []) as any,
                 properties: (item?.properties || []) as any,
                 mastery: item?.mastery ?? "",
@@ -231,23 +243,16 @@ export function ItemFormModal({ item, isOpen, onClose, onSuccess }: ItemFormModa
 
                         {/* Name + Source */}
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            <GlassInput 
-                                id="name" 
-                                label="Nome do Item" 
-                                placeholder="Ex: Espada Longa +1" 
-                                icon={<Backpack className="h-4 w-4" />} 
-                                required 
-                                error={errors.name?.message} 
-                                {...register("name")} 
+                            <GlassInput
+                                id="name"
+                                label="Nome do Item"
+                                placeholder="Ex: Espada Longa +1"
+                                icon={<Backpack className="h-4 w-4" />}
+                                required
+                                error={errors.name?.message}
+                                {...register("name")}
                             />
-                            <GlassInput 
-                                id="source" 
-                                label="Fonte" 
-                                placeholder="Ex: PHB pg. 150" 
-                                icon={<Link className="h-4 w-4" />} 
-                                error={errors.source?.message} 
-                                {...register("source")} 
-                            />
+                            <GlassInput id="source" label="Fonte" placeholder="Ex: PHB pg. 150" icon={<Link className="h-4 w-4" />} error={errors.source?.message} {...register("source")} />
                         </div>
 
                         {/* Image + Description Section */}
@@ -260,6 +265,26 @@ export function ItemFormModal({ item, isOpen, onClose, onSuccess }: ItemFormModa
                             entityId={item?._id}
                             placeholder="Descreva o item detalhadamente... (Suporta imagens e formatação)"
                         />
+
+                        {/* Magic Item Toggle */}
+                        <div className="flex items-center justify-between p-4 rounded-2xl border border-white/5 bg-white/5 relative overflow-hidden group">
+                            <div className="flex items-center gap-3">
+                                <div className={cn("p-2 rounded-xl transition-colors", watch("isMagic") ? "bg-blue-400/20 text-blue-400" : "bg-white/5 text-white/40")}>
+                                    <Wand2 className="h-5 w-5" />
+                                </div>
+                                <div className="space-y-0.5">
+                                    <h4 className="text-sm font-bold text-white tracking-tight uppercase">Item Mágico</h4>
+                                    <p className="text-[11px] text-white/40 font-medium leading-tight">Define se este item possui propriedades mágicas ou é mundano</p>
+                                </div>
+                            </div>
+                            <Controller
+                                control={control}
+                                name="isMagic"
+                                render={({ field: { value, onChange } }) => <GlassSwitch checked={value} onCheckedChange={onChange} disabled={isSubmitting} />}
+                            />
+                            {/* Decorative logic shine */}
+                            {watch("isMagic") && <motion.div layoutId="magic-glow" className="absolute inset-0 bg-blue-400/5 pointer-events-none" initial={{ opacity: 0 }} animate={{ opacity: 1 }} />}
+                        </div>
 
                         {/* Price (Following Spell Range pattern) */}
                         <div className="space-y-3">
@@ -278,23 +303,12 @@ export function ItemFormModal({ item, isOpen, onClose, onSuccess }: ItemFormModa
                                     </button>
                                 )}
                             </div>
-                            
+
                             <AnimatePresence>
                                 {isPriceActive ? (
-                                    <motion.div
-                                        initial={{ opacity: 0, height: 0 }}
-                                        animate={{ opacity: 1, height: "auto" }}
-                                        exit={{ opacity: 0, height: 0 }}
-                                        className="flex items-end gap-2"
-                                    >
+                                    <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} exit={{ opacity: 0, height: 0 }} className="flex items-end gap-2">
                                         <div className="flex-1">
-                                            <GlassInput
-                                                id="price"
-                                                placeholder="Ex: 15 po"
-                                                {...register("price")}
-                                                error={errors.price?.message}
-                                                autoFocus
-                                            />
+                                            <GlassInput id="price" placeholder="Ex: 15 po" {...register("price")} error={errors.price?.message} autoFocus />
                                         </div>
                                         <button
                                             type="button"
@@ -320,13 +334,7 @@ export function ItemFormModal({ item, isOpen, onClose, onSuccess }: ItemFormModa
                                 <Scale className="h-4 w-4" />
                                 Raridade
                             </label>
-                            <GlassSelector
-                                options={RARITY_OPTIONS}
-                                value={watch("rarity")}
-                                onChange={(val) => setValue("rarity", val as ItemRarity)}
-                                layoutId="item-rarity-form"
-                                fullWidth
-                            />
+                            <GlassSelector options={RARITY_OPTIONS} value={watch("rarity")} onChange={(val) => setValue("rarity", val as ItemRarity)} layoutId="item-rarity-form" fullWidth />
                         </div>
 
                         {/* Type (Single row, Qualqer first) */}
@@ -335,13 +343,7 @@ export function ItemFormModal({ item, isOpen, onClose, onSuccess }: ItemFormModa
                                 <Boxes className="h-4 w-4" />
                                 Tipo de Item
                             </label>
-                            <GlassSelector
-                                options={TYPE_OPTIONS}
-                                value={watch("type")}
-                                onChange={(val) => setValue("type", val as ItemType)}
-                                layoutId="item-type-form"
-                                fullWidth
-                            />
+                            <GlassSelector options={TYPE_OPTIONS} value={watch("type")} onChange={(val) => setValue("type", val as ItemType)} layoutId="item-type-form" fullWidth />
                         </div>
 
                         {/* Dynamic fields based on type */}
@@ -392,11 +394,7 @@ export function ItemFormModal({ item, isOpen, onClose, onSuccess }: ItemFormModa
                                             />
                                         </div>
 
-                                        <GlassInput 
-                                            label="Maestria" 
-                                            placeholder="Ex: Cleave" 
-                                            {...register("mastery" as any)} 
-                                        />
+                                        <GlassInput label="Maestria" placeholder="Ex: Cleave" {...register("mastery" as any)} />
                                     </div>
 
                                     {/* Properties (Rules) nested inside Weapon */}
@@ -429,12 +427,12 @@ export function ItemFormModal({ item, isOpen, onClose, onSuccess }: ItemFormModa
                                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                                         {selectedType === "armadura" ? (
                                             <>
-                                                <GlassInput 
-                                                    type="number" 
-                                                    label="Classe de Armadura (CA)" 
-                                                    placeholder="Ex: 15" 
-                                                    value={watch("ac") || ""} 
-                                                    onChange={(e) => setValue("ac", parseInt(e.target.value) || undefined)} 
+                                                <GlassInput
+                                                    type="number"
+                                                    label="Classe de Armadura (CA)"
+                                                    placeholder="Ex: 15"
+                                                    value={watch("ac") || ""}
+                                                    onChange={(e) => setValue("ac", parseInt(e.target.value) || undefined)}
                                                 />
                                                 <div className="space-y-2">
                                                     <label className="text-xs font-medium text-white/40">Tipo de Armadura</label>
@@ -449,7 +447,10 @@ export function ItemFormModal({ item, isOpen, onClose, onSuccess }: ItemFormModa
                                                 <div className="space-y-2">
                                                     <label className="text-xs font-medium text-white/40">Tipo de CA</label>
                                                     <GlassSelector
-                                                        options={[{ value: "base", label: "Base" }, { value: "bonus", label: "Bônus" }]}
+                                                        options={[
+                                                            { value: "base", label: "Base" },
+                                                            { value: "bonus", label: "Bônus" },
+                                                        ]}
                                                         value={watch("acType") || "base"}
                                                         onChange={(val) => setValue("acType", val as any)}
                                                         layoutId="ac-type-selector"
@@ -458,12 +459,12 @@ export function ItemFormModal({ item, isOpen, onClose, onSuccess }: ItemFormModa
                                                 </div>
                                             </>
                                         ) : (
-                                            <GlassInput 
-                                                type="number" 
-                                                label="Bônus de CA" 
-                                                placeholder="Ex: 2" 
-                                                value={watch("acBonus") || ""} 
-                                                onChange={(e) => setValue("acBonus", parseInt(e.target.value) || undefined)} 
+                                            <GlassInput
+                                                type="number"
+                                                label="Bônus de CA"
+                                                placeholder="Ex: 2"
+                                                value={watch("acBonus") || ""}
+                                                onChange={(e) => setValue("acBonus", parseInt(e.target.value) || undefined)}
                                             />
                                         )}
                                     </div>
@@ -478,24 +479,12 @@ export function ItemFormModal({ item, isOpen, onClose, onSuccess }: ItemFormModa
                                     <Hammer className="h-4 w-4 text-amber-400" />
                                     <h3 className="text-sm font-medium text-white/60">Atributos de Ferramenta</h3>
                                 </div>
-                                <GlassInput 
-                                    label="Atributo Associado" 
-                                    placeholder="Ex: Destreza, Inteligência..." 
-                                    {...register("attributeUsed" as any)} 
-                                />
+                                <GlassInput label="Atributo Associado" placeholder="Ex: Destreza, Inteligência..." {...register("attributeUsed" as any)} />
                             </div>
                         )}
 
                         {/* Public Traits Section (Global/Non-Weapon specific traits) */}
-                        <TraitsSection
-                            fields={traitFields}
-                            append={appendTrait}
-                            remove={removeTrait}
-                            control={control}
-                            isSubmitting={isSubmitting}
-                            traitsFieldName="traits"
-                            errors={errors}
-                        />
+                        <TraitsSection fields={traitFields} append={appendTrait} remove={removeTrait} control={control} isSubmitting={isSubmitting} traitsFieldName="traits" errors={errors} />
 
                         {/* Footer Actions */}
                         <div className="flex flex-col-reverse sm:flex-row justify-end gap-3 pt-6 border-t border-white/10">
@@ -512,7 +501,7 @@ export function ItemFormModal({ item, isOpen, onClose, onSuccess }: ItemFormModa
                                 className={cn(
                                     "flex flex-1 sm:flex-none items-center justify-center gap-2 px-6 py-2.5 rounded-lg text-sm font-medium transition-all shadow-lg active:scale-95",
                                     "bg-blue-500 text-white shadow-blue-500/20 hover:bg-blue-600",
-                                    isSubmitting && "opacity-50 cursor-not-allowed"
+                                    isSubmitting && "opacity-50 cursor-not-allowed",
                                 )}
                                 disabled={isSubmitting}
                             >

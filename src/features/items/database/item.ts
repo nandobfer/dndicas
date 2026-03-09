@@ -2,39 +2,40 @@ import mongoose, { Schema, Document, Model } from "mongoose";
 import { DiceValue, ItemType, ItemRarity, ArmorType, DamageType, ItemTrait } from "../types/items.types";
 
 export interface IItem extends Document {
-    _id: mongoose.Types.ObjectId;
-    name: string;
-    description: string;
-    source: string;
-    status: "active" | "inactive";
-    image?: string;
-    price?: string;
-    type: ItemType;
-    rarity: ItemRarity;
-    traits: ItemTrait[];
-    
+    _id: mongoose.Types.ObjectId
+    name: string
+    description: string
+    source: string
+    status: "active" | "inactive"
+    image?: string
+    price?: string
+    isMagic: boolean
+    type: ItemType
+    rarity: ItemRarity
+    traits: ItemTrait[]
+
     // Weapon specifics
-    properties?: ItemTrait[];
-    damageDice?: DiceValue;
-    damageType?: DamageType;
-    mastery?: string;
-    
+    properties?: ItemTrait[]
+    damageDice?: DiceValue
+    damageType?: DamageType
+    mastery?: string
+
     // Tool specifics
-    attributeUsed?: string;
-    
+    attributeUsed?: string
+
     // Armor specifics
-    ac?: number;
-    acType?: "base" | "bonus";
-    armorType?: ArmorType;
-    
+    ac?: number
+    acType?: "base" | "bonus"
+    armorType?: ArmorType
+
     // Shield specifics
-    acBonus?: number;
-    
+    acBonus?: number
+
     // Consumable specifics
-    effectDice?: DiceValue;
-    
-    createdAt: Date;
-    updatedAt: Date;
+    effectDice?: DiceValue
+
+    createdAt: Date
+    updatedAt: Date
 }
 
 const DiceValueSchema = new Schema(
@@ -42,8 +43,8 @@ const DiceValueSchema = new Schema(
         quantidade: { type: Number, required: true, min: 1 },
         tipo: { type: String, required: true, enum: ["d4", "d6", "d8", "d10", "d12", "d20"] },
     },
-    { _id: false }
-);
+    { _id: false },
+)
 
 const ItemTraitSchema = new Schema(
     {
@@ -51,8 +52,8 @@ const ItemTraitSchema = new Schema(
         level: { type: Number, default: 1 },
         description: { type: String, required: true, maxlength: 5000 },
     },
-    { _id: true }
-);
+    { _id: true },
+)
 
 const ItemSchema = new Schema<IItem>(
     {
@@ -80,6 +81,7 @@ const ItemSchema = new Schema<IItem>(
         },
         image: { type: String, default: "" },
         price: { type: String, default: "" },
+        isMagic: { type: Boolean, default: false },
         type: {
             type: String,
             required: [true, "Tipo de item é obrigatório"],
@@ -91,7 +93,7 @@ const ItemSchema = new Schema<IItem>(
             enum: ["comum", "incomum", "raro", "muito raro", "lendário", "artefato"],
         },
         traits: { type: [ItemTraitSchema], default: [] },
-        
+
         // Weapon specifics
         properties: { type: [ItemTraitSchema], default: [] },
         damageDice: { type: DiceValueSchema },
@@ -100,21 +102,21 @@ const ItemSchema = new Schema<IItem>(
             enum: ["cortante", "perfurante", "concussão", "ácido", "fogo", "frio", "relâmpago", "trovão", "veneno", "psíquico", "radiante", "necrótico", "força"],
         },
         mastery: { type: Schema.Types.Mixed }, // Similar to background featId or spell rule reference
-        
+
         // Tool specifics
         attributeUsed: {
             type: String,
             enum: ["Força", "Destreza", "Constituição", "Inteligência", "Sabedoria", "Carisma"],
         },
-        
+
         // Armor specifics
         ac: { type: Number },
         acType: { type: String, enum: ["base", "bonus"] },
         armorType: { type: String, enum: ["leve", "média", "pesada", "nenhuma"] },
-        
+
         // Shield specifics
         acBonus: { type: Number },
-        
+
         // Consumable specifics
         effectDice: { type: DiceValueSchema },
     },
@@ -127,13 +129,13 @@ const ItemSchema = new Schema<IItem>(
                 const result = {
                     ...ret,
                     id: String(ret._id),
-                };
-                return result;
+                }
+                return result
             },
         },
         toObject: { virtuals: true },
-    }
-);
+    },
+)
 
 // Indexes
 ItemSchema.index({ name: "text", description: "text", source: "text" });

@@ -18,30 +18,31 @@ export const createItemSchema = z.object({
     status: z.enum(["active", "inactive"]),
     image: z.string().optional().default(""),
     price: z.string().optional().default(""),
+    isMagic: z.boolean().default(false),
     type: z.enum(["ferramenta", "arma", "armadura", "escudo", "consumível", "munição", "qualquer"]),
     rarity: z.enum(["comum", "incomum", "raro", "muito raro", "lendário", "artefato"]),
     traits: z.array(itemTraitSchema).default([]),
-    
+
     // Weapon specifics
     properties: z.array(itemTraitSchema).optional().default([]),
     damageDice: diceValueSchema.optional(),
     damageType: z.enum(["cortante", "perfurante", "concussão", "ácido", "fogo", "frio", "relâmpago", "trovão", "veneno", "psíquico", "radiante", "necrótico", "força"]).optional(),
     mastery: z.any().optional(),
-    
+
     // Tool specifics
     attributeUsed: z.enum(["Força", "Destreza", "Constituição", "Inteligência", "Sabedoria", "Carisma"]).optional(),
-    
+
     // Armor specifics
     ac: z.number().optional(),
     acType: z.enum(["base", "bonus"]).optional(),
     armorType: z.enum(["leve", "média", "pesada", "nenhuma"]).optional(),
-    
+
     // Shield specifics
     acBonus: z.number().optional(),
-    
+
     // Consumable specifics
     effectDice: diceValueSchema.optional(),
-});
+})
 
 export const updateItemSchema = createItemSchema.partial().omit({ name: true }).extend({
     name: z.string().min(2).max(100).optional()
