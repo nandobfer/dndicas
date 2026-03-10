@@ -58,8 +58,8 @@ function BackgroundVisualHeader({ image, name, description }: { image?: string; 
             </div>
             {image && (
                 <div className="w-full md:w-2/5 shrink-0">
-                    <div className="aspect-square rounded-xl border border-white/10 bg-white/5 overflow-hidden shadow-2xl group/image relative">
-                        <img src={image} alt={name} className="w-full h-full object-cover transition-transform duration-500 group-hover/image:scale-110" />
+                    <div className="aspect-square rounded-xl border border-white/10 bg-white/5 overflow-hidden shadow-2xl group/image relative bg-[image:var(--background-image-paper-texture)] bg-cover bg-center">
+                        <img src={image} alt={name} className="w-full h-full object-cover transition-transform duration-500 group-hover/image:scale-110 mix-blend-multiply" />
                         <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent opacity-0 group-hover/image:opacity-100 transition-opacity duration-300" />
                     </div>
                 </div>

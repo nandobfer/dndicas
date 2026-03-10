@@ -36,6 +36,8 @@
   --animate-accordion-up: accordion-up 0.2s ease-out;
   --animate-gradient: gradient 3s ease infinite;
 
+  --background-image-paper-texture: url('/papel.webp');
+
   @keyframes accordion-down {
     from { height: 0; }
     to { height: var(--radix-accordion-content-height); }
