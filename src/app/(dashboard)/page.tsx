@@ -23,50 +23,8 @@ import Link from "next/link"
 
 // Types for the stats
 interface DashboardStats {
-    users: {
-        total: number
-        active: number
-        growth: Array<{ date: string; count: number }>
-    }
-    auditLogs: {
-        total: number
-        activity: Array<{ date: string; count: number }>
-    }
-    rules: {
-        total: number
-        active: number
-        growth: Array<{ date: string; count: number }>
-    }
-    traits: {
-        total: number
-        active: number
-        growth: Array<{ date: string; count: number }>
-    }
-    feats: {
-        total: number
-        active: number
-        growth: Array<{ date: string; count: number }>
-    }
-    spells: {
-        total: number
-        active: number
-        growth: Array<{ date: string; count: number }>
-    }
-    classes: {
-        total: number
-        active: number
-        growth: Array<{ date: string; count: number }>
-    }
-    backgrounds: {
-        total: number
-        active: number
-        growth: Array<{ date: string; count: number }>
-    }
-    races: {
-        total: number
-        active: number
-        growth: Array<{ date: string; count: number }>
-    }
+    active: number
+    growth: Array<{ date: string; count: number }>
 }
 
 const dndEntities = [
@@ -75,12 +33,12 @@ const dndEntities = [
         title: "Classes",
         icon: Sword,
         description: "Classes de personagem (Guerreiro, Mago, etc.)",
-        component: ClassesEntityCard
+        component: ClassesEntityCard,
     },
     {
         id: "races",
         title: "Raças",
-        component: RacesEntityCard
+        component: RacesEntityCard,
     },
     { id: "spells", title: "Magias", component: SpellsEntityCard },
     {
@@ -88,26 +46,26 @@ const dndEntities = [
         title: "Origens",
         icon: Map,
         description: "Antecedentes e origens dos heróis",
-        component: BackgroundsEntityCard
+        component: BackgroundsEntityCard,
     },
     {
         id: "traits",
         title: "Habilidades",
         icon: Sparkles,
         description: "Traits e habilidades de classe/raça",
-        component: TraitsEntityCard
+        component: TraitsEntityCard,
     },
     {
         id: "feats",
         title: "Talentos",
-        component: FeatsEntityCard
+        component: FeatsEntityCard,
     },
     {
         id: "items",
         title: "Itens",
         icon: Backpack,
         description: "Equipamentos, armas e itens mágicos",
-        component: ItemsEntityCard
+        component: ItemsEntityCard,
     },
 
     {
@@ -115,46 +73,78 @@ const dndEntities = [
         title: "Monstros",
         icon: Skull,
         description: "Criaturas, feras e adversários",
-        component: WipEntityCard
-    }
+        component: WipEntityCard,
+    },
 ]
 
-export default function DashboardPage() {
-    const [stats, setStats] = React.useState<DashboardStats | null>(null)
+const UserStatCard = ({ index }: { index: number }) => {
+    const [stats, setStats] = React.useState<{ active: number; growth: any[] } | null>(null)
     const [loading, setLoading] = React.useState(true)
 
     React.useEffect(() => {
-        const fetchStats = async () => {
-            try {
-                const res = await fetch("/api/dashboard/stats")
-                const data = await res.json()
+        fetch("/api/stats/users")
+            .then((res) => res.json())
+            .then((data) => {
                 if (!data.error) setStats(data)
-            } catch (err) {
-                console.error("Failed to fetch stats", err)
-            } finally {
-                setLoading(false)
-            }
-        }
-        fetchStats()
+            })
+            .finally(() => setLoading(false))
     }, [])
 
+    return (
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 + index * 0.05 }} whileHover={{ y: -4 }}>
+            <Link href="/users">
+                <GlassCard className={cn("h-full group transition-all overflow-hidden cursor-pointer hover:bg-white/[0.04]", entityColors.Usuário.border, entityColors.Usuário.hoverBorder)}>
+                    <GlassCardHeader className="pb-2">
+                        <div className="flex items-center justify-between">
+                            <div className="space-y-1">
+                                <GlassCardTitle className="text-white/70 text-sm font-medium flex items-center gap-2">
+                                    <Users className={cn("h-4 w-4", entityColors.Usuário.text)} />
+                                    Comunidade
+                                </GlassCardTitle>
+                                <div className="text-3xl font-bold text-white leading-none">
+                                    <AnimatedNumber value={loading ? 0 : stats?.active || 0} formatter={(val) => `${Math.floor(val)}`} />
+                                </div>
+                            </div>
+                            <div
+                                className={cn(
+                                    "p-3 rounded-xl border transition-colors",
+                                    entityColors.Usuário.bgAlpha,
+                                    entityColors.Usuário.border,
+                                    "group-hover:bg-white/10 group-hover:text-white",
+                                )}
+                            >
+                                <TrendingUp className={cn("h-6 w-6", entityColors.Usuário.text, "group-hover:text-white")} />
+                            </div>
+                        </div>
+                    </GlassCardHeader>
+                    <GlassCardContent>
+                        <div className="space-y-4">
+                            <div className="flex items-end justify-between">
+                                <p className="text-xs text-white/40">Usuários ativos e crescimento semanal</p>
+                                <div className={cn("text-xs font-medium px-2 py-0.5 rounded-full border flex items-center gap-1", entityColors.Usuário.badge, entityColors.Usuário.border)}>
+                                    <span>+</span>
+                                    <AnimatedNumber value={loading ? 0 : stats?.active || 0} formatter={(val) => `${Math.floor(val)}`} />
+                                    <span>ativos</span>
+                                </div>
+                            </div>
+                            {stats?.growth && <MiniBarChart data={stats.growth} color={entityColors.Usuário.hex} />}
+                        </div>
+                    </GlassCardContent>
+                </GlassCard>
+            </Link>
+        </motion.div>
+    )
+}
+
+export default function DashboardPage() {
     return (
         <div className="flex flex-col gap-8 pb-12">
             {/* Header */}
             <div className="flex flex-col items-center justify-center text-center space-y-4 pt-8 md:pt-12">
-                <motion.div
-                    initial={{ opacity: 0, scale: 0.9 }}
-                    animate={{ opacity: 1, scale: 1 }}
-                    className="relative w-full md:w-[500px] aspect-[2/1]"
-                >
+                <motion.div initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} className="relative w-full md:w-[500px] aspect-[2/1]">
                     <Image src="/dndicas-logo.webp" alt="Dungeons & Dicas" fill className="object-contain" priority />
                 </motion.div>
-                <motion.p
-                    initial={{ opacity: 0, y: 10 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: 0.1 }}
-                    className="text-white/60 text-lg md:text-xl max-w-2xl px-4"
-                >
+                <motion.p initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }} className="text-white/60 text-lg md:text-xl max-w-2xl px-4">
                     Dungeons & Dicas: Um catálogo em português, para mestres e jogadores encontrarem rapidamente as informações que precisam
                 </motion.p>
             </div>
@@ -168,24 +158,7 @@ export default function DashboardPage() {
             <div className="space-y-4">
                 <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
                     {dndEntities.map(({ component: Card, id, ...entity }, index) => {
-                        const entityStats =
-                            id === "rules"
-                                ? stats?.rules
-                                : id === "traits"
-                                  ? stats?.traits
-                                  : id === "feats"
-                                    ? stats?.feats
-                                    : id === "spells"
-                                      ? stats?.spells
-                                      : id === "classes"
-                                        ? stats?.classes
-                                        : id === "backgrounds"
-                                          ? stats?.backgrounds
-                                          : id === "races"
-                                            ? stats?.races
-                                            : undefined
-
-                        return <Card key={id} {...entity} index={index} stats={entityStats} loading={loading} />
+                        return <Card key={id} {...entity} index={index} />
                     })}
                 </div>
             </div>
@@ -193,65 +166,9 @@ export default function DashboardPage() {
             {/* Real Data Stats */}
             <div className="grid gap-6 md:grid-cols-2">
                 {/* Users Stat */}
-                <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }} whileHover={{ y: -4 }}>
-                    <Link href="/users">
-                        <GlassCard
-                            className={cn(
-                                "h-full group transition-all overflow-hidden cursor-pointer hover:bg-white/[0.04]",
-                                entityColors.Usuário.border,
-                                entityColors.Usuário.hoverBorder
-                            )}
-                        >
-                            <GlassCardHeader className="pb-2">
-                                <div className="flex items-center justify-between">
-                                    <div className="space-y-1">
-                                        <GlassCardTitle className="text-white/70 text-sm font-medium flex items-center gap-2">
-                                            <Users className={cn("h-4 w-4", entityColors.Usuário.text)} />
-                                            Comunidade
-                                        </GlassCardTitle>
-                                        <div className="text-3xl font-bold text-white leading-none">
-                                            <AnimatedNumber value={loading ? 0 : stats?.users.total || 0} formatter={(val) => `${Math.floor(val)}`} />
-                                        </div>
-                                    </div>
-                                    <div
-                                        className={cn(
-                                            "p-3 rounded-xl border transition-colors",
-                                            entityColors.Usuário.bgAlpha,
-                                            entityColors.Usuário.border,
-                                            "group-hover:bg-white/10 group-hover:text-white"
-                                        )}
-                                    >
-                                        <TrendingUp className={cn("h-6 w-6", entityColors.Usuário.text, "group-hover:text-white")} />
-                                    </div>
-                                </div>
-                            </GlassCardHeader>
-                            <GlassCardContent>
-                                <div className="space-y-4">
-                                    <div className="flex items-end justify-between">
-                                        <p className="text-xs text-white/40">Usuários ativos e crescimento semanal</p>
-                                        <div
-                                            className={cn(
-                                                "text-xs font-medium px-2 py-0.5 rounded-full border flex items-center gap-1",
-                                                entityColors.Usuário.badge,
-                                                entityColors.Usuário.border
-                                            )}
-                                        >
-                                            <span>+</span>
-                                            <AnimatedNumber
-                                                value={loading ? 0 : stats?.users.active || 0}
-                                                formatter={(val) => `${Math.floor(val)}`}
-                                            />
-                                            <span>ativos</span>
-                                        </div>
-                                    </div>
-                                    {stats?.users.growth && <MiniBarChart data={stats.users.growth} color={entityColors.Usuário.hex} />}
-                                </div>
-                            </GlassCardContent>
-                        </GlassCard>
-                    </Link>
-                </motion.div>
+                <UserStatCard index={0} />
 
-                <RulesEntityCard stats={stats?.rules} loading={loading} index={1} />
+                <RulesEntityCard index={1} />
             </div>
 
             {/* Full Width Info */}
