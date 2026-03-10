@@ -96,7 +96,7 @@ export default function GenericEntityPage({ entityTypeKey }: GenericEntityPagePr
         const currentName = decodeURIComponent(slug).replace(/-/g, " ")
 
         if (newName && newName.toLowerCase() !== currentName.toLowerCase()) {
-            const newSlug = encodeURIComponent(newName.toLowerCase().replace(/\s+/g, "-"))
+            const newSlug = encodeURIComponent(newName.toLowerCase().trim().replace(/\s+/g, "-"))
             const route = routeMap[entityTypeKey]
             router.push(`/${route}/${newSlug}`)
         } else {
@@ -111,7 +111,9 @@ export default function GenericEntityPage({ entityTypeKey }: GenericEntityPagePr
         queryKey,
         queryFn: async () => {
             // Decodes slug to possible name (slug is the name from URL)
-            const name = decodeURIComponent(slug).replace(/-/g, " ")
+            // Slug is already URL encoded, so we decode it once, then replace - with space
+            const decodedSlug = decodeURIComponent(slug)
+            const name = decodedSlug.replace(/-/g, " ")
 
             // 1. First, search to get the basic record and ID
             const endpoint = config.provider!.endpoint()
@@ -122,7 +124,15 @@ export default function GenericEntityPage({ entityTypeKey }: GenericEntityPagePr
             const isSearchEndpoint = endpoint.endsWith("/search")
             const searchParam = isSearchEndpoint ? "q" : "search"
 
-            const searchRes = await fetch(`${endpoint}${separator}${searchParam}=${encodeURIComponent(name)}&searchField=name`)
+            // Ensure the name is properly encoded for the query param
+            // We use both name (with spaces) AND decodedSlug (with potential dashes) to ensure match
+            const queryName = name.trim()
+
+            // Escape special regex characters in the query name for the search endpoint
+            // since the backend might be using $regex without escaping
+            const escapedQueryName = queryName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
+
+            const searchRes = await fetch(`${endpoint}${separator}${searchParam}=${encodeURIComponent(escapedQueryName)}&searchField=name`)
 
             if (!searchRes.ok) return null
             const searchData = await searchRes.json()
@@ -130,17 +140,14 @@ export default function GenericEntityPage({ entityTypeKey }: GenericEntityPagePr
             // The search might return one or more items, pick the best match
             const items = Array.isArray(searchData)
                 ? searchData
-                : searchData.items ||
-                  searchData.spells ||
-                  searchData.traits ||
-                  searchData.rules ||
-                  searchData.feats ||
-                  searchData.backgrounds ||
-                  searchData.classes ||
-                  []
+                : searchData.items || searchData.spells || searchData.traits || searchData.rules || searchData.feats || searchData.backgrounds || searchData.classes || []
 
-            // Find exact name match
-            const basicItem = items.find((i: any) => (i.name || i.label).toLowerCase() === name.toLowerCase()) || items[0]
+            // Find exact name match OR match against the decoded slug (which might contain dashes that were original)
+            const basicItem =
+                items.find((i: any) => {
+                    const itemName = (i.name || i.label || "").toLowerCase().trim()
+                    return itemName === name.toLowerCase().trim() || itemName === decodedSlug.toLowerCase().trim()
+                }) || items[0]
 
             if (!basicItem) return null
 
