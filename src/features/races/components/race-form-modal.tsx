@@ -71,14 +71,14 @@ interface VariationTabItemProps {
     disabled?: boolean
 }
 
-function VariationTabItem({ variation, index, isRenaming, renameValue, onStartRename, onRenameChange, onConfirmRename, onCancelRename, onDelete, disabled = false }: VariationTabItemProps) {
+function VariationTabItem({ variation, index, isRenaming, renameValue, onStartRename, onRenameChange, onConfirmRename, onCancelRename, onDelete, disabled = false, onColorChange }: VariationTabItemProps & { onColorChange?: (index: number, color: string) => void }) {
     return (
         <motion.div
             layout
             initial={{ opacity: 0, x: -8 }}
             animate={{ opacity: 1, x: 0 }}
             exit={{ opacity: 0, x: -8 }}
-            className="flex items-center gap-2 px-3 py-2 rounded-lg bg-white/5 border border-white/10 group"
+            className="flex items-center gap-2 px-3 py-2 rounded-lg bg-white/5 border border-white/10 group h-12"
             style={{ borderColor: variation.color ? `${variation.color}40` : undefined }}
         >
             {isRenaming ? (
@@ -107,17 +107,26 @@ function VariationTabItem({ variation, index, isRenaming, renameValue, onStartRe
                         {variation.source && (
                             <span className="px-1.5 py-0.5 rounded bg-white/5 border border-white/10 text-[9px] font-bold text-white/40 uppercase tracking-tight truncate">{variation.source}</span>
                         )}
-                        {variation.color && <div className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: variation.color }} />}
                     </div>
+
                     {!disabled && (
-                        <>
+                        <div className="flex items-center gap-1.5">
+                            {onColorChange && (
+                                <div className="scale-75 origin-right">
+                                    <GlassColorPicker 
+                                        value={variation.color}
+                                        onChange={(color) => onColorChange(index, color)}
+                                        disabled={disabled}
+                                    />
+                                </div>
+                            )}
                             <button type="button" onClick={() => onStartRename(index, variation.name)} className="text-white/30 hover:text-white/60 transition-colors opacity-0 group-hover:opacity-100">
                                 <Pencil className="h-3.5 w-3.5" />
                             </button>
                             <button type="button" onClick={() => onDelete(index)} className="text-white/30 hover:text-rose-400 transition-colors opacity-0 group-hover:opacity-100">
                                 <X className="h-3.5 w-3.5" />
                             </button>
-                        </>
+                        </div>
                     )}
                 </>
             )}
@@ -467,6 +476,11 @@ export function RaceFormModal({ race, isOpen, onClose, onSuccess }: RaceFormModa
 
     const handleCancelRename = () => setRenamingIndex(null)
 
+    const handleUpdateVariationColor = (index: number, color: string) => {
+        const updated = variations.map((v, i) => (i === index ? { ...v, color } : v))
+        setValue("variations", updated)
+    }
+
     const handleCloseAttempt = () => {
         if (isDirty) {
             setShowConfirmClose(true)
@@ -686,6 +700,7 @@ export function RaceFormModal({ race, isOpen, onClose, onSuccess }: RaceFormModa
                                                                 index={i}
                                                                 isRenaming={renamingIndex === i}
                                                                 renameValue={renameValue}
+                                                                onColorChange={handleUpdateVariationColor}
                                                                 onStartRename={handleStartRename}
                                                                 onRenameChange={setRenameValue}
                                                                 onConfirmRename={handleConfirmRename}

@@ -144,14 +144,14 @@ interface SubclassTabItemProps {
     disabled?: boolean
 }
 
-function SubclassTabItem({ subclass, index, isRenaming, renameValue, onStartRename, onRenameChange, onConfirmRename, onCancelRename, onDelete, disabled = false }: SubclassTabItemProps) {
+function SubclassTabItem({ subclass, index, isRenaming, renameValue, onStartRename, onRenameChange, onConfirmRename, onCancelRename, onDelete, disabled = false, onColorChange }: SubclassTabItemProps & { onColorChange?: (index: number, color: string) => void }) {
     return (
         <motion.div
             layout
             initial={{ opacity: 0, x: -8 }}
             animate={{ opacity: 1, x: 0 }}
             exit={{ opacity: 0, x: -8 }}
-            className="flex items-center gap-2 px-3 py-2 rounded-lg bg-white/5 border border-white/10 group"
+            className="flex items-center gap-2 px-3 py-2 rounded-lg bg-white/5 border border-white/10 group h-12"
             style={{ borderColor: subclass.color ? `${subclass.color}40` : undefined }}
         >
             {isRenaming ? (
@@ -181,17 +181,26 @@ function SubclassTabItem({ subclass, index, isRenaming, renameValue, onStartRena
                         {subclass.source && (
                             <span className="px-1.5 py-0.5 rounded bg-white/5 border border-white/10 text-[9px] font-bold text-white/40 uppercase tracking-tight truncate">{subclass.source}</span>
                         )}
-                        {subclass.color && <div className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: subclass.color }} />}
                     </div>
+                    
                     {!disabled && (
-                        <>
+                        <div className="flex items-center gap-1.5">
+                            {onColorChange && (
+                                <div className="scale-75 origin-right">
+                                    <GlassColorPicker 
+                                        value={subclass.color} 
+                                        onChange={(color) => onColorChange(index, color)} 
+                                        disabled={disabled}
+                                    />
+                                </div>
+                            )}
                             <button type="button" onClick={() => onStartRename(index, subclass.name)} className="text-white/30 hover:text-white/60 transition-colors opacity-0 group-hover:opacity-100">
                                 <Pencil className="h-3.5 w-3.5" />
                             </button>
                             <button type="button" onClick={() => onDelete(index)} className="text-white/30 hover:text-rose-400 transition-colors opacity-0 group-hover:opacity-100">
                                 <X className="h-3.5 w-3.5" />
                             </button>
-                        </>
+                        </div>
                     )}
                 </>
             )}
@@ -372,6 +381,11 @@ export function ClassFormModal({ characterClass, isOpen, onClose, onSuccess }: C
     }
 
     const handleCancelRename = () => setRenamingIndex(null)
+
+    const handleUpdateSubclassColor = (index: number, color: string) => {
+        const updated = subclasses.map((s, i) => (i === index ? { ...s, color } : s))
+        setValue("subclasses", updated)
+    }
 
     const handleCloseAttempt = () => {
         if (isDirty) {
@@ -799,6 +813,7 @@ export function ClassFormModal({ characterClass, isOpen, onClose, onSuccess }: C
                                                                 onConfirmRename={handleConfirmRename}
                                                                 onCancelRename={handleCancelRename}
                                                                 onDelete={handleDeleteSubclass}
+                                                                onColorChange={handleUpdateSubclassColor}
                                                                 disabled={isSubmitting}
                                                             />
                                                         ))}
