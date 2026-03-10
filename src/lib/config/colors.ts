@@ -31,6 +31,12 @@ export const rarityColors = {
     legendary: "#F59E0B",
     /** Artifact items - danger state (DELETE actions, admins) */
     artifact: "#EF4444",
+    /** Mythic items - peak performance state */
+    mythic: "#EC4899",
+    /** Divine items - celestial state */
+    divine: "#06B6D4",
+    /** Ethereal items - mystical state */
+    ethereal: "#FB923C",
 } as const
 
 /**
@@ -138,14 +144,14 @@ export const entityColors = {
         hex: rarityColors.common // #9CA3AF
     },
     Talento: {
-        color: "amber",
-        mention: "bg-amber-500/10 text-amber-400 border-amber-400/20",
-        badge: "bg-amber-400/20 text-amber-400",
-        border: "border-amber-500/20",
-        hoverBorder: "hover:border-amber-500/40",
-        bgAlpha: "bg-amber-500/10",
-        text: "text-amber-400",
-        hex: rarityColors.legendary // #F59E0B
+        color: "pink",
+        mention: "bg-pink-500/10 text-pink-400 border-pink-400/20",
+        badge: "bg-pink-400/20 text-pink-400",
+        border: "border-pink-500/20",
+        hoverBorder: "hover:border-pink-500/40",
+        bgAlpha: "bg-pink-500/10",
+        text: "text-pink-400",
+        hex: rarityColors.mythic // #EC4899
     },
     Origem: {
         color: "blue",
@@ -188,14 +194,14 @@ export const entityColors = {
         hex: rarityColors.artifact // #EF4444
     },
     Item: {
-        color: "purple",
-        mention: "bg-purple-500/10 text-purple-400 border-purple-400/20",
-        badge: "bg-purple-400/20 text-purple-400",
-        border: "border-purple-500/20",
-        hoverBorder: "hover:border-purple-500/40",
-        bgAlpha: "bg-purple-500/10",
-        text: "text-purple-400",
-        hex: rarityColors.veryRare // #8B5CF6
+        color: "cyan",
+        mention: "bg-cyan-500/10 text-cyan-400 border-cyan-400/20",
+        badge: "bg-cyan-400/20 text-cyan-400",
+        border: "border-cyan-500/20",
+        hoverBorder: "hover:border-cyan-500/40",
+        bgAlpha: "bg-cyan-500/10",
+        text: "text-cyan-400",
+        hex: rarityColors.divine // #06B6D4
     }
 } as const
 
@@ -662,6 +668,9 @@ export const rarityToTailwind: Record<RarityColor, { bg: string; text: string; b
     veryRare: { bg: "bg-purple-400/20", text: "text-purple-400", border: "border-purple-400/20" },
     legendary: { bg: "bg-amber-400/20", text: "text-amber-400", border: "border-amber-400/20" },
     artifact: { bg: "bg-red-400/20", text: "text-red-400", border: "border-red-400/20" },
+    mythic: { bg: "bg-pink-400/20", text: "text-pink-400", border: "border-pink-400/20" },
+    divine: { bg: "bg-cyan-400/20", text: "text-cyan-400", border: "border-cyan-400/20" },
+    ethereal: { bg: "bg-orange-400/20", text: "text-orange-400", border: "border-orange-400/20" },
 } as const
 
 /**
