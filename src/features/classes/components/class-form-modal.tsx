@@ -36,6 +36,7 @@ import { GlassConfirmClosing } from "@/components/ui/glass-confirm-closing"
 import { GlassStatusSwitch } from "@/components/ui/glass-status-switch"
 import { GlassImageUploader } from "@/components/ui/glass-image-uploader"
 import { GlassInlineEmptyState } from "@/components/ui/glass-inline-empty-state"
+import { GlassColorPicker } from "@/components/ui/glass-color-picker"
 import { RichTextEditor } from "@/features/rules/components/rich-text-editor"
 
 import { attributeColors, diceColors, rarityColors, type AttributeType } from "@/lib/config/colors"
@@ -222,6 +223,7 @@ export function ClassFormModal({ characterClass, isOpen, onClose, onSuccess }: C
     // Subclass add field
     const [newSubclassName, setNewSubclassName] = React.useState("")
     const [newSubclassSource, setNewSubclassSource] = React.useState("")
+    const [newSubclassColor, setNewSubclassColor] = React.useState<string>(SUBCLASS_COLORS[0])
     const [renamingIndex, setRenamingIndex] = React.useState<number | null>(null)
     const [renameValue, setRenameValue] = React.useState("")
 
@@ -300,10 +302,10 @@ export function ClassFormModal({ characterClass, isOpen, onClose, onSuccess }: C
                 subclasses: (characterClass?.subclasses || []).map((s) => ({
                     ...s,
                     spellcasting: Boolean(s.spellcasting),
-                    spells: s.spells ?? []
+                    spells: s.spells ?? [],
                 })),
                 traits: characterClass?.traits ?? [],
-                image: characterClass?.image ?? ""
+                image: characterClass?.image ?? "",
             })
         }
     }, [isOpen, characterClass, reset])
@@ -318,12 +320,11 @@ export function ClassFormModal({ characterClass, isOpen, onClose, onSuccess }: C
         if (!nameTrimmed) return
 
         const sourceTrimmed = newSubclassSource.trim()
-        const color = SUBCLASS_COLORS[subclasses.length % SUBCLASS_COLORS.length]
 
         const newSubclass: CreateClassSchema["subclasses"][number] = {
             name: nameTrimmed,
             source: sourceTrimmed || undefined,
-            color: color,
+            color: newSubclassColor,
             spellcasting: false,
             spellcastingAttribute: undefined,
             spells: [],
@@ -335,6 +336,7 @@ export function ClassFormModal({ characterClass, isOpen, onClose, onSuccess }: C
         setValue("subclasses", [...subclasses, newSubclass])
         setNewSubclassName("")
         setNewSubclassSource("")
+        setNewSubclassColor(SUBCLASS_COLORS[(subclasses.length + 1) % SUBCLASS_COLORS.length])
 
         // Auto-navigate to the new subclass tab
         const newIndex = subclasses.length
@@ -732,31 +734,45 @@ export function ClassFormModal({ characterClass, isOpen, onClose, onSuccess }: C
                                     ) : (
                                         <>
                                             {/* Add subclass */}
-                                            <div className="flex flex-col sm:flex-row gap-2">
-                                                <input
-                                                    type="text"
-                                                    value={newSubclassName}
-                                                    onChange={(e) => setNewSubclassName(e.target.value)}
-                                                    onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), handleAddSubclass())}
-                                                    placeholder="Nome da subclasse..."
-                                                    disabled={isSubmitting}
-                                                    className="flex-1 bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm text-white placeholder:text-white/30 outline-none focus:border-white/25 transition-colors disabled:opacity-50"
-                                                />
-                                                <input
-                                                    type="text"
-                                                    value={newSubclassSource}
-                                                    onChange={(e) => setNewSubclassSource(e.target.value)}
-                                                    onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), handleAddSubclass())}
-                                                    placeholder="Fonte..."
-                                                    disabled={isSubmitting}
-                                                    className="sm:w-1/3 bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm text-white placeholder:text-white/30 outline-none focus:border-white/25 transition-colors disabled:opacity-50"
-                                                />
+                                            <div className="flex flex-col sm:flex-row gap-2 items-end">
+                                                <div className="flex-1 w-full space-y-1.5">
+                                                    <label className="text-[10px] font-bold text-white/40 uppercase tracking-widest ml-1">Nome da Subclasse</label>
+                                                    <input
+                                                        type="text"
+                                                        value={newSubclassName}
+                                                        onChange={(e) => setNewSubclassName(e.target.value)}
+                                                        onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), handleAddSubclass())}
+                                                        placeholder="Ex: Berserker..."
+                                                        disabled={isSubmitting}
+                                                        className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm text-white placeholder:text-white/30 outline-none focus:border-white/25 transition-colors disabled:opacity-50"
+                                                    />
+                                                </div>
+                                                <div className="sm:w-1/3 w-full space-y-1.5">
+                                                    <label className="text-[10px] font-bold text-white/40 uppercase tracking-widest ml-1">Fonte</label>
+                                                    <input
+                                                        type="text"
+                                                        value={newSubclassSource}
+                                                        onChange={(e) => setNewSubclassSource(e.target.value)}
+                                                        onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), handleAddSubclass())}
+                                                        placeholder="Ex: PHB..."
+                                                        disabled={isSubmitting}
+                                                        className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm text-white placeholder:text-white/30 outline-none focus:border-white/25 transition-colors disabled:opacity-50"
+                                                    />
+                                                </div>
+
+                                                <div className="shrink-0 space-y-1.5">
+                                                    <label className="text-[10px] font-bold text-white/40 uppercase tracking-widest ml-1 select-none">Cor</label>
+                                                    <div className="h-10 flex items-center">
+                                                        <GlassColorPicker value={newSubclassColor} onChange={setNewSubclassColor} disabled={isSubmitting} />
+                                                    </div>
+                                                </div>
+
                                                 <button
                                                     type="button"
                                                     onClick={handleAddSubclass}
                                                     disabled={isSubmitting || !newSubclassName.trim()}
                                                     className={cn(
-                                                        "flex items-center justify-center px-3 py-2 rounded-lg transition-colors",
+                                                        "flex items-center justify-center px-3 h-10 rounded-lg transition-colors shrink-0",
                                                         "bg-white/10 hover:bg-white/15 text-white/60 hover:text-white",
                                                         "disabled:opacity-30 disabled:cursor-not-allowed",
                                                     )}
@@ -861,6 +877,15 @@ export function ClassFormModal({ characterClass, isOpen, onClose, onSuccess }: C
                                     className="p-4 rounded-xl bg-white/5 border border-white/10 space-y-6"
                                     style={{ borderColor: subclasses[activeTab]?.color ? `${subclasses[activeTab]?.color}40` : undefined }}
                                 >
+                                    {/* Color Picker Addition */}
+                                    <div className="grid grid-cols-1 md:grid-cols-1 gap-6 pb-2 border-b border-white/5">
+                                        <Controller
+                                            name={`subclasses.${activeTab}.color`}
+                                            control={control}
+                                            render={({ field }) => <GlassColorPicker label="Cor da Subclasse" value={field.value} onChange={field.onChange} disabled={isSubmitting} />}
+                                        />
+                                    </div>
+
                                     <SpellcastingSection
                                         control={control}
                                         watch={watch}

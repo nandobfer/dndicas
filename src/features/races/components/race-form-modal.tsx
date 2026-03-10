@@ -20,6 +20,7 @@ import { GlassSelector } from "@/components/ui/glass-selector"
 import { GlassConfirmClosing } from "@/components/ui/glass-confirm-closing"
 import { GlassStatusSwitch } from "@/components/ui/glass-status-switch"
 import { GlassInlineEmptyState } from "@/components/ui/glass-inline-empty-state"
+import { GlassColorPicker } from "@/components/ui/glass-color-picker"
 import { ImageAndDescriptionSection, TraitsSection, SpellsSection } from "@/features/classes/components/shared-form-components"
 
 import { sizeColors, rarityColors } from "@/lib/config/colors"
@@ -260,6 +261,24 @@ const RaceFormFields = ({
                 />
             </div>
 
+            {/* Row 3.1: Color Picker for Variation */}
+            {isVariation && (
+                <div className="grid grid-cols-1 md:grid-cols-1 gap-6 pb-2 border-b border-white/5">
+                    <Controller
+                        name={`${prefix}color` as any}
+                        control={control}
+                        render={({ field }) => (
+                            <GlassColorPicker
+                                label="Cor da Variação"
+                                value={field.value}
+                                onChange={field.onChange}
+                                disabled={isSubmitting}
+                            />
+                        )}
+                    />
+                </div>
+            )}
+
             {/* Row 4: Art & Description */}
             <ImageAndDescriptionSection
                 control={control}
@@ -328,6 +347,7 @@ export function RaceFormModal({ race, isOpen, onClose, onSuccess }: RaceFormModa
     // Variation add field
     const [newVariationName, setNewVariationName] = React.useState("")
     const [newVariationSource, setNewVariationSource] = React.useState("")
+    const [newVariationColor, setNewVariationColor] = React.useState<string>(VARIATION_COLORS[0])
     const [renamingIndex, setRenamingIndex] = React.useState<number | null>(null)
     const [renameValue, setRenameValue] = React.useState("")
 
@@ -396,12 +416,11 @@ export function RaceFormModal({ race, isOpen, onClose, onSuccess }: RaceFormModa
         if (!nameTrimmed) return
 
         const sourceTrimmed = newVariationSource.trim()
-        const color = VARIATION_COLORS[variations.length % VARIATION_COLORS.length]
-
+        
         const newVariation: CreateRaceSchema["variations"][number] = {
             name: nameTrimmed,
             source: sourceTrimmed || undefined,
-            color: color,
+            color: newVariationColor,
             traits: [],
             spells: [],
             description: "",
@@ -413,6 +432,7 @@ export function RaceFormModal({ race, isOpen, onClose, onSuccess }: RaceFormModa
         setValue("variations", [...variations, newVariation])
         setNewVariationName("")
         setNewVariationSource("")
+        setNewVariationColor(VARIATION_COLORS[(variations.length + 1) % VARIATION_COLORS.length])
 
         // Auto-navigate to the new variation tab
         const newIndex = variations.length
@@ -602,31 +622,49 @@ export function RaceFormModal({ race, isOpen, onClose, onSuccess }: RaceFormModa
                                     ) : (
                                         <>
                                             {/* Add variation */}
-                                            <div className="flex flex-col sm:flex-row gap-2">
-                                                <input
-                                                    type="text"
-                                                    value={newVariationName}
-                                                    onChange={(e) => setNewVariationName(e.target.value)}
-                                                    onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), handleAddVariation())}
-                                                    placeholder="Nome da variação (Ex: Elfo da Floresta)..."
-                                                    disabled={isSubmitting}
-                                                    className="flex-1 bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm text-white placeholder:text-white/30 outline-none focus:border-white/25 transition-colors disabled:opacity-50"
-                                                />
-                                                <input
-                                                    type="text"
-                                                    value={newVariationSource}
-                                                    onChange={(e) => setNewVariationSource(e.target.value)}
-                                                    onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), handleAddVariation())}
-                                                    placeholder="Fonte..."
-                                                    disabled={isSubmitting}
-                                                    className="sm:w-1/3 bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm text-white placeholder:text-white/30 outline-none focus:border-white/25 transition-colors disabled:opacity-50"
-                                                />
+                                            <div className="flex flex-col sm:flex-row gap-2 items-end">
+                                                <div className="flex-1 w-full space-y-1.5">
+                                                    <label className="text-[10px] font-bold text-white/40 uppercase tracking-widest ml-1">Nome da Variação</label>
+                                                    <input
+                                                        type="text"
+                                                        value={newVariationName}
+                                                        onChange={(e) => setNewVariationName(e.target.value)}
+                                                        onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), handleAddVariation())}
+                                                        placeholder="Ex: Elfo da Floresta..."
+                                                        disabled={isSubmitting}
+                                                        className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm text-white placeholder:text-white/30 outline-none focus:border-white/25 transition-colors disabled:opacity-50"
+                                                    />
+                                                </div>
+                                                <div className="sm:w-1/3 w-full space-y-1.5">
+                                                    <label className="text-[10px] font-bold text-white/40 uppercase tracking-widest ml-1">Fonte</label>
+                                                    <input
+                                                        type="text"
+                                                        value={newVariationSource}
+                                                        onChange={(e) => setNewVariationSource(e.target.value)}
+                                                        onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), handleAddVariation())}
+                                                        placeholder="Ex: PHB..."
+                                                        disabled={isSubmitting}
+                                                        className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm text-white placeholder:text-white/30 outline-none focus:border-white/25 transition-colors disabled:opacity-50"
+                                                    />
+                                                </div>
+
+                                                <div className="shrink-0 space-y-1.5">
+                                                    <label className="text-[10px] font-bold text-white/40 uppercase tracking-widest ml-1 select-none">Cor</label>
+                                                    <div className="h-10 flex items-center">
+                                                        <GlassColorPicker 
+                                                            value={newVariationColor}
+                                                            onChange={setNewVariationColor}
+                                                            disabled={isSubmitting}
+                                                        />
+                                                    </div>
+                                                </div>
+
                                                 <button
                                                     type="button"
                                                     onClick={handleAddVariation}
                                                     disabled={isSubmitting || !newVariationName.trim()}
                                                     className={cn(
-                                                        "flex items-center justify-center px-3 py-2 rounded-lg transition-colors",
+                                                        "flex items-center justify-center px-3 h-10 rounded-lg transition-colors shrink-0",
                                                         "bg-white/10 hover:bg-white/15 text-white/60 hover:text-white",
                                                         "disabled:opacity-30 disabled:cursor-not-allowed",
                                                     )}
