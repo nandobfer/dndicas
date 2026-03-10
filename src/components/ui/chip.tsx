@@ -31,6 +31,12 @@ const chipVariants = cva(
         legendary: 'bg-amber-400/20 text-amber-400 border border-amber-400/30',
         /** Artifact - danger red */
         artifact: 'bg-rose-400/20 text-rose-400 border border-rose-400/30',
+        /** Mythic - peak performance pink */
+        mythic: 'bg-pink-400/20 text-pink-400 border border-pink-400/30',
+        /** Divine - celestial cyan */
+        divine: 'bg-cyan-400/20 text-cyan-400 border border-cyan-400/30',
+        /** Ethereal - mystical orange */
+        ethereal: 'bg-orange-400/20 text-orange-400 border border-orange-400/30',
         /** Outline - subtle bordered */
         outline: 'bg-transparent text-white/60 border border-white/20',
         /** Ghost - no background */
