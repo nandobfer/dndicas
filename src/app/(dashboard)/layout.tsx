@@ -10,6 +10,7 @@ import { motionConfig } from "@/lib/config/motion-configs"
 import { themeConfig } from "@/lib/config/theme-config"
 import { cn } from "@/core/utils"
 import { useState, useEffect } from "react"
+import { GlassFooter } from "@/components/ui/glass-footer"
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
     const { isExpanded, expand, collapse, toggle, isHydrated } = useSidebar()
@@ -48,7 +49,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             <motion.div
                 className={cn("relative z-10 flex flex-1 flex-col min-w-0", isMobile && "pt-16")}
                 animate={{
-                    marginLeft
+                    marginLeft,
                 }}
                 transition={motionConfig.sidebarTransition}
             >
@@ -62,6 +63,9 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                 >
                     {children}
                 </motion.main>
+
+                {/* Footer */}
+                <GlassFooter />
             </motion.div>
 
             {/* Global Search FAB */}
