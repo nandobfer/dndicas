@@ -105,7 +105,7 @@ export const entityColors = {
         hoverBorder: "hover:border-emerald-500/40",
         bgAlpha: "bg-emerald-500/10",
         text: "text-emerald-400",
-        hex: rarityColors.uncommon,
+        hex: rarityColors.uncommon
     },
     Usuário: {
         color: "blue",
@@ -115,7 +115,7 @@ export const entityColors = {
         hoverBorder: "hover:border-blue-500/40",
         bgAlpha: "bg-blue-500/10",
         text: "text-blue-400",
-        hex: rarityColors.rare,
+        hex: rarityColors.rare
     },
     Segurança: {
         color: "purple",
@@ -125,7 +125,7 @@ export const entityColors = {
         hoverBorder: "hover:border-purple-500/40",
         bgAlpha: "bg-purple-500/10",
         text: "text-purple-400",
-        hex: rarityColors.veryRare,
+        hex: rarityColors.veryRare
     },
     Regra: {
         color: "slate",
@@ -135,7 +135,7 @@ export const entityColors = {
         hoverBorder: "hover:border-slate-500/40",
         bgAlpha: "bg-slate-500/10",
         text: "text-slate-400",
-        hex: rarityColors.common, // #9CA3AF
+        hex: rarityColors.common // #9CA3AF
     },
     Talento: {
         color: "amber",
@@ -145,7 +145,7 @@ export const entityColors = {
         hoverBorder: "hover:border-amber-500/40",
         bgAlpha: "bg-amber-500/10",
         text: "text-amber-400",
-        hex: rarityColors.legendary, // #F59E0B
+        hex: rarityColors.legendary // #F59E0B
     },
     Origem: {
         color: "blue",
@@ -155,7 +155,7 @@ export const entityColors = {
         hoverBorder: "hover:border-blue-500/40",
         bgAlpha: "bg-blue-500/10",
         text: "text-blue-400",
-        hex: rarityColors.rare, // #3B82F6
+        hex: rarityColors.rare // #3B82F6
     },
     Magia: {
         color: "purple",
@@ -165,7 +165,7 @@ export const entityColors = {
         hoverBorder: "hover:border-purple-500/40",
         bgAlpha: "bg-purple-500/10",
         text: "text-purple-400",
-        hex: rarityColors.veryRare, // #8B5CF6
+        hex: rarityColors.veryRare // #8B5CF6
     },
     Classe: {
         color: "amber",
@@ -175,7 +175,7 @@ export const entityColors = {
         hoverBorder: "hover:border-amber-500/40",
         bgAlpha: "bg-amber-500/10",
         text: "text-amber-400",
-        hex: rarityColors.legendary, // #F59E0B
+        hex: rarityColors.legendary // #F59E0B
     },
     Raça: {
         color: "red",
@@ -185,18 +185,18 @@ export const entityColors = {
         hoverBorder: "hover:border-red-500/40",
         bgAlpha: "bg-red-500/10",
         text: "text-red-400",
-        hex: rarityColors.artifact, // #EF4444
+        hex: rarityColors.artifact // #EF4444
     },
     Item: {
-        color: "slate",
-        mention: "bg-slate-500/10 text-slate-400 border-slate-400/20",
-        badge: "bg-slate-400/20 text-slate-400",
-        border: "border-slate-500/20",
-        hoverBorder: "hover:border-slate-500/40",
-        bgAlpha: "bg-slate-500/10",
-        text: "text-slate-400",
-        hex: rarityColors.common, // #9CA3AF
-    },
+        color: "purple",
+        mention: "bg-purple-500/10 text-purple-400 border-purple-400/20",
+        badge: "bg-purple-400/20 text-purple-400",
+        border: "border-purple-500/20",
+        hoverBorder: "hover:border-purple-500/40",
+        bgAlpha: "bg-purple-500/10",
+        text: "text-purple-400",
+        hex: rarityColors.veryRare // #8B5CF6
+    }
 } as const
 
 /**
