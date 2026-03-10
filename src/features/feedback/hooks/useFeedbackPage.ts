@@ -21,7 +21,7 @@ export function useFeedbackPage() {
     // State
     const [page, setPage] = React.useState(1);
     const [search, setSearch] = React.useState("");
-    const [status, setStatus] = React.useState<FeedbackFilters['status']>("all");
+    const [status, setStatus] = React.useState<FeedbackFilters["status"]>("pendente")
     const [priority, setPriority] = React.useState<FeedbackFilters['priority']>("all");
     const [type, setType] = React.useState<FeedbackFilters['type']>("all");
     
