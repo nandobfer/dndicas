@@ -1,0 +1,841 @@
+openapi: 3.0.3
+info:
+  title: Character Sheets API
+  description: API for managing D&D 2024 character sheets in Dungeons & Dicas
+  version: 1.0.0
+
+tags:
+  - name: character-sheets
+    description: Character sheet CRUD
+  - name: character-items
+    description: Inventory items
+  - name: character-spells
+    description: Known spells
+  - name: character-traits
+    description: Class/racial traits and abilities
+  - name: character-feats
+    description: Feats (Talentos)
+  - name: character-attacks
+    description: Attack entries
+  - name: long-rest
+    description: Long rest recovery
+
+paths:
+  /api/character-sheets:
+    get:
+      tags: [character-sheets]
+      summary: List user's character sheets (paginated)
+      description: Returns paginated list of the authenticated user's sheets, sorted by updatedAt DESC
+      security:
+        - clerkAuth: []
+      parameters:
+        - name: page
+          in: query
+          schema: { type: integer, default: 1 }
+        - name: limit
+          in: query
+          schema: { type: integer, default: 12 }
+        - name: search
+          in: query
+          description: Fuzzy search term — server fetches all user sheets, runs Fuse.js in character-sheets-service.ts, returns filtered paginated result
+          schema: { type: string }
+      responses:
+        "200":
+          description: Paginated sheets list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SheetsListResponse'
+        "401":
+          $ref: '#/components/responses/Unauthorized'
+
+    post:
+      tags: [character-sheets]
+      summary: Create a blank character sheet
+      security:
+        - clerkAuth: []
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+                  default: ""
+      responses:
+        "201":
+          description: Created sheet
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CharacterSheet'
+        "401":
+          $ref: '#/components/responses/Unauthorized'
+
+  /api/character-sheets/{id}:
+    get:
+      tags: [character-sheets]
+      summary: Get a character sheet by ID
+      description: Returns full sheet. No authentication required — all sheets are publicly accessible by anyone with the link. Returns 404 if not found.
+      parameters:
+        - $ref: '#/components/parameters/SheetId'
+      responses:
+        "200":
+          description: Full sheet with sub-entities
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CharacterSheetFull'
+        "404":
+          $ref: '#/components/responses/NotFound'
+
+    patch:
+      tags: [character-sheets]
+      summary: Update one or more fields of a character sheet (auto-save)
+      description: Partial update — only pass changed fields. Used for auto-save (500ms debounce per field).
+      security:
+        - clerkAuth: []
+      parameters:
+        - $ref: '#/components/parameters/SheetId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchSheetBody'
+      responses:
+        "200":
+          description: Updated sheet (partial)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CharacterSheet'
+        "403":
+          $ref: '#/components/responses/Forbidden'
+        "404":
+          $ref: '#/components/responses/NotFound'
+
+    delete:
+      tags: [character-sheets]
+      summary: Hard delete a character sheet and all sub-entities
+      security:
+        - clerkAuth: []
+      parameters:
+        - $ref: '#/components/parameters/SheetId'
+      responses:
+        "200":
+          description: Deleted
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+        "403":
+          $ref: '#/components/responses/Forbidden'
+        "404":
+          $ref: '#/components/responses/NotFound'
+
+  /api/character-sheets/{id}/long-rest:
+    post:
+      tags: [long-rest]
+      summary: Trigger Long Rest recovery
+      description: Resets hpCurrent to hpMax, all spellSlots[n].used to 0, hitDiceUsed to 0
+      security:
+        - clerkAuth: []
+      parameters:
+        - $ref: '#/components/parameters/SheetId'
+      responses:
+        "200":
+          description: Sheet after long rest
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CharacterSheet'
+        "403":
+          $ref: '#/components/responses/Forbidden'
+
+  /api/character-sheets/{id}/items:
+    get:
+      tags: [character-items]
+      summary: List items for a sheet
+      parameters:
+        - $ref: '#/components/parameters/SheetId'
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/CharacterItem'
+
+    post:
+      tags: [character-items]
+      summary: Add item to sheet (from catalog or manual)
+      security:
+        - clerkAuth: []
+      parameters:
+        - $ref: '#/components/parameters/SheetId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateItemBody'
+      responses:
+        "201":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CharacterItem'
+
+  /api/character-sheets/{id}/items/{itemId}:
+    patch:
+      tags: [character-items]
+      summary: Update item (quantity, notes)
+      security:
+        - clerkAuth: []
+      parameters:
+        - $ref: '#/components/parameters/SheetId'
+        - name: itemId
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                quantity: { type: integer, minimum: 0 }
+                notes: { type: string }
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CharacterItem'
+
+    delete:
+      tags: [character-items]
+      summary: Remove item from sheet
+      security:
+        - clerkAuth: []
+      parameters:
+        - $ref: '#/components/parameters/SheetId'
+        - name: itemId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+
+  /api/character-sheets/{id}/spells:
+    get:
+      tags: [character-spells]
+      summary: List spells for a sheet
+      parameters:
+        - $ref: '#/components/parameters/SheetId'
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/CharacterSpell'
+
+    post:
+      tags: [character-spells]
+      summary: Add spell to sheet
+      security:
+        - clerkAuth: []
+      parameters:
+        - $ref: '#/components/parameters/SheetId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateSpellBody'
+      responses:
+        "201":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CharacterSpell'
+
+  /api/character-sheets/{id}/spells/{spellId}:
+    patch:
+      tags: [character-spells]
+      parameters:
+        - $ref: '#/components/parameters/SheetId'
+        - name: spellId
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                prepared: { type: boolean }
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CharacterSpell'
+
+    delete:
+      tags: [character-spells]
+      parameters:
+        - $ref: '#/components/parameters/SheetId'
+        - name: spellId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+
+  /api/character-sheets/{id}/traits:
+    get:
+      tags: [character-traits]
+      parameters:
+        - $ref: '#/components/parameters/SheetId'
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/CharacterTrait'
+
+    post:
+      tags: [character-traits]
+      security:
+        - clerkAuth: []
+      parameters:
+        - $ref: '#/components/parameters/SheetId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateTraitBody'
+      responses:
+        "201":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CharacterTrait'
+
+  /api/character-sheets/{id}/traits/{traitId}:
+    delete:
+      tags: [character-traits]
+      security:
+        - clerkAuth: []
+      parameters:
+        - $ref: '#/components/parameters/SheetId'
+        - name: traitId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+
+  /api/character-sheets/{id}/feats:
+    get:
+      tags: [character-feats]
+      parameters:
+        - $ref: '#/components/parameters/SheetId'
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/CharacterFeat'
+
+    post:
+      tags: [character-feats]
+      security:
+        - clerkAuth: []
+      parameters:
+        - $ref: '#/components/parameters/SheetId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateFeatBody'
+      responses:
+        "201":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CharacterFeat'
+
+  /api/character-sheets/{id}/feats/{featId}:
+    delete:
+      tags: [character-feats]
+      security:
+        - clerkAuth: []
+      parameters:
+        - $ref: '#/components/parameters/SheetId'
+        - name: featId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+
+  /api/character-sheets/{id}/attacks:
+    get:
+      tags: [character-attacks]
+      parameters:
+        - $ref: '#/components/parameters/SheetId'
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/CharacterAttack'
+
+    post:
+      tags: [character-attacks]
+      security:
+        - clerkAuth: []
+      parameters:
+        - $ref: '#/components/parameters/SheetId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateAttackBody'
+      responses:
+        "201":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CharacterAttack'
+
+  /api/character-sheets/{id}/attacks/{attackId}:
+    patch:
+      tags: [character-attacks]
+      security:
+        - clerkAuth: []
+      parameters:
+        - $ref: '#/components/parameters/SheetId'
+        - name: attackId
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateAttackBody'
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CharacterAttack'
+
+    delete:
+      tags: [character-attacks]
+      security:
+        - clerkAuth: []
+      parameters:
+        - $ref: '#/components/parameters/SheetId'
+        - name: attackId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+
+components:
+  securitySchemes:
+    clerkAuth:
+      type: http
+      scheme: bearer
+
+  parameters:
+    SheetId:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string
+      description: MongoDB ObjectId of the character sheet
+
+  responses:
+    Unauthorized:
+      description: Not authenticated
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              error: { type: string, example: "Não autenticado" }
+    Forbidden:
+      description: Not authorized (not owner)
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              error: { type: string, example: "Acesso negado" }
+    NotFound:
+      description: Sheet not found
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              error: { type: string, example: "Ficha não encontrada" }
+
+  schemas:
+    SheetsListResponse:
+      type: object
+      properties:
+        sheets:
+          type: array
+          items:
+            $ref: '#/components/schemas/CharacterSheet'
+        total:
+          type: integer
+        page:
+          type: integer
+        limit:
+          type: integer
+        hasMore:
+          type: boolean
+
+    CharacterSheet:
+      type: object
+      properties:
+        _id:
+          type: string
+        slug:
+          type: string
+        userId:
+          type: string
+        name:
+          type: string
+        class:
+          type: string
+        classRef:
+          type: string
+          nullable: true
+        subclass:
+          type: string
+        subclassRef:
+          type: string
+          nullable: true
+        level:
+          type: integer
+          minimum: 1
+          maximum: 20
+        race:
+          type: string
+        raceRef:
+          type: string
+          nullable: true
+        origin:
+          type: string
+        originRef:
+          type: string
+          nullable: true
+        inspiration:
+          type: boolean
+        multiclassNotes:
+          type: string
+        photo:
+          type: string
+          nullable: true
+        age:
+          type: string
+        height:
+          type: string
+        weight:
+          type: string
+        eyes:
+          type: string
+        skin:
+          type: string
+        hair:
+          type: string
+        appearance:
+          type: string
+        strength:
+          type: integer
+        dexterity:
+          type: integer
+        constitution:
+          type: integer
+        intelligence:
+          type: integer
+        wisdom:
+          type: integer
+        charisma:
+          type: integer
+        proficiencyBonusOverride:
+          type: integer
+          nullable: true
+        savingThrows:
+          type: object
+        skills:
+          type: object
+        movementSpeed:
+          type: integer
+          nullable: true
+        hpMax:
+          type: integer
+          nullable: true
+        hpCurrent:
+          type: integer
+          nullable: true
+        hpTemp:
+          type: integer
+        hitDiceTotal:
+          type: string
+        hitDiceUsed:
+          type: integer
+        deathSavesSuccess:
+          type: integer
+        deathSavesFailure:
+          type: integer
+        armorClassOverride:
+          type: integer
+          nullable: true
+        initiativeOverride:
+          type: integer
+          nullable: true
+        passivePerceptionOverride:
+          type: integer
+          nullable: true
+        spellcastingAttribute:
+          type: string
+          nullable: true
+        spellSaveDCOverride:
+          type: integer
+          nullable: true
+        spellAttackBonusOverride:
+          type: integer
+          nullable: true
+        spellSlots:
+          type: object
+          additionalProperties:
+            type: object
+            properties:
+              total: { type: integer }
+              used: { type: integer }
+        coins:
+          type: object
+          properties:
+            cp: { type: integer }
+            sp: { type: integer }
+            ep: { type: integer }
+            gp: { type: integer }
+            pp: { type: integer }
+        personalityTraits:
+          type: string
+        ideals:
+          type: string
+        bonds:
+          type: string
+        flaws:
+          type: string
+        notes:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    CharacterSheetFull:
+      allOf:
+        - $ref: '#/components/schemas/CharacterSheet'
+        - type: object
+          properties:
+            items:
+              type: array
+              items:
+                $ref: '#/components/schemas/CharacterItem'
+            spells:
+              type: array
+              items:
+                $ref: '#/components/schemas/CharacterSpell'
+            traits:
+              type: array
+              items:
+                $ref: '#/components/schemas/CharacterTrait'
+            feats:
+              type: array
+              items:
+                $ref: '#/components/schemas/CharacterFeat'
+            attacks:
+              type: array
+              items:
+                $ref: '#/components/schemas/CharacterAttack'
+
+    PatchSheetBody:
+      type: object
+      description: Partial sheet update — include only modified fields
+      additionalProperties: true
+
+    CharacterItem:
+      type: object
+      properties:
+        _id: { type: string }
+        sheetId: { type: string }
+        catalogItemId: { type: string, nullable: true }
+        name: { type: string }
+        image: { type: string, nullable: true }
+        quantity: { type: integer }
+        notes: { type: string }
+        createdAt: { type: string, format: date-time }
+
+    CreateItemBody:
+      type: object
+      required: [name]
+      properties:
+        catalogItemId: { type: string }
+        name: { type: string }
+        image: { type: string }
+        quantity: { type: integer, default: 1 }
+        notes: { type: string }
+
+    CharacterSpell:
+      type: object
+      properties:
+        _id: { type: string }
+        sheetId: { type: string }
+        catalogSpellId: { type: string, nullable: true }
+        name: { type: string }
+        circle: { type: integer, minimum: 0, maximum: 9 }
+        school: { type: string }
+        image: { type: string, nullable: true }
+        prepared: { type: boolean }
+        components: { type: array, items: { type: string } }
+        createdAt: { type: string, format: date-time }
+
+    CreateSpellBody:
+      type: object
+      required: [name]
+      properties:
+        catalogSpellId: { type: string }
+        name: { type: string }
+        circle: { type: integer }
+        school: { type: string }
+        image: { type: string }
+        prepared: { type: boolean, default: false }
+        components: { type: array, items: { type: string } }
+
+    CharacterTrait:
+      type: object
+      properties:
+        _id: { type: string }
+        sheetId: { type: string }
+        catalogTraitId: { type: string, nullable: true }
+        name: { type: string }
+        description: { type: string }
+        origin:
+          type: string
+          enum: [class, race, background, manual]
+        createdAt: { type: string, format: date-time }
+
+    CreateTraitBody:
+      type: object
+      required: [name, origin]
+      properties:
+        catalogTraitId: { type: string }
+        name: { type: string }
+        description: { type: string }
+        origin:
+          type: string
+          enum: [class, race, background, manual]
+
+    CharacterFeat:
+      type: object
+      properties:
+        _id: { type: string }
+        sheetId: { type: string }
+        catalogFeatId: { type: string, nullable: true }
+        name: { type: string }
+        description: { type: string }
+        levelAcquired: { type: integer, nullable: true }
+        createdAt: { type: string, format: date-time }
+
+    CreateFeatBody:
+      type: object
+      required: [name]
+      properties:
+        catalogFeatId: { type: string }
+        name: { type: string }
+        description: { type: string }
+        levelAcquired: { type: integer }
+
+    CharacterAttack:
+      type: object
+      properties:
+        _id: { type: string }
+        sheetId: { type: string }
+        name: { type: string }
+        attackBonus: { type: string }
+        damage: { type: string }
+        damageType: { type: string }
+        createdAt: { type: string, format: date-time }
+
+    CreateAttackBody:
+      type: object
+      required: [name]
+      properties:
+        name: { type: string }
+        attackBonus: { type: string }
+        damage: { type: string }
+        damageType: { type: string }
