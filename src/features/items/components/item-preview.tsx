@@ -11,6 +11,7 @@ import { useWindows } from "@/core/context/window-context"
 import { GlassLevelChip } from "@/components/ui/glass-level-chip"
 import { GlassDiceValue } from "@/components/ui/glass-dice-value"
 import { GlassEmptyValue } from "@/components/ui/glass-empty-value"
+import { GlassImage } from "@/components/ui/glass-image"
 import { Chip } from "@/components/ui/chip"
 import { SimpleGlassTooltip } from "@/components/ui/glass-tooltip"
 import { MentionContent, EntityTitleLink } from "@/features/rules/components/mention-badge"
@@ -145,10 +146,7 @@ export function ItemPreview({ item, showStatus = true, hideStatusChip = false, h
                 </div>
                 {item.image && (
                     <div className="w-full md:w-[30%] shrink-0">
-                        <div className="aspect-square rounded-xl bg-white/5 overflow-hidden shadow-2xl group/image relative bg-[image:var(--background-image-paper-texture)] bg-cover bg-center">
-                            <img src={item.image} alt={item.name} className="w-full h-full object-cover transition-transform duration-500 group-hover/image:scale-110 mix-blend-multiply" />
-                            <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent opacity-0 group-hover/image:opacity-100 transition-opacity duration-300" />
-                        </div>
+                        <GlassImage src={item.image} alt={item.name} />
                     </div>
                 )}
             </div>
