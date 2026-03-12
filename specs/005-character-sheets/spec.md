@@ -4,6 +4,31 @@
 **Created**: 2026-03-12  
 **Status**: Draft  
 
+## Clarifications
+
+### Session 2026-03-12
+
+- Q: Multiclasse será suportada nesta entrega? → A: Fora do escopo desta entrega — somente uma classe principal; campo de texto livre para o usuário registrar multiclasse manualmente se desejar
+- Q: Como o usuário pode excluir uma ficha? → A: Hard delete com modal de confirmação — ao confirmar, a ficha é apagada permanentemente do banco de dados
+- Q: Qual o layout da página da ficha? → A: Página única com scroll vertical — seções organizadas em colunas como na ficha física (sidebar esquerda com atributos/salvaguardas/perícias, área central com combate/ataques/equipamentos, área direita com personalidade/características/magias)
+- Q: HP atual e slots de magia usados são persistidos no banco? → A: Sim — todos os campos de estado de sessão (HP atual, HP temporário, slots de magia usados, dados de vida usados, testes de morte) são persistidos no banco com o mesmo debounce de 500ms e PATCH por campo
+- Q: Fichas podem ser compartilhadas com outras pessoas? → A: Sim — o dono pode tornar a ficha pública; qualquer pessoa com o link pode visualizá-la em modo somente leitura; a ficha continua privada por padrão ao ser criada
+- Q: Como o usuário adiciona foto ao personagem? → A: Upload de arquivo — o usuário faz upload de imagem local; armazenada no serviço de storage existente na plataforma; sem suporte a URL externa
+- Q: Descanso Curto e Longo devem ser implementados? → A: Apenas Descanso Longo — botão "Descanso Longo" recupera todos os recursos (HP máximo, todos os slots de magia, dados de vida); sem botão de Descanso Curto nesta entrega; o usuário ajusta dados de vida e outros recursos parciais manualmente
+- Q: Existe limite de fichas por usuário? → A: Sem limite nesta entrega — o usuário pode criar quantas fichas quiser
+- Q: Qual a ordenação padrão da lista de fichas? → A: Mais recentemente modificadas primeiro (`updatedAt` DESC)
+- Q: Qual componente UI usar para o seletor do catálogo dentro dos campos da ficha? → A: Reutilizar o componente existente `GlassEntityChooser` (`@/components/ui/glass-entity-chooser`) — Popover com campo de busca interno, já suporta `EntityProvider`, busca com debounce e criação de nova entidade; o botão de ícone dentro do input da ficha deve abrir este componente- Q: Como o layout se comporta em telas menores (mobile/tablet)? → A: Grid responsivo na lista (3 col → 2 col tablet → 1 col mobile); página da ficha em coluna única no mobile com seções empilhadas verticalmente
+- Q: Onde ficam listados talentos e habilidades na ficha? → A: Seguir exatamente a ficha oficial D&D 2024 — quatro seções separadas: "Características de Classe" (Traits origem classe), "Características Raciais" (Traits origem raça), "Talentos" (entidade Feat) e "Habilidades" (todas as demais Traits — origem, manuais ou outras fontes)
+- Q: A quarta seção de características de origem fica separada? → A: Quarta seção chamada "Habilidades" — acomoda todas as Traits que não são raciais nem de classe (inclui origem/background, adições manuais e outras fontes)
+- Q: Os bônus de perícias são calculados automaticamente? → A: Sim — cálculo automático pelo frontend: modificador do atributo base + bônus de proficiência (se checkbox marcado) + bônus de proficiência extra (se expertise marcada); o usuário gerencia apenas os checkboxes, nunca o valor numérico da perícia diretamente
+- Q: Iniciativa e CA são calculadas automaticamente? → A: Ambas automáticas — todos os campos derivados são calculados automaticamente, mas todos são editáveis manualmente (o usuário pode sobrescrever qualquer valor calculado); **todos os campos com cálculo automático devem exibir tooltip on hover com a memória de cálculo** (ex: "10 + DEX mod (3) + Prof (2) = 15")
+- Q: Qual o idioma da interface da ficha? → A: 100% português BR — seguir a nomeclatura da ficha oficial anexada (ex: "Pontos de Vida", "Salvaguardas", "Perícias", "Bônus de Proficiência", "Força", "Destreza")
+- Q: Bônus de proficiência é calculado automaticamente pelo nível? → A: Sim — calculado pela tabela D&D 2024 a partir do nível total (1-4: +2, 5-8: +3, 9-12: +4, 13-16: +5, 17-20: +6); exibe tooltip com memória de cálculo; editável manualmente; alteração de nível dispara recalculo em cascata de todos os valores derivados (prof → perícias → salvaguardas)
+- Q: HP máximo é calculado automaticamente? → A: Não — HP máximo é campo manual; o cálculo envolve decisões do jogador (rolar dados vs média por nível) que tornam a automação impraticável; o usuário preenche diretamente o valor
+- Q: O campo de XP será incluído na ficha? → A: Não — campo de XP removido do escopo; a ficha não terá rastreamento de pontos de experiência
+- Q: A seção de moedas será incluída? → A: Sim — cinco campos numéricos manuais (PC, PP, PE, PO, PL); cada campo exibe tooltip on hover com o equivalente em Peças de Ouro (ex: PC → "equivale a 0,01 PO cada"; PL → "equivale a 10 PO cada"); sem conversão automática entre moedas
+- Q: Bônus de ataque de magia e CD de resistência são calculados automaticamente? → A: Sim — CD = `8 + bônus de proficiência + modificador do atributo de conjuração`; bônus de ataque = `bônus de proficiência + modificador do atributo de conjuração`; ambos exibem tooltip com memória de cálculo e são editáveis manualmente- Q: Descanso Curto e Longo devem ser implementados? → A: Apenas Descanso Longo — um botão "Descanso Longo" recupera automaticamente HP máximo, todos os slots de magia e dados de vida; sem botão de Descanso Curto nesta entrega
+
 ## User Scenarios & Testing *(mandatory)*
 
 ### User Story 1 - Visualizar Lista de Fichas (Priority: P1)
@@ -119,10 +144,13 @@ A seção de equipamentos da ficha exibe os itens do personagem em uma lista. Ca
 
 ### Edge Cases
 
-- O que acontece quando o usuário acessa `/sheets/[slug]` de uma ficha de outro usuário? → Retorna erro 404 (não expõe a existência da ficha)
+- O que acontece quando um visitante não autenticado acessa uma ficha **privada**? → Retorna erro 404 (não expõe a existência da ficha)
+- O que acontece quando um visitante acessa uma ficha **pública**? → Exibe a ficha em modo somente leitura sem exibir controles de edição; nenhum campo pode ser editado
+- O que acontece quando um usuário tenta registrar multiclasse? → Não há suporte a multiclasse nesta entrega; o usuário pode usar o campo de texto livre "Notas de multiclasse" para registro manual
 - O que acontece quando um campo de catálogo é removido do catálogo global após ter sido referenciado na ficha? → O valor textual salvo na ficha permanece; o vínculo ao catálogo é removido silenciosamente
 - O que acontece quando o usuário edita um campo enquanto o save anterior ainda está em progresso? → Cada campo cancela o debounce anterior e reinicia os 500ms; o save anterior é cancelado se ainda não enviado
 - O que acontece quando a busca na lista de fichas não retorna resultados? → Exibe empty state específico de "nenhuma ficha encontrada para [termo]" com opção de limpar busca
+- O que acontece ao confirmar a exclusão de uma ficha? → A ficha é permanentemente deletada do banco; o card some da lista com animação de saída; não há recuperação possível após confirmação
 - O que acontece quando a imagem da classe/subclasse não carrega? → Plano de fundo da ficha e do card usa cor sólida dark como fallback
 - O que acontece quando o usuário acessa a página sem estar autenticado? → É redirecionado para a tela de login
 
@@ -134,7 +162,9 @@ A seção de equipamentos da ficha exibe os itens do personagem em uma lista. Ca
 
 - **FR-001**: A barra lateral DEVE exibir o item "Minhas Fichas" abaixo de "Perfil", visível apenas para usuários autenticados
 - **FR-002**: A página "Minhas Fichas" DEVE ser acessível apenas por usuários autenticados; acessos não autenticados devem redirecionar para login
-- **FR-003**: A página DEVE exibir as fichas do usuário em grade de 3 colunas
+- **FR-002a**: A página de visualização de uma ficha pública (`/sheets/[slug]`) DEVE ser acessível sem autenticação em modo somente leitura; controles de edição, salvamento e exclusão NÃO são exibidos para visitantes
+- **FR-002b**: Fichas são **privadas por padrão** ao serem criadas; o dono pode alterar a visibilidade para pública a qualquer momento
+- **FR-003**: A página DEVE exibir as fichas do usuário em grade responsiva: **3 colunas** no desktop, **2 colunas** em tablet, **1 coluna** no mobile; ordenadas por última modificação (`updatedAt` DESC) por padrão
 - **FR-004**: A busca DEVE filtrar fichas em tempo real com tolerância a pequenos erros de digitação (busca aproximada)
 - **FR-005**: O botão "Nova Ficha" DEVE criar uma ficha em branco, exibir o card na lista com animação e navegar para `/sheets/[slug]`
 - **FR-006**: O slug da URL DEVE conter o ID único da ficha para garantir unicidade
@@ -142,31 +172,41 @@ A seção de equipamentos da ficha exibe os itens do personagem em uma lista. Ca
 - **FR-008**: Se a classe (ou subclasse) do personagem possuir imagem no catálogo, ela DEVE ser exibida como plano de fundo do card com baixa opacidade e desfoque leve
 - **FR-009**: A lista DEVE apresentar estados animados de: carregamento (loading), vazio (empty state) e preenchido
 - **FR-010**: Transições entre estados e adições/remoções de cards DEVEM ser animadas
+- **FR-010a**: Cada card DEVE ter opção de exclusão (ex: menu de contexto ou botão); ao acionar, exibe modal de confirmação com aviso de ação irreversível; ao confirmar, deleta a ficha permanentemente do banco e remove o card da lista com animação de saída
+- **FR-010b**: Cada card DEVE ter opção de alternar visibilidade (privada/pública); o estado atual deve ser visível no card (ex: ícone de cadeado)
 
 #### Página da Ficha
 
-- **FR-011**: A página da ficha DEVE seguir a estrutura e organização da ficha oficial D&D 2024 (conforme documento de referência anexado), substituindo o logotipo D&D pelo logotipo Dungeons & Dicas
+- **FR-011**: A página da ficha DEVE seguir a estrutura e organização da ficha oficial D&D 2024 (conforme documento de referência anexado), substituindo o logotipo D&D pelo logotipo Dungeons & Dicas; o layout DEVE ser **página única com scroll vertical**, organizada em 3 colunas equivalentes às da ficha física no desktop (coluna esquerda: atributos, salvaguardas, perícias; coluna central: combate, ataques, equipamentos; coluna direita: personalidade, características, magias, notas); **em mobile, as seções devem empilhar em coluna única** na mesma ordem de prioridade
+- **FR-011a**: **Toda a nomenclatura da ficha DEVE estar em português BR**, seguindo fidelmente a tradução da ficha oficial D&D 2024 anexada como referência (ex: "Pontos de Vida", "Salvaguardas", "Perícias", "Bônus de Proficiência", "Força", "Destreza", "Constituição", "Inteligência", "Sabedoria", "Carisma")
 - **FR-012**: Todos os campos da ficha DEVEM ser opcionais
 - **FR-013**: Toda alteração em qualquer campo DEVE disparar um salvamento automático (PATCH) com debounce de 500ms, enviando apenas o ID da ficha e o campo alterado
 - **FR-014**: Cada campo que está sendo salvo DEVE exibir indicador de carregamento individual (loading state dentro do input)
 - **FR-015**: O plano de fundo da página da ficha DEVE usar a imagem da classe (ou subclasse, se o personagem a possuir) com baixa opacidade e leve desfoque; se nenhuma imagem disponível, usa fundo escuro padrão
-- **FR-016**: Campos com correspondência no catálogo (raça, classe, subclasse, origem, perícias, magias, habilidades, itens) DEVEM ter um botão de ícone dentro do input (lado direito) para abrir o seletor do catálogo
+- **FR-016**: Campos com correspondência no catálogo (raça, classe, subclasse, origem, perícias, magias, habilidades, itens) DEVEM ter um botão de ícone dentro do input (lado direito) que abre o componente `GlassEntityChooser` (`@/components/ui/glass-entity-chooser`) com o `EntityProvider` correspondente; o componente já oferece busca com debounce, navegação por teclado e criação de nova entidade
 - **FR-017**: O usuário DEVE poder editar qualquer campo manualmente, independente de usar ou não o catálogo
 
 #### Campos da Ficha (conforme ficha oficial D&D 2024)
 
-- **FR-018**: A seção de identidade DEVE incluir: nome do personagem, classe, nível, subclasse, origem, raça/espécie, XP e inspiração
-- **FR-019**: A seção de atributos DEVE incluir os seis atributos base (Força, Destreza, Constituição, Inteligência, Sabedoria, Carisma) com seus modificadores calculados automaticamente a partir do valor base
-- **FR-020**: A seção de competências DEVE incluir: bônus de proficiência, lista de salvaguardas (com checkbox de proficiência para cada atributo) e lista de perícias (com checkbox de proficiência e expertise)
-- **FR-021**: A seção de combate DEVE incluir: Classe de Armadura, Iniciativa, Deslocamento, Pontos de Vida máximos/atuais/temporários, Dados de Vida e Testes de Morte (saves de sucesso/falha)
-- **FR-022**: A seção de percepção passiva DEVE ser calculada automaticamente com base na perícia Percepção e no modificador de Sabedoria
+- **FR-018**: A seção de identidade DEVE incluir: nome do personagem, classe (única), nível, subclasse, origem, raça/espécie e inspiração; **XP não será incluído**; multiclasse está **fora do escopo** desta entrega — o campo classe aceita apenas uma classe do catálogo ou texto livre; um campo de texto auxiliar "Notas de multiclasse" pode ser usado para registros manuais
+- **FR-019**: A seção de atributos DEVE incluir os seis atributos base (Força, Destreza, Constituição, Inteligência, Sabedoria, Carisma) com seus **modificadores calculados automaticamente** a partir do valor base `floor((valor - 10) / 2)`; o modificador exibe tooltip on hover com a memória de cálculo (ex: "STR 16 → floor((16-10)/2) = +3")
+- **FR-020**: A seção de competências DEVE incluir: **bônus de proficiência** (calculado automaticamente pela tabela D&D 2024: nível 1-4 = +2, 5-8 = +3, 9-12 = +4, 13-16 = +5, 17-20 = +6; editável manualmente), lista de salvaguardas (checkbox de proficiência por atributo, valor calculado automaticamente) e lista de perícias completa com checkbox de proficiência e checkbox de expertise; os **valores finais das perícias e salvaguardas são calculados automaticamente** pelo frontend: `modificador do atributo + (bônus de proficiência se proficiente) + (bônus de proficiência extra se expertise)`; **alteração de nível dispara recalculo em cascata** de todos os valores derivados; o usuário gerencia apenas os checkboxes; **todos os valores calculados exibem tooltip on hover com a memória de cálculo**; o usuário pode sobrescrever qualquer valor calculado manualmente
+- **FR-021**: A seção de combate DEVE incluir: **Classe de Armadura** (calculada automaticamente: `10 + DEX mod` como base, editável manualmente), **Iniciativa** (calculada automaticamente: `DEX mod + bônus de proficiência se aplicável`, editável manualmente), Deslocamento, **Pontos de Vida máximos** (campo **manual** — o cálculo depende de decisões do jogador a cada nível), Pontos de Vida atuais, Pontos de Vida temporários, Dados de Vida (total e usados) e Testes de Morte (saves de sucesso/falha); **todos os valores calculados exibem tooltip on hover com a memória de cálculo**; **todos os campos de estado de sessão são persistidos no banco** com debounce 500ms e PATCH por campo
+- **FR-021a**: A seção de combate DEVE ter um botão **"Descanso Longo"** que, ao ser acionado com confirmação, restaura automaticamente: HP atual ao valor máximo, todos os slots de magia ao total disponível e dados de vida usados a zero; a operação persiste todos os campos recuperados em uma única requisição PATCH
+- **FR-022**: A percepção passiva DEVE ser **calculada automaticamente** (`10 + bônus de Percepção`) e exibir tooltip on hover com a memória de cálculo; editável manualmente pelo usuário
 - **FR-023**: A seção de ataques DEVE permitir adicionar múltiplos ataques com: nome, bônus de ataque e dano/tipo
 - **FR-024**: A seção de equipamentos DEVE exibir os itens com avatar, nome, quantidade e campo de notas; deve ter botão para adicionar item do catálogo ou manualmente
+- **FR-024a**: A seção de equipamentos DEVE incluir uma sub-seção de **moedas** com cinco campos numéricos manuais: PC (Peças de Cobre), PP (Peças de Prata), PE (Peças de Electrum), PO (Peças de Ouro) e PL (Peças de Platina); cada campo DEVE exibir tooltip on hover com o equivalente em PO (PC = 0,01 PO; PP = 0,1 PO; PE = 0,5 PO; PO = 1 PO; PL = 10 PO); sem conversão automática entre denominações; todos os campos persistidos no banco com debounce 500ms
 - **FR-025**: A seção de personalidade DEVE incluir: traços de personalidade, ideais, vínculos e falhas
-- **FR-026**: A seção de características e habilidades DEVE listar os recursos do personagem (vindos de raça, classe, origem ou adicionados manualmente) com botão para adicionar do catálogo
-- **FR-027**: A seção de magias DEVE exibir: conjurador principal, atributo de conjuração, CD de resistência, bônus de ataque de magia, slots de magia por nível (com controle de uso/recuperação) e a lista de magias com avatar (ou fallback genérico de magia), bônus de ataque/CD, componentes e botão para adicionar do catálogo
+- **FR-026**: A ficha DEVE ter **quatro seções distintas** para recursos do personagem, seguindo a ficha oficial D&D 2024:
+  - **"Características de Classe"**: Traits com origem `class`; populada automaticamente ao selecionar classe do catálogo; permite adição manual via `GlassEntityChooser` de Traits
+  - **"Características Raciais"**: Traits com origem `race`; populada automaticamente ao selecionar raça do catálogo; permite adição manual via `GlassEntityChooser` de Traits
+  - **"Talentos"**: entidades Feat conquistadas; populadas via wizard de nível (Ability Score Improvement) ou adicionadas manualmente via `GlassEntityChooser` de Feats
+  - **"Habilidades"**: todas as demais Traits (origem `background`, `manual` ou qualquer outra fonte); populada automaticamente ao selecionar origem do catálogo; permite adição manual via `GlassEntityChooser` de Traits
+- **FR-027**: A seção de magias DEVE exibir: atributo de conjuração (selecionado automaticamente ao escolher classe do catálogo, editável manualmente), **CD de resistência** (calculada automaticamente: `8 + bônus de proficiência + modificador do atributo de conjuração`, com tooltip de memória de cálculo, editável manualmente), **bônus de ataque de magia** (calculado automaticamente: `bônus de proficiência + modificador do atributo de conjuração`, com tooltip, editável manualmente), slots de magia por nível (total e usados, ambos persistidos no banco) e a lista de magias com avatar (ou fallback genérico de magia), bônus de ataque/CD, componentes e botão para adicionar do catálogo
+- **FR-027a**: A seção de combate/magias DEVE incluir um botão **"Descanso Longo"** que, ao ser acionado com confirmação, recupera automaticamente: HP atual para o valor máximo, todos os slots de magia para o total disponível e dados de vida gastos (metade do total, arredondado para baixo, conforme regra D&D 2024); todos os valores recuperados são persistidos no banco via PATCH
 - **FR-028**: A seção de notas (verso da ficha) DEVE ter áreas de texto livre para anotações adicionais
-- **FR-029**: A seção de aparência DEVE incluir: foto do personagem (upload ou URL), idade, altura, peso, olhos, pele, cabelo e aparência geral
+- **FR-029**: A seção de aparência DEVE incluir: foto do personagem (**upload de arquivo** via serviço de storage existente na plataforma, sem suporte a URL externa), idade, altura, peso, olhos, pele, cabelo e aparência geral
 
 #### Integração com Catálogo
 
@@ -183,7 +223,8 @@ A seção de equipamentos da ficha exibe os itens do personagem em uma lista. Ca
 - **CharacterSheet**: Representa a ficha de personagem de um usuário. Pertence a um único usuário. Contém todos os campos da ficha D&D 2024: identidade, atributos, competências, combate, personalidade, notas e aparência. Possui referências opcionais a entidades do catálogo (raça, classe, subclasse, origem).
 - **CharacterItem**: Representa um item no inventário de um personagem. Contém: referência opcional ao catálogo de itens, nome textual (para itens manuais), quantidade e notas. Pertence a uma CharacterSheet.
 - **CharacterSpell**: Representa uma magia na lista do personagem. Contém: referência opcional ao catálogo de magias, nome textual (para magias manuais) e dados de preparação. Pertence a uma CharacterSheet.
-- **CharacterTrait**: Representa uma característica ou habilidade do personagem. Contém: referência opcional ao catálogo de habilidades (Traits/Feats), nome e descrição textual. Pertence a uma CharacterSheet.
+- **CharacterTrait**: Representa uma característica do personagem (entidade Trait). Contém: referência opcional ao catálogo de Traits, nome e descrição textual, e **origem** (`class` | `race` | `background` | `manual`) para determinar em qual das quatro seções é exibida (class → "Características de Classe"; race → "Características Raciais"; demais → "Habilidades"). Pertence a uma CharacterSheet.
+- **CharacterFeat**: Representa um talento (Feat) conquistado pelo personagem. Contém: referência opcional ao catálogo de Feats, nome e descrição textual, e nível em que foi adquirido. Pertence a uma CharacterSheet.
 - **CharacterAttack**: Representa um ataque listado na ficha. Contém: nome, bônus de ataque e dano/tipo. Pertence a uma CharacterSheet.
 
 ## Success Criteria *(mandatory)*
@@ -199,6 +240,15 @@ A seção de equipamentos da ficha exibe os itens do personagem em uma lista. Ca
 - **SC-007**: Cada campo exibe feedback visual de salvamento individual; o usuário sempre sabe qual campo está sendo salvo
 - **SC-008**: A busca na lista de fichas retorna resultados relevantes mesmo com até 2 caracteres incorretos no termo digitado
 
+## Out of Scope
+
+- Multiclasse (campo de texto livre como alternativa manual)
+- Descanso Curto (usuário ajusta dados de vida e recursos parciais manualmente)
+- Compartilhamento por convite / co-edição colaborativa
+- Limite de fichas por usuário
+- Histórico de versões ou auditoria de alterações na ficha
+- Campo de XP (Pontos de Experiência) — a ficha não rastreia XP; progressão de nível é manual ou via wizard de nível
+
 ## Assumptions
 
 - O catálogo de raças já possui os atributos de deslocamento, tamanho e lista de habilidades associadas necessários para o preenchimento automático
@@ -209,3 +259,4 @@ A seção de equipamentos da ficha exibe os itens do personagem em uma lista. Ca
 - O upload de foto do personagem reutiliza o serviço de storage existente na plataforma
 - A autenticação segue o padrão Clerk já implementado na plataforma
 - A URL slug da ficha usa o formato `[id]-[nome-do-personagem-slug]`; se o nome estiver vazio, usa apenas o ID
+- Multiclasse está fora do escopo desta entrega; o data model armazena uma única classe por ficha; a estrutura pode ser evoluída futuramente sem breaking change
