@@ -20,7 +20,7 @@ import * as React from "react";
 import { useForm, Controller, useFieldArray } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod";
 import { motion, AnimatePresence } from "framer-motion";
-import { Loader2, Wand, Link, AlignLeft, Info, Shield, Dices, Zap, Plus, X, MapPin, Target, Clock, Hourglass } from "lucide-react"
+import { Loader2, Wand, Link, AlignLeft, Info, Shield, Dices, Zap, Plus, X, MapPin, Target, Clock, Hourglass, Sparkles, BookOpen } from "lucide-react"
 import { toast } from "sonner"
 import { cn } from "@/core/utils"
 import { useIsMobile } from "@/core/hooks/useMediaQuery"
@@ -33,6 +33,7 @@ import { GlassStatusSwitch } from "@/components/ui/glass-status-switch"
 import { GlassInlineEmptyState } from "@/components/ui/glass-inline-empty-state"
 import { GlassDiceSelector } from "@/components/ui/glass-dice-selector"
 import { RichTextEditor } from "@/features/rules/components/rich-text-editor"
+import { ImageAndDescriptionSection } from "@/features/classes/components/shared-form-components"
 
 import {
     spellSchoolColors,
@@ -143,6 +144,7 @@ export function SpellFormModal({ spell, isOpen, onClose, onSuccess }: SpellFormM
             additionalBaseDice: spell?.additionalBaseDice || [],
             extraDicePerLevel: spell?.extraDicePerLevel,
             additionalExtraDicePerLevel: spell?.additionalExtraDicePerLevel || [],
+            image: spell?.image ?? "",
             source: spell?.source ?? "LDJ pág. ",
             status: (spell?.status as "active" | "inactive") ?? "active"
         }
@@ -189,6 +191,7 @@ export function SpellFormModal({ spell, isOpen, onClose, onSuccess }: SpellFormM
                 additionalBaseDice: spell?.additionalBaseDice || [],
                 extraDicePerLevel: spell?.extraDicePerLevel,
                 additionalExtraDicePerLevel: spell?.additionalExtraDicePerLevel || [],
+                image: spell?.image ?? "",
                 source: spell?.source ?? "LDJ pág. ",
                 status: (spell?.status as "active" | "inactive") ?? "active"
             })
@@ -224,10 +227,15 @@ export function SpellFormModal({ spell, isOpen, onClose, onSuccess }: SpellFormM
         }
     }
 
+    const onFormError = (errors: any) => {
+        console.error("[SpellFormModal] Validation Errors:", errors)
+        toast.error("Por favor, verifique os erros no formulário.")
+    }
+
     return (
         <>
             <GlassModal open={isOpen} onOpenChange={(open) => !open && handleCloseAttempt()}>
-                <GlassModalContent size="xl">
+                <GlassModalContent size="xl" className="max-w-full md:max-w-[70vw]">
                     <GlassModalHeader>
                         <GlassModalTitle>{isEditMode ? `Editar ${spell!.name}` : "Nova Magia"}</GlassModalTitle>
                         <GlassModalDescription>
@@ -235,7 +243,7 @@ export function SpellFormModal({ spell, isOpen, onClose, onSuccess }: SpellFormM
                         </GlassModalDescription>
                     </GlassModalHeader>
 
-                    <form onSubmit={handleSubmit(onSubmit as any)} className="space-y-6 mt-4">
+                    <form onSubmit={handleSubmit(onSubmit as any, onFormError)} className="space-y-6 mt-4">
                         {/* Row 1: Status switch — full width */}
                         <GlassStatusSwitch
                             entityLabel="Status da Magia"
@@ -265,6 +273,17 @@ export function SpellFormModal({ spell, isOpen, onClose, onSuccess }: SpellFormM
                                 {...register("source")}
                             />
                         </div>
+
+                        {/* Row: Image + Description */}
+                        <ImageAndDescriptionSection
+                            control={control}
+                            isSubmitting={isSubmitting}
+                            errors={errors}
+                            imageFieldName="image"
+                            descriptionFieldName="description"
+                            entityId={spell?._id}
+                            placeholder="Descreva os efeitos da magia... (Suporta imagens S3 e formatação)"
+                        />
 
                         {/* Row: Casting Time — grid select */}
                         <div className="space-y-2">
@@ -694,8 +713,8 @@ export function SpellFormModal({ spell, isOpen, onClose, onSuccess }: SpellFormM
                             </AnimatePresence>
                         </div>
 
-                        {/* Row 5.4: Range and Area */}
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        {/* Row 5.4: Range, Area and Duration */}
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                             <div className="space-y-3">
                                 <div className="flex items-center justify-between">
                                     <label className="text-sm font-medium text-white/80 flex items-center gap-2">
@@ -722,7 +741,7 @@ export function SpellFormModal({ spell, isOpen, onClose, onSuccess }: SpellFormM
                                 </div>
                                 <AnimatePresence mode="popLayout">
                                     {rangeValue === undefined ? (
-                                        <GlassInlineEmptyState message="Sem alcance definido" />
+                                        <GlassInlineEmptyState message="Sem alcance" />
                                     ) : (
                                         <motion.div
                                             initial={{ opacity: 0, scale: 0.95 }}
@@ -780,7 +799,7 @@ export function SpellFormModal({ spell, isOpen, onClose, onSuccess }: SpellFormM
                                 </div>
                                 <AnimatePresence mode="popLayout">
                                     {areaValue === undefined ? (
-                                        <GlassInlineEmptyState message="Sem área de efeito" />
+                                        <GlassInlineEmptyState message="Sem área" />
                                     ) : (
                                         <motion.div
                                             initial={{ opacity: 0, scale: 0.95 }}
@@ -810,92 +829,64 @@ export function SpellFormModal({ spell, isOpen, onClose, onSuccess }: SpellFormM
                                     )}
                                 </AnimatePresence>
                             </div>
-                        </div>
 
-                        {/* Row: Duration */}
-                        <div className="space-y-3">
-                            <div className="flex items-center justify-between">
-                                <label className="text-sm font-medium text-white/80 flex items-center gap-2">
-                                    <Hourglass className="h-4 w-4 text-sky-400" />
-                                    Duração
-                                </label>
-                                {durationValue === undefined && (
-                                    <button
-                                        type="button"
-                                        onClick={() => setValue("duration", "")}
-                                        disabled={isSubmitting}
-                                        className={cn(
-                                            "px-3 py-1.5 rounded-lg text-xs font-medium transition-colors",
-                                            "bg-sky-500/20 text-sky-400 hover:bg-sky-500/30",
-                                            "border border-sky-500/30",
-                                            "disabled:opacity-50 disabled:cursor-not-allowed",
-                                            "flex items-center gap-1.5"
-                                        )}
-                                    >
-                                        <Plus className="h-3 w-3" />
-                                        Adicionar Duração
-                                    </button>
-                                )}
-                            </div>
-                            <AnimatePresence mode="popLayout">
-                                {durationValue === undefined ? (
-                                    <GlassInlineEmptyState message="Sem duração definida" />
-                                ) : (
-                                    <motion.div
-                                        initial={{ opacity: 0, scale: 0.95 }}
-                                        animate={{ opacity: 1, scale: 1 }}
-                                        exit={{ opacity: 0, scale: 0.95 }}
-                                        className="flex items-center gap-2"
-                                    >
-                                        <div className="flex-1">
-                                            <GlassInput
-                                                id="duration"
-                                                placeholder="Ex: 1 minuto, Concentração (até 10 minutos)"
-                                                error={errors.duration?.message}
-                                                {...register("duration")}
-                                                className="mb-0"
-                                                icon={<Hourglass />}
-                                            />
-                                        </div>
+                            {/* Duration */}
+                            <div className="space-y-3">
+                                <div className="flex items-center justify-between">
+                                    <label className="text-sm font-medium text-white/80 flex items-center gap-2">
+                                        <Hourglass className="h-4 w-4 text-sky-400" />
+                                        Duração
+                                    </label>
+                                    {durationValue === undefined && (
                                         <button
                                             type="button"
-                                            onClick={() => setValue("duration", undefined)}
+                                            onClick={() => setValue("duration", "")}
                                             disabled={isSubmitting}
-                                            className="p-2.5 rounded-xl bg-rose-500/10 text-rose-400 hover:bg-rose-500/20 hover:text-rose-300 transition-colors border border-rose-500/20"
+                                            className={cn(
+                                                "px-3 py-1.5 rounded-lg text-xs font-medium transition-colors",
+                                                "bg-sky-500/20 text-sky-400 hover:bg-sky-500/30",
+                                                "border border-sky-500/30",
+                                                "disabled:opacity-50 disabled:cursor-not-allowed",
+                                                "flex items-center gap-1.5"
+                                            )}
                                         >
-                                            <X className="h-4 w-4" />
+                                            <Plus className="h-3 w-3" />
+                                            Adicionar Duração
                                         </button>
-                                    </motion.div>
-                                )}
-                            </AnimatePresence>
-                        </div>
-
-                        {/* Row 6: Description */}
-                        <div className="space-y-2">
-                            <label className="text-sm font-medium text-white/80 flex items-center gap-2">
-                                <AlignLeft className="h-4 w-4" />
-                                Descrição <span className="text-rose-400">*</span>
-                            </label>
-                            <Controller
-                                name="description"
-                                control={control}
-                                render={({ field }) => (
-                                    <RichTextEditor
-                                        value={field.value || ""}
-                                        onChange={field.onChange}
-                                        placeholder="Descreva os efeitos da magia... (Suporta imagens S3 e formatação)"
-                                        className={errors.description ? "border-rose-500/50" : ""}
-                                        disabled={isSubmitting}
-                                        excludeId={spell?._id}
-                                    />
-                                )}
-                            />
-                            {errors.description && (
-                                <p className="text-xs text-rose-400 animate-slide-down flex items-center gap-1 mt-1">
-                                    <Info className="h-3 w-3" />
-                                    {errors.description.message}
-                                </p>
-                            )}
+                                    )}
+                                </div>
+                                <AnimatePresence mode="popLayout">
+                                    {durationValue === undefined ? (
+                                        <GlassInlineEmptyState message="Sem duração" />
+                                    ) : (
+                                        <motion.div
+                                            initial={{ opacity: 0, scale: 0.95 }}
+                                            animate={{ opacity: 1, scale: 1 }}
+                                            exit={{ opacity: 0, scale: 0.95 }}
+                                            className="flex items-center gap-2"
+                                        >
+                                            <div className="flex-1">
+                                                <GlassInput
+                                                    id="duration"
+                                                    placeholder="Ex: 1 minuto"
+                                                    error={errors.duration?.message}
+                                                    {...register("duration")}
+                                                    className="mb-0"
+                                                    icon={<Hourglass />}
+                                                />
+                                            </div>
+                                            <button
+                                                type="button"
+                                                onClick={() => setValue("duration", undefined)}
+                                                disabled={isSubmitting}
+                                                className="p-2.5 rounded-xl bg-rose-500/10 text-rose-400 hover:bg-rose-500/20 hover:text-rose-300 transition-colors border border-rose-500/20"
+                                            >
+                                                <X className="h-4 w-4" />
+                                            </button>
+                                        </motion.div>
+                                    )}
+                                </AnimatePresence>
+                            </div>
                         </div>
 
                         {/* Actions */}

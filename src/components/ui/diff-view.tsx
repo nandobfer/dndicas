@@ -67,6 +67,12 @@ function computeChanges(
     const before = previousData?.[key];
     const after = newData?.[key];
 
+    // Skip empty arrays comparing with undefined/null or itself
+    const isEmpty = (v: any) => v === undefined || v === null || (Array.isArray(v) && v.length === 0);
+    if (isEmpty(before) && isEmpty(after)) {
+      continue;
+    }
+
     if (before === undefined && after !== undefined) {
       changes.push({ field: key, before, after, type: 'added' });
     } else if (before !== undefined && after === undefined) {

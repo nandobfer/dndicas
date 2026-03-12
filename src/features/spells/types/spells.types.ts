@@ -19,6 +19,7 @@ export interface Spell {
     additionalBaseDice?: DiceValue[]
     extraDicePerLevel?: DiceValue
     additionalExtraDicePerLevel?: DiceValue[]
+    image?: string
     source: string
     status: "active" | "inactive"
     createdAt: Date
@@ -57,6 +58,7 @@ export interface CreateSpellInput {
     additionalBaseDice?: DiceValue[]
     extraDicePerLevel?: DiceValue
     additionalExtraDicePerLevel?: DiceValue[]
+    image?: string
     source?: string
     status: "active" | "inactive"
 }
@@ -76,6 +78,7 @@ export interface UpdateSpellInput {
     additionalBaseDice?: DiceValue[] | null
     extraDicePerLevel?: DiceValue | null
     additionalExtraDicePerLevel?: DiceValue[] | null
+    image?: string | null
     source?: string
     status?: "active" | "inactive"
 }

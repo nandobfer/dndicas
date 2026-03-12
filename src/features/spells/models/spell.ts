@@ -23,6 +23,7 @@ export interface ISpell extends Document {
     additionalBaseDice?: DiceValue[] // Optional - extra permanent dice
     extraDicePerLevel?: DiceValue // Optional - dice added per spell slot level above base
     additionalExtraDicePerLevel?: DiceValue[] // Optional - extra level-scaling dice
+    image?: string // Optional - visualization image
     source: string // Free text (e.g., "PHB pg. 230", "Homebrew")
     status: "active" | "inactive" // Admin toggle
     createdAt: Date
@@ -138,6 +139,11 @@ const SpellSchema = new Schema<ISpell>(
             type: [DiceValueSchema],
             required: false,
             default: undefined,
+        },
+        image: {
+            type: String,
+            required: false,
+            trim: true,
         },
         source: {
             type: String,

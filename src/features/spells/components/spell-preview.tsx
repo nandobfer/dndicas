@@ -37,6 +37,32 @@ const COMPONENT_DESCRIPTIONS: Record<string, string> = {
     Material: "Requer componentes físicos ou um foco arcano.",
 }
 
+function SpellVisualHeader({ image, name, description }: { image?: string; name: string; description: string }) {
+    return (
+        <div className="flex flex-col md:flex-row gap-4 py-3 border-y border-white/5">
+            <div className="flex-1 space-y-2">
+                <div className="flex items-center gap-2 text-[10px] font-bold text-white/40 uppercase tracking-widest">
+                    <Info className="h-3 w-3" />
+                    <span>Descrição</span>
+                </div>
+                <div className="text-sm text-white/80 leading-relaxed pr-2 break-words">
+                    <MentionContent html={description} mode="block" className="[&_p]:text-sm [&_p]:text-white/80 [&_ul]:text-sm [&_ol]:text-sm [&_p]:leading-relaxed" />
+                </div>
+            </div>
+            {image && (
+                <div className="w-full md:w-2/5 shrink-0">
+                    <div
+                        className="aspect-square rounded-xl bg-white/5 overflow-hidden shadow-2xl group/image relative bg-[image:var(--background-image-paper-texture)] bg-cover bg-center"
+                    >
+                        <img src={image} alt={name} className="w-full h-full object-cover transition-transform duration-500 group-hover/image:scale-110 mix-blend-multiply" />
+                        <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent opacity-0 group-hover/image:opacity-100 transition-opacity duration-300" />
+                    </div>
+                </div>
+            )}
+        </div>
+    )
+}
+
 export interface SpellPreviewProps {
     /** Spell data to display */
     spell: Spell
@@ -252,16 +278,8 @@ export function SpellPreview({ spell, showStatus = true, hideStatusChip = false,
                 </div>
             )}
 
-            {/* Description */}
-            <div className="space-y-2">
-                <div className="flex items-center gap-2 text-[10px] font-bold text-white/40 uppercase tracking-widest">
-                    <Info className="h-3 w-3" />
-                    <span>Descrição</span>
-                </div>
-                <div className="text-sm text-white/80 leading-relaxed break-words">
-                    <MentionContent html={spell.description} mode="block" className="[&_p]:text-sm [&_p]:text-white/80 [&_ul]:text-sm [&_ol]:text-sm" />
-                </div>
-            </div>
+            {/* Description & Image */}
+            <SpellVisualHeader name={spell.name} description={spell.description} image={spell.image} />
 
             {/* Source */}
             <EntitySource source={spell.source} />

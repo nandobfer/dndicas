@@ -31,6 +31,7 @@ export const createSpellSchema = z.object({
     additionalBaseDice: z.array(diceValueSchema).optional(),
     extraDicePerLevel: diceValueSchema.optional(),
     additionalExtraDicePerLevel: z.array(diceValueSchema).optional(),
+    image: z.string().optional().or(z.literal("")),
     source: z.string().max(200, "Fonte muito longa").optional(),
     status: z.enum(["active", "inactive"])
 })
@@ -51,6 +52,7 @@ export const updateSpellSchema = z.object({
     additionalBaseDice: z.array(diceValueSchema).nullable().optional(),
     extraDicePerLevel: diceValueSchema.nullable().optional(),
     additionalExtraDicePerLevel: z.array(diceValueSchema).nullable().optional(),
+    image: z.string().optional().or(z.literal("")),
     source: z.string().max(200).optional(),
     status: z.enum(["active", "inactive"]).optional()
 })
