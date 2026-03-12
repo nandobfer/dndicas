@@ -17,7 +17,7 @@ import { motion } from "framer-motion"
 import Link from "next/link"
 import Image from "next/image"
 import { usePathname } from "next/navigation"
-import { Home, User, Sparkles, FileText, Users, Scroll, Zap, Wand, AtSign, MessageSquare, Sword, ShieldCheck, Fingerprint, Backpack } from "lucide-react"
+import { Home, User, Sparkles, FileText, Users, Scroll, Zap, Wand, AtSign, MessageSquare, Sword, ShieldCheck, Fingerprint, Backpack, ScrollText } from "lucide-react"
 import { cn } from "@/core/utils"
 import { glassConfig } from "@/lib/config/glass-config"
 import { motionConfig } from "@/lib/config/motion-configs"
@@ -48,7 +48,8 @@ export interface ExpandableSidebarProps {
  */
 const mainItems = [
     { label: "Início", href: "/", icon: Home },
-    { label: "Perfil", href: "/profile", icon: User, authenticated: true }
+    { label: "Perfil", href: "/profile", icon: User, authenticated: true },
+    { label: "Minhas Fichas", href: "/my-sheets", icon: ScrollText, authenticated: true }
 ]
 
 // T020: Renamed from "Módulos" to "Cadastros", removed "Empresas", added "Usuários"
