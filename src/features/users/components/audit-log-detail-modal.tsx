@@ -64,6 +64,15 @@ function formatEntityType(entityType: string): string {
 }
 
 const renderAuditValue = (value: unknown, fieldName?: string) => {
+    // Handle images
+    if (fieldName === "image" && typeof value === "string" && value) {
+        return (
+            <div className="w-24 h-24 rounded-lg bg-white/5 border border-white/10 overflow-hidden shadow-xl">
+                <img src={value} alt="Field preview" className="w-full h-full object-cover" />
+            </div>
+        )
+    }
+
     if (typeof value === "string" && (value.includes("<p>") || value.includes("<span"))) {
         return (
             <div className="max-w-full overflow-hidden bg-black/20 p-2 rounded border border-white/5">
