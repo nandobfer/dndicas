@@ -18,13 +18,11 @@ export interface SpellsFiltersProps {
     onStatusChange: (status: SpellsFilters["status"]) => void
     onCircleChange: (circle: number | undefined, mode: "exact" | "upTo") => void
     onSchoolsChange: (schools: SpellSchool[]) => void
-    onAttributesChange: (attributes: AttributeType[]) => void
-    onDiceTypesChange: (diceTypes: DiceType[]) => void
     isSearching?: boolean
     className?: string
 }
 
-export function SpellsFilters({ filters, onSearchChange, onStatusChange, onCircleChange, onSchoolsChange, onAttributesChange, onDiceTypesChange, isSearching = false, className }: SpellsFiltersProps) {
+export function SpellsFilters({ filters, onSearchChange, onStatusChange, onCircleChange, onSchoolsChange, isSearching = false, className }: SpellsFiltersProps) {
     const isMobile = useIsMobile()
     const [circleMode, setCircleMode] = useState<"exact" | "upTo">("exact")
     const [selectedCircle, setSelectedCircle] = useState<number | undefined>(filters.circles && filters.circles.length === 1 ? filters.circles[0] : undefined)
@@ -49,22 +47,6 @@ export function SpellsFilters({ filters, onSearchChange, onStatusChange, onCircl
             textColor: colors.text,
         }
     })
-
-    // Build attribute options
-    const attributeOptions = Object.entries(attributeColors).map(([key, config]) => ({
-        value: key as AttributeType,
-        label: config.name,
-        activeColor: config.badge.split(" ")[0],
-        textColor: config.text,
-    }))
-
-    // Build dice type options
-    const diceTypeOptions = Object.entries(diceColors).map(([key, config]) => ({
-        value: key as DiceType,
-        label: key, // "d4", "d6", etc.
-        activeColor: config.bg.split(" ")[0],
-        textColor: config.text,
-    }))
 
     const handleCircleInput = (value: string) => {
         // Remove any non-numeric characters
@@ -160,22 +142,6 @@ export function SpellsFilters({ filters, onSearchChange, onStatusChange, onCircl
                             </AnimatePresence>
                         </div>
                     </div>
-
-                    {/* Dice Types Filter */}
-                    <div className="flex items-center gap-3 w-full sm:w-auto">
-                        <span className={cn("text-xs font-semibold text-white/40 uppercase tracking-wider whitespace-nowrap", isMobile && "hidden")}>Dados:</span>
-                        <GlassSelector
-                            value={filters.diceTypes || []}
-                            onChange={(vals) => onDiceTypesChange(vals as DiceType[])}
-                            options={diceTypeOptions}
-                            mode="multi"
-                            layout={isMobile ? "grid" : "horizontal"}
-                            cols={isMobile ? 3 : undefined}
-                            fullWidth={isMobile}
-                            layoutId="filter-dice-selector"
-                            className={isMobile ? "w-full" : "h-10"}
-                        />
-                    </div>
                 </div>
 
                 {/* Status */}
@@ -203,25 +169,7 @@ export function SpellsFilters({ filters, onSearchChange, onStatusChange, onCircl
                         layout={isMobile ? "grid" : "horizontal"}
                         cols={isMobile ? 2 : undefined}
                         fullWidth={isMobile}
-                        size="sm"
                         layoutId="filter-school-selector"
-                        className={isMobile ? "w-full" : "h-10"}
-                    />
-                </div>
-
-                {/* Save Attributes Filter */}
-                <div className="flex items-center gap-3 w-full sm:w-auto">
-                    <span className={cn("text-xs font-semibold text-white/40 uppercase tracking-wider whitespace-nowrap", isMobile && "hidden")}>Resistência:</span>
-                    <GlassSelector
-                        value={filters.saveAttributes || []}
-                        onChange={(vals) => onAttributesChange(vals as AttributeType[])}
-                        options={attributeOptions}
-                        mode="multi"
-                        layout={isMobile ? "grid" : "horizontal"}
-                        cols={isMobile ? 3 : undefined}
-                        fullWidth={isMobile}
-                        layoutId="filter-attr-selector"
-                        size="sm"
                         className={isMobile ? "w-full" : "h-10"}
                     />
                 </div>

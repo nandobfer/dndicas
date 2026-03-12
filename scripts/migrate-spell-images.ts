@@ -24,21 +24,46 @@ const { Spell } = require('../src/features/spells/models/spell');
 
 /**
  * Connect to MongoDB with error handling.
+ * Builds the URI by taking the .env base and replacing parts with provided arguments.
  */
-async function connectDatabase(overrideHost?: string): Promise<void> {
+async function connectDatabase(args: { host?: string; user?: string; pass?: string; db?: string; srv?: boolean }): Promise<void> {
   let mongoUri = process.env.MONGODB_URI;
 
-  if (overrideHost && mongoUri) {
-    const parts = mongoUri.match(/^(mongodb(?:\+srv)?:\/\/(?:[^:]+:[^@]+@)?)([^:\/?]+)(.*)$/);
-    if (parts) {
-      const [, prefix, , suffix] = parts;
-      mongoUri = `${prefix}${overrideHost}${suffix}`;
-      console.log(`🌐 Using custom host: ${overrideHost}`);
-    }
+  if (!mongoUri) {
+    throw new Error("MONGODB_URI environment variable is not set in .env.");
   }
 
-  if (!mongoUri) {
-    throw new Error("MONGODB_URI environment variable is not set.");
+  // Regex decomposition: mongodb(+srv)://[user:pass@]host[:port]/db[?options]
+  const uriRegex = /^(mongodb(?:\+srv)?:\/\/)(?:([^:]+):([^@]+)@)?([^:\/?]+(:[0-9]+)?)\/([^?]*)(.*)$/;
+  const parts = mongoUri.match(uriRegex);
+
+  if (parts) {
+    const [originalFull, protocol, envUser, envPass, envHost, , envDb, options] = parts;
+    
+    const user = args.user ? encodeURIComponent(args.user) : (envUser || "");
+    const pass = args.pass ? encodeURIComponent(args.pass) : (envPass || "");
+    const host = args.host || envHost;
+    const db = args.db || envDb;
+
+    // Use mongodb+srv if --srv flag is passed, otherwise keep original protocol
+    let protocolToUse = protocol;
+    if (args.srv) {
+        protocolToUse = "mongodb+srv://";
+    }
+
+    // Reconstruct URI
+    if (user && pass) {
+      mongoUri = `${protocolToUse}${user}:${pass}@${host}/${db}${options}`;
+    } else {
+      mongoUri = `${protocolToUse}${host}/${db}${options}`;
+    }
+
+    if (args.user || args.pass || args.host || args.db || args.srv) {
+      console.log(`🌐 URI reconstructed with provided arguments.`);
+      // Hide password in logs: replace ":password@" with ":****@"
+      const logUri = mongoUri.replace(/:([^@]+)@/, ":****@");
+      console.log(`🔗 Target: ${logUri}`);
+    }
   }
 
   try {
@@ -108,12 +133,27 @@ async function main() {
   console.log("🚀 Spell Image Migration Script");
   console.log("==============================\n");
 
-  const args = process.argv.slice(2);
-  const hostIdx = args.findIndex(a => a === "--host");
-  const customHost = hostIdx !== -1 ? args[hostIdx + 1] : undefined;
+  const argsArr = process.argv.slice(2);
+  
+  function getArg(name: string): string | undefined {
+    const idx = argsArr.findIndex(a => a === `--${name}`);
+    if (idx !== -1 && argsArr[idx + 1] && !argsArr[idx+1].startsWith('--')) {
+      return argsArr[idx + 1];
+    }
+    // Check for --name=value format
+    const namedArg = argsArr.find(a => a.startsWith(`--${name}=`));
+    if (namedArg) return namedArg.split('=')[1];
+    return undefined;
+  }
+
+  const host = getArg("host");
+  const user = getArg("user");
+  const pass = getArg("pass");
+  const db = getArg("db");
+  const srv = argsArr.some(a => a === "--srv");
 
   try {
-    await connectDatabase(customHost);
+    await connectDatabase({ host, user, pass, db, srv });
     await migrateImages();
     process.exit(0);
   } catch (error) {

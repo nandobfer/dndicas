@@ -14,7 +14,7 @@ import { useWindows } from "@/core/context/window-context"
 import { GlassSpellSchool } from "@/components/ui/glass-spell-school"
 import { GlassAttributeChip } from "@/components/ui/glass-attribute-chip"
 import { GlassDiceValue } from "@/components/ui/glass-dice-value"
-import { GlassEmptyValue } from "@/components/ui/glass-empty-value"
+import { GlassImage } from "@/components/ui/glass-image"
 import { Chip } from "@/components/ui/chip"
 import { SimpleGlassTooltip } from "@/components/ui/glass-tooltip"
 import { MentionContent, EntityTitleLink } from "@/features/rules/components/mention-badge"
@@ -51,12 +51,7 @@ function SpellVisualHeader({ image, name, description }: { image?: string; name:
             </div>
             {image && (
                 <div className="w-full md:w-2/5 shrink-0">
-                    <div
-                        className="aspect-square rounded-xl bg-white/5 overflow-hidden shadow-2xl group/image relative bg-[image:var(--background-image-paper-texture)] bg-cover bg-center"
-                    >
-                        <img src={image} alt={name} className="w-full h-full object-cover transition-transform duration-500 group-hover/image:scale-110 mix-blend-multiply" />
-                        <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent opacity-0 group-hover/image:opacity-100 transition-opacity duration-300" />
-                    </div>
+                    <GlassImage src={image} alt={name} />
                 </div>
             )}
         </div>
