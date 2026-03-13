@@ -1,46 +1,46 @@
 "use client"
 
-import { useEffect, useRef, useCallback } from "react"
+import { useEffect, useCallback } from "react"
 import { useForm } from "react-hook-form"
 import { usePatchSheet } from "../api/character-sheets-queries"
 import type { CharacterSheet, PatchSheetBody } from "../types/character-sheet.types"
 
-const AUTO_SAVE_DELAY = 800
-
 export function useSheetAutoSave(sheet: CharacterSheet) {
-    const { mutate: patch } = usePatchSheet(sheet._id)
-    const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+    const { mutate: patch, isPending } = usePatchSheet(sheet?._id)
 
     const form = useForm<PatchSheetBody>({
-        defaultValues: sheet as PatchSheetBody,
+        defaultValues: sheet as PatchSheetBody
     })
 
-    const { watch, reset } = form
+    const { reset, setValue } = form
 
-    // Reset form when the sheet changes from outside
+    // Sync external value changes
     useEffect(() => {
-        reset(sheet as PatchSheetBody)
-    }, [sheet._id, reset]) // eslint-disable-line react-hooks/exhaustive-deps
+        if (sheet) {
+            reset(sheet as PatchSheetBody)
+        }
+    }, [sheet?._id, reset]) // eslint-disable-line react-hooks/exhaustive-deps
 
-    const schedulesSave = useCallback(
-        (data: PatchSheetBody) => {
-            if (timerRef.current) clearTimeout(timerRef.current)
-            timerRef.current = setTimeout(() => {
-                patch(data)
-            }, AUTO_SAVE_DELAY)
+    /**
+     * Patch a single field. This is used by debounced inputs like SheetInput.
+     */
+    const patchField = useCallback(
+        (field: keyof PatchSheetBody, value: any) => {
+            // Update local form state immediately
+            setValue(field, value, { shouldDirty: true, shouldTouch: true })
+
+            // Only patch if we have an ID
+            if (sheet?._id) {
+                const body: PatchSheetBody = { [field]: value }
+                patch(body)
+            }
         },
-        [patch],
+        [patch, setValue, sheet?._id]
     )
 
-    useEffect(() => {
-        const subscription = watch((data) => {
-            schedulesSave(data as PatchSheetBody)
-        })
-        return () => {
-            subscription.unsubscribe()
-            if (timerRef.current) clearTimeout(timerRef.current)
-        }
-    }, [watch, schedulesSave])
-
-    return form
+    return {
+        ...form,
+        patchField,
+        isSaving: isPending
+    }
 }

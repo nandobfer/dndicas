@@ -24,6 +24,12 @@ export interface SearchInputProps extends Omit<React.InputHTMLAttributes<HTMLInp
     debounceMs?: number
     /** Whether search is loading */
     isLoading?: boolean
+    /** Whether to show the clear button */
+    showClearButton?: boolean
+    /** Whether to show the search icon */
+    showSearchIcon?: boolean
+    /** Custom right element (actions) */
+    rightElement?: React.ReactNode
     /** Placeholder text */
     placeholder?: string
 }
@@ -42,7 +48,7 @@ export interface SearchInputProps extends Omit<React.InputHTMLAttributes<HTMLInp
  * ```
  */
 export const SearchInput = React.forwardRef<HTMLInputElement, SearchInputProps>(
-    ({ value, onChange, debounceMs = 500, isLoading = false, placeholder = "Buscar...", className, ...props }, ref) => {
+    ({ value, onChange, debounceMs = 500, isLoading = false, showClearButton = true, showSearchIcon = true, rightElement, placeholder = "Buscar...", className, ...props }, ref) => {
         const [localValue, setLocalValue] = React.useState(value)
         const [isDebouncing, setIsDebouncing] = React.useState(false)
         const debouncedValue = useDebounce(localValue, debounceMs)
@@ -77,7 +83,7 @@ export const SearchInput = React.forwardRef<HTMLInputElement, SearchInputProps>(
         }
 
         const showLoader = isLoading
-        const showClear = localValue.length > 0 && !isLoading
+        const showClear = showClearButton && localValue.length > 0 && !isLoading
 
         return (
             <GlassInput
@@ -86,11 +92,13 @@ export const SearchInput = React.forwardRef<HTMLInputElement, SearchInputProps>(
                 onChange={handleChange}
                 placeholder={placeholder}
                 className={className}
-                icon={<Search />}
+                icon={showSearchIcon ? <Search /> : null}
                 rightElement={
-                    <AnimatePresence mode="wait">
-                        {showLoader ? (
-                            <motion.div
+                    <div className="flex items-center gap-1">
+                        {rightElement}
+                        <AnimatePresence mode="wait">
+                            {showLoader ? (
+                                <motion.div
                                 key="loader"
                                 initial={{ opacity: 0, scale: 0.8 }}
                                 animate={{ opacity: 1, scale: 1 }}
@@ -119,11 +127,12 @@ export const SearchInput = React.forwardRef<HTMLInputElement, SearchInputProps>(
                             </motion.button>
                         ) : null}
                     </AnimatePresence>
-                }
-                {...props}
-            >
-                <DebounceProgress isAnimating={isDebouncing} duration={debounceMs} />
-            </GlassInput>
+                </div>
+            }
+            {...props}
+        >
+            <DebounceProgress isAnimating={isDebouncing} duration={debounceMs} animationKey={localValue} />
+        </GlassInput>
         )
     }
 )

@@ -2,36 +2,63 @@
 
 import * as React from "react"
 import { cn } from "@/core/utils"
+import { SearchInput } from "@/components/ui/search-input"
 
 interface SheetInputProps extends React.InputHTMLAttributes<HTMLInputElement> {
     label?: string
     compact?: boolean
+    isLoading?: boolean
+    debounceMs?: number
+    onChangeValue?: (value: string) => void
+    onActionClick?: (e: React.MouseEvent) => void
+    icon?: React.ReactNode
 }
 
 export const SheetInput = React.forwardRef<HTMLInputElement, SheetInputProps>(
-    ({ label, compact = false, className, ...props }, ref) => {
+    ({ label, compact = false, className, isLoading, debounceMs = 500, onChangeValue, value, onActionClick, icon, ...props }, ref) => {
+        const { onChange: _onChange, ...restProps } = props as any
+
         return (
-            <div className={cn("flex flex-col gap-0.5", compact && "items-center")}>
+            <div className={cn("w-full", compact ? "flex flex-col gap-0.5 items-center" : "space-y-1")}>
                 {label && (
-                    <label className="text-[9px] font-bold uppercase tracking-widest text-white/40 text-center">
+                    <label
+                        className={cn(
+                            "font-bold uppercase tracking-widest text-white/40",
+                            compact ? "text-[9px] text-center" : "text-[10px] ml-1",
+                        )}
+                    >
                         {label}
                     </label>
                 )}
-                <input
+                <SearchInput
                     ref={ref}
+                    value={String(value || "")}
+                    onChange={(val: string) => onChangeValue?.(val)}
+                    isLoading={isLoading}
+                    debounceMs={debounceMs}
+                    showClearButton={false}
+                    showSearchIcon={!compact}
                     className={cn(
-                        "bg-white/5 border border-white/10 rounded-md text-white placeholder:text-white/20",
-                        "focus:outline-none focus:border-white/30 focus:ring-1 focus:ring-white/10",
-                        "transition-colors duration-150",
-                        compact
-                            ? "text-center text-sm font-bold w-full h-9 px-1"
-                            : "text-sm px-3 py-2 w-full",
+                        "transition-all duration-150",
+                        compact ? "text-center text-sm font-bold w-full h-9 px-1" : "h-10",
+                        isLoading && "animate-pulse border-white/20",
                         className,
                     )}
-                    {...props}
+                    rightElement={
+                        onActionClick && !isLoading ? (
+                            <button
+                                type="button"
+                                onClick={onActionClick}
+                                className="p-1 transition-opacity bg-white/10 hover:bg-white/20 rounded text-white/60"
+                            >
+                                {icon || <span className="text-[10px]">...</span>}
+                            </button>
+                        ) : null
+                    }
+                    {...(restProps as any)}
                 />
             </div>
         )
-    },
+    }
 )
 SheetInput.displayName = "SheetInput"
