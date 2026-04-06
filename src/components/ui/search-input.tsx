@@ -48,7 +48,21 @@ export interface SearchInputProps extends Omit<React.InputHTMLAttributes<HTMLInp
  * ```
  */
 export const SearchInput = React.forwardRef<HTMLInputElement, SearchInputProps>(
-    ({ value, onChange, debounceMs = 500, isLoading = false, showClearButton = true, showSearchIcon = true, rightElement, placeholder = "Buscar...", className, ...props }, ref) => {
+    (
+        {
+            value,
+            onChange,
+            debounceMs = 500,
+            isLoading = false,
+            showClearButton = true,
+            showSearchIcon = true,
+            rightElement,
+            placeholder = "Buscar...",
+            className,
+            ...props
+        },
+        ref
+    ) => {
         const [localValue, setLocalValue] = React.useState(value)
         const [isDebouncing, setIsDebouncing] = React.useState(false)
         const debouncedValue = useDebounce(localValue, debounceMs)
@@ -99,40 +113,40 @@ export const SearchInput = React.forwardRef<HTMLInputElement, SearchInputProps>(
                         <AnimatePresence mode="wait">
                             {showLoader ? (
                                 <motion.div
-                                key="loader"
-                                initial={{ opacity: 0, scale: 0.8 }}
-                                animate={{ opacity: 1, scale: 1 }}
-                                exit={{ opacity: 0, scale: 0.8 }}
-                                className="h-4 w-4"
-                            >
-                                <svg className="animate-spin text-white/60" viewBox="0 0 24 24" fill="none">
-                                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                                    <path
-                                        className="opacity-75"
-                                        fill="currentColor"
-                                        d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-                                    />
-                                </svg>
-                            </motion.div>
-                        ) : showClear ? (
-                            <motion.button
-                                key="clear"
-                                onClick={handleClear}
-                                className="p-1 hover:bg-white/10 rounded-full transition-colors text-white/40 hover:text-white"
-                                initial={{ opacity: 0, scale: 0.8 }}
-                                animate={{ opacity: 1, scale: 1 }}
-                                exit={{ opacity: 0, scale: 0.8 }}
-                            >
-                                <X className="h-3.5 w-3.5" />
-                            </motion.button>
-                        ) : null}
-                    </AnimatePresence>
-                </div>
-            }
-            {...props}
-        >
-            <DebounceProgress isAnimating={isDebouncing} duration={debounceMs} animationKey={localValue} />
-        </GlassInput>
+                                    key="loader"
+                                    initial={{ opacity: 0, scale: 0.8 }}
+                                    animate={{ opacity: 1, scale: 1 }}
+                                    exit={{ opacity: 0, scale: 0.8 }}
+                                    className="h-4 w-4"
+                                >
+                                    <svg className="animate-spin text-white/60" viewBox="0 0 24 24" fill="none">
+                                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                                        <path
+                                            className="opacity-75"
+                                            fill="currentColor"
+                                            d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                                        />
+                                    </svg>
+                                </motion.div>
+                            ) : showClear ? (
+                                <motion.button
+                                    key="clear"
+                                    onClick={handleClear}
+                                    className="p-1 hover:bg-white/10 rounded-full transition-colors text-white/40 hover:text-white"
+                                    initial={{ opacity: 0, scale: 0.8 }}
+                                    animate={{ opacity: 1, scale: 1 }}
+                                    exit={{ opacity: 0, scale: 0.8 }}
+                                >
+                                    <X className="h-3.5 w-3.5" />
+                                </motion.button>
+                            ) : null}
+                        </AnimatePresence>
+                    </div>
+                }
+                {...props}
+            >
+                <DebounceProgress isAnimating={isDebouncing} duration={debounceMs} animationKey={localValue} />
+            </GlassInput>
         )
     }
 )

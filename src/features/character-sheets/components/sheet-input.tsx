@@ -22,10 +22,7 @@ export const SheetInput = React.forwardRef<HTMLInputElement, SheetInputProps>(
             <div className={cn("w-full", compact ? "flex flex-col gap-0.5 items-center" : "space-y-1")}>
                 {label && (
                     <label
-                        className={cn(
-                            "font-bold uppercase tracking-widest text-white/40",
-                            compact ? "text-[9px] text-center" : "text-[10px] ml-1",
-                        )}
+                        className={cn("font-bold uppercase tracking-widest text-white/40", compact ? "text-[9px] text-center" : "text-[10px] ml-1")}
                     >
                         {label}
                     </label>
@@ -42,7 +39,7 @@ export const SheetInput = React.forwardRef<HTMLInputElement, SheetInputProps>(
                         "transition-all duration-150",
                         compact ? "text-center text-sm font-bold w-full h-9 px-1" : "h-10",
                         isLoading && "animate-pulse border-white/20",
-                        className,
+                        className
                     )}
                     rightElement={
                         onActionClick && !isLoading ? (
