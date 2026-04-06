@@ -1,8 +1,8 @@
 /**
  * @fileoverview Abstract base class for all seed data providers.
  *
- * Each provider reads a 5etools JSON file, translates items with AI,
- * checks for duplicates, and creates records in the system.
+ * Each provider reads a 5etools JSON file, translates items via a pluggable
+ * translator, checks for duplicates, and creates records in the system.
  *
  * Usage:
  *   class MyProvider extends BaseProvider<TInput, TOutput> { ... }
@@ -11,27 +11,24 @@
 import fs from 'fs';
 import path from 'path';
 import terminal from 'terminal-kit';
-import { generateText, defaultModel } from '../../src/core/ai/genai';
+import type { BaseTranslator } from './translation/base-translator';
+import {
+    loadAllEntries,
+    saveEntries,
+    applyGlossary,
+    parseGlossaryInput,
+    type GlossaryEntry,
+} from './glossary/glossary-store';
+import {
+    readProgress as dbReadProgress,
+    saveProgress as dbSaveProgress,
+} from './progress/progress-store';
 
 const term = terminal.terminal;
 
 export type LogLevel = 'info' | 'success' | 'error' | 'warn' | 'dim';
 
-const PROGRESS_FILE = path.resolve(__dirname, 'progress.json');
 const PROJECT_ROOT = path.resolve(__dirname, '../../');
-
-export interface ProgressState {
-    [providerName: string]: { lastIndex: number };
-}
-
-export interface RateLimitConfig {
-    /** AI model name — empty string means use defaultModel */
-    model: string;
-    /** Max requests per minute (0 = no limit) */
-    rpm: number;
-    /** Max requests per day (0 = no limit) */
-    rpd: number;
-}
 
 // ─── Unit conversion ──────────────────────────────────────────────────────────
 
@@ -69,74 +66,38 @@ export abstract class BaseProvider<TInput, TOutput> {
 
     private progressBar: terminal.Terminal.ProgressBarController | null = null;
     private currentTotal = 0;
+    private testMode = false;
+    private autoMode = false;
 
-    // ─── Rate limit state ─────────────────────────────────────────────────────
+    // ─── Translator ───────────────────────────────────────────────────────────
 
-    private aiModel: string = defaultModel;
-    private rateLimitRpm = 0;
-    private rateLimitRpd = 0;
+    private translator: BaseTranslator | null = null;
 
-    /** Timestamps (ms) of each AI request made this session, for RPM tracking */
-    private requestTimestamps: number[] = [];
-    /** Total AI requests made this session, for RPD tracking */
-    private dailyRequestCount = 0;
-
-    configure(config: RateLimitConfig): void {
-        this.aiModel = config.model || defaultModel;
-        this.rateLimitRpm = config.rpm;
-        this.rateLimitRpd = config.rpd;
+    setTranslator(translator: BaseTranslator): void {
+        this.translator = translator;
     }
 
-    // ─── Sleep / rate limit ───────────────────────────────────────────────────
+    setTestMode(enabled: boolean): void {
+        this.testMode = enabled;
+    }
 
-    async sleep(ms: number, reason: string): Promise<void> {
-        const seconds = Math.ceil(ms / 1000);
-        this.stopProgressBar();
-        this.log(`Rate limit reached (${reason}). Waiting ${seconds}s...`, 'warn');
-
-        const end = Date.now() + ms;
-        while (Date.now() < end) {
-            const remaining = Math.ceil((end - Date.now()) / 1000);
-            process.stdout.write(`\r  ⏳ Resuming in ${remaining}s...   `);
-            await new Promise((resolve) => setTimeout(resolve, 1000));
-        }
-        process.stdout.write('\r' + ' '.repeat(40) + '\r');
-        this.log('Resuming...', 'dim');
+    setAutoMode(enabled: boolean): void {
+        this.autoMode = enabled;
     }
 
     /**
-     * Checks RPM/RPD counters and sleeps proactively if a limit is about to
-     * be reached. Call this before every AI request.
+     * Translates a D&D item name and pre-built HTML description from English
+     * to Brazilian Portuguese via the configured translator.
      */
-    private async enforceRateLimits(): Promise<void> {
-        // ── Daily limit ──
-        if (this.rateLimitRpd > 0 && this.dailyRequestCount >= this.rateLimitRpd) {
-            await this.sleep(60 * 60 * 1000, `daily limit of ${this.rateLimitRpd} req/day reached`);
-            this.dailyRequestCount = 0;
+    async translateItem(
+        name: string,
+        descriptionHtml: string,
+    ): Promise<{ name: string; description: string }> {
+        if (!this.translator) {
+            throw new Error('No translator configured. Call setTranslator() before running.');
         }
-
-        // ── Per-minute limit ──
-        if (this.rateLimitRpm > 0) {
-            const now = Date.now();
-            const windowStart = now - 60_000;
-            this.requestTimestamps = this.requestTimestamps.filter((t) => t > windowStart);
-
-            if (this.requestTimestamps.length >= this.rateLimitRpm) {
-                const oldestInWindow = this.requestTimestamps[0];
-                const waitMs = oldestInWindow + 60_000 - now + 500;
-                await this.sleep(waitMs, `RPM limit of ${this.rateLimitRpm} req/min reached`);
-                const after = Date.now();
-                this.requestTimestamps = this.requestTimestamps.filter((t) => t > after - 60_000);
-            }
-        }
+        return this.translator.translateItem(name, descriptionHtml);
     }
-
-    private recordRequest(): void {
-        this.requestTimestamps.push(Date.now());
-        this.dailyRequestCount++;
-    }
-
-    // ─── Data file ───────────────────────────────────────────────────────────
 
     readDataFile(): TInput[] {
         const fullPath = path.resolve(PROJECT_ROOT, this.dataFilePath);
@@ -151,117 +112,12 @@ export abstract class BaseProvider<TInput, TOutput> {
 
     // ─── Progress tracking ────────────────────────────────────────────────────
 
-    readProgress(): number {
-        try {
-            if (!fs.existsSync(PROGRESS_FILE)) return -1;
-            const state: ProgressState = JSON.parse(fs.readFileSync(PROGRESS_FILE, 'utf-8'));
-            return state[this.name]?.lastIndex ?? -1;
-        } catch {
-            return -1;
-        }
+    async readProgress(): Promise<number> {
+        return dbReadProgress(this.name);
     }
 
-    saveProgress(index: number): void {
-        let state: ProgressState = {};
-        try {
-            if (fs.existsSync(PROGRESS_FILE)) {
-                state = JSON.parse(fs.readFileSync(PROGRESS_FILE, 'utf-8'));
-            }
-        } catch {
-            // ignore — start fresh
-        }
-        state[this.name] = { lastIndex: index };
-        fs.writeFileSync(PROGRESS_FILE, JSON.stringify(state, null, 2), 'utf-8');
-    }
-
-    // ─── AI translation ───────────────────────────────────────────────────────
-
-    /**
-     * Translates a D&D item name and plain-text description from English to
-     * Brazilian Portuguese using the system's configured AI model.
-     *
-     * Respects RPM/RPD rate limits, and retries automatically on 429 errors.
-     *
-     * @param name - Item name in English
-     * @param descriptionEnglish - Item description in English (plain text)
-     * @returns Translated name and HTML description in pt-BR
-     */
-    async translateItem(
-        name: string,
-        descriptionEnglish: string,
-    ): Promise<{ name: string; description: string }> {
-        const prompt = `You are a D&D 5e expert and Brazilian Portuguese translator.
-Translate the following D&D 5e item from English to Brazilian Portuguese (pt-BR).
-
-═══ OUTPUT FORMAT ═══
-Return ONLY a valid JSON object — no markdown, no backticks, no extra text:
-{
-  "name": "<translated name in pt-BR>",
-  "description": "<full description as HTML in pt-BR>"
-}
-
-For the description HTML:
-- Use <p> tags for each paragraph.
-- Preserve section sub-headers as <p><strong>Header.</strong> Text...</p>.
-- If there is an "At Higher Levels" section, render it as:
-  <p><strong>Em Níveis Superiores.</strong> Text here...</p>
-- Keep dice notation as plain text (e.g. 8d6, 1d4+1).
-- Do NOT convert distances — keep the original feet/miles values. They will be converted separately.
-
-═══ INPUT ═══
-Name (English): ${name}
-
-Description (English, plain text):
-${descriptionEnglish}`;
-
-        await this.enforceRateLimits();
-
-        let aiResponse: string;
-        try {
-            this.recordRequest();
-            aiResponse = await generateText(prompt, this.aiModel, 'seed-script');
-        } catch (err) {
-            const isRateLimit =
-                err instanceof Error &&
-                (err.message.includes('429') ||
-                    err.message.toLowerCase().includes('resource_exhausted') ||
-                    err.message.toLowerCase().includes('quota'));
-
-            if (isRateLimit) {
-                const retryMatch = err instanceof Error
-                    ? err.message.match(/"retryDelay"\s*:\s*"(\d+)s"/)
-                    : null;
-                const retrySeconds = retryMatch ? parseInt(retryMatch[1], 10) + 5 : 65;
-                await this.sleep(retrySeconds * 1000, `429 from API — retry in ${retrySeconds}s`);
-                this.recordRequest();
-                aiResponse = await generateText(prompt, this.aiModel, 'seed-script');
-            } else {
-                throw err;
-            }
-        }
-
-        const clean = aiResponse
-            .replace(/^```(?:json)?\s*/i, '')
-            .replace(/```\s*$/, '')
-            .trim();
-
-        let translated: { name: string; description: string };
-        try {
-            translated = JSON.parse(clean);
-        } catch {
-            throw new Error(
-                `AI returned invalid JSON for "${name}": ${aiResponse.slice(0, 300)}`,
-            );
-        }
-
-        if (!translated.name || !translated.description) {
-            throw new Error(`AI response missing name or description for "${name}"`);
-        }
-
-        return {
-            name: translated.name,
-            description: convertFeetToMeters(translated.description),
-        };
+    async saveProgress(index: number): Promise<void> {
+        await dbSaveProgress(this.name, index);
     }
 
     // ─── Terminal UI ──────────────────────────────────────────────────────────
@@ -317,22 +173,131 @@ ${descriptionEnglish}`;
         }
     }
 
+    // ─── Glossary post-processing ─────────────────────────────────────────────
+
+    /**
+     * Applies the current glossary to all string fields of an output object.
+     * Only processes `name` and `description` fields (both are translatable text).
+     */
+    private applyGlossaryToOutput(output: TOutput, entries: GlossaryEntry[]): TOutput {
+        if (!entries.length) return output;
+        const obj = output as Record<string, unknown>;
+        const result = { ...obj };
+
+        if (typeof result['name'] === 'string') {
+            result['name'] = applyGlossary(entries, result['name']);
+        }
+        if (typeof result['description'] === 'string') {
+            result['description'] = applyGlossary(entries, result['description']);
+        }
+
+        return result as TOutput;
+    }
+
+    // ─── Interactive review ───────────────────────────────────────────────────
+
+    /**
+     * Shows the current item and prompts the user for glossary corrections.
+     * Loops until the user presses Enter with no input.
+     *
+     * @param output - The translated item to review
+     * @param isDryRun - If true, will not save to database
+     * @returns The final (possibly corrected) output
+     */
+    private async reviewAndConfirmItem(
+        output: TOutput,
+        isDryRun: boolean,
+    ): Promise<TOutput> {
+        let entries = await loadAllEntries();
+        let current = this.applyGlossaryToOutput(output, entries);
+
+        // eslint-disable-next-line no-constant-condition
+        while (true) {
+            // Display current state
+            term('\n');
+            term.bold('─── Resultado ─────────────────────────────────────────────\n');
+            term.cyan(JSON.stringify(current, null, 2));
+            term('\n');
+            term.bold('────────────────────────────────────────────────────────────\n');
+
+            if (isDryRun) {
+                term.yellow('  (modo dry-run — não será salvo no banco)\n');
+            }
+
+            term('\n');
+            term.cyan('Glossário ');
+            term.gray('(formato: "termo > tradução ; outro > outro" — vazio para confirmar)');
+            term.cyan(': ');
+
+            const input = await new Promise<string>((resolve) => {
+                term.inputField({}, (_, value) => {
+                    term('\n');
+                    resolve((value ?? '').trim());
+                });
+            });
+
+            // Empty input = confirm
+            if (!input) {
+                return current;
+            }
+
+            // Parse and validate
+            const { entries: newEntries, errors } = parseGlossaryInput(input);
+
+            if (errors.length > 0) {
+                for (const err of errors) {
+                    term.red(`  ✗ ${err}\n`);
+                }
+                term.yellow('  Por favor, corrija o formato e tente novamente.\n');
+                continue;
+            }
+
+            if (newEntries.length === 0) {
+                term.yellow('  Nenhuma entrada reconhecida. Tente novamente.\n');
+                continue;
+            }
+
+            // Save new entries to MongoDB
+            await saveEntries(newEntries);
+            term.green(`  ✓ ${newEntries.length} entrada(s) salva(s) no glossário.\n`);
+
+            // Reload and reapply all entries (including newly saved ones)
+            entries = await loadAllEntries();
+            current = this.applyGlossaryToOutput(output, entries);
+        }
+    }
+
     // ─── Main loop ────────────────────────────────────────────────────────────
 
     async run(): Promise<void> {
         this.log(`\nStarting provider: ${this.name}`, 'info');
 
         const items = this.readDataFile();
-        const lastIndex = this.readProgress();
-        const startIndex = lastIndex + 1;
+        const startIndex = this.testMode ? 0 : (await this.readProgress()) + 1;
 
         this.log(`Total items: ${items.length}`, 'dim');
 
-        if (startIndex >= items.length) {
-            this.log(`All ${items.length} items already processed. Reset progress.json to restart.`, 'warn');
+        if (!this.testMode && startIndex >= items.length) {
+            this.log(`All ${items.length} items already processed. Use --reset-progress to restart.`, 'warn');
             return;
         }
 
+        if (this.testMode) {
+            this.log(`\n🧪 TEST MODE: Processing only the first item (index 0)`, 'info');
+            await this.runInteractiveItem(items[0], 0, true);
+            return;
+        }
+
+        if (this.autoMode) {
+            await this.runAutoLoop(items, startIndex);
+        } else {
+            await this.runInteractiveLoop(items, startIndex);
+        }
+    }
+
+    // ─── Auto mode (batch, no confirmation) ──────────────────────────────────
+
+    private async runAutoLoop(items: TInput[], startIndex: number): Promise<void> {
         this.log(
             startIndex > 0
                 ? `Resuming from index ${startIndex} (${items.length - startIndex} remaining)`
@@ -342,6 +307,12 @@ ${descriptionEnglish}`;
 
         this.initProgressBar(items.length, startIndex);
 
+        // Load glossary once for the full run
+        const entries = await loadAllEntries();
+        if (entries.length > 0) {
+            this.log(`Glossário carregado: ${entries.length} entrada(s)`, 'dim');
+        }
+
         let created = 0;
         let skipped = 0;
 
@@ -349,15 +320,18 @@ ${descriptionEnglish}`;
             const item = items[i];
 
             try {
-                const output = await this.processItem(item);
+                const raw = await this.processItem(item);
 
-                if (output === null) {
+                if (raw === null) {
                     this.log(`[${i}] Skipped (processItem returned null)`, 'dim');
                     skipped++;
-                    this.saveProgress(i);
+                    await this.saveProgress(i);
                     this.updateProgressBar(i + 1, '(skipped)');
                     continue;
                 }
+
+                // Always apply glossary post-processing
+                const output = this.applyGlossaryToOutput(raw, entries);
 
                 const exists = await this.checkExists(output);
                 if (exists) {
@@ -369,7 +343,7 @@ ${descriptionEnglish}`;
                     created++;
                 }
 
-                this.saveProgress(i);
+                await this.saveProgress(i);
                 this.updateProgressBar(i + 1, this.getItemLabel(output));
             } catch (err) {
                 this.stopProgressBar();
@@ -388,6 +362,84 @@ ${descriptionEnglish}`;
         term.yellow(`  Skipped:  ${skipped}\n`);
         term(`  Total processed: ${items.length - startIndex}\n`);
         term.bold(`────────────────────────────────────────────────\n`);
+    }
+
+    // ─── Interactive mode (one item at a time with review) ────────────────────
+
+    private async runInteractiveLoop(items: TInput[], startIndex: number): Promise<void> {
+        this.log(
+            startIndex > 0
+                ? `Resuming from index ${startIndex} (${items.length - startIndex} remaining)`
+                : `Starting from the beginning`,
+            'dim'
+        );
+
+        let created = 0;
+        let skipped = 0;
+
+        for (let i = startIndex; i < items.length; i++) {
+            term('\n');
+            term.bold(`─── Item ${i + 1} / ${items.length} ──────────────────────────────────\n`);
+
+            try {
+                const savedOrSkipped = await this.runInteractiveItem(items[i], i, false);
+                if (savedOrSkipped === 'skipped') {
+                    skipped++;
+                } else {
+                    created++;
+                }
+            } catch (err) {
+                const message = err instanceof Error ? err.message : String(err);
+                this.log(`\nFatal error at index ${i}: ${message}`, 'error');
+                this.log(`Script stopped. Fix the issue and re-run — it will resume from index ${i}.`, 'warn');
+                throw err;
+            }
+        }
+
+        term('\n\n');
+        term.bold(`─── ${this.name} Summary ───────────────────────────\n`);
+        term.green(`  Created:  ${created}\n`);
+        term.yellow(`  Skipped:  ${skipped}\n`);
+        term(`  Total processed: ${items.length - startIndex}\n`);
+        term.bold(`────────────────────────────────────────────────\n`);
+    }
+
+    /**
+     * Process a single item interactively. Returns 'created', 'skipped', or
+     * 'exists'. In dry-run/test mode, does not save to DB.
+     */
+    private async runInteractiveItem(
+        item: TInput,
+        index: number,
+        isDryRun: boolean,
+    ): Promise<'created' | 'skipped' | 'exists'> {
+        const raw = await this.processItem(item);
+
+        if (raw === null) {
+            term.yellow('  ⚠  Item ignorado (processItem retornou null)\n');
+            if (!isDryRun) await this.saveProgress(index);
+            return 'skipped';
+        }
+
+        // Interactive review: show output, allow glossary corrections
+        const final = await this.reviewAndConfirmItem(raw, isDryRun);
+
+        if (isDryRun) {
+            term.green('\n✓ Modo dry-run — nenhum dado foi salvo.\n');
+            return 'skipped';
+        }
+
+        const exists = await this.checkExists(final);
+        if (exists) {
+            term.yellow('  ⚠  Já existe no banco — ignorando.\n');
+            await this.saveProgress(index);
+            return 'exists';
+        }
+
+        await this.create(final);
+        term.green(`  ✓ Criado com sucesso.\n`);
+        await this.saveProgress(index);
+        return 'created';
     }
 
     // ─── Abstract methods ─────────────────────────────────────────────────────
@@ -417,3 +469,4 @@ ${descriptionEnglish}`;
         return String(obj['name'] ?? '');
     }
 }
+

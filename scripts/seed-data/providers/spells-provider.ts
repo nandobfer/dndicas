@@ -218,19 +218,23 @@ function cleanEntryText(text: string): string {
         .trim();
 }
 
-/** Build a plain-text English description from the spell entries for the AI. */
-function buildEntriesText(spell: FiveEToolsSpell): string {
-    const lines: string[] = [];
+/** Build an HTML description in English from the spell entries, ready for translation. */
+function buildEntriesHtml(spell: FiveEToolsSpell): string {
+    const parts: string[] = [];
 
     for (const entry of spell.entries) {
         if (typeof entry === 'string') {
-            lines.push(cleanEntryText(entry));
+            parts.push(`<p>${cleanEntryText(entry)}</p>`);
         } else if (typeof entry === 'object' && entry !== null) {
             const e = entry as { type?: string; name?: string; entries?: string[] };
             if (e.entries) {
-                if (e.name) lines.push(`${e.name}:`);
-                for (const sub of e.entries) {
-                    if (typeof sub === 'string') lines.push(cleanEntryText(sub));
+                const texts = e.entries
+                    .filter((s): s is string => typeof s === 'string')
+                    .map(cleanEntryText);
+                if (e.name) {
+                    parts.push(`<p><strong>${e.name}.</strong> ${texts.join(' ')}</p>`);
+                } else {
+                    texts.forEach((t) => parts.push(`<p>${t}</p>`));
                 }
             }
         }
@@ -238,11 +242,12 @@ function buildEntriesText(spell: FiveEToolsSpell): string {
 
     if (spell.entriesHigherLevel) {
         for (const section of spell.entriesHigherLevel) {
-            lines.push(`At Higher Levels: ${section.entries.map(cleanEntryText).join(' ')}`);
+            const text = section.entries.map(cleanEntryText).join(' ');
+            parts.push(`<p><strong>At Higher Levels.</strong> ${text}</p>`);
         }
     }
 
-    return lines.join('\n\n');
+    return parts.join('');
 }
 
 // ─── SpellsProvider ───────────────────────────────────────────────────────────
@@ -259,9 +264,9 @@ export class SpellsProvider extends BaseProvider<FiveEToolsSpell, CreateSpellInp
             return null;
         }
 
-        // Translate name + description via base class (includes @mention formatting)
-        const entriesText = buildEntriesText(spell);
-        const { name, description } = await this.translateItem(spell.name, entriesText);
+        // Translate name + description via the configured translator
+        const entriesHtml = buildEntriesHtml(spell);
+        const { name, description } = await this.translateItem(spell.name, entriesHtml);
 
         // Deterministic field mapping (no AI needed)
         return {
