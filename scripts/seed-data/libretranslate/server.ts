@@ -227,9 +227,14 @@ export class LibreTranslateServer {
             env,
         });
 
-        // Stream server output dimmed so the user can follow startup progress
+        // Stream server output dimmed so the user can follow startup progress.
+        // Suppress verbose INFO:argostranslate.* lines — they log every translation
+        // internally and are not useful to the end user.
         const onData = (data: Buffer): void => {
-            const lines = data.toString().split('\n').filter((l) => l.trim());
+            const lines = data.toString().split('\n').filter((l) => {
+                const trimmed = l.trim();
+                return trimmed && !trimmed.startsWith('INFO:argostranslate');
+            });
             for (const line of lines) {
                 term.gray(`   ${line}\n`);
             }
