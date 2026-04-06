@@ -18,18 +18,9 @@ export function SheetForm({ sheet }: SheetFormProps) {
     const form = useSheetAutoSave(sheet)
 
     return (
-        <motion.div
-            variants={motionConfig.variants.fadeInUp}
-            initial="initial"
-            animate="animate"
-            className="space-y-4"
-        >
+        <motion.div variants={motionConfig.variants.fadeInUp} initial="initial" animate="animate" className="space-y-4">
             {/* Header */}
-            <GlassCard>
-                <GlassCardContent className="pt-4 pb-4">
-                    <SheetHeader sheet={sheet} form={form} />
-                </GlassCardContent>
-            </GlassCard>
+            <SheetHeader sheet={sheet} form={form} />
 
             {/* Three-column layout */}
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
