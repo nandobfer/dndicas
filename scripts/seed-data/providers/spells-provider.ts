@@ -288,10 +288,38 @@ export class SpellsProvider extends BaseProvider<FiveEToolsSpell, CreateSpellInp
         };
     }
 
-    async checkExists(spell: CreateSpellInput): Promise<boolean> {
+    async findExisting(spell: CreateSpellInput): Promise<CreateSpellInput | null> {
         await dbConnect();
-        const existing = await Spell.findOne({ name: spell.name }).lean();
-        return existing !== null;
+        const doc = await Spell.findOne({ name: spell.name }).lean();
+        if (!doc) return null;
+        return {
+            name: doc.name,
+            description: doc.description,
+            circle: doc.circle,
+            school: doc.school,
+            castingTime: doc.castingTime,
+            component: doc.component,
+            range: doc.range ?? undefined,
+            area: doc.area ?? undefined,
+            duration: doc.duration ?? undefined,
+            saveAttribute: doc.saveAttribute ?? undefined,
+            baseDice: doc.baseDice ?? undefined,
+            additionalBaseDice: doc.additionalBaseDice ?? undefined,
+            extraDicePerLevel: doc.extraDicePerLevel ?? undefined,
+            additionalExtraDicePerLevel: doc.additionalExtraDicePerLevel ?? undefined,
+            image: doc.image ?? undefined,
+            source: doc.source ?? undefined,
+            status: doc.status,
+        };
+    }
+
+    async update(spell: CreateSpellInput): Promise<void> {
+        await dbConnect();
+        await Spell.findOneAndUpdate(
+            { name: spell.name },
+            { $set: spell },
+            { runValidators: true },
+        );
     }
 
     async create(spell: CreateSpellInput): Promise<void> {

@@ -19,7 +19,7 @@ import terminal from 'terminal-kit';
 // Type-only imports — erased at compile time, generate no require() calls.
 import type { BaseProvider } from './base-provider';
 import type { BaseTranslator, RateLimitConfig, LibreTranslateTranslator as LibreTranslateTranslatorType } from './translation';
-import { countEntries, clearAllEntries, backupGlossary } from './glossary/glossary-store';
+import { countEntries, clearAllEntries, backupGlossary, restoreGlossary } from './glossary/glossary-store';
 import { listAllProgress, resetProgress } from './progress/progress-store';
 
 // Load .env FIRST — must happen before requiring any module that reads env vars
@@ -66,6 +66,10 @@ function printHelp(): void {
     term('Lista modelos GenAI disponíveis e encerra\n');
     term.green('  --clear-glossary   ');
     term('Backup + limpa o glossário no MongoDB e encerra\n');
+    term.green('  --dump-glossary    ');
+    term('Exporta o glossário via mongodump e encerra\n');
+    term.green('  --restore-glossary ');
+    term('[./path]  Restaura o glossário de um backup (path opcional; tab completion ✅)\n');
     term.green('  --reset-progress   ');
     term('Reseta o progresso de um provider no MongoDB e encerra\n');
     term.green('  --test / --dry-run ');
@@ -233,7 +237,123 @@ async function runClearGlossary(): Promise<void> {
     await mongoose.disconnect();
 }
 
-// ─── List models ──────────────────────────────────────────────────────────────
+// ─── Dump glossary ────────────────────────────────────────────────────────────
+
+async function runDumpGlossary(): Promise<void> {
+    const mongoUri = process.env.MONGODB_URI;
+    if (!mongoUri) {
+        term.red('✗ MONGODB_URI não está configurado no .env\n');
+        process.exit(1);
+    }
+
+    term.bold.cyan('\n📦 Exportar glossário\n');
+    term('─────────────────────────────────────────\n\n');
+
+    term.cyan('Conectando ao banco...\n');
+    await mongoose.connect(mongoUri);
+
+    const count = await countEntries();
+    term.cyan(`  ${count} entrada(s) no glossário.\n\n`);
+
+    term.cyan('📦 Fazendo dump com mongodump...\n');
+
+    let backupPath: string;
+    try {
+        backupPath = backupGlossary(mongoUri);
+        term.green(`\n✓ Dump salvo em: ${backupPath}\n`);
+    } catch (err) {
+        term.red(`✗ Falha no dump: ${err instanceof Error ? err.message : String(err)}\n`);
+        await mongoose.disconnect();
+        process.exit(1);
+    }
+
+    await mongoose.disconnect();
+}
+
+// ─── Restore glossary ─────────────────────────────────────────────────────────
+
+async function runRestoreGlossary(filePath?: string): Promise<void> {
+    const mongoUri = process.env.MONGODB_URI;
+    if (!mongoUri) {
+        term.red('✗ MONGODB_URI não está configurado no .env\n');
+        process.exit(1);
+    }
+
+    term.bold.cyan('\n♻️  Restaurar glossário\n');
+    term('─────────────────────────────────────────\n\n');
+
+    let resolvedPath = filePath;
+
+    if (!resolvedPath) {
+        term.cyan('Caminho do backup ');
+        term.gray('(diretório gerado por --dump-glossary ou --clear-glossary)');
+        term.cyan(': ');
+
+        resolvedPath = await new Promise<string>((resolve) => {
+            term.inputField({}, (_, value) => {
+                term('\n');
+                resolve((value ?? '').trim());
+            });
+        });
+    }
+
+    if (!resolvedPath) {
+        term.yellow('\n⚠  Caminho não informado. Operação cancelada.\n');
+        process.exit(0);
+    }
+
+    // Resolve relative to cwd so ./backups/... works naturally
+    const absolutePath = path.resolve(process.cwd(), resolvedPath);
+
+    const fs = await import('fs');
+    if (!fs.existsSync(absolutePath)) {
+        term.red(`✗ Diretório não encontrado: ${absolutePath}\n`);
+        process.exit(1);
+    }
+
+    term.cyan('Conectando ao banco...\n');
+    await mongoose.connect(mongoUri);
+
+    const currentCount = await countEntries();
+    term('\n');
+    term.yellow(`⚠  Entradas atuais no glossário: ${currentCount}\n`);
+    term.bold('Esta ação irá substituir todas as entradas atuais pelo conteúdo do backup.\n\n');
+    term.red('Esta ação não pode ser desfeita.\n\n');
+
+    term.cyan('Confirmar? ');
+    term.gray('[y/N]: ');
+
+    const answer = await new Promise<string>((resolve) => {
+        term.inputField({}, (_, value) => {
+            term('\n');
+            resolve((value ?? '').trim().toLowerCase());
+        });
+    });
+
+    if (answer !== 'y') {
+        term.yellow('\n⚠  Operação cancelada.\n');
+        await mongoose.disconnect();
+        return;
+    }
+
+    term('\n');
+    term.cyan('♻️  Restaurando com mongorestore...\n');
+
+    try {
+        restoreGlossary(mongoUri, absolutePath);
+    } catch (err) {
+        term.red(`✗ Falha na restauração: ${err instanceof Error ? err.message : String(err)}\n`);
+        await mongoose.disconnect();
+        process.exit(1);
+    }
+
+    const newCount = await countEntries();
+    term.green(`\n✓ Glossário restaurado com sucesso! ${newCount} entrada(s) carregada(s).\n`);
+
+    await mongoose.disconnect();
+}
+
+
 
 async function listAvailableModels(): Promise<void> {
     // eslint-disable-next-line @typescript-eslint/no-require-imports
@@ -400,6 +520,19 @@ async function main(): Promise<void> {
 
     if (process.argv.includes('--clear-glossary')) {
         await runClearGlossary();
+        process.exit(0);
+    }
+
+    if (process.argv.includes('--dump-glossary')) {
+        await runDumpGlossary();
+        process.exit(0);
+    }
+
+    const restoreIdx = process.argv.indexOf('--restore-glossary');
+    if (restoreIdx !== -1) {
+        const nextArg = process.argv[restoreIdx + 1];
+        const restorePath = nextArg && !nextArg.startsWith('--') ? nextArg : undefined;
+        await runRestoreGlossary(restorePath);
         process.exit(0);
     }
 

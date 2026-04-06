@@ -103,6 +103,20 @@ export function backupGlossary(mongoUri: string): string {
     return backupDir;
 }
 
+/**
+ * Restore the glossary collection from a mongodump backup directory.
+ * Uses --drop to clear the existing collection before restoring.
+ *
+ * @param mongoUri  - MongoDB connection URI from environment
+ * @param backupDir - Path to the directory produced by backupGlossary / mongodump
+ */
+export function restoreGlossary(mongoUri: string, backupDir: string): void {
+    execSync(
+        `mongorestore --uri="${mongoUri}" --drop "${backupDir}"`,
+        { stdio: 'pipe' },
+    );
+}
+
 // ─── Application ──────────────────────────────────────────────────────────────
 
 /**
