@@ -7,6 +7,8 @@ Auto-generated from all feature plans. Last updated: 2026-02-20
 - MongoDB Atlas com Mongoose ODM (collection: `feats`) (003-feats-catalog)
 - TypeScript 5.x with strict mode enabled (Next.js 15+, React 18+, Node.js 20+ LTS) + Next.js 15+ App Router, React 18+, Mongoose (MongoDB), TanStack Query, Clerk (auth), React Hook Form, Zod, Framer Motion, Tailwind CSS, Shadcn/ui, TipTap (rich text) (004-spells-catalog)
 - MongoDB Atlas with Mongoose ODM; S3 (via existing upload infrastructure) for images in rich text descriptions (004-spells-catalog)
+- TypeScript (strict), Next.js 16+ App Router, React 18+, Node.js 20+ LTS (005-character-sheets)
+- MongoDB Atlas via Mongoose; AWS S3-compatible (Minio) for character photos (existing `src/core/storage/s3.ts`) (005-character-sheets)
 
 - TypeScript 5.x, React 19, Next.js 16 (001-rules-catalog)
 
@@ -26,10 +28,10 @@ npm test; npm run lint
 TypeScript 5.x, React 19, Next.js 16: Follow standard conventions
 
 ## Recent Changes
+- 005-character-sheets: Added TypeScript (strict), Next.js 16+ App Router, React 18+, Node.js 20+ LTS
 - 004-spells-catalog: Added TypeScript 5.x with strict mode enabled (Next.js 15+, React 18+, Node.js 20+ LTS) + Next.js 15+ App Router, React 18+, Mongoose (MongoDB), TanStack Query, Clerk (auth), React Hook Form, Zod, Framer Motion, Tailwind CSS, Shadcn/ui, TipTap (rich text)
 - 003-feats-catalog: Added TypeScript 5.x (strict mode) com Next.js 15+ App Router, React 18+, Node.js 20+ LTS + Next.js, React, TanStack Query, Mongoose, Zod, React Hook Form, Tiptap (rich text editor), Framer Motion, Clerk (auth), Tailwind CSS, Shadcn/ui
 
-- 001-rules-catalog: Added TypeScript 5.x, React 19, Next.js 16
 
 <!-- MANUAL ADDITIONS START -->
 <!-- MANUAL ADDITIONS END -->
