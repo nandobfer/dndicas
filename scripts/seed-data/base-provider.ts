@@ -6,6 +6,29 @@
  *
  * Usage:
  *   class MyProvider extends BaseProvider<TInput, TOutput> { ... }
+ *
+ * ---------------------------------------------------------------------------
+ * IMAGENS DO 5ETOOLS
+ * ---------------------------------------------------------------------------
+ * Os JSONs do 5etools NÃO contêm URLs de imagem diretamente. Em vez disso,
+ * usam a flag booleana `hasFluffImages: true` para indicar que existe imagem
+ * disponível externamente.
+ *
+ * Para exibir a imagem na UI, buscar via:
+ *   https://5e.tools/img/{source}/{name}.webp
+ *   (ex: https://5e.tools/img/MPMM/Aarakocra.webp)
+ *
+ * Cobertura por tipo de entidade:
+ *   - Classes  : ~93% têm imagem (14 de 15 classes)
+ *   - Raças    : ~84% têm imagem (133 de 158 raças)
+ *   - Itens    : ~31% têm imagem (764 de 2451 itens)
+ *   - Base items: ~28% têm imagem (55 de 196 itens)
+ *   - Feats    : ~11% têm imagem (29 de 265 feats)
+ *   - Spells   : ~3%  têm imagem (12 de 361 spells)
+ *
+ * Ao implementar, verificar `hasFluffImages === true` antes de tentar
+ * carregar a imagem para evitar requisições desnecessárias.
+ * ---------------------------------------------------------------------------
  */
 
 import fs from 'fs';
@@ -27,6 +50,23 @@ import {
 const term = terminal.terminal;
 
 export type LogLevel = 'info' | 'success' | 'error' | 'warn' | 'dim';
+
+export interface DiffEntry {
+    field: string;
+    oldValue: unknown;
+    newValue: unknown;
+}
+
+function formatValue(v: unknown): string {
+    if (v === undefined) return '(não definido)';
+    if (v === null) return '(nulo)';
+    if (typeof v === 'string') return v;
+    return JSON.stringify(v);
+}
+
+function truncateStr(s: string, maxLen = 120): string {
+    return s.length > maxLen ? s.slice(0, maxLen - 3) + '...' : s;
+}
 
 const PROJECT_ROOT = path.resolve(__dirname, '../../');
 
@@ -173,7 +213,89 @@ export abstract class BaseProvider<TInput, TOutput> {
         }
     }
 
-    // ─── Glossary post-processing ─────────────────────────────────────────────
+    // ─── Diff helpers ─────────────────────────────────────────────────────────
+
+    /**
+     * Normalizes a value before diff comparison.
+     * Empty arrays, empty strings, and null are treated as equivalent to
+     * undefined because the DB may return null/""/[] for unset fields while
+     * incoming data uses undefined, and semantically they mean "not set".
+     */
+    private normalizeForDiff(v: unknown): unknown {
+        if (v === null) return undefined;
+        if (v === '') return undefined;
+        if (Array.isArray(v) && v.length === 0) return undefined;
+        return v;
+    }
+
+    private diffObjects(existing: TOutput, incoming: TOutput): DiffEntry[] {
+        const a = existing as Record<string, unknown>;
+        const b = incoming as Record<string, unknown>;
+        const allFields = new Set([...Object.keys(a), ...Object.keys(b)]);
+        const diffs: DiffEntry[] = [];
+        for (const field of allFields) {
+            const normA = this.normalizeForDiff(a[field]);
+            const normB = this.normalizeForDiff(b[field]);
+            if (JSON.stringify(normA) !== JSON.stringify(normB)) {
+                diffs.push({ field, oldValue: a[field], newValue: b[field] });
+            }
+        }
+        return diffs;
+    }
+
+    /**
+     * Shows each conflicting field individually and lets the user decide
+     * field by field whether to keep the existing value (←) or use the
+     * incoming one (→). Works identically in dry-run and live mode.
+     *
+     * @returns A merged TOutput built from existing + chosen incoming fields.
+     */
+    private async resolveConflictsFieldByField(
+        existing: TOutput,
+        incoming: TOutput,
+        diffs: DiffEntry[],
+    ): Promise<TOutput> {
+        const label = this.getItemLabel(incoming);
+        term('\n');
+        term.bold(`─── Conflito: ${label} ─────────────────────────────────────────\n`);
+        term.yellow(`  ${diffs.length} campo(s) diferente(s) — resolva cada um:\n\n`);
+
+        const result = { ...(existing as Record<string, unknown>) };
+
+        for (const diff of diffs) {
+            term.bold(`  ${diff.field}:\n`);
+            term.red(`    ← ${truncateStr(formatValue(diff.oldValue))}  (existente)\n`);
+            term.green(`    → ${truncateStr(formatValue(diff.newValue))}  (novo)\n`);
+            term.bold('  ← seta esquerda: manter existente  |  → seta direita: usar novo\n');
+
+            const choice = await new Promise<'keep' | 'update'>((resolve) => {
+                term.grabInput(true);
+                const handler = (name: string) => {
+                    if (name === 'CTRL_C') { term.grabInput(false); process.exit(0); }
+                    if (name === 'LEFT') {
+                        term.grabInput(false);
+                        term.removeListener('key', handler);
+                        term.yellow('  ← Mantendo existente.\n\n');
+                        resolve('keep');
+                    } else if (name === 'RIGHT') {
+                        term.grabInput(false);
+                        term.removeListener('key', handler);
+                        term.green('  → Usando novo.\n\n');
+                        resolve('update');
+                    }
+                };
+                term.on('key', handler);
+            });
+
+            if (choice === 'update') {
+                result[diff.field] = diff.newValue;
+            }
+        }
+
+        return result as TOutput;
+    }
+
+
 
     /**
      * Applies the current glossary to all string fields of an output object.
@@ -333,9 +455,14 @@ export abstract class BaseProvider<TInput, TOutput> {
                 // Always apply glossary post-processing
                 const output = this.applyGlossaryToOutput(raw, entries);
 
-                const exists = await this.checkExists(output);
-                if (exists) {
-                    this.log(`[${i}] Already exists — skipping`, 'dim');
+                const exists = await this.findExisting(output);
+                if (exists !== null) {
+                    const diffs = this.diffObjects(exists, output);
+                    if (diffs.length > 0) {
+                        this.log(`[${i}] Conflito: ${diffs.length} campo(s) diferente(s) — mantendo existente (use modo interativo para resolver)`, 'warn');
+                    } else {
+                        this.log(`[${i}] Already exists — skipping`, 'dim');
+                    }
                     skipped++;
                 } else {
                     await this.create(output);
@@ -375,6 +502,7 @@ export abstract class BaseProvider<TInput, TOutput> {
         );
 
         let created = 0;
+        let updated = 0;
         let skipped = 0;
 
         for (let i = startIndex; i < items.length; i++) {
@@ -382,12 +510,10 @@ export abstract class BaseProvider<TInput, TOutput> {
             term.bold(`─── Item ${i + 1} / ${items.length} ──────────────────────────────────\n`);
 
             try {
-                const savedOrSkipped = await this.runInteractiveItem(items[i], i, false);
-                if (savedOrSkipped === 'skipped') {
-                    skipped++;
-                } else {
-                    created++;
-                }
+                const result = await this.runInteractiveItem(items[i], i, false);
+                if (result === 'created') created++;
+                else if (result === 'updated') updated++;
+                else skipped++;
             } catch (err) {
                 const message = err instanceof Error ? err.message : String(err);
                 this.log(`\nFatal error at index ${i}: ${message}`, 'error');
@@ -399,20 +525,21 @@ export abstract class BaseProvider<TInput, TOutput> {
         term('\n\n');
         term.bold(`─── ${this.name} Summary ───────────────────────────\n`);
         term.green(`  Created:  ${created}\n`);
+        term.cyan(`  Updated:  ${updated}\n`);
         term.yellow(`  Skipped:  ${skipped}\n`);
         term(`  Total processed: ${items.length - startIndex}\n`);
         term.bold(`────────────────────────────────────────────────\n`);
     }
 
     /**
-     * Process a single item interactively. Returns 'created', 'skipped', or
-     * 'exists'. In dry-run/test mode, does not save to DB.
+     * Process a single item interactively. Returns 'created', 'updated',
+     * 'skipped', or 'exists'. In dry-run/test mode, does not save to DB.
      */
     private async runInteractiveItem(
         item: TInput,
         index: number,
         isDryRun: boolean,
-    ): Promise<'created' | 'skipped' | 'exists'> {
+    ): Promise<'created' | 'updated' | 'skipped' | 'exists'> {
         const raw = await this.processItem(item);
 
         if (raw === null) {
@@ -421,19 +548,46 @@ export abstract class BaseProvider<TInput, TOutput> {
             return 'skipped';
         }
 
-        // Interactive review: show output, allow glossary corrections
-        const final = await this.reviewAndConfirmItem(raw, isDryRun);
+        // Apply glossary silently so findExisting uses the canonicalized name
+        // (a previous run may have stored the item with the glossary applied,
+        // so searching with the raw AI-translated name could miss it)
+        const glossaryEntries = await loadAllEntries();
+        const glossarized = this.applyGlossaryToOutput(raw, glossaryEntries);
+
+        // Resolve conflicts field by field BEFORE the glossary review step
+        const existing = await this.findExisting(glossarized);
+        let working: TOutput = glossarized;
+
+        if (existing) {
+            const diffs = this.diffObjects(existing, glossarized);
+            if (diffs.length > 0) {
+                working = await this.resolveConflictsFieldByField(existing, glossarized, diffs);
+            } else if (!isDryRun) {
+                term.yellow('  ⚠  Já existe no banco e está igual — ignorando.\n');
+                await this.saveProgress(index);
+                return 'exists';
+            }
+        }
+
+        // Interactive review: show result, allow glossary corrections
+        const final = await this.reviewAndConfirmItem(working, isDryRun);
 
         if (isDryRun) {
             term.green('\n✓ Modo dry-run — nenhum dado foi salvo.\n');
             return 'skipped';
         }
 
-        const exists = await this.checkExists(final);
-        if (exists) {
-            term.yellow('  ⚠  Já existe no banco — ignorando.\n');
+        if (existing) {
+            const finalDiffs = this.diffObjects(existing, final);
+            if (finalDiffs.length === 0) {
+                term.yellow('  ⚠  Resultado igual ao existente — ignorando.\n');
+                await this.saveProgress(index);
+                return 'exists';
+            }
+            await this.update(final);
+            term.green('  ✓ Atualizado com sucesso.\n');
             await this.saveProgress(index);
-            return 'exists';
+            return 'updated';
         }
 
         await this.create(final);
@@ -451,14 +605,23 @@ export abstract class BaseProvider<TInput, TOutput> {
     abstract processItem(item: TInput): Promise<TOutput | null>;
 
     /**
-     * Check if the item already exists in the database.
+     * Find an existing item in the database that matches the incoming item.
+     * Returns the existing item's data (as TOutput) or null if not found.
      */
-    abstract checkExists(item: TOutput): Promise<boolean>;
+    abstract findExisting(item: TOutput): Promise<TOutput | null>;
 
     /**
      * Insert the item into the database.
      */
     abstract create(item: TOutput): Promise<void>;
+
+    /**
+     * Update an existing item in the database.
+     * Override in subclasses that support conflict resolution updates.
+     */
+    async update(_item: TOutput): Promise<void> {
+        this.log('update() not implemented for this provider — skipping.', 'warn');
+    }
 
     /**
      * Return a human-readable label for the progress bar (e.g. spell name).
