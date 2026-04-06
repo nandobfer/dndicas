@@ -335,6 +335,12 @@ async function selectTranslator(): Promise<BaseTranslator> {
         translator.configure(rateLimitConfig);
     }
 
+    if (translator instanceof LibreTranslateTranslator) {
+        term('\n');
+        term.gray('   Modelo ativo será detectado automaticamente ao iniciar o servidor.\n');
+        term.gray('   Prefere en→pb (pt-BR) se disponível, caso contrário en→pt (pt-PT).\n');
+    }
+
     return translator;
 }
 
@@ -477,8 +483,12 @@ async function main(): Promise<void> {
     let exitCode = 0;
     try {
         await provider!.run();
-    } catch {
+    } catch (err) {
         exitCode = 1;
+        term.red(`\n✗ Erro: ${err instanceof Error ? err.message : String(err)}\n`);
+        if (err instanceof Error && err.stack) {
+            term.gray(`${err.stack}\n`);
+        }
     } finally {
         await mongoose.disconnect();
         term.cyan('\nDisconnected from database.\n');

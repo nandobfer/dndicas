@@ -5,12 +5,17 @@
  * Responsibilities:
  *  - Check whether pip is available (bootstraps it via get-pip.py if not)
  *  - Check whether libretranslate pip package is installed
- *  - Check whether the en→pt argostranslate model is downloaded
- *  - Run setup (install package + download model) with live terminal output
+ *  - Check whether an en→pt-BR or en→pt argostranslate model is downloaded
+ *  - Install the local pt-BR model (translate-en_pb-1_9.argosmodel) if present
+ *  - Run setup with live terminal output
  *  - Spawn the server process and wait until it responds to HTTP requests
  *  - Stop the server cleanly on exit
  *
  * Python 3 must be available as `python3` on PATH.
+ *
+ * Model preference:
+ *   1. en→pb  (Portuguese Brazil, from local .argosmodel file)
+ *   2. en→pt  (Portuguese, downloaded from argostranslate index — pt-PT)
  *
  * Notes on Debian/Ubuntu:
  *   System Python is "externally managed" (PEP 668). pip may not be installed
@@ -18,21 +23,43 @@
  *   all of that automatically.
  */
 
+import path from 'path';
+import fs from 'fs';
 import { spawn, ChildProcess } from 'child_process';
 import axios from 'axios';
 import terminal from 'terminal-kit';
 
 const term = terminal.terminal;
 
-// Python snippet that prints "ready" if en→pt argostranslate model is installed
+// Path to the bundled pt-BR argostranslate model (same directory as this file)
+const PTBR_MODEL_FILE = path.join(__dirname, 'translate-en_pb-1_9.argosmodel');
+
+// Python snippet that detects which en→pt model is installed.
+// Prints "pb" (pt-BR), "pt" (pt-PT fallback), or "not_ready".
 const CHECK_MODELS_SCRIPT = `
 from argostranslate import package
 pkgs = package.get_installed_packages()
-print("ready" if any(p.from_code == "en" and p.to_code == "pt" for p in pkgs) else "not_ready")
+codes = [(p.from_code, p.to_code) for p in pkgs]
+if ("en", "pb") in codes:
+    print("pb")
+elif ("en", "pt") in codes:
+    print("pt")
+else:
+    print("not_ready")
+`.trim();
+
+// Python snippet that installs the pt-BR model from a local .argosmodel file.
+const makeInstallPtBrScript = (modelPath: string): string => `
+from argostranslate import package
+import sys
+print("Instalando modelo pt-BR de ${modelPath.replace(/\\/g, '/')}...")
+sys.stdout.flush()
+package.install_from_path("${modelPath.replace(/\\/g, '/')}")
+print("done")
 `.trim();
 
 // Python snippet that downloads and installs the en→pt argostranslate model
-const INSTALL_MODELS_SCRIPT = `
+const INSTALL_PT_MODEL_SCRIPT = `
 from argostranslate import package
 import sys
 print("Atualizando índice de pacotes...")
@@ -75,6 +102,14 @@ export class LibreTranslateServer {
     private readonly port: number;
     private readonly host: string;
 
+    /**
+     * The language code for the active translation target.
+     * Set after setup/start — use this in the translation API call.
+     *   'pb' = Portuguese (Brazil) — from bundled .argosmodel file
+     *   'pt' = Portuguese (Portugal) — fallback from argostranslate index
+     */
+    activeTargetCode: string = 'pt';
+
     constructor(port = 5000, host = '127.0.0.1') {
         this.port = port;
         this.host = host;
@@ -102,21 +137,35 @@ export class LibreTranslateServer {
         });
     }
 
-    async areModelsInstalled(): Promise<boolean> {
+    /**
+     * Detects which en→pt model is currently installed.
+     * Returns 'pb' (pt-BR), 'pt' (pt-PT fallback), or null (none installed).
+     */
+    async detectTargetCode(): Promise<'pb' | 'pt' | null> {
         return new Promise((resolve) => {
             let output = '';
             const proc = spawn('python3', ['-c', CHECK_MODELS_SCRIPT], {
                 stdio: ['ignore', 'pipe', 'ignore'],
             });
             proc.stdout?.on('data', (d: Buffer) => { output += d.toString(); });
-            proc.on('close', () => resolve(output.trim() === 'ready'));
+            proc.on('close', () => {
+                const code = output.trim();
+                if (code === 'pb' || code === 'pt') resolve(code);
+                else resolve(null);
+            });
         });
+    }
+
+    async areModelsInstalled(): Promise<boolean> {
+        return (await this.detectTargetCode()) !== null;
     }
 
     // ─── Setup ────────────────────────────────────────────────────────────────
 
     /**
-     * Installs the libretranslate pip package and downloads the en→pt model.
+     * Installs the libretranslate pip package and a translation model.
+     * Prefers the bundled pt-BR model (translate-en_pb-1_9.argosmodel) over
+     * downloading pt-PT from the argostranslate index.
      * Bootstraps pip first if it is not available (Debian/Ubuntu systems).
      * Streams output to the terminal.
      */
@@ -140,9 +189,15 @@ export class LibreTranslateServer {
 
         const modelsInstalled = await this.areModelsInstalled();
         if (!modelsInstalled) {
-            term.cyan('\n   Baixando modelo de tradução en→pt (~400MB, pode demorar)...\n');
-            await this.runWithLiveOutput('python3', ['-c', INSTALL_MODELS_SCRIPT]);
-            term.green('   ✓ Modelo instalado!\n');
+            if (fs.existsSync(PTBR_MODEL_FILE)) {
+                term.cyan('\n   Instalando modelo pt-BR do arquivo local...\n');
+                await this.runWithLiveOutput('python3', ['-c', makeInstallPtBrScript(PTBR_MODEL_FILE)]);
+                term.green('   ✓ Modelo pt-BR instalado!\n');
+            } else {
+                term.cyan('\n   Baixando modelo de tradução en→pt (~400MB, pode demorar)...\n');
+                await this.runWithLiveOutput('python3', ['-c', INSTALL_PT_MODEL_SCRIPT]);
+                term.green('   ✓ Modelo instalado!\n');
+            }
         }
     }
 
@@ -188,7 +243,16 @@ export class LibreTranslateServer {
 
         // Wait for HTTP readiness
         await this.waitForReady();
+
+        // Detect which model code is active for use in translation calls
+        const code = await this.detectTargetCode();
+        this.activeTargetCode = code ?? 'pt';
+
+        const modelLabel = this.activeTargetCode === 'pb'
+            ? 'pt-BR (Portuguese Brazil)'
+            : 'pt (Portuguese — fallback)';
         term.green(`   ✓ Servidor pronto em ${this.url}\n`);
+        term.green(`   ✓ Modelo ativo: ${modelLabel}\n`);
     }
 
     /**

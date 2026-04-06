@@ -1,11 +1,13 @@
 /**
  * @fileoverview LibreTranslate self-hosted translator.
  *
- * Translates D&D items from English to Brazilian Portuguese using a locally
- * hosted LibreTranslate instance. Supports HTML format natively, preserving
- * all HTML tags during translation.
+ * Translates D&D items from English to Portuguese using a locally hosted
+ * LibreTranslate instance. Supports HTML format natively, preserving all HTML
+ * tags during translation.
  *
- * Free tier: Unlimited (self-hosted, no character limits).
+ * Model preference (detected automatically at startup):
+ *   1. en→pb  Portuguese (Brazil) — from bundled translate-en_pb-1_9.argosmodel
+ *   2. en→pt  Portuguese (Portugal) — fallback from argostranslate index
  *
  * Setup is handled automatically when this translator is selected:
  *   1. Checks if libretranslate Python package is installed
@@ -83,14 +85,15 @@ export class LibreTranslateTranslator extends BaseTranslator {
     // ─── Translation ──────────────────────────────────────────────────────────
 
     private async translateHtml(html: string): Promise<string> {
+        // Use the model code detected at server startup:
+        //   'pb' = Portuguese (Brazil) — from bundled translate-en_pb-1_9.argosmodel
+        //   'pt' = Portuguese (Portugal) — fallback from argostranslate index
+        const target = this.server?.activeTargetCode ?? 'pt';
+
         const body: Record<string, string> = {
             q: html,
             source: 'en',
-            // LibreTranslate uses 'pt' for Portuguese — the argostranslate model
-            // does not distinguish pt-BR from pt-PT via language code.
-            // In practice, the standard en→pt model produces Brazilian Portuguese
-            // as it is the most prevalent Portuguese on the internet.
-            target: 'pt',
+            target,
             format: 'html',
         };
 
