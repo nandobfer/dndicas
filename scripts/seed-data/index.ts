@@ -16,7 +16,7 @@ import mongoose from 'mongoose';
 import terminal from 'terminal-kit';
 
 // Type-only imports — erased at compile time, generate no require() calls.
-import type { BaseProvider } from './base-provider';
+import type { BaseProvider, RateLimitConfig } from './base-provider';
 
 // Load .env FIRST — must happen before requiring any module that reads env vars
 // at load time (e.g. src/core/ai/genai.ts reads GOOGLE_API_KEY at module level).
@@ -42,6 +42,84 @@ async function connectDatabase(): Promise<void> {
         throw new Error('MONGODB_URI environment variable is not set. Check your .env file.');
     }
     await mongoose.connect(mongoUri);
+}
+
+// ─── List models ──────────────────────────────────────────────────────────────
+
+async function listAvailableModels(): Promise<void> {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { getGenAIClient } = require('../../src/core/ai/genai') as typeof import('../../src/core/ai/genai');
+
+    term.cyan('Fetching available models from Gemini API...\n\n');
+
+    const ai = getGenAIClient();
+    const models: string[] = [];
+
+    // The Pager has a Symbol.asyncIterator at runtime but TS types don't expose it;
+    // cast to any to iterate safely.
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const pager = await ai.models.list() as any;
+    for await (const model of pager) {
+        if (model?.name && model.supportedActions?.includes('generateContent')) {
+            models.push((model.name as string).replace('models/', ''));
+        }
+    }
+
+    if (models.length === 0) {
+        term.yellow('No models supporting generateContent found.\n');
+        return;
+    }
+
+    term.bold('Available models (supports generateContent):\n');
+    for (const m of models.sort()) {
+        term.green(`  ${m}\n`);
+    }
+    term('\n');
+}
+
+// ─── AI / Rate limit config ───────────────────────────────────────────────────
+
+async function askRateLimitConfig(): Promise<RateLimitConfig> {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { defaultModel } = require('../../src/core/ai/genai') as typeof import('../../src/core/ai/genai');
+
+    term('\n');
+    term.gray('  Tip: run with --list-models to see all available model IDs\n\n');
+
+    const model = await new Promise<string>((resolve) => {
+        term.cyan(`AI model `);
+        term.gray(`(leave empty for default: ${defaultModel})`);
+        term.cyan(`: `);
+        term.inputField({}, (_, input) => {
+            term('\n');
+            resolve((input ?? '').trim());
+        });
+    });
+
+    const rpmStr = await new Promise<string>((resolve) => {
+        term.cyan('Requests per minute (RPM) ');
+        term.gray('(0 = no limit): ');
+        term.inputField({}, (_, input) => {
+            term('\n');
+            resolve((input ?? '').trim());
+        });
+    });
+
+    const rpdStr = await new Promise<string>((resolve) => {
+        term.cyan('Requests per day (RPD) ');
+        term.gray('(0 = no limit): ');
+        term.inputField({}, (_, input) => {
+            term('\n');
+            resolve((input ?? '').trim());
+        });
+    });
+
+    const rpm = Math.max(0, parseInt(rpmStr || '0', 10) || 0);
+    const rpd = Math.max(0, parseInt(rpdStr || '0', 10) || 0);
+
+    term.dim(`  Model: ${model || defaultModel}  |  RPM: ${rpm || 'unlimited'}  |  RPD: ${rpd || 'unlimited'}\n`);
+
+    return { model, rpm, rpd };
 }
 
 // ─── Provider selector ────────────────────────────────────────────────────────
@@ -92,17 +170,28 @@ function setupExitHandler(): void {
 // ─── Main ─────────────────────────────────────────────────────────────────────
 
 async function main(): Promise<void> {
+    // Handle --list-models flag before any interactive UI
+    if (process.argv.includes('--list-models')) {
+        dotenv.config({ path: path.resolve(__dirname, '../../.env') });
+        await listAvailableModels();
+        process.exit(0);
+    }
+
     setupExitHandler();
 
     let provider: BaseProvider<unknown, unknown>;
+    let rateLimitConfig: RateLimitConfig;
 
     try {
         provider = await selectProvider();
+        rateLimitConfig = await askRateLimitConfig();
     } catch {
         term('\n');
         term.yellow('Exiting.\n');
         process.exit(0);
     }
+
+    provider!.configure(rateLimitConfig!);
 
     term('\n');
     term.cyan(`Connecting to database...\n`);

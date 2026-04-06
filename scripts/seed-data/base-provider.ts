@@ -11,7 +11,7 @@
 import fs from 'fs';
 import path from 'path';
 import terminal from 'terminal-kit';
-import { generateText } from '../../src/core/ai/genai';
+import { generateText, defaultModel } from '../../src/core/ai/genai';
 
 const term = terminal.terminal;
 
@@ -22,6 +22,15 @@ const PROJECT_ROOT = path.resolve(__dirname, '../../');
 
 export interface ProgressState {
     [providerName: string]: { lastIndex: number };
+}
+
+export interface RateLimitConfig {
+    /** AI model name — empty string means use defaultModel */
+    model: string;
+    /** Max requests per minute (0 = no limit) */
+    rpm: number;
+    /** Max requests per day (0 = no limit) */
+    rpd: number;
 }
 
 // ─── Unit conversion ──────────────────────────────────────────────────────────
@@ -60,6 +69,72 @@ export abstract class BaseProvider<TInput, TOutput> {
 
     private progressBar: terminal.Terminal.ProgressBarController | null = null;
     private currentTotal = 0;
+
+    // ─── Rate limit state ─────────────────────────────────────────────────────
+
+    private aiModel: string = defaultModel;
+    private rateLimitRpm = 0;
+    private rateLimitRpd = 0;
+
+    /** Timestamps (ms) of each AI request made this session, for RPM tracking */
+    private requestTimestamps: number[] = [];
+    /** Total AI requests made this session, for RPD tracking */
+    private dailyRequestCount = 0;
+
+    configure(config: RateLimitConfig): void {
+        this.aiModel = config.model || defaultModel;
+        this.rateLimitRpm = config.rpm;
+        this.rateLimitRpd = config.rpd;
+    }
+
+    // ─── Sleep / rate limit ───────────────────────────────────────────────────
+
+    async sleep(ms: number, reason: string): Promise<void> {
+        const seconds = Math.ceil(ms / 1000);
+        this.stopProgressBar();
+        this.log(`Rate limit reached (${reason}). Waiting ${seconds}s...`, 'warn');
+
+        const end = Date.now() + ms;
+        while (Date.now() < end) {
+            const remaining = Math.ceil((end - Date.now()) / 1000);
+            process.stdout.write(`\r  ⏳ Resuming in ${remaining}s...   `);
+            await new Promise((resolve) => setTimeout(resolve, 1000));
+        }
+        process.stdout.write('\r' + ' '.repeat(40) + '\r');
+        this.log('Resuming...', 'dim');
+    }
+
+    /**
+     * Checks RPM/RPD counters and sleeps proactively if a limit is about to
+     * be reached. Call this before every AI request.
+     */
+    private async enforceRateLimits(): Promise<void> {
+        // ── Daily limit ──
+        if (this.rateLimitRpd > 0 && this.dailyRequestCount >= this.rateLimitRpd) {
+            await this.sleep(60 * 60 * 1000, `daily limit of ${this.rateLimitRpd} req/day reached`);
+            this.dailyRequestCount = 0;
+        }
+
+        // ── Per-minute limit ──
+        if (this.rateLimitRpm > 0) {
+            const now = Date.now();
+            const windowStart = now - 60_000;
+            this.requestTimestamps = this.requestTimestamps.filter((t) => t > windowStart);
+
+            if (this.requestTimestamps.length >= this.rateLimitRpm) {
+                const oldestInWindow = this.requestTimestamps[0];
+                const waitMs = oldestInWindow + 60_000 - now + 500;
+                await this.sleep(waitMs, `RPM limit of ${this.rateLimitRpm} req/min reached`);
+                const after = Date.now();
+                this.requestTimestamps = this.requestTimestamps.filter((t) => t > after - 60_000);
+            }
+        }
+    }
+
+    private recordRequest(): void {
+        this.requestTimestamps.push(Date.now());
+        this.dailyRequestCount++;
+    }
 
     // ─── Data file ───────────────────────────────────────────────────────────
 
@@ -105,9 +180,7 @@ export abstract class BaseProvider<TInput, TOutput> {
      * Translates a D&D item name and plain-text description from English to
      * Brazilian Portuguese using the system's configured AI model.
      *
-     * The returned description is formatted as HTML, feet/miles are converted
-     * to meters/km, and @mention markers are added by the AI for recognisable
-     * D&D game terms (spells, conditions, class features, feats, equipment, etc.)
+     * Respects RPM/RPD rate limits, and retries automatically on 429 errors.
      *
      * @param name - Item name in English
      * @param descriptionEnglish - Item description in English (plain text)
@@ -141,9 +214,32 @@ Name (English): ${name}
 Description (English, plain text):
 ${descriptionEnglish}`;
 
-        const aiResponse = await generateText(prompt);
+        await this.enforceRateLimits();
 
-        // Strip optional markdown code fence the model may add
+        let aiResponse: string;
+        try {
+            this.recordRequest();
+            aiResponse = await generateText(prompt, this.aiModel, 'seed-script');
+        } catch (err) {
+            const isRateLimit =
+                err instanceof Error &&
+                (err.message.includes('429') ||
+                    err.message.toLowerCase().includes('resource_exhausted') ||
+                    err.message.toLowerCase().includes('quota'));
+
+            if (isRateLimit) {
+                const retryMatch = err instanceof Error
+                    ? err.message.match(/"retryDelay"\s*:\s*"(\d+)s"/)
+                    : null;
+                const retrySeconds = retryMatch ? parseInt(retryMatch[1], 10) + 5 : 65;
+                await this.sleep(retrySeconds * 1000, `429 from API — retry in ${retrySeconds}s`);
+                this.recordRequest();
+                aiResponse = await generateText(prompt, this.aiModel, 'seed-script');
+            } else {
+                throw err;
+            }
+        }
+
         const clean = aiResponse
             .replace(/^```(?:json)?\s*/i, '')
             .replace(/```\s*$/, '')
@@ -282,9 +378,6 @@ ${descriptionEnglish}`;
                 this.log(`Script stopped. Fix the issue and re-run — it will resume from index ${i}.`, 'warn');
                 throw err;
             }
-
-            // Small delay to avoid hammering the AI API
-            await new Promise((resolve) => setTimeout(resolve, 200));
         }
 
         this.stopProgressBar();
