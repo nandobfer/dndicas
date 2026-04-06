@@ -68,6 +68,53 @@ function truncateStr(s: string, maxLen = 120): string {
     return s.length > maxLen ? s.slice(0, maxLen - 3) + '...' : s;
 }
 
+// ─── Colored JSON printer ─────────────────────────────────────────────────────
+
+/**
+ * Prints a syntax-highlighted JSON representation of `obj` to the terminal.
+ *
+ * Color scheme:
+ *   - Keys        → yellow
+ *   - Strings     → green
+ *   - Numbers     → cyan
+ *   - Booleans    → blue
+ *   - null        → gray
+ *   - Brackets    → bold white
+ *   - Punctuation → default
+ */
+function printColoredJson(obj: unknown): void {
+    const str = JSON.stringify(obj, null, 2);
+    // Tokenize: quoted strings (optionally followed by ": "), numbers,
+    // keywords, brackets, punctuation, and whitespace.
+    const re = /("(?:[^"\\]|\\.)*")(\s*:)?|true|false|null|-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?|[{}\[\],:]|\n|[^\S\n]+/g;
+
+    let m: RegExpExecArray | null;
+    while ((m = re.exec(str)) !== null) {
+        const tok = m[0];
+        const quotedStr = m[1];
+        const colonSuffix = m[2];
+
+        if (quotedStr !== undefined) {
+            if (colonSuffix !== undefined) {
+                term.yellow(quotedStr);
+                term(colonSuffix);
+            } else {
+                term.cyan(quotedStr);
+            }
+        } else if (tok === 'true' || tok === 'false') {
+            term.blue(tok);
+        } else if (tok === 'null') {
+            term.gray(tok);
+        } else if (tok === '{' || tok === '}' || tok === '[' || tok === ']') {
+            term.bold.white(tok);
+        } else if (/^-?\d/.test(tok)) {
+            term.green(tok);
+        } else {
+            term(tok);
+        }
+    }
+}
+
 const PROJECT_ROOT = path.resolve(__dirname, '../../');
 
 // ─── Unit conversion ──────────────────────────────────────────────────────────
@@ -338,7 +385,7 @@ export abstract class BaseProvider<TInput, TOutput> {
             // Display current state
             term('\n');
             term.bold('─── Resultado ─────────────────────────────────────────────\n');
-            term.cyan(JSON.stringify(current, null, 2));
+            printColoredJson(current);
             term('\n');
             term.bold('────────────────────────────────────────────────────────────\n');
 
