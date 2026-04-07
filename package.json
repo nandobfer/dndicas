@@ -8,7 +8,10 @@
         "start": "next start",
         "lint": "eslint",
         "test:seed": "vitest run --config vitest.config.ts",
-        "deploy": "dockerbp nandoburgos/dndicas && ssh boz \"cd /home/nandoburgos/dndicas && docker compose pull && docker compose up -d\""
+        "deploy": "dockerbp nandoburgos/dndicas && ssh boz \"cd /home/nandoburgos/dndicas && docker compose pull && docker compose up -d\"",
+	"seed": "tsx scripts/seed-data/index.ts",
+	"seed:test": "tsx scripts/seed-data/index.ts --test"
+
     },
     "dependencies": {
         "@aws-sdk/client-s3": "^3.974.0",

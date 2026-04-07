@@ -352,13 +352,18 @@ export abstract class BaseProvider<TInput, TOutput> {
      * Only processes `name` and `description` fields (both are translatable text).
      */
     protected applyGlossaryToOutput(output: TOutput, entries: GlossaryEntry[]): TOutput {
-        if (!entries.length) return output;
         const obj = output as Record<string, unknown>;
         const result = { ...obj };
 
+        // Always strip leading/trailing punctuation/quote artifacts from the name,
+        // regardless of whether there are glossary entries (AI sometimes wraps names in quotes)
         if (typeof result['name'] === 'string') {
-            // Strip leading/trailing punctuation artifacts before applying glossary
-            result['name'] = (result['name'] as string).replace(/^[\s.,;:!?]+|[\s.,;:!?]+$/g, '').trim();
+            result['name'] = (result['name'] as string).replace(/^[\s.,;:!?"']+|[\s.,;:!?"']+$/g, '').trim();
+        }
+
+        if (!entries.length) return result as TOutput;
+
+        if (typeof result['name'] === 'string') {
             result['name'] = applyGlossary(entries, result['name'] as string);
         }
         if (typeof result['description'] === 'string') {
@@ -372,17 +377,17 @@ export abstract class BaseProvider<TInput, TOutput> {
 
     /**
      * Shows the current item and prompts the user for glossary corrections.
-     * Loops until the user presses Enter with no input.
+     * Loops until the user presses Enter with no input (confirm) or ESC (skip).
      *
      * @param output - The translated item to review
      * @param isDryRun - If true, will not save to database
-     * @returns The final (possibly corrected) output
+     * @returns The final (possibly corrected) output, or null if the user pressed ESC to skip
      */
     private async reviewAndConfirmItem(
         output: TOutput,
         isDryRun: boolean,
         originalItem?: unknown,
-    ): Promise<TOutput> {
+    ): Promise<TOutput | null> {
         let entries = await loadAllEntries();
         let current = this.applyGlossaryToOutput(output, entries);
 
@@ -406,15 +411,22 @@ export abstract class BaseProvider<TInput, TOutput> {
 
             term('\n');
             term.cyan('Glossário ');
-            term.gray('(formato: "termo > tradução ; outro > outro" — vazio para confirmar)');
+            term.gray('(formato: "termo > tradução ; outro > outro" — vazio para confirmar, ESC para pular)');
             term.cyan(': ');
 
-            const input = await new Promise<string>((resolve) => {
-                term.inputField({}, (_, value) => {
+            // value is undefined when ESC is pressed; empty string when Enter with no text
+            const input = await new Promise<string | null>((resolve) => {
+                term.inputField({ cancelable: true }, (_, value) => {
                     term('\n');
-                    resolve((value ?? '').trim());
+                    resolve(value === undefined ? null : value.trim());
                 });
             });
+
+            // ESC = skip this item entirely
+            if (input === null) {
+                term.yellow('  ⏭  Item pulado.\n');
+                return null;
+            }
 
             // Empty input = confirm
             if (!input) {
@@ -634,6 +646,12 @@ export abstract class BaseProvider<TInput, TOutput> {
 
         // Interactive review: show result, allow glossary corrections
         const reviewed = await this.reviewAndConfirmItem(working, isDryRun, item);
+
+        // ESC during review = skip without saving
+        if (reviewed === null) {
+            if (!isDryRun) await this.saveProgress(index);
+            return 'skipped';
+        }
 
         // Hook for providers to run post-review steps (e.g. trait resolution)
         const final = await this.afterReview(reviewed, isDryRun);
