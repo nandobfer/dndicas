@@ -69,7 +69,7 @@ export async function listSpells(filters: SpellsFilters, page = 1, limit = 10, i
         }
 
         // Fetch ALL items matching filters (except search) to apply fuzzy search locally
-        const items = await Spell.find(query).sort({ circle: 1, name: 1 }).lean()
+        const items = await Spell.find(query).sort({ updatedAt: -1 }).lean()
 
         // Apply fuzzy search locally using the shared function
         const searchedItems = filters.search ? applyFuzzySearch(items, filters.search) : items
