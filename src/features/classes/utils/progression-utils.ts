@@ -195,6 +195,8 @@ export type ProgressionTableRow = {
     subclassName?: string
     spellSlotData?: SpellSlotsTable[number]
     customValues?: Record<string, string | null>
+    /** Populated in merge mode: subclasses whose data was folded into this class row */
+    mergedSubclasses?: Array<{ color: string; name: string }>
 }
 
 /**
@@ -203,16 +205,21 @@ export type ProgressionTableRow = {
  *
  * Always returns exactly 20 class rows (one per level 1–20),
  * plus additional subclass rows at levels where subclasses have data.
+ *
+ * When `options.mergeSubclassRows` is true (view mode), subclass data is folded
+ * directly into the matching class row instead of creating extra rows.
  */
 export const buildProgressionRows = (
     traits: ClassTrait[],
     progressionData?: ClassProgressionData,
     subclassRows?: SubclassRowData[],
+    options?: { mergeSubclassRows?: boolean },
 ): {
     rows: ProgressionTableRow[]
     activeSpellCircles: Set<number>
     allCustomColumns: Array<{ id: string; label: string; subclassColor?: string }>
 } => {
+    const mergeMode = options?.mergeSubclassRows ?? false
     const rowMap = new Map<string, ProgressionTableRow>()
 
     // Always generate 20 class rows
@@ -234,36 +241,89 @@ export const buildProgressionRows = (
         })
     }
 
-    // Add subclass rows only at levels where the subclass has traits or spell slots
-    subclassRows?.forEach((sub) => {
-        const subLevels = new Set<number>([
-            ...sub.traits.map((t) => t.level),
-            ...Object.keys(sub.progressionData?.spellSlots ?? {}).map(Number),
-        ])
+    if (mergeMode) {
+        // Merge subclass data into the corresponding class rows instead of creating extra rows
+        subclassRows?.forEach((sub) => {
+            const subLevels = new Set<number>([
+                ...sub.traits.map((t) => t.level),
+                ...Object.keys(sub.progressionData?.spellSlots ?? {}).map(Number),
+                // Also include levels from custom columns that have non-null values
+                ...(sub.progressionData?.customColumns?.flatMap((col) =>
+                    col.values
+                        .map((v, i) => (v != null ? i + 1 : null))
+                        .filter((l): l is number => l !== null),
+                ) ?? []),
+            ])
 
-        for (const level of subLevels) {
-            const key = `${level}-subclass-${sub.name}`
-            if (rowMap.has(key)) continue
+            for (const level of subLevels) {
+                const classRowKey = `${level}-class`
+                const classRow = rowMap.get(classRowKey)
+                if (!classRow) continue
 
-            const levelTraits = sub.traits.filter((t) => t.level === level)
-            const spellSlotData = sub.progressionData?.spellSlots?.[level]
-            const customValues: Record<string, string | null> = {}
-            sub.progressionData?.customColumns?.forEach((col) => {
-                customValues[col.id] = col.values[level - 1] ?? null
-            })
+                const levelTraits = sub.traits.filter((t) => t.level === level)
+                const subCustomValues: Record<string, string | null> = {}
+                sub.progressionData?.customColumns?.forEach((col) => {
+                    subCustomValues[col.id] = col.values[level - 1] ?? null
+                })
 
-            rowMap.set(key, {
-                level,
-                proficiencyBonus: getProficiencyBonus(level),
-                traits: levelTraits,
-                source: "subclass",
-                subclassColor: sub.color,
-                subclassName: sub.name,
-                spellSlotData,
-                customValues: Object.keys(customValues).length > 0 ? customValues : undefined,
-            })
-        }
-    })
+                // Merge spell slot data: class values take precedence; subclass fills in gaps
+                const subSpellSlotData = sub.progressionData?.spellSlots?.[level]
+                const mergedSpellSlotData = subSpellSlotData
+                    ? {
+                          cantrips: classRow.spellSlotData?.cantrips ?? subSpellSlotData.cantrips,
+                          preparedSpells:
+                              classRow.spellSlotData?.preparedSpells ?? subSpellSlotData.preparedSpells,
+                          slots: {
+                              ...(subSpellSlotData.slots ?? {}),
+                              ...(classRow.spellSlotData?.slots ?? {}),
+                          },
+                      }
+                    : classRow.spellSlotData
+
+                rowMap.set(classRowKey, {
+                    ...classRow,
+                    traits: [...classRow.traits, ...levelTraits],
+                    customValues: { ...(classRow.customValues ?? {}), ...subCustomValues },
+                    spellSlotData: mergedSpellSlotData,
+                    mergedSubclasses: [
+                        ...(classRow.mergedSubclasses ?? []),
+                        { color: sub.color, name: sub.name },
+                    ],
+                })
+            }
+        })
+    } else {
+        // Add subclass rows only at levels where the subclass has traits or spell slots
+        subclassRows?.forEach((sub) => {
+            const subLevels = new Set<number>([
+                ...sub.traits.map((t) => t.level),
+                ...Object.keys(sub.progressionData?.spellSlots ?? {}).map(Number),
+            ])
+
+            for (const level of subLevels) {
+                const key = `${level}-subclass-${sub.name}`
+                if (rowMap.has(key)) continue
+
+                const levelTraits = sub.traits.filter((t) => t.level === level)
+                const spellSlotData = sub.progressionData?.spellSlots?.[level]
+                const customValues: Record<string, string | null> = {}
+                sub.progressionData?.customColumns?.forEach((col) => {
+                    customValues[col.id] = col.values[level - 1] ?? null
+                })
+
+                rowMap.set(key, {
+                    level,
+                    proficiencyBonus: getProficiencyBonus(level),
+                    traits: levelTraits,
+                    source: "subclass",
+                    subclassColor: sub.color,
+                    subclassName: sub.name,
+                    spellSlotData,
+                    customValues: Object.keys(customValues).length > 0 ? customValues : undefined,
+                })
+            }
+        })
+    }
 
     // Collect active spell circles
     const activeSpellCircles = new Set<number>()
