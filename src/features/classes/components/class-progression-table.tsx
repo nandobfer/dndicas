@@ -19,6 +19,7 @@ import { cn } from "@/core/utils"
 import { MentionContent } from "@/features/rules/components/mention-badge"
 import { GlassDiceValue } from "@/components/ui/glass-dice-value"
 import type { DiceValue, DiceType } from "@/features/spells/types/spells.types"
+import { proficiencyBonusColors, rarityToTailwind } from "@/lib/config/colors"
 import type { ClassTrait } from "../types/classes.types"
 import type { ClassProgressionData, SpellProgressionType } from "../types/progression.types"
 import {
@@ -573,7 +574,10 @@ export function ClassProgressionTable({
                                                     {/* Proficiency Bonus */}
                                                     <td className={cn(cellCls, "text-center")}>
                                                         {!isSubclassRow ? (
-                                                            <span className="font-mono text-[11px] font-bold text-emerald-400/70">
+                                                            <span className={cn(
+                                                                "font-mono text-[11px] font-bold",
+                                                                rarityToTailwind[proficiencyBonusColors[row.proficiencyBonus] ?? "common"].text,
+                                                            )}>
                                                                 +{row.proficiencyBonus}
                                                             </span>
                                                         ) : (
