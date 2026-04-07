@@ -113,25 +113,51 @@ const DAMAGE_TYPE_MAP: Record<string, DamageType> = {
 const PROPERTY_MAP: Record<string, string> = {
     '2H|XPHB': 'Duas Mãos',
     'A|XPHB': 'Munição',
-    'F|XPHB': 'Finesse',
+    'F|XPHB': 'Acuidade / Finesse',
     'H|XPHB': 'Pesada',
-    'LD|XPHB': 'Carga',
+    'LD|XPHB': 'Recarga',
     'L|XPHB': 'Leve',
     'R|XPHB': 'Alcance',
-    'T|XPHB': 'Arremessável',
+    'T|XPHB': 'Arremesso',
     'V': 'Versátil',
     'V|XPHB': 'Versátil',
 };
 
+/** Maps 5etools property codes to their DB reference document IDs + PT-BR names. */
+const PROPERTY_REF_MAP: Record<string, { id: string; name: string }> = {
+    '2H|XPHB': { id: '699fb437d68d68ded79f4dec', name: 'Propriedade: Duas Mãos' },
+    'A|XPHB':  { id: '699fb545d68d68ded79f4f1e', name: 'Propriedade: Munição' },
+    'F|XPHB':  { id: '699fb73ad68d68ded79f5075', name: 'Propriedade: Acuidade / Finesse' },
+    'H|XPHB':  { id: '699fb572d68d68ded79f4f91', name: 'Propriedade: Pesada' },
+    'LD|XPHB': { id: '699fb68fd68d68ded79f5019', name: 'Propriedade: Recarga' },
+    'L|XPHB':  { id: '699fb4ccd68d68ded79f4edb', name: 'Propriedade: Leve' },
+    'R|XPHB':  { id: '699fb76cd68d68ded79f50a0', name: 'Propriedade: Alcance' },
+    'T|XPHB':  { id: '699fb7cbd68d68ded79f50ae', name: 'Propriedade: Arremesso' },
+    'V':       { id: '699fb6c3d68d68ded79f5023', name: 'Propriedade: Versátil' },
+    'V|XPHB':  { id: '699fb6c3d68d68ded79f5023', name: 'Propriedade: Versátil' },
+};
+
 const MASTERY_MAP: Record<string, string> = {
-    'Cleave|XPHB': 'Golpe Amplo',
-    'Graze|XPHB': 'Raspar',
-    'Nick|XPHB': 'Corte',
-    'Push|XPHB': 'Empurrar',
-    'Sap|XPHB': 'Debilitar',
-    'Slow|XPHB': 'Retardar',
-    'Topple|XPHB': 'Derrubar',
-    'Vex|XPHB': 'Irritar',
+    'Cleave|XPHB': 'Trespassar / Cleave',
+    'Graze|XPHB': 'Garantido / Graze',
+    'Nick|XPHB': 'Ágil / Nick',
+    'Push|XPHB': 'Empurrar / Push',
+    'Sap|XPHB': 'Drenar / Sap',
+    'Slow|XPHB': 'Lentidão / Slow',
+    'Topple|XPHB': 'Derrubar / Topple',
+    'Vex|XPHB': 'Afligir / Vex',
+};
+
+/** Maps 5etools mastery codes to their DB reference document IDs + PT-BR names. */
+const MASTERY_REF_MAP: Record<string, { id: string; name: string }> = {
+    'Cleave|XPHB': { id: '699fb3c4d68d68ded79f4dba', name: 'Maestria: Trespassar / Cleave' },
+    'Graze|XPHB':  { id: '699fb20dd68d68ded79f4cd2', name: 'Maestria: Garantido / Graze' },
+    'Nick|XPHB':   { id: '699fb13dd68d68ded79f4a84', name: 'Maestria: Ágil / Nick' },
+    'Push|XPHB':   { id: '699fb1d3d68d68ded79f4c2f', name: 'Maestria: Empurrar / Push' },
+    'Sap|XPHB':    { id: '699fb1bfd68d68ded79f4baf', name: 'Maestria: Drenar / Sap' },
+    'Slow|XPHB':   { id: '699fb36dd68d68ded79f4d71', name: 'Maestria: Lentidão / Slow' },
+    'Topple|XPHB': { id: '699fb188d68d68ded79f4b21', name: 'Maestria: Derrubar / Topple' },
+    'Vex|XPHB':    { id: '699fb0dbd68d68ded79f491a', name: 'Maestria: Afligir / Vex' },
 };
 
 const WEAPON_CATEGORY_PT: Record<string, string> = {
@@ -279,8 +305,12 @@ const buildEntriesHtml = (item: FiveEToolsBaseItem): string =>
 const buildImageUrl = (item: FiveEToolsBaseItem): string => {
     if (!item.hasFluffImages) return '';
     const encodedName = encodeURIComponent(item.name);
-    return `https://5e.tools/img/${item.source}/${encodedName}.webp`;
+    return `https://5e.tools/img/items/${item.source}/${encodedName}.webp`;
 };
+
+/** Build an HTML mention span for a DB reference document. */
+const buildMentionSpan = (id: string, name: string): string =>
+    `<span data-type="mention" data-id="${id}" data-entity-type="Regra" class="mention">${name}</span>`;
 
 // ─── ItemsProvider ────────────────────────────────────────────────────────────
 
@@ -334,18 +364,23 @@ export class ItemsProvider extends BaseProvider<FiveEToolsBaseItem, CreateItemIn
         const properties = isWeapon
             ? (item.property ?? [])
                 .map((p) => {
-                    const propName = PROPERTY_MAP[p];
-                    if (!propName) return null;
-                    // Versatile includes secondary damage in name
-                    if ((p === 'V' || p === 'V|XPHB') && item.dmg2) {
-                        return { name: `${propName} (${item.dmg2})`, description: `Dano com duas mãos: ${item.dmg2} ${DAMAGE_TYPE_MAP[item.dmgType ?? ''] ?? ''}.`.trim() };
-                    }
-                    return { name: propName, description: propName };
+                    const ref = PROPERTY_REF_MAP[p];
+                    if (!ref) return null;
+                    // Versátil includes secondary damage dice in the display name
+                    const displayName = (p === 'V' || p === 'V|XPHB') && item.dmg2
+                        ? `${ref.name} (${item.dmg2})`
+                        : ref.name;
+                    return { description: buildMentionSpan(ref.id, displayName), level: 1 };
                 })
-                .filter((p): p is { name: string; description: string } => p !== null)
+                .filter((p): p is { description: string; level: number } => p !== null)
             : [];
         const mastery = isWeapon && item.mastery?.[0]
-            ? (MASTERY_MAP[item.mastery[0]] ?? item.mastery[0].split('|')[0])
+            ? (() => {
+                const ref = MASTERY_REF_MAP[item.mastery[0]];
+                return ref
+                    ? buildMentionSpan(ref.id, ref.name)
+                    : item.mastery[0].split('|')[0];
+            })()
             : undefined;
 
         // ── Armor fields ─────────────────────────────────────────────────────────
@@ -417,8 +452,10 @@ export class ItemsProvider extends BaseProvider<FiveEToolsBaseItem, CreateItemIn
             ac: doc.ac,
             acType: doc.acType,
             armorType: doc.armorType,
-            strReq: doc.strReq,
-            stealthDis: doc.stealthDis,
+            // Only include armor-specific defaults when the item is actually armor,
+            // otherwise Mongoose's schema defaults (0 / false) cause false diffs.
+            strReq: doc.type === 'armadura' ? doc.strReq : undefined,
+            stealthDis: doc.type === 'armadura' ? doc.stealthDis : undefined,
             acBonus: doc.acBonus,
             effectDice: doc.effectDice,
         };
