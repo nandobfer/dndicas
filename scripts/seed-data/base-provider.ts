@@ -654,27 +654,45 @@ export abstract class BaseProvider<TInput, TOutput> {
         }
 
         // Hook for providers to run post-review steps (e.g. trait resolution)
-        const final = await this.afterReview(reviewed, isDryRun);
+        let finalOutput = await this.afterReview(reviewed, isDryRun);
 
         if (isDryRun) {
             term.green('\n✓ Modo dry-run — nenhum dado foi salvo.\n');
             return 'skipped';
         }
 
-        if (existing) {
-            const finalDiffs = this.diffObjects(existing, final);
+        // Re-check existence in case the glossary review changed the item's name
+        // (e.g., user maps "Condenar a Maldição" → "Rogar Maldição" which already exists).
+        // The pre-review `existing` may be stale if the name changed.
+        const nameBeforeReview = this.getItemLabel(glossarized);
+        const nameAfterReview = this.getItemLabel(finalOutput);
+        let finalExisting = existing;
+
+        if (nameAfterReview !== nameBeforeReview) {
+            finalExisting = await this.findExisting(finalOutput);
+            if (finalExisting !== null) {
+                term.yellow(`  ⚠  O nome foi alterado para "${nameAfterReview}", que já existe no banco. Iniciando resolução de conflito.\n`);
+                const conflictDiffs = this.diffObjects(finalExisting, finalOutput);
+                if (conflictDiffs.length > 0) {
+                    finalOutput = await this.resolveConflictsFieldByField(finalExisting, finalOutput, conflictDiffs);
+                }
+            }
+        }
+
+        if (finalExisting) {
+            const finalDiffs = this.diffObjects(finalExisting, finalOutput);
             if (finalDiffs.length === 0) {
                 term.yellow('  ⚠  Resultado igual ao existente — ignorando.\n');
                 await this.saveProgress(index);
                 return 'exists';
             }
-            await this.update(final);
+            await this.update(finalOutput);
             term.green('  ✓ Atualizado com sucesso.\n');
             await this.saveProgress(index);
             return 'updated';
         }
 
-        await this.create(final);
+        await this.create(finalOutput);
         term.green(`  ✓ Criado com sucesso.\n`);
         await this.saveProgress(index);
         return 'created';
