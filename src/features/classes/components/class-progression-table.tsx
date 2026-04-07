@@ -156,9 +156,15 @@ export function ClassProgressionTable({
     const [newColumnLabel, setNewColumnLabel] = React.useState("")
     const [isAddingColumn, setIsAddingColumn] = React.useState(false)
 
+    // Use JSON.stringify(traits) as dependency so that nested field edits (e.g. changing
+    // a trait's level via react-hook-form Controller) always trigger a recomputation.
+    // Without this, RHF may return the same array reference with mutated items and
+    // useMemo would incorrectly skip recomputing the rows.
+    const traitsKey = JSON.stringify(traits)
     const { rows, activeSpellCircles, allCustomColumns } = React.useMemo(
         () => buildProgressionRows(traits, progressionData, subclassData),
-        [traits, progressionData, subclassData],
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+        [traitsKey, progressionData, subclassData],
     )
 
     // Show spell circles even if spellcasting is false but there are stored slots
