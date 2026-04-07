@@ -654,6 +654,10 @@ export abstract class BaseProvider<TInput, TOutput> {
     /**
      * Find an existing item in the database that matches the incoming item.
      * Returns the existing item's data (as TOutput) or null if not found.
+     *
+     * **Important:** name-based lookups must use case-insensitive matching
+     * (e.g. MongoDB `$regex` with the `i` flag) to avoid creating duplicates
+     * when the translated name differs only in letter casing.
      */
     abstract findExisting(item: TOutput): Promise<TOutput | null>;
 
