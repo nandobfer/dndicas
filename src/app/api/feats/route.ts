@@ -22,6 +22,7 @@ export async function GET(req: NextRequest) {
     const level = url.searchParams.get('level');
     const levelMax = url.searchParams.get('levelMax');
     const attributes = url.searchParams.get("attributes")?.split(",").filter(Boolean)
+    const categories = url.searchParams.get("categories")?.split(",").filter(Boolean)
 
     const query: Record<string, unknown> = {}
 
@@ -51,6 +52,11 @@ export async function GET(req: NextRequest) {
     // Attributes filter (multi-select)
     if (attributes && attributes.length > 0) {
         query["attributeBonuses.attribute"] = { $in: attributes }
+    }
+
+    // Categories filter (multi-select)
+    if (categories && categories.length > 0) {
+        query.category = { $in: categories }
     }
 
     // ALWAYS fetch items matching non-search filters

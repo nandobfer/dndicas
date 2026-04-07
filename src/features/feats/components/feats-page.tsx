@@ -61,12 +61,14 @@ export function FeatsPage() {
                             status: filters.status,
                             level: filters.level,
                             levelMax: filters.levelMax,
-                            attributes: filters.attributes
+                            attributes: filters.attributes,
+                            categories: filters.categories
                         }}
                         onSearchChange={actions.handleSearchChange}
                         onStatusChange={actions.handleStatusChange}
                         onLevelChange={actions.handleLevelChange}
                         onAttributesChange={actions.handleAttributesChange}
+                        onCategoriesChange={actions.handleCategoriesChange}
                         isSearching={data.paginated.isFetching || data.infinite.isFetching}
                     />
                 </GlassCardContent>

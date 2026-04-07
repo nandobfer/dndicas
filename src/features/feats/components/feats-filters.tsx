@@ -9,6 +9,8 @@ import { useIsMobile } from "@/core/hooks/useMediaQuery"
 import { cn } from "@/core/utils"
 import { attributeColors, AttributeType } from "@/lib/config/colors"
 import type { FeatsFilters } from "../types/feats.types"
+import type { FeatCategory } from "../lib/feat-categories"
+import { FEAT_CATEGORY_OPTIONS } from "../lib/feat-categories"
 import { useState } from "react"
 import { motion, AnimatePresence } from "framer-motion"
 
@@ -18,11 +20,12 @@ export interface FeatsFiltersProps {
     onStatusChange: (status: FeatsFilters["status"]) => void
     onLevelChange: (level: number | undefined, mode: "exact" | "upto") => void
     onAttributesChange: (attributes: string[]) => void
+    onCategoriesChange: (categories: FeatCategory[]) => void
     isSearching?: boolean
     className?: string
 }
 
-export function FeatsFilters({ filters, onSearchChange, onStatusChange, onLevelChange, onAttributesChange, isSearching = false, className }: FeatsFiltersProps) {
+export function FeatsFilters({ filters, onSearchChange, onStatusChange, onLevelChange, onAttributesChange, onCategoriesChange, isSearching = false, className }: FeatsFiltersProps) {
     const isMobile = useIsMobile()
     const [levelMode, setLevelMode] = useState<"exact" | "upto">("exact")
     const [selectedLevel, setSelectedLevel] = useState<number | undefined>(filters.level || filters.levelMax)
@@ -54,79 +57,91 @@ export function FeatsFilters({ filters, onSearchChange, onStatusChange, onLevelC
     }
 
     return (
-        <div className={cn("flex flex-col lg:flex-row lg:items-center gap-4 justify-between", className)}>
-            {/* Search */}
-            <div className="flex-1 w-full lg:max-w-md">
-                <SearchInput value={filters.search || ""} onChange={onSearchChange} isLoading={isSearching} placeholder="Buscar talentos por nome ou fonte..." />
-            </div>
-
-            <div className="flex flex-wrap items-center gap-6">
-                {/* Level Filter */}
-                <div className="flex items-center gap-3">
-                    <span className="text-xs font-semibold text-white/40 uppercase tracking-wider whitespace-nowrap">Nível:</span>
-                    <div className="flex items-center gap-2">
-                        <GlassInput
-                            type="text"
-                            inputMode="numeric"
-                            value={selectedLevel !== undefined ? String(selectedLevel) : ""}
-                            onChange={(e) => handleLevelInput(e.target.value)}
-                            placeholder="Todos"
-                            className="w-16 px-2 h-10 text-center"
-                            containerClassName="w-auto"
-                        />
-
-                        <AnimatePresence mode="popLayout">
-                            {selectedLevel !== undefined && (
-                                <motion.div
-                                    key="level-mode-selector-wrapper"
-                                    initial={{ opacity: 0, scale: 0.8, x: -10 }}
-                                    animate={{ opacity: 1, scale: 1, x: 0 }}
-                                    exit={{ opacity: 0, scale: 0.8, x: -10 }}
-                                    transition={{ type: "spring", duration: 0.4, bounce: 0.3 }}
-                                >
-                                    <GlassSelector
-                                        value={levelMode}
-                                        onChange={(val) => {
-                                            const newMode = val as "exact" | "upto"
-                                            setLevelMode(newMode)
-                                            if (selectedLevel !== undefined) {
-                                                onLevelChange(selectedLevel, newMode)
-                                            }
-                                        }}
-                                        options={[
-                                            {
-                                                value: "exact",
-                                                label: (
-                                                    <div className="flex items-center gap-1.5 leading-none">
-                                                        <span className="text-base">=</span>
-                                                        <span>Exato</span>
-                                                    </div>
-                                                ),
-                                                activeColor: "bg-blue-500/20",
-                                                textColor: "text-blue-400",
-                                            },
-                                            {
-                                                value: "upto",
-                                                label: (
-                                                    <div className="flex items-center gap-1.5 leading-none">
-                                                        <span className="text-base">≤</span>
-                                                        <span>Até Nv.{selectedLevel}</span>
-                                                    </div>
-                                                ),
-                                                activeColor: "bg-blue-500/20",
-                                                textColor: "text-blue-400",
-                                            },
-                                        ]}
-                                        size="sm"
-                                        className="h-10"
-                                        layoutId="level-mode-selector"
-                                    />
-                                </motion.div>
-                            )}
-                        </AnimatePresence>
-                    </div>
+        <div className={cn("flex flex-col gap-4", className)}>
+            {/* Row 1: Search + Level + Status */}
+            <div className="flex flex-col lg:flex-row lg:items-center gap-4 justify-between">
+                {/* Search */}
+                <div className="flex-1 w-full lg:max-w-md">
+                    <SearchInput value={filters.search || ""} onChange={onSearchChange} isLoading={isSearching} placeholder="Buscar talentos por nome ou fonte..." />
                 </div>
 
+                <div className="flex flex-wrap items-center gap-6">
+                    {/* Level Filter */}
+                    <div className="flex items-center gap-3">
+                        <span className="text-xs font-semibold text-white/40 uppercase tracking-wider whitespace-nowrap">Nível:</span>
+                        <div className="flex items-center gap-2">
+                            <GlassInput
+                                type="text"
+                                inputMode="numeric"
+                                value={selectedLevel !== undefined ? String(selectedLevel) : ""}
+                                onChange={(e) => handleLevelInput(e.target.value)}
+                                placeholder="Todos"
+                                className="w-16 px-2 h-10 text-center"
+                                containerClassName="w-auto"
+                            />
+
+                            <AnimatePresence mode="popLayout">
+                                {selectedLevel !== undefined && (
+                                    <motion.div
+                                        key="level-mode-selector-wrapper"
+                                        initial={{ opacity: 0, scale: 0.8, x: -10 }}
+                                        animate={{ opacity: 1, scale: 1, x: 0 }}
+                                        exit={{ opacity: 0, scale: 0.8, x: -10 }}
+                                        transition={{ type: "spring", duration: 0.4, bounce: 0.3 }}
+                                    >
+                                        <GlassSelector
+                                            value={levelMode}
+                                            onChange={(val) => {
+                                                const newMode = val as "exact" | "upto"
+                                                setLevelMode(newMode)
+                                                if (selectedLevel !== undefined) {
+                                                    onLevelChange(selectedLevel, newMode)
+                                                }
+                                            }}
+                                            options={[
+                                                {
+                                                    value: "exact",
+                                                    label: (
+                                                        <div className="flex items-center gap-1.5 leading-none">
+                                                            <span className="text-base">=</span>
+                                                            <span>Exato</span>
+                                                        </div>
+                                                    ),
+                                                    activeColor: "bg-blue-500/20",
+                                                    textColor: "text-blue-400",
+                                                },
+                                                {
+                                                    value: "upto",
+                                                    label: (
+                                                        <div className="flex items-center gap-1.5 leading-none">
+                                                            <span className="text-base">≤</span>
+                                                            <span>Até Nv.{selectedLevel}</span>
+                                                        </div>
+                                                    ),
+                                                    activeColor: "bg-blue-500/20",
+                                                    textColor: "text-blue-400",
+                                                },
+                                            ]}
+                                            size="sm"
+                                            className="h-10"
+                                            layoutId="level-mode-selector"
+                                        />
+                                    </motion.div>
+                                )}
+                            </AnimatePresence>
+                        </div>
+                    </div>
+
+                    {/* Status */}
+                    <div className="flex items-center gap-2 w-full sm:w-auto">
+                        <span className="text-xs font-semibold text-white/40 uppercase tracking-wider whitespace-nowrap hidden sm:inline">Status:</span>
+                        <StatusChips value={filters.status || "all"} onChange={onStatusChange as (status: StatusFilter) => void} fullWidth={isMobile} className={isMobile ? "w-full" : ""} />
+                    </div>
+                </div>
+            </div>
+
+            {/* Row 2: Attributes + Categories */}
+            <div className="flex flex-wrap items-center gap-6">
                 {/* Attributes Filter */}
                 <div className="flex items-center gap-3 w-full sm:w-auto">
                     <span className={cn("text-xs font-semibold text-white/40 uppercase tracking-wider whitespace-nowrap", isMobile && "hidden")}>Atributos:</span>
@@ -138,16 +153,25 @@ export function FeatsFilters({ filters, onSearchChange, onStatusChange, onLevelC
                         layout={isMobile ? "grid" : "horizontal"}
                         cols={isMobile ? 3 : undefined}
                         fullWidth={isMobile}
-                        size="sm"
                         layoutId="filter-attr-selector"
-                        className={isMobile ? "w-full" : "h-10"}
+                        className={isMobile ? "w-full" : ""}
                     />
                 </div>
 
-                {/* Status */}
-                <div className="flex items-center gap-2 w-full sm:w-auto">
-                    <span className="text-xs font-semibold text-white/40 uppercase tracking-wider whitespace-nowrap hidden sm:inline">Status:</span>
-                    <StatusChips value={filters.status || "all"} onChange={onStatusChange as (status: StatusFilter) => void} fullWidth={isMobile} className={isMobile ? "w-full" : ""} />
+                {/* Categories Filter */}
+                <div className="flex items-center gap-3 w-full sm:w-auto">
+                    <span className={cn("text-xs font-semibold text-white/40 uppercase tracking-wider whitespace-nowrap", isMobile && "hidden")}>Categoria:</span>
+                    <GlassSelector
+                        value={filters.categories || []}
+                        onChange={(vals) => onCategoriesChange(vals as FeatCategory[])}
+                        options={FEAT_CATEGORY_OPTIONS}
+                        mode="multi"
+                        layout={isMobile ? "grid" : "horizontal"}
+                        cols={isMobile ? 2 : undefined}
+                        fullWidth={isMobile}
+                        layoutId="filter-category-selector"
+                        className={isMobile ? "w-full" : ""}
+                    />
                 </div>
             </div>
         </div>
