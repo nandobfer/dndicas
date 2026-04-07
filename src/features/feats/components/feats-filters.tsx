@@ -32,7 +32,7 @@ export function FeatsFilters({ filters, onSearchChange, onStatusChange, onLevelC
 
     const attributeOptions = Object.entries(attributeColors).map(([key, config]) => ({
         value: key as AttributeType,
-        label: config.name.slice(0, 3) + ".",
+        label: config.name,
         activeColor: config.badge.split(" ")[0],
         textColor: config.text,
     }))

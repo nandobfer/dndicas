@@ -233,10 +233,25 @@ function buildAttributeBonuses(
     const bonuses: { attribute: string; value: number }[] = [];
 
     for (const abilityObj of ability) {
+        // Skip hidden entries (e.g. Ability Score Improvement internals)
+        if (abilityObj.hidden) continue;
+
+        // Direct fixed bonus: { str: 1 }, { dex: 2 }, …
         for (const key of ATTRIBUTE_KEYS) {
             const val = (abilityObj as Record<string, number | undefined>)[key];
             if (typeof val === 'number' && val >= 1 && val <= 3) {
                 bonuses.push({ attribute: ATTRIBUTE_MAP[key], value: val });
+            }
+        }
+
+        // Choose bonus: { choose: { from: ["str","dex"], amount: 1 } }
+        if (abilityObj.choose?.from) {
+            const value = abilityObj.choose.amount ?? 1;
+            for (const key of abilityObj.choose.from) {
+                const attribute = ATTRIBUTE_MAP[key];
+                if (attribute) {
+                    bonuses.push({ attribute, value });
+                }
             }
         }
     }
