@@ -1,7 +1,7 @@
 "use client";
 
 import { motion, AnimatePresence } from "framer-motion"
-import { MoreHorizontal, Pencil, Trash2, GraduationCap, Sword } from "lucide-react"
+import { MoreHorizontal, Pencil, Trash2, GraduationCap, Sword, TableProperties } from "lucide-react"
 import { useAuth } from "@/core/hooks/useAuth"
 import { cn } from "@/core/utils"
 import { GlassCard } from "@/components/ui/glass-card"
@@ -16,9 +16,11 @@ import {
     GlassDropdownMenuTrigger,
 } from "@/components/ui/glass-dropdown-menu"
 import { GlassEmptyValue } from "@/components/ui/glass-empty-value"
+import { GlassPopover, GlassPopoverTrigger, GlassPopoverContent } from "@/components/ui/glass-popover"
 import { EntityTitleLink } from "@/features/rules/components/entity-title-link"
 import { motionConfig } from "@/lib/config/motion-configs"
 import { diceColors } from "@/lib/config/colors"
+import { ClassProgressionTable } from "./class-progression-table"
 import type { CharacterClass } from "../types/classes.types"
 
 const classStatusVariantMap: Record<string, "uncommon" | "common"> = {
@@ -105,6 +107,7 @@ export function ClassesTable({ classes, total, page, limit, isLoading = false, h
                             <th className="px-6 py-4 text-left text-xs font-semibold text-white/50 uppercase tracking-wider w-[120px]">Conjuração</th>
                             <th className="px-6 py-4 text-left text-xs font-semibold text-white/50 uppercase tracking-wider w-[100px]">Subclasses</th>
                             <th className="px-6 py-4 text-left text-xs font-semibold text-white/50 uppercase tracking-wider w-[120px]">Fonte</th>
+                            <th className="px-6 py-4 text-center text-xs font-semibold text-white/50 uppercase tracking-wider w-[60px]">Prog.</th>
                             {isAdmin && <th className="px-6 py-4 text-right text-xs font-semibold text-white/50 uppercase tracking-wider w-[80px]">Ações</th>}
                         </tr>
                     </thead>
@@ -160,6 +163,35 @@ export function ClassesTable({ classes, total, page, limit, isLoading = false, h
 
                                         {/* Source */}
                                         <td className="px-6 py-4">{c.source ? <span className="text-sm text-white/50 truncate max-w-[100px] block">{c.source}</span> : <GlassEmptyValue />}</td>
+
+                                        {/* Progression Table Popover */}
+                                        <td className="px-6 py-4 text-center">
+                                            <GlassPopover>
+                                                <GlassPopoverTrigger asChild>
+                                                    <button
+                                                        className="p-1.5 rounded-lg hover:bg-white/10 text-white/30 hover:text-white/70 transition-colors"
+                                                        title="Ver tabela de progressão"
+                                                    >
+                                                        <TableProperties className="h-3.5 w-3.5" />
+                                                    </button>
+                                                </GlassPopoverTrigger>
+                                                <GlassPopoverContent
+                                                    align="end"
+                                                    sideOffset={8}
+                                                    className="w-[min(90vw,860px)] p-0"
+                                                >
+                                                    <div className="p-2">
+                                                        <ClassProgressionTable
+                                                            traits={c.traits || []}
+                                                            spellcasting={c.spellcasting}
+                                                            progressionData={c.progressionTable}
+                                                            isEditable={false}
+                                                            compact
+                                                        />
+                                                    </div>
+                                                </GlassPopoverContent>
+                                            </GlassPopover>
+                                        </td>
 
                                         {/* Actions */}
                                         {isAdmin && (

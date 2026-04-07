@@ -3,6 +3,27 @@ import { SKILL_OPTIONS, HIT_DICE_OPTIONS } from "../types/classes.types"
 
 const ATTRIBUTES = ["Força", "Destreza", "Constituição", "Inteligência", "Sabedoria", "Carisma"] as const
 
+// ─── Progression Table Schemas ───────────────────────────────────────────────
+
+const spellSlotsLevelDataSchema = z.object({
+    cantrips: z.number().int().min(0).max(20).optional(),
+    preparedSpells: z.number().int().min(0).optional(),
+    slots: z.record(z.string(), z.number().int().min(0).max(10)).optional(),
+})
+
+const progressionCustomColumnSchema = z.object({
+    id: z.string(),
+    label: z.string().min(1).max(100),
+    values: z.array(z.string().nullable()).length(20),
+})
+
+const classProgressionDataSchema = z.object({
+    spellSlots: z.record(z.string(), spellSlotsLevelDataSchema).optional(),
+    customColumns: z.array(progressionCustomColumnSchema).optional(),
+}).optional()
+
+// ─── Subclass Schema ─────────────────────────────────────────────────────────
+
 const subclassSchema = z.object({
     _id: z.string().optional(),
     name: z.string().min(2, "Nome da subclasse deve ter pelo menos 2 caracteres").max(100, "Nome muito longo"),
@@ -25,7 +46,8 @@ const subclassSchema = z.object({
                 description: z.string().min(1, "Descrição da habilidade é obrigatória").max(10000)
             })
         )
-        .default([])
+        .default([]),
+    progressionTable: classProgressionDataSchema,
 })
 
 const classTraitSchema = z.object({
@@ -58,7 +80,8 @@ export const createClassSchema = z.object({
         .transform((val) => val || undefined),
     spells: z.array(z.any()).default([]),
     subclasses: z.array(subclassSchema).default([]),
-    traits: z.array(classTraitSchema).default([])
+    traits: z.array(classTraitSchema).default([]),
+    progressionTable: classProgressionDataSchema,
 })
 
 export const updateClassSchema = z.object({
@@ -78,7 +101,8 @@ export const updateClassSchema = z.object({
     spellcastingAttribute: z.enum(ATTRIBUTES).nullable().optional(),
     spells: z.array(z.any()).optional(),
     subclasses: z.array(subclassSchema).optional(),
-    traits: z.array(classTraitSchema).optional()
+    traits: z.array(classTraitSchema).optional(),
+    progressionTable: classProgressionDataSchema,
 })
 
 export const classesQuerySchema = z.object({
@@ -93,3 +117,4 @@ export const classesQuerySchema = z.object({
 export type CreateClassSchema = z.infer<typeof createClassSchema>
 export type UpdateClassSchema = z.infer<typeof updateClassSchema>
 export type ClassesQuerySchema = z.infer<typeof classesQuerySchema>
+
