@@ -9,6 +9,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { createFeat, updateFeat, deleteFeat } from '../api/feats-api';
 import { CreateFeatInput, UpdateFeatInput, Feat } from '../types/feats.types';
 import { featKeys } from "./useFeats"
+import { invalidateSearchCache } from '@/core/utils/search-engine';
 
 export function useFeatMutations() {
     const queryClient = useQueryClient()
@@ -19,6 +20,7 @@ export function useFeatMutations() {
             queryClient.invalidateQueries({ queryKey: featKeys.all })
             queryClient.invalidateQueries({ queryKey: ["audit-logs"] })
             queryClient.invalidateQueries({ queryKey: ["dashboard-stats"] })
+            invalidateSearchCache()
         },
     })
 
@@ -28,6 +30,7 @@ export function useFeatMutations() {
             queryClient.invalidateQueries({ queryKey: featKeys.all })
             queryClient.invalidateQueries({ queryKey: ["audit-logs"] })
             queryClient.invalidateQueries({ queryKey: ["dashboard-stats"] })
+            invalidateSearchCache()
         },
     })
 
@@ -37,6 +40,7 @@ export function useFeatMutations() {
             queryClient.invalidateQueries({ queryKey: featKeys.all })
             queryClient.invalidateQueries({ queryKey: ["audit-logs"] })
             queryClient.invalidateQueries({ queryKey: ["dashboard-stats"] })
+            invalidateSearchCache()
         },
     })
 

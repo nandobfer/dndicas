@@ -254,7 +254,7 @@ function buildEntriesHtml(spell: FiveEToolsSpell): string {
 
 export class SpellsProvider extends BaseProvider<FiveEToolsSpell, CreateSpellInput> {
     readonly name = 'Spells';
-    readonly dataFilePath = 'src/lib/5etools-data/spells-phb.json';
+    readonly dataFilePath = 'src/lib/5etools-data/spells-xphb.json';
     readonly dataKey = 'spell';
 
     async processItem(spell: FiveEToolsSpell): Promise<CreateSpellInput | null> {
@@ -290,7 +290,8 @@ export class SpellsProvider extends BaseProvider<FiveEToolsSpell, CreateSpellInp
 
     async findExisting(spell: CreateSpellInput): Promise<CreateSpellInput | null> {
         await dbConnect();
-        const doc = await Spell.findOne({ name: spell.name }).lean();
+        const nameRegex = new RegExp(`^${spell.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i');
+        const doc = await Spell.findOne({ name: nameRegex }).lean();
         if (!doc) return null;
         return {
             name: doc.name,
@@ -315,8 +316,9 @@ export class SpellsProvider extends BaseProvider<FiveEToolsSpell, CreateSpellInp
 
     async update(spell: CreateSpellInput): Promise<void> {
         await dbConnect();
+        const nameRegex = new RegExp(`^${spell.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i');
         await Spell.findOneAndUpdate(
-            { name: spell.name },
+            { name: nameRegex },
             { $set: spell },
             { runValidators: true },
         );

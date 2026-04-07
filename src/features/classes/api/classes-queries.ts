@@ -7,6 +7,7 @@
 import { useQuery, useMutation, useQueryClient, useInfiniteQuery } from "@tanstack/react-query"
 import type { CharacterClass, CreateClassInput, UpdateClassInput, ClassesFilters, ClassesListResponse } from "../types/classes.types"
 import { fetchClasses, fetchClass, createClass, updateClass, deleteClass } from "./classes-api"
+import { invalidateSearchCache } from "@/core/utils/search-engine"
 
 export const classesKeys = {
     all: ["classes"] as const,
@@ -68,6 +69,7 @@ export function useCreateClass() {
             queryClient.invalidateQueries({ queryKey: classesKeys.all })
             queryClient.invalidateQueries({ queryKey: ["audit-logs"] })
             queryClient.invalidateQueries({ queryKey: ["dashboard-stats"] })
+            invalidateSearchCache()
         },
     })
 }
@@ -81,6 +83,7 @@ export function useUpdateClass() {
             queryClient.invalidateQueries({ queryKey: classesKeys.all })
             queryClient.invalidateQueries({ queryKey: ["audit-logs"] })
             queryClient.invalidateQueries({ queryKey: ["dashboard-stats"] })
+            invalidateSearchCache()
         },
     })
 }
@@ -94,6 +97,7 @@ export function useDeleteClass() {
             queryClient.invalidateQueries({ queryKey: classesKeys.all })
             queryClient.invalidateQueries({ queryKey: ["audit-logs"] })
             queryClient.invalidateQueries({ queryKey: ["dashboard-stats"] })
+            invalidateSearchCache()
         },
     })
 }

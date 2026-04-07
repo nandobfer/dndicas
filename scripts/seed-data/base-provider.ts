@@ -64,11 +64,7 @@ function formatValue(v: unknown): string {
     return JSON.stringify(v);
 }
 
-function truncateStr(s: string, maxLen = 120): string {
-    return s.length > maxLen ? s.slice(0, maxLen - 3) + '...' : s;
-}
-
-// ─── Colored JSON printer ─────────────────────────────────────────────────────
+// ─── Colored JSON printer (red variant for originals) ─────────────────────────
 
 /**
  * Prints a syntax-highlighted JSON representation of `obj` to the terminal.
@@ -113,6 +109,11 @@ function printColoredJson(obj: unknown): void {
             term(tok);
         }
     }
+}
+
+/** Prints all values in uniform light red (for original EN object display). */
+function printRedJson(obj: unknown): void {
+    term.brightRed(JSON.stringify(obj, null, 2));
 }
 
 const PROJECT_ROOT = path.resolve(__dirname, '../../');
@@ -311,8 +312,10 @@ export abstract class BaseProvider<TInput, TOutput> {
 
         for (const diff of diffs) {
             term.bold(`  ${diff.field}:\n`);
-            term.red(`    ← ${truncateStr(formatValue(diff.oldValue))}  (existente)\n`);
-            term.green(`    → ${truncateStr(formatValue(diff.newValue))}  (novo)\n`);
+            term.red(`    ← (existente)\n`);
+            term.red(`      ${formatValue(diff.oldValue)}\n`);
+            term.green(`    → (novo)\n`);
+            term.green(`      ${formatValue(diff.newValue)}\n`);
             term.bold('  ← seta esquerda: manter existente  |  → seta direita: usar novo\n');
 
             const choice = await new Promise<'keep' | 'update'>((resolve) => {
@@ -348,13 +351,15 @@ export abstract class BaseProvider<TInput, TOutput> {
      * Applies the current glossary to all string fields of an output object.
      * Only processes `name` and `description` fields (both are translatable text).
      */
-    private applyGlossaryToOutput(output: TOutput, entries: GlossaryEntry[]): TOutput {
+    protected applyGlossaryToOutput(output: TOutput, entries: GlossaryEntry[]): TOutput {
         if (!entries.length) return output;
         const obj = output as Record<string, unknown>;
         const result = { ...obj };
 
         if (typeof result['name'] === 'string') {
-            result['name'] = applyGlossary(entries, result['name']);
+            // Strip leading/trailing punctuation artifacts before applying glossary
+            result['name'] = (result['name'] as string).replace(/^[\s.,;:!?]+|[\s.,;:!?]+$/g, '').trim();
+            result['name'] = applyGlossary(entries, result['name'] as string);
         }
         if (typeof result['description'] === 'string') {
             result['description'] = applyGlossary(entries, result['description']);
@@ -376,6 +381,7 @@ export abstract class BaseProvider<TInput, TOutput> {
     private async reviewAndConfirmItem(
         output: TOutput,
         isDryRun: boolean,
+        originalItem?: unknown,
     ): Promise<TOutput> {
         let entries = await loadAllEntries();
         let current = this.applyGlossaryToOutput(output, entries);
@@ -384,6 +390,11 @@ export abstract class BaseProvider<TInput, TOutput> {
         while (true) {
             // Display current state
             term('\n');
+            if (originalItem !== undefined) {
+                term.bold('─── Original (EN) ──────────────────────────────────────────\n');
+                printRedJson(originalItem);
+                term('\n');
+            }
             term.bold('─── Resultado ─────────────────────────────────────────────\n');
             printColoredJson(current);
             term('\n');
@@ -452,8 +463,13 @@ export abstract class BaseProvider<TInput, TOutput> {
         }
 
         if (this.testMode) {
-            this.log(`\n🧪 TEST MODE: Processing only the first item (index 0)`, 'info');
-            await this.runInteractiveItem(items[0], 0, true);
+            this.log(`\n🧪 TEST MODE: Finding first processable item...`, 'info');
+            const limit = Math.min(items.length, 20);
+            for (let i = 0; i < limit; i++) {
+                const result = await this.runInteractiveItem(items[i], i, true);
+                if (result !== 'skipped') break;
+                this.log(`  Item ${i} skipped — trying next...`, 'dim');
+            }
             return;
         }
 
@@ -617,7 +633,10 @@ export abstract class BaseProvider<TInput, TOutput> {
         }
 
         // Interactive review: show result, allow glossary corrections
-        const final = await this.reviewAndConfirmItem(working, isDryRun);
+        const reviewed = await this.reviewAndConfirmItem(working, isDryRun, item);
+
+        // Hook for providers to run post-review steps (e.g. trait resolution)
+        const final = await this.afterReview(reviewed, isDryRun);
 
         if (isDryRun) {
             term.green('\n✓ Modo dry-run — nenhum dado foi salvo.\n');
@@ -643,6 +662,14 @@ export abstract class BaseProvider<TInput, TOutput> {
         return 'created';
     }
 
+    /**
+     * Called after the glossary review step and before saving.
+     * Override in subclasses to run additional interactive steps (e.g. trait resolution).
+     */
+    protected async afterReview(output: TOutput, _isDryRun: boolean): Promise<TOutput> {
+        return output;
+    }
+
     // ─── Abstract methods ─────────────────────────────────────────────────────
 
     /**
@@ -654,6 +681,10 @@ export abstract class BaseProvider<TInput, TOutput> {
     /**
      * Find an existing item in the database that matches the incoming item.
      * Returns the existing item's data (as TOutput) or null if not found.
+     *
+     * **Important:** name-based lookups must use case-insensitive matching
+     * (e.g. MongoDB `$regex` with the `i` flag) to avoid creating duplicates
+     * when the translated name differs only in letter casing.
      */
     abstract findExisting(item: TOutput): Promise<TOutput | null>;
 

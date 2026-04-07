@@ -1,6 +1,7 @@
 import mongoose, { Schema, Document } from "mongoose"
 import type { HitDiceType, ArmorProficiency, WeaponProficiency, SkillType, Subclass, ClassTrait } from "../types/classes.types"
 import type { AttributeType } from "@/lib/config/colors"
+import type { ClassProgressionData } from "../types/progression.types"
 
 export interface ICharacterClass extends Document {
     _id: mongoose.Types.ObjectId
@@ -21,6 +22,7 @@ export interface ICharacterClass extends Document {
     spells: any[]
     subclasses: Subclass[]
     traits: ClassTrait[]
+    progressionTable?: ClassProgressionData
     createdAt: Date
     updatedAt: Date
 }
@@ -109,6 +111,11 @@ const SubclassSchema = new Schema<Subclass>(
         traits: {
             type: [ClassTraitSchema],
             default: [],
+        },
+        progressionTable: {
+            type: Schema.Types.Mixed,
+            required: false,
+            default: undefined,
         },
     },
     { _id: true },
@@ -213,6 +220,11 @@ const CharacterClassSchema = new Schema<ICharacterClass>(
             type: [ClassTraitSchema],
             required: true,
             default: [],
+        },
+        progressionTable: {
+            type: Schema.Types.Mixed,
+            required: false,
+            default: undefined,
         },
     },
     { timestamps: true },

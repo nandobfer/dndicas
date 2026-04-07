@@ -13,7 +13,8 @@ import { GlassDropdownMenu, GlassDropdownMenuContent, GlassDropdownMenuItem, Gla
 import { SimpleGlassTooltip } from "@/components/ui/glass-tooltip"
 import { motionConfig } from "@/lib/config/motion-configs"
 import { Feat } from "../types/feats.types"
-import { attributeColors, AttributeType } from "@/lib/config/colors"
+import { attributeColors, AttributeType, featCategoryColors } from "@/lib/config/colors"
+import type { FeatCategoryColorKey } from "@/lib/config/colors"
 import { EntityDescription } from "@/features/rules/components/entity-description"
 import { EntityPreviewTooltip } from "@/features/rules/components/entity-preview-tooltip"
 import { EntityTitleLink } from "@/features/rules/components/entity-title-link"
@@ -77,6 +78,7 @@ export function FeatsTable({ feats, total, page, limit, isLoading = false, onEdi
                             <th className="px-6 py-4 text-left text-xs font-semibold text-white/50 uppercase tracking-wider w-[100px]">Status</th>
                             <th className="px-6 py-4 text-left text-xs font-semibold text-white/50 uppercase tracking-wider">Nome</th>
                             <th className="px-6 py-4 text-left text-xs font-semibold text-white/50 uppercase tracking-wider w-[90px]">Nível</th>
+                            <th className="px-6 py-4 text-left text-xs font-semibold text-white/50 uppercase tracking-wider w-[140px]">Categoria</th>
                             <th className="px-6 py-4 text-left text-xs font-semibold text-white/50 uppercase tracking-wider w-[140px]">+ Atributo</th>
                             <th className="px-6 py-4 text-left text-xs font-semibold text-white/50 uppercase tracking-wider w-full">Descrição</th>
                             <th className="px-6 py-4 text-left text-xs font-semibold text-white/50 uppercase tracking-wider">Fonte</th>
@@ -108,6 +110,25 @@ export function FeatsTable({ feats, total, page, limit, isLoading = false, onEdi
                                     </td>
                                     <td className="px-6 py-4 whitespace-nowrap">
                                         <Chip variant={getLevelRarityVariant(feat.level)}>Nv. {feat.level}</Chip>
+                                    </td>
+                                    <td className="px-6 py-4 whitespace-nowrap">
+                                        {feat.category ? (() => {
+                                            const config = featCategoryColors[feat.category as FeatCategoryColorKey]
+                                            return (
+                                                <Chip
+                                                    size="sm"
+                                                    className={cn(
+                                                        "text-[10px] py-0.5 px-1.5 h-auto border shrink-0",
+                                                        config.badge,
+                                                        config.border
+                                                    )}
+                                                >
+                                                    {feat.category}
+                                                </Chip>
+                                            )
+                                        })() : (
+                                            <span className="text-[10px] text-white/20 italic">—</span>
+                                        )}
                                     </td>
                                     <td className="px-6 py-4 whitespace-nowrap">
                                         <div className="flex items-center gap-1.5 h-6">

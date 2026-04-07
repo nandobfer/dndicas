@@ -3,6 +3,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { createTrait, updateTrait, deleteTrait } from '../api/traits-api';
 import { CreateTraitInput, UpdateTraitInput, Trait } from '../types/traits.types';
 import { traitKeys } from './useTraits';
+import { invalidateSearchCache } from '@/core/utils/search-engine';
 
 export function useTraitMutations() {
   const queryClient = useQueryClient();
@@ -11,6 +12,7 @@ export function useTraitMutations() {
     mutationFn: createTrait,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: traitKeys.all })
+      invalidateSearchCache()
     },
   });
 
@@ -18,6 +20,7 @@ export function useTraitMutations() {
     mutationFn: ({ id, data }) => updateTrait(id, data),
     onSuccess: (_, { id }) => {
       queryClient.invalidateQueries({ queryKey: traitKeys.all });
+      invalidateSearchCache()
     },
   });
 
@@ -25,6 +28,7 @@ export function useTraitMutations() {
     mutationFn: deleteTrait,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: traitKeys.all });
+      invalidateSearchCache()
     },
   });
 

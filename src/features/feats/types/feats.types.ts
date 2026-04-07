@@ -4,6 +4,9 @@
  * @see specs/003-feats-catalog/data-model.md
  */
 
+import type { FeatCategory } from "../lib/feat-categories"
+export type { FeatCategory }
+
 export interface Feat {
     _id: string
     name: string
@@ -15,6 +18,7 @@ export interface Feat {
         attribute: string
         value: number
     }[]
+    category?: FeatCategory
     status: "active" | "inactive"
     createdAt: string // ISO 8601
     updatedAt: string
@@ -30,6 +34,7 @@ export interface CreateFeatInput {
         attribute: string
         value: number
     }[]
+    category?: FeatCategory
     status: "active" | "inactive"
 }
 
@@ -43,6 +48,7 @@ export interface UpdateFeatInput {
         attribute: string
         value: number
     }[]
+    category?: FeatCategory
     status?: "active" | "inactive"
 }
 
@@ -54,7 +60,8 @@ export interface FeatsFilters {
     status?: "all" | "active" | "inactive"
     level?: number // Exact match
     levelMax?: number // Range (1 to levelMax)
-    attributes?: string[] // New filter
+    attributes?: string[]
+    categories?: FeatCategory[]
 }
 
 export interface FeatsResponse {
@@ -66,7 +73,14 @@ export interface FeatsResponse {
 }
 
 export interface FeatSearchResult {
-  id: string;
-  label: string;
-  entityType: 'Talento';
+  id: string
+  _id: string
+  label: string
+  name: string
+  entityType: 'Talento'
+  description: string
+  source: string
+  metadata: {
+    level: number
+  }
 }

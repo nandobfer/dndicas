@@ -6,7 +6,7 @@ export async function GET(req: NextRequest) {
     try {
         await dbConnect()
         const url = new URL(req.url)
-        const q = url.searchParams.get("query") || ""
+        const q = url.searchParams.get("q") || url.searchParams.get("query") || ""
         const limit = parseInt(url.searchParams.get("limit") || "10", 10)
 
         // Simple regex search for now

@@ -295,6 +295,56 @@ export type EntityType = keyof typeof entityColors
 export type AttributeType = keyof typeof attributeColors
 
 /**
+ * Feat category colors mapped from D&D rarity system.
+ *
+ * Mapping:
+ * - Geral         → veryRare (purple)  — "Épico" tier
+ * - Origem        → rare (blue)
+ * - Estilo de Luta → legendary (amber/gold)
+ * - Dádiva Épica  → artifact (rose/red)
+ */
+export const featCategoryColors = {
+    Geral: {
+        chipVariant: "veryRare" as const,
+        badge: "bg-purple-400/20 text-purple-400",
+        border: "border-purple-500/20",
+        bgAlpha: "bg-purple-500/10",
+        text: "text-purple-400",
+        activeColor: "bg-purple-500/20",
+        hex: rarityColors.veryRare,
+    },
+    Origem: {
+        chipVariant: "rare" as const,
+        badge: "bg-blue-400/20 text-blue-400",
+        border: "border-blue-500/20",
+        bgAlpha: "bg-blue-500/10",
+        text: "text-blue-400",
+        activeColor: "bg-blue-500/20",
+        hex: rarityColors.rare,
+    },
+    "Estilo de Luta": {
+        chipVariant: "legendary" as const,
+        badge: "bg-amber-400/20 text-amber-400",
+        border: "border-amber-500/20",
+        bgAlpha: "bg-amber-500/10",
+        text: "text-amber-400",
+        activeColor: "bg-amber-500/20",
+        hex: rarityColors.legendary,
+    },
+    "Dádiva Épica": {
+        chipVariant: "artifact" as const,
+        badge: "bg-rose-400/20 text-rose-400",
+        border: "border-rose-500/20",
+        bgAlpha: "bg-rose-500/10",
+        text: "text-rose-400",
+        activeColor: "bg-rose-500/20",
+        hex: rarityColors.artifact,
+    },
+} as const
+
+export type FeatCategoryColorKey = keyof typeof featCategoryColors
+
+/**
  * D&D Spell Schools colors mapped from rarity system.
  * Used for spell catalog UI - school chips and filtering.
  *

@@ -1,6 +1,8 @@
 import type { AttributeType } from "@/lib/config/colors"
+import type { ClassProgressionData } from "./progression.types"
 
 export type { AttributeType }
+export type { ClassProgressionData, SpellSlotsTable, SpellSlotsLevelData, ProgressionCustomColumn, SpellProgressionType } from "./progression.types"
 
 // ─── D&D 5e Class domain constants ──────────────────────────────────────────
 
@@ -65,6 +67,7 @@ export interface Subclass {
     spellcastingAttribute?: AttributeType
     spells?: any[]
     traits: ClassTrait[]
+    progressionTable?: ClassProgressionData
 }
 
 // ─── Class Traits ────────────────────────────────────────────────────────────
@@ -96,6 +99,7 @@ export interface CharacterClass {
     spells?: any[]
     subclasses: Subclass[]
     traits: ClassTrait[]
+    progressionTable?: ClassProgressionData
     createdAt: Date
     updatedAt: Date
 }
@@ -120,6 +124,7 @@ export interface CreateClassInput {
     spells?: any[]
     subclasses?: Subclass[]
     traits?: ClassTrait[]
+    progressionTable?: ClassProgressionData
 }
 
 export interface UpdateClassInput {
@@ -139,6 +144,7 @@ export interface UpdateClassInput {
     spellcastingAttribute?: AttributeType | null
     spells?: any[]
     subclasses?: Subclass[]
+    progressionTable?: ClassProgressionData | null
 }
 
 // ─── Filter types ─────────────────────────────────────────────────────────────
