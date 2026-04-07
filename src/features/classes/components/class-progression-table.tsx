@@ -17,6 +17,8 @@ import { motion, AnimatePresence } from "framer-motion"
 import { Plus, X, ChevronRight, Table2, Zap, Wand2, AlertTriangle } from "lucide-react"
 import { cn } from "@/core/utils"
 import { MentionContent } from "@/features/rules/components/mention-badge"
+import { GlassDiceValue } from "@/components/ui/glass-dice-value"
+import type { DiceValue, DiceType } from "@/features/spells/types/spells.types"
 import type { ClassTrait } from "../types/classes.types"
 import type { ClassProgressionData, SpellProgressionType } from "../types/progression.types"
 import {
@@ -30,6 +32,38 @@ import {
 } from "../utils/progression-utils"
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
+
+const VALID_DICE_TYPES = new Set<DiceType>(['d4', 'd6', 'd8', 'd10', 'd12', 'd20'])
+const DICE_NOTATION_RE = /^(\d+)(d(?:4|6|8|10|12|20))$/i
+
+function parseDiceNotation(value: string): DiceValue | null {
+    const match = value.trim().match(DICE_NOTATION_RE)
+    if (!match) return null
+    const tipo = match[2].toLowerCase() as DiceType
+    if (!VALID_DICE_TYPES.has(tipo)) return null
+    return { quantidade: parseInt(match[1], 10), tipo }
+}
+
+function renderCustomCellValue(cellValue: string | number, subclassColor?: string) {
+    const dice = typeof cellValue === 'string' ? parseDiceNotation(cellValue) : null
+    if (dice) {
+        return (
+            <GlassDiceValue
+                value={dice}
+                showIcon={false}
+                colorOverride={subclassColor ? { text: `${subclassColor}cc` } : undefined}
+            />
+        )
+    }
+    return (
+        <span
+            className="font-mono text-[11px] text-white/70"
+            style={subclassColor ? { color: `${subclassColor}cc` } : undefined}
+        >
+            {cellValue}
+        </span>
+    )
+}
 
 const ORDINAL_SUFFIXES: Record<number, string> = {
     1: "1º", 2: "2º", 3: "3º", 4: "4º", 5: "5º",
@@ -678,16 +712,7 @@ export function ClassProgressionTable({
                                                                         placeholder="—"
                                                                     />
                                                                 ) : cellValue != null ? (
-                                                                    <span
-                                                                        className="font-mono text-[11px] text-white/70"
-                                                                        style={
-                                                                            col.subclassColor
-                                                                                ? { color: `${col.subclassColor}cc` }
-                                                                                : undefined
-                                                                        }
-                                                                    >
-                                                                        {cellValue}
-                                                                    </span>
+                                                                    renderCustomCellValue(cellValue, col.subclassColor)
                                                                 ) : null}
                                                             </td>
                                                         )
