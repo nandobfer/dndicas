@@ -15,6 +15,7 @@ import {
     updateRace, 
     deleteRace 
 } from "./races-api"
+import { invalidateSearchCache } from "@/core/utils/search-engine"
 
 export const racesKeys = {
     all: ["races"] as const,
@@ -75,6 +76,7 @@ export function useCreateRace() {
             queryClient.invalidateQueries({ queryKey: racesKeys.all })
             queryClient.invalidateQueries({ queryKey: ["audit-logs"] })
             queryClient.invalidateQueries({ queryKey: ["dashboard-stats"] })
+            invalidateSearchCache()
         },
     })
 }
@@ -88,6 +90,7 @@ export function useUpdateRace() {
             queryClient.invalidateQueries({ queryKey: racesKeys.all })
             queryClient.invalidateQueries({ queryKey: ["audit-logs"] })
             queryClient.invalidateQueries({ queryKey: ["dashboard-stats"] })
+            invalidateSearchCache()
         },
     })
 }
@@ -101,6 +104,7 @@ export function useDeleteRace() {
             queryClient.invalidateQueries({ queryKey: racesKeys.all })
             queryClient.invalidateQueries({ queryKey: ["audit-logs"] })
             queryClient.invalidateQueries({ queryKey: ["dashboard-stats"] })
+            invalidateSearchCache()
         },
     })
 }

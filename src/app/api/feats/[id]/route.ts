@@ -83,6 +83,7 @@ export async function PUT(
         level: existingFeat.level,
         prerequisites: existingFeat.prerequisites,
         attributeBonuses: existingFeat.attributeBonuses,
+        category: existingFeat.category,
         status: existingFeat.status,
     }
 
@@ -93,6 +94,7 @@ export async function PUT(
     if (validation.data.level !== undefined) existingFeat.level = validation.data.level
     if (validation.data.prerequisites !== undefined) existingFeat.prerequisites = validation.data.prerequisites
     if (validation.data.attributeBonuses !== undefined) existingFeat.attributeBonuses = validation.data.attributeBonuses
+    if (validation.data.category !== undefined) existingFeat.category = validation.data.category
     if (validation.data.status) existingFeat.status = validation.data.status
 
     const updatedFeat = await existingFeat.save()
@@ -112,6 +114,7 @@ export async function PUT(
                 level: updatedFeat.level,
                 prerequisites: updatedFeat.prerequisites,
                 attributeBonuses: updatedFeat.attributeBonuses,
+                category: updatedFeat.category,
                 status: updatedFeat.status,
             },
             metadata: {

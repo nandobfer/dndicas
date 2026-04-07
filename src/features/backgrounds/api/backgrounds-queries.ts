@@ -15,6 +15,7 @@ import {
     updateBackground, 
     deleteBackground 
 } from "./backgrounds-api"
+import { invalidateSearchCache } from "@/core/utils/search-engine"
 
 export const backgroundsKeys = {
     all: ["backgrounds"] as const,
@@ -76,6 +77,7 @@ export function useCreateBackground() {
             queryClient.invalidateQueries({ queryKey: backgroundsKeys.all })
             queryClient.invalidateQueries({ queryKey: ["audit-logs"] })
             queryClient.invalidateQueries({ queryKey: ["dashboard-stats"] })
+            invalidateSearchCache()
         },
     })
 }
@@ -89,6 +91,7 @@ export function useUpdateBackground() {
             queryClient.invalidateQueries({ queryKey: backgroundsKeys.all })
             queryClient.invalidateQueries({ queryKey: ["audit-logs"] })
             queryClient.invalidateQueries({ queryKey: ["dashboard-stats"] })
+            invalidateSearchCache()
         },
     })
 }
@@ -102,6 +105,7 @@ export function useDeleteBackground() {
             queryClient.invalidateQueries({ queryKey: backgroundsKeys.all })
             queryClient.invalidateQueries({ queryKey: ["audit-logs"] })
             queryClient.invalidateQueries({ queryKey: ["dashboard-stats"] })
+            invalidateSearchCache()
         },
     })
 }

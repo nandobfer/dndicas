@@ -9,6 +9,7 @@
 import { useQuery, useMutation, useQueryClient, useInfiniteQuery } from "@tanstack/react-query"
 import type { Spell, CreateSpellInput, UpdateSpellInput, SpellsFilters, SpellsListResponse } from "../types/spells.types"
 import { fetchSpells, fetchSpell, createSpell, updateSpell, deleteSpell } from "./spells-api"
+import { invalidateSearchCache } from "@/core/utils/search-engine"
 
 /**
  * Query keys factory for spells.
@@ -126,6 +127,7 @@ export function useCreateSpell() {
             queryClient.invalidateQueries({ queryKey: spellsKeys.all })
             queryClient.invalidateQueries({ queryKey: ["audit-logs"] })
             queryClient.invalidateQueries({ queryKey: ["dashboard-stats"] })
+            invalidateSearchCache()
         },
     })
 }
@@ -159,6 +161,7 @@ export function useUpdateSpell() {
             queryClient.invalidateQueries({ queryKey: spellsKeys.all })
             queryClient.invalidateQueries({ queryKey: ["audit-logs"] })
             queryClient.invalidateQueries({ queryKey: ["dashboard-stats"] })
+            invalidateSearchCache()
         },
     })
 }
@@ -189,6 +192,7 @@ export function useDeleteSpell() {
             queryClient.invalidateQueries({ queryKey: spellsKeys.all })
             queryClient.invalidateQueries({ queryKey: ["audit-logs"] })
             queryClient.invalidateQueries({ queryKey: ["dashboard-stats"] })
+            invalidateSearchCache()
         },
     })
 }

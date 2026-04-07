@@ -7,7 +7,7 @@ import { useDebounce } from '@/core/hooks/useDebounce';
 import { useIsMobile } from '@/core/hooks/useMediaQuery';
 import { useViewMode } from "@/core/hooks/useViewMode"
 import { toast } from "sonner"
-import type { Feat, CreateFeatInput, UpdateFeatInput, FeatsFilters } from "../types/feats.types"
+import type { Feat, CreateFeatInput, UpdateFeatInput, FeatsFilters, FeatCategory } from "../types/feats.types"
 
 /**
  * T044: Logic for the Feats page, including filters, modals, and responsive data fetching.
@@ -23,6 +23,7 @@ export function useFeatsPage() {
     const [level, setLevel] = React.useState<number | undefined>(undefined)
     const [levelMax, setLevelMax] = React.useState<number | undefined>(undefined)
     const [attributes, setAttributes] = React.useState<string[]>([])
+    const [categories, setCategories] = React.useState<FeatCategory[]>([])
 
     // Debounced search
     const debouncedSearch = useDebounce(search, 500)
@@ -35,9 +36,10 @@ export function useFeatsPage() {
             level,
             levelMax,
             attributes,
+            categories,
             limit: 10,
         }),
-        [debouncedSearch, status, level, levelMax, attributes],
+        [debouncedSearch, status, level, levelMax, attributes, categories],
     )
 
     /**
@@ -90,6 +92,11 @@ export function useFeatsPage() {
 
     const handleAttributesChange = (val: string[]) => {
         setAttributes(val)
+        setPage(1)
+    }
+
+    const handleCategoriesChange = (val: FeatCategory[]) => {
+        setCategories(val)
         setPage(1)
     }
 
@@ -151,6 +158,7 @@ export function useFeatsPage() {
             level,
             levelMax,
             attributes,
+            categories,
         },
         pagination: {
             page,
@@ -178,6 +186,7 @@ export function useFeatsPage() {
             handleStatusChange,
             handleLevelChange,
             handleAttributesChange,
+            handleCategoriesChange,
             handleCreateClick,
             handleEditClick,
             handleDeleteClick,

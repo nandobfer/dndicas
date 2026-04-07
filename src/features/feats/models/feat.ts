@@ -6,6 +6,7 @@
  */
 
 import mongoose, { Schema, Document, Model } from 'mongoose';
+import { FEAT_CATEGORIES } from '../lib/feat-categories';
 
 /**
  * Feat document interface extending Mongoose Document.
@@ -27,6 +28,8 @@ export interface IFeat extends Document {
     attribute: string;
     value: number;
   }[];
+  /** Feat category */
+  category?: string;
   /** Feat visibility status */
   status: 'active' | 'inactive';
   /** Creation timestamp */
@@ -88,6 +91,14 @@ const FeatSchema = new Schema<IFeat>(
       ],
       default: [],
     },
+    category: {
+      type: String,
+      enum: {
+        values: [...FEAT_CATEGORIES],
+        message: "Categoria inválida",
+      },
+      required: false,
+    },
     status: {
       type: String,
       enum: {
@@ -118,6 +129,7 @@ FeatSchema.index({ name: 'text', description: 'text' }); // Full-text search
 FeatSchema.index({ status: 1 }); // Filter by status
 FeatSchema.index({ level: 1 }); // Filter/sort by level
 FeatSchema.index({ 'attributeBonuses.attribute': 1 }); // Filter by attributes
+FeatSchema.index({ category: 1 }); // Filter by category
 FeatSchema.index({ createdAt: -1 }); // Sort by creation date
 
 export const Feat: Model<IFeat> =

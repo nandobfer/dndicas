@@ -1,14 +1,15 @@
 "use client";
 
-import { Zap, BookOpen, Info, Trophy, PlusCircle, ExternalLink } from "lucide-react"
+import { Zap, BookOpen, Info, Trophy, PlusCircle, ExternalLink, Tag } from "lucide-react"
 import { Chip } from "@/components/ui/chip"
 import { motion } from "framer-motion"
 import { useWindows } from "@/core/context/window-context"
 import { MentionContent, EntityTitleLink } from "@/features/rules/components/mention-badge"
 import { getLevelRarityVariant } from "./feats-table"
-import { attributeColors, AttributeType } from "@/lib/config/colors"
+import { attributeColors, AttributeType, featCategoryColors } from "@/lib/config/colors"
 import { cn } from "@/core/utils"
 import type { Feat } from "../types/feats.types"
+import type { FeatCategoryColorKey } from "@/lib/config/colors"
 import { EntitySource } from "@/features/rules/components/entity-source"
 
 export interface FeatPreviewProps {
@@ -35,7 +36,18 @@ export function FeatPreview({ feat, showStatus = true, hideStatusChip = false, h
                                 Nv. {feat.level}
                             </Chip>
                         </div>
-                        <p className="text-[10px] uppercase font-bold tracking-widest text-white/40 mt-0.5">Talento de Personagem</p>
+                        <div className="flex items-center gap-2 mt-0.5">
+                            <p className="text-[10px] uppercase font-bold tracking-widest text-white/40">Talento de Personagem</p>
+                            {feat.category && (() => {
+                                const config = featCategoryColors[feat.category as FeatCategoryColorKey]
+                                return (
+                                    <div className={cn("flex items-center gap-1 px-1.5 py-0.5 rounded border", config.bgAlpha, config.border)}>
+                                        <Tag className={cn("h-2.5 w-2.5", config.text)} />
+                                        <span className={cn("text-[9px] uppercase font-bold tracking-widest", config.text)}>{feat.category}</span>
+                                    </div>
+                                )
+                            })()}
+                        </div>
                     </div>
                 </div>
                 <div className="flex items-center gap-2">
