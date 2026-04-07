@@ -140,3 +140,19 @@ export async function performUnifiedSearch(query: string, limit = 20, offset = 0
     const allEntities = await getSearchData()
     return applyFuzzySearch(allEntities, query, limit, offset)
 }
+
+/**
+ * Pre-populates the search cache without blocking. Safe to call on app init.
+ */
+export function warmSearchCache(): void {
+    void getSearchData()
+}
+
+/**
+ * Resets the search cache, forcing the next search to re-fetch all entities.
+ * Call this after successful create/update/delete mutations.
+ */
+export function invalidateSearchCache(): void {
+    cachedData = null
+    lastFetchTime = 0
+}

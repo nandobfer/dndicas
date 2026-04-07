@@ -2,6 +2,7 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { createRule, updateRule, deleteRule } from '../api/rules-api';
 import { CreateReferenceInput, UpdateReferenceInput, Reference } from '../types/rules.types';
+import { invalidateSearchCache } from '@/core/utils/search-engine';
 
 export function useRuleMutations() {
   const queryClient = useQueryClient();
@@ -11,6 +12,7 @@ export function useRuleMutations() {
       onSuccess: () => {
           queryClient.invalidateQueries({ queryKey: ["rules"] })
           queryClient.invalidateQueries({ queryKey: ["rules-infinite"] })
+          invalidateSearchCache()
       },
   })
 
@@ -20,6 +22,7 @@ export function useRuleMutations() {
           queryClient.invalidateQueries({ queryKey: ["rules"] })
           queryClient.invalidateQueries({ queryKey: ["rules-infinite"] })
           queryClient.invalidateQueries({ queryKey: ["rule", id] })
+          invalidateSearchCache()
       },
   })
 
@@ -29,6 +32,7 @@ export function useRuleMutations() {
           queryClient.invalidateQueries({ queryKey: ["rules"] })
           queryClient.invalidateQueries({ queryKey: ["rules-infinite"] })
           queryClient.invalidateQueries({ queryKey: ["rule", id] })
+          invalidateSearchCache()
       },
   })
 

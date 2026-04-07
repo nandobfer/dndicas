@@ -15,6 +15,7 @@ import {
     updateItem, 
     deleteItem 
 } from "./items-api"
+import { invalidateSearchCache } from "@/core/utils/search-engine"
 
 export const itemsKeys = {
     all: ["items"] as const,
@@ -75,6 +76,7 @@ export function useCreateItem() {
             queryClient.invalidateQueries({ queryKey: itemsKeys.all })
             queryClient.invalidateQueries({ queryKey: ["audit-logs"] })
             queryClient.invalidateQueries({ queryKey: ["dashboard-stats"] })
+            invalidateSearchCache()
         },
     })
 }
@@ -88,6 +90,7 @@ export function useUpdateItem() {
             queryClient.invalidateQueries({ queryKey: itemsKeys.all })
             queryClient.invalidateQueries({ queryKey: ["audit-logs"] })
             queryClient.invalidateQueries({ queryKey: ["dashboard-stats"] })
+            invalidateSearchCache()
         },
     })
 }
@@ -101,6 +104,7 @@ export function useDeleteItem() {
             queryClient.invalidateQueries({ queryKey: itemsKeys.all })
             queryClient.invalidateQueries({ queryKey: ["audit-logs"] })
             queryClient.invalidateQueries({ queryKey: ["dashboard-stats"] })
+            invalidateSearchCache()
         },
     })
 }
