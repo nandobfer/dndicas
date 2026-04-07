@@ -348,7 +348,7 @@ export abstract class BaseProvider<TInput, TOutput> {
      * Applies the current glossary to all string fields of an output object.
      * Only processes `name` and `description` fields (both are translatable text).
      */
-    private applyGlossaryToOutput(output: TOutput, entries: GlossaryEntry[]): TOutput {
+    protected applyGlossaryToOutput(output: TOutput, entries: GlossaryEntry[]): TOutput {
         if (!entries.length) return output;
         const obj = output as Record<string, unknown>;
         const result = { ...obj };
@@ -452,8 +452,13 @@ export abstract class BaseProvider<TInput, TOutput> {
         }
 
         if (this.testMode) {
-            this.log(`\n🧪 TEST MODE: Processing only the first item (index 0)`, 'info');
-            await this.runInteractiveItem(items[0], 0, true);
+            this.log(`\n🧪 TEST MODE: Finding first processable item...`, 'info');
+            const limit = Math.min(items.length, 20);
+            for (let i = 0; i < limit; i++) {
+                const result = await this.runInteractiveItem(items[i], i, true);
+                if (result !== 'skipped') break;
+                this.log(`  Item ${i} skipped — trying next...`, 'dim');
+            }
             return;
         }
 
@@ -617,7 +622,10 @@ export abstract class BaseProvider<TInput, TOutput> {
         }
 
         // Interactive review: show result, allow glossary corrections
-        const final = await this.reviewAndConfirmItem(working, isDryRun);
+        const reviewed = await this.reviewAndConfirmItem(working, isDryRun);
+
+        // Hook for providers to run post-review steps (e.g. trait resolution)
+        const final = await this.afterReview(reviewed, isDryRun);
 
         if (isDryRun) {
             term.green('\n✓ Modo dry-run — nenhum dado foi salvo.\n');
@@ -641,6 +649,14 @@ export abstract class BaseProvider<TInput, TOutput> {
         term.green(`  ✓ Criado com sucesso.\n`);
         await this.saveProgress(index);
         return 'created';
+    }
+
+    /**
+     * Called after the glossary review step and before saving.
+     * Override in subclasses to run additional interactive steps (e.g. trait resolution).
+     */
+    protected async afterReview(output: TOutput, _isDryRun: boolean): Promise<TOutput> {
+        return output;
     }
 
     // ─── Abstract methods ─────────────────────────────────────────────────────
