@@ -21,7 +21,7 @@
 
 import path from 'path';
 import fs from 'fs';
-import { BaseProvider, convertFeetToMeters } from '../base-provider';
+import { BaseProvider, convertFeetToMeters, formatSource } from '../base-provider';
 import type { GlossaryEntry } from '../glossary/glossary-store';
 import { applyGlossary } from '../glossary/glossary-store';
 import type { CreateRaceInput, RaceTrait, RaceVariation, SizeCategory } from '../../../src/features/races/types/races.types';
@@ -154,19 +154,6 @@ export function mapSpeed(speed: number | Record<string, number | boolean> | unde
     return parts.join(', ') || '9 metros';
 }
 
-/**
- * Maps 5etools source codes to Portuguese book abbreviations.
- * Sources not in this map keep their original code.
- */
-const SOURCE_MAP: Record<string, string> = {
-    XPHB: 'LDJ',   // Player's Handbook 2024
-    PHB: 'LDJ',    // Player's Handbook 2014
-};
-
-function buildSourceLabel(source: string, page?: number): string {
-    const mapped = SOURCE_MAP[source] ?? source;
-    return page !== undefined ? `${mapped} pág. ${page}` : mapped;
-}
 
 /** Strip 5etools inline tag syntax from text before sending to AI. */
 export function cleanText(text: string): string {
@@ -355,7 +342,7 @@ export class RacesProvider extends BaseProvider<FiveEToolsRace, CreateRaceInput>
             variations.push({
                 name: subraceName,
                 description: subraceDescription,
-                source: buildSourceLabel(subrace.source, subrace.page),
+                source: formatSource(subrace.source, subrace.page),
                 image: this.buildFluffImageUrl(subraceFluff),
                 traits: subraceTraits,
                 spells: [],
@@ -367,7 +354,7 @@ export class RacesProvider extends BaseProvider<FiveEToolsRace, CreateRaceInput>
         return {
             name,
             description: convertFeetToMeters(description),
-            source: buildSourceLabel(race.source, race.page),
+            source: formatSource(race.source, race.page),
             status: 'active',
             size: mapSize(race.size),
             speed: mapSpeed(race.speed),

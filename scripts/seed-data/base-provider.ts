@@ -711,3 +711,68 @@ export abstract class BaseProvider<TInput, TOutput> {
     }
 }
 
+/**
+ * Maps 5etools source abbreviations to their full display names.
+ * PHB and XPHB map to "LDJ" (the Brazilian Portuguese edition).
+ */
+const SOURCE_DISPLAY_MAP: Record<string, string> = {
+    // Brazilian Portuguese editions
+    PHB: 'LDJ',
+    XPHB: 'LDJ',
+
+    // Official sourcebooks
+    TCE: "Tasha's Cauldron of Everything",
+    XGE: "Xanathar's Guide to Everything",
+    DMG: "Dungeon Master's Guide",
+    MTF: "Mordenkainen's Tome of Foes",
+    MPMM: 'Mordenkainen Presents: Monsters of the Multiverse',
+    VGM: "Volo's Guide to Monsters",
+    FTD: "Fizban's Treasury of Dragons",
+    BGG: 'Bigby Presents: Glory of the Giants',
+    BMT: 'The Book of Many Things',
+    SCC: 'Strixhaven: A Curriculum of Chaos',
+    ERLW: 'Eberron: Rising from the Last War',
+    EGW: "Explorer's Guide to Wildemount",
+    GGR: "Guildmasters' Guide to Ravnica",
+    MOT: 'Mythic Odysseys of Theros',
+    VRGR: "Van Richten's Guide to Ravenloft",
+    WBtW: 'The Wild Beyond the Witchlight',
+    AAG: "Astral Adventurer's Guide",
+    DSotDQ: 'Dragonlance: Shadow of the Dragon Queen',
+    SatO: 'Sigil and the Outlands',
+    EEPC: 'Elemental Evil Player Companion',
+    AI: 'Acquisitions Incorporated',
+
+    // Homebrew / third-party content in the dataset
+    ABH: "Astarion's Book of Hungers",
+    EFA: 'Eberron: Forge of the Artificer',
+    FRHoF: 'Forgotten Realms: Heroes of Faerûn',
+    LFL: 'Lorwyn: First Light',
+
+    // Plane Shift series
+    PSA: 'Plane Shift: Amonkhet',
+    PSD: 'Plane Shift: Dominaria',
+    PSI: 'Plane Shift: Innistrad',
+    PSK: 'Plane Shift: Kaladesh',
+    PSX: 'Plane Shift: Ixalan',
+    PSZ: 'Plane Shift: Zendikar',
+
+    // Standalone supplements
+    TTP: 'The Tortle Package',
+    LR: 'Locathah Rising',
+    OGA: 'One Grung Above',
+    AWM: 'Adventure with Muk',
+};
+
+/**
+ * Returns a formatted source label for display.
+ *
+ * - PHB / XPHB → "LDJ" (or "LDJ pág. N")
+ * - All other sources → full book name (or "Full Name pág. N")
+ * - Unknown codes fall back to the raw abbreviation.
+ */
+export function formatSource(sourceCode: string, page?: number): string {
+    const label = SOURCE_DISPLAY_MAP[sourceCode] ?? sourceCode;
+    return page !== undefined ? `${label} pág. ${page}` : label;
+}
+

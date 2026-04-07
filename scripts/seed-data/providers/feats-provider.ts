@@ -13,7 +13,7 @@
  *  6. If not, create it
  */
 
-import { BaseProvider } from '../base-provider';
+import { BaseProvider, formatSource } from '../base-provider';
 import { createFeat } from '../../../src/features/feats/api/feats-service';
 import { Feat } from '../../../src/features/feats/models/feat';
 import dbConnect from '../../../src/core/database/db';
@@ -334,7 +334,7 @@ export class FeatsProvider extends BaseProvider<FiveEToolsFeat, CreateFeatInput>
         const entriesHtml = buildEntriesHtml(feat);
         const { name, description } = await this.translateItem(feat.name, entriesHtml);
 
-        const source = feat.page ? `LDJ pág. ${feat.page}` : 'LDJ';
+        const source = formatSource(feat.source, feat.page);
 
         return {
             name,
