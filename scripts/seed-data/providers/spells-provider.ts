@@ -12,7 +12,7 @@
  */
 
 import mongoose from 'mongoose';
-import { BaseProvider, convertFeetToMeters } from '../base-provider';
+import { BaseProvider, convertFeetToMeters, formatSource } from '../base-provider';
 import type { CreateSpellInput } from '../../../src/features/spells/types/spells.types';
 import { createSpell } from '../../../src/features/spells/api/spells-service';
 import { Spell } from '../../../src/features/spells/models/spell';
@@ -283,7 +283,7 @@ export class SpellsProvider extends BaseProvider<FiveEToolsSpell, CreateSpellInp
                 : undefined,
             baseDice: extractBaseDice(spell.entries),
             extraDicePerLevel: extractExtraDicePerLevel(spell.entries, spell.entriesHigherLevel),
-            source: spell.page ? `LDJ pág. ${spell.page}` : 'LDJ',
+            source: formatSource(spell.source, spell.page),
             status: 'active',
         };
     }

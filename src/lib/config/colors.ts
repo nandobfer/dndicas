@@ -797,3 +797,20 @@ export function getItemRarityVariant(rarity: string): RarityColor {
     }
 }
 
+/**
+ * Maps proficiency bonus values (+2 through +6) to rarity color keys.
+ * Reflects character progression: each tier feels more powerful.
+ *
+ * +2 → common    (levels  1–4)
+ * +3 → uncommon  (levels  5–8)
+ * +4 → rare      (levels  9–12)
+ * +5 → veryRare  (levels 13–16)
+ * +6 → legendary (levels 17–20)
+ */
+export const proficiencyBonusColors: Record<number, RarityColor> = {
+    2: "common",
+    3: "uncommon",
+    4: "rare",
+    5: "veryRare",
+    6: "legendary",
+}
