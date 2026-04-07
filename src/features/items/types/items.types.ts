@@ -48,6 +48,8 @@ export interface Item {
     ac?: number
     acType?: "base" | "bonus"
     armorType?: ArmorType
+    strReq?: number
+    stealthDis?: boolean
 
     // Shield specifics
     acBonus?: number
