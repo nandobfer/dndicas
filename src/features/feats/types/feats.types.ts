@@ -73,7 +73,14 @@ export interface FeatsResponse {
 }
 
 export interface FeatSearchResult {
-  id: string;
-  label: string;
-  entityType: 'Talento';
+  id: string
+  _id: string
+  label: string
+  name: string
+  entityType: 'Talento'
+  description: string
+  source: string
+  metadata: {
+    level: number
+  }
 }
