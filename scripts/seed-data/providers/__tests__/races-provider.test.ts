@@ -365,7 +365,7 @@ describe('RacesProvider.processItem', () => {
 
         expect(result).not.toBeNull();
         expect(result!.name).toBe('[PT] Aasimar');
-        expect(result!.source).toBe('PHB pág. 286');
+        expect(result!.source).toBe('LDJ pág. 286');
         expect(result!.status).toBe('active');
         expect(result!.size).toBe('Médio');
         expect(result!.speed).toBe('9 metros');
@@ -483,7 +483,7 @@ describe('RacesProvider.findExisting', () => {
         const mockDoc = {
             name: 'Aasimar',
             description: '<p>Celestial blood.</p>',
-            source: 'PHB pág. 286',
+            source: 'LDJ pág. 286',
             status: 'active',
             size: 'Médio',
             speed: '9 metros',
@@ -497,7 +497,7 @@ describe('RacesProvider.findExisting', () => {
         const result = await provider.findExisting({
             name: 'Aasimar',
             description: '<p>Celestial blood.</p>',
-            source: 'PHB pág. 286',
+            source: 'LDJ pág. 286',
             status: 'active',
             size: 'Médio',
             speed: '9 metros',
@@ -509,7 +509,7 @@ describe('RacesProvider.findExisting', () => {
 
         expect(result).not.toBeNull();
         expect(result!.name).toBe('Aasimar');
-        expect(result!.source).toBe('PHB pág. 286');
+        expect(result!.source).toBe('LDJ pág. 286');
         expect(result!.status).toBe('active');
     });
 });

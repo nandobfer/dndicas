@@ -154,8 +154,18 @@ export function mapSpeed(speed: number | Record<string, number | boolean> | unde
     return parts.join(', ') || '9 metros';
 }
 
+/**
+ * Maps 5etools source codes to Portuguese book abbreviations.
+ * Sources not in this map keep their original code.
+ */
+const SOURCE_MAP: Record<string, string> = {
+    XPHB: 'LDJ',   // Player's Handbook 2024
+    PHB: 'LDJ',    // Player's Handbook 2014
+};
+
 function buildSourceLabel(source: string, page?: number): string {
-    return page !== undefined ? `${source} pág. ${page}` : source;
+    const mapped = SOURCE_MAP[source] ?? source;
+    return page !== undefined ? `${mapped} pág. ${page}` : mapped;
 }
 
 /** Strip 5etools inline tag syntax from text before sending to AI. */

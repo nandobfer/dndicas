@@ -64,11 +64,7 @@ function formatValue(v: unknown): string {
     return JSON.stringify(v);
 }
 
-function truncateStr(s: string, maxLen = 120): string {
-    return s.length > maxLen ? s.slice(0, maxLen - 3) + '...' : s;
-}
-
-// ─── Colored JSON printer ─────────────────────────────────────────────────────
+// ─── Colored JSON printer (red variant for originals) ─────────────────────────
 
 /**
  * Prints a syntax-highlighted JSON representation of `obj` to the terminal.
@@ -113,6 +109,11 @@ function printColoredJson(obj: unknown): void {
             term(tok);
         }
     }
+}
+
+/** Prints all values in uniform light red (for original EN object display). */
+function printRedJson(obj: unknown): void {
+    term.brightRed(JSON.stringify(obj, null, 2));
 }
 
 const PROJECT_ROOT = path.resolve(__dirname, '../../');
@@ -311,8 +312,10 @@ export abstract class BaseProvider<TInput, TOutput> {
 
         for (const diff of diffs) {
             term.bold(`  ${diff.field}:\n`);
-            term.red(`    ← ${truncateStr(formatValue(diff.oldValue))}  (existente)\n`);
-            term.green(`    → ${truncateStr(formatValue(diff.newValue))}  (novo)\n`);
+            term.red(`    ← (existente)\n`);
+            term.red(`      ${formatValue(diff.oldValue)}\n`);
+            term.green(`    → (novo)\n`);
+            term.green(`      ${formatValue(diff.newValue)}\n`);
             term.bold('  ← seta esquerda: manter existente  |  → seta direita: usar novo\n');
 
             const choice = await new Promise<'keep' | 'update'>((resolve) => {
@@ -354,7 +357,9 @@ export abstract class BaseProvider<TInput, TOutput> {
         const result = { ...obj };
 
         if (typeof result['name'] === 'string') {
-            result['name'] = applyGlossary(entries, result['name']);
+            // Strip leading/trailing punctuation artifacts before applying glossary
+            result['name'] = (result['name'] as string).replace(/^[\s.,;:!?]+|[\s.,;:!?]+$/g, '').trim();
+            result['name'] = applyGlossary(entries, result['name'] as string);
         }
         if (typeof result['description'] === 'string') {
             result['description'] = applyGlossary(entries, result['description']);
@@ -376,6 +381,7 @@ export abstract class BaseProvider<TInput, TOutput> {
     private async reviewAndConfirmItem(
         output: TOutput,
         isDryRun: boolean,
+        originalItem?: unknown,
     ): Promise<TOutput> {
         let entries = await loadAllEntries();
         let current = this.applyGlossaryToOutput(output, entries);
@@ -384,6 +390,11 @@ export abstract class BaseProvider<TInput, TOutput> {
         while (true) {
             // Display current state
             term('\n');
+            if (originalItem !== undefined) {
+                term.bold('─── Original (EN) ──────────────────────────────────────────\n');
+                printRedJson(originalItem);
+                term('\n');
+            }
             term.bold('─── Resultado ─────────────────────────────────────────────\n');
             printColoredJson(current);
             term('\n');
@@ -622,7 +633,7 @@ export abstract class BaseProvider<TInput, TOutput> {
         }
 
         // Interactive review: show result, allow glossary corrections
-        const reviewed = await this.reviewAndConfirmItem(working, isDryRun);
+        const reviewed = await this.reviewAndConfirmItem(working, isDryRun, item);
 
         // Hook for providers to run post-review steps (e.g. trait resolution)
         const final = await this.afterReview(reviewed, isDryRun);
