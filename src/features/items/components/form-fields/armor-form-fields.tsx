@@ -2,13 +2,15 @@
 
 import * as React from "react"
 import { UseFormSetValue, UseFormWatch, FieldErrors } from "react-hook-form"
-import { Shield, ShieldCheck, ShieldAlert, Zap, Target } from "lucide-react"
+import { Shield, ShieldCheck, ShieldAlert, Zap, Target, Footprints } from "lucide-react"
 import { motion } from "framer-motion"
 import { GlassInput } from "@/components/ui/glass-input"
 import { GlassSelector } from "@/components/ui/glass-selector"
+import { GlassSwitch } from "@/components/ui/glass-switch"
 import { CreateItemSchema } from "../../api/validation"
 import { ArmorType, ItemType } from "../../types/items.types"
 import { armorTypeConfig, acTypeConfig, rarityToTailwind } from "@/lib/config/colors"
+import { cn } from "@/core/utils"
 
 const ARMOR_TYPE_OPTIONS = [
     { 
@@ -122,6 +124,39 @@ export function ArmorFormFields({ selectedType, setValue, watch, errors }: Armor
                             }}
                             error={errors.ac?.message}
                         />
+
+                        <GlassInput
+                            label="Requisito de Força"
+                            placeholder="Ex: 15"
+                            value={watch("strReq") || ""}
+                            onChange={(e) => {
+                                const val = e.target.value.replace(/\D/g, "")
+                                setValue("strReq", val === "" ? 0 : parseInt(val))
+                            }}
+                            error={errors.strReq?.message}
+                        />
+
+                        <div className={cn(
+                            "flex items-center justify-between p-4 rounded-2xl border border-white/5 bg-white/5 relative overflow-hidden",
+                            watch("stealthDis") && "border-amber-500/20 bg-amber-500/5"
+                        )}>
+                            <div className="flex items-center gap-3">
+                                <div className={cn(
+                                    "p-2 rounded-xl transition-colors",
+                                    watch("stealthDis") ? "bg-amber-400/20 text-amber-400" : "bg-white/5 text-white/40"
+                                )}>
+                                    <Footprints className="h-5 w-5" />
+                                </div>
+                                <div className="space-y-0.5">
+                                    <h4 className="text-sm font-bold text-white tracking-tight uppercase">Desvantagem em Furtividade</h4>
+                                    <p className="text-[11px] text-white/40 font-medium leading-tight">Impõe desvantagem nos testes de Furtividade enquanto usada</p>
+                                </div>
+                            </div>
+                            <GlassSwitch
+                                checked={watch("stealthDis") ?? false}
+                                onCheckedChange={(checked) => setValue("stealthDis", checked)}
+                            />
+                        </div>
                     </>
                 ) : (
                     <GlassInput

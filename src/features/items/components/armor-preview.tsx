@@ -49,6 +49,26 @@ export function ArmorPreview({ item }: ArmorPreviewProps) {
                             })()}
                         </div>
                     )}
+
+                    {/* Strength Requirement */}
+                    {item.strReq != null && item.strReq > 0 && (
+                        <div className="flex items-center gap-2">
+                            <span className="text-[10px] uppercase font-bold text-white/30 tracking-widest">Req. de Força</span>
+                            <div className={cn("px-2.5 py-0.5 rounded-md text-xs font-bold border transition-colors", rarityToTailwind.legendary.bg, rarityToTailwind.legendary.text, rarityToTailwind.legendary.border)}>
+                                FOR {item.strReq}
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Stealth Disadvantage */}
+                    {item.stealthDis && (
+                        <div className="flex items-center gap-2">
+                            <span className="text-[10px] uppercase font-bold text-white/30 tracking-widest">Furtividade</span>
+                            <div className={cn("px-2.5 py-0.5 rounded-md text-xs font-bold border transition-colors", rarityToTailwind.artifact.bg, rarityToTailwind.artifact.text, rarityToTailwind.artifact.border)}>
+                                Desvantagem
+                            </div>
+                        </div>
+                    )}
                 </div>
             </div>
         </div>
