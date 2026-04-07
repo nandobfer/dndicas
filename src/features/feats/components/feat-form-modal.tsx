@@ -3,7 +3,7 @@
 import * as React from "react";
 import { useForm, Controller, useFieldArray } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { Loader2, Zap, Link, AlignLeft, Info, Trophy, Plus, X } from "lucide-react";
+import { Loader2, Zap, Link, AlignLeft, Info, Trophy, Plus, X, Tag } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { cn } from "@/core/utils";
 import { GlassModal, GlassModalContent, GlassModalHeader, GlassModalTitle, GlassModalDescription } from "@/components/ui/glass-modal";
@@ -16,6 +16,7 @@ import { createFeatSchema, type CreateFeatSchema } from "../api/validation"
 import { Feat, CreateFeatInput, UpdateFeatInput } from "../types/feats.types"
 import { RichTextEditor } from "@/features/rules/components/rich-text-editor"
 import { attributeColors, AttributeType } from "@/lib/config/colors"
+import { FEAT_CATEGORY_OPTIONS, type FeatCategory } from "../lib/feat-categories"
 
 export interface FeatFormModalProps {
     isOpen: boolean
@@ -47,6 +48,7 @@ export function FeatFormModal({ isOpen, onClose, onSubmit, feat, isSubmitting = 
             level: feat?.level || 1,
             prerequisites: feat?.prerequisites || [],
             attributeBonuses: feat?.attributeBonuses || [],
+            category: feat?.category,
             status: feat?.status || "active"
         }
     })
@@ -84,6 +86,7 @@ export function FeatFormModal({ isOpen, onClose, onSubmit, feat, isSubmitting = 
                 level: feat?.level || 1,
                 prerequisites: feat?.prerequisites || [],
                 attributeBonuses: feat?.attributeBonuses || [],
+                category: feat?.category,
                 status: feat?.status || "active"
             })
         }
@@ -157,6 +160,34 @@ export function FeatFormModal({ isOpen, onClose, onSubmit, feat, isSubmitting = 
                             error={errors.name?.message}
                             {...register("name")}
                         />
+
+                        {/* Category */}
+                        <div className="space-y-2">
+                            <label className="text-sm font-medium text-white/80 flex items-center gap-2">
+                                <Tag className="h-4 w-4" />
+                                Categoria <span className="text-rose-400">*</span>
+                            </label>
+                            <Controller
+                                name={"category" as any}
+                                control={control}
+                                render={({ field }) => (
+                                    <GlassSelector
+                                        value={field.value}
+                                        onChange={(val) => field.onChange(val as FeatCategory)}
+                                        options={FEAT_CATEGORY_OPTIONS}
+                                        fullWidth
+                                        layoutId="feat-category-selector"
+                                        disabled={isSubmitting}
+                                    />
+                                )}
+                            />
+                            {errors.category && (
+                                <p className="text-xs text-rose-400 animate-slide-down flex items-center gap-1 mt-1">
+                                    <Info className="h-3 w-3" />
+                                    {(errors.category as any).message}
+                                </p>
+                            )}
+                        </div>
 
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                             {/* Source */}

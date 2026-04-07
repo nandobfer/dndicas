@@ -5,6 +5,7 @@
  */
 
 import { z } from 'zod';
+import { FEAT_CATEGORIES } from '../lib/feat-categories';
 
 export const createFeatSchema = z.object({
     name: z.string().min(3, "Nome deve ter no mínimo 3 caracteres").max(100, "Nome deve ter no máximo 100 caracteres"),
@@ -21,6 +22,7 @@ export const createFeatSchema = z.object({
         )
         .optional()
         .default([]),
+    category: z.enum(FEAT_CATEGORIES, { error: "Categoria é obrigatória" }),
     status: z.enum(["active", "inactive"]),
 })
 
@@ -38,6 +40,7 @@ export const updateFeatSchema = z.object({
             }),
         )
         .optional(),
+    category: z.enum(FEAT_CATEGORIES).optional(),
     status: z.enum(["active", "inactive"]).optional(),
 })
 
