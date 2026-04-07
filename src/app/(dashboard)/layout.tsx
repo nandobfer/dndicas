@@ -11,8 +11,10 @@ import { themeConfig } from "@/lib/config/theme-config"
 import { cn } from "@/core/utils"
 import { useState, useEffect } from "react"
 import { GlassFooter } from "@/components/ui/glass-footer"
+import { useWarmSearchCache } from "@/core/hooks/useWarmSearchCache"
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
+    useWarmSearchCache()
     const { isExpanded, expand, collapse, toggle, isHydrated } = useSidebar()
     const [isMobile, setIsMobile] = useState(false)
 
