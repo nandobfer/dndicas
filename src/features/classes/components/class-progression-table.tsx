@@ -197,9 +197,9 @@ export function ClassProgressionTable({
     // useMemo would incorrectly skip recomputing the rows.
     const traitsKey = JSON.stringify(traits)
     const { rows, activeSpellCircles, allCustomColumns } = React.useMemo(
-        () => buildProgressionRows(traits, progressionData, subclassData),
+        () => buildProgressionRows(traits, progressionData, subclassData, { mergeSubclassRows: !isEditable }),
         // eslint-disable-next-line react-hooks/exhaustive-deps
-        [traitsKey, progressionData, subclassData],
+        [traitsKey, progressionData, subclassData, isEditable],
     )
 
     // Show spell circles even if spellcasting is false but there are stored slots
@@ -524,6 +524,8 @@ export function ClassProgressionTable({
                                     <AnimatePresence initial={false}>
                                         {rows.map((row, rowIdx) => {
                                             const isSubclassRow = row.source === "subclass"
+                                            const hasMergedSubclasses = (row.mergedSubclasses?.length ?? 0) > 0
+                                            const primaryColor = row.mergedSubclasses?.[0]?.color ?? row.subclassColor
                                             const rowKey = `${row.level}-${row.source}-${row.subclassName ?? ""}`
 
                                             return (
@@ -536,13 +538,13 @@ export function ClassProgressionTable({
                                                     transition={{ duration: 0.15, delay: Math.min(rowIdx * 0.005, 0.1) }}
                                                     className={cn(
                                                         "hover:bg-white/[0.025] transition-colors duration-150 group",
-                                                        isSubclassRow && "border-l-2",
+                                                        (isSubclassRow || hasMergedSubclasses) && "border-l-2",
                                                     )}
                                                     style={
-                                                        isSubclassRow && row.subclassColor
+                                                        (isSubclassRow || hasMergedSubclasses) && primaryColor
                                                             ? {
-                                                                  backgroundColor: `${row.subclassColor}08`,
-                                                                  borderLeftColor: `${row.subclassColor}40`,
+                                                                  backgroundColor: `${primaryColor}08`,
+                                                                  borderLeftColor: `${primaryColor}40`,
                                                               }
                                                             : undefined
                                                     }
@@ -562,6 +564,22 @@ export function ClassProgressionTable({
                                                                     >
                                                                         {row.level}
                                                                     </span>
+                                                                </div>
+                                                            ) : hasMergedSubclasses ? (
+                                                                <div className="flex items-center gap-1">
+                                                                    <span className="font-mono text-[11px] font-bold text-white/60 px-1.5 py-0.5 rounded bg-white/5">
+                                                                        {row.level}
+                                                                    </span>
+                                                                    <div className="flex items-center gap-0.5">
+                                                                        {row.mergedSubclasses!.map((sub) => (
+                                                                            <div
+                                                                                key={sub.name}
+                                                                                className="w-1 h-1 rounded-full shrink-0"
+                                                                                style={{ backgroundColor: sub.color }}
+                                                                                title={sub.name}
+                                                                            />
+                                                                        ))}
+                                                                    </div>
                                                                 </div>
                                                             ) : (
                                                                 <span className="font-mono text-[11px] font-bold text-white/60 px-1.5 py-0.5 rounded bg-white/5">
