@@ -33,6 +33,8 @@ const { RacesProvider } = require('./providers/races-provider') as typeof import
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const { FeatsProvider } = require('./providers/feats-provider') as typeof import('./providers/feats-provider');
 // eslint-disable-next-line @typescript-eslint/no-require-imports
+const { ItemsProvider } = require('./providers/items-provider') as typeof import('./providers/items-provider');
+// eslint-disable-next-line @typescript-eslint/no-require-imports
 const { ALL_TRANSLATORS, GenAITranslator, LibreTranslateTranslator } = require('./translation') as typeof import('./translation');
 
 const term = terminal.terminal;
@@ -44,6 +46,7 @@ const providers: BaseProvider<unknown, unknown>[] = [
     new SpellsProvider(),
     new RacesProvider(),
     new FeatsProvider(),
+    new ItemsProvider(),
 ];
 
 // ─── Database ─────────────────────────────────────────────────────────────────
