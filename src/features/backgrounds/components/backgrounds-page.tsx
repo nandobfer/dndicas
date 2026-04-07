@@ -59,7 +59,15 @@ export function BackgroundsPage() {
             {/* Filters Panel */}
             <GlassCard>
                 <GlassCardContent className="py-4">
-                    <BackgroundFilters filters={filters} onSearchChange={actions.handleSearchChange} onStatusChange={actions.handleStatusChange} isSearching={data.isLoading} />
+                    <BackgroundFilters
+                        filters={filters}
+                        onSearchChange={actions.handleSearchChange}
+                        onStatusChange={actions.handleStatusChange}
+                        onAttributesChange={actions.handleAttributesChange}
+                        onSkillsChange={actions.handleSkillsChange}
+                        onFeatsChange={actions.handleFeatsChange}
+                        isSearching={data.isLoading}
+                    />
                 </GlassCardContent>
             </GlassCard>
 
