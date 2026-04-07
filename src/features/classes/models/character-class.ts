@@ -110,6 +110,11 @@ const SubclassSchema = new Schema<Subclass>(
             type: [ClassTraitSchema],
             default: [],
         },
+        progressionTable: {
+            type: Schema.Types.Mixed,
+            required: false,
+            default: undefined,
+        },
     },
     { _id: true },
 )

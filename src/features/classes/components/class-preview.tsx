@@ -23,6 +23,7 @@ import { MentionRenderer } from "./mention-renderer"
 import { Wand } from "lucide-react"
 import { GlassDiceValue } from "@/components/ui/glass-dice-value"
 import { EntitySource } from "@/features/rules/components/entity-source"
+import { ClassProgressionTable } from "./class-progression-table"
 
 const SKILL_TO_ATTR: Record<string, string> = {
     Atletismo: "Força",
@@ -420,6 +421,20 @@ export function ClassPreview({ characterClass, showStatus = true }: ClassPreview
             </div>
 
             <ClassVisualHeader name={characterClass.name} description={characterClass.description} image={characterClass.image} />
+
+            {/* Progression Table — merged class + selected subclasses */}
+            <ClassProgressionTable
+                traits={characterClass.traits || []}
+                spellcasting={characterClass.spellcasting}
+                progressionData={characterClass.progressionTable}
+                subclassData={selectedSubclasses.map((sub) => ({
+                    traits: sub.traits || [],
+                    progressionData: sub.progressionTable,
+                    color: sub.color ?? "#ffffff",
+                    name: sub.name,
+                }))}
+                isEditable={false}
+            />
 
             {characterClass.spellcasting && (
                 <SpellcastingSection

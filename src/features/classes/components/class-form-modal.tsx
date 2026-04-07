@@ -41,6 +41,7 @@ import { RichTextEditor } from "@/features/rules/components/rich-text-editor"
 
 import { attributeColors, diceColors, rarityColors, type AttributeType } from "@/lib/config/colors"
 import { ImageAndDescriptionSection, SpellcastingSection, TraitsSection, SkillSelection } from "./shared-form-components"
+import { ClassProgressionTable } from "./class-progression-table"
 
 import { createClassSchema, type CreateClassSchema } from "../api/validation"
 import {
@@ -127,6 +128,28 @@ function SubclassTraitsWrapper({ control, activeTab, isSubmitting, errors }: { c
     })
 
     return <TraitsSection fields={fields} append={append} remove={remove} control={control} isSubmitting={isSubmitting} traitsFieldName={`subclasses.${activeTab}.traits`} errors={errors} />
+}
+
+// ─── Subclass Progression Table Wrapper ──────────────────────────────────────
+
+/**
+ * Wrapper for subclass progression table in the form.
+ * Reads subclass traits and spellcasting from watch() to stay reactive.
+ */
+function SubclassProgressionTableWrapper({ watch, setValue, activeTab }: { watch: any; setValue: any; activeTab: number }) {
+    const subclassTrait = watch(`subclasses.${activeTab}.traits`) || []
+    const subclassSpellcasting = watch(`subclasses.${activeTab}.spellcasting`) || false
+    const subclassProgressionTable = watch(`subclasses.${activeTab}.progressionTable`)
+
+    return (
+        <ClassProgressionTable
+            traits={subclassTrait}
+            spellcasting={subclassSpellcasting}
+            progressionData={subclassProgressionTable}
+            isEditable
+            onProgressionDataChange={(data) => setValue(`subclasses.${activeTab}.progressionTable`, data as any)}
+        />
+    )
 }
 
 // ─── Subclass Tab Item ───────────────────────────────────────────────────────
@@ -264,6 +287,7 @@ export function ClassFormModal({ characterClass, isOpen, onClose, onSuccess }: C
             subclasses: characterClass?.subclasses ?? [],
             traits: characterClass?.traits ?? [],
             image: characterClass?.image ?? "",
+            progressionTable: characterClass?.progressionTable ?? undefined,
         },
     })
 
@@ -315,6 +339,7 @@ export function ClassFormModal({ characterClass, isOpen, onClose, onSuccess }: C
                 })),
                 traits: characterClass?.traits ?? [],
                 image: characterClass?.image ?? "",
+                progressionTable: characterClass?.progressionTable ?? undefined,
             })
         }
     }, [isOpen, characterClass, reset])
@@ -824,6 +849,15 @@ export function ClassFormModal({ characterClass, isOpen, onClose, onSuccess }: C
                                     )}
                                 </div>
 
+                                {/* Row 12: Progression Table */}
+                                <ClassProgressionTable
+                                    traits={watch("traits") || []}
+                                    spellcasting={watch("spellcasting") || false}
+                                    progressionData={watch("progressionTable")}
+                                    isEditable
+                                    onProgressionDataChange={(data) => setValue("progressionTable", data as any)}
+                                />
+
                                 {/* Footer */}
                                 <div className="flex flex-col-reverse sm:flex-row justify-end gap-3 pt-6 border-t border-white/10">
                                     <button
@@ -915,6 +949,15 @@ export function ClassFormModal({ characterClass, isOpen, onClose, onSuccess }: C
 
                                     <SubclassTraitsWrapper control={control} activeTab={activeTab} isSubmitting={isSubmitting} errors={errors} />
                                 </div>
+
+                                {/* Progression table for subclass */}
+                                {typeof activeTab === "number" && (
+                                    <SubclassProgressionTableWrapper
+                                        watch={watch}
+                                        setValue={setValue}
+                                        activeTab={activeTab}
+                                    />
+                                )}
 
                                 <div className="flex flex-col-reverse sm:flex-row justify-end gap-3 pt-6 border-t border-white/10">
                                     <button
