@@ -35,6 +35,9 @@ export type UpdateBackgroundInput = Partial<CreateBackgroundInput>
 export interface BackgroundsFilters {
     search?: string
     status?: "all" | "active" | "inactive"
+    suggestedAttributes?: string[]
+    skillProficiencies?: string[]
+    featIds?: string[]
     page?: number
     limit?: number
 }
