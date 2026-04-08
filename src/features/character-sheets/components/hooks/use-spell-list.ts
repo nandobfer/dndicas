@@ -1,19 +1,21 @@
 "use client"
 
 import { useCallback } from "react"
+import type { UseFormWatch } from "react-hook-form"
 import { useSheetSpells, useAddSpell, usePatchSpell, useRemoveSpell, usePatchSheet } from "../../api/character-sheets-queries"
 import { useCharacterCalculations } from "../../hooks/use-character-calculations"
-import type { CharacterSheet, CharacterSpell } from "../../types/character-sheet.types"
+import type { CharacterSheet, CharacterSpell, PatchSheetBody } from "../../types/character-sheet.types"
 
 interface UseSpellListOptions {
     sheet: CharacterSheet
     form: {
-        watch: (field?: string) => any
-        patchField: (field: string, value: unknown) => void
+        watch: UseFormWatch<PatchSheetBody>
+        patchField: (field: keyof PatchSheetBody, value: unknown) => void
     }
+    isReadOnly?: boolean
 }
 
-export function useSpellList({ sheet, form }: UseSpellListOptions) {
+export function useSpellList({ sheet, form, isReadOnly = false }: UseSpellListOptions) {
     const { watch, patchField } = form
     const currentValues = watch()
     const currentSheet = { ...sheet, ...currentValues } as CharacterSheet
@@ -28,6 +30,7 @@ export function useSpellList({ sheet, form }: UseSpellListOptions) {
     const spellSlots = (currentValues.spellSlots ?? sheet.spellSlots ?? {}) as Record<string, { total: number; used: number }>
 
     const handleAddSpell = useCallback(() => {
+        if (isReadOnly) return
         addSpell.mutate({
             name: "Nova magia",
             circle: 0,
@@ -38,38 +41,42 @@ export function useSpellList({ sheet, form }: UseSpellListOptions) {
             material: false,
             notes: "",
         })
-    }, [addSpell])
+    }, [addSpell, isReadOnly])
 
     const handlePatchSpell = useCallback(
         (spellId: string, data: Partial<Omit<CharacterSpell, "_id" | "sheetId" | "createdAt">>) => {
+            if (isReadOnly) return
             patchSpell.mutate({ spellId, data })
         },
-        [patchSpell]
+        [isReadOnly, patchSpell]
     )
 
     const handleRemoveSpell = useCallback(
         (spellId: string) => {
+            if (isReadOnly) return
             removeSpell.mutate(spellId)
         },
-        [removeSpell]
+        [isReadOnly, removeSpell]
     )
 
     const handlePatchSpellSlot = useCallback(
         (level: string, field: "total" | "used", value: number) => {
+            if (isReadOnly) return
             const current = spellSlots[level] ?? { total: 0, used: 0 }
             patchField("spellSlots", {
                 ...spellSlots,
                 [level]: { ...current, [field]: Math.max(0, value) },
             })
         },
-        [patchField, spellSlots]
+        [isReadOnly, patchField, spellSlots]
     )
 
     const handlePatchSpellcasting = useCallback(
         (attr: string | null) => {
+            if (isReadOnly) return
             patchField("spellcastingAttribute", attr)
         },
-        [patchField]
+        [isReadOnly, patchField]
     )
 
     return {

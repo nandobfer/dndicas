@@ -7,6 +7,7 @@ import type { CharacterSheet, PatchSheetBody } from "../types/character-sheet.ty
 
 interface UseSheetAutoSaveOptions {
     onSlugChange?: (newSlug: string) => void
+    disabled?: boolean
 }
 
 export function useSheetAutoSave(sheet: CharacterSheet, options?: UseSheetAutoSaveOptions) {
@@ -30,6 +31,8 @@ export function useSheetAutoSave(sheet: CharacterSheet, options?: UseSheetAutoSa
      */
     const patchField = useCallback(
         (field: keyof PatchSheetBody, value: any) => {
+            if (options?.disabled) return
+
             // Update local form state immediately
             setValue(field, value, { shouldDirty: true, shouldTouch: true })
 

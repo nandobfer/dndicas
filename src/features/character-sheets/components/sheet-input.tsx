@@ -15,10 +15,12 @@ interface SheetInputProps extends React.InputHTMLAttributes<HTMLInputElement> {
     icon?: React.ReactNode
     inputClassName?: string
     showControls?: boolean
+    readOnlyMode?: boolean
 }
 
 export const SheetInput = React.forwardRef<HTMLInputElement, SheetInputProps>(
-    ({ label, compact = false, className, inputClassName, isLoading, debounceMs = 0, onChangeValue, value, onActionClick, icon, showControls = false, min, max, ...props }, ref) => {
+    ({ label, compact = false, className, inputClassName, isLoading, debounceMs = 0, onChangeValue, value, onActionClick, icon, showControls = false, min, max, readOnlyMode = false, disabled, readOnly, ...props }, ref) => {
+        const isNonInteractive = !!disabled || !!readOnly || readOnlyMode
         const [localValue, setLocalValue] = React.useState(String(value ?? ""))
         const lastValidRef = React.useRef(String(value ?? ""))
         const timeoutRef = React.useRef<NodeJS.Timeout | null>(null)
@@ -45,6 +47,7 @@ export const SheetInput = React.forwardRef<HTMLInputElement, SheetInputProps>(
         }
 
         const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+            if (isNonInteractive) return
             const val = e.target.value
             setLocalValue(val)
 
@@ -65,6 +68,10 @@ export const SheetInput = React.forwardRef<HTMLInputElement, SheetInputProps>(
         }
 
         const handleBlur = (e: React.FocusEvent<HTMLInputElement>) => {
+            if (isNonInteractive) {
+                props.onBlur?.(e)
+                return
+            }
             const val = e.target.value
             if (props.type === "number" || props.inputMode === "numeric") {
                 const num = parseFloat(val)
@@ -94,6 +101,7 @@ export const SheetInput = React.forwardRef<HTMLInputElement, SheetInputProps>(
         }
 
         const adjustValue = (amount: number) => {
+            if (isNonInteractive) return
             const currentNum = parseInt(localValue) || 0
             const minNum = min !== undefined ? Number(min) : undefined
             const maxNum = max !== undefined ? Number(max) : undefined
@@ -112,8 +120,14 @@ export const SheetInput = React.forwardRef<HTMLInputElement, SheetInputProps>(
                     {showControls && (
                         <button
                             type="button"
+                            disabled={isNonInteractive}
                             onClick={() => adjustValue(-1)}
-                            className="p-1 hover:bg-white/10 rounded-full transition-colors text-white/40 hover:text-white flex-shrink-0"
+                            tabIndex={isNonInteractive ? -1 : undefined}
+                            className={cn(
+                                "p-1 rounded-full transition-colors text-white/40 flex-shrink-0",
+                                !isNonInteractive && "hover:bg-white/10 hover:text-white",
+                                isNonInteractive && "opacity-50 cursor-not-allowed pointer-events-none",
+                            )}
                         >
                             <Minus size={14} />
                         </button>
@@ -126,6 +140,7 @@ export const SheetInput = React.forwardRef<HTMLInputElement, SheetInputProps>(
                             "[appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none",
                             compact ? "text-sm font-semibold" : "text-lg font-bold",
                             isLoading && "animate-pulse opacity-50",
+                            isNonInteractive && "cursor-default select-none",
                             inputClassName,
                         )}
                         value={localValue}
@@ -133,24 +148,32 @@ export const SheetInput = React.forwardRef<HTMLInputElement, SheetInputProps>(
                         onBlur={handleBlur}
                         min={min}
                         max={max}
+                        disabled={disabled || readOnlyMode}
+                        readOnly={readOnly || readOnlyMode}
+                        tabIndex={isNonInteractive ? -1 : props.tabIndex}
                         {...props}
                     />
 
                     {showControls && (
                         <button
                             type="button"
+                            disabled={isNonInteractive}
                             onClick={() => adjustValue(1)}
-                            className="p-1 hover:bg-white/10 rounded-full transition-colors text-white/40 hover:text-white flex-shrink-0"
+                            tabIndex={isNonInteractive ? -1 : undefined}
+                            className={cn(
+                                "p-1 rounded-full transition-colors text-white/40 flex-shrink-0",
+                                !isNonInteractive && "hover:bg-white/10 hover:text-white",
+                                isNonInteractive && "opacity-50 cursor-not-allowed pointer-events-none",
+                            )}
                         >
                             <Plus size={14} />
                         </button>
                     )}
                 </div>
-                <div className={cn("w-full bg-white/10 group-focus-within:bg-white/40 transition-colors", compact ? "h-[1px]" : "h-0.5")} />
+                <div className={cn("w-full bg-white/10 transition-colors", !isNonInteractive && "group-focus-within:bg-white/40", compact ? "h-[1px]" : "h-0.5")} />
                 {label && <label className={cn("font-black uppercase tracking-widest text-white/40 mt-1 ml-1 select-none", compact ? "text-[9px]" : "text-[10px]")}>{label}</label>}
             </div>
         )
     },
 )
 SheetInput.displayName = "SheetInput"
-

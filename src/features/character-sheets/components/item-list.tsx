@@ -2,18 +2,20 @@
 
 import { motion, AnimatePresence } from "framer-motion"
 import { Plus, Trash2, Coins } from "lucide-react"
+import type { UseFormWatch } from "react-hook-form"
 import { cn } from "@/core/utils"
 import { SheetInput } from "./sheet-input"
 import { CompactRichInput } from "./compact-rich-input"
 import { useItemList } from "./hooks/use-item-list"
-import type { CharacterSheet } from "../types/character-sheet.types"
+import type { CharacterSheet, PatchSheetBody } from "../types/character-sheet.types"
 
 interface ItemListProps {
     sheet: CharacterSheet
     form: {
-        watch: (field?: string) => any
-        patchField: (field: string, value: unknown) => void
+        watch: UseFormWatch<PatchSheetBody>
+        patchField: (field: keyof PatchSheetBody, value: unknown) => void
     }
+    isReadOnly?: boolean
 }
 
 const COIN_LABELS: Array<{ key: "cp" | "sp" | "ep" | "gp" | "pp"; label: string; color: string }> = [
@@ -24,25 +26,27 @@ const COIN_LABELS: Array<{ key: "cp" | "sp" | "ep" | "gp" | "pp"; label: string;
     { key: "pp", label: "PL", color: "text-violet-300" },
 ]
 
-export function ItemList({ sheet, form }: ItemListProps) {
+export function ItemList({ sheet, form, isReadOnly = false }: ItemListProps) {
     const { watch } = form
     const currentValues = watch()
     const coins = currentValues.coins ?? sheet.coins ?? { cp: 0, sp: 0, ep: 0, gp: 0, pp: 0 }
 
-    const { items, handleAddItem, handlePatchItem, handleRemoveItem, handlePatchCoins } = useItemList({ sheet, form })
+    const { items, handleAddItem, handlePatchItem, handleRemoveItem, handlePatchCoins } = useItemList({ sheet, form, isReadOnly })
 
     return (
         <div className="rounded-lg border border-white/10 bg-white/[0.03] overflow-hidden flex flex-col">
             {/* Header */}
             <div className="flex items-center justify-between px-3 py-2 border-b border-white/10 bg-white/[0.03]">
                 <span className="text-[9px] font-black uppercase tracking-[0.2em] text-white/40">Itens e Equipamentos</span>
-                <button
-                    type="button"
-                    onClick={handleAddItem}
-                    className="flex items-center gap-1 text-[8px] font-bold uppercase tracking-wider text-white/30 hover:text-white/70 transition-colors"
-                >
-                    <Plus className="w-3 h-3" /> Adicionar
-                </button>
+                {!isReadOnly && (
+                    <button
+                        type="button"
+                        onClick={handleAddItem}
+                        className="flex items-center gap-1 text-[8px] font-bold uppercase tracking-wider text-white/30 hover:text-white/70 transition-colors"
+                    >
+                        <Plus className="w-3 h-3" /> Adicionar
+                    </button>
+                )}
             </div>
 
             {/* Moedas */}
@@ -63,6 +67,7 @@ export function ItemList({ sheet, form }: ItemListProps) {
                                 onChangeValue={(v) => handlePatchCoins(key, parseInt(v) || 0)}
                                 inputClassName={cn("text-center text-xs font-bold", color)}
                                 className="items-center"
+                                readOnlyMode={isReadOnly}
                             />
                             <span className={cn("text-[8px] font-black uppercase tracking-widest mt-0.5", color)}>{label}</span>
                         </div>
@@ -99,6 +104,7 @@ export function ItemList({ sheet, form }: ItemListProps) {
                                 placeholder="Nome do item"
                                 debounceMs={800}
                                 excludeId={sheet._id}
+                                disabled={isReadOnly}
                             />
                             <SheetInput
                                 compact
@@ -108,14 +114,17 @@ export function ItemList({ sheet, form }: ItemListProps) {
                                 value={String(item.quantity)}
                                 onChangeValue={(v) => handlePatchItem(item._id, { quantity: parseInt(v) || 0 })}
                                 inputClassName="text-center text-xs"
+                                readOnlyMode={isReadOnly}
                             />
-                            <button
-                                type="button"
-                                onClick={() => handleRemoveItem(item._id)}
-                                className="text-red-400/20 hover:text-red-400 transition-colors mt-1 flex-shrink-0"
-                            >
-                                <Trash2 className="w-3.5 h-3.5" />
-                            </button>
+                            {!isReadOnly && (
+                                <button
+                                    type="button"
+                                    onClick={() => handleRemoveItem(item._id)}
+                                    className="text-red-400/20 hover:text-red-400 transition-colors mt-1 flex-shrink-0"
+                                >
+                                    <Trash2 className="w-3.5 h-3.5" />
+                                </button>
+                            )}
                         </motion.div>
                     ))}
                 </AnimatePresence>
@@ -125,13 +134,15 @@ export function ItemList({ sheet, form }: ItemListProps) {
             {items.length === 0 && (
                 <div className="px-3 py-6 flex flex-col items-center gap-2 text-white/20">
                     <span className="text-[10px] font-semibold">Nenhum item ainda</span>
-                    <button
-                        type="button"
-                        onClick={handleAddItem}
-                        className="flex items-center gap-1.5 py-1.5 px-3 border border-dashed border-white/10 rounded text-[9px] font-bold uppercase tracking-wider hover:border-white/20 hover:text-white/40 transition-all"
-                    >
-                        <Plus className="w-3 h-3" /> Adicionar item
-                    </button>
+                    {!isReadOnly && (
+                        <button
+                            type="button"
+                            onClick={handleAddItem}
+                            className="flex items-center gap-1.5 py-1.5 px-3 border border-dashed border-white/10 rounded text-[9px] font-bold uppercase tracking-wider hover:border-white/20 hover:text-white/40 transition-all"
+                        >
+                            <Plus className="w-3 h-3" /> Adicionar item
+                        </button>
+                    )}
                 </div>
             )}
         </div>
