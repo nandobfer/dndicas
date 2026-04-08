@@ -55,9 +55,10 @@ export function RulesPage() {
             <GlassCard>
                 <GlassCardContent className="py-4">
                     <RulesFilter
-                        filters={{ search: filters.search, status: filters.status }}
+                        filters={{ search: filters.search, status: filters.status, sources: filters.sources }}
                         onSearchChange={actions.handleSearchChange}
                         onStatusChange={actions.handleStatusChange}
+                        onSourcesChange={actions.handleSourcesChange}
                         isSearching={data.paginated.isFetching || data.infinite.isFetching}
                     />
                 </GlassCardContent>

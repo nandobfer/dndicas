@@ -13,6 +13,7 @@ import type { FeatCategory } from "../lib/feat-categories"
 import { FEAT_CATEGORY_OPTIONS } from "../lib/feat-categories"
 import { useState } from "react"
 import { motion, AnimatePresence } from "framer-motion"
+import { SourceFilter } from "@/components/ui/source-filter"
 
 export interface FeatsFiltersProps {
     filters: FeatsFilters
@@ -21,11 +22,12 @@ export interface FeatsFiltersProps {
     onLevelChange: (level: number | undefined, mode: "exact" | "upto") => void
     onAttributesChange: (attributes: string[]) => void
     onCategoriesChange: (categories: FeatCategory[]) => void
+    onSourcesChange: (sources: string[]) => void
     isSearching?: boolean
     className?: string
 }
 
-export function FeatsFilters({ filters, onSearchChange, onStatusChange, onLevelChange, onAttributesChange, onCategoriesChange, isSearching = false, className }: FeatsFiltersProps) {
+export function FeatsFilters({ filters, onSearchChange, onStatusChange, onLevelChange, onAttributesChange, onCategoriesChange, onSourcesChange, isSearching = false, className }: FeatsFiltersProps) {
     const isMobile = useIsMobile()
     const [levelMode, setLevelMode] = useState<"exact" | "upto">("exact")
     const [selectedLevel, setSelectedLevel] = useState<number | undefined>(filters.level || filters.levelMax)
@@ -58,11 +60,20 @@ export function FeatsFilters({ filters, onSearchChange, onStatusChange, onLevelC
 
     return (
         <div className={cn("flex flex-col gap-4", className)}>
-            {/* Row 1: Search + Level + Status */}
+            {/* Row 1: Search + Source + Level + Status */}
             <div className="flex flex-col lg:flex-row lg:items-center gap-4 justify-between">
-                {/* Search */}
-                <div className="flex-1 w-full lg:max-w-md">
-                    <SearchInput value={filters.search || ""} onChange={onSearchChange} isLoading={isSearching} placeholder="Buscar talentos por nome ou fonte..." />
+                <div className="flex flex-col md:flex-row items-start md:items-center gap-4 flex-1">
+                    {/* Search */}
+                    <div className="flex-1 w-full lg:max-w-md">
+                        <SearchInput value={filters.search || ""} onChange={onSearchChange} isLoading={isSearching} placeholder="Buscar talentos por nome ou fonte..." />
+                    </div>
+
+                    {/* Source Filter */}
+                    <SourceFilter
+                        value={filters.sources || []}
+                        onChange={onSourcesChange}
+                        entityType="feats"
+                    />
                 </div>
 
                 <div className="flex flex-wrap items-center gap-6">

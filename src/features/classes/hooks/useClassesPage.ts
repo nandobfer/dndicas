@@ -12,7 +12,7 @@ export function useClassesPage() {
     const isMobile = useIsMobile()
     const { viewMode, setViewMode, isTable, isDefault } = useViewMode()
 
-    const { filters, search, setSearch, setStatus, setPage } = useClassFilters()
+    const { filters, search, setSearch, setStatus, setSources, setPage } = useClassFilters()
 
     const paginatedData = useClasses(filters, filters.page, filters.limit, { enabled: isTable })
     const infiniteData = useInfiniteClasses(filters, { enabled: !isTable })
@@ -59,7 +59,7 @@ export function useClassesPage() {
     }
 
     const hasActiveFilters =
-        !!filters.search || (filters.hitDice && filters.hitDice.length > 0) || (filters.spellcasting && filters.spellcasting.length > 0) || (filters.status && filters.status !== "all")
+        !!filters.search || (filters.hitDice && filters.hitDice.length > 0) || (filters.spellcasting && filters.spellcasting.length > 0) || (filters.sources && filters.sources.length > 0) || (filters.status && filters.status !== "all")
 
     return {
         isMobile,
@@ -91,6 +91,7 @@ export function useClassesPage() {
         actions: {
             handleSearchChange,
             handleStatusChange,
+            handleSourcesChange: setSources,
             handleCreateClick,
             handleEditClick,
             handleDeleteClick,

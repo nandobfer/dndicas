@@ -38,6 +38,7 @@ export interface BackgroundsFilters {
     suggestedAttributes?: string[]
     skillProficiencies?: string[]
     featIds?: string[]
+    sources?: string[] // Multi-select: book name prefixes
     page?: number
     limit?: number
 }

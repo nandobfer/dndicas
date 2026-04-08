@@ -15,6 +15,7 @@ import { useIsMobile } from "@/core/hooks/useMediaQuery"
 import { cn } from "@/core/utils"
 import { attributeColors, type AttributeType } from "@/lib/config/colors"
 import { useFeats } from "@/features/feats/hooks/useFeats"
+import { SourceFilter } from "@/components/ui/source-filter"
 
 // ── Constants ────────────────────────────────────────────────────────────────
 
@@ -45,12 +46,14 @@ export interface BackgroundFiltersProps {
         suggestedAttributes?: string[]
         skillProficiencies?: string[]
         featIds?: string[]
+        sources?: string[]
     }
     onSearchChange: (search: string) => void
     onStatusChange?: (status: any) => void
     onAttributesChange?: (attrs: string[]) => void
     onSkillsChange?: (skills: string[]) => void
     onFeatsChange?: (ids: string[]) => void
+    onSourcesChange?: (sources: string[]) => void
     isSearching?: boolean
     className?: string
 }
@@ -163,6 +166,7 @@ export function BackgroundFilters({
     onAttributesChange,
     onSkillsChange,
     onFeatsChange,
+    onSourcesChange,
     isSearching = false,
     className,
 }: BackgroundFiltersProps) {
@@ -173,14 +177,21 @@ export function BackgroundFilters({
 
     return (
         <div className={cn("flex flex-col gap-4", className)}>
-            {/* Row 1: Search + Status + Origin Feats */}
+            {/* Row 1: Search + Source + Origin Feats + Status */}
             <div className="flex flex-col lg:flex-row lg:items-center gap-4 justify-between">
-                <div className="flex-1 w-full lg:max-w-sm">
-                    <SearchInput
-                        value={filters.search || ""}
-                        onChange={onSearchChange}
-                        isLoading={isSearching}
-                        placeholder="Buscar origens por nome, descrição ou fonte..."
+                <div className="flex flex-col sm:flex-row sm:items-center gap-4 flex-1">
+                    <div className="flex-1 w-full lg:max-w-sm">
+                        <SearchInput
+                            value={filters.search || ""}
+                            onChange={onSearchChange}
+                            isLoading={isSearching}
+                            placeholder="Buscar origens por nome, descrição ou fonte..."
+                        />
+                    </div>
+                    <SourceFilter
+                        value={filters.sources || []}
+                        onChange={(sources) => onSourcesChange?.(sources)}
+                        entityType="backgrounds"
                     />
                 </div>
 

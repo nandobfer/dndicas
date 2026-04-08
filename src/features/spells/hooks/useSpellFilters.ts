@@ -38,6 +38,8 @@ export interface UseSpellFiltersReturn {
   setDiceTypes: (types: DiceType[]) => void;
   /** Update circle mode */
   setCircleMode: (mode: 'exact' | 'upTo') => void;
+  /** Update sources filter */
+  setSources: (sources: string[]) => void;
   /** Update page number */
   setPage: (page: number) => void;
   /** Update limit */
@@ -118,6 +120,11 @@ export function useSpellFilters(): UseSpellFiltersReturn {
     return (modeParam as 'exact' | 'upTo') || 'exact';
   });
 
+  const [sources, setSourcesState] = useState<string[]>(() => {
+    const sourcesParam = searchParams.get('sources');
+    return sourcesParam ? sourcesParam.split(',') : [];
+  });
+
   // Debounced search for API calls
   const debouncedSearch = useDebounce(search, SEARCH_DEBOUNCE_MS);
 
@@ -163,6 +170,12 @@ export function useSpellFilters(): UseSpellFiltersReturn {
     setPageState(1);
   }, []);
 
+  // Update sources and reset page
+  const setSources = useCallback((value: string[]) => {
+    setSourcesState(value);
+    setPageState(1);
+  }, []);
+
   // Update page number
   const setPage = useCallback((newPage: number) => {
     setPageState(newPage);
@@ -182,6 +195,7 @@ export function useSpellFilters(): UseSpellFiltersReturn {
     setSaveAttributesState([]);
     setDiceTypesState([]);
     setCircleModeState('exact');
+    setSourcesState([]);
     setPageState(1);
   }, []);
 
@@ -194,10 +208,11 @@ export function useSpellFilters(): UseSpellFiltersReturn {
       schools: schools.length > 0 ? schools : undefined,
       saveAttributes: saveAttributes.length > 0 ? saveAttributes : undefined,
       diceTypes: diceTypes.length > 0 ? diceTypes : undefined,
+      sources: sources.length > 0 ? sources : undefined,
       page,
       limit,
     }),
-    [debouncedSearch, status, circles, schools, saveAttributes, diceTypes, page, limit]
+    [debouncedSearch, status, circles, schools, saveAttributes, diceTypes, sources, page, limit]
   );
 
   // Sync filters to URL query params
@@ -213,13 +228,14 @@ export function useSpellFilters(): UseSpellFiltersReturn {
     if (saveAttributes.length > 0) params.set('attributes', saveAttributes.join(','));
     if (diceTypes.length > 0) params.set('dice', diceTypes.join(','));
     if (circleMode !== 'exact') params.set('circleMode', circleMode);
+    if (sources.length > 0) params.set('sources', sources.join(','));
 
     const queryString = params.toString();
     const newUrl = queryString ? `?${queryString}` : window.location.pathname;
 
     // Use shallow routing to update URL without page reload
     router.replace(newUrl, { scroll: false });
-  }, [search, status, page, circles, schools, saveAttributes, diceTypes, circleMode, router]);
+  }, [search, status, page, circles, schools, saveAttributes, diceTypes, circleMode, sources, router]);
 
   return {
     filters,
@@ -235,6 +251,7 @@ export function useSpellFilters(): UseSpellFiltersReturn {
     setSaveAttributes,
     setDiceTypes,
     setCircleMode,
+    setSources,
     setPage,
     setLimit,
     resetFilters,

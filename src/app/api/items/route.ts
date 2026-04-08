@@ -21,6 +21,14 @@ export async function GET(req: NextRequest) {
     if (status && status !== "all") query.status = status;
     if (type && type !== "all") query.type = type;
     if (rarity && rarity !== "all") query.rarity = rarity;
+    const sourcesParam = url.searchParams.get("sources");
+    if (sourcesParam) {
+      const escapeRegex = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+      const sourcesList = sourcesParam.split(",").map(s => s.trim()).filter(Boolean)
+      if (sourcesList.length > 0) {
+        query.source = { $in: sourcesList.map(s => new RegExp(`^${escapeRegex(s)}`, 'i')) }
+      }
+    }
 
     const items = await ItemModel.find(query).sort({ createdAt: -1 });
 

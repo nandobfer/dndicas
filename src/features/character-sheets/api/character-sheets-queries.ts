@@ -4,6 +4,7 @@ import { useInfiniteQuery, useQuery, useMutation, useQueryClient } from "@tansta
 import {
     fetchSheets,
     fetchSheet,
+    fetchSheetBySlug,
     createSheet,
     patchSheet,
     deleteSheet,
@@ -62,7 +63,8 @@ export function useInfiniteSheets(search?: string, limit = 12) {
         initialPageParam: 1,
         getNextPageParam: (lastPage) =>
             lastPage.hasNextPage ? lastPage.page + 1 : undefined,
-        staleTime: 30 * 1000,
+        staleTime: 0,
+        refetchOnWindowFocus: true,
     })
 }
 
@@ -73,7 +75,18 @@ export function useSheet(id: string | null) {
         queryKey: sheetsKeys.detail(id ?? ""),
         queryFn: () => fetchSheet(id!),
         enabled: !!id,
-        staleTime: 60 * 1000,
+        staleTime: 0,
+        refetchOnWindowFocus: true,
+    })
+}
+
+export function useSheetBySlug(slug: string | null) {
+    return useQuery({
+        queryKey: [...sheetsKeys.details(), "slug", slug ?? ""],
+        queryFn: () => fetchSheetBySlug(slug!),
+        enabled: !!slug,
+        staleTime: 0,
+        refetchOnWindowFocus: true,
     })
 }
 
@@ -82,7 +95,7 @@ export function useSheet(id: string | null) {
 export function useCreateSheet() {
     const qc = useQueryClient()
     return useMutation({
-        mutationFn: createSheet,
+        mutationFn: (name?: string) => createSheet(name),
         onSuccess: () => qc.invalidateQueries({ queryKey: sheetsKeys.lists() }),
     })
 }
@@ -93,6 +106,7 @@ export function usePatchSheet(id: string) {
         mutationFn: (data: PatchSheetBody) => patchSheet(id, data),
         onSuccess: (updated) => {
             qc.setQueryData(sheetsKeys.detail(id), updated)
+            qc.invalidateQueries({ queryKey: sheetsKeys.details() })
         },
     })
 }
@@ -122,7 +136,8 @@ export function useItems(sheetId: string) {
         queryKey: sheetsKeys.items(sheetId),
         queryFn: () => fetchItems(sheetId),
         enabled: !!sheetId,
-        staleTime: 60 * 1000,
+        staleTime: 0,
+        refetchOnWindowFocus: true,
     })
 }
 
@@ -158,7 +173,8 @@ export function useSheetSpells(sheetId: string) {
         queryKey: sheetsKeys.spells(sheetId),
         queryFn: () => fetchSpells(sheetId),
         enabled: !!sheetId,
-        staleTime: 60 * 1000,
+        staleTime: 0,
+        refetchOnWindowFocus: true,
     })
 }
 
@@ -194,7 +210,8 @@ export function useTraits(sheetId: string) {
         queryKey: sheetsKeys.traits(sheetId),
         queryFn: () => fetchTraits(sheetId),
         enabled: !!sheetId,
-        staleTime: 60 * 1000,
+        staleTime: 0,
+        refetchOnWindowFocus: true,
     })
 }
 
@@ -221,7 +238,8 @@ export function useSheetFeats(sheetId: string) {
         queryKey: sheetsKeys.feats(sheetId),
         queryFn: () => fetchFeats(sheetId),
         enabled: !!sheetId,
-        staleTime: 60 * 1000,
+        staleTime: 0,
+        refetchOnWindowFocus: true,
     })
 }
 
@@ -248,7 +266,8 @@ export function useAttacks(sheetId: string) {
         queryKey: sheetsKeys.attacks(sheetId),
         queryFn: () => fetchAttacks(sheetId),
         enabled: !!sheetId,
-        staleTime: 60 * 1000,
+        staleTime: 0,
+        refetchOnWindowFocus: true,
     })
 }
 

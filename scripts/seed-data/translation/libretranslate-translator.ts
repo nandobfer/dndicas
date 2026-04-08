@@ -85,6 +85,8 @@ export class LibreTranslateTranslator extends BaseTranslator {
     // ─── Translation ──────────────────────────────────────────────────────────
 
     private async translateHtml(html: string): Promise<string> {
+        if (!html.trim()) return '';
+
         // Use the model code detected at server startup:
         //   'pb' = Portuguese (Brazil) — from bundled translate-en_pb-1_9.argosmodel
         //   'pt' = Portuguese (Portugal) — fallback from argostranslate index

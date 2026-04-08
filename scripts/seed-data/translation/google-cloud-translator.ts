@@ -40,6 +40,8 @@ export class GoogleCloudTranslator extends BaseTranslator {
     }
 
     private async translateHtml(html: string): Promise<string> {
+        if (!html.trim()) return '';
+
         this.assertConfigured();
         const response = await axios.post<{
             data: { translations: Array<{ translatedText: string }> };

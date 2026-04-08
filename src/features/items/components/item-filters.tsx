@@ -11,6 +11,7 @@ import { useIsMobile } from "@/core/hooks/useMediaQuery"
 import { cn } from "@/core/utils"
 import { ItemType, ItemRarity } from "../types/items.types"
 import { GlassSelector } from "@/components/ui/glass-selector"
+import { SourceFilter } from "@/components/ui/source-filter"
 
 export interface ItemFiltersProps {
     filters: {
@@ -18,11 +19,13 @@ export interface ItemFiltersProps {
         status?: "active" | "inactive" | "all"
         type?: ItemType | "all"
         rarity?: ItemRarity | "all"
+        sources?: string[]
     }
     onSearchChange: (search: string) => void
     onStatusChange?: (status: "active" | "inactive" | "all") => void
     onTypeChange?: (type: ItemType | "all") => void
     onRarityChange?: (rarity: ItemRarity | "all") => void
+    onSourcesChange?: (sources: string[]) => void
     isSearching?: boolean
     className?: string
 }
@@ -48,7 +51,7 @@ const ITEM_RARITIES: { value: ItemRarity | "all"; label: string }[] = [
     { value: "artefato", label: "Artefato" },
 ]
 
-export function ItemFilters({ filters, onSearchChange, onStatusChange, onTypeChange, onRarityChange, isSearching = false, className }: ItemFiltersProps) {
+export function ItemFilters({ filters, onSearchChange, onStatusChange, onTypeChange, onRarityChange, onSourcesChange, isSearching = false, className }: ItemFiltersProps) {
     const { isAdmin } = useAuth()
     const isMobile = useIsMobile()
 
@@ -74,7 +77,7 @@ export function ItemFilters({ filters, onSearchChange, onStatusChange, onTypeCha
                 </div>
             </div>
 
-            {/* Bottom Row: Type + Status */}
+            {/* Bottom Row: Type + Source + Status */}
             <div className="flex flex-col sm:flex-row sm:flex-wrap sm:items-center gap-6">
                 <div className="flex flex-col sm:flex-row sm:items-center gap-2 w-full sm:w-auto">
                     <span className="text-[10px] sm:text-xs font-semibold text-white/40 uppercase tracking-wider whitespace-nowrap">Tipo:</span>
@@ -88,6 +91,12 @@ export function ItemFilters({ filters, onSearchChange, onStatusChange, onTypeCha
                         cols={isMobile ? 3 : undefined}
                     />
                 </div>
+
+                <SourceFilter
+                    value={filters.sources || []}
+                    onChange={(sources) => onSourcesChange?.(sources)}
+                    entityType="items"
+                />
 
                 {isAdmin && (
                     <div className="flex flex-col sm:flex-row sm:items-center gap-3 w-full sm:w-auto sm:ml-auto">

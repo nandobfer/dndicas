@@ -64,6 +64,7 @@ export const spellsQuerySchema = z.object({
   schools: z.array(z.enum(['Abjuração', 'Adivinhação', 'Conjuração', 'Encantamento', 'Evocação', 'Ilusão', 'Necromancia', 'Transmutação'])).optional(),
   saveAttributes: z.array(z.enum(['Força', 'Destreza', 'Constituição', 'Inteligência', 'Sabedoria', 'Carisma'])).optional(),
   diceTypes: z.array(z.enum(['d4', 'd6', 'd8', 'd10', 'd12', 'd20'])).optional(),
+  sources: z.array(z.string()).optional(),
   status: z.enum(['all', 'active', 'inactive']).default('active'),
   page: z.number().int().positive().default(1),
   limit: z.number().int().positive().max(100).default(10),

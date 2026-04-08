@@ -29,6 +29,14 @@ export async function GET(req: NextRequest) {
             query.status = status
         }
     }
+    const sourcesParam = url.searchParams.get("sources")
+    if (sourcesParam) {
+        const escapeRegex = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+        const sourcesList = sourcesParam.split(",").map(s => s.trim()).filter(Boolean)
+        if (sourcesList.length > 0) {
+            query.source = { $in: sourcesList.map(s => new RegExp(`^${escapeRegex(s)}`, 'i')) }
+        }
+    }
 
     // ALWAYS fetch items matching non-search filters (like status)
     // We fetch EVERYTHING without DB-level limit/search to let applyFuzzySearch do its job properly

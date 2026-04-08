@@ -26,6 +26,7 @@ export async function fetchFeats(params: FeatsFilters = {}): Promise<FeatsRespon
   if (params.levelMax) query.append('levelMax', params.levelMax.toString());
   if (params.attributes && params.attributes.length > 0) query.append('attributes', params.attributes.join(','));
   if (params.categories && params.categories.length > 0) query.append('categories', params.categories.join(','));
+  if (params.sources && params.sources.length > 0) query.append('sources', params.sources.join(','));
 
   const res = await fetch(`${API_URL}?${query.toString()}`);
   if (!res.ok) {

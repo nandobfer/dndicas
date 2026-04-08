@@ -5,7 +5,11 @@ import { useForm } from "react-hook-form"
 import { usePatchSheet } from "../api/character-sheets-queries"
 import type { CharacterSheet, PatchSheetBody } from "../types/character-sheet.types"
 
-export function useSheetAutoSave(sheet: CharacterSheet) {
+interface UseSheetAutoSaveOptions {
+    onSlugChange?: (newSlug: string) => void
+}
+
+export function useSheetAutoSave(sheet: CharacterSheet, options?: UseSheetAutoSaveOptions) {
     const { mutate: patch, isPending } = usePatchSheet(sheet?._id)
 
     const form = useForm<PatchSheetBody>({
@@ -32,10 +36,16 @@ export function useSheetAutoSave(sheet: CharacterSheet) {
             // Only patch if we have an ID
             if (sheet?._id) {
                 const body: PatchSheetBody = { [field]: value }
-                patch(body)
+                patch(body, {
+                    onSuccess: (updated) => {
+                        if (field === "name" && updated?.slug && updated.slug !== sheet.slug) {
+                            options?.onSlugChange?.(updated.slug)
+                        }
+                    },
+                })
             }
         },
-        [patch, setValue, sheet?._id]
+        [patch, setValue, sheet?._id, sheet?.slug, options]
     )
 
     return {

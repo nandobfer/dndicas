@@ -67,6 +67,7 @@ export function SpellsPage() {
                         onStatusChange={actions.handleStatusChange}
                         onCircleChange={actions.handleCircleChange}
                         onSchoolsChange={actions.handleSchoolsChange}
+                        onSourcesChange={actions.handleSourcesChange}
                         isSearching={data.paginated.isFetching || data.infinite.isFetching}
                     />
                 </GlassCardContent>

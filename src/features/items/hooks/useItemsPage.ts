@@ -18,8 +18,9 @@ export function useItemsPage() {
     const [type, setType] = React.useState<ItemType | "all">("all")
     const [rarity, setRarity] = React.useState<ItemRarity | "all">("all")
     const [status, setStatus] = React.useState<"active" | "inactive" | "all">("all")
+    const [sources, setSources] = React.useState<string[]>([])
 
-    const filters = { search, type, rarity, status }
+    const filters = { search, type, rarity, status, sources: sources.length > 0 ? sources : undefined }
 
     const tableData = useItems(filters, 1, 100)
     const infiniteData = useInfiniteItems(filters)
@@ -32,6 +33,7 @@ export function useItemsPage() {
     const handleTypeChange = (value: ItemType | "all") => setType(value)
     const handleRarityChange = (value: ItemRarity | "all") => setRarity(value)
     const handleStatusChange = (value: "active" | "inactive" | "all") => setStatus(value)
+    const handleSourcesChange = (value: string[]) => setSources(value)
 
     const handleCreateClick = () => {
         setSelectedItem(null)
@@ -66,7 +68,9 @@ export function useItemsPage() {
             rarity,
             setRarity,
             status,
-            setStatus
+            setStatus,
+            sources,
+            setSources,
         },
         data: {
             items: viewMode === "table" ? (tableData.data?.items || []) : (infiniteData.data?.pages.flatMap(p => p.items) || []),
@@ -81,6 +85,7 @@ export function useItemsPage() {
             handleTypeChange,
             handleRarityChange,
             handleStatusChange,
+            handleSourcesChange,
             handleCreateClick,
             handleEditClick,
             handleDeleteClick,

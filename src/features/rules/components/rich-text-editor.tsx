@@ -11,7 +11,248 @@ import { Button } from '@/core/ui/button'
 import { glassConfig } from "@/lib/config/glass-config"
 import { Bold, Italic, Strikethrough, List, ListOrdered, Undo, Redo, Image as ImageIcon } from "lucide-react"
 import { getSuggestionConfig } from "../utils/suggestion"
-import { entityColors } from "@/lib/config/colors"
+import { Extension, Node, InputRule } from "@tiptap/core"
+import { Plugin, PluginKey } from "@tiptap/pm/state"
+import { Decoration, DecorationSet } from "@tiptap/pm/view"
+import { GlassDiceValue } from "@/components/ui/glass-dice-value"
+import type { DiceType } from "@/features/spells/types/spells.types"
+import { diceFuse, DICE_LOOKAHEAD_REGEX } from "../utils/dice-render-utils"
+
+// ─── Dice Highlight Extension ────────────────────────────────────────────────
+// Colors plain-text dice notation and damage-type phrases.
+// Acts as backward-compat for existing content (plain text "2d6").
+// Newly typed dice are handled by DiceValueNode (below).
+const diceHighlightKey = new PluginKey("diceHighlight")
+
+const DiceHighlight = Extension.create({
+    name: "diceHighlight",
+    addProseMirrorPlugins() {
+        return [
+            new Plugin({
+                key: diceHighlightKey,
+                props: {
+                    decorations(state) {
+                        const decorations: Decoration[] = []
+                        const DICE_REGEX = /(\d+)d(4|6|8|10|12|20|100)/gi
+                        const DAMAGE_REGEX = /(?:pontos de dano|de dano) (?:de )?([a-zA-Záàâãéèêíïóôõöúçñ]+)/gi
+
+                        let lastDiceAtomEndPos = -1
+
+                        state.doc.descendants((node, pos) => {
+                            // Track DiceValueNode atoms so we can color following text
+                            if ((node as any).type?.name === "diceValue") {
+                                lastDiceAtomEndPos = pos + node.nodeSize
+                                return
+                            }
+
+                            if (!node.isText || !node.text) return
+                            const text = node.text
+
+                            // ── Damage type text immediately after a DiceValueNode atom ──
+                            if (lastDiceAtomEndPos >= 0 && pos === lastDiceAtomEndPos) {
+                                lastDiceAtomEndPos = -1
+
+                                // Try "de dano X" prefix first
+                                const deDanoMatch = /^(\s*(?:pontos de dano|de dano) (?:de )?([a-záàâãéèêíïóôõöúçñ]+))/i.exec(text)
+                                if (deDanoMatch) {
+                                    const fuseResult = diceFuse.search(deDanoMatch[2])
+                                    if (fuseResult.length > 0) {
+                                        decorations.push(
+                                            Decoration.inline(pos, pos + deDanoMatch[1].length, {
+                                                style: `color: ${fuseResult[0].item.hex}; font-weight: 500;`,
+                                                class: "damage-type-notation",
+                                            })
+                                        )
+                                    }
+                                } else {
+                                    // Try standalone damage type word at start of text
+                                    const wordMatch = /^(\s*)([a-záàâãéèêíïóôõöúçñ]{4,})/i.exec(text)
+                                    if (wordMatch) {
+                                        const fuseResult = diceFuse.search(wordMatch[2])
+                                        if (fuseResult.length > 0) {
+                                            const wordStart = wordMatch[1].length
+                                            decorations.push(
+                                                Decoration.inline(pos + wordStart, pos + wordStart + wordMatch[2].length, {
+                                                    style: `color: ${fuseResult[0].item.hex}; font-weight: 600;`,
+                                                    class: "damage-type-notation",
+                                                })
+                                            )
+                                        }
+                                    }
+                                }
+                            } else {
+                                lastDiceAtomEndPos = -1
+                            }
+
+                            // ── Dice notation coloring ──────────────────────
+                            DICE_REGEX.lastIndex = 0
+                            let match: RegExpExecArray | null
+                            while ((match = DICE_REGEX.exec(text)) !== null) {
+                                const from = pos + match.index
+                                const to = from + match[0].length
+                                const remainingText = text.substring(DICE_REGEX.lastIndex)
+                                const nextNaturalMatch = DICE_LOOKAHEAD_REGEX.exec(remainingText)
+
+                                let colorHex = "#a78bfa"
+                                if (nextNaturalMatch) {
+                                    const fuseResult = diceFuse.search(nextNaturalMatch[1])
+                                    if (fuseResult.length > 0) colorHex = fuseResult[0].item.hex
+                                } else {
+                                    const ctxAfter = text.substring(match.index + match[0].length, match.index + match[0].length + 40)
+                                    const words = ctxAfter.match(/[a-záàâãéèêíïóôõöúçñ]+/gi) ?? []
+                                    for (const word of words) {
+                                        const result = diceFuse.search(word)
+                                        if (result.length > 0) { colorHex = result[0].item.hex; break }
+                                    }
+                                }
+
+                                decorations.push(
+                                    Decoration.inline(from, to, {
+                                        style: `color: ${colorHex}; font-weight: 700;`,
+                                        class: "dice-notation",
+                                    })
+                                )
+                            }
+
+                            // ── Damage type text coloring ───────────────────
+                            DAMAGE_REGEX.lastIndex = 0
+                            while ((match = DAMAGE_REGEX.exec(text)) !== null) {
+                                const fuseResult = diceFuse.search(match[1])
+                                if (fuseResult.length === 0) continue
+                                const colorHex = fuseResult[0].item.hex
+                                const from = pos + match.index
+                                const to = from + match[0].length
+                                decorations.push(
+                                    Decoration.inline(from, to, {
+                                        style: `color: ${colorHex}; font-weight: 500;`,
+                                        class: "damage-type-notation",
+                                    })
+                                )
+                            }
+                        })
+
+                        return DecorationSet.create(state.doc, decorations)
+                    },
+                },
+            }),
+        ]
+    },
+})
+
+// ─── DiceValueNode ────────────────────────────────────────────────────────────
+// Inline atom node that renders GlassDiceValue for newly typed dice notation.
+const DICE_INPUT_RULE_REGEX = /(\d+)d(4|6|8|10|12|20|100)$/
+
+const DiceNodeView = (props: { node: { attrs: { qty: number; faces: number; colorHex?: string | null } } }) => {
+    const { qty, faces, colorHex } = props.node.attrs
+    const tipo = `d${faces}` as DiceType
+    const colorOverride = colorHex ? { text: colorHex } : undefined
+    return (
+        <NodeViewWrapper className="inline-block align-middle">
+            <GlassDiceValue value={{ quantidade: qty, tipo }} colorOverride={colorOverride} className="mx-0.5" />
+        </NodeViewWrapper>
+    )
+}
+
+const DiceValueNode = Node.create({
+    name: "diceValue",
+    inline: true,
+    group: "inline",
+    atom: true,
+
+    addAttributes() {
+        return {
+            qty: { default: 1, parseHTML: (el) => parseInt(el.getAttribute("data-qty") || "1", 10) },
+            faces: { default: 6, parseHTML: (el) => parseInt(el.getAttribute("data-faces") || "6", 10) },
+            colorHex: { default: null, parseHTML: (el) => el.getAttribute("data-color-hex") || null },
+        }
+    },
+
+    parseHTML() {
+        return [{ tag: 'span[data-type="dice-value"]' }]
+    },
+
+    renderHTML({ HTMLAttributes }) {
+        const { qty, faces, colorHex } = HTMLAttributes
+        const attrs: Record<string, string> = {
+            "data-type": "dice-value",
+            "data-qty": String(qty),
+            "data-faces": String(faces),
+        }
+        if (colorHex) attrs["data-color-hex"] = colorHex
+        return ["span", attrs]
+    },
+
+    addNodeView() {
+        return ReactNodeViewRenderer(DiceNodeView as any)
+    },
+
+    addInputRules() {
+        const type = this.type
+        return [
+            new InputRule({
+                find: DICE_INPUT_RULE_REGEX,
+                handler: ({ state, range, match }) => {
+                    const node = type.create({
+                        qty: parseInt(match[1], 10),
+                        faces: parseInt(match[2], 10),
+                        colorHex: null,
+                    })
+                    state.tr.replaceWith(range.from, range.to, node)
+                },
+            }),
+        ]
+    },
+
+    addProseMirrorPlugins() {
+        const nodeType = this.type
+        return [
+            new Plugin({
+                appendTransaction(transactions, _oldState, newState) {
+                    if (!transactions.some((tr) => tr.docChanged)) return null
+
+                    const tr = newState.tr
+                    let modified = false
+
+                    newState.doc.descendants((node, pos) => {
+                        if (node.type !== nodeType) return
+
+                        const nodeEnd = pos + node.nodeSize
+                        const end = Math.min(nodeEnd + 60, newState.doc.content.size)
+                        if (end <= nodeEnd) return
+
+                        const textAfter = newState.doc.textBetween(nodeEnd, end, " ")
+
+                        let colorHex: string | null = null
+
+                        const lookaheadMatch = DICE_LOOKAHEAD_REGEX.exec(textAfter)
+                        if (lookaheadMatch) {
+                            const fuseResult = diceFuse.search(lookaheadMatch[1])
+                            if (fuseResult.length > 0) colorHex = fuseResult[0].item.hex
+                        } else {
+                            const words = textAfter.match(/[a-záàâãéèêíïóôõöúçñ]+/gi) ?? []
+                            for (const word of words) {
+                                const result = diceFuse.search(word)
+                                if (result.length > 0) {
+                                    colorHex = result[0].item.hex
+                                    break
+                                }
+                            }
+                        }
+
+                        const currentColor = node.attrs.colorHex || null
+                        if (colorHex !== currentColor) {
+                            tr.setNodeMarkup(pos, null, { ...node.attrs, colorHex })
+                            modified = true
+                        }
+                    })
+
+                    return modified ? tr : null
+                },
+            }),
+        ]
+    },
+})
 import { EntityPreviewTooltip } from "./entity-preview-tooltip"
 import { MentionBadge } from "./mention-badge"
 
@@ -84,6 +325,7 @@ interface RichTextEditorProps {
     excludeId?: string
     variant?: "full" | "simple"
     autoFocus?: boolean
+    minRows?: number
 }
 
 const MenuBar = ({ editor, addImage }: { editor: Editor | null; addImage: () => void }) => {
@@ -168,7 +410,7 @@ const MenuBar = ({ editor, addImage }: { editor: Editor | null; addImage: () => 
     )
 }
 
-export function RichTextEditor({ value, onChange, className, disabled = false, excludeId, variant = "full", autoFocus = false }: RichTextEditorProps) {
+export function RichTextEditor({ value, onChange, className, disabled = false, excludeId, variant = "full", autoFocus = false, placeholder, minRows }: RichTextEditorProps) {
     const [isUploading, setIsUploading] = useState(false)
 
     const uploadImage = useCallback(async (file: File) => {
@@ -204,11 +446,13 @@ export function RichTextEditor({ value, onChange, className, disabled = false, e
             StarterKit,
             ImageExtension,
             Placeholder.configure({
-                placeholder: "Dica: digite '@' para referenciar regras, habilidades, magias, etc.",
+                placeholder: placeholder ?? "Digite '@' para referenciar habilidades, magias, etc.",
             }),
             CustomMention.configure({
                 suggestion: getSuggestionConfig({ excludeId }),
             }),
+            DiceHighlight,
+            DiceValueNode,
         ],
         content: value,
         editable: !disabled,
@@ -229,7 +473,9 @@ export function RichTextEditor({ value, onChange, className, disabled = false, e
                     "dark:prose-invert",
                     // TipTap placeholder CSS logic
                     "relative [&_p.is-editor-empty:first-child]:before:content-[attr(data-placeholder)] [&_p.is-editor-empty:first-child]:before:text-white/30 [&_p.is-editor-empty:first-child]:before:float-left [&_p.is-editor-empty:first-child]:before:h-0 [&_p.is-editor-empty:first-child]:before:pointer-events-none",
+                    variant === "simple" && "[&_p.is-editor-empty:first-child]:before:text-xs",
                 ),
+                ...(variant === "full" && minRows ? { style: `min-height: ${minRows * 1.75}rem` } : {}),
             },
             handlePaste: (view, event) => {
                 const item = event.clipboardData?.items[0]

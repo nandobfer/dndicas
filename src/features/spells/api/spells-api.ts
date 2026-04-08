@@ -50,6 +50,9 @@ export async function fetchSpells(params: SpellsFilters & { page?: number; limit
   if (params.diceTypes && params.diceTypes.length > 0) {
     query.append('diceTypes', params.diceTypes.join(','));
   }
+  if (params.sources && params.sources.length > 0) {
+    query.append('sources', params.sources.join(','));
+  }
   if (params.status && params.status !== 'all') {
     query.append('status', params.status);
   }

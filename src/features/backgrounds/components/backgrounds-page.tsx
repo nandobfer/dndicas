@@ -66,6 +66,7 @@ export function BackgroundsPage() {
                         onAttributesChange={actions.handleAttributesChange}
                         onSkillsChange={actions.handleSkillsChange}
                         onFeatsChange={actions.handleFeatsChange}
+                        onSourcesChange={actions.handleSourcesChange}
                         isSearching={data.isLoading}
                     />
                 </GlassCardContent>

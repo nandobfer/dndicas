@@ -10,6 +10,12 @@ export interface ICharacterSpell extends Document {
     image: string | null
     prepared: boolean
     components: string[]
+    castingTime: string
+    range: string
+    concentration: boolean
+    ritual: boolean
+    material: boolean
+    notes: string
     createdAt: Date
 }
 
@@ -23,6 +29,12 @@ const CharacterSpellSchema = new Schema<ICharacterSpell>(
         image: { type: String, default: null },
         prepared: { type: Boolean, default: false },
         components: [{ type: String }],
+        castingTime: { type: String, default: "" },
+        range: { type: String, default: "" },
+        concentration: { type: Boolean, default: false },
+        ritual: { type: Boolean, default: false },
+        material: { type: Boolean, default: false },
+        notes: { type: String, default: "" },
     },
     { timestamps: { createdAt: true, updatedAt: false } }
 )

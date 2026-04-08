@@ -62,6 +62,7 @@ export interface FeatsFilters {
     levelMax?: number // Range (1 to levelMax)
     attributes?: string[]
     categories?: FeatCategory[]
+    sources?: string[] // Multi-select: book name prefixes
 }
 
 export interface FeatsResponse {

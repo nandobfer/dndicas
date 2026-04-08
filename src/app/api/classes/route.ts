@@ -25,6 +25,7 @@ export async function GET(req: NextRequest) {
                     ?.split(",")
                     .filter(Boolean)
                     .map((v) => v === "true") || undefined,
+            sources: url.searchParams.get("sources")?.split(",").filter(Boolean) || undefined,
             status: (url.searchParams.get("status") || undefined) as "active" | "inactive" | "all" | undefined,
             page: parseInt(url.searchParams.get("page") || "1", 10),
             limit: parseInt(url.searchParams.get("limit") || "10", 10),
