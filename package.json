@@ -10,7 +10,9 @@
         "test:seed": "vitest run --config vitest.config.ts",
         "deploy": "dockerbp nandoburgos/dndicas && ssh boz \"cd /home/nandoburgos/dndicas && docker compose pull && docker compose up -d\"",
 	"seed": "tsx scripts/seed-data/index.ts",
-	"seed:test": "tsx scripts/seed-data/index.ts --test"
+	"seed:test": "tsx scripts/seed-data/index.ts --test",
+	"search": "tsx scripts/search-cli.ts",
+	"search-cli": "tsx scripts/search-cli.ts"
 
     },
     "dependencies": {
