@@ -31,12 +31,28 @@ import { applyFuzzySearch, type UnifiedEntity } from '@/core/utils/search-engine
 
 const term = terminal.terminal;
 
+// ─── Highlight ANSI codes ─────────────────────────────────────────────────────
+// Used for the selected-item background. We use raw ANSI escape codes here
+// instead of terminal-kit chainables because terminal-kit's bgColor256()
+// without a text argument sets the bg persistently (leaking into subsequent
+// eraseLine calls). Raw codes give us precise control: fg-only resets between
+// tokens keep the bg within a line; a full reset at the end of each line
+// ensures nothing leaks to normal rows.
+const HL_BG        = '\x1b[48;5;235m'; // #262626 — just above pure black
+const HL_FG_RESET  = '\x1b[39m';       // reset foreground only (preserves bg)
+const HL_FULL_RESET = '\x1b[0m';       // reset everything
+
 // ─── JSON color printer ───────────────────────────────────────────────────────
 // Replicates the color scheme from scripts/seed-data/base-provider.ts.
 // Works line-by-line so it's compatible with term.moveTo() absolute positioning.
-// When highlight=true, chains bgGray on every token for the selected-item background.
+// When highlight=true, uses raw ANSI codes to keep the dark bg across all tokens
+// without leaking it beyond the selected-item block.
 
 function printColoredJsonLine(line: string, highlight: boolean): void {
+    if (highlight) {
+        process.stdout.write(HL_BG);
+    }
+
     const re = /("(?:[^"\\]|\\.)*")(\s*:)?|true|false|null|-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?|[{}\[\],]|[^\S\n]+/g;
     let m: RegExpExecArray | null;
     while ((m = re.exec(line)) !== null) {
@@ -45,22 +61,36 @@ function printColoredJsonLine(line: string, highlight: boolean): void {
         const colonSuffix = m[2];
         if (quotedStr !== undefined) {
             if (colonSuffix !== undefined) {
-                highlight ? term.bgGray.yellow(quotedStr) : term.yellow(quotedStr);
-                highlight ? term.bgGray(colonSuffix) : term(colonSuffix);
+                if (highlight) {
+                    process.stdout.write('\x1b[33m' + quotedStr + HL_FG_RESET + colonSuffix);
+                } else {
+                    term.yellow(quotedStr);
+                    term(colonSuffix);
+                }
             } else {
-                highlight ? term.bgGray.cyan(quotedStr) : term.cyan(quotedStr);
+                if (highlight) process.stdout.write('\x1b[36m' + quotedStr + HL_FG_RESET);
+                else term.cyan(quotedStr);
             }
         } else if (tok === 'true' || tok === 'false') {
-            highlight ? term.bgGray.blue(tok) : term.blue(tok);
+            if (highlight) process.stdout.write('\x1b[34m' + tok + HL_FG_RESET);
+            else term.blue(tok);
         } else if (tok === 'null') {
-            highlight ? term.bgGray.gray(tok) : term.gray(tok);
+            if (highlight) process.stdout.write('\x1b[90m' + tok + HL_FG_RESET);
+            else term.gray(tok);
         } else if (tok === '{' || tok === '}' || tok === '[' || tok === ']') {
-            highlight ? term.bgGray.bold.white(tok) : term.bold.white(tok);
+            if (highlight) process.stdout.write('\x1b[1;37m' + tok + '\x1b[22m' + HL_FG_RESET);
+            else term.bold.white(tok);
         } else if (/^-?\d/.test(tok)) {
-            highlight ? term.bgGray.green(tok) : term.green(tok);
+            if (highlight) process.stdout.write('\x1b[32m' + tok + HL_FG_RESET);
+            else term.green(tok);
         } else {
-            highlight ? term.bgGray(tok) : term(tok);
+            if (highlight) process.stdout.write(tok);
+            else term(tok);
         }
+    }
+
+    if (highlight) {
+        process.stdout.write(HL_FULL_RESET);
     }
 }
 
@@ -317,10 +347,11 @@ function render(): void {
         fn();
     };
 
-    // Highlighted row: fill with bgGray first, reposition, then draw content.
+    // Highlighted row: fill entire line with dark bg via raw ANSI (no persistent
+    // state leak), reposition, then draw content on top.
     const writeHighlightedRow = (row: number, fn: () => void) => {
         term.moveTo(1, row);
-        term.bgGray(' '.repeat(W));
+        process.stdout.write(HL_BG + ' '.repeat(W) + HL_FULL_RESET);
         term.moveTo(1, row);
         fn();
     };
