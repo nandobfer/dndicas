@@ -1,10 +1,10 @@
 "use client"
 
-import { useEffect, useRef } from "react"
+import { useEffect, useRef, useState } from "react"
 import { motion, AnimatePresence } from "framer-motion"
 import { GlassSheetCard } from "@/components/ui/glass-sheet-card"
 import { GlassInlineEmptyState } from "@/components/ui/glass-inline-empty-state"
-import { useDeleteSheet } from "@/features/character-sheets/api/character-sheets-queries"
+import { DeleteSheetDialog } from "@/features/character-sheets/components/delete-sheet-dialog"
 import type { CharacterSheet } from "@/features/character-sheets/types/character-sheet.types"
 
 interface SheetsListProps {
@@ -26,7 +26,7 @@ const cardVariants = {
 }
 
 export function SheetsList({ sheets, isLoading, hasNextPage, isFetchingNextPage, fetchNextPage }: SheetsListProps) {
-    const { mutate: deleteSheet, isPending: isDeleting } = useDeleteSheet()
+    const [sheetToDelete, setSheetToDelete] = useState<CharacterSheet | null>(null)
     const sentinelRef = useRef<HTMLDivElement>(null)
 
     // Infinite scroll via IntersectionObserver
@@ -77,8 +77,7 @@ export function SheetsList({ sheets, isLoading, hasNextPage, isFetchingNextPage,
                         <motion.div key={sheet._id} variants={cardVariants} layout>
                             <GlassSheetCard
                                 sheet={sheet}
-                                onDelete={(id) => deleteSheet(id)}
-                                isDeleting={isDeleting}
+                                onRequestDelete={setSheetToDelete}
                             />
                         </motion.div>
                     ))}
@@ -93,6 +92,12 @@ export function SheetsList({ sheets, isLoading, hasNextPage, isFetchingNextPage,
                     <div className="w-5 h-5 border-2 border-white/20 border-t-white/60 rounded-full animate-spin" />
                 </div>
             )}
+
+            <DeleteSheetDialog
+                isOpen={sheetToDelete !== null}
+                onClose={() => setSheetToDelete(null)}
+                sheet={sheetToDelete}
+            />
         </>
     )
 }

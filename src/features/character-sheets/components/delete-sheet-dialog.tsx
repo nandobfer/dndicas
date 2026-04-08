@@ -1,0 +1,114 @@
+"use client"
+
+import { AlertTriangle, Loader2, ScrollText } from "lucide-react"
+import { cn } from "@/core/utils"
+import { GlassModal, GlassModalContent, GlassModalHeader, GlassModalTitle, GlassModalDescription } from "@/components/ui/glass-modal"
+import { toast } from "sonner"
+import { useDeleteSheet } from "../api/character-sheets-queries"
+import type { CharacterSheet } from "../types/character-sheet.types"
+import { MentionContent } from "@/features/rules/components/mention-badge"
+
+const isHtml = (s: string) => s.includes("<")
+
+function RichFieldValue({ value }: { value: string }) {
+    if (isHtml(value)) return <MentionContent html={value} mode="inline" />
+    return <span>{value}</span>
+}
+
+export interface DeleteSheetDialogProps {
+    isOpen: boolean
+    onClose: () => void
+    sheet: CharacterSheet | null
+}
+
+export function DeleteSheetDialog({ isOpen, onClose, sheet }: DeleteSheetDialogProps) {
+    const deleteMutation = useDeleteSheet()
+    const isDeleting = deleteMutation.isPending
+
+    if (!sheet) return null
+
+    const handleConfirm = async () => {
+        try {
+            await deleteMutation.mutateAsync(sheet._id)
+            toast.success(`Ficha "${sheet.name}" excluída com sucesso!`)
+            onClose()
+        } catch (error) {
+            console.error("[DeleteSheetDialog] Error deleting:", error)
+            toast.error("Ocorreu um erro ao excluir a ficha.")
+        }
+    }
+
+    return (
+        <GlassModal open={isOpen} onOpenChange={(open) => !open && onClose()}>
+            <GlassModalContent size="md">
+                <GlassModalHeader>
+                    <GlassModalTitle>Excluir Ficha</GlassModalTitle>
+                    <GlassModalDescription>
+                        Esta ação removerá a ficha de personagem permanentemente, incluindo todos os seus dados.
+                    </GlassModalDescription>
+                </GlassModalHeader>
+
+                <div className="mt-6 space-y-6">
+                    <div className="space-y-4">
+                        {/* Warning */}
+                        <div className="flex items-start gap-3 p-3 rounded-lg bg-rose-500/10 border border-rose-500/20">
+                            <AlertTriangle className="h-5 w-5 text-rose-400 shrink-0 mt-0.5" />
+                            <div className="text-sm text-white/80">
+                                <p className="font-medium text-rose-400 mb-1">Atenção! Esta ação é irreversível.</p>
+                                <p>Todos os dados da ficha — atributos, magias, itens, traços e anotações — serão excluídos definitivamente e não poderão ser recuperados.</p>
+                            </div>
+                        </div>
+
+                        {/* Sheet info */}
+                        <div className="p-4 rounded-lg bg-white/5 border border-white/10 flex items-center gap-4">
+                            <div className="h-12 w-12 rounded-full bg-violet-500/10 border border-violet-500/20 flex items-center justify-center shrink-0">
+                                <ScrollText className="h-6 w-6 text-violet-400" />
+                            </div>
+                            <div className="space-y-1 min-w-0">
+                                <p className="text-xs text-white/40 uppercase tracking-wider">Ficha a ser excluída</p>
+                                <p className="text-base font-semibold text-white truncate">{sheet.name}</p>
+                                <p className="text-sm text-white/60">
+                                    {sheet.class && <RichFieldValue value={sheet.class} />}
+                                    {sheet.class && sheet.race && " · "}
+                                    {sheet.race && <RichFieldValue value={sheet.race} />}
+                                    {!sheet.class && !sheet.race && "Sem classe/raça"}
+                                    {sheet.level > 0 ? ` · Nível ${sheet.level}` : ""}
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Actions */}
+                    <div className="flex justify-end gap-3 pt-4 border-t border-white/10">
+                        <button
+                            type="button"
+                            onClick={onClose}
+                            disabled={isDeleting}
+                            className={cn(
+                                "px-4 py-2 rounded-lg text-sm font-medium transition-colors",
+                                "text-white/60 hover:text-white hover:bg-white/10",
+                                "disabled:opacity-50 disabled:cursor-not-allowed",
+                            )}
+                        >
+                            Cancelar
+                        </button>
+                        <button
+                            type="button"
+                            onClick={handleConfirm}
+                            disabled={isDeleting}
+                            className={cn(
+                                "px-4 py-2 rounded-lg text-sm font-medium transition-colors",
+                                "bg-rose-600 text-white hover:bg-rose-700 shadow-lg shadow-rose-500/20",
+                                "disabled:opacity-50 disabled:cursor-not-allowed",
+                                "flex items-center gap-2",
+                            )}
+                        >
+                            {isDeleting && <Loader2 className="h-4 w-4 animate-spin" />}
+                            {isDeleting ? "Excluindo..." : "Excluir Ficha"}
+                        </button>
+                    </div>
+                </div>
+            </GlassModalContent>
+        </GlassModal>
+    )
+}

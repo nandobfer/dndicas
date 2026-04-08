@@ -32,7 +32,7 @@ export interface CharacterSheet {
     _id: string
     slug: string
     userId: string
-    // Identity
+    username: string
     name: string
     class: string
     classRef: string | null
@@ -90,6 +90,14 @@ export interface CharacterSheet {
     bonds: string
     flaws: string
     notes: string
+    // 2024 sheet fields
+    classFeatures: string
+    speciesTraits: string
+    featuresNotes: string
+    size: string
+    armorTraining: { light: boolean; medium: boolean; heavy: boolean; shields: boolean }
+    weaponProficiencies: string
+    toolProficiencies: string
     createdAt: string
     updatedAt: string
 }
@@ -115,6 +123,12 @@ export interface CharacterSpell {
     image: string | null
     prepared: boolean
     components: string[]
+    castingTime: string
+    range: string
+    concentration: boolean
+    ritual: boolean
+    material: boolean
+    notes: string
     createdAt: string
 }
 
@@ -144,6 +158,7 @@ export interface CharacterAttack {
     name: string
     attackBonus: number
     damageType: string
+    notes: string
     createdAt: string
 }
 
@@ -178,6 +193,7 @@ export interface CreateItemBody {
 }
 
 export interface PatchItemBody {
+    name?: string
     quantity?: number
     notes?: string
 }
@@ -190,10 +206,24 @@ export interface CreateSpellBody {
     image?: string | null
     prepared?: boolean
     components?: string[]
+    castingTime?: string
+    range?: string
+    concentration?: boolean
+    ritual?: boolean
+    material?: boolean
+    notes?: string
 }
 
 export interface PatchSpellBody {
+    name?: string
+    circle?: number
     prepared?: boolean
+    castingTime?: string
+    range?: string
+    concentration?: boolean
+    ritual?: boolean
+    material?: boolean
+    notes?: string
 }
 
 export interface CreateTraitBody {
@@ -214,26 +244,28 @@ export interface CreateAttackBody {
     name: string
     attackBonus?: number
     damageType?: string
+    notes?: string
 }
 
 export interface PatchAttackBody {
     name?: string
     attackBonus?: number
     damageType?: string
+    notes?: string
 }
 
 // ─── Zod validation schemas ───────────────────────────────────────────────────
 
 export const PatchSheetSchema = z.object({
     name: z.string().max(100).optional(),
-    class: z.string().max(100).optional(),
+    class: z.string().max(2000).optional(),
     classRef: z.string().nullable().optional(),
-    subclass: z.string().max(100).optional(),
+    subclass: z.string().max(2000).optional(),
     subclassRef: z.string().nullable().optional(),
     level: z.number().int().min(1).max(20).optional(),
-    race: z.string().max(100).optional(),
+    race: z.string().max(2000).optional(),
     raceRef: z.string().nullable().optional(),
-    origin: z.string().max(100).optional(),
+    origin: z.string().max(2000).optional(),
     originRef: z.string().nullable().optional(),
     inspiration: z.boolean().optional(),
     multiclassNotes: z.string().optional(),
@@ -275,6 +307,13 @@ export const PatchSheetSchema = z.object({
     bonds: z.string().optional(),
     flaws: z.string().optional(),
     notes: z.string().optional(),
+    classFeatures: z.string().optional(),
+    speciesTraits: z.string().optional(),
+    featuresNotes: z.string().optional(),
+    size: z.string().max(50).optional(),
+    armorTraining: z.object({ light: z.boolean(), medium: z.boolean(), heavy: z.boolean(), shields: z.boolean() }).optional(),
+    weaponProficiencies: z.string().optional(),
+    toolProficiencies: z.string().optional(),
 })
 
 export const CreateItemSchema = z.object({
@@ -286,6 +325,7 @@ export const CreateItemSchema = z.object({
 })
 
 export const PatchItemSchema = z.object({
+    name: z.string().min(1).max(100).optional(),
     quantity: z.number().int().min(0).optional(),
     notes: z.string().optional(),
 })
@@ -298,10 +338,24 @@ export const CreateSpellSchema = z.object({
     image: z.string().url().nullable().optional(),
     prepared: z.boolean().optional(),
     components: z.array(z.string()).optional(),
+    castingTime: z.string().optional(),
+    range: z.string().optional(),
+    concentration: z.boolean().optional(),
+    ritual: z.boolean().optional(),
+    material: z.boolean().optional(),
+    notes: z.string().optional(),
 })
 
 export const PatchSpellSchema = z.object({
+    name: z.string().min(1).max(100).optional(),
+    circle: z.number().int().min(0).max(9).optional(),
     prepared: z.boolean().optional(),
+    castingTime: z.string().optional(),
+    range: z.string().optional(),
+    concentration: z.boolean().optional(),
+    ritual: z.boolean().optional(),
+    material: z.boolean().optional(),
+    notes: z.string().optional(),
 })
 
 export const CreateTraitSchema = z.object({
@@ -319,13 +373,15 @@ export const CreateFeatSchema = z.object({
 })
 
 export const CreateAttackSchema = z.object({
-    name: z.string().min(1).max(100),
+    name: z.string().min(1).max(500),
     attackBonus: z.number().int().optional(),
-    damageType: z.string().max(100).optional(),
+    damageType: z.string().max(500).optional(),
+    notes: z.string().optional(),
 })
 
 export const PatchAttackSchema = z.object({
-    name: z.string().min(1).max(100).optional(),
+    name: z.string().min(1).max(500).optional(),
     attackBonus: z.number().int().optional(),
-    damageType: z.string().max(100).optional(),
+    damageType: z.string().max(500).optional(),
+    notes: z.string().optional(),
 })

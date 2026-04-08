@@ -62,20 +62,58 @@ export async function getAllUserSheets(
     }
 }
 
-export async function createBlankSheet(userId: string) {
+export async function createBlankSheet(userId: string, username: string, name?: string) {
     await dbConnect()
 
+    const sheetName = name || "Nova Ficha"
+    const tempSlug = generateSlug(username || userId, `${sheetName} ${Date.now()}`)
     const doc = await CharacterSheet.create({
         userId,
-        name: "Nova Ficha",
-        slug: generateSlug(new Date().getTime().toString(), "Nova Ficha"),
+        username: username || "",
+        name: sheetName,
+        slug: tempSlug,
     })
 
-    // Set slug with the real mongo _id
-    doc.slug = generateSlug(String(doc._id), doc.name)
+    // Set slug with the real name, ensuring uniqueness
+    doc.slug = await ensureUniqueSlug(username || userId, doc.name, String(doc._id))
     await doc.save()
 
     return toPlainSheet(doc.toObject())
+}
+
+export async function getSheetBySlug(slug: string): Promise<CharacterSheetFull | null> {
+    await dbConnect()
+
+    // New format: username/character-name
+    let sheet = await CharacterSheet.findOne({ slug }).lean()
+
+    // Backward compat: old format mongoId-name (single segment, no slash)
+    if (!sheet && !slug.includes("/")) {
+        const id = slug.split("-")[0]
+        if (/^[0-9a-f]{24}$/i.test(id)) {
+            sheet = await CharacterSheet.findById(id).lean()
+        }
+    }
+
+    if (!sheet) return null
+
+    const sheetId = sheet._id as Types.ObjectId
+    const [items, spells, traits, feats, attacks] = await Promise.all([
+        CharacterItem.find({ sheetId }).lean(),
+        CharacterSpell.find({ sheetId }).lean(),
+        CharacterTrait.find({ sheetId }).sort({ origin: 1, name: 1 }).lean(),
+        CharacterFeat.find({ sheetId }).lean(),
+        CharacterAttack.find({ sheetId }).lean(),
+    ])
+
+    return {
+        ...toPlainSheet(sheet),
+        items: items.map(toPlain),
+        spells: spells.map(toPlain),
+        traits: traits.map(toPlain),
+        feats: feats.map(toPlain),
+        attacks: attacks.map(toPlain),
+    } as unknown as CharacterSheetFull
 }
 
 export async function getSheetById(id: string): Promise<CharacterSheetFull | null> {
@@ -107,10 +145,20 @@ export async function getSheetById(id: string): Promise<CharacterSheetFull | nul
 export async function patchSheet(id: string, userId: string, data: PatchSheetBody) {
     await dbConnect()
 
+    // When name changes, also update the slug
+    let updateData: Record<string, unknown> = { ...data }
+    if (data.name !== undefined) {
+        const existing = await CharacterSheet.findOne({ _id: id, userId }, { username: 1 }).lean()
+        if (existing) {
+            const username = (existing as { username?: string }).username || userId
+            updateData.slug = await ensureUniqueSlug(username, data.name, id)
+        }
+    }
+
     const sheet = await CharacterSheet.findOneAndUpdate(
         { _id: id, userId },
-        { $set: data },
-        { new: true },
+        { $set: updateData },
+        { returnDocument: 'after' },
     ).lean()
 
     if (!sheet) return null
@@ -176,7 +224,7 @@ export async function updateItem(sheetId: string, itemId: string, data: PatchIte
     const item = await CharacterItem.findOneAndUpdate(
         { _id: itemId, sheetId },
         { $set: data },
-        { new: true },
+        { returnDocument: 'after' },
     ).lean()
     return item ? toPlain(item) : null
 }
@@ -206,7 +254,7 @@ export async function updateSpell(sheetId: string, spellId: string, data: PatchS
     const spell = await CharacterSpell.findOneAndUpdate(
         { _id: spellId, sheetId },
         { $set: data },
-        { new: true },
+        { returnDocument: 'after' },
     ).lean()
     return spell ? toPlain(spell) : null
 }
@@ -276,7 +324,7 @@ export async function updateAttack(sheetId: string, attackId: string, data: Patc
     const attack = await CharacterAttack.findOneAndUpdate(
         { _id: attackId, sheetId },
         { $set: data },
-        { new: true },
+        { returnDocument: 'after' },
     ).lean()
     return attack ? toPlain(attack) : null
 }
@@ -319,4 +367,18 @@ function toPlainSheet(doc: any) {
     }
     // lean() returns plain objects but savingThrows/skills/spellSlots may be plain already
     return obj
+}
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+async function ensureUniqueSlug(username: string, name: string, excludeId: string): Promise<string> {
+    const base = generateSlug(username, name)
+    let candidate = base
+    let n = 1
+    while (true) {
+        const existing = await CharacterSheet.findOne({ slug: candidate }).lean()
+        if (!existing || String(existing._id) === excludeId) return candidate
+        n++
+        candidate = `${base}-${n}`
+    }
 }

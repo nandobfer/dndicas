@@ -1,29 +1,42 @@
 "use client"
 
+import { useCallback } from "react"
+import { useRouter } from "next/navigation"
 import { motion } from "framer-motion"
 import { GlassCard, GlassCardContent } from "@/components/ui/glass-card"
 import { motionConfig } from "@/lib/config/motion-configs"
 import { SheetHeader } from "./sheet-header"
 import { SheetLeftColumn } from "./sheet-left-column"
+import { SheetMiddleColumn } from "./sheet-middle-column"
 import { SheetCenterColumn } from "./sheet-center-column"
 import { SheetRightColumn } from "./sheet-right-column"
+import { CompactRichInput } from "./compact-rich-input"
 import { useSheetAutoSave } from "../hooks/use-sheet-auto-save"
-import type { CharacterSheetFull } from "../types/character-sheet.types"
+import { usePatchSheet } from "../api/character-sheets-queries"
+import type { CharacterSheetFull, PatchSheetBody } from "../types/character-sheet.types"
 
 interface SheetFormProps {
     sheet: CharacterSheetFull
 }
 
 export function SheetForm({ sheet }: SheetFormProps) {
-    const form = useSheetAutoSave(sheet)
+    const router = useRouter()
+
+    const handleSlugChange = useCallback((newSlug: string) => {
+        router.replace(`/sheets/${newSlug}`)
+    }, [router])
+
+    const form = useSheetAutoSave(sheet, { onSlugChange: handleSlugChange })
+    const { watch, patchField } = form
+    const { isPending: isLoading } = usePatchSheet(sheet._id)
 
     return (
         <motion.div variants={motionConfig.variants.fadeInUp} initial="initial" animate="animate" className="space-y-4">
             {/* Header */}
             <SheetHeader sheet={sheet} form={form} />
 
-            {/* Three-column layout */}
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+            {/* Three-column layout: narrow | narrow | wide */}
+            <div className="grid grid-cols-1 lg:grid-cols-[1fr_1fr_2fr] gap-4">
                 <GlassCard>
                     <GlassCardContent className="pt-4 pb-4">
                         <SheetLeftColumn sheet={sheet} form={form} />
@@ -32,16 +45,35 @@ export function SheetForm({ sheet }: SheetFormProps) {
 
                 <GlassCard>
                     <GlassCardContent className="pt-4 pb-4">
-                        <SheetCenterColumn sheet={sheet} form={form} />
+                        <SheetMiddleColumn sheet={sheet} form={form} />
                     </GlassCardContent>
                 </GlassCard>
 
                 <GlassCard>
                     <GlassCardContent className="pt-4 pb-4">
-                        <SheetRightColumn sheet={sheet} form={form} />
+                        <SheetCenterColumn sheet={sheet} form={form} />
                     </GlassCardContent>
                 </GlassCard>
             </div>
+
+            {/* Items + Spells — two equal columns, always open */}
+            <SheetRightColumn sheet={sheet} form={form} />
+
+            {/* Notes — full-width, always open */}
+            <GlassCard>
+                <GlassCardContent className="p-4">
+                    <CompactRichInput
+                        variant="full"
+                        label="Notas"
+                        value={watch("notes") ?? sheet.notes ?? ""}
+                        onChange={(v) => patchField("notes" as keyof PatchSheetBody, v)}
+                        placeholder="Anotações livres, histórico, recompensas, NPCs... use @ para mencionar"
+                        isLoading={isLoading}
+                        minRows={5}
+                        excludeId={sheet._id}
+                    />
+                </GlassCardContent>
+            </GlassCard>
         </motion.div>
     )
 }

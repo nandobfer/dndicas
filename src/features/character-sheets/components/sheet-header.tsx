@@ -2,13 +2,10 @@
 
 
 
-import { Search, Shield, Heart, Dice5, Skull, Zap } from "lucide-react"
 import { SheetInput } from "./sheet-input"
-import { LongRestButton } from "./long-rest-button"
-import type { PatchSheetBody, CharacterSheet } from "../types/character-sheet.types"
-import { usePatchSheet } from "../api/character-sheets-queries"
+import { CompactRichInput } from "./compact-rich-input"
+import type { CharacterSheet } from "../types/character-sheet.types"
 import { cn } from "@/core/utils"
-import { useCharacterCalculations } from "../hooks/use-character-calculations"
 import { GlassCard, GlassCardContent } from "@/components/ui/glass-card"
 
 interface SheetHeaderProps {
@@ -18,8 +15,6 @@ interface SheetHeaderProps {
 
 export function SheetHeader({ sheet, form }: SheetHeaderProps) {
   const { watch, patchField } = form
-  const { isPending: isLoading } = usePatchSheet(sheet?._id)
-  const { armorClass } = useCharacterCalculations(sheet)
 
   const handleDeathSaveToggle = (field: "deathSavesSuccess" | "deathSavesFailure", index: number) => {
     const current = watch(field) || 0
@@ -46,20 +41,20 @@ export function SheetHeader({ sheet, form }: SheetHeaderProps) {
           />
 
           {/* Grid de Identidade */}
-          <div className="grid grid-cols-2 gap-x-8 gap-y-4">
+          <div className="grid grid-cols-2 gap-x-8 gap-y-2">
             {[
-              { label: "Antecedente", field: "origin" },
-              { label: "Classe", field: "class" },
-              { label: "Espécie", field: "race" },
-              { label: "Subclasse", field: "subclass" },
+              { label: "Origem", field: "origin", placeholder: "@Sábio" },
+              { label: "Classe", field: "class", placeholder: "@Mago" },
+              { label: "Espécie", field: "race", placeholder: "@Elfo" },
+              { label: "Subclasse", field: "subclass", placeholder: "@Escola de Evocação" },
             ].map((item) => (
-              <SheetInput
+              <CompactRichInput
                 key={item.field}
-                compact
                 label={item.label}
                 value={watch(item.field as any) || ""}
-                onChangeValue={(val) => patchField(item.field as any, val)}
-                debounceMs={1000}
+                onChange={(val) => patchField(item.field as any, val)}
+                placeholder={item.placeholder}
+                excludeId={sheet._id}
               />
             ))}
           </div>
@@ -74,6 +69,8 @@ export function SheetHeader({ sheet, form }: SheetHeaderProps) {
             <SheetInput
               type="number"
               label="Nível"
+              min={1}
+              max={20}
               value={watch("level") || 1}
               onChangeValue={(val) => patchField("level", parseInt(val) || 1)}
               showControls
@@ -97,26 +94,25 @@ export function SheetHeader({ sheet, form }: SheetHeaderProps) {
       </GlassCard>
 
       {/* 3. CLASSE DE ARMADURA */}
-      <GlassCard className="flex-none w-28 border-white/10 bg-white/[0.03]">
+      <GlassCard className="flex-none w-40 border-white/10 bg-white/[0.03]">
         <GlassCardContent className="p-4 flex flex-col items-center justify-center h-full">
-          <div className="relative w-full aspect-[4/5] flex flex-col items-center justify-between p-3 border border-white/20 bg-white/5 rounded-b-[45%] rounded-t-sm group transition-colors">
+          <div className="relative w-full aspect-[4/5] flex flex-col items-center p-3 border border-white/20 bg-white/5 rounded-b-[45%] rounded-t-sm group transition-colors">
             <label className="text-[8px] font-black uppercase text-center leading-tight text-white/40 z-10">
               Classe de
               <br />
               Armadura
             </label>
-            <div className="text-3xl font-black text-white z-10">{armorClass.value}</div>
-            <button type="button" onClick={() => patchField("hasShield", !watch("hasShield"))} className="flex flex-col items-center w-full z-10 group/shield">
-              <label className={cn("text-[8px] font-black uppercase transition-colors", watch("hasShield") ? "text-white" : "text-white/40 group-hover/shield:text-white/60")}>
-                Escudo
-              </label>
-              <div
-                className={cn(
-                  "w-2.5 h-2.5 rotate-45 border transition-all mt-1",
-                  watch("hasShield") ? "bg-white border-white shadow-[0_0_8px_rgba(255,255,255,0.4)]" : "bg-white/5 border-white/20 group-hover/shield:border-white/40",
-                )}
+            <div className="flex-1 flex items-center justify-center w-full">
+              <SheetInput
+                type="number"
+                value={watch("armorClassOverride") ?? 10}
+                onChangeValue={(val) => patchField("armorClassOverride", parseInt(val) || 10)}
+                showControls
+                min={1}
+                inputClassName="text-3xl font-black text-center h-10 px-0"
+                className="items-center w-full z-10"
               />
-            </button>
+            </div>
           </div>
         </GlassCardContent>
       </GlassCard>
@@ -127,7 +123,18 @@ export function SheetHeader({ sheet, form }: SheetHeaderProps) {
           <div className="text-center py-1.5 border-b border-white/10 bg-white/[0.03]">
             <label className="text-[10px] font-black uppercase tracking-[0.3em] text-white/50">Pontos de Vida</label>
           </div>
-          <div className="flex h-full items-stretch">
+          <div className="flex h-full items-stretch relative">
+            {/* HP bar — absolute strip at the top */}
+            <div className="absolute top-0 left-0 right-0 h-0.5 overflow-hidden">
+              <div
+                className="h-full bg-gradient-to-r from-green-500/70 to-green-400/40 transition-all duration-300"
+                style={{
+                  width: (watch("hpMax") ?? 0) > 0
+                    ? `${Math.max(0, Math.min(100, ((watch("hpCurrent") ?? 0) / (watch("hpMax") ?? 1)) * 100))}%`
+                    : "0%",
+                }}
+              />
+            </div>
             <div className="flex-[2] flex flex-col p-4 items-center justify-center relative">
               <SheetInput
                 type="number"
@@ -135,6 +142,7 @@ export function SheetHeader({ sheet, form }: SheetHeaderProps) {
                 value={watch("hpCurrent") || 0}
                 onChangeValue={(val) => patchField("hpCurrent", parseInt(val) || 0)}
                 showControls
+                min={0}
                 inputClassName="text-5xl h-20 text-center"
                 className="items-center"
                 debounceMs={1000}
@@ -189,12 +197,14 @@ export function SheetHeader({ sheet, form }: SheetHeaderProps) {
                 value={watch("hitDiceUsed") || 0}
                 onChangeValue={(val) => patchField("hitDiceUsed", parseInt(val) || 0)}
                 showControls
+                min={0}
+                max={watch("level") || 1}
                 inputClassName="text-center text-xs h-6"
                 debounceMs={1000}
               />
               <div className="flex flex-col items-end pt-1 pr-1">
                 <label className="text-[8px] font-black uppercase text-white/30">Max</label>
-                <span className="text-white/40 text-[10px] font-bold">Total</span>
+                <span className="text-white/90 text-[10px] font-bold">{watch("level") || 1}</span>
               </div>
             </div>
           </div>

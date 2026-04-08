@@ -3,13 +3,18 @@
 import * as React from "react"
 import { useMemo } from "react"
 import { cn } from "@/core/utils"
-import { entityColors, getDamageColorByKey, damageTypeColors } from "@/lib/config/colors"
+import { entityColors } from "@/lib/config/colors"
 import { useIsMobile } from "@/core/hooks/useMediaQuery"
 import { EntityPreviewTooltip } from "./entity-preview-tooltip"
-import Fuse from "fuse.js"
 import { SimpleGlassTooltip } from "@/components/ui/glass-tooltip"
 import { GlassDiceValue } from "@/components/ui/glass-dice-value"
 import type { DiceType } from "@/features/spells/types/spells.types"
+import {
+    diceFuse,
+    DICE_UNIFIED_REGEX,
+    DICE_LOOKAHEAD_REGEX,
+    decodeHTMLEntities,
+} from "../utils/dice-render-utils"
 export { EntityTitleLink } from "./entity-title-link"
 
 interface MentionBadgeProps {
@@ -18,32 +23,6 @@ interface MentionBadgeProps {
     type?: string
     className?: string
     delayDuration?: number
-}
-
-/**
- * Pre-flattening damage keys for Fuse.js search
- */
-const fuseData = Object.entries(damageTypeColors).flatMap(([id, config]) =>
-    config.keys.map((key) => ({
-        id,
-        key,
-        color: { text: config.text, bgAlpha: config.bgAlpha },
-        hex: config.hex,
-    })),
-)
-
-const fuse = new Fuse(fuseData, {
-    keys: ["key"],
-    threshold: 0.25, // Rigoroso: só aceita matches muito próximos para evitar falsos positivos
-    ignoreLocation: true,
-    minMatchCharLength: 4, // Evita matches em palavras muito curtas como "do", "de", etc.
-})
-
-function decodeHTMLEntities(text: string) {
-    if (typeof document === "undefined") return text.replace(/&amp;/g, "&")
-    const textArea = document.createElement("textarea")
-    textArea.innerHTML = text
-    return textArea.value
 }
 
 export function MentionContent({
@@ -82,29 +61,11 @@ export function MentionContent({
             if (node.nodeType === Node.TEXT_NODE) {
                 const text = node.textContent || ""
 
-                /**
-                 * Caso 1: Detecção de dados com colchetes de estilo [fogo]
-                 * Esses são puramente para estilização e são REMOVIDOS do texto.
-                 */
-                const diceBracketRegex = /(\d+)d(4|6|8|10|12|20|100)(?:\s*\[([^\]]+)\])/g
-
-                /**
-                 * Caso 2: Detecção de dano em linguagem natural (ex: "de dano de fogo", "de dano psíquico")
-                 * Esses são COLORIDOS mas mantidos no texto.
-                 */
-                const naturalDamageRegex = /(de dano (?:de )?)([a-zA-Záàâãéèêíïóôõöúçñ]+)/gi
-
-                /**
-                 * Caso 3: Dados simples sem colchetes
-                 */
-                const simpleDiceRegex = /(\d+)d(4|6|8|10|12|20|100)/g
-
                 const elements: React.ReactNode[] = []
                 let lastIndex = 0
 
-                // Combinamos as regex em uma lógica sequencial de parsing ou usamos uma abordagem de "marcador"
-                // Para manter a simplicidade e performance, vamos usar um regex unificado que prioriza o colchete
-                const unifiedRegex = /(\d+)d(4|6|8|10|12|20|100)(?:\s*\[([^\]]+)\])?|(?:pontos de dano|de dano) (?:de )?([a-zA-Záàâãéèêíïóôõöúçñ]+)/gi
+                // Unified regex (reused from dice-render-utils; must reset lastIndex each call)
+                const unifiedRegex = new RegExp(DICE_UNIFIED_REGEX.source, DICE_UNIFIED_REGEX.flags)
 
                 let match
                 while ((match = unifiedRegex.exec(text)) !== null) {
@@ -123,7 +84,7 @@ export function MentionContent({
 
                         // Se houver tipo em colchetes, usamos Fuse para encontrar a cor e ESCONDEMOS o colchete
                         if (bracketType) {
-                            const fuseResult = fuse.search(bracketType)
+                            const fuseResult = diceFuse.search(bracketType)
                             const item = fuseResult.length > 0 ? fuseResult[0].item : null
 
                             elements.push(
@@ -135,15 +96,14 @@ export function MentionContent({
                                 />,
                             )
                         } else {
-                            // Se for apenas o dado, olhamos se o próximo texto é "de dano de X" ou "pontos de dano de X"
-                            // Vamos espiar o resto do texto para ver se há um match de dano natural logo após
+                            // Espiar o texto seguinte por contexto de dano natural
                             const remainingText = text.substring(unifiedRegex.lastIndex)
-                            const nextNaturalMatch = /^\s*(?:pontos de dano|de dano) (?:de )?([a-zA-Záàâãéèêíïóôõöúçñ]+)/i.exec(remainingText)
+                            const nextNaturalMatch = DICE_LOOKAHEAD_REGEX.exec(remainingText)
 
                             let colorOverride = undefined
                             if (nextNaturalMatch) {
-                                const naturalType = nextNaturalMatch[1]
-                                const fuseResult = fuse.search(naturalType)
+                                const nextType = nextNaturalMatch[1]
+                                const fuseResult = diceFuse.search(nextType)
                                 if (fuseResult.length > 0) {
                                     const item = fuseResult[0].item
                                     colorOverride = { text: `text-[${item.hex}]`, bgAlpha: item.color.bgAlpha }
@@ -155,7 +115,7 @@ export function MentionContent({
                     }
                     // Se for um texto de dano natural (match no grupo 4)
                     else if (naturalType) {
-                        const fuseResult = fuse.search(naturalType)
+                        const fuseResult = diceFuse.search(naturalType)
                         const item = fuseResult.length > 0 ? fuseResult[0].item : null
 
                         if (item) {
@@ -183,6 +143,22 @@ export function MentionContent({
             if (node.nodeType === Node.ELEMENT_NODE) {
                 const el = node as HTMLElement
                 const tagName = el.tagName.toLowerCase()
+
+                // Special handling for DiceValue nodes (saved by RichTextEditor)
+                if (tagName === "span" && el.getAttribute("data-type") === "dice-value") {
+                    const qty = parseInt(el.getAttribute("data-qty") || "1", 10)
+                    const faces = parseInt(el.getAttribute("data-faces") || "6", 10)
+                    const colorHex = el.getAttribute("data-color-hex") || undefined
+                    const tipo = `d${faces}` as DiceType
+                    return (
+                        <GlassDiceValue
+                            key={`dice-node-${index}`}
+                            value={{ quantidade: qty, tipo }}
+                            colorOverride={colorHex ? { text: colorHex } : undefined}
+                            className="mx-0.5"
+                        />
+                    )
+                }
 
                 // Special handling for Mentions
                 if (tagName === "span" && el.getAttribute("data-type") === "mention") {
