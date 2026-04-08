@@ -249,7 +249,7 @@ export function MentionContent({
 
 export function MentionBadge({ id, label, type = "Regra", className, delayDuration = 400 }: MentionBadgeProps) {
     const getStyles = (t: string) => {
-        const typeKey = (Object.keys(entityColors).find((k) => t.includes(k.substring(0, 5))) || "Regra") as keyof typeof entityColors
+        const typeKey = (t in entityColors ? t : "Regra") as keyof typeof entityColors
         return entityColors[typeKey]?.mention || entityColors.Regra.mention
     }
 

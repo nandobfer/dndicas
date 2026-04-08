@@ -249,12 +249,13 @@ function ClassVisualHeader({ image, name, description, color }: { image?: string
 export interface ClassPreviewProps {
     characterClass: CharacterClass
     showStatus?: boolean
+    initialSelectedSubclassIds?: string[]
 }
 
-export function ClassPreview({ characterClass, showStatus = true }: ClassPreviewProps) {
+export function ClassPreview({ characterClass, showStatus = true, initialSelectedSubclassIds }: ClassPreviewProps) {
     const [levelFilter, setLevelFilter] = useState<number | undefined>(undefined)
     const [filterMode, setFilterMode] = useState<"upTo" | "exact">("upTo")
-    const [selectedSubclassIds, setSelectedSubclassIds] = useState<string[]>([])
+    const [selectedSubclassIds, setSelectedSubclassIds] = useState<string[]>(initialSelectedSubclassIds ?? [])
     const [isTraitsOpen, setIsTraitsOpen] = useState(false)
 
     const subclasses = characterClass.subclasses || []

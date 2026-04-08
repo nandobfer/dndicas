@@ -221,6 +221,9 @@ export const EntityPreviewTooltip = ({ entityId, entityType, children, side = "t
                 endpoint = `/api/spells/${entityId}`
             } else if (entityType === "Classe") {
                 endpoint = `/api/classes/${entityId}`
+            } else if (entityType === "Subclasse") {
+                const match = /^subclass:([^:]+):(.+)$/.exec(entityId)
+                endpoint = match ? `/api/classes/${match[1]}` : ""
             } else if (entityType === "Origem") {
                 endpoint = `/api/backgrounds/${entityId}`
             } else if (entityType === "Raça") {
@@ -229,10 +232,19 @@ export const EntityPreviewTooltip = ({ entityId, entityType, children, side = "t
                 endpoint = `/api/items/${entityId}`
             }
 
+            if (!endpoint) return
+
             const res = await fetch(endpoint)
             if (res.ok) {
                 const json = await res.json()
-                setData(json)
+                if (entityType === "Subclasse") {
+                    const match = /^subclass:([^:]+):(.+)$/.exec(entityId)
+                    const subclassId = match?.[2]
+                    const subclass = json?.subclasses?.find((sub: any) => String(sub._id || sub.name) === subclassId) || null
+                    setData({ parentClass: json, subclass })
+                } else {
+                    setData(json)
+                }
             }
         } catch (e) {
             console.error("Failed to fetch entity preview:", e)
@@ -277,6 +289,18 @@ export const EntityPreviewTooltip = ({ entityId, entityType, children, side = "t
                 return <SpellPreview spell={data} />
             case "Classe":
                 return <ClassPreview characterClass={data} showStatus={true} />
+            case "Subclasse":
+                if (!data?.parentClass || !data?.subclass) {
+                    return <div className="p-4 text-xs text-white/40 text-center w-[200px]">Subclasse não encontrada</div>
+                }
+                return (
+                    <ClassPreview
+                        key={`${data.parentClass._id}:${String(data.subclass._id || data.subclass.name)}`}
+                        characterClass={data.parentClass}
+                        showStatus={true}
+                        initialSelectedSubclassIds={[String(data.subclass._id || data.subclass.name)]}
+                    />
+                )
             case "Origem":
                 return <BackgroundPreview background={data} />
             case "Raça":

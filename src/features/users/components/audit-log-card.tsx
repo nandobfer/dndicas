@@ -1,6 +1,6 @@
 "use client";
 
-import { Clock, User, Scroll, Users, Sparkles, Zap, Wand, ChevronRight, Shield, Sword, ShieldCheck, Fingerprint, Backpack } from "lucide-react"
+import { Clock, User, Scroll, Users, Sparkles, Zap, Wand, ChevronRight, Shield, Sword, ShieldCheck, Fingerprint, Backpack, GraduationCap } from "lucide-react"
 import { ActionChip } from "@/components/ui/action-chip"
 import { UserMini } from "@/components/ui/user-mini"
 import { cn } from "@/core/utils"
@@ -41,6 +41,7 @@ const ENTITY_ICONS: Record<keyof typeof entityConfig, any> = {
     Habilidade: Sparkles,
     Talento: Zap,
     Classe: Sword,
+    Subclasse: GraduationCap,
     Magia: Wand,
     Origem: ShieldCheck,
     Raça: Fingerprint,
