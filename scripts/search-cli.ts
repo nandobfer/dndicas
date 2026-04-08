@@ -219,7 +219,9 @@ let allEntities: UnifiedEntity[] = [];
 let query = '';
 let results: UnifiedEntity[] = [];
 let selectedIndex = 0;
-let searchDebounceTimer: ReturnType<typeof setTimeout> | null = null;
+// Tracks how many rows were used in the list area on the previous render,
+// so we can erase leftover rows when the list shrinks.
+let lastListRowCount = 0;
 
 function runSearch(): void {
     if (!query.trim()) {
@@ -288,16 +290,25 @@ function render(): void {
     // Bottom 4 rows are reserved: divider, status, divider, search input.
     const listRows = Math.max(1, H - 4);
 
-    term.clear();
+    // Helper: overwrite a row in place — no term.clear(), no flicker.
+    const writeRow = (row: number, fn: () => void) => {
+        term.moveTo(1, row);
+        term.eraseLine();
+        fn();
+    };
 
     // ── Results list (rows 1..listRows) ──────────────────────────────────────
+    let currentRow = 1;
+
     if (results.length === 0) {
-        term.moveTo(1, 1);
-        term.brightBlack(
-            query.trim()
-                ? `  Nenhum resultado para "${query}"`
-                : '  Digite para buscar...'
+        writeRow(1, () =>
+            term.brightBlack(
+                query.trim()
+                    ? `  Nenhum resultado para "${query}"`
+                    : '  Digite para buscar...'
+            )
         );
+        currentRow = 2;
     } else {
         const selectedEntity = results[selectedIndex];
         const jsonStr = JSON.stringify(selectedEntity ?? {}, null, 2);
@@ -306,7 +317,6 @@ function render(): void {
 
         const { start, end } = computeWindow(results.length, selectedIndex, jsonLineCount, listRows);
 
-        let currentRow = 1;
         for (let i = start; i <= end && currentRow <= listRows; i++) {
             const entity = results[i];
             if (!entity) continue;
@@ -314,33 +324,38 @@ function render(): void {
             if (i === selectedIndex) {
                 for (const jLine of jsonLines) {
                     if (currentRow > listRows) break;
-                    term.moveTo(1, currentRow);
-                    printColoredJsonLine('  ' + jLine);
+                    writeRow(currentRow, () => printColoredJsonLine('  ' + jLine));
                     currentRow++;
                 }
             } else {
-                term.moveTo(1, currentRow);
-                const colorFn = TYPE_COLORS[entity.type] ?? ((s: string) => term.white(s));
-                term('  ');
-                colorFn(entity.type);
-                term.white(' | ');
-                term.white(entity.name);
+                writeRow(currentRow, () => {
+                    const colorFn = TYPE_COLORS[entity.type] ?? ((s: string) => term.white(s));
+                    term('  ');
+                    colorFn(entity.type);
+                    term.white(' | ');
+                    term.white(entity.name);
+                });
                 currentRow++;
             }
         }
     }
 
+    // Erase rows that were used in the previous render but not in this one.
+    for (let row = currentRow; row <= lastListRowCount; row++) {
+        writeRow(row, () => {});
+    }
+    lastListRowCount = currentRow - 1;
+
     // ── Footer (fixed absolute positions) ────────────────────────────────────
-    term.moveTo(1, H - 3);
-    term.brightBlack(divider);
+    writeRow(H - 3, () => term.brightBlack(divider));
 
-    term.moveTo(1, H - 2);
-    term.brightBlack('  ↑↓ navegar  ·  Esc limpar  ·  Ctrl+C sair  ·  ');
-    term.brightWhite(String(results.length));
-    term.brightBlack(` resultado${results.length !== 1 ? 's' : ''}  (total: ${allEntities.length})`);
+    writeRow(H - 2, () => {
+        term.brightBlack('  ↑↓ navegar  ·  Esc limpar  ·  Ctrl+C sair  ·  ');
+        term.brightWhite(String(results.length));
+        term.brightBlack(` resultado${results.length !== 1 ? 's' : ''}  (total: ${allEntities.length})`);
+    });
 
-    term.moveTo(1, H - 1);
-    term.brightBlack(divider);
+    writeRow(H - 1, () => term.brightBlack(divider));
 
     renderInputLine(H);
 }
@@ -392,28 +407,19 @@ function setupInput(): void {
             case 'DELETE':
                 if (query.length > 0) {
                     query = query.slice(0, -1);
-                    // Show the updated input instantly, debounce the search
                     renderInputLine();
-                    scheduleSearch();
+                    runSearch();
                 }
                 return;
 
             default:
                 if (data?.isCharacter && name.length === 1) {
                     query += name;
-                    // Show the updated input instantly, debounce the search
                     renderInputLine();
-                    scheduleSearch();
+                    runSearch();
                 }
         }
     });
-}
-
-function scheduleSearch(): void {
-    if (searchDebounceTimer) clearTimeout(searchDebounceTimer);
-    searchDebounceTimer = setTimeout(() => {
-        runSearch();
-    }, 80);
 }
 
 function cleanup(): void {
