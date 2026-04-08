@@ -90,6 +90,7 @@ export interface SpellsFilters {
     schools?: SpellSchool[] // Multi-select: ["Evocação", "Abjuração"]
     saveAttributes?: AttributeType[] // Multi-select
     diceTypes?: DiceType[] // Multi-select: ["d6", "d8"]
+    sources?: string[] // Multi-select: book name prefixes (e.g. ["LDJ", "Mordenkainen Presents"])
     status?: "all" | "active" | "inactive" // Admin-only filter
 }
 

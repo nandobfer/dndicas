@@ -76,11 +76,13 @@ export function ItemsPage() {
                             type: filters.type,
                             rarity: filters.rarity,
                             status: filters.status,
+                            sources: filters.sources,
                         }}
                         onSearchChange={actions.handleSearchChange}
                         onTypeChange={actions.handleTypeChange}
                         onRarityChange={actions.handleRarityChange}
                         onStatusChange={actions.handleStatusChange}
+                        onSourcesChange={actions.handleSourcesChange}
                         isSearching={data.isLoading}
                     />
                 </GlassCardContent>

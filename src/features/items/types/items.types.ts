@@ -69,6 +69,7 @@ export interface ItemFilterParams {
     type?: ItemType | "all";
     rarity?: ItemRarity | "all";
     status?: "active" | "inactive" | "all";
+    sources?: string[]; // Multi-select: book name prefixes
     page?: number;
     limit?: number;
 }

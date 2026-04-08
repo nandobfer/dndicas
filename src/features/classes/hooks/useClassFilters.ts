@@ -22,6 +22,10 @@ export function useClassFilters() {
         const s = searchParams.get("status")
         return (s as ClassesFilters["status"]) || "all"
     })
+    const [sources, setSourcesState] = useState<string[]>(() => {
+        const s = searchParams.get("sources")
+        return s ? s.split(",") : []
+    })
 
     const debouncedSearch = useDebounce(search, SEARCH_DEBOUNCE_MS)
 
@@ -35,11 +39,17 @@ export function useClassFilters() {
         setPageState(1)
     }, [])
 
+    const setSources = useCallback((value: string[]) => {
+        setSourcesState(value)
+        setPageState(1)
+    }, [])
+
     const setPage = useCallback((newPage: number) => setPageState(newPage), [])
 
     const resetFilters = useCallback(() => {
         setSearchState("")
         setStatusState("all")
+        setSourcesState([])
         setPageState(1)
     }, [])
 
@@ -47,10 +57,11 @@ export function useClassFilters() {
         () => ({
             search: debouncedSearch,
             status,
+            sources: sources.length > 0 ? sources : undefined,
             page,
             limit
         }),
-        [debouncedSearch, status, page, limit]
+        [debouncedSearch, status, sources, page, limit]
     )
 
     useEffect(() => {
@@ -58,11 +69,12 @@ export function useClassFilters() {
         if (search) params.set("search", search)
         if (status && status !== "all") params.set("status", status)
         if (page > 1) params.set("page", page.toString())
+        if (sources.length > 0) params.set("sources", sources.join(","))
 
         const qs = params.toString()
         const newUrl = qs ? `?${qs}` : window.location.pathname
         router.replace(newUrl, { scroll: false })
-    }, [search, status, page, router])
+    }, [search, status, page, sources, router])
 
     return {
         filters,
@@ -72,6 +84,7 @@ export function useClassFilters() {
         limit,
         setSearch,
         setStatus,
+        setSources,
         setPage,
         resetFilters
     }

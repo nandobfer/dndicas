@@ -30,6 +30,11 @@ export async function listClasses(filters: ClassesFilters, page = 1, limit = 10,
         query.spellcasting = { $in: filters.spellcasting }
     }
 
+    if (filters.sources && filters.sources.length > 0) {
+        const escapeRegex = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+        query.source = { $in: filters.sources.map(s => new RegExp(`^${escapeRegex(s)}`, 'i')) }
+    }
+
     if (filters.status && filters.status !== "all") {
         query.status = filters.status
     }

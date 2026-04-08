@@ -36,6 +36,14 @@ export async function GET(req: NextRequest) {
       if (status && status !== "all") {
           query.status = status
       }
+      const sourcesParam = url.searchParams.get("sources")
+      if (sourcesParam) {
+          const escapeRegex = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+          const sourcesList = sourcesParam.split(",").map(s => s.trim()).filter(Boolean)
+          if (sourcesList.length > 0) {
+              query.source = { $in: sourcesList.map(s => new RegExp(`^${escapeRegex(s)}`, 'i')) }
+          }
+      }
 
       // Build the promise for items
       let itemsPromise = Reference.find(query as any).sort({ createdAt: -1 })

@@ -62,6 +62,7 @@ export function ClassesPage() {
                         filters={filters}
                         onSearchChange={actions.handleSearchChange}
                         onStatusChange={(v) => actions.handleStatusChange(v as "all" | "active" | "inactive")}
+                        onSourcesChange={actions.handleSourcesChange}
                         isSearching={data.paginated.isFetching || data.infinite.isFetching}
                     />
                 </GlassCardContent>

@@ -25,6 +25,7 @@ export interface UpdateReferenceInput extends Partial<Omit<CreateReferenceInput,
 export interface RulesFilters {
     search?: string;
     status?: 'active' | 'inactive' | 'all';
+    sources?: string[]; // Multi-select: book name prefixes
     page?: number;
     limit?: number;
 }

@@ -46,6 +46,7 @@ export type UpdateRaceInput = Partial<CreateRaceInput>
 export interface RacesFilters {
     search?: string
     status?: "all" | "active" | "inactive" | "all"
+    sources?: string[] // Multi-select: book name prefixes
     page?: number
     limit?: number
 }

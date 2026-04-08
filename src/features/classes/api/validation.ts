@@ -109,6 +109,7 @@ export const classesQuerySchema = z.object({
     search: z.string().optional(),
     hitDice: z.array(z.enum(HIT_DICE_OPTIONS)).optional(),
     spellcasting: z.array(z.boolean()).optional(),
+    sources: z.array(z.string()).optional(),
     status: z.enum(["all", "active", "inactive"]).default("active"),
     page: z.number().int().positive().default(1),
     limit: z.number().int().positive().max(100).default(10)

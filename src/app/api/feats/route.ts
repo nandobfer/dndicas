@@ -24,6 +24,7 @@ export async function GET(req: NextRequest) {
       .get('categories')
       ?.split(',')
       .filter(Boolean) as FeatCategory[] | undefined;
+    const sources = url.searchParams.get('sources')?.split(',').filter(Boolean);
 
     const { userId } = await auth();
     const isAdmin = !!userId;
@@ -36,6 +37,7 @@ export async function GET(req: NextRequest) {
       levelMax: levelMax ? parseInt(levelMax, 10) : undefined,
       attributes,
       categories,
+      sources: sources && sources.length > 0 ? sources : undefined,
     };
 
     const result = await listFeats(filters, page, limit, isAdmin);

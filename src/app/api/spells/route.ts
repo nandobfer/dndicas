@@ -32,6 +32,7 @@ export async function GET(req: NextRequest) {
       schools: url.searchParams.get('schools')?.split(',').filter(Boolean) as SpellSchool[] | undefined,
       saveAttributes: url.searchParams.get('saveAttributes')?.split(',').filter(Boolean) as AttributeType[] | undefined,
       diceTypes: url.searchParams.get('diceTypes')?.split(',').filter(Boolean) as DiceType[] | undefined,
+      sources: url.searchParams.get('sources')?.split(',').filter(Boolean) || undefined,
       status: (url.searchParams.get('status') || undefined) as 'active' | 'inactive' | 'all' | undefined,
       page: parseInt(url.searchParams.get('page') || '1', 10),
       limit: parseInt(url.searchParams.get('limit') || '10', 10),

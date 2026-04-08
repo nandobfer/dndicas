@@ -153,6 +153,7 @@ export interface ClassesFilters {
     search?: string
     hitDice?: HitDiceType[]
     spellcasting?: boolean[]
+    sources?: string[] // Multi-select: book name prefixes
     status?: "all" | "active" | "inactive"
 }
 

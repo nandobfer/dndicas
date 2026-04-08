@@ -11,6 +11,7 @@ import { attributeColors, AttributeType, spellSchoolColors, SpellSchool, diceCol
 import type { SpellsFilters } from "../types/spells.types"
 import { useState } from "react"
 import { motion, AnimatePresence } from "framer-motion"
+import { SourceFilter } from "@/components/ui/source-filter"
 
 export interface SpellsFiltersProps {
     filters: SpellsFilters
@@ -18,11 +19,12 @@ export interface SpellsFiltersProps {
     onStatusChange: (status: SpellsFilters["status"]) => void
     onCircleChange: (circle: number | undefined, mode: "exact" | "upTo") => void
     onSchoolsChange: (schools: SpellSchool[]) => void
+    onSourcesChange: (sources: string[]) => void
     isSearching?: boolean
     className?: string
 }
 
-export function SpellsFilters({ filters, onSearchChange, onStatusChange, onCircleChange, onSchoolsChange, isSearching = false, className }: SpellsFiltersProps) {
+export function SpellsFilters({ filters, onSearchChange, onStatusChange, onCircleChange, onSchoolsChange, onSourcesChange, isSearching = false, className }: SpellsFiltersProps) {
     const isMobile = useIsMobile()
     const [circleMode, setCircleMode] = useState<"exact" | "upTo">("exact")
     const [selectedCircle, setSelectedCircle] = useState<number | undefined>(filters.circles && filters.circles.length === 1 ? filters.circles[0] : undefined)
@@ -173,6 +175,13 @@ export function SpellsFilters({ filters, onSearchChange, onStatusChange, onCircl
                         className={isMobile ? "w-full" : "h-10"}
                     />
                 </div>
+
+                {/* Source Filter */}
+                <SourceFilter
+                    value={filters.sources || []}
+                    onChange={onSourcesChange}
+                    entityType="spells"
+                />
             </div>
         </div>
     )
