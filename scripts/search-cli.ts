@@ -335,15 +335,24 @@ function render(): void {
     term.brightBlack(divider);
 
     term.moveTo(1, H - 2);
-    term.brightBlack('  ↑↓ navegar  ·  Esc/Ctrl+C sair  ·  ');
+    term.brightBlack('  ↑↓ navegar  ·  Esc limpar  ·  Ctrl+C sair  ·  ');
     term.brightWhite(String(results.length));
     term.brightBlack(` resultado${results.length !== 1 ? 's' : ''}  (total: ${allEntities.length})`);
 
     term.moveTo(1, H - 1);
     term.brightBlack(divider);
 
-    // ── Search input (always pinned to last row) ──────────────────────────────
-    term.moveTo(1, H);
+    renderInputLine(H);
+}
+
+/**
+ * Updates only the search input row — fast path for immediate feedback on keypress.
+ * Does NOT call term.clear(), so it never flickers the rest of the screen.
+ */
+function renderInputLine(H?: number): void {
+    const row: number = H ?? ((term as any).height ?? 30);
+    term.moveTo(1, row);
+    term.eraseLine();
     term.bold.white('🔍 Buscar: ');
     term.white(query);
     term.brightBlack('_');
@@ -357,9 +366,16 @@ function setupInput(): void {
     term.on('key', (name: string, _matches: string[], data: { isCharacter?: boolean }) => {
         switch (name) {
             case 'CTRL_C':
-            case 'ESCAPE':
                 cleanup();
                 process.exit(0);
+                return;
+
+            case 'ESCAPE':
+                // Clear search query; full re-render to update results area
+                query = '';
+                selectedIndex = 0;
+                results = allEntities.slice(0, 50);
+                render();
                 return;
 
             case 'UP':
@@ -376,6 +392,8 @@ function setupInput(): void {
             case 'DELETE':
                 if (query.length > 0) {
                     query = query.slice(0, -1);
+                    // Show the updated input instantly, debounce the search
+                    renderInputLine();
                     scheduleSearch();
                 }
                 return;
@@ -383,6 +401,8 @@ function setupInput(): void {
             default:
                 if (data?.isCharacter && name.length === 1) {
                     query += name;
+                    // Show the updated input instantly, debounce the search
+                    renderInputLine();
                     scheduleSearch();
                 }
         }
@@ -393,14 +413,13 @@ function scheduleSearch(): void {
     if (searchDebounceTimer) clearTimeout(searchDebounceTimer);
     searchDebounceTimer = setTimeout(() => {
         runSearch();
-    }, 150);
+    }, 80);
 }
 
 function cleanup(): void {
     term.grabInput(false);
     term.hideCursor(false);
     term.fullscreen(false);
-    term.green('\nAté mais! 👋\n');
     void mongoose.disconnect();
 }
 
