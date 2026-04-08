@@ -34,8 +34,9 @@ const term = terminal.terminal;
 // ─── JSON color printer ───────────────────────────────────────────────────────
 // Replicates the color scheme from scripts/seed-data/base-provider.ts.
 // Works line-by-line so it's compatible with term.moveTo() absolute positioning.
+// When highlight=true, chains bgGray on every token for the selected-item background.
 
-function printColoredJsonLine(line: string): void {
+function printColoredJsonLine(line: string, highlight: boolean): void {
     const re = /("(?:[^"\\]|\\.)*")(\s*:)?|true|false|null|-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?|[{}\[\],]|[^\S\n]+/g;
     let m: RegExpExecArray | null;
     while ((m = re.exec(line)) !== null) {
@@ -44,21 +45,21 @@ function printColoredJsonLine(line: string): void {
         const colonSuffix = m[2];
         if (quotedStr !== undefined) {
             if (colonSuffix !== undefined) {
-                term.yellow(quotedStr);
-                term(colonSuffix);
+                highlight ? term.bgGray.yellow(quotedStr) : term.yellow(quotedStr);
+                highlight ? term.bgGray(colonSuffix) : term(colonSuffix);
             } else {
-                term.cyan(quotedStr);
+                highlight ? term.bgGray.cyan(quotedStr) : term.cyan(quotedStr);
             }
         } else if (tok === 'true' || tok === 'false') {
-            term.blue(tok);
+            highlight ? term.bgGray.blue(tok) : term.blue(tok);
         } else if (tok === 'null') {
-            term.gray(tok);
+            highlight ? term.bgGray.gray(tok) : term.gray(tok);
         } else if (tok === '{' || tok === '}' || tok === '[' || tok === ']') {
-            term.bold.white(tok);
+            highlight ? term.bgGray.bold.white(tok) : term.bold.white(tok);
         } else if (/^-?\d/.test(tok)) {
-            term.green(tok);
+            highlight ? term.bgGray.green(tok) : term.green(tok);
         } else {
-            term(tok);
+            highlight ? term.bgGray(tok) : term(tok);
         }
     }
 }
@@ -217,11 +218,30 @@ async function loadAllEntities(): Promise<UnifiedEntity[]> {
 
 let allEntities: UnifiedEntity[] = [];
 let query = '';
+let cursorPos = 0; // insertion point within query (0 = before first char)
 let results: UnifiedEntity[] = [];
 let selectedIndex = 0;
 // Tracks how many rows were used in the list area on the previous render,
 // so we can erase leftover rows when the list shrinks.
 let lastListRowCount = 0;
+
+// ─── Word navigation helpers ─────────────────────────────────────────────────
+
+/** Returns the index at the start of the word before `pos`. */
+function wordStart(s: string, pos: number): number {
+    let i = pos - 1;
+    while (i > 0 && s[i - 1] === ' ') i--;  // skip trailing spaces
+    while (i > 0 && s[i - 1] !== ' ') i--;  // skip word chars
+    return Math.max(0, i);
+}
+
+/** Returns the index just past the end of the word after `pos`. */
+function wordEnd(s: string, pos: number): number {
+    let i = pos;
+    while (i < s.length && s[i] === ' ') i++;  // skip leading spaces
+    while (i < s.length && s[i] !== ' ') i++;  // skip word chars
+    return i;
+}
 
 function runSearch(): void {
     if (!query.trim()) {
@@ -290,10 +310,18 @@ function render(): void {
     // Bottom 4 rows are reserved: divider, status, divider, search input.
     const listRows = Math.max(1, H - 4);
 
-    // Helper: overwrite a row in place — no term.clear(), no flicker.
+    // Normal row: erase and overwrite in place — no term.clear(), no flicker.
     const writeRow = (row: number, fn: () => void) => {
         term.moveTo(1, row);
         term.eraseLine();
+        fn();
+    };
+
+    // Highlighted row: fill with bgGray first, reposition, then draw content.
+    const writeHighlightedRow = (row: number, fn: () => void) => {
+        term.moveTo(1, row);
+        term.bgGray(' '.repeat(W));
+        term.moveTo(1, row);
         fn();
     };
 
@@ -301,13 +329,7 @@ function render(): void {
     let currentRow = 1;
 
     if (results.length === 0) {
-        writeRow(1, () =>
-            term.brightBlack(
-                query.trim()
-                    ? `  Nenhum resultado para "${query}"`
-                    : '  Digite para buscar...'
-            )
-        );
+        writeRow(1, () => term.brightBlack(`  Nenhum resultado para "${query}"`));
         currentRow = 2;
     } else {
         const selectedEntity = results[selectedIndex];
@@ -324,7 +346,7 @@ function render(): void {
             if (i === selectedIndex) {
                 for (const jLine of jsonLines) {
                     if (currentRow > listRows) break;
-                    writeRow(currentRow, () => printColoredJsonLine('  ' + jLine));
+                    writeHighlightedRow(currentRow, () => printColoredJsonLine('  ' + jLine, true));
                     currentRow++;
                 }
             } else {
@@ -362,15 +384,26 @@ function render(): void {
 
 /**
  * Updates only the search input row — fast path for immediate feedback on keypress.
- * Does NOT call term.clear(), so it never flickers the rest of the screen.
+ * Does NOT redraw the results list, so it never flickers the rest of the screen.
  */
 function renderInputLine(H?: number): void {
     const row: number = H ?? ((term as any).height ?? 30);
     term.moveTo(1, row);
     term.eraseLine();
     term.bold.white('🔍 Buscar: ');
-    term.white(query);
-    term.brightBlack('_');
+
+    const before = query.slice(0, cursorPos);
+    const atCursor = query[cursorPos];
+    const after = query.slice(cursorPos + 1);
+
+    term.white(before);
+    if (atCursor !== undefined) {
+        term.inverse(atCursor);
+        term.white(after);
+    } else {
+        // Cursor is at the end of the string
+        term.inverse('_');
+    }
 }
 
 // ─── Keyboard handling ────────────────────────────────────────────────────────
@@ -386,8 +419,8 @@ function setupInput(): void {
                 return;
 
             case 'ESCAPE':
-                // Clear search query; full re-render to update results area
                 query = '';
+                cursorPos = 0;
                 selectedIndex = 0;
                 results = allEntities.slice(0, 50);
                 render();
@@ -403,18 +436,69 @@ function setupInput(): void {
                 render();
                 return;
 
+            // ── Cursor movement ────────────────────────────────────────────
+
+            case 'LEFT':
+                if (cursorPos > 0) {
+                    cursorPos--;
+                    renderInputLine();
+                }
+                return;
+
+            case 'RIGHT':
+                if (cursorPos < query.length) {
+                    cursorPos++;
+                    renderInputLine();
+                }
+                return;
+
+            case 'CTRL_LEFT':
+                cursorPos = wordStart(query, cursorPos);
+                renderInputLine();
+                return;
+
+            case 'CTRL_RIGHT':
+                cursorPos = wordEnd(query, cursorPos);
+                renderInputLine();
+                return;
+
+            // ── Deletion ───────────────────────────────────────────────────
+
             case 'BACKSPACE':
-            case 'DELETE':
-                if (query.length > 0) {
-                    query = query.slice(0, -1);
+                if (cursorPos > 0) {
+                    query = query.slice(0, cursorPos - 1) + query.slice(cursorPos);
+                    cursorPos--;
                     renderInputLine();
                     runSearch();
                 }
                 return;
 
+            case 'DELETE':
+                if (cursorPos < query.length) {
+                    query = query.slice(0, cursorPos) + query.slice(cursorPos + 1);
+                    renderInputLine();
+                    runSearch();
+                }
+                return;
+
+            case 'CTRL_BACKSPACE':
+            case 'ALT_BACKSPACE': {
+                if (cursorPos > 0) {
+                    const newPos = wordStart(query, cursorPos);
+                    query = query.slice(0, newPos) + query.slice(cursorPos);
+                    cursorPos = newPos;
+                    renderInputLine();
+                    runSearch();
+                }
+                return;
+            }
+
+            // ── Character insertion ────────────────────────────────────────
+
             default:
                 if (data?.isCharacter && name.length === 1) {
-                    query += name;
+                    query = query.slice(0, cursorPos) + name + query.slice(cursorPos);
+                    cursorPos++;
                     renderInputLine();
                     runSearch();
                 }
