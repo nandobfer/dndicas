@@ -25,13 +25,15 @@ interface SheetHeaderProps {
       watch: UseFormWatch<PatchSheetBody>
       patchField: (field: keyof PatchSheetBody, value: unknown) => void
     }
+    isReadOnly?: boolean
 }
 
-export function SheetHeader({ sheet, form }: SheetHeaderProps) {
+export function SheetHeader({ sheet, form, isReadOnly = false }: SheetHeaderProps) {
   const { watch, patchField } = form
   const hitDiceValue = (watch("hitDiceTotal") || "d8") as DiceType
 
   const handleDeathSaveToggle = (field: "deathSavesSuccess" | "deathSavesFailure", index: number) => {
+    if (isReadOnly) return
     const current = watch(field) || 0
     if (current === index) {
       patchField(field, index - 1)
@@ -53,6 +55,7 @@ export function SheetHeader({ sheet, form }: SheetHeaderProps) {
             onChangeValue={(val) => patchField("name", val)}
             debounceMs={1000}
             className="tracking-tight"
+            readOnlyMode={isReadOnly}
           />
 
           {/* Grid de Identidade */}
@@ -65,6 +68,7 @@ export function SheetHeader({ sheet, form }: SheetHeaderProps) {
                 onChange={(val) => patchField(item.field, val)}
                 placeholder={item.placeholder}
                 excludeId={sheet._id}
+                disabled={isReadOnly}
               />
             ))}
           </div>
@@ -86,6 +90,7 @@ export function SheetHeader({ sheet, form }: SheetHeaderProps) {
               showControls
               inputClassName="text-3xl font-black text-center h-10 px-0"
               className="items-center w-24"
+              readOnlyMode={isReadOnly}
             />
           </div>
           <div className="mt-6 flex flex-col items-center z-10">
@@ -98,6 +103,7 @@ export function SheetHeader({ sheet, form }: SheetHeaderProps) {
               value={watch("experience") || ""}
               onChangeValue={(val) => patchField("experience", val)}
               debounceMs={1000}
+              readOnlyMode={isReadOnly}
             />
           </div>
         </GlassCardContent>
@@ -121,6 +127,7 @@ export function SheetHeader({ sheet, form }: SheetHeaderProps) {
                 min={1}
                 inputClassName="text-3xl font-black text-center h-10 px-0"
                 className="items-center w-full z-10"
+                readOnlyMode={isReadOnly}
               />
             </div>
           </div>
@@ -156,6 +163,7 @@ export function SheetHeader({ sheet, form }: SheetHeaderProps) {
                 inputClassName="text-5xl h-20 text-center"
                 className="items-center"
                 debounceMs={1000}
+                readOnlyMode={isReadOnly}
               />
             </div>
             <div className="w-[1px] bg-white/10 self-stretch my-4" />
@@ -170,6 +178,7 @@ export function SheetHeader({ sheet, form }: SheetHeaderProps) {
                 inputClassName="text-center text-lg h-8"
                 className="bg-white/5 rounded-lg border border-white/5 px-1"
                 debounceMs={1000}
+                readOnlyMode={isReadOnly}
               />
               <SheetInput
                 compact
@@ -181,6 +190,7 @@ export function SheetHeader({ sheet, form }: SheetHeaderProps) {
                 inputClassName="text-center text-lg h-8"
                 className="bg-white/5 rounded-lg border border-white/5 px-1"
                 debounceMs={1000}
+                readOnlyMode={isReadOnly}
               />
             </div>
           </div>
@@ -206,6 +216,7 @@ export function SheetHeader({ sheet, form }: SheetHeaderProps) {
                 cols={3}
                 fullWidth
                 layoutId="sheet-hit-die"
+                disabled={isReadOnly}
               />
             </div>
             <div className="grid grid-cols-2 gap-2 mt-2">
@@ -220,6 +231,7 @@ export function SheetHeader({ sheet, form }: SheetHeaderProps) {
                 max={watch("level") || 1}
                 inputClassName="text-center text-xs h-6"
                 debounceMs={1000}
+                readOnlyMode={isReadOnly}
               />
               <div className="flex flex-col items-end pt-1 pr-1">
                 <label className="text-[8px] font-black uppercase text-white/30">Max</label>
@@ -237,8 +249,10 @@ export function SheetHeader({ sheet, form }: SheetHeaderProps) {
                       key={`s-${i}`}
                       className={cn(
                         "w-3 h-3 border border-white/30 rotate-45 transition-all rounded-sm",
+                        !isReadOnly && "cursor-pointer",
                         (watch("deathSavesSuccess") || 0) >= i ? "bg-white/80 border-white shadow-[0_0_8px_rgba(255,255,255,0.3)]" : "bg-transparent",
                       )}
+                      disabled={isReadOnly}
                       onClick={() => handleDeathSaveToggle("deathSavesSuccess", i)}
                     />
                   ))}
@@ -252,8 +266,10 @@ export function SheetHeader({ sheet, form }: SheetHeaderProps) {
                       key={`f-${i}`}
                       className={cn(
                         "w-3 h-3 border border-white/30 rotate-45 transition-all rounded-sm",
+                        !isReadOnly && "cursor-pointer",
                         (watch("deathSavesFailure") || 0) >= i ? "bg-white/80 border-white shadow-[0_0_8px_rgba(255,255,255,0.3)]" : "bg-transparent",
                       )}
+                      disabled={isReadOnly}
                       onClick={() => handleDeathSaveToggle("deathSavesFailure", i)}
                     />
                   ))}

@@ -11,9 +11,10 @@ const MIDDLE_ATTRIBUTES: AttributeType[] = ["intelligence", "wisdom", "charisma"
 interface SheetMiddleColumnProps {
     sheet: CharacterSheet
     form: any
+    isReadOnly?: boolean
 }
 
-export function SheetMiddleColumn({ sheet, form }: SheetMiddleColumnProps) {
+export function SheetMiddleColumn({ sheet, form, isReadOnly = false }: SheetMiddleColumnProps) {
     const { watch, patchField } = form
     const currentValues = watch()
     const currentSheet = { ...sheet, ...currentValues } as CharacterSheet
@@ -39,6 +40,7 @@ export function SheetMiddleColumn({ sheet, form }: SheetMiddleColumnProps) {
             })
 
     const handleSkillChange = (skill: SkillName, proficient: boolean, expertise: boolean) => {
+        if (isReadOnly) return
         const curr = (currentSheet.skills as Record<string, { proficient: boolean; expertise: boolean }> | undefined) ?? {}
         patchField("skills", {
             ...curr,
@@ -47,6 +49,7 @@ export function SheetMiddleColumn({ sheet, form }: SheetMiddleColumnProps) {
     }
 
     const handleSavingThrowToggle = (attr: AttributeType) => {
+        if (isReadOnly) return
         const curr = (currentSheet.savingThrows as Record<string, boolean> | undefined) ?? {}
         patchField("savingThrows", { ...curr, [attr]: !curr[attr] })
     }
@@ -70,6 +73,7 @@ export function SheetMiddleColumn({ sheet, form }: SheetMiddleColumnProps) {
                     skills={getSkillsForAttribute(attrKey)}
                     onSkillChange={handleSkillChange}
                     isLoading={isLoading}
+                    isReadOnly={isReadOnly}
                 />
             ))}
         </div>
