@@ -2,18 +2,50 @@
 
 import { motion } from "framer-motion"
 import { useRouter } from "next/navigation"
-import { ScrollText, Trash2, User, Swords, Star } from "lucide-react"
+import { ScrollText, Trash2, User, Swords, Star, Shield } from "lucide-react"
 import { GlassCard } from "@/components/ui/glass-card"
 import { cn } from "@/core/utils"
 import type { CharacterSheet } from "@/features/character-sheets/types/character-sheet.types"
+import { attributeColors } from "@/lib/config/colors"
+import { MentionContent } from "@/features/rules/components/mention-badge"
+
+const isHtmlContent = (s: string) => s.includes("<")
+
+function RichFieldValue({ value }: { value: string }) {
+    if (isHtmlContent(value)) {
+        return <MentionContent html={value} mode="inline" />
+    }
+    return <span>{value}</span>
+}
+
+const ATTR_LABELS: {
+    key: keyof CharacterSheet
+    label: string
+    bgAlpha: string
+    text: string
+    border: string
+}[] = [
+    { key: "strength",      label: "FOR", ...attributeColors["Força"] },
+    { key: "dexterity",     label: "DES", ...attributeColors["Destreza"] },
+    { key: "constitution",  label: "CON", ...attributeColors["Constituição"] },
+    { key: "intelligence",  label: "INT", ...attributeColors["Inteligência"] },
+    { key: "wisdom",        label: "SAB", ...attributeColors["Sabedoria"] },
+    { key: "charisma",      label: "CAR", ...attributeColors["Carisma"] },
+]
+
+const formatMod = (score: number): string => {
+    const mod = Math.floor((score - 10) / 2)
+    if (mod > 0) return `+${mod}`
+    return String(mod)
+}
 
 interface GlassSheetCardProps {
     sheet: CharacterSheet
-    onDelete: (id: string) => void
+    onRequestDelete: (sheet: CharacterSheet) => void
     isDeleting?: boolean
 }
 
-export function GlassSheetCard({ sheet, onDelete, isDeleting }: GlassSheetCardProps) {
+export function GlassSheetCard({ sheet, onRequestDelete, isDeleting }: GlassSheetCardProps) {
     const router = useRouter()
 
     const handleOpen = () => {
@@ -22,8 +54,10 @@ export function GlassSheetCard({ sheet, onDelete, isDeleting }: GlassSheetCardPr
 
     const handleDelete = (e: React.MouseEvent) => {
         e.stopPropagation()
-        onDelete(sheet._id)
+        onRequestDelete(sheet)
     }
+
+    const ca = sheet.armorClassOverride ?? 10
 
     return (
         <GlassCard
@@ -51,7 +85,10 @@ export function GlassSheetCard({ sheet, onDelete, isDeleting }: GlassSheetCardPr
                             </h3>
                             {sheet.class && (
                                 <p className="text-[10px] text-white/50 uppercase font-semibold tracking-wider truncate mt-0.5">
-                                    {sheet.class}{sheet.subclass ? ` · ${sheet.subclass}` : ""}
+                                    <RichFieldValue value={sheet.class} />
+                                    {sheet.subclass && (
+                                        <> · <RichFieldValue value={sheet.subclass} /></>
+                                    )}
                                 </p>
                             )}
                         </div>
@@ -81,18 +118,32 @@ export function GlassSheetCard({ sheet, onDelete, isDeleting }: GlassSheetCardPr
                             <span>Nível {sheet.level}</span>
                         </div>
                     )}
+                    <div className="flex items-center gap-1 text-[10px] font-semibold text-sky-400/80">
+                        <Shield className="w-3 h-3" />
+                        <span>CA {ca}</span>
+                    </div>
                     {sheet.race && (
                         <div className="flex items-center gap-1 text-[10px] font-semibold text-white/40">
                             <User className="w-3 h-3" />
-                            <span>{sheet.race}</span>
+                            <span><RichFieldValue value={sheet.race} /></span>
                         </div>
                     )}
                     {sheet.origin && (
                         <div className="flex items-center gap-1 text-[10px] font-semibold text-white/40">
                             <Swords className="w-3 h-3" />
-                            <span>{sheet.origin}</span>
+                            <span><RichFieldValue value={sheet.origin} /></span>
                         </div>
                     )}
+                </div>
+
+                {/* Attribute modifiers */}
+                <div className="grid grid-cols-6 gap-1">
+                    {ATTR_LABELS.map(({ key, label, bgAlpha, text, border }) => (
+                        <div key={key} className={cn("flex flex-col items-center gap-0.5 rounded py-1 px-0.5 border", bgAlpha, border)}>
+                            <span className="text-[8px] font-bold uppercase text-white/40">{label}</span>
+                            <span className={cn("text-[10px] font-bold", text)}>{formatMod(sheet[key] as number)}</span>
+                        </div>
+                    ))}
                 </div>
 
                 {/* HP bar */}

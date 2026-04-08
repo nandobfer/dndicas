@@ -20,7 +20,7 @@ export async function GET(req: NextRequest) {
     }
 }
 
-export async function POST() {
+export async function POST(req: NextRequest) {
     try {
         const { userId } = await auth()
         if (!userId) return NextResponse.json({ error: "Não autorizado" }, { status: 401 })
@@ -28,7 +28,15 @@ export async function POST() {
         const user = await currentUser()
         const username = user?.username || user?.firstName?.toLowerCase() || userId
 
-        const sheet = await createBlankSheet(userId, username)
+        let name: string | undefined
+        try {
+            const body = await req.json()
+            if (typeof body?.name === "string" && body.name.trim()) name = body.name.trim()
+        } catch {
+            // body is empty or not JSON — ignore
+        }
+
+        const sheet = await createBlankSheet(userId, username, name)
         return NextResponse.json(sheet, { status: 201 })
     } catch (error) {
         console.error("[API] POST /api/character-sheets error:", error)

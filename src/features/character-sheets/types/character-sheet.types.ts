@@ -258,14 +258,14 @@ export interface PatchAttackBody {
 
 export const PatchSheetSchema = z.object({
     name: z.string().max(100).optional(),
-    class: z.string().max(100).optional(),
+    class: z.string().max(2000).optional(),
     classRef: z.string().nullable().optional(),
-    subclass: z.string().max(100).optional(),
+    subclass: z.string().max(2000).optional(),
     subclassRef: z.string().nullable().optional(),
     level: z.number().int().min(1).max(20).optional(),
-    race: z.string().max(100).optional(),
+    race: z.string().max(2000).optional(),
     raceRef: z.string().nullable().optional(),
-    origin: z.string().max(100).optional(),
+    origin: z.string().max(2000).optional(),
     originRef: z.string().nullable().optional(),
     inspiration: z.boolean().optional(),
     multiclassNotes: z.string().optional(),

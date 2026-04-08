@@ -62,14 +62,15 @@ export async function getAllUserSheets(
     }
 }
 
-export async function createBlankSheet(userId: string, username: string) {
+export async function createBlankSheet(userId: string, username: string, name?: string) {
     await dbConnect()
 
-    const tempSlug = generateSlug(username || userId, `Nova Ficha ${Date.now()}`)
+    const sheetName = name || "Nova Ficha"
+    const tempSlug = generateSlug(username || userId, `${sheetName} ${Date.now()}`)
     const doc = await CharacterSheet.create({
         userId,
         username: username || "",
-        name: "Nova Ficha",
+        name: sheetName,
         slug: tempSlug,
     })
 
