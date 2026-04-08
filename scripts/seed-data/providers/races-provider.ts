@@ -816,9 +816,12 @@ export class RacesProvider extends BaseProvider<FiveEToolsRace, CreateRaceInput>
     protected override applyGlossaryToOutput(output: CreateRaceInput, entries: GlossaryEntry[]): CreateRaceInput {
         const base = super.applyGlossaryToOutput(output, entries);
 
+        const stripName = (s: string): string =>
+            s.replace(/^[\s.,;:!?"']+|[\s.,;:!?"']+$/g, '').trim();
+
         const applyToTrait = (t: RaceTrait): RaceTrait => ({
             ...t,
-            name: applyGlossary(entries, t.name),
+            name: stripName(applyGlossary(entries, t.name)),
             description: applyGlossary(entries, t.description),
         });
 
@@ -841,7 +844,7 @@ export class RacesProvider extends BaseProvider<FiveEToolsRace, CreateRaceInput>
             spells: base.spells.map(applyToSpell),
             variations: base.variations.map((v) => ({
                 ...v,
-                name: applyGlossary(entries, v.name),
+                name: stripName(applyGlossary(entries, v.name)),
                 description: applyGlossary(entries, v.description),
                 traits: v.traits.map(applyToTrait),
                 spells: v.spells.map(applyToSpell),
