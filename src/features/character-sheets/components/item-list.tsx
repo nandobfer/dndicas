@@ -2,17 +2,18 @@
 
 import { motion, AnimatePresence } from "framer-motion"
 import { Plus, Trash2, Coins } from "lucide-react"
+import type { UseFormWatch } from "react-hook-form"
 import { cn } from "@/core/utils"
 import { SheetInput } from "./sheet-input"
 import { CompactRichInput } from "./compact-rich-input"
 import { useItemList } from "./hooks/use-item-list"
-import type { CharacterSheet } from "../types/character-sheet.types"
+import type { CharacterSheet, PatchSheetBody } from "../types/character-sheet.types"
 
 interface ItemListProps {
     sheet: CharacterSheet
     form: {
-        watch: (field?: string) => any
-        patchField: (field: string, value: unknown) => void
+        watch: UseFormWatch<PatchSheetBody>
+        patchField: (field: keyof PatchSheetBody, value: unknown) => void
     }
 }
 

@@ -12,6 +12,7 @@ export interface ICharacterSheet extends Document {
     subclass: string
     subclassRef: mongoose.Types.ObjectId | null
     level: number
+    experience: string
     race: string
     raceRef: mongoose.Types.ObjectId | null
     origin: string
@@ -35,7 +36,7 @@ export interface ICharacterSheet extends Document {
     proficiencyBonusOverride: number | null
     savingThrows: Record<AttributeType, boolean>
     skills: Record<SkillName, { proficient: boolean; expertise: boolean; override?: number }>
-    movementSpeed: number | null
+    movementSpeed: string
     hpMax: number | null
     hpCurrent: number | null
     hpTemp: number
@@ -79,6 +80,7 @@ const CharacterSheetSchema = new Schema<ICharacterSheet>(
         subclass: { type: String, default: "", trim: true, maxlength: 2000 },
         subclassRef: { type: Schema.Types.ObjectId, ref: "Subclass", default: null },
         level: { type: Number, default: 1, min: 1, max: 20 },
+        experience: { type: String, default: "" },
         race: { type: String, default: "", trim: true, maxlength: 2000 },
         raceRef: { type: Schema.Types.ObjectId, ref: "Race", default: null },
         origin: { type: String, default: "", trim: true, maxlength: 2000 },
@@ -117,7 +119,7 @@ const CharacterSheetSchema = new Schema<ICharacterSheet>(
             of: new Schema({ proficient: { type: Boolean, default: false }, expertise: { type: Boolean, default: false }, override: { type: Number } }, { _id: false }),
             default: () => ({}),
         },
-        movementSpeed: { type: Number, default: null },
+        movementSpeed: { type: String, default: "" },
         hpMax: { type: Number, default: null },
         hpCurrent: { type: Number, default: null },
         hpTemp: { type: Number, default: 0, min: 0 },

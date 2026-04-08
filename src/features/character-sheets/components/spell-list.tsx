@@ -2,7 +2,7 @@
 
 import { motion, AnimatePresence } from "framer-motion"
 import { Plus, Trash2, Wand2 } from "lucide-react"
-import { cn } from "@/core/utils"
+import type { UseFormWatch } from "react-hook-form"
 import { SheetInput } from "./sheet-input"
 import { CompactRichInput } from "./compact-rich-input"
 import { GlassCheckbox } from "./glass-checkbox"
@@ -10,13 +10,13 @@ import { CalcTooltip } from "./calc-tooltip"
 import { useSpellList } from "./hooks/use-spell-list"
 import { GlassSelector } from "@/components/ui/glass-selector"
 import { attributeColors } from "@/lib/config/colors"
-import type { CharacterSheet } from "../types/character-sheet.types"
+import type { CharacterSheet, PatchSheetBody } from "../types/character-sheet.types"
 
 interface SpellListProps {
     sheet: CharacterSheet
     form: {
-        watch: (field?: string) => any
-        patchField: (field: string, value: unknown) => void
+        watch: UseFormWatch<PatchSheetBody>
+        patchField: (field: keyof PatchSheetBody, value: unknown) => void
     }
 }
 
@@ -118,8 +118,11 @@ export function SpellList({ sheet, form }: SpellListProps) {
 
                 {/* Attribute selector — full width */}
                 <GlassSelector<string>
-                    value={spellcastingAttribute ?? ""}
-                    onChange={(v) => handlePatchSpellcasting(Array.isArray(v) ? v[0] || null : v || null)}
+                    value={spellcastingAttribute ?? undefined}
+                    onChange={(v) => {
+                        const next = Array.isArray(v) ? v[0] : v
+                        handlePatchSpellcasting(next === spellcastingAttribute ? null : next || null)
+                    }}
                     options={SPELL_CASTING_OPTIONS}
                     mode="single"
                     layout="grid"

@@ -1,8 +1,9 @@
 "use client"
 
 import { cn } from "@/core/utils"
+import { rarityColors } from "@/lib/config/colors"
+import type { UseFormWatch } from "react-hook-form"
 import { CalcTooltip } from "./calc-tooltip"
-import { SheetInput } from "./sheet-input"
 import { AttributeBlock, type SkillEntry } from "./attribute-block"
 import { CompactRichInput } from "./compact-rich-input"
 import { GlassCheckbox } from "./glass-checkbox"
@@ -16,7 +17,10 @@ const LEFT_ATTRIBUTES: AttributeType[] = ["strength", "dexterity", "constitution
 
 interface SheetLeftColumnProps {
     sheet: CharacterSheet
-    form: any
+    form: {
+        watch: UseFormWatch<PatchSheetBody>
+        patchField: (field: keyof PatchSheetBody, value: unknown) => void
+    }
 }
 
 export function SheetLeftColumn({ sheet, form }: SheetLeftColumnProps) {
@@ -101,16 +105,19 @@ export function SheetLeftColumn({ sheet, form }: SheetLeftColumnProps) {
                 className={cn(
                     "flex items-center gap-2 p-2 rounded-lg border cursor-pointer transition-all select-none",
                     currentValues.inspiration
-                        ? "border-amber-500/40 bg-amber-500/10"
+                        ? "border-cyan-500/40 bg-cyan-500/10"
                         : "border-white/10 bg-white/5 hover:border-white/20"
                 )}
                 onClick={() => patchField("inspiration", !currentValues.inspiration)}
             >
-                <Zap className={cn("w-4 h-4 flex-shrink-0", currentValues.inspiration ? "text-amber-400" : "text-white/30")} />
-                <span className={cn("text-[9px] font-black uppercase tracking-widest", currentValues.inspiration ? "text-amber-400" : "text-white/40")}>
+                <Zap className={cn("w-4 h-4 flex-shrink-0", currentValues.inspiration ? "text-cyan-400" : "text-white/30")} />
+                <span className={cn("text-[9px] font-black uppercase tracking-widest", currentValues.inspiration ? "text-cyan-400" : "text-white/40")}>
                     Inspiração Heroica
                 </span>
-                <div className={cn("ml-auto w-3 h-3 rotate-45 border transition-all", currentValues.inspiration ? "bg-amber-400 border-amber-400" : "bg-transparent border-white/30")} />
+                <div
+                    className={cn("ml-auto w-3 h-3 rotate-45 border transition-all", !currentValues.inspiration && "bg-transparent border-white/30")}
+                    style={currentValues.inspiration ? { backgroundColor: rarityColors.divine, borderColor: rarityColors.divine } : undefined}
+                />
             </div>
 
             {/* Treinamento em Equipamentos e Proficiências */}
@@ -161,4 +168,3 @@ export function SheetLeftColumn({ sheet, form }: SheetLeftColumnProps) {
         </div>
     )
 }
-

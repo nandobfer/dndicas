@@ -63,12 +63,13 @@ interface SkillGlassCheckboxProps {
     state: SkillCheckboxState
     onChange: (next: SkillCheckboxState) => void
     proficientColor?: string  // hex color for proficient state (attribute color)
+    expertiseColor?: string
     className?: string
     size?: "sm" | "md"
     disabled?: boolean
 }
 
-export const SkillGlassCheckbox = ({ state, onChange, proficientColor, className, size = "sm", disabled = false }: SkillGlassCheckboxProps) => {
+export const SkillGlassCheckbox = ({ state, onChange, proficientColor, expertiseColor = "#06b6d4", className, size = "sm", disabled = false }: SkillGlassCheckboxProps) => {
     const dim = size === "sm" ? "w-4 h-4" : "w-5 h-5"
 
     const handleClick = () => {
@@ -99,7 +100,7 @@ export const SkillGlassCheckbox = ({ state, onChange, proficientColor, className
                 state === 1 && proficientColor
                     ? { backgroundColor: proficientColor + "cc", borderColor: proficientColor }
                     : state === 2
-                    ? { backgroundColor: "#d97706cc", borderColor: "#d97706" }
+                    ? { backgroundColor: expertiseColor + "cc", borderColor: expertiseColor }
                     : undefined
             }
         >
@@ -124,7 +125,7 @@ export const SkillGlassCheckbox = ({ state, onChange, proficientColor, className
                         exit={{ scale: 0, opacity: 0 }}
                         transition={{ type: "spring", stiffness: 400, damping: 25 }}
                     >
-                        <Star size={8} className="text-amber-100 fill-amber-100" />
+                        <Star size={8} className="text-cyan-100 fill-cyan-100" />
                     </motion.span>
                 )}
             </AnimatePresence>

@@ -1,7 +1,7 @@
 "use client"
 
 import { cn } from "@/core/utils"
-import { attributeColors } from "@/lib/config/colors"
+import { attributeColors, rarityColors } from "@/lib/config/colors"
 import { CalcTooltip } from "./calc-tooltip"
 import { SheetInput } from "./sheet-input"
 import { GlassCheckbox, SkillGlassCheckbox, type SkillCheckboxState } from "./glass-checkbox"
@@ -153,6 +153,7 @@ export function AttributeBlock({
                                 state={toSkillState(skill.proficient, skill.expertise)}
                                 onChange={(next) => handleSkillStateChange(skill.name, next)}
                                 proficientColor={colors.hex}
+                                expertiseColor={rarityColors.divine}
                             />
                             <CalcTooltip formula={skill.formula}>
                                 <div className="flex items-center gap-1 cursor-help">

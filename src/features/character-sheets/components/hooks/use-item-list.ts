@@ -1,14 +1,15 @@
 "use client"
 
 import { useCallback } from "react"
+import type { UseFormWatch } from "react-hook-form"
 import { useItems, useAddItem, usePatchItem, useRemoveItem, usePatchSheet } from "../../api/character-sheets-queries"
-import type { CharacterSheet, CharacterItem } from "../../types/character-sheet.types"
+import type { CharacterSheet, CharacterItem, PatchSheetBody } from "../../types/character-sheet.types"
 
 interface UseItemListOptions {
     sheet: CharacterSheet
     form: {
-        watch: (field?: string) => any
-        patchField: (field: string, value: unknown) => void
+        watch: UseFormWatch<PatchSheetBody>
+        patchField: (field: keyof PatchSheetBody, value: unknown) => void
     }
 }
 

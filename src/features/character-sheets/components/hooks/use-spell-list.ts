@@ -1,15 +1,16 @@
 "use client"
 
 import { useCallback } from "react"
+import type { UseFormWatch } from "react-hook-form"
 import { useSheetSpells, useAddSpell, usePatchSpell, useRemoveSpell, usePatchSheet } from "../../api/character-sheets-queries"
 import { useCharacterCalculations } from "../../hooks/use-character-calculations"
-import type { CharacterSheet, CharacterSpell } from "../../types/character-sheet.types"
+import type { CharacterSheet, CharacterSpell, PatchSheetBody } from "../../types/character-sheet.types"
 
 interface UseSpellListOptions {
     sheet: CharacterSheet
     form: {
-        watch: (field?: string) => any
-        patchField: (field: string, value: unknown) => void
+        watch: UseFormWatch<PatchSheetBody>
+        patchField: (field: keyof PatchSheetBody, value: unknown) => void
     }
 }
 

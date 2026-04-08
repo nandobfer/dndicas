@@ -4,17 +4,32 @@
 
 import { SheetInput } from "./sheet-input"
 import { CompactRichInput } from "./compact-rich-input"
-import type { CharacterSheet } from "../types/character-sheet.types"
+import type { UseFormWatch } from "react-hook-form"
+import type { CharacterSheet, PatchSheetBody } from "../types/character-sheet.types"
 import { cn } from "@/core/utils"
 import { GlassCard, GlassCardContent } from "@/components/ui/glass-card"
+import { GlassSelector } from "@/components/ui/glass-selector"
+import { colors, diceColors, type DiceType } from "@/lib/config/colors"
+
+const HIT_DIE_OPTIONS: DiceType[] = ["d4", "d6", "d8", "d10", "d12"]
+const IDENTITY_FIELDS = [
+  { label: "Origem", field: "origin", placeholder: "@Sábio" },
+  { label: "Classe", field: "class", placeholder: "@Mago" },
+  { label: "Espécie", field: "race", placeholder: "@Elfo" },
+  { label: "Subclasse", field: "subclass", placeholder: "@Escola de Evocação" },
+] as const
 
 interface SheetHeaderProps {
     sheet: CharacterSheet
-    form: any // Using specific hook return type instead of UseFormReturn
+    form: {
+      watch: UseFormWatch<PatchSheetBody>
+      patchField: (field: keyof PatchSheetBody, value: unknown) => void
+    }
 }
 
 export function SheetHeader({ sheet, form }: SheetHeaderProps) {
   const { watch, patchField } = form
+  const hitDiceValue = (watch("hitDiceTotal") || "d8") as DiceType
 
   const handleDeathSaveToggle = (field: "deathSavesSuccess" | "deathSavesFailure", index: number) => {
     const current = watch(field) || 0
@@ -42,17 +57,12 @@ export function SheetHeader({ sheet, form }: SheetHeaderProps) {
 
           {/* Grid de Identidade */}
           <div className="grid grid-cols-2 gap-x-8 gap-y-2">
-            {[
-              { label: "Origem", field: "origin", placeholder: "@Sábio" },
-              { label: "Classe", field: "class", placeholder: "@Mago" },
-              { label: "Espécie", field: "race", placeholder: "@Elfo" },
-              { label: "Subclasse", field: "subclass", placeholder: "@Escola de Evocação" },
-            ].map((item) => (
+            {IDENTITY_FIELDS.map((item) => (
               <CompactRichInput
                 key={item.field}
                 label={item.label}
-                value={watch(item.field as any) || ""}
-                onChange={(val) => patchField(item.field as any, val)}
+                value={String(watch(item.field) || "")}
+                onChange={(val) => patchField(item.field, val)}
                 placeholder={item.placeholder}
                 excludeId={sheet._id}
               />
@@ -181,14 +191,23 @@ export function SheetHeader({ sheet, form }: SheetHeaderProps) {
       <GlassCard className="flex-[2] border-white/10 bg-white/[0.02] min-w-[200px]">
         <GlassCardContent className="p-0 flex flex-col h-full">
           <div className="flex-1 p-3 flex flex-col border-b border-white/10">
-            <SheetInput
-              compact
-              label="Dados de Vida (Total)"
-              value={watch("hitDiceTotal") || "d8"}
-              onChangeValue={(val) => patchField("hitDiceTotal", val)}
-              inputClassName="text-center text-xl py-1 bg-white/5 rounded-lg border border-white/5"
-              debounceMs={1000}
-            />
+            <div className="space-y-1.5">
+              <label className="text-[9px] font-black uppercase tracking-widest text-white/40 ml-1">Dado de Vida</label>
+              <GlassSelector<DiceType>
+                value={HIT_DIE_OPTIONS.includes(hitDiceValue) ? hitDiceValue : "d8"}
+                onChange={(val) => patchField("hitDiceTotal", Array.isArray(val) ? val[0] : val)}
+                options={HIT_DIE_OPTIONS.map((die) => ({
+                  value: die,
+                  label: die,
+                  activeColor: colors.rarity[diceColors[die].rarity],
+                  textColor: colors.rarity[diceColors[die].rarity],
+                }))}
+                layout="grid"
+                cols={3}
+                fullWidth
+                layoutId="sheet-hit-die"
+              />
+            </div>
             <div className="grid grid-cols-2 gap-2 mt-2">
               <SheetInput
                 compact
