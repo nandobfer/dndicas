@@ -4,6 +4,7 @@
 
 import { Search, Shield, Heart, Dice5, Skull, Zap } from "lucide-react"
 import { SheetInput } from "./sheet-input"
+import { CompactRichInput } from "./compact-rich-input"
 import { LongRestButton } from "./long-rest-button"
 import type { PatchSheetBody, CharacterSheet } from "../types/character-sheet.types"
 import { usePatchSheet } from "../api/character-sheets-queries"
@@ -46,20 +47,20 @@ export function SheetHeader({ sheet, form }: SheetHeaderProps) {
           />
 
           {/* Grid de Identidade */}
-          <div className="grid grid-cols-2 gap-x-8 gap-y-4">
+          <div className="grid grid-cols-2 gap-x-8 gap-y-2">
             {[
-              { label: "Antecedente", field: "origin" },
-              { label: "Classe", field: "class" },
-              { label: "Espécie", field: "race" },
-              { label: "Subclasse", field: "subclass" },
+              { label: "Origem", field: "origin", placeholder: "@Sábio" },
+              { label: "Classe", field: "class", placeholder: "@Mago" },
+              { label: "Espécie", field: "race", placeholder: "@Elfo" },
+              { label: "Subclasse", field: "subclass", placeholder: "@Escola de Evocação" },
             ].map((item) => (
-              <SheetInput
+              <CompactRichInput
                 key={item.field}
-                compact
                 label={item.label}
                 value={watch(item.field as any) || ""}
-                onChangeValue={(val) => patchField(item.field as any, val)}
-                debounceMs={1000}
+                onChange={(val) => patchField(item.field as any, val)}
+                placeholder={item.placeholder}
+                excludeId={sheet._id}
               />
             ))}
           </div>
@@ -74,6 +75,8 @@ export function SheetHeader({ sheet, form }: SheetHeaderProps) {
             <SheetInput
               type="number"
               label="Nível"
+              min={1}
+              max={20}
               value={watch("level") || 1}
               onChangeValue={(val) => patchField("level", parseInt(val) || 1)}
               showControls
@@ -194,7 +197,7 @@ export function SheetHeader({ sheet, form }: SheetHeaderProps) {
               />
               <div className="flex flex-col items-end pt-1 pr-1">
                 <label className="text-[8px] font-black uppercase text-white/30">Max</label>
-                <span className="text-white/40 text-[10px] font-bold">Total</span>
+                <span className="text-white/90 text-[10px] font-bold">{watch("level") || 1}</span>
               </div>
             </div>
           </div>

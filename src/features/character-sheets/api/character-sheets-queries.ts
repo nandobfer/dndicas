@@ -4,6 +4,7 @@ import { useInfiniteQuery, useQuery, useMutation, useQueryClient } from "@tansta
 import {
     fetchSheets,
     fetchSheet,
+    fetchSheetBySlug,
     createSheet,
     patchSheet,
     deleteSheet,
@@ -73,6 +74,15 @@ export function useSheet(id: string | null) {
         queryKey: sheetsKeys.detail(id ?? ""),
         queryFn: () => fetchSheet(id!),
         enabled: !!id,
+        staleTime: 60 * 1000,
+    })
+}
+
+export function useSheetBySlug(slug: string | null) {
+    return useQuery({
+        queryKey: [...sheetsKeys.details(), "slug", slug ?? ""],
+        queryFn: () => fetchSheetBySlug(slug!),
+        enabled: !!slug,
         staleTime: 60 * 1000,
     })
 }

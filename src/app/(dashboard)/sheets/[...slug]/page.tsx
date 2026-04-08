@@ -2,19 +2,19 @@
 
 import { use } from "react"
 import { notFound } from "next/navigation"
-import { useSheet } from "@/features/character-sheets/api/character-sheets-queries"
+import { useSheetBySlug } from "@/features/character-sheets/api/character-sheets-queries"
 import { SheetForm } from "@/features/character-sheets/components/sheet-form"
-import { extractIdFromSlug } from "@/features/character-sheets/utils/slug"
 import type { CharacterSheetFull } from "@/features/character-sheets/types/character-sheet.types"
 
 interface SheetPageProps {
-    params: Promise<{ slug: string }>
+    params: Promise<{ slug: string[] }>
 }
 
 export default function SheetPage({ params }: SheetPageProps) {
-    const { slug } = use(params)
-    const id = extractIdFromSlug(slug)
-    const { data, isLoading, isError } = useSheet(id)
+    const { slug: slugParts } = use(params)
+    const fullSlug = slugParts.join("/")
+
+    const { data, isLoading, isError } = useSheetBySlug(fullSlug)
 
     if (isLoading) {
         return <SheetPageSkeleton />

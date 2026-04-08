@@ -5,6 +5,7 @@ export interface ICharacterSheet extends Document {
     _id: mongoose.Types.ObjectId
     slug: string
     userId: string
+    username: string
     name: string
     class: string
     classRef: mongoose.Types.ObjectId | null
@@ -55,6 +56,14 @@ export interface ICharacterSheet extends Document {
     bonds: string
     flaws: string
     notes: string
+    // 2024 sheet fields
+    classFeatures: string
+    speciesTraits: string
+    featuresNotes: string
+    size: string
+    armorTraining: { light: boolean; medium: boolean; heavy: boolean; shields: boolean }
+    weaponProficiencies: string
+    toolProficiencies: string
     createdAt: Date
     updatedAt: Date
 }
@@ -63,6 +72,7 @@ const CharacterSheetSchema = new Schema<ICharacterSheet>(
     {
         slug: { type: String, required: true, unique: true, trim: true },
         userId: { type: String, required: true, trim: true, index: true },
+        username: { type: String, default: "", trim: true, index: true },
         name: { type: String, default: "", trim: true, maxlength: 100 },
         class: { type: String, default: "", trim: true, maxlength: 100 },
         classRef: { type: Schema.Types.ObjectId, ref: "Class", default: null },
@@ -131,6 +141,24 @@ const CharacterSheetSchema = new Schema<ICharacterSheet>(
         bonds: { type: String, default: "" },
         flaws: { type: String, default: "" },
         notes: { type: String, default: "" },
+        classFeatures: { type: String, default: "" },
+        speciesTraits: { type: String, default: "" },
+        featuresNotes: { type: String, default: "" },
+        size: { type: String, default: "" },
+        armorTraining: {
+            type: new Schema(
+                {
+                    light: { type: Boolean, default: false },
+                    medium: { type: Boolean, default: false },
+                    heavy: { type: Boolean, default: false },
+                    shields: { type: Boolean, default: false },
+                },
+                { _id: false }
+            ),
+            default: () => ({ light: false, medium: false, heavy: false, shields: false }),
+        },
+        weaponProficiencies: { type: String, default: "" },
+        toolProficiencies: { type: String, default: "" },
     },
     { timestamps: true }
 )

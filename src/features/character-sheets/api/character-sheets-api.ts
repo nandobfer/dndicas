@@ -43,6 +43,9 @@ export const fetchSheets = (params: { page?: number; limit?: number; search?: st
 export const fetchSheet = (id: string): Promise<CharacterSheetFull> =>
     fetch(`${API_BASE}/${id}`).then(handleResponse<CharacterSheetFull>)
 
+export const fetchSheetBySlug = (slug: string): Promise<CharacterSheetFull> =>
+    fetch(`${API_BASE}/by-slug?slug=${encodeURIComponent(slug)}`).then(handleResponse<CharacterSheetFull>)
+
 export const createSheet = (): Promise<CharacterSheet> =>
     fetch(API_BASE, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({}) })
         .then(handleResponse<CharacterSheet>)

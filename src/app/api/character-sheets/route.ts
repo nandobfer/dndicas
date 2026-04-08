@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
-import { auth } from "@clerk/nextjs/server"
+import { auth, currentUser } from "@clerk/nextjs/server"
 import { getAllUserSheets, createBlankSheet } from "@/features/character-sheets/api/character-sheets-service"
 
 export async function GET(req: NextRequest) {
@@ -25,7 +25,10 @@ export async function POST() {
         const { userId } = await auth()
         if (!userId) return NextResponse.json({ error: "Não autorizado" }, { status: 401 })
 
-        const sheet = await createBlankSheet(userId)
+        const user = await currentUser()
+        const username = user?.username || user?.firstName?.toLowerCase() || userId
+
+        const sheet = await createBlankSheet(userId, username)
         return NextResponse.json(sheet, { status: 201 })
     } catch (error) {
         console.error("[API] POST /api/character-sheets error:", error)
