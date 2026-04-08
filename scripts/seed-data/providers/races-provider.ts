@@ -688,11 +688,17 @@ export class RacesProvider extends BaseProvider<FiveEToolsRace, CreateRaceInput>
             ];
 
             term('\n');
-            const choice = await new Promise<number>((resolve) => {
-                term.singleColumnMenu(menuItems, (_, response) => {
-                    resolve(response.selectedIndex);
+            const choice = await new Promise<number | null>((resolve) => {
+                term.singleColumnMenu(menuItems, { cancelable: true }, (_, response) => {
+                    resolve(response.canceled ? null : response.selectedIndex);
                 });
             });
+
+            if (choice === null) {
+                term.dim(`  → Pulada.\n`);
+                resolved.push(trait);
+                continue;
+            }
 
             if (choice === 0) {
                 const created = await Trait.create({
@@ -792,11 +798,17 @@ export class RacesProvider extends BaseProvider<FiveEToolsRace, CreateRaceInput>
 
                 const menuItems = results.map((r, i) => `[${i + 1}] "${r.name}" (circle ${r.circle})`);
                 term('\n');
-                const choice = await new Promise<number>((resolve) => {
-                    term.singleColumnMenu(menuItems, (_, response) => {
-                        resolve(response.selectedIndex);
+                const choice = await new Promise<number | null>((resolve) => {
+                    term.singleColumnMenu(menuItems, { cancelable: true }, (_, response) => {
+                        resolve(response.canceled ? null : response.selectedIndex);
                     });
                 });
+
+                if (choice === null) {
+                    term.dim(`  → Pulada.\n`);
+                    continue;
+                }
+
                 picked = results[choice];
                 term.green(`  ✓ Selecionada: "${picked.name}"\n`);
             }
