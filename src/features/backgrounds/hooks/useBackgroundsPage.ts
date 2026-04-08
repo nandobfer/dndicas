@@ -54,9 +54,10 @@ export function useBackgroundsPage() {
     const [suggestedAttributes, setSuggestedAttributes] = React.useState<string[]>([])
     const [skillProficiencies, setSkillProficiencies] = React.useState<string[]>([])
     const [featIds, setFeatIds] = React.useState<string[]>([])
+    const [sources, setSources] = React.useState<string[]>([])
 
     // Only server-filterable fields go to the API
-    const serverFilters = { search, status }
+    const serverFilters = { search, status, sources: sources.length > 0 ? sources : undefined }
 
     const tableData = useBackgrounds(serverFilters, 1, 100)
     const infiniteData = useInfiniteBackgrounds(serverFilters)
@@ -84,6 +85,7 @@ export function useBackgroundsPage() {
     const handleAttributesChange = (attrs: string[]) => setSuggestedAttributes(attrs)
     const handleSkillsChange = (skills: string[]) => setSkillProficiencies(skills)
     const handleFeatsChange = (ids: string[]) => setFeatIds(ids)
+    const handleSourcesChange = (value: string[]) => setSources(value)
 
     const handleCreateClick = () => {
         setSelectedBackground(null)
@@ -118,6 +120,7 @@ export function useBackgroundsPage() {
             suggestedAttributes,
             skillProficiencies,
             featIds,
+            sources,
         },
         data: {
             backgrounds:
@@ -134,6 +137,7 @@ export function useBackgroundsPage() {
             handleAttributesChange,
             handleSkillsChange,
             handleFeatsChange,
+            handleSourcesChange,
             handleCreateClick,
             handleEditClick,
             handleDeleteClick,

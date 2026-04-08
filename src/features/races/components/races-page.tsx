@@ -57,7 +57,7 @@ export function RacesPage() {
             {/* Filters Panel */}
             <GlassCard>
                 <GlassCardContent className="py-4">
-                    <RaceFilters filters={filters} onSearchChange={actions.handleSearchChange} onStatusChange={actions.handleStatusChange} isSearching={data.isLoading} />
+                    <RaceFilters filters={filters} onSearchChange={actions.handleSearchChange} onStatusChange={actions.handleStatusChange} onSourcesChange={actions.handleSourcesChange} isSearching={data.isLoading} />
                 </GlassCardContent>
             </GlassCard>
 

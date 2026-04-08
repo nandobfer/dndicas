@@ -61,6 +61,12 @@ export async function listSpells(filters: SpellsFilters, page = 1, limit = 10, i
             query.$or = [{ "baseDice.tipo": { $in: filters.diceTypes } }, { "extraDicePerLevel.tipo": { $in: filters.diceTypes } }]
         }
 
+        // Source filter (prefix match against book name)
+        if (filters.sources && filters.sources.length > 0) {
+            const escapeRegex = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+            query.source = { $in: filters.sources.map(s => new RegExp(`^${escapeRegex(s)}`, 'i')) }
+        }
+
         // Status filter
         if (!isAdmin) {
             query.status = "active"

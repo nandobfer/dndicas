@@ -22,6 +22,7 @@ export async function fetchClasses(
     if (params.search) query.append("search", params.search)
     if (params.hitDice && params.hitDice.length > 0) query.append("hitDice", params.hitDice.join(","))
     if (params.spellcasting && params.spellcasting.length > 0) query.append("spellcasting", params.spellcasting.join(","))
+    if (params.sources && params.sources.length > 0) query.append("sources", params.sources.join(","))
     if (params.status) query.append("status", params.status)
 
     const res = await fetch(`${API_URL}?${query.toString()}`)

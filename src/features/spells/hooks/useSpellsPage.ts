@@ -16,7 +16,7 @@ export function useSpellsPage() {
     const { viewMode, setViewMode, isTable, isDefault } = useViewMode()
 
     // Filters logic from existing hook
-    const { filters, search, setSearch, setStatus, setCircles, setSchools, setSaveAttributes, setDiceTypes, circleMode, setCircleMode, setPage } = useSpellFilters()
+    const { filters, search, setSearch, setStatus, setCircles, setSchools, setSaveAttributes, setDiceTypes, setSources, circleMode, setCircleMode, setPage } = useSpellFilters()
 
     /**
      * Data Fetching
@@ -84,6 +84,7 @@ export function useSpellsPage() {
         (filters.schools && filters.schools.length > 0) ||
         (filters.saveAttributes && filters.saveAttributes.length > 0) ||
         (filters.diceTypes && filters.diceTypes.length > 0) ||
+        (filters.sources && filters.sources.length > 0) ||
         (filters.status && filters.status !== "all")
 
     return {
@@ -124,6 +125,7 @@ export function useSpellsPage() {
             handleSchoolsChange: setSchools,
             handleAttributesChange: setSaveAttributes,
             handleDiceTypesChange: setDiceTypes,
+            handleSourcesChange: setSources,
             handleCreateClick,
             handleEditClick,
             handleDeleteClick,

@@ -11,6 +11,7 @@ export async function fetchItems(params: ItemFilterParams = {}): Promise<ItemsRe
     if (params.type && params.type !== "all") query.append("type", params.type)
     if (params.rarity && params.rarity !== "all") query.append("rarity", params.rarity)
     if (params.status && params.status !== "all") query.append("status", params.status)
+    if (params.sources && params.sources.length > 0) query.append("sources", params.sources.join(","))
 
     const res = await fetch(`${API_URL}?${query.toString()}`)
     if (!res.ok) {

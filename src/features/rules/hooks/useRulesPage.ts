@@ -19,6 +19,7 @@ export function useRulesPage() {
     const [page, setPage] = React.useState(1)
     const [search, setSearch] = React.useState("")
     const [status, setStatus] = React.useState<RulesFilters["status"]>("all")
+    const [sources, setSources] = React.useState<string[]>([])
 
     // Debounced search
     const debouncedSearch = useDebounce(search, 500)
@@ -28,9 +29,10 @@ export function useRulesPage() {
         () => ({
             search: debouncedSearch,
             status,
+            sources: sources.length > 0 ? sources : undefined,
             limit: 10,
         }),
-        [debouncedSearch, status],
+        [debouncedSearch, status, sources],
     )
 
     /**
@@ -64,6 +66,11 @@ export function useRulesPage() {
 
     const handleStatusChange = (value: RulesFilters["status"]) => {
         setStatus(value)
+        setPage(1)
+    }
+
+    const handleSourcesChange = (value: string[]) => {
+        setSources(value)
         setPage(1)
     }
 
@@ -108,7 +115,7 @@ export function useRulesPage() {
         viewMode,
         setViewMode,
         isDefault,
-        filters: { search, status },
+        filters: { search, status, sources },
         pagination: {
             page,
             setPage,
@@ -133,6 +140,7 @@ export function useRulesPage() {
         actions: {
             handleSearchChange,
             handleStatusChange,
+            handleSourcesChange,
             handleCreateClick,
             handleEditClick,
             handleDeleteClick,

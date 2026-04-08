@@ -25,6 +25,7 @@ export interface UpdateTraitInput extends Partial<Omit<CreateTraitInput, 'name'>
 export interface TraitFilterParams {
     search?: string
     status?: "active" | "inactive" | "all"
+    sources?: string[] // Multi-select: book name prefixes
     page?: number
     limit?: number
 }

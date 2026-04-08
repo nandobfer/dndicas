@@ -24,6 +24,7 @@ export function useFeatsPage() {
     const [levelMax, setLevelMax] = React.useState<number | undefined>(undefined)
     const [attributes, setAttributes] = React.useState<string[]>([])
     const [categories, setCategories] = React.useState<FeatCategory[]>([])
+    const [sources, setSources] = React.useState<string[]>([])
 
     // Debounced search
     const debouncedSearch = useDebounce(search, 500)
@@ -37,9 +38,10 @@ export function useFeatsPage() {
             levelMax,
             attributes,
             categories,
+            sources: sources.length > 0 ? sources : undefined,
             limit: 10,
         }),
-        [debouncedSearch, status, level, levelMax, attributes, categories],
+        [debouncedSearch, status, level, levelMax, attributes, categories, sources],
     )
 
     /**
@@ -97,6 +99,11 @@ export function useFeatsPage() {
 
     const handleCategoriesChange = (val: FeatCategory[]) => {
         setCategories(val)
+        setPage(1)
+    }
+
+    const handleSourcesChange = (val: string[]) => {
+        setSources(val)
         setPage(1)
     }
 
@@ -159,6 +166,7 @@ export function useFeatsPage() {
             levelMax,
             attributes,
             categories,
+            sources,
         },
         pagination: {
             page,
@@ -187,6 +195,7 @@ export function useFeatsPage() {
             handleLevelChange,
             handleAttributesChange,
             handleCategoriesChange,
+            handleSourcesChange,
             handleCreateClick,
             handleEditClick,
             handleDeleteClick,

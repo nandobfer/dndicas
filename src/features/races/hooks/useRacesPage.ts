@@ -16,8 +16,9 @@ export function useRacesPage() {
 
     const [search, setSearch] = React.useState("")
     const [status, setStatus] = React.useState<"active" | "inactive" | "all">("all")
+    const [sources, setSources] = React.useState<string[]>([])
 
-    const filters = { search, status }
+    const filters = { search, status, sources: sources.length > 0 ? sources : undefined }
 
     const tableData = useRaces(filters, 1, 100)
     const infiniteData = useInfiniteRaces(filters)
@@ -28,6 +29,7 @@ export function useRacesPage() {
 
     const handleSearchChange = (value: string) => setSearch(value)
     const handleStatusChange = (value: "active" | "inactive" | "all") => setStatus(value)
+    const handleSourcesChange = (value: string[]) => setSources(value)
 
     const handleCreateClick = () => {
         setSelectedRace(null)
@@ -59,6 +61,8 @@ export function useRacesPage() {
             setSearch,
             status,
             setStatus,
+            sources,
+            setSources,
         },
         data: {
             races: viewMode === "table" ? tableData.data?.items || [] : infiniteData.data?.pages.flatMap((p) => p.items) || [],
@@ -71,6 +75,7 @@ export function useRacesPage() {
         actions: {
             handleSearchChange,
             handleStatusChange,
+            handleSourcesChange,
             handleCreateClick,
             handleEditClick,
             handleDeleteClick,

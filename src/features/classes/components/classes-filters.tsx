@@ -5,28 +5,36 @@ import { StatusChips, type StatusFilter } from "@/components/ui/status-chips"
 import { useAuth } from "@/core/hooks/useAuth"
 import { cn } from "@/core/utils"
 import type { ClassesFilters } from "../types/classes.types"
+import { SourceFilter } from "@/components/ui/source-filter"
 
 export interface ClassesFiltersProps {
     filters: ClassesFilters & { search?: string }
     onSearchChange: (search: string) => void
     onStatusChange: (status: ClassesFilters["status"]) => void
+    onSourcesChange: (sources: string[]) => void
     isSearching?: boolean
     className?: string
 }
 
-export function ClassesFilters({ filters, onSearchChange, onStatusChange, isSearching = false, className }: ClassesFiltersProps) {
+export function ClassesFilters({ filters, onSearchChange, onStatusChange, onSourcesChange, isSearching = false, className }: ClassesFiltersProps) {
     const { isAdmin } = useAuth()
 
     return (
         <div className={cn("flex flex-col gap-4", className)}>
-            {/* Top Row: Search + Status */}
             <div className="flex flex-col lg:flex-row lg:items-center gap-4 justify-between">
-                <div className="flex-1 w-full lg:max-w-sm">
-                    <SearchInput
-                        value={filters.search || ""}
-                        onChange={onSearchChange}
-                        isLoading={isSearching}
-                        placeholder="Buscar classes por nome ou descrição..."
+                <div className="flex flex-col sm:flex-row sm:items-center gap-4 flex-1">
+                    <div className="flex-1 w-full lg:max-w-sm">
+                        <SearchInput
+                            value={filters.search || ""}
+                            onChange={onSearchChange}
+                            isLoading={isSearching}
+                            placeholder="Buscar classes por nome ou descrição..."
+                        />
+                    </div>
+                    <SourceFilter
+                        value={filters.sources || []}
+                        onChange={onSourcesChange}
+                        entityType="classes"
                     />
                 </div>
 

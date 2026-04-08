@@ -59,6 +59,7 @@ export function TraitsPage() {
                         filters={{ search: filters.search, status: filters.status }}
                         onSearchChange={actions.handleSearchChange}
                         onStatusChange={actions.handleStatusChange}
+                        onSourcesChange={actions.handleSourcesChange}
                         isSearching={data.paginated.isFetching || data.infinite.isFetching}
                     />
                 </GlassCardContent>

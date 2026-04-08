@@ -69,6 +69,7 @@ export function FeatsPage() {
                         onLevelChange={actions.handleLevelChange}
                         onAttributesChange={actions.handleAttributesChange}
                         onCategoriesChange={actions.handleCategoriesChange}
+                        onSourcesChange={actions.handleSourcesChange}
                         isSearching={data.paginated.isFetching || data.infinite.isFetching}
                     />
                 </GlassCardContent>

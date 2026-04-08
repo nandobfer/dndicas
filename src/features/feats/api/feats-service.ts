@@ -62,6 +62,11 @@ export async function listFeats(
       query.category = { $in: filters.categories };
     }
 
+    if (filters.sources && filters.sources.length > 0) {
+      const escapeRegex = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+      query.source = { $in: filters.sources.map(s => new RegExp(`^${escapeRegex(s)}`, 'i')) }
+    }
+
     const items = await Feat.find(query as unknown as Parameters<typeof Feat.find>[0])
       .sort({ createdAt: -1 })
       .lean();
