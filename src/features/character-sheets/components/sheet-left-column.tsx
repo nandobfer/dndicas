@@ -19,13 +19,14 @@ interface SheetLeftColumnProps {
     sheet: CharacterSheet
     form: {
         watch: UseFormWatch<PatchSheetBody>
+        setFieldLocally: (field: keyof PatchSheetBody, value: unknown) => void
         patchField: (field: keyof PatchSheetBody, value: unknown) => void
     }
     isReadOnly?: boolean
 }
 
 export function SheetLeftColumn({ sheet, form, isReadOnly = false }: SheetLeftColumnProps) {
-    const { watch, patchField } = form
+    const { watch, setFieldLocally, patchField } = form
     const currentValues = watch()
     const currentSheet = { ...sheet, ...currentValues } as CharacterSheet
     const calc = useCharacterCalculations(currentSheet)
@@ -48,6 +49,8 @@ export function SheetLeftColumn({ sheet, form, isReadOnly = false }: SheetLeftCo
                     expertise: skillData.expertise,
                     value: calc.skills[skill]?.value ?? 0,
                     formula: calc.skills[skill]?.formula ?? "",
+                    parts: calc.skills[skill]?.parts,
+                    result: calc.skills[skill]?.result,
                 }
             })
 
@@ -99,7 +102,7 @@ export function SheetLeftColumn({ sheet, form, isReadOnly = false }: SheetLeftCo
             {/* Proficiency Bonus */}
             <div className="flex items-center justify-between p-2 rounded-lg bg-white/5 border border-white/10">
                 <span className="text-[9px] font-black uppercase tracking-widest text-white/40">Bônus de Proficiência</span>
-                <CalcTooltip formula={calc.profBonus.formula}>
+                <CalcTooltip formula={calc.profBonus.formula} parts={calc.profBonus.parts} result={calc.profBonus.result}>
                     <span className="text-lg font-black text-white/90">{formatMod(calc.profBonus.value)}</span>
                 </CalcTooltip>
             </div>
@@ -113,10 +116,14 @@ export function SheetLeftColumn({ sheet, form, isReadOnly = false }: SheetLeftCo
                     onValueChange={(v) => patchField(attrKey as keyof PatchSheetBody, v)}
                     modifier={calc.attrMods[attrKey].value}
                     modifierFormula={calc.attrMods[attrKey].formula}
+                    modifierParts={calc.attrMods[attrKey].parts}
+                    modifierResult={calc.attrMods[attrKey].result}
                     savingThrow={{
                         proficient: !!(currentSheet.savingThrows as Record<string, boolean> | undefined)?.[attrKey],
                         value: calc.savingThrows[attrKey].value,
                         formula: calc.savingThrows[attrKey].formula,
+                        parts: calc.savingThrows[attrKey].parts,
+                        result: calc.savingThrows[attrKey].result,
                     }}
                     onSavingThrowToggle={() => handleSavingThrowToggle(attrKey)}
                     skills={getSkillsForAttribute(attrKey)}
@@ -157,7 +164,8 @@ export function SheetLeftColumn({ sheet, form, isReadOnly = false }: SheetLeftCo
                     <CompactRichInput
                         label="Armas"
                         value={currentValues.weaponProficiencies ?? sheet.weaponProficiencies ?? ""}
-                        onChange={(v) => patchField("weaponProficiencies" as keyof PatchSheetBody, v)}
+                        onChange={(v) => setFieldLocally("weaponProficiencies" as keyof PatchSheetBody, v)}
+                        onBlur={(v) => patchField("weaponProficiencies" as keyof PatchSheetBody, v)}
                         placeholder="Proficiências com armas..."
                         isLoading={isLoading}
                         disabled={isReadOnly}
@@ -167,7 +175,8 @@ export function SheetLeftColumn({ sheet, form, isReadOnly = false }: SheetLeftCo
                     <CompactRichInput
                         label="Ferramentas"
                         value={currentValues.toolProficiencies ?? sheet.toolProficiencies ?? ""}
-                        onChange={(v) => patchField("toolProficiencies" as keyof PatchSheetBody, v)}
+                        onChange={(v) => setFieldLocally("toolProficiencies" as keyof PatchSheetBody, v)}
+                        onBlur={(v) => patchField("toolProficiencies" as keyof PatchSheetBody, v)}
                         placeholder="Proficiências com ferramentas..."
                         isLoading={isLoading}
                         disabled={isReadOnly}

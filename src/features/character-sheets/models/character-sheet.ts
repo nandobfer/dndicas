@@ -45,6 +45,7 @@ export interface ICharacterSheet extends Document {
     deathSavesSuccess: number
     deathSavesFailure: number
     armorClassOverride: number | null
+    armorClassBonus: number | null
     initiativeOverride: number | null
     passivePerceptionOverride: number | null
     spellcastingAttribute: string | null
@@ -128,6 +129,7 @@ const CharacterSheetSchema = new Schema<ICharacterSheet>(
         deathSavesSuccess: { type: Number, default: 0, min: 0, max: 3 },
         deathSavesFailure: { type: Number, default: 0, min: 0, max: 3 },
         armorClassOverride: { type: Number, default: null },
+        armorClassBonus: { type: Number, default: null },
         initiativeOverride: { type: Number, default: null },
         passivePerceptionOverride: { type: Number, default: null },
         spellcastingAttribute: { type: String, default: null },

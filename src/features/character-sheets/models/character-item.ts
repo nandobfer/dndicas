@@ -8,6 +8,12 @@ export interface ICharacterItem extends Document {
     image: string | null
     quantity: number
     notes: string
+    equipped: boolean
+    catalogItemType: string | null
+    catalogAc: number | null
+    catalogAcType: "base" | "bonus" | null
+    catalogArmorType: "leve" | "média" | "pesada" | null
+    catalogAcBonus: number | null
     createdAt: Date
 }
 
@@ -19,6 +25,12 @@ const CharacterItemSchema = new Schema<ICharacterItem>(
         image: { type: String, default: null },
         quantity: { type: Number, default: 1, min: 0 },
         notes: { type: String, default: "" },
+        equipped: { type: Boolean, default: false },
+        catalogItemType: { type: String, default: null },
+        catalogAc: { type: Number, default: null },
+        catalogAcType: { type: String, default: null },
+        catalogArmorType: { type: String, default: null },
+        catalogAcBonus: { type: Number, default: null },
     },
     { timestamps: { createdAt: true, updatedAt: false } }
 )

@@ -4,6 +4,8 @@ import { z } from "zod"
 
 export type AttributeType = "strength" | "dexterity" | "constitution" | "intelligence" | "wisdom" | "charisma"
 
+export type ArmorTraining = { light: boolean; medium: boolean; heavy: boolean; shields: boolean }
+
 export type SkillName =
     | "Acrobacia"
     | "Arcanismo"
@@ -76,6 +78,7 @@ export interface CharacterSheet {
     deathSavesSuccess: number
     deathSavesFailure: number
     armorClassOverride: number | null
+    armorClassBonus: number | null
     initiativeOverride: number | null
     passivePerceptionOverride: number | null
     // Spellcasting
@@ -96,7 +99,7 @@ export interface CharacterSheet {
     speciesTraits: string
     featuresNotes: string
     size: string
-    armorTraining: { light: boolean; medium: boolean; heavy: boolean; shields: boolean }
+    armorTraining: ArmorTraining
     weaponProficiencies: string
     toolProficiencies: string
     createdAt: string
@@ -111,6 +114,12 @@ export interface CharacterItem {
     image: string | null
     quantity: number
     notes: string
+    equipped: boolean
+    catalogItemType: string | null
+    catalogAc: number | null
+    catalogAcType: "base" | "bonus" | null
+    catalogArmorType: "leve" | "média" | "pesada" | null
+    catalogAcBonus: number | null
     createdAt: string
 }
 
@@ -197,6 +206,12 @@ export interface PatchItemBody {
     name?: string
     quantity?: number
     notes?: string
+    equipped?: boolean
+    catalogItemType?: string | null
+    catalogAc?: number | null
+    catalogAcType?: "base" | "bonus" | null
+    catalogArmorType?: "leve" | "média" | "pesada" | null
+    catalogAcBonus?: number | null
 }
 
 export interface CreateSpellBody {
@@ -297,6 +312,7 @@ export const PatchSheetSchema = z.object({
     deathSavesSuccess: z.number().int().min(0).max(3).optional(),
     deathSavesFailure: z.number().int().min(0).max(3).optional(),
     armorClassOverride: z.number().int().nullable().optional(),
+    armorClassBonus: z.number().int().nullable().optional(),
     initiativeOverride: z.number().int().nullable().optional(),
     passivePerceptionOverride: z.number().int().nullable().optional(),
     spellcastingAttribute: z.string().nullable().optional(),
@@ -330,11 +346,17 @@ export const PatchItemSchema = z.object({
     name: z.string().min(1).max(2000).optional(),
     quantity: z.number().int().min(0).optional(),
     notes: z.string().optional(),
+    equipped: z.boolean().optional(),
+    catalogItemType: z.string().nullable().optional(),
+    catalogAc: z.number().nullable().optional(),
+    catalogAcType: z.enum(["base", "bonus"]).nullable().optional(),
+    catalogArmorType: z.enum(["leve", "média", "pesada"]).nullable().optional(),
+    catalogAcBonus: z.number().nullable().optional(),
 })
 
 export const CreateSpellSchema = z.object({
     catalogSpellId: z.string().optional(),
-    name: z.string().min(1).max(100),
+    name: z.string().min(1).max(2000),
     circle: z.number().int().min(0).max(9).optional(),
     school: z.string().optional(),
     image: z.string().url().nullable().optional(),
@@ -349,7 +371,7 @@ export const CreateSpellSchema = z.object({
 })
 
 export const PatchSpellSchema = z.object({
-    name: z.string().min(1).max(100).optional(),
+    name: z.string().min(1).max(2000).optional(),
     circle: z.number().int().min(0).max(9).optional(),
     prepared: z.boolean().optional(),
     castingTime: z.string().optional(),
