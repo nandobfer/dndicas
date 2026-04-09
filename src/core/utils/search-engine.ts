@@ -11,7 +11,7 @@ export interface UnifiedEntity {
     _id?: string
     name: string
     label?: string // For compatibility
-    type: "Regra" | "Magia" | "Habilidade" | "Talento" | "Classe" | "Origem" | "Raça" | "Item"
+    type: "Regra" | "Magia" | "Habilidade" | "Talento" | "Classe" | "Subclasse" | "Origem" | "Raça" | "Item"
     description?: string
     source?: string
     status: "active" | "inactive"
@@ -72,7 +72,7 @@ async function getSearchData(): Promise<UnifiedEntity[]> {
             else if (data.races) rawItems = data.races
             else if (data.data) rawItems = data.data // Fallback para padrões comuns
 
-            return rawItems.map(provider.map)
+            return rawItems.flatMap((item) => provider.map(item))
         } catch (err) {
             console.error(`Fetch failed for ${provider.name}:`, err)
             return []

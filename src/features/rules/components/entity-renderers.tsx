@@ -3,30 +3,43 @@ import { RulePreview, TraitPreview } from "@/features/rules/components/entity-pr
 import { FeatPreview } from "@/features/feats/components/feat-preview"
 import { SpellPreview } from "@/features/spells/components/spell-preview"
 import { ClassPreview } from "@/features/classes/components/class-preview"
+import { SubclassPreview } from "@/features/classes/components/subclass-preview"
 import { BackgroundPreview } from "@/features/backgrounds/components/background-preview"
 import { RacePreview } from "@/features/races/components/race-preview"
 import { ItemPreview } from "@/features/items/components/item-preview"
 import { fetchTraitById } from "@/features/traits/api/traits-api"
 import { fetchSpell } from "@/features/spells/api/spells-api"
 import { fetchFeat } from "@/features/feats/api/feats-api"
-import { getClassById } from "@/features/classes/api/classes-service"
 import { fetchItemById } from "@/features/items/api/items-api"
 import { LoadingState } from "@/components/ui/loading-state"
 import { Wand, GraduationCap, Star, Backpack, ScrollText } from "lucide-react"
+import type { CharacterClass as CharacterClassType } from "@/features/classes/types/classes.types"
 
 /**
  * Registry of renderers for different entity types.
  * T042: Shared entity renderer configuration for EntityList and GlassWindow.
  */
-export const ENTITY_RENDERERS: Record<string, (item: any, options?: { showStatus?: boolean; hideStatusChip?: boolean; hideActionIcons?: boolean }) => React.ReactNode> = {
+export const ENTITY_RENDERERS: Record<string, (item: any, options?: { showStatus?: boolean; hideStatusChip?: boolean; hideActionIcons?: boolean; initialSelectedSubclassIds?: string[] }) => React.ReactNode> = {
     Regra: (idOrItem, opts) => <RuleAsyncRenderer item={idOrItem} showStatus={opts?.showStatus ?? false} />,
     Habilidade: (id, opts) => <TraitAsyncRenderer id={id} showStatus={opts?.showStatus ?? true} hideStatusChip={opts?.hideStatusChip} hideActionIcons={opts?.hideActionIcons} />,
     Talento: (idOrItem, opts) => <FeatAsyncRenderer item={idOrItem} showStatus={opts?.showStatus ?? true} hideStatusChip={opts?.hideStatusChip} hideActionIcons={opts?.hideActionIcons} />,
     Magia: (idOrItem, opts) => <SpellAsyncRenderer item={idOrItem} showStatus={opts?.showStatus ?? true} hideStatusChip={opts?.hideStatusChip} hideActionIcons={opts?.hideActionIcons} />,
     Classe: (idOrItem, opts) => <ClassAsyncRenderer item={idOrItem} showStatus={opts?.showStatus ?? true} />,
+    Subclasse: (idOrItem, opts) => <SubclassAsyncRenderer item={idOrItem} showStatus={opts?.showStatus ?? true} />,
     Origem: (idOrItem, opts) => <BackgroundAsyncRenderer item={idOrItem} />,
     Raça: (idOrItem, opts) => <RaceAsyncRenderer item={idOrItem} />,
     Item: (idOrItem, opts) => <ItemAsyncRenderer item={idOrItem} showStatus={opts?.showStatus ?? true} hideStatusChip={opts?.hideStatusChip} hideActionIcons={opts?.hideActionIcons} />,
+}
+
+function parseSubclassSearchId(id: string) {
+    const match = /^subclass:([^:]+):(.+)$/.exec(id)
+    if (!match) return null
+    return { parentClassId: match[1], subclassId: match[2] }
+}
+
+function findSubclassPayload(characterClass: CharacterClassType | any, subclassId?: string, subclassName?: string) {
+    const subclasses = characterClass?.subclasses || []
+    return subclasses.find((sub: any) => String(sub._id || sub.name) === subclassId || sub.name === subclassName) || null
 }
 
 function RuleAsyncRenderer({ item, showStatus = true }: { item: any; showStatus?: boolean }) {
@@ -213,7 +226,7 @@ function SpellAsyncRenderer({ item, showStatus = true, hideStatusChip, hideActio
     )
 }
 
-function ClassAsyncRenderer({ item, showStatus = true }: { item: any; showStatus?: boolean }) {
+function ClassAsyncRenderer({ item, showStatus = true, initialSelectedSubclassIds }: { item: any; showStatus?: boolean; initialSelectedSubclassIds?: string[] }) {
     const [characterClass, setCharacterClass] = React.useState<any>(null)
     const [loading, setLoading] = React.useState(true)
 
@@ -259,7 +272,66 @@ function ClassAsyncRenderer({ item, showStatus = true }: { item: any; showStatus
 
     return (
         <div className="p-4">
-            <ClassPreview characterClass={characterClass} showStatus={showStatus} />
+            <ClassPreview characterClass={characterClass} showStatus={showStatus} initialSelectedSubclassIds={initialSelectedSubclassIds} />
+        </div>
+    )
+}
+
+function SubclassAsyncRenderer({ item, showStatus = true }: { item: any; showStatus?: boolean }) {
+    const [characterClass, setCharacterClass] = React.useState<any>(null)
+    const [subclass, setSubclass] = React.useState<any>(null)
+    const [loading, setLoading] = React.useState(true)
+
+    const metadata = typeof item === "object" ? item?.metadata : undefined
+    const rawId = typeof item === "string" ? item : item?._id || item?.id
+    const parsed = typeof rawId === "string" ? parseSubclassSearchId(rawId) : null
+    const parentClassId = metadata?.parentClassId || parsed?.parentClassId
+    const subclassId = metadata?.subclassId || parsed?.subclassId
+    const subclassName = metadata?.subclassName || item?.name
+
+    React.useEffect(() => {
+        if (!parentClassId) {
+            setLoading(false)
+            return
+        }
+
+        if (item && typeof item === "object" && item.metadata?.parentClass && item.metadata?.subclass) {
+            setCharacterClass(item.metadata.parentClass)
+            setSubclass(item.metadata.subclass)
+            setLoading(false)
+            return
+        }
+
+        fetch(`/api/classes/${parentClassId}`)
+            .then((res) => res.json())
+            .then((data) => {
+                setCharacterClass(data)
+                setSubclass(findSubclassPayload(data, subclassId, subclassName))
+            })
+            .catch(console.error)
+            .finally(() => setLoading(false))
+    }, [item, parentClassId, subclassId, subclassName])
+
+    if (loading)
+        return (
+            <div className="p-8 flex flex-col items-center justify-center gap-3 bg-white/[0.02] rounded-xl border border-white/5 animate-in fade-in duration-300">
+                <LoadingState variant="spinner" size="md" />
+                <span className="text-[10px] uppercase font-bold tracking-widest text-white/20">Buscando Subclasse...</span>
+            </div>
+        )
+    if (!characterClass || !subclass)
+        return (
+            <div className="p-8 text-center bg-purple-500/5 rounded-xl border border-dashed border-purple-500/20 flex flex-col items-center justify-center gap-2">
+                <div className="p-2 rounded-full bg-purple-500/10 text-purple-400">
+                    <GraduationCap className="h-4 w-4" />
+                </div>
+                <p className="text-xs text-purple-400/60 italic">Subclasse não encontrada no catálogo.</p>
+            </div>
+        )
+
+    return (
+        <div className="p-4">
+            <SubclassPreview subclass={subclass} parentClassName={characterClass.name} linkToParentClass />
         </div>
     )
 }
@@ -408,7 +480,7 @@ function RaceAsyncRenderer({ item }: { item: any }) {
 }
 
 
-export const renderEntity = (item: any, entityType: string, options?: { showStatus?: boolean; hideStatusChip?: boolean; hideActionIcons?: boolean }) => {
+export const renderEntity = (item: any, entityType: string, options?: { showStatus?: boolean; hideStatusChip?: boolean; hideActionIcons?: boolean; initialSelectedSubclassIds?: string[] }) => {
     const type = entityType === "Mixed" ? item.type : entityType
     const renderer = ENTITY_RENDERERS[type]
     return renderer ? renderer(item, options) : <div>{item.name || "Unknown item"}</div>
