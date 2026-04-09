@@ -36,6 +36,9 @@ interface SheetHeaderProps {
 export function SheetHeader({ sheet, form, isReadOnly = false }: SheetHeaderProps) {
   const { watch, patchField } = form
   const hitDiceValue = (watch("hitDiceTotal") || "d8") as DiceType
+  const hpCurrent = watch("hpCurrent") ?? 0
+  const hpTemp = watch("hpTemp") ?? 0
+  const hpMax = watch("hpMax") ?? 0
   const classRef = watch("classRef") ?? sheet.classRef
   const subclassRef = watch("subclassRef") ?? sheet.subclassRef
   const { data: currentClass } = useClass(classRef ?? null)
@@ -72,6 +75,13 @@ export function SheetHeader({ sheet, form, isReadOnly = false }: SheetHeaderProp
     if (closeTimeoutRef.current) clearTimeout(closeTimeoutRef.current)
     closeTimeoutRef.current = setTimeout(() => setIsProgressionOpen(false), 120)
   }
+
+  const hpCurrentWidth = hpMax > 0
+    ? `${Math.max(0, Math.min(100, (hpCurrent / hpMax) * 100))}%`
+    : "0%"
+  const hpTempWidth = hpMax > 0
+    ? `${Math.max(0, Math.min(100, (hpTemp / hpMax) * 100))}%`
+    : "0%"
 
   return (
     <div className="flex flex-col lg:flex-row items-stretch gap-2 w-full">
@@ -211,18 +221,20 @@ export function SheetHeader({ sheet, form, isReadOnly = false }: SheetHeaderProp
             <div className="absolute top-0 left-0 right-0 h-0.5 overflow-hidden">
               <div
                 className="h-full bg-gradient-to-r from-green-500/70 to-green-400/40 transition-all duration-300"
-                style={{
-                  width: (watch("hpMax") ?? 0) > 0
-                    ? `${Math.max(0, Math.min(100, ((watch("hpCurrent") ?? 0) / (watch("hpMax") ?? 1)) * 100))}%`
-                    : "0%",
-                }}
+                style={{ width: hpCurrentWidth }}
+              />
+            </div>
+            <div className="absolute top-[5px] left-0 right-0 h-0.5 overflow-hidden">
+              <div
+                className="h-full transition-all duration-300"
+                style={{ width: hpTempWidth, backgroundColor: colors.rarity.divine }}
               />
             </div>
             <div className="flex-[2] flex flex-col p-4 items-center justify-center relative">
               <SheetInput
                 type="number"
                 label="Atual"
-                value={watch("hpCurrent") || 0}
+                value={hpCurrent}
                 onChangeValue={(val) => patchField("hpCurrent", parseInt(val) || 0)}
                 showControls
                 min={0}
@@ -238,7 +250,7 @@ export function SheetHeader({ sheet, form, isReadOnly = false }: SheetHeaderProp
                 compact
                 type="number"
                 label="Temp"
-                value={watch("hpTemp") || 0}
+                value={hpTemp}
                 onChangeValue={(val) => patchField("hpTemp", parseInt(val) || 0)}
                 showControls
                 inputClassName="text-center text-lg h-8"
@@ -250,7 +262,7 @@ export function SheetHeader({ sheet, form, isReadOnly = false }: SheetHeaderProp
                 compact
                 type="number"
                 label="Máximo"
-                value={watch("hpMax") || 0}
+                value={hpMax}
                 onChangeValue={(val) => patchField("hpMax", parseInt(val) || 0)}
                 showControls
                 inputClassName="text-center text-lg h-8"
