@@ -10,6 +10,7 @@ interface UseSheetAutoSaveOptions {
     disabled?: boolean
 }
 
+
 export function useSheetAutoSave(sheet: CharacterSheet, options?: UseSheetAutoSaveOptions) {
     const { mutate: patch, isPending } = usePatchSheet(sheet?._id)
 
@@ -25,6 +26,17 @@ export function useSheetAutoSave(sheet: CharacterSheet, options?: UseSheetAutoSa
             reset(sheet as PatchSheetBody)
         }
     }, [sheet?._id, reset]) // eslint-disable-line react-hooks/exhaustive-deps
+
+    /**
+     * Update local form state only — no server request. Use this for text inputs
+     * that save on blur via `patchField`.
+     */
+    const setFieldLocally = useCallback(
+        (field: keyof PatchSheetBody, value: unknown) => {
+            setValue(field, value as PatchSheetBody[typeof field], { shouldDirty: true, shouldTouch: true })
+        },
+        [setValue]
+    )
 
     /**
      * Patch a single field. This is used by debounced inputs like SheetInput.
@@ -57,6 +69,9 @@ export function useSheetAutoSave(sheet: CharacterSheet, options?: UseSheetAutoSa
     const patchFields = useCallback(
         (values: Partial<PatchSheetBody>) => {
             if (options?.disabled) return
+            // No trimming here — patchFields is used by the mention sync which generates
+            // clean HTML internally. Trimming would cause a value mismatch on the next
+            // sync cycle and create an infinite re-patch loop.
             const entries = Object.entries(values) as Array<[keyof PatchSheetBody, PatchSheetBody[keyof PatchSheetBody]]>
             if (entries.length === 0) return
 
@@ -79,8 +94,10 @@ export function useSheetAutoSave(sheet: CharacterSheet, options?: UseSheetAutoSa
 
     return {
         ...form,
+        setFieldLocally,
         patchField,
         patchFields,
         isSaving: isPending
     }
 }
+

@@ -23,7 +23,7 @@ const CharacterSpellSchema = new Schema<ICharacterSpell>(
     {
         sheetId: { type: Schema.Types.ObjectId, ref: "CharacterSheet", required: true, index: true },
         catalogSpellId: { type: Schema.Types.ObjectId, ref: "Spell", default: null },
-        name: { type: String, required: true, trim: true, maxlength: 100 },
+        name: { type: String, required: true, trim: true, maxlength: 2000 },
         circle: { type: Number, default: 0, min: 0, max: 9 },
         school: { type: String, default: "" },
         image: { type: String, default: null },

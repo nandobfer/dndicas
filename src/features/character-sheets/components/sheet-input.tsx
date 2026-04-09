@@ -9,6 +9,7 @@ interface SheetInputProps extends React.InputHTMLAttributes<HTMLInputElement> {
     label?: string
     compact?: boolean
     isLoading?: boolean
+    /** @deprecated No longer used — text saves on blur, steppers save immediately. */
     debounceMs?: number
     onChangeValue?: (value: string) => void
     onActionClick?: (e: React.MouseEvent) => void
@@ -19,11 +20,10 @@ interface SheetInputProps extends React.InputHTMLAttributes<HTMLInputElement> {
 }
 
 export const SheetInput = React.forwardRef<HTMLInputElement, SheetInputProps>(
-    ({ label, compact = false, className, inputClassName, isLoading, debounceMs = 0, onChangeValue, value, onActionClick, icon, showControls = false, min, max, readOnlyMode = false, disabled, readOnly, ...props }, ref) => {
+    ({ label, compact = false, className, inputClassName, isLoading, onChangeValue, value, onActionClick, icon, showControls = false, min, max, readOnlyMode = false, disabled, readOnly, ...props }, ref) => {
         const isNonInteractive = !!disabled || !!readOnly || readOnlyMode
         const [localValue, setLocalValue] = React.useState(String(value ?? ""))
         const lastValidRef = React.useRef(String(value ?? ""))
-        const timeoutRef = React.useRef<NodeJS.Timeout | null>(null)
 
         React.useEffect(() => {
             const newStr = String(value ?? "")
@@ -34,36 +34,21 @@ export const SheetInput = React.forwardRef<HTMLInputElement, SheetInputProps>(
             }
         }, [value]) // eslint-disable-line react-hooks/exhaustive-deps
 
-        const triggerChange = (val: string) => {
-            if (timeoutRef.current) clearTimeout(timeoutRef.current)
-
-            if (debounceMs > 0) {
-                timeoutRef.current = setTimeout(() => {
-                    onChangeValue?.(val)
-                }, debounceMs)
-            } else {
-                onChangeValue?.(val)
-            }
-        }
-
         const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
             if (isNonInteractive) return
             const val = e.target.value
             setLocalValue(val)
 
-            // For number inputs, don't commit empty/partial values — wait for blur
             if (props.type === "number" || props.inputMode === "numeric") {
                 const num = parseFloat(val)
-                if (val === "" || isNaN(num)) return
+                if (!val || isNaN(num)) return
                 const minNum = min !== undefined ? Number(min) : undefined
                 const maxNum = max !== undefined ? Number(max) : undefined
                 if (minNum !== undefined && num < minNum) return
                 if (maxNum !== undefined && num > maxNum) return
                 lastValidRef.current = String(num)
-                triggerChange(String(num))
             } else {
                 lastValidRef.current = val
-                triggerChange(val)
             }
         }
 
@@ -86,16 +71,19 @@ export const SheetInput = React.forwardRef<HTMLInputElement, SheetInputProps>(
                     const clamped = String(minNum)
                     setLocalValue(clamped)
                     lastValidRef.current = clamped
-                    triggerChange(clamped)
+                    onChangeValue?.(clamped)
                     return
                 }
                 if (maxNum !== undefined && num > maxNum) {
                     const clamped = String(maxNum)
                     setLocalValue(clamped)
                     lastValidRef.current = clamped
-                    triggerChange(clamped)
+                    onChangeValue?.(clamped)
                     return
                 }
+                onChangeValue?.(String(num))
+            } else {
+                onChangeValue?.(val)
             }
             props.onBlur?.(e)
         }
@@ -111,7 +99,7 @@ export const SheetInput = React.forwardRef<HTMLInputElement, SheetInputProps>(
             const newVal = String(next)
             setLocalValue(newVal)
             lastValidRef.current = newVal
-            triggerChange(newVal)
+            onChangeValue?.(newVal)
         }
 
         return (

@@ -94,6 +94,7 @@ export function SpellList({ sheet, form, isReadOnly = false }: SpellListProps) {
         spellAttackBonus,
         handleAddSpell,
         handlePatchSpell,
+        handleSpellNameChange,
         handleRemoveSpell,
         handlePatchSpellSlot,
         handlePatchSpellcasting,
@@ -141,14 +142,14 @@ export function SpellList({ sheet, form, isReadOnly = false }: SpellListProps) {
 
                 {/* Save DC + Attack Bonus */}
                 <div className="grid grid-cols-2 gap-3">
-                    <CalcTooltip formula={spellSaveDC.formula}>
+                    <CalcTooltip formula={spellSaveDC.formula} parts={spellSaveDC.parts} result={spellSaveDC.result}>
                         <div className="flex flex-col items-center gap-0.5 cursor-help">
                             <span className="text-xl font-black text-white">{spellSaveDC.value}</span>
                             <span className="text-[8px] font-black uppercase tracking-widest text-white/30">CD de Magia</span>
                         </div>
                     </CalcTooltip>
 
-                    <CalcTooltip formula={spellAttackBonus.formula}>
+                    <CalcTooltip formula={spellAttackBonus.formula} parts={spellAttackBonus.parts} result={spellAttackBonus.result}>
                         <div className="flex flex-col items-center gap-0.5 cursor-help">
                             <span className="text-xl font-black text-white">{formatMod(spellAttackBonus.value)}</span>
                             <span className="text-[8px] font-black uppercase tracking-widest text-white/30">Atq de Magia</span>
@@ -217,9 +218,9 @@ export function SpellList({ sheet, form, isReadOnly = false }: SpellListProps) {
                             {/* Name */}
                             <CompactRichInput
                                 value={spell.name}
-                                onChange={(v) => handlePatchSpell(spell._id, { name: v || "Magia" })}
+                                onChange={() => {}}
+                                onBlur={(v) => handleSpellNameChange(spell._id, v || "Magia")}
                                 placeholder="Nome da magia"
-                                debounceMs={800}
                                 excludeId={sheet._id}
                                 disabled={isReadOnly}
                             />
@@ -227,9 +228,9 @@ export function SpellList({ sheet, form, isReadOnly = false }: SpellListProps) {
                             {/* Casting time */}
                             <CompactRichInput
                                 value={spell.castingTime ?? ""}
-                                onChange={(v) => handlePatchSpell(spell._id, { castingTime: v })}
+                                onChange={() => {}}
+                                onBlur={(v) => handlePatchSpell(spell._id, { castingTime: v })}
                                 placeholder="ação"
-                                debounceMs={800}
                                 excludeId={sheet._id}
                                 disabled={isReadOnly}
                             />
@@ -237,9 +238,9 @@ export function SpellList({ sheet, form, isReadOnly = false }: SpellListProps) {
                             {/* Range */}
                             <CompactRichInput
                                 value={spell.range ?? ""}
-                                onChange={(v) => handlePatchSpell(spell._id, { range: v })}
+                                onChange={() => {}}
+                                onBlur={(v) => handlePatchSpell(spell._id, { range: v })}
                                 placeholder="18 m"
-                                debounceMs={800}
                                 excludeId={sheet._id}
                                 disabled={isReadOnly}
                             />

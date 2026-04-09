@@ -7,10 +7,9 @@ import { fetchClass } from "@/features/classes/api/classes-api"
 import type { CharacterClass } from "@/features/classes/types/classes.types"
 import { fetchFeat } from "@/features/feats/api/feats-api"
 import { fetchRace } from "@/features/races/api/races-api"
-import type { AttributeType, CharacterSheet, PatchSheetBody, SkillName } from "../types/character-sheet.types"
+import type { AttributeType, ArmorTraining, CharacterSheet, PatchSheetBody, SkillName } from "../types/character-sheet.types"
 import {
     appendMentionsToHtml,
-    applySkillProficiencies,
     collectMentionsFromClasses,
     collectMentionsFromRaces,
     collectMentionsFromSubclasses,
@@ -43,16 +42,33 @@ interface DerivedMentionState {
     classMentions: ParsedMention[]
     subclassMentions: ParsedMention[]
     raceMentions: ParsedMention[]
+    raceIds: string[]
     backgroundFeatMentions: ParsedMention[]
-    savingThrows: Partial<Record<AttributeType, boolean>>
+    /** Saving throw attributes contributed by active classes */
+    classSavingThrowAttributes: AttributeType[]
+    /** Armor proficiency strings contributed by active classes (e.g. "Armaduras Leves") */
+    classArmorProficiencies: string[]
+    /** Skill proficiency names contributed by active backgrounds */
+    backgroundSkillProficiencies: SkillName[]
 }
 
 const EMPTY_DERIVED_STATE: DerivedMentionState = {
     classMentions: [],
     subclassMentions: [],
     raceMentions: [],
+    raceIds: [],
     backgroundFeatMentions: [],
-    savingThrows: {},
+    classSavingThrowAttributes: [],
+    classArmorProficiencies: [],
+    backgroundSkillProficiencies: [],
+}
+
+/** Maps Portuguese armor proficiency strings to ArmorTraining keys */
+const ARMOR_PROF_KEY: Partial<Record<string, keyof ArmorTraining>> = {
+    "Armaduras Leves": "light",
+    "Armaduras Médias": "medium",
+    "Armaduras Pesadas": "heavy",
+    "Escudos": "shields",
 }
 
 export function useSheetMentionSync({ sheet, form, isReadOnly = false }: UseSheetMentionSyncProps) {
@@ -70,6 +86,8 @@ export function useSheetMentionSync({ sheet, form, isReadOnly = false }: UseShee
     const currentSavingThrows = watch("savingThrows") ?? sheet.savingThrows
     const currentSpellSlots = watch("spellSlots") ?? sheet.spellSlots
     const currentHitDiceTotal = watch("hitDiceTotal") ?? sheet.hitDiceTotal ?? null
+    const currentMovementSpeed = watch("movementSpeed") ?? sheet.movementSpeed ?? ""
+    const currentSize = watch("size") ?? sheet.size ?? ""
     const watchedClassRef = watch("classRef")
     const watchedSubclassRef = watch("subclassRef")
     const watchedRaceRef = watch("raceRef")
@@ -78,22 +96,45 @@ export function useSheetMentionSync({ sheet, form, isReadOnly = false }: UseShee
     const currentSpellcastingAttribute = watchedSpellcastingAttribute === undefined
         ? (sheet.spellcastingAttribute ?? null)
         : watchedSpellcastingAttribute
+    const currentArmorTraining = watch("armorTraining") ?? sheet.armorTraining
+    const currentWeaponProficiencies = watch("weaponProficiencies") ?? sheet.weaponProficiencies ?? ""
 
     const previousDerivedRef = useRef<DerivedMentionState>(EMPTY_DERIVED_STATE)
     const requestIdRef = useRef(0)
     const hasInitializedRef = useRef(false)
     const previousTriggerRef = useRef("")
 
+    // Use refs for values that are read inside the effect but should NOT re-trigger it.
+    const patchFieldsRef = useRef(patchFields)
+    patchFieldsRef.current = patchFields
+
+    const armorTrainingRef = useRef(currentArmorTraining)
+    armorTrainingRef.current = currentArmorTraining
+
+    const weaponProfsRef = useRef(currentWeaponProficiencies)
+    weaponProfsRef.current = currentWeaponProficiencies
+
+    const currentSavingThrowsRef = useRef(currentSavingThrows)
+    currentSavingThrowsRef.current = currentSavingThrows
+
+    const currentSkillsRef = useRef(currentSkills)
+    currentSkillsRef.current = currentSkills
+
+    // Ownership tracking: only remove what THIS sync session set to true.
+    const syncContributedSavingThrowsRef = useRef<Set<AttributeType>>(new Set())
+    const syncContributedArmorRef = useRef<Set<keyof ArmorTraining>>(new Set())
+    const syncContributedSkillsRef = useRef<Set<SkillName>>(new Set())
+
     useEffect(() => {
         if (isReadOnly) return
 
-        const triggerKey = JSON.stringify({
-            classValue,
-            subclassValue,
-            raceValue,
-            originValue,
-            level,
-        })
+        // Build triggerKey from mention IDs only — not full HTML —
+        // so the expensive async resolution only runs when actual mentions change.
+        const classIds = getActiveClassMentions(classValue).map(m => m.id).sort().join(",")
+        const subclassIds = getActiveSubclassMentions(subclassValue).map(m => m.id).sort().join(",")
+        const raceIds = getActiveRaceMentions(raceValue).map(m => m.id).sort().join(",")
+        const bgIds = getActiveBackgroundMentions(originValue).map(m => m.id).sort().join(",")
+        const triggerKey = `${classIds}||${subclassIds}||${raceIds}||${bgIds}||${level}`
 
         if (hasInitializedRef.current && previousTriggerRef.current === triggerKey) {
             return
@@ -114,8 +155,8 @@ export function useSheetMentionSync({ sheet, form, isReadOnly = false }: UseShee
             }
 
             const nextDerived = resolved.derived
-
             const previousDerived = previousDerivedRef.current
+
             const classFeatureDiff = diffMentions(
                 [...previousDerived.classMentions, ...previousDerived.subclassMentions],
                 [...nextDerived.classMentions, ...nextDerived.subclassMentions]
@@ -123,19 +164,18 @@ export function useSheetMentionSync({ sheet, form, isReadOnly = false }: UseShee
             const speciesTraitDiff = diffMentions(previousDerived.raceMentions, nextDerived.raceMentions)
             const featDiff = diffMentions(previousDerived.backgroundFeatMentions, nextDerived.backgroundFeatMentions)
 
+            // Diff race IDs to detect newly added races
+            const previousRaceIds = new Set(previousDerived.raceIds)
+            const addedRaceIds = nextDerived.raceIds.filter((id) => !previousRaceIds.has(id))
+
             const nextClassFeatures = appendMentionsToHtml(
-                removeMentionsFromHtml(
-                    classFeatures,
-                    classFeatureDiff.removed
-                ),
+                removeMentionsFromHtml(classFeatures, classFeatureDiff.removed),
                 classFeatureDiff.added
             )
-
             const nextSpeciesTraits = appendMentionsToHtml(
                 removeMentionsFromHtml(speciesTraits, speciesTraitDiff.removed),
                 speciesTraitDiff.added
             )
-
             const nextFeaturesNotes = appendMentionsToHtml(
                 removeMentionsFromHtml(featuresNotes, featDiff.removed),
                 featDiff.added
@@ -176,32 +216,135 @@ export function useSheetMentionSync({ sheet, form, isReadOnly = false }: UseShee
                 assignIfChanged(patch, "hitDiceTotal", nextHitDice, currentHitDiceTotal)
             }
 
-            if (resolved.activeBackgrounds.length > 0) {
-                const backgroundSkills = dedupeSkillNames(resolved.activeBackgrounds.flatMap((background) => background.skillProficiencies ?? []))
-                const nextSkills = applySkillProficiencies(currentSkills, backgroundSkills)
-                assignIfChanged(patch, "skills", nextSkills, currentSkills)
+            // ── Saving throws (class-contributed, ownership-aware) ──────────────
+            const prevSavingThrowAttrs = new Set(previousDerived.classSavingThrowAttributes)
+            const nextSavingThrowAttrs = new Set(nextDerived.classSavingThrowAttributes)
+
+            const addedSavingThrowAttrs = nextDerived.classSavingThrowAttributes.filter(a => !prevSavingThrowAttrs.has(a))
+            const removedSavingThrowAttrs = previousDerived.classSavingThrowAttributes.filter(a => !nextSavingThrowAttrs.has(a))
+
+            let nextSavingThrows = { ...(currentSavingThrowsRef.current ?? {}) } as Record<AttributeType, boolean>
+            let savingThrowsChanged = false
+
+            for (const attr of addedSavingThrowAttrs) {
+                if (!nextSavingThrows[attr]) {
+                    nextSavingThrows[attr] = true
+                    syncContributedSavingThrowsRef.current.add(attr)
+                    savingThrowsChanged = true
+                }
             }
-            if (Object.keys(nextDerived.savingThrows).length > 0) {
-                const nextSavingThrows = {
-                    ...(currentSavingThrows ?? {}),
-                    ...nextDerived.savingThrows,
-                } as PatchSheetBody["savingThrows"]
-                assignIfChanged(patch, "savingThrows", nextSavingThrows, currentSavingThrows)
+            for (const attr of removedSavingThrowAttrs) {
+                if (syncContributedSavingThrowsRef.current.has(attr)) {
+                    nextSavingThrows[attr] = false
+                    savingThrowsChanged = true
+                }
+                syncContributedSavingThrowsRef.current.delete(attr)
+            }
+            if (savingThrowsChanged) {
+                assignIfChanged(patch, "savingThrows", nextSavingThrows as PatchSheetBody["savingThrows"], currentSavingThrowsRef.current)
             }
 
             assignIfChanged(patch, "spellcastingAttribute", nextSpellcastingAttribute, currentSpellcastingAttribute)
             assignIfChanged(patch, "spellSlots", nextSpellSlots, currentSpellSlots)
 
+            // ── Armor training (class-contributed, ownership-aware) ─────────────
+            const prevArmorProfs = new Set(previousDerived.classArmorProficiencies)
+            const nextArmorProfs = new Set(nextDerived.classArmorProficiencies)
+
+            const addedArmorProfs = nextDerived.classArmorProficiencies.filter(p => !prevArmorProfs.has(p))
+            const removedArmorProfs = previousDerived.classArmorProficiencies.filter(p => !nextArmorProfs.has(p))
+
+            const armorTraining = armorTrainingRef.current
+            let nextArmorTraining = { ...armorTraining } as ArmorTraining
+            let armorChanged = false
+
+            for (const prof of addedArmorProfs) {
+                const key = ARMOR_PROF_KEY[prof]
+                if (key && !nextArmorTraining[key]) {
+                    nextArmorTraining[key] = true
+                    syncContributedArmorRef.current.add(key)
+                    armorChanged = true
+                }
+            }
+            for (const prof of removedArmorProfs) {
+                const key = ARMOR_PROF_KEY[prof]
+                if (key && syncContributedArmorRef.current.has(key)) {
+                    nextArmorTraining[key] = false
+                    armorChanged = true
+                }
+                if (key) syncContributedArmorRef.current.delete(key)
+            }
+            if (armorChanged) {
+                assignIfChanged(patch, "armorTraining", nextArmorTraining, armorTraining)
+            }
+
+            // ── Weapon proficiencies — only add when the field is currently empty ──
+            const weaponProfs = weaponProfsRef.current
+            if (!weaponProfs.trim()) {
+                const classWeaponProfs = resolved.activeClasses.flatMap((c) => c.weaponProficiencies ?? [])
+                if (classWeaponProfs.length > 0) {
+                    assignIfChanged(patch, "weaponProficiencies", classWeaponProfs.join(", "), weaponProfs)
+                }
+            }
+
+            // ── Background skill proficiencies (ownership-aware) ────────────────
+            const prevBgSkills = new Set(previousDerived.backgroundSkillProficiencies)
+            const nextBgSkills = new Set(nextDerived.backgroundSkillProficiencies)
+
+            const addedBgSkills = nextDerived.backgroundSkillProficiencies.filter(s => !prevBgSkills.has(s))
+            const removedBgSkills = previousDerived.backgroundSkillProficiencies.filter(s => !nextBgSkills.has(s))
+
+            let nextSkills = { ...(currentSkillsRef.current ?? {}) } as Record<SkillName, { proficient: boolean; expertise: boolean }>
+            let skillsChanged = false
+
+            for (const skill of addedBgSkills) {
+                if (!nextSkills[skill]?.proficient) {
+                    nextSkills[skill] = { ...(nextSkills[skill] ?? { proficient: false, expertise: false }), proficient: true }
+                    syncContributedSkillsRef.current.add(skill)
+                    skillsChanged = true
+                }
+            }
+            for (const skill of removedBgSkills) {
+                if (syncContributedSkillsRef.current.has(skill)) {
+                    nextSkills[skill] = { ...(nextSkills[skill] ?? { proficient: false, expertise: false }), proficient: false }
+                    skillsChanged = true
+                }
+                syncContributedSkillsRef.current.delete(skill)
+            }
+            if (skillsChanged) {
+                assignIfChanged(patch, "skills", nextSkills as PatchSheetBody["skills"], currentSkillsRef.current)
+            }
+
+            // ── Populate movementSpeed and size from newly added races ───────────
+            if (addedRaceIds.length > 0) {
+                const addedRace = resolved.activeRaces.find((r) => addedRaceIds.includes(String(r._id)))
+                if (addedRace) {
+                    if (addedRace.speed) {
+                        assignIfChanged(patch, "movementSpeed", addedRace.speed, currentMovementSpeed as PatchSheetBody["movementSpeed"])
+                    }
+                    if (addedRace.size) {
+                        assignIfChanged(patch, "size", addedRace.size, currentSize as PatchSheetBody["size"])
+                    }
+                }
+            }
+
             previousDerivedRef.current = nextDerived
             previousTriggerRef.current = triggerKey
 
             if (Object.keys(patch).length > 0) {
-                patchFields(patch)
+                // Include source identity fields so server always receives source + derived together.
+                patch.class = classValue
+                patch.subclass = subclassValue
+                patch.race = raceValue
+                patch.origin = originValue
+                patchFieldsRef.current(patch)
             }
         })()
     }, [
         classFeatures,
         classValue,
+        currentMovementSpeed,
+        currentSize,
         currentSkills,
         currentSavingThrows,
         currentSpellSlots,
@@ -211,11 +354,12 @@ export function useSheetMentionSync({ sheet, form, isReadOnly = false }: UseShee
         isReadOnly,
         level,
         originValue,
-        patchFields,
         raceValue,
         sheet.classRef,
+        sheet.movementSpeed,
         sheet.originRef,
         sheet.raceRef,
+        sheet.size,
         sheet.spellSlots,
         sheet.spellcastingAttribute,
         sheet.subclassRef,
@@ -226,6 +370,10 @@ export function useSheetMentionSync({ sheet, form, isReadOnly = false }: UseShee
         watchedRaceRef,
         watchedSpellcastingAttribute,
         watchedSubclassRef,
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+        // patchFields, currentArmorTraining, currentWeaponProficiencies,
+        // currentSavingThrowsRef, currentSkillsRef are intentionally excluded —
+        // accessed via refs to prevent race conditions with requestId.
     ])
 }
 
@@ -276,6 +424,10 @@ function isSpellcastingClass(characterClass: CharacterClass) {
 
 function isSpellcastingSubclass(subclass: ResolvedSubclass) {
     return !!(subclass.entity.spellcasting || subclass.entity.spellcastingAttribute || subclass.entity.progressionTable?.spellSlots)
+}
+
+function dedupeStrings(items: string[]): string[] {
+    return Array.from(new Set(items))
 }
 
 function dedupeSkillNames(skills: string[]): SkillName[] {
@@ -374,6 +526,24 @@ async function resolveSheetSyncState(
         })
     )).flat())
 
+    const classSavingThrowAttributes = dedupeStrings(
+        activeClasses.flatMap((c) =>
+            (c.savingThrows ?? [])
+                .map(mapCatalogAttributeToSheetAttribute)
+                .filter((a): a is AttributeType => !!a)
+        )
+    ) as AttributeType[]
+
+    const classArmorProficiencies = dedupeStrings(
+        activeClasses
+            .flatMap((c) => c.armorProficiencies ?? [])
+            .filter((p) => p !== "Nenhuma")
+    )
+
+    const backgroundSkillProficiencies = dedupeSkillNames(
+        activeBackgrounds.flatMap((b) => b.skillProficiencies ?? [])
+    )
+
     return {
         activeClasses,
         activeSubclasses,
@@ -383,15 +553,11 @@ async function resolveSheetSyncState(
             classMentions: collectMentionsFromClasses(activeClasses, level),
             subclassMentions: collectMentionsFromSubclasses(activeSubclasses, level),
             raceMentions: collectMentionsFromRaces(activeRaces, level),
+            raceIds: activeRaces.map((r) => String(r._id)),
             backgroundFeatMentions,
-            savingThrows: Object.fromEntries(
-                activeClasses.flatMap((characterClass) =>
-                    (characterClass.savingThrows ?? [])
-                        .map(mapCatalogAttributeToSheetAttribute)
-                        .filter((attribute): attribute is AttributeType => !!attribute)
-                        .map((attribute) => [attribute, true] as const)
-                )
-            ),
+            classSavingThrowAttributes,
+            classArmorProficiencies,
+            backgroundSkillProficiencies,
         } satisfies DerivedMentionState,
     }
 }

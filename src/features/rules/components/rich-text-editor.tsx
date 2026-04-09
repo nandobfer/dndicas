@@ -316,9 +316,25 @@ const CustomMention = Mention.extend({
     },
 })
 
+// ─── DisableNewlinesExtension ─────────────────────────────────────────────────
+// Blocks Enter (new paragraph) when disableNewlines is active.
+// Priority 50 is intentionally lower than the default (100) so that the
+// CustomMention suggestion plugin — which runs at higher priority — can handle
+// Enter first (e.g. selecting from the dropdown) before this extension blocks it.
+const DisableNewlinesExtension = Extension.create({
+    name: "disableNewlines",
+    priority: 50,
+    addKeyboardShortcuts() {
+        return {
+            Enter: () => true,
+        }
+    },
+})
+
 interface RichTextEditorProps {
     value: string
     onChange: (value: string) => void
+    onBlur?: () => void
     placeholder?: string
     className?: string
     disabled?: boolean
@@ -326,6 +342,8 @@ interface RichTextEditorProps {
     variant?: "full" | "simple"
     autoFocus?: boolean
     minRows?: number
+    disableNewlines?: boolean
+    blurOnMentionSelect?: boolean
 }
 
 const MenuBar = ({ editor, addImage, disabled = false }: { editor: Editor | null; addImage: () => void; disabled?: boolean }) => {
@@ -412,7 +430,7 @@ const MenuBar = ({ editor, addImage, disabled = false }: { editor: Editor | null
     )
 }
 
-export function RichTextEditor({ value, onChange, className, disabled = false, excludeId, variant = "full", autoFocus = false, placeholder, minRows }: RichTextEditorProps) {
+export function RichTextEditor({ value, onChange, onBlur, className, disabled = false, excludeId, variant = "full", autoFocus = false, placeholder, minRows, disableNewlines = false, blurOnMentionSelect = false }: RichTextEditorProps) {
     const [isUploading, setIsUploading] = useState(false)
 
     const uploadImage = useCallback(async (file: File) => {
@@ -451,15 +469,19 @@ export function RichTextEditor({ value, onChange, className, disabled = false, e
                 placeholder: placeholder ?? "Digite '@' para referenciar habilidades, magias, etc.",
             }),
             CustomMention.configure({
-                suggestion: getSuggestionConfig({ excludeId }),
+                suggestion: getSuggestionConfig({ excludeId, blurOnMentionSelect }),
             }),
             DiceHighlight,
             DiceValueNode,
+            ...(disableNewlines ? [DisableNewlinesExtension] : []),
         ],
         content: value,
         editable: !disabled,
         onUpdate: ({ editor }) => {
             onChange(editor.getHTML())
+        },
+        onBlur: () => {
+            onBlur?.()
         },
         editorProps: {
             attributes: {
@@ -573,14 +595,14 @@ export function RichTextEditor({ value, onChange, className, disabled = false, e
 
     // Update content if value changes externally
     useEffect(() => {
-        if (editor && value && value !== editor.getHTML()) {
-            // Avoid cursor jumps validation
+        if (editor && value !== editor.getHTML()) {
+            // No-op: both editor and incoming value are empty — avoids redundant setContent
             if (editor.getText() === "" && (value === "<p></p>" || value === "")) return
             if (!editor.isFocused) {
                 // Ensure the update happens outside the current rendering cycle to avoid flushSync errors
                 setTimeout(() => {
                     if (editor && !editor.isDestroyed) {
-                        editor.commands.setContent(value)
+                        editor.commands.setContent(value ?? "")
                     }
                 }, 0)
             }

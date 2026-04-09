@@ -1,23 +1,80 @@
 "use client"
 
-import { GlassTooltip, GlassTooltipTrigger, GlassTooltipContent } from "@/components/ui/glass-tooltip"
+import { useState, useCallback } from "react"
+import { createPortal } from "react-dom"
 import { cn } from "@/core/utils"
+import { GlassBackdrop } from "@/components/ui/glass-backdrop"
+import type { CalcPart } from "../utils/dnd-calculations"
+
+// Attribute colors match attributeColors in src/lib/config/colors.ts
+// strength=amber, dexterity=emerald, constitution=red, intelligence=blue, wisdom=slate, charisma=purple
+const COLOR_MAP: Record<CalcPart["color"], string> = {
+    // Attributes
+    strength:     "bg-amber-500/20 text-amber-300 border border-amber-500/30",
+    dexterity:    "bg-emerald-500/20 text-emerald-300 border border-emerald-500/30",
+    constitution: "bg-red-500/20 text-red-300 border border-red-500/30",
+    intelligence: "bg-blue-500/20 text-blue-300 border border-blue-500/30",
+    wisdom:       "bg-slate-400/20 text-slate-300 border border-slate-400/30",
+    charisma:     "bg-purple-500/20 text-purple-300 border border-purple-500/30",
+    // Non-attribute
+    prof:   "bg-cyan-500/20 text-cyan-300 border border-cyan-500/30",
+    bonus:  "bg-green-500/20 text-green-300 border border-green-500/30",
+    base:   "bg-white/10 text-white/60 border border-white/20",
+    manual: "bg-orange-500/20 text-orange-300 border border-orange-500/30",
+}
 
 interface CalcTooltipProps {
     formula: string
+    parts?: CalcPart[]
+    result?: string
     children: React.ReactNode
     className?: string
 }
 
-export function CalcTooltip({ formula, children, className }: CalcTooltipProps) {
+export function CalcTooltip({ formula, parts, result, children, className }: CalcTooltipProps) {
+    const [visible, setVisible] = useState(false)
+    const [pos, setPos] = useState({ x: 0, y: 0 })
+
+    const handleMouseMove = useCallback((e: React.MouseEvent) => {
+        setPos({ x: e.clientX, y: e.clientY })
+    }, [])
+
     return (
-        <GlassTooltip>
-            <GlassTooltipTrigger asChild>
-                <span className={cn("cursor-help", className)}>{children}</span>
-            </GlassTooltipTrigger>
-            <GlassTooltipContent>
-                <span className="font-mono text-[10px] text-white/70">{formula}</span>
-            </GlassTooltipContent>
-        </GlassTooltip>
+        <span
+            className={cn("cursor-help", className)}
+            onMouseEnter={() => setVisible(true)}
+            onMouseLeave={() => setVisible(false)}
+            onMouseMove={handleMouseMove}
+        >
+            {children}
+            {visible && typeof document !== "undefined" && createPortal(
+                <div
+                    style={{ position: "fixed", left: pos.x + 14, top: pos.y + 14, zIndex: 9999 }}
+                    className="pointer-events-none rounded-lg px-3 py-2 text-sm border border-white/10 shadow-2xl relative overflow-hidden backdrop-blur-sm"
+                >
+                    <GlassBackdrop />
+                    <div className="relative z-10">
+                        {parts && parts.length > 0 ? (
+                            <div className="flex flex-wrap items-center gap-1.5">
+                                {parts.map((part, i) => (
+                                    <span
+                                        key={i}
+                                        className={cn("rounded-full px-2 py-0.5 text-xs font-semibold", COLOR_MAP[part.color])}
+                                    >
+                                        {part.label} {part.value}
+                                    </span>
+                                ))}
+                                {result && (
+                                    <span className="text-white font-bold ml-1">= {result}</span>
+                                )}
+                            </div>
+                        ) : (
+                            <span className="font-mono text-[10px] text-white/70">{formula}</span>
+                        )}
+                    </div>
+                </div>,
+                document.body
+            )}
+        </span>
     )
 }

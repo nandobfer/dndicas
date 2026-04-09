@@ -1,5 +1,3 @@
-"use client"
-
 import { useMemo } from "react"
 import {
     getProficiencyBonus,
@@ -12,10 +10,16 @@ import {
     getSpellSaveDC,
     getSpellAttackBonus,
     SKILL_ATTRIBUTE_MAP,
+    type EquippedArmorData,
 } from "../utils/dnd-calculations"
 import type { CharacterSheet, SkillName, AttributeType } from "../types/character-sheet.types"
 
-export function useCharacterCalculations(sheet: CharacterSheet) {
+interface UseCharacterCalculationsOptions {
+    equippedArmor?: EquippedArmorData | null
+    equippedShield?: EquippedArmorData | null
+}
+
+export function useCharacterCalculations(sheet: CharacterSheet, opts?: UseCharacterCalculationsOptions) {
     return useMemo(() => {
         const profBonus = getProficiencyBonus(sheet.level, sheet.proficiencyBonusOverride)
 
@@ -40,7 +44,7 @@ export function useCharacterCalculations(sheet: CharacterSheet) {
         const savingThrows = (["strength", "dexterity", "constitution", "intelligence", "wisdom", "charisma"] as AttributeType[]).reduce(
             (acc, attr) => {
                 const proficient = (sheet.savingThrows as Record<string, boolean> | undefined)?.[attr] ?? false
-                acc[attr] = getSavingThrowBonus(sheet[attr as keyof CharacterSheet] as number, proficient, profBonus.value)
+                acc[attr] = getSavingThrowBonus(sheet[attr as keyof CharacterSheet] as number, proficient, profBonus.value, attr)
                 return acc
             },
             {} as Record<AttributeType, ReturnType<typeof getSavingThrowBonus>>,
@@ -55,7 +59,13 @@ export function useCharacterCalculations(sheet: CharacterSheet) {
             {} as Record<SkillName, ReturnType<typeof getSkillBonus>>,
         )
 
-        const armorClass = getArmorClass(sheet.dexterity, sheet.armorClassOverride)
+        const armorClass = getArmorClass(
+            sheet.dexterity,
+            sheet.armorClassOverride,
+            opts?.equippedArmor,
+            opts?.equippedShield,
+            sheet.armorClassBonus,
+        )
         const initiative = getInitiative(sheet.dexterity, sheet.initiativeOverride)
         const passivePerception = getPassivePerception(
             skills["Percepção"]?.value ?? 0,
@@ -66,8 +76,9 @@ export function useCharacterCalculations(sheet: CharacterSheet) {
             ? (attributes[sheet.spellcastingAttribute as AttributeType] ?? 10)
             : 10
 
-        const spellSaveDC = getSpellSaveDC(spellAttrValue, profBonus.value, sheet.spellSaveDCOverride)
-        const spellAttackBonus = getSpellAttackBonus(spellAttrValue, profBonus.value, sheet.spellAttackBonusOverride)
+        const spellAttrType = sheet.spellcastingAttribute as AttributeType | undefined
+        const spellSaveDC = getSpellSaveDC(spellAttrValue, profBonus.value, sheet.spellSaveDCOverride, spellAttrType)
+        const spellAttackBonus = getSpellAttackBonus(spellAttrValue, profBonus.value, sheet.spellAttackBonusOverride, spellAttrType)
 
         return {
             profBonus,
@@ -92,10 +103,13 @@ export function useCharacterCalculations(sheet: CharacterSheet) {
         sheet.savingThrows,
         sheet.skills,
         sheet.armorClassOverride,
+        sheet.armorClassBonus,
         sheet.initiativeOverride,
         sheet.passivePerceptionOverride,
         sheet.spellcastingAttribute,
         sheet.spellSaveDCOverride,
         sheet.spellAttackBonusOverride,
+        opts?.equippedArmor,
+        opts?.equippedShield,
     ])
 }

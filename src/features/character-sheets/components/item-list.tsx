@@ -6,6 +6,7 @@ import type { UseFormWatch } from "react-hook-form"
 import { cn } from "@/core/utils"
 import { SheetInput } from "./sheet-input"
 import { CompactRichInput } from "./compact-rich-input"
+import { GlassSwitch } from "@/components/ui/glass-switch"
 import { useItemList } from "./hooks/use-item-list"
 import type { CharacterSheet, PatchSheetBody } from "../types/character-sheet.types"
 
@@ -26,12 +27,22 @@ const COIN_LABELS: Array<{ key: "cp" | "sp" | "ep" | "gp" | "pp"; label: string;
     { key: "pp", label: "PL", color: "text-violet-300" },
 ]
 
+const EQUIPPABLE_TYPES = new Set(["arma", "armadura", "escudo"])
+
 export function ItemList({ sheet, form, isReadOnly = false }: ItemListProps) {
     const { watch } = form
     const currentValues = watch()
     const coins = currentValues.coins ?? sheet.coins ?? { cp: 0, sp: 0, ep: 0, gp: 0, pp: 0 }
 
-    const { items, handleAddItem, handlePatchItem, handleRemoveItem, handlePatchCoins } = useItemList({ sheet, form, isReadOnly })
+    const {
+        items,
+        handleAddItem,
+        handlePatchItemName,
+        handleToggleEquipped,
+        handlePatchItem,
+        handleRemoveItem,
+        handlePatchCoins,
+    } = useItemList({ sheet, form, isReadOnly })
 
     return (
         <div className="rounded-lg border border-white/10 bg-white/[0.03] overflow-hidden flex flex-col">
@@ -77,9 +88,9 @@ export function ItemList({ sheet, form, isReadOnly = false }: ItemListProps) {
 
             {/* Table header */}
             {items.length > 0 && (
-                <div className="grid grid-cols-[minmax(0,1fr)_72px_auto] gap-1 px-3 py-1 border-b border-white/5">
-                    {["Nome", "Qtd", ""].map((h) => (
-                        <span key={h} className="text-[8px] font-black uppercase tracking-widest text-white/20 text-center">
+                <div className="grid grid-cols-[minmax(0,1fr)_72px_24px_auto] gap-1 px-3 py-1 border-b border-white/5">
+                    {["Nome", "Qtd", "", ""].map((h, i) => (
+                        <span key={i} className="text-[8px] font-black uppercase tracking-widest text-white/20 text-center">
                             {h}
                         </span>
                     ))}
@@ -89,45 +100,58 @@ export function ItemList({ sheet, form, isReadOnly = false }: ItemListProps) {
             {/* Item rows */}
             <div className="divide-y divide-white/5 flex-1">
                 <AnimatePresence initial={false}>
-                    {items.map((item) => (
-                        <motion.div
-                            key={item._id}
-                            initial={{ opacity: 0, height: 0 }}
-                            animate={{ opacity: 1, height: "auto" }}
-                            exit={{ opacity: 0, height: 0 }}
-                            transition={{ duration: 0.2 }}
-                            className="grid grid-cols-[minmax(0,1fr)_72px_auto] gap-1 px-3 py-1 items-center"
-                        >
-                            <CompactRichInput
-                                value={item.name}
-                                onChange={(v) => handlePatchItem(item._id, { name: v || "Item" })}
-                                placeholder="Nome do item"
-                                debounceMs={800}
-                                excludeId={sheet._id}
-                                disabled={isReadOnly}
-                            />
-                            <SheetInput
-                                compact
-                                type="number"
-                                min={0}
-                                showControls
-                                value={String(item.quantity)}
-                                onChangeValue={(v) => handlePatchItem(item._id, { quantity: parseInt(v) || 0 })}
-                                inputClassName="text-center text-xs"
-                                className="w-[72px]"
-                                readOnlyMode={isReadOnly}
-                            />
-                            {!isReadOnly && (
-                                <button
-                                    type="button"
-                                    onClick={() => handleRemoveItem(item._id)}
-                                    className="text-red-400/20 hover:text-red-400 transition-colors mt-1 flex-shrink-0"
-                                >
-                                    <Trash2 className="w-3.5 h-3.5" />
-                                </button>
-                            )}
-                        </motion.div>
-                    ))}
+                    {items.map((item) => {
+                        const isEquippable = item.catalogItemType && EQUIPPABLE_TYPES.has(item.catalogItemType)
+                        return (
+                            <motion.div
+                                key={item._id}
+                                initial={{ opacity: 0, height: 0 }}
+                                animate={{ opacity: 1, height: "auto" }}
+                                exit={{ opacity: 0, height: 0 }}
+                                transition={{ duration: 0.2 }}
+                                className="grid grid-cols-[minmax(0,1fr)_72px_24px_auto] gap-1 px-3 py-1 items-center"
+                            >
+                                <CompactRichInput
+                                    value={item.name}
+                                    onChange={() => {}}
+                                    onBlur={(v) => handlePatchItemName(item._id, v || "Item")}
+                                    placeholder="Nome do item"
+                                    excludeId={sheet._id}
+                                    disabled={isReadOnly}
+                                />
+                                <SheetInput
+                                    compact
+                                    type="number"
+                                    min={0}
+                                    showControls
+                                    value={String(item.quantity)}
+                                    onChangeValue={(v) => handlePatchItem(item._id, { quantity: parseInt(v) || 0 })}
+                                    inputClassName="text-center text-xs"
+                                    className="w-[72px]"
+                                    readOnlyMode={isReadOnly}
+                                />
+                                {isEquippable ? (
+                                    <GlassSwitch
+                                        checked={item.equipped ?? false}
+                                        onCheckedChange={() => handleToggleEquipped(item)}
+                                        disabled={isReadOnly}
+                                        label="Equipar"
+                                    />
+                                ) : (
+                                    <span />
+                                )}
+                                {!isReadOnly && (
+                                    <button
+                                        type="button"
+                                        onClick={() => handleRemoveItem(item._id)}
+                                        className="text-red-400/20 hover:text-red-400 transition-colors mt-1 flex-shrink-0"
+                                    >
+                                        <Trash2 className="w-3.5 h-3.5" />
+                                    </button>
+                                )}
+                            </motion.div>
+                        )
+                    })}
                 </AnimatePresence>
             </div>
 
