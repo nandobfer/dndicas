@@ -75,6 +75,27 @@ export function SheetLeftColumn({ sheet, form, isReadOnly = false }: SheetLeftCo
 
     return (
         <div className="space-y-3">
+            {/* Inspiração Heroica */}
+            <div
+                className={cn(
+                    "flex items-center gap-2 p-2 rounded-lg border cursor-pointer transition-all select-none",
+                    isReadOnly && "cursor-default",
+                    currentValues.inspiration
+                        ? "border-cyan-500/40 bg-cyan-500/10"
+                        : "border-white/10 bg-white/5 hover:border-white/20"
+                )}
+                onClick={() => !isReadOnly && patchField("inspiration", !currentValues.inspiration)}
+            >
+                <Zap className={cn("w-4 h-4 flex-shrink-0", currentValues.inspiration ? "text-cyan-400" : "text-white/30")} />
+                <span className={cn("text-[9px] font-black uppercase tracking-widest", currentValues.inspiration ? "text-cyan-400" : "text-white/40")}>
+                    Inspiração Heroica
+                </span>
+                <div
+                    className={cn("ml-auto w-3 h-3 rotate-45 border transition-all", !currentValues.inspiration && "bg-transparent border-white/30")}
+                    style={currentValues.inspiration ? { backgroundColor: rarityColors.divine, borderColor: rarityColors.divine } : undefined}
+                />
+            </div>
+
             {/* Proficiency Bonus */}
             <div className="flex items-center justify-between p-2 rounded-lg bg-white/5 border border-white/10">
                 <span className="text-[9px] font-black uppercase tracking-widest text-white/40">Bônus de Proficiência</span>
@@ -104,27 +125,6 @@ export function SheetLeftColumn({ sheet, form, isReadOnly = false }: SheetLeftCo
                     isReadOnly={isReadOnly}
                 />
             ))}
-
-            {/* Inspiração Heroica */}
-            <div
-                className={cn(
-                    "flex items-center gap-2 p-2 rounded-lg border cursor-pointer transition-all select-none",
-                    isReadOnly && "cursor-default",
-                    currentValues.inspiration
-                        ? "border-cyan-500/40 bg-cyan-500/10"
-                        : "border-white/10 bg-white/5 hover:border-white/20"
-                )}
-                onClick={() => !isReadOnly && patchField("inspiration", !currentValues.inspiration)}
-            >
-                <Zap className={cn("w-4 h-4 flex-shrink-0", currentValues.inspiration ? "text-cyan-400" : "text-white/30")} />
-                <span className={cn("text-[9px] font-black uppercase tracking-widest", currentValues.inspiration ? "text-cyan-400" : "text-white/40")}>
-                    Inspiração Heroica
-                </span>
-                <div
-                    className={cn("ml-auto w-3 h-3 rotate-45 border transition-all", !currentValues.inspiration && "bg-transparent border-white/30")}
-                    style={currentValues.inspiration ? { backgroundColor: rarityColors.divine, borderColor: rarityColors.divine } : undefined}
-                />
-            </div>
 
             {/* Treinamento em Equipamentos e Proficiências */}
             <div className="rounded-lg border border-white/10 bg-white/5 overflow-hidden">

@@ -61,13 +61,15 @@ export function SheetCenterColumn({ sheet, form, isReadOnly = false }: SheetCent
 
                 <div className="rounded-lg bg-white/[0.03] border border-white/10 p-2 flex flex-col items-center gap-1">
                     <span className="text-[8px] font-black uppercase tracking-widest text-white/40 text-center">Tamanho</span>
-                    <CompactRichInput
-                        value={currentValues.size ?? sheet.size ?? ""}
-                        onChange={(v) => patchField("size" as keyof PatchSheetBody, v)}
+                    <SheetInput
+                        value={String(currentValues.size ?? sheet.size ?? "")}
+                        onChangeValue={(v) => patchField("size" as keyof PatchSheetBody, v)}
                         placeholder="Médio"
+                        debounceMs={800}
                         isLoading={isLoading}
-                        className="w-full"
-                        disabled={isReadOnly}
+                        inputClassName="text-xl font-black text-center"
+                        className="items-center w-full"
+                        readOnlyMode={isReadOnly}
                     />
                 </div>
 
@@ -86,7 +88,7 @@ export function SheetCenterColumn({ sheet, form, isReadOnly = false }: SheetCent
                 </div>
 
                 {/* Table header */}
-                <div className="grid grid-cols-[2fr_1fr_2fr_auto] gap-1 px-2 py-1 border-b border-white/5">
+                <div className="grid grid-cols-[minmax(0,2fr)_80px_minmax(0,2.5fr)_auto] gap-1 px-2 py-1 border-b border-white/5">
                     {["Nome", "Bônus Atq", "Dano e Tipo", ""].map((h) => (
                         <span key={h} className="text-[8px] font-black uppercase tracking-widest text-white/30 text-center">
                             {h}
@@ -104,7 +106,7 @@ export function SheetCenterColumn({ sheet, form, isReadOnly = false }: SheetCent
                                 animate={{ opacity: 1, height: "auto" }}
                                 exit={{ opacity: 0, height: 0 }}
                                 transition={{ duration: 0.2 }}
-                                className="grid grid-cols-[2fr_1fr_2fr_auto] gap-1 px-2 py-1 items-center"
+                                className="grid grid-cols-[minmax(0,2fr)_80px_minmax(0,2.5fr)_auto] gap-1 px-2 py-1 items-center"
                             >
                             <CompactRichInput
                                 value={attack.name}
@@ -120,6 +122,7 @@ export function SheetCenterColumn({ sheet, form, isReadOnly = false }: SheetCent
                                 placeholder="+7"
                                 debounceMs={800}
                                 inputClassName="text-center text-xs"
+                                className="w-[80px]"
                                 readOnlyMode={isReadOnly}
                             />
                             <CompactRichInput

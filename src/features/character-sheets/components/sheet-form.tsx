@@ -13,6 +13,7 @@ import { SheetCenterColumn } from "./sheet-center-column"
 import { SheetRightColumn } from "./sheet-right-column"
 import { CompactRichInput } from "./compact-rich-input"
 import { useSheetAutoSave } from "../hooks/use-sheet-auto-save"
+import { useSheetMentionSync } from "../hooks/use-sheet-mention-sync"
 import { usePatchSheet } from "../api/character-sheets-queries"
 import type { CharacterSheetFull, PatchSheetBody } from "../types/character-sheet.types"
 
@@ -34,24 +35,27 @@ export function SheetForm({ sheet }: SheetFormProps) {
     const { watch, patchField } = form
     const { isPending: isLoading } = usePatchSheet(sheet._id)
 
+    useSheetMentionSync({ sheet, form, isReadOnly })
+
     return (
         <motion.div variants={motionConfig.variants.fadeInUp} initial="initial" animate="animate" className="space-y-4">
             {/* Header */}
             <SheetHeader sheet={sheet} form={form} isReadOnly={isReadOnly} />
 
-            {/* Three-column layout: narrow | narrow | wide */}
-            <div className="grid grid-cols-1 lg:grid-cols-[1fr_1fr_2fr] gap-4">
-                <GlassCard>
-                    <GlassCardContent className="pt-4 pb-4">
-                        <SheetLeftColumn sheet={sheet} form={form} isReadOnly={isReadOnly} />
-                    </GlassCardContent>
-                </GlassCard>
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 items-start">
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                    <GlassCard>
+                        <GlassCardContent className="pt-4 pb-4">
+                            <SheetLeftColumn sheet={sheet} form={form} isReadOnly={isReadOnly} />
+                        </GlassCardContent>
+                    </GlassCard>
 
-                <GlassCard>
-                    <GlassCardContent className="pt-4 pb-4">
-                        <SheetMiddleColumn sheet={sheet} form={form} isReadOnly={isReadOnly} />
-                    </GlassCardContent>
-                </GlassCard>
+                    <GlassCard>
+                        <GlassCardContent className="pt-4 pb-4">
+                            <SheetMiddleColumn sheet={sheet} form={form} isReadOnly={isReadOnly} />
+                        </GlassCardContent>
+                    </GlassCard>
+                </div>
 
                 <GlassCard>
                     <GlassCardContent className="pt-4 pb-4">
