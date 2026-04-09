@@ -316,9 +316,25 @@ const CustomMention = Mention.extend({
     },
 })
 
+// ─── DisableNewlinesExtension ─────────────────────────────────────────────────
+// Blocks Enter (new paragraph) when disableNewlines is active.
+// Priority 50 is intentionally lower than the default (100) so that the
+// CustomMention suggestion plugin — which runs at higher priority — can handle
+// Enter first (e.g. selecting from the dropdown) before this extension blocks it.
+const DisableNewlinesExtension = Extension.create({
+    name: "disableNewlines",
+    priority: 50,
+    addKeyboardShortcuts() {
+        return {
+            Enter: () => true,
+        }
+    },
+})
+
 interface RichTextEditorProps {
     value: string
     onChange: (value: string) => void
+    onBlur?: () => void
     placeholder?: string
     className?: string
     disabled?: boolean
@@ -326,6 +342,7 @@ interface RichTextEditorProps {
     variant?: "full" | "simple"
     autoFocus?: boolean
     minRows?: number
+    disableNewlines?: boolean
 }
 
 const MenuBar = ({ editor, addImage, disabled = false }: { editor: Editor | null; addImage: () => void; disabled?: boolean }) => {
@@ -412,7 +429,7 @@ const MenuBar = ({ editor, addImage, disabled = false }: { editor: Editor | null
     )
 }
 
-export function RichTextEditor({ value, onChange, className, disabled = false, excludeId, variant = "full", autoFocus = false, placeholder, minRows }: RichTextEditorProps) {
+export function RichTextEditor({ value, onChange, onBlur, className, disabled = false, excludeId, variant = "full", autoFocus = false, placeholder, minRows, disableNewlines = false }: RichTextEditorProps) {
     const [isUploading, setIsUploading] = useState(false)
 
     const uploadImage = useCallback(async (file: File) => {
@@ -455,11 +472,15 @@ export function RichTextEditor({ value, onChange, className, disabled = false, e
             }),
             DiceHighlight,
             DiceValueNode,
+            ...(disableNewlines ? [DisableNewlinesExtension] : []),
         ],
         content: value,
         editable: !disabled,
         onUpdate: ({ editor }) => {
             onChange(editor.getHTML())
+        },
+        onBlur: () => {
+            onBlur?.()
         },
         editorProps: {
             attributes: {

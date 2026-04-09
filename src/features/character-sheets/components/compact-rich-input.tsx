@@ -1,14 +1,17 @@
 "use client"
 
-import { useRef, useEffect, useState, useCallback } from "react"
+import { useEffect, useState, useCallback } from "react"
 import { cn } from "@/core/utils"
 import { RichTextEditor } from "@/features/rules/components/rich-text-editor"
+
 
 interface CompactRichInputProps {
     label?: string
     value: string
     onChange: (value: string) => void
+    onBlur?: (value: string) => void
     placeholder?: string
+    /** @deprecated No longer used — saves happen on blur for text inputs. */
     debounceMs?: number
     isLoading?: boolean
     className?: string
@@ -20,14 +23,16 @@ interface CompactRichInputProps {
     editorClassName?: string
     minRows?: number
     disabled?: boolean
+    /** Block Enter key from creating new lines. Defaults to true for "simple" variant. */
+    disableNewlines?: boolean
 }
 
 export function CompactRichInput({
     label,
     value,
     onChange,
+    onBlur,
     placeholder,
-    debounceMs = 1000,
     isLoading = false,
     className,
     excludeId,
@@ -36,17 +41,10 @@ export function CompactRichInput({
     editorClassName,
     minRows,
     disabled = false,
+    disableNewlines,
 }: CompactRichInputProps) {
+    const blockNewlines = disableNewlines ?? variant === "simple"
     const [localValue, setLocalValue] = useState(value)
-    const timeoutRef = useRef<NodeJS.Timeout | null>(null)
-    const isMountedRef = useRef(true)
-
-    useEffect(() => {
-        isMountedRef.current = true
-        return () => {
-            isMountedRef.current = false
-        }
-    }, [])
 
     useEffect(() => {
         setLocalValue(value)
@@ -56,17 +54,14 @@ export function CompactRichInput({
         (html: string) => {
             if (disabled) return
             setLocalValue(html)
-            if (timeoutRef.current) clearTimeout(timeoutRef.current)
-            if (debounceMs > 0) {
-                timeoutRef.current = setTimeout(() => {
-                    if (isMountedRef.current) onChange(html)
-                }, debounceMs)
-            } else {
-                onChange(html)
-            }
+            onChange(html)
         },
-        [onChange, debounceMs]
+        [onChange, disabled]
     )
+
+    const handleBlur = useCallback(() => {
+        onBlur?.(localValue)
+    }, [onBlur, localValue])
 
     if (variant === "full") {
         return (
@@ -85,11 +80,13 @@ export function CompactRichInput({
                     <RichTextEditor
                         value={localValue}
                         onChange={handleChange}
+                        onBlur={handleBlur}
                         placeholder={placeholder}
                         variant="full"
                         excludeId={excludeId}
                         minRows={minRows ?? 5}
                         disabled={disabled}
+                        disableNewlines={blockNewlines}
                     />
                 </div>
             </div>
@@ -107,10 +104,12 @@ export function CompactRichInput({
                 <RichTextEditor
                     value={localValue}
                     onChange={handleChange}
+                    onBlur={handleBlur}
                     placeholder={placeholder}
                     variant="simple"
                     excludeId={excludeId}
                     disabled={disabled}
+                    disableNewlines={blockNewlines}
                     className={cn(
                         // Strip glass container for simple variant so our bottom border is the only affordance
                         "!bg-transparent !border-0 !shadow-none !backdrop-blur-none !rounded-none",

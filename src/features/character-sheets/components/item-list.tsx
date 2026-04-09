@@ -6,7 +6,7 @@ import type { UseFormWatch } from "react-hook-form"
 import { cn } from "@/core/utils"
 import { SheetInput } from "./sheet-input"
 import { CompactRichInput } from "./compact-rich-input"
-import { GlassCheckbox } from "./glass-checkbox"
+import { GlassSwitch } from "@/components/ui/glass-switch"
 import { useItemList } from "./hooks/use-item-list"
 import type { CharacterSheet, PatchSheetBody } from "../types/character-sheet.types"
 
@@ -113,9 +113,9 @@ export function ItemList({ sheet, form, isReadOnly = false }: ItemListProps) {
                             >
                                 <CompactRichInput
                                     value={item.name}
-                                    onChange={(v) => handlePatchItemName(item._id, v || "Item")}
+                                    onChange={() => {}}
+                                    onBlur={(v) => handlePatchItemName(item._id, v || "Item")}
                                     placeholder="Nome do item"
-                                    debounceMs={800}
                                     excludeId={sheet._id}
                                     disabled={isReadOnly}
                                 />
@@ -131,12 +131,11 @@ export function ItemList({ sheet, form, isReadOnly = false }: ItemListProps) {
                                     readOnlyMode={isReadOnly}
                                 />
                                 {isEquippable ? (
-                                    <GlassCheckbox
+                                    <GlassSwitch
                                         checked={item.equipped ?? false}
-                                        onChange={() => handleToggleEquipped(item)}
-                                        accentColor="#f59e0b"
+                                        onCheckedChange={() => handleToggleEquipped(item)}
                                         disabled={isReadOnly}
-                                        size="sm"
+                                        label="Equipar"
                                     />
                                 ) : (
                                     <span />

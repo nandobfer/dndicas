@@ -32,7 +32,7 @@ export function SheetForm({ sheet }: SheetFormProps) {
     }, [router])
 
     const form = useSheetAutoSave(sheet, { onSlugChange: handleSlugChange, disabled: isReadOnly })
-    const { watch, patchField } = form
+    const { watch, setFieldLocally, patchField } = form
     const { isPending: isLoading } = usePatchSheet(sheet._id)
     const { data: items = [] } = useItems(sheet._id)
 
@@ -75,7 +75,8 @@ export function SheetForm({ sheet }: SheetFormProps) {
                         variant="full"
                         label="Notas"
                         value={watch("notes") ?? sheet.notes ?? ""}
-                        onChange={(v) => patchField("notes" as keyof PatchSheetBody, v)}
+                        onChange={(v) => setFieldLocally("notes" as keyof PatchSheetBody, v)}
+                        onBlur={(v) => patchField("notes" as keyof PatchSheetBody, v)}
                         placeholder="Anotações livres, histórico, recompensas, NPCs... use @ para mencionar"
                         isLoading={isLoading}
                         minRows={5}

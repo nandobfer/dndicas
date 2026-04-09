@@ -85,6 +85,17 @@ export function useItemList({ sheet, form, isReadOnly = false }: UseItemListOpti
         async (item: CharacterItem) => {
             if (isReadOnly) return
             const newEquipped = !item.equipped
+
+            // Only one base-AC armor can be equipped at a time
+            if (newEquipped && item.catalogAcType === "base") {
+                const currentBaseArmor = items.find(
+                    (i) => i._id !== item._id && i.catalogAcType === "base" && i.equipped
+                )
+                if (currentBaseArmor) {
+                    patchItem.mutate({ itemId: currentBaseArmor._id, data: { equipped: false } })
+                }
+            }
+
             patchItem.mutate({ itemId: item._id, data: { equipped: newEquipped } })
 
             // When equipping a weapon, auto-add an attack row if not already present
@@ -103,7 +114,7 @@ export function useItemList({ sheet, form, isReadOnly = false }: UseItemListOpti
                 }
             }
         },
-        [isReadOnly, patchItem, attacks, addAttack]
+        [isReadOnly, patchItem, attacks, addAttack, items]
     )
 
     const handleRemoveItem = useCallback(

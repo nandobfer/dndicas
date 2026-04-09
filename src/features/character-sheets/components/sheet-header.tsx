@@ -30,6 +30,7 @@ interface SheetHeaderProps {
     sheet: CharacterSheet
     form: {
       watch: UseFormWatch<PatchSheetBody>
+      setFieldLocally: (field: keyof PatchSheetBody, value: unknown) => void
       patchField: (field: keyof PatchSheetBody, value: unknown) => void
     }
     items?: CharacterItem[]
@@ -37,7 +38,7 @@ interface SheetHeaderProps {
 }
 
 export function SheetHeader({ sheet, form, items = [], isReadOnly = false }: SheetHeaderProps) {
-  const { watch, patchField } = form
+  const { watch, setFieldLocally, patchField } = form
   const hitDiceValue = (watch("hitDiceTotal") || "d8") as DiceType
   const hpCurrent = watch("hpCurrent") ?? 0
   const hpTemp = watch("hpTemp") ?? 0
@@ -123,7 +124,6 @@ export function SheetHeader({ sheet, form, items = [], isReadOnly = false }: She
             placeholder="NOME DO PERSONAGEM"
             value={watch("name") || ""}
             onChangeValue={(val) => patchField("name", val)}
-            debounceMs={1000}
             className="tracking-tight"
             readOnlyMode={isReadOnly}
           />
@@ -135,7 +135,8 @@ export function SheetHeader({ sheet, form, items = [], isReadOnly = false }: She
                 key={item.field}
                 label={item.label}
                 value={String(watch(item.field) || "")}
-                onChange={(val) => patchField(item.field, val)}
+                onChange={(val) => setFieldLocally(item.field, val)}
+                onBlur={(val) => patchField(item.field, val)}
                 placeholder={item.placeholder}
                 excludeId={sheet._id}
                 disabled={isReadOnly}
@@ -172,7 +173,6 @@ export function SheetHeader({ sheet, form, items = [], isReadOnly = false }: She
               inputClassName="text-center"
               value={watch("experience") || ""}
               onChangeValue={(val) => patchField("experience", val)}
-              debounceMs={1000}
               readOnlyMode={isReadOnly}
             />
           </div>
@@ -224,7 +224,7 @@ export function SheetHeader({ sheet, form, items = [], isReadOnly = false }: She
               Armadura
             </label>
             <div className="flex-1 flex items-center justify-center w-full">
-              <CalcTooltip formula={calc.armorClass.formula}>
+              <CalcTooltip formula={calc.armorClass.formula} parts={calc.armorClass.parts} result={calc.armorClass.result}>
                 <span className="text-3xl font-black text-white z-10 select-none">
                   {calc.armorClass.value}
                 </span>
@@ -278,7 +278,6 @@ export function SheetHeader({ sheet, form, items = [], isReadOnly = false }: She
                 min={0}
                 inputClassName="text-5xl h-20 text-center"
                 className="items-center"
-                debounceMs={1000}
                 readOnlyMode={isReadOnly}
               />
             </div>
@@ -293,7 +292,6 @@ export function SheetHeader({ sheet, form, items = [], isReadOnly = false }: She
                 showControls
                 inputClassName="text-center text-lg h-8"
                 className="bg-white/5 rounded-lg border border-white/5 px-1"
-                debounceMs={1000}
                 readOnlyMode={isReadOnly}
               />
               <SheetInput
@@ -305,7 +303,6 @@ export function SheetHeader({ sheet, form, items = [], isReadOnly = false }: She
                 showControls
                 inputClassName="text-center text-lg h-8"
                 className="bg-white/5 rounded-lg border border-white/5 px-1"
-                debounceMs={1000}
                 readOnlyMode={isReadOnly}
               />
             </div>
@@ -346,7 +343,6 @@ export function SheetHeader({ sheet, form, items = [], isReadOnly = false }: She
                 min={0}
                 max={watch("level") || 1}
                 inputClassName="text-center text-xs h-6"
-                debounceMs={1000}
                 readOnlyMode={isReadOnly}
               />
               <div className="flex flex-col items-end pt-1 pr-1">

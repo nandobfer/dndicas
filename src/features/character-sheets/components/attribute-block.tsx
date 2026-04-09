@@ -6,6 +6,7 @@ import { CalcTooltip } from "./calc-tooltip"
 import { SheetInput } from "./sheet-input"
 import { GlassCheckbox, SkillGlassCheckbox, type SkillCheckboxState } from "./glass-checkbox"
 import type { AttributeType, SkillName } from "../types/character-sheet.types"
+import type { CalcPart } from "../utils/dnd-calculations"
 
 export interface SkillEntry {
     name: SkillName
@@ -13,6 +14,8 @@ export interface SkillEntry {
     expertise: boolean
     value: number
     formula: string
+    parts?: CalcPart[]
+    result?: string
 }
 
 interface AttributeBlockProps {
@@ -21,7 +24,9 @@ interface AttributeBlockProps {
     onValueChange: (v: number) => void
     modifier: number
     modifierFormula: string
-    savingThrow: { proficient: boolean; value: number; formula: string }
+    modifierParts?: CalcPart[]
+    modifierResult?: string
+    savingThrow: { proficient: boolean; value: number; formula: string; parts?: CalcPart[]; result?: string }
     onSavingThrowToggle: () => void
     skills?: SkillEntry[]
     onSkillChange: (skill: SkillName, proficient: boolean, expertise: boolean) => void
@@ -70,6 +75,8 @@ export function AttributeBlock({
     onValueChange,
     modifier,
     modifierFormula,
+    modifierParts,
+    modifierResult,
     savingThrow,
     onSavingThrowToggle,
     skills = [],
@@ -100,7 +107,7 @@ export function AttributeBlock({
             {/* Modifier circle + value input row */}
             <div className="flex items-center gap-2">
                 {/* Modifier circle */}
-                <CalcTooltip formula={modifierFormula}>
+                <CalcTooltip formula={modifierFormula} parts={modifierParts} result={modifierResult}>
                     <div
                         className={cn(
                             "w-14 h-14 rounded-full border-2 flex items-center justify-center flex-shrink-0 cursor-help",
@@ -139,7 +146,7 @@ export function AttributeBlock({
                     accentColor={colors.hex}
                     disabled={isReadOnly}
                 />
-                <CalcTooltip formula={savingThrow.formula}>
+                <CalcTooltip formula={savingThrow.formula} parts={savingThrow.parts} result={savingThrow.result}>
                     <div className="flex items-center gap-1.5 cursor-help">
                         <span className={cn("text-[10px] w-6 text-center font-bold", colors.text)}>
                             {formatMod(savingThrow.value)}
@@ -161,7 +168,7 @@ export function AttributeBlock({
                                 expertiseColor={rarityColors.divine}
                                 disabled={isReadOnly}
                             />
-                            <CalcTooltip formula={skill.formula}>
+                            <CalcTooltip formula={skill.formula} parts={skill.parts} result={skill.result}>
                                 <div className="flex items-center gap-1 cursor-help">
                                     <span className={cn("text-[9px] w-5 text-center font-bold", colors.text)}>
                                         {formatMod(skill.value)}

@@ -36,6 +36,8 @@ export function SheetMiddleColumn({ sheet, form, isReadOnly = false }: SheetMidd
                     expertise: skillData.expertise,
                     value: calc.skills[skill]?.value ?? 0,
                     formula: calc.skills[skill]?.formula ?? "",
+                    parts: calc.skills[skill]?.parts,
+                    result: calc.skills[skill]?.result,
                 }
             })
 
@@ -64,10 +66,14 @@ export function SheetMiddleColumn({ sheet, form, isReadOnly = false }: SheetMidd
                     onValueChange={(v) => patchField(attrKey as keyof PatchSheetBody, v)}
                     modifier={calc.attrMods[attrKey].value}
                     modifierFormula={calc.attrMods[attrKey].formula}
+                    modifierParts={calc.attrMods[attrKey].parts}
+                    modifierResult={calc.attrMods[attrKey].result}
                     savingThrow={{
                         proficient: !!(currentSheet.savingThrows as Record<string, boolean> | undefined)?.[attrKey],
                         value: calc.savingThrows[attrKey].value,
                         formula: calc.savingThrows[attrKey].formula,
+                        parts: calc.savingThrows[attrKey].parts,
+                        result: calc.savingThrows[attrKey].result,
                     }}
                     onSavingThrowToggle={() => handleSavingThrowToggle(attrKey)}
                     skills={getSkillsForAttribute(attrKey)}

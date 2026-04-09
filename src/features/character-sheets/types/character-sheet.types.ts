@@ -4,6 +4,8 @@ import { z } from "zod"
 
 export type AttributeType = "strength" | "dexterity" | "constitution" | "intelligence" | "wisdom" | "charisma"
 
+export type ArmorTraining = { light: boolean; medium: boolean; heavy: boolean; shields: boolean }
+
 export type SkillName =
     | "Acrobacia"
     | "Arcanismo"
@@ -97,7 +99,7 @@ export interface CharacterSheet {
     speciesTraits: string
     featuresNotes: string
     size: string
-    armorTraining: { light: boolean; medium: boolean; heavy: boolean; shields: boolean }
+    armorTraining: ArmorTraining
     weaponProficiencies: string
     toolProficiencies: string
     createdAt: string

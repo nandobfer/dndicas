@@ -44,7 +44,7 @@ export function useCharacterCalculations(sheet: CharacterSheet, opts?: UseCharac
         const savingThrows = (["strength", "dexterity", "constitution", "intelligence", "wisdom", "charisma"] as AttributeType[]).reduce(
             (acc, attr) => {
                 const proficient = (sheet.savingThrows as Record<string, boolean> | undefined)?.[attr] ?? false
-                acc[attr] = getSavingThrowBonus(sheet[attr as keyof CharacterSheet] as number, proficient, profBonus.value)
+                acc[attr] = getSavingThrowBonus(sheet[attr as keyof CharacterSheet] as number, proficient, profBonus.value, attr)
                 return acc
             },
             {} as Record<AttributeType, ReturnType<typeof getSavingThrowBonus>>,
@@ -76,8 +76,9 @@ export function useCharacterCalculations(sheet: CharacterSheet, opts?: UseCharac
             ? (attributes[sheet.spellcastingAttribute as AttributeType] ?? 10)
             : 10
 
-        const spellSaveDC = getSpellSaveDC(spellAttrValue, profBonus.value, sheet.spellSaveDCOverride)
-        const spellAttackBonus = getSpellAttackBonus(spellAttrValue, profBonus.value, sheet.spellAttackBonusOverride)
+        const spellAttrType = sheet.spellcastingAttribute as AttributeType | undefined
+        const spellSaveDC = getSpellSaveDC(spellAttrValue, profBonus.value, sheet.spellSaveDCOverride, spellAttrType)
+        const spellAttackBonus = getSpellAttackBonus(spellAttrValue, profBonus.value, sheet.spellAttackBonusOverride, spellAttrType)
 
         return {
             profBonus,

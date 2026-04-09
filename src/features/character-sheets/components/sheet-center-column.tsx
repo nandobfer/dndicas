@@ -16,6 +16,7 @@ interface SheetCenterColumnProps {
     sheet: CharacterSheet
     form: {
         watch: UseFormWatch<PatchSheetBody>
+        setFieldLocally: (field: keyof PatchSheetBody, value: unknown) => void
         patchField: (field: keyof PatchSheetBody, value: unknown) => void
     }
     isReadOnly?: boolean
@@ -24,7 +25,7 @@ interface SheetCenterColumnProps {
 const formatMod = (v: number) => (v >= 0 ? `+${v}` : `${v}`)
 
 export function SheetCenterColumn({ sheet, form, isReadOnly = false }: SheetCenterColumnProps) {
-    const { watch, patchField } = form
+    const { watch, setFieldLocally, patchField } = form
     const currentValues = watch()
     const currentSheet = { ...sheet, ...currentValues } as CharacterSheet
     const calc = useCharacterCalculations(currentSheet)
@@ -47,7 +48,7 @@ export function SheetCenterColumn({ sheet, form, isReadOnly = false }: SheetCent
             <div className="grid grid-cols-4 gap-2">
                 <div className="rounded-lg bg-white/[0.03] border border-white/10 p-2 flex flex-col items-center gap-1">
                     <span className="text-[8px] font-black uppercase tracking-widest text-white/40 text-center">Iniciativa</span>
-                    <CalcTooltip formula={calc.initiative.formula}>
+                    <CalcTooltip formula={calc.initiative.formula} parts={calc.initiative.parts} result={calc.initiative.result}>
                         <span className="text-xl font-black text-white">{formatMod(calc.initiative.value)}</span>
                     </CalcTooltip>
                 </div>
@@ -58,7 +59,6 @@ export function SheetCenterColumn({ sheet, form, isReadOnly = false }: SheetCent
                         value={String(currentValues.movementSpeed ?? sheet.movementSpeed ?? "")}
                         onChangeValue={(val) => patchField("movementSpeed", val)}
                         placeholder="9m"
-                        debounceMs={800}
                         isLoading={isLoading}
                         inputClassName="text-xl font-black text-center"
                         className="items-center"
@@ -72,7 +72,6 @@ export function SheetCenterColumn({ sheet, form, isReadOnly = false }: SheetCent
                         value={String(currentValues.size ?? sheet.size ?? "")}
                         onChangeValue={(v) => patchField("size" as keyof PatchSheetBody, v)}
                         placeholder="Médio"
-                        debounceMs={800}
                         isLoading={isLoading}
                         inputClassName="text-xl font-black text-center"
                         className="items-center w-full"
@@ -82,7 +81,7 @@ export function SheetCenterColumn({ sheet, form, isReadOnly = false }: SheetCent
 
                 <div className="rounded-lg bg-white/[0.03] border border-white/10 p-2 flex flex-col items-center gap-1">
                     <span className="text-[8px] font-black uppercase tracking-widest text-white/40 text-center leading-tight">Percepção Passiva</span>
-                    <CalcTooltip formula={calc.passivePerception.formula}>
+                    <CalcTooltip formula={calc.passivePerception.formula} parts={calc.passivePerception.parts} result={calc.passivePerception.result}>
                         <span className="text-xl font-black text-white">{calc.passivePerception.value}</span>
                     </CalcTooltip>
                 </div>
@@ -117,9 +116,9 @@ export function SheetCenterColumn({ sheet, form, isReadOnly = false }: SheetCent
                             >
                             <CompactRichInput
                                 value={attack.name}
-                                onChange={(v) => handleAttackNameChange(attack._id, v)}
+                                onChange={() => {}}
+                                onBlur={(v) => handleAttackNameChange(attack._id, v)}
                                 placeholder="Nome"
-                                debounceMs={1000}
                                 disabled={isReadOnly}
                             />
                             <SheetInput
@@ -127,16 +126,15 @@ export function SheetCenterColumn({ sheet, form, isReadOnly = false }: SheetCent
                                 value={String(attack.attackBonus ?? "")}
                                 onChangeValue={(v) => patchAttack.mutate({ attackId: attack._id, data: { attackBonus: v } })}
                                 placeholder="+7"
-                                debounceMs={800}
                                 inputClassName="text-center text-xs"
                                 className="w-[80px]"
                                 readOnlyMode={isReadOnly}
                             />
                             <CompactRichInput
                                 value={attack.damageType}
-                                onChange={(v) => patchAttack.mutate({ attackId: attack._id, data: { damageType: v } })}
+                                onChange={() => {}}
+                                onBlur={(v) => patchAttack.mutate({ attackId: attack._id, data: { damageType: v } })}
                                 placeholder="Dano e tipo"
-                                debounceMs={1000}
                                 editorClassName="text-xs"
                                 disabled={isReadOnly}
                             />
@@ -173,7 +171,8 @@ export function SheetCenterColumn({ sheet, form, isReadOnly = false }: SheetCent
                         variant="full"
                         label="Características de Classe"
                         value={currentValues.classFeatures ?? sheet.classFeatures ?? ""}
-                        onChange={(v) => patchField("classFeatures" as keyof PatchSheetBody, v)}
+                        onChange={(v) => setFieldLocally("classFeatures" as keyof PatchSheetBody, v)}
+                        onBlur={(v) => patchField("classFeatures" as keyof PatchSheetBody, v)}
                         placeholder="Descreva as características de classe... use @para mencionar"
                         isLoading={isLoading}
                         minRows={5}
@@ -190,7 +189,8 @@ export function SheetCenterColumn({ sheet, form, isReadOnly = false }: SheetCent
                             variant="full"
                             label="Traços de Espécies"
                             value={currentValues.speciesTraits ?? sheet.speciesTraits ?? ""}
-                            onChange={(v) => patchField("speciesTraits" as keyof PatchSheetBody, v)}
+                            onChange={(v) => setFieldLocally("speciesTraits" as keyof PatchSheetBody, v)}
+                            onBlur={(v) => patchField("speciesTraits" as keyof PatchSheetBody, v)}
                             placeholder="Traços raciais... use @ para mencionar"
                             isLoading={isLoading}
                             minRows={5}
@@ -205,7 +205,8 @@ export function SheetCenterColumn({ sheet, form, isReadOnly = false }: SheetCent
                             variant="full"
                             label="Talentos"
                             value={currentValues.featuresNotes ?? sheet.featuresNotes ?? ""}
-                            onChange={(v) => patchField("featuresNotes" as keyof PatchSheetBody, v)}
+                            onChange={(v) => setFieldLocally("featuresNotes" as keyof PatchSheetBody, v)}
+                            onBlur={(v) => patchField("featuresNotes" as keyof PatchSheetBody, v)}
                             placeholder="@alerta, @atirador, @sortudo..."
                             isLoading={isLoading}
                             minRows={5}

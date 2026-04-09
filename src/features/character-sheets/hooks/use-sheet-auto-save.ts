@@ -10,27 +10,6 @@ interface UseSheetAutoSaveOptions {
     disabled?: boolean
 }
 
-const TEXT_ONLY_FIELDS = new Set<keyof PatchSheetBody>([
-    "name", "experience", "age", "height", "weight",
-    "eyes", "skin", "hair", "movementSpeed", "size",
-    "hitDiceTotal", "multiclassNotes",
-])
-
-function trimValue<K extends keyof PatchSheetBody>(field: K, value: PatchSheetBody[K]): PatchSheetBody[K] {
-    if (TEXT_ONLY_FIELDS.has(field) && typeof value === "string") {
-        return value.trim() as PatchSheetBody[K]
-    }
-    return value
-}
-
-function trimValues(values: Partial<PatchSheetBody>): Partial<PatchSheetBody> {
-    const result: Partial<PatchSheetBody> = {}
-    for (const key of Object.keys(values) as Array<keyof PatchSheetBody>) {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        ;(result as any)[key] = trimValue(key, values[key] as PatchSheetBody[typeof key])
-    }
-    return result
-}
 
 export function useSheetAutoSave(sheet: CharacterSheet, options?: UseSheetAutoSaveOptions) {
     const { mutate: patch, isPending } = usePatchSheet(sheet?._id)
@@ -49,20 +28,29 @@ export function useSheetAutoSave(sheet: CharacterSheet, options?: UseSheetAutoSa
     }, [sheet?._id, reset]) // eslint-disable-line react-hooks/exhaustive-deps
 
     /**
+     * Update local form state only — no server request. Use this for text inputs
+     * that save on blur via `patchField`.
+     */
+    const setFieldLocally = useCallback(
+        (field: keyof PatchSheetBody, value: unknown) => {
+            setValue(field, value as PatchSheetBody[typeof field], { shouldDirty: true, shouldTouch: true })
+        },
+        [setValue]
+    )
+
+    /**
      * Patch a single field. This is used by debounced inputs like SheetInput.
      */
     const patchField = useCallback(
         (field: keyof PatchSheetBody, value: unknown) => {
             if (options?.disabled) return
 
-            const trimmed = trimValue(field, value as PatchSheetBody[typeof field])
-
             // Update local form state immediately
-            setValue(field, trimmed, { shouldDirty: true, shouldTouch: true })
+            setValue(field, value as PatchSheetBody[typeof field], { shouldDirty: true, shouldTouch: true })
 
             // Only patch if we have an ID
             if (sheet?._id) {
-                const body: PatchSheetBody = { [field]: trimmed }
+                const body: PatchSheetBody = { [field]: value as PatchSheetBody[typeof field] }
                 patch(body, {
                     onSuccess: (updated) => {
                         if (field === "name" && updated?.slug && updated.slug !== sheet.slug) {
@@ -81,8 +69,10 @@ export function useSheetAutoSave(sheet: CharacterSheet, options?: UseSheetAutoSa
     const patchFields = useCallback(
         (values: Partial<PatchSheetBody>) => {
             if (options?.disabled) return
-            const trimmed = trimValues(values)
-            const entries = Object.entries(trimmed) as Array<[keyof PatchSheetBody, PatchSheetBody[keyof PatchSheetBody]]>
+            // No trimming here — patchFields is used by the mention sync which generates
+            // clean HTML internally. Trimming would cause a value mismatch on the next
+            // sync cycle and create an infinite re-patch loop.
+            const entries = Object.entries(values) as Array<[keyof PatchSheetBody, PatchSheetBody[keyof PatchSheetBody]]>
             if (entries.length === 0) return
 
             for (const [field, value] of entries) {
@@ -90,9 +80,9 @@ export function useSheetAutoSave(sheet: CharacterSheet, options?: UseSheetAutoSa
             }
 
             if (sheet?._id) {
-                patch(trimmed, {
+                patch(values, {
                     onSuccess: (updated) => {
-                        if (trimmed.name && updated?.slug && updated.slug !== sheet.slug) {
+                        if (values.name && updated?.slug && updated.slug !== sheet.slug) {
                             options?.onSlugChange?.(updated.slug)
                         }
                     },
@@ -104,6 +94,7 @@ export function useSheetAutoSave(sheet: CharacterSheet, options?: UseSheetAutoSa
 
     return {
         ...form,
+        setFieldLocally,
         patchField,
         patchFields,
         isSaving: isPending
