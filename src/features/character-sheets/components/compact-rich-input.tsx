@@ -19,6 +19,7 @@ interface CompactRichInputProps {
     /** Extra className forwarded to the RichTextEditor (only used in simple variant). */
     editorClassName?: string
     minRows?: number
+    disabled?: boolean
 }
 
 export function CompactRichInput({
@@ -34,6 +35,7 @@ export function CompactRichInput({
     variant = "simple",
     editorClassName,
     minRows,
+    disabled = false,
 }: CompactRichInputProps) {
     const [localValue, setLocalValue] = useState(value)
     const timeoutRef = useRef<NodeJS.Timeout | null>(null)
@@ -52,6 +54,7 @@ export function CompactRichInput({
 
     const handleChange = useCallback(
         (html: string) => {
+            if (disabled) return
             setLocalValue(html)
             if (timeoutRef.current) clearTimeout(timeoutRef.current)
             if (debounceMs > 0) {
@@ -86,6 +89,7 @@ export function CompactRichInput({
                         variant="full"
                         excludeId={excludeId}
                         minRows={minRows ?? 5}
+                        disabled={disabled}
                     />
                 </div>
             </div>
@@ -106,14 +110,16 @@ export function CompactRichInput({
                     placeholder={placeholder}
                     variant="simple"
                     excludeId={excludeId}
+                    disabled={disabled}
                     className={cn(
                         // Strip glass container for simple variant so our bottom border is the only affordance
                         "!bg-transparent !border-0 !shadow-none !backdrop-blur-none !rounded-none",
+                        disabled && "!opacity-100 !cursor-default pointer-events-none",
                         editorClassName,
                     )}
                 />
             </div>
-            <div className="w-full h-[1px] bg-white/10 group-focus-within:bg-white/40 transition-colors" />
+            <div className={cn("w-full h-[1px] bg-white/10 transition-colors", !disabled && "group-focus-within:bg-white/40")} />
             {label && (
                 <label
                     className={cn(

@@ -328,7 +328,7 @@ interface RichTextEditorProps {
     minRows?: number
 }
 
-const MenuBar = ({ editor, addImage }: { editor: Editor | null; addImage: () => void }) => {
+const MenuBar = ({ editor, addImage, disabled = false }: { editor: Editor | null; addImage: () => void; disabled?: boolean }) => {
     if (!editor) {
         return null
     }
@@ -340,8 +340,8 @@ const MenuBar = ({ editor, addImage }: { editor: Editor | null; addImage: () => 
                 variant="ghost"
                 size="sm"
                 tabIndex={-1}
+                disabled={disabled || !editor.can().chain().focus().toggleBold().run()}
                 onClick={() => editor.chain().focus().toggleBold().run()}
-                disabled={!editor.can().chain().focus().toggleBold().run()}
                 className={cn(editor.isActive("bold") ? "bg-white/10" : "", "h-8 w-8 p-0")}
             >
                 <Bold className="h-4 w-4" />
@@ -351,8 +351,8 @@ const MenuBar = ({ editor, addImage }: { editor: Editor | null; addImage: () => 
                 variant="ghost"
                 size="sm"
                 tabIndex={-1}
+                disabled={disabled || !editor.can().chain().focus().toggleItalic().run()}
                 onClick={() => editor.chain().focus().toggleItalic().run()}
-                disabled={!editor.can().chain().focus().toggleItalic().run()}
                 className={cn(editor.isActive("italic") ? "bg-white/10" : "", "h-8 w-8 p-0")}
             >
                 <Italic className="h-4 w-4" />
@@ -362,8 +362,8 @@ const MenuBar = ({ editor, addImage }: { editor: Editor | null; addImage: () => 
                 variant="ghost"
                 size="sm"
                 tabIndex={-1}
+                disabled={disabled || !editor.can().chain().focus().toggleStrike().run()}
                 onClick={() => editor.chain().focus().toggleStrike().run()}
-                disabled={!editor.can().chain().focus().toggleStrike().run()}
                 className={cn(editor.isActive("strike") ? "bg-white/10" : "", "h-8 w-8 p-0")}
             >
                 <Strikethrough className="h-4 w-4" />
@@ -376,6 +376,7 @@ const MenuBar = ({ editor, addImage }: { editor: Editor | null; addImage: () => 
                 variant="ghost"
                 size="sm"
                 tabIndex={-1}
+                disabled={disabled}
                 onClick={() => editor.chain().focus().toggleBulletList().run()}
                 className={cn(editor.isActive("bulletList") ? "bg-white/10" : "", "h-8 w-8 p-0")}
             >
@@ -386,6 +387,7 @@ const MenuBar = ({ editor, addImage }: { editor: Editor | null; addImage: () => 
                 variant="ghost"
                 size="sm"
                 tabIndex={-1}
+                disabled={disabled}
                 onClick={() => editor.chain().focus().toggleOrderedList().run()}
                 className={cn(editor.isActive("orderedList") ? "bg-white/10" : "", "h-8 w-8 p-0")}
             >
@@ -394,16 +396,16 @@ const MenuBar = ({ editor, addImage }: { editor: Editor | null; addImage: () => 
 
             <div className="w-px h-6 bg-white/10 mx-1 self-center" />
 
-            <Button type="button" variant="ghost" size="sm" tabIndex={-1} onClick={addImage} className="h-8 w-8 p-0" title="Upload Image">
+            <Button type="button" variant="ghost" size="sm" tabIndex={-1} disabled={disabled} onClick={addImage} className="h-8 w-8 p-0" title="Upload Image">
                 <ImageIcon className="h-4 w-4" />
             </Button>
 
             <div className="w-px h-6 bg-white/10 mx-1 self-center" />
 
-            <Button type="button" variant="ghost" size="sm" tabIndex={-1} onClick={() => editor.chain().focus().undo().run()} disabled={!editor.can().chain().focus().undo().run()} className="h-8 w-8 p-0">
+            <Button type="button" variant="ghost" size="sm" tabIndex={-1} onClick={() => editor.chain().focus().undo().run()} disabled={disabled || !editor.can().chain().focus().undo().run()} className="h-8 w-8 p-0">
                 <Undo className="h-4 w-4" />
             </Button>
-            <Button type="button" variant="ghost" size="sm" tabIndex={-1} onClick={() => editor.chain().focus().redo().run()} disabled={!editor.can().chain().focus().redo().run()} className="h-8 w-8 p-0">
+            <Button type="button" variant="ghost" size="sm" tabIndex={-1} onClick={() => editor.chain().focus().redo().run()} disabled={disabled || !editor.can().chain().focus().redo().run()} className="h-8 w-8 p-0">
                 <Redo className="h-4 w-4" />
             </Button>
         </div>
@@ -552,7 +554,7 @@ export function RichTextEditor({ value, onChange, className, disabled = false, e
 
     // Need to pass addImage to MenuBar inside the component to access editor and uploadImage
     const handleAddImageClick = useCallback(() => {
-        if (!editor) return
+        if (!editor || disabled) return
         const input = document.createElement("input")
         input.type = "file"
         input.accept = "image/*"
@@ -567,7 +569,7 @@ export function RichTextEditor({ value, onChange, className, disabled = false, e
             }
         }
         input.click()
-    }, [editor, uploadImage])
+    }, [disabled, editor, uploadImage])
 
     // Update content if value changes externally
     useEffect(() => {
@@ -592,13 +594,13 @@ export function RichTextEditor({ value, onChange, className, disabled = false, e
                 glassConfig.input.background,
                 glassConfig.input.blur,
                 glassConfig.input.border,
-                "focus-within:ring-2 focus-within:ring-blue-500/50 focus-within:border-blue-500/50",
+                !disabled && "focus-within:ring-2 focus-within:ring-blue-500/50 focus-within:border-blue-500/50",
                 disabled && "opacity-50 cursor-not-allowed",
                 isUploading && "animate-pulse pointer-events-none",
                 className,
             )}
         >
-            {variant === "full" && <MenuBar editor={editor} addImage={handleAddImageClick} />}
+            {variant === "full" && !disabled && <MenuBar editor={editor} addImage={handleAddImageClick} disabled={disabled} />}
             <div className="relative">
                 <EditorContent editor={editor} />
                 {isUploading && <div className="absolute inset-0 bg-black/50 flex items-center justify-center text-xs text-white">Uploading...</div>}

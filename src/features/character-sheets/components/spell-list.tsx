@@ -2,7 +2,7 @@
 
 import { motion, AnimatePresence } from "framer-motion"
 import { Plus, Trash2, Wand2 } from "lucide-react"
-import { cn } from "@/core/utils"
+import type { UseFormWatch } from "react-hook-form"
 import { SheetInput } from "./sheet-input"
 import { CompactRichInput } from "./compact-rich-input"
 import { GlassCheckbox } from "./glass-checkbox"
@@ -10,14 +10,15 @@ import { CalcTooltip } from "./calc-tooltip"
 import { useSpellList } from "./hooks/use-spell-list"
 import { GlassSelector } from "@/components/ui/glass-selector"
 import { attributeColors } from "@/lib/config/colors"
-import type { CharacterSheet } from "../types/character-sheet.types"
+import type { CharacterSheet, PatchSheetBody } from "../types/character-sheet.types"
 
 interface SpellListProps {
     sheet: CharacterSheet
     form: {
-        watch: (field?: string) => any
-        patchField: (field: string, value: unknown) => void
+        watch: UseFormWatch<PatchSheetBody>
+        patchField: (field: keyof PatchSheetBody, value: unknown) => void
     }
+    isReadOnly?: boolean
 }
 
 const SPELL_CASTING_OPTIONS = [
@@ -40,9 +41,10 @@ interface SpellSlotCardProps {
     used: number
     onPatchTotal: (v: number) => void
     onPatchUsed: (v: number) => void
+    isReadOnly?: boolean
 }
 
-function SpellSlotCard({ level, total, used, onPatchTotal, onPatchUsed }: SpellSlotCardProps) {
+function SpellSlotCard({ level, total, used, onPatchTotal, onPatchUsed, isReadOnly = false }: SpellSlotCardProps) {
     return (
         <div className="flex flex-col items-center gap-1.5 min-w-[56px] rounded-lg border border-white/10 bg-white/[0.02] px-2 py-2 flex-shrink-0">
             <span className="text-[9px] font-black uppercase text-white/40">{level}º</span>
@@ -58,6 +60,7 @@ function SpellSlotCard({ level, total, used, onPatchTotal, onPatchUsed }: SpellS
                 onChangeValue={(v) => onPatchTotal(parseInt(v) || 0)}
                 inputClassName="text-center text-[10px] w-6"
                 className="w-full"
+                readOnlyMode={isReadOnly}
             />
 
             {/* Slot checkboxes: checked = used */}
@@ -70,6 +73,7 @@ function SpellSlotCard({ level, total, used, onPatchTotal, onPatchUsed }: SpellS
                             checked={i < used}
                             onChange={() => onPatchUsed(i < used ? i : i + 1)}
                             accentColor="#7c3aed"
+                            disabled={isReadOnly}
                         />
                     ))}
                 </div>
@@ -81,7 +85,7 @@ function SpellSlotCard({ level, total, used, onPatchTotal, onPatchUsed }: SpellS
     )
 }
 
-export function SpellList({ sheet, form }: SpellListProps) {
+export function SpellList({ sheet, form, isReadOnly = false }: SpellListProps) {
     const {
         spells,
         spellSlots,
@@ -93,20 +97,22 @@ export function SpellList({ sheet, form }: SpellListProps) {
         handleRemoveSpell,
         handlePatchSpellSlot,
         handlePatchSpellcasting,
-    } = useSpellList({ sheet, form })
+    } = useSpellList({ sheet, form, isReadOnly })
 
     return (
         <div className="rounded-lg border border-white/10 bg-white/[0.03] overflow-hidden flex flex-col">
             {/* Header */}
             <div className="flex items-center justify-between px-3 py-2 border-b border-white/10 bg-white/[0.03]">
                 <span className="text-[9px] font-black uppercase tracking-[0.2em] text-white/40">Magias</span>
-                <button
-                    type="button"
-                    onClick={handleAddSpell}
-                    className="flex items-center gap-1 text-[8px] font-bold uppercase tracking-wider text-white/30 hover:text-white/70 transition-colors"
-                >
-                    <Plus className="w-3 h-3" /> Adicionar
-                </button>
+                {!isReadOnly && (
+                    <button
+                        type="button"
+                        onClick={handleAddSpell}
+                        className="flex items-center gap-1 text-[8px] font-bold uppercase tracking-wider text-white/30 hover:text-white/70 transition-colors"
+                    >
+                        <Plus className="w-3 h-3" /> Adicionar
+                    </button>
+                )}
             </div>
 
             {/* Spellcasting header */}
@@ -118,8 +124,11 @@ export function SpellList({ sheet, form }: SpellListProps) {
 
                 {/* Attribute selector — full width */}
                 <GlassSelector<string>
-                    value={spellcastingAttribute ?? ""}
-                    onChange={(v) => handlePatchSpellcasting(Array.isArray(v) ? v[0] || null : v || null)}
+                    value={spellcastingAttribute ?? undefined}
+                    onChange={(v) => {
+                        const next = Array.isArray(v) ? v[0] : v
+                        handlePatchSpellcasting(next === spellcastingAttribute ? null : next || null)
+                    }}
                     options={SPELL_CASTING_OPTIONS}
                     mode="single"
                     layout="grid"
@@ -127,6 +136,7 @@ export function SpellList({ sheet, form }: SpellListProps) {
                     fullWidth
                     layoutId="spellcasting-attr"
                     className="mb-2"
+                    disabled={isReadOnly}
                 />
 
                 {/* Save DC + Attack Bonus */}
@@ -161,6 +171,7 @@ export function SpellList({ sheet, form }: SpellListProps) {
                                 used={slot.used}
                                 onPatchTotal={(v) => handlePatchSpellSlot(level, "total", v)}
                                 onPatchUsed={(v) => handlePatchSpellSlot(level, "used", v)}
+                                isReadOnly={isReadOnly}
                             />
                         )
                     })}
@@ -200,6 +211,7 @@ export function SpellList({ sheet, form }: SpellListProps) {
                                 onChangeValue={(v) => handlePatchSpell(spell._id, { circle: parseInt(v) || 0 })}
                                 inputClassName="text-center text-xs w-7"
                                 className="w-8"
+                                readOnlyMode={isReadOnly}
                             />
 
                             {/* Name */}
@@ -209,15 +221,17 @@ export function SpellList({ sheet, form }: SpellListProps) {
                                 placeholder="Nome da magia"
                                 debounceMs={800}
                                 excludeId={sheet._id}
+                                disabled={isReadOnly}
                             />
 
                             {/* Casting time */}
                             <CompactRichInput
                                 value={spell.castingTime ?? ""}
                                 onChange={(v) => handlePatchSpell(spell._id, { castingTime: v })}
-                            placeholder="ação"
+                                placeholder="ação"
                                 debounceMs={800}
                                 excludeId={sheet._id}
+                                disabled={isReadOnly}
                             />
 
                             {/* Range */}
@@ -227,6 +241,7 @@ export function SpellList({ sheet, form }: SpellListProps) {
                                 placeholder="18 m"
                                 debounceMs={800}
                                 excludeId={sheet._id}
+                                disabled={isReadOnly}
                             />
 
                             {/* Concentration */}
@@ -234,6 +249,7 @@ export function SpellList({ sheet, form }: SpellListProps) {
                                 checked={!!spell.concentration}
                                 onChange={(v) => handlePatchSpell(spell._id, { concentration: v })}
                                 accentColor="#7c3aed"
+                                disabled={isReadOnly}
                             />
 
                             {/* Ritual */}
@@ -241,6 +257,7 @@ export function SpellList({ sheet, form }: SpellListProps) {
                                 checked={!!spell.ritual}
                                 onChange={(v) => handlePatchSpell(spell._id, { ritual: v })}
                                 accentColor="#0369a1"
+                                disabled={isReadOnly}
                             />
 
                             {/* Material */}
@@ -248,16 +265,19 @@ export function SpellList({ sheet, form }: SpellListProps) {
                                 checked={!!spell.material}
                                 onChange={(v) => handlePatchSpell(spell._id, { material: v })}
                                 accentColor="#b45309"
+                                disabled={isReadOnly}
                             />
 
                             {/* Delete */}
-                            <button
-                                type="button"
-                                onClick={() => handleRemoveSpell(spell._id)}
-                                className="text-red-400/20 hover:text-red-400 transition-colors flex-shrink-0 flex items-center justify-center"
-                            >
-                                <Trash2 className="w-3.5 h-3.5" />
-                            </button>
+                            {!isReadOnly && (
+                                <button
+                                    type="button"
+                                    onClick={() => handleRemoveSpell(spell._id)}
+                                    className="text-red-400/20 hover:text-red-400 transition-colors flex-shrink-0 flex items-center justify-center"
+                                >
+                                    <Trash2 className="w-3.5 h-3.5" />
+                                </button>
+                            )}
                         </motion.div>
                     ))}
                 </AnimatePresence>
@@ -267,13 +287,15 @@ export function SpellList({ sheet, form }: SpellListProps) {
             {spells.length === 0 && (
                 <div className="px-3 py-6 flex flex-col items-center gap-2 text-white/20">
                     <span className="text-[10px] font-semibold">Nenhuma magia ainda</span>
-                    <button
-                        type="button"
-                        onClick={handleAddSpell}
-                        className="flex items-center gap-1.5 py-1.5 px-3 border border-dashed border-white/10 rounded text-[9px] font-bold uppercase tracking-wider hover:border-white/20 hover:text-white/40 transition-all"
-                    >
-                        <Plus className="w-3 h-3" /> Adicionar magia
-                    </button>
+                    {!isReadOnly && (
+                        <button
+                            type="button"
+                            onClick={handleAddSpell}
+                            className="flex items-center gap-1.5 py-1.5 px-3 border border-dashed border-white/10 rounded text-[9px] font-bold uppercase tracking-wider hover:border-white/20 hover:text-white/40 transition-all"
+                        >
+                            <Plus className="w-3 h-3" /> Adicionar magia
+                        </button>
+                    )}
                 </div>
             )}
         </div>

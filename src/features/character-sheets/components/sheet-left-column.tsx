@@ -1,8 +1,9 @@
 "use client"
 
 import { cn } from "@/core/utils"
+import { rarityColors } from "@/lib/config/colors"
+import type { UseFormWatch } from "react-hook-form"
 import { CalcTooltip } from "./calc-tooltip"
-import { SheetInput } from "./sheet-input"
 import { AttributeBlock, type SkillEntry } from "./attribute-block"
 import { CompactRichInput } from "./compact-rich-input"
 import { GlassCheckbox } from "./glass-checkbox"
@@ -16,10 +17,14 @@ const LEFT_ATTRIBUTES: AttributeType[] = ["strength", "dexterity", "constitution
 
 interface SheetLeftColumnProps {
     sheet: CharacterSheet
-    form: any
+    form: {
+        watch: UseFormWatch<PatchSheetBody>
+        patchField: (field: keyof PatchSheetBody, value: unknown) => void
+    }
+    isReadOnly?: boolean
 }
 
-export function SheetLeftColumn({ sheet, form }: SheetLeftColumnProps) {
+export function SheetLeftColumn({ sheet, form, isReadOnly = false }: SheetLeftColumnProps) {
     const { watch, patchField } = form
     const currentValues = watch()
     const currentSheet = { ...sheet, ...currentValues } as CharacterSheet
@@ -47,6 +52,7 @@ export function SheetLeftColumn({ sheet, form }: SheetLeftColumnProps) {
             })
 
     const handleSkillChange = (skill: SkillName, proficient: boolean, expertise: boolean) => {
+        if (isReadOnly) return
         const curr = (currentSheet.skills as Record<string, { proficient: boolean; expertise: boolean }> | undefined) ?? {}
         patchField("skills", {
             ...curr,
@@ -55,6 +61,7 @@ export function SheetLeftColumn({ sheet, form }: SheetLeftColumnProps) {
     }
 
     const handleSavingThrowToggle = (attr: AttributeType) => {
+        if (isReadOnly) return
         const curr = (currentSheet.savingThrows as Record<string, boolean> | undefined) ?? {}
         patchField("savingThrows", { ...curr, [attr]: !curr[attr] })
     }
@@ -62,6 +69,7 @@ export function SheetLeftColumn({ sheet, form }: SheetLeftColumnProps) {
     const armorTraining = currentValues.armorTraining ?? sheet.armorTraining ?? { light: false, medium: false, heavy: false, shields: false }
 
     const toggleArmor = (key: "light" | "medium" | "heavy" | "shields") => {
+        if (isReadOnly) return
         patchField("armorTraining", { ...armorTraining, [key]: !armorTraining[key] })
     }
 
@@ -93,6 +101,7 @@ export function SheetLeftColumn({ sheet, form }: SheetLeftColumnProps) {
                     skills={getSkillsForAttribute(attrKey)}
                     onSkillChange={handleSkillChange}
                     isLoading={isLoading}
+                    isReadOnly={isReadOnly}
                 />
             ))}
 
@@ -100,17 +109,21 @@ export function SheetLeftColumn({ sheet, form }: SheetLeftColumnProps) {
             <div
                 className={cn(
                     "flex items-center gap-2 p-2 rounded-lg border cursor-pointer transition-all select-none",
+                    isReadOnly && "cursor-default",
                     currentValues.inspiration
-                        ? "border-amber-500/40 bg-amber-500/10"
+                        ? "border-cyan-500/40 bg-cyan-500/10"
                         : "border-white/10 bg-white/5 hover:border-white/20"
                 )}
-                onClick={() => patchField("inspiration", !currentValues.inspiration)}
+                onClick={() => !isReadOnly && patchField("inspiration", !currentValues.inspiration)}
             >
-                <Zap className={cn("w-4 h-4 flex-shrink-0", currentValues.inspiration ? "text-amber-400" : "text-white/30")} />
-                <span className={cn("text-[9px] font-black uppercase tracking-widest", currentValues.inspiration ? "text-amber-400" : "text-white/40")}>
+                <Zap className={cn("w-4 h-4 flex-shrink-0", currentValues.inspiration ? "text-cyan-400" : "text-white/30")} />
+                <span className={cn("text-[9px] font-black uppercase tracking-widest", currentValues.inspiration ? "text-cyan-400" : "text-white/40")}>
                     Inspiração Heroica
                 </span>
-                <div className={cn("ml-auto w-3 h-3 rotate-45 border transition-all", currentValues.inspiration ? "bg-amber-400 border-amber-400" : "bg-transparent border-white/30")} />
+                <div
+                    className={cn("ml-auto w-3 h-3 rotate-45 border transition-all", !currentValues.inspiration && "bg-transparent border-white/30")}
+                    style={currentValues.inspiration ? { backgroundColor: rarityColors.divine, borderColor: rarityColors.divine } : undefined}
+                />
             </div>
 
             {/* Treinamento em Equipamentos e Proficiências */}
@@ -126,10 +139,11 @@ export function SheetLeftColumn({ sheet, form }: SheetLeftColumnProps) {
                         <label className="text-[8px] font-black uppercase tracking-widest text-white/30 ml-1">Armaduras</label>
                         <div className="flex flex-wrap gap-x-3 gap-y-1 mt-1">
                             {(["light", "medium", "heavy", "shields"] as const).map((key) => (
-                                <label key={key} className="flex items-center gap-1.5 cursor-pointer group" onClick={() => toggleArmor(key)}>
+                                <label key={key} className={cn("flex items-center gap-1.5 group", !isReadOnly && "cursor-pointer")} onClick={() => toggleArmor(key)}>
                                     <GlassCheckbox
                                         checked={!!armorTraining[key]}
                                         onChange={() => toggleArmor(key)}
+                                        disabled={isReadOnly}
                                     />
                                     <span className="text-[8px] font-semibold text-white/40 group-hover:text-white/70 transition-colors capitalize">
                                         {key === "light" ? "Leve" : key === "medium" ? "Média" : key === "heavy" ? "Pesada" : "Escudos"}
@@ -146,6 +160,7 @@ export function SheetLeftColumn({ sheet, form }: SheetLeftColumnProps) {
                         onChange={(v) => patchField("weaponProficiencies" as keyof PatchSheetBody, v)}
                         placeholder="Proficiências com armas..."
                         isLoading={isLoading}
+                        disabled={isReadOnly}
                     />
 
                     {/* Tool proficiencies */}
@@ -155,10 +170,10 @@ export function SheetLeftColumn({ sheet, form }: SheetLeftColumnProps) {
                         onChange={(v) => patchField("toolProficiencies" as keyof PatchSheetBody, v)}
                         placeholder="Proficiências com ferramentas..."
                         isLoading={isLoading}
+                        disabled={isReadOnly}
                     />
                 </div>
             </div>
         </div>
     )
 }
-

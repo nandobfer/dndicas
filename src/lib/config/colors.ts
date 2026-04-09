@@ -183,6 +183,16 @@ export const entityColors = {
         text: "text-amber-400",
         hex: rarityColors.legendary // #F59E0B
     },
+    Subclasse: {
+        color: "purple",
+        mention: "bg-purple-500/10 text-purple-400 border-purple-400/20",
+        badge: "bg-purple-400/20 text-purple-400",
+        border: "border-purple-500/20",
+        hoverBorder: "hover:border-purple-500/40",
+        bgAlpha: "bg-purple-500/10",
+        text: "text-purple-400",
+        hex: rarityColors.veryRare
+    },
     Raça: {
         color: "red",
         mention: "bg-red-500/10 text-red-400 border-red-400/20",

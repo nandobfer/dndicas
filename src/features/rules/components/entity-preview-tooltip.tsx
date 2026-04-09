@@ -13,6 +13,7 @@ import { GlassPopover, GlassPopoverTrigger, GlassPopoverContent } from "@/compon
 import { FeatPreview } from "@/features/feats/components/feat-preview"
 import { SpellPreview } from "@/features/spells/components/spell-preview"
 import { ClassPreview } from "@/features/classes/components/class-preview"
+import { SubclassPreview } from "@/features/classes/components/subclass-preview"
 import { BackgroundPreview } from "@/features/backgrounds/components/background-preview"
 import { RacePreview } from "@/features/races/components/race-preview"
 import { ItemPreview } from "@/features/items/components/item-preview"
@@ -221,6 +222,9 @@ export const EntityPreviewTooltip = ({ entityId, entityType, children, side = "t
                 endpoint = `/api/spells/${entityId}`
             } else if (entityType === "Classe") {
                 endpoint = `/api/classes/${entityId}`
+            } else if (entityType === "Subclasse") {
+                const match = /^subclass:([^:]+):(.+)$/.exec(entityId)
+                endpoint = match ? `/api/classes/${match[1]}` : ""
             } else if (entityType === "Origem") {
                 endpoint = `/api/backgrounds/${entityId}`
             } else if (entityType === "Raça") {
@@ -229,10 +233,19 @@ export const EntityPreviewTooltip = ({ entityId, entityType, children, side = "t
                 endpoint = `/api/items/${entityId}`
             }
 
+            if (!endpoint) return
+
             const res = await fetch(endpoint)
             if (res.ok) {
                 const json = await res.json()
-                setData(json)
+                if (entityType === "Subclasse") {
+                    const match = /^subclass:([^:]+):(.+)$/.exec(entityId)
+                    const subclassId = match?.[2]
+                    const subclass = json?.subclasses?.find((sub: any) => String(sub._id || sub.name) === subclassId) || null
+                    setData({ parentClass: json, subclass })
+                } else {
+                    setData(json)
+                }
             }
         } catch (e) {
             console.error("Failed to fetch entity preview:", e)
@@ -277,6 +290,11 @@ export const EntityPreviewTooltip = ({ entityId, entityType, children, side = "t
                 return <SpellPreview spell={data} />
             case "Classe":
                 return <ClassPreview characterClass={data} showStatus={true} />
+            case "Subclasse":
+                if (!data?.parentClass || !data?.subclass) {
+                    return <div className="p-4 text-xs text-white/40 text-center w-[200px]">Subclasse não encontrada</div>
+                }
+                return <SubclassPreview subclass={data.subclass} parentClassName={data.parentClass.name} linkToParentClass />
             case "Origem":
                 return <BackgroundPreview background={data} />
             case "Raça":

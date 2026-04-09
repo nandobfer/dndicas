@@ -7,15 +7,16 @@ import { useLongRest } from "../hooks/use-long-rest"
 interface LongRestButtonProps {
     sheetId: string
     className?: string
+    disabled?: boolean
 }
 
-export function LongRestButton({ sheetId, className }: LongRestButtonProps) {
+export function LongRestButton({ sheetId, className, disabled = false }: LongRestButtonProps) {
     const { applyLongRest, isPending } = useLongRest(sheetId)
 
     return (
         <button
-            onClick={applyLongRest}
-            disabled={isPending}
+            onClick={() => !disabled && applyLongRest()}
+            disabled={isPending || disabled}
             className={cn(
                 "inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold",
                 "bg-indigo-500/10 hover:bg-indigo-500/20 border border-indigo-500/20",

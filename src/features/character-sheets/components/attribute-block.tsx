@@ -1,7 +1,7 @@
 "use client"
 
 import { cn } from "@/core/utils"
-import { attributeColors } from "@/lib/config/colors"
+import { attributeColors, rarityColors } from "@/lib/config/colors"
 import { CalcTooltip } from "./calc-tooltip"
 import { SheetInput } from "./sheet-input"
 import { GlassCheckbox, SkillGlassCheckbox, type SkillCheckboxState } from "./glass-checkbox"
@@ -26,6 +26,7 @@ interface AttributeBlockProps {
     skills?: SkillEntry[]
     onSkillChange: (skill: SkillName, proficient: boolean, expertise: boolean) => void
     isLoading?: boolean
+    isReadOnly?: boolean
 }
 
 const ATTRIBUTE_LABEL: Record<AttributeType, string> = {
@@ -74,6 +75,7 @@ export function AttributeBlock({
     skills = [],
     onSkillChange,
     isLoading = false,
+    isReadOnly = false,
 }: AttributeBlockProps) {
     const colorKey = COLOR_MAP[attributeKey]
     const colors = attributeColors[colorKey]
@@ -81,6 +83,7 @@ export function AttributeBlock({
     const abbr = ATTRIBUTE_ABBR[attributeKey]
 
     const handleSkillStateChange = (skillName: SkillName, next: SkillCheckboxState) => {
+        if (isReadOnly) return
         if (next === 0) onSkillChange(skillName, false, false)
         else if (next === 1) onSkillChange(skillName, true, false)
         else onSkillChange(skillName, true, true)
@@ -124,6 +127,7 @@ export function AttributeBlock({
                     isLoading={isLoading}
                     inputClassName="text-center text-sm font-bold"
                     className="flex-1"
+                    readOnlyMode={isReadOnly}
                 />
             </div>
 
@@ -133,6 +137,7 @@ export function AttributeBlock({
                     checked={savingThrow.proficient}
                     onChange={onSavingThrowToggle}
                     accentColor={colors.hex}
+                    disabled={isReadOnly}
                 />
                 <CalcTooltip formula={savingThrow.formula}>
                     <div className="flex items-center gap-1.5 cursor-help">
@@ -153,6 +158,8 @@ export function AttributeBlock({
                                 state={toSkillState(skill.proficient, skill.expertise)}
                                 onChange={(next) => handleSkillStateChange(skill.name, next)}
                                 proficientColor={colors.hex}
+                                expertiseColor={rarityColors.divine}
+                                disabled={isReadOnly}
                             />
                             <CalcTooltip formula={skill.formula}>
                                 <div className="flex items-center gap-1 cursor-help">

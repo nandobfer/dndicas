@@ -39,6 +39,7 @@ export interface CharacterSheet {
     subclass: string
     subclassRef: string | null
     level: number
+    experience: string
     race: string
     raceRef: string | null
     origin: string
@@ -66,7 +67,7 @@ export interface CharacterSheet {
     savingThrows: Record<AttributeType, boolean>
     skills: Record<SkillName, { proficient: boolean; expertise: boolean; override?: number }>
     // Combat
-    movementSpeed: number | null
+    movementSpeed: string
     hpMax: number | null
     hpCurrent: number | null
     hpTemp: number
@@ -156,7 +157,7 @@ export interface CharacterAttack {
     _id: string
     sheetId: string
     name: string
-    attackBonus: number
+    attackBonus: string
     damageType: string
     notes: string
     createdAt: string
@@ -242,14 +243,14 @@ export interface CreateFeatBody {
 
 export interface CreateAttackBody {
     name: string
-    attackBonus?: number
+    attackBonus?: string
     damageType?: string
     notes?: string
 }
 
 export interface PatchAttackBody {
     name?: string
-    attackBonus?: number
+    attackBonus?: string
     damageType?: string
     notes?: string
 }
@@ -263,6 +264,7 @@ export const PatchSheetSchema = z.object({
     subclass: z.string().max(2000).optional(),
     subclassRef: z.string().nullable().optional(),
     level: z.number().int().min(1).max(20).optional(),
+    experience: z.string().optional(),
     race: z.string().max(2000).optional(),
     raceRef: z.string().nullable().optional(),
     origin: z.string().max(2000).optional(),
@@ -286,7 +288,7 @@ export const PatchSheetSchema = z.object({
     proficiencyBonusOverride: z.number().int().nullable().optional(),
     savingThrows: z.record(z.string(), z.boolean()).optional(),
     skills: z.record(z.string(), z.object({ proficient: z.boolean(), expertise: z.boolean(), override: z.number().optional() })).optional(),
-    movementSpeed: z.number().int().nullable().optional(),
+    movementSpeed: z.string().optional(),
     hpMax: z.number().int().nullable().optional(),
     hpCurrent: z.number().int().nullable().optional(),
     hpTemp: z.number().int().min(0).optional(),
@@ -318,14 +320,14 @@ export const PatchSheetSchema = z.object({
 
 export const CreateItemSchema = z.object({
     catalogItemId: z.string().optional(),
-    name: z.string().min(1).max(100),
+    name: z.string().min(1).max(2000),
     image: z.string().url().nullable().optional(),
     quantity: z.number().int().min(0).optional(),
     notes: z.string().optional(),
 })
 
 export const PatchItemSchema = z.object({
-    name: z.string().min(1).max(100).optional(),
+    name: z.string().min(1).max(2000).optional(),
     quantity: z.number().int().min(0).optional(),
     notes: z.string().optional(),
 })
@@ -374,14 +376,14 @@ export const CreateFeatSchema = z.object({
 
 export const CreateAttackSchema = z.object({
     name: z.string().min(1).max(500),
-    attackBonus: z.number().int().optional(),
+    attackBonus: z.string().optional(),
     damageType: z.string().max(500).optional(),
     notes: z.string().optional(),
 })
 
 export const PatchAttackSchema = z.object({
     name: z.string().min(1).max(500).optional(),
-    attackBonus: z.number().int().optional(),
+    attackBonus: z.string().optional(),
     damageType: z.string().max(500).optional(),
     notes: z.string().optional(),
 })

@@ -3,6 +3,7 @@
 import { useCallback } from "react"
 import { useRouter } from "next/navigation"
 import { motion } from "framer-motion"
+import { useAuth } from "@/core/hooks/useAuth"
 import { GlassCard, GlassCardContent } from "@/components/ui/glass-card"
 import { motionConfig } from "@/lib/config/motion-configs"
 import { SheetHeader } from "./sheet-header"
@@ -21,43 +22,46 @@ interface SheetFormProps {
 
 export function SheetForm({ sheet }: SheetFormProps) {
     const router = useRouter()
+    const { userId, isSignedIn, isLoaded } = useAuth()
+    const canEdit = isLoaded && isSignedIn && userId === sheet.userId
+    const isReadOnly = !canEdit
 
     const handleSlugChange = useCallback((newSlug: string) => {
         router.replace(`/sheets/${newSlug}`)
     }, [router])
 
-    const form = useSheetAutoSave(sheet, { onSlugChange: handleSlugChange })
+    const form = useSheetAutoSave(sheet, { onSlugChange: handleSlugChange, disabled: isReadOnly })
     const { watch, patchField } = form
     const { isPending: isLoading } = usePatchSheet(sheet._id)
 
     return (
         <motion.div variants={motionConfig.variants.fadeInUp} initial="initial" animate="animate" className="space-y-4">
             {/* Header */}
-            <SheetHeader sheet={sheet} form={form} />
+            <SheetHeader sheet={sheet} form={form} isReadOnly={isReadOnly} />
 
             {/* Three-column layout: narrow | narrow | wide */}
             <div className="grid grid-cols-1 lg:grid-cols-[1fr_1fr_2fr] gap-4">
                 <GlassCard>
                     <GlassCardContent className="pt-4 pb-4">
-                        <SheetLeftColumn sheet={sheet} form={form} />
+                        <SheetLeftColumn sheet={sheet} form={form} isReadOnly={isReadOnly} />
                     </GlassCardContent>
                 </GlassCard>
 
                 <GlassCard>
                     <GlassCardContent className="pt-4 pb-4">
-                        <SheetMiddleColumn sheet={sheet} form={form} />
+                        <SheetMiddleColumn sheet={sheet} form={form} isReadOnly={isReadOnly} />
                     </GlassCardContent>
                 </GlassCard>
 
                 <GlassCard>
                     <GlassCardContent className="pt-4 pb-4">
-                        <SheetCenterColumn sheet={sheet} form={form} />
+                        <SheetCenterColumn sheet={sheet} form={form} isReadOnly={isReadOnly} />
                     </GlassCardContent>
                 </GlassCard>
             </div>
 
             {/* Items + Spells — two equal columns, always open */}
-            <SheetRightColumn sheet={sheet} form={form} />
+            <SheetRightColumn sheet={sheet} form={form} isReadOnly={isReadOnly} />
 
             {/* Notes — full-width, always open */}
             <GlassCard>
@@ -71,6 +75,7 @@ export function SheetForm({ sheet }: SheetFormProps) {
                         isLoading={isLoading}
                         minRows={5}
                         excludeId={sheet._id}
+                        disabled={isReadOnly}
                     />
                 </GlassCardContent>
             </GlassCard>

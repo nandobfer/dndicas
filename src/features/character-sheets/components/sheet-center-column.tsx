@@ -2,6 +2,7 @@
 
 import { Plus, Trash2 } from "lucide-react"
 import { motion, AnimatePresence } from "framer-motion"
+import type { UseFormWatch } from "react-hook-form"
 import { PatchSheetBody } from "../types/character-sheet.types"
 import { usePatchSheet, useAttacks, useAddAttack, usePatchAttack, useRemoveAttack } from "../api/character-sheets-queries"
 import { useCharacterCalculations } from "../hooks/use-character-calculations"
@@ -12,12 +13,16 @@ import { CompactRichInput } from "./compact-rich-input"
 
 interface SheetCenterColumnProps {
     sheet: CharacterSheet
-    form: any
+    form: {
+        watch: UseFormWatch<PatchSheetBody>
+        patchField: (field: keyof PatchSheetBody, value: unknown) => void
+    }
+    isReadOnly?: boolean
 }
 
 const formatMod = (v: number) => (v >= 0 ? `+${v}` : `${v}`)
 
-export function SheetCenterColumn({ sheet, form }: SheetCenterColumnProps) {
+export function SheetCenterColumn({ sheet, form, isReadOnly = false }: SheetCenterColumnProps) {
     const { watch, patchField } = form
     const currentValues = watch()
     const currentSheet = { ...sheet, ...currentValues } as CharacterSheet
@@ -43,12 +48,14 @@ export function SheetCenterColumn({ sheet, form }: SheetCenterColumnProps) {
                 <div className="rounded-lg bg-white/[0.03] border border-white/10 p-2 flex flex-col items-center gap-1">
                     <span className="text-[8px] font-black uppercase tracking-widest text-white/40 text-center">Deslocamento</span>
                     <SheetInput
-                        type="number"
-                        value={String(currentValues.movementSpeed ?? 30)}
-                        onChangeValue={(val) => patchField("movementSpeed", parseInt(val) || 30)}
+                        value={String(currentValues.movementSpeed ?? sheet.movementSpeed ?? "")}
+                        onChangeValue={(val) => patchField("movementSpeed", val)}
+                        placeholder="9m"
+                        debounceMs={800}
                         isLoading={isLoading}
                         inputClassName="text-xl font-black text-center"
                         className="items-center"
+                        readOnlyMode={isReadOnly}
                     />
                 </div>
 
@@ -60,6 +67,7 @@ export function SheetCenterColumn({ sheet, form }: SheetCenterColumnProps) {
                         placeholder="Médio"
                         isLoading={isLoading}
                         className="w-full"
+                        disabled={isReadOnly}
                     />
                 </div>
 
@@ -103,13 +111,16 @@ export function SheetCenterColumn({ sheet, form }: SheetCenterColumnProps) {
                                 onChange={(v) => patchAttack.mutate({ attackId: attack._id, data: { name: v || "Ataque" } })}
                                 placeholder="Nome"
                                 debounceMs={1000}
+                                disabled={isReadOnly}
                             />
                             <SheetInput
                                 compact
-                                type="number"
-                                value={String(attack.attackBonus)}
-                                onChangeValue={(v) => patchAttack.mutate({ attackId: attack._id, data: { attackBonus: parseInt(v) || 0 } })}
+                                value={String(attack.attackBonus ?? "")}
+                                onChangeValue={(v) => patchAttack.mutate({ attackId: attack._id, data: { attackBonus: v } })}
+                                placeholder="+7"
+                                debounceMs={800}
                                 inputClassName="text-center text-xs"
+                                readOnlyMode={isReadOnly}
                             />
                             <CompactRichInput
                                 value={attack.damageType}
@@ -117,11 +128,13 @@ export function SheetCenterColumn({ sheet, form }: SheetCenterColumnProps) {
                                 placeholder="Dano e tipo"
                                 debounceMs={1000}
                                 editorClassName="text-xs"
+                                disabled={isReadOnly}
                             />
                             <button
                                 type="button"
-                                onClick={() => removeAttack.mutate(attack._id)}
-                                className="text-red-400/30 hover:text-red-400 transition-colors flex-shrink-0 flex items-center justify-center"
+                                disabled={isReadOnly}
+                                onClick={() => !isReadOnly && removeAttack.mutate(attack._id)}
+                                className="text-red-400/30 hover:text-red-400 transition-colors flex-shrink-0 flex items-center justify-center disabled:opacity-30 disabled:cursor-not-allowed"
                             >
                                 <Trash2 className="w-3.5 h-3.5" />
                             </button>
@@ -130,15 +143,17 @@ export function SheetCenterColumn({ sheet, form }: SheetCenterColumnProps) {
                     </AnimatePresence>
                 </div>
 
+                {!isReadOnly && (
                 <div className="px-2 pb-2 pt-1">
                     <button
                         type="button"
-                        onClick={() => addAttack.mutate({ name: "Novo Ataque", attackBonus: 0, damageType: "" })}
+                        onClick={() => addAttack.mutate({ name: "Novo Ataque", attackBonus: "", damageType: "" })}
                         className="w-full flex items-center justify-center gap-2 py-1.5 border border-dashed border-white/10 rounded text-[9px] font-bold uppercase tracking-wider text-white/30 hover:text-white/60 hover:border-white/20 transition-all"
                     >
                         <Plus className="w-3 h-3" /> Adicionar ataque
                     </button>
                 </div>
+                )}
             </div>
 
             {/* Características de Classe */}
@@ -152,6 +167,7 @@ export function SheetCenterColumn({ sheet, form }: SheetCenterColumnProps) {
                         placeholder="Descreva as características de classe... use @para mencionar"
                         isLoading={isLoading}
                         minRows={5}
+                        disabled={isReadOnly}
                     />
                 </div>
             </div>
@@ -168,6 +184,7 @@ export function SheetCenterColumn({ sheet, form }: SheetCenterColumnProps) {
                             placeholder="Traços raciais... use @ para mencionar"
                             isLoading={isLoading}
                             minRows={5}
+                            disabled={isReadOnly}
                         />
                     </div>
                 </div>
@@ -182,6 +199,7 @@ export function SheetCenterColumn({ sheet, form }: SheetCenterColumnProps) {
                             placeholder="@alerta, @atirador, @sortudo..."
                             isLoading={isLoading}
                             minRows={5}
+                            disabled={isReadOnly}
                         />
                     </div>
                 </div>
@@ -189,4 +207,3 @@ export function SheetCenterColumn({ sheet, form }: SheetCenterColumnProps) {
         </div>
     )
 }
-
