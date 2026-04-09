@@ -13,6 +13,7 @@ import { SheetCenterColumn } from "./sheet-center-column"
 import { SheetRightColumn } from "./sheet-right-column"
 import { CompactRichInput } from "./compact-rich-input"
 import { useSheetAutoSave } from "../hooks/use-sheet-auto-save"
+import { useSheetMentionSync } from "../hooks/use-sheet-mention-sync"
 import { usePatchSheet } from "../api/character-sheets-queries"
 import type { CharacterSheetFull, PatchSheetBody } from "../types/character-sheet.types"
 
@@ -33,6 +34,8 @@ export function SheetForm({ sheet }: SheetFormProps) {
     const form = useSheetAutoSave(sheet, { onSlugChange: handleSlugChange, disabled: isReadOnly })
     const { watch, patchField } = form
     const { isPending: isLoading } = usePatchSheet(sheet._id)
+
+    useSheetMentionSync({ sheet, form, isReadOnly })
 
     return (
         <motion.div variants={motionConfig.variants.fadeInUp} initial="initial" animate="animate" className="space-y-4">
