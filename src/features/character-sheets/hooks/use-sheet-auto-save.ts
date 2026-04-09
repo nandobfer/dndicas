@@ -30,15 +30,15 @@ export function useSheetAutoSave(sheet: CharacterSheet, options?: UseSheetAutoSa
      * Patch a single field. This is used by debounced inputs like SheetInput.
      */
     const patchField = useCallback(
-        (field: keyof PatchSheetBody, value: any) => {
+        (field: keyof PatchSheetBody, value: unknown) => {
             if (options?.disabled) return
 
             // Update local form state immediately
-            setValue(field, value, { shouldDirty: true, shouldTouch: true })
+            setValue(field, value as PatchSheetBody[typeof field], { shouldDirty: true, shouldTouch: true })
 
             // Only patch if we have an ID
             if (sheet?._id) {
-                const body: PatchSheetBody = { [field]: value }
+                const body: PatchSheetBody = { [field]: value as PatchSheetBody[typeof field] }
                 patch(body, {
                     onSuccess: (updated) => {
                         if (field === "name" && updated?.slug && updated.slug !== sheet.slug) {
@@ -48,12 +48,39 @@ export function useSheetAutoSave(sheet: CharacterSheet, options?: UseSheetAutoSa
                 })
             }
         },
-        [patch, setValue, sheet?._id, sheet?.slug, options]
+        [options, patch, setValue, sheet]
+    )
+
+    /**
+     * Patch multiple fields in a single request while keeping local form state in sync.
+     */
+    const patchFields = useCallback(
+        (values: Partial<PatchSheetBody>) => {
+            if (options?.disabled) return
+            const entries = Object.entries(values) as Array<[keyof PatchSheetBody, PatchSheetBody[keyof PatchSheetBody]]>
+            if (entries.length === 0) return
+
+            for (const [field, value] of entries) {
+                setValue(field, value, { shouldDirty: true, shouldTouch: true })
+            }
+
+            if (sheet?._id) {
+                patch(values, {
+                    onSuccess: (updated) => {
+                        if (values.name && updated?.slug && updated.slug !== sheet.slug) {
+                            options?.onSlugChange?.(updated.slug)
+                        }
+                    },
+                })
+            }
+        },
+        [options, patch, setValue, sheet]
     )
 
     return {
         ...form,
         patchField,
+        patchFields,
         isSaving: isPending
     }
 }

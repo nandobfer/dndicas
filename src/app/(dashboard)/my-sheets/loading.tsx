@@ -14,7 +14,7 @@ export default function MySheetsLoading() {
             <div className="h-14 w-full bg-white/5 rounded-xl animate-pulse" />
 
             {/* Grid skeleton */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 {Array.from({ length: 8 }).map((_, i) => (
                     <div key={i} className="h-40 rounded-xl bg-white/5 animate-pulse" />
                 ))}

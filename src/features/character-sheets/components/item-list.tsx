@@ -77,7 +77,7 @@ export function ItemList({ sheet, form, isReadOnly = false }: ItemListProps) {
 
             {/* Table header */}
             {items.length > 0 && (
-                <div className="grid grid-cols-[2fr_1fr_auto] gap-1 px-3 py-1 border-b border-white/5">
+                <div className="grid grid-cols-[minmax(0,1fr)_72px_auto] gap-1 px-3 py-1 border-b border-white/5">
                     {["Nome", "Qtd", ""].map((h) => (
                         <span key={h} className="text-[8px] font-black uppercase tracking-widest text-white/20 text-center">
                             {h}
@@ -96,7 +96,7 @@ export function ItemList({ sheet, form, isReadOnly = false }: ItemListProps) {
                             animate={{ opacity: 1, height: "auto" }}
                             exit={{ opacity: 0, height: 0 }}
                             transition={{ duration: 0.2 }}
-                            className="grid grid-cols-[2fr_1fr_auto] gap-1 px-3 py-1 items-center"
+                            className="grid grid-cols-[minmax(0,1fr)_72px_auto] gap-1 px-3 py-1 items-center"
                         >
                             <CompactRichInput
                                 value={item.name}
@@ -114,6 +114,7 @@ export function ItemList({ sheet, form, isReadOnly = false }: ItemListProps) {
                                 value={String(item.quantity)}
                                 onChangeValue={(v) => handlePatchItem(item._id, { quantity: parseInt(v) || 0 })}
                                 inputClassName="text-center text-xs"
+                                className="w-[72px]"
                                 readOnlyMode={isReadOnly}
                             />
                             {!isReadOnly && (
