@@ -20,6 +20,8 @@ import {
     getActiveClassMentions,
     getActiveRaceMentions,
     getActiveSubclassMentions,
+    mapCatalogAttributeToSheetAttribute,
+    mapHitDiceToSheetHitDice,
     mapSpellSlotsForLevel,
     removeMentionsFromHtml,
     resolveSubclassFromClasses,
@@ -63,6 +65,7 @@ export function useSheetMentionSync({ sheet, form, isReadOnly = false }: UseShee
     const featuresNotes = watch("featuresNotes") ?? sheet.featuresNotes ?? ""
     const currentSkills = watch("skills") ?? sheet.skills
     const currentSpellSlots = watch("spellSlots") ?? sheet.spellSlots
+    const currentHitDiceTotal = watch("hitDiceTotal") ?? sheet.hitDiceTotal ?? null
     const watchedClassRef = watch("classRef")
     const watchedSubclassRef = watch("subclassRef")
     const watchedRaceRef = watch("raceRef")
@@ -198,8 +201,9 @@ export function useSheetMentionSync({ sheet, form, isReadOnly = false }: UseShee
             const winningSubclass = activeSubclasses.find(isSpellcastingSubclass)
             const winningClass = activeClasses.find(isSpellcastingClass)
             const winningSpellSource = winningSubclass?.entity ?? winningClass ?? null
-            const nextSpellcastingAttribute = winningSpellSource?.spellcastingAttribute ?? null
+            const nextSpellcastingAttribute = mapCatalogAttributeToSheetAttribute(winningSpellSource?.spellcastingAttribute)
             const nextSpellSlots = mapSpellSlotsForLevel(level, winningSpellSource, currentSpellSlots)
+            const nextHitDice = mapHitDiceToSheetHitDice(activeClasses[0]?.hitDice)
 
             const patch: Partial<PatchSheetBody> = {}
 
@@ -225,6 +229,9 @@ export function useSheetMentionSync({ sheet, form, isReadOnly = false }: UseShee
             assignIfChanged(patch, "classFeatures", nextClassFeatures, classFeatures)
             assignIfChanged(patch, "speciesTraits", nextSpeciesTraits, speciesTraits)
             assignIfChanged(patch, "featuresNotes", nextFeaturesNotes, featuresNotes)
+            if (nextHitDice) {
+                assignIfChanged(patch, "hitDiceTotal", nextHitDice, currentHitDiceTotal)
+            }
 
             if (activeBackgrounds.length > 0) {
                 const backgroundSkills = dedupeSkillNames(activeBackgrounds.flatMap((background) => background.skillProficiencies ?? []))
@@ -247,6 +254,7 @@ export function useSheetMentionSync({ sheet, form, isReadOnly = false }: UseShee
         currentSkills,
         currentSpellSlots,
         currentSpellcastingAttribute,
+        currentHitDiceTotal,
         featuresNotes,
         isReadOnly,
         level,

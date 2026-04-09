@@ -1,10 +1,10 @@
 "use client"
 
 import type { Background } from "@/features/backgrounds/types/backgrounds.types"
-import type { CharacterClass, ClassTrait, Subclass } from "@/features/classes/types/classes.types"
+import type { AttributeType as CatalogAttributeType, CharacterClass, ClassTrait, HitDiceType, Subclass } from "@/features/classes/types/classes.types"
 import type { Feat } from "@/features/feats/types/feats.types"
 import type { Race, RaceTrait } from "@/features/races/types/races.types"
-import type { PatchSheetBody, SkillName } from "../types/character-sheet.types"
+import type { AttributeType as SheetAttributeType, PatchSheetBody, SkillName } from "../types/character-sheet.types"
 
 export interface ParsedMention {
     id: string
@@ -13,7 +13,7 @@ export interface ParsedMention {
 }
 
 export interface SpellcastingSource {
-    spellcastingAttribute?: string | null
+    spellcastingAttribute?: CatalogAttributeType | null
     progressionTable?: CharacterClass["progressionTable"]
 }
 
@@ -24,6 +24,15 @@ export interface ResolvedSubclass {
 }
 
 const EMPTY_HTML_VALUES = new Set(["", "<p></p>"])
+
+const CATALOG_TO_SHEET_ATTRIBUTE: Record<CatalogAttributeType, SheetAttributeType> = {
+    Força: "strength",
+    Destreza: "dexterity",
+    Constituição: "constitution",
+    Inteligência: "intelligence",
+    Sabedoria: "wisdom",
+    Carisma: "charisma",
+}
 
 export function normalizeHtml(html: string | null | undefined): string {
     const value = String(html ?? "").trim()
@@ -89,10 +98,25 @@ export function appendMentionsToHtml(html: string | null | undefined, mentionsTo
     const mentions = uniqueMentions.filter((mention) => !existingKeys.has(toMentionKey(mention)))
     if (mentions.length === 0) return normalized
 
-    const mentionHtml = mentions.map(buildMentionHtml).join(" ")
-    if (!normalized) return `<p>${mentionHtml}</p>`
+    if (typeof DOMParser === "undefined" || typeof document === "undefined") {
+        const mentionHtml = mentions.map(buildMentionHtml).join(" ")
+        if (!normalized) return `<p>${mentionHtml}</p>`
+        return `${normalized} ${mentionHtml}`
+    }
 
-    return `${normalized}<p>${mentionHtml}</p>`
+    const parser = new DOMParser()
+    const doc = parser.parseFromString(normalized || "<p></p>", "text/html")
+    const targetBlock = getAppendTargetBlock(doc.body)
+
+    for (const mention of mentions) {
+        if (!isElementEffectivelyEmpty(targetBlock)) {
+            targetBlock.appendChild(doc.createTextNode(" "))
+        }
+        targetBlock.appendChild(createMentionElement(doc, mention))
+    }
+
+    cleanupEmptyBlocks(doc.body)
+    return normalizeHtml(doc.body.innerHTML)
 }
 
 export function collectClassTraitMentions(traits: ClassTrait[], level: number): ParsedMention[] {
@@ -178,14 +202,29 @@ export function toMentionKey(mention: Pick<ParsedMention, "id" | "entityType">):
     return `${mention.entityType}:${mention.id}`
 }
 
+export function mapCatalogAttributeToSheetAttribute(
+    attribute: CatalogAttributeType | null | undefined
+): SheetAttributeType | null {
+    if (!attribute) return null
+    return CATALOG_TO_SHEET_ATTRIBUTE[attribute] ?? null
+}
+
+export function mapHitDiceToSheetHitDice(hitDice: HitDiceType | null | undefined): string | null {
+    return hitDice ?? null
+}
+
 function cleanupEmptyBlocks(root: HTMLElement) {
-    Array.from(root.querySelectorAll("p,div,li")).forEach((element) => {
-        const text = element.textContent?.replace(/\u00a0/g, " ").trim() ?? ""
-        const hasMention = !!element.querySelector('span[data-type="mention"]')
-        if (!text && !hasMention && element.childNodes.length === 0) {
+    Array.from(root.querySelectorAll("p,div,li"))
+        .filter((element): element is HTMLElement => element instanceof HTMLElement)
+        .forEach((element) => {
+        if (isElementEffectivelyEmpty(element)) {
             element.remove()
         }
-    })
+        })
+
+    if (!root.children.length && !(root.textContent?.trim())) {
+        root.innerHTML = ""
+    }
 }
 
 function escapeHtmlAttr(value: string): string {
@@ -201,6 +240,40 @@ function escapeHtmlText(value: string): string {
         .replaceAll("&", "&amp;")
         .replaceAll("<", "&lt;")
         .replaceAll(">", "&gt;")
+}
+
+function createMentionElement(doc: Document, mention: ParsedMention): HTMLElement {
+    const element = doc.createElement("span")
+    element.setAttribute("data-type", "mention")
+    element.setAttribute("data-id", mention.id)
+    element.setAttribute("data-entity-type", mention.entityType)
+    element.setAttribute("data-label", mention.label)
+    element.setAttribute("class", "mention")
+    element.textContent = mention.label
+    return element
+}
+
+function getAppendTargetBlock(body: HTMLElement): HTMLElement {
+    const blocks = Array.from(body.children).filter((node): node is HTMLElement => node instanceof HTMLElement)
+    const lastBlock = blocks.at(-1)
+    if (lastBlock) return lastBlock
+
+    const paragraph = body.ownerDocument.createElement("p")
+    body.appendChild(paragraph)
+    return paragraph
+}
+
+function isElementEffectivelyEmpty(element: HTMLElement): boolean {
+    const hasMention = !!element.querySelector('span[data-type="mention"]')
+    if (hasMention) return false
+
+    const html = element.innerHTML
+        .replace(/<br\s*\/?>/gi, "")
+        .replace(/&nbsp;/gi, " ")
+        .trim()
+    const text = element.textContent?.replace(/\u00a0/g, " ").trim() ?? ""
+
+    return !html && !text
 }
 
 export function getActiveClassMentions(html: string | null | undefined): ParsedMention[] {

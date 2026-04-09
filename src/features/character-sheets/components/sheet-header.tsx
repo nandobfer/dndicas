@@ -1,6 +1,7 @@
 ﻿"use client"
 
 
+import { useRef, useState } from "react"
 
 import { SheetInput } from "./sheet-input"
 import { CompactRichInput } from "./compact-rich-input"
@@ -9,7 +10,11 @@ import type { CharacterSheet, PatchSheetBody } from "../types/character-sheet.ty
 import { cn } from "@/core/utils"
 import { GlassCard, GlassCardContent } from "@/components/ui/glass-card"
 import { GlassSelector } from "@/components/ui/glass-selector"
+import { GlassPopover, GlassPopoverContent, GlassPopoverTrigger } from "@/components/ui/glass-popover"
 import { colors, diceColors, type DiceType } from "@/lib/config/colors"
+import { Table2 } from "lucide-react"
+import { useClass } from "@/features/classes/api/classes-queries"
+import { ClassProgressionTable } from "@/features/classes/components/class-progression-table"
 
 const HIT_DIE_OPTIONS: DiceType[] = ["d4", "d6", "d8", "d10", "d12"]
 const IDENTITY_FIELDS = [
@@ -31,6 +36,22 @@ interface SheetHeaderProps {
 export function SheetHeader({ sheet, form, isReadOnly = false }: SheetHeaderProps) {
   const { watch, patchField } = form
   const hitDiceValue = (watch("hitDiceTotal") || "d8") as DiceType
+  const classRef = watch("classRef") ?? sheet.classRef
+  const subclassRef = watch("subclassRef") ?? sheet.subclassRef
+  const { data: currentClass } = useClass(classRef ?? null)
+  const [isProgressionOpen, setIsProgressionOpen] = useState(false)
+  const closeTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+
+  const selectedSubclasses = currentClass?.subclasses
+    ?.filter((subclass) => String(subclass._id || "") === String(subclassRef || "")) ?? []
+
+  const selectedSubclassData = selectedSubclasses
+    .map((subclass) => ({
+      name: subclass.name,
+      color: subclass.color ?? colors.rarity.veryRare,
+      traits: subclass.traits ?? [],
+      progressionData: subclass.progressionTable,
+    }))
 
   const handleDeathSaveToggle = (field: "deathSavesSuccess" | "deathSavesFailure", index: number) => {
     if (isReadOnly) return
@@ -40,6 +61,16 @@ export function SheetHeader({ sheet, form, isReadOnly = false }: SheetHeaderProp
     } else {
       patchField(field, index)
     }
+  }
+
+  const handleProgressionEnter = () => {
+    if (closeTimeoutRef.current) clearTimeout(closeTimeoutRef.current)
+    setIsProgressionOpen(true)
+  }
+
+  const handleProgressionLeave = () => {
+    if (closeTimeoutRef.current) clearTimeout(closeTimeoutRef.current)
+    closeTimeoutRef.current = setTimeout(() => setIsProgressionOpen(false), 120)
   }
 
   return (
@@ -76,7 +107,7 @@ export function SheetHeader({ sheet, form, isReadOnly = false }: SheetHeaderProp
       </GlassCard>
 
       {/* 2. NÍVEL E XP */}
-      <GlassCard className="flex-none w-32 border-white/10 bg-white/[0.02]">
+      <GlassCard className="flex-none w-36 border-white/10 bg-white/[0.02]">
         <GlassCardContent className="p-4 flex flex-col items-center justify-center relative h-full gap-0">
           <div className="absolute inset-4 border border-white/10 rounded-full pointer-events-none" />
           <div className="flex flex-col items-center z-10 gap-0">
@@ -106,6 +137,41 @@ export function SheetHeader({ sheet, form, isReadOnly = false }: SheetHeaderProp
               readOnlyMode={isReadOnly}
             />
           </div>
+          {currentClass && (
+            <GlassPopover open={isProgressionOpen} onOpenChange={setIsProgressionOpen}>
+              <GlassPopoverTrigger asChild>
+                <button
+                  type="button"
+                  onMouseEnter={handleProgressionEnter}
+                  onMouseLeave={handleProgressionLeave}
+                  onClick={() => setIsProgressionOpen((prev) => !prev)}
+                  className="mt-3 z-10 inline-flex items-center justify-center w-8 h-8 rounded-full border border-amber-400/20 bg-amber-500/10 text-amber-400/70 hover:text-amber-300 hover:bg-amber-500/15 transition-colors"
+                  aria-label="Ver progressão da classe"
+                >
+                  <Table2 className="w-3.5 h-3.5" />
+                </button>
+              </GlassPopoverTrigger>
+              <GlassPopoverContent
+                side="bottom"
+                align="center"
+                sideOffset={10}
+                className="w-[min(92vw,900px)] p-0"
+                onMouseEnter={handleProgressionEnter}
+                onMouseLeave={handleProgressionLeave}
+              >
+                <ClassProgressionTable
+                  traits={currentClass.traits ?? []}
+                  spellcasting={!!(currentClass.spellcasting || selectedSubclasses.some((subclass) => subclass.spellcasting || subclass.progressionTable?.spellSlots))}
+                  progressionData={currentClass.progressionTable}
+                  subclassData={selectedSubclassData}
+                  compact
+                  forceOpen
+                  hideToggle
+                  className="border-0 rounded-none bg-transparent"
+                />
+              </GlassPopoverContent>
+            </GlassPopover>
+          )}
         </GlassCardContent>
       </GlassCard>
 
