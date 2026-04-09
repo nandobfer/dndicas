@@ -106,13 +106,10 @@ export function appendMentionsToHtml(html: string | null | undefined, mentionsTo
 
     const parser = new DOMParser()
     const doc = parser.parseFromString(normalized || "<p></p>", "text/html")
-    const targetBlock = getAppendTargetBlock(doc.body)
-
     for (const mention of mentions) {
-        if (!isElementEffectivelyEmpty(targetBlock)) {
-            targetBlock.appendChild(doc.createTextNode(" "))
-        }
-        targetBlock.appendChild(createMentionElement(doc, mention))
+        const paragraph = doc.createElement("p")
+        paragraph.appendChild(createMentionElement(doc, mention))
+        doc.body.appendChild(paragraph)
     }
 
     cleanupEmptyBlocks(doc.body)
@@ -251,16 +248,6 @@ function createMentionElement(doc: Document, mention: ParsedMention): HTMLElemen
     element.setAttribute("class", "mention")
     element.textContent = mention.label
     return element
-}
-
-function getAppendTargetBlock(body: HTMLElement): HTMLElement {
-    const blocks = Array.from(body.children).filter((node): node is HTMLElement => node instanceof HTMLElement)
-    const lastBlock = blocks.at(-1)
-    if (lastBlock) return lastBlock
-
-    const paragraph = body.ownerDocument.createElement("p")
-    body.appendChild(paragraph)
-    return paragraph
 }
 
 function isElementEffectivelyEmpty(element: HTMLElement): boolean {

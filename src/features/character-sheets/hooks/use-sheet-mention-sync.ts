@@ -7,7 +7,7 @@ import { fetchClass } from "@/features/classes/api/classes-api"
 import type { CharacterClass } from "@/features/classes/types/classes.types"
 import { fetchFeat } from "@/features/feats/api/feats-api"
 import { fetchRace } from "@/features/races/api/races-api"
-import type { CharacterSheet, PatchSheetBody, SkillName } from "../types/character-sheet.types"
+import type { AttributeType, CharacterSheet, PatchSheetBody, SkillName } from "../types/character-sheet.types"
 import {
     appendMentionsToHtml,
     applySkillProficiencies,
@@ -43,6 +43,7 @@ interface DerivedMentionState {
     subclassMentions: ParsedMention[]
     raceMentions: ParsedMention[]
     backgroundFeatMentions: ParsedMention[]
+    savingThrows: Partial<Record<AttributeType, boolean>>
 }
 
 const EMPTY_DERIVED_STATE: DerivedMentionState = {
@@ -50,6 +51,7 @@ const EMPTY_DERIVED_STATE: DerivedMentionState = {
     subclassMentions: [],
     raceMentions: [],
     backgroundFeatMentions: [],
+    savingThrows: {},
 }
 
 export function useSheetMentionSync({ sheet, form, isReadOnly = false }: UseSheetMentionSyncProps) {
@@ -64,6 +66,7 @@ export function useSheetMentionSync({ sheet, form, isReadOnly = false }: UseShee
     const speciesTraits = watch("speciesTraits") ?? sheet.speciesTraits ?? ""
     const featuresNotes = watch("featuresNotes") ?? sheet.featuresNotes ?? ""
     const currentSkills = watch("skills") ?? sheet.skills
+    const currentSavingThrows = watch("savingThrows") ?? sheet.savingThrows
     const currentSpellSlots = watch("spellSlots") ?? sheet.spellSlots
     const currentHitDiceTotal = watch("hitDiceTotal") ?? sheet.hitDiceTotal ?? null
     const watchedClassRef = watch("classRef")
@@ -77,106 +80,39 @@ export function useSheetMentionSync({ sheet, form, isReadOnly = false }: UseShee
 
     const previousDerivedRef = useRef<DerivedMentionState>(EMPTY_DERIVED_STATE)
     const requestIdRef = useRef(0)
+    const hasInitializedRef = useRef(false)
+    const previousTriggerRef = useRef("")
 
     useEffect(() => {
         if (isReadOnly) return
 
+        const triggerKey = JSON.stringify({
+            classValue,
+            subclassValue,
+            raceValue,
+            originValue,
+            level,
+        })
+
+        if (hasInitializedRef.current && previousTriggerRef.current === triggerKey) {
+            return
+        }
+
         const requestId = ++requestIdRef.current
 
         void (async () => {
-            const classMentions = getActiveClassMentions(classValue)
-            const subclassMentions = getActiveSubclassMentions(subclassValue)
-            const raceMentions = getActiveRaceMentions(raceValue)
-            const backgroundMentions = getActiveBackgroundMentions(originValue)
-
-            const activeClasses = dedupeClasses(await Promise.all(
-                classMentions.map(async (mention) => {
-                    try {
-                        return await fetchClass(mention.id)
-                    } catch {
-                        return null
-                    }
-                })
-            ))
-
-            let knownClasses = [...activeClasses]
-            const activeSubclasses = dedupeResolvedSubclasses(
-                subclassMentions
-                    .map((mention) => resolveSubclassFromClasses(knownClasses, mention.id))
-                    .filter((value): value is ResolvedSubclass => !!value)
-            )
-
-            const unresolvedSubclassMentions = subclassMentions.filter(
-                (mention) => !activeSubclasses.some((item) => item.id === mention.id)
-            )
-
-            if (unresolvedSubclassMentions.length > 0) {
-                const additionalClasses = dedupeClasses(await Promise.all(
-                    unresolvedSubclassMentions.map(async (mention) => {
-                        const parsedId = mention.id.match(/^subclass:([^:]+):(.+)$/)
-                        const classId = parsedId?.[1]
-                        if (!classId) return null
-                        try {
-                            return await fetchClass(classId)
-                        } catch {
-                            return null
-                        }
-                    })
-                ))
-
-                knownClasses = dedupeClasses([...knownClasses, ...additionalClasses])
-
-                const resolvedExtra = unresolvedSubclassMentions
-                    .map((mention) => resolveSubclassFromClasses(knownClasses, mention.id))
-                    .filter((value): value is ResolvedSubclass => !!value)
-
-                activeSubclasses.push(...resolvedExtra.filter(
-                    (candidate) => !activeSubclasses.some((item) => item.id === candidate.id)
-                ))
-            }
-
-            const activeRaces = dedupeById(await Promise.all(
-                raceMentions.map(async (mention) => {
-                    try {
-                        return await fetchRace(mention.id)
-                    } catch {
-                        return null
-                    }
-                })
-            ))
-
-            const activeBackgrounds = dedupeById(await Promise.all(
-                backgroundMentions.map(async (mention) => {
-                    try {
-                        return await fetchBackground(mention.id)
-                    } catch {
-                        return null
-                    }
-                })
-            ))
-
-            const backgroundFeatMentions = dedupeMentions((await Promise.all(
-                activeBackgrounds.map(async (background) => {
-                    const featIdValue = background.featId as string | { id: string; label?: string } | undefined
-                    const featId = typeof featIdValue === "string" ? featIdValue : featIdValue?.id
-                    if (!featId) return []
-                    try {
-                        const feat = await fetchFeat(featId)
-                        return extractFeatMention(feat)
-                    } catch {
-                        return []
-                    }
-                })
-            )).flat())
+            const resolved = await resolveSheetSyncState(classValue, subclassValue, raceValue, originValue, level)
 
             if (requestId !== requestIdRef.current) return
 
-            const nextDerived: DerivedMentionState = {
-                classMentions: collectMentionsFromClasses(activeClasses, level),
-                subclassMentions: collectMentionsFromSubclasses(activeSubclasses, level),
-                raceMentions: collectMentionsFromRaces(activeRaces, level),
-                backgroundFeatMentions,
+            if (!hasInitializedRef.current) {
+                previousDerivedRef.current = resolved.derived
+                previousTriggerRef.current = triggerKey
+                hasInitializedRef.current = true
+                return
             }
+
+            const nextDerived = resolved.derived
 
             const previousDerived = previousDerivedRef.current
 
@@ -198,32 +134,32 @@ export function useSheetMentionSync({ sheet, form, isReadOnly = false }: UseShee
                 nextDerived.backgroundFeatMentions
             )
 
-            const winningSubclass = activeSubclasses.find(isSpellcastingSubclass)
-            const winningClass = activeClasses.find(isSpellcastingClass)
+            const winningSubclass = resolved.activeSubclasses.find(isSpellcastingSubclass)
+            const winningClass = resolved.activeClasses.find(isSpellcastingClass)
             const winningSpellSource = winningSubclass?.entity ?? winningClass ?? null
             const nextSpellcastingAttribute = mapCatalogAttributeToSheetAttribute(winningSpellSource?.spellcastingAttribute)
             const nextSpellSlots = mapSpellSlotsForLevel(level, winningSpellSource, currentSpellSlots)
-            const nextHitDice = mapHitDiceToSheetHitDice(activeClasses[0]?.hitDice)
+            const nextHitDice = mapHitDiceToSheetHitDice(resolved.activeClasses[0]?.hitDice)
 
             const patch: Partial<PatchSheetBody> = {}
 
-            assignIfChanged(patch, "classRef", activeClasses[0]?._id ?? null, watchedClassRef === undefined ? (sheet.classRef ?? null) : watchedClassRef)
+            assignIfChanged(patch, "classRef", resolved.activeClasses[0]?._id ?? null, watchedClassRef === undefined ? (sheet.classRef ?? null) : watchedClassRef)
             assignIfChanged(
                 patch,
                 "subclassRef",
-                activeSubclasses[0]?.entity._id ? String(activeSubclasses[0].entity._id) : null,
+                resolved.activeSubclasses[0]?.entity._id ? String(resolved.activeSubclasses[0].entity._id) : null,
                 watchedSubclassRef === undefined ? (sheet.subclassRef ?? null) : watchedSubclassRef
             )
             assignIfChanged(
                 patch,
                 "raceRef",
-                activeRaces[0]?._id ? String(activeRaces[0]._id) : null,
+                resolved.activeRaces[0]?._id ? String(resolved.activeRaces[0]._id) : null,
                 watchedRaceRef === undefined ? (sheet.raceRef ?? null) : watchedRaceRef
             )
             assignIfChanged(
                 patch,
                 "originRef",
-                activeBackgrounds[0]?._id ? String(activeBackgrounds[0]._id) : null,
+                resolved.activeBackgrounds[0]?._id ? String(resolved.activeBackgrounds[0]._id) : null,
                 watchedOriginRef === undefined ? (sheet.originRef ?? null) : watchedOriginRef
             )
             assignIfChanged(patch, "classFeatures", nextClassFeatures, classFeatures)
@@ -233,16 +169,24 @@ export function useSheetMentionSync({ sheet, form, isReadOnly = false }: UseShee
                 assignIfChanged(patch, "hitDiceTotal", nextHitDice, currentHitDiceTotal)
             }
 
-            if (activeBackgrounds.length > 0) {
-                const backgroundSkills = dedupeSkillNames(activeBackgrounds.flatMap((background) => background.skillProficiencies ?? []))
+            if (resolved.activeBackgrounds.length > 0) {
+                const backgroundSkills = dedupeSkillNames(resolved.activeBackgrounds.flatMap((background) => background.skillProficiencies ?? []))
                 const nextSkills = applySkillProficiencies(currentSkills, backgroundSkills)
                 assignIfChanged(patch, "skills", nextSkills, currentSkills)
+            }
+            if (Object.keys(nextDerived.savingThrows).length > 0) {
+                const nextSavingThrows = {
+                    ...(currentSavingThrows ?? {}),
+                    ...nextDerived.savingThrows,
+                } as PatchSheetBody["savingThrows"]
+                assignIfChanged(patch, "savingThrows", nextSavingThrows, currentSavingThrows)
             }
 
             assignIfChanged(patch, "spellcastingAttribute", nextSpellcastingAttribute, currentSpellcastingAttribute)
             assignIfChanged(patch, "spellSlots", nextSpellSlots, currentSpellSlots)
 
             previousDerivedRef.current = nextDerived
+            previousTriggerRef.current = triggerKey
 
             if (Object.keys(patch).length > 0) {
                 patchFields(patch)
@@ -252,6 +196,7 @@ export function useSheetMentionSync({ sheet, form, isReadOnly = false }: UseShee
         classFeatures,
         classValue,
         currentSkills,
+        currentSavingThrows,
         currentSpellSlots,
         currentSpellcastingAttribute,
         currentHitDiceTotal,
@@ -328,4 +273,118 @@ function isSpellcastingSubclass(subclass: ResolvedSubclass) {
 
 function dedupeSkillNames(skills: string[]): SkillName[] {
     return Array.from(new Set(skills)) as SkillName[]
+}
+
+async function resolveSheetSyncState(
+    classValue: string,
+    subclassValue: string,
+    raceValue: string,
+    originValue: string,
+    level: number
+) {
+    const classMentions = getActiveClassMentions(classValue)
+    const subclassMentions = getActiveSubclassMentions(subclassValue)
+    const raceMentions = getActiveRaceMentions(raceValue)
+    const backgroundMentions = getActiveBackgroundMentions(originValue)
+
+    const activeClasses = dedupeClasses(await Promise.all(
+        classMentions.map(async (mention) => {
+            try {
+                return await fetchClass(mention.id)
+            } catch {
+                return null
+            }
+        })
+    ))
+
+    let knownClasses = [...activeClasses]
+    const activeSubclasses = dedupeResolvedSubclasses(
+        subclassMentions
+            .map((mention) => resolveSubclassFromClasses(knownClasses, mention.id))
+            .filter((value): value is ResolvedSubclass => !!value)
+    )
+
+    const unresolvedSubclassMentions = subclassMentions.filter(
+        (mention) => !activeSubclasses.some((item) => item.id === mention.id)
+    )
+
+    if (unresolvedSubclassMentions.length > 0) {
+        const additionalClasses = dedupeClasses(await Promise.all(
+            unresolvedSubclassMentions.map(async (mention) => {
+                const parsedId = mention.id.match(/^subclass:([^:]+):(.+)$/)
+                const classId = parsedId?.[1]
+                if (!classId) return null
+                try {
+                    return await fetchClass(classId)
+                } catch {
+                    return null
+                }
+            })
+        ))
+
+        knownClasses = dedupeClasses([...knownClasses, ...additionalClasses])
+
+        const resolvedExtra = unresolvedSubclassMentions
+            .map((mention) => resolveSubclassFromClasses(knownClasses, mention.id))
+            .filter((value): value is ResolvedSubclass => !!value)
+
+        activeSubclasses.push(...resolvedExtra.filter(
+            (candidate) => !activeSubclasses.some((item) => item.id === candidate.id)
+        ))
+    }
+
+    const activeRaces = dedupeById(await Promise.all(
+        raceMentions.map(async (mention) => {
+            try {
+                return await fetchRace(mention.id)
+            } catch {
+                return null
+            }
+        })
+    ))
+
+    const activeBackgrounds = dedupeById(await Promise.all(
+        backgroundMentions.map(async (mention) => {
+            try {
+                return await fetchBackground(mention.id)
+            } catch {
+                return null
+            }
+        })
+    ))
+
+    const backgroundFeatMentions = dedupeMentions((await Promise.all(
+        activeBackgrounds.map(async (background) => {
+            const featIdValue = background.featId as string | { id: string; label?: string } | undefined
+            const featId = typeof featIdValue === "string" ? featIdValue : featIdValue?.id
+            if (!featId) return []
+            try {
+                const feat = await fetchFeat(featId)
+                return extractFeatMention(feat)
+            } catch {
+                return []
+            }
+        })
+    )).flat())
+
+    return {
+        activeClasses,
+        activeSubclasses,
+        activeRaces,
+        activeBackgrounds,
+        derived: {
+            classMentions: collectMentionsFromClasses(activeClasses, level),
+            subclassMentions: collectMentionsFromSubclasses(activeSubclasses, level),
+            raceMentions: collectMentionsFromRaces(activeRaces, level),
+            backgroundFeatMentions,
+            savingThrows: Object.fromEntries(
+                activeClasses.flatMap((characterClass) =>
+                    (characterClass.savingThrows ?? [])
+                        .map(mapCatalogAttributeToSheetAttribute)
+                        .filter((attribute): attribute is AttributeType => !!attribute)
+                        .map((attribute) => [attribute, true] as const)
+                )
+            ),
+        } satisfies DerivedMentionState,
+    }
 }

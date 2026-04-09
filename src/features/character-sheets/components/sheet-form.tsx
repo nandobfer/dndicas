@@ -42,19 +42,20 @@ export function SheetForm({ sheet }: SheetFormProps) {
             {/* Header */}
             <SheetHeader sheet={sheet} form={form} isReadOnly={isReadOnly} />
 
-            {/* Three-column layout: narrow | narrow | wide */}
-            <div className="grid grid-cols-1 lg:grid-cols-[1fr_1fr_2fr] gap-4">
-                <GlassCard>
-                    <GlassCardContent className="pt-4 pb-4">
-                        <SheetLeftColumn sheet={sheet} form={form} isReadOnly={isReadOnly} />
-                    </GlassCardContent>
-                </GlassCard>
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 items-start">
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                    <GlassCard>
+                        <GlassCardContent className="pt-4 pb-4">
+                            <SheetLeftColumn sheet={sheet} form={form} isReadOnly={isReadOnly} />
+                        </GlassCardContent>
+                    </GlassCard>
 
-                <GlassCard>
-                    <GlassCardContent className="pt-4 pb-4">
-                        <SheetMiddleColumn sheet={sheet} form={form} isReadOnly={isReadOnly} />
-                    </GlassCardContent>
-                </GlassCard>
+                    <GlassCard>
+                        <GlassCardContent className="pt-4 pb-4">
+                            <SheetMiddleColumn sheet={sheet} form={form} isReadOnly={isReadOnly} />
+                        </GlassCardContent>
+                    </GlassCard>
+                </div>
 
                 <GlassCard>
                     <GlassCardContent className="pt-4 pb-4">
