@@ -4,6 +4,7 @@ import { useCallback } from "react"
 import type { UseFormWatch } from "react-hook-form"
 import { useSheetSpells, useAddSpell, usePatchSpell, useRemoveSpell, usePatchSheet } from "../../api/character-sheets-queries"
 import { useCharacterCalculations } from "../../hooks/use-character-calculations"
+import { useSpellNameSync } from "./use-spell-name-sync"
 import type { CharacterSheet, CharacterSpell, PatchSheetBody } from "../../types/character-sheet.types"
 
 interface UseSpellListOptions {
@@ -29,6 +30,19 @@ export function useSpellList({ sheet, form, isReadOnly = false }: UseSpellListOp
 
     const spellSlots = (currentValues.spellSlots ?? sheet.spellSlots ?? {}) as Record<string, { total: number; used: number }>
 
+    const handlePatchSpell = useCallback(
+        (spellId: string, data: Partial<Omit<CharacterSpell, "_id" | "sheetId" | "createdAt">>) => {
+            if (isReadOnly) return
+            patchSpell.mutate({ spellId, data })
+        },
+        [isReadOnly, patchSpell]
+    )
+
+    const { handleSpellNameChange } = useSpellNameSync({
+        isReadOnly,
+        onPatch: handlePatchSpell,
+    })
+
     const handleAddSpell = useCallback(() => {
         if (isReadOnly) return
         addSpell.mutate({
@@ -42,14 +56,6 @@ export function useSpellList({ sheet, form, isReadOnly = false }: UseSpellListOp
             notes: "",
         })
     }, [addSpell, isReadOnly])
-
-    const handlePatchSpell = useCallback(
-        (spellId: string, data: Partial<Omit<CharacterSpell, "_id" | "sheetId" | "createdAt">>) => {
-            if (isReadOnly) return
-            patchSpell.mutate({ spellId, data })
-        },
-        [isReadOnly, patchSpell]
-    )
 
     const handleRemoveSpell = useCallback(
         (spellId: string) => {
@@ -89,6 +95,7 @@ export function useSpellList({ sheet, form, isReadOnly = false }: UseSpellListOp
         spellAttackBonus: calc.spellAttackBonus,
         handleAddSpell,
         handlePatchSpell,
+        handleSpellNameChange,
         handleRemoveSpell,
         handlePatchSpellSlot,
         handlePatchSpellcasting,

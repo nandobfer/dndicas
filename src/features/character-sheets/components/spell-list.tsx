@@ -94,6 +94,7 @@ export function SpellList({ sheet, form, isReadOnly = false }: SpellListProps) {
         spellAttackBonus,
         handleAddSpell,
         handlePatchSpell,
+        handleSpellNameChange,
         handleRemoveSpell,
         handlePatchSpellSlot,
         handlePatchSpellcasting,
@@ -217,7 +218,7 @@ export function SpellList({ sheet, form, isReadOnly = false }: SpellListProps) {
                             {/* Name */}
                             <CompactRichInput
                                 value={spell.name}
-                                onChange={(v) => handlePatchSpell(spell._id, { name: v || "Magia" })}
+                                onChange={(v) => handleSpellNameChange(spell._id, v || "Magia")}
                                 placeholder="Nome da magia"
                                 debounceMs={800}
                                 excludeId={sheet._id}

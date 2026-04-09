@@ -6,7 +6,7 @@ import { useRef, useState } from "react"
 import { SheetInput } from "./sheet-input"
 import { CompactRichInput } from "./compact-rich-input"
 import type { UseFormWatch } from "react-hook-form"
-import type { CharacterSheet, PatchSheetBody } from "../types/character-sheet.types"
+import type { CharacterSheet, CharacterItem, PatchSheetBody } from "../types/character-sheet.types"
 import { cn } from "@/core/utils"
 import { GlassCard, GlassCardContent } from "@/components/ui/glass-card"
 import { GlassSelector } from "@/components/ui/glass-selector"
@@ -15,6 +15,8 @@ import { colors, diceColors, type DiceType } from "@/lib/config/colors"
 import { Table2 } from "lucide-react"
 import { useClass } from "@/features/classes/api/classes-queries"
 import { ClassProgressionTable } from "@/features/classes/components/class-progression-table"
+import { useCharacterCalculations } from "../hooks/use-character-calculations"
+import { CalcTooltip } from "./calc-tooltip"
 
 const HIT_DIE_OPTIONS: DiceType[] = ["d4", "d6", "d8", "d10", "d12"]
 const IDENTITY_FIELDS = [
@@ -30,10 +32,11 @@ interface SheetHeaderProps {
       watch: UseFormWatch<PatchSheetBody>
       patchField: (field: keyof PatchSheetBody, value: unknown) => void
     }
+    items?: CharacterItem[]
     isReadOnly?: boolean
 }
 
-export function SheetHeader({ sheet, form, isReadOnly = false }: SheetHeaderProps) {
+export function SheetHeader({ sheet, form, items = [], isReadOnly = false }: SheetHeaderProps) {
   const { watch, patchField } = form
   const hitDiceValue = (watch("hitDiceTotal") || "d8") as DiceType
   const hpCurrent = watch("hpCurrent") ?? 0
@@ -55,6 +58,32 @@ export function SheetHeader({ sheet, form, isReadOnly = false }: SheetHeaderProp
       traits: subclass.traits ?? [],
       progressionData: subclass.progressionTable,
     }))
+
+  // Equipped armor/shield for AC calculation
+  const equippedArmor = items.find(
+    (item) => item.equipped && (item.catalogItemType === "armadura")
+  ) ?? null
+  const equippedShield = items.find(
+    (item) => item.equipped && item.catalogItemType === "escudo"
+  ) ?? null
+
+  const currentSheet = { ...sheet, ...Object.fromEntries(
+    Object.entries(watch()).filter(([, v]) => v !== undefined)
+  ) } as CharacterSheet
+
+  const calc = useCharacterCalculations(currentSheet, {
+    equippedArmor: equippedArmor ? {
+      ac: equippedArmor.catalogAc,
+      acType: equippedArmor.catalogAcType,
+      armorType: equippedArmor.catalogArmorType,
+      acBonus: equippedArmor.catalogAcBonus,
+    } : null,
+    equippedShield: equippedShield ? {
+      acBonus: equippedShield.catalogAcBonus,
+    } : null,
+  })
+
+  const armorClassBonus = watch("armorClassBonus") ?? sheet.armorClassBonus ?? null
 
   const handleDeathSaveToggle = (field: "deathSavesSuccess" | "deathSavesFailure", index: number) => {
     if (isReadOnly) return
@@ -195,14 +224,23 @@ export function SheetHeader({ sheet, form, isReadOnly = false }: SheetHeaderProp
               Armadura
             </label>
             <div className="flex-1 flex items-center justify-center w-full">
+              <CalcTooltip formula={calc.armorClass.formula}>
+                <span className="text-3xl font-black text-white z-10 select-none">
+                  {calc.armorClass.value}
+                </span>
+              </CalcTooltip>
+            </div>
+            {/* Bonus manual (pequeno input abaixo do valor base) */}
+            <div className="z-10 w-full mt-1">
               <SheetInput
+                compact
                 type="number"
-                value={watch("armorClassOverride") ?? 10}
-                onChangeValue={(val) => patchField("armorClassOverride", parseInt(val) || 10)}
+                label="Bônus"
+                value={armorClassBonus ?? 0}
+                onChangeValue={(val) => patchField("armorClassBonus", parseInt(val) || 0)}
                 showControls
-                min={1}
-                inputClassName="text-3xl font-black text-center h-10 px-0"
-                className="items-center w-full z-10"
+                inputClassName="text-center text-xs h-5"
+                className="items-center"
                 readOnlyMode={isReadOnly}
               />
             </div>

@@ -43,6 +43,7 @@ interface DerivedMentionState {
     classMentions: ParsedMention[]
     subclassMentions: ParsedMention[]
     raceMentions: ParsedMention[]
+    raceIds: string[]
     backgroundFeatMentions: ParsedMention[]
     savingThrows: Partial<Record<AttributeType, boolean>>
 }
@@ -51,6 +52,7 @@ const EMPTY_DERIVED_STATE: DerivedMentionState = {
     classMentions: [],
     subclassMentions: [],
     raceMentions: [],
+    raceIds: [],
     backgroundFeatMentions: [],
     savingThrows: {},
 }
@@ -70,6 +72,8 @@ export function useSheetMentionSync({ sheet, form, isReadOnly = false }: UseShee
     const currentSavingThrows = watch("savingThrows") ?? sheet.savingThrows
     const currentSpellSlots = watch("spellSlots") ?? sheet.spellSlots
     const currentHitDiceTotal = watch("hitDiceTotal") ?? sheet.hitDiceTotal ?? null
+    const currentMovementSpeed = watch("movementSpeed") ?? sheet.movementSpeed ?? ""
+    const currentSize = watch("size") ?? sheet.size ?? ""
     const watchedClassRef = watch("classRef")
     const watchedSubclassRef = watch("subclassRef")
     const watchedRaceRef = watch("raceRef")
@@ -122,6 +126,10 @@ export function useSheetMentionSync({ sheet, form, isReadOnly = false }: UseShee
             )
             const speciesTraitDiff = diffMentions(previousDerived.raceMentions, nextDerived.raceMentions)
             const featDiff = diffMentions(previousDerived.backgroundFeatMentions, nextDerived.backgroundFeatMentions)
+
+            // Diff race IDs to detect newly added races
+            const previousRaceIds = new Set(previousDerived.raceIds)
+            const addedRaceIds = nextDerived.raceIds.filter((id) => !previousRaceIds.has(id))
 
             const nextClassFeatures = appendMentionsToHtml(
                 removeMentionsFromHtml(
@@ -192,6 +200,19 @@ export function useSheetMentionSync({ sheet, form, isReadOnly = false }: UseShee
             assignIfChanged(patch, "spellcastingAttribute", nextSpellcastingAttribute, currentSpellcastingAttribute)
             assignIfChanged(patch, "spellSlots", nextSpellSlots, currentSpellSlots)
 
+            // Populate movementSpeed and size from newly added races
+            if (addedRaceIds.length > 0) {
+                const addedRace = resolved.activeRaces.find((r) => addedRaceIds.includes(String(r._id)))
+                if (addedRace) {
+                    if (addedRace.speed) {
+                        assignIfChanged(patch, "movementSpeed", addedRace.speed, currentMovementSpeed as PatchSheetBody["movementSpeed"])
+                    }
+                    if (addedRace.size) {
+                        assignIfChanged(patch, "size", addedRace.size, currentSize as PatchSheetBody["size"])
+                    }
+                }
+            }
+
             previousDerivedRef.current = nextDerived
             previousTriggerRef.current = triggerKey
 
@@ -202,6 +223,8 @@ export function useSheetMentionSync({ sheet, form, isReadOnly = false }: UseShee
     }, [
         classFeatures,
         classValue,
+        currentMovementSpeed,
+        currentSize,
         currentSkills,
         currentSavingThrows,
         currentSpellSlots,
@@ -214,8 +237,10 @@ export function useSheetMentionSync({ sheet, form, isReadOnly = false }: UseShee
         patchFields,
         raceValue,
         sheet.classRef,
+        sheet.movementSpeed,
         sheet.originRef,
         sheet.raceRef,
+        sheet.size,
         sheet.spellSlots,
         sheet.spellcastingAttribute,
         sheet.subclassRef,
@@ -383,6 +408,7 @@ async function resolveSheetSyncState(
             classMentions: collectMentionsFromClasses(activeClasses, level),
             subclassMentions: collectMentionsFromSubclasses(activeSubclasses, level),
             raceMentions: collectMentionsFromRaces(activeRaces, level),
+            raceIds: activeRaces.map((r) => String(r._id)),
             backgroundFeatMentions,
             savingThrows: Object.fromEntries(
                 activeClasses.flatMap((characterClass) =>

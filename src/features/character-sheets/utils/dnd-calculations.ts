@@ -81,13 +81,54 @@ export const getSkillBonus = (
 
 // ─── Armor class ──────────────────────────────────────────────────────────────
 
-export const getArmorClass = (dexterity: number, override: number | null): CalcResult => {
-    if (override !== null) {
-        return { value: override, formula: `Valor manual (cálculo: 10 + DEX mod ${Math.floor((dexterity - 10) / 2)})` }
-    }
+export interface EquippedArmorData {
+    ac?: number | null
+    acType?: "base" | "bonus" | null
+    armorType?: "leve" | "média" | "pesada" | null
+    acBonus?: number | null
+}
+
+export const getArmorClass = (
+    dexterity: number,
+    override: number | null,
+    equippedArmor?: EquippedArmorData | null,
+    equippedShield?: EquippedArmorData | null,
+    manualBonus?: number | null,
+): CalcResult => {
     const dexMod = Math.floor((dexterity - 10) / 2)
-    const value = 10 + dexMod
-    return { value, formula: `10 + DEX mod(${dexMod}) = ${value}` }
+
+    let base = 10
+    let dexContrib = dexMod
+
+    if (equippedArmor) {
+        if (equippedArmor.acType === "base" && equippedArmor.ac != null) {
+            base = equippedArmor.ac
+        } else if (equippedArmor.acType === "bonus" && equippedArmor.acBonus != null) {
+            base = 10 + equippedArmor.acBonus
+        }
+        if (equippedArmor.armorType === "pesada") {
+            dexContrib = 0
+        } else if (equippedArmor.armorType === "média") {
+            dexContrib = Math.min(dexMod, 2)
+        }
+    }
+
+    const shieldBonus = equippedShield?.acBonus ?? 0
+    const bonus = manualBonus ?? 0
+    const calculated = base + dexContrib + shieldBonus + bonus
+
+    if (override !== null) {
+        return { value: override, formula: `Valor manual (cálculo: ${base} + DEX(${dexContrib}) + escudo(${shieldBonus}) + bônus(${bonus}) = ${calculated})` }
+    }
+
+    const value = calculated
+    let formula = `${base}`
+    if (dexContrib !== 0) formula += ` + DEX(${dexContrib})`
+    if (shieldBonus !== 0) formula += ` + escudo(${shieldBonus})`
+    if (bonus !== 0) formula += ` + bônus(${bonus})`
+    formula += ` = ${value}`
+
+    return { value, formula }
 }
 
 // ─── Initiative ───────────────────────────────────────────────────────────────

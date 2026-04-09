@@ -14,7 +14,7 @@ import { SheetRightColumn } from "./sheet-right-column"
 import { CompactRichInput } from "./compact-rich-input"
 import { useSheetAutoSave } from "../hooks/use-sheet-auto-save"
 import { useSheetMentionSync } from "../hooks/use-sheet-mention-sync"
-import { usePatchSheet } from "../api/character-sheets-queries"
+import { usePatchSheet, useItems } from "../api/character-sheets-queries"
 import type { CharacterSheetFull, PatchSheetBody } from "../types/character-sheet.types"
 
 interface SheetFormProps {
@@ -34,13 +34,14 @@ export function SheetForm({ sheet }: SheetFormProps) {
     const form = useSheetAutoSave(sheet, { onSlugChange: handleSlugChange, disabled: isReadOnly })
     const { watch, patchField } = form
     const { isPending: isLoading } = usePatchSheet(sheet._id)
+    const { data: items = [] } = useItems(sheet._id)
 
     useSheetMentionSync({ sheet, form, isReadOnly })
 
     return (
         <motion.div variants={motionConfig.variants.fadeInUp} initial="initial" animate="animate" className="space-y-4">
             {/* Header */}
-            <SheetHeader sheet={sheet} form={form} isReadOnly={isReadOnly} />
+            <SheetHeader sheet={sheet} form={form} items={items} isReadOnly={isReadOnly} />
 
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 items-start">
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">

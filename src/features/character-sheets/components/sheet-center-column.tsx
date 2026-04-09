@@ -10,6 +10,7 @@ import { CharacterSheet } from "../types/character-sheet.types"
 import { CalcTooltip } from "./calc-tooltip"
 import { SheetInput } from "./sheet-input"
 import { CompactRichInput } from "./compact-rich-input"
+import { useAttackNameSync } from "./hooks/use-attack-name-sync"
 
 interface SheetCenterColumnProps {
     sheet: CharacterSheet
@@ -33,6 +34,12 @@ export function SheetCenterColumn({ sheet, form, isReadOnly = false }: SheetCent
     const addAttack = useAddAttack(sheet._id)
     const patchAttack = usePatchAttack(sheet._id)
     const removeAttack = useRemoveAttack(sheet._id)
+
+    const { handleAttackNameChange } = useAttackNameSync({
+        calc,
+        isReadOnly,
+        onPatch: (attackId, data) => patchAttack.mutate({ attackId, data }),
+    })
 
     return (
         <div className="space-y-4">
@@ -110,7 +117,7 @@ export function SheetCenterColumn({ sheet, form, isReadOnly = false }: SheetCent
                             >
                             <CompactRichInput
                                 value={attack.name}
-                                onChange={(v) => patchAttack.mutate({ attackId: attack._id, data: { name: v || "Ataque" } })}
+                                onChange={(v) => handleAttackNameChange(attack._id, v)}
                                 placeholder="Nome"
                                 debounceMs={1000}
                                 disabled={isReadOnly}
