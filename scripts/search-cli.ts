@@ -9,9 +9,10 @@
  *   npm run search-cli
  *
  * Controls:
- *   Type to search · ↑↓ navigate · ESC / Ctrl+C to exit
+ *   Type to search · ↑↓ navigate · Enter copy name · Alt+Enter copy JSON · ESC clear · Ctrl+C exit
  */
 
+import { spawnSync } from 'node:child_process';
 import dotenv from 'dotenv';
 import path from 'path';
 
@@ -251,6 +252,8 @@ let query = '';
 let cursorPos = 0; // insertion point within query (0 = before first char)
 let results: UnifiedEntity[] = [];
 let selectedIndex = 0;
+let statusMessage: { text: string; tone: 'info' | 'error' } | null = null;
+let statusMessageTimer: NodeJS.Timeout | null = null;
 // Tracks how many rows were used in the list area on the previous render,
 // so we can erase leftover rows when the list shrinks.
 let lastListRowCount = 0;
@@ -281,6 +284,98 @@ function runSearch(): void {
     }
     selectedIndex = Math.min(selectedIndex, Math.max(0, results.length - 1));
     render();
+}
+
+function getSelectedEntity(): UnifiedEntity | undefined {
+    return results[selectedIndex];
+}
+
+function writeToClipboard(text: string): void {
+    type ClipboardCommand = { command: string; args: string[] };
+
+    const commands: ClipboardCommand[] =
+        process.platform === 'darwin'
+            ? [{ command: 'pbcopy', args: [] }]
+            : process.platform === 'win32'
+                ? [{ command: 'clip.exe', args: [] }]
+                : process.env.WSL_DISTRO_NAME
+                    ? [
+                        { command: 'clip.exe', args: [] },
+                        { command: 'xclip', args: ['-selection', 'clipboard'] },
+                        { command: 'xsel', args: ['--clipboard', '--input'] },
+                    ]
+                    : process.env.WAYLAND_DISPLAY
+                        ? [
+                            { command: 'wl-copy', args: [] },
+                            { command: 'xclip', args: ['-selection', 'clipboard'] },
+                            { command: 'xsel', args: ['--clipboard', '--input'] },
+                        ]
+                        : [
+                            { command: 'xclip', args: ['-selection', 'clipboard'] },
+                            { command: 'xsel', args: ['--clipboard', '--input'] },
+                        ];
+
+    let lastError: unknown;
+
+    for (const command of commands) {
+        const result = spawnSync(command.command, command.args, {
+            input: text,
+            encoding: 'utf8',
+        });
+
+        if (!result.error && result.status === 0) {
+            return;
+        }
+
+        lastError = result.error ?? new Error(result.stderr?.trim() || `Clipboard command failed: ${command.command}`);
+    }
+
+    throw lastError instanceof Error ? lastError : new Error(String(lastError));
+}
+
+function setStatusMessage(text: string, tone: 'info' | 'error' = 'info'): void {
+    if (statusMessageTimer) {
+        clearTimeout(statusMessageTimer);
+    }
+
+    statusMessage = { text, tone };
+    render();
+
+    statusMessageTimer = setTimeout(() => {
+        statusMessage = null;
+        statusMessageTimer = null;
+        render();
+    }, 1800);
+}
+
+async function copySelectedName(): Promise<void> {
+    const entity = getSelectedEntity();
+    if (!entity) {
+        setStatusMessage('Nenhum item selecionado', 'error');
+        return;
+    }
+
+    try {
+        writeToClipboard(entity.name);
+        setStatusMessage('Nome copiado');
+    } catch (error) {
+        setStatusMessage(`Falha ao copiar nome: ${error instanceof Error ? error.message : String(error)}`, 'error');
+    }
+}
+
+async function copySelectedJson(): Promise<void> {
+    const entity = getSelectedEntity();
+    if (!entity) {
+        setStatusMessage('Nenhum item selecionado', 'error');
+        return;
+    }
+
+    try {
+        writeToClipboard(JSON.stringify(entity, null, 2));
+        setStatusMessage('JSON copiado');
+    } catch (error) {
+        setStatusMessage(`Falha ao copiar JSON: ${error instanceof Error ? error.message : String(error)}`, 'error');
+    }
 }
 
 // ─── Rendering ────────────────────────────────────────────────────────────────
@@ -403,7 +498,13 @@ function render(): void {
     writeRow(H - 3, () => term.brightBlack(divider));
 
     writeRow(H - 2, () => {
-        term.brightBlack('  ↑↓ navegar  ·  Esc limpar  ·  Ctrl+C sair  ·  ');
+        term.brightBlack('  ↑↓ navegar  ·  Enter copiar nome  ·  Alt+Enter copiar JSON  ·  Esc limpar  ·  Ctrl+C sair  ·  ');
+        if (statusMessage) {
+            if (statusMessage.tone === 'error') term.brightRed(statusMessage.text);
+            else term.brightGreen(statusMessage.text);
+            return;
+        }
+
         term.brightWhite(String(results.length));
         term.brightBlack(` resultado${results.length !== 1 ? 's' : ''}  (total: ${allEntities.length})`);
     });
@@ -447,6 +548,15 @@ function setupInput(): void {
             case 'CTRL_C':
                 cleanup();
                 process.exit(0);
+                return;
+
+            case 'ENTER':
+            case 'KP_ENTER':
+                void copySelectedName();
+                return;
+
+            case 'ALT_ENTER':
+                void copySelectedJson();
                 return;
 
             case 'ESCAPE':
@@ -538,6 +648,10 @@ function setupInput(): void {
 }
 
 function cleanup(): void {
+    if (statusMessageTimer) {
+        clearTimeout(statusMessageTimer);
+        statusMessageTimer = null;
+    }
     term.grabInput(false);
     term.hideCursor(false);
     term.fullscreen(false);
