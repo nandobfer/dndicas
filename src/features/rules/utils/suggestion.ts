@@ -7,10 +7,22 @@ import { performUnifiedSearch } from '@/core/utils/search-engine'
  * T039: Updated to support both Regra and Habilidade entity types in mentions.
  * Fetches from central search engine.
  */
-export const getSuggestionConfig = (options?: { excludeId?: string }) => {
+export const getSuggestionConfig = (options?: { excludeId?: string; blurOnMentionSelect?: boolean }) => {
     let component: ReactRenderer<MentionListRef, MentionListProps> | null = null
     let loading = false
     let currentQuery = ""
+
+    const wrapCommand = (props: any) => {
+        if (!options?.blurOnMentionSelect) return props.command
+        return (item: any) => {
+            props.command(item)
+            setTimeout(() => {
+                if (!props.editor.isDestroyed) {
+                    props.editor.commands.blur()
+                }
+            }, 0)
+        }
+    }
 
     return {
         items: async ({ query }: { query: string }) => {
@@ -53,7 +65,7 @@ export const getSuggestionConfig = (options?: { excludeId?: string }) => {
             return {
                 onStart: (props: any) => {
                     component = new ReactRenderer(MentionList, {
-                        props: { ...props, loading, query: currentQuery },
+                        props: { ...props, command: wrapCommand(props), loading, query: currentQuery },
                         editor: props.editor,
                     })
 
@@ -83,7 +95,7 @@ export const getSuggestionConfig = (options?: { excludeId?: string }) => {
 
                 onUpdate: (props: any) => {
                     if (component) {
-                        component.updateProps({ ...props, loading, query: currentQuery })
+                        component.updateProps({ ...props, command: wrapCommand(props), loading, query: currentQuery })
                     }
 
                     if (!props.clientRect || !popup) {

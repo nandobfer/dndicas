@@ -87,6 +87,7 @@ export function CompactRichInput({
                         minRows={minRows ?? 5}
                         disabled={disabled}
                         disableNewlines={blockNewlines}
+                        blurOnMentionSelect
                     />
                 </div>
             </div>
@@ -110,6 +111,7 @@ export function CompactRichInput({
                     excludeId={excludeId}
                     disabled={disabled}
                     disableNewlines={blockNewlines}
+                    blurOnMentionSelect
                     className={cn(
                         // Strip glass container for simple variant so our bottom border is the only affordance
                         "!bg-transparent !border-0 !shadow-none !backdrop-blur-none !rounded-none",

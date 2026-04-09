@@ -343,6 +343,7 @@ interface RichTextEditorProps {
     autoFocus?: boolean
     minRows?: number
     disableNewlines?: boolean
+    blurOnMentionSelect?: boolean
 }
 
 const MenuBar = ({ editor, addImage, disabled = false }: { editor: Editor | null; addImage: () => void; disabled?: boolean }) => {
@@ -429,7 +430,7 @@ const MenuBar = ({ editor, addImage, disabled = false }: { editor: Editor | null
     )
 }
 
-export function RichTextEditor({ value, onChange, onBlur, className, disabled = false, excludeId, variant = "full", autoFocus = false, placeholder, minRows, disableNewlines = false }: RichTextEditorProps) {
+export function RichTextEditor({ value, onChange, onBlur, className, disabled = false, excludeId, variant = "full", autoFocus = false, placeholder, minRows, disableNewlines = false, blurOnMentionSelect = false }: RichTextEditorProps) {
     const [isUploading, setIsUploading] = useState(false)
 
     const uploadImage = useCallback(async (file: File) => {
@@ -468,7 +469,7 @@ export function RichTextEditor({ value, onChange, onBlur, className, disabled = 
                 placeholder: placeholder ?? "Digite '@' para referenciar habilidades, magias, etc.",
             }),
             CustomMention.configure({
-                suggestion: getSuggestionConfig({ excludeId }),
+                suggestion: getSuggestionConfig({ excludeId, blurOnMentionSelect }),
             }),
             DiceHighlight,
             DiceValueNode,
@@ -594,14 +595,14 @@ export function RichTextEditor({ value, onChange, onBlur, className, disabled = 
 
     // Update content if value changes externally
     useEffect(() => {
-        if (editor && value && value !== editor.getHTML()) {
-            // Avoid cursor jumps validation
+        if (editor && value !== editor.getHTML()) {
+            // No-op: both editor and incoming value are empty — avoids redundant setContent
             if (editor.getText() === "" && (value === "<p></p>" || value === "")) return
             if (!editor.isFocused) {
                 // Ensure the update happens outside the current rendering cycle to avoid flushSync errors
                 setTimeout(() => {
                     if (editor && !editor.isDestroyed) {
-                        editor.commands.setContent(value)
+                        editor.commands.setContent(value ?? "")
                     }
                 }, 0)
             }
