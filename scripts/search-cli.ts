@@ -9,7 +9,7 @@
  *   npm run search-cli
  *
  * Controls:
- *   Type to search · ↑↓ navigate · Enter copy name · Alt+Enter copy JSON · ESC clear · Ctrl+C exit
+ *   Type to search · ↑↓ navigate · Ctrl+N copy name · Ctrl+J copy JSON · Ctrl+K copy id · ESC clear · Ctrl+C exit
  */
 
 import { spawnSync } from 'node:child_process';
@@ -378,6 +378,21 @@ async function copySelectedJson(): Promise<void> {
     }
 }
 
+async function copySelectedId(): Promise<void> {
+    const entity = getSelectedEntity();
+    if (!entity) {
+        setStatusMessage('Nenhum item selecionado', 'error');
+        return;
+    }
+
+    try {
+        writeToClipboard(entity.id);
+        setStatusMessage('Id copiado');
+    } catch (error) {
+        setStatusMessage(`Falha ao copiar id: ${error instanceof Error ? error.message : String(error)}`, 'error');
+    }
+}
+
 // ─── Rendering ────────────────────────────────────────────────────────────────
 
 const TYPE_COLORS: Record<string, (s: string) => void> = {
@@ -498,7 +513,7 @@ function render(): void {
     writeRow(H - 3, () => term.brightBlack(divider));
 
     writeRow(H - 2, () => {
-        term.brightBlack('  ↑↓ navegar  ·  Enter copiar nome  ·  Alt+Enter copiar JSON  ·  Esc limpar  ·  Ctrl+C sair  ·  ');
+        term.brightBlack('  ↑↓ navegar  ·  Ctrl+N copiar nome  ·  Ctrl+J copiar JSON  ·  Ctrl+K copiar id  ·  Esc limpar  ·  Ctrl+C sair  ·  ');
         if (statusMessage) {
             if (statusMessage.tone === 'error') term.brightRed(statusMessage.text);
             else term.brightGreen(statusMessage.text);
@@ -550,13 +565,16 @@ function setupInput(): void {
                 process.exit(0);
                 return;
 
-            case 'ENTER':
-            case 'KP_ENTER':
+            case 'CTRL_N':
                 void copySelectedName();
                 return;
 
-            case 'ALT_ENTER':
+            case 'CTRL_J':
                 void copySelectedJson();
+                return;
+
+            case 'CTRL_K':
+                void copySelectedId();
                 return;
 
             case 'ESCAPE':
