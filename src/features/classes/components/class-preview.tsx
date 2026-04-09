@@ -24,6 +24,7 @@ import { Wand } from "lucide-react"
 import { GlassDiceValue } from "@/components/ui/glass-dice-value"
 import { EntitySource } from "@/features/rules/components/entity-source"
 import { ClassProgressionTable } from "./class-progression-table"
+import { SubclassPreview } from "./subclass-preview"
 
 const SKILL_TO_ATTR: Record<string, string> = {
     Atletismo: "Força",
@@ -477,29 +478,8 @@ export function ClassPreview({ characterClass, showStatus = true, initialSelecte
                                 initial={{ opacity: 0, y: -10 }}
                                 animate={{ opacity: 1, y: 0 }}
                                 exit={{ opacity: 0, y: -10 }}
-                                className="space-y-3 p-3 rounded-xl bg-white/[0.02] border border-white/5"
-                                style={{ borderColor: subclass.color ? `${subclass.color}20` : undefined }}
                             >
-                                <div className="flex items-center gap-2">
-                                    <div className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: subclass.color }} />
-                                    <span className="text-xs font-bold uppercase tracking-wider" style={{ color: subclass.color }}>
-                                        {subclass.name}
-                                    </span>
-                                </div>
-
-                                <ClassVisualHeader
-                                    name={subclass.name}
-                                    description={subclass.description || ""}
-                                    image={subclass.image}
-                                    color={subclass.color}
-                                />
-
-                                <SpellcastingSection
-                                    spellcasting={subclass.spellcasting}
-                                    spellcastingAttribute={subclass.spellcastingAttribute}
-                                    spells={subclass.spells}
-                                    color={subclass.color}
-                                />
+                                <SubclassPreview subclass={subclass} parentClassName={characterClass.name} linkToParentClass />
                             </motion.div>
                         ))}
                     </AnimatePresence>

@@ -13,6 +13,7 @@ import { GlassPopover, GlassPopoverTrigger, GlassPopoverContent } from "@/compon
 import { FeatPreview } from "@/features/feats/components/feat-preview"
 import { SpellPreview } from "@/features/spells/components/spell-preview"
 import { ClassPreview } from "@/features/classes/components/class-preview"
+import { SubclassPreview } from "@/features/classes/components/subclass-preview"
 import { BackgroundPreview } from "@/features/backgrounds/components/background-preview"
 import { RacePreview } from "@/features/races/components/race-preview"
 import { ItemPreview } from "@/features/items/components/item-preview"
@@ -293,14 +294,7 @@ export const EntityPreviewTooltip = ({ entityId, entityType, children, side = "t
                 if (!data?.parentClass || !data?.subclass) {
                     return <div className="p-4 text-xs text-white/40 text-center w-[200px]">Subclasse não encontrada</div>
                 }
-                return (
-                    <ClassPreview
-                        key={`${data.parentClass._id}:${String(data.subclass._id || data.subclass.name)}`}
-                        characterClass={data.parentClass}
-                        showStatus={true}
-                        initialSelectedSubclassIds={[String(data.subclass._id || data.subclass.name)]}
-                    />
-                )
+                return <SubclassPreview subclass={data.subclass} parentClassName={data.parentClass.name} linkToParentClass />
             case "Origem":
                 return <BackgroundPreview background={data} />
             case "Raça":

@@ -12,9 +12,10 @@ interface EntityTitleLinkProps {
     className?: string
     style?: React.CSSProperties
     disableLink?: boolean
+    hrefOverride?: string
 }
 
-export function EntityTitleLink({ name, entityType, className, style, disableLink = false }: EntityTitleLinkProps) {
+export function EntityTitleLink({ name, entityType, className, style, disableLink = false, hrefOverride }: EntityTitleLinkProps) {
     // Determine route based on entity type
     const routeMap: Record<string, string> = {
         Regra: "rules",
@@ -28,7 +29,7 @@ export function EntityTitleLink({ name, entityType, className, style, disableLin
     }
 
     const route = routeMap[entityType] || "rules"
-    if (!name || disableLink || entityType === "Subclasse")
+    if (!name || disableLink)
         return (
             <h3 className={cn("text-sm font-bold text-white", className)} style={style}>
                 {name}
@@ -36,10 +37,11 @@ export function EntityTitleLink({ name, entityType, className, style, disableLin
         )
 
     const slug = encodeURIComponent(name.toLowerCase().replace(/\s+/g, "-"))
+    const href = hrefOverride || `/${route}/${slug}`
 
     return (
         <Link
-            href={`/${route}/${slug}`}
+            href={href}
             className={cn("group relative inline-flex items-center gap-2 cursor-pointer transition-colors", "hover:text-white group-hover:text-white", className)}
             style={style}
         >

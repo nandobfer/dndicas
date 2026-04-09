@@ -3,6 +3,7 @@ import { RulePreview, TraitPreview } from "@/features/rules/components/entity-pr
 import { FeatPreview } from "@/features/feats/components/feat-preview"
 import { SpellPreview } from "@/features/spells/components/spell-preview"
 import { ClassPreview } from "@/features/classes/components/class-preview"
+import { SubclassPreview } from "@/features/classes/components/subclass-preview"
 import { BackgroundPreview } from "@/features/backgrounds/components/background-preview"
 import { RacePreview } from "@/features/races/components/race-preview"
 import { ItemPreview } from "@/features/items/components/item-preview"
@@ -18,7 +19,7 @@ import type { CharacterClass as CharacterClassType } from "@/features/classes/ty
  * Registry of renderers for different entity types.
  * T042: Shared entity renderer configuration for EntityList and GlassWindow.
  */
-export const ENTITY_RENDERERS: Record<string, (item: any, options?: { showStatus?: boolean; hideStatusChip?: boolean; hideActionIcons?: boolean }) => React.ReactNode> = {
+export const ENTITY_RENDERERS: Record<string, (item: any, options?: { showStatus?: boolean; hideStatusChip?: boolean; hideActionIcons?: boolean; initialSelectedSubclassIds?: string[] }) => React.ReactNode> = {
     Regra: (idOrItem, opts) => <RuleAsyncRenderer item={idOrItem} showStatus={opts?.showStatus ?? false} />,
     Habilidade: (id, opts) => <TraitAsyncRenderer id={id} showStatus={opts?.showStatus ?? true} hideStatusChip={opts?.hideStatusChip} hideActionIcons={opts?.hideActionIcons} />,
     Talento: (idOrItem, opts) => <FeatAsyncRenderer item={idOrItem} showStatus={opts?.showStatus ?? true} hideStatusChip={opts?.hideStatusChip} hideActionIcons={opts?.hideActionIcons} />,
@@ -225,7 +226,7 @@ function SpellAsyncRenderer({ item, showStatus = true, hideStatusChip, hideActio
     )
 }
 
-function ClassAsyncRenderer({ item, showStatus = true }: { item: any; showStatus?: boolean }) {
+function ClassAsyncRenderer({ item, showStatus = true, initialSelectedSubclassIds }: { item: any; showStatus?: boolean; initialSelectedSubclassIds?: string[] }) {
     const [characterClass, setCharacterClass] = React.useState<any>(null)
     const [loading, setLoading] = React.useState(true)
 
@@ -271,7 +272,7 @@ function ClassAsyncRenderer({ item, showStatus = true }: { item: any; showStatus
 
     return (
         <div className="p-4">
-            <ClassPreview characterClass={characterClass} showStatus={showStatus} />
+            <ClassPreview characterClass={characterClass} showStatus={showStatus} initialSelectedSubclassIds={initialSelectedSubclassIds} />
         </div>
     )
 }
@@ -330,12 +331,7 @@ function SubclassAsyncRenderer({ item, showStatus = true }: { item: any; showSta
 
     return (
         <div className="p-4">
-            <ClassPreview
-                key={`${characterClass._id}:${String(subclass._id || subclass.name)}`}
-                characterClass={characterClass}
-                showStatus={showStatus}
-                initialSelectedSubclassIds={[String(subclass._id || subclass.name)]}
-            />
+            <SubclassPreview subclass={subclass} parentClassName={characterClass.name} linkToParentClass />
         </div>
     )
 }
@@ -484,7 +480,7 @@ function RaceAsyncRenderer({ item }: { item: any }) {
 }
 
 
-export const renderEntity = (item: any, entityType: string, options?: { showStatus?: boolean; hideStatusChip?: boolean; hideActionIcons?: boolean }) => {
+export const renderEntity = (item: any, entityType: string, options?: { showStatus?: boolean; hideStatusChip?: boolean; hideActionIcons?: boolean; initialSelectedSubclassIds?: string[] }) => {
     const type = entityType === "Mixed" ? item.type : entityType
     const renderer = ENTITY_RENDERERS[type]
     return renderer ? renderer(item, options) : <div>{item.name || "Unknown item"}</div>
