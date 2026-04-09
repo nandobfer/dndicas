@@ -479,7 +479,7 @@ export function ClassPreview({ characterClass, showStatus = true, initialSelecte
                                 animate={{ opacity: 1, y: 0 }}
                                 exit={{ opacity: 0, y: -10 }}
                             >
-                                <SubclassPreview subclass={subclass} parentClassName={characterClass.name} linkToParentClass />
+                                <SubclassPreview subclass={subclass} parentClassName={characterClass.name} linkToParentClass mode="embedded" />
                             </motion.div>
                         ))}
                     </AnimatePresence>

@@ -7,6 +7,7 @@ import { useMemo, useState } from "react"
 import { GlassAttributeChip } from "@/components/ui/glass-attribute-chip"
 import { GlassImage } from "@/components/ui/glass-image"
 import { GlassInput } from "@/components/ui/glass-input"
+import { GlassSelector } from "@/components/ui/glass-selector"
 import { MentionContent } from "@/features/rules/components/mention-badge"
 import { MentionRenderer } from "./mention-renderer"
 import type { AttributeType, Subclass } from "../types/classes.types"
@@ -185,14 +186,51 @@ export interface SubclassPreviewProps {
     subclass: Subclass
     parentClassName?: string
     linkToParentClass?: boolean
+    mode?: "embedded" | "standalone"
 }
 
-export function SubclassPreview({ subclass, parentClassName, linkToParentClass = false }: SubclassPreviewProps) {
+export function SubclassPreview({ subclass, parentClassName, linkToParentClass = false, mode = "standalone" }: SubclassPreviewProps) {
+    const [levelFilter, setLevelFilter] = useState<number | undefined>(undefined)
+    const [filterMode, setFilterMode] = useState<"upTo" | "exact">("upTo")
+    const [isTraitsOpen, setIsTraitsOpen] = useState(false)
     const subclassKey = String(subclass._id || subclass.name)
     const href =
         linkToParentClass && parentClassName
             ? `/classes/${toSlug(parentClassName)}?subclass=${encodeURIComponent(subclassKey)}`
             : null
+
+    const filteredTraitsByLevel = useMemo(() => {
+        const traits = [...(subclass.traits || [])].sort((a, b) => a.level - b.level)
+        const filtered =
+            levelFilter === undefined
+                ? traits
+                : filterMode === "exact"
+                  ? traits.filter((trait) => trait.level === levelFilter)
+                  : traits.filter((trait) => trait.level <= levelFilter)
+
+        const groups: Record<number, typeof traits> = {}
+        filtered.forEach((trait) => {
+            if (!groups[trait.level]) groups[trait.level] = []
+            groups[trait.level].push(trait)
+        })
+
+        return Object.entries(groups)
+            .map(([level, items]) => ({ level: parseInt(level, 10), items }))
+            .sort((a, b) => a.level - b.level)
+    }, [subclass.traits, levelFilter, filterMode])
+
+    const handleLevelInput = (value: string) => {
+        const cleanedValue = value.replace(/\D/g, "")
+        if (cleanedValue === "") {
+            setLevelFilter(undefined)
+            return
+        }
+
+        let nextValue = parseInt(cleanedValue, 10)
+        if (nextValue > 20) nextValue = 20
+        if (nextValue < 1) nextValue = 1
+        setLevelFilter(nextValue)
+    }
 
     return (
         <div className="space-y-3 p-3 rounded-xl bg-white/[0.02] border border-white/5" style={{ borderColor: subclass.color ? `${subclass.color}20` : undefined }}>
@@ -211,12 +249,132 @@ export function SubclassPreview({ subclass, parentClassName, linkToParentClass =
 
             <SubclassVisualHeader name={subclass.name} description={subclass.description || ""} image={subclass.image} color={subclass.color} />
 
-            <SpellcastingSection
-                spellcasting={subclass.spellcasting}
-                spellcastingAttribute={subclass.spellcastingAttribute}
-                spells={subclass.spells}
-                color={subclass.color}
-            />
+            {mode === "standalone" && (
+                <>
+                    {subclass.spellcasting && (
+                        <SpellcastingSection
+                            spellcasting={subclass.spellcasting}
+                            spellcastingAttribute={subclass.spellcastingAttribute}
+                            spells={subclass.spells}
+                            color={subclass.color}
+                        />
+                    )}
+
+                    <div
+                        className="rounded-xl overflow-hidden border transition-all"
+                        style={{
+                            borderColor: subclass.color ? `${subclass.color}20` : "rgba(100, 116, 139, 0.2)",
+                            backgroundColor: subclass.color ? `${subclass.color}08` : "rgba(100, 116, 139, 0.05)",
+                        }}
+                    >
+                        <button onClick={() => setIsTraitsOpen(!isTraitsOpen)} className="w-full flex items-center justify-between p-2.5 hover:bg-white/[0.02] transition-colors">
+                            <div className="flex items-center gap-3">
+                                <div
+                                    className="p-1 px-1.5 rounded-lg border"
+                                    style={{
+                                        backgroundColor: subclass.color ? `${subclass.color}15` : "rgba(251, 191, 36, 0.15)",
+                                        borderColor: subclass.color ? `${subclass.color}30` : "rgba(251, 191, 36, 0.3)",
+                                    }}
+                                >
+                                    <Zap className="h-3.5 w-3.5" style={{ color: subclass.color || "#fbbf24" }} />
+                                </div>
+                                <div className="text-left">
+                                    <span className="text-[10px] font-bold text-white/40 uppercase tracking-widest block">Habilidades</span>
+                                    <span className="text-xs font-semibold text-white/90">Por Nível</span>
+                                </div>
+                            </div>
+                            <motion.div animate={{ rotate: isTraitsOpen ? 90 : 0 }} transition={{ duration: 0.2 }}>
+                                <ChevronRight className="h-4 w-4 text-white/20" />
+                            </motion.div>
+                        </button>
+
+                        <AnimatePresence>
+                            {isTraitsOpen && (
+                                <motion.div
+                                    initial={{ height: 0, opacity: 0 }}
+                                    animate={{ height: "auto", opacity: 1 }}
+                                    exit={{ height: 0, opacity: 0 }}
+                                    className="border-t border-white/5"
+                                >
+                                    <div className="p-3 space-y-4">
+                                        <div className="flex flex-col sm:flex-row sm:items-center justify-end gap-3">
+                                            <div className="flex items-center gap-2">
+                                                <GlassInput
+                                                    type="text"
+                                                    inputMode="numeric"
+                                                    value={levelFilter !== undefined ? String(levelFilter) : ""}
+                                                    onChange={(e) => handleLevelInput(e.target.value)}
+                                                    placeholder="Nível"
+                                                    className="w-14 px-2 h-8 text-center text-xs"
+                                                    containerClassName="w-auto"
+                                                />
+                                                <GlassSelector
+                                                    value={filterMode}
+                                                    onChange={(val) => setFilterMode(val as "exact" | "upTo")}
+                                                    options={[
+                                                        { value: "exact", label: "=", activeColor: subclass.color ? `${subclass.color}20` : "bg-amber-500/20", textColor: subclass.color || "text-amber-400" },
+                                                        { value: "upTo", label: "≤", activeColor: subclass.color ? `${subclass.color}20` : "bg-amber-500/20", textColor: subclass.color || "text-amber-400" },
+                                                    ]}
+                                                    size="sm"
+                                                    className="h-8"
+                                                    layoutId={`subclass-level-mode-${subclassKey}`}
+                                                />
+                                            </div>
+                                        </div>
+
+                                        <div className="space-y-4">
+                                            <AnimatePresence mode="popLayout" initial={false}>
+                                                {filteredTraitsByLevel.length > 0 ? (
+                                                    filteredTraitsByLevel.map((group) => (
+                                                        <motion.div
+                                                            key={`subclass-group-${subclassKey}-${group.level}`}
+                                                            initial={{ opacity: 0, y: 10 }}
+                                                            animate={{ opacity: 1, y: 0 }}
+                                                            exit={{ opacity: 0, scale: 0.95 }}
+                                                            className="space-y-2"
+                                                        >
+                                                            <div className="flex items-center gap-2">
+                                                                <div className="h-px flex-1 bg-white/5" />
+                                                                <span
+                                                                    className="text-[10px] font-black uppercase tracking-[0.2em] px-2 bg-black/20 rounded-full border"
+                                                                    style={{
+                                                                        color: subclass.color ? `${subclass.color}cc` : "rgba(245, 158, 11, 0.5)",
+                                                                        borderColor: subclass.color ? `${subclass.color}20` : "rgba(251, 191, 36, 0.1)",
+                                                                    }}
+                                                                >
+                                                                    Nível {group.level}º
+                                                                </span>
+                                                                <div className="h-px flex-1 bg-white/5" />
+                                                            </div>
+                                                            <div className="grid gap-3">
+                                                                {group.items.map((trait, idx) => (
+                                                                    <MentionRenderer
+                                                                        key={trait._id || `subclass-trait-${subclassKey}-${group.level}-${idx}`}
+                                                                        item={trait}
+                                                                        color={subclass.color}
+                                                                    />
+                                                                ))}
+                                                            </div>
+                                                        </motion.div>
+                                                    ))
+                                                ) : (
+                                                    <motion.div
+                                                        initial={{ opacity: 0 }}
+                                                        animate={{ opacity: 1 }}
+                                                        className="text-center py-4 text-xs text-white/20 italic bg-white/5 rounded-lg border border-dashed border-white/10"
+                                                    >
+                                                        Nenhuma habilidade encontrada para os filtros.
+                                                    </motion.div>
+                                                )}
+                                            </AnimatePresence>
+                                        </div>
+                                    </div>
+                                </motion.div>
+                            )}
+                        </AnimatePresence>
+                    </div>
+                </>
+            )}
         </div>
     )
 }
