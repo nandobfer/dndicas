@@ -15,6 +15,7 @@ import {
     collectMentionsFromRaces,
     collectMentionsFromSubclasses,
     dedupeMentions,
+    diffMentions,
     extractFeatMention,
     getActiveBackgroundMentions,
     getActiveClassMentions,
@@ -115,23 +116,29 @@ export function useSheetMentionSync({ sheet, form, isReadOnly = false }: UseShee
             const nextDerived = resolved.derived
 
             const previousDerived = previousDerivedRef.current
+            const classFeatureDiff = diffMentions(
+                [...previousDerived.classMentions, ...previousDerived.subclassMentions],
+                [...nextDerived.classMentions, ...nextDerived.subclassMentions]
+            )
+            const speciesTraitDiff = diffMentions(previousDerived.raceMentions, nextDerived.raceMentions)
+            const featDiff = diffMentions(previousDerived.backgroundFeatMentions, nextDerived.backgroundFeatMentions)
 
             const nextClassFeatures = appendMentionsToHtml(
                 removeMentionsFromHtml(
                     classFeatures,
-                    [...previousDerived.classMentions, ...previousDerived.subclassMentions]
+                    classFeatureDiff.removed
                 ),
-                [...nextDerived.classMentions, ...nextDerived.subclassMentions]
+                classFeatureDiff.added
             )
 
             const nextSpeciesTraits = appendMentionsToHtml(
-                removeMentionsFromHtml(speciesTraits, previousDerived.raceMentions),
-                nextDerived.raceMentions
+                removeMentionsFromHtml(speciesTraits, speciesTraitDiff.removed),
+                speciesTraitDiff.added
             )
 
             const nextFeaturesNotes = appendMentionsToHtml(
-                removeMentionsFromHtml(featuresNotes, previousDerived.backgroundFeatMentions),
-                nextDerived.backgroundFeatMentions
+                removeMentionsFromHtml(featuresNotes, featDiff.removed),
+                featDiff.added
             )
 
             const winningSubclass = resolved.activeSubclasses.find(isSpellcastingSubclass)

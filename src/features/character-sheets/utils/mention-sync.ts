@@ -23,6 +23,12 @@ export interface ResolvedSubclass {
     parentClassId: string
 }
 
+export interface MentionDiff {
+    added: ParsedMention[]
+    removed: ParsedMention[]
+    kept: ParsedMention[]
+}
+
 const EMPTY_HTML_VALUES = new Set(["", "<p></p>"])
 
 const CATALOG_TO_SHEET_ATTRIBUTE: Record<CatalogAttributeType, SheetAttributeType> = {
@@ -193,6 +199,19 @@ export function dedupeMentions(mentions: ParsedMention[]): ParsedMention[] {
     }
 
     return result
+}
+
+export function diffMentions(previousMentions: ParsedMention[], nextMentions: ParsedMention[]): MentionDiff {
+    const previous = dedupeMentions(previousMentions)
+    const next = dedupeMentions(nextMentions)
+    const previousKeys = new Set(previous.map(toMentionKey))
+    const nextKeys = new Set(next.map(toMentionKey))
+
+    return {
+        added: next.filter((mention) => !previousKeys.has(toMentionKey(mention))),
+        removed: previous.filter((mention) => !nextKeys.has(toMentionKey(mention))),
+        kept: next.filter((mention) => previousKeys.has(toMentionKey(mention))),
+    }
 }
 
 export function toMentionKey(mention: Pick<ParsedMention, "id" | "entityType">): string {
