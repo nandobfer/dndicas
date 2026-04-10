@@ -15,6 +15,8 @@ export interface GlassDiceValueProps {
     value: DiceValue
     /** Show dice icon */
     showIcon?: boolean
+    /** Flat bonus to display alongside the dice notation, e.g. 4 for "1d6 + 4" */
+    bonus?: number
     /** Custom color configuration (overrides default dice type color) */
     colorOverride?: {
         text: string
@@ -48,9 +50,11 @@ export interface GlassDiceValueProps {
  * <GlassDiceValue value={{ quantidade: 1, tipo: 'd8' }} colorOverride={{ text: 'text-orange-500' }} />
  * ```
  */
-export function GlassDiceValue({ value, showIcon = true, colorOverride, className }: GlassDiceValueProps) {
+export function GlassDiceValue({ value, showIcon = true, bonus, colorOverride, className }: GlassDiceValueProps) {
     const colorConfig = colorOverride || diceColors[value.tipo as DiceType]
-    const notation = `${value.quantidade}${value.tipo}`
+    const notation = bonus !== undefined
+        ? `${value.quantidade}${value.tipo} + ${bonus}`
+        : `${value.quantidade}${value.tipo}`
 
     // Use inline style for text color if hex is provided to avoid Tailwind JIT issues with arbitrary values in strings
     const isCustomHex = colorOverride?.text?.includes("#")

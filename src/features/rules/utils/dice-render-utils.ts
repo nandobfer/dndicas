@@ -20,6 +20,8 @@ export interface DiceMatch {
     quantidade: number
     /** Parsed die type, e.g. "d6" */
     tipo: DiceType
+    /** Optional flat bonus, e.g. 4 for "2d6 + 4" */
+    bonus?: number
     /** Optional damage-type color override */
     colorOverride?: DiceColorOverride
     /** Hex color string if resolved */
@@ -49,17 +51,23 @@ export const diceFuse = new Fuse(fuseData, {
 /**
  * Unified regex that matches:
  * - `NdX[type]`  — dice with bracket damage type (type is hidden, used for color)
+ * - `NdX + N`    — dice with optional flat bonus modifier
  * - `NdX`        — plain dice notation
- * - `pontos de dano X` / `de dano X` — natural language damage description
+ * - `pontos de dano X` / `dano[s] [de] X` / `de dano[s] [de] X` — natural language damage description
+ *
+ * Groups: qty(1), faces(2), bracketType(3), bonus(4), naturalType(5)
  */
 export const DICE_UNIFIED_REGEX =
-    /(\d+)d(4|6|8|10|12|20|100)(?:\s*\[([^\]]+)\])?|(?:pontos de dano|de dano) (?:de )?([a-zA-Záàâãéèêíïóôõöúçñ]+)/gi
+    /(\d+)d(4|6|8|10|12|20|100)(?:\s*\[([^\]]+)\])?(?:\s*\+\s*(\d+))?|(?:pontos de dano|(?:de )?danos?) (?:de )?([a-zA-Záàâãéèêíïóôõöúçñ]+)/gi
 
 /**
  * Regex used to look ahead for natural damage context right after a dice match.
+ * Covers: `dano X`, `danos X`, `dano de X`, `danos de X`, `de dano X`,
+ *         `de danos X`, `de dano de X`, `de danos de X`, `pontos de dano X`,
+ *         `pontos de dano de X`.
  */
 export const DICE_LOOKAHEAD_REGEX =
-    /^\s*(?:pontos de dano|de dano) (?:de )?([a-zA-Záàâãéèêíïóôõöúçñ]+)/i
+    /^\s*(?:(?:de\s+)?danos?(?:\s+de)?|pontos\s+de\s+dano(?:\s+de)?)\s+([a-zA-Záàâãéèêíïóôõöúçñ]+)/i
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
