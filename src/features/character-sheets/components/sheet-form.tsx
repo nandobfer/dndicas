@@ -7,10 +7,10 @@ import { useAuth } from "@/core/hooks/useAuth"
 import { GlassCard, GlassCardContent } from "@/components/ui/glass-card"
 import { motionConfig } from "@/lib/config/motion-configs"
 import { SheetHeader } from "./sheet-header"
-import { SheetLeftColumn } from "./sheet-left-column"
-import { SheetMiddleColumn } from "./sheet-middle-column"
-import { SheetCenterColumn } from "./sheet-center-column"
-import { SheetRightColumn } from "./sheet-right-column"
+import { SheetAttributesLeft } from "./sheet-attributes-left"
+import { SheetAttributesRight } from "./sheet-attributes-right"
+import { SheetAttacksAndTraits } from "./sheet-attacks-and-traits"
+import { SheetItemsAndSpells } from "./sheet-items-and-spells"
 import { CompactRichInput } from "./compact-rich-input"
 import { useSheetAutoSave } from "../hooks/use-sheet-auto-save"
 import { useSheetMentionSync } from "../hooks/use-sheet-mention-sync"
@@ -47,26 +47,26 @@ export function SheetForm({ sheet }: SheetFormProps) {
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
                     <GlassCard>
                         <GlassCardContent className="pt-4 pb-4">
-                            <SheetLeftColumn sheet={sheet} form={form} isReadOnly={isReadOnly} />
+                            <SheetAttributesLeft sheet={sheet} form={form} isReadOnly={isReadOnly} />
                         </GlassCardContent>
                     </GlassCard>
 
                     <GlassCard>
                         <GlassCardContent className="pt-4 pb-4">
-                            <SheetMiddleColumn sheet={sheet} form={form} isReadOnly={isReadOnly} />
+                            <SheetAttributesRight sheet={sheet} form={form} isReadOnly={isReadOnly} />
                         </GlassCardContent>
                     </GlassCard>
                 </div>
 
                 <GlassCard>
                     <GlassCardContent className="pt-4 pb-4">
-                        <SheetCenterColumn sheet={sheet} form={form} isReadOnly={isReadOnly} />
+                        <SheetAttacksAndTraits sheet={sheet} form={form} isReadOnly={isReadOnly} />
                     </GlassCardContent>
                 </GlassCard>
             </div>
 
             {/* Items + Spells — two equal columns, always open */}
-            <SheetRightColumn sheet={sheet} form={form} isReadOnly={isReadOnly} />
+            <SheetItemsAndSpells sheet={sheet} form={form} isReadOnly={isReadOnly} />
 
             {/* Notes — full-width, always open */}
             <GlassCard>
