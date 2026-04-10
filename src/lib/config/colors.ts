@@ -212,6 +212,16 @@ export const entityColors = {
         bgAlpha: "bg-cyan-500/10",
         text: "text-cyan-400",
         hex: rarityColors.divine // #06B6D4
+    },
+    Ficha: {
+        color: "purple",
+        mention: "bg-purple-500/10 text-purple-400 border-purple-400/20",
+        badge: "bg-purple-400/20 text-purple-400",
+        border: "border-purple-500/20",
+        hoverBorder: "hover:border-purple-500/40",
+        bgAlpha: "bg-purple-500/10",
+        text: "text-purple-400",
+        hex: rarityColors.veryRare,
     }
 } as const
 
