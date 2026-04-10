@@ -247,6 +247,45 @@ function buildDisplayJsonLines(entity: UnifiedEntity | undefined, maxWidth: numb
     return rawLines.flatMap((line) => wrapJsonLine(line, maxWidth));
 }
 
+/**
+ * Wraps the current `editBuffer` into visual chunks that fit within `maxWidth`,
+ * matching the layout of the edit input:
+ *   Line 0: indent + keyPrefix + content  (firstCap chars of content)
+ *   Line 1+: indent + content             (contCap chars per line)
+ *
+ * Returns the chunks and the start offset of each chunk within `editBuffer`
+ * so callers can determine which line the cursor falls on.
+ */
+function wrapEditBuffer(
+    logLine: JsonLogicalLine,
+    maxWidth: number
+): { chunks: string[]; chunkStarts: number[] } {
+    const indent = logLine.lineText.match(/^\s*/)?.[0] ?? '';
+    const keyMatch = /^(\s*)"([^"]+)":\s*/.exec(logLine.lineText);
+    const keyPrefix = keyMatch ? ('"' + keyMatch[2] + '": ') : '';
+
+    const firstCap = Math.max(1, maxWidth - indent.length - keyPrefix.length);
+    const contCap  = Math.max(1, maxWidth - indent.length);
+
+    const chunks: string[] = [];
+    const chunkStarts: number[] = [];
+    let pos = 0;
+
+    // First chunk uses firstCap
+    chunks.push(editBuffer.slice(pos, pos + firstCap));
+    chunkStarts.push(pos);
+    pos += firstCap;
+
+    // Continuation chunks use contCap
+    while (pos < editBuffer.length) {
+        chunks.push(editBuffer.slice(pos, pos + contCap));
+        chunkStarts.push(pos);
+        pos += contCap;
+    }
+
+    return { chunks, chunkStarts };
+}
+
 // ─── JSON logical line helpers ────────────────────────────────────────────────
 
 /** Maps a dot-notation path to the value inside an object. */
@@ -934,7 +973,18 @@ function render(): void {
         const selectedEntity = results[selectedIndex];
         const selectedRowStyle = getSelectedRowStyle(selectedEntity, activeTab);
         const { visualLines: jsonVisualLines, logicalMap } = buildDisplayJsonLinesWithMap(selectedEntity, W - 2);
-        const selectedLineCount = 1 + jsonVisualLines.length;
+
+        // In editLine mode, the edit buffer may wrap into more lines than the
+        // original JSON display. Pre-compute chunks to allocate the right space.
+        let editWrappedCache: { chunks: string[]; chunkStarts: number[] } | null = null;
+        if (appMode === 'editLine' && selectedEntity) {
+            const selLogLine = jsonLogicalLines[jsonLogicalLineIndex];
+            if (selLogLine) {
+                editWrappedCache = wrapEditBuffer(selLogLine, W - 2);
+            }
+        }
+        const editChunkCount = editWrappedCache?.chunks.length ?? 0;
+        const selectedLineCount = 1 + Math.max(jsonVisualLines.length, editChunkCount);
 
         const { start, end } = computeWindow(results.length, selectedIndex, selectedLineCount, listRows);
 
@@ -966,36 +1016,70 @@ function render(): void {
                         const { visualStart, visualEnd } = logicalMap[logIdx];
                         const isSelectedLogical = logIdx === jsonLogicalLineIndex;
 
-                        for (let vIdx = visualStart; vIdx <= visualEnd; vIdx++) {
-                            if (currentRow > listEndRow) break;
-                            const visualLine = jsonVisualLines[vIdx];
-                            if (!visualLine) continue;
+                        // For editLine mode on the selected logical line, pre-resolve
+                        // the wrapped chunks (cached from above for the selected line).
+                        const wrapped = (isSelectedLogical && appMode === 'editLine')
+                            ? editWrappedCache
+                            : null;
 
-                            if (isSelectedLogical && appMode === 'editLine' && vIdx === visualStart) {
-                                // Render the edit input inline for the selected logical line
+                        // Total rows to iterate: max of JSON visual rows and edit chunks
+                        const totalRows = wrapped
+                            ? Math.max(visualEnd - visualStart + 1, wrapped.chunks.length)
+                            : (visualEnd - visualStart + 1);
+
+                        for (let offset = 0; offset < totalRows; offset++) {
+                            const vIdx = visualStart + offset;
+                            if (currentRow > listEndRow) break;
+
+                            if (wrapped) {
+                                // editLine mode for the selected logical line
+                                const logLine = jsonLogicalLines[logIdx];
+                                const keyMatch = /^(\s*)"([^"]+)":\s*/.exec(logLine?.lineText ?? '');
+                                const indent = logLine?.lineText?.match(/^\s*/)?.[0] ?? '';
+                                const chunk = wrapped.chunks[offset] ?? '';
+                                const chunkStart = wrapped.chunkStarts[offset] ?? -1;
+                                const isLastChunk = offset === wrapped.chunks.length - 1;
+
+                                // Cursor is in this chunk if editCursorPos falls within it
+                                const localCursor = (chunkStart !== -1
+                                    && editCursorPos >= chunkStart
+                                    && (editCursorPos < chunkStart + chunk.length || (isLastChunk && editCursorPos <= chunkStart + chunk.length)))
+                                    ? editCursorPos - chunkStart
+                                    : null;
+
                                 writeRow(currentRow, () => {
-                                    const logLine = jsonLogicalLines[logIdx];
                                     process.stdout.write(JSON_HL_BG);
                                     term('  ');
-                                    const keyMatch = /^(\s*)"([^"]+)":\s*/.exec(logLine?.lineText ?? '');
-                                    if (keyMatch) {
-                                        process.stdout.write('\x1b[33m"' + keyMatch[2] + '"' + HL_FG_RESET + ': ');
-                                    }
-                                    const before = editBuffer.slice(0, editCursorPos);
-                                    const atCursor = editBuffer[editCursorPos];
-                                    const after = editBuffer.slice(editCursorPos + 1);
-                                    process.stdout.write('\x1b[36m');
-                                    process.stdout.write(before);
-                                    if (atCursor !== undefined) {
-                                        process.stdout.write('\x1b[7m' + atCursor + '\x1b[27m');
-                                        process.stdout.write(after);
+                                    if (offset === 0) {
+                                        // First line: show indent + key prefix
+                                        if (indent) process.stdout.write(indent);
+                                        if (keyMatch) {
+                                            process.stdout.write('\x1b[33m"' + keyMatch[2] + '"' + HL_FG_RESET + ': ');
+                                        }
                                     } else {
-                                        process.stdout.write('\x1b[7m_\x1b[27m');
+                                        // Continuation lines: re-indent to match original
+                                        if (indent) process.stdout.write(indent);
+                                    }
+                                    // Render chunk content with cursor
+                                    process.stdout.write('\x1b[36m');
+                                    if (localCursor !== null) {
+                                        process.stdout.write(chunk.slice(0, localCursor));
+                                        const atCursor = chunk[localCursor];
+                                        if (atCursor !== undefined) {
+                                            process.stdout.write('\x1b[7m' + atCursor + '\x1b[27m');
+                                            process.stdout.write(chunk.slice(localCursor + 1));
+                                        } else {
+                                            process.stdout.write('\x1b[7m_\x1b[27m');
+                                        }
+                                    } else {
+                                        process.stdout.write(chunk);
                                     }
                                     process.stdout.write(HL_FULL_RESET);
                                 });
                             } else if (isSelectedLogical) {
-                                // Highlight the selected logical line
+                                // jsonNav highlight (or editLine on non-selected lines)
+                                const visualLine = jsonVisualLines[vIdx];
+                                if (!visualLine) { currentRow++; continue; }
                                 writeRow(currentRow, () => {
                                     process.stdout.write(JSON_HL_BG);
                                     term('  ');
@@ -1005,6 +1089,8 @@ function render(): void {
                                     process.stdout.write(HL_FULL_RESET);
                                 });
                             } else {
+                                const visualLine = jsonVisualLines[vIdx];
+                                if (!visualLine) { currentRow++; continue; }
                                 writeRow(currentRow, () => {
                                     term('  ');
                                     for (const token of visualLine) {
