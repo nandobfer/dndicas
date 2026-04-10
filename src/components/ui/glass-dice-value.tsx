@@ -53,7 +53,7 @@ export interface GlassDiceValueProps {
 export function GlassDiceValue({ value, showIcon = true, bonus, colorOverride, className }: GlassDiceValueProps) {
     const colorConfig = colorOverride || diceColors[value.tipo as DiceType]
     const notation = bonus !== undefined
-        ? `${value.quantidade}${value.tipo} + ${bonus}`
+        ? `${value.quantidade}${value.tipo} ${bonus >= 0 ? "+" : "-"} ${Math.abs(bonus)}`
         : `${value.quantidade}${value.tipo}`
 
     // Use inline style for text color if hex is provided to avoid Tailwind JIT issues with arbitrary values in strings
