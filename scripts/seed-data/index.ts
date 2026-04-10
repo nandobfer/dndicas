@@ -84,7 +84,11 @@ function printHelp(): void {
     term.green('  --test / --dry-run ');
     term('Revisão interativa do 1º item, não salva no banco\n');
     term.green('  --auto             ');
-    term('Processa todos os itens sem confirmação (batch)\n\n');
+    term('Processa todos os itens sem confirmação (batch)\n');
+    term.green('  --from-start       ');
+    term('Ignora o progresso salvo e começa a iterar do índice 0\n');
+    term.green('  --from <índice>    ');
+    term('Começa a iterar a partir do índice especificado (ex: --from 117)\n\n');
 
     term.bold('Modos de execução:\n\n');
 
@@ -560,6 +564,10 @@ async function main(): Promise<void> {
     // Detect --test or --dry-run mode
     const testMode = process.argv.includes('--test') || process.argv.includes('--dry-run');
     const autoMode = process.argv.includes('--auto');
+    const fromStart = process.argv.includes('--from-start');
+
+    const fromIdx = process.argv.indexOf('--from');
+    const fromIndex = fromIdx !== -1 ? parseInt(process.argv[fromIdx + 1] ?? '', 10) : NaN;
 
     if (testMode) {
         term.yellow('\n🧪 TEST/DRY-RUN MODE ENABLED\n');
@@ -574,6 +582,22 @@ async function main(): Promise<void> {
         term.cyan('\n💬 INTERACTIVE MODE\n');
         term.dim('   • Each item will be shown for review\n');
         term.dim('   • You can add glossary corrections before confirming\n\n');
+    }
+
+    if (fromStart) {
+        term.yellow('⏮  FROM-START MODE ENABLED\n');
+        term.dim('   • Saved progress will be ignored\n');
+        term.dim('   • Iteration will begin from index 0\n\n');
+    }
+
+    if (fromIdx !== -1) {
+        if (isNaN(fromIndex)) {
+            term.red('✗ --from requer um número válido. Exemplo: --from 117\n');
+            process.exit(1);
+        }
+        term.yellow(`⏩  FROM INDEX: ${fromIndex}\n`);
+        term.dim(`   • Saved progress will be ignored\n`);
+        term.dim(`   • Iteration will begin from index ${fromIndex}\n\n`);
     }
 
     setupExitHandler();
@@ -596,6 +620,12 @@ async function main(): Promise<void> {
     }
     if (autoMode) {
         provider!.setAutoMode(true);
+    }
+    if (fromStart) {
+        provider!.setFromStart(true);
+    }
+    if (!isNaN(fromIndex)) {
+        provider!.setFromIndex(fromIndex);
     }
 
     // If LibreTranslate was selected, start its server (and run setup if needed).

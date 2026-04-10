@@ -855,7 +855,13 @@ export class RacesProvider extends BaseProvider<FiveEToolsRace, CreateRaceInput>
 
     async findExisting(race: CreateRaceInput): Promise<CreateRaceInput | null> {
         await dbConnect();
-        const doc = await RaceModel.findOne({ name: race.name }).lean();
+        const escape = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        const nameRegex = new RegExp(`^${escape(race.name)}$`, 'i');
+        const orClauses: Record<string, unknown>[] = [{ name: nameRegex }];
+        if (race.originalName) {
+            orClauses.push({ originalName: new RegExp(`^${escape(race.originalName)}$`, 'i') });
+        }
+        const doc = await RaceModel.findOne({ $or: orClauses }).lean();
         if (!doc) return null;
 
         return {

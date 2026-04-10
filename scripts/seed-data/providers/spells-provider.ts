@@ -291,8 +291,13 @@ export class SpellsProvider extends BaseProvider<FiveEToolsSpell, CreateSpellInp
 
     async findExisting(spell: CreateSpellInput): Promise<CreateSpellInput | null> {
         await dbConnect();
-        const nameRegex = new RegExp(`^${spell.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i');
-        const doc = await Spell.findOne({ name: nameRegex }).lean();
+        const escape = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        const nameRegex = new RegExp(`^${escape(spell.name)}$`, 'i');
+        const orClauses: Record<string, unknown>[] = [{ name: nameRegex }];
+        if (spell.originalName) {
+            orClauses.push({ originalName: new RegExp(`^${escape(spell.originalName)}$`, 'i') });
+        }
+        const doc = await Spell.findOne({ $or: orClauses }).lean();
         if (!doc) return null;
         return {
             name: doc.name,
