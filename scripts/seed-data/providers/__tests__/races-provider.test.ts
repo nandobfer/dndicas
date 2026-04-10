@@ -365,6 +365,7 @@ describe('RacesProvider.processItem', () => {
 
         expect(result).not.toBeNull();
         expect(result!.name).toBe('[PT] Aasimar');
+        expect(result!.originalName).toBe('Aasimar');
         expect(result!.source).toBe('LDJ pág. 286');
         expect(result!.status).toBe('active');
         expect(result!.size).toBe('Médio');

@@ -10,6 +10,7 @@ export interface BackgroundTrait {
 export interface Background {
     _id: string
     name: string
+    originalName?: string
     image?: string
     description: string // HTML string from TipTap
     source: string

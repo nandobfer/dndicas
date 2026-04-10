@@ -9,6 +9,7 @@ import { GlassCheckbox } from "./glass-checkbox"
 import { CalcTooltip } from "./calc-tooltip"
 import { useSpellList } from "./hooks/use-spell-list"
 import { GlassSelector } from "@/components/ui/glass-selector"
+import { PointerTooltip } from "./pointer-tooltip"
 import { attributeColors } from "@/lib/config/colors"
 import type { CharacterSheet, PatchSheetBody } from "../types/character-sheet.types"
 
@@ -98,6 +99,8 @@ export function SpellList({ sheet, form, isReadOnly = false }: SpellListProps) {
         handleRemoveSpell,
         handlePatchSpellSlot,
         handlePatchSpellcasting,
+        focusSpellId,
+        clearFocusSpellId,
     } = useSpellList({ sheet, form, isReadOnly })
 
     return (
@@ -193,9 +196,11 @@ export function SpellList({ sheet, form, isReadOnly = false }: SpellListProps) {
             {/* Spell rows */}
             <div className="divide-y divide-white/5 flex-1">
                 <AnimatePresence initial={false}>
-                    {spells.map((spell) => (
+                    {spells.map((spell) => {
+                        const rowKey = spell.clientKey ?? spell._id
+                        return (
                         <motion.div
-                            key={spell._id}
+                            key={rowKey}
                             initial={{ opacity: 0, height: 0 }}
                             animate={{ opacity: 1, height: "auto" }}
                             exit={{ opacity: 0, height: 0 }}
@@ -208,21 +213,24 @@ export function SpellList({ sheet, form, isReadOnly = false }: SpellListProps) {
                                 type="number"
                                 min={0}
                                 max={9}
-                                value={String(spell.circle)}
-                                onChangeValue={(v) => handlePatchSpell(spell._id, { circle: parseInt(v) || 0 })}
+                                value={spell.circle ?? ""}
+                                onChangeValue={(v) => handlePatchSpell(spell._id, { circle: v === "" ? null : parseInt(v) || 0 })}
                                 inputClassName="text-center text-xs w-7"
                                 className="w-8"
                                 readOnlyMode={isReadOnly}
+                                allowEmptyNumber
                             />
 
                             {/* Name */}
                             <CompactRichInput
                                 value={spell.name}
                                 onChange={() => {}}
-                                onBlur={(v) => handleSpellNameChange(spell._id, v || "Magia")}
+                                onBlur={(v) => handleSpellNameChange(spell._id, v)}
                                 placeholder="Nome da magia"
                                 excludeId={sheet._id}
                                 disabled={isReadOnly}
+                                focusToken={!isReadOnly && focusSpellId === rowKey ? rowKey : null}
+                                onAutoFocusApplied={clearFocusSpellId}
                             />
 
                             {/* Casting time */}
@@ -246,28 +254,34 @@ export function SpellList({ sheet, form, isReadOnly = false }: SpellListProps) {
                             />
 
                             {/* Concentration */}
-                            <GlassCheckbox
-                                checked={!!spell.concentration}
-                                onChange={(v) => handlePatchSpell(spell._id, { concentration: v })}
-                                accentColor="#7c3aed"
-                                disabled={isReadOnly}
-                            />
+                            <PointerTooltip content="Concentração">
+                                <GlassCheckbox
+                                    checked={!!spell.concentration}
+                                    onChange={(v) => handlePatchSpell(spell._id, { concentration: v })}
+                                    accentColor="#7c3aed"
+                                    disabled={isReadOnly}
+                                />
+                            </PointerTooltip>
 
                             {/* Ritual */}
-                            <GlassCheckbox
-                                checked={!!spell.ritual}
-                                onChange={(v) => handlePatchSpell(spell._id, { ritual: v })}
-                                accentColor="#0369a1"
-                                disabled={isReadOnly}
-                            />
+                            <PointerTooltip content="Ritual">
+                                <GlassCheckbox
+                                    checked={!!spell.ritual}
+                                    onChange={(v) => handlePatchSpell(spell._id, { ritual: v })}
+                                    accentColor="#0369a1"
+                                    disabled={isReadOnly}
+                                />
+                            </PointerTooltip>
 
                             {/* Material */}
-                            <GlassCheckbox
-                                checked={!!spell.material}
-                                onChange={(v) => handlePatchSpell(spell._id, { material: v })}
-                                accentColor="#b45309"
-                                disabled={isReadOnly}
-                            />
+                            <PointerTooltip content="Material">
+                                <GlassCheckbox
+                                    checked={!!spell.material}
+                                    onChange={(v) => handlePatchSpell(spell._id, { material: v })}
+                                    accentColor="#b45309"
+                                    disabled={isReadOnly}
+                                />
+                            </PointerTooltip>
 
                             {/* Delete */}
                             {!isReadOnly && (
@@ -280,7 +294,7 @@ export function SpellList({ sheet, form, isReadOnly = false }: SpellListProps) {
                                 </button>
                             )}
                         </motion.div>
-                    ))}
+                    )})}
                 </AnimatePresence>
             </div>
 

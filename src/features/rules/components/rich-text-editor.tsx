@@ -5,7 +5,7 @@ import StarterKit from '@tiptap/starter-kit'
 import ImageExtension from "@tiptap/extension-image"
 import Placeholder from '@tiptap/extension-placeholder'
 import Mention from "@tiptap/extension-mention"
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { cn } from '@/core/utils'
 import { Button } from '@/core/ui/button'
 import { glassConfig } from "@/lib/config/glass-config"
@@ -33,8 +33,8 @@ const DiceHighlight = Extension.create({
                 props: {
                     decorations(state) {
                         const decorations: Decoration[] = []
-                        const DICE_REGEX = /(\d+)d(4|6|8|10|12|20|100)/gi
-                        const DAMAGE_REGEX = /(?:pontos de dano|de dano) (?:de )?([a-zA-Záàâãéèêíïóôõöúçñ]+)/gi
+                        const DICE_REGEX = /(\d+)d(4|6|8|10|12|20|100)(?:\s*\+\s*\d+)?/gi
+                        const DAMAGE_REGEX = /(?:pontos de dano|(?:de )?danos?) (?:de )?([a-zA-Záàâãéèêíïóôõöúçñ]+)/gi
 
                         let lastDiceAtomEndPos = -1
 
@@ -143,13 +143,14 @@ const DiceHighlight = Extension.create({
 // Inline atom node that renders GlassDiceValue for newly typed dice notation.
 const DICE_INPUT_RULE_REGEX = /(\d+)d(4|6|8|10|12|20|100)$/
 
-const DiceNodeView = (props: { node: { attrs: { qty: number; faces: number; colorHex?: string | null } } }) => {
-    const { qty, faces, colorHex } = props.node.attrs
+const DiceNodeView = (props: { node: { attrs: { qty: number; faces: number; colorHex?: string | null; bonus?: number | null } } }) => {
+    const { qty, faces, colorHex, bonus } = props.node.attrs
     const tipo = `d${faces}` as DiceType
     const colorOverride = colorHex ? { text: colorHex } : undefined
+    const bonusValue = bonus ?? undefined
     return (
         <NodeViewWrapper className="inline-block align-middle">
-            <GlassDiceValue value={{ quantidade: qty, tipo }} colorOverride={colorOverride} className="mx-0.5" />
+            <GlassDiceValue value={{ quantidade: qty, tipo }} bonus={bonusValue} colorOverride={colorOverride} className="mx-0.5" />
         </NodeViewWrapper>
     )
 }
@@ -165,6 +166,7 @@ const DiceValueNode = Node.create({
             qty: { default: 1, parseHTML: (el) => parseInt(el.getAttribute("data-qty") || "1", 10) },
             faces: { default: 6, parseHTML: (el) => parseInt(el.getAttribute("data-faces") || "6", 10) },
             colorHex: { default: null, parseHTML: (el) => el.getAttribute("data-color-hex") || null },
+            bonus: { default: null, parseHTML: (el) => { const v = el.getAttribute("data-bonus"); return v ? parseInt(v, 10) : null } },
         }
     },
 
@@ -173,13 +175,14 @@ const DiceValueNode = Node.create({
     },
 
     renderHTML({ HTMLAttributes }) {
-        const { qty, faces, colorHex } = HTMLAttributes
+        const { qty, faces, colorHex, bonus } = HTMLAttributes
         const attrs: Record<string, string> = {
             "data-type": "dice-value",
             "data-qty": String(qty),
             "data-faces": String(faces),
         }
         if (colorHex) attrs["data-color-hex"] = colorHex
+        if (bonus != null) attrs["data-bonus"] = String(bonus)
         return ["span", attrs]
     },
 
@@ -223,9 +226,22 @@ const DiceValueNode = Node.create({
 
                         const textAfter = newState.doc.textBetween(nodeEnd, end, " ")
 
+                        // Absorb "+ N" text immediately after the atom into the bonus attribute
+                        const bonusMatch = /^\s*\+\s*(\d+)/.exec(textAfter)
+                        const bonus: number | null = bonusMatch ? parseInt(bonusMatch[1], 10) : null
+                        const currentBonus: number | null = node.attrs.bonus ?? null
+
+                        if (bonusMatch && bonus !== currentBonus) {
+                            tr.delete(nodeEnd, nodeEnd + bonusMatch[0].length)
+                            tr.setNodeMarkup(pos, null, { ...node.attrs, bonus })
+                            modified = true
+                            return
+                        }
+
                         let colorHex: string | null = null
 
-                        const lookaheadMatch = DICE_LOOKAHEAD_REGEX.exec(textAfter)
+                        const textForLookahead = bonusMatch ? textAfter.slice(bonusMatch[0].length) : textAfter
+                        const lookaheadMatch = DICE_LOOKAHEAD_REGEX.exec(textForLookahead)
                         if (lookaheadMatch) {
                             const fuseResult = diceFuse.search(lookaheadMatch[1])
                             if (fuseResult.length > 0) colorHex = fuseResult[0].item.hex
@@ -341,6 +357,8 @@ interface RichTextEditorProps {
     excludeId?: string
     variant?: "full" | "simple"
     autoFocus?: boolean
+    focusToken?: string | null
+    onAutoFocusApplied?: () => void
     minRows?: number
     disableNewlines?: boolean
     blurOnMentionSelect?: boolean
@@ -430,8 +448,9 @@ const MenuBar = ({ editor, addImage, disabled = false }: { editor: Editor | null
     )
 }
 
-export function RichTextEditor({ value, onChange, onBlur, className, disabled = false, excludeId, variant = "full", autoFocus = false, placeholder, minRows, disableNewlines = false, blurOnMentionSelect = false }: RichTextEditorProps) {
+export function RichTextEditor({ value, onChange, onBlur, className, disabled = false, excludeId, variant = "full", autoFocus = false, focusToken = null, onAutoFocusApplied, placeholder, minRows, disableNewlines = false, blurOnMentionSelect = false }: RichTextEditorProps) {
     const [isUploading, setIsUploading] = useState(false)
+    const lastAppliedFocusTokenRef = useRef<string | null>(null)
 
     const uploadImage = useCallback(async (file: File) => {
         setIsUploading(true)
@@ -461,7 +480,7 @@ export function RichTextEditor({ value, onChange, onBlur, className, disabled = 
 
     const editor = useEditor({
         immediatelyRender: false,
-        autofocus: autoFocus,
+        autofocus: false,
         extensions: [
             StarterKit,
             ImageExtension,
@@ -573,6 +592,22 @@ export function RichTextEditor({ value, onChange, onBlur, className, disabled = 
             },
         },
     })
+
+    useEffect(() => {
+        const requestedFocusToken = focusToken ?? (autoFocus ? "__legacy-auto-focus__" : null)
+        if (!editor || !requestedFocusToken || disabled) return
+        if (lastAppliedFocusTokenRef.current === requestedFocusToken) return
+
+        const timeoutId = window.setTimeout(() => {
+            if (!editor.isDestroyed && editor.isEditable) {
+                editor.commands.focus("end")
+                lastAppliedFocusTokenRef.current = requestedFocusToken
+                onAutoFocusApplied?.()
+            }
+        }, 60)
+
+        return () => window.clearTimeout(timeoutId)
+    }, [editor, autoFocus, focusToken, disabled, onAutoFocusApplied])
 
     // Need to pass addImage to MenuBar inside the component to access editor and uploadImage
     const handleAddImageClick = useCallback(() => {

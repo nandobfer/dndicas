@@ -420,7 +420,7 @@ export function RacePreview({ race, showStatus = true }: RacePreviewProps) {
             </div>
 
             <div className="pt-2">
-                <EntitySource source={race.source} className="pt-0 border-t-0" />
+                <EntitySource source={race.source} originalName={race.originalName} className="pt-0 border-t-0" />
             </div>
         </div>
     )

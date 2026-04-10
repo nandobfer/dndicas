@@ -57,7 +57,7 @@ export function GlassSheetCard({ sheet, onRequestDelete, isDeleting }: GlassShee
         onRequestDelete(sheet)
     }
 
-    const ca = sheet.armorClassOverride ?? 10
+    const ca = sheet.computedArmorClass ?? 10
 
     return (
         <GlassCard

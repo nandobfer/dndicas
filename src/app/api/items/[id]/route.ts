@@ -13,7 +13,12 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
     if (!item) {
       return NextResponse.json({ error: "Item not found" }, { status: 404 });
     }
-    return NextResponse.json(item);
+    const serialized = item.toObject() as unknown as Record<string, unknown>;
+    return NextResponse.json({
+      ...serialized,
+      id: String(serialized._id ?? item._id),
+      itemType: (serialized.itemType as string | undefined) ?? (serialized.type as string | undefined) ?? null,
+    });
   } catch (error) {
     console.error("Item GET by ID error:", error);
     return NextResponse.json({ error: "Failed to fetch item" }, { status: 500 });

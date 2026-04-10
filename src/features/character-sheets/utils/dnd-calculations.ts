@@ -130,7 +130,7 @@ export interface EquippedArmorData {
 
 export const getArmorClass = (
     dexterity: number,
-    override: number | null,
+    _override: number | null,
     equippedArmor?: EquippedArmorData | null,
     equippedShield?: EquippedArmorData | null,
     manualBonus?: number | null,
@@ -161,15 +161,6 @@ export const getArmorClass = (
     if (dexContrib !== 0) parts.push({ label: "Destreza", value: fmt(dexContrib), color: "dexterity" })
     if (shieldBonus !== 0) parts.push({ label: "Escudo", value: `+${shieldBonus}`, color: "bonus" })
     if (bonus !== 0) parts.push({ label: "Bônus", value: fmt(bonus), color: "bonus" })
-
-    if (override !== null) {
-        return {
-            value: override,
-            formula: `Valor manual (cálculo: ${base} + DEX(${dexContrib}) + escudo(${shieldBonus}) + bônus(${bonus}) = ${calculated})`,
-            parts: [{ label: "Manual", value: override, color: "manual" }],
-            result: String(override),
-        }
-    }
 
     let formula = `${base}`
     if (dexContrib !== 0) formula += ` + DEX(${dexContrib})`

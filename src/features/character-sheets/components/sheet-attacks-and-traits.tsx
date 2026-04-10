@@ -1,5 +1,6 @@
 "use client"
 
+import { useCallback, useState } from "react"
 import { Plus, Trash2 } from "lucide-react"
 import { motion, AnimatePresence } from "framer-motion"
 import type { UseFormWatch } from "react-hook-form"
@@ -12,7 +13,7 @@ import { SheetInput } from "./sheet-input"
 import { CompactRichInput } from "./compact-rich-input"
 import { useAttackNameSync } from "./hooks/use-attack-name-sync"
 
-interface SheetCenterColumnProps {
+interface SheetAttacksAndTraitsProps {
     sheet: CharacterSheet
     form: {
         watch: UseFormWatch<PatchSheetBody>
@@ -24,7 +25,7 @@ interface SheetCenterColumnProps {
 
 const formatMod = (v: number) => (v >= 0 ? `+${v}` : `${v}`)
 
-export function SheetCenterColumn({ sheet, form, isReadOnly = false }: SheetCenterColumnProps) {
+export function SheetAttacksAndTraits({ sheet, form, isReadOnly = false }: SheetAttacksAndTraitsProps) {
     const { watch, setFieldLocally, patchField } = form
     const currentValues = watch()
     const currentSheet = { ...sheet, ...currentValues } as CharacterSheet
@@ -32,9 +33,15 @@ export function SheetCenterColumn({ sheet, form, isReadOnly = false }: SheetCent
     const { isPending: isLoading } = usePatchSheet(sheet?._id)
 
     const { data: attacks = [] } = useAttacks(sheet._id)
-    const addAttack = useAddAttack(sheet._id)
+    const [focusAttackId, setFocusAttackId] = useState<string | null>(null)
+    const addAttack = useAddAttack(sheet._id, {
+        onOptimisticCreate: setFocusAttackId,
+    })
     const patchAttack = usePatchAttack(sheet._id)
     const removeAttack = useRemoveAttack(sheet._id)
+    const clearFocusAttackId = useCallback(() => {
+        setFocusAttackId(null)
+    }, [])
 
     const { handleAttackNameChange } = useAttackNameSync({
         calc,
@@ -105,9 +112,11 @@ export function SheetCenterColumn({ sheet, form, isReadOnly = false }: SheetCent
                 {/* Attack rows */}
                 <div className="divide-y divide-white/5">
                     <AnimatePresence initial={false}>
-                        {attacks.map((attack) => (
+                        {attacks.map((attack) => {
+                            const rowKey = attack.clientKey ?? attack._id
+                            return (
                             <motion.div
-                                key={attack._id}
+                                key={rowKey}
                                 initial={{ opacity: 0, height: 0 }}
                                 animate={{ opacity: 1, height: "auto" }}
                                 exit={{ opacity: 0, height: 0 }}
@@ -120,6 +129,8 @@ export function SheetCenterColumn({ sheet, form, isReadOnly = false }: SheetCent
                                 onBlur={(v) => handleAttackNameChange(attack._id, v)}
                                 placeholder="Nome"
                                 disabled={isReadOnly}
+                                focusToken={!isReadOnly && focusAttackId === rowKey ? rowKey : null}
+                                onAutoFocusApplied={clearFocusAttackId}
                             />
                             <SheetInput
                                 compact
@@ -147,7 +158,7 @@ export function SheetCenterColumn({ sheet, form, isReadOnly = false }: SheetCent
                                 <Trash2 className="w-3.5 h-3.5" />
                             </button>
                         </motion.div>
-                        ))}
+                        )})}
                     </AnimatePresence>
                 </div>
 
@@ -155,7 +166,7 @@ export function SheetCenterColumn({ sheet, form, isReadOnly = false }: SheetCent
                 <div className="px-2 pb-2 pt-1">
                     <button
                         type="button"
-                        onClick={() => addAttack.mutate({ name: "Novo Ataque", attackBonus: "", damageType: "" })}
+                        onClick={() => addAttack.mutate({ name: "", attackBonus: "", damageType: "" })}
                         className="w-full flex items-center justify-center gap-2 py-1.5 border border-dashed border-white/10 rounded text-[9px] font-bold uppercase tracking-wider text-white/30 hover:text-white/60 hover:border-white/20 transition-all"
                     >
                         <Plus className="w-3 h-3" /> Adicionar ataque

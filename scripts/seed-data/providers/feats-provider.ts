@@ -353,6 +353,7 @@ export class FeatsProvider extends BaseProvider<FiveEToolsFeat, CreateFeatInput>
 
         return {
             name,
+            originalName: feat.name,
             description,
             source,
             level,
@@ -374,6 +375,7 @@ export class FeatsProvider extends BaseProvider<FiveEToolsFeat, CreateFeatInput>
 
         return {
             name: doc.name,
+            originalName: doc.originalName,
             description: doc.description,
             source: doc.source,
             level: doc.level,

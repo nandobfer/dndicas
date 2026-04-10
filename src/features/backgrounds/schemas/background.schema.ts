@@ -2,6 +2,7 @@ import { z } from "zod"
 
 export const backgroundSchema = z.object({
   name: z.string().min(1, "Nome é obrigatório"),
+  originalName: z.union([z.string().trim().max(100, "Nome original muito longo"), z.literal("")]).optional().transform((val) => val || undefined),
   description: z.string().min(1, "Descrição é obrigatória"),
   image: z.string().optional(),
   status: z.enum(["active", "inactive"]),

@@ -130,7 +130,7 @@ export function FeatPreview({ feat, showStatus = true, hideStatusChip = false, h
             </div>
 
             {/* Source */}
-            <EntitySource source={feat.source} />
+            <EntitySource source={feat.source} originalName={feat.originalName} />
         </div>
     )
 }

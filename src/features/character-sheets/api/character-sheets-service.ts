@@ -1,13 +1,16 @@
 import dbConnect from "@/core/database/db"
 import Fuse from "fuse.js"
-import { CharacterSheet, type ICharacterSheet } from "../models/character-sheet"
+import { CharacterSheet } from "../models/character-sheet"
 import { CharacterItem } from "../models/character-item"
 import { CharacterSpell } from "../models/character-spell"
 import { CharacterTrait } from "../models/character-trait"
 import { CharacterFeat } from "../models/character-feat"
 import { CharacterAttack } from "../models/character-attack"
 import { generateSlug } from "../utils/slug"
+import { getArmorClass } from "../utils/dnd-calculations"
 import type {
+    CharacterItem as CharacterItemType,
+    CharacterSheet as CharacterSheetType,
     SheetsListResponse,
     CharacterSheetFull,
     PatchSheetBody,
@@ -52,9 +55,13 @@ export async function getAllUserSheets(
     const totalPages = Math.ceil(total / limit) || 1
     const start = (page - 1) * limit
     const sheets = searched.slice(start, start + limit)
+    const sheetIds = sheets.map((sheet) => String(sheet._id))
+    const equippedItems = sheetIds.length > 0
+        ? (await CharacterItem.find({ sheetId: { $in: sheetIds }, equipped: true }).lean()).map(toPlain) as CharacterItemType[]
+        : []
 
     return {
-        sheets: sheets.map(toPlainSheet),
+        sheets: sheets.map((sheet) => withComputedArmorClass(toPlainSheet(sheet), equippedItems)),
         total,
         page,
         totalPages,
@@ -146,7 +153,7 @@ export async function patchSheet(id: string, userId: string, data: PatchSheetBod
     await dbConnect()
 
     // When name changes, also update the slug
-    let updateData: Record<string, unknown> = { ...data }
+    const updateData: Record<string, unknown> = { ...data }
     if (data.name !== undefined) {
         const existing = await CharacterSheet.findOne({ _id: id, userId }, { username: 1 }).lean()
         if (existing) {
@@ -367,6 +374,30 @@ function toPlainSheet(doc: any) {
     }
     // lean() returns plain objects but savingThrows/skills/spellSlots may be plain already
     return obj
+}
+
+function withComputedArmorClass(sheet: CharacterSheetType, items: CharacterItemType[]) {
+    const sheetItems = items.filter((item) => String(item.sheetId) === String(sheet._id))
+    const equippedArmor = sheetItems.find((item) => item.equipped && item.catalogItemType === "armadura") ?? null
+    const equippedShield = sheetItems.find((item) => item.equipped && item.catalogItemType === "escudo") ?? null
+
+    return {
+        ...sheet,
+        computedArmorClass: getArmorClass(
+            sheet.dexterity,
+            sheet.armorClassOverride ?? null,
+            equippedArmor ? {
+                ac: equippedArmor.catalogAc ?? null,
+                acType: equippedArmor.catalogAcType ?? null,
+                armorType: equippedArmor.catalogArmorType ?? null,
+                acBonus: equippedArmor.catalogAcBonus ?? null,
+            } : null,
+            equippedShield ? {
+                acBonus: equippedShield.catalogAcBonus ?? null,
+            } : null,
+            sheet.armorClassBonus ?? null,
+        ).value,
+    }
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────

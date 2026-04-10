@@ -5,6 +5,7 @@ import { fetchSpell } from "@/features/spells/api/spells-api"
 import { fetchItemById } from "@/features/items/api/items-api"
 import { extractMentionsFromHtml } from "../../utils/mention-sync"
 import type { CharacterAttack } from "../../types/character-sheet.types"
+import { buildDiceValueHtml, buildWeaponAttackAutofill, formatBonus, resolveCatalogItemType } from "../../utils/attack-autofill"
 
 interface CalcValues {
     spellAttackBonus: { value: number }
@@ -21,10 +22,6 @@ interface UseAttackNameSyncOptions {
     onPatch: (attackId: string, data: Partial<Omit<CharacterAttack, "_id" | "sheetId" | "createdAt">>) => void
 }
 
-function formatBonus(value: number): string {
-    return value >= 0 ? `+${value}` : `${value}`
-}
-
 export function useAttackNameSync({ calc, isReadOnly = false, onPatch }: UseAttackNameSyncOptions) {
     // Cache: attackId → last processed catalogId
     const processedRef = useRef<Map<string, string>>(new Map())
@@ -34,7 +31,7 @@ export function useAttackNameSync({ calc, isReadOnly = false, onPatch }: UseAtta
             if (isReadOnly) return
 
             // Always patch name
-            onPatch(attackId, { name: nameHtml || "Ataque" })
+            onPatch(attackId, { name: nameHtml })
 
             const mentions = extractMentionsFromHtml(nameHtml)
 
@@ -57,7 +54,7 @@ export function useAttackNameSync({ calc, isReadOnly = false, onPatch }: UseAtta
                     let damageText = ""
                     if (catalogSpell.baseDice) {
                         const { quantidade, tipo } = catalogSpell.baseDice
-                        damageText = `${quantidade}${tipo}`
+                        damageText = `${buildDiceValueHtml(quantidade, tipo)}`
                     }
 
                     onPatch(attackId, {
@@ -66,31 +63,9 @@ export function useAttackNameSync({ calc, isReadOnly = false, onPatch }: UseAtta
                     })
                 } else if (itemMention) {
                     const catalogItem = await fetchItemById(itemMention.id)
-                    if (catalogItem.type !== "arma") return
-
-                    // Damage string
-                    let damageText = ""
-                    if (catalogItem.damageDice) {
-                        const { quantidade, tipo } = catalogItem.damageDice
-                        damageText = `${quantidade}${tipo}`
-                        if (catalogItem.damageType) {
-                            damageText += ` ${catalogItem.damageType}`
-                        }
-                    }
-
-                    // Attack bonus: check Finesse property
-                    const hasFinesse = catalogItem.properties?.some(
-                        (p) => p.name?.toLowerCase() === "finesse"
-                    ) ?? false
-                    const attrMod = hasFinesse
-                        ? calc.attrMods.dexterity.value
-                        : calc.attrMods.strength.value
-                    const attackBonusValue = calc.profBonus.value + attrMod
-
-                    onPatch(attackId, {
-                        damageType: damageText,
-                        attackBonus: formatBonus(attackBonusValue),
-                    })
+                    const catalogItemType = resolveCatalogItemType(catalogItem)
+                    if (catalogItemType !== "arma") return
+                    onPatch(attackId, buildWeaponAttackAutofill(catalogItem, calc))
                 }
             } catch {
                 // Silently ignore fetch errors

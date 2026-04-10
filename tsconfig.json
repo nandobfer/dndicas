@@ -39,6 +39,7 @@
   "exclude": [
     "node_modules",
     "vitest.config.ts",
-    "scripts/seed-data/providers/__tests__"
+    "scripts/seed-data/providers/__tests__",
+		"sheet"
   ]
 }

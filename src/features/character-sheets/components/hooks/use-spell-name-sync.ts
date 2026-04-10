@@ -3,11 +3,11 @@
 import { useRef, useCallback } from "react"
 import { fetchSpell } from "@/features/spells/api/spells-api"
 import { extractMentionsFromHtml } from "../../utils/mention-sync"
-import type { CharacterSpell } from "../../types/character-sheet.types"
+import type { PatchSpellBody } from "../../types/character-sheet.types"
 
 interface UseSpellNameSyncOptions {
     isReadOnly?: boolean
-    onPatch: (spellId: string, data: Partial<CharacterSpell>) => void
+    onPatch: (spellId: string, data: PatchSpellBody) => void
 }
 
 export function useSpellNameSync({ isReadOnly = false, onPatch }: UseSpellNameSyncOptions) {
@@ -19,13 +19,14 @@ export function useSpellNameSync({ isReadOnly = false, onPatch }: UseSpellNameSy
             if (isReadOnly) return
 
             // Always patch the name
-            onPatch(spellId, { name: nameHtml || "Nova magia" })
+            onPatch(spellId, { name: nameHtml })
 
             const mentions = extractMentionsFromHtml(nameHtml)
             const spellMention = mentions.find((m) => m.entityType === "Magia")
 
             if (!spellMention) {
                 processedRef.current.delete(spellId)
+                onPatch(spellId, { catalogSpellId: null })
                 return
             }
 

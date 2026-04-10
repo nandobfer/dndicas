@@ -25,6 +25,9 @@ interface CompactRichInputProps {
     disabled?: boolean
     /** Block Enter key from creating new lines. Defaults to true for "simple" variant. */
     disableNewlines?: boolean
+    autoFocus?: boolean
+    focusToken?: string | null
+    onAutoFocusApplied?: () => void
 }
 
 export function CompactRichInput({
@@ -42,6 +45,9 @@ export function CompactRichInput({
     minRows,
     disabled = false,
     disableNewlines,
+    autoFocus = false,
+    focusToken,
+    onAutoFocusApplied,
 }: CompactRichInputProps) {
     const blockNewlines = disableNewlines ?? variant === "simple"
     const [localValue, setLocalValue] = useState(value)
@@ -87,7 +93,10 @@ export function CompactRichInput({
                         minRows={minRows ?? 5}
                         disabled={disabled}
                         disableNewlines={blockNewlines}
-                        blurOnMentionSelect
+                        blurOnMentionSelect={false}
+                        autoFocus={autoFocus}
+                        focusToken={focusToken}
+                        onAutoFocusApplied={onAutoFocusApplied}
                     />
                 </div>
             </div>
@@ -112,6 +121,9 @@ export function CompactRichInput({
                     disabled={disabled}
                     disableNewlines={blockNewlines}
                     blurOnMentionSelect
+                    autoFocus={autoFocus}
+                    focusToken={focusToken}
+                    onAutoFocusApplied={onAutoFocusApplied}
                     className={cn(
                         // Strip glass container for simple variant so our bottom border is the only affordance
                         "!bg-transparent !border-0 !shadow-none !backdrop-blur-none !rounded-none",
