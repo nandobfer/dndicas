@@ -156,6 +156,8 @@ export abstract class BaseProvider<TInput, TOutput> {
     private currentTotal = 0;
     private testMode = false;
     private autoMode = false;
+    private fromStart = false;
+    private fromIndex: number | null = null;
 
     // ─── Translator ───────────────────────────────────────────────────────────
 
@@ -171,6 +173,14 @@ export abstract class BaseProvider<TInput, TOutput> {
 
     setAutoMode(enabled: boolean): void {
         this.autoMode = enabled;
+    }
+
+    setFromStart(enabled: boolean): void {
+        this.fromStart = enabled;
+    }
+
+    setFromIndex(index: number): void {
+        this.fromIndex = index;
     }
 
     /**
@@ -292,17 +302,34 @@ export abstract class BaseProvider<TInput, TOutput> {
     }
 
     /**
+     * Prints a notice when the `findExisting` match was driven by `originalName`
+     * rather than `name`. Detects this by comparing both names case-insensitively:
+     * if they differ, the DB record was found via its English original name.
+     */
+    private logOriginalNameMatchIfNeeded(existing: TOutput, incoming: TOutput): void {
+        const existingObj = existing as Record<string, unknown>;
+        const incomingObj = incoming as Record<string, unknown>;
+        const existingName = String(existingObj['name'] ?? '').toLowerCase();
+        const incomingName = String(incomingObj['name'] ?? '').toLowerCase();
+        if (existingName !== incomingName) {
+            const originalName = String(incomingObj['originalName'] ?? '');
+            term.cyan(`  ℹ Correspondência pelo nome original em inglês ("${originalName}") — o item já existe no banco com nome traduzido diferente.\n`);
+        }
+    }
+
+    /**
      * Shows each conflicting field individually and lets the user decide
      * field by field whether to keep the existing value (←) or use the
      * incoming one (→). Works identically in dry-run and live mode.
      *
-     * @returns A merged TOutput built from existing + chosen incoming fields.
+     * @returns A merged TOutput built from existing + chosen incoming fields,
+     *          or null if the user pressed ESC to skip the item entirely.
      */
     private async resolveConflictsFieldByField(
         existing: TOutput,
         incoming: TOutput,
         diffs: DiffEntry[],
-    ): Promise<TOutput> {
+    ): Promise<TOutput | null> {
         const label = this.getItemLabel(incoming);
         term('\n');
         term.bold(`─── Conflito: ${label} ─────────────────────────────────────────\n`);
@@ -316,9 +343,9 @@ export abstract class BaseProvider<TInput, TOutput> {
             term.red(`      ${formatValue(diff.oldValue)}\n`);
             term.green(`    → (novo)\n`);
             term.green(`      ${formatValue(diff.newValue)}\n`);
-            term.bold('  ← seta esquerda: manter existente  |  → seta direita: usar novo\n');
+            term.bold('  ← seta esquerda: manter existente  |  → seta direita: usar novo  |  ESC para pular\n');
 
-            const choice = await new Promise<'keep' | 'update'>((resolve) => {
+            const choice = await new Promise<'keep' | 'update' | 'escape'>((resolve) => {
                 term.grabInput(true);
                 const handler = (name: string) => {
                     if (name === 'CTRL_C') { term.grabInput(false); process.exit(0); }
@@ -332,11 +359,17 @@ export abstract class BaseProvider<TInput, TOutput> {
                         term.removeListener('key', handler);
                         term.green('  → Usando novo.\n\n');
                         resolve('update');
+                    } else if (name === 'ESCAPE') {
+                        term.grabInput(false);
+                        term.removeListener('key', handler);
+                        term.yellow('  ⏭  Item pulado via ESC.\n');
+                        resolve('escape');
                     }
                 };
                 term.on('key', handler);
             });
 
+            if (choice === 'escape') return null;
             if (choice === 'update') {
                 result[diff.field] = diff.newValue;
             }
@@ -465,7 +498,10 @@ export abstract class BaseProvider<TInput, TOutput> {
         this.log(`\nStarting provider: ${this.name}`, 'info');
 
         const items = this.readDataFile();
-        const startIndex = this.testMode ? 0 : (await this.readProgress()) + 1;
+        const startIndex = this.testMode ? 0
+            : this.fromIndex !== null ? this.fromIndex
+            : this.fromStart ? 0
+            : (await this.readProgress()) + 1;
 
         this.log(`Total items: ${items.length}`, 'dim');
 
@@ -532,6 +568,7 @@ export abstract class BaseProvider<TInput, TOutput> {
 
                 const exists = await this.findExisting(output);
                 if (exists !== null) {
+                    this.logOriginalNameMatchIfNeeded(exists, output);
                     const diffs = this.diffObjects(exists, output);
                     if (diffs.length > 0) {
                         this.log(`[${i}] Conflito: ${diffs.length} campo(s) diferente(s) — mantendo existente (use modo interativo para resolver)`, 'warn');
@@ -634,9 +671,15 @@ export abstract class BaseProvider<TInput, TOutput> {
         let working: TOutput = glossarized;
 
         if (existing) {
+            this.logOriginalNameMatchIfNeeded(existing, glossarized);
             const diffs = this.diffObjects(existing, glossarized);
             if (diffs.length > 0) {
-                working = await this.resolveConflictsFieldByField(existing, glossarized, diffs);
+                const resolved = await this.resolveConflictsFieldByField(existing, glossarized, diffs);
+                if (resolved === null) {
+                    if (!isDryRun) await this.saveProgress(index);
+                    return 'skipped';
+                }
+                working = resolved;
             } else if (!isDryRun) {
                 term.yellow('  ⚠  Já existe no banco e está igual — ignorando.\n');
                 await this.saveProgress(index);
@@ -674,7 +717,12 @@ export abstract class BaseProvider<TInput, TOutput> {
                 term.yellow(`  ⚠  O nome foi alterado para "${nameAfterReview}", que já existe no banco. Iniciando resolução de conflito.\n`);
                 const conflictDiffs = this.diffObjects(finalExisting, finalOutput);
                 if (conflictDiffs.length > 0) {
-                    finalOutput = await this.resolveConflictsFieldByField(finalExisting, finalOutput, conflictDiffs);
+                    const resolved = await this.resolveConflictsFieldByField(finalExisting, finalOutput, conflictDiffs);
+                    if (resolved === null) {
+                        await this.saveProgress(index);
+                        return 'skipped';
+                    }
+                    finalOutput = resolved;
                 }
             }
         }

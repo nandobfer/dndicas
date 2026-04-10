@@ -428,11 +428,13 @@ export class ItemsProvider extends BaseProvider<FiveEToolsBaseItem, CreateItemIn
 
     async findExisting(item: CreateItemInput): Promise<CreateItemInput | null> {
         await dbConnect();
-        const nameRegex = new RegExp(
-            `^${item.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`,
-            'i',
-        );
-        const doc = await ItemModel.findOne({ name: nameRegex }).lean();
+        const escape = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        const nameRegex = new RegExp(`^${escape(item.name)}$`, 'i');
+        const orClauses: Record<string, unknown>[] = [{ name: nameRegex }];
+        if (item.originalName) {
+            orClauses.push({ originalName: new RegExp(`^${escape(item.originalName)}$`, 'i') });
+        }
+        const doc = await ItemModel.findOne({ $or: orClauses }).lean();
         if (!doc) return null;
 
         return {

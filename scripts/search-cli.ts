@@ -664,9 +664,9 @@ function runSearch(): void {
     const items = getTabEntities();
 
     if (!query.trim()) {
-        results = items.slice(0, 50);
+        results = items;
     } else {
-        results = applyFuzzySearch(items, query, 50);
+        results = applyFuzzySearch(items, query);
     }
     selectedIndex = Math.min(selectedIndex, Math.max(0, results.length - 1));
     render();
@@ -1201,7 +1201,8 @@ function handleSearchKey(name: string, data: { isCharacter?: boolean }): void {
         case 'CTRL_J': void copySelectedJson(); return;
         case 'CTRL_K': void copySelectedId(); return;
 
-        case 'CTRL_E': {
+        case 'CTRL_E':
+        case 'ENTER': {
             const entity = getSelectedEntity();
             if (!entity) return;
             jsonLogicalLines = buildLogicalJsonLines(entity);
