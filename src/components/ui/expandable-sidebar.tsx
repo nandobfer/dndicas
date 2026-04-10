@@ -49,7 +49,7 @@ export interface ExpandableSidebarProps {
 const mainItems = [
     { label: "Início", href: "/", icon: Home },
     { label: "Perfil", href: "/profile", icon: User, authenticated: true },
-    { label: "Minhas Fichas", href: "/my-sheets", icon: ScrollText, authenticated: true }
+    { label: "Minhas Fichas", href: "/my-sheets", icon: ScrollText }
 ]
 
 // T020: Renamed from "Módulos" to "Cadastros", removed "Empresas", added "Usuários"
