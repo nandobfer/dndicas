@@ -75,12 +75,13 @@ export function MentionContent({
                         elements.push(text.substring(lastIndex, matchIndex))
                     }
 
-                    const [fullMatch, qty, faces, bracketType, naturalType] = match
+                    const [fullMatch, qty, faces, bracketType, bonus, naturalType] = match
 
                     // Se for um dado (match no grupo 1/2)
                     if (qty && faces) {
                         const quantidade = parseInt(qty, 10)
                         const tipo = `d${faces}` as DiceType
+                        const bonusValue = bonus ? parseInt(bonus, 10) : undefined
 
                         // Se houver tipo em colchetes, usamos Fuse para encontrar a cor e ESCONDEMOS o colchete
                         if (bracketType) {
@@ -91,6 +92,7 @@ export function MentionContent({
                                 <GlassDiceValue
                                     key={`dice-bracket-${index}-${matchIndex}`}
                                     value={{ quantidade, tipo }}
+                                    bonus={bonusValue}
                                     colorOverride={item ? { text: `text-[${item.hex}]`, bgAlpha: item.color.bgAlpha } : undefined}
                                     className="mx-0.5"
                                 />,
@@ -110,10 +112,10 @@ export function MentionContent({
                                 }
                             }
 
-                            elements.push(<GlassDiceValue key={`dice-simple-${index}-${matchIndex}`} value={{ quantidade, tipo }} colorOverride={colorOverride} className="mx-0.5" />)
+                            elements.push(<GlassDiceValue key={`dice-simple-${index}-${matchIndex}`} value={{ quantidade, tipo }} bonus={bonusValue} colorOverride={colorOverride} className="mx-0.5" />)
                         }
                     }
-                    // Se for um texto de dano natural (match no grupo 4)
+                    // Se for um texto de dano natural (match no grupo 5)
                     else if (naturalType) {
                         const fuseResult = diceFuse.search(naturalType)
                         const item = fuseResult.length > 0 ? fuseResult[0].item : null
@@ -149,11 +151,14 @@ export function MentionContent({
                     const qty = parseInt(el.getAttribute("data-qty") || "1", 10)
                     const faces = parseInt(el.getAttribute("data-faces") || "6", 10)
                     const colorHex = el.getAttribute("data-color-hex") || undefined
+                    const bonusAttr = el.getAttribute("data-bonus")
+                    const bonus = bonusAttr ? parseInt(bonusAttr, 10) : undefined
                     const tipo = `d${faces}` as DiceType
                     return (
                         <GlassDiceValue
                             key={`dice-node-${index}`}
                             value={{ quantidade: qty, tipo }}
+                            bonus={bonus}
                             colorOverride={colorHex ? { text: colorHex } : undefined}
                             className="mx-0.5"
                         />
