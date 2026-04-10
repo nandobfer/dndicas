@@ -16,7 +16,7 @@ export async function GET(req: NextRequest) {
         const limit = limitParam ? parseInt(limitParam, 10) : 10
 
         const classes = await CharacterClass.find({ status: "active" })
-            .select("_id name source description hitDice spellcasting subclasses status")
+            .select("_id name originalName source description hitDice spellcasting subclasses status")
             .sort({ name: 1 })
             .lean()
 
@@ -27,6 +27,7 @@ export async function GET(req: NextRequest) {
             _id: String(c._id),
             label: c.name,
             name: c.name,
+            originalName: c.originalName,
             description: c.description,
             source: c.source,
             hitDice: c.hitDice,

@@ -236,7 +236,7 @@ export async function searchFeats(query: string, limit?: number): Promise<FeatSe
     await dbConnect();
 
     const feats = await Feat.find({ status: 'active' })
-      .select('_id name level description source')
+      .select('_id name originalName level description source')
       .sort({ createdAt: -1 })
       .lean();
 
@@ -246,6 +246,7 @@ export async function searchFeats(query: string, limit?: number): Promise<FeatSe
       _id: feat._id.toString(),
       label: feat.name,
       name: feat.name,
+      originalName: feat.originalName,
       entityType: 'Talento' as const,
       description: feat.description,
       source: feat.source,

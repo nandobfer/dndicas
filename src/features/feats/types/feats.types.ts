@@ -81,6 +81,7 @@ export interface FeatSearchResult {
   _id: string
   label: string
   name: string
+  originalName?: string
   entityType: 'Talento'
   description: string
   source: string
