@@ -42,56 +42,207 @@ const HL_BG        = '\x1b[48;5;235m'; // #262626 — just above pure black
 const HL_FG_RESET  = '\x1b[39m';       // reset foreground only (preserves bg)
 const HL_FULL_RESET = '\x1b[0m';       // reset everything
 
+type JsonTokenKind = 'key' | 'string' | 'boolean' | 'null' | 'brace' | 'number' | 'plain';
+
+type JsonToken = {
+    text: string;
+    kind: JsonTokenKind;
+};
+
 // ─── JSON color printer ───────────────────────────────────────────────────────
 // Replicates the color scheme from scripts/seed-data/base-provider.ts.
 // Works line-by-line so it's compatible with term.moveTo() absolute positioning.
 // `highlight=true` is kept as an optional raw-ANSI mode for callers that want
 // colored JSON over a filled background.
 
-function printColoredJsonLine(line: string, highlight: boolean): void {
+const JSON_TOKEN_RE = /("(?:[^"\\]|\\.)*")(\s*:)?|true|false|null|-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?|[{}\[\],]|[^\S\n]+/g;
+const HTML_TAG_RE = /<[^>]+>/g;
+const HTML_BREAK_RE = /<(?:br|\/p|\/div|\/li|\/h[1-6])\s*\/?>/gi;
+const HTML_ENTITY_MAP: Record<string, string> = {
+    '&nbsp;': ' ',
+    '&amp;': '&',
+    '&lt;': '<',
+    '&gt;': '>',
+    '&quot;': '"',
+    '&#39;': "'",
+};
+
+function decodeHtmlEntities(value: string): string {
+    return value.replace(/&nbsp;|&amp;|&lt;|&gt;|&quot;|&#39;/g, (entity) => HTML_ENTITY_MAP[entity] ?? entity);
+}
+
+function stripHtmlToDisplayText(value: string): string {
+    return decodeHtmlEntities(
+        value
+            .replace(HTML_BREAK_RE, ' ')
+            .replace(HTML_TAG_RE, '')
+            .replace(/\s+/g, ' ')
+            .trim()
+    );
+}
+
+function sanitizeJsonDisplayValue(value: unknown): unknown {
+    if (typeof value === 'string') {
+        if (!HTML_TAG_RE.test(value)) {
+            return value;
+        }
+
+        const text = stripHtmlToDisplayText(value);
+        return `[${text}]`;
+    }
+
+    if (Array.isArray(value)) {
+        return value.map((item) => sanitizeJsonDisplayValue(item));
+    }
+
+    if (value && typeof value === 'object') {
+        return Object.fromEntries(
+            Object.entries(value).map(([key, nestedValue]) => [key, sanitizeJsonDisplayValue(nestedValue)])
+        );
+    }
+
+    return value;
+}
+
+function tokenizeJsonLine(line: string): JsonToken[] {
+    const tokens: JsonToken[] = [];
+    JSON_TOKEN_RE.lastIndex = 0;
+
+    let lastIndex = 0;
+    let match: RegExpExecArray | null;
+
+    while ((match = JSON_TOKEN_RE.exec(line)) !== null) {
+        if (match.index > lastIndex) {
+            tokens.push({ text: line.slice(lastIndex, match.index), kind: 'plain' });
+        }
+
+        const text = match[0];
+        const quotedStr = match[1];
+        const colonSuffix = match[2];
+
+        if (quotedStr !== undefined) {
+            tokens.push({ text: quotedStr, kind: colonSuffix !== undefined ? 'key' : 'string' });
+            if (colonSuffix !== undefined) {
+                tokens.push({ text: colonSuffix, kind: 'plain' });
+            }
+        } else if (text === 'true' || text === 'false') {
+            tokens.push({ text, kind: 'boolean' });
+        } else if (text === 'null') {
+            tokens.push({ text, kind: 'null' });
+        } else if (text === '{' || text === '}' || text === '[' || text === ']' || text === ',') {
+            tokens.push({ text, kind: 'brace' });
+        } else if (/^-?\d/.test(text)) {
+            tokens.push({ text, kind: 'number' });
+        } else {
+            tokens.push({ text, kind: 'plain' });
+        }
+
+        lastIndex = JSON_TOKEN_RE.lastIndex;
+    }
+
+    if (lastIndex < line.length) {
+        tokens.push({ text: line.slice(lastIndex), kind: 'plain' });
+    }
+
+    return tokens;
+}
+
+function printColoredJsonToken(token: JsonToken, highlight: boolean): void {
     if (highlight) {
         process.stdout.write(HL_BG);
     }
 
-    const re = /("(?:[^"\\]|\\.)*")(\s*:)?|true|false|null|-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?|[{}\[\],]|[^\S\n]+/g;
-    let m: RegExpExecArray | null;
-    while ((m = re.exec(line)) !== null) {
-        const tok = m[0];
-        const quotedStr = m[1];
-        const colonSuffix = m[2];
-        if (quotedStr !== undefined) {
-            if (colonSuffix !== undefined) {
-                if (highlight) {
-                    process.stdout.write('\x1b[33m' + quotedStr + HL_FG_RESET + colonSuffix);
-                } else {
-                    term.yellow(quotedStr);
-                    term(colonSuffix);
-                }
-            } else {
-                if (highlight) process.stdout.write('\x1b[36m' + quotedStr + HL_FG_RESET);
-                else term.cyan(quotedStr);
-            }
-        } else if (tok === 'true' || tok === 'false') {
-            if (highlight) process.stdout.write('\x1b[34m' + tok + HL_FG_RESET);
-            else term.blue(tok);
-        } else if (tok === 'null') {
-            if (highlight) process.stdout.write('\x1b[90m' + tok + HL_FG_RESET);
-            else term.gray(tok);
-        } else if (tok === '{' || tok === '}' || tok === '[' || tok === ']') {
-            if (highlight) process.stdout.write('\x1b[1;37m' + tok + '\x1b[22m' + HL_FG_RESET);
-            else term.bold.white(tok);
-        } else if (/^-?\d/.test(tok)) {
-            if (highlight) process.stdout.write('\x1b[32m' + tok + HL_FG_RESET);
-            else term.green(tok);
-        } else {
-            if (highlight) process.stdout.write(tok);
-            else term(tok);
-        }
+    switch (token.kind) {
+        case 'key':
+            if (highlight) process.stdout.write('\x1b[33m' + token.text + HL_FG_RESET);
+            else term.yellow(token.text);
+            return;
+        case 'string':
+            if (highlight) process.stdout.write('\x1b[36m' + token.text + HL_FG_RESET);
+            else term.cyan(token.text);
+            return;
+        case 'boolean':
+            if (highlight) process.stdout.write('\x1b[34m' + token.text + HL_FG_RESET);
+            else term.blue(token.text);
+            return;
+        case 'null':
+            if (highlight) process.stdout.write('\x1b[90m' + token.text + HL_FG_RESET);
+            else term.gray(token.text);
+            return;
+        case 'brace':
+            if (highlight) process.stdout.write('\x1b[1;37m' + token.text + '\x1b[22m' + HL_FG_RESET);
+            else term.bold.white(token.text);
+            return;
+        case 'number':
+            if (highlight) process.stdout.write('\x1b[32m' + token.text + HL_FG_RESET);
+            else term.green(token.text);
+            return;
+        default:
+            if (highlight) process.stdout.write(token.text);
+            else term(token.text);
+    }
+}
+
+function printColoredJsonLine(line: string, highlight: boolean): void {
+    for (const token of tokenizeJsonLine(line)) {
+        printColoredJsonToken(token, highlight);
     }
 
     if (highlight) {
         process.stdout.write(HL_FULL_RESET);
     }
+}
+
+function wrapJsonLine(line: string, maxWidth: number): JsonToken[][] {
+    const safeWidth = Math.max(1, maxWidth);
+    const indent = line.match(/^\s*/)?.[0] ?? '';
+    const indentToken: JsonToken = { text: indent, kind: 'plain' };
+    const tokens = tokenizeJsonLine(line.slice(indent.length));
+    const wrappedLines: JsonToken[][] = [];
+
+    let currentLine: JsonToken[] = [{ ...indentToken }];
+    let currentWidth = indent.length;
+
+    const pushCurrentLine = () => {
+        wrappedLines.push(currentLine);
+        currentLine = [{ ...indentToken }];
+        currentWidth = indent.length;
+    };
+
+    for (const token of tokens) {
+        let remaining = token.text;
+
+        while (remaining.length > 0) {
+            if (currentWidth >= safeWidth) {
+                pushCurrentLine();
+            }
+
+            const spaceLeft = Math.max(1, safeWidth - currentWidth);
+            const part = remaining.slice(0, spaceLeft);
+
+            currentLine.push({ text: part, kind: token.kind });
+            currentWidth += part.length;
+            remaining = remaining.slice(part.length);
+
+            if (remaining.length > 0) {
+                pushCurrentLine();
+            }
+        }
+    }
+
+    if (currentLine.length > 1 || wrappedLines.length === 0) {
+        wrappedLines.push(currentLine);
+    }
+
+    return wrappedLines;
+}
+
+function buildDisplayJsonLines(entity: UnifiedEntity | undefined, maxWidth: number): JsonToken[][] {
+    const sanitizedEntity = sanitizeJsonDisplayValue(entity ?? {});
+    const jsonStr = JSON.stringify(sanitizedEntity, null, 2);
+    const rawLines = jsonStr.split('\n');
+
+    return rawLines.flatMap((line) => wrapJsonLine(line, maxWidth));
 }
 
 // ─── Entity loading ───────────────────────────────────────────────────────────
@@ -568,9 +719,8 @@ function render(): void {
     } else {
         const selectedEntity = results[selectedIndex];
         const selectedRowStyle = getSelectedRowStyle(selectedEntity, activeTab);
-        const jsonStr = JSON.stringify(selectedEntity ?? {}, null, 2);
-        const jsonLines = jsonStr.split('\n');
-        const selectedLineCount = 1 + jsonLines.length;
+        const jsonVisualLines = buildDisplayJsonLines(selectedEntity, W - 2);
+        const selectedLineCount = 1 + jsonVisualLines.length;
 
         const { start, end } = computeWindow(results.length, selectedIndex, selectedLineCount, listRows);
 
@@ -584,9 +734,14 @@ function render(): void {
                 });
                 currentRow++;
 
-                for (const jLine of jsonLines) {
+                for (const visualLine of jsonVisualLines) {
                     if (currentRow > listEndRow) break;
-                    writeRow(currentRow, () => printColoredJsonLine('  ' + jLine, false));
+                    writeRow(currentRow, () => {
+                        term('  ');
+                        for (const token of visualLine) {
+                            printColoredJsonToken(token, false);
+                        }
+                    });
                     currentRow++;
                 }
             } else {
