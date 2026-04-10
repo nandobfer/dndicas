@@ -21,6 +21,7 @@ export interface Item {
     _id: string
     id: string // Used in frontend, mapped from _id
     name: string
+    originalName?: string
     description: string
     source: string
     status: "active" | "inactive"

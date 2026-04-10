@@ -3,7 +3,7 @@
 import * as React from "react";
 import { useForm, Controller, useFieldArray } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { Loader2, Zap, Link, AlignLeft, Info, Trophy, Plus, X, Tag } from "lucide-react";
+import { Loader2, Zap, Link, AlignLeft, Info, Trophy, Plus, X, Tag, Languages } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { cn } from "@/core/utils";
 import { GlassModal, GlassModalContent, GlassModalHeader, GlassModalTitle, GlassModalDescription } from "@/components/ui/glass-modal";
@@ -43,6 +43,7 @@ export function FeatFormModal({ isOpen, onClose, onSubmit, feat, isSubmitting = 
         resolver: zodResolver(createFeatSchema) as any,
         defaultValues: {
             name: feat?.name || "",
+            originalName: feat?.originalName || "",
             description: feat?.description || "",
             source: feat?.source || "LDJ pág. ",
             level: feat?.level || 1,
@@ -81,6 +82,7 @@ export function FeatFormModal({ isOpen, onClose, onSubmit, feat, isSubmitting = 
             setLastAddedIndex(null)
             reset({
                 name: feat?.name || "",
+                originalName: feat?.originalName || "",
                 description: feat?.description || "",
                 source: feat?.source || "LDJ pág. ",
                 level: feat?.level || 1,
@@ -96,6 +98,7 @@ export function FeatFormModal({ isOpen, onClose, onSubmit, feat, isSubmitting = 
         // Filter out empty prerequisites (considering TipTap might return <p></p>)
         const cleanedData = {
             ...data,
+            originalName: data.originalName?.trim() || undefined,
             prerequisites: (data.prerequisites || []).filter((p: string) => {
                 if (!p) return false
                 const plainText = p.replace(/<[^>]*>/g, "").trim()
@@ -189,8 +192,7 @@ export function FeatFormModal({ isOpen, onClose, onSubmit, feat, isSubmitting = 
                             )}
                         </div>
 
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                            {/* Source */}
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                             <GlassInput
                                 id="source"
                                 label="Fonte / Referência"
@@ -199,8 +201,15 @@ export function FeatFormModal({ isOpen, onClose, onSubmit, feat, isSubmitting = 
                                 error={errors.source?.message}
                                 {...register("source")}
                             />
+                            <GlassInput
+                                id="originalName"
+                                label="Nome em Inglês"
+                                placeholder="Ex: Great Weapon Master"
+                                icon={<Languages />}
+                                error={errors.originalName?.message}
+                                {...register("originalName")}
+                            />
 
-                            {/* Level */}
                             <GlassInput
                                 id="level"
                                 type="text"

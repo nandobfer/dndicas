@@ -3,7 +3,7 @@
 import * as React from "react";
 import { useForm, Controller } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { Loader2, Sparkles, Link, AlignLeft, Info } from "lucide-react";
+import { Loader2, Sparkles, Link, AlignLeft, Info, Languages } from "lucide-react";
 import { cn } from "@/core/utils";
 import { GlassModal, GlassModalContent, GlassModalHeader, GlassModalTitle, GlassModalDescription } from "@/components/ui/glass-modal";
 import { GlassInput } from "@/components/ui/glass-input";
@@ -37,6 +37,7 @@ export function TraitFormModal({ isOpen, onClose, onSubmit, trait, isSubmitting 
         resolver: zodResolver(isEditMode ? updateTraitSchema : createTraitSchema),
         defaultValues: {
             name: trait?.name || "",
+            originalName: trait?.originalName || "",
             description: trait?.description || "",
             source: trait?.source || "LDJ pág. ",
             status: trait?.status || "active"
@@ -49,6 +50,7 @@ export function TraitFormModal({ isOpen, onClose, onSubmit, trait, isSubmitting 
             setShowConfirmClose(false)
             reset({
                 name: trait?.name || "",
+                originalName: trait?.originalName || "",
                 description: trait?.description || "",
                 source: trait?.source || "LDJ pág. ",
                 status: trait?.status || "active"
@@ -57,8 +59,11 @@ export function TraitFormModal({ isOpen, onClose, onSubmit, trait, isSubmitting 
     }, [isOpen, trait, reset])
 
     const handleFormSubmit = async (data: CreateTraitSchema | UpdateTraitSchema) => {
-        // Cast to appropriate input type as the schema infers slightly different types than the interface
-        await onSubmit(data as CreateTraitInput | UpdateTraitInput)
+        const cleanedData = {
+            ...data,
+            originalName: data.originalName?.trim() || undefined,
+        }
+        await onSubmit(cleanedData as CreateTraitInput | UpdateTraitInput)
         setShowConfirmClose(false)
     }
 
@@ -93,15 +98,24 @@ export function TraitFormModal({ isOpen, onClose, onSubmit, trait, isSubmitting 
                                 {...register("name")}
                             />
 
-                            {/* Source */}
-                            <GlassInput
-                                id="source"
-                                label="Fonte / Referência"
-                                placeholder="Ex: PHB pg. 48"
-                                icon={<Link />}
-                                error={errors.source?.message}
-                                {...register("source")}
-                            />
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <GlassInput
+                                    id="source"
+                                    label="Fonte / Referência"
+                                    placeholder="Ex: PHB pg. 48"
+                                    icon={<Link />}
+                                    error={errors.source?.message}
+                                    {...register("source")}
+                                />
+                                <GlassInput
+                                    id="originalName"
+                                    label="Nome em Inglês"
+                                    placeholder="Ex: Barbarian Rage"
+                                    icon={<Languages />}
+                                    error={errors.originalName?.message}
+                                    {...register("originalName")}
+                                />
+                            </div>
                         </div>
 
                         {/* Status Switch */}

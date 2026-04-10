@@ -25,6 +25,7 @@ const raceVariationSchema = z.object({
 
 const raceSchema = z.object({
     name: z.string().min(2).max(100),
+    originalName: z.union([z.string().trim().max(100), z.literal("")]).optional().transform((val) => val || undefined),
     description: z.string().min(10),
     source: z.string(),
     status: z.enum(["active", "inactive"]),

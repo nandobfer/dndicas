@@ -2,6 +2,7 @@ import mongoose, { Schema, Document, Model } from "mongoose";
 
 export interface ITrait extends Document {
     name: string;
+    originalName?: string;
     description: string;
     source: string;
     status: "active" | "inactive";
@@ -15,6 +16,12 @@ const TraitSchema = new Schema<ITrait>(
             type: String,
             required: true,
             unique: true,
+            maxlength: 100,
+            trim: true,
+        },
+        originalName: {
+            type: String,
+            required: false,
             maxlength: 100,
             trim: true,
         },

@@ -271,6 +271,7 @@ export class SpellsProvider extends BaseProvider<FiveEToolsSpell, CreateSpellInp
         // Deterministic field mapping (no AI needed)
         return {
             name,
+            originalName: spell.name,
             description,
             circle: spell.level,
             school,
@@ -295,6 +296,7 @@ export class SpellsProvider extends BaseProvider<FiveEToolsSpell, CreateSpellInp
         if (!doc) return null;
         return {
             name: doc.name,
+            originalName: doc.originalName ?? undefined,
             description: doc.description,
             circle: doc.circle,
             school: doc.school,

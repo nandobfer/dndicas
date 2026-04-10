@@ -6,6 +6,7 @@ export { type SpellSchool, type SpellComponent, type DiceType }
 export interface Spell {
     _id: string
     name: string
+    originalName?: string
     description: string // HTML string from TipTap
     circle: number // 0-9
     school: SpellSchool
@@ -45,6 +46,7 @@ export type CastingTime = "Ação" | "Ação Bônus" | "Reação" | "Ritual"
 // API input types
 export interface CreateSpellInput {
     name: string
+    originalName?: string
     description: string
     circle: number
     school: SpellSchool
@@ -65,6 +67,7 @@ export interface CreateSpellInput {
 
 export interface UpdateSpellInput {
     name?: string
+    originalName?: string
     description?: string
     circle?: number
     school?: SpellSchool

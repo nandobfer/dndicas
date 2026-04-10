@@ -83,6 +83,7 @@ export interface ClassTrait {
 export interface CharacterClass {
     _id: string
     name: string
+    originalName?: string
     image?: string
     description: string // HTML string from TipTap
     source: string
@@ -108,6 +109,7 @@ export interface CharacterClass {
 
 export interface CreateClassInput {
     name: string
+    originalName?: string
     image?: string
     description: string
     source?: string
@@ -129,6 +131,7 @@ export interface CreateClassInput {
 
 export interface UpdateClassInput {
     name?: string
+    originalName?: string
     image?: string
     description?: string
     source?: string

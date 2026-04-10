@@ -1,4 +1,5 @@
 import { z } from "zod";
+const optionalOriginalNameSchema = z.union([z.string().trim().max(100, "Nome original muito longo"), z.literal("")]).optional().transform((val) => val || undefined)
 
 const diceValueSchema = z.object({
     quantidade: z.number().min(1, "Quantidade deve ser pelo menos 1"),
@@ -22,6 +23,7 @@ const itemTraitIdSchema = z.union([
 
 export const createItemSchema = z.object({
     name: z.string().min(2, "Nome deve ter pelo menos 2 caracteres").max(100, "Nome deve ter no máximo 100 caracteres"),
+    originalName: optionalOriginalNameSchema,
     description: z.string().min(10, "Descrição deve ter pelo menos 10 caracteres").max(20000, "Descrição muito longa"),
     source: z.string().min(1, "Fonte é obrigatória").max(200, "Fonte muito longa"),
     status: z.enum(["active", "inactive"]),
