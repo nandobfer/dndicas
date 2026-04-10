@@ -9,7 +9,7 @@
  *   npm run search-cli
  *
  * Controls:
- *   Type to search · ↑↓ navigate · Enter copy name · Alt+Enter copy JSON · ESC clear · Ctrl+C exit
+ *   Type to search · ↑↓ navigate · Alt+←/→ tabs · Ctrl+N copy name · Ctrl+J copy JSON · Ctrl+K copy id · ESC clear · Ctrl+C exit
  */
 
 import { spawnSync } from 'node:child_process';
@@ -32,67 +32,217 @@ import { applyFuzzySearch, type UnifiedEntity } from '@/core/utils/search-engine
 
 const term = terminal.terminal;
 
-// ─── Highlight ANSI codes ─────────────────────────────────────────────────────
-// Used for the selected-item background. We use raw ANSI escape codes here
-// instead of terminal-kit chainables because terminal-kit's bgColor256()
-// without a text argument sets the bg persistently (leaking into subsequent
-// eraseLine calls). Raw codes give us precise control: fg-only resets between
-// tokens keep the bg within a line; a full reset at the end of each line
-// ensures nothing leaks to normal rows.
+// ─── ANSI helpers ─────────────────────────────────────────────────────────────
+// We use raw ANSI escape codes here instead of terminal-kit chainables because
+// terminal-kit's bgColor256() without a text argument sets the bg persistently
+// (leaking into subsequent eraseLine calls). Raw codes give us precise control:
+// fg-only resets between tokens keep the bg within a line; a full reset at the
+// end of each line ensures nothing leaks to normal rows.
 const HL_BG        = '\x1b[48;5;235m'; // #262626 — just above pure black
 const HL_FG_RESET  = '\x1b[39m';       // reset foreground only (preserves bg)
 const HL_FULL_RESET = '\x1b[0m';       // reset everything
 
+type JsonTokenKind = 'key' | 'string' | 'boolean' | 'null' | 'brace' | 'number' | 'plain';
+
+type JsonToken = {
+    text: string;
+    kind: JsonTokenKind;
+};
+
 // ─── JSON color printer ───────────────────────────────────────────────────────
 // Replicates the color scheme from scripts/seed-data/base-provider.ts.
 // Works line-by-line so it's compatible with term.moveTo() absolute positioning.
-// When highlight=true, uses raw ANSI codes to keep the dark bg across all tokens
-// without leaking it beyond the selected-item block.
+// `highlight=true` is kept as an optional raw-ANSI mode for callers that want
+// colored JSON over a filled background.
 
-function printColoredJsonLine(line: string, highlight: boolean): void {
+const JSON_TOKEN_RE = /("(?:[^"\\]|\\.)*")(\s*:)?|true|false|null|-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?|[{}\[\],]|[^\S\n]+/g;
+const HTML_TAG_RE = /<[^>]+>/g;
+const HTML_BREAK_RE = /<(?:br|\/p|\/div|\/li|\/h[1-6])\s*\/?>/gi;
+const HTML_ENTITY_MAP: Record<string, string> = {
+    '&nbsp;': ' ',
+    '&amp;': '&',
+    '&lt;': '<',
+    '&gt;': '>',
+    '&quot;': '"',
+    '&#39;': "'",
+};
+
+function decodeHtmlEntities(value: string): string {
+    return value.replace(/&nbsp;|&amp;|&lt;|&gt;|&quot;|&#39;/g, (entity) => HTML_ENTITY_MAP[entity] ?? entity);
+}
+
+function stripHtmlToDisplayText(value: string): string {
+    return decodeHtmlEntities(
+        value
+            .replace(HTML_BREAK_RE, ' ')
+            .replace(HTML_TAG_RE, '')
+            .replace(/\s+/g, ' ')
+            .trim()
+    );
+}
+
+function sanitizeJsonDisplayValue(value: unknown): unknown {
+    if (typeof value === 'string') {
+        if (!HTML_TAG_RE.test(value)) {
+            return value;
+        }
+
+        const text = stripHtmlToDisplayText(value);
+        return `[${text}]`;
+    }
+
+    if (Array.isArray(value)) {
+        return value.map((item) => sanitizeJsonDisplayValue(item));
+    }
+
+    if (value && typeof value === 'object') {
+        return Object.fromEntries(
+            Object.entries(value).map(([key, nestedValue]) => [key, sanitizeJsonDisplayValue(nestedValue)])
+        );
+    }
+
+    return value;
+}
+
+function tokenizeJsonLine(line: string): JsonToken[] {
+    const tokens: JsonToken[] = [];
+    JSON_TOKEN_RE.lastIndex = 0;
+
+    let lastIndex = 0;
+    let match: RegExpExecArray | null;
+
+    while ((match = JSON_TOKEN_RE.exec(line)) !== null) {
+        if (match.index > lastIndex) {
+            tokens.push({ text: line.slice(lastIndex, match.index), kind: 'plain' });
+        }
+
+        const text = match[0];
+        const quotedStr = match[1];
+        const colonSuffix = match[2];
+
+        if (quotedStr !== undefined) {
+            tokens.push({ text: quotedStr, kind: colonSuffix !== undefined ? 'key' : 'string' });
+            if (colonSuffix !== undefined) {
+                tokens.push({ text: colonSuffix, kind: 'plain' });
+            }
+        } else if (text === 'true' || text === 'false') {
+            tokens.push({ text, kind: 'boolean' });
+        } else if (text === 'null') {
+            tokens.push({ text, kind: 'null' });
+        } else if (text === '{' || text === '}' || text === '[' || text === ']' || text === ',') {
+            tokens.push({ text, kind: 'brace' });
+        } else if (/^-?\d/.test(text)) {
+            tokens.push({ text, kind: 'number' });
+        } else {
+            tokens.push({ text, kind: 'plain' });
+        }
+
+        lastIndex = JSON_TOKEN_RE.lastIndex;
+    }
+
+    if (lastIndex < line.length) {
+        tokens.push({ text: line.slice(lastIndex), kind: 'plain' });
+    }
+
+    return tokens;
+}
+
+function printColoredJsonToken(token: JsonToken, highlight: boolean): void {
     if (highlight) {
         process.stdout.write(HL_BG);
     }
 
-    const re = /("(?:[^"\\]|\\.)*")(\s*:)?|true|false|null|-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?|[{}\[\],]|[^\S\n]+/g;
-    let m: RegExpExecArray | null;
-    while ((m = re.exec(line)) !== null) {
-        const tok = m[0];
-        const quotedStr = m[1];
-        const colonSuffix = m[2];
-        if (quotedStr !== undefined) {
-            if (colonSuffix !== undefined) {
-                if (highlight) {
-                    process.stdout.write('\x1b[33m' + quotedStr + HL_FG_RESET + colonSuffix);
-                } else {
-                    term.yellow(quotedStr);
-                    term(colonSuffix);
-                }
-            } else {
-                if (highlight) process.stdout.write('\x1b[36m' + quotedStr + HL_FG_RESET);
-                else term.cyan(quotedStr);
-            }
-        } else if (tok === 'true' || tok === 'false') {
-            if (highlight) process.stdout.write('\x1b[34m' + tok + HL_FG_RESET);
-            else term.blue(tok);
-        } else if (tok === 'null') {
-            if (highlight) process.stdout.write('\x1b[90m' + tok + HL_FG_RESET);
-            else term.gray(tok);
-        } else if (tok === '{' || tok === '}' || tok === '[' || tok === ']') {
-            if (highlight) process.stdout.write('\x1b[1;37m' + tok + '\x1b[22m' + HL_FG_RESET);
-            else term.bold.white(tok);
-        } else if (/^-?\d/.test(tok)) {
-            if (highlight) process.stdout.write('\x1b[32m' + tok + HL_FG_RESET);
-            else term.green(tok);
-        } else {
-            if (highlight) process.stdout.write(tok);
-            else term(tok);
-        }
+    switch (token.kind) {
+        case 'key':
+            if (highlight) process.stdout.write('\x1b[33m' + token.text + HL_FG_RESET);
+            else term.yellow(token.text);
+            return;
+        case 'string':
+            if (highlight) process.stdout.write('\x1b[36m' + token.text + HL_FG_RESET);
+            else term.cyan(token.text);
+            return;
+        case 'boolean':
+            if (highlight) process.stdout.write('\x1b[34m' + token.text + HL_FG_RESET);
+            else term.blue(token.text);
+            return;
+        case 'null':
+            if (highlight) process.stdout.write('\x1b[90m' + token.text + HL_FG_RESET);
+            else term.gray(token.text);
+            return;
+        case 'brace':
+            if (highlight) process.stdout.write('\x1b[1;37m' + token.text + '\x1b[22m' + HL_FG_RESET);
+            else term.bold.white(token.text);
+            return;
+        case 'number':
+            if (highlight) process.stdout.write('\x1b[32m' + token.text + HL_FG_RESET);
+            else term.green(token.text);
+            return;
+        default:
+            if (highlight) process.stdout.write(token.text);
+            else term(token.text);
+    }
+}
+
+function printColoredJsonLine(line: string, highlight: boolean): void {
+    for (const token of tokenizeJsonLine(line)) {
+        printColoredJsonToken(token, highlight);
     }
 
     if (highlight) {
         process.stdout.write(HL_FULL_RESET);
     }
+}
+
+function wrapJsonLine(line: string, maxWidth: number): JsonToken[][] {
+    const safeWidth = Math.max(1, maxWidth);
+    const indent = line.match(/^\s*/)?.[0] ?? '';
+    const indentToken: JsonToken = { text: indent, kind: 'plain' };
+    const tokens = tokenizeJsonLine(line.slice(indent.length));
+    const wrappedLines: JsonToken[][] = [];
+
+    let currentLine: JsonToken[] = [{ ...indentToken }];
+    let currentWidth = indent.length;
+
+    const pushCurrentLine = () => {
+        wrappedLines.push(currentLine);
+        currentLine = [{ ...indentToken }];
+        currentWidth = indent.length;
+    };
+
+    for (const token of tokens) {
+        let remaining = token.text;
+
+        while (remaining.length > 0) {
+            if (currentWidth >= safeWidth) {
+                pushCurrentLine();
+            }
+
+            const spaceLeft = Math.max(1, safeWidth - currentWidth);
+            const part = remaining.slice(0, spaceLeft);
+
+            currentLine.push({ text: part, kind: token.kind });
+            currentWidth += part.length;
+            remaining = remaining.slice(part.length);
+
+            if (remaining.length > 0) {
+                pushCurrentLine();
+            }
+        }
+    }
+
+    if (currentLine.length > 1 || wrappedLines.length === 0) {
+        wrappedLines.push(currentLine);
+    }
+
+    return wrappedLines;
+}
+
+function buildDisplayJsonLines(entity: UnifiedEntity | undefined, maxWidth: number): JsonToken[][] {
+    const sanitizedEntity = sanitizeJsonDisplayValue(entity ?? {});
+    const jsonStr = JSON.stringify(sanitizedEntity, null, 2);
+    const rawLines = jsonStr.split('\n');
+
+    return rawLines.flatMap((line) => wrapJsonLine(line, maxWidth));
 }
 
 // ─── Entity loading ───────────────────────────────────────────────────────────
@@ -258,6 +408,25 @@ let statusMessageTimer: NodeJS.Timeout | null = null;
 // so we can erase leftover rows when the list shrinks.
 let lastListRowCount = 0;
 
+type EntityTab = {
+    label: string;
+    type: UnifiedEntity['type'] | null;
+};
+
+const TABS: EntityTab[] = [
+    { label: 'Tudo', type: null },
+    { label: 'Regras', type: 'Regra' },
+    { label: 'Classes', type: 'Classe' },
+    { label: 'Raças', type: 'Raça' },
+    { label: 'Magias', type: 'Magia' },
+    { label: 'Itens', type: 'Item' },
+    { label: 'Habilidades', type: 'Habilidade' },
+    { label: 'Talentos', type: 'Talento' },
+    { label: 'Origens', type: 'Origem' },
+];
+
+let activeTabIndex = 0;
+
 // ─── Word navigation helpers ─────────────────────────────────────────────────
 
 /** Returns the index at the start of the word before `pos`. */
@@ -276,11 +445,26 @@ function wordEnd(s: string, pos: number): number {
     return i;
 }
 
+function getActiveTab(): EntityTab {
+    return TABS[activeTabIndex] ?? TABS[0];
+}
+
+function getTabEntities(): UnifiedEntity[] {
+    const activeTab = getActiveTab();
+    if (!activeTab.type) {
+        return allEntities;
+    }
+
+    return allEntities.filter((entity) => entity.type === activeTab.type);
+}
+
 function runSearch(): void {
+    const items = getTabEntities();
+
     if (!query.trim()) {
-        results = allEntities.slice(0, 50);
+        results = items.slice(0, 50);
     } else {
-        results = applyFuzzySearch(allEntities, query, 50);
+        results = applyFuzzySearch(items, query, 50);
     }
     selectedIndex = Math.min(selectedIndex, Math.max(0, results.length - 1));
     render();
@@ -378,6 +562,21 @@ async function copySelectedJson(): Promise<void> {
     }
 }
 
+async function copySelectedId(): Promise<void> {
+    const entity = getSelectedEntity();
+    if (!entity) {
+        setStatusMessage('Nenhum item selecionado', 'error');
+        return;
+    }
+
+    try {
+        writeToClipboard(entity.id);
+        setStatusMessage('Id copiado');
+    } catch (error) {
+        setStatusMessage(`Falha ao copiar id: ${error instanceof Error ? error.message : String(error)}`, 'error');
+    }
+}
+
 // ─── Rendering ────────────────────────────────────────────────────────────────
 
 const TYPE_COLORS: Record<string, (s: string) => void> = {
@@ -391,6 +590,38 @@ const TYPE_COLORS: Record<string, (s: string) => void> = {
     Item:       (s) => term.brightYellow(s),
 };
 
+const TAB_ACTIVE_STYLES: Record<string, { bg: string; fg: string }> = {
+    Tudo: { bg: '\x1b[48;5;240m', fg: '\x1b[97m' },
+    Regra: { bg: '\x1b[45m', fg: '\x1b[97m' },
+    Habilidade: { bg: '\x1b[46m', fg: '\x1b[30m' },
+    Talento: { bg: '\x1b[43m', fg: '\x1b[30m' },
+    Magia: { bg: '\x1b[44m', fg: '\x1b[97m' },
+    Classe: { bg: '\x1b[41m', fg: '\x1b[97m' },
+    Origem: { bg: '\x1b[42m', fg: '\x1b[30m' },
+    Raça: { bg: '\x1b[105m', fg: '\x1b[30m' },
+    Item: { bg: '\x1b[103m', fg: '\x1b[30m' },
+};
+
+function getActiveTabStyle(tab: EntityTab): { bg: string; fg: string } {
+    if (!tab.type) {
+        return TAB_ACTIVE_STYLES.Tudo;
+    }
+
+    return TAB_ACTIVE_STYLES[tab.type] ?? TAB_ACTIVE_STYLES.Tudo;
+}
+
+function getSelectedRowStyle(entity: UnifiedEntity | undefined, activeTab: EntityTab): { bg: string; fg: string } {
+    if (activeTab.type) {
+        return getActiveTabStyle(activeTab);
+    }
+
+    if (entity?.type) {
+        return TAB_ACTIVE_STYLES[entity.type] ?? TAB_ACTIVE_STYLES.Tudo;
+    }
+
+    return TAB_ACTIVE_STYLES.Tudo;
+}
+
 /**
  * Computes the visible window of result indices to display, keeping
  * `selectedIndex` in view and filling available lines with surrounding items.
@@ -398,14 +629,14 @@ const TYPE_COLORS: Record<string, (s: string) => void> = {
 function computeWindow(
     total: number,
     selected: number,
-    jsonLineCount: number,
+    selectedLineCount: number,
     availableLines: number
 ): { start: number; end: number } {
     if (total === 0) return { start: 0, end: -1 };
 
     let start = selected;
     let end = selected;
-    let usedLines = jsonLineCount;
+    let usedLines = selectedLineCount;
 
     let canBefore = selected > 0;
     let canAfter = selected < total - 1;
@@ -430,10 +661,15 @@ function render(): void {
     const W: number = (term as any).width ?? 80;
     const H: number = (term as any).height ?? 30;
     const divider = '─'.repeat(W - 1);
+    const activeTab = getActiveTab();
+    const tabEntities = getTabEntities();
+    const listStartRow = 2;
+    const listEndRow = H - 4;
 
     // Rows available for the results list (top portion of screen).
-    // Bottom 4 rows are reserved: divider, status, divider, search input.
-    const listRows = Math.max(1, H - 4);
+    // Top row is reserved for tabs and bottom 4 rows are reserved:
+    // divider, status, divider, search input.
+    const listRows = Math.max(1, listEndRow - listStartRow + 1);
 
     // Normal row: erase and overwrite in place — no term.clear(), no flicker.
     const writeRow = (row: number, fn: () => void) => {
@@ -442,37 +678,70 @@ function render(): void {
         fn();
     };
 
-    // Highlighted row: fill entire line with dark bg via raw ANSI (no persistent
-    // state leak), reposition, then draw content on top.
-    const writeHighlightedRow = (row: number, fn: () => void) => {
+    // Styled row: fill entire line with the selection bg, reposition, then draw
+    // content on top. Resets are explicit to avoid leaking styles.
+    const writeStyledRow = (row: number, style: { bg: string; fg: string }, fn: () => void) => {
         term.moveTo(1, row);
-        process.stdout.write(HL_BG + ' '.repeat(W) + HL_FULL_RESET);
+        process.stdout.write(style.bg + ' '.repeat(W) + HL_FULL_RESET);
         term.moveTo(1, row);
+        process.stdout.write(style.bg + style.fg);
         fn();
+        process.stdout.write(HL_FULL_RESET);
     };
 
-    // ── Results list (rows 1..listRows) ──────────────────────────────────────
-    let currentRow = 1;
+    // ── Tabs (row 1) ─────────────────────────────────────────────────────────
+    writeRow(1, () => {
+        term('  ');
+        TABS.forEach((tab, index) => {
+            const isActive = index === activeTabIndex;
+            if (isActive) {
+                const style = getActiveTabStyle(tab);
+                process.stdout.write(`${style.bg}${style.fg} ${tab.label} ${HL_FULL_RESET}`);
+            } else {
+                term.brightBlack(` ${tab.label} `);
+            }
+
+            if (index < TABS.length - 1) {
+                term.brightBlack(' ');
+            }
+        });
+    });
+
+    // ── Results list (rows 2..H-4) ──────────────────────────────────────────
+    let currentRow = listStartRow;
 
     if (results.length === 0) {
-        writeRow(1, () => term.brightBlack(`  Nenhum resultado para "${query}"`));
-        currentRow = 2;
+        writeRow(listStartRow, () => {
+            const scope = activeTab.label.toLowerCase();
+            term.brightBlack(`  Nenhum resultado para "${query}" em ${scope}`);
+        });
+        currentRow = listStartRow + 1;
     } else {
         const selectedEntity = results[selectedIndex];
-        const jsonStr = JSON.stringify(selectedEntity ?? {}, null, 2);
-        const jsonLines = jsonStr.split('\n');
-        const jsonLineCount = jsonLines.length;
+        const selectedRowStyle = getSelectedRowStyle(selectedEntity, activeTab);
+        const jsonVisualLines = buildDisplayJsonLines(selectedEntity, W - 2);
+        const selectedLineCount = 1 + jsonVisualLines.length;
 
-        const { start, end } = computeWindow(results.length, selectedIndex, jsonLineCount, listRows);
+        const { start, end } = computeWindow(results.length, selectedIndex, selectedLineCount, listRows);
 
-        for (let i = start; i <= end && currentRow <= listRows; i++) {
+        for (let i = start; i <= end && currentRow <= listEndRow; i++) {
             const entity = results[i];
             if (!entity) continue;
 
             if (i === selectedIndex) {
-                for (const jLine of jsonLines) {
-                    if (currentRow > listRows) break;
-                    writeHighlightedRow(currentRow, () => printColoredJsonLine('  ' + jLine, true));
+                writeStyledRow(currentRow, selectedRowStyle, () => {
+                    process.stdout.write(`  ${entity.type} | ${entity.name}`);
+                });
+                currentRow++;
+
+                for (const visualLine of jsonVisualLines) {
+                    if (currentRow > listEndRow) break;
+                    writeRow(currentRow, () => {
+                        term('  ');
+                        for (const token of visualLine) {
+                            printColoredJsonToken(token, false);
+                        }
+                    });
                     currentRow++;
                 }
             } else {
@@ -498,7 +767,7 @@ function render(): void {
     writeRow(H - 3, () => term.brightBlack(divider));
 
     writeRow(H - 2, () => {
-        term.brightBlack('  ↑↓ navegar  ·  Enter copiar nome  ·  Alt+Enter copiar JSON  ·  Esc limpar  ·  Ctrl+C sair  ·  ');
+        term.brightBlack('  ↑↓ navegar  ·  Alt+←/→ abas  ·  Ctrl+N copiar nome  ·  Ctrl+J copiar JSON  ·  Ctrl+K copiar id  ·  Esc limpar  ·  Ctrl+C sair  ·  ');
         if (statusMessage) {
             if (statusMessage.tone === 'error') term.brightRed(statusMessage.text);
             else term.brightGreen(statusMessage.text);
@@ -506,7 +775,9 @@ function render(): void {
         }
 
         term.brightWhite(String(results.length));
-        term.brightBlack(` resultado${results.length !== 1 ? 's' : ''}  (total: ${allEntities.length})`);
+        term.brightBlack(` resultado${results.length !== 1 ? 's' : ''} em `);
+        term.white(activeTab.label);
+        term.brightBlack(`  (aba: ${tabEntities.length} · total: ${allEntities.length})`);
     });
 
     writeRow(H - 1, () => term.brightBlack(divider));
@@ -550,21 +821,35 @@ function setupInput(): void {
                 process.exit(0);
                 return;
 
-            case 'ENTER':
-            case 'KP_ENTER':
+            case 'CTRL_N':
                 void copySelectedName();
                 return;
 
-            case 'ALT_ENTER':
+            case 'CTRL_J':
                 void copySelectedJson();
+                return;
+
+            case 'CTRL_K':
+                void copySelectedId();
+                return;
+
+            case 'ALT_LEFT':
+                activeTabIndex = (activeTabIndex - 1 + TABS.length) % TABS.length;
+                selectedIndex = 0;
+                runSearch();
+                return;
+
+            case 'ALT_RIGHT':
+                activeTabIndex = (activeTabIndex + 1) % TABS.length;
+                selectedIndex = 0;
+                runSearch();
                 return;
 
             case 'ESCAPE':
                 query = '';
                 cursorPos = 0;
                 selectedIndex = 0;
-                results = allEntities.slice(0, 50);
-                render();
+                runSearch();
                 return;
 
             case 'UP':
@@ -675,12 +960,6 @@ async function main(): Promise<void> {
 
         term('\n');
         term.green(`  ✓ ${allEntities.length} entidades carregadas!\n\n`);
-        term.brightBlack('  Pressione qualquer tecla para iniciar...\n');
-        await new Promise<void>((resolve) => {
-            term.once('key', () => resolve());
-            term.grabInput(true);
-        });
-        term.grabInput(false);
     } catch (err) {
         term.red(`\n  ✗ Erro ao carregar entidades: ${err instanceof Error ? err.message : String(err)}\n`);
         process.exit(1);
@@ -689,8 +968,11 @@ async function main(): Promise<void> {
     // Enter fullscreen (alternate buffer) then render
     term.fullscreen(true);
     term.hideCursor(true);
-    results = allEntities.slice(0, 50);
-    render();
+    activeTabIndex = 0;
+    query = '';
+    cursorPos = 0;
+    selectedIndex = 0;
+    runSearch();
 
     // Start listening for input
     setupInput();
