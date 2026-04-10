@@ -64,8 +64,31 @@ export function MentionContent({
                 const elements: React.ReactNode[] = []
                 let lastIndex = 0
 
+                // Color damage type word immediately following a dice-value element span
+                const prevEl = node.previousSibling
+                if (
+                    prevEl?.nodeType === Node.ELEMENT_NODE &&
+                    (prevEl as HTMLElement).getAttribute("data-type") === "dice-value"
+                ) {
+                    const wordMatch = /^(\s*)([a-záàâãéèêíïóôõöúçñ]{4,})/i.exec(text)
+                    if (wordMatch) {
+                        const fuseResult = diceFuse.search(wordMatch[2])
+                        if (fuseResult.length > 0) {
+                            const item = fuseResult[0].item
+                            if (wordMatch[1]) elements.push(wordMatch[1])
+                            elements.push(
+                                <span key={`dmg-after-dice-${index}`} className="font-medium" style={{ color: item.hex }}>
+                                    {wordMatch[2]}
+                                </span>,
+                            )
+                            lastIndex = wordMatch[0].length
+                        }
+                    }
+                }
+
                 // Unified regex (reused from dice-render-utils; must reset lastIndex each call)
                 const unifiedRegex = new RegExp(DICE_UNIFIED_REGEX.source, DICE_UNIFIED_REGEX.flags)
+                unifiedRegex.lastIndex = lastIndex
 
                 let match
                 while ((match = unifiedRegex.exec(text)) !== null) {
