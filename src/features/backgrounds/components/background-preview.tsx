@@ -198,7 +198,7 @@ export function BackgroundPreview({ background, showStatus = true, className }: 
                 </div>
             </div>
 
-            <EntitySource source={background.source} />
+            <EntitySource source={background.source} originalName={background.originalName} />
         </div>
     )
 }

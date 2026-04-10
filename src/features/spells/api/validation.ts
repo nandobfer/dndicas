@@ -1,4 +1,5 @@
 import { z } from 'zod';
+const optionalOriginalNameSchema = z.union([z.string().trim().max(100, "Nome original muito longo"), z.literal("")]).optional().transform((val) => val || undefined)
 
 // Dice value schema
 export const diceValueSchema = z.object({
@@ -9,6 +10,7 @@ export const diceValueSchema = z.object({
 // Create spell schema
 export const createSpellSchema = z.object({
     name: z.string().min(2, "Nome deve ter pelo menos 2 caracteres").max(100, "Nome muito longo"),
+    originalName: optionalOriginalNameSchema,
     description: z.string().min(10, "Descrição deve ter pelo menos 10 caracteres").max(10000, "Descrição muito longa"),
     circle: z.number().int().min(0, "Círculo mínimo é 0 (truque)").max(9, "Círculo máximo é 9"),
     school: z.enum(["Abjuração", "Adivinhação", "Conjuração", "Encantamento", "Evocação", "Ilusão", "Necromancia", "Transmutação"], {
@@ -39,6 +41,7 @@ export const createSpellSchema = z.object({
 // Update spell schema (all fields optional)
 export const updateSpellSchema = z.object({
     name: z.string().min(2).max(100).optional(),
+    originalName: optionalOriginalNameSchema,
     description: z.string().min(10).max(10000).optional(),
     circle: z.number().int().min(0).max(9).optional(),
     school: z.enum(["Abjuração", "Adivinhação", "Conjuração", "Encantamento", "Evocação", "Ilusão", "Necromancia", "Transmutação"]).optional(),

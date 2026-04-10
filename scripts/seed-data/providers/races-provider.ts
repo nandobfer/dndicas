@@ -542,6 +542,7 @@ export class RacesProvider extends BaseProvider<FiveEToolsRace, CreateRaceInput>
 
         return {
             name,
+            originalName: race.name,
             description: convertFeetToMeters(description),
             source: formatSource(race.source, race.page),
             status: 'active',
@@ -859,6 +860,7 @@ export class RacesProvider extends BaseProvider<FiveEToolsRace, CreateRaceInput>
 
         return {
             name: doc.name,
+            originalName: doc.originalName,
             description: doc.description,
             source: doc.source,
             status: doc.status,

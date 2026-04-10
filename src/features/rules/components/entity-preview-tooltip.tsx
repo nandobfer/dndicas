@@ -76,7 +76,7 @@ export const RulePreview = ({ rule, showStatus = true }: RulePreviewProps) => {
                 </div>
             )}
 
-            <EntitySource source={rule.source} />
+            <EntitySource source={rule.source} originalName={rule.originalName} />
         </div>
     )
 }
@@ -139,7 +139,7 @@ export const TraitPreview = ({ trait, showStatus = true, hideStatusChip = false,
                 </div>
             )}
 
-            <EntitySource source={trait.source} />
+            <EntitySource source={trait.source} originalName={trait.originalName} />
         </div>
     )
 }

@@ -20,7 +20,7 @@ import * as React from "react";
 import { useForm, Controller, useFieldArray } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod";
 import { motion, AnimatePresence } from "framer-motion";
-import { Loader2, Wand, Link, AlignLeft, Info, Shield, Dices, Zap, Plus, X, MapPin, Target, Clock, Hourglass, Sparkles, BookOpen } from "lucide-react"
+import { Loader2, Wand, Link, AlignLeft, Info, Shield, Dices, Zap, Plus, X, MapPin, Target, Clock, Hourglass, Sparkles, BookOpen, Languages } from "lucide-react"
 import { toast } from "sonner"
 import { cn } from "@/core/utils"
 import { useIsMobile } from "@/core/hooks/useMediaQuery"
@@ -131,6 +131,7 @@ export function SpellFormModal({ spell, isOpen, onClose, onSuccess }: SpellFormM
         resolver: zodResolver(createSpellSchema) as any,
         defaultValues: {
             name: spell?.name ?? "",
+            originalName: spell?.originalName ?? "",
             description: spell?.description ?? "",
             circle: spell?.circle ?? 0,
             school: (spell?.school as SpellSchool) ?? "Evocação",
@@ -178,6 +179,7 @@ export function SpellFormModal({ spell, isOpen, onClose, onSuccess }: SpellFormM
             setShowConfirmClose(false)
             reset({
                 name: spell?.name ?? "",
+                originalName: spell?.originalName ?? "",
                 description: spell?.description ?? "",
                 circle: spell?.circle ?? 0,
                 school: (spell?.school as SpellSchool) ?? "Evocação",
@@ -200,14 +202,18 @@ export function SpellFormModal({ spell, isOpen, onClose, onSuccess }: SpellFormM
 
     const onSubmit = async (values: CreateSpellSchema) => {
         try {
+            const cleanedValues = {
+                ...values,
+                originalName: values.originalName?.trim() || undefined,
+            }
             let result
             if (isEditMode && spell) {
                 result = await updateMutation.mutateAsync({
                     id: spell._id,
-                    data: values as UpdateSpellInput,
+                    data: cleanedValues as UpdateSpellInput,
                 })
             } else {
-                result = await createMutation.mutateAsync(values as CreateSpellInput)
+                result = await createMutation.mutateAsync(cleanedValues as CreateSpellInput)
             }
             toast.success(spell ? "Magia atualizada com sucesso!" : "Magia criada com sucesso!")
             onSuccess(result)
@@ -264,14 +270,24 @@ export function SpellFormModal({ spell, isOpen, onClose, onSuccess }: SpellFormM
                                 error={errors.name?.message}
                                 {...register("name")}
                             />
-                            <GlassInput
-                                id="source"
-                                label="Fonte"
-                                placeholder="Ex: PHB pg. 230"
-                                icon={<Link />}
-                                error={errors.source?.message}
-                                {...register("source")}
-                            />
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <GlassInput
+                                    id="source"
+                                    label="Fonte"
+                                    placeholder="Ex: PHB pg. 230"
+                                    icon={<Link />}
+                                    error={errors.source?.message}
+                                    {...register("source")}
+                                />
+                                <GlassInput
+                                    id="originalName"
+                                    label="Nome em Inglês"
+                                    placeholder="Ex: Fireball"
+                                    icon={<Languages />}
+                                    error={errors.originalName?.message}
+                                    {...register("originalName")}
+                                />
+                            </div>
                         </div>
 
                         {/* Row: Image + Description */}

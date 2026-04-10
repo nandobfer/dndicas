@@ -598,7 +598,7 @@ export function ClassPreview({ characterClass, showStatus = true, initialSelecte
             </div>
 
             <div className="pt-2">
-                <EntitySource source={characterClass.source} className="pt-0 border-t-0" />
+                <EntitySource source={characterClass.source} originalName={characterClass.originalName} className="pt-0 border-t-0" />
             </div>
         </div>
     )

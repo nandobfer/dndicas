@@ -170,9 +170,8 @@ export function ItemPreview({ item, showStatus = true, hideStatusChip = false, h
 
             {/* Footer */}
             <div className="pt-2">
-                <EntitySource source={item.source} />
+                <EntitySource source={item.source} originalName={item.originalName} />
             </div>
         </div>
     )
 }
-

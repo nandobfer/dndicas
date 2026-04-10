@@ -9,7 +9,7 @@ import * as React from "react"
 import { useForm, Controller, useFieldArray } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { motion, AnimatePresence } from "framer-motion"
-import { ShieldCheck, BookOpen, X, Loader2, Info, Sparkles, ScrollText, GraduationCap, Link } from "lucide-react"
+import { ShieldCheck, BookOpen, X, Loader2, Info, Sparkles, ScrollText, GraduationCap, Link, Languages } from "lucide-react"
 import { toast } from "sonner"
 import { cn } from "@/core/utils"
 
@@ -72,6 +72,7 @@ export function BackgroundFormModal({ background, isOpen, onClose, onSuccess }: 
     } = useForm<CreateBackgroundInput>({
         defaultValues: {
             name: background?.name ?? "",
+            originalName: background?.originalName ?? "",
             description: background?.description ?? "",
             source: background?.source ?? "LDJ pág. ",
             status: background?.status ?? "active",
@@ -99,6 +100,7 @@ export function BackgroundFormModal({ background, isOpen, onClose, onSuccess }: 
             setShowConfirmClose(false)
             reset({
                 name: background?.name ?? "",
+                originalName: background?.originalName ?? "",
                 description: background?.description ?? "",
                 source: background?.source ?? "LDJ pág. ",
                 status: background?.status ?? "active",
@@ -126,6 +128,7 @@ export function BackgroundFormModal({ background, isOpen, onClose, onSuccess }: 
         // Limpeza dos dados
         const cleanData = {
             ...data,
+            originalName: data.originalName?.trim() || undefined,
             traits: (data.traits || [])
                 .filter(t => t.description && t.description.trim() !== "")
         }
@@ -190,14 +193,24 @@ export function BackgroundFormModal({ background, isOpen, onClose, onSuccess }: 
                                 error={errors.name?.message} 
                                 {...register("name")} 
                             />
-                            <GlassInput 
-                                id="source" 
-                                label="Fonte" 
-                                placeholder="Ex: LDJ pág. " 
-                                icon={<Link className="h-4 w-4" />} 
-                                error={errors.source?.message} 
-                                {...register("source")} 
-                            />
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <GlassInput
+                                    id="source"
+                                    label="Fonte"
+                                    placeholder="Ex: LDJ pág. "
+                                    icon={<Link className="h-4 w-4" />}
+                                    error={errors.source?.message}
+                                    {...register("source")}
+                                />
+                                <GlassInput
+                                    id="originalName"
+                                    label="Nome em Inglês"
+                                    placeholder="Ex: Acolyte"
+                                    icon={<Languages className="h-4 w-4" />}
+                                    error={errors.originalName?.message}
+                                    {...register("originalName")}
+                                />
+                            </div>
                         </div>
 
                         {/* Row 3: Art & Description */}

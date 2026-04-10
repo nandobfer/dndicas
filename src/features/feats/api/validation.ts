@@ -6,9 +6,11 @@
 
 import { z } from 'zod';
 import { FEAT_CATEGORIES } from '../lib/feat-categories';
+const optionalOriginalNameSchema = z.union([z.string().trim().max(100, "Nome original muito longo"), z.literal("")]).optional().transform((val) => val || undefined)
 
 export const createFeatSchema = z.object({
     name: z.string().min(3, "Nome deve ter no mínimo 3 caracteres").max(100, "Nome deve ter no máximo 100 caracteres"),
+    originalName: optionalOriginalNameSchema,
     description: z.string().min(10, "Descrição deve ter no mínimo 10 caracteres").max(50000, "Descrição muito longa"),
     source: z.string().min(1, "Fonte é obrigatória").max(200, "Fonte muito longa"),
     level: z.number().int("Nível deve ser número inteiro").min(1, "Nível mínimo é 1").max(20, "Nível máximo é 20"),
@@ -28,6 +30,7 @@ export const createFeatSchema = z.object({
 
 export const updateFeatSchema = z.object({
     name: z.string().min(3).max(100).optional(),
+    originalName: optionalOriginalNameSchema,
     description: z.string().min(10).max(50000).optional(),
     source: z.string().min(1).max(200).optional(),
     level: z.number().int().min(1).max(20).optional(),

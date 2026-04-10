@@ -15,6 +15,7 @@ export interface IFeat extends Document {
   _id: mongoose.Types.ObjectId;
   /** Unique feat name (3-100 chars) */
   name: string;
+  originalName?: string;
   /** Rich HTML content with mentions support (10-50000 chars) */
   description: string;
   /** Source reference (e.g., "PHB pg. 168") */
@@ -46,6 +47,12 @@ const FeatSchema = new Schema<IFeat>(
       unique: true,
       minlength: [3, 'Nome deve ter no mínimo 3 caracteres'],
       maxlength: [100, 'Nome deve ter no máximo 100 caracteres'],
+      trim: true,
+    },
+    originalName: {
+      type: String,
+      required: false,
+      maxlength: [100, 'Nome original deve ter no máximo 100 caracteres'],
       trim: true,
     },
     description: {
