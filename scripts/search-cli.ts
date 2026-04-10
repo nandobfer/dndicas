@@ -10,6 +10,8 @@
  *
  * Controls:
  *   Type to search · ↑↓ navigate · Alt+←/→ tabs · Ctrl+N copy name · Ctrl+J copy JSON · Ctrl+K copy id · ESC clear · Ctrl+C exit
+ *   Ctrl+E → JSON nav mode: ↑↓ navigate JSON lines · Enter edit line · Esc back
+ *   Edit mode: type to edit · Enter save · Esc cancel · ←/→ cursor · Ctrl+←/→ word
  */
 
 import { spawnSync } from 'node:child_process';
@@ -245,6 +247,138 @@ function buildDisplayJsonLines(entity: UnifiedEntity | undefined, maxWidth: numb
     return rawLines.flatMap((line) => wrapJsonLine(line, maxWidth));
 }
 
+// ─── JSON logical line helpers ────────────────────────────────────────────────
+
+/** Maps a dot-notation path to the value inside an object. */
+function getValueByPath(obj: unknown, path: string): unknown {
+    const parts = path.split('.');
+    let current: unknown = obj;
+    for (const part of parts) {
+        if (current === null || typeof current !== 'object') return undefined;
+        current = (current as Record<string, unknown>)[part];
+    }
+    return current;
+}
+
+/** Mutates an object at the given dot-notation path. */
+function setValueByPath(obj: Record<string, unknown>, path: string, value: unknown): void {
+    const parts = path.split('.');
+    let current: Record<string, unknown> = obj;
+    for (let i = 0; i < parts.length - 1; i++) {
+        const next = current[parts[i]];
+        if (next === null || typeof next !== 'object') return;
+        current = next as Record<string, unknown>;
+    }
+    current[parts[parts.length - 1]] = value;
+}
+
+/** Returns the display text for a raw value (strips HTML for string fields). */
+function getDisplayValue(rawValue: unknown): string {
+    if (rawValue === null) return 'null';
+    if (typeof rawValue === 'string') {
+        if (HTML_TAG_RE.test(rawValue)) return stripHtmlToDisplayText(rawValue);
+        return rawValue;
+    }
+    return String(rawValue);
+}
+
+/**
+ * Extracts the outermost HTML wrapper tags from a string.
+ * e.g. "<p>hello</p>" → { opener: "<p>", closer: "</p>" }
+ * Returns null if the string is not wrapped in a single HTML element.
+ */
+function extractHtmlWrapper(html: string): { opener: string; closer: string } | null {
+    const match = /^(<([a-zA-Z][a-zA-Z0-9]*)[^>]*>)([\s\S]*?)(<\/\2>)$/.exec(html.trim());
+    if (!match) return null;
+    return { opener: match[1], closer: match[4] };
+}
+
+const SCALAR_KEY_VALUE_RE = /^(\s*)"([^"]+)":\s*(.+?)(?:,\s*)?$/;
+const CONTAINER_KEY_RE = /^(\s*)"([^"]+)":\s*[{[]/;
+const CLOSE_RE = /^\s*[}\]]/;
+
+/**
+ * Builds the list of logical JSON lines for a given entity (no sanitization),
+ * with path tracking so each scalar line knows its full dot-notation path.
+ */
+function buildLogicalJsonLines(entity: UnifiedEntity): JsonLogicalLine[] {
+    const jsonStr = JSON.stringify(entity, null, 2);
+    const rawLines = jsonStr.split('\n');
+    const lines: JsonLogicalLine[] = [];
+    const pathStack: string[] = [];
+    // When a key opens a container (object/array), stash it to push on next line
+    let pendingKey: string | null = null;
+
+    for (const lineText of rawLines) {
+        // If a container key was stashed, push it now that we're inside the container
+        if (pendingKey !== null) {
+            pathStack.push(pendingKey);
+            pendingKey = null;
+        }
+
+        if (CLOSE_RE.test(lineText)) {
+            // Closing bracket/brace — pop the stack
+            if (pathStack.length > 0) pathStack.pop();
+            lines.push({ lineText, path: null, isEditable: false, rawValue: undefined, displayValue: '' });
+            continue;
+        }
+
+        if (CONTAINER_KEY_RE.test(lineText)) {
+            // "key": { or "key": [ — not editable, but stash key for next iteration
+            const m = SCALAR_KEY_VALUE_RE.exec(lineText);
+            if (m) pendingKey = m[2];
+            lines.push({ lineText, path: null, isEditable: false, rawValue: undefined, displayValue: '' });
+            continue;
+        }
+
+        const scalarMatch = SCALAR_KEY_VALUE_RE.exec(lineText);
+        if (scalarMatch) {
+            const key = scalarMatch[2];
+            const valueStr = scalarMatch[3].trim().replace(/,$/, '').trim();
+            // Confirm scalar (not a container opener that slipped through)
+            const isScalar = !valueStr.startsWith('{') && !valueStr.startsWith('[');
+            if (isScalar) {
+                const fullPath = [...pathStack, key].join('.');
+                const rawValue = getValueByPath(entity, fullPath);
+                const displayValue = getDisplayValue(rawValue);
+                lines.push({ lineText, path: fullPath, isEditable: true, rawValue, displayValue });
+                continue;
+            }
+        }
+
+        // Everything else (array items without key, opening brace line, etc.)
+        lines.push({ lineText, path: null, isEditable: false, rawValue: undefined, displayValue: '' });
+    }
+
+    return lines;
+}
+
+type DisplayLineMap = { logicalIndex: number; visualStart: number; visualEnd: number };
+
+/**
+ * Like buildDisplayJsonLines but also returns a map from logical line index
+ * to the range of visual (wrapped) lines it produced.
+ */
+function buildDisplayJsonLinesWithMap(
+    entity: UnifiedEntity | undefined,
+    maxWidth: number
+): { visualLines: JsonToken[][]; logicalMap: DisplayLineMap[] } {
+    const sanitizedEntity = sanitizeJsonDisplayValue(entity ?? {});
+    const jsonStr = JSON.stringify(sanitizedEntity, null, 2);
+    const rawLines = jsonStr.split('\n');
+    const visualLines: JsonToken[][] = [];
+    const logicalMap: DisplayLineMap[] = [];
+
+    rawLines.forEach((line, logicalIndex) => {
+        const wrapped = wrapJsonLine(line, maxWidth);
+        const visualStart = visualLines.length;
+        visualLines.push(...wrapped);
+        logicalMap.push({ logicalIndex, visualStart, visualEnd: visualLines.length - 1 });
+    });
+
+    return { visualLines, logicalMap };
+}
+
 // ─── Entity loading ───────────────────────────────────────────────────────────
 
 async function loadAllEntities(): Promise<UnifiedEntity[]> {
@@ -416,6 +550,27 @@ let statusMessageTimer: NodeJS.Timeout | null = null;
 // so we can erase leftover rows when the list shrinks.
 let lastListRowCount = 0;
 
+// ─── App mode ─────────────────────────────────────────────────────────────────
+
+type AppMode = 'search' | 'jsonNav' | 'editLine';
+
+type JsonLogicalLine = {
+    lineText: string;      // raw line from JSON.stringify
+    path: string | null;   // dot-notation path to the field (null for brackets)
+    isEditable: boolean;   // false for container lines ({ } [ ])
+    rawValue: unknown;     // actual (non-sanitized) value from the entity
+    displayValue: string;  // text shown in the edit input (HTML stripped)
+};
+
+let appMode: AppMode = 'search';
+let jsonLogicalLines: JsonLogicalLine[] = [];
+let jsonLogicalLineIndex = 0;
+let editBuffer = '';
+let editCursorPos = 0;
+
+// Highlight background for the selected JSON logical line
+const JSON_HL_BG = '\x1b[48;5;238m'; // #444444
+
 type EntityTab = {
     label: string;
     type: UnifiedEntity['type'] | null;
@@ -585,6 +740,57 @@ async function copySelectedId(): Promise<void> {
     }
 }
 
+async function saveEntityField(
+    entity: UnifiedEntity,
+    path: string,
+    rawValue: unknown,
+    newText: string
+): Promise<void> {
+    const ModelMap: Record<string, mongoose.Model<any>> = {
+        'Regra': Reference,
+        'Habilidade': Trait,
+        'Talento': Feat,
+        'Magia': Spell,
+        'Classe': CharacterClass,
+        'Origem': BackgroundModel,
+        'Raça': RaceModel,
+        'Item': ItemModel,
+    };
+
+    const Model = ModelMap[entity.type];
+    if (!Model) {
+        setStatusMessage(`Tipo desconhecido: ${entity.type}`, 'error');
+        return;
+    }
+
+    let finalValue: unknown;
+
+    if (typeof rawValue === 'number') {
+        const parsed = Number(newText);
+        if (isNaN(parsed)) {
+            setStatusMessage('Valor inválido para número', 'error');
+            return;
+        }
+        finalValue = parsed;
+    } else if (typeof rawValue === 'boolean') {
+        finalValue = newText === 'true';
+    } else if (typeof rawValue === 'string' && HTML_TAG_RE.test(rawValue)) {
+        const wrapper = extractHtmlWrapper(rawValue);
+        finalValue = wrapper ? `${wrapper.opener}${newText}${wrapper.closer}` : `<p>${newText}</p>`;
+    } else {
+        finalValue = newText;
+    }
+
+    try {
+        await Model.updateOne({ _id: entity._id }, { $set: { [path]: finalValue } });
+        setValueByPath(entity as unknown as Record<string, unknown>, path, finalValue);
+        jsonLogicalLines = buildLogicalJsonLines(entity);
+        setStatusMessage(`"${path}" salvo`);
+    } catch (err) {
+        setStatusMessage(`Erro ao salvar: ${err instanceof Error ? err.message : String(err)}`, 'error');
+    }
+}
+
 // ─── Rendering ────────────────────────────────────────────────────────────────
 
 const TYPE_COLORS: Record<string, (s: string) => void> = {
@@ -727,7 +933,7 @@ function render(): void {
     } else {
         const selectedEntity = results[selectedIndex];
         const selectedRowStyle = getSelectedRowStyle(selectedEntity, activeTab);
-        const jsonVisualLines = buildDisplayJsonLines(selectedEntity, W - 2);
+        const { visualLines: jsonVisualLines, logicalMap } = buildDisplayJsonLinesWithMap(selectedEntity, W - 2);
         const selectedLineCount = 1 + jsonVisualLines.length;
 
         const { start, end } = computeWindow(results.length, selectedIndex, selectedLineCount, listRows);
@@ -743,15 +949,72 @@ function render(): void {
                 });
                 currentRow++;
 
-                for (const visualLine of jsonVisualLines) {
-                    if (currentRow > listEndRow) break;
-                    writeRow(currentRow, () => {
-                        term('  ');
-                        for (const token of visualLine) {
-                            printColoredJsonToken(token, false);
+                if (appMode === 'search') {
+                    for (const visualLine of jsonVisualLines) {
+                        if (currentRow > listEndRow) break;
+                        writeRow(currentRow, () => {
+                            term('  ');
+                            for (const token of visualLine) {
+                                printColoredJsonToken(token, false);
+                            }
+                        });
+                        currentRow++;
+                    }
+                } else {
+                    // jsonNav or editLine: render JSON with logical-line highlight
+                    for (let logIdx = 0; logIdx < logicalMap.length; logIdx++) {
+                        const { visualStart, visualEnd } = logicalMap[logIdx];
+                        const isSelectedLogical = logIdx === jsonLogicalLineIndex;
+
+                        for (let vIdx = visualStart; vIdx <= visualEnd; vIdx++) {
+                            if (currentRow > listEndRow) break;
+                            const visualLine = jsonVisualLines[vIdx];
+                            if (!visualLine) continue;
+
+                            if (isSelectedLogical && appMode === 'editLine' && vIdx === visualStart) {
+                                // Render the edit input inline for the selected logical line
+                                writeRow(currentRow, () => {
+                                    const logLine = jsonLogicalLines[logIdx];
+                                    process.stdout.write(JSON_HL_BG);
+                                    term('  ');
+                                    const keyMatch = /^(\s*)"([^"]+)":\s*/.exec(logLine?.lineText ?? '');
+                                    if (keyMatch) {
+                                        process.stdout.write('\x1b[33m"' + keyMatch[2] + '"' + HL_FG_RESET + ': ');
+                                    }
+                                    const before = editBuffer.slice(0, editCursorPos);
+                                    const atCursor = editBuffer[editCursorPos];
+                                    const after = editBuffer.slice(editCursorPos + 1);
+                                    process.stdout.write('\x1b[36m');
+                                    process.stdout.write(before);
+                                    if (atCursor !== undefined) {
+                                        process.stdout.write('\x1b[7m' + atCursor + '\x1b[27m');
+                                        process.stdout.write(after);
+                                    } else {
+                                        process.stdout.write('\x1b[7m_\x1b[27m');
+                                    }
+                                    process.stdout.write(HL_FULL_RESET);
+                                });
+                            } else if (isSelectedLogical) {
+                                // Highlight the selected logical line
+                                writeRow(currentRow, () => {
+                                    process.stdout.write(JSON_HL_BG);
+                                    term('  ');
+                                    for (const token of visualLine) {
+                                        printColoredJsonToken(token, true);
+                                    }
+                                    process.stdout.write(HL_FULL_RESET);
+                                });
+                            } else {
+                                writeRow(currentRow, () => {
+                                    term('  ');
+                                    for (const token of visualLine) {
+                                        printColoredJsonToken(token, false);
+                                    }
+                                });
+                            }
+                            currentRow++;
                         }
-                    });
-                    currentRow++;
+                    }
                 }
             } else {
                 writeRow(currentRow, () => {
@@ -780,17 +1043,39 @@ function render(): void {
     writeRow(H - 3, () => term.brightBlack(divider));
 
     writeRow(H - 2, () => {
-        term.brightBlack('  ↑↓ navegar  ·  Alt+←/→ abas  ·  Ctrl+N copiar nome  ·  Ctrl+J copiar JSON  ·  Ctrl+K copiar id  ·  Esc limpar  ·  Ctrl+C sair  ·  ');
+        if (appMode === 'jsonNav') {
+            term.brightBlack('  ↑↓ navegar JSON  ·  Enter editar linha  ·  Esc voltar  ·  Ctrl+C sair  ·  ');
+        } else if (appMode === 'editLine') {
+            term.brightBlack('  Enter salvar  ·  Esc cancelar edição  ·  ←→ cursor  ·  Ctrl+C sair  ·  ');
+        } else {
+            term.brightBlack('  ↑↓ navegar  ·  Ctrl+E editar  ·  Alt+←/→ abas  ·  Ctrl+N nome  ·  Ctrl+J JSON  ·  Ctrl+K id  ·  Esc limpar  ·  Ctrl+C sair  ·  ');
+        }
+
         if (statusMessage) {
             if (statusMessage.tone === 'error') term.brightRed(statusMessage.text);
             else term.brightGreen(statusMessage.text);
             return;
         }
 
-        term.brightWhite(String(results.length));
-        term.brightBlack(` resultado${results.length !== 1 ? 's' : ''} em `);
-        term.white(activeTab.label);
-        term.brightBlack(`  (aba: ${tabEntities.length} · total: ${allEntities.length})`);
+        if (appMode === 'search') {
+            term.brightWhite(String(results.length));
+            term.brightBlack(` resultado${results.length !== 1 ? 's' : ''} em `);
+            term.white(activeTab.label);
+            term.brightBlack(`  (aba: ${tabEntities.length} · total: ${allEntities.length})`);
+        } else if (appMode === 'jsonNav') {
+            const line = jsonLogicalLines[jsonLogicalLineIndex];
+            if (line?.path) {
+                term.brightBlack('campo: ');
+                term.white(line.path);
+                if (!line.isEditable) term.brightBlack(' (não editável)');
+            }
+        } else if (appMode === 'editLine') {
+            const line = jsonLogicalLines[jsonLogicalLineIndex];
+            if (line?.path) {
+                term.brightBlack('editando: ');
+                term.white(line.path);
+            }
+        }
     });
 
     writeRow(H - 1, () => term.brightBlack(divider));
@@ -824,123 +1109,227 @@ function renderInputLine(H?: number): void {
 
 // ─── Keyboard handling ────────────────────────────────────────────────────────
 
+function handleSearchKey(name: string, data: { isCharacter?: boolean }): void {
+    switch (name) {
+        case 'CTRL_N': void copySelectedName(); return;
+        case 'CTRL_J': void copySelectedJson(); return;
+        case 'CTRL_K': void copySelectedId(); return;
+
+        case 'CTRL_E': {
+            const entity = getSelectedEntity();
+            if (!entity) return;
+            jsonLogicalLines = buildLogicalJsonLines(entity);
+            jsonLogicalLineIndex = 0;
+            appMode = 'jsonNav';
+            render();
+            return;
+        }
+
+        case 'ALT_LEFT':
+            activeTabIndex = (activeTabIndex - 1 + TABS.length) % TABS.length;
+            selectedIndex = 0;
+            runSearch();
+            return;
+
+        case 'ALT_RIGHT':
+            activeTabIndex = (activeTabIndex + 1) % TABS.length;
+            selectedIndex = 0;
+            runSearch();
+            return;
+
+        case 'ESCAPE':
+            query = '';
+            cursorPos = 0;
+            selectedIndex = 0;
+            runSearch();
+            return;
+
+        case 'UP':
+            selectedIndex = Math.max(0, selectedIndex - 1);
+            render();
+            return;
+
+        case 'DOWN':
+            selectedIndex = Math.min(results.length - 1, selectedIndex + 1);
+            render();
+            return;
+
+        case 'LEFT':
+            if (cursorPos > 0) { cursorPos--; renderInputLine(); }
+            return;
+
+        case 'RIGHT':
+            if (cursorPos < query.length) { cursorPos++; renderInputLine(); }
+            return;
+
+        case 'CTRL_LEFT':
+            cursorPos = wordStart(query, cursorPos);
+            renderInputLine();
+            return;
+
+        case 'CTRL_RIGHT':
+            cursorPos = wordEnd(query, cursorPos);
+            renderInputLine();
+            return;
+
+        case 'BACKSPACE':
+            if (cursorPos > 0) {
+                query = query.slice(0, cursorPos - 1) + query.slice(cursorPos);
+                cursorPos--;
+                renderInputLine();
+                runSearch();
+            }
+            return;
+
+        case 'DELETE':
+            if (cursorPos < query.length) {
+                query = query.slice(0, cursorPos) + query.slice(cursorPos + 1);
+                renderInputLine();
+                runSearch();
+            }
+            return;
+
+        case 'CTRL_BACKSPACE':
+        case 'ALT_BACKSPACE': {
+            if (cursorPos > 0) {
+                const newPos = wordStart(query, cursorPos);
+                query = query.slice(0, newPos) + query.slice(cursorPos);
+                cursorPos = newPos;
+                renderInputLine();
+                runSearch();
+            }
+            return;
+        }
+
+        default:
+            if (data?.isCharacter && name.length === 1) {
+                query = query.slice(0, cursorPos) + name + query.slice(cursorPos);
+                cursorPos++;
+                renderInputLine();
+                runSearch();
+            }
+    }
+}
+
+function handleJsonNavKey(name: string): void {
+    switch (name) {
+        case 'UP':
+            jsonLogicalLineIndex = Math.max(0, jsonLogicalLineIndex - 1);
+            render();
+            return;
+
+        case 'DOWN':
+            jsonLogicalLineIndex = Math.min(jsonLogicalLines.length - 1, jsonLogicalLineIndex + 1);
+            render();
+            return;
+
+        case 'ENTER': {
+            const line = jsonLogicalLines[jsonLogicalLineIndex];
+            if (!line?.isEditable) {
+                setStatusMessage('Linha não editável', 'error');
+                return;
+            }
+            editBuffer = line.displayValue;
+            editCursorPos = editBuffer.length;
+            appMode = 'editLine';
+            render();
+            return;
+        }
+
+        case 'ESCAPE':
+            appMode = 'search';
+            render();
+            return;
+    }
+}
+
+function handleEditLineKey(name: string, data: { isCharacter?: boolean }): void {
+    switch (name) {
+        case 'ENTER': {
+            const entity = getSelectedEntity();
+            const line = jsonLogicalLines[jsonLogicalLineIndex];
+            if (!entity || !line?.path) return;
+            void saveEntityField(entity, line.path, line.rawValue, editBuffer).then(() => {
+                appMode = 'jsonNav';
+                render();
+            });
+            return;
+        }
+
+        case 'ESCAPE':
+            appMode = 'jsonNav';
+            render();
+            return;
+
+        case 'LEFT':
+            if (editCursorPos > 0) { editCursorPos--; render(); }
+            return;
+
+        case 'RIGHT':
+            if (editCursorPos < editBuffer.length) { editCursorPos++; render(); }
+            return;
+
+        case 'CTRL_LEFT':
+            editCursorPos = wordStart(editBuffer, editCursorPos);
+            render();
+            return;
+
+        case 'CTRL_RIGHT':
+            editCursorPos = wordEnd(editBuffer, editCursorPos);
+            render();
+            return;
+
+        case 'BACKSPACE':
+            if (editCursorPos > 0) {
+                editBuffer = editBuffer.slice(0, editCursorPos - 1) + editBuffer.slice(editCursorPos);
+                editCursorPos--;
+                render();
+            }
+            return;
+
+        case 'DELETE':
+            if (editCursorPos < editBuffer.length) {
+                editBuffer = editBuffer.slice(0, editCursorPos) + editBuffer.slice(editCursorPos + 1);
+                render();
+            }
+            return;
+
+        case 'CTRL_BACKSPACE':
+        case 'ALT_BACKSPACE': {
+            if (editCursorPos > 0) {
+                const newPos = wordStart(editBuffer, editCursorPos);
+                editBuffer = editBuffer.slice(0, newPos) + editBuffer.slice(editCursorPos);
+                editCursorPos = newPos;
+                render();
+            }
+            return;
+        }
+
+        default:
+            if (data?.isCharacter && name.length === 1) {
+                editBuffer = editBuffer.slice(0, editCursorPos) + name + editBuffer.slice(editCursorPos);
+                editCursorPos++;
+                render();
+            }
+    }
+}
+
 function setupInput(): void {
     term.grabInput(true);
 
     term.on('key', (name: string, _matches: string[], data: { isCharacter?: boolean }) => {
-        switch (name) {
-            case 'CTRL_C':
-                cleanup();
-                process.exit(0);
-                return;
+        if (name === 'CTRL_C') {
+            cleanup();
+            process.exit(0);
+            return;
+        }
 
-            case 'CTRL_N':
-                void copySelectedName();
-                return;
-
-            case 'CTRL_J':
-                void copySelectedJson();
-                return;
-
-            case 'CTRL_K':
-                void copySelectedId();
-                return;
-
-            case 'ALT_LEFT':
-                activeTabIndex = (activeTabIndex - 1 + TABS.length) % TABS.length;
-                selectedIndex = 0;
-                runSearch();
-                return;
-
-            case 'ALT_RIGHT':
-                activeTabIndex = (activeTabIndex + 1) % TABS.length;
-                selectedIndex = 0;
-                runSearch();
-                return;
-
-            case 'ESCAPE':
-                query = '';
-                cursorPos = 0;
-                selectedIndex = 0;
-                runSearch();
-                return;
-
-            case 'UP':
-                selectedIndex = Math.max(0, selectedIndex - 1);
-                render();
-                return;
-
-            case 'DOWN':
-                selectedIndex = Math.min(results.length - 1, selectedIndex + 1);
-                render();
-                return;
-
-            // ── Cursor movement ────────────────────────────────────────────
-
-            case 'LEFT':
-                if (cursorPos > 0) {
-                    cursorPos--;
-                    renderInputLine();
-                }
-                return;
-
-            case 'RIGHT':
-                if (cursorPos < query.length) {
-                    cursorPos++;
-                    renderInputLine();
-                }
-                return;
-
-            case 'CTRL_LEFT':
-                cursorPos = wordStart(query, cursorPos);
-                renderInputLine();
-                return;
-
-            case 'CTRL_RIGHT':
-                cursorPos = wordEnd(query, cursorPos);
-                renderInputLine();
-                return;
-
-            // ── Deletion ───────────────────────────────────────────────────
-
-            case 'BACKSPACE':
-                if (cursorPos > 0) {
-                    query = query.slice(0, cursorPos - 1) + query.slice(cursorPos);
-                    cursorPos--;
-                    renderInputLine();
-                    runSearch();
-                }
-                return;
-
-            case 'DELETE':
-                if (cursorPos < query.length) {
-                    query = query.slice(0, cursorPos) + query.slice(cursorPos + 1);
-                    renderInputLine();
-                    runSearch();
-                }
-                return;
-
-            case 'CTRL_BACKSPACE':
-            case 'ALT_BACKSPACE': {
-                if (cursorPos > 0) {
-                    const newPos = wordStart(query, cursorPos);
-                    query = query.slice(0, newPos) + query.slice(cursorPos);
-                    cursorPos = newPos;
-                    renderInputLine();
-                    runSearch();
-                }
-                return;
-            }
-
-            // ── Character insertion ────────────────────────────────────────
-
-            default:
-                if (data?.isCharacter && name.length === 1) {
-                    query = query.slice(0, cursorPos) + name + query.slice(cursorPos);
-                    cursorPos++;
-                    renderInputLine();
-                    runSearch();
-                }
+        if (appMode === 'search') {
+            handleSearchKey(name, data);
+        } else if (appMode === 'jsonNav') {
+            handleJsonNavKey(name);
+        } else if (appMode === 'editLine') {
+            handleEditLineKey(name, data);
         }
     });
 }
@@ -985,6 +1374,11 @@ async function main(): Promise<void> {
     query = '';
     cursorPos = 0;
     selectedIndex = 0;
+    appMode = 'search';
+    jsonLogicalLines = [];
+    jsonLogicalLineIndex = 0;
+    editBuffer = '';
+    editCursorPos = 0;
     runSearch();
 
     // Start listening for input
