@@ -29,6 +29,7 @@ export interface Item {
     price?: string
     isMagic: boolean
     type: ItemType
+    itemType?: ItemType
     rarity: ItemRarity
     traits: ItemTrait[]
 

@@ -42,6 +42,8 @@ export function ItemList({ sheet, form, isReadOnly = false }: ItemListProps) {
         handlePatchItem,
         handleRemoveItem,
         handlePatchCoins,
+        focusItemId,
+        clearFocusItemId,
     } = useItemList({ sheet, form, isReadOnly })
 
     return (
@@ -88,8 +90,8 @@ export function ItemList({ sheet, form, isReadOnly = false }: ItemListProps) {
 
             {/* Table header */}
             {items.length > 0 && (
-                <div className="grid grid-cols-[minmax(0,1fr)_72px_24px_auto] gap-1 px-3 py-1 border-b border-white/5">
-                    {["Nome", "Qtd", "", ""].map((h, i) => (
+                <div className="grid grid-cols-[52px_minmax(0,1fr)_72px_24px] gap-2 px-3 py-1 border-b border-white/5">
+                    {["Equip.", "Nome", "Qtd", ""].map((h, i) => (
                         <span key={i} className="text-[8px] font-black uppercase tracking-widest text-white/20 text-center">
                             {h}
                         </span>
@@ -102,22 +104,36 @@ export function ItemList({ sheet, form, isReadOnly = false }: ItemListProps) {
                 <AnimatePresence initial={false}>
                     {items.map((item) => {
                         const isEquippable = item.catalogItemType && EQUIPPABLE_TYPES.has(item.catalogItemType)
+                        const rowKey = item.clientKey ?? item._id
                         return (
                             <motion.div
-                                key={item._id}
+                                key={rowKey}
                                 initial={{ opacity: 0, height: 0 }}
                                 animate={{ opacity: 1, height: "auto" }}
                                 exit={{ opacity: 0, height: 0 }}
                                 transition={{ duration: 0.2 }}
-                                className="grid grid-cols-[minmax(0,1fr)_72px_24px_auto] gap-1 px-3 py-1 items-center"
+                                className="grid grid-cols-[52px_minmax(0,1fr)_72px_24px] gap-2 px-3 py-1 items-center"
                             >
+                                {isEquippable ? (
+                                    <div className="flex justify-center">
+                                        <GlassSwitch
+                                            checked={item.equipped ?? false}
+                                            onCheckedChange={() => handleToggleEquipped(item)}
+                                            disabled={isReadOnly}
+                                        />
+                                    </div>
+                                ) : (
+                                    <span />
+                                )}
                                 <CompactRichInput
                                     value={item.name}
                                     onChange={() => {}}
-                                    onBlur={(v) => handlePatchItemName(item._id, v || "Item")}
+                                    onBlur={(v) => handlePatchItemName(item._id, v)}
                                     placeholder="Nome do item"
                                     excludeId={sheet._id}
                                     disabled={isReadOnly}
+                                    focusToken={!isReadOnly && focusItemId === rowKey ? rowKey : null}
+                                    onAutoFocusApplied={clearFocusItemId}
                                 />
                                 <SheetInput
                                     compact
@@ -130,21 +146,11 @@ export function ItemList({ sheet, form, isReadOnly = false }: ItemListProps) {
                                     className="w-[72px]"
                                     readOnlyMode={isReadOnly}
                                 />
-                                {isEquippable ? (
-                                    <GlassSwitch
-                                        checked={item.equipped ?? false}
-                                        onCheckedChange={() => handleToggleEquipped(item)}
-                                        disabled={isReadOnly}
-                                        label="Equipar"
-                                    />
-                                ) : (
-                                    <span />
-                                )}
                                 {!isReadOnly && (
                                     <button
                                         type="button"
                                         onClick={() => handleRemoveItem(item._id)}
-                                        className="text-red-400/20 hover:text-red-400 transition-colors mt-1 flex-shrink-0"
+                                        className="text-red-400/20 hover:text-red-400 transition-colors flex-shrink-0 flex items-center justify-center"
                                     >
                                         <Trash2 className="w-3.5 h-3.5" />
                                     </button>

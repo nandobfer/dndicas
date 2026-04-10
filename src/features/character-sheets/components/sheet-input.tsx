@@ -17,10 +17,11 @@ interface SheetInputProps extends React.InputHTMLAttributes<HTMLInputElement> {
     inputClassName?: string
     showControls?: boolean
     readOnlyMode?: boolean
+    allowEmptyNumber?: boolean
 }
 
 export const SheetInput = React.forwardRef<HTMLInputElement, SheetInputProps>(
-    ({ label, compact = false, className, inputClassName, isLoading, onChangeValue, value, onActionClick, icon, showControls = false, min, max, readOnlyMode = false, disabled, readOnly, ...props }, ref) => {
+    ({ label, compact = false, className, inputClassName, isLoading, onChangeValue, value, showControls = false, min, max, readOnlyMode = false, allowEmptyNumber = false, disabled, readOnly, ...props }, ref) => {
         const isNonInteractive = !!disabled || !!readOnly || readOnlyMode
         const [localValue, setLocalValue] = React.useState(String(value ?? ""))
         const lastValidRef = React.useRef(String(value ?? ""))
@@ -61,6 +62,13 @@ export const SheetInput = React.forwardRef<HTMLInputElement, SheetInputProps>(
             if (props.type === "number" || props.inputMode === "numeric") {
                 const num = parseFloat(val)
                 if (val === "" || isNaN(num)) {
+                    if (allowEmptyNumber) {
+                        setLocalValue("")
+                        lastValidRef.current = ""
+                        onChangeValue?.("")
+                        props.onBlur?.(e)
+                        return
+                    }
                     // Revert to last valid value
                     setLocalValue(lastValidRef.current)
                     return

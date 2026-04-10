@@ -31,6 +31,22 @@ interface CalcTooltipProps {
     className?: string
 }
 
+function getTooltipPosition(pos: { x: number; y: number }) {
+    const tooltipWidth = 260
+    const tooltipHeight = 132
+    const gap = 14
+    const viewportWidth = typeof window !== "undefined" ? window.innerWidth : 0
+    const viewportHeight = typeof window !== "undefined" ? window.innerHeight : 0
+    const prefersLeft = pos.x + gap + tooltipWidth > viewportWidth - 12
+    const prefersTop = pos.y + gap + tooltipHeight > viewportHeight - 12
+
+    return {
+        left: Math.max(12, Math.min(viewportWidth - 12, prefersLeft ? pos.x - gap : pos.x + gap)),
+        top: Math.max(12, Math.min(viewportHeight - 12, prefersTop ? pos.y - gap : pos.y + gap)),
+        transform: `${prefersLeft ? "translateX(-100%) " : ""}${prefersTop ? "translateY(-100%)" : ""}`.trim(),
+    }
+}
+
 export function CalcTooltip({ formula, parts, result, children, className }: CalcTooltipProps) {
     const [visible, setVisible] = useState(false)
     const [pos, setPos] = useState({ x: 0, y: 0 })
@@ -49,11 +65,23 @@ export function CalcTooltip({ formula, parts, result, children, className }: Cal
             {children}
             {visible && typeof document !== "undefined" && createPortal(
                 <div
-                    style={{ position: "fixed", left: pos.x + 14, top: pos.y + 14, zIndex: 9999 }}
-                    className="pointer-events-none rounded-lg px-3 py-2 text-sm border border-white/10 shadow-2xl relative overflow-hidden backdrop-blur-sm"
+                    style={{
+                        position: "fixed",
+                        ...getTooltipPosition(pos),
+                        zIndex: 9999,
+                    }}
+                    className="pointer-events-none rounded-lg px-3 py-2 text-sm border border-white/10 shadow-2xl relative overflow-hidden backdrop-blur-sm min-w-[180px]"
                 >
                     <GlassBackdrop />
-                    <div className="relative z-10">
+                    <div className="relative z-10 space-y-2">
+                        {result && (
+                            <div className="flex items-center justify-between gap-3">
+                                <span className="text-[9px] font-black uppercase tracking-[0.22em] text-white/45">Resultado</span>
+                                <span className="rounded-full border border-white/15 bg-white/10 px-3 py-1 text-base font-black text-white shadow-[0_0_20px_rgba(255,255,255,0.08)]">
+                                    {result}
+                                </span>
+                            </div>
+                        )}
                         {parts && parts.length > 0 ? (
                             <div className="flex flex-wrap items-center gap-1.5">
                                 {parts.map((part, i) => (
@@ -64,12 +92,11 @@ export function CalcTooltip({ formula, parts, result, children, className }: Cal
                                         {part.label} {part.value}
                                     </span>
                                 ))}
-                                {result && (
-                                    <span className="text-white font-bold ml-1">= {result}</span>
-                                )}
                             </div>
                         ) : (
-                            <span className="font-mono text-[10px] text-white/70">{formula}</span>
+                            <div className="rounded-md border border-white/10 bg-black/10 px-2 py-1.5">
+                                <span className="font-mono text-[10px] text-white/70">{formula}</span>
+                            </div>
                         )}
                     </div>
                 </div>,

@@ -5,7 +5,7 @@ import StarterKit from '@tiptap/starter-kit'
 import ImageExtension from "@tiptap/extension-image"
 import Placeholder from '@tiptap/extension-placeholder'
 import Mention from "@tiptap/extension-mention"
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { cn } from '@/core/utils'
 import { Button } from '@/core/ui/button'
 import { glassConfig } from "@/lib/config/glass-config"
@@ -341,6 +341,8 @@ interface RichTextEditorProps {
     excludeId?: string
     variant?: "full" | "simple"
     autoFocus?: boolean
+    focusToken?: string | null
+    onAutoFocusApplied?: () => void
     minRows?: number
     disableNewlines?: boolean
     blurOnMentionSelect?: boolean
@@ -430,8 +432,9 @@ const MenuBar = ({ editor, addImage, disabled = false }: { editor: Editor | null
     )
 }
 
-export function RichTextEditor({ value, onChange, onBlur, className, disabled = false, excludeId, variant = "full", autoFocus = false, placeholder, minRows, disableNewlines = false, blurOnMentionSelect = false }: RichTextEditorProps) {
+export function RichTextEditor({ value, onChange, onBlur, className, disabled = false, excludeId, variant = "full", autoFocus = false, focusToken = null, onAutoFocusApplied, placeholder, minRows, disableNewlines = false, blurOnMentionSelect = false }: RichTextEditorProps) {
     const [isUploading, setIsUploading] = useState(false)
+    const lastAppliedFocusTokenRef = useRef<string | null>(null)
 
     const uploadImage = useCallback(async (file: File) => {
         setIsUploading(true)
@@ -461,7 +464,7 @@ export function RichTextEditor({ value, onChange, onBlur, className, disabled = 
 
     const editor = useEditor({
         immediatelyRender: false,
-        autofocus: autoFocus,
+        autofocus: false,
         extensions: [
             StarterKit,
             ImageExtension,
@@ -573,6 +576,22 @@ export function RichTextEditor({ value, onChange, onBlur, className, disabled = 
             },
         },
     })
+
+    useEffect(() => {
+        const requestedFocusToken = focusToken ?? (autoFocus ? "__legacy-auto-focus__" : null)
+        if (!editor || !requestedFocusToken || disabled) return
+        if (lastAppliedFocusTokenRef.current === requestedFocusToken) return
+
+        const timeoutId = window.setTimeout(() => {
+            if (!editor.isDestroyed && editor.isEditable) {
+                editor.commands.focus("end")
+                lastAppliedFocusTokenRef.current = requestedFocusToken
+                onAutoFocusApplied?.()
+            }
+        }, 60)
+
+        return () => window.clearTimeout(timeoutId)
+    }, [editor, autoFocus, focusToken, disabled, onAutoFocusApplied])
 
     // Need to pass addImage to MenuBar inside the component to access editor and uploadImage
     const handleAddImageClick = useCallback(() => {

@@ -1,11 +1,20 @@
 "use client"
 
-import { useCallback, useRef } from "react"
+import { useCallback, useRef, useState } from "react"
 import type { UseFormWatch } from "react-hook-form"
-import { useItems, useAddItem, usePatchItem, useRemoveItem, usePatchSheet, useAttacks, useAddAttack } from "../../api/character-sheets-queries"
+import { useItems, useAddItem, usePatchItem, useRemoveItem, usePatchSheet, useAttacks, useAddAttack, useRemoveAttack } from "../../api/character-sheets-queries"
 import { fetchItemById } from "@/features/items/api/items-api"
 import { extractMentionsFromHtml } from "../../utils/mention-sync"
 import type { CharacterSheet, CharacterItem, PatchSheetBody } from "../../types/character-sheet.types"
+import { useCharacterCalculations } from "../../hooks/use-character-calculations"
+import { buildWeaponAttackAutofill, resolveCatalogItemType } from "../../utils/attack-autofill"
+
+function normalizeCatalogArmorType(armorType?: string | null): CharacterItem["catalogArmorType"] {
+    if (armorType === "leve" || armorType === "média" || armorType === "pesada") {
+        return armorType
+    }
+    return null
+}
 
 interface UseItemListOptions {
     sheet: CharacterSheet
@@ -17,13 +26,20 @@ interface UseItemListOptions {
 }
 
 export function useItemList({ sheet, form, isReadOnly = false }: UseItemListOptions) {
-    const { patchField } = form
+    const { patchField, watch } = form
+    const currentValues = watch()
+    const currentSheet = { ...sheet, ...currentValues } as CharacterSheet
+    const calc = useCharacterCalculations(currentSheet)
     const { data: items = [], isLoading: isLoadingItems } = useItems(sheet._id)
     const { data: attacks = [] } = useAttacks(sheet._id)
-    const addItem = useAddItem(sheet._id)
+    const [focusItemId, setFocusItemId] = useState<string | null>(null)
+    const addItem = useAddItem(sheet._id, {
+        onOptimisticCreate: setFocusItemId,
+    })
     const patchItem = usePatchItem(sheet._id)
     const removeItem = useRemoveItem(sheet._id)
     const addAttack = useAddAttack(sheet._id)
+    const removeAttack = useRemoveAttack(sheet._id)
     const { isPending: isSaving } = usePatchSheet(sheet._id)
 
     // Cache of processed item IDs to avoid redundant fetches
@@ -31,7 +47,7 @@ export function useItemList({ sheet, form, isReadOnly = false }: UseItemListOpti
 
     const handleAddItem = useCallback(() => {
         if (isReadOnly) return
-        addItem.mutate({ name: "Novo item", quantity: 1, notes: "" })
+        addItem.mutate({ name: "", quantity: 1, notes: "" })
     }, [addItem, isReadOnly])
 
     const handlePatchItem = useCallback(
@@ -47,7 +63,7 @@ export function useItemList({ sheet, form, isReadOnly = false }: UseItemListOpti
             if (isReadOnly) return
 
             // Always patch the name
-            patchItem.mutate({ itemId, data: { name: nameHtml || "Item" } })
+            patchItem.mutate({ itemId, data: { name: nameHtml } })
 
             // Check for Item mention
             const mentions = extractMentionsFromHtml(nameHtml)
@@ -55,6 +71,17 @@ export function useItemList({ sheet, form, isReadOnly = false }: UseItemListOpti
 
             if (!itemMention) {
                 processedItemNameRef.current.delete(itemId)
+                patchItem.mutate({
+                    itemId,
+                    data: {
+                        catalogItemId: null,
+                        catalogItemType: null,
+                        catalogAc: null,
+                        catalogAcType: null,
+                        catalogArmorType: null,
+                        catalogAcBonus: null,
+                    },
+                })
                 return
             }
 
@@ -64,12 +91,14 @@ export function useItemList({ sheet, form, isReadOnly = false }: UseItemListOpti
 
             try {
                 const catalogItem = await fetchItemById(itemMention.id)
+                const catalogItemType = resolveCatalogItemType(catalogItem)
 
                 const metadata: Partial<CharacterItem> = {
-                    catalogItemType: catalogItem.type,
+                    catalogItemId: catalogItem.id,
+                    catalogItemType: catalogItemType,
                     catalogAc: catalogItem.ac ?? null,
                     catalogAcType: catalogItem.acType ?? null,
-                    catalogArmorType: catalogItem.armorType as "leve" | "média" | "pesada" | null ?? null,
+                    catalogArmorType: normalizeCatalogArmorType(catalogItem.armorType),
                     catalogAcBonus: catalogItem.acBonus ?? null,
                 }
 
@@ -87,9 +116,9 @@ export function useItemList({ sheet, form, isReadOnly = false }: UseItemListOpti
             const newEquipped = !item.equipped
 
             // Only one base-AC armor can be equipped at a time
-            if (newEquipped && item.catalogAcType === "base") {
+            if (newEquipped && item.catalogItemType === "armadura" && item.catalogAcType === "base") {
                 const currentBaseArmor = items.find(
-                    (i) => i._id !== item._id && i.catalogAcType === "base" && i.equipped
+                    (i) => i._id !== item._id && i.catalogItemType === "armadura" && i.catalogAcType === "base" && i.equipped
                 )
                 if (currentBaseArmor) {
                     patchItem.mutate({ itemId: currentBaseArmor._id, data: { equipped: false } })
@@ -98,23 +127,47 @@ export function useItemList({ sheet, form, isReadOnly = false }: UseItemListOpti
 
             patchItem.mutate({ itemId: item._id, data: { equipped: newEquipped } })
 
-            // When equipping a weapon, auto-add an attack row if not already present
-            if (newEquipped && item.catalogItemType === "arma") {
-                const alreadyExists = attacks.some((a) => {
-                    const mentions = extractMentionsFromHtml(a.name)
-                    return mentions.some((m) => m.entityType === "Item" && a.name.includes(item.name.replace(/<[^>]*>/g, "").trim()))
-                }) || attacks.some((a) => a.name === item.name)
+            if (item.catalogItemType !== "arma") {
+                return
+            }
 
-                if (!alreadyExists) {
-                    addAttack.mutate({
-                        name: item.name,
-                        attackBonus: "",
-                        damageType: "",
-                    })
+            const itemMentions = extractMentionsFromHtml(item.name)
+            const itemMentionId = item.catalogItemId ?? itemMentions.find((mention) => mention.entityType === "Item")?.id
+            if (!itemMentionId) {
+                return
+            }
+
+            const matchingAttack = attacks.find((attack) => {
+                const attackMentions = extractMentionsFromHtml(attack.name)
+                return attackMentions.some((mention) => mention.entityType === "Item" && mention.id === itemMentionId)
+            })
+
+            if (!newEquipped) {
+                if (matchingAttack) {
+                    removeAttack.mutate(matchingAttack._id)
                 }
+                return
+            }
+
+            if (matchingAttack) {
+                return
+            }
+
+            try {
+                const catalogItem = await fetchItemById(itemMentionId)
+                if (resolveCatalogItemType(catalogItem) !== "arma") {
+                    return
+                }
+
+                addAttack.mutate({
+                    name: item.name,
+                    ...buildWeaponAttackAutofill(catalogItem, calc),
+                })
+            } catch {
+                // Silently ignore fetch errors
             }
         },
-        [isReadOnly, patchItem, attacks, addAttack, items]
+        [isReadOnly, patchItem, attacks, addAttack, removeAttack, items, calc]
     )
 
     const handleRemoveItem = useCallback(
@@ -134,6 +187,10 @@ export function useItemList({ sheet, form, isReadOnly = false }: UseItemListOpti
         [isReadOnly, patchField, sheet.coins]
     )
 
+    const clearFocusItemId = useCallback(() => {
+        setFocusItemId(null)
+    }, [])
+
     return {
         items,
         isLoadingItems,
@@ -144,5 +201,7 @@ export function useItemList({ sheet, form, isReadOnly = false }: UseItemListOpti
         handleToggleEquipped,
         handleRemoveItem,
         handlePatchCoins,
+        focusItemId,
+        clearFocusItemId,
     }
 }
