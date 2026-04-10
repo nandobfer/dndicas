@@ -268,6 +268,7 @@ async function loadAllEntities(): Promise<UnifiedEntity[]> {
         id: String(item._id),
         _id: String(item._id),
         name: item.name,
+        originalName: item.originalName,
         label: item.name,
         type: 'Regra' as const,
         description: item.description,
@@ -281,6 +282,7 @@ async function loadAllEntities(): Promise<UnifiedEntity[]> {
         id: String(item._id),
         _id: String(item._id),
         name: item.name,
+        originalName: item.originalName,
         label: item.name,
         type: 'Habilidade' as const,
         description: item.description,
@@ -294,6 +296,7 @@ async function loadAllEntities(): Promise<UnifiedEntity[]> {
         id: String(item.id || item._id),
         _id: String(item._id),
         name: item.label || item.name,
+        originalName: item.originalName,
         label: item.label || item.name,
         type: 'Talento' as const,
         description: item.metadata?.description || item.description,
@@ -308,6 +311,7 @@ async function loadAllEntities(): Promise<UnifiedEntity[]> {
         id: String(item.id || item._id),
         _id: String(item._id),
         name: item.label || item.name,
+        originalName: item.originalName,
         label: item.label || item.name,
         type: 'Magia' as const,
         description: item.description,
@@ -327,6 +331,7 @@ async function loadAllEntities(): Promise<UnifiedEntity[]> {
         id: String(item.id || item._id),
         _id: String(item._id),
         name: item.label || item.name,
+        originalName: item.originalName,
         label: item.label || item.name,
         type: 'Classe' as const,
         description: item.description,
@@ -340,6 +345,7 @@ async function loadAllEntities(): Promise<UnifiedEntity[]> {
         id: String(item.id || item._id),
         _id: String(item._id),
         name: item.label || item.name,
+        originalName: item.originalName,
         label: item.label || item.name,
         type: 'Origem' as const,
         description: item.description,
@@ -353,6 +359,7 @@ async function loadAllEntities(): Promise<UnifiedEntity[]> {
         id: String(item.id || item._id),
         _id: String(item._id),
         name: item.label || item.name,
+        originalName: item.originalName,
         label: item.label || item.name,
         type: 'Raça' as const,
         description: item.description,
@@ -366,6 +373,7 @@ async function loadAllEntities(): Promise<UnifiedEntity[]> {
         id: String(item._id || item.id),
         _id: String(item._id),
         name: item.name,
+        originalName: item.originalName,
         label: item.name,
         type: 'Item' as const,
         description: item.description,
@@ -730,7 +738,8 @@ function render(): void {
 
             if (i === selectedIndex) {
                 writeStyledRow(currentRow, selectedRowStyle, () => {
-                    process.stdout.write(`  ${entity.type} | ${entity.name}`);
+                    const nameDisplay = entity.originalName ? `${entity.name} | ${entity.originalName}` : entity.name;
+                    process.stdout.write(`  ${entity.type} | ${nameDisplay}`);
                 });
                 currentRow++;
 
@@ -751,6 +760,10 @@ function render(): void {
                     colorFn(entity.type);
                     term.white(' | ');
                     term.white(entity.name);
+                    if (entity.originalName) {
+                        term.brightBlack(' | ');
+                        term.brightBlack(entity.originalName);
+                    }
                 });
                 currentRow++;
             }
