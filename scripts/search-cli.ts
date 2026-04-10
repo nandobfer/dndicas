@@ -32,13 +32,12 @@ import { applyFuzzySearch, type UnifiedEntity } from '@/core/utils/search-engine
 
 const term = terminal.terminal;
 
-// ─── Highlight ANSI codes ─────────────────────────────────────────────────────
-// Used for the selected-item background. We use raw ANSI escape codes here
-// instead of terminal-kit chainables because terminal-kit's bgColor256()
-// without a text argument sets the bg persistently (leaking into subsequent
-// eraseLine calls). Raw codes give us precise control: fg-only resets between
-// tokens keep the bg within a line; a full reset at the end of each line
-// ensures nothing leaks to normal rows.
+// ─── ANSI helpers ─────────────────────────────────────────────────────────────
+// We use raw ANSI escape codes here instead of terminal-kit chainables because
+// terminal-kit's bgColor256() without a text argument sets the bg persistently
+// (leaking into subsequent eraseLine calls). Raw codes give us precise control:
+// fg-only resets between tokens keep the bg within a line; a full reset at the
+// end of each line ensures nothing leaks to normal rows.
 const HL_BG        = '\x1b[48;5;235m'; // #262626 — just above pure black
 const HL_FG_RESET  = '\x1b[39m';       // reset foreground only (preserves bg)
 const HL_FULL_RESET = '\x1b[0m';       // reset everything
@@ -46,8 +45,8 @@ const HL_FULL_RESET = '\x1b[0m';       // reset everything
 // ─── JSON color printer ───────────────────────────────────────────────────────
 // Replicates the color scheme from scripts/seed-data/base-provider.ts.
 // Works line-by-line so it's compatible with term.moveTo() absolute positioning.
-// When highlight=true, uses raw ANSI codes to keep the dark bg across all tokens
-// without leaking it beyond the selected-item block.
+// `highlight=true` is kept as an optional raw-ANSI mode for callers that want
+// colored JSON over a filled background.
 
 function printColoredJsonLine(line: string, highlight: boolean): void {
     if (highlight) {
@@ -460,6 +459,18 @@ function getActiveTabStyle(tab: EntityTab): { bg: string; fg: string } {
     return TAB_ACTIVE_STYLES[tab.type] ?? TAB_ACTIVE_STYLES.Tudo;
 }
 
+function getSelectedRowStyle(entity: UnifiedEntity | undefined, activeTab: EntityTab): { bg: string; fg: string } {
+    if (activeTab.type) {
+        return getActiveTabStyle(activeTab);
+    }
+
+    if (entity?.type) {
+        return TAB_ACTIVE_STYLES[entity.type] ?? TAB_ACTIVE_STYLES.Tudo;
+    }
+
+    return TAB_ACTIVE_STYLES.Tudo;
+}
+
 /**
  * Computes the visible window of result indices to display, keeping
  * `selectedIndex` in view and filling available lines with surrounding items.
@@ -467,14 +478,14 @@ function getActiveTabStyle(tab: EntityTab): { bg: string; fg: string } {
 function computeWindow(
     total: number,
     selected: number,
-    jsonLineCount: number,
+    selectedLineCount: number,
     availableLines: number
 ): { start: number; end: number } {
     if (total === 0) return { start: 0, end: -1 };
 
     let start = selected;
     let end = selected;
-    let usedLines = jsonLineCount;
+    let usedLines = selectedLineCount;
 
     let canBefore = selected > 0;
     let canAfter = selected < total - 1;
@@ -516,13 +527,15 @@ function render(): void {
         fn();
     };
 
-    // Highlighted row: fill entire line with dark bg via raw ANSI (no persistent
-    // state leak), reposition, then draw content on top.
-    const writeHighlightedRow = (row: number, fn: () => void) => {
+    // Styled row: fill entire line with the selection bg, reposition, then draw
+    // content on top. Resets are explicit to avoid leaking styles.
+    const writeStyledRow = (row: number, style: { bg: string; fg: string }, fn: () => void) => {
         term.moveTo(1, row);
-        process.stdout.write(HL_BG + ' '.repeat(W) + HL_FULL_RESET);
+        process.stdout.write(style.bg + ' '.repeat(W) + HL_FULL_RESET);
         term.moveTo(1, row);
+        process.stdout.write(style.bg + style.fg);
         fn();
+        process.stdout.write(HL_FULL_RESET);
     };
 
     // ── Tabs (row 1) ─────────────────────────────────────────────────────────
@@ -554,20 +567,26 @@ function render(): void {
         currentRow = listStartRow + 1;
     } else {
         const selectedEntity = results[selectedIndex];
+        const selectedRowStyle = getSelectedRowStyle(selectedEntity, activeTab);
         const jsonStr = JSON.stringify(selectedEntity ?? {}, null, 2);
         const jsonLines = jsonStr.split('\n');
-        const jsonLineCount = jsonLines.length;
+        const selectedLineCount = 1 + jsonLines.length;
 
-        const { start, end } = computeWindow(results.length, selectedIndex, jsonLineCount, listRows);
+        const { start, end } = computeWindow(results.length, selectedIndex, selectedLineCount, listRows);
 
         for (let i = start; i <= end && currentRow <= listEndRow; i++) {
             const entity = results[i];
             if (!entity) continue;
 
             if (i === selectedIndex) {
+                writeStyledRow(currentRow, selectedRowStyle, () => {
+                    process.stdout.write(`  ${entity.type} | ${entity.name}`);
+                });
+                currentRow++;
+
                 for (const jLine of jsonLines) {
                     if (currentRow > listEndRow) break;
-                    writeHighlightedRow(currentRow, () => printColoredJsonLine('  ' + jLine, true));
+                    writeRow(currentRow, () => printColoredJsonLine('  ' + jLine, false));
                     currentRow++;
                 }
             } else {
