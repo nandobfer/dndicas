@@ -10,6 +10,7 @@ import { type SpellSchool, type SpellComponent, type AttributeType, type Casting
 export interface ISpell extends Document {
     _id: mongoose.Types.ObjectId
     name: string // Spell name (unique)
+    originalName?: string
     description: string // Rich HTML (TipTap output with mentions)
     circle: number // 0-9 (0 = Truque/Cantrip)
     school: SpellSchool // One of 8 D&D schools
@@ -63,6 +64,12 @@ const SpellSchema = new Schema<ISpell>(
             maxlength: [100, "Nome deve ter no máximo 100 caracteres"],
             index: true,
             unique: true
+        },
+        originalName: {
+            type: String,
+            required: false,
+            trim: true,
+            maxlength: [100, "Nome original deve ter no máximo 100 caracteres"],
         },
         description: {
             type: String,

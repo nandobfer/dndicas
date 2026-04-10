@@ -13,7 +13,7 @@ export interface ICharacterAttack extends Document {
 const CharacterAttackSchema = new Schema<ICharacterAttack>(
     {
         sheetId: { type: Schema.Types.ObjectId, ref: "CharacterSheet", required: true, index: true },
-        name: { type: String, required: true, trim: true, maxlength: 500 },
+        name: { type: String, default: "", trim: true, maxlength: 500 },
         attackBonus: { type: String, default: "" },
         damageType: { type: String, default: "", maxlength: 500 },
         notes: { type: String, default: "" },

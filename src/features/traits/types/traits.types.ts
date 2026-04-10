@@ -2,6 +2,7 @@ export interface Trait {
     _id: string; // Mongoose ID
     id: string; // Frontend ID (mapped from _id)
     name: string;
+    originalName?: string;
     description: string; // HTML content with mentions and S3 images
     source: string;
     status: 'active' | 'inactive';
@@ -13,6 +14,7 @@ export type TraitResponse = Trait;
 
 export interface CreateTraitInput {
     name: string;
+    originalName?: string;
     description: string;
     source: string;
     status: 'active' | 'inactive';

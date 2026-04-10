@@ -396,6 +396,7 @@ export class ItemsProvider extends BaseProvider<FiveEToolsBaseItem, CreateItemIn
 
         return {
             name,
+            originalName: item.name,
             description,
             source,
             status: 'active',
@@ -436,6 +437,7 @@ export class ItemsProvider extends BaseProvider<FiveEToolsBaseItem, CreateItemIn
 
         return {
             name: doc.name,
+            originalName: doc.originalName,
             description: doc.description,
             source: doc.source,
             status: doc.status,

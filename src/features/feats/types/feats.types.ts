@@ -10,6 +10,7 @@ export type { FeatCategory }
 export interface Feat {
     _id: string
     name: string
+    originalName?: string
     description: string
     source: string
     level: number
@@ -26,6 +27,7 @@ export interface Feat {
 
 export interface CreateFeatInput {
     name: string
+    originalName?: string
     description: string
     source: string
     level?: number // Optional, defaults to 1
@@ -40,6 +42,7 @@ export interface CreateFeatInput {
 
 export interface UpdateFeatInput {
     name?: string
+    originalName?: string
     description?: string
     source?: string
     level?: number

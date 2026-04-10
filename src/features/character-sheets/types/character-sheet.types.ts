@@ -102,12 +102,14 @@ export interface CharacterSheet {
     armorTraining: ArmorTraining
     weaponProficiencies: string
     toolProficiencies: string
+    computedArmorClass?: number
     createdAt: string
     updatedAt: string
 }
 
 export interface CharacterItem {
     _id: string
+    clientKey?: string
     sheetId: string
     catalogItemId: string | null
     name: string
@@ -125,10 +127,11 @@ export interface CharacterItem {
 
 export interface CharacterSpell {
     _id: string
+    clientKey?: string
     sheetId: string
     catalogSpellId: string | null
     name: string
-    circle: number
+    circle: number | null
     school: string
     image: string | null
     prepared: boolean
@@ -164,6 +167,7 @@ export interface CharacterFeat {
 
 export interface CharacterAttack {
     _id: string
+    clientKey?: string
     sheetId: string
     name: string
     attackBonus: string
@@ -203,6 +207,7 @@ export interface CreateItemBody {
 }
 
 export interface PatchItemBody {
+    catalogItemId?: string | null
     name?: string
     quantity?: number
     notes?: string
@@ -215,9 +220,9 @@ export interface PatchItemBody {
 }
 
 export interface CreateSpellBody {
-    catalogSpellId?: string
+    catalogSpellId?: string | null
     name: string
-    circle?: number
+    circle?: number | null
     school?: string
     image?: string | null
     prepared?: boolean
@@ -231,8 +236,9 @@ export interface CreateSpellBody {
 }
 
 export interface PatchSpellBody {
+    catalogSpellId?: string | null
     name?: string
-    circle?: number
+    circle?: number | null
     prepared?: boolean
     castingTime?: string
     range?: string
@@ -336,14 +342,15 @@ export const PatchSheetSchema = z.object({
 
 export const CreateItemSchema = z.object({
     catalogItemId: z.string().optional(),
-    name: z.string().min(1).max(2000),
+    name: z.string().max(2000),
     image: z.string().url().nullable().optional(),
     quantity: z.number().int().min(0).optional(),
     notes: z.string().optional(),
 })
 
 export const PatchItemSchema = z.object({
-    name: z.string().min(1).max(2000).optional(),
+    catalogItemId: z.string().nullable().optional(),
+    name: z.string().max(2000).optional(),
     quantity: z.number().int().min(0).optional(),
     notes: z.string().optional(),
     equipped: z.boolean().optional(),
@@ -355,9 +362,9 @@ export const PatchItemSchema = z.object({
 })
 
 export const CreateSpellSchema = z.object({
-    catalogSpellId: z.string().optional(),
-    name: z.string().min(1).max(2000),
-    circle: z.number().int().min(0).max(9).optional(),
+    catalogSpellId: z.string().nullable().optional(),
+    name: z.string().max(2000),
+    circle: z.number().int().min(0).max(9).nullable().optional(),
     school: z.string().optional(),
     image: z.string().url().nullable().optional(),
     prepared: z.boolean().optional(),
@@ -371,8 +378,9 @@ export const CreateSpellSchema = z.object({
 })
 
 export const PatchSpellSchema = z.object({
-    name: z.string().min(1).max(2000).optional(),
-    circle: z.number().int().min(0).max(9).optional(),
+    catalogSpellId: z.string().optional(),
+    name: z.string().max(2000).optional(),
+    circle: z.number().int().min(0).max(9).nullable().optional(),
     prepared: z.boolean().optional(),
     castingTime: z.string().optional(),
     range: z.string().optional(),
@@ -397,14 +405,14 @@ export const CreateFeatSchema = z.object({
 })
 
 export const CreateAttackSchema = z.object({
-    name: z.string().min(1).max(500),
+    name: z.string().max(500),
     attackBonus: z.string().optional(),
     damageType: z.string().max(500).optional(),
     notes: z.string().optional(),
 })
 
 export const PatchAttackSchema = z.object({
-    name: z.string().min(1).max(500).optional(),
+    name: z.string().max(500).optional(),
     attackBonus: z.string().optional(),
     damageType: z.string().max(500).optional(),
     notes: z.string().optional(),

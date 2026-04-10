@@ -5,7 +5,7 @@ export interface ICharacterSpell extends Document {
     sheetId: mongoose.Types.ObjectId
     catalogSpellId: mongoose.Types.ObjectId | null
     name: string
-    circle: number
+    circle: number | null
     school: string
     image: string | null
     prepared: boolean
@@ -23,8 +23,8 @@ const CharacterSpellSchema = new Schema<ICharacterSpell>(
     {
         sheetId: { type: Schema.Types.ObjectId, ref: "CharacterSheet", required: true, index: true },
         catalogSpellId: { type: Schema.Types.ObjectId, ref: "Spell", default: null },
-        name: { type: String, required: true, trim: true, maxlength: 2000 },
-        circle: { type: Number, default: 0, min: 0, max: 9 },
+        name: { type: String, default: "", trim: true, maxlength: 2000 },
+        circle: { type: Number, default: null, min: 0, max: 9 },
         school: { type: String, default: "" },
         image: { type: String, default: null },
         prepared: { type: Boolean, default: false },

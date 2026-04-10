@@ -25,7 +25,7 @@ import * as React from "react"
 import { useForm, Controller, useFieldArray } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { motion, AnimatePresence } from "framer-motion"
-import { GraduationCap, Link, Shield, Dices, Star, BookOpen, Zap, Users, Plus, X, Pencil, Check, Loader2, Sword, Info, AlignLeft } from "lucide-react"
+import { GraduationCap, Link, Shield, Dices, Star, BookOpen, Zap, Users, Plus, X, Pencil, Check, Loader2, Sword, Info, AlignLeft, Languages } from "lucide-react"
 import { toast } from "sonner"
 import { cn } from "@/core/utils"
 
@@ -271,6 +271,7 @@ export function ClassFormModal({ characterClass, isOpen, onClose, onSuccess }: C
         resolver: zodResolver(createClassSchema) as any,
         defaultValues: {
             name: characterClass?.name ?? "",
+            originalName: characterClass?.originalName ?? "",
             description: characterClass?.description ?? "",
             source: characterClass?.source ?? "",
             status: characterClass?.status ?? "active",
@@ -319,6 +320,7 @@ export function ClassFormModal({ characterClass, isOpen, onClose, onSuccess }: C
             setRenamingIndex(null)
             reset({
                 name: characterClass?.name ?? "",
+                originalName: characterClass?.originalName ?? "",
                 description: characterClass?.description ?? "",
                 source: characterClass?.source ?? "LDJ pág. ",
                 status: characterClass?.status ?? "active",
@@ -424,7 +426,7 @@ export function ClassFormModal({ characterClass, isOpen, onClose, onSuccess }: C
 
     const onSubmit = async (data: CreateClassSchema) => {
         // Create a copy of values to modify
-        const values = { ...data }
+        const values = { ...data, originalName: data.originalName?.trim() || undefined }
 
         // Ensure all objects in spells have at least an id or _id
         const cleanSpells = (spells: any[]) =>
@@ -529,7 +531,10 @@ export function ClassFormModal({ characterClass, isOpen, onClose, onSuccess }: C
                                 {/* Row 2: Name + Source */}
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                     <GlassInput id="name" label="Nome da Classe" placeholder="Ex: Guerreiro" icon={<GraduationCap />} required error={errors.name?.message} {...register("name")} />
-                                    <GlassInput id="source" label="Fonte" placeholder="Ex: PHB pg. 70" icon={<Link />} error={errors.source?.message} {...register("source")} />
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                        <GlassInput id="source" label="Fonte" placeholder="Ex: PHB pg. 70" icon={<Link />} error={errors.source?.message} {...register("source")} />
+                                        <GlassInput id="originalName" label="Nome em Inglês" placeholder="Ex: Fighter" icon={<Languages />} error={errors.originalName?.message} {...register("originalName")} />
+                                    </div>
                                 </div>
 
                                 {/* Row 3: Image + Description (Newly relocated) */}

@@ -4,6 +4,7 @@ import { DiceValue, ItemType, ItemRarity, ArmorType, DamageType, ItemTrait } fro
 export interface IItem extends Document {
     _id: mongoose.Types.ObjectId
     name: string
+    originalName?: string
     description: string
     source: string
     status: "active" | "inactive"
@@ -68,6 +69,12 @@ const ItemSchema = new Schema<IItem>(
             type: String,
             required: [true, "Nome do item é obrigatório"],
             unique: true,
+            maxlength: 100,
+            trim: true,
+        },
+        originalName: {
+            type: String,
+            required: false,
             maxlength: 100,
             trim: true,
         },

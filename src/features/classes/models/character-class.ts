@@ -6,6 +6,7 @@ import type { ClassProgressionData } from "../types/progression.types"
 export interface ICharacterClass extends Document {
     _id: mongoose.Types.ObjectId
     name: string
+    originalName?: string
     image?: string
     description: string
     source: string
@@ -131,6 +132,12 @@ const CharacterClassSchema = new Schema<ICharacterClass>(
             maxlength: [100, "Nome deve ter no máximo 100 caracteres"],
             index: true,
             unique: true,
+        },
+        originalName: {
+            type: String,
+            required: false,
+            trim: true,
+            maxlength: [100, "Nome original deve ter no máximo 100 caracteres"],
         },
         image: {
             type: String,

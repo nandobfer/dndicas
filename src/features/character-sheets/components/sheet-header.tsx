@@ -332,7 +332,7 @@ export function SheetHeader({ sheet, form, items = [], isReadOnly = false }: She
                 disabled={isReadOnly}
               />
             </div>
-            <div className="grid grid-cols-2 gap-2 mt-2">
+            <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-2 mt-2 items-center">
               <SheetInput
                 compact
                 type="number"
@@ -343,9 +343,10 @@ export function SheetHeader({ sheet, form, items = [], isReadOnly = false }: She
                 min={0}
                 max={watch("level") || 1}
                 inputClassName="text-center text-xs h-6"
+                className="w-full"
                 readOnlyMode={isReadOnly}
               />
-              <div className="flex flex-col items-end pt-1 pr-1">
+              <div className="flex flex-col items-center justify-center self-stretch min-w-[28px]">
                 <label className="text-[8px] font-black uppercase text-white/30">Max</label>
                 <span className="text-white/90 text-[10px] font-bold">{watch("level") || 1}</span>
               </div>

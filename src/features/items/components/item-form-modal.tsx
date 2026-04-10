@@ -25,6 +25,7 @@ import {
     Tag,
     Search,
     Link,
+    Languages,
     Library,
     Scale,
     Weight,
@@ -114,6 +115,7 @@ const {
     resolver: zodResolver(createItemSchema) as any,
     defaultValues: {
         name: item?.name ?? "",
+        originalName: item?.originalName ?? "",
         description: item?.description ?? "",
         source: item?.source ?? "LDJ pág. ",
         status: item?.status ?? "active",
@@ -171,6 +173,7 @@ React.useEffect(() => {
         setIsPriceActive(!!item?.price)
         reset({
             name: item?.name ?? "",
+            originalName: item?.originalName ?? "",
             description: item?.description ?? "",
             source: item?.source ?? "LDJ pág. ",
             status: item?.status ?? "active",
@@ -208,12 +211,16 @@ const handleCloseAttempt = () => {
 }
 
 const onSubmit = async (data: CreateItemSchema) => {
-    console.log("[ItemFormModal] Submitting data:", data)
+    const cleanedData = {
+        ...data,
+        originalName: data.originalName?.trim() || undefined,
+    }
+    console.log("[ItemFormModal] Submitting data:", cleanedData)
     try {
         if (isEditMode && item) {
-            await updateMutation.mutateAsync({ id: item._id, data: data as UpdateItemInput })
+            await updateMutation.mutateAsync({ id: item._id, data: cleanedData as UpdateItemInput })
         } else {
-            await createMutation.mutateAsync(data as CreateItemInput)
+            await createMutation.mutateAsync(cleanedData as CreateItemInput)
         }
         toast.success(item ? "Item atualizado com sucesso!" : "Item criado com sucesso!")
         onSuccess()
@@ -261,7 +268,10 @@ return (
                             error={errors.name?.message}
                             {...register("name")}
                         />
-                        <GlassInput id="source" label="Fonte" placeholder="Ex: PHB pg. 150" icon={<Link className="h-4 w-4" />} error={errors.source?.message} {...register("source")} />
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <GlassInput id="source" label="Fonte" placeholder="Ex: PHB pg. 150" icon={<Link className="h-4 w-4" />} error={errors.source?.message} {...register("source")} />
+                            <GlassInput id="originalName" label="Nome em Inglês" placeholder="Ex: Longsword +1" icon={<Languages className="h-4 w-4" />} error={errors.originalName?.message} {...register("originalName")} />
+                        </div>
                     </div>
 
                     {/* Image + Description Section */}

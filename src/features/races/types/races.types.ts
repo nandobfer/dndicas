@@ -23,6 +23,7 @@ export interface RaceVariation {
 export interface Race {
     _id: string
     name: string
+    originalName?: string
     image?: string
     description: string // HTML string from TipTap
     source: string
