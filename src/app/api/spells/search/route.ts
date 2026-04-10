@@ -17,7 +17,7 @@ export async function GET(req: NextRequest) {
 
         // Search only active spells
         const filter: any = { status: "active" }
-        const spells = await Spell.find(filter).select("_id name circle school source description saveAttribute component baseDice extraDicePerLevel").sort({ createdAt: -1 }).lean()
+        const spells = await Spell.find(filter).select("_id name originalName circle school source description saveAttribute component baseDice extraDicePerLevel").sort({ createdAt: -1 }).lean()
 
         // Apply fuzzy search locally using the shared function
         const searchedSpells = query ? applyFuzzySearch(spells, query) : spells
@@ -28,6 +28,7 @@ export async function GET(req: NextRequest) {
             _id: String(spell._id),
             label: spell.name,
             name: spell.name,
+            originalName: spell.originalName,
             entityType: "Magia",
             circle: spell.circle,
             school: spell.school,
