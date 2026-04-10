@@ -5,12 +5,19 @@ import { motion } from "framer-motion"
 import { GlassCard, GlassCardContent } from "@/components/ui/glass-card"
 import { motionConfig } from "@/lib/config/motion-configs"
 import { useSheetList } from "@/features/character-sheets/hooks/use-sheet-list"
+import { useAuth } from "@/core/hooks/useAuth"
 import { SheetsSearch } from "./_components/sheets-search"
 import { SheetsList } from "./_components/sheets-list"
 import { NewSheetButton } from "./_components/new-sheet-button"
+import { UnauthenticatedView } from "./_components/unauthenticated-view"
 
 export default function MySheetsPage() {
+    const { isSignedIn, isLoaded } = useAuth()
     const { sheets, search, handleSearch, isLoading, isFetchingNextPage, hasNextPage, fetchNextPage } = useSheetList()
+
+    if (isLoaded && !isSignedIn) {
+        return <UnauthenticatedView />
+    }
 
     return (
         <motion.div
