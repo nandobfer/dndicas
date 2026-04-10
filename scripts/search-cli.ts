@@ -9,7 +9,7 @@
  *   npm run search-cli
  *
  * Controls:
- *   Type to search · ↑↓ navigate · Ctrl+N copy name · Ctrl+J copy JSON · Ctrl+K copy id · ESC clear · Ctrl+C exit
+ *   Type to search · ↑↓ navigate · Alt+←/→ tabs · Ctrl+N copy name · Ctrl+J copy JSON · Ctrl+K copy id · ESC clear · Ctrl+C exit
  */
 
 import { spawnSync } from 'node:child_process';
@@ -258,6 +258,25 @@ let statusMessageTimer: NodeJS.Timeout | null = null;
 // so we can erase leftover rows when the list shrinks.
 let lastListRowCount = 0;
 
+type EntityTab = {
+    label: string;
+    type: UnifiedEntity['type'] | null;
+};
+
+const TABS: EntityTab[] = [
+    { label: 'Tudo', type: null },
+    { label: 'Regras', type: 'Regra' },
+    { label: 'Classes', type: 'Classe' },
+    { label: 'Raças', type: 'Raça' },
+    { label: 'Magias', type: 'Magia' },
+    { label: 'Itens', type: 'Item' },
+    { label: 'Habilidades', type: 'Habilidade' },
+    { label: 'Talentos', type: 'Talento' },
+    { label: 'Origens', type: 'Origem' },
+];
+
+let activeTabIndex = 0;
+
 // ─── Word navigation helpers ─────────────────────────────────────────────────
 
 /** Returns the index at the start of the word before `pos`. */
@@ -276,11 +295,26 @@ function wordEnd(s: string, pos: number): number {
     return i;
 }
 
+function getActiveTab(): EntityTab {
+    return TABS[activeTabIndex] ?? TABS[0];
+}
+
+function getTabEntities(): UnifiedEntity[] {
+    const activeTab = getActiveTab();
+    if (!activeTab.type) {
+        return allEntities;
+    }
+
+    return allEntities.filter((entity) => entity.type === activeTab.type);
+}
+
 function runSearch(): void {
+    const items = getTabEntities();
+
     if (!query.trim()) {
-        results = allEntities.slice(0, 50);
+        results = items.slice(0, 50);
     } else {
-        results = applyFuzzySearch(allEntities, query, 50);
+        results = applyFuzzySearch(items, query, 50);
     }
     selectedIndex = Math.min(selectedIndex, Math.max(0, results.length - 1));
     render();
@@ -406,6 +440,26 @@ const TYPE_COLORS: Record<string, (s: string) => void> = {
     Item:       (s) => term.brightYellow(s),
 };
 
+const TAB_ACTIVE_STYLES: Record<string, { bg: string; fg: string }> = {
+    Tudo: { bg: '\x1b[48;5;240m', fg: '\x1b[97m' },
+    Regra: { bg: '\x1b[45m', fg: '\x1b[97m' },
+    Habilidade: { bg: '\x1b[46m', fg: '\x1b[30m' },
+    Talento: { bg: '\x1b[43m', fg: '\x1b[30m' },
+    Magia: { bg: '\x1b[44m', fg: '\x1b[97m' },
+    Classe: { bg: '\x1b[41m', fg: '\x1b[97m' },
+    Origem: { bg: '\x1b[42m', fg: '\x1b[30m' },
+    Raça: { bg: '\x1b[105m', fg: '\x1b[30m' },
+    Item: { bg: '\x1b[103m', fg: '\x1b[30m' },
+};
+
+function getActiveTabStyle(tab: EntityTab): { bg: string; fg: string } {
+    if (!tab.type) {
+        return TAB_ACTIVE_STYLES.Tudo;
+    }
+
+    return TAB_ACTIVE_STYLES[tab.type] ?? TAB_ACTIVE_STYLES.Tudo;
+}
+
 /**
  * Computes the visible window of result indices to display, keeping
  * `selectedIndex` in view and filling available lines with surrounding items.
@@ -445,10 +499,15 @@ function render(): void {
     const W: number = (term as any).width ?? 80;
     const H: number = (term as any).height ?? 30;
     const divider = '─'.repeat(W - 1);
+    const activeTab = getActiveTab();
+    const tabEntities = getTabEntities();
+    const listStartRow = 2;
+    const listEndRow = H - 4;
 
     // Rows available for the results list (top portion of screen).
-    // Bottom 4 rows are reserved: divider, status, divider, search input.
-    const listRows = Math.max(1, H - 4);
+    // Top row is reserved for tabs and bottom 4 rows are reserved:
+    // divider, status, divider, search input.
+    const listRows = Math.max(1, listEndRow - listStartRow + 1);
 
     // Normal row: erase and overwrite in place — no term.clear(), no flicker.
     const writeRow = (row: number, fn: () => void) => {
@@ -466,12 +525,33 @@ function render(): void {
         fn();
     };
 
-    // ── Results list (rows 1..listRows) ──────────────────────────────────────
-    let currentRow = 1;
+    // ── Tabs (row 1) ─────────────────────────────────────────────────────────
+    writeRow(1, () => {
+        term('  ');
+        TABS.forEach((tab, index) => {
+            const isActive = index === activeTabIndex;
+            if (isActive) {
+                const style = getActiveTabStyle(tab);
+                process.stdout.write(`${style.bg}${style.fg} ${tab.label} ${HL_FULL_RESET}`);
+            } else {
+                term.brightBlack(` ${tab.label} `);
+            }
+
+            if (index < TABS.length - 1) {
+                term.brightBlack(' ');
+            }
+        });
+    });
+
+    // ── Results list (rows 2..H-4) ──────────────────────────────────────────
+    let currentRow = listStartRow;
 
     if (results.length === 0) {
-        writeRow(1, () => term.brightBlack(`  Nenhum resultado para "${query}"`));
-        currentRow = 2;
+        writeRow(listStartRow, () => {
+            const scope = activeTab.label.toLowerCase();
+            term.brightBlack(`  Nenhum resultado para "${query}" em ${scope}`);
+        });
+        currentRow = listStartRow + 1;
     } else {
         const selectedEntity = results[selectedIndex];
         const jsonStr = JSON.stringify(selectedEntity ?? {}, null, 2);
@@ -480,13 +560,13 @@ function render(): void {
 
         const { start, end } = computeWindow(results.length, selectedIndex, jsonLineCount, listRows);
 
-        for (let i = start; i <= end && currentRow <= listRows; i++) {
+        for (let i = start; i <= end && currentRow <= listEndRow; i++) {
             const entity = results[i];
             if (!entity) continue;
 
             if (i === selectedIndex) {
                 for (const jLine of jsonLines) {
-                    if (currentRow > listRows) break;
+                    if (currentRow > listEndRow) break;
                     writeHighlightedRow(currentRow, () => printColoredJsonLine('  ' + jLine, true));
                     currentRow++;
                 }
@@ -513,7 +593,7 @@ function render(): void {
     writeRow(H - 3, () => term.brightBlack(divider));
 
     writeRow(H - 2, () => {
-        term.brightBlack('  ↑↓ navegar  ·  Ctrl+N copiar nome  ·  Ctrl+J copiar JSON  ·  Ctrl+K copiar id  ·  Esc limpar  ·  Ctrl+C sair  ·  ');
+        term.brightBlack('  ↑↓ navegar  ·  Alt+←/→ abas  ·  Ctrl+N copiar nome  ·  Ctrl+J copiar JSON  ·  Ctrl+K copiar id  ·  Esc limpar  ·  Ctrl+C sair  ·  ');
         if (statusMessage) {
             if (statusMessage.tone === 'error') term.brightRed(statusMessage.text);
             else term.brightGreen(statusMessage.text);
@@ -521,7 +601,9 @@ function render(): void {
         }
 
         term.brightWhite(String(results.length));
-        term.brightBlack(` resultado${results.length !== 1 ? 's' : ''}  (total: ${allEntities.length})`);
+        term.brightBlack(` resultado${results.length !== 1 ? 's' : ''} em `);
+        term.white(activeTab.label);
+        term.brightBlack(`  (aba: ${tabEntities.length} · total: ${allEntities.length})`);
     });
 
     writeRow(H - 1, () => term.brightBlack(divider));
@@ -577,12 +659,23 @@ function setupInput(): void {
                 void copySelectedId();
                 return;
 
+            case 'ALT_LEFT':
+                activeTabIndex = (activeTabIndex - 1 + TABS.length) % TABS.length;
+                selectedIndex = 0;
+                runSearch();
+                return;
+
+            case 'ALT_RIGHT':
+                activeTabIndex = (activeTabIndex + 1) % TABS.length;
+                selectedIndex = 0;
+                runSearch();
+                return;
+
             case 'ESCAPE':
                 query = '';
                 cursorPos = 0;
                 selectedIndex = 0;
-                results = allEntities.slice(0, 50);
-                render();
+                runSearch();
                 return;
 
             case 'UP':
@@ -693,12 +786,6 @@ async function main(): Promise<void> {
 
         term('\n');
         term.green(`  ✓ ${allEntities.length} entidades carregadas!\n\n`);
-        term.brightBlack('  Pressione qualquer tecla para iniciar...\n');
-        await new Promise<void>((resolve) => {
-            term.once('key', () => resolve());
-            term.grabInput(true);
-        });
-        term.grabInput(false);
     } catch (err) {
         term.red(`\n  ✗ Erro ao carregar entidades: ${err instanceof Error ? err.message : String(err)}\n`);
         process.exit(1);
@@ -707,8 +794,11 @@ async function main(): Promise<void> {
     // Enter fullscreen (alternate buffer) then render
     term.fullscreen(true);
     term.hideCursor(true);
-    results = allEntities.slice(0, 50);
-    render();
+    activeTabIndex = 0;
+    query = '';
+    cursorPos = 0;
+    selectedIndex = 0;
+    runSearch();
 
     // Start listening for input
     setupInput();
