@@ -15,7 +15,7 @@ import { Zap } from "lucide-react"
 
 const LEFT_ATTRIBUTES: AttributeType[] = ["strength", "dexterity", "constitution"]
 
-interface SheetLeftColumnProps {
+interface SheetAttributesLeftProps {
     sheet: CharacterSheet
     form: {
         watch: UseFormWatch<PatchSheetBody>
@@ -25,7 +25,7 @@ interface SheetLeftColumnProps {
     isReadOnly?: boolean
 }
 
-export function SheetLeftColumn({ sheet, form, isReadOnly = false }: SheetLeftColumnProps) {
+export function SheetAttributesLeft({ sheet, form, isReadOnly = false }: SheetAttributesLeftProps) {
     const { watch, setFieldLocally, patchField } = form
     const currentValues = watch()
     const currentSheet = { ...sheet, ...currentValues } as CharacterSheet

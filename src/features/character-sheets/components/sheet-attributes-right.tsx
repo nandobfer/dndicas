@@ -8,13 +8,13 @@ import { usePatchSheet } from "../api/character-sheets-queries"
 
 const MIDDLE_ATTRIBUTES: AttributeType[] = ["intelligence", "wisdom", "charisma"]
 
-interface SheetMiddleColumnProps {
+interface SheetAttributesRightProps {
     sheet: CharacterSheet
     form: any
     isReadOnly?: boolean
 }
 
-export function SheetMiddleColumn({ sheet, form, isReadOnly = false }: SheetMiddleColumnProps) {
+export function SheetAttributesRight({ sheet, form, isReadOnly = false }: SheetAttributesRightProps) {
     const { watch, patchField } = form
     const currentValues = watch()
     const currentSheet = { ...sheet, ...currentValues } as CharacterSheet

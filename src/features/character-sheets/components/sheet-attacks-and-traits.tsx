@@ -13,7 +13,7 @@ import { SheetInput } from "./sheet-input"
 import { CompactRichInput } from "./compact-rich-input"
 import { useAttackNameSync } from "./hooks/use-attack-name-sync"
 
-interface SheetCenterColumnProps {
+interface SheetAttacksAndTraitsProps {
     sheet: CharacterSheet
     form: {
         watch: UseFormWatch<PatchSheetBody>
@@ -25,7 +25,7 @@ interface SheetCenterColumnProps {
 
 const formatMod = (v: number) => (v >= 0 ? `+${v}` : `${v}`)
 
-export function SheetCenterColumn({ sheet, form, isReadOnly = false }: SheetCenterColumnProps) {
+export function SheetAttacksAndTraits({ sheet, form, isReadOnly = false }: SheetAttacksAndTraitsProps) {
     const { watch, setFieldLocally, patchField } = form
     const currentValues = watch()
     const currentSheet = { ...sheet, ...currentValues } as CharacterSheet
