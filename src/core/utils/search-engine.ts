@@ -10,6 +10,7 @@ export interface UnifiedEntity {
     id: string
     _id?: string
     name: string
+    originalName?: string
     label?: string // For compatibility
     type: "Regra" | "Magia" | "Habilidade" | "Talento" | "Classe" | "Subclasse" | "Origem" | "Raça" | "Item"
     description?: string
@@ -88,7 +89,7 @@ async function getSearchData(): Promise<UnifiedEntity[]> {
 /**
  * Applies weighted fuzzy search to a list of entities.
  */
-export function applyFuzzySearch<T extends { name?: string; label?: string; source?: string; description?: string }>(
+export function applyFuzzySearch<T extends { name?: string; originalName?: string; label?: string; source?: string; description?: string }>(
     items: T[],
     query: string,
     limit?: number,
@@ -102,6 +103,7 @@ export function applyFuzzySearch<T extends { name?: string; label?: string; sour
     const fuse = new Fuse(items, {
         keys: [
             { name: "name", weight: 10 },
+            { name: "originalName", weight: 8 },
             { name: "label", weight: 10 },
             { name: "source", weight: 5 },
             { name: "description", weight: 1 }
