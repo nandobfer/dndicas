@@ -1,5 +1,6 @@
 "use client"
 
+import type { UseFormWatch } from "react-hook-form"
 import { AttributeBlock, type SkillEntry } from "./attribute-block"
 import type { PatchSheetBody, AttributeType, SkillName, CharacterSheet } from "../types/character-sheet.types"
 import { useCharacterCalculations } from "../hooks/use-character-calculations"
@@ -10,11 +11,16 @@ const MIDDLE_ATTRIBUTES: AttributeType[] = ["intelligence", "wisdom", "charisma"
 
 interface SheetAttributesRightProps {
     sheet: CharacterSheet
-    form: any
+    form: {
+        watch: UseFormWatch<PatchSheetBody>
+        patchField: (field: keyof PatchSheetBody, value: unknown) => void
+    }
     isReadOnly?: boolean
 }
 
-export function SheetAttributesRight({ sheet, form, isReadOnly = false }: SheetAttributesRightProps) {
+type UseSheetAttributesRightSectionsProps = SheetAttributesRightProps
+
+export function useSheetAttributesRightSections({ sheet, form, isReadOnly = false }: UseSheetAttributesRightSectionsProps) {
     const { watch, patchField } = form
     const currentValues = watch()
     const currentSheet = { ...sheet, ...currentValues } as CharacterSheet
@@ -56,32 +62,34 @@ export function SheetAttributesRight({ sheet, form, isReadOnly = false }: SheetA
         patchField("savingThrows", { ...curr, [attr]: !curr[attr] })
     }
 
-    return (
-        <div className="space-y-3">
-            {MIDDLE_ATTRIBUTES.map((attrKey) => (
-                <AttributeBlock
-                    key={attrKey}
-                    attributeKey={attrKey}
-                    value={currentValues[attrKey] ?? 10}
-                    onValueChange={(v) => patchField(attrKey as keyof PatchSheetBody, v)}
-                    modifier={calc.attrMods[attrKey].value}
-                    modifierFormula={calc.attrMods[attrKey].formula}
-                    modifierParts={calc.attrMods[attrKey].parts}
-                    modifierResult={calc.attrMods[attrKey].result}
-                    savingThrow={{
-                        proficient: !!(currentSheet.savingThrows as Record<string, boolean> | undefined)?.[attrKey],
-                        value: calc.savingThrows[attrKey].value,
-                        formula: calc.savingThrows[attrKey].formula,
-                        parts: calc.savingThrows[attrKey].parts,
-                        result: calc.savingThrows[attrKey].result,
-                    }}
-                    onSavingThrowToggle={() => handleSavingThrowToggle(attrKey)}
-                    skills={getSkillsForAttribute(attrKey)}
-                    onSkillChange={handleSkillChange}
-                    isLoading={isLoading}
-                    isReadOnly={isReadOnly}
-                />
-            ))}
-        </div>
-    )
+    return MIDDLE_ATTRIBUTES.map((attrKey) => (
+        <AttributeBlock
+            key={attrKey}
+            attributeKey={attrKey}
+            value={currentValues[attrKey] ?? 10}
+            onValueChange={(v) => patchField(attrKey as keyof PatchSheetBody, v)}
+            modifier={calc.attrMods[attrKey].value}
+            modifierFormula={calc.attrMods[attrKey].formula}
+            modifierParts={calc.attrMods[attrKey].parts}
+            modifierResult={calc.attrMods[attrKey].result}
+            savingThrow={{
+                proficient: !!(currentSheet.savingThrows as Record<string, boolean> | undefined)?.[attrKey],
+                value: calc.savingThrows[attrKey].value,
+                formula: calc.savingThrows[attrKey].formula,
+                parts: calc.savingThrows[attrKey].parts,
+                result: calc.savingThrows[attrKey].result,
+            }}
+            onSavingThrowToggle={() => handleSavingThrowToggle(attrKey)}
+            skills={getSkillsForAttribute(attrKey)}
+            onSkillChange={handleSkillChange}
+            isLoading={isLoading}
+            isReadOnly={isReadOnly}
+        />
+    ))
+}
+
+export function SheetAttributesRight({ sheet, form, isReadOnly = false }: SheetAttributesRightProps) {
+    const attributeCards = useSheetAttributesRightSections({ sheet, form, isReadOnly })
+
+    return <div className="space-y-3">{attributeCards}</div>
 }
