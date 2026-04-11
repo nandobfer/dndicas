@@ -37,21 +37,37 @@ const raceSchema = z.object({
     variations: z.array(raceVariationSchema).default([]),
 })
 
+type RaceListQuery = {
+    $or?: Array<{ name?: { $regex: string; $options: string }; description?: { $regex: string; $options: string } }>
+    status?: string
+    source?: { $in: RegExp[] }
+}
+
+type RaceTraitInput = {
+    name?: string
+    level?: number
+    description: string
+}
+
 export async function GET(req: NextRequest) {
     try {
         await dbConnect()
         const url = new URL(req.url)
-        const page = parseInt(url.searchParams.get("page") || "1", 10)
-        const limit = parseInt(url.searchParams.get("limit") || "10", 10)
+        const pageParam = url.searchParams.get("page")
+        const limitParam = url.searchParams.get("limit")
+        const page = pageParam ? parseInt(pageParam, 10) : 1
+        const limit = limitParam ? parseInt(limitParam, 10) : undefined
         const search = url.searchParams.get("search") || ""
         const status = url.searchParams.get("status")
 
-        const query: any = {}
+        const query: RaceListQuery = {}
         if (search) {
             query.$or = [{ name: { $regex: search, $options: "i" } }, { description: { $regex: search, $options: "i" } }]
         }
         if (status && status !== "all") {
             query.status = status
+        } else if (!status) {
+            query.status = "active"
         }
         const sourcesParam = url.searchParams.get("sources")
         if (sourcesParam) {
@@ -62,13 +78,16 @@ export async function GET(req: NextRequest) {
             }
         }
 
-        const items = await RaceModel.find(query)
-            .sort({ name: 1 })
-            .skip((page - 1) * limit)
-            .limit(limit)
-            .lean()
+        let itemsQuery = RaceModel.find(query).sort({ name: 1 })
 
-        const formattedItems = items.map((item: any) => ({
+        if (pageParam || limitParam) {
+            const effectiveLimit = limit ?? 10
+            itemsQuery = itemsQuery.skip((page - 1) * effectiveLimit).limit(effectiveLimit)
+        }
+
+        const items = await itemsQuery.lean()
+
+        const formattedItems = items.map((item) => ({
             ...item,
             id: item._id.toString(),
         }))
@@ -79,7 +98,7 @@ export async function GET(req: NextRequest) {
             items: formattedItems,
             total,
             page,
-            limit,
+            limit: limit ?? formattedItems.length,
         })
     } catch (error) {
         console.error("Races GET error:", error)
@@ -96,7 +115,7 @@ export async function POST(req: NextRequest) {
 
         // Normalize traits for Mongoose
         if (body.traits && Array.isArray(body.traits)) {
-            body.traits = body.traits.map((t: any) => ({
+            body.traits = body.traits.map((t: RaceTraitInput) => ({
                 name: t.name && t.name.trim() !== "" ? t.name : "Traço Racial",
                 level: t.level || 1,
                 description: t.description,
@@ -110,12 +129,13 @@ export async function POST(req: NextRequest) {
 
         // Audit configuration
         if (userId) {
+            const auditData = race.toObject ? race.toObject() : JSON.parse(JSON.stringify(race))
             await createAuditLog({
                 performedBy: userId,
                 action: "CREATE",
                 entity: "Race",
                 entityId: race._id.toString(),
-                newData: (race.toObject ? race.toObject() : race) as any,
+                newData: auditData,
             })
         }
 
