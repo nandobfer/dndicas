@@ -52,6 +52,17 @@ export interface ICharacterSheet extends Document {
     spellSaveDCOverride: number | null
     spellAttackBonusOverride: number | null
     spellSlots: Record<string, { total: number; used: number }>
+    resourceCharges: Array<{
+        id: string
+        name: string
+        total: number
+        used: number
+        source: {
+            kind: "manual-name-mention" | "class-feature" | "species-trait" | "feat" | "item"
+            entityType: "Habilidade" | "Talento" | "Item"
+            entityId: string
+        } | null
+    }>
     coins: { cp: number; sp: number; ep: number; gp: number; pp: number }
     personalityTraits: string
     ideals: string
@@ -136,6 +147,31 @@ const CharacterSheetSchema = new Schema<ICharacterSheet>(
         spellSaveDCOverride: { type: Number, default: null },
         spellAttackBonusOverride: { type: Number, default: null },
         spellSlots: { type: Map, of: new Schema({ total: { type: Number, default: 0, min: 0 }, used: { type: Number, default: 0, min: 0 } }, { _id: false }), default: () => ({}) },
+        resourceCharges: {
+            type: [
+                new Schema(
+                    {
+                        id: { type: String, required: true, trim: true },
+                        name: { type: String, default: "", trim: true, maxlength: 2000 },
+                        total: { type: Number, default: 0, min: 0 },
+                        used: { type: Number, default: 0, min: 0 },
+                        source: {
+                            type: new Schema(
+                                {
+                                    kind: { type: String, enum: ["manual-name-mention", "class-feature", "species-trait", "feat", "item"], required: true },
+                                    entityType: { type: String, enum: ["Habilidade", "Talento", "Item"], required: true },
+                                    entityId: { type: String, required: true, trim: true },
+                                },
+                                { _id: false }
+                            ),
+                            default: null,
+                        },
+                    },
+                    { _id: false }
+                ),
+            ],
+            default: () => [],
+        },
         coins: {
             type: new Schema({ cp: { type: Number, default: 0, min: 0 }, sp: { type: Number, default: 0, min: 0 }, ep: { type: Number, default: 0, min: 0 }, gp: { type: Number, default: 0, min: 0 }, pp: { type: Number, default: 0, min: 0 } }, { _id: false }),
             default: () => ({ cp: 0, sp: 0, ep: 0, gp: 0, pp: 0 }),

@@ -12,6 +12,7 @@ import { CalcTooltip } from "./calc-tooltip"
 import { SheetInput } from "./sheet-input"
 import { CompactRichInput } from "./compact-rich-input"
 import { useAttackNameSync } from "./hooks/use-attack-name-sync"
+import { ResourceChargeList } from "./resource-charge-list"
 
 interface SheetAttacksAndTraitsProps {
     sheet: CharacterSheet
@@ -232,6 +233,7 @@ export function useSheetAttacksAndTraitsSections({ sheet, form, isReadOnly = fal
     return {
         combatStatsCard,
         attacksCard,
+        resourceChargesCard: <ResourceChargeList sheet={sheet} form={form} isReadOnly={isReadOnly} />,
         classFeaturesCard,
         speciesTraitsCard,
         featsCard,
@@ -245,6 +247,7 @@ export function SheetAttacksAndTraits({ sheet, form, isReadOnly = false }: Sheet
         <div className="space-y-4">
             {sections.combatStatsCard}
             {sections.attacksCard}
+            {sections.resourceChargesCard}
             {sections.classFeaturesCard}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
                 {sections.speciesTraitsCard}
