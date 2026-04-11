@@ -75,6 +75,8 @@ export function TraitFormModal({ isOpen, onClose, onSubmit, trait, isSubmitting 
                     ? { mode: "fixed" as const, value: data.charges.value }
                     : data.charges.mode === "proficiency"
                         ? { mode: "proficiency" as const }
+                        : data.charges.mode === "attribute"
+                            ? { mode: "attribute" as const, attribute: data.charges.attribute }
                     : { mode: "byLevel" as const, values: data.charges.values }
                 : undefined,
         }

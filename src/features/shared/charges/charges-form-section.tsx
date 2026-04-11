@@ -2,6 +2,7 @@
 
 import * as React from "react"
 import { Battery, Info, ListOrdered, Plus, Trash2 } from "lucide-react"
+import { attributeColors, type AttributeType } from "@/lib/config/colors"
 import {
     type Control,
     type FieldErrors,
@@ -17,9 +18,10 @@ import { GlassInput } from "@/components/ui/glass-input"
 import { GlassSelector } from "@/components/ui/glass-selector"
 import type { Charges } from "./types"
 
-type ChargeModeOption = "none" | "fixed" | "proficiency" | "byLevel"
+type ChargeModeOption = "none" | "fixed" | "proficiency" | "attribute" | "byLevel"
 type ChargesByLevelFormRow = { level: string; value: string }
 type ChargeFieldErrors = {
+    attribute?: { message?: string }
     value?: { message?: string }
     values?: Array<{
         level?: { message?: string }
@@ -32,10 +34,17 @@ const CHARGE_MODE_OPTIONS = [
     { value: "none", label: "Nenhuma", activeColor: "bg-white/10" },
     { value: "fixed", label: "Fixa", activeColor: "bg-emerald-500/20", textColor: "#6ee7b7" },
     { value: "proficiency", label: "Proficiência", activeColor: "bg-amber-500/20", textColor: "#fcd34d" },
+    { value: "attribute", label: "Atributo", activeColor: "bg-violet-500/20", textColor: "#c4b5fd" },
     { value: "byLevel", label: "Por nível", activeColor: "bg-blue-500/20", textColor: "#93c5fd" },
 ] as const
 
 const LEVEL_OPTIONS = Array.from({ length: 20 }, (_, index) => index + 1)
+const ATTRIBUTE_OPTIONS = (Object.entries(attributeColors) as [AttributeType, (typeof attributeColors)[AttributeType]][]).map(([key, config]) => ({
+    value: key,
+    label: config.name,
+    activeColor: config.bgAlpha,
+    textColor: config.hex,
+}))
 
 export interface ChargesFormSectionProps<TFieldValues extends FieldValues = FieldValues> {
     control: Control<TFieldValues>
@@ -63,6 +72,7 @@ export function ChargesFormSection<TFieldValues extends FieldValues = FieldValue
     description = 'Defina uma carga fixa ou uma progressão por nível. Valores aceitos: "3", "1d6", "4d8".',
 }: ChargesFormSectionProps<TFieldValues>) {
     const fixedChargesRef = React.useRef("")
+    const attributeChargesRef = React.useRef<AttributeType>("Sabedoria")
     const byLevelChargesRef = React.useRef<ChargesByLevelFormRow[]>([{ level: "1", value: "" }])
 
     const { fields, append, remove, replace } = useFieldArray({
@@ -73,7 +83,7 @@ export function ChargesFormSection<TFieldValues extends FieldValues = FieldValue
     const watchedCharges = useWatch({
         control,
         name: "charges" as Path<TFieldValues>,
-    }) as Charges | { mode: "byLevel"; values: ChargesByLevelFormRow[] } | { mode: "fixed"; value: string } | { mode: "proficiency" } | undefined
+    }) as Charges | { mode: "byLevel"; values: ChargesByLevelFormRow[] } | { mode: "fixed"; value: string } | { mode: "proficiency" } | { mode: "attribute"; attribute: AttributeType } | undefined
 
     const chargeMode = watchedCharges?.mode ?? "none"
     const chargeErrors = errors.charges as unknown as ChargeFieldErrors | undefined
@@ -81,6 +91,7 @@ export function ChargesFormSection<TFieldValues extends FieldValues = FieldValue
 
     React.useEffect(() => {
         fixedChargesRef.current = initialCharges?.mode === "fixed" ? initialCharges.value : ""
+        attributeChargesRef.current = initialCharges?.mode === "attribute" ? initialCharges.attribute : "Sabedoria"
         byLevelChargesRef.current =
             initialCharges?.mode === "byLevel" && initialCharges.values.length > 0
                 ? initialCharges.values.map((row) => ({ level: String(row.level), value: row.value }))
@@ -90,6 +101,9 @@ export function ChargesFormSection<TFieldValues extends FieldValues = FieldValue
     React.useEffect(() => {
         if (watchedCharges?.mode === "fixed") {
             fixedChargesRef.current = watchedCharges.value
+        }
+        if (watchedCharges?.mode === "attribute") {
+            attributeChargesRef.current = watchedCharges.attribute
         }
         if (watchedCharges?.mode === "byLevel") {
             byLevelChargesRef.current =
@@ -118,6 +132,15 @@ export function ChargesFormSection<TFieldValues extends FieldValues = FieldValue
         if (nextMode === "proficiency") {
             replace([])
             setValue("charges" as Path<TFieldValues>, { mode: "proficiency" } as never, {
+                shouldDirty: true,
+                shouldValidate: false,
+            })
+            return
+        }
+
+        if (nextMode === "attribute") {
+            replace([])
+            setValue("charges" as Path<TFieldValues>, { mode: "attribute", attribute: attributeChargesRef.current } as never, {
                 shouldDirty: true,
                 shouldValidate: false,
             })
@@ -191,6 +214,45 @@ export function ChargesFormSection<TFieldValues extends FieldValues = FieldValue
             {chargeMode === "proficiency" && (
                 <div className="rounded-xl border border-white/10 bg-black/10 px-4 py-3">
                     <p className="text-sm font-medium text-white/75">As cargas desta entidade escalam com a proficiência.</p>
+                </div>
+            )}
+
+            {chargeMode === "attribute" && (
+                <div className="space-y-3">
+                    <div className="space-y-2">
+                        <label className="text-sm font-medium text-white/80 flex items-center gap-2">
+                            <Battery className="h-4 w-4" />
+                            Atributo
+                        </label>
+                        <GlassSelector
+                            value={watchedCharges?.mode === "attribute" ? watchedCharges.attribute : "Sabedoria"}
+                            onChange={(value) => {
+                                const nextAttribute = value as AttributeType
+                                attributeChargesRef.current = nextAttribute
+                                setValue("charges" as Path<TFieldValues>, { mode: "attribute", attribute: nextAttribute } as never, {
+                                    shouldDirty: true,
+                                    shouldTouch: true,
+                                    shouldValidate: false,
+                                })
+                            }}
+                            options={ATTRIBUTE_OPTIONS}
+                            layout="grid"
+                            cols={3}
+                            size="md"
+                            fullWidth
+                            disabled={disabled}
+                            layoutId={`${title.toLowerCase().replace(/\s+/g, "-")}-charge-attribute`}
+                        />
+                        {shouldShowChargeErrors && chargeErrors?.attribute?.message && (
+                            <p className="text-xs text-rose-400 animate-slide-down flex items-center gap-1">
+                                <Info className="h-3 w-3" />
+                                {chargeErrors.attribute.message}
+                            </p>
+                        )}
+                    </div>
+                    <div className="rounded-xl border border-white/10 bg-black/10 px-4 py-3">
+                        <p className="text-sm font-medium text-white/75">As cargas desta entidade escalam com o modificador do atributo selecionado.</p>
+                    </div>
                 </div>
             )}
 

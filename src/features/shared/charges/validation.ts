@@ -1,5 +1,8 @@
 import { z } from "zod"
+import { attributeColors, type AttributeType } from "@/lib/config/colors"
 import { isValidChargeValue, sortChargeRows } from "./utils"
+
+const ATTRIBUTE_OPTIONS = Object.keys(attributeColors) as [AttributeType, ...AttributeType[]]
 
 export const chargeLevelSchema = z.preprocess(
     (value) => {
@@ -25,6 +28,10 @@ export const chargesSchema = z.discriminatedUnion("mode", [
     }),
     z.object({
         mode: z.literal("proficiency"),
+    }),
+    z.object({
+        mode: z.literal("attribute"),
+        attribute: z.enum(ATTRIBUTE_OPTIONS, { message: "Atributo é obrigatório" }),
     }),
     z.object({
         mode: z.literal("byLevel"),

@@ -20,8 +20,13 @@ export const ChargesSchema = new Schema(
     {
         mode: {
             type: String,
-            enum: ["fixed", "proficiency", "byLevel"],
+            enum: ["fixed", "proficiency", "attribute", "byLevel"],
             required: true,
+        },
+        attribute: {
+            type: String,
+            enum: ["Força", "Destreza", "Constituição", "Inteligência", "Sabedoria", "Carisma"],
+            required: false,
         },
         value: {
             type: String,
