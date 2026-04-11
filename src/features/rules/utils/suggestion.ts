@@ -1,13 +1,18 @@
 import { ReactRenderer } from '@tiptap/react'
-import tippy, { Instance as TippyInstance, GetReferenceClientRect } from 'tippy.js'
+import tippy from 'tippy.js'
 import MentionList, { MentionListProps, MentionListRef } from '../components/mention-list'
 import { performUnifiedSearch } from '@/core/utils/search-engine'
+import type { EntityType } from '@/lib/config/colors'
 
 /**
  * T039: Updated to support both Regra and Habilidade entity types in mentions.
  * Fetches from central search engine.
  */
-export const getSuggestionConfig = (options?: { excludeId?: string; blurOnMentionSelect?: boolean }) => {
+export const getSuggestionConfig = (options?: {
+    excludeId?: string
+    blurOnMentionSelect?: boolean
+    specificEntityMention?: EntityType
+}) => {
     let component: ReactRenderer<MentionListRef, MentionListProps> | null = null
     let loading = false
     let currentQuery = ""
@@ -39,7 +44,9 @@ export const getSuggestionConfig = (options?: { excludeId?: string; blurOnMentio
             }
 
             try {
-                const results = await performUnifiedSearch(query, 10)
+                const results = await performUnifiedSearch(query, 10, 0, {
+                    specificEntityType: options?.specificEntityMention,
+                })
 
                 // Filter out excluded ID if provided
                 const filteredResults = results.filter((item) => 

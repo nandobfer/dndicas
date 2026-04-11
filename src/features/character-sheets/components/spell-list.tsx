@@ -229,6 +229,7 @@ export function SpellList({ sheet, form, isReadOnly = false }: SpellListProps) {
                                 placeholder="Nome da magia"
                                 excludeId={sheet._id}
                                 disabled={isReadOnly}
+                                specificEntityMention="Magia"
                                 focusToken={!isReadOnly && focusSpellId === rowKey ? rowKey : null}
                                 onAutoFocusApplied={clearFocusSpellId}
                             />

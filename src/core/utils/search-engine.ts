@@ -1,5 +1,6 @@
 import Fuse from "fuse.js"
 import { ENTITY_PROVIDERS } from "@/lib/config/entities"
+import type { EntityType } from "@/lib/config/colors"
 
 /**
  * @fileoverview Central search engine for multi-entity lookups.
@@ -40,6 +41,10 @@ export interface UnifiedEntity {
     additionalDamage?: any[]
     mastery?: string
     score?: number // Added for weighted sorting visibility if needed
+}
+
+export interface UnifiedSearchOptions {
+    specificEntityType?: EntityType
 }
 
 // Simple in-memory cache for search data
@@ -136,11 +141,20 @@ export function applyFuzzySearch<T extends { name?: string; originalName?: strin
 /**
  * Performs a fuzzy search across all entities with weighted scoring.
  */
-export async function performUnifiedSearch(query: string, limit = 20, offset = 0): Promise<UnifiedEntity[]> {
+export async function performUnifiedSearch(
+    query: string,
+    limit = 20,
+    offset = 0,
+    options?: UnifiedSearchOptions
+): Promise<UnifiedEntity[]> {
     if (!query.trim()) return []
 
     const allEntities = await getSearchData()
-    return applyFuzzySearch(allEntities, query, limit, offset)
+    const filteredEntities = options?.specificEntityType
+        ? allEntities.filter((entity) => entity.type === options.specificEntityType)
+        : allEntities
+
+    return applyFuzzySearch(filteredEntities, query, limit, offset)
 }
 
 /**
