@@ -1,21 +1,4 @@
-export type TraitChargeMode = "fixed" | "byLevel";
-
-export interface TraitChargesFixed {
-    mode: "fixed";
-    value: string;
-}
-
-export interface TraitChargesByLevelRow {
-    level: number;
-    value: string;
-}
-
-export interface TraitChargesByLevel {
-    mode: "byLevel";
-    values: TraitChargesByLevelRow[];
-}
-
-export type TraitCharges = TraitChargesFixed | TraitChargesByLevel;
+import type { Charges } from "@/features/shared/charges/types";
 
 export interface Trait {
     _id: string; // Mongoose ID
@@ -23,7 +6,7 @@ export interface Trait {
     name: string;
     originalName?: string;
     description: string; // HTML content with mentions and S3 images
-    charges?: TraitCharges;
+    charges?: Charges;
     source: string;
     status: 'active' | 'inactive';
     createdAt: string;
@@ -36,7 +19,7 @@ export interface CreateTraitInput {
     name: string;
     originalName?: string;
     description: string;
-    charges?: TraitCharges;
+    charges?: Charges;
     source: string;
     status: 'active' | 'inactive';
 }

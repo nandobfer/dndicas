@@ -1,52 +1,17 @@
 import mongoose, { Schema, Document, Model } from "mongoose";
-import type { TraitCharges, TraitChargesByLevelRow } from "../types/traits.types";
+import type { Charges } from "@/features/shared/charges/types";
+import { ChargesSchema } from "@/features/shared/charges/mongoose";
 
 export interface ITrait extends Document {
     name: string;
     originalName?: string;
     description: string;
-    charges?: TraitCharges;
+    charges?: Charges;
     source: string;
     status: "active" | "inactive";
     createdAt: Date;
     updatedAt: Date;
 }
-
-const TraitChargeByLevelRowSchema = new Schema<TraitChargesByLevelRow>(
-    {
-        level: {
-            type: Number,
-            required: true,
-            min: 1,
-            max: 20,
-        },
-        value: {
-            type: String,
-            required: true,
-        },
-    },
-    { _id: false },
-)
-
-const TraitChargesSchema = new Schema(
-    {
-        mode: {
-            type: String,
-            enum: ["fixed", "byLevel"],
-            required: true,
-        },
-        value: {
-            type: String,
-            required: false,
-        },
-        values: {
-            type: [TraitChargeByLevelRowSchema],
-            required: false,
-            default: undefined,
-        },
-    },
-    { _id: false },
-)
 
 const TraitSchema = new Schema<ITrait>(
     {
@@ -69,7 +34,7 @@ const TraitSchema = new Schema<ITrait>(
             // Rich Text is stored as raw HTML string with mentions and S3 images
         },
         charges: {
-            type: TraitChargesSchema,
+            type: ChargesSchema,
             required: false,
             default: undefined,
         },

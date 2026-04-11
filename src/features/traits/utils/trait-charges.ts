@@ -1,5 +1,5 @@
 import type { DiceType, DiceValue } from "@/features/spells/types/spells.types"
-import type { TraitChargesByLevelRow } from "../types/traits.types"
+import type { ChargesByLevelRow } from "@/features/shared/charges/types"
 
 export const TRAIT_CHARGE_VALUE_PATTERN = /^(?:\d+|\d+d(?:4|6|8|10|12|20))$/i
 export const TRAIT_CHARGE_DICE_PATTERN = /^(\d+)(d(?:4|6|8|10|12|20))$/i
@@ -18,6 +18,6 @@ export function parseTraitChargeDice(value: string): DiceValue | null {
     }
 }
 
-export function sortTraitChargeRows(rows: TraitChargesByLevelRow[]) {
+export function sortTraitChargeRows(rows: ChargesByLevelRow[]) {
     return [...rows].sort((a, b) => a.level - b.level)
 }

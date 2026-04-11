@@ -24,9 +24,8 @@ import type { Item } from "@/features/items/types/items.types"
 import { useWindows } from "@/core/context/window-context"
 import { motion } from "framer-motion"
 import { EntitySource } from "./entity-source"
-import { GlassDiceValue } from "@/components/ui/glass-dice-value"
 import type { Trait } from "@/features/traits/types/traits.types"
-import { parseTraitChargeDice, sortTraitChargeRows } from "@/features/traits/utils/trait-charges"
+import { ChargesPreview } from "@/features/shared/charges/charges-preview"
 
 interface RulePreviewProps {
     rule: Reference
@@ -106,59 +105,6 @@ type SubclassPreviewData = {
     subclass: Subclass
 }
 
-function renderChargeValue(value: string) {
-    const dice = parseTraitChargeDice(value)
-    if (dice) {
-        return <GlassDiceValue value={dice} className="text-xs" />
-    }
-
-    return <span className="font-mono text-xs text-white/70">{value}</span>
-}
-
-function TraitChargesPreview({ trait }: { trait: Trait }) {
-    if (!trait.charges) return null
-
-    if (trait.charges.mode === "fixed") {
-        return (
-            <div className="space-y-2">
-                <p className="text-[10px] font-black uppercase tracking-[0.15em] text-white/35">Cargas</p>
-                <div className="inline-flex items-center gap-2 rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2">
-                    <span className="text-xs text-white/45">Fixa</span>
-                    {renderChargeValue(trait.charges.value)}
-                </div>
-            </div>
-        )
-    }
-
-    const rows = sortTraitChargeRows(trait.charges.values)
-
-    return (
-        <div className="space-y-2">
-            <p className="text-[10px] font-black uppercase tracking-[0.15em] text-white/35">Cargas por nível</p>
-            <div className="rounded-xl overflow-hidden border border-white/10 bg-white/[0.02]">
-                <div className="overflow-x-auto">
-                    <table className="w-full min-w-[220px] border-collapse">
-                        <thead>
-                            <tr className="border-b border-white/5 bg-white/[0.03]">
-                                <th className="px-3 py-2 text-left text-[9px] font-black uppercase tracking-[0.15em] text-white/30">Nível</th>
-                                <th className="px-3 py-2 text-left text-[9px] font-black uppercase tracking-[0.15em] text-white/30">Cargas</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {rows.map((row) => (
-                                <tr key={row.level} className="border-b border-white/5 last:border-b-0">
-                                    <td className="px-3 py-2 text-xs font-semibold text-white/70">{row.level}</td>
-                                    <td className="px-3 py-2">{renderChargeValue(row.value)}</td>
-                                </tr>
-                            ))}
-                        </tbody>
-                    </table>
-                </div>
-            </div>
-        </div>
-    )
-}
-
 export const TraitPreview = ({ trait, showStatus = true, hideStatusChip = false, hideActionIcons = false }: TraitPreviewProps & { hideStatusChip?: boolean; hideActionIcons?: boolean }) => {
     const { addWindow } = useWindows()
     return (
@@ -209,7 +155,7 @@ export const TraitPreview = ({ trait, showStatus = true, hideStatusChip = false,
                 </div>
             )}
 
-            <TraitChargesPreview trait={trait} />
+            <ChargesPreview charges={trait.charges} />
 
             <EntitySource source={trait.source} originalName={trait.originalName} />
         </div>
