@@ -25,7 +25,9 @@ interface SheetAttributesLeftProps {
     isReadOnly?: boolean
 }
 
-export function SheetAttributesLeft({ sheet, form, isReadOnly = false }: SheetAttributesLeftProps) {
+type UseSheetAttributesLeftSectionsProps = SheetAttributesLeftProps
+
+export function useSheetAttributesLeftSections({ sheet, form, isReadOnly = false }: UseSheetAttributesLeftSectionsProps) {
     const { watch, setFieldLocally, patchField } = form
     const currentValues = watch()
     const currentSheet = { ...sheet, ...currentValues } as CharacterSheet
@@ -76,113 +78,128 @@ export function SheetAttributesLeft({ sheet, form, isReadOnly = false }: SheetAt
         patchField("armorTraining", { ...armorTraining, [key]: !armorTraining[key] })
     }
 
+    const inspirationCard = (
+        <div
+            className={cn(
+                "flex items-center gap-2 p-2 rounded-lg border cursor-pointer transition-all select-none",
+                isReadOnly && "cursor-default",
+                currentValues.inspiration
+                    ? "border-cyan-500/40 bg-cyan-500/10"
+                    : "border-white/10 bg-white/5 hover:border-white/20"
+            )}
+            onClick={() => !isReadOnly && patchField("inspiration", !currentValues.inspiration)}
+        >
+            <Zap className={cn("w-4 h-4 flex-shrink-0", currentValues.inspiration ? "text-cyan-400" : "text-white/30")} />
+            <span className={cn("text-[9px] font-black uppercase tracking-widest", currentValues.inspiration ? "text-cyan-400" : "text-white/40")}>
+                Inspiração Heroica
+            </span>
+            <div
+                className={cn("ml-auto w-3 h-3 rotate-45 border transition-all", !currentValues.inspiration && "bg-transparent border-white/30")}
+                style={currentValues.inspiration ? { backgroundColor: rarityColors.divine, borderColor: rarityColors.divine } : undefined}
+            />
+        </div>
+    )
+
+    const proficiencyBonusCard = (
+        <div className="flex items-center justify-between p-2 rounded-lg bg-white/5 border border-white/10">
+            <span className="text-[9px] font-black uppercase tracking-widest text-white/40">Bônus de Proficiência</span>
+            <CalcTooltip formula={calc.profBonus.formula} parts={calc.profBonus.parts} result={calc.profBonus.result}>
+                <span className="text-lg font-black text-white/90">{formatMod(calc.profBonus.value)}</span>
+            </CalcTooltip>
+        </div>
+    )
+
+    const attributeCards = LEFT_ATTRIBUTES.map((attrKey) => (
+        <AttributeBlock
+            key={attrKey}
+            attributeKey={attrKey}
+            value={currentValues[attrKey] ?? 10}
+            onValueChange={(v) => patchField(attrKey as keyof PatchSheetBody, v)}
+            modifier={calc.attrMods[attrKey].value}
+            modifierFormula={calc.attrMods[attrKey].formula}
+            modifierParts={calc.attrMods[attrKey].parts}
+            modifierResult={calc.attrMods[attrKey].result}
+            savingThrow={{
+                proficient: !!(currentSheet.savingThrows as Record<string, boolean> | undefined)?.[attrKey],
+                value: calc.savingThrows[attrKey].value,
+                formula: calc.savingThrows[attrKey].formula,
+                parts: calc.savingThrows[attrKey].parts,
+                result: calc.savingThrows[attrKey].result,
+            }}
+            onSavingThrowToggle={() => handleSavingThrowToggle(attrKey)}
+            skills={getSkillsForAttribute(attrKey)}
+            onSkillChange={handleSkillChange}
+            isLoading={isLoading}
+            isReadOnly={isReadOnly}
+        />
+    ))
+
+    const trainingCard = (
+        <div className="rounded-lg border border-white/10 bg-white/5 overflow-hidden">
+            <div className="text-center py-1.5 border-b border-white/10 bg-white/[0.03]">
+                <label className="text-[8px] font-black uppercase tracking-[0.2em] text-white/40">
+                    Treinamento em Equipamentos e Proficiências
+                </label>
+            </div>
+            <div className="p-2 space-y-2">
+                <div>
+                    <label className="text-[8px] font-black uppercase tracking-widest text-white/30 ml-1">Armaduras</label>
+                    <div className="flex flex-wrap gap-x-3 gap-y-1 mt-1">
+                        {(["light", "medium", "heavy", "shields"] as const).map((key) => (
+                            <label key={key} className={cn("flex items-center gap-1.5 group", !isReadOnly && "cursor-pointer")} onClick={() => toggleArmor(key)}>
+                                <GlassCheckbox
+                                    checked={!!armorTraining[key]}
+                                    onChange={() => toggleArmor(key)}
+                                    disabled={isReadOnly}
+                                />
+                                <span className="text-[8px] font-semibold text-white/40 group-hover:text-white/70 transition-colors capitalize">
+                                    {key === "light" ? "Leve" : key === "medium" ? "Média" : key === "heavy" ? "Pesada" : "Escudos"}
+                                </span>
+                            </label>
+                        ))}
+                    </div>
+                </div>
+
+                <CompactRichInput
+                    label="Armas"
+                    value={currentValues.weaponProficiencies ?? sheet.weaponProficiencies ?? ""}
+                    onChange={(v) => setFieldLocally("weaponProficiencies" as keyof PatchSheetBody, v)}
+                    onBlur={(v) => patchField("weaponProficiencies" as keyof PatchSheetBody, v)}
+                    placeholder="Proficiências com armas..."
+                    isLoading={isLoading}
+                    disabled={isReadOnly}
+                />
+
+                <CompactRichInput
+                    label="Ferramentas"
+                    value={currentValues.toolProficiencies ?? sheet.toolProficiencies ?? ""}
+                    onChange={(v) => setFieldLocally("toolProficiencies" as keyof PatchSheetBody, v)}
+                    onBlur={(v) => patchField("toolProficiencies" as keyof PatchSheetBody, v)}
+                    placeholder="Proficiências com ferramentas..."
+                    isLoading={isLoading}
+                    disabled={isReadOnly}
+                />
+            </div>
+        </div>
+    )
+
+    return {
+        inspirationCard,
+        proficiencyBonusCard,
+        attributeCards,
+        trainingCard,
+    }
+}
+
+export function SheetAttributesLeft({ sheet, form, isReadOnly = false }: SheetAttributesLeftProps) {
+    const sections = useSheetAttributesLeftSections({ sheet, form, isReadOnly })
+
     return (
         <div className="space-y-3">
-            {/* Inspiração Heroica */}
-            <div
-                className={cn(
-                    "flex items-center gap-2 p-2 rounded-lg border cursor-pointer transition-all select-none",
-                    isReadOnly && "cursor-default",
-                    currentValues.inspiration
-                        ? "border-cyan-500/40 bg-cyan-500/10"
-                        : "border-white/10 bg-white/5 hover:border-white/20"
-                )}
-                onClick={() => !isReadOnly && patchField("inspiration", !currentValues.inspiration)}
-            >
-                <Zap className={cn("w-4 h-4 flex-shrink-0", currentValues.inspiration ? "text-cyan-400" : "text-white/30")} />
-                <span className={cn("text-[9px] font-black uppercase tracking-widest", currentValues.inspiration ? "text-cyan-400" : "text-white/40")}>
-                    Inspiração Heroica
-                </span>
-                <div
-                    className={cn("ml-auto w-3 h-3 rotate-45 border transition-all", !currentValues.inspiration && "bg-transparent border-white/30")}
-                    style={currentValues.inspiration ? { backgroundColor: rarityColors.divine, borderColor: rarityColors.divine } : undefined}
-                />
-            </div>
-
-            {/* Proficiency Bonus */}
-            <div className="flex items-center justify-between p-2 rounded-lg bg-white/5 border border-white/10">
-                <span className="text-[9px] font-black uppercase tracking-widest text-white/40">Bônus de Proficiência</span>
-                <CalcTooltip formula={calc.profBonus.formula} parts={calc.profBonus.parts} result={calc.profBonus.result}>
-                    <span className="text-lg font-black text-white/90">{formatMod(calc.profBonus.value)}</span>
-                </CalcTooltip>
-            </div>
-
-            {/* FOR, DES, CON with their skills */}
-            {LEFT_ATTRIBUTES.map((attrKey) => (
-                <AttributeBlock
-                    key={attrKey}
-                    attributeKey={attrKey}
-                    value={currentValues[attrKey] ?? 10}
-                    onValueChange={(v) => patchField(attrKey as keyof PatchSheetBody, v)}
-                    modifier={calc.attrMods[attrKey].value}
-                    modifierFormula={calc.attrMods[attrKey].formula}
-                    modifierParts={calc.attrMods[attrKey].parts}
-                    modifierResult={calc.attrMods[attrKey].result}
-                    savingThrow={{
-                        proficient: !!(currentSheet.savingThrows as Record<string, boolean> | undefined)?.[attrKey],
-                        value: calc.savingThrows[attrKey].value,
-                        formula: calc.savingThrows[attrKey].formula,
-                        parts: calc.savingThrows[attrKey].parts,
-                        result: calc.savingThrows[attrKey].result,
-                    }}
-                    onSavingThrowToggle={() => handleSavingThrowToggle(attrKey)}
-                    skills={getSkillsForAttribute(attrKey)}
-                    onSkillChange={handleSkillChange}
-                    isLoading={isLoading}
-                    isReadOnly={isReadOnly}
-                />
-            ))}
-
-            {/* Treinamento em Equipamentos e Proficiências */}
-            <div className="rounded-lg border border-white/10 bg-white/5 overflow-hidden">
-                <div className="text-center py-1.5 border-b border-white/10 bg-white/[0.03]">
-                    <label className="text-[8px] font-black uppercase tracking-[0.2em] text-white/40">
-                        Treinamento em Equipamentos e Proficiências
-                    </label>
-                </div>
-                <div className="p-2 space-y-2">
-                    {/* Armor training */}
-                    <div>
-                        <label className="text-[8px] font-black uppercase tracking-widest text-white/30 ml-1">Armaduras</label>
-                        <div className="flex flex-wrap gap-x-3 gap-y-1 mt-1">
-                            {(["light", "medium", "heavy", "shields"] as const).map((key) => (
-                                <label key={key} className={cn("flex items-center gap-1.5 group", !isReadOnly && "cursor-pointer")} onClick={() => toggleArmor(key)}>
-                                    <GlassCheckbox
-                                        checked={!!armorTraining[key]}
-                                        onChange={() => toggleArmor(key)}
-                                        disabled={isReadOnly}
-                                    />
-                                    <span className="text-[8px] font-semibold text-white/40 group-hover:text-white/70 transition-colors capitalize">
-                                        {key === "light" ? "Leve" : key === "medium" ? "Média" : key === "heavy" ? "Pesada" : "Escudos"}
-                                    </span>
-                                </label>
-                            ))}
-                        </div>
-                    </div>
-
-                    {/* Weapon proficiencies */}
-                    <CompactRichInput
-                        label="Armas"
-                        value={currentValues.weaponProficiencies ?? sheet.weaponProficiencies ?? ""}
-                        onChange={(v) => setFieldLocally("weaponProficiencies" as keyof PatchSheetBody, v)}
-                        onBlur={(v) => patchField("weaponProficiencies" as keyof PatchSheetBody, v)}
-                        placeholder="Proficiências com armas..."
-                        isLoading={isLoading}
-                        disabled={isReadOnly}
-                    />
-
-                    {/* Tool proficiencies */}
-                    <CompactRichInput
-                        label="Ferramentas"
-                        value={currentValues.toolProficiencies ?? sheet.toolProficiencies ?? ""}
-                        onChange={(v) => setFieldLocally("toolProficiencies" as keyof PatchSheetBody, v)}
-                        onBlur={(v) => patchField("toolProficiencies" as keyof PatchSheetBody, v)}
-                        placeholder="Proficiências com ferramentas..."
-                        isLoading={isLoading}
-                        disabled={isReadOnly}
-                    />
-                </div>
-            </div>
+            {sections.inspirationCard}
+            {sections.proficiencyBonusCard}
+            {sections.attributeCards}
+            {sections.trainingCard}
         </div>
     )
 }
