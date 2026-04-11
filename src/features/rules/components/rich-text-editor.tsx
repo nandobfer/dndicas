@@ -17,6 +17,7 @@ import { Decoration, DecorationSet } from "@tiptap/pm/view"
 import { GlassDiceValue } from "@/components/ui/glass-dice-value"
 import type { DiceType } from "@/features/spells/types/spells.types"
 import { diceFuse, DICE_LOOKAHEAD_REGEX } from "../utils/dice-render-utils"
+import type { EntityType } from "@/lib/config/colors"
 
 // ─── Dice Highlight Extension ────────────────────────────────────────────────
 // Colors plain-text dice notation and damage-type phrases.
@@ -269,7 +270,6 @@ const DiceValueNode = Node.create({
         ]
     },
 })
-import { EntityPreviewTooltip } from "./entity-preview-tooltip"
 import { MentionBadge } from "./mention-badge"
 
 const MentionNode = (props: any) => {
@@ -362,6 +362,7 @@ interface RichTextEditorProps {
     minRows?: number
     disableNewlines?: boolean
     blurOnMentionSelect?: boolean
+    specificEntityMention?: EntityType
 }
 
 const MenuBar = ({ editor, addImage, disabled = false }: { editor: Editor | null; addImage: () => void; disabled?: boolean }) => {
@@ -448,7 +449,23 @@ const MenuBar = ({ editor, addImage, disabled = false }: { editor: Editor | null
     )
 }
 
-export function RichTextEditor({ value, onChange, onBlur, className, disabled = false, excludeId, variant = "full", autoFocus = false, focusToken = null, onAutoFocusApplied, placeholder, minRows, disableNewlines = false, blurOnMentionSelect = false }: RichTextEditorProps) {
+export function RichTextEditor({
+    value,
+    onChange,
+    onBlur,
+    className,
+    disabled = false,
+    excludeId,
+    variant = "full",
+    autoFocus = false,
+    focusToken = null,
+    onAutoFocusApplied,
+    placeholder,
+    minRows,
+    disableNewlines = false,
+    blurOnMentionSelect = false,
+    specificEntityMention,
+}: RichTextEditorProps) {
     const [isUploading, setIsUploading] = useState(false)
     const lastAppliedFocusTokenRef = useRef<string | null>(null)
 
@@ -488,7 +505,7 @@ export function RichTextEditor({ value, onChange, onBlur, className, disabled = 
                 placeholder: placeholder ?? "Digite '@' para referenciar habilidades, magias, etc.",
             }),
             CustomMention.configure({
-                suggestion: getSuggestionConfig({ excludeId, blurOnMentionSelect }),
+                suggestion: getSuggestionConfig({ excludeId, blurOnMentionSelect, specificEntityMention }),
             }),
             DiceHighlight,
             DiceValueNode,
@@ -554,7 +571,7 @@ export function RichTextEditor({ value, onChange, onBlur, className, disabled = 
                     if (hasHyphenatedLineBreak || hasMidSentenceLineBreak) {
                         event.preventDefault()
 
-                        let cleanedText = text
+                        const cleanedText = text
                             // Remove hyphenation: "apre-\nsentados" -> "apresentados"
                             .replace(/(\w+)-\s*[\n\r]+\s*(\w+)/g, "$1$2")
                             // Join lines that end with a word and start with a word (mid-sentence)
