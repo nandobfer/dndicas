@@ -91,6 +91,12 @@ async function getSearchData(): Promise<UnifiedEntity[]> {
     return cachedData
 }
 
+function filterEntitiesByOptions(items: UnifiedEntity[], options?: UnifiedSearchOptions): UnifiedEntity[] {
+    return options?.specificEntityType
+        ? items.filter((entity) => entity.type === options.specificEntityType)
+        : items
+}
+
 /**
  * Applies weighted fuzzy search to a list of entities.
  */
@@ -139,6 +145,22 @@ export function applyFuzzySearch<T extends { name?: string; originalName?: strin
 }
 
 /**
+ * Returns cached search results synchronously when available.
+ * Useful for instantly populating mention lists before the async search resolves.
+ */
+export function peekUnifiedSearch(
+    query: string,
+    limit = 20,
+    offset = 0,
+    options?: UnifiedSearchOptions
+): UnifiedEntity[] | null {
+    if (!cachedData) return null
+
+    const filteredEntities = filterEntitiesByOptions(cachedData, options)
+    return applyFuzzySearch(filteredEntities, query, limit, offset)
+}
+
+/**
  * Performs a fuzzy search across all entities with weighted scoring.
  */
 export async function performUnifiedSearch(
@@ -147,12 +169,8 @@ export async function performUnifiedSearch(
     offset = 0,
     options?: UnifiedSearchOptions
 ): Promise<UnifiedEntity[]> {
-    if (!query.trim()) return []
-
     const allEntities = await getSearchData()
-    const filteredEntities = options?.specificEntityType
-        ? allEntities.filter((entity) => entity.type === options.specificEntityType)
-        : allEntities
+    const filteredEntities = filterEntitiesByOptions(allEntities, options)
 
     return applyFuzzySearch(filteredEntities, query, limit, offset)
 }
