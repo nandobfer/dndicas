@@ -34,6 +34,7 @@
 import fs from 'fs';
 import path from 'path';
 import terminal from 'terminal-kit';
+import Fuse from 'fuse.js';
 import type { BaseTranslator } from './translation/base-translator';
 import {
     loadAllEntries,
@@ -55,6 +56,25 @@ export interface DiffEntry {
     field: string;
     oldValue: unknown;
     newValue: unknown;
+}
+
+/**
+ * Search document used by the generalized `--filter` pipeline.
+ *
+ * Every provider must map its raw 5etools JSON item into this structure so the
+ * base provider can build a fuzzy-search index without needing to know the
+ * provider-specific shape.
+ *
+ * Rules for implementers:
+ * - `name` should be the primary user-facing name from the source JSON.
+ * - `aliases` is optional and should contain alternative names or searchable
+ *   labels only when the provider's data shape requires it.
+ * - Keep this mapping focused on the source JSON fields that actually identify
+ *   the item; the main intent of `--filter` is narrowing by name.
+ */
+export interface ProviderFilterDocument {
+    name: string;
+    aliases?: string[];
 }
 
 function formatValue(v: unknown): string {
@@ -158,6 +178,7 @@ export abstract class BaseProvider<TInput, TOutput> {
     private autoMode = false;
     private fromStart = false;
     private fromIndex: number | null = null;
+    private filterTerm: string | null = null;
 
     // ─── Translator ───────────────────────────────────────────────────────────
 
@@ -183,6 +204,11 @@ export abstract class BaseProvider<TInput, TOutput> {
         this.fromIndex = index;
     }
 
+    setFilter(term: string): void {
+        const normalized = term.trim();
+        this.filterTerm = normalized.length > 0 ? normalized : null;
+    }
+
     /**
      * Translates a D&D item name and pre-built HTML description from English
      * to Brazilian Portuguese via the configured translator.
@@ -206,6 +232,57 @@ export abstract class BaseProvider<TInput, TOutput> {
             throw new Error(`Key "${this.dataKey}" not found or not an array in ${fullPath}`);
         }
         return items as TInput[];
+    }
+
+    private hasActiveFilter(): boolean {
+        return this.filterTerm !== null;
+    }
+
+    private filterItems(items: TInput[]): TInput[] {
+        if (!this.filterTerm) return items;
+
+        const indexedItems = items.map((item, index) => {
+            const doc = this.buildFilterDocument(item);
+            return {
+                item,
+                index,
+                name: doc.name,
+                aliases: doc.aliases ?? [],
+            };
+        });
+
+        const fuse = new Fuse(indexedItems, {
+            keys: [
+                { name: 'name', weight: 10 },
+                { name: 'aliases', weight: 4 },
+            ],
+            threshold: 0.35,
+            includeScore: true,
+            shouldSort: true,
+            minMatchCharLength: 2,
+            ...this.getFilterFuseOptions(),
+        });
+
+        return fuse.search(this.filterTerm).map((result) => result.item.item);
+    }
+
+    /**
+     * Maps a raw provider item into the generalized search document used by
+     * the `--filter` CLI flag.
+     *
+     * Providers must explicitly map their JSON shape here. This keeps the
+     * filtering logic centralized in BaseProvider while still allowing each
+     * provider to define which fields represent the item's searchable name.
+     */
+    protected abstract buildFilterDocument(item: TInput): ProviderFilterDocument;
+
+    /**
+     * Optional Fuse.js overrides for providers that need different fuzzy-search
+     * behavior. The default configuration is intended to work for name-based
+     * matching across all seed-data providers.
+     */
+    protected getFilterFuseOptions(): Fuse.IFuseOptions<{ item: TInput; index: number; name: string; aliases: string[] }> {
+        return {};
     }
 
     // ─── Progress tracking ────────────────────────────────────────────────────
@@ -497,13 +574,23 @@ export abstract class BaseProvider<TInput, TOutput> {
     async run(): Promise<void> {
         this.log(`\nStarting provider: ${this.name}`, 'info');
 
-        const items = this.readDataFile();
-        const startIndex = this.testMode ? 0
+        const allItems = this.readDataFile();
+        const items = this.filterItems(allItems);
+        const startIndex = this.testMode || this.hasActiveFilter() ? 0
             : this.fromIndex !== null ? this.fromIndex
             : this.fromStart ? 0
             : (await this.readProgress()) + 1;
 
-        this.log(`Total items: ${items.length}`, 'dim');
+        this.log(`Total items: ${allItems.length}`, 'dim');
+        if (this.hasActiveFilter()) {
+            this.log(`Filter active: "${this.filterTerm}"`, 'dim');
+            this.log(`Filtered items: ${items.length}`, 'dim');
+        }
+
+        if (items.length === 0) {
+            this.log('No items matched the active filter.', 'warn');
+            return;
+        }
 
         if (!this.testMode && startIndex >= items.length) {
             this.log(`All ${items.length} items already processed. Use --reset-progress to restart.`, 'warn');
@@ -558,7 +645,7 @@ export abstract class BaseProvider<TInput, TOutput> {
                 if (raw === null) {
                     this.log(`[${i}] Skipped (processItem returned null)`, 'dim');
                     skipped++;
-                    await this.saveProgress(i);
+                    await this.persistProgressIfEnabled(i);
                     this.updateProgressBar(i + 1, '(skipped)');
                     continue;
                 }
@@ -582,7 +669,7 @@ export abstract class BaseProvider<TInput, TOutput> {
                     created++;
                 }
 
-                await this.saveProgress(i);
+                await this.persistProgressIfEnabled(i);
                 this.updateProgressBar(i + 1, this.getItemLabel(output));
             } catch (err) {
                 this.stopProgressBar();
@@ -656,7 +743,7 @@ export abstract class BaseProvider<TInput, TOutput> {
 
         if (raw === null) {
             term.yellow('  ⚠  Item ignorado (processItem retornou null)\n');
-            if (!isDryRun) await this.saveProgress(index);
+            if (!isDryRun) await this.persistProgressIfEnabled(index);
             return 'skipped';
         }
 
@@ -676,13 +763,13 @@ export abstract class BaseProvider<TInput, TOutput> {
             if (diffs.length > 0) {
                 const resolved = await this.resolveConflictsFieldByField(existing, glossarized, diffs);
                 if (resolved === null) {
-                    if (!isDryRun) await this.saveProgress(index);
+                    if (!isDryRun) await this.persistProgressIfEnabled(index);
                     return 'skipped';
                 }
                 working = resolved;
             } else if (!isDryRun) {
                 term.yellow('  ⚠  Já existe no banco e está igual — ignorando.\n');
-                await this.saveProgress(index);
+                await this.persistProgressIfEnabled(index);
                 return 'exists';
             }
         }
@@ -692,7 +779,7 @@ export abstract class BaseProvider<TInput, TOutput> {
 
         // ESC during review = skip without saving
         if (reviewed === null) {
-            if (!isDryRun) await this.saveProgress(index);
+            if (!isDryRun) await this.persistProgressIfEnabled(index);
             return 'skipped';
         }
 
@@ -719,7 +806,7 @@ export abstract class BaseProvider<TInput, TOutput> {
                 if (conflictDiffs.length > 0) {
                     const resolved = await this.resolveConflictsFieldByField(finalExisting, finalOutput, conflictDiffs);
                     if (resolved === null) {
-                        await this.saveProgress(index);
+                        await this.persistProgressIfEnabled(index);
                         return 'skipped';
                     }
                     finalOutput = resolved;
@@ -731,19 +818,24 @@ export abstract class BaseProvider<TInput, TOutput> {
             const finalDiffs = this.diffObjects(finalExisting, finalOutput);
             if (finalDiffs.length === 0) {
                 term.yellow('  ⚠  Resultado igual ao existente — ignorando.\n');
-                await this.saveProgress(index);
+                await this.persistProgressIfEnabled(index);
                 return 'exists';
             }
             await this.update(finalOutput);
             term.green('  ✓ Atualizado com sucesso.\n');
-            await this.saveProgress(index);
+            await this.persistProgressIfEnabled(index);
             return 'updated';
         }
 
         await this.create(finalOutput);
         term.green(`  ✓ Criado com sucesso.\n`);
-        await this.saveProgress(index);
+        await this.persistProgressIfEnabled(index);
         return 'created';
+    }
+
+    private async persistProgressIfEnabled(index: number): Promise<void> {
+        if (this.hasActiveFilter()) return;
+        await this.saveProgress(index);
     }
 
     /**
@@ -859,4 +951,3 @@ export function formatSource(sourceCode: string, page?: number): string {
     const label = SOURCE_DISPLAY_MAP[sourceCode] ?? sourceCode;
     return page !== undefined ? `${label} pág. ${page}` : label;
 }
-

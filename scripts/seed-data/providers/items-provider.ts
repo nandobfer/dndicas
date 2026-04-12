@@ -319,6 +319,12 @@ export class ItemsProvider extends BaseProvider<FiveEToolsBaseItem, CreateItemIn
     readonly dataFilePath = 'src/lib/5etools-data/items-base.json';
     readonly dataKey = 'baseitem';
 
+    protected override buildFilterDocument(item: FiveEToolsBaseItem) {
+        return {
+            name: item.name,
+        };
+    }
+
     async processItem(item: FiveEToolsBaseItem): Promise<CreateItemInput | null> {
         // Stage 1: only XPHB base items (PHB 2024)
         if (item.source !== 'XPHB') {

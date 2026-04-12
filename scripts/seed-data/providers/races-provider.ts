@@ -413,6 +413,12 @@ export class RacesProvider extends BaseProvider<FiveEToolsRace, CreateRaceInput>
     private subraces: FiveEToolsSubrace[] = [];
     private fluffData: Map<string, FluffRaceEntry> = new Map();
 
+    protected override buildFilterDocument(race: FiveEToolsRace) {
+        return {
+            name: race.name,
+        };
+    }
+
     override readDataFile(): FiveEToolsRace[] {
         const fullPath = path.resolve(PROJECT_ROOT, this.dataFilePath);
         const raw = fs.readFileSync(fullPath, 'utf-8');

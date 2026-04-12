@@ -89,6 +89,8 @@ function printHelp(): void {
     term('Ignora o progresso salvo e começa a iterar do índice 0\n');
     term.green('  --from <índice>    ');
     term('Começa a iterar a partir do índice especificado (ex: --from 117)\n\n');
+    term.green('  --filter <termo>   ');
+    term('Filtra os dados por nome usando busca fuzzy; não usa nem salva progresso\n\n');
 
     term.bold('Modos de execução:\n\n');
 
@@ -565,9 +567,21 @@ async function main(): Promise<void> {
     const testMode = process.argv.includes('--test') || process.argv.includes('--dry-run');
     const autoMode = process.argv.includes('--auto');
     const fromStart = process.argv.includes('--from-start');
+    const filterIdx = process.argv.indexOf('--filter');
+    const filterValue = filterIdx !== -1 ? process.argv[filterIdx + 1] : undefined;
 
     const fromIdx = process.argv.indexOf('--from');
     const fromIndex = fromIdx !== -1 ? parseInt(process.argv[fromIdx + 1] ?? '', 10) : NaN;
+
+    if (filterIdx !== -1 && (!filterValue || filterValue.startsWith('--'))) {
+        term.red('✗ --filter requer um valor. Exemplo: --filter yan-ti\n');
+        process.exit(1);
+    }
+
+    if (filterIdx !== -1 && (fromStart || fromIdx !== -1)) {
+        term.red('✗ --filter não pode ser combinado com --from ou --from-start\n');
+        process.exit(1);
+    }
 
     if (testMode) {
         term.yellow('\n🧪 TEST/DRY-RUN MODE ENABLED\n');
@@ -600,6 +614,13 @@ async function main(): Promise<void> {
         term.dim(`   • Iteration will begin from index ${fromIndex}\n\n`);
     }
 
+    if (filterIdx !== -1) {
+        term.yellow(`🔎  FILTER MODE: ${filterValue}\n`);
+        term.dim('   • Will fuzzy-filter provider items by name\n');
+        term.dim('   • Saved progress will be ignored\n');
+        term.dim('   • No progress will be persisted for this run\n\n');
+    }
+
     setupExitHandler();
 
     let provider: BaseProvider<unknown, unknown>;
@@ -626,6 +647,9 @@ async function main(): Promise<void> {
     }
     if (!isNaN(fromIndex)) {
         provider!.setFromIndex(fromIndex);
+    }
+    if (filterValue) {
+        provider!.setFilter(filterValue);
     }
 
     // If LibreTranslate was selected, start its server (and run setup if needed).
