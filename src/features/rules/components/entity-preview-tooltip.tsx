@@ -1,25 +1,31 @@
 "use client"
 
 import * as React from "react"
-import { GlassCard } from "@/components/ui/glass-card"
 import { Chip } from "@/components/ui/chip"
-import { ScrollText, BookOpen, Quote, Sparkles, ExternalLink, Fingerprint } from "lucide-react"
+import { ScrollText, Quote, Sparkles, ExternalLink, Fingerprint } from "lucide-react"
 import { cn } from "@/core/utils"
 import { entityColors } from "@/lib/config/colors"
 import { Reference } from "../types/rules.types"
-import { SimpleGlassTooltip } from "@/components/ui/glass-tooltip"
 import { EntityTitleLink, MentionContent } from "./mention-badge"
 import { GlassPopover, GlassPopoverTrigger, GlassPopoverContent } from "@/components/ui/glass-popover"
 import { FeatPreview } from "@/features/feats/components/feat-preview"
+import type { Feat } from "@/features/feats/types/feats.types"
 import { SpellPreview } from "@/features/spells/components/spell-preview"
+import type { Spell } from "@/features/spells/types/spells.types"
 import { ClassPreview } from "@/features/classes/components/class-preview"
 import { SubclassPreview } from "@/features/classes/components/subclass-preview"
+import type { CharacterClass, Subclass } from "@/features/classes/types/classes.types"
 import { BackgroundPreview } from "@/features/backgrounds/components/background-preview"
+import type { Background } from "@/features/backgrounds/types/backgrounds.types"
 import { RacePreview } from "@/features/races/components/race-preview"
+import type { Race } from "@/features/races/types/races.types"
 import { ItemPreview } from "@/features/items/components/item-preview"
+import type { Item } from "@/features/items/types/items.types"
 import { useWindows } from "@/core/context/window-context"
-import { motion, AnimatePresence } from "framer-motion"
+import { motion } from "framer-motion"
 import { EntitySource } from "./entity-source"
+import type { Trait } from "@/features/traits/types/traits.types"
+import { ChargesPreview } from "@/features/shared/charges/charges-preview"
 
 interface RulePreviewProps {
     rule: Reference
@@ -85,8 +91,18 @@ export const RulePreview = ({ rule, showStatus = true }: RulePreviewProps) => {
  * T041: Added Trait preview component for Habilidade entity type.
  */
 interface TraitPreviewProps {
-    trait: any // Trait type from features/traits
+    trait: Trait
     showStatus?: boolean
+}
+
+type SubclassParentData = {
+    name?: string
+    subclasses?: Subclass[]
+} & Record<string, unknown>
+
+type SubclassPreviewData = {
+    parentClass: SubclassParentData
+    subclass: Subclass
 }
 
 export const TraitPreview = ({ trait, showStatus = true, hideStatusChip = false, hideActionIcons = false }: TraitPreviewProps & { hideStatusChip?: boolean; hideActionIcons?: boolean }) => {
@@ -139,6 +155,8 @@ export const TraitPreview = ({ trait, showStatus = true, hideStatusChip = false,
                 </div>
             )}
 
+            <ChargesPreview charges={trait.charges} />
+
             <EntitySource source={trait.source} originalName={trait.originalName} />
         </div>
     )
@@ -147,7 +165,7 @@ export const TraitPreview = ({ trait, showStatus = true, hideStatusChip = false,
 /**
  * RacePreview specialized for the tooltip with actions.
  */
-export const RacePreviewWithActions = ({ race, showStatus = true }: { race: any; showStatus?: boolean }) => {
+export const RacePreviewWithActions = ({ race, showStatus = true }: { race: Race; showStatus?: boolean }) => {
     const { addWindow } = useWindows()
     return (
         <div className="space-y-4 w-full">
@@ -200,7 +218,7 @@ interface EntityPreviewTooltipProps {
 }
 
 export const EntityPreviewTooltip = ({ entityId, entityType, children, side = "top", delayDuration = 300 }: EntityPreviewTooltipProps) => {
-    const [data, setData] = React.useState<any>(null)
+    const [data, setData] = React.useState<unknown>(null)
     const [loading, setLoading] = React.useState(false)
     const [open, setOpen] = React.useState(false)
     const timeoutRef = React.useRef<NodeJS.Timeout | null>(null)
@@ -239,10 +257,11 @@ export const EntityPreviewTooltip = ({ entityId, entityType, children, side = "t
             if (res.ok) {
                 const json = await res.json()
                 if (entityType === "Subclasse") {
+                    const parentData = json as SubclassParentData
                     const match = /^subclass:([^:]+):(.+)$/.exec(entityId)
                     const subclassId = match?.[2]
-                    const subclass = json?.subclasses?.find((sub: any) => String(sub._id || sub.name) === subclassId) || null
-                    setData({ parentClass: json, subclass })
+                    const subclass = parentData.subclasses?.find((sub) => String(sub._id || sub.name) === subclassId) || null
+                    setData({ parentClass: parentData, subclass })
                 } else {
                     setData(json)
                 }
@@ -281,35 +300,37 @@ export const EntityPreviewTooltip = ({ entityId, entityType, children, side = "t
 
         switch (entityType) {
             case "Regra":
-                return <RulePreview rule={data} />
+                return <RulePreview rule={data as Reference} />
             case "Habilidade":
-                return <TraitPreview trait={data} />
+                return <TraitPreview trait={data as Trait} />
             case "Talento":
-                return <FeatPreview feat={data} />
+                return <FeatPreview feat={data as Feat} />
             case "Magia":
-                return <SpellPreview spell={data} />
+                return <SpellPreview spell={data as Spell} />
             case "Classe":
-                return <ClassPreview characterClass={data} showStatus={true} />
+                return <ClassPreview characterClass={data as CharacterClass} showStatus={true} />
             case "Subclasse":
-                if (!data?.parentClass || !data?.subclass) {
+                if (!data || typeof data !== "object" || !("parentClass" in data) || !("subclass" in data) || !data.parentClass || !data.subclass) {
                     return <div className="p-4 text-xs text-white/40 text-center w-[200px]">Subclasse não encontrada</div>
                 }
-                return <SubclassPreview subclass={data.subclass} parentClassName={data.parentClass.name} linkToParentClass />
+                return <SubclassPreview subclass={(data as SubclassPreviewData).subclass} parentClassName={(data as SubclassPreviewData).parentClass.name} linkToParentClass />
             case "Origem":
-                return <BackgroundPreview background={data} />
+                return <BackgroundPreview background={data as Background} />
             case "Raça":
-                return <RacePreviewWithActions race={data} showStatus={true} />
+                return <RacePreviewWithActions race={data as Race} showStatus={true} />
             case "Item":
-                return <ItemPreview item={data} showStatus={true} />
-            default:
+                return <ItemPreview item={data as Item} showStatus={true} />
+            default: {
+                const fallbackData = (data ?? {}) as Record<string, unknown>
                 return (
                     <div className="p-4">
                         <p className="text-sm font-bold text-white">
-                            <MentionContent html={data.name || data.label || entityId} />
+                            <MentionContent html={String(fallbackData.name || fallbackData.label || entityId)} />
                         </p>
                         <p className="text-xs text-white/40">{entityType}</p>
                     </div>
                 )
+            }
         }
     }, [entityType, data, loading, entityId])
 

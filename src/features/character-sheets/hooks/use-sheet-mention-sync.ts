@@ -1,13 +1,16 @@
 "use client"
 
-import { useEffect, useRef } from "react"
+import { useEffect, useMemo, useRef } from "react"
 import type { UseFormWatch } from "react-hook-form"
 import { fetchBackground } from "@/features/backgrounds/api/backgrounds-api"
 import { fetchClass } from "@/features/classes/api/classes-api"
 import type { CharacterClass } from "@/features/classes/types/classes.types"
 import { fetchFeat } from "@/features/feats/api/feats-api"
+import { useItems } from "../api/character-sheets-queries"
 import { fetchRace } from "@/features/races/api/races-api"
-import type { AttributeType, ArmorTraining, CharacterSheet, PatchSheetBody, SkillName } from "../types/character-sheet.types"
+import { fetchTraitById } from "@/features/traits/api/traits-api"
+import { fetchItemById } from "@/features/items/api/items-api"
+import type { AttributeType, ArmorTraining, CharacterSheet, CharacterResourceCharge, PatchSheetBody, SkillName } from "../types/character-sheet.types"
 import {
     appendMentionsToHtml,
     collectMentionsFromClasses,
@@ -16,6 +19,7 @@ import {
     dedupeMentions,
     diffMentions,
     extractFeatMention,
+    extractMentionsFromHtml,
     getActiveBackgroundMentions,
     getActiveClassMentions,
     getActiveRaceMentions,
@@ -28,6 +32,8 @@ import {
     type ParsedMention,
     type ResolvedSubclass,
 } from "../utils/mention-sync"
+import { useCharacterCalculations } from "./use-character-calculations"
+import { buildBoundResourceCharge, syncResourceChargeRows } from "../utils/resource-charges"
 
 interface UseSheetMentionSyncProps {
     sheet: CharacterSheet
@@ -82,6 +88,11 @@ export function useSheetMentionSync({ sheet, form, isReadOnly = false }: UseShee
     const classFeatures = watch("classFeatures") ?? sheet.classFeatures ?? ""
     const speciesTraits = watch("speciesTraits") ?? sheet.speciesTraits ?? ""
     const featuresNotes = watch("featuresNotes") ?? sheet.featuresNotes ?? ""
+    const watchedResourceCharges = watch("resourceCharges")
+    const resourceCharges = useMemo(
+        () => watchedResourceCharges ?? sheet.resourceCharges ?? [],
+        [sheet.resourceCharges, watchedResourceCharges]
+    )
     const currentSkills = watch("skills") ?? sheet.skills
     const currentSavingThrows = watch("savingThrows") ?? sheet.savingThrows
     const currentSpellSlots = watch("spellSlots") ?? sheet.spellSlots
@@ -98,6 +109,37 @@ export function useSheetMentionSync({ sheet, form, isReadOnly = false }: UseShee
         : watchedSpellcastingAttribute
     const currentArmorTraining = watch("armorTraining") ?? sheet.armorTraining
     const currentWeaponProficiencies = watch("weaponProficiencies") ?? sheet.weaponProficiencies ?? ""
+    const strength = watch("strength") ?? sheet.strength
+    const dexterity = watch("dexterity") ?? sheet.dexterity
+    const constitution = watch("constitution") ?? sheet.constitution
+    const intelligence = watch("intelligence") ?? sheet.intelligence
+    const wisdom = watch("wisdom") ?? sheet.wisdom
+    const charisma = watch("charisma") ?? sheet.charisma
+    const proficiencyBonusOverride = watch("proficiencyBonusOverride") ?? sheet.proficiencyBonusOverride ?? null
+    const { data: items = [] } = useItems(sheet._id)
+    const calc = useCharacterCalculations({
+        ...sheet,
+        level,
+        strength,
+        dexterity,
+        constitution,
+        intelligence,
+        wisdom,
+        charisma,
+        proficiencyBonusOverride,
+        savingThrows: currentSavingThrows,
+        skills: currentSkills,
+        spellSlots: currentSpellSlots,
+        classFeatures,
+        speciesTraits,
+        featuresNotes,
+        resourceCharges,
+        armorTraining: currentArmorTraining,
+        weaponProficiencies: currentWeaponProficiencies,
+        movementSpeed: currentMovementSpeed,
+        size: currentSize,
+        spellcastingAttribute: currentSpellcastingAttribute,
+    })
 
     const previousDerivedRef = useRef<DerivedMentionState>(EMPTY_DERIVED_STATE)
     const requestIdRef = useRef(0)
@@ -106,24 +148,35 @@ export function useSheetMentionSync({ sheet, form, isReadOnly = false }: UseShee
 
     // Use refs for values that are read inside the effect but should NOT re-trigger it.
     const patchFieldsRef = useRef(patchFields)
-    patchFieldsRef.current = patchFields
-
     const armorTrainingRef = useRef(currentArmorTraining)
-    armorTrainingRef.current = currentArmorTraining
-
     const weaponProfsRef = useRef(currentWeaponProficiencies)
-    weaponProfsRef.current = currentWeaponProficiencies
-
     const currentSavingThrowsRef = useRef(currentSavingThrows)
-    currentSavingThrowsRef.current = currentSavingThrows
-
     const currentSkillsRef = useRef(currentSkills)
-    currentSkillsRef.current = currentSkills
 
     // Ownership tracking: only remove what THIS sync session set to true.
     const syncContributedSavingThrowsRef = useRef<Set<AttributeType>>(new Set())
     const syncContributedArmorRef = useRef<Set<keyof ArmorTraining>>(new Set())
     const syncContributedSkillsRef = useRef<Set<SkillName>>(new Set())
+
+    useEffect(() => {
+        patchFieldsRef.current = patchFields
+    }, [patchFields])
+
+    useEffect(() => {
+        armorTrainingRef.current = currentArmorTraining
+    }, [currentArmorTraining])
+
+    useEffect(() => {
+        weaponProfsRef.current = currentWeaponProficiencies
+    }, [currentWeaponProficiencies])
+
+    useEffect(() => {
+        currentSavingThrowsRef.current = currentSavingThrows
+    }, [currentSavingThrows])
+
+    useEffect(() => {
+        currentSkillsRef.current = currentSkills
+    }, [currentSkills])
 
     useEffect(() => {
         if (isReadOnly) return
@@ -134,7 +187,38 @@ export function useSheetMentionSync({ sheet, form, isReadOnly = false }: UseShee
         const subclassIds = getActiveSubclassMentions(subclassValue).map(m => m.id).sort().join(",")
         const raceIds = getActiveRaceMentions(raceValue).map(m => m.id).sort().join(",")
         const bgIds = getActiveBackgroundMentions(originValue).map(m => m.id).sort().join(",")
-        const triggerKey = `${classIds}||${subclassIds}||${raceIds}||${bgIds}||${level}`
+        const itemIds = items
+            .flatMap((item) => extractMentionsFromHtml(item.name).filter((mention) => mention.entityType === "Item"))
+            .map((mention) => mention.id)
+            .sort()
+            .join(",")
+        const classFeatureResourceIds = extractMentionsFromHtml(classFeatures)
+            .filter((mention) => mention.entityType === "Habilidade")
+            .map((mention) => mention.id)
+            .sort()
+            .join(",")
+        const speciesTraitResourceIds = extractMentionsFromHtml(speciesTraits)
+            .filter((mention) => mention.entityType === "Habilidade")
+            .map((mention) => mention.id)
+            .sort()
+            .join(",")
+        const featResourceIds = extractMentionsFromHtml(featuresNotes)
+            .filter((mention) => mention.entityType === "Talento")
+            .map((mention) => mention.id)
+            .sort()
+            .join(",")
+        const statKey = [level, proficiencyBonusOverride ?? "", strength, dexterity, constitution, intelligence, wisdom, charisma].join(",")
+        const triggerKey = [
+            classIds,
+            subclassIds,
+            raceIds,
+            bgIds,
+            itemIds,
+            classFeatureResourceIds,
+            speciesTraitResourceIds,
+            featResourceIds,
+            statKey,
+        ].join("||")
 
         if (hasInitializedRef.current && previousTriggerRef.current === triggerKey) {
             return
@@ -147,15 +231,8 @@ export function useSheetMentionSync({ sheet, form, isReadOnly = false }: UseShee
 
             if (requestId !== requestIdRef.current) return
 
-            if (!hasInitializedRef.current) {
-                previousDerivedRef.current = resolved.derived
-                previousTriggerRef.current = triggerKey
-                hasInitializedRef.current = true
-                return
-            }
-
             const nextDerived = resolved.derived
-            const previousDerived = previousDerivedRef.current
+            const previousDerived = hasInitializedRef.current ? previousDerivedRef.current : EMPTY_DERIVED_STATE
 
             const classFeatureDiff = diffMentions(
                 [...previousDerived.classMentions, ...previousDerived.subclassMentions],
@@ -187,6 +264,23 @@ export function useSheetMentionSync({ sheet, form, isReadOnly = false }: UseShee
             const nextSpellcastingAttribute = mapCatalogAttributeToSheetAttribute(winningSpellSource?.spellcastingAttribute)
             const nextSpellSlots = mapSpellSlotsForLevel(level, winningSpellSource, currentSpellSlots)
             const nextHitDice = mapHitDiceToSheetHitDice(resolved.activeClasses[0]?.hitDice)
+            const nextResourceCharges = await syncMentionBoundResourceCharges({
+                classFeatures: nextClassFeatures,
+                speciesTraits: nextSpeciesTraits,
+                featuresNotes: nextFeaturesNotes,
+                items,
+                currentRows: resourceCharges,
+                level,
+                proficiencyBonus: calc.profBonus.value,
+                attributeModifiers: {
+                    strength: calc.attrMods.strength.value,
+                    dexterity: calc.attrMods.dexterity.value,
+                    constitution: calc.attrMods.constitution.value,
+                    intelligence: calc.attrMods.intelligence.value,
+                    wisdom: calc.attrMods.wisdom.value,
+                    charisma: calc.attrMods.charisma.value,
+                },
+            })
 
             const patch: Partial<PatchSheetBody> = {}
 
@@ -223,7 +317,7 @@ export function useSheetMentionSync({ sheet, form, isReadOnly = false }: UseShee
             const addedSavingThrowAttrs = nextDerived.classSavingThrowAttributes.filter(a => !prevSavingThrowAttrs.has(a))
             const removedSavingThrowAttrs = previousDerived.classSavingThrowAttributes.filter(a => !nextSavingThrowAttrs.has(a))
 
-            let nextSavingThrows = { ...(currentSavingThrowsRef.current ?? {}) } as Record<AttributeType, boolean>
+            const nextSavingThrows = { ...(currentSavingThrowsRef.current ?? {}) } as Record<AttributeType, boolean>
             let savingThrowsChanged = false
 
             for (const attr of addedSavingThrowAttrs) {
@@ -246,6 +340,7 @@ export function useSheetMentionSync({ sheet, form, isReadOnly = false }: UseShee
 
             assignIfChanged(patch, "spellcastingAttribute", nextSpellcastingAttribute, currentSpellcastingAttribute)
             assignIfChanged(patch, "spellSlots", nextSpellSlots, currentSpellSlots)
+            assignIfChanged(patch, "resourceCharges", nextResourceCharges, resourceCharges)
 
             // ── Armor training (class-contributed, ownership-aware) ─────────────
             const prevArmorProfs = new Set(previousDerived.classArmorProficiencies)
@@ -255,7 +350,7 @@ export function useSheetMentionSync({ sheet, form, isReadOnly = false }: UseShee
             const removedArmorProfs = previousDerived.classArmorProficiencies.filter(p => !nextArmorProfs.has(p))
 
             const armorTraining = armorTrainingRef.current
-            let nextArmorTraining = { ...armorTraining } as ArmorTraining
+            const nextArmorTraining = { ...armorTraining } as ArmorTraining
             let armorChanged = false
 
             for (const prof of addedArmorProfs) {
@@ -294,7 +389,7 @@ export function useSheetMentionSync({ sheet, form, isReadOnly = false }: UseShee
             const addedBgSkills = nextDerived.backgroundSkillProficiencies.filter(s => !prevBgSkills.has(s))
             const removedBgSkills = previousDerived.backgroundSkillProficiencies.filter(s => !nextBgSkills.has(s))
 
-            let nextSkills = { ...(currentSkillsRef.current ?? {}) } as Record<SkillName, { proficient: boolean; expertise: boolean }>
+            const nextSkills = { ...(currentSkillsRef.current ?? {}) } as Record<SkillName, { proficient: boolean; expertise: boolean }>
             let skillsChanged = false
 
             for (const skill of addedBgSkills) {
@@ -330,6 +425,7 @@ export function useSheetMentionSync({ sheet, form, isReadOnly = false }: UseShee
 
             previousDerivedRef.current = nextDerived
             previousTriggerRef.current = triggerKey
+            hasInitializedRef.current = true
 
             if (Object.keys(patch).length > 0) {
                 // Include source identity fields so server always receives source + derived together.
@@ -343,6 +439,15 @@ export function useSheetMentionSync({ sheet, form, isReadOnly = false }: UseShee
     }, [
         classFeatures,
         classValue,
+        calc.attrMods.charisma.value,
+        calc.attrMods.constitution.value,
+        calc.attrMods.dexterity.value,
+        calc.attrMods.intelligence.value,
+        calc.attrMods.strength.value,
+        calc.attrMods.wisdom.value,
+        calc.profBonus.value,
+        charisma,
+        constitution,
         currentMovementSpeed,
         currentSize,
         currentSkills,
@@ -350,10 +455,16 @@ export function useSheetMentionSync({ sheet, form, isReadOnly = false }: UseShee
         currentSpellSlots,
         currentSpellcastingAttribute,
         currentHitDiceTotal,
+        currentArmorTraining,
+        currentWeaponProficiencies,
+        dexterity,
         featuresNotes,
+        intelligence,
         isReadOnly,
+        items,
         level,
         originValue,
+        proficiencyBonusOverride,
         raceValue,
         sheet.classRef,
         sheet.movementSpeed,
@@ -363,17 +474,16 @@ export function useSheetMentionSync({ sheet, form, isReadOnly = false }: UseShee
         sheet.spellSlots,
         sheet.spellcastingAttribute,
         sheet.subclassRef,
+        strength,
         speciesTraits,
         subclassValue,
+        wisdom,
+        resourceCharges,
         watchedClassRef,
         watchedOriginRef,
         watchedRaceRef,
         watchedSpellcastingAttribute,
         watchedSubclassRef,
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-        // patchFields, currentArmorTraining, currentWeaponProficiencies,
-        // currentSavingThrowsRef, currentSkillsRef are intentionally excluded —
-        // accessed via refs to prevent race conditions with requestId.
     ])
 }
 
@@ -560,4 +670,107 @@ async function resolveSheetSyncState(
             backgroundSkillProficiencies,
         } satisfies DerivedMentionState,
     }
+}
+
+async function syncMentionBoundResourceCharges({
+    classFeatures,
+    speciesTraits,
+    featuresNotes,
+    items,
+    currentRows,
+    level,
+    proficiencyBonus,
+    attributeModifiers,
+}: {
+    classFeatures: string
+    speciesTraits: string
+    featuresNotes: string
+    items: Array<{ name: string }>
+    currentRows: CharacterResourceCharge[]
+    level: number
+    proficiencyBonus: number
+    attributeModifiers: Record<AttributeType, number>
+}) {
+    const traitMentions = [
+        ...extractMentionsFromHtml(classFeatures)
+            .filter((mention) => mention.entityType === "Habilidade")
+            .map((mention) => ({ mention, kind: "class-feature" as const })),
+        ...extractMentionsFromHtml(speciesTraits)
+            .filter((mention) => mention.entityType === "Habilidade")
+            .map((mention) => ({ mention, kind: "species-trait" as const })),
+    ]
+    const featMentions = extractMentionsFromHtml(featuresNotes)
+        .filter((mention) => mention.entityType === "Talento")
+        .map((mention) => ({ mention, kind: "feat" as const }))
+    const itemMentions = items.flatMap((item) =>
+        extractMentionsFromHtml(item.name)
+            .filter((mention) => mention.entityType === "Item")
+            .map((mention) => ({ mention, kind: "item" as const }))
+    )
+
+    const desiredRows = (await Promise.all([
+        ...traitMentions.map(async ({ mention, kind }) => {
+            try {
+                const trait = await fetchTraitById(mention.id)
+                return buildBoundResourceCharge({
+                    entityId: mention.id,
+                    entityType: "Habilidade",
+                    kind,
+                    nameHtml: mentionToHtml(mention),
+                    charges: trait.charges,
+                }, { level, proficiencyBonus, attributeModifiers })
+            } catch {
+                return null
+            }
+        }),
+        ...featMentions.map(async ({ mention, kind }) => {
+            try {
+                const feat = await fetchFeat(mention.id)
+                return buildBoundResourceCharge({
+                    entityId: mention.id,
+                    entityType: "Talento",
+                    kind,
+                    nameHtml: mentionToHtml(mention),
+                    charges: feat.charges,
+                }, { level, proficiencyBonus, attributeModifiers })
+            } catch {
+                return null
+            }
+        }),
+        ...itemMentions.map(async ({ mention, kind }) => {
+            try {
+                const item = await fetchItemById(mention.id)
+                return buildBoundResourceCharge({
+                    entityId: mention.id,
+                    entityType: "Item",
+                    kind,
+                    nameHtml: mentionToHtml(mention),
+                    charges: item.charges,
+                }, { level, proficiencyBonus, attributeModifiers })
+            } catch {
+                return null
+            }
+        }),
+    ])).filter((row): row is CharacterResourceCharge => !!row)
+
+    return syncResourceChargeRows(currentRows, desiredRows)
+}
+
+function mentionToHtml(mention: ParsedMention) {
+    return `<p><span data-type="mention" data-id="${escapeAttr(mention.id)}" data-entity-type="${escapeAttr(mention.entityType)}" data-label="${escapeAttr(mention.label)}" class="mention">${escapeText(mention.label)}</span></p>`
+}
+
+function escapeAttr(value: string) {
+    return value
+        .replaceAll("&", "&amp;")
+        .replaceAll('"', "&quot;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;")
+}
+
+function escapeText(value: string) {
+    return value
+        .replaceAll("&", "&amp;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;")
 }

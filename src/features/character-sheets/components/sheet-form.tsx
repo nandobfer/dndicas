@@ -33,7 +33,10 @@ export function SheetForm({ sheet }: SheetFormProps) {
     const isReadOnly = !canEdit
 
     useEffect(() => {
-        setHasHydrated(true)
+        const frame = requestAnimationFrame(() => {
+            setHasHydrated(true)
+        })
+        return () => cancelAnimationFrame(frame)
     }, [])
 
     const handleSlugChange = useCallback((newSlug: string) => {
@@ -81,6 +84,7 @@ export function SheetForm({ sheet }: SheetFormProps) {
                     {leftSections.attributeCards}
                     {rightAttributeCards}
                     {attacksSections.attacksCard}
+                    {attacksSections.resourceChargesCard}
                     {attacksSections.classFeaturesCard}
                     {attacksSections.speciesTraitsCard}
                     {attacksSections.featsCard}

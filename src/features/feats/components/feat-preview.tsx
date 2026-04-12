@@ -1,6 +1,6 @@
 "use client";
 
-import { Zap, BookOpen, Info, Trophy, PlusCircle, ExternalLink, Tag } from "lucide-react"
+import { Zap, Info, Trophy, PlusCircle, ExternalLink, Tag } from "lucide-react"
 import { Chip } from "@/components/ui/chip"
 import { motion } from "framer-motion"
 import { useWindows } from "@/core/context/window-context"
@@ -11,6 +11,7 @@ import { cn } from "@/core/utils"
 import type { Feat } from "../types/feats.types"
 import type { FeatCategoryColorKey } from "@/lib/config/colors"
 import { EntitySource } from "@/features/rules/components/entity-source"
+import { ChargesPreview } from "@/features/shared/charges/charges-preview"
 
 export interface FeatPreviewProps {
     feat: Feat
@@ -128,6 +129,8 @@ export function FeatPreview({ feat, showStatus = true, hideStatusChip = false, h
                     <MentionContent html={feat.description} mode="block" className="[&_p]:text-sm [&_p]:text-white/80 [&_ul]:text-sm [&_ol]:text-sm" />
                 </div>
             </div>
+
+            <ChargesPreview charges={feat.charges} />
 
             {/* Source */}
             <EntitySource source={feat.source} originalName={feat.originalName} />
