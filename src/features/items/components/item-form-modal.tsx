@@ -59,6 +59,7 @@ import { diceColors } from "@/lib/config/colors"
 import { createItemSchema, type CreateItemSchema } from "../api/validation"
 import { Item, ItemType, ItemRarity, ArmorType, DamageType, CreateItemInput, UpdateItemInput } from "../types/items.types"
 import { useCreateItem, useUpdateItem } from "../api/items-queries"
+import { ChargesFormSection } from "@/features/shared/charges/charges-form-section"
 
 // ── Shared Constants ─────────────────────────────────────────────────────────
 
@@ -108,15 +109,17 @@ const {
     handleSubmit,
     watch,
     setValue,
+    getFieldState,
     control,
     reset,
-    formState: { errors, isDirty },
+    formState: { errors, isDirty, submitCount },
 } = useForm<CreateItemSchema>({
     resolver: zodResolver(createItemSchema) as any,
     defaultValues: {
         name: item?.name ?? "",
         originalName: item?.originalName ?? "",
         description: item?.description ?? "",
+        charges: item?.charges ?? undefined,
         source: item?.source ?? "LDJ pág. ",
         status: item?.status ?? "active",
         type: item?.type ?? "qualquer",
@@ -175,6 +178,7 @@ React.useEffect(() => {
             name: item?.name ?? "",
             originalName: item?.originalName ?? "",
             description: item?.description ?? "",
+            charges: item?.charges ?? undefined,
             source: item?.source ?? "LDJ pág. ",
             status: item?.status ?? "active",
             type: item?.type ?? "qualquer",
@@ -403,6 +407,17 @@ return (
 
                     {/* Tool Specifics */}
                     {selectedType === "ferramenta" && <ToolFormFields watch={watch} setValue={setValue} />}
+
+                    <ChargesFormSection
+                        control={control}
+                        register={register}
+                        setValue={setValue}
+                        getFieldState={getFieldState}
+                        errors={errors}
+                        submitCount={submitCount}
+                        disabled={isSubmitting}
+                        initialCharges={item?.charges}
+                    />
 
                     {/* Public Traits Section (Global/Non-Weapon specific traits) */}
                     <EntityListChooser

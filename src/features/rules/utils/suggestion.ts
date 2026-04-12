@@ -1,16 +1,38 @@
 import { ReactRenderer } from '@tiptap/react'
-import tippy, { Instance as TippyInstance, GetReferenceClientRect } from 'tippy.js'
+import tippy from 'tippy.js'
 import MentionList, { MentionListProps, MentionListRef } from '../components/mention-list'
-import { performUnifiedSearch } from '@/core/utils/search-engine'
+import { performUnifiedSearch, peekUnifiedSearch, type UnifiedEntity, type UnifiedSearchOptions } from '@/core/utils/search-engine'
+import type { EntityType } from '@/lib/config/colors'
 
 /**
  * T039: Updated to support both Regra and Habilidade entity types in mentions.
  * Fetches from central search engine.
  */
-export const getSuggestionConfig = (options?: { excludeId?: string; blurOnMentionSelect?: boolean }) => {
+export const getSuggestionConfig = (options?: {
+    excludeId?: string
+    blurOnMentionSelect?: boolean
+    specificEntityMention?: EntityType
+}) => {
     let component: ReactRenderer<MentionListRef, MentionListProps> | null = null
     let loading = false
     let currentQuery = ""
+
+    const searchOptions: UnifiedSearchOptions = {
+        specificEntityType: options?.specificEntityMention,
+    }
+
+    const normalizeResults = (results: UnifiedEntity[]) =>
+        results
+            .filter((item) =>
+                options?.excludeId ? item._id !== options.excludeId && item.id !== options.excludeId : true
+            )
+            .map((item) => ({
+                ...item,
+                entityType: item.type,
+            }))
+
+    const getCachedItems = (query: string) =>
+        normalizeResults(peekUnifiedSearch(query, 10, 0, searchOptions) ?? [])
 
     const wrapCommand = (props: any) => {
         if (!options?.blurOnMentionSelect) return props.command
@@ -28,26 +50,19 @@ export const getSuggestionConfig = (options?: { excludeId?: string; blurOnMentio
         items: async ({ query }: { query: string }) => {
             currentQuery = query
             loading = true
+            const cachedItems = getCachedItems(query)
 
-            // Update component to show loading state if it exists
             if (component) {
                 component.updateProps({
-                    items: [],
+                    items: cachedItems,
                     loading: true,
-                    query: query,
+                    query,
                 })
             }
 
             try {
-                const results = await performUnifiedSearch(query, 10)
-
-                // Filter out excluded ID if provided
-                const filteredResults = results.filter((item) => 
-                    options?.excludeId ? item._id !== options.excludeId && item.id !== options.excludeId : true
-                ).map(item => ({
-                    ...item,
-                    entityType: item.type, // Map 'type' to 'entityType' for MentionList compatibility
-                }))
+                const results = await performUnifiedSearch(query, 10, 0, searchOptions)
+                const filteredResults = normalizeResults(results)
 
                 loading = false
 
@@ -64,8 +79,16 @@ export const getSuggestionConfig = (options?: { excludeId?: string; blurOnMentio
 
             return {
                 onStart: (props: any) => {
+                    const cachedItems = getCachedItems(currentQuery)
+
                     component = new ReactRenderer(MentionList, {
-                        props: { ...props, command: wrapCommand(props), loading, query: currentQuery },
+                        props: {
+                            ...props,
+                            items: cachedItems.length > 0 ? cachedItems : props.items,
+                            command: wrapCommand(props),
+                            loading: cachedItems.length === 0,
+                            query: currentQuery,
+                        },
                         editor: props.editor,
                     })
 

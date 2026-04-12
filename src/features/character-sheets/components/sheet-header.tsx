@@ -11,7 +11,7 @@ import { cn } from "@/core/utils"
 import { GlassCard, GlassCardContent } from "@/components/ui/glass-card"
 import { GlassSelector } from "@/components/ui/glass-selector"
 import { GlassPopover, GlassPopoverContent, GlassPopoverTrigger } from "@/components/ui/glass-popover"
-import { colors, diceColors, type DiceType } from "@/lib/config/colors"
+import { colors, diceColors, type DiceType, type EntityType } from "@/lib/config/colors"
 import { Table2 } from "lucide-react"
 import { useClass } from "@/features/classes/api/classes-queries"
 import { ClassProgressionTable } from "@/features/classes/components/class-progression-table"
@@ -20,11 +20,16 @@ import { CalcTooltip } from "./calc-tooltip"
 
 const HIT_DIE_OPTIONS: DiceType[] = ["d4", "d6", "d8", "d10", "d12"]
 const IDENTITY_FIELDS = [
-  { label: "Origem", field: "origin", placeholder: "@Sábio" },
-  { label: "Classe", field: "class", placeholder: "@Mago" },
-  { label: "Espécie", field: "race", placeholder: "@Elfo" },
-  { label: "Subclasse", field: "subclass", placeholder: "@Escola de Evocação" },
-] as const
+  { label: "Origem", field: "origin", placeholder: "@Sábio", specificEntityMention: "Origem" },
+  { label: "Classe", field: "class", placeholder: "@Mago", specificEntityMention: "Classe" },
+  { label: "Espécie", field: "race", placeholder: "@Elfo", specificEntityMention: "Raça" },
+  { label: "Subclasse", field: "subclass", placeholder: "@Escola de Evocação", specificEntityMention: "Subclasse" },
+] as const satisfies ReadonlyArray<{
+  label: string
+  field: "origin" | "class" | "race" | "subclass"
+  placeholder: string
+  specificEntityMention: EntityType
+}>
 
 interface SheetHeaderProps {
     sheet: CharacterSheet
@@ -138,6 +143,7 @@ export function useSheetHeaderSections({ sheet, form, items = [], isReadOnly = f
               placeholder={item.placeholder}
               excludeId={sheet._id}
               disabled={isReadOnly}
+              specificEntityMention={item.specificEntityMention}
             />
           ))}
         </div>

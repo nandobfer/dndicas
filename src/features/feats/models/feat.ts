@@ -6,6 +6,8 @@
  */
 
 import mongoose, { Schema, Document, Model } from 'mongoose';
+import type { Charges } from '@/features/shared/charges/types';
+import { ChargesSchema } from '@/features/shared/charges/mongoose';
 import { FEAT_CATEGORIES } from '../lib/feat-categories';
 
 /**
@@ -18,6 +20,7 @@ export interface IFeat extends Document {
   originalName?: string;
   /** Rich HTML content with mentions support (10-50000 chars) */
   description: string;
+  charges?: Charges;
   /** Source reference (e.g., "PHB pg. 168") */
   source: string;
   /** Minimum character level required (1-20) */
@@ -60,6 +63,11 @@ const FeatSchema = new Schema<IFeat>(
       required: [true, 'Descrição é obrigatória'],
       minlength: [10, 'Descrição deve ter no mínimo 10 caracteres'],
       maxlength: [50000, 'Descrição deve ter no máximo 50.000 caracteres'],
+    },
+    charges: {
+      type: ChargesSchema,
+      required: false,
+      default: undefined,
     },
     source: {
       type: String,

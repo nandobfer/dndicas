@@ -1,0 +1,13 @@
+ ótimo, agora vamos aprimorar o src/features/character-sheets/components/sheet-form.tsx
+
+vamos criar um container abaixo de "armas e truques de dano" chamado "recursos e cargas". Vampos copiar o estilo da lista de armas e truques e danos, a funcionalidade será bem similar:
+o usuário deve poder adicionar manualmente um recurso ou carga para rastrear. Clicar no botão de adicionar deve inserir uma linha, com animações iguais as implementadas da lista de armas e truques. Nessa linha, teremos um campo de nome que usará o mesmo compact text editor, um campo numérico para total, e @checkbox para indicar os gastos. A quantiade de checkbox será sempre igual ao total, igual fazemos no componente de conjuração
+
+mencionar um trait, feat ou item no campo "nome" deve preencher automaticamente o total caso ele tenha o campo "charges"
+
+  sempre que for mencionado um trait nos campos "caracteristicas de classe", "traços
+  raciais", um feat no campo "talentos" e um item no campo "nome" do row da lista de itens, se a entidade mencionada possuir o campo "charges", vamos criar uma linha automaticamente no componente de "recursos e cargas" com o nome (menção) e total preenchidos, eexatamente igual acontece na lista de armas e truques quando adicionamos um item do tipo arma no @itenlist
+
+	atualize o model, api e o que precisar desse sheet-form para comportar esses novos dados
+
+	lembre de renderizar esse campo tanto no mobile quanto no desktop

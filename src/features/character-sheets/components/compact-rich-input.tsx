@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback } from "react"
 import { cn } from "@/core/utils"
 import { RichTextEditor } from "@/features/rules/components/rich-text-editor"
+import type { EntityType } from "@/lib/config/colors"
 
 
 interface CompactRichInputProps {
@@ -28,6 +29,7 @@ interface CompactRichInputProps {
     autoFocus?: boolean
     focusToken?: string | null
     onAutoFocusApplied?: () => void
+    specificEntityMention?: EntityType
 }
 
 export function CompactRichInput({
@@ -48,6 +50,7 @@ export function CompactRichInput({
     autoFocus = false,
     focusToken,
     onAutoFocusApplied,
+    specificEntityMention,
 }: CompactRichInputProps) {
     const blockNewlines = disableNewlines ?? variant === "simple"
     const [localValue, setLocalValue] = useState(value)
@@ -97,6 +100,7 @@ export function CompactRichInput({
                         autoFocus={autoFocus}
                         focusToken={focusToken}
                         onAutoFocusApplied={onAutoFocusApplied}
+                        specificEntityMention={specificEntityMention}
                     />
                 </div>
             </div>
@@ -124,6 +128,7 @@ export function CompactRichInput({
                     autoFocus={autoFocus}
                     focusToken={focusToken}
                     onAutoFocusApplied={onAutoFocusApplied}
+                    specificEntityMention={specificEntityMention}
                     className={cn(
                         // Strip glass container for simple variant so our bottom border is the only affordance
                         "!bg-transparent !border-0 !shadow-none !backdrop-blur-none !rounded-none",

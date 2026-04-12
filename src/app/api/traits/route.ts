@@ -4,15 +4,7 @@ import { Trait } from "@/features/traits/database/trait";
 import { createAuditLog } from "@/features/users/api/audit-service";
 import dbConnect from "@/core/database/db";
 import { applyFuzzySearch } from "@/core/utils/search-engine"
-import { z } from "zod";
-
-const createTraitSchema = z.object({
-  name: z.string().min(3).max(100),
-  originalName: z.union([z.string().trim().max(100), z.literal("")]).optional().transform((val) => val || undefined),
-  description: z.string().min(10).max(50000), // HTML string with S3 images
-  source: z.string().min(1).max(200),
-  status: z.enum(["active", "inactive"]),
-});
+import { createTraitSchema } from "@/features/traits/api/validation";
 
 export async function GET(req: NextRequest) {
   try {
@@ -21,7 +13,6 @@ export async function GET(req: NextRequest) {
     const page = parseInt(url.searchParams.get("page") || "1", 10);
     const limit = parseInt(url.searchParams.get("limit") || "10", 10);
     const search = url.searchParams.get("search") || "";
-    const searchField = url.searchParams.get("searchField") || "all";
     const status = url.searchParams.get("status");
 
     const query: Record<string, unknown> = {}
@@ -41,7 +32,7 @@ export async function GET(req: NextRequest) {
 
     // ALWAYS fetch items matching non-search filters (like status)
     // We fetch EVERYTHING without DB-level limit/search to let applyFuzzySearch do its job properly
-    const items = await Trait.find(query as any).sort({ createdAt: -1 })
+    const items = await Trait.find(query).sort({ createdAt: -1 })
 
     // Apply fuzzy search locally using the shared function
     const searchedItems = search ? applyFuzzySearch(items, search) : items
@@ -78,8 +69,7 @@ export async function POST(req: NextRequest) {
     const parseResult = createTraitSchema.safeParse(body);
 
     if (!parseResult.success) {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      return NextResponse.json({ error: (parseResult.error as any).errors }, { status: 400 });
+      return NextResponse.json({ error: parseResult.error.flatten() }, { status: 400 });
     }
 
     const validatedData = parseResult.data;

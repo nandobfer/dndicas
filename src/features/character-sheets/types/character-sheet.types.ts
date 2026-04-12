@@ -86,6 +86,7 @@ export interface CharacterSheet {
     spellSaveDCOverride: number | null
     spellAttackBonusOverride: number | null
     spellSlots: Record<string, { total: number; used: number }>
+    resourceCharges: CharacterResourceCharge[]
     // Currency
     coins: { cp: number; sp: number; ep: number; gp: number; pp: number }
     // Personality
@@ -174,6 +175,24 @@ export interface CharacterAttack {
     damageType: string
     notes: string
     createdAt: string
+}
+
+export type ResourceChargeSourceKind = "manual-name-mention" | "class-feature" | "species-trait" | "feat" | "item"
+
+export type ResourceChargeSourceEntityType = "Habilidade" | "Talento" | "Item"
+
+export interface CharacterResourceChargeSource {
+    kind: ResourceChargeSourceKind
+    entityType: ResourceChargeSourceEntityType
+    entityId: string
+}
+
+export interface CharacterResourceCharge {
+    id: string
+    name: string
+    total: number
+    used: number
+    source: CharacterResourceChargeSource | null
 }
 
 export interface CharacterSheetFull extends CharacterSheet {
@@ -325,6 +344,19 @@ export const PatchSheetSchema = z.object({
     spellSaveDCOverride: z.number().int().nullable().optional(),
     spellAttackBonusOverride: z.number().int().nullable().optional(),
     spellSlots: z.record(z.string(), z.object({ total: z.number().int().min(0), used: z.number().int().min(0) })).optional(),
+    resourceCharges: z.array(
+        z.object({
+            id: z.string().min(1),
+            name: z.string().max(2000),
+            total: z.number().int().min(0),
+            used: z.number().int().min(0),
+            source: z.object({
+                kind: z.enum(["manual-name-mention", "class-feature", "species-trait", "feat", "item"]),
+                entityType: z.enum(["Habilidade", "Talento", "Item"]),
+                entityId: z.string().min(1),
+            }).nullable(),
+        })
+    ).optional(),
     coins: z.object({ cp: z.number().int().min(0), sp: z.number().int().min(0), ep: z.number().int().min(0), gp: z.number().int().min(0), pp: z.number().int().min(0) }).optional(),
     personalityTraits: z.string().optional(),
     ideals: z.string().optional(),
