@@ -1,4 +1,5 @@
 import type { Charges } from "@/features/shared/charges/types"
+import { parseTraitChargeDice } from "@/features/traits/utils/trait-charges"
 import type {
     AttributeType,
     CharacterResourceCharge,
@@ -35,7 +36,7 @@ export function resolveChargesTotal(charges: Charges | undefined, context: Resou
     if (!charges) return null
 
     if (charges.mode === "fixed") {
-        return parseNumericChargeValue(charges.value)
+        return parseChargeCountValue(charges.value)
     }
 
     if (charges.mode === "proficiency") {
@@ -47,7 +48,7 @@ export function resolveChargesTotal(charges: Charges | undefined, context: Resou
     }
 
     const row = charges.values.find((value) => value.level === context.level)
-    return row ? parseNumericChargeValue(row.value) : null
+    return row ? parseChargeCountValue(row.value) : null
 }
 
 export function extractResourceChargeMention(nameHtml: string): ParsedMention | null {
@@ -115,10 +116,14 @@ export function syncResourceChargeRows(
     return nextRows
 }
 
-function parseNumericChargeValue(value: string): number | null {
+function parseChargeCountValue(value: string): number | null {
     const trimmed = value.trim()
-    if (!/^\d+$/.test(trimmed)) return null
-    return parseInt(trimmed, 10)
+    if (/^\d+$/.test(trimmed)) {
+        return parseInt(trimmed, 10)
+    }
+
+    const dice = parseTraitChargeDice(trimmed)
+    return dice?.quantidade ?? null
 }
 
 function mapCatalogAttribute(attribute: string): AttributeType {
