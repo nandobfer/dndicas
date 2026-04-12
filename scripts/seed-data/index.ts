@@ -42,7 +42,7 @@ const term = terminal.terminal;
 // ─── Register providers here ──────────────────────────────────────────────────
 // When new providers are created, just add them to this array.
 
-const providers: BaseProvider<unknown, unknown>[] = [
+const providers: BaseProvider<any, any>[] = [
     new SpellsProvider(),
     new RacesProvider(),
     new FeatsProvider(),
@@ -481,7 +481,7 @@ async function selectTranslator(): Promise<BaseTranslator> {
 
 // ─── Provider selector ────────────────────────────────────────────────────────
 
-async function selectProvider(): Promise<BaseProvider<unknown, unknown>> {
+async function selectProvider(): Promise<BaseProvider<any, any>> {
     term.bold.cyan('\n🎲 D&D Seed Data Script\n');
     term('─────────────────────────────────────────\n\n');
     term('Select a provider:\n\n');
@@ -623,7 +623,7 @@ async function main(): Promise<void> {
 
     setupExitHandler();
 
-    let provider: BaseProvider<unknown, unknown>;
+    let provider: BaseProvider<any, any>;
     let translator: BaseTranslator;
 
     try {

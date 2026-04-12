@@ -35,6 +35,7 @@ import fs from 'fs';
 import path from 'path';
 import terminal from 'terminal-kit';
 import Fuse from 'fuse.js';
+import type { IFuseOptions } from 'fuse.js';
 import type { BaseTranslator } from './translation/base-translator';
 import {
     loadAllEntries,
@@ -281,7 +282,7 @@ export abstract class BaseProvider<TInput, TOutput> {
      * behavior. The default configuration is intended to work for name-based
      * matching across all seed-data providers.
      */
-    protected getFilterFuseOptions(): Fuse.IFuseOptions<{ item: TInput; index: number; name: string; aliases: string[] }> {
+    protected getFilterFuseOptions(): IFuseOptions<{ item: TInput; index: number; name: string; aliases: string[] }> {
         return {};
     }
 
