@@ -17,13 +17,13 @@ import { motion } from "framer-motion"
 import Link from "next/link"
 import Image from "next/image"
 import { usePathname } from "next/navigation"
-import { Home, User, Sparkles, FileText, Users, Scroll, Zap, Wand, AtSign, MessageSquare, Sword, ShieldCheck, Fingerprint, Backpack, ScrollText } from "lucide-react"
+import { Home, User, Sparkles, FileText, Users, Scroll, Zap, Wand, AtSign, MessageSquare, Sword, ShieldCheck, Fingerprint, Backpack, ScrollText, type LucideIcon } from "lucide-react"
 import { cn } from "@/core/utils"
 import { glassConfig } from "@/lib/config/glass-config"
 import { motionConfig } from "@/lib/config/motion-configs"
 import { SidebarItem, SidebarSection } from "./sidebar-item"
 import { TooltipProvider } from "@/core/ui/tooltip"
-import { UserButton, SignedIn, SignedOut, SignInButton } from "@clerk/nextjs"
+import { UserButton, SignedIn, SignedOut } from "@clerk/nextjs"
 import { useAuth } from "@/core/hooks/useAuth"
 import { APP_VERSION } from "@/lib/config/version"
 
@@ -36,8 +36,6 @@ export interface ExpandableSidebarProps {
     onCollapse: () => void
     /** Whether it's mobile view */
     isMobile?: boolean
-    /** Toggle callback for mobile */
-    onToggle?: () => void
     /** Additional CSS classes */
     className?: string
 }
@@ -69,6 +67,7 @@ const cadastrosItems = [
 const adminItems = [
     { label: "Feedback", href: "/feedback", icon: MessageSquare },
     { label: "Usuários", href: "/users", icon: Users, admin: true },
+    { label: "Fichas", href: "/sheets", icon: ScrollText, admin: true },
     { label: "Logs", href: "/audit-logs", icon: FileText, admin: true },
     { label: "Referências Pendentes", href: "/admin/mentions", icon: AtSign, admin: true }
 ]
@@ -77,7 +76,15 @@ const adminItems = [
  * Expandable sidebar component with Liquid Glass styling and smooth animations.
  * Sidebar width: 280px expanded, 72px collapsed (per themeConfig.spacing.sidebar).
  */
-export const ExpandableSidebar: React.FC<ExpandableSidebarProps> = ({ isExpanded, onExpand, onCollapse, isMobile = false, onToggle, className }) => {
+type NavigationItem = {
+    label: string
+    href: string
+    icon: LucideIcon
+    authenticated?: boolean
+    admin?: boolean
+}
+
+export const ExpandableSidebar: React.FC<ExpandableSidebarProps> = ({ isExpanded, onExpand, onCollapse, isMobile = false, className }) => {
     const pathname = usePathname()
     const { isSignedIn, isAdmin } = useAuth()
 
@@ -92,7 +99,7 @@ export const ExpandableSidebar: React.FC<ExpandableSidebarProps> = ({ isExpanded
           }
         : motionConfig.variants.sidebar
 
-    const filterItems = (items: any[]) =>
+    const filterItems = (items: NavigationItem[]) =>
         items.filter((item) => {
             if (item.admin && !isAdmin) return false
             if (item.authenticated && !isSignedIn) return false

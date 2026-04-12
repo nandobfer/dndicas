@@ -6,9 +6,11 @@ import { CharacterSpell } from "../models/character-spell"
 import { CharacterTrait } from "../models/character-trait"
 import { CharacterFeat } from "../models/character-feat"
 import { CharacterAttack } from "../models/character-attack"
+import { User } from "@/features/users/models/user"
 import { generateSlug } from "../utils/slug"
 import { getArmorClass } from "../utils/dnd-calculations"
 import type {
+    AdminSheetsListResponse,
     CharacterItem as CharacterItemType,
     CharacterSheet as CharacterSheetType,
     SheetsListResponse,
@@ -24,6 +26,8 @@ import type {
     PatchAttackBody,
 } from "../types/character-sheet.types"
 import type { Types } from "mongoose"
+
+const escapeRegex = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
 
 // ─── Sheets ───────────────────────────────────────────────────────────────────
 
@@ -66,6 +70,128 @@ export async function getAllUserSheets(
         page,
         totalPages,
         hasNextPage: page < totalPages,
+    }
+}
+
+export async function getAllSheetsForAdmin(search?: string, page = 1, limit = 10): Promise<AdminSheetsListResponse> {
+    await dbConnect()
+
+    const safePage = Math.max(1, page)
+    const safeLimit = Math.max(1, Math.min(limit, 100))
+    const skip = (safePage - 1) * safeLimit
+    const regex = search?.trim() ? new RegExp(escapeRegex(search.trim()), "i") : null
+
+    const ownerCollection = User.collection.name
+    const matchStage = regex
+        ? {
+              $match: {
+                  $or: [
+                      { name: regex },
+                      { class: regex },
+                      { subclass: regex },
+                      { race: regex },
+                      { origin: regex },
+                      { username: regex },
+                      { "owner.name": regex },
+                      { "owner.username": regex },
+                  ],
+              },
+          }
+        : null
+
+    const [result] = await CharacterSheet.aggregate([
+        {
+            $lookup: {
+                from: ownerCollection,
+                localField: "userId",
+                foreignField: "clerkId",
+                as: "owner",
+            },
+        },
+        {
+            $addFields: {
+                owner: { $arrayElemAt: ["$owner", 0] },
+            },
+        },
+        ...(matchStage ? [matchStage] : []),
+        {
+            $facet: {
+                items: [
+                    { $sort: { updatedAt: -1, _id: -1 } },
+                    { $skip: skip },
+                    { $limit: safeLimit },
+                    {
+                        $project: {
+                            _id: 1,
+                            slug: 1,
+                            name: 1,
+                            photo: 1,
+                            class: 1,
+                            subclass: 1,
+                            race: 1,
+                            origin: 1,
+                            createdAt: 1,
+                            updatedAt: 1,
+                            userId: 1,
+                            username: 1,
+                            owner: {
+                                _id: "$owner._id",
+                                name: "$owner.name",
+                                username: "$owner.username",
+                                avatarUrl: "$owner.avatarUrl",
+                            },
+                        },
+                    },
+                ],
+                meta: [{ $count: "total" }],
+            },
+        },
+    ])
+
+    const total = result?.meta?.[0]?.total ?? 0
+    const totalPages = Math.max(1, Math.ceil(total / safeLimit))
+    const items = (result?.items ?? []).map((item: {
+        _id: Types.ObjectId | string
+        slug: string
+        name?: string
+        photo?: string | null
+        class?: string
+        subclass?: string
+        race?: string
+        origin?: string
+        createdAt: Date | string
+        updatedAt: Date | string
+        owner?: {
+            _id?: Types.ObjectId | string
+            name?: string
+            username?: string
+            avatarUrl?: string | null
+        }
+        username?: string
+    }) => ({
+        id: String(item._id),
+        slug: item.slug,
+        name: item.name || "Ficha sem nome",
+        photo: item.photo ?? null,
+        class: item.class || "—",
+        subclass: item.subclass || "—",
+        race: item.race || "—",
+        origin: item.origin || "—",
+        createdAt: item.createdAt instanceof Date ? item.createdAt.toISOString() : new Date(item.createdAt).toISOString(),
+        updatedAt: item.updatedAt instanceof Date ? item.updatedAt.toISOString() : new Date(item.updatedAt).toISOString(),
+        owner: {
+            id: item.owner?._id ? String(item.owner._id) : null,
+            name: item.owner?.name || item.username || "Usuário desconhecido",
+            username: item.owner?.username || item.username || "sem-username",
+            avatarUrl: item.owner?.avatarUrl ?? null,
+        },
+    }))
+
+    return {
+        items,
+        total,
+        page: safePage,
+        totalPages,
     }
 }
 

@@ -15,7 +15,7 @@ import { useWarmSearchCache } from "@/core/hooks/useWarmSearchCache"
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
     useWarmSearchCache()
-    const { isExpanded, expand, collapse, toggle, isHydrated } = useSidebar()
+    const { isExpanded, expand, collapse, isHydrated } = useSidebar()
     const [isMobile, setIsMobile] = useState(false)
 
     useEffect(() => {
@@ -42,7 +42,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             <LiquidGlassBackground />
 
             {/* Unified Sidebar for Desktop and Mobile */}
-            <ExpandableSidebar isExpanded={isExpanded} onExpand={expand} onCollapse={collapse} isMobile={isMobile} onToggle={toggle} />
+            <ExpandableSidebar isExpanded={isExpanded} onExpand={expand} onCollapse={collapse} isMobile={isMobile} />
 
             {/* Mobile Header */}
             {isMobile && <GlassHeader onExpand={expand} />}
