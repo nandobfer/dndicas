@@ -113,6 +113,17 @@ export function ChargesFormSection<TFieldValues extends FieldValues = FieldValue
         }
     }, [watchedCharges])
 
+    React.useEffect(() => {
+        if (initialCharges || watchedCharges?.mode) return
+
+        replace([])
+        setValue("charges" as Path<TFieldValues>, undefined as never, {
+            shouldDirty: false,
+            shouldTouch: false,
+            shouldValidate: false,
+        })
+    }, [initialCharges, replace, setValue, watchedCharges?.mode])
+
     const handleChargeModeChange = (nextMode: ChargeModeOption) => {
         if (nextMode === "none") {
             replace([])
