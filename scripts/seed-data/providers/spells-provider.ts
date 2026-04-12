@@ -257,6 +257,12 @@ export class SpellsProvider extends BaseProvider<FiveEToolsSpell, CreateSpellInp
     readonly dataFilePath = 'src/lib/5etools-data/spells-xphb.json';
     readonly dataKey = 'spell';
 
+    protected override buildFilterDocument(spell: FiveEToolsSpell) {
+        return {
+            name: spell.name,
+        };
+    }
+
     async processItem(spell: FiveEToolsSpell): Promise<CreateSpellInput | null> {
         const school = SCHOOL_MAP[spell.school];
         if (!school) {

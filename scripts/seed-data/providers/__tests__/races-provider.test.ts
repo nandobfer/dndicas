@@ -424,7 +424,7 @@ describe('RacesProvider.processItem', () => {
 
         expect(result!.variations).toHaveLength(1);
         expect(result!.variations[0].name).toBe('[PT] Fallen');
-        expect(result!.variations[0].source).toBe('VGM pág. 105');
+        expect(result!.variations[0].source).toBe("Volo's Guide to Monsters pág. 105");
         expect(result!.variations[0].traits).toHaveLength(1);
         expect(result!.variations[0].traits[0].name).toBe('[PT] Necrotic Shroud');
     });
@@ -445,6 +445,18 @@ describe('RacesProvider.processItem', () => {
         const result = await provider.processItem(race);
 
         expect(result!.variations).toHaveLength(0);
+    });
+});
+
+describe('RacesProvider filter mapping', () => {
+    it('maps race name for fuzzy filter matching', () => {
+        const provider = makeProvider();
+
+        const result = (
+            provider as unknown as { buildFilterDocument: (item: { name: string }) => { name: string } }
+        ).buildFilterDocument({ name: 'Yuan-ti' });
+
+        expect(result).toEqual({ name: 'Yuan-ti' });
     });
 });
 

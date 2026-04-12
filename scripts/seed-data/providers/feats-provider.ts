@@ -327,6 +327,12 @@ export class FeatsProvider extends BaseProvider<FiveEToolsFeat, CreateFeatInput>
     readonly dataFilePath = 'src/lib/5etools-data/feats.json';
     readonly dataKey = 'feat';
 
+    protected override buildFilterDocument(feat: FiveEToolsFeat) {
+        return {
+            name: feat.name,
+        };
+    }
+
     async processItem(feat: FiveEToolsFeat): Promise<CreateFeatInput | null> {
         // Skip reprinted (superseded) feats — their replacement is the canonical version
         if (feat.reprintedAs) {
