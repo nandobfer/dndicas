@@ -16,7 +16,7 @@
  *   4. Description from fluff-races.json entries (lore) → translated to PT
  *   5. Traits from races.json entries (mechanical) → translated to PT
  *   6. Spells from additionalSpells on base race → translated names stored as raw
- *      placeholder: { _raw: true, name: string (PT), level: number }
+ *      placeholder: { _raw: true, name: string (PT), originalName: string (EN), level: number }
  *   7. Collect matching subraces as variations, same steps 3–6 per subrace
  *
  *  BaseProvider interactive loop:
@@ -26,12 +26,13 @@
  *
  *  afterReview() — runs after user confirms, before DB write:
  *   11. resolveTraits() — for base race and each variation:
- *       - Search Trait collection by name (case-insensitive regex)
+ *       - Search Trait collection by originalName first, fallback to translated name
  *       - Let user pick an existing one via terminal menu, or create new
+ *       - When creating: saves both name (PT) and originalName (EN) in Trait document
  *       - Store in race as MENTION format (not full description):
  *         { name: "Habilidade sem Nome", level: 1, description: "<span data-type='mention' ...>" }
  *   12. resolveSpells() — for base race and each variation:
- *       - Search Spell collection by translated Portuguese name
+ *       - Search Spell collection by originalName first, fallback to translated name
  *       - If found: store as { id, name, circle, level } (circle from DB)
  *       - If NOT found: warn user to create the spell manually — never creates
  *   13. Create or update Race document in MongoDB
@@ -80,6 +81,7 @@ import type { CreateRaceInput, RaceTrait, RaceVariation, SizeCategory } from '..
 import { RaceModel } from '../../../src/features/races/models/race';
 import { Trait } from '../../../src/features/traits/database/trait';
 import { Spell } from '../../../src/features/spells/models/spell';
+import { applyFuzzySearch } from '../../../src/core/utils/search-engine';
 import dbConnect from '../../../src/core/database/db';
 import termKit from 'terminal-kit';
 
@@ -173,6 +175,8 @@ export interface RawSpellRef {
     _raw: true;
     /** Translated Portuguese spell name (from translateItem) */
     name: string;
+    /** Original English spell name from 5etools data (used for DB lookup) */
+    originalName: string;
     /** Character level at which this racial spell is granted */
     level: number;
 }
@@ -193,6 +197,17 @@ interface FluffRaceEntry {
     source: string;
     entries?: (string | FiveEToolsEntry)[];
     images?: FluffImage[];
+}
+
+// ─── Internal processing types ───────────────────────────────────────────────
+
+/**
+ * Extended `RaceTrait` carrying the original English name from 5etools.
+ * Used only during `processItem()` / `resolveTraits()` — never persisted to MongoDB.
+ * After `resolveTraits()` converts each trait to a mention span, originalName is dropped.
+ */
+interface ProcessingRaceTrait extends RaceTrait {
+    originalName: string;
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -486,13 +501,17 @@ export class RacesProvider extends BaseProvider<FiveEToolsRace, CreateRaceInput>
 
         // Traits come from mechanical entries
         const rawTraits = extractTraits(race.entries);
-        const translatedTraits: RaceTrait[] = [];
+        const translatedTraits: ProcessingRaceTrait[] = [];
         for (const trait of rawTraits) {
             const { name: traitName, description: traitDesc } = await this.translateItem(
                 trait.name,
                 trait.description,
             );
-            translatedTraits.push({ name: traitName, description: convertFeetToMeters(traitDesc) });
+            translatedTraits.push({
+                name: traitName,
+                description: convertFeetToMeters(traitDesc),
+                originalName: trait.name,
+            });
         }
 
         // Spells: extract from additionalSpells, translate names, store as raw placeholders.
@@ -520,13 +539,17 @@ export class RacesProvider extends BaseProvider<FiveEToolsRace, CreateRaceInput>
                 await this.translateItem(subraceNameRaw, subraceDescHtml);
 
             const subraceRawTraits = extractTraits(subrace.entries);
-            const subraceTraits: RaceTrait[] = [];
+            const subraceTraits: ProcessingRaceTrait[] = [];
             for (const trait of subraceRawTraits) {
                 const { name: traitName, description: traitDesc } = await this.translateItem(
                     trait.name,
                     trait.description,
                 );
-                subraceTraits.push({ name: traitName, description: convertFeetToMeters(traitDesc) });
+                subraceTraits.push({
+                    name: traitName,
+                    description: convertFeetToMeters(traitDesc),
+                    originalName: trait.name,
+                });
             }
 
             // Spells for subrace: same translate-now, resolve-later approach
@@ -567,6 +590,7 @@ export class RacesProvider extends BaseProvider<FiveEToolsRace, CreateRaceInput>
      *
      * Returns `RawSpellRef[]` — placeholders that afterReview() will resolve against
      * the Spell collection. We only translate the name here (description = '').
+     * The original English name is preserved in `originalName` for DB lookup.
      *
      * @param refs - List of { nameEN, charLevel } pairs from extractAdditionalSpells
      */
@@ -576,7 +600,7 @@ export class RacesProvider extends BaseProvider<FiveEToolsRace, CreateRaceInput>
         const result: RawSpellRef[] = [];
         for (const { nameEN, charLevel } of refs) {
             const { name } = await this.translateItem(nameEN, '');
-            result.push({ _raw: true, name, level: charLevel });
+            result.push({ _raw: true, name, originalName: nameEN, level: charLevel });
         }
         return result;
     }
@@ -622,8 +646,9 @@ export class RacesProvider extends BaseProvider<FiveEToolsRace, CreateRaceInput>
      * Resolves translated trait entries against the Trait collection.
      *
      * For each trait:
-     *  - Searches by name (case-insensitive regex, up to 5 results)
-     *  - If 0 results → creates a new Trait document with full description
+     *  - Searches by originalName first (case-insensitive regex, up to 5 results)
+     *  - Falls back to translated name for legacy records without originalName
+     *  - If 0 results → creates a new Trait document with full description + originalName
      *  - If results → shows a terminal menu: pick existing or create new "<Name> (RaceName)"
      *
      * ⚠️ Storage format in the race document uses MENTION SPANS, not the full description.
@@ -646,14 +671,47 @@ export class RacesProvider extends BaseProvider<FiveEToolsRace, CreateRaceInput>
         term.bold('\n─── Resolvendo Habilidades ─────────────────────────────────\n');
 
         const resolved: RaceTrait[] = [];
+        const escape = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
         for (const trait of traits) {
-            term.cyan(`\n  Habilidade: `);
-            term.bold(`${trait.name}\n`);
+            const originalName = (trait as ProcessingRaceTrait).originalName ?? trait.name;
 
-            const results = await Trait.find({
-                name: { $regex: new RegExp(trait.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i') },
-            }).limit(5).lean();
+            term.cyan(`\n  Habilidade: `);
+            term.bold(`${trait.name}`);
+            if (originalName !== trait.name) term.dim(` (EN: ${originalName})`);
+            term('\n');
+
+            // Fetch candidates matching originalName (EN) OR translated name (PT) in one pass.
+            // Using $or ensures traits with empty/missing originalName are still found via their PT name.
+            const rawCandidates = await Trait.find({
+                $or: [
+                    { originalName: { $regex: new RegExp(escape(originalName), 'i') } },
+                    { name: { $regex: new RegExp(escape(trait.name), 'i') } },
+                ],
+            }).limit(100).lean();
+
+            // Deduplicate by _id (a doc may match both $or conditions)
+            const seen = new Set<string>();
+            const results = rawCandidates.filter((r) => {
+                const id = String(r._id);
+                if (seen.has(id)) return false;
+                seen.add(id);
+                return true;
+            });
+
+            // Rank by translated name (PT) — stable even when originalName is empty
+            const ranked = applyFuzzySearch(results, trait.name, 5);
+            let topResults = ranked.length > 0 ? ranked : results.slice(0, 5);
+
+            // Inject the race-specific variant at position 0 if it exists in the pool but
+            // wasn't selected by Fuse.js (common when many candidates share the same prefix).
+            const raceSpecificName = `${trait.name} (${raceName})`;
+            const raceSpecificCandidate = results.find(
+                (r) => r.name.toLowerCase() === raceSpecificName.toLowerCase(),
+            );
+            if (raceSpecificCandidate && !topResults.some((r) => String(r._id) === String(raceSpecificCandidate._id))) {
+                topResults = [raceSpecificCandidate, ...topResults.slice(0, 4)];
+            }
 
             /** Build the mention span that is stored in the race document. */
             const buildMentionHtml = (id: string, traitName: string): string =>
@@ -663,6 +721,7 @@ export class RacesProvider extends BaseProvider<FiveEToolsRace, CreateRaceInput>
                 term.dim(`  → Nenhum resultado encontrado. Será criada.\n`);
                 const created = await Trait.create({
                     name: trait.name,
+                    originalName,
                     description: trait.description,
                     source: raceSource,
                     status: 'active',
@@ -678,9 +737,9 @@ export class RacesProvider extends BaseProvider<FiveEToolsRace, CreateRaceInput>
                 continue;
             }
 
-            // Show existing results as formatted list
+            // Show existing results ranked by Fuse.js relevance
             term.dim(`\n  Resultados encontrados:\n`);
-            results.forEach((r, i) => {
+            topResults.forEach((r, i) => {
                 term.dim(`  [${ i + 1 }] `);
                 term.bold(`${r.name}\n`);
                 const desc = r.description.replace(/<[^>]+>/g, '').substring(0, 120);
@@ -691,7 +750,7 @@ export class RacesProvider extends BaseProvider<FiveEToolsRace, CreateRaceInput>
             const newName = `${trait.name} (${raceName})`;
             const menuItems = [
                 `[0] CRIAR NOVA: "${newName}"`,
-                ...results.map((r, i) => `[${i + 1}] USAR EXISTENTE: "${r.name}"`),
+                ...topResults.map((r, i) => `[${i + 1}] USAR EXISTENTE: "${r.name}"`),
             ];
 
             term('\n');
@@ -704,6 +763,7 @@ export class RacesProvider extends BaseProvider<FiveEToolsRace, CreateRaceInput>
             if (choice === 0) {
                 const created = await Trait.create({
                     name: newName,
+                    originalName,
                     description: trait.description,
                     source: raceSource,
                     status: 'active',
@@ -717,7 +777,7 @@ export class RacesProvider extends BaseProvider<FiveEToolsRace, CreateRaceInput>
                     description: buildMentionHtml(traitId, newName),
                 });
             } else {
-                const picked = results[choice - 1];
+                const picked = topResults[choice - 1];
                 const traitId = String(picked._id);
                 term.green(`  ✓ Usando existente: "${picked.name}" (${traitId})\n`);
 
@@ -741,7 +801,8 @@ export class RacesProvider extends BaseProvider<FiveEToolsRace, CreateRaceInput>
      * Fully resolved spell objects `{ id, name, circle, level }` are passed through as-is.
      *
      * Resolution logic per raw spell:
-     *  - Searches Spell collection by translated Portuguese name (case-insensitive regex)
+     *  - Searches Spell collection by originalName (EN) first, fallback to translated name
+     *    for legacy records without originalName
      *  - 1 result  → uses it automatically, prints confirmation
      *  - N results → shows terminal menu for user to pick
      *  - 0 results → warns user to create the spell manually; NEVER creates a spell
@@ -761,6 +822,7 @@ export class RacesProvider extends BaseProvider<FiveEToolsRace, CreateRaceInput>
         term.bold('\n─── Resolvendo Magias ──────────────────────────────────────\n');
 
         const resolved: { id: string; name: string; circle: number; level: number }[] = [];
+        const escape = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
         for (const spell of spells) {
             // Pass through already-resolved spells (e.g. from a prior run / findExisting)
@@ -771,40 +833,70 @@ export class RacesProvider extends BaseProvider<FiveEToolsRace, CreateRaceInput>
             }
 
             const raw = spell as RawSpellRef;
-            term.cyan(`\n  Magia: `);
-            term.bold(`${raw.name} (nível do personagem: ${raw.level})\n`);
+            const originalName = raw.originalName ?? raw.name;
 
-            const results = await Spell.find({
-                name: { $regex: new RegExp(raw.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i') },
-            }).limit(5).lean();
+            term.cyan(`\n  Magia: `);
+            term.bold(`${raw.name}`);
+            if (originalName !== raw.name) term.dim(` (EN: ${originalName})`);
+            term(` (nível do personagem: ${raw.level})\n`);
+
+            // Fetch candidates matching originalName (EN) OR translated name (PT) in one pass.
+            const rawSpellCandidates = await Spell.find({
+                $or: [
+                    { originalName: { $regex: new RegExp(escape(originalName), 'i') } },
+                    { name: { $regex: new RegExp(escape(raw.name), 'i') } },
+                ],
+            }).limit(100).lean();
+
+            // Deduplicate by _id
+            const spellSeen = new Set<string>();
+            const results = rawSpellCandidates.filter((r) => {
+                const id = String(r._id);
+                if (spellSeen.has(id)) return false;
+                spellSeen.add(id);
+                return true;
+            });
 
             if (results.length === 0) {
-                term.yellow(`  ⚠  Magia "${raw.name}" não encontrada no banco.\n`);
+                term.yellow(`  ⚠  Magia "${raw.name}" (EN: "${originalName}") não encontrada no banco.\n`);
                 term.yellow(`     Crie-a manualmente e execute o script novamente para vinculá-la.\n`);
                 continue;
             }
 
+            // Rank by translated name (PT) — stable even when originalName is empty
+            const rankedSpells = applyFuzzySearch(results, raw.name, 5);
+            let topSpells = rankedSpells.length > 0 ? rankedSpells : results.slice(0, 5);
+
+            // Inject the race-specific variant at position 0 if it exists in the pool but wasn't selected
+            const raceSpecificSpellName = `${raw.name} (${raceName})`;
+            const raceSpecificSpell = results.find(
+                (r) => r.name.toLowerCase() === raceSpecificSpellName.toLowerCase(),
+            );
+            if (raceSpecificSpell && !topSpells.some((r) => String(r._id) === String(raceSpecificSpell._id))) {
+                topSpells = [raceSpecificSpell, ...topSpells.slice(0, 4)];
+            }
+
             let picked: typeof results[0];
 
-            if (results.length === 1) {
-                picked = results[0];
+            if (topSpells.length === 1) {
+                picked = topSpells[0];
                 term.green(`  ✓ Encontrada automaticamente: "${picked.name}" (circle: ${picked.circle})\n`);
             } else {
                 term.dim(`\n  Múltiplos resultados encontrados:\n`);
-                results.forEach((r, i) => {
+                topSpells.forEach((r, i) => {
                     term.dim(`  [${i + 1}] `);
                     term.bold(`${r.name}`);
                     term.dim(` (circle ${r.circle})\n`);
                 });
 
-                const menuItems = results.map((r, i) => `[${i + 1}] "${r.name}" (circle ${r.circle})`);
+                const menuItems = topSpells.map((r, i) => `[${i + 1}] "${r.name}" (circle ${r.circle})`);
                 term('\n');
                 const choice = await new Promise<number>((resolve) => {
                     term.singleColumnMenu(menuItems, (_, response) => {
                         resolve(response.selectedIndex);
                     });
                 });
-                picked = results[choice];
+                picked = topSpells[choice];
                 term.green(`  ✓ Selecionada: "${picked.name}"\n`);
             }
 
