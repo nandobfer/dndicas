@@ -9,7 +9,7 @@
  *   npm run search-cli
  *
  * Controls:
- *   Type to search · ↑↓ navigate · Alt+←/→ tabs · Ctrl+N copy name · Ctrl+J copy JSON · Ctrl+K copy id · ESC clear · Ctrl+C exit
+ *   Type to search · ↑↓ navigate · Alt+←/→ tabs · Ctrl+N copy name · Ctrl+J copy JSON · Ctrl+K copy id · Ctrl+R refresh · ESC clear · Ctrl+C exit
  *   Ctrl+E → JSON nav mode: ↑↓ navigate JSON lines · Enter edit line · Esc back
  *   Edit mode: type to edit · Enter save · Esc cancel · ←/→ cursor · Ctrl+←/→ word
  */
@@ -421,9 +421,11 @@ function buildDisplayJsonLinesWithMap(
 // ─── Entity loading ───────────────────────────────────────────────────────────
 
 async function loadAllEntities(): Promise<UnifiedEntity[]> {
+    const termWidth: number = (term as any).width ?? 80;
     const progressBar = term.progressBar({
-        width: 60,
+        width: Math.max(60, termWidth - 4),
         title: 'Carregando entidades:',
+        titleSize: 22,
         eta: true,
         percent: true,
         items: 8,
@@ -588,6 +590,7 @@ let statusMessageTimer: NodeJS.Timeout | null = null;
 // Tracks how many rows were used in the list area on the previous render,
 // so we can erase leftover rows when the list shrinks.
 let lastListRowCount = 0;
+let isRefreshing = false;
 
 // ─── App mode ─────────────────────────────────────────────────────────────────
 
@@ -827,6 +830,37 @@ async function saveEntityField(
         setStatusMessage(`"${path}" salvo`);
     } catch (err) {
         setStatusMessage(`Erro ao salvar: ${err instanceof Error ? err.message : String(err)}`, 'error');
+    }
+}
+
+// ─── Refresh ──────────────────────────────────────────────────────────────────
+
+async function refreshEntities(): Promise<void> {
+    if (isRefreshing) return;
+    isRefreshing = true;
+
+    term.grabInput(false);
+
+    const H: number = (term as any).height ?? 30;
+    const startRow = Math.max(1, Math.floor(H / 2) - 3);
+
+    // Clear a band of rows so the progress bar renders cleanly over the TUI
+    for (let row = startRow; row <= startRow + 5; row++) {
+        term.moveTo(1, row);
+        term.eraseLine();
+    }
+    term.moveTo(1, startRow + 1);
+
+    try {
+        allEntities = await loadAllEntities();
+        runSearch();
+        setStatusMessage(`${allEntities.length} entidades atualizadas`);
+    } catch (err) {
+        render();
+        setStatusMessage(`Erro ao atualizar: ${err instanceof Error ? err.message : String(err)}`, 'error');
+    } finally {
+        term.grabInput(true);
+        isRefreshing = false;
     }
 }
 
@@ -1134,7 +1168,7 @@ function render(): void {
         } else if (appMode === 'editLine') {
             term.brightBlack('  Enter salvar  ·  Esc cancelar edição  ·  ←→ cursor  ·  Ctrl+C sair  ·  ');
         } else {
-            term.brightBlack('  ↑↓ navegar  ·  Ctrl+E editar  ·  Alt+←/→ abas  ·  Ctrl+N nome  ·  Ctrl+J JSON  ·  Ctrl+K id  ·  Esc limpar  ·  Ctrl+C sair  ·  ');
+            term.brightBlack('  ↑↓ navegar  ·  Ctrl+E editar  ·  Alt+←/→ abas  ·  Ctrl+N nome  ·  Ctrl+J JSON  ·  Ctrl+K id  ·  Ctrl+R refresh  ·  Esc limpar  ·  Ctrl+C sair  ·  ');
         }
 
         if (statusMessage) {
@@ -1200,6 +1234,7 @@ function handleSearchKey(name: string, data: { isCharacter?: boolean }): void {
         case 'CTRL_N': void copySelectedName(); return;
         case 'CTRL_J': void copySelectedJson(); return;
         case 'CTRL_K': void copySelectedId(); return;
+        case 'CTRL_R': void refreshEntities(); return;
 
         case 'CTRL_E':
         case 'ENTER': {
