@@ -213,6 +213,34 @@ export interface SheetsListResponse {
     hasNextPage: boolean
 }
 
+export interface AdminSheetOwnerSummary {
+    id: string | null
+    name: string
+    username: string
+    avatarUrl: string | null
+}
+
+export interface AdminSheetListItem {
+    id: string
+    slug: string
+    name: string
+    photo: string | null
+    class: string
+    subclass: string
+    race: string
+    origin: string
+    createdAt: string
+    updatedAt: string
+    owner: AdminSheetOwnerSummary
+}
+
+export interface AdminSheetsListResponse {
+    items: AdminSheetListItem[]
+    total: number
+    page: number
+    totalPages: number
+}
+
 // ─── API body types ───────────────────────────────────────────────────────────
 
 export type PatchSheetBody = Partial<Omit<CharacterSheet, "_id" | "slug" | "userId" | "createdAt" | "updatedAt">>

@@ -30,6 +30,12 @@ vi.mock('../../../../src/features/traits/database/trait', () => ({
     },
 }));
 
+vi.mock('../../../../src/features/spells/models/spell', () => ({
+    Spell: {
+        find: vi.fn(),
+    },
+}));
+
 vi.mock('../../../../src/core/database/db', () => ({
     default: vi.fn().mockResolvedValue(undefined),
 }));
@@ -82,8 +88,12 @@ import {
     buildDescriptionHtml,
     buildEntryHtml,
     extractTraits,
+    type RawSpellRef,
 } from '../races-provider';
 import { RaceModel } from '../../../../src/features/races/models/race';
+import { Trait } from '../../../../src/features/traits/database/trait';
+import { Spell } from '../../../../src/features/spells/models/spell';
+import termKit from 'terminal-kit';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -524,5 +534,319 @@ describe('RacesProvider.findExisting', () => {
         expect(result!.name).toBe('Aasimar');
         expect(result!.source).toBe('LDJ pág. 286');
         expect(result!.status).toBe('active');
+    });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// processItem — originalName preservation
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe('RacesProvider.processItem — originalName preservation', () => {
+    let provider: RacesProvider;
+
+    beforeEach(() => {
+        provider = makeProvider();
+    });
+
+    it('preserves originalName in translated traits', async () => {
+        const race = {
+            name: 'Aasimar',
+            source: 'PHB',
+            size: ['M'] as string[],
+            speed: 30,
+            entries: [
+                { type: 'entries', name: 'Celestial Resistance', entries: ['You resist damage.'] },
+            ],
+        };
+
+        const result = await provider.processItem(race);
+
+        expect(result).not.toBeNull();
+        expect(result!.traits).toHaveLength(1);
+        // Cast to access the transient originalName field
+        const trait = result!.traits[0] as { name: string; description: string; originalName?: string };
+        expect(trait.name).toBe('[PT] Celestial Resistance');
+        expect(trait.originalName).toBe('Celestial Resistance');
+    });
+
+    it('preserves originalName in subrace traits', async () => {
+        (provider as unknown as { subraces: unknown[] }).subraces = [
+            {
+                name: 'Fallen',
+                source: 'VGM',
+                raceName: 'Aasimar',
+                raceSource: 'VGM',
+                entries: [{ type: 'entries', name: 'Necrotic Shroud', entries: ['Your eyes turn dark.'] }],
+            },
+        ];
+
+        const race = { name: 'Aasimar', source: 'VGM', size: ['M'] as string[], speed: 30 };
+        const result = await provider.processItem(race);
+
+        expect(result!.variations).toHaveLength(1);
+        const subTrait = result!.variations[0].traits[0] as { name: string; originalName?: string };
+        expect(subTrait.name).toBe('[PT] Necrotic Shroud');
+        expect(subTrait.originalName).toBe('Necrotic Shroud');
+    });
+
+    it('preserves originalName in RawSpellRef entries from additionalSpells', async () => {
+        const race = {
+            name: 'Tiefling',
+            source: 'PHB',
+            size: ['M'] as string[],
+            speed: 30,
+            additionalSpells: [
+                { known: { '1': ['dancing lights#c'] } },
+            ],
+        };
+
+        const result = await provider.processItem(race);
+
+        expect(result).not.toBeNull();
+        expect(result!.spells).toHaveLength(1);
+        const rawSpell = result!.spells[0] as RawSpellRef;
+        expect(rawSpell._raw).toBe(true);
+        expect(rawSpell.name).toBe('[PT] dancing lights');
+        expect(rawSpell.originalName).toBe('dancing lights');
+        expect(rawSpell.level).toBe(1);
+    });
+
+    it('glossary application does not overwrite originalName in spells', async () => {
+        const race = {
+            name: 'Tiefling',
+            source: 'PHB',
+            size: ['M'] as string[],
+            speed: 30,
+            additionalSpells: [{ known: { '1': ['darkness'] } }],
+        };
+
+        const result = await provider.processItem(race);
+        const rawSpell = result!.spells[0] as RawSpellRef;
+
+        // Simulate glossary application (spread preserves originalName, only overrides name)
+        const afterGlossary = { ...rawSpell, name: 'Escuridão' };
+        expect(afterGlossary.originalName).toBe('darkness');
+    });
+
+    it('glossary application does not overwrite originalName in traits', async () => {
+        const race = {
+            name: 'Aasimar',
+            source: 'PHB',
+            size: ['M'] as string[],
+            speed: 30,
+            entries: [{ type: 'entries', name: 'Darkvision', entries: ['You see in darkness.'] }],
+        };
+
+        const result = await provider.processItem(race);
+        const trait = result!.traits[0] as { name: string; originalName?: string; description: string };
+
+        // Simulate glossary application (spread preserves originalName, only overrides name/description)
+        const afterGlossary = { ...trait, name: 'Visão no Escuro', description: trait.description };
+        expect(afterGlossary.originalName).toBe('Darkvision');
+    });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// resolveTraits — originalName lookup
+// ─────────────────────────────────────────────────────────────────────────────
+
+type PrivateResolveTraits = {
+    resolveTraits: (
+        traits: { name: string; description: string; level?: number; originalName?: string }[],
+        raceName: string,
+        raceSource: string,
+    ) => Promise<{ name: string; description: string; level?: number }[]>;
+};
+
+describe('RacesProvider.resolveTraits — originalName lookup', () => {
+    let provider: RacesProvider;
+    let traitFindMock: MockInstance;
+    let traitCreateMock: MockInstance;
+
+    beforeEach(() => {
+        provider = makeProvider();
+        traitFindMock = vi.mocked(Trait.find);
+        traitCreateMock = vi.mocked(Trait.create);
+        traitFindMock.mockReset();
+        traitCreateMock.mockReset();
+        // Auto-pick "use existing" (index 1) so interactive menu resolves immediately
+        (termKit as unknown as { terminal: { singleColumnMenu: ReturnType<typeof vi.fn> } })
+            .terminal.singleColumnMenu.mockImplementation(
+                (_: unknown, cb: (err: unknown, resp: { selectedIndex: number }) => void) => {
+                    cb(null, { selectedIndex: 1 });
+                },
+            );
+    });
+
+    it('searches with $or query covering both originalName and translated name', async () => {
+        const mockTrait = { _id: 'abc123', name: 'Visão no Escuro', description: '<p>Sees in dark.</p>' };
+        traitFindMock.mockReturnValue({ limit: vi.fn().mockReturnValue({ lean: vi.fn().mockResolvedValue([mockTrait]) }) });
+
+        const traits = [{ name: 'Visão no Escuro', description: '<p>Sees in dark.</p>', originalName: 'Darkvision' }];
+        const resolved = await (provider as unknown as PrivateResolveTraits).resolveTraits(traits, 'Aasimar', 'PHB');
+
+        // Single $or query should cover both originalName (EN) and name (PT)
+        expect(traitFindMock).toHaveBeenCalledTimes(1);
+        const query = traitFindMock.mock.calls[0][0];
+        expect(query).toHaveProperty('$or');
+        expect(query.$or[0].originalName.$regex.source).toContain('Darkvision');
+        expect(query.$or[1].name.$regex.source).toContain('Visão no Escuro');
+        expect(resolved).toHaveLength(1);
+        expect(resolved[0].name).toBe('Habilidade sem Nome');
+        expect(resolved[0].description).toContain('abc123');
+    });
+
+    it('finds trait with empty originalName via PT name in $or query', async () => {
+        const mockTrait = { _id: 'xyz999', name: 'Idade (Kaladesh)', description: '<p>desc</p>' };
+        traitFindMock.mockReturnValue({ limit: vi.fn().mockReturnValue({ lean: vi.fn().mockResolvedValue([mockTrait]) }) });
+
+        // Trait where DB record has empty originalName — found only via PT name in $or
+        const traits = [{ name: 'Idade', description: '<p>desc</p>', originalName: 'Age' }];
+        const resolved = await (provider as unknown as PrivateResolveTraits).resolveTraits(traits, 'Kaladesh', 'PSK');
+
+        expect(traitFindMock).toHaveBeenCalledTimes(1);
+        const query = traitFindMock.mock.calls[0][0];
+        expect(query.$or[0].originalName.$regex.source).toContain('Age');
+        expect(query.$or[1].name.$regex.source).toContain('Idade');
+        expect(resolved).toHaveLength(1);
+        expect(resolved[0].description).toContain('xyz999');
+    });
+
+    it('creates new Trait with originalName when none found', async () => {
+        traitFindMock.mockReturnValue({ limit: vi.fn().mockReturnValue({ lean: vi.fn().mockResolvedValue([]) }) });
+        const createdDoc = { _id: 'new001', name: 'Darkvision' };
+        traitCreateMock.mockResolvedValue(createdDoc);
+
+        const traits = [{ name: 'Visão no Escuro', description: '<p>Sees in dark.</p>', originalName: 'Darkvision' }];
+        await (provider as unknown as PrivateResolveTraits).resolveTraits(traits, 'Aasimar', 'PHB');
+
+        expect(traitCreateMock).toHaveBeenCalledWith(expect.objectContaining({
+            name: 'Visão no Escuro',
+            originalName: 'Darkvision',
+            source: 'PHB',
+            status: 'active',
+        }));
+    });
+
+    it('uses originalName equal to name when no originalName is provided (legacy support)', async () => {
+        traitFindMock.mockReturnValue({ limit: vi.fn().mockReturnValue({ lean: vi.fn().mockResolvedValue([]) }) });
+        traitCreateMock.mockResolvedValue({ _id: 'leg001', name: 'Visão no Escuro' });
+
+        const traits = [{ name: 'Visão no Escuro', description: '<p>desc</p>' }];
+        await (provider as unknown as PrivateResolveTraits).resolveTraits(traits, 'Aasimar', 'PHB');
+
+        // $or query should use the name as fallback originalName in both conditions
+        const query = traitFindMock.mock.calls[0][0];
+        expect(query.$or[0].originalName.$regex.source).toContain('Visão no Escuro');
+        expect(query.$or[1].name.$regex.source).toContain('Visão no Escuro');
+        expect(traitCreateMock).toHaveBeenCalledWith(expect.objectContaining({
+            originalName: 'Visão no Escuro',
+        }));
+    });
+
+    it('injects race-specific variant at position 0 when not in Fuse.js top-5', async () => {
+        // Simulate many "Tipo Criatura (X)" traits — Fuse.js may not pick the race-specific one
+        const makeTraitDoc = (id: string, name: string) => ({ _id: id, name, description: `<p>${name}</p>` });
+        const candidates = [
+            makeTraitDoc('id-bugbear',  'Tipo Criatura (Bugbear)'),
+            makeTraitDoc('id-centauro', 'Tipo Criatura (Centauro)'),
+            makeTraitDoc('id-duergar',  'Tipo Criatura (Duergar)'),
+            makeTraitDoc('id-eladrin',  'Tipo Criatura (Eladrin)'),
+            makeTraitDoc('id-gnomo',    'Tipo Criatura (Gnomo)'),
+            makeTraitDoc('id-fada',     'Tipo Criatura (Fada)'),   // should be injected
+        ];
+        traitFindMock.mockReturnValue({ limit: vi.fn().mockReturnValue({ lean: vi.fn().mockResolvedValue(candidates) }) });
+
+        const traits = [{ name: 'Tipo Criatura', description: '<p>Você é uma Fey.</p>', originalName: 'Creature Type' }];
+        const resolved = await (provider as unknown as PrivateResolveTraits).resolveTraits(traits, 'Fada', 'MOT');
+
+        // The resolved mention should reference the race-specific "Tipo Criatura (Fada)"
+        expect(resolved[0].description).toContain('id-fada');
+    });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// resolveSpells — originalName lookup
+// ─────────────────────────────────────────────────────────────────────────────
+
+type PrivateResolveSpells = {
+    resolveSpells: (
+        spells: unknown[],
+        raceName: string,
+    ) => Promise<{ id: string; name: string; circle: number; level: number }[]>;
+};
+
+describe('RacesProvider.resolveSpells — originalName lookup', () => {
+    let provider: RacesProvider;
+    let spellFindMock: MockInstance;
+
+    beforeEach(() => {
+        provider = makeProvider();
+        spellFindMock = vi.mocked(Spell.find);
+        spellFindMock.mockReset();
+    });
+
+    it('searches with $or query covering both originalName and translated name', async () => {
+        const mockSpell = { _id: 'sp001', name: 'Luzes Dançantes', circle: 0 };
+        spellFindMock.mockReturnValue({ limit: vi.fn().mockReturnValue({ lean: vi.fn().mockResolvedValue([mockSpell]) }) });
+
+        const spells: RawSpellRef[] = [{ _raw: true, name: 'Luzes Dançantes', originalName: 'dancing lights', level: 1 }];
+        const resolved = await (provider as unknown as PrivateResolveSpells).resolveSpells(spells, 'Tiefling');
+
+        // Single $or query covers both originalName (EN) and name (PT)
+        expect(spellFindMock).toHaveBeenCalledTimes(1);
+        const query = spellFindMock.mock.calls[0][0];
+        expect(query).toHaveProperty('$or');
+        expect(query.$or[0].originalName.$regex.source).toContain('dancing lights');
+        expect(query.$or[1].name.$regex.source).toContain('Luzes Dançantes');
+        expect(resolved).toHaveLength(1);
+        expect(resolved[0].id).toBe('sp001');
+        expect(resolved[0].name).toBe('Luzes Dançantes');
+        expect(resolved[0].circle).toBe(0);
+        expect(resolved[0].level).toBe(1);
+    });
+
+    it('finds spell with empty originalName via PT name in $or query', async () => {
+        const mockSpell = { _id: 'sp002', name: 'Luzes Dançantes', circle: 0 };
+        spellFindMock.mockReturnValue({ limit: vi.fn().mockReturnValue({ lean: vi.fn().mockResolvedValue([mockSpell]) }) });
+
+        // Spell found via PT name when originalName is empty in DB
+        const spells: RawSpellRef[] = [{ _raw: true, name: 'Luzes Dançantes', originalName: 'dancing lights', level: 1 }];
+        const resolved = await (provider as unknown as PrivateResolveSpells).resolveSpells(spells, 'Tiefling');
+
+        expect(spellFindMock).toHaveBeenCalledTimes(1);
+        expect(resolved).toHaveLength(1);
+        expect(resolved[0].id).toBe('sp002');
+    });
+
+    it('emits warning with both names when spell not found in either search', async () => {
+        spellFindMock.mockReturnValue({ limit: vi.fn().mockReturnValue({ lean: vi.fn().mockResolvedValue([]) }) });
+
+        const spells: RawSpellRef[] = [{ _raw: true, name: 'Trevas', originalName: 'darkness', level: 3 }];
+        const resolved = await (provider as unknown as PrivateResolveSpells).resolveSpells(spells, 'Tiefling');
+
+        expect(resolved).toHaveLength(0);
+    });
+
+    it('passes through already-resolved spell objects unchanged', async () => {
+        const alreadyResolved = { id: 'sp100', name: 'Trevas', circle: 2, level: 5 };
+        const resolved = await (provider as unknown as PrivateResolveSpells).resolveSpells([alreadyResolved], 'Tiefling');
+
+        expect(spellFindMock).not.toHaveBeenCalled();
+        expect(resolved).toHaveLength(1);
+        expect(resolved[0]).toEqual(alreadyResolved);
+    });
+
+    it('uses originalName equal to name when no originalName is provided (legacy support)', async () => {
+        const mockSpell = { _id: 'sp003', name: 'Trevas', circle: 2 };
+        spellFindMock.mockReturnValue({ limit: vi.fn().mockReturnValue({ lean: vi.fn().mockResolvedValue([mockSpell]) }) });
+
+        // Simulate a legacy RawSpellRef without originalName
+        const legacySpell = { _raw: true as const, name: 'Trevas', originalName: 'Trevas', level: 3 };
+        await (provider as unknown as PrivateResolveSpells).resolveSpells([legacySpell], 'Tiefling');
+
+        const query = spellFindMock.mock.calls[0][0];
+        expect(query.$or[0].originalName.$regex.source).toContain('Trevas');
+        expect(query.$or[1].name.$regex.source).toContain('Trevas');
     });
 });
