@@ -62,4 +62,4 @@ ENV PORT=4005
 ENV HOSTNAME="0.0.0.0"
 
 # Comando de inicialização na porta correta
-CMD ["npx", "next", "start", "-p", "4005"]
+CMD ["node_modules/.bin/next", "start", "-p", "4005"]
