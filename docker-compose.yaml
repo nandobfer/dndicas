@@ -1,51 +1,27 @@
 services:
-  mongodb:
-    image: mongo:latest
-    container_name: mongodb
-    restart: always
-    environment:
-      MONGO_INITDB_ROOT_USERNAME: root
-      MONGO_INITDB_ROOT_PASSWORD: root
-    ports:
-      - "27017:27017"
-    volumes:
-      - mongodb_data:/data/db
-
-  minio:
-    image: minio/minio:latest
-    container_name: minio
-    restart: always
-    command: server /data --console-address ":9001"
-    environment:
-      MINIO_ROOT_USER: nandoburgos
-      MINIO_ROOT_PASSWORD: mfux6xpj
-      # MINIO_LICENSE_KEY: path to license if using env, but user asked for volume
-    ports:
-      - "9000:9000"
-      - "9001:9001"
-    volumes:
-      - minio_data:/data
-      - ./minio/license:/etc/minio/license:ro
-
-  app:
+  dndicas:
     build:
       context: .
       dockerfile: Dockerfile
+      args:
+        - NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=${NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY}
+        - NEXT_PUBLIC_CLERK_SIGN_IN_URL=${NEXT_PUBLIC_CLERK_SIGN_IN_URL}
+        - NEXT_PUBLIC_CLERK_SIGN_UP_URL=${NEXT_PUBLIC_CLERK_SIGN_UP_URL}
+        - NEXT_PUBLIC_CLERK_AFTER_SIGN_IN_URL=${NEXT_PUBLIC_CLERK_AFTER_SIGN_IN_URL}
+        - NEXT_PUBLIC_CLERK_AFTER_SIGN_UP_URL=${NEXT_PUBLIC_CLERK_AFTER_SIGN_UP_URL}
     image: nandoburgos/dndicas
     container_name: dndicas
     restart: always
     ports:
-      - "4107:4107"
+      - "4005:4005"
     env_file:
       - .env
-    environment:
-      # Apenas overrides necessários para a rede interna do Docker
-      MONGODB_URI: mongodb://root:root@mongodb:27017/dndicas?authSource=admin
-      S3_ENDPOINT: http://minio:9000
-    depends_on:
-      - mongodb
-      - minio
+    networks:
+      - mongodb-network
+      - minio-network
 
-volumes:
-  mongodb_data:
-  minio_data:
+networks:
+  mongodb-network:
+    external: true
+  minio-network:
+    external: true
