@@ -1,3 +1,4 @@
+import Script from "next/script";
 import type { Metadata } from "next";
 import { ClerkProvider } from "@clerk/nextjs";
 import { dark } from "@clerk/themes";
@@ -9,8 +10,6 @@ import { Toaster } from "@/core/ui/toast"
 import { GlassTooltipProvider } from "@/components/ui/glass-tooltip"
 import { ScrollToTop } from "@/core/ui/scroll-to-top"
 import { WindowProvider } from "@/core/context/window-context"
-import { Analytics } from "@vercel/analytics/next"
-
 export const metadata: Metadata = {
     title: "Dungeons & Dicas",
     description: "Dungeons & Dragons em Português",
@@ -56,6 +55,14 @@ export default function RootLayout({
             }}
         >
             <html lang="pt-BR" className="dark">
+                <head>
+                    <Script
+                        id="umami-analytics"
+                        src="https://analytics.nandoburgos.dev/script.js"
+                        data-website-id="6914445b-f309-4d5a-85b3-ef9c5fc30866"
+                        strategy="afterInteractive"
+                    />
+                </head>
                 <body className={cn("min-h-screen bg-background font-sans antialiased")}>
                     <ScrollToTop />
                     <AppProvider>
@@ -66,7 +73,6 @@ export default function RootLayout({
                             </WindowProvider>
                         </GlassTooltipProvider>
                     </AppProvider>
-                    <Analytics />
                 </body>
             </html>
         </ClerkProvider>
