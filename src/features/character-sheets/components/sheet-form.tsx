@@ -15,6 +15,7 @@ import { useSheetAttacksAndTraitsSections } from "./sheet-attacks-and-traits"
 import { ItemList } from "./item-list"
 import { SpellList } from "./spell-list"
 import { useSheetAutoSave } from "../hooks/use-sheet-auto-save"
+import { useCharacterSheetRealtime } from "../hooks/use-character-sheet-realtime"
 import { useSheetMentionSync } from "../hooks/use-sheet-mention-sync"
 import { useItems } from "../api/character-sheets-queries"
 import type { CharacterSheetFull } from "../types/character-sheet.types"
@@ -51,6 +52,7 @@ export function SheetForm({ sheet }: SheetFormProps) {
     const attacksSections = useSheetAttacksAndTraitsSections({ sheet, form, isReadOnly })
 
     useSheetMentionSync({ sheet, form, isReadOnly })
+    useCharacterSheetRealtime({ sheetId: sheet._id, currentSlug: sheet.slug })
 
     const shouldRenderDesktop = hasHydrated ? isDesktop : true
 

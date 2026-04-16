@@ -1,5 +1,6 @@
 import dbConnect from "@/core/database/db"
 import Fuse from "fuse.js"
+import { CharacterSheetPusherService } from "../realtime/character-sheet-pusher-service"
 import { CharacterSheet } from "../models/character-sheet"
 import { CharacterItem } from "../models/character-item"
 import { CharacterSpell } from "../models/character-spell"
@@ -275,7 +276,7 @@ export async function getSheetById(id: string): Promise<CharacterSheetFull | nul
     } as unknown as CharacterSheetFull
 }
 
-export async function patchSheet(id: string, userId: string, data: PatchSheetBody) {
+export async function patchSheet(id: string, userId: string, data: PatchSheetBody, originId?: string) {
     await dbConnect()
 
     // When name changes, also update the slug
@@ -295,7 +296,11 @@ export async function patchSheet(id: string, userId: string, data: PatchSheetBod
     ).lean()
 
     if (!sheet) return null
-    return toPlainSheet(sheet)
+    const plainSheet = toPlainSheet(sheet)
+    await publishCharacterSheetRealtime(async () => {
+        await getCharacterSheetPusherService().publishSheetPatched({ sheet: plainSheet, originId })
+    })
+    return plainSheet
 }
 
 export async function deleteSheet(id: string, userId: string): Promise<boolean> {
@@ -315,7 +320,7 @@ export async function deleteSheet(id: string, userId: string): Promise<boolean> 
     return true
 }
 
-export async function applyLongRest(id: string, userId: string) {
+export async function applyLongRest(id: string, userId: string, originId?: string) {
     await dbConnect()
 
     const sheet = await CharacterSheet.findOne({ _id: id, userId })
@@ -335,7 +340,23 @@ export async function applyLongRest(id: string, userId: string) {
     await CharacterSpell.updateMany({ sheetId: id }, { $set: { prepared: false } })
 
     await sheet.save()
-    return toPlainSheet(sheet.toObject())
+    const plainSheet = toPlainSheet(sheet.toObject())
+    const spells = await getSpells(id)
+
+    await publishCharacterSheetRealtime(async () => {
+        await Promise.all([
+            getCharacterSheetPusherService().publishSheetPatched({ sheet: plainSheet, originId }),
+            getCharacterSheetPusherService().publishCollectionChanged({
+                sheetId: id,
+                collection: "spells",
+                action: "reloaded",
+                originId,
+                records: spells,
+            }),
+        ])
+    })
+
+    return plainSheet
 }
 
 // ─── Items ────────────────────────────────────────────────────────────────────
@@ -346,26 +367,62 @@ export async function getItems(sheetId: string) {
     return items.map(toPlain)
 }
 
-export async function createItem(sheetId: string, data: CreateItemBody) {
+export async function createItem(sheetId: string, data: CreateItemBody, originId?: string) {
     await dbConnect()
     const item = await CharacterItem.create({ sheetId, ...data })
-    return toPlain(item.toObject())
+    const plainItem = toPlain(item.toObject())
+    await publishCharacterSheetRealtime(async () => {
+        await getCharacterSheetPusherService().publishCollectionChanged({
+            sheetId,
+            collection: "items",
+            action: "created",
+            originId,
+            recordId: plainItem._id,
+            record: plainItem,
+        })
+    })
+    return plainItem
 }
 
-export async function updateItem(sheetId: string, itemId: string, data: PatchItemBody) {
+export async function updateItem(sheetId: string, itemId: string, data: PatchItemBody, originId?: string) {
     await dbConnect()
     const item = await CharacterItem.findOneAndUpdate(
         { _id: itemId, sheetId },
         { $set: data },
         { returnDocument: 'after' },
     ).lean()
-    return item ? toPlain(item) : null
+    if (!item) return null
+
+    const plainItem = toPlain(item)
+    await publishCharacterSheetRealtime(async () => {
+        await getCharacterSheetPusherService().publishCollectionChanged({
+            sheetId,
+            collection: "items",
+            action: "updated",
+            originId,
+            recordId: plainItem._id,
+            record: plainItem,
+        })
+    })
+    return plainItem
 }
 
-export async function deleteItem(sheetId: string, itemId: string): Promise<boolean> {
+export async function deleteItem(sheetId: string, itemId: string, originId?: string): Promise<boolean> {
     await dbConnect()
     const result = await CharacterItem.deleteOne({ _id: itemId, sheetId })
-    return result.deletedCount > 0
+    const deleted = result.deletedCount > 0
+    if (deleted) {
+        await publishCharacterSheetRealtime(async () => {
+            await getCharacterSheetPusherService().publishCollectionChanged({
+                sheetId,
+                collection: "items",
+                action: "deleted",
+                originId,
+                recordId: itemId,
+            })
+        })
+    }
+    return deleted
 }
 
 // ─── Spells ───────────────────────────────────────────────────────────────────
@@ -376,26 +433,62 @@ export async function getSpells(sheetId: string) {
     return spells.map(toPlain)
 }
 
-export async function createSpell(sheetId: string, data: CreateSpellBody) {
+export async function createSpell(sheetId: string, data: CreateSpellBody, originId?: string) {
     await dbConnect()
     const spell = await CharacterSpell.create({ sheetId, ...data })
-    return toPlain(spell.toObject())
+    const plainSpell = toPlain(spell.toObject())
+    await publishCharacterSheetRealtime(async () => {
+        await getCharacterSheetPusherService().publishCollectionChanged({
+            sheetId,
+            collection: "spells",
+            action: "created",
+            originId,
+            recordId: plainSpell._id,
+            record: plainSpell,
+        })
+    })
+    return plainSpell
 }
 
-export async function updateSpell(sheetId: string, spellId: string, data: PatchSpellBody) {
+export async function updateSpell(sheetId: string, spellId: string, data: PatchSpellBody, originId?: string) {
     await dbConnect()
     const spell = await CharacterSpell.findOneAndUpdate(
         { _id: spellId, sheetId },
         { $set: data },
         { returnDocument: 'after' },
     ).lean()
-    return spell ? toPlain(spell) : null
+    if (!spell) return null
+
+    const plainSpell = toPlain(spell)
+    await publishCharacterSheetRealtime(async () => {
+        await getCharacterSheetPusherService().publishCollectionChanged({
+            sheetId,
+            collection: "spells",
+            action: "updated",
+            originId,
+            recordId: plainSpell._id,
+            record: plainSpell,
+        })
+    })
+    return plainSpell
 }
 
-export async function deleteSpell(sheetId: string, spellId: string): Promise<boolean> {
+export async function deleteSpell(sheetId: string, spellId: string, originId?: string): Promise<boolean> {
     await dbConnect()
     const result = await CharacterSpell.deleteOne({ _id: spellId, sheetId })
-    return result.deletedCount > 0
+    const deleted = result.deletedCount > 0
+    if (deleted) {
+        await publishCharacterSheetRealtime(async () => {
+            await getCharacterSheetPusherService().publishCollectionChanged({
+                sheetId,
+                collection: "spells",
+                action: "deleted",
+                originId,
+                recordId: spellId,
+            })
+        })
+    }
+    return deleted
 }
 
 // ─── Traits ───────────────────────────────────────────────────────────────────
@@ -406,16 +499,39 @@ export async function getTraits(sheetId: string) {
     return traits.map(toPlain)
 }
 
-export async function createTrait(sheetId: string, data: CreateTraitBody) {
+export async function createTrait(sheetId: string, data: CreateTraitBody, originId?: string) {
     await dbConnect()
     const trait = await CharacterTrait.create({ sheetId, ...data })
-    return toPlain(trait.toObject())
+    const plainTrait = toPlain(trait.toObject())
+    await publishCharacterSheetRealtime(async () => {
+        await getCharacterSheetPusherService().publishCollectionChanged({
+            sheetId,
+            collection: "traits",
+            action: "created",
+            originId,
+            recordId: plainTrait._id,
+            record: plainTrait,
+        })
+    })
+    return plainTrait
 }
 
-export async function deleteTrait(sheetId: string, traitId: string): Promise<boolean> {
+export async function deleteTrait(sheetId: string, traitId: string, originId?: string): Promise<boolean> {
     await dbConnect()
     const result = await CharacterTrait.deleteOne({ _id: traitId, sheetId })
-    return result.deletedCount > 0
+    const deleted = result.deletedCount > 0
+    if (deleted) {
+        await publishCharacterSheetRealtime(async () => {
+            await getCharacterSheetPusherService().publishCollectionChanged({
+                sheetId,
+                collection: "traits",
+                action: "deleted",
+                originId,
+                recordId: traitId,
+            })
+        })
+    }
+    return deleted
 }
 
 // ─── Feats ────────────────────────────────────────────────────────────────────
@@ -426,16 +542,39 @@ export async function getFeats(sheetId: string) {
     return feats.map(toPlain)
 }
 
-export async function createFeat(sheetId: string, data: CreateFeatBody) {
+export async function createFeat(sheetId: string, data: CreateFeatBody, originId?: string) {
     await dbConnect()
     const feat = await CharacterFeat.create({ sheetId, ...data })
-    return toPlain(feat.toObject())
+    const plainFeat = toPlain(feat.toObject())
+    await publishCharacterSheetRealtime(async () => {
+        await getCharacterSheetPusherService().publishCollectionChanged({
+            sheetId,
+            collection: "feats",
+            action: "created",
+            originId,
+            recordId: plainFeat._id,
+            record: plainFeat,
+        })
+    })
+    return plainFeat
 }
 
-export async function deleteFeat(sheetId: string, featId: string): Promise<boolean> {
+export async function deleteFeat(sheetId: string, featId: string, originId?: string): Promise<boolean> {
     await dbConnect()
     const result = await CharacterFeat.deleteOne({ _id: featId, sheetId })
-    return result.deletedCount > 0
+    const deleted = result.deletedCount > 0
+    if (deleted) {
+        await publishCharacterSheetRealtime(async () => {
+            await getCharacterSheetPusherService().publishCollectionChanged({
+                sheetId,
+                collection: "feats",
+                action: "deleted",
+                originId,
+                recordId: featId,
+            })
+        })
+    }
+    return deleted
 }
 
 // ─── Attacks ──────────────────────────────────────────────────────────────────
@@ -446,26 +585,62 @@ export async function getAttacks(sheetId: string) {
     return attacks.map(toPlain)
 }
 
-export async function createAttack(sheetId: string, data: CreateAttackBody) {
+export async function createAttack(sheetId: string, data: CreateAttackBody, originId?: string) {
     await dbConnect()
     const attack = await CharacterAttack.create({ sheetId, ...data })
-    return toPlain(attack.toObject())
+    const plainAttack = toPlain(attack.toObject())
+    await publishCharacterSheetRealtime(async () => {
+        await getCharacterSheetPusherService().publishCollectionChanged({
+            sheetId,
+            collection: "attacks",
+            action: "created",
+            originId,
+            recordId: plainAttack._id,
+            record: plainAttack,
+        })
+    })
+    return plainAttack
 }
 
-export async function updateAttack(sheetId: string, attackId: string, data: PatchAttackBody) {
+export async function updateAttack(sheetId: string, attackId: string, data: PatchAttackBody, originId?: string) {
     await dbConnect()
     const attack = await CharacterAttack.findOneAndUpdate(
         { _id: attackId, sheetId },
         { $set: data },
         { returnDocument: 'after' },
     ).lean()
-    return attack ? toPlain(attack) : null
+    if (!attack) return null
+
+    const plainAttack = toPlain(attack)
+    await publishCharacterSheetRealtime(async () => {
+        await getCharacterSheetPusherService().publishCollectionChanged({
+            sheetId,
+            collection: "attacks",
+            action: "updated",
+            originId,
+            recordId: plainAttack._id,
+            record: plainAttack,
+        })
+    })
+    return plainAttack
 }
 
-export async function deleteAttack(sheetId: string, attackId: string): Promise<boolean> {
+export async function deleteAttack(sheetId: string, attackId: string, originId?: string): Promise<boolean> {
     await dbConnect()
     const result = await CharacterAttack.deleteOne({ _id: attackId, sheetId })
-    return result.deletedCount > 0
+    const deleted = result.deletedCount > 0
+    if (deleted) {
+        await publishCharacterSheetRealtime(async () => {
+            await getCharacterSheetPusherService().publishCollectionChanged({
+                sheetId,
+                collection: "attacks",
+                action: "deleted",
+                originId,
+                recordId: attackId,
+            })
+        })
+    }
+    return deleted
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -562,5 +737,17 @@ async function ensureUniqueSlug(username: string, name: string, excludeId: strin
         if (!existing || String(existing._id) === excludeId) return candidate
         n++
         candidate = `${base}-${n}`
+    }
+}
+
+function getCharacterSheetPusherService() {
+    return CharacterSheetPusherService.getInstance()
+}
+
+async function publishCharacterSheetRealtime(publish: () => Promise<void>) {
+    try {
+        await publish()
+    } catch (error) {
+        console.error("[Realtime] Failed to publish character-sheet update:", error)
     }
 }

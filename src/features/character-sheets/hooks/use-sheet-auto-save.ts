@@ -25,7 +25,7 @@ export function useSheetAutoSave(sheet: CharacterSheet, options?: UseSheetAutoSa
         if (sheet) {
             reset(sheet as PatchSheetBody)
         }
-    }, [sheet?._id, reset]) // eslint-disable-line react-hooks/exhaustive-deps
+    }, [reset, sheet])
 
     /**
      * Update local form state only — no server request. Use this for text inputs
@@ -100,4 +100,3 @@ export function useSheetAutoSave(sheet: CharacterSheet, options?: UseSheetAutoSa
         isSaving: isPending
     }
 }
-

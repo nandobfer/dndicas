@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@clerk/nextjs/server"
+import { PUSHER_ORIGIN_HEADER } from "@/core/realtime/pusher-origin"
 import { getSheetById, patchSheet, deleteSheet } from "@/features/character-sheets/api/character-sheets-service"
 import { PatchSheetSchema, type PatchSheetBody } from "@/features/character-sheets/types/character-sheet.types"
 
@@ -27,7 +28,8 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
             return NextResponse.json({ error: "Dados inválidos", details: parsed.error.flatten() }, { status: 400 })
         }
 
-        const sheet = await patchSheet(id, userId, parsed.data as PatchSheetBody)
+        const originId = req.headers.get(PUSHER_ORIGIN_HEADER) ?? undefined
+        const sheet = await patchSheet(id, userId, parsed.data as PatchSheetBody, originId)
         if (!sheet) return NextResponse.json({ error: "Ficha não encontrada ou não autorizado" }, { status: 404 })
         return NextResponse.json(sheet)
     } catch (error) {
