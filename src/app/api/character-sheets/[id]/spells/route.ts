@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@clerk/nextjs/server"
+import { PUSHER_ORIGIN_HEADER } from "@/core/realtime/pusher-origin"
 import { getSpells, createSpell } from "@/features/character-sheets/api/character-sheets-service"
 import { CreateSpellSchema } from "@/features/character-sheets/types/character-sheet.types"
 
@@ -26,7 +27,8 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
             return NextResponse.json({ error: "Dados inválidos", details: parsed.error.flatten() }, { status: 400 })
         }
 
-        const spell = await createSpell(id, parsed.data)
+        const originId = req.headers.get(PUSHER_ORIGIN_HEADER) ?? undefined
+        const spell = await createSpell(id, parsed.data, originId)
         return NextResponse.json(spell, { status: 201 })
     } catch (error) {
         console.error("[API] POST /api/character-sheets/[id]/spells error:", error)

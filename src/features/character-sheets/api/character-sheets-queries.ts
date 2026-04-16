@@ -57,6 +57,7 @@ export const sheetsKeys = {
     infinite: (params: { search?: string; limit?: number }) => [...sheetsKeys.all, "infinite", params] as const,
     details: () => [...sheetsKeys.all, "detail"] as const,
     detail: (id: string) => [...sheetsKeys.details(), id] as const,
+    bySlug: (slug: string) => [...sheetsKeys.details(), "slug", slug] as const,
     items: (sheetId: string) => [...sheetsKeys.all, "items", sheetId] as const,
     spells: (sheetId: string) => [...sheetsKeys.all, "spells", sheetId] as const,
     traits: (sheetId: string) => [...sheetsKeys.all, "traits", sheetId] as const,
@@ -92,7 +93,7 @@ export function useSheet(id: string | null) {
 
 export function useSheetBySlug(slug: string | null) {
     return useQuery({
-        queryKey: [...sheetsKeys.details(), "slug", slug ?? ""],
+        queryKey: sheetsKeys.bySlug(slug ?? ""),
         queryFn: () => fetchSheetBySlug(slug!),
         enabled: !!slug,
         staleTime: 0,
