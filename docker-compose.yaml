@@ -3,6 +3,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+      network: host
       args:
         - NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=${NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY}
         - NEXT_PUBLIC_CLERK_SIGN_IN_URL=${NEXT_PUBLIC_CLERK_SIGN_IN_URL}
@@ -24,9 +25,12 @@ services:
     networks:
       - mongodb-network
       - minio-network
+      - soketi-network
 
 networks:
   mongodb-network:
     external: true
   minio-network:
+    external: true
+  soketi-network:
     external: true
