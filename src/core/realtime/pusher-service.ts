@@ -1,6 +1,11 @@
 import "server-only"
 
 import Pusher from "pusher"
+import type { PusherBrowserConfig, PusherPublicConfig } from "./pusher-config"
+
+const DEFAULT_PUSHER_PUBLIC_HOST = "pusher.nandoburgos.dev"
+const DEFAULT_PUSHER_PUBLIC_SCHEME = "https"
+const DEFAULT_PUSHER_PUBLIC_PORT = 443
 
 export interface PusherServerConfig {
     appId: string
@@ -9,16 +14,6 @@ export interface PusherServerConfig {
     host: string
     port: number
     scheme: "http" | "https"
-    cluster: string
-}
-
-export interface PusherClientConfig {
-    key: string
-    wsHost: string
-    wsPort: number
-    wssPort: number
-    forceTLS: boolean
-    enabledTransports: Array<"ws" | "wss">
     cluster: string
 }
 
@@ -69,17 +64,8 @@ export class PusherService {
     /**
      * Returns the browser-safe subset of the Pusher configuration.
      */
-    getClientConfig(): PusherClientConfig {
-        const forceTLS = this.config.scheme === "https"
-        return {
-            key: this.config.key,
-            wsHost: this.config.host,
-            wsPort: this.config.port,
-            wssPort: this.config.port,
-            forceTLS,
-            enabledTransports: forceTLS ? ["wss"] : ["ws"],
-            cluster: this.config.cluster,
-        }
+    getClientConfig(): PusherBrowserConfig {
+        return buildPusherBrowserConfig(this.readPublicClientConfigFromEnv())
     }
 
     /**
@@ -120,5 +106,66 @@ export class PusherService {
             scheme,
             cluster,
         }
+    }
+
+    private readPublicClientConfigFromEnv(): PusherPublicConfig {
+        const host =
+            process.env.PUSHER_PUBLIC_HOST?.trim() ||
+            process.env.NEXT_PUBLIC_PUSHER_HOST?.trim() ||
+            DEFAULT_PUSHER_PUBLIC_HOST
+        const schemeRaw =
+            process.env.PUSHER_PUBLIC_SCHEME?.trim() ||
+            process.env.NEXT_PUBLIC_PUSHER_SCHEME?.trim() ||
+            DEFAULT_PUSHER_PUBLIC_SCHEME
+        const scheme = schemeRaw as "http" | "https"
+        const key =
+            process.env.PUSHER_PUBLIC_APP_KEY?.trim() ||
+            process.env.NEXT_PUBLIC_PUSHER_APP_KEY?.trim() ||
+            this.config.key
+        const cluster =
+            process.env.PUSHER_PUBLIC_CLUSTER?.trim() ||
+            process.env.NEXT_PUBLIC_PUSHER_CLUSTER?.trim() ||
+            this.config.cluster
+
+        if (scheme !== "http" && scheme !== "https") {
+            throw new Error("PUSHER_PUBLIC_SCHEME deve ser 'http' ou 'https'.")
+        }
+
+        const portRaw = process.env.PUSHER_PUBLIC_PORT?.trim() || process.env.NEXT_PUBLIC_PUSHER_PORT?.trim()
+        const defaultPort = scheme === "https" ? DEFAULT_PUSHER_PUBLIC_PORT : 80
+        const port = portRaw ? Number.parseInt(portRaw, 10) : defaultPort
+
+        if (!Number.isFinite(port) || port <= 0) {
+            throw new Error("PUSHER_PUBLIC_PORT deve ser um número válido.")
+        }
+
+        if (!process.env.PUSHER_PUBLIC_HOST?.trim() && !process.env.NEXT_PUBLIC_PUSHER_HOST?.trim()) {
+            console.warn("[realtime] Using default public Pusher host fallback.", {
+                host: DEFAULT_PUSHER_PUBLIC_HOST,
+                scheme: DEFAULT_PUSHER_PUBLIC_SCHEME,
+                port: DEFAULT_PUSHER_PUBLIC_PORT,
+            })
+        }
+
+        return {
+            key,
+            host,
+            port,
+            scheme,
+            cluster,
+        }
+    }
+}
+
+export function buildPusherBrowserConfig(config: PusherPublicConfig): PusherBrowserConfig {
+    const forceTLS = config.scheme === "https"
+    return {
+        key: config.key,
+        wsHost: config.host,
+        wsPort: config.port,
+        wssPort: config.port,
+        forceTLS,
+        enabledTransports: ["ws"],
+        cluster: config.cluster,
     }
 }

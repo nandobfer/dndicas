@@ -3,6 +3,7 @@
 import { useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { useQueryClient } from "@tanstack/react-query"
+import { getPusherBrowserConfig } from "@/core/realtime/pusher-browser-config"
 import { PusherBrowserService } from "@/core/realtime/pusher-browser-service"
 import { getOrCreatePusherOriginId } from "@/core/realtime/pusher-origin"
 import {
@@ -29,23 +30,6 @@ type CollectionRecordMap = {
     traits: CharacterTrait
     feats: CharacterFeat
 }
-
-const browserConfig = {
-    key: process.env.NEXT_PUBLIC_PUSHER_APP_KEY ?? "",
-    wsHost: process.env.NEXT_PUBLIC_PUSHER_HOST ?? "",
-    wsPort: Number.parseInt(process.env.NEXT_PUBLIC_PUSHER_PORT ?? "0", 10),
-    wssPort: Number.parseInt(process.env.NEXT_PUBLIC_PUSHER_PORT ?? "0", 10),
-    forceTLS: (process.env.NEXT_PUBLIC_PUSHER_SCHEME ?? "http") === "https",
-    enabledTransports: ((process.env.NEXT_PUBLIC_PUSHER_SCHEME ?? "http") === "https" ? ["wss"] : ["ws"]) as Array<"ws" | "wss">,
-    cluster: process.env.NEXT_PUBLIC_PUSHER_CLUSTER ?? "mt1",
-}
-
-const hasRealtimeConfig = Boolean(
-    browserConfig.key &&
-    browserConfig.wsHost &&
-    Number.isFinite(browserConfig.wsPort) &&
-    browserConfig.wsPort > 0
-)
 
 interface UseCharacterSheetRealtimeOptions {
     sheetId: string
@@ -75,12 +59,11 @@ export function useCharacterSheetRealtime({ sheetId, currentSlug }: UseCharacter
     const router = useRouter()
 
     useEffect(() => {
-        if (!sheetId || !hasRealtimeConfig) return
+        if (!sheetId) return
 
         const originId = getOrCreatePusherOriginId()
-        const channelName = getCharacterSheetChannelName(sheetId)
-        const pusher = PusherBrowserService.getInstance()
-        const channel = pusher.subscribe(browserConfig, channelName)
+        let channel: ReturnType<PusherBrowserService["subscribe"]> | null = null
+        let disposed = false
 
         const syncSheetDetail = (sheet: CharacterSheet) => {
             queryClient.setQueryData(sheetsKeys.detail(sheetId), sheet)
@@ -128,25 +111,75 @@ export function useCharacterSheetRealtime({ sheetId, currentSlug }: UseCharacter
             }
         }
 
-        channel.bind(CHARACTER_SHEET_PUSHER_EVENTS.sheetPatched, handleSheetPatched)
-        channel.bind(CHARACTER_SHEET_PUSHER_EVENTS.itemsChanged, (payload: CharacterSheetCollectionChangedEventPayload<"items", CharacterItem>) => {
-            applyCollectionChange(sheetsKeys.items(sheetId), payload)
-        })
-        channel.bind(CHARACTER_SHEET_PUSHER_EVENTS.spellsChanged, (payload: CharacterSheetCollectionChangedEventPayload<"spells", CharacterSpell>) => {
-            applyCollectionChange(sheetsKeys.spells(sheetId), payload)
-        })
-        channel.bind(CHARACTER_SHEET_PUSHER_EVENTS.attacksChanged, (payload: CharacterSheetCollectionChangedEventPayload<"attacks", CharacterAttack>) => {
-            applyCollectionChange(sheetsKeys.attacks(sheetId), payload)
-        })
-        channel.bind(CHARACTER_SHEET_PUSHER_EVENTS.traitsChanged, (payload: CharacterSheetCollectionChangedEventPayload<"traits", CharacterTrait>) => {
-            applyCollectionChange(sheetsKeys.traits(sheetId), payload)
-        })
-        channel.bind(CHARACTER_SHEET_PUSHER_EVENTS.featsChanged, (payload: CharacterSheetCollectionChangedEventPayload<"feats", CharacterFeat>) => {
-            applyCollectionChange(sheetsKeys.feats(sheetId), payload)
-        })
+        const bindChannelEvents = (nextChannel: NonNullable<typeof channel>) => {
+            nextChannel.bind("pusher:subscription_succeeded", () => {
+                console.info("[realtime] Character sheet subscription succeeded.", {
+                    sheetId,
+                    channelName: nextChannel.name,
+                })
+            })
+            nextChannel.bind("pusher:subscription_error", (error: unknown) => {
+                console.error("[realtime] Character sheet subscription failed.", {
+                    sheetId,
+                    channelName: nextChannel.name,
+                    error,
+                })
+            })
+            nextChannel.bind(CHARACTER_SHEET_PUSHER_EVENTS.sheetPatched, handleSheetPatched)
+            nextChannel.bind(CHARACTER_SHEET_PUSHER_EVENTS.itemsChanged, (payload: CharacterSheetCollectionChangedEventPayload<"items", CharacterItem>) => {
+                applyCollectionChange(sheetsKeys.items(sheetId), payload)
+            })
+            nextChannel.bind(CHARACTER_SHEET_PUSHER_EVENTS.spellsChanged, (payload: CharacterSheetCollectionChangedEventPayload<"spells", CharacterSpell>) => {
+                applyCollectionChange(sheetsKeys.spells(sheetId), payload)
+            })
+            nextChannel.bind(CHARACTER_SHEET_PUSHER_EVENTS.attacksChanged, (payload: CharacterSheetCollectionChangedEventPayload<"attacks", CharacterAttack>) => {
+                applyCollectionChange(sheetsKeys.attacks(sheetId), payload)
+            })
+            nextChannel.bind(CHARACTER_SHEET_PUSHER_EVENTS.traitsChanged, (payload: CharacterSheetCollectionChangedEventPayload<"traits", CharacterTrait>) => {
+                applyCollectionChange(sheetsKeys.traits(sheetId), payload)
+            })
+            nextChannel.bind(CHARACTER_SHEET_PUSHER_EVENTS.featsChanged, (payload: CharacterSheetCollectionChangedEventPayload<"feats", CharacterFeat>) => {
+                applyCollectionChange(sheetsKeys.feats(sheetId), payload)
+            })
+        }
+
+        void (async () => {
+            const browserConfig = await getPusherBrowserConfig()
+            if (disposed) return
+
+            if (!browserConfig?.key || !browserConfig.wsHost || !Number.isFinite(browserConfig.wsPort) || browserConfig.wsPort <= 0) {
+                console.error("[realtime] Missing or invalid Pusher browser config.", {
+                    sheetId,
+                    config: browserConfig,
+                })
+                return
+            }
+
+            const channelName = getCharacterSheetChannelName(sheetId)
+            const pusher = PusherBrowserService.getInstance()
+
+            channel = pusher.subscribe(browserConfig, channelName)
+            bindChannelEvents(channel)
+
+            console.info("[realtime] Character sheet subscription requested.", {
+                sheetId,
+                channelName,
+                originId,
+                transport: browserConfig.enabledTransports.join(","),
+                forceTLS: browserConfig.forceTLS,
+            })
+        })()
 
         return () => {
+            disposed = true
+            if (!channel) return
+
+            const pusher = PusherBrowserService.getInstance()
+            const channelName = getCharacterSheetChannelName(sheetId)
+
             channel.unbind(CHARACTER_SHEET_PUSHER_EVENTS.sheetPatched, handleSheetPatched)
+            channel.unbind("pusher:subscription_succeeded")
+            channel.unbind("pusher:subscription_error")
             channel.unbind(CHARACTER_SHEET_PUSHER_EVENTS.itemsChanged)
             channel.unbind(CHARACTER_SHEET_PUSHER_EVENTS.spellsChanged)
             channel.unbind(CHARACTER_SHEET_PUSHER_EVENTS.attacksChanged)
