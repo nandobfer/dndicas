@@ -502,10 +502,38 @@ function toPlainSheet(doc: any) {
     return obj
 }
 
+function stripHtml(html: string | null | undefined) {
+    return String(html ?? "").replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim()
+}
+
+function getArmorClassBonusValue(item: CharacterItemType): number | null {
+    if (item.catalogAcType === "bonus" && item.catalogAc != null) {
+        return item.catalogAc
+    }
+
+    if (item.catalogAcBonus != null) {
+        return item.catalogAcBonus
+    }
+
+    return null
+}
+
 function withComputedArmorClass(sheet: CharacterSheetType, items: CharacterItemType[]) {
     const sheetItems = items.filter((item) => String(item.sheetId) === String(sheet._id))
-    const equippedArmor = sheetItems.find((item) => item.equipped && item.catalogItemType === "armadura") ?? null
-    const equippedShield = sheetItems.find((item) => item.equipped && item.catalogItemType === "escudo") ?? null
+    const equippedArmor = sheetItems.find(
+        (item) => item.equipped && item.catalogItemType === "armadura" && item.catalogAcType === "base" && item.catalogAc != null
+    ) ?? null
+    const armorClassBonusSources = sheetItems
+        .filter((item) => item.equipped)
+        .map((item) => ({
+            name: stripHtml(item.name) || "Item",
+            acBonus: getArmorClassBonusValue(item),
+        }))
+        .filter((item): item is { name: string; acBonus: number } => item.acBonus != null)
+        .map((item) => ({
+            name: item.name,
+            acBonus: item.acBonus,
+        }))
 
     return {
         ...sheet,
@@ -513,14 +541,11 @@ function withComputedArmorClass(sheet: CharacterSheetType, items: CharacterItemT
             sheet.dexterity,
             sheet.armorClassOverride ?? null,
             equippedArmor ? {
+                name: stripHtml(equippedArmor.name) || "Armadura",
                 ac: equippedArmor.catalogAc ?? null,
-                acType: equippedArmor.catalogAcType ?? null,
                 armorType: equippedArmor.catalogArmorType ?? null,
-                acBonus: equippedArmor.catalogAcBonus ?? null,
             } : null,
-            equippedShield ? {
-                acBonus: equippedShield.catalogAcBonus ?? null,
-            } : null,
+            armorClassBonusSources,
             sheet.armorClassBonus ?? null,
         ).value,
     }

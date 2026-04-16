@@ -10,13 +10,14 @@ import {
     getSpellSaveDC,
     getSpellAttackBonus,
     SKILL_ATTRIBUTE_MAP,
+    type ArmorClassBonusSource,
     type EquippedArmorData,
 } from "../utils/dnd-calculations"
 import type { CharacterSheet, SkillName, AttributeType } from "../types/character-sheet.types"
 
 interface UseCharacterCalculationsOptions {
     equippedArmor?: EquippedArmorData | null
-    equippedShield?: EquippedArmorData | null
+    armorClassBonusSources?: ArmorClassBonusSource[]
 }
 
 export function useCharacterCalculations(sheet: CharacterSheet, opts?: UseCharacterCalculationsOptions) {
@@ -63,7 +64,7 @@ export function useCharacterCalculations(sheet: CharacterSheet, opts?: UseCharac
             sheet.dexterity,
             sheet.armorClassOverride,
             opts?.equippedArmor,
-            opts?.equippedShield,
+            opts?.armorClassBonusSources,
             sheet.armorClassBonus,
         )
         const initiative = getInitiative(sheet.dexterity, sheet.initiativeOverride)
@@ -91,25 +92,5 @@ export function useCharacterCalculations(sheet: CharacterSheet, opts?: UseCharac
             spellSaveDC,
             spellAttackBonus,
         }
-    }, [
-        sheet.level,
-        sheet.proficiencyBonusOverride,
-        sheet.strength,
-        sheet.dexterity,
-        sheet.constitution,
-        sheet.intelligence,
-        sheet.wisdom,
-        sheet.charisma,
-        sheet.savingThrows,
-        sheet.skills,
-        sheet.armorClassOverride,
-        sheet.armorClassBonus,
-        sheet.initiativeOverride,
-        sheet.passivePerceptionOverride,
-        sheet.spellcastingAttribute,
-        sheet.spellSaveDCOverride,
-        sheet.spellAttackBonusOverride,
-        opts?.equippedArmor,
-        opts?.equippedShield,
-    ])
+    }, [sheet, opts?.equippedArmor, opts?.armorClassBonusSources])
 }

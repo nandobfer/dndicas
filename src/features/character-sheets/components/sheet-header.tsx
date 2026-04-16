@@ -45,6 +45,22 @@ interface SheetHeaderProps {
 
 type UseSheetHeaderSectionsProps = SheetHeaderProps
 
+function stripHtml(html: string | null | undefined): string {
+  return String(html ?? "").replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim()
+}
+
+function getArmorClassBonusValue(item: CharacterItem): number | null {
+  if (item.catalogAcType === "bonus" && item.catalogAc != null) {
+    return item.catalogAc
+  }
+
+  if (item.catalogAcBonus != null) {
+    return item.catalogAcBonus
+  }
+
+  return null
+}
+
 export function useSheetHeaderSections({ sheet, form, items = [], isReadOnly = false }: UseSheetHeaderSectionsProps) {
   const { watch, setFieldLocally, patchField } = form
   const hitDiceValue = (watch("hitDiceTotal") || "d8") as DiceType
@@ -69,28 +85,32 @@ export function useSheetHeaderSections({ sheet, form, items = [], isReadOnly = f
       progressionData: subclass.progressionTable,
     }))
 
-  // Equipped armor/shield for AC calculation
-  const equippedArmor = items.find(
-    (item) => item.equipped && (item.catalogItemType === "armadura")
+  const equippedBaseArmor = items.find(
+    (item) => item.equipped && item.catalogItemType === "armadura" && item.catalogAcType === "base" && item.catalogAc != null
   ) ?? null
-  const equippedShield = items.find(
-    (item) => item.equipped && item.catalogItemType === "escudo"
-  ) ?? null
+  const armorClassBonusSources = items
+    .filter((item) => item.equipped)
+    .map((item) => ({
+      name: stripHtml(item.name) || "Item",
+      acBonus: getArmorClassBonusValue(item),
+    }))
+    .filter((item): item is { name: string; acBonus: number } => item.acBonus != null)
+    .map((item) => ({
+      name: item.name,
+      acBonus: item.acBonus,
+    }))
 
   const currentSheet = { ...sheet, ...Object.fromEntries(
     Object.entries(watch()).filter(([, v]) => v !== undefined)
   ) } as CharacterSheet
 
   const calc = useCharacterCalculations(currentSheet, {
-    equippedArmor: equippedArmor ? {
-      ac: equippedArmor.catalogAc,
-      acType: equippedArmor.catalogAcType,
-      armorType: equippedArmor.catalogArmorType,
-      acBonus: equippedArmor.catalogAcBonus,
+    equippedArmor: equippedBaseArmor ? {
+      name: stripHtml(equippedBaseArmor.name) || "Armadura",
+      ac: equippedBaseArmor.catalogAc,
+      armorType: equippedBaseArmor.catalogArmorType,
     } : null,
-    equippedShield: equippedShield ? {
-      acBonus: equippedShield.catalogAcBonus,
-    } : null,
+    armorClassBonusSources,
   })
 
   const armorClassBonus = watch("armorClassBonus") ?? sheet.armorClassBonus ?? null
