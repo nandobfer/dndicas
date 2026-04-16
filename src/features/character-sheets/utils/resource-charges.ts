@@ -47,7 +47,11 @@ export function resolveChargesTotal(charges: Charges | undefined, context: Resou
         return context.attributeModifiers[mapCatalogAttribute(charges.attribute)] ?? 0
     }
 
-    const row = charges.values.find((value) => value.level === context.level)
+    const row = charges.values.reduce<typeof charges.values[number] | null>((closest, value) => {
+        if (value.level > context.level) return closest
+        if (!closest || value.level > closest.level) return value
+        return closest
+    }, null)
     return row ? parseChargeCountValue(row.value) : null
 }
 
