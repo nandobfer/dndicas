@@ -122,30 +122,33 @@ export const getSkillBonus = (
 // ─── Armor class ──────────────────────────────────────────────────────────────
 
 export interface EquippedArmorData {
+    name?: string | null
     ac?: number | null
-    acType?: "base" | "bonus" | null
     armorType?: "leve" | "média" | "pesada" | null
-    acBonus?: number | null
+}
+
+export interface ArmorClassBonusSource {
+    name: string
+    acBonus: number
 }
 
 export const getArmorClass = (
     dexterity: number,
     _override: number | null,
     equippedArmor?: EquippedArmorData | null,
-    equippedShield?: EquippedArmorData | null,
+    equippedBonuses: ArmorClassBonusSource[] = [],
     manualBonus?: number | null,
 ): CalcResult => {
     const dexMod = Math.floor((dexterity - 10) / 2)
 
     let base = 10
+    let baseLabel = "Base"
     let dexContrib = dexMod
 
-    if (equippedArmor) {
-        if (equippedArmor.acType === "base" && equippedArmor.ac != null) {
-            base = equippedArmor.ac
-        } else if (equippedArmor.acType === "bonus" && equippedArmor.acBonus != null) {
-            base = 10 + equippedArmor.acBonus
-        }
+    if (equippedArmor?.ac != null) {
+        base = equippedArmor.ac
+        baseLabel = equippedArmor.name?.trim() || "Armadura"
+
         if (equippedArmor.armorType === "pesada") {
             dexContrib = 0
         } else if (equippedArmor.armorType === "média") {
@@ -153,18 +156,26 @@ export const getArmorClass = (
         }
     }
 
-    const shieldBonus = equippedShield?.acBonus ?? 0
+    const totalItemBonus = equippedBonuses.reduce((sum, source) => sum + source.acBonus, 0)
     const bonus = manualBonus ?? 0
-    const calculated = base + dexContrib + shieldBonus + bonus
+    const calculated = base + dexContrib + totalItemBonus + bonus
 
-    const parts: CalcPart[] = [{ label: "Base", value: base, color: "base" }]
+    const parts: CalcPart[] = [{ label: baseLabel, value: base, color: "base" }]
     if (dexContrib !== 0) parts.push({ label: "Destreza", value: fmt(dexContrib), color: "dexterity" })
-    if (shieldBonus !== 0) parts.push({ label: "Escudo", value: `+${shieldBonus}`, color: "bonus" })
+    equippedBonuses.forEach((source) => {
+        if (source.acBonus !== 0) {
+            parts.push({ label: source.name, value: fmt(source.acBonus), color: "bonus" })
+        }
+    })
     if (bonus !== 0) parts.push({ label: "Bônus", value: fmt(bonus), color: "bonus" })
 
-    let formula = `${base}`
+    let formula = `${baseLabel}(${base})`
     if (dexContrib !== 0) formula += ` + DEX(${dexContrib})`
-    if (shieldBonus !== 0) formula += ` + escudo(${shieldBonus})`
+    equippedBonuses.forEach((source) => {
+        if (source.acBonus !== 0) {
+            formula += ` + ${source.name}(${source.acBonus})`
+        }
+    })
     if (bonus !== 0) formula += ` + bônus(${bonus})`
     formula += ` = ${calculated}`
 
