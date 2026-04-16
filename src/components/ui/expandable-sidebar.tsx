@@ -42,7 +42,7 @@ export interface ExpandableSidebarProps {
 
 /**
  * Navigation items configuration.
- * Updated per T020: renamed "Módulos" to "Cadastros", removed "Empresas", added "Usuários".
+ * Updated per T020: renamed "Módulos" to "Cadastros" and added "Usuários".
  */
 const mainItems = [
     { label: "Início", href: "/", icon: Home },
@@ -50,7 +50,7 @@ const mainItems = [
     { label: "Minhas Fichas", href: "/my-sheets", icon: ScrollText }
 ]
 
-// T020: Renamed from "Módulos" to "Cadastros", removed "Empresas", added "Usuários"
+// T020: Renamed from "Módulos" to "Cadastros" and added "Usuários"
 // T032: Added "Habilidades" for traits catalog
 // T008: Added "Talentos" for feats catalog
 const cadastrosItems = [

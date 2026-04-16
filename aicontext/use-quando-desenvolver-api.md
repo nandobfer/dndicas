@@ -30,12 +30,12 @@ O cliente axios está configurado com `baseURL: '/api'` em `src/core/utils/api.t
 import api from '@/core/utils/api';
 
 // ✅ CORRETO
-await api.get('/companies');              // → GET /api/companies
+await api.get('/users');                  // → GET /api/users
 await api.post('/core/ai', { prompt });   // → POST /api/core/ai
-await api.get('/companies/123');          // → GET /api/companies/123
+await api.get('/users/123');              // → GET /api/users/123
 
 // ❌ ERRADO (resulta em /api/api/...)
-await api.get('/api/companies');          // → GET /api/api/companies (404)
+await api.get('/api/users');              // → GET /api/api/users (404)
 await api.post('/api/core/ai', data);     // → GET /api/api/core/ai (404)
 ```
 
@@ -47,17 +47,17 @@ Os hooks `useQuery` e `useMutation` de `@/core/hooks/useApi` também seguem este
 import { useQuery, useMutation } from '@/core/hooks/useApi';
 
 // ✅ CORRETO
-const { data } = useQuery<Company[]>('/companies');
+const { data } = useQuery<UserResponse[]>('/users');
 const { mutate } = useMutation('POST', '/core/ai');
 
 // ❌ ERRADO
-const { data } = useQuery<Company[]>('/api/companies');
+const { data } = useQuery<UserResponse[]>('/api/users');
 const { mutate } = useMutation('POST', '/api/core/ai');
 ```
 
 ### Regra prática
 
-> Se sua rota está em `src/app/api/companies/route.ts`, chame com `/companies` (sem `/api/`).
+> Se sua rota está em `src/app/api/users/route.ts`, chame com `/users` (sem `/api/`).
 
 ## Padrão de Resposta
 
@@ -288,20 +288,19 @@ import { z } from 'zod';
 import dbConnect from '@/core/database/db';
 import { logAction } from '@/core/database/audit-log';
 import { ApiResponse } from '@/core/types/common';
-import { Company } from '@/features/organizations/models/company';
+import { User } from '@/features/users/models/user';
 
-const CreateCompanySchema = z.object({
-  name: z.string().min(1, 'Nome é obrigatório'),
-  cnpj: z.string().regex(/^\d{14}$/, 'CNPJ inválido'),
+const CreateUserSchema = z.object({
+  username: z.string().min(3, 'Username é obrigatório'),
   email: z.string().email('Email inválido'),
 });
 
 /**
  * @openapi
- * /api/companies:
+ * /api/users:
  *   post:
- *     summary: Cria uma nova empresa
- *     description: Cria uma nova empresa no sistema
+ *     summary: Cria um novo usuário
+ *     description: Cria um novo usuário no sistema
  *     requestBody:
  *       required: true
  *       content:
@@ -309,19 +308,16 @@ const CreateCompanySchema = z.object({
  *           schema:
  *             type: object
  *             required:
- *               - name
- *               - cnpj
+ *               - username
  *               - email
  *             properties:
- *               name:
- *                 type: string
- *               cnpj:
+ *               username:
  *                 type: string
  *               email:
  *                 type: string
  *     responses:
  *       201:
- *         description: Empresa criada com sucesso
+ *         description: Usuário criado com sucesso
  *       400:
  *         description: Dados inválidos
  *       401:
@@ -342,40 +338,40 @@ export async function POST(request: Request) {
 
     // 2. Validação
     const body = await request.json();
-    const validatedData = CreateCompanySchema.parse(body);
+    const validatedData = CreateUserSchema.parse(body);
 
     // 3. Conexão DB
     await dbConnect();
 
     // 4. Verificar duplicatas
-    const existing = await Company.findOne({ cnpj: validatedData.cnpj });
+    const existing = await User.findOne({ email: validatedData.email });
     if (existing) {
       const response: ApiResponse<null> = {
         success: false,
-        error: 'CNPJ já cadastrado',
-        code: 'DUPLICATE_CNPJ',
+        error: 'Email já cadastrado',
+        code: 'DUPLICATE_EMAIL',
       };
       return Response.json(response, { status: 400 });
     }
 
     // 5. Criar
-    const company = await Company.create(validatedData);
+    const user = await User.create(validatedData);
 
     // 6. Log
-    await logAction('CREATE', 'Company', company._id.toString(), userId, {
-      name: company.name,
-      cnpj: company.cnpj,
+    await logAction('CREATE', 'User', user._id.toString(), userId, {
+      username: user.username,
+      email: user.email,
     });
 
     // 7. Resposta
-    const response: ApiResponse<typeof company> = {
+    const response: ApiResponse<typeof user> = {
       success: true,
-      data: company,
+      data: user,
     };
 
     return Response.json(response, { status: 201 });
   } catch (error) {
-    console.error('Error creating company:', error);
+    console.error('Error creating user:', error);
 
     if (error instanceof z.ZodError) {
       const response: ApiResponse<null> = {
@@ -389,7 +385,7 @@ export async function POST(request: Request) {
 
     const response: ApiResponse<null> = {
       success: false,
-      error: 'Erro ao criar empresa',
+      error: 'Erro ao criar usuário',
       code: 'INTERNAL_ERROR',
     };
     return Response.json(response, { status: 500 });
@@ -409,9 +405,9 @@ Para APIs públicas, configure CORS apropriadamente no Next.js config ou na pró
 
 Sempre teste suas APIs:
 ```typescript
-// __tests__/api/companies/route.test.ts
-describe('POST /api/companies', () => {
-  it('should create a company', async () => {
+// __tests__/api/users/route.test.ts
+describe('POST /api/users', () => {
+  it('should create a user', async () => {
     // teste
   });
 

@@ -25,7 +25,6 @@ const ENTITY_MAP: Record<string, keyof typeof entityConfig> = {
     Background: "Origem",
     Race: "Raça",
     Auth: "Segurança",
-    Company: "Regra", // Fallback
     Organization: "Regra", // Fallback
     Item: "Item",
 }
