@@ -7,6 +7,8 @@
         "build": "next build",
         "start": "next start",
         "lint": "eslint",
+        "test:jest": "jest --passWithNoTests",
+        "test:vitest": "vitest run --config vitest.config.ts",
         "test:seed": "vitest run --config vitest.config.ts",
         "deploy": "dockerbp nandoburgos/dndicas && ssh boz \"cd /home/nandoburgos/dndicas && docker compose pull && docker compose up -d\"",
         "seed": "tsx scripts/seed-data/index.ts",

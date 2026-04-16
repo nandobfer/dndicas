@@ -4,9 +4,6 @@ on:
   push:
     branches:
       - main
-  pull_request:
-    branches:
-      - main
 
 permissions:
   contents: read
@@ -82,13 +79,13 @@ jobs:
       - name: Deploy to Server via SSH
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         env:
-          DEPLOY_HOST: ${{ vars.DEPLOY_HOST }}
-          DEPLOY_PORT: ${{ vars.DEPLOY_PORT }}
-          DEPLOY_USERNAME: ${{ vars.DEPLOY_USERNAME }}
-          DEPLOY_PATH: ${{ vars.DEPLOY_PATH }}
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_PORT: ${{ secrets.DEPLOY_PORT }}
+          DEPLOY_USERNAME: ${{ secrets.DEPLOY_USERNAME }}
+          DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
         run: |
-          test -n "$DEPLOY_HOST" || { echo "Missing required repository/environment variable: DEPLOY_HOST"; exit 1; }
-          test -n "$DEPLOY_USERNAME" || { echo "Missing required repository/environment variable: DEPLOY_USERNAME"; exit 1; }
+          test -n "$DEPLOY_HOST" || { echo "Missing required secret: DEPLOY_HOST"; exit 1; }
+          test -n "$DEPLOY_USERNAME" || { echo "Missing required secret: DEPLOY_USERNAME"; exit 1; }
           ssh -p "${DEPLOY_PORT:-22}" "${DEPLOY_USERNAME}@${DEPLOY_HOST}" \
             -o StrictHostKeyChecking=yes \
             "cd ${DEPLOY_PATH:-/home/dndicas} && docker compose pull && docker compose up -d"
