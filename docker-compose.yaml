@@ -25,9 +25,12 @@ services:
     networks:
       - mongodb-network
       - minio-network
+      - soketi-network
 
 networks:
   mongodb-network:
     external: true
   minio-network:
+    external: true
+  soketi-network:
     external: true
