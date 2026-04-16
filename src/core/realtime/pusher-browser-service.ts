@@ -1,16 +1,7 @@
 "use client"
 
 import Pusher, { type Channel } from "pusher-js"
-
-export interface PusherBrowserConfig {
-    key: string
-    cluster: string
-    wsHost: string
-    wsPort: number
-    wssPort: number
-    forceTLS: boolean
-    enabledTransports: Array<"ws" | "wss">
-}
+import type { PusherBrowserConfig } from "./pusher-config"
 
 /**
  * Centralises the browser-side Pusher client lifecycle.
@@ -48,6 +39,7 @@ export class PusherBrowserService {
                 enabledTransports: config.enabledTransports,
                 disableStats: true,
             })
+            this.attachConnectionLogging(this.client, config)
             this.configKey = nextConfigKey
         }
 
@@ -75,5 +67,61 @@ export class PusherBrowserService {
         this.client?.disconnect()
         this.client = null
         this.configKey = null
+    }
+
+    private attachConnectionLogging(client: Pusher, config: PusherBrowserConfig) {
+        client.connection.bind("connecting", () => {
+            console.info("[realtime] Pusher connecting.", {
+                transport: config.enabledTransports.join(","),
+                host: config.wsHost,
+                wsPort: config.wsPort,
+                wssPort: config.wssPort,
+                forceTLS: config.forceTLS,
+            })
+        })
+
+        client.connection.bind("state_change", (states: { previous: string; current: string }) => {
+            console.info("[realtime] Pusher connection state changed.", {
+                from: states.previous,
+                to: states.current,
+                transport: config.enabledTransports.join(","),
+                host: config.wsHost,
+                wsPort: config.wsPort,
+                wssPort: config.wssPort,
+                forceTLS: config.forceTLS,
+            })
+        })
+
+        client.connection.bind("connected", () => {
+            console.info("[realtime] Pusher connected.", {
+                transport: config.enabledTransports.join(","),
+                host: config.wsHost,
+                wsPort: config.wsPort,
+                wssPort: config.wssPort,
+                forceTLS: config.forceTLS,
+            })
+        })
+
+        client.connection.bind("disconnected", () => {
+            console.warn("[realtime] Pusher disconnected.", {
+                transport: config.enabledTransports.join(","),
+                host: config.wsHost,
+                wsPort: config.wsPort,
+                wssPort: config.wssPort,
+                forceTLS: config.forceTLS,
+            })
+        })
+
+        client.connection.bind("error", (error: unknown) => {
+            console.error("[realtime] Pusher connection error.", error)
+        })
+
+        client.connection.bind("unavailable", () => {
+            console.error("[realtime] Pusher connection unavailable.")
+        })
+
+        client.connection.bind("failed", () => {
+            console.error("[realtime] Pusher connection failed.")
+        })
     }
 }
