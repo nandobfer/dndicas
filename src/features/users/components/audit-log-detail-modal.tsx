@@ -51,7 +51,6 @@ function formatDate(date: Date | string): string {
 function formatEntityType(entityType: string): string {
     const labels: Record<string, string> = {
         User: "Usuário",
-        Company: "Empresa",
         Organization: "Organização",
         OrganizationMembership: "Membro da Organização",
         Rule: "Regra",

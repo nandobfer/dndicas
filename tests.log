@@ -1,0 +1,179 @@
+
+> dndicas@0.1.0 test
+> vitest run --config vitest.config.ts
+
+
+ RUN  v4.1.2 /home/burgos/code/dndicas/tests
+
+stderr | tests/backend/catalogs/feats-route-service.test.ts > feats backend > POST /api/feats maps duplicate-name errors to 409
+Feats POST error: Error: já existe um talento com este nome.
+    at /home/burgos/code/dndicas/tests/tests/backend/catalogs/feats-route-service.test.ts:98:51
+    at ManualMockedModule.factory (file:///home/burgos/code/dndicas/tests/node_modules/vitest/dist/chunks/test.p_J6dB8a.js:3907:78)
+    at ManualMockedModule.resolve (file:///home/burgos/code/dndicas/tests/node_modules/@vitest/mocker/dist/chunk-registry.js:161:21)
+    at VitestMocker.callFunctionMock (file:///home/burgos/code/dndicas/tests/node_modules/vitest/dist/chunks/startVitestModuleRunner.bRl2_oI_.js:316:32)
+    at file:///home/burgos/code/dndicas/tests/node_modules/vitest/dist/chunks/startVitestModuleRunner.bRl2_oI_.js:399:23
+    at Traces.$ (file:///home/burgos/code/dndicas/tests/node_modules/vitest/dist/chunks/traces.DT5aQ62U.js:142:27)
+    at VitestMocker.requestWithMockedModule (file:///home/burgos/code/dndicas/tests/node_modules/vitest/dist/chunks/startVitestModuleRunner.bRl2_oI_.js:364:21)
+    at VitestModuleRunner.cachedRequest (file:///home/burgos/code/dndicas/tests/node_modules/vitest/dist/chunks/startVitestModuleRunner.bRl2_oI_.js:565:31)
+    at request (file:///home/burgos/code/dndicas/tests/node_modules/vite/dist/node/module-runner.js:1205:76)
+    at processTicksAndRejections (node:internal/process/task_queues:104:5)
+
+stderr | tests/backend/core/aux-routes.test.ts > auxiliary backend routes > GET /api/core/health returns a healthy payload even when dbConnect throws
+Database connection error: Error: down
+    at /home/burgos/code/dndicas/tests/tests/backend/core/aux-routes.test.ts:55:48
+    at ManualMockedModule.factory (file:///home/burgos/code/dndicas/tests/node_modules/vitest/dist/chunks/test.p_J6dB8a.js:3907:78)
+    at ManualMockedModule.resolve (file:///home/burgos/code/dndicas/tests/node_modules/@vitest/mocker/dist/chunk-registry.js:161:21)
+    at VitestMocker.callFunctionMock (file:///home/burgos/code/dndicas/tests/node_modules/vitest/dist/chunks/startVitestModuleRunner.bRl2_oI_.js:316:32)
+    at file:///home/burgos/code/dndicas/tests/node_modules/vitest/dist/chunks/startVitestModuleRunner.bRl2_oI_.js:399:23
+    at Traces.$ (file:///home/burgos/code/dndicas/tests/node_modules/vitest/dist/chunks/traces.DT5aQ62U.js:142:27)
+    at VitestMocker.requestWithMockedModule (file:///home/burgos/code/dndicas/tests/node_modules/vitest/dist/chunks/startVitestModuleRunner.bRl2_oI_.js:364:21)
+    at VitestModuleRunner.cachedRequest (file:///home/burgos/code/dndicas/tests/node_modules/vitest/dist/chunks/startVitestModuleRunner.bRl2_oI_.js:565:31)
+    at request (file:///home/burgos/code/dndicas/tests/node_modules/vite/dist/node/module-runner.js:1205:76)
+    at processTicksAndRejections (node:internal/process/task_queues:104:5)
+
+ ✓ tests/backend/catalogs/feats-route-service.test.ts (6 tests) 336ms
+ ✓ tests/backend/catalogs/rules-traits-routes.test.ts (4 tests) 414ms
+stderr | tests/backend/core/aux-routes.test.ts > auxiliary backend routes > POST /api/core/email returns 401 when requireAuth rejects
+Email error: Error: UNAUTHORIZED
+    at /home/burgos/code/dndicas/tests/tests/backend/core/aux-routes.test.ts:86:52
+    at ManualMockedModule.factory (file:///home/burgos/code/dndicas/tests/node_modules/vitest/dist/chunks/test.p_J6dB8a.js:3907:78)
+    at ManualMockedModule.resolve (file:///home/burgos/code/dndicas/tests/node_modules/@vitest/mocker/dist/chunk-registry.js:161:21)
+    at VitestMocker.callFunctionMock (file:///home/burgos/code/dndicas/tests/node_modules/vitest/dist/chunks/startVitestModuleRunner.bRl2_oI_.js:316:32)
+    at file:///home/burgos/code/dndicas/tests/node_modules/vitest/dist/chunks/startVitestModuleRunner.bRl2_oI_.js:399:23
+    at Traces.$ (file:///home/burgos/code/dndicas/tests/node_modules/vitest/dist/chunks/traces.DT5aQ62U.js:142:27)
+    at VitestMocker.requestWithMockedModule (file:///home/burgos/code/dndicas/tests/node_modules/vitest/dist/chunks/startVitestModuleRunner.bRl2_oI_.js:364:21)
+    at VitestModuleRunner.cachedRequest (file:///home/burgos/code/dndicas/tests/node_modules/vitest/dist/chunks/startVitestModuleRunner.bRl2_oI_.js:565:31)
+    at request (file:///home/burgos/code/dndicas/tests/node_modules/vite/dist/node/module-runner.js:1205:76)
+    at processTicksAndRejections (node:internal/process/task_queues:104:5)
+
+stderr | tests/backend/core/aux-routes.test.ts > auxiliary backend routes > POST /api/core/email validates request payloads
+Email error: ZodError: [
+  {
+    "origin": "string",
+    "code": "invalid_format",
+    "format": "email",
+    "pattern": "/^(?!\\.)(?!.*\\.\\.)([A-Za-z0-9_'+\\-\\.]*)[A-Za-z0-9_+-]@([A-Za-z0-9][A-Za-z0-9\\-]*\\.)+[A-Za-z]{2,}$/",
+    "path": [
+      "to"
+    ],
+    "message": "Email inválido"
+  },
+  {
+    "origin": "string",
+    "code": "too_small",
+    "minimum": 1,
+    "inclusive": true,
+    "path": [
+      "subject"
+    ],
+    "message": "Assunto é obrigatório"
+  },
+  {
+    "origin": "string",
+    "code": "too_small",
+    "minimum": 1,
+    "inclusive": true,
+    "path": [
+      "html"
+    ],
+    "message": "Conteúdo HTML é obrigatório"
+  }
+]
+    at Module.POST (/home/burgos/code/dndicas/tests/src/app/api/core/email/route.ts:54:51)
+    at processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at /home/burgos/code/dndicas/tests/tests/backend/core/aux-routes.test.ts:110:26
+    at file:///home/burgos/code/dndicas/tests/node_modules/@vitest/runner/dist/chunk-artifact.js:1893:20
+
+stderr | tests/backend/core/aux-routes.test.ts > auxiliary backend routes > POST /api/core/ai validates request payloads
+AI generation error: ZodError: [
+  {
+    "origin": "string",
+    "code": "too_small",
+    "minimum": 1,
+    "inclusive": true,
+    "path": [
+      "prompt"
+    ],
+    "message": "Prompt é obrigatório"
+  }
+]
+    at Module.POST (/home/burgos/code/dndicas/tests/src/app/api/core/ai/route.ts:47:52)
+    at processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at /home/burgos/code/dndicas/tests/tests/backend/core/aux-routes.test.ts:127:26
+    at file:///home/burgos/code/dndicas/tests/node_modules/@vitest/runner/dist/chunk-artifact.js:1893:20
+
+ ✓ tests/backend/character-sheets/character-sheets.test.ts (6 tests) 542ms
+ ✓ tests/backend/core/aux-routes.test.ts (11 tests) 733ms
+ ✓ tests/backend/users/users-routes.test.ts (5 tests) 792ms
+     ✓ GET /api/users validates filters and returns 400 for invalid pagination  336ms
+     ✓ PUT /api/users/[id] blocks self-role changes  362ms
+stderr | tests/backend/users/sync.test.ts > features/users/api/sync > ensureUserExists returns null when no local user exists and no clerk payload is available
+[UserSync] Cannot create user without Clerk data
+
+ ✓ tests/backend/users/get-current-user.test.ts (3 tests) 108ms
+ ✓ tests/backend/users/sync.test.ts (6 tests) 164ms
+stderr | tests/backend/users/webhook-route.test.ts > POST /api/webhooks/clerk > returns 500 when the webhook secret is not configured
+[Clerk Webhook] CLERK_WEBHOOK_SECRET is not set. Webhook verification failed.
+
+ ✓ tests/backend/users/audit-routes.test.ts (3 tests) 209ms
+stdout | tests/backend/users/webhook-route.test.ts > POST /api/webhooks/clerk > syncs a user.created event
+[Clerk Webhook] Received event: user.created
+
+stdout | tests/backend/users/webhook-route.test.ts > POST /api/webhooks/clerk > syncs a user.created event
+[Clerk Webhook] User sync result: created 
+
+stdout | tests/backend/users/webhook-route.test.ts > POST /api/webhooks/clerk > soft deletes a user on user.deleted events
+[Clerk Webhook] Received event: user.deleted
+
+stdout | tests/backend/users/webhook-route.test.ts > POST /api/webhooks/clerk > soft deletes a user on user.deleted events
+[Clerk Webhook] User clerk-1 marked as deleted
+
+ ✓ tests/backend/users/webhook-route.test.ts (4 tests) 206ms
+stdout | tests/backend/users/audit-service.test.ts > features/users/api/audit-service > createAuditLog sanitizes technical fields and enriches performer details
+[AUDIT] Log criado: {
+  action: 'CREATE',
+  entity: 'User',
+  entityId: 'mongo-2',
+  performedBy: 'mongo-1',
+  timestamp: '2026-04-16T15:03:23.855Z'
+}
+
+stderr | tests/backend/core/auth-helpers.test.ts > core/auth helpers > logAuthAction writes an audit entry and swallows audit failures
+Failed to log auth action: Error: db down
+    at /home/burgos/code/dndicas/tests/tests/backend/core/auth-helpers.test.ts:114:53
+    at file:///home/burgos/code/dndicas/tests/node_modules/@vitest/runner/dist/chunk-artifact.js:302:11
+    at file:///home/burgos/code/dndicas/tests/node_modules/@vitest/runner/dist/chunk-artifact.js:1893:26
+    at file:///home/burgos/code/dndicas/tests/node_modules/@vitest/runner/dist/chunk-artifact.js:2316:20
+    at new Promise (<anonymous>)
+    at runWithCancel (file:///home/burgos/code/dndicas/tests/node_modules/@vitest/runner/dist/chunk-artifact.js:2313:10)
+    at file:///home/burgos/code/dndicas/tests/node_modules/@vitest/runner/dist/chunk-artifact.js:2295:20
+    at new Promise (<anonymous>)
+    at runWithTimeout (file:///home/burgos/code/dndicas/tests/node_modules/@vitest/runner/dist/chunk-artifact.js:2262:10)
+    at file:///home/burgos/code/dndicas/tests/node_modules/@vitest/runner/dist/chunk-artifact.js:2945:64
+
+ ✓ tests/backend/core/auth-helpers.test.ts (7 tests) 229ms
+stderr | tests/backend/users/audit-service.test.ts > features/users/api/audit-service > createAuditLog returns null on persistence failure
+[Audit] Failed to create audit log: Error: fail
+    at /home/burgos/code/dndicas/tests/tests/backend/users/audit-service.test.ts:89:67
+    at ManualMockedModule.factory (file:///home/burgos/code/dndicas/tests/node_modules/vitest/dist/chunks/test.p_J6dB8a.js:3907:78)
+    at ManualMockedModule.resolve (file:///home/burgos/code/dndicas/tests/node_modules/@vitest/mocker/dist/chunk-registry.js:161:21)
+    at VitestMocker.callFunctionMock (file:///home/burgos/code/dndicas/tests/node_modules/vitest/dist/chunks/startVitestModuleRunner.bRl2_oI_.js:316:32)
+    at file:///home/burgos/code/dndicas/tests/node_modules/vitest/dist/chunks/startVitestModuleRunner.bRl2_oI_.js:399:23
+    at Traces.$ (file:///home/burgos/code/dndicas/tests/node_modules/vitest/dist/chunks/traces.DT5aQ62U.js:142:27)
+    at VitestMocker.requestWithMockedModule (file:///home/burgos/code/dndicas/tests/node_modules/vitest/dist/chunks/startVitestModuleRunner.bRl2_oI_.js:364:21)
+    at VitestModuleRunner.cachedRequest (file:///home/burgos/code/dndicas/tests/node_modules/vitest/dist/chunks/startVitestModuleRunner.bRl2_oI_.js:565:31)
+    at request (file:///home/burgos/code/dndicas/tests/node_modules/vite/dist/node/module-runner.js:1205:76)
+    at processTicksAndRejections (node:internal/process/task_queues:104:5)
+
+ ✓ tests/backend/users/audit-service.test.ts (3 tests) 155ms
+ ✓ __tests__/classes/progression-utils.test.ts (51 tests) 33ms
+ ✓ scripts/seed-data/providers/__tests__/races-provider.test.ts (63 tests) 53ms
+ ✓ scripts/seed-data/__tests__/base-provider.test.ts (4 tests) 15ms
+ ✓ __tests__/feats/validation.test.ts (14 tests) 18ms
+ ✓ __tests__/character-sheets/resource-charges.test.ts (3 tests) 6ms
+
+ Test Files  16 passed (16)
+      Tests  193 passed (193)
+   Start at  17:03:22
+   Duration  2.15s (transform 2.55s, setup 428ms, import 1.86s, tests 4.01s, environment 3ms)
+

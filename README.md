@@ -13,7 +13,7 @@ Template starter para o projeto Dungeons & Dicas, com autenticação, banco de d
 - **S3/Minio** para storage de arquivos
 - **ShadCN UI** para componentes visuais
 - **Tailwind CSS v4** para estilização
-- **Jest** para testes
+- **Vitest** para testes
 - **PM2** configurado para produção
 
 ## Conceito do Core
@@ -122,7 +122,7 @@ sipal-nextjs-starter/
 │       └── api/                    # API Routes
 ├── public/                         # Assets estáticos
 ├── ecosystem.config.js             # Configuração PM2
-├── jest.config.ts                  # Configuração de testes
+├── vitest.config.ts                # Configuração de testes
 └── package.json
 ```
 
@@ -198,15 +198,6 @@ src/features/my-module/
 2. Crie as APIs em `src/app/api/my-module/`
 
 3. Documente em `aicontext/modules/my-module.md`
-
-## Páginas Exemplo
-
-O template inclui páginas de demonstração:
-
-- **/examples/ai** - Geração de texto com IA
-- **/examples/storage** - Upload/download de arquivos
-- **/examples/email** - Envio de emails
-- **/companies** - CRUD completo de empresas (exemplo de módulo)
 
 ## Desenvolvendo com IA
 

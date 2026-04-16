@@ -4,7 +4,7 @@ import { usePathname } from 'next/navigation';
 import { useAuth } from "@/core/hooks/useAuth"
 import { cn } from '@/core/utils';
 import { Button } from '@/core/ui/button';
-import { Home, User, Sparkles, Upload, Mail, Building2, Palette, FileText, Users, Ruler, Zap, Wand } from "lucide-react"
+import { Home, User, Sparkles, Palette, FileText, Users, Ruler, Zap, Wand } from "lucide-react"
 
 export const SidebarItems = [
     { label: "Início", href: "/", icon: Home },
@@ -13,9 +13,6 @@ export const SidebarItems = [
 
 export const ExampleItems = [
     { label: "Componentes UI", href: "/ui-components", icon: Palette },
-    { label: "IA / Gemini", href: "/examples/ai", icon: Sparkles, admin: true },
-    { label: "Storage / S3", href: "/examples/storage", icon: Upload, admin: true },
-    { label: "Email", href: "/examples/email", icon: Mail, admin: true },
 ]
 
 export const FeatureItems = [

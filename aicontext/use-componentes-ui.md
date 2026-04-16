@@ -859,7 +859,7 @@ Para customizar, edite:
 26. **DataTable** - Tabela com filtro/sort/paginação
 27. **Form** - Wrapper de formulário
 
-## Componentes para Sistemas Empresariais
+## Componentes para Sistemas Administrativos
 
 Componentes essenciais adicionados para desenvolvimento de sistemas empresariais:
 
