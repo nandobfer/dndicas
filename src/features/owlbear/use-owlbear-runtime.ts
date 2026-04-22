@@ -19,6 +19,13 @@ export function useOwlbearRuntime() {
     React.useEffect(() => {
         let mounted = true
         const cleanups: Array<() => void> = []
+
+        const bootstrapRuntime = async () => {
+            const next = await bootstrapOwlbearRuntime()
+            if (!mounted) return
+            setRuntime(next)
+        }
+
         void (async () => {
             const sdk = await loadOwlbearSdk()
 
@@ -31,17 +38,11 @@ export function useOwlbearRuntime() {
                 return
             }
 
-            void bootstrapOwlbearRuntime().then((next) => {
-                if (!mounted) return
-                setRuntime(next)
-            })
+            void bootstrapRuntime()
 
             if (!sdk.isReady) {
                 const unsubscribeReady = sdk.onReady(() => {
-                    void bootstrapOwlbearRuntime().then((next) => {
-                        if (!mounted) return
-                        setRuntime(next)
-                    })
+                    void bootstrapRuntime()
                 })
 
                 if (typeof unsubscribeReady === "function") {

@@ -2,33 +2,45 @@
 
 import * as React from "react"
 import { Compass, Library, Shield, Users } from "lucide-react"
+import { LiquidGlassBackground } from "@/components/ui/glass-background"
+import { GlassSelector } from "@/components/ui/glass-selector"
 import { cn } from "@/core/utils"
+import { colors } from "@/lib/config/colors"
 import { setActionPopoverSize } from "./sdk"
 import { useOwlbearRuntime } from "./use-owlbear-runtime"
 import { CatalogDashboardFrame } from "./catalog-dashboard-frame"
-import type { OwlbearRole, OwlbearTabId } from "./types"
+import { OwlbearPlayerSheetTab } from "./player-sheet-tab"
+import type { OwlbearRole, OwlbearSheetViewMode, OwlbearTabId } from "./types"
 
 type TabDefinition = {
     id: OwlbearTabId
     label: string
     icon: React.ComponentType<{ className?: string }>
+    activeColorHex: string
+    textColorHex: string
 }
 
 const GM_TABS: TabDefinition[] = [
-    { id: "fichas", label: "Fichas", icon: Users },
-    { id: "npcs", label: "NPCs", icon: Shield },
-    { id: "catalogo", label: "Catálogo", icon: Library },
+    { id: "catalogo", label: "Catálogo", icon: Library, activeColorHex: colors.rarity.rare, textColorHex: colors.rarity.rare },
+    { id: "fichas", label: "Fichas", icon: Users, activeColorHex: colors.rarity.veryRare, textColorHex: colors.rarity.veryRare },
+    { id: "npcs", label: "NPCs", icon: Shield, activeColorHex: colors.rarity.legendary, textColorHex: colors.rarity.legendary },
 ]
 
 const PLAYER_TABS: TabDefinition[] = [
-    { id: "ficha", label: "Ficha", icon: Compass },
-    { id: "catalogo", label: "Catálogo", icon: Library },
+    { id: "catalogo", label: "Catálogo", icon: Library, activeColorHex: colors.rarity.rare, textColorHex: colors.rarity.rare },
+    { id: "ficha", label: "Ficha", icon: Compass, activeColorHex: colors.rarity.veryRare, textColorHex: colors.rarity.veryRare },
 ]
 
 function getTabsForRole(role: OwlbearRole | null) {
     if (role === "GM") return GM_TABS
     if (role === "PLAYER") return PLAYER_TABS
-    return [{ id: "catalogo", label: "Catálogo", icon: Library }] satisfies TabDefinition[]
+    return [{
+        id: "catalogo",
+        label: "Catálogo",
+        icon: Library,
+        activeColorHex: colors.rarity.rare,
+        textColorHex: colors.rarity.rare,
+    }] satisfies TabDefinition[]
 }
 
 function PlaceholderPanel({ title, description }: { title: string; description: string }) {
@@ -56,6 +68,19 @@ export function OwlbearShell() {
     const runtime = useOwlbearRuntime()
     const tabs = React.useMemo(() => getTabsForRole(runtime.role), [runtime.role])
     const [activeTab, setActiveTab] = React.useState<OwlbearTabId>("catalogo")
+    const [sheetViewMode, setSheetViewMode] = React.useState<OwlbearSheetViewMode>("picker")
+
+    const resizeForTab = React.useCallback((tabId: OwlbearTabId, nextSheetViewMode = sheetViewMode) => {
+        if (runtime.status !== "ready") return
+
+        const nextTab = tabId === "ficha"
+            ? nextSheetViewMode === "editor"
+                ? "ficha-editor"
+                : "ficha-picker"
+            : tabId
+
+        void setActionPopoverSize(nextTab)
+    }, [runtime.status, sheetViewMode])
 
     React.useEffect(() => {
         if (!tabs.some((tab) => tab.id === activeTab)) {
@@ -64,9 +89,8 @@ export function OwlbearShell() {
     }, [activeTab, tabs])
 
     React.useEffect(() => {
-        if (runtime.status !== "ready") return
-        void setActionPopoverSize(activeTab)
-    }, [activeTab, runtime.status])
+        resizeForTab(activeTab, sheetViewMode)
+    }, [activeTab, resizeForTab, sheetViewMode])
 
     React.useEffect(() => {
         if (runtime.status === "unavailable") {
@@ -74,57 +98,67 @@ export function OwlbearShell() {
         }
     }, [runtime.status])
 
-    const content = (() => {
-        switch (activeTab) {
-            case "ficha":
-                return <PlaceholderPanel title="Ficha do jogador" description="Esta etapa entrega a shell do plugin. A ficha Owlbear-aware entra nas próximas tasks." />
-            case "fichas":
-                return <PlaceholderPanel title="Fichas do mestre" description="A listagem e a edição das fichas vinculadas à sala serão implementadas nas próximas etapas da integração." />
-            case "npcs":
-                return <PlaceholderPanel title="NPCs da sala" description="O CRUD de NPCs locais e seus vínculos com tokens permanece fora desta etapa inicial." />
-            case "catalogo":
-            default:
-                return <CatalogDashboardFrame />
-        }
-    })()
-
     return (
         <div
             data-testid="owlbear-shell"
             data-theme={runtime.themeMode}
             className={cn(
-                "flex h-dvh min-h-0 flex-col overflow-hidden bg-[radial-gradient(circle_at_top,_rgba(59,130,246,0.16),_transparent_35%),linear-gradient(180deg,_rgba(2,6,23,0.98),_rgba(2,6,23,1))] text-white",
-                runtime.themeMode === "light" && "bg-[radial-gradient(circle_at_top,_rgba(59,130,246,0.08),_transparent_30%),linear-gradient(180deg,_rgba(241,245,249,1),_rgba(226,232,240,1))] text-slate-950"
+                "relative flex h-dvh min-h-0 flex-col overflow-hidden bg-background text-white",
+                runtime.themeMode === "light" && "text-slate-950"
             )}
         >
-            <div className="mx-auto flex h-full min-h-0 w-full max-w-[1400px] flex-1 flex-col gap-4 overflow-hidden p-4">
+            <LiquidGlassBackground />
+
+            <div className="relative z-10 mx-auto flex h-full min-h-0 w-full max-w-[1400px] flex-1 flex-col gap-4 overflow-hidden p-4">
                 <RuntimeBanner status={runtime.status} />
 
                 <div className="rounded-3xl border border-white/10 bg-black/30 p-2 backdrop-blur-sm">
-                    <div className="flex flex-wrap gap-2">
-                        {tabs.map((tab) => {
+                    <GlassSelector
+                        value={activeTab}
+                        onChange={(value) => {
+                            const nextTab = value as OwlbearTabId
+                            setActiveTab(nextTab)
+                            resizeForTab(nextTab)
+                        }}
+                        options={tabs.map((tab) => {
                             const Icon = tab.icon
-                            const isActive = tab.id === activeTab
-
-                            return (
-                                <button
-                                    key={tab.id}
-                                    type="button"
-                                    onClick={() => setActiveTab(tab.id)}
-                                    className={cn(
-                                        "inline-flex items-center gap-2 rounded-2xl px-4 py-3 text-sm font-medium transition-colors",
-                                        isActive ? "bg-blue-500 text-white shadow-lg shadow-blue-500/20" : "bg-white/5 text-white/70 hover:bg-white/10 hover:text-white"
-                                    )}
-                                >
-                                    <Icon className="h-4 w-4" />
-                                    <span>{tab.label}</span>
-                                </button>
-                            )
+                            return {
+                                value: tab.id,
+                                label: (
+                                    <span className="inline-flex items-center gap-2">
+                                        <Icon className="h-4 w-4" />
+                                        <span>{tab.label}</span>
+                                    </span>
+                                ),
+                                activeColor: tab.activeColorHex,
+                                textColor: tab.textColorHex,
+                            }
                         })}
-                    </div>
+                        size="normal"
+                        layoutId="owlbear-shell-tabs"
+                    />
                 </div>
 
-                <div className="min-h-0 flex-1 overflow-hidden">{content}</div>
+                <div className="min-h-0 flex-1 overflow-hidden">
+                    <div className={cn("h-full min-h-0", activeTab === "catalogo" ? "block" : "hidden")} aria-hidden={activeTab !== "catalogo"}>
+                        <CatalogDashboardFrame />
+                    </div>
+                    {tabs.some((tab) => tab.id === "ficha") && (
+                        <div className={cn("h-full min-h-0", activeTab === "ficha" ? "block" : "hidden")} aria-hidden={activeTab !== "ficha"}>
+                            <OwlbearPlayerSheetTab runtime={runtime} isActive={activeTab === "ficha"} onViewModeChange={setSheetViewMode} />
+                        </div>
+                    )}
+                    {tabs.some((tab) => tab.id === "fichas") && (
+                        <div className={cn("h-full min-h-0", activeTab === "fichas" ? "block" : "hidden")} aria-hidden={activeTab !== "fichas"}>
+                            <PlaceholderPanel title="Fichas do mestre" description="A listagem e a edição das fichas vinculadas à sala serão implementadas nas próximas etapas da integração." />
+                        </div>
+                    )}
+                    {tabs.some((tab) => tab.id === "npcs") && (
+                        <div className={cn("h-full min-h-0", activeTab === "npcs" ? "block" : "hidden")} aria-hidden={activeTab !== "npcs"}>
+                            <PlaceholderPanel title="NPCs da sala" description="O CRUD de NPCs locais e seus vínculos com tokens permanece fora desta etapa inicial." />
+                        </div>
+                    )}
+                </div>
             </div>
         </div>
     )

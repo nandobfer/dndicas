@@ -30,7 +30,7 @@ export interface GlassSelectorProps<T extends string | number> {
     /** Whether the tabs should take full width */
     fullWidth?: boolean
     /** Size variant */
-    size?: "sm" | "md" | "lg"
+    size?: "sm" | "md" | "lg" | "normal"
     /** Whether the component is disabled */
     disabled?: boolean
     /** Additional class names */
@@ -116,7 +116,7 @@ export function GlassSelector<T extends string | number>({
                         className={cn(
                             "relative font-medium rounded-md transition-colors inline-block text-center",
                             size === "sm" && "px-3 py-1 text-xs",
-                            size === "md" && "px-4 py-2 text-sm",
+                            (size === "md" || size === "normal") && "px-4 py-2 text-sm",
                             size === "lg" && "px-6 py-3 text-base",
                             fullWidth && "flex-1",
                             "text-white/50"
@@ -145,7 +145,7 @@ export function GlassSelector<T extends string | number>({
                             "relative font-medium rounded-md transition-colors",
                             layout === "horizontal" && (fullWidth ? "flex-1 flex items-center justify-center" : "inline-block text-center"),
                             layout === "grid" && "h-full flex items-center justify-center",
-                            size === "md" && "px-4 py-1.5 text-sm",
+                            (size === "md" || size === "normal") && "px-4 py-1.5 text-sm",
                             size === "sm" && "px-2 py-0.5 text-[8px]",
                             size === "lg" && "px-6 py-2.5 text-base",
                             "focus:outline-none focus-visible:ring-2 focus-visible:ring-white/20",

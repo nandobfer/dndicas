@@ -1,10 +1,10 @@
 "use client"
 
 import { useState } from "react"
-import { useRouter } from "next/navigation"
 import { Plus, Loader2 } from "lucide-react"
 import { cn } from "@/core/utils"
 import { useCreateSheet } from "@/features/character-sheets/api/character-sheets-queries"
+import type { CharacterSheet } from "@/features/character-sheets/types/character-sheet.types"
 
 interface RandomUserResponse {
     results: { name: { first: string; last: string } }[]
@@ -21,8 +21,11 @@ const fetchRandomName = async (): Promise<string> => {
     }
 }
 
-export function NewSheetButton() {
-    const router = useRouter()
+interface NewSheetButtonProps {
+    onCreated?: (sheet: CharacterSheet) => void
+}
+
+export function NewSheetButton({ onCreated }: NewSheetButtonProps) {
     const { mutate: create, isPending } = useCreateSheet()
     const [isFetchingName, setIsFetchingName] = useState(false)
 
@@ -32,7 +35,7 @@ export function NewSheetButton() {
         setIsFetchingName(false)
         create(name, {
             onSuccess: (sheet) => {
-                router.push(`/sheets/${sheet.slug}`)
+                onCreated?.(sheet)
             },
         })
     }

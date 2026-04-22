@@ -381,6 +381,7 @@ export function useSheetHeaderSections({ sheet, form, items = [], isReadOnly = f
               value={hpAdjustmentValue}
               onChange={(event) => setHpAdjustmentValue(event.target.value)}
               onChangeValue={(val) => setHpAdjustmentValue(val)}
+              debounceMs={0}
               showControls
               allowEmptyNumber
               className="rounded-lg border border-white/10 bg-white/[0.04] px-1 py-0"

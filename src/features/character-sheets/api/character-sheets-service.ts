@@ -303,6 +303,32 @@ export async function patchSheet(id: string, userId: string, data: PatchSheetBod
     return plainSheet
 }
 
+export async function patchSheetWithAccess(id: string, data: PatchSheetBody, originId?: string) {
+    await dbConnect()
+
+    const existing = await CharacterSheet.findById(id, { username: 1, userId: 1 }).lean()
+    if (!existing) return null
+
+    const updateData: Record<string, unknown> = { ...data }
+    if (data.name !== undefined) {
+        const username = (existing as { username?: string; userId?: string }).username || (existing as { userId?: string }).userId || id
+        updateData.slug = await ensureUniqueSlug(username, data.name, id)
+    }
+
+    const sheet = await CharacterSheet.findByIdAndUpdate(
+        id,
+        { $set: updateData },
+        { returnDocument: 'after' },
+    ).lean()
+
+    if (!sheet) return null
+    const plainSheet = toPlainSheet(sheet)
+    await publishCharacterSheetRealtime(async () => {
+        await getCharacterSheetPusherService().publishSheetPatched({ sheet: plainSheet, originId })
+    })
+    return plainSheet
+}
+
 export async function deleteSheet(id: string, userId: string): Promise<boolean> {
     await dbConnect()
 
@@ -337,6 +363,42 @@ export async function applyLongRest(id: string, userId: string, originId?: strin
     sheet.markModified("spellSlots")
 
     // Unmark all exhausted items  
+    await CharacterSpell.updateMany({ sheetId: id }, { $set: { prepared: false } })
+
+    await sheet.save()
+    const plainSheet = toPlainSheet(sheet.toObject())
+    const spells = await getSpells(id)
+
+    await publishCharacterSheetRealtime(async () => {
+        await Promise.all([
+            getCharacterSheetPusherService().publishSheetPatched({ sheet: plainSheet, originId }),
+            getCharacterSheetPusherService().publishCollectionChanged({
+                sheetId: id,
+                collection: "spells",
+                action: "reloaded",
+                originId,
+                records: spells,
+            }),
+        ])
+    })
+
+    return plainSheet
+}
+
+export async function applyLongRestWithAccess(id: string, originId?: string) {
+    await dbConnect()
+
+    const sheet = await CharacterSheet.findById(id)
+    if (!sheet) return null
+
+    sheet.hpCurrent = sheet.hpMax
+
+    const slots = sheet.spellSlots as unknown as Map<string, { max: number; used: number }>
+    for (const [circle, slot] of slots.entries()) {
+        slots.set(circle, { max: slot.max, used: 0 })
+    }
+    sheet.markModified("spellSlots")
+
     await CharacterSpell.updateMany({ sheetId: id }, { $set: { prepared: false } })
 
     await sheet.save()

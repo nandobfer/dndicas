@@ -9,7 +9,7 @@ interface SheetInputProps extends React.InputHTMLAttributes<HTMLInputElement> {
     label?: string
     compact?: boolean
     isLoading?: boolean
-    /** @deprecated No longer used — text saves on blur, steppers save immediately. */
+    /** Debounce for numeric +/- controls. Defaults to 300ms when controls are enabled. */
     debounceMs?: number
     onChangeValue?: (value: string) => void
     onActionClick?: (e: React.MouseEvent) => void
@@ -21,10 +21,50 @@ interface SheetInputProps extends React.InputHTMLAttributes<HTMLInputElement> {
 }
 
 export const SheetInput = React.forwardRef<HTMLInputElement, SheetInputProps>(
-    ({ label, compact = false, className, inputClassName, isLoading, onChangeValue, value, showControls = false, min, max, readOnlyMode = false, allowEmptyNumber = false, disabled, readOnly, ...props }, ref) => {
+    ({ label, compact = false, className, inputClassName, isLoading, debounceMs, onChangeValue, onActionClick, value, showControls = false, min, max, readOnlyMode = false, allowEmptyNumber = false, disabled, readOnly, ...props }, ref) => {
         const isNonInteractive = !!disabled || !!readOnly || readOnlyMode
         const [localValue, setLocalValue] = React.useState(String(value ?? ""))
         const lastValidRef = React.useRef(String(value ?? ""))
+        const pendingControlValueRef = React.useRef<string | null>(null)
+        const debounceTimeoutRef = React.useRef<ReturnType<typeof setTimeout> | null>(null)
+        const isNumericInput = props.type === "number" || props.inputMode === "numeric"
+        const controlsDebounceMs = isNumericInput && showControls ? (debounceMs ?? 300) : 0
+
+        const clearPendingControlEmission = React.useCallback(() => {
+            if (debounceTimeoutRef.current) {
+                clearTimeout(debounceTimeoutRef.current)
+                debounceTimeoutRef.current = null
+            }
+            pendingControlValueRef.current = null
+        }, [])
+
+        const emitChangeValue = React.useCallback((nextValue: string) => {
+            onChangeValue?.(nextValue)
+        }, [onChangeValue])
+
+        const flushPendingControlEmission = React.useCallback(() => {
+            if (pendingControlValueRef.current === null) return
+
+            const nextValue = pendingControlValueRef.current
+            clearPendingControlEmission()
+            emitChangeValue(nextValue)
+        }, [clearPendingControlEmission, emitChangeValue])
+
+        const scheduleControlEmission = React.useCallback((nextValue: string) => {
+            if (controlsDebounceMs <= 0) {
+                emitChangeValue(nextValue)
+                return
+            }
+
+            pendingControlValueRef.current = nextValue
+            if (debounceTimeoutRef.current) {
+                clearTimeout(debounceTimeoutRef.current)
+            }
+
+            debounceTimeoutRef.current = setTimeout(() => {
+                flushPendingControlEmission()
+            }, controlsDebounceMs)
+        }, [controlsDebounceMs, emitChangeValue, flushPendingControlEmission])
 
         React.useEffect(() => {
             const newStr = String(value ?? "")
@@ -35,12 +75,20 @@ export const SheetInput = React.forwardRef<HTMLInputElement, SheetInputProps>(
             }
         }, [value]) // eslint-disable-line react-hooks/exhaustive-deps
 
+        React.useEffect(() => {
+            return () => {
+                if (debounceTimeoutRef.current) {
+                    clearTimeout(debounceTimeoutRef.current)
+                }
+            }
+        }, [])
+
         const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
             if (isNonInteractive) return
             const val = e.target.value
             setLocalValue(val)
 
-            if (props.type === "number" || props.inputMode === "numeric") {
+            if (isNumericInput) {
                 const num = parseFloat(val)
                 if (!val || isNaN(num)) return
                 const minNum = min !== undefined ? Number(min) : undefined
@@ -59,12 +107,13 @@ export const SheetInput = React.forwardRef<HTMLInputElement, SheetInputProps>(
                 return
             }
             const val = e.target.value
-            if (props.type === "number" || props.inputMode === "numeric") {
+            if (isNumericInput) {
                 const num = parseFloat(val)
                 if (val === "" || isNaN(num)) {
                     if (allowEmptyNumber) {
                         setLocalValue("")
                         lastValidRef.current = ""
+                        clearPendingControlEmission()
                         onChangeValue?.("")
                         props.onBlur?.(e)
                         return
@@ -79,14 +128,24 @@ export const SheetInput = React.forwardRef<HTMLInputElement, SheetInputProps>(
                     const clamped = String(minNum)
                     setLocalValue(clamped)
                     lastValidRef.current = clamped
+                    clearPendingControlEmission()
                     onChangeValue?.(clamped)
+                    props.onBlur?.(e)
                     return
                 }
                 if (maxNum !== undefined && num > maxNum) {
                     const clamped = String(maxNum)
                     setLocalValue(clamped)
                     lastValidRef.current = clamped
+                    clearPendingControlEmission()
                     onChangeValue?.(clamped)
+                    props.onBlur?.(e)
+                    return
+                }
+                const hadPendingControlEmission = pendingControlValueRef.current !== null
+                flushPendingControlEmission()
+                if (hadPendingControlEmission && pendingControlValueRef.current === null) {
+                    props.onBlur?.(e)
                     return
                 }
                 onChangeValue?.(String(num))
@@ -96,7 +155,7 @@ export const SheetInput = React.forwardRef<HTMLInputElement, SheetInputProps>(
             props.onBlur?.(e)
         }
 
-        const adjustValue = (amount: number) => {
+        const adjustValue = (amount: number, event: React.MouseEvent<HTMLButtonElement>) => {
             if (isNonInteractive) return
             const currentNum = parseInt(localValue) || 0
             const minNum = min !== undefined ? Number(min) : undefined
@@ -107,7 +166,8 @@ export const SheetInput = React.forwardRef<HTMLInputElement, SheetInputProps>(
             const newVal = String(next)
             setLocalValue(newVal)
             lastValidRef.current = newVal
-            onChangeValue?.(newVal)
+            scheduleControlEmission(newVal)
+            onActionClick?.(event)
         }
 
         return (
@@ -117,7 +177,7 @@ export const SheetInput = React.forwardRef<HTMLInputElement, SheetInputProps>(
                         <button
                             type="button"
                             disabled={isNonInteractive}
-                            onClick={() => adjustValue(-1)}
+                            onClick={(event) => adjustValue(-1, event)}
                             tabIndex={isNonInteractive ? -1 : undefined}
                             className={cn(
                                 "p-1 rounded-full transition-colors text-white/40 flex-shrink-0",
@@ -154,7 +214,7 @@ export const SheetInput = React.forwardRef<HTMLInputElement, SheetInputProps>(
                         <button
                             type="button"
                             disabled={isNonInteractive}
-                            onClick={() => adjustValue(1)}
+                            onClick={(event) => adjustValue(1, event)}
                             tabIndex={isNonInteractive ? -1 : undefined}
                             className={cn(
                                 "p-1 rounded-full transition-colors text-white/40 flex-shrink-0",

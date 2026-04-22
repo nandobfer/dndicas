@@ -1,7 +1,6 @@
 "use client"
 
 import { motion } from "framer-motion"
-import { useRouter } from "next/navigation"
 import { ScrollText, Trash2, Star, Shield } from "lucide-react"
 import { GlassCard } from "@/components/ui/glass-card"
 import { cn } from "@/core/utils"
@@ -41,20 +40,26 @@ const formatMod = (score: number): string => {
 
 interface GlassSheetCardProps {
     sheet: CharacterSheet
-    onRequestDelete: (sheet: CharacterSheet) => void
+    onRequestDelete?: (sheet: CharacterSheet) => void
+    onOpen?: (sheet: CharacterSheet) => void
+    showDelete?: boolean
     isDeleting?: boolean
 }
 
-export function GlassSheetCard({ sheet, onRequestDelete, isDeleting }: GlassSheetCardProps) {
-    const router = useRouter()
-
+export function GlassSheetCard({
+    sheet,
+    onRequestDelete,
+    onOpen,
+    showDelete = true,
+    isDeleting,
+}: GlassSheetCardProps) {
     const handleOpen = () => {
-        router.push(`/sheets/${sheet.slug}`)
+        onOpen?.(sheet)
     }
 
     const handleDelete = (e: React.MouseEvent) => {
         e.stopPropagation()
-        onRequestDelete(sheet)
+        onRequestDelete?.(sheet)
     }
 
     const ca = sheet.computedArmorClass ?? 10
@@ -111,19 +116,21 @@ export function GlassSheetCard({ sheet, onRequestDelete, isDeleting }: GlassShee
                     </div>
 
                     {/* Delete button */}
-                    <motion.button
-                        onClick={handleDelete}
-                        className={cn(
-                            "opacity-0 group-hover:opacity-100 transition-opacity duration-150",
-                            "w-7 h-7 rounded-md flex items-center justify-center flex-shrink-0",
-                            "bg-red-500/10 hover:bg-red-500/20 border border-red-500/20",
-                            "text-red-400 hover:text-red-300",
-                        )}
-                        whileTap={{ scale: 0.9 }}
-                        aria-label="Excluir ficha"
-                    >
-                        <Trash2 className="w-3.5 h-3.5" />
-                    </motion.button>
+                    {showDelete && onRequestDelete && (
+                        <motion.button
+                            onClick={handleDelete}
+                            className={cn(
+                                "opacity-0 group-hover:opacity-100 transition-opacity duration-150",
+                                "w-7 h-7 rounded-md flex items-center justify-center flex-shrink-0",
+                                "bg-red-500/10 hover:bg-red-500/20 border border-red-500/20",
+                                "text-red-400 hover:text-red-300",
+                            )}
+                            whileTap={{ scale: 0.9 }}
+                            aria-label="Excluir ficha"
+                        >
+                            <Trash2 className="w-3.5 h-3.5" />
+                        </motion.button>
+                    )}
                 </div>
                 {/* Attribute modifiers */}
                 <div className="grid grid-cols-6 gap-1">

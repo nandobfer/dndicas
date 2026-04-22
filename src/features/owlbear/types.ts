@@ -6,6 +6,20 @@ export type OwlbearRuntimeStatus = "booting" | "ready" | "unavailable"
 
 export type OwlbearTabId = "ficha" | "fichas" | "npcs" | "catalogo"
 
+export type OwlbearSheetViewMode = "picker" | "editor"
+
+export interface OwlbearRoomMetadataState {
+    version: number
+    playerLinks: Record<string, string>
+    lastSyncAt?: string
+}
+
+export interface OwlbearSessionState {
+    sessionStatus: "idle" | "loading" | "ready" | "error"
+    sessionToken: string | null
+    sessionExpiresAt: string | null
+}
+
 export interface OwlbearRuntimeState {
     status: OwlbearRuntimeStatus
     role: OwlbearRole | null
@@ -33,6 +47,9 @@ export interface OwlbearSdkLike {
     }
     room: {
         id?: string
+        getMetadata: () => Promise<Record<string, unknown>>
+        setMetadata: (update: Record<string, unknown>) => Promise<void>
+        onMetadataChange: (callback: (metadata: Record<string, unknown>) => void) => void | (() => void)
     }
     scene: {
         isReady: () => Promise<boolean>
