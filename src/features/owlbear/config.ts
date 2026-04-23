@@ -4,7 +4,7 @@ export const OWLBEAR_POPOVER_SIZES: Record<OwlbearTabId | "fallback" | "ficha-pi
     ficha: { width: 1180, height: 900 },
     "ficha-picker": { width: 980, height: 820 },
     "ficha-editor": { width: 1180, height: 900 },
-    fichas: { width: 920, height: 760 },
+    fichas: { width: 1180, height: 900 },
     npcs: { width: 920, height: 760 },
     catalogo: { width: 1320, height: 900 },
     fallback: { width: 720, height: 520 },
@@ -13,3 +13,7 @@ export const OWLBEAR_POPOVER_SIZES: Record<OwlbearTabId | "fallback" | "ficha-pi
 export const OWLBEAR_MANIFEST_ACTION_TITLE = "Dndicas"
 export const OWLBEAR_ROOM_METADATA_KEY = "com.dndicas.owlbear/room"
 export const OWLBEAR_ROOM_METADATA_VERSION = 1
+export const OWLBEAR_TOKEN_METADATA_KEY = "com.dndicas.owlbear/token"
+export const OWLBEAR_OVERLAY_METADATA_KEY = "com.dndicas.owlbear/overlay"
+export const OWLBEAR_TOKEN_METADATA_VERSION = 1
+export const OWLBEAR_OVERLAY_METADATA_VERSION = 1

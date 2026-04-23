@@ -3,38 +3,20 @@
 import * as React from "react"
 import { Loader2 } from "lucide-react"
 import { cn } from "@/core/utils"
+import { GlassSheetCard } from "@/components/ui/glass-sheet-card"
+import { GlassModal, GlassModalContent, GlassModalHeader, GlassModalTitle, GlassModalDescription } from "@/components/ui/glass-modal"
 import { SheetForm } from "@/features/character-sheets/components/sheet-form"
 import { CharacterSheetClientProvider } from "@/features/character-sheets/api/character-sheet-client-config"
 import { useSheet } from "@/features/character-sheets/api/character-sheets-queries"
 import type { CharacterSheet } from "@/features/character-sheets/types/character-sheet.types"
-import { useAuth } from "@/core/hooks/useAuth"
 import { MySheetsContent } from "@/app/(dashboard)/my-sheets/_components/my-sheets-content"
-import {
-    GlassModal,
-    GlassModalContent,
-    GlassModalDescription,
-    GlassModalHeader,
-    GlassModalTitle,
-} from "@/components/ui/glass-modal"
 import {
     clearPlayerSheetLink,
     getRoomMetadataState,
-    openOwlbearBackendSession,
     setPlayerSheetLink,
     subscribeToRoomMetadata,
 } from "./sdk"
 import type { OwlbearRuntimeState, OwlbearSessionState, OwlbearSheetViewMode } from "./types"
-
-function isSessionUsable(session: OwlbearSessionState) {
-    if (session.sessionStatus !== "ready" || !session.sessionToken || !session.sessionExpiresAt) {
-        return false
-    }
-
-    const expiresAt = Date.parse(session.sessionExpiresAt)
-    if (Number.isNaN(expiresAt)) return false
-
-    return expiresAt > Date.now()
-}
 
 function InlineStatus({ tone = "neutral", message }: { tone?: "neutral" | "error"; message: string }) {
     return (
@@ -51,17 +33,17 @@ function InlineStatus({ tone = "neutral", message }: { tone?: "neutral" | "error
     )
 }
 
-function ConfirmLinkDialog({
-    sheet,
+function LinkSheetDialog({
     isOpen,
-    isPending,
     onClose,
+    sheet,
+    isPending,
     onConfirm,
 }: {
-    sheet: CharacterSheet | null
     isOpen: boolean
-    isPending: boolean
     onClose: () => void
+    sheet: CharacterSheet | null
+    isPending: boolean
     onConfirm: () => void
 }) {
     if (!sheet) return null
@@ -70,20 +52,20 @@ function ConfirmLinkDialog({
         <GlassModal open={isOpen} onOpenChange={(open) => !open && onClose()}>
             <GlassModalContent size="md">
                 <GlassModalHeader>
-                    <GlassModalTitle>Vincular ficha a esta sala</GlassModalTitle>
+                    <GlassModalTitle>Vincular Ficha</GlassModalTitle>
                     <GlassModalDescription>
-                        Esta ação abrirá a ficha "{sheet.name}" sempre que você acessar a aba `Ficha` nesta sala do Owlbear.
+                        Esta ficha será aberta sempre que você acessar a aba Ficha nesta sala do Owlbear.
                     </GlassModalDescription>
                 </GlassModalHeader>
 
                 <div className="mt-6 space-y-6">
-                    <div className="rounded-xl border border-blue-500/20 bg-blue-500/10 p-4 text-sm text-white/80">
-                        O vínculo é específico desta sala. Sua ficha continua persistida normalmente no Dndicas.
-                    </div>
-
-                    <div className="rounded-xl border border-white/10 bg-white/5 p-4">
-                        <p className="text-xs uppercase tracking-wider text-white/40">Ficha selecionada</p>
-                        <p className="mt-1 text-base font-semibold text-white">{sheet.name}</p>
+                    <div className="space-y-2">
+                        <p className="text-xs uppercase tracking-[0.2em] text-white/40">Ficha selecionada</p>
+                        <GlassSheetCard
+                            sheet={sheet}
+                            showDelete={false}
+                            interactive={false}
+                        />
                     </div>
 
                     <div className="flex justify-end gap-3 border-t border-white/10 pt-4">
@@ -91,7 +73,11 @@ function ConfirmLinkDialog({
                             type="button"
                             onClick={onClose}
                             disabled={isPending}
-                            className="rounded-lg px-4 py-2 text-sm font-medium text-white/60 transition-colors hover:bg-white/10 hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
+                            className={cn(
+                                "rounded-lg px-4 py-2 text-sm font-medium transition-colors",
+                                "text-white/60 hover:bg-white/10 hover:text-white",
+                                "disabled:cursor-not-allowed disabled:opacity-50",
+                            )}
                         >
                             Cancelar
                         </button>
@@ -99,10 +85,14 @@ function ConfirmLinkDialog({
                             type="button"
                             onClick={onConfirm}
                             disabled={isPending}
-                            className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-50"
+                            className={cn(
+                                "inline-flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium transition-colors",
+                                "bg-blue-600 text-white shadow-lg shadow-blue-500/20 hover:bg-blue-500",
+                                "disabled:cursor-not-allowed disabled:opacity-50",
+                            )}
                         >
                             {isPending && <Loader2 className="h-4 w-4 animate-spin" />}
-                            Vincular ficha
+                            {isPending ? "Vinculando..." : "Vincular ficha"}
                         </button>
                     </div>
                 </div>
@@ -127,7 +117,6 @@ function PlayerSheetTabContent({
     const [linkedSheetId, setLinkedSheetId] = React.useState<string | null>(null)
     const [metadataLoaded, setMetadataLoaded] = React.useState(false)
     const [selectedExistingSheet, setSelectedExistingSheet] = React.useState<CharacterSheet | null>(null)
-    const [isConfirmLinkOpen, setIsConfirmLinkOpen] = React.useState(false)
     const [isLinking, setIsLinking] = React.useState(false)
     const [notice, setNotice] = React.useState<string | null>(null)
     const [errorMessage, setErrorMessage] = React.useState<string | null>(null)
@@ -235,7 +224,6 @@ function PlayerSheetTabContent({
             await setPlayerSheetLink(runtime.playerId, selectedExistingSheet._id)
             setLinkedSheetId(selectedExistingSheet._id)
             showTemporaryNotice("Ficha vinculada a esta sala do Owlbear.")
-            setIsConfirmLinkOpen(false)
             setSelectedExistingSheet(null)
         } catch (error) {
             console.error("Failed to link existing sheet", error)
@@ -296,17 +284,28 @@ function PlayerSheetTabContent({
             <div className="space-y-4">
                 <InlineStatus tone="error" message={errorMessage} />
                 {!linkedSheetId && (
-                    <MySheetsContent
-                        title="Minhas Fichas"
-                        description="Selecione uma ficha existente ou crie uma nova para vinculá-la a esta sala do Owlbear."
-                        redirectUrl="/owlbear/action"
-                        showDelete={false}
-                        onSheetOpen={(sheet) => {
-                            setSelectedExistingSheet(sheet)
-                            setIsConfirmLinkOpen(true)
-                        }}
-                        onSheetCreated={(sheet) => void handleCreateAndLink(sheet)}
-                    />
+                    <>
+                        <MySheetsContent
+                            title="Minhas Fichas"
+                            description="Selecione uma ficha existente ou crie uma nova para vinculá-la a esta sala do Owlbear."
+                            redirectUrl="/owlbear/action"
+                            showDelete={false}
+                            onSheetOpen={(sheet) => {
+                                setSelectedExistingSheet(sheet)
+                            }}
+                            onSheetCreated={(sheet) => void handleCreateAndLink(sheet)}
+                        />
+                        <LinkSheetDialog
+                            isOpen={selectedExistingSheet !== null}
+                            sheet={selectedExistingSheet}
+                            isPending={isLinking}
+                            onClose={() => {
+                                if (isLinking) return
+                                setSelectedExistingSheet(null)
+                            }}
+                            onConfirm={() => void handleConfirmExisting()}
+                        />
+                    </>
                 )}
             </div>
         )
@@ -326,18 +325,16 @@ function PlayerSheetTabContent({
                     onSheetOpen={(sheet) => {
                         setNotice(null)
                         setSelectedExistingSheet(sheet)
-                        setIsConfirmLinkOpen(true)
                     }}
                     onSheetCreated={(sheet) => void handleCreateAndLink(sheet)}
                 />
 
-                <ConfirmLinkDialog
+                <LinkSheetDialog
+                    isOpen={selectedExistingSheet !== null}
                     sheet={selectedExistingSheet}
-                    isOpen={isConfirmLinkOpen}
                     isPending={isLinking}
                     onClose={() => {
                         if (isLinking) return
-                        setIsConfirmLinkOpen(false)
                         setSelectedExistingSheet(null)
                     }}
                     onConfirm={() => void handleConfirmExisting()}
@@ -377,6 +374,7 @@ function PlayerSheetTabContent({
                     layoutMode="desktop"
                     navigateOnSlugChange={false}
                     onSlugChange={() => undefined}
+                    runtimeContext="owlbear"
                 />
             </div>
         </div>
@@ -385,109 +383,17 @@ function PlayerSheetTabContent({
 
 export function OwlbearPlayerSheetTab({
     runtime,
-    isActive = true,
+    session,
+    isAuthenticated,
+    isAuthLoaded,
     onViewModeChange,
 }: {
     runtime: OwlbearRuntimeState
-    isActive?: boolean
+    session: OwlbearSessionState
+    isAuthenticated: boolean
+    isAuthLoaded: boolean
     onViewModeChange?: (mode: OwlbearSheetViewMode) => void
 }) {
-    const { isLoaded, isSignedIn } = useAuth()
-    const [session, setSession] = React.useState<OwlbearSessionState>({
-        sessionStatus: "idle",
-        sessionToken: null,
-        sessionExpiresAt: null,
-    })
-    const lastRuntimeIdentityRef = React.useRef<string | null>(null)
-    const sessionRef = React.useRef(session)
-
-    React.useEffect(() => {
-        sessionRef.current = session
-    }, [session])
-
-    React.useEffect(() => {
-        if (runtime.status !== "ready" || !runtime.roomId || !runtime.playerId || !runtime.role) return
-        if (!isLoaded) return
-
-        const roomId = runtime.roomId
-        const owlbearPlayerId = runtime.playerId
-        const owlbearRole = runtime.role
-        const runtimeIdentity = `${roomId}:${owlbearPlayerId}:${owlbearRole}`
-        const identityChanged = lastRuntimeIdentityRef.current !== null && lastRuntimeIdentityRef.current !== runtimeIdentity
-
-        lastRuntimeIdentityRef.current = runtimeIdentity
-
-        if (!isSignedIn) {
-            setSession({
-                sessionStatus: "idle",
-                sessionToken: null,
-                sessionExpiresAt: null,
-            })
-            return
-        }
-
-        if (!isActive) return
-
-        if (identityChanged) {
-            setSession({
-                sessionStatus: "idle",
-                sessionToken: null,
-                sessionExpiresAt: null,
-            })
-        } else if (isSessionUsable(sessionRef.current)) {
-            return
-        } else if (sessionRef.current.sessionStatus === "loading") {
-            return
-        }
-
-        let cancelled = false
-
-        setSession((current) => ({
-            ...current,
-            sessionStatus: "loading",
-        }))
-
-        void (async () => {
-            try {
-                const nextSession = await openOwlbearBackendSession({
-                    roomId,
-                    owlbearPlayerId,
-                    owlbearRole,
-                })
-
-                if (cancelled) return
-                setSession({
-                    sessionStatus: "ready",
-                    sessionToken: nextSession.token,
-                    sessionExpiresAt: nextSession.expiresAt,
-                })
-            } catch (error) {
-                const sessionError = error as Error & { status?: number }
-                if (cancelled) return
-
-                if (sessionError.status === 401) {
-                    setSession({
-                        sessionStatus: "idle",
-                        sessionToken: null,
-                        sessionExpiresAt: null,
-                    })
-                    return
-                }
-
-                console.error("Failed to open Owlbear backend session", error)
-                setSession({
-                    sessionStatus: "error",
-                    sessionToken: null,
-                    sessionExpiresAt: null,
-                })
-            }
-        })()
-
-        return () => {
-            cancelled = true
-        }
-    }, [isActive, isLoaded, isSignedIn, runtime.playerId, runtime.role, runtime.roomId, runtime.status])
-
     const clientConfig = React.useMemo(() => ({
         apiBase: "/api/owlbear/character-sheets",
         getHeaders: () => session.sessionToken
@@ -500,8 +406,8 @@ export function OwlbearPlayerSheetTab({
             <PlayerSheetTabContent
                 runtime={runtime}
                 session={session}
-                isAuthenticated={Boolean(isSignedIn)}
-                isAuthLoaded={isLoaded}
+                isAuthenticated={isAuthenticated}
+                isAuthLoaded={isAuthLoaded}
                 onViewModeChange={onViewModeChange}
             />
         </CharacterSheetClientProvider>

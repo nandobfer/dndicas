@@ -6,6 +6,13 @@ import type { OwlbearRole } from "../types"
 const DEFAULT_SESSION_TTL_MS = 15 * 60 * 1000
 const LAST_USED_TOUCH_WINDOW_MS = 60 * 1000
 
+export function buildAnonymousGmSessionUserId(input: {
+    roomId: string
+    owlbearPlayerId: string
+}) {
+    return `owlbear-gm:${input.roomId}:${input.owlbearPlayerId}`
+}
+
 export interface OwlbearSessionRecord {
     id: string
     userId: string

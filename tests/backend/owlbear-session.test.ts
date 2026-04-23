@@ -59,7 +59,7 @@ describe("owlbear session backend", () => {
         expect(result.session.userId).toBe("user-1")
     })
 
-    it("POST /api/owlbear/session rejects anonymous users", async () => {
+    it("POST /api/owlbear/session rejects anonymous players", async () => {
         vi.doMock("@clerk/nextjs/server", () => ({
             auth: vi.fn().mockResolvedValue({ userId: null }),
         }))
@@ -79,6 +79,42 @@ describe("owlbear session backend", () => {
         }))
 
         expect(response.status).toBe(401)
+    })
+
+    it("POST /api/owlbear/session accepts anonymous GMs using a synthetic Owlbear session user", async () => {
+        const createOwlbearSession = vi.fn().mockResolvedValue({
+            token: "gm-token",
+            expiresAt: "2026-04-20T10:15:00.000Z",
+        })
+
+        vi.doMock("@clerk/nextjs/server", () => ({
+            auth: vi.fn().mockResolvedValue({ userId: null }),
+        }))
+        vi.doMock("@/features/owlbear/server/session-service", () => ({
+            createOwlbearSession,
+            buildAnonymousGmSessionUserId: vi.fn(({ roomId, owlbearPlayerId }: { roomId: string; owlbearPlayerId: string }) =>
+                `owlbear-gm:${roomId}:${owlbearPlayerId}`
+            ),
+        }))
+
+        const mod = await importFresh<typeof import("@/app/api/owlbear/session/route")>("@/app/api/owlbear/session/route")
+        const response = await mod.POST(new Request("http://localhost/api/owlbear/session", {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({
+                roomId: "room-1",
+                owlbearPlayerId: "gm-player-1",
+                owlbearRole: "GM",
+            }),
+        }))
+
+        expect(response.status).toBe(201)
+        expect(createOwlbearSession).toHaveBeenCalledWith(expect.objectContaining({
+            userId: "owlbear-gm:room-1:gm-player-1",
+            roomId: "room-1",
+            owlbearPlayerId: "gm-player-1",
+            owlbearRole: "GM",
+        }))
     })
 
     it("GET /api/owlbear/character-sheets rejects missing bearer token", async () => {

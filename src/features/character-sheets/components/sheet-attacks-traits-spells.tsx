@@ -14,14 +14,15 @@ interface SheetAttacksTraitsSpellsProps {
         patchField: (field: keyof PatchSheetBody, value: unknown) => void
     }
     isReadOnly?: boolean
+    forceDesktopLayout?: boolean
 }
 
-export function SheetAttacksTraitsSpells({ sheet, form, isReadOnly = false }: SheetAttacksTraitsSpellsProps) {
+export function SheetAttacksTraitsSpells({ sheet, form, isReadOnly = false, forceDesktopLayout = false }: SheetAttacksTraitsSpellsProps) {
     return (
         <div className="space-y-4">
             <GlassCard>
                 <GlassCardContent className="pt-4 pb-4">
-                    <SheetAttacksAndTraits sheet={sheet} form={form} isReadOnly={isReadOnly} />
+                    <SheetAttacksAndTraits sheet={sheet} form={form} isReadOnly={isReadOnly} forceDesktopLayout={forceDesktopLayout} />
                 </GlassCardContent>
             </GlassCard>
 

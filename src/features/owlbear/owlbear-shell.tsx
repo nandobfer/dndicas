@@ -8,8 +8,11 @@ import { cn } from "@/core/utils"
 import { colors } from "@/lib/config/colors"
 import { setActionPopoverSize } from "./sdk"
 import { useOwlbearRuntime } from "./use-owlbear-runtime"
+import { useOwlbearSession } from "./use-owlbear-session"
 import { CatalogDashboardFrame } from "./catalog-dashboard-frame"
 import { OwlbearPlayerSheetTab } from "./player-sheet-tab"
+import { OwlbearGmSheetsTab } from "./gm-sheets-tab"
+import { OwlbearGmSceneController } from "./gm-scene-controller"
 import type { OwlbearRole, OwlbearSheetViewMode, OwlbearTabId } from "./types"
 
 type TabDefinition = {
@@ -66,6 +69,7 @@ function RuntimeBanner({
 
 export function OwlbearShell() {
     const runtime = useOwlbearRuntime()
+    const { session, isAuthLoaded, isAuthenticated } = useOwlbearSession(runtime)
     const tabs = React.useMemo(() => getTabsForRole(runtime.role), [runtime.role])
     const [activeTab, setActiveTab] = React.useState<OwlbearTabId>("catalogo")
     const [sheetViewMode, setSheetViewMode] = React.useState<OwlbearSheetViewMode>("picker")
@@ -111,6 +115,7 @@ export function OwlbearShell() {
 
             <div className="relative z-10 mx-auto flex h-full min-h-0 w-full max-w-[1400px] flex-1 flex-col gap-4 overflow-hidden p-4">
                 <RuntimeBanner status={runtime.status} />
+                <OwlbearGmSceneController runtime={runtime} session={session} isAuthenticated={isAuthenticated} />
 
                 <div className="rounded-3xl border border-white/10 bg-black/30 p-2 backdrop-blur-sm">
                     <GlassSelector
@@ -145,12 +150,18 @@ export function OwlbearShell() {
                     </div>
                     {tabs.some((tab) => tab.id === "ficha") && (
                         <div className={cn("h-full min-h-0", activeTab === "ficha" ? "block" : "hidden")} aria-hidden={activeTab !== "ficha"}>
-                            <OwlbearPlayerSheetTab runtime={runtime} isActive={activeTab === "ficha"} onViewModeChange={setSheetViewMode} />
+                            <OwlbearPlayerSheetTab
+                                runtime={runtime}
+                                session={session}
+                                isAuthenticated={isAuthenticated}
+                                isAuthLoaded={isAuthLoaded}
+                                onViewModeChange={setSheetViewMode}
+                            />
                         </div>
                     )}
                     {tabs.some((tab) => tab.id === "fichas") && (
                         <div className={cn("h-full min-h-0", activeTab === "fichas" ? "block" : "hidden")} aria-hidden={activeTab !== "fichas"}>
-                            <PlaceholderPanel title="Fichas do mestre" description="A listagem e a edição das fichas vinculadas à sala serão implementadas nas próximas etapas da integração." />
+                            <OwlbearGmSheetsTab session={session} />
                         </div>
                     )}
                     {tabs.some((tab) => tab.id === "npcs") && (

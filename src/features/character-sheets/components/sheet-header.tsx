@@ -41,6 +41,7 @@ interface SheetHeaderProps {
     }
     items?: CharacterItem[]
     isReadOnly?: boolean
+    isOwlbear?: boolean
 }
 
 type UseSheetHeaderSectionsProps = SheetHeaderProps
@@ -61,7 +62,7 @@ function getArmorClassBonusValue(item: CharacterItem): number | null {
   return null
 }
 
-export function useSheetHeaderSections({ sheet, form, items = [], isReadOnly = false }: UseSheetHeaderSectionsProps) {
+export function useSheetHeaderSections({ sheet, form, items = [], isReadOnly = false, isOwlbear = false }: UseSheetHeaderSectionsProps) {
   const { watch, setFieldLocally, patchField } = form
   const hitDiceValue = (watch("hitDiceTotal") || "d8") as DiceType
   const hpCurrent = watch("hpCurrent") ?? 0
@@ -233,26 +234,32 @@ export function useSheetHeaderSections({ sheet, form, items = [], isReadOnly = f
                       <GlassPopoverContent
                           side="bottom"
                           align="center"
-                          sideOffset={10}
-                          className="w-[min(92vw,900px)] p-0"
+                          sideOffset={isOwlbear ? 6 : 10}
+                          collisionPadding={12}
+                          className={cn("w-[min(92vw,900px)] p-0", isOwlbear && "w-[min(92vw,860px)]")}
                           onMouseEnter={handleProgressionEnter}
                           onMouseLeave={handleProgressionLeave}
                       >
-                          <ClassProgressionTable
-                              traits={currentClass.traits ?? []}
-                              spellcasting={
-                                  !!(
-                                      currentClass.spellcasting ||
-                                      selectedSubclasses.some((subclass) => subclass.spellcasting || subclass.progressionTable?.spellSlots)
-                                  )
-                              }
-                              progressionData={currentClass.progressionTable}
-                              subclassData={selectedSubclassData}
-                              compact
-                              forceOpen
-                              hideToggle
-                              className="border-0 rounded-none bg-transparent"
-                          />
+                          <div
+                              data-testid={isOwlbear ? "owlbear-class-progression-popover" : undefined}
+                              className={cn(isOwlbear && "max-h-[min(60vh,460px)] overflow-auto overscroll-contain")}
+                          >
+                              <ClassProgressionTable
+                                  traits={currentClass.traits ?? []}
+                                  spellcasting={
+                                      !!(
+                                          currentClass.spellcasting ||
+                                          selectedSubclasses.some((subclass) => subclass.spellcasting || subclass.progressionTable?.spellSlots)
+                                      )
+                                  }
+                                  progressionData={currentClass.progressionTable}
+                                  subclassData={selectedSubclassData}
+                                  compact
+                                  forceOpen
+                                  hideToggle
+                                  className="border-0 rounded-none bg-transparent"
+                              />
+                          </div>
                       </GlassPopoverContent>
                   </GlassPopover>
               )}
@@ -510,8 +517,8 @@ export function useSheetHeaderSections({ sheet, form, items = [], isReadOnly = f
   }
 }
 
-export function SheetHeader({ sheet, form, items = [], isReadOnly = false }: SheetHeaderProps) {
-  const sections = useSheetHeaderSections({ sheet, form, items, isReadOnly })
+export function SheetHeader({ sheet, form, items = [], isReadOnly = false, isOwlbear = false }: SheetHeaderProps) {
+  const sections = useSheetHeaderSections({ sheet, form, items, isReadOnly, isOwlbear })
 
   return (
     <div className="flex flex-col lg:flex-row items-stretch gap-2 w-full">

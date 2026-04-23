@@ -1,6 +1,7 @@
 "use client"
 
 import { motion } from "framer-motion"
+import type { LucideIcon } from "lucide-react"
 import { ScrollText, Trash2, Star, Shield } from "lucide-react"
 import { GlassCard } from "@/components/ui/glass-card"
 import { cn } from "@/core/utils"
@@ -44,6 +45,12 @@ interface GlassSheetCardProps {
     onOpen?: (sheet: CharacterSheet) => void
     showDelete?: boolean
     isDeleting?: boolean
+    interactive?: boolean
+    actionLabel?: string
+    actionIcon?: LucideIcon
+    actionTone?: "danger" | "warning"
+    onAction?: (sheet: CharacterSheet) => void
+    isActionPending?: boolean
 }
 
 export function GlassSheetCard({
@@ -52,27 +59,49 @@ export function GlassSheetCard({
     onOpen,
     showDelete = true,
     isDeleting,
+    interactive = true,
+    actionLabel,
+    actionIcon: ActionIcon = Trash2,
+    actionTone = "danger",
+    onAction,
+    isActionPending,
 }: GlassSheetCardProps) {
     const handleOpen = () => {
         onOpen?.(sheet)
     }
 
-    const handleDelete = (e: React.MouseEvent) => {
+    const handleAction = (e: React.MouseEvent) => {
         e.stopPropagation()
+        if (onAction) {
+            onAction(sheet)
+            return
+        }
         onRequestDelete?.(sheet)
     }
 
     const ca = sheet.computedArmorClass ?? 10
+    const shouldShowAction = showDelete && (onAction || onRequestDelete)
+    const actionDisabled = isDeleting || isActionPending
+    const actionButtonClassName = cn(
+        "opacity-0 group-hover:opacity-100 transition-opacity duration-150",
+        "w-7 h-7 rounded-md flex items-center justify-center flex-shrink-0",
+        actionTone === "warning"
+            ? "bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/20 text-amber-400 hover:text-amber-300"
+            : "bg-red-500/10 hover:bg-red-500/20 border border-red-500/20 text-red-400 hover:text-red-300",
+        actionDisabled && "opacity-50 pointer-events-none",
+    )
 
     return (
         <GlassCard
             className={cn(
-                "group cursor-pointer overflow-hidden transition-all duration-200",
-                "hover:border-white/25 hover:shadow-lg hover:shadow-black/30",
+                "group overflow-hidden transition-all duration-200",
+                interactive
+                    ? "cursor-pointer hover:border-white/25 hover:shadow-lg hover:shadow-black/30"
+                    : "cursor-default",
                 "bg-white/[0.03] backdrop-blur-sm",
                 isDeleting && "opacity-50 pointer-events-none",
             )}
-            onClick={handleOpen}
+            onClick={interactive ? handleOpen : undefined}
         >
             {/* Top accent bar */}
             <div className="h-0.5 w-full bg-gradient-to-r from-violet-500/40 via-blue-400/40 to-transparent" />
@@ -115,20 +144,16 @@ export function GlassSheetCard({
                         </div>
                     </div>
 
-                    {/* Delete button */}
-                    {showDelete && onRequestDelete && (
+                    {/* Secondary action button */}
+                    {shouldShowAction && (
                         <motion.button
-                            onClick={handleDelete}
-                            className={cn(
-                                "opacity-0 group-hover:opacity-100 transition-opacity duration-150",
-                                "w-7 h-7 rounded-md flex items-center justify-center flex-shrink-0",
-                                "bg-red-500/10 hover:bg-red-500/20 border border-red-500/20",
-                                "text-red-400 hover:text-red-300",
-                            )}
+                            onClick={handleAction}
+                            disabled={actionDisabled}
+                            className={actionButtonClassName}
                             whileTap={{ scale: 0.9 }}
-                            aria-label="Excluir ficha"
+                            aria-label={actionLabel ?? "Excluir ficha"}
                         >
-                            <Trash2 className="w-3.5 h-3.5" />
+                            <ActionIcon className={cn("w-3.5 h-3.5", isActionPending && "animate-spin")} />
                         </motion.button>
                     )}
                 </div>

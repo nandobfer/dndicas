@@ -1,5 +1,21 @@
-import { OWLBEAR_POPOVER_SIZES, OWLBEAR_ROOM_METADATA_KEY, OWLBEAR_ROOM_METADATA_VERSION } from "./config"
-import type { OwlbearRoomMetadataState, OwlbearRuntimeState, OwlbearSdkLike, OwlbearTheme } from "./types"
+import {
+    OWLBEAR_OVERLAY_METADATA_KEY,
+    OWLBEAR_OVERLAY_METADATA_VERSION,
+    OWLBEAR_POPOVER_SIZES,
+    OWLBEAR_ROOM_METADATA_KEY,
+    OWLBEAR_ROOM_METADATA_VERSION,
+    OWLBEAR_TOKEN_METADATA_KEY,
+    OWLBEAR_TOKEN_METADATA_VERSION,
+} from "./config"
+import type {
+    OwlbearOverlayMetadata,
+    OwlbearRoomMetadataState,
+    OwlbearRuntimeState,
+    OwlbearSdkLike,
+    OwlbearSceneItem,
+    OwlbearTheme,
+    OwlbearTokenLinkMetadata,
+} from "./types"
 
 const READY_TIMEOUT_MS = 4000
 
@@ -19,6 +35,11 @@ export async function loadOwlbearSdk(): Promise<OwlbearSdkLike | null> {
 
     const module = await import("@owlbear-rodeo/sdk")
     return module.default as OwlbearSdkLike
+}
+
+export async function loadOwlbearSdkModule() {
+    if (typeof window === "undefined") return null
+    return import("@owlbear-rodeo/sdk")
 }
 
 function waitForOwlbearReady(sdk: OwlbearSdkLike, timeoutMs = READY_TIMEOUT_MS) {
@@ -187,4 +208,125 @@ export async function subscribeToRoomMetadata(callback: (state: OwlbearRoomMetad
     return sdk.room.onMetadataChange((metadata) => {
         callback(parseRoomMetadata(metadata))
     }) || (() => undefined)
+}
+
+export function parseTokenLinkMetadata(metadata: Record<string, unknown> | null | undefined): OwlbearTokenLinkMetadata | null {
+    const value = metadata?.[OWLBEAR_TOKEN_METADATA_KEY]
+    if (!value || typeof value !== "object") {
+        return null
+    }
+
+    const parsed = value as Partial<OwlbearTokenLinkMetadata>
+    if (parsed.kind !== "player" || typeof parsed.refId !== "string" || typeof parsed.tokenId !== "string") {
+        return null
+    }
+
+    return {
+        version: typeof parsed.version === "number" ? parsed.version : OWLBEAR_TOKEN_METADATA_VERSION,
+        kind: "player",
+        refId: parsed.refId,
+        tokenId: parsed.tokenId,
+        overlayIds: Array.isArray(parsed.overlayIds) ? parsed.overlayIds.filter((id): id is string => typeof id === "string") : [],
+        linkedAt: typeof parsed.linkedAt === "string" ? parsed.linkedAt : undefined,
+    }
+}
+
+export function parseOverlayMetadata(metadata: Record<string, unknown> | null | undefined): OwlbearOverlayMetadata | null {
+    const value = metadata?.[OWLBEAR_OVERLAY_METADATA_KEY]
+    if (!value || typeof value !== "object") {
+        return null
+    }
+
+    const parsed = value as Partial<OwlbearOverlayMetadata>
+    if (typeof parsed.tokenId !== "string" || (parsed.role !== "backdrop" && parsed.role !== "label")) {
+        return null
+    }
+
+    return {
+        version: typeof parsed.version === "number" ? parsed.version : OWLBEAR_OVERLAY_METADATA_VERSION,
+        tokenId: parsed.tokenId,
+        role: parsed.role,
+    }
+}
+
+export function getTokenLinkFromItem(item: OwlbearSceneItem | null | undefined) {
+    return parseTokenLinkMetadata(item?.metadata)
+}
+
+export function getOverlayLinkFromItem(item: OwlbearSceneItem | null | undefined) {
+    return parseOverlayMetadata(item?.metadata)
+}
+
+export async function setTokenSheetLink(tokenId: string, sheetId: string, overlayIds: string[] = []) {
+    const sdk = await loadOwlbearSdk()
+    if (!sdk || !sdk.isAvailable || !sdk.isReady) {
+        throw new Error("Owlbear SDK indisponível para vincular token")
+    }
+
+    await sdk.scene.items.updateItems([tokenId], (draft) => {
+        const item = draft[0]
+        if (!item) return
+        item.metadata = {
+            ...item.metadata,
+            [OWLBEAR_TOKEN_METADATA_KEY]: {
+                version: OWLBEAR_TOKEN_METADATA_VERSION,
+                kind: "player",
+                refId: sheetId,
+                tokenId,
+                overlayIds,
+                linkedAt: new Date().toISOString(),
+            } satisfies OwlbearTokenLinkMetadata,
+        }
+    })
+}
+
+export async function updateTokenOverlayIds(tokenId: string, overlayIds: string[]) {
+    const sdk = await loadOwlbearSdk()
+    if (!sdk || !sdk.isAvailable || !sdk.isReady) {
+        throw new Error("Owlbear SDK indisponível para atualizar overlays do token")
+    }
+
+    await sdk.scene.items.updateItems([tokenId], (draft) => {
+        const item = draft[0]
+        if (!item) return
+        const current = parseTokenLinkMetadata(item.metadata)
+        if (!current) return
+        item.metadata = {
+            ...item.metadata,
+            [OWLBEAR_TOKEN_METADATA_KEY]: {
+                ...current,
+                overlayIds,
+            } satisfies OwlbearTokenLinkMetadata,
+        }
+    })
+}
+
+export async function clearTokenSheetLink(tokenId: string) {
+    const sdk = await loadOwlbearSdk()
+    if (!sdk || !sdk.isAvailable || !sdk.isReady) {
+        throw new Error("Owlbear SDK indisponível para desvincular token")
+    }
+
+    await sdk.scene.items.updateItems([tokenId], (draft) => {
+        const item = draft[0]
+        if (!item) return
+        const nextMetadata = { ...item.metadata }
+        delete nextMetadata[OWLBEAR_TOKEN_METADATA_KEY]
+        item.metadata = nextMetadata
+    })
+}
+
+export async function fetchOwlbearSheetById(sheetId: string, sessionToken: string) {
+    const response = await fetch(`/api/owlbear/character-sheets/${sheetId}`, {
+        headers: {
+            Authorization: `Bearer ${sessionToken}`,
+        },
+    })
+
+    if (!response.ok) {
+        const error = await response.json().catch(() => ({ error: "Erro desconhecido" }))
+        throw new Error(error.error ?? `HTTP ${response.status}`)
+    }
+
+    return response.json()
 }

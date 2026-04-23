@@ -27,6 +27,7 @@ interface SheetFormProps {
     editMode?: "auto" | "editable" | "read-only"
     onSlugChange?: (newSlug: string) => void
     navigateOnSlugChange?: boolean
+    runtimeContext?: "default" | "owlbear"
 }
 
 export function SheetForm({
@@ -35,6 +36,7 @@ export function SheetForm({
     editMode = "auto",
     onSlugChange,
     navigateOnSlugChange = true,
+    runtimeContext = "default",
 }: SheetFormProps) {
     const router = useRouter()
     const { userId, isSignedIn, isLoaded } = useAuth()
@@ -71,16 +73,17 @@ export function SheetForm({
     useCharacterSheetRealtime({ sheetId: sheet._id, currentSlug: sheet.slug, navigateOnSlugChange })
 
     const shouldRenderDesktop = layoutMode === "desktop" ? true : hasHydrated ? isDesktop : true
+    const forceDesktopLayout = layoutMode === "desktop"
 
     return (
         <motion.div variants={motionConfig.variants.fadeInUp} initial="initial" animate="animate" className="space-y-4">
             {shouldRenderDesktop ? (
                 <div className="space-y-4">
-                    <SheetHeader sheet={sheet} form={form} items={items} isReadOnly={isReadOnly} />
+                    <SheetHeader sheet={sheet} form={form} items={items} isReadOnly={isReadOnly} isOwlbear={runtimeContext === "owlbear"} />
 
-                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 items-start">
-                        <SheetAttributesAndItems sheet={sheet} form={form} isReadOnly={isReadOnly} />
-                        <SheetAttacksTraitsSpells sheet={sheet} form={form} isReadOnly={isReadOnly} />
+                    <div className={forceDesktopLayout ? "grid grid-cols-2 gap-4 items-start" : "grid grid-cols-1 gap-4 items-start lg:grid-cols-2"}>
+                        <SheetAttributesAndItems sheet={sheet} form={form} isReadOnly={isReadOnly} forceDesktopLayout={forceDesktopLayout} />
+                        <SheetAttacksTraitsSpells sheet={sheet} form={form} isReadOnly={isReadOnly} forceDesktopLayout={forceDesktopLayout} />
                     </div>
 
                     <SheetNotes sheet={sheet} form={form} isReadOnly={isReadOnly} />

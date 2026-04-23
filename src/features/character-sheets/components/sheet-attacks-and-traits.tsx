@@ -22,6 +22,7 @@ interface SheetAttacksAndTraitsProps {
         patchField: (field: keyof PatchSheetBody, value: unknown) => void
     }
     isReadOnly?: boolean
+    forceDesktopLayout?: boolean
 }
 
 const formatMod = (v: number) => (v >= 0 ? `+${v}` : `${v}`)
@@ -240,7 +241,7 @@ export function useSheetAttacksAndTraitsSections({ sheet, form, isReadOnly = fal
     }
 }
 
-export function SheetAttacksAndTraits({ sheet, form, isReadOnly = false }: SheetAttacksAndTraitsProps) {
+export function SheetAttacksAndTraits({ sheet, form, isReadOnly = false, forceDesktopLayout = false }: SheetAttacksAndTraitsProps) {
     const sections = useSheetAttacksAndTraitsSections({ sheet, form, isReadOnly })
 
     return (
@@ -249,7 +250,7 @@ export function SheetAttacksAndTraits({ sheet, form, isReadOnly = false }: Sheet
             {sections.attacksCard}
             {sections.resourceChargesCard}
             {sections.classFeaturesCard}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+            <div className={forceDesktopLayout ? "grid grid-cols-2 gap-3" : "grid grid-cols-1 gap-3 lg:grid-cols-2"}>
                 {sections.speciesTraitsCard}
                 {sections.featsCard}
             </div>
