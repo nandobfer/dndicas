@@ -70,6 +70,8 @@ export interface GlassModalContentProps extends React.ComponentPropsWithoutRef<t
     hideCloseButton?: boolean
     /** Size variant */
     size?: "sm" | "md" | "lg" | "xl" | "full"
+    /** Classes applied to the inner content wrapper */
+    bodyClassName?: string
 }
 
 const sizeClasses = {
@@ -84,7 +86,7 @@ const sizeClasses = {
  * Modal content with Liquid Glass styling.
  */
 const GlassModalContent = React.forwardRef<React.ElementRef<typeof DialogPrimitive.Content>, GlassModalContentProps>(
-    ({ className, children, hideCloseButton = false, size = "lg", ...props }, ref) => (
+    ({ className, children, hideCloseButton = false, size = "lg", bodyClassName, ...props }, ref) => (
         <GlassModalPortal>
             <GlassModalOverlay />
             <DialogPrimitive.Content ref={ref} asChild {...props}>
@@ -101,7 +103,7 @@ const GlassModalContent = React.forwardRef<React.ElementRef<typeof DialogPrimiti
                     exit="exit"
                     transition={{ duration: 0.35, ease: "easeInOut" }}
                 >
-                    <div className="relative w-full p-6">
+                    <div className={cn("relative w-full p-6", bodyClassName)}>
                         <GlassBackdrop />
                         {children}
                     </div>

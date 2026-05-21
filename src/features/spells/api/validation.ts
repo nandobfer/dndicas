@@ -4,7 +4,7 @@ const optionalOriginalNameSchema = z.union([z.string().trim().max(100, "Nome ori
 // Dice value schema
 export const diceValueSchema = z.object({
   quantidade: z.number().int().positive({ message: 'Quantidade deve ser um número positivo' }),
-  tipo: z.enum(['d4', 'd6', 'd8', 'd10', 'd12', 'd20'], { message: 'Tipo de dado inválido' }),
+  tipo: z.enum(['d4', 'd6', 'd8', 'd10', 'd12', 'd20', 'd100'], { message: 'Tipo de dado inválido' }),
 });
 
 // Create spell schema
@@ -66,7 +66,7 @@ export const spellsQuerySchema = z.object({
   circles: z.array(z.number().int().min(0).max(9)).optional(),
   schools: z.array(z.enum(['Abjuração', 'Adivinhação', 'Conjuração', 'Encantamento', 'Evocação', 'Ilusão', 'Necromancia', 'Transmutação'])).optional(),
   saveAttributes: z.array(z.enum(['Força', 'Destreza', 'Constituição', 'Inteligência', 'Sabedoria', 'Carisma'])).optional(),
-  diceTypes: z.array(z.enum(['d4', 'd6', 'd8', 'd10', 'd12', 'd20'])).optional(),
+  diceTypes: z.array(z.enum(['d4', 'd6', 'd8', 'd10', 'd12', 'd20', 'd100'])).optional(),
   sources: z.array(z.string()).optional(),
   status: z.enum(['all', 'active', 'inactive']).default('active'),
   page: z.number().int().positive().default(1),

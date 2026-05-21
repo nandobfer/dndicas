@@ -52,7 +52,7 @@ A interface deve reproduzir a ideia de rolagem cinematográfica do Baldur's Gate
 Características:
 
 - fundo glass escuro com blur, bordas translúcidas e highlights;
-- dado central grande, pseudo-3D, sem física real;
+- palco 3D com `@3d-dice/dice-box-threejs`, usando resultados predeterminados pelo backend;
 - animação de giro/tombo/reveal entre 800 ms e 1400 ms;
 - resultado final destacado no centro;
 - chips laterais com dados selecionados, modificador, modo de rolagem e total;
@@ -72,7 +72,7 @@ Componentes sugeridos:
 - `DiceBuilder`: botões de dados, lista de dados escolhidos e controles;
 - `DiceModeSelector`: selector normal/vantagem/desvantagem;
 - `DiceModifierInput`: input numérico de modificador;
-- `DiceAnimationStage`: palco visual da rolagem;
+- `DiceVisualStage`: palco 3D client-only da rolagem;
 - `DiceResultSummary`: total, parcelas e resultado final;
 - `RollableValue`: wrapper de valores clicáveis que abre o modal com preset.
 
@@ -306,11 +306,12 @@ DELETE /api/dice/overrides
 
 O Owlbear pode usar wrappers próprios sob `/api/owlbear`, mas a regra de negócio deve ficar no módulo geral sempre que possível.
 
-Armazenamento recomendado:
+Armazenamento:
 
-- usar MongoDB com TTL ou limpeza por `expiresAt`;
+- usar MongoDB;
 - não usar memória de processo em produção, porque múltiplas instâncias ou reloads perderiam overrides;
 - manter apenas overrides pendentes, sem histórico depois do consumo.
+- overrides não expiram automaticamente na v1; ficam pendentes até consumo ou `clear`.
 
 Modelo lógico:
 
@@ -323,7 +324,6 @@ interface DiceRollOverride {
   max?: number
   exact?: number
   remainingUses: number
-  expiresAt?: string
 }
 ```
 
@@ -372,7 +372,7 @@ Exemplo:
 3. Criar serviço backend de overrides sem auditoria.
 4. Criar endpoints `/api/dice/rolls` e `/api/dice/overrides`.
 5. Criar componentes `DiceRollerPanel` e `DiceRollerModal`.
-6. Criar animação pseudo-3D para dados de `d4` a `d20`.
+6. Criar stage 3D para dados de `d4` a `d100`, com `d100` representado visualmente como dois `d10`.
 7. Criar `DiceRollerFab` ao lado do `GlobalSearchFAB`.
 8. Expor `window.diceResult` fora do Owlbear.
 9. Criar `RollableValue` para abrir modal com preset estruturado.

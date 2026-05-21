@@ -1,0 +1,46 @@
+<svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+  <path
+    fill="#111111"
+    d="M50 6 74 16 90 36 84 69 50 94 16 69 10 36 26 16 50 6Z"
+  />
+  <path
+    fill="#1d1d1d"
+    d="M50 6 26 16 38 31h24L74 16 50 6Z"
+  />
+  <path
+    fill="#191919"
+    d="M26 16 10 36l14 14 14-19-12-15Z"
+  />
+  <path
+    fill="#242424"
+    d="M74 16 62 31l14 19 14-14-16-20Z"
+  />
+  <path
+    fill="#202020"
+    d="M38 31 24 50l26 10 26-10-14-19H38Z"
+  />
+  <path
+    fill="#171717"
+    d="M24 50 16 69l34 25V60L24 50Z"
+  />
+  <path
+    fill="#262626"
+    d="M76 50 50 60v34l34-25-8-19Z"
+  />
+  <path
+    fill="none"
+    stroke="#111111"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+    stroke-width="2.2"
+    d="M50 6 74 16 90 36 84 69 50 94 16 69 10 36 26 16 50 6Z"
+  />
+  <path
+    fill="none"
+    stroke="#3a3a3a"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+    stroke-width="1.2"
+    d="M50 6 38 31m12-25 12 25m-36-15 12 15m26-15-12 15M10 36l14 14m66-14-14 14M38 31 24 50l26 10 26-10-14-19M24 50l-8 19m60-19 8 19M50 60v34"
+  />
+</svg>
