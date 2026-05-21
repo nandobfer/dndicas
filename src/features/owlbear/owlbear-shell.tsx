@@ -115,7 +115,7 @@ export function OwlbearShell() {
 
             <div className="relative z-10 mx-auto flex h-full min-h-0 w-full max-w-[1400px] flex-1 flex-col gap-4 overflow-hidden p-4">
                 <RuntimeBanner status={runtime.status} />
-                <OwlbearGmSceneController runtime={runtime} session={session} isAuthenticated={isAuthenticated} />
+                <OwlbearGmSceneController runtime={runtime} session={session} />
 
                 <div className="rounded-3xl border border-white/10 bg-black/30 p-2 backdrop-blur-sm">
                     <GlassSelector

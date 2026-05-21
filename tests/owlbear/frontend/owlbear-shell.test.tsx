@@ -1,6 +1,7 @@
 import * as React from "react"
 import { fireEvent, render, screen, waitFor } from "@testing-library/react"
 import { beforeEach, describe, expect, it, vi } from "vitest"
+import { canManageGmScene, OwlbearGmSceneController } from "@/features/owlbear/gm-scene-controller"
 import { OwlbearShell } from "@/features/owlbear/owlbear-shell"
 
 const useSheetListMock = vi.hoisted(() => vi.fn())
@@ -40,6 +41,26 @@ function clickSheetCard(sheetName: string) {
     )
     expect(card).toBeDefined()
     fireEvent.click(card!)
+}
+
+const readyGmRuntime = {
+    status: "ready" as const,
+    role: "GM" as const,
+    roomId: "room-1",
+    playerId: "player-1",
+    themeMode: "dark" as const,
+    sceneReady: true,
+}
+
+const readyPlayerRuntime = {
+    ...readyGmRuntime,
+    role: "PLAYER" as const,
+}
+
+const readySession = {
+    sessionStatus: "ready" as const,
+    sessionToken: "token-1",
+    sessionExpiresAt: "2099-04-20T10:15:00.000Z",
 }
 
 const sdkMock = vi.hoisted(() => {
@@ -118,7 +139,7 @@ vi.mock("@/features/character-sheets/api/character-sheets-queries", () => ({
 }))
 
 vi.mock("@/features/owlbear/use-room-linked-sheets", () => ({
-    useRoomLinkedSheets: () => useRoomLinkedSheetsMock(),
+    useRoomLinkedSheets: (...args: unknown[]) => useRoomLinkedSheetsMock(...args),
 }))
 
 vi.mock("@/features/character-sheets/hooks/use-character-sheet-realtime", () => ({
@@ -286,6 +307,32 @@ describe("OwlbearShell", () => {
 
         expect(screen.queryByTestId("clerk-sign-in")).not.toBeInTheDocument()
         expect(screen.queryByText("A sessão Owlbear-aware não pôde ser inicializada. Reabra a action para tentar novamente.")).not.toBeInTheDocument()
+    })
+
+    it("treats a ready GM Owlbear-aware session as sufficient for scene management", () => {
+        expect(canManageGmScene(readyGmRuntime, readySession)).toBe(true)
+        expect(canManageGmScene(readyPlayerRuntime, readySession)).toBe(false)
+        expect(canManageGmScene(readyGmRuntime, {
+            ...readySession,
+            sessionToken: null,
+        })).toBe(false)
+    })
+
+    it("enables room-linked sheets for a ready GM session without depending on Clerk auth", () => {
+        render(<OwlbearGmSceneController runtime={readyGmRuntime} session={readySession} />)
+
+        expect(useRoomLinkedSheetsMock).toHaveBeenCalledWith("token-1", true)
+    })
+
+    it("keeps GM scene integrations disabled for players", async () => {
+        render(<OwlbearGmSceneController runtime={readyPlayerRuntime} session={readySession} />)
+
+        await waitFor(() => {
+            expect(screen.queryByRole("heading", { name: "Vincular ficha ao token" })).not.toBeInTheDocument()
+        })
+
+        expect(useRoomLinkedSheetsMock).toHaveBeenCalledWith("token-1", false)
+        expect(sdkMock.contextMenu.create).not.toHaveBeenCalled()
     })
 
     it("renders a technical banner only when the SDK is truly unavailable", async () => {

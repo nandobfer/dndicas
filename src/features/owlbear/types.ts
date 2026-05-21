@@ -1,3 +1,5 @@
+import type { ContextMenuIconFilter } from "@owlbear-rodeo/sdk"
+
 export type OwlbearRole = "GM" | "PLAYER"
 
 export type OwlbearThemeMode = "light" | "dark"
@@ -103,11 +105,7 @@ export interface OwlbearSdkLike {
             icons: Array<{
                 icon: string
                 label: string
-                filter?: {
-                    min?: number
-                    max?: number
-                    roles?: OwlbearRole[]
-                }
+                filter?: ContextMenuIconFilter
             }>
             onClick?: (context: OwlbearContextMenuContext, elementId: string) => void
         }) => Promise<void>

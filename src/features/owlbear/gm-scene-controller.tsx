@@ -20,6 +20,7 @@ import {
     setTokenSheetLink,
     updateTokenOverlayIds,
 } from "./sdk"
+import { OWLBEAR_TOKEN_METADATA_KEY } from "./config"
 import type { OwlbearRuntimeState, OwlbearSceneItem, OwlbearSessionState } from "./types"
 import { useRoomLinkedSheets } from "./use-room-linked-sheets"
 
@@ -30,6 +31,10 @@ function isTokenEligible(item: OwlbearSceneItem | null | undefined) {
     if (!item) return false
     if (getOverlayLinkFromItem(item)) return false
     return ["CHARACTER", "MOUNT", "PROP"].includes(item.layer)
+}
+
+export function canManageGmScene(runtime: OwlbearRuntimeState, session: OwlbearSessionState) {
+    return runtime.role === "GM" && session.sessionStatus === "ready" && Boolean(session.sessionToken)
 }
 
 function getOverlayPosition(token: OwlbearSceneItem) {
@@ -238,13 +243,12 @@ function TokenLinkDialog({
 export function OwlbearGmSceneController({
     runtime,
     session,
-    isAuthenticated,
 }: {
     runtime: OwlbearRuntimeState
     session: OwlbearSessionState
-    isAuthenticated: boolean
 }) {
-    const { sheets } = useRoomLinkedSheets(session.sessionToken, runtime.role === "GM" && isAuthenticated && session.sessionStatus === "ready")
+    const canManageScene = canManageGmScene(runtime, session)
+    const { sheets } = useRoomLinkedSheets(session.sessionToken, canManageScene)
     const [selectedToken, setSelectedToken] = React.useState<OwlbearSceneItem | null>(null)
     const [linkingSheetId, setLinkingSheetId] = React.useState<string | null>(null)
 
@@ -285,7 +289,7 @@ export function OwlbearGmSceneController({
     }, [runtime.role, session.sessionStatus, session.sessionToken])
 
     React.useEffect(() => {
-        if (runtime.role !== "GM" || !isAuthenticated || session.sessionStatus !== "ready") return
+        if (!canManageScene) return
 
         let active = true
         let unsubscribeItems: (() => void) | undefined
@@ -310,10 +314,10 @@ export function OwlbearGmSceneController({
             window.clearInterval(intervalId)
             unsubscribeItems?.()
         }
-    }, [isAuthenticated, runtime.role, session.sessionStatus, syncScene])
+    }, [canManageScene, syncScene])
 
     React.useEffect(() => {
-        if (runtime.role !== "GM" || !isAuthenticated || session.sessionStatus !== "ready") return
+        if (!canManageScene) return
 
         let active = true
 
@@ -329,7 +333,13 @@ export function OwlbearGmSceneController({
                     filter: {
                         min: 1,
                         max: 1,
+                        permissions: ["UPDATE"],
                         roles: ["GM"],
+                        some: [
+                            { key: "layer", value: "CHARACTER" },
+                            { key: "layer", value: "MOUNT" },
+                            { key: "layer", value: "PROP" },
+                        ],
                     },
                 }],
                 onClick: (context) => {
@@ -347,7 +357,16 @@ export function OwlbearGmSceneController({
                     filter: {
                         min: 1,
                         max: 1,
+                        permissions: ["UPDATE"],
                         roles: ["GM"],
+                        every: [
+                            { key: ["metadata", OWLBEAR_TOKEN_METADATA_KEY, "kind"], value: "player" },
+                        ],
+                        some: [
+                            { key: "layer", value: "CHARACTER" },
+                            { key: "layer", value: "MOUNT" },
+                            { key: "layer", value: "PROP" },
+                        ],
                     },
                 }],
                 onClick: (context) => {
@@ -380,7 +399,7 @@ export function OwlbearGmSceneController({
                 ])
             })()
         }
-    }, [isAuthenticated, runtime.role, session.sessionStatus])
+    }, [canManageScene])
 
     const handleLinkSheet = React.useCallback(async (sheet: CharacterSheetFull) => {
         if (!selectedToken) return
