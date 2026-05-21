@@ -14,7 +14,7 @@ import { usePathname } from "next/navigation"
 
 const GLASS_STYLE = "bg-black/40 backdrop-blur-[4px]"
 
-export function GlobalSearchFAB() {
+export function GlobalSearchFAB({ embedded = false }: { embedded?: boolean }) {
   const [isOpen, setIsOpen] = React.useState(false)
   const isMobile = useIsMobile()
   const pathname = usePathname()
@@ -50,7 +50,7 @@ export function GlobalSearchFAB() {
   if (pathname === "/") return null
 
   return (
-      <div className="fixed bottom-6 right-6 z-[99]" ref={containerRef}>
+      <div className={embedded ? "relative" : "fixed bottom-6 right-6 z-[99]"} ref={containerRef}>
           <AnimatePresence mode="popLayout" initial={false}>
               {!isOpen ? (
                   <motion.button
@@ -151,7 +151,7 @@ export function GlobalSearchFAB() {
                                           animate={{ opacity: 1 }}
                                           className="h-48 flex items-center justify-center"
                                       >
-                                          <p className="text-white/40 text-sm">Nenhum resultado para "{query}"</p>
+                                          <p className="text-white/40 text-sm">Nenhum resultado para &quot;{query}&quot;</p>
                                       </motion.div>
                                   ) : query.trim().length === 0 ? (
                                       <motion.div

@@ -24,7 +24,7 @@ export interface GlassDiceSelectorProps {
     layoutId?: string
 }
 
-const DICE_TYPES: DiceType[] = ["d4", "d6", "d8", "d10", "d12", "d20"]
+const DICE_TYPES: DiceType[] = ["d4", "d6", "d8", "d10", "d12", "d20", "d100"]
 
 const DICE_OPTIONS = DICE_TYPES.map((type) => ({
     value: type,
@@ -150,4 +150,3 @@ export function GlassDiceSelector({
         </div>
     )
 }
-

@@ -2,7 +2,7 @@ import mongoose, { Schema, Document } from 'mongoose';
 
 export interface DiceValue {
   quantidade: number;  // Positive integer, no upper limit
-  tipo: 'd4' | 'd6' | 'd8' | 'd10' | 'd12' | 'd20';
+  tipo: 'd4' | 'd6' | 'd8' | 'd10' | 'd12' | 'd20' | 'd100';
 }
 
 import { type SpellSchool, type SpellComponent, type AttributeType, type CastingTime } from "../types/spells.types"
@@ -46,7 +46,7 @@ const DiceValueSchema = new Schema<DiceValue>(
             type: String,
             required: true,
             enum: {
-                values: ["d4", "d6", "d8", "d10", "d12", "d20"],
+                values: ["d4", "d6", "d8", "d10", "d12", "d20", "d100"],
                 message: "{VALUE} não é um tipo de dado válido",
             },
         },

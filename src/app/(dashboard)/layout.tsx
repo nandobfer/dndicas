@@ -4,7 +4,6 @@ import { motion } from "framer-motion"
 import { useSidebar } from "@/hooks/useSidebar"
 import { ExpandableSidebar } from "@/components/ui/expandable-sidebar"
 import { GlassHeader } from "@/components/ui/glass-header"
-import { GlobalSearchFAB } from "@/components/ui/global-search-fab"
 import { LiquidGlassBackground } from "@/components/ui/glass-background"
 import { motionConfig } from "@/lib/config/motion-configs"
 import { themeConfig } from "@/lib/config/theme-config"
@@ -12,6 +11,8 @@ import { cn } from "@/core/utils"
 import { useState, useEffect } from "react"
 import { GlassFooter } from "@/components/ui/glass-footer"
 import { useWarmSearchCache } from "@/core/hooks/useWarmSearchCache"
+import { DiceRollerProvider } from "@/features/dice-roller/components/dice-roll-context"
+import { GlobalFabGroup } from "@/features/dice-roller/components/global-fab-group"
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
     useWarmSearchCache()
@@ -37,6 +38,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           : `${themeConfig.spacing.sidebar.collapsed}px`
 
     return (
+        <DiceRollerProvider>
         <div className="relative flex min-h-screen w-full bg-background overflow-hidden">
             {/* Liquid Glass Background */}
             <LiquidGlassBackground />
@@ -70,8 +72,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                 <GlassFooter />
             </motion.div>
 
-            {/* Global Search FAB */}
-            <GlobalSearchFAB />
+            <GlobalFabGroup />
         </div>
+        </DiceRollerProvider>
     )
 }
