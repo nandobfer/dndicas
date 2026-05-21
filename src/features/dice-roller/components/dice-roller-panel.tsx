@@ -8,6 +8,7 @@ import { GlassCard } from "@/components/ui/glass-card"
 import { GlassNumberInput } from "@/components/ui/glass-number-input"
 import { cn } from "@/core/utils"
 import { colors, diceColors } from "@/lib/config/colors"
+import { getDiceCriticalState } from "../critical-state"
 import { requestDiceRoll } from "../dice-api"
 import { DICE_TYPES, type DiceRollMode, type DiceRollPreset, type DiceRollResponse, type DiceTerm, type DiceType } from "../types"
 import { DiceVisualStage } from "./dice-visual-stage"
@@ -52,6 +53,7 @@ export function DiceRollerPanel({ preset, className }: DiceRollerPanelProps) {
     const activeMode: DiceRollMode = canUseD20Mode ? mode : "normal"
     const d20ModeLocked = canUseD20Mode && activeMode !== "normal"
     const isRollButtonDisabled = isRolling || isAnimatingDice
+    const criticalState = React.useMemo(() => getDiceCriticalState(result), [result])
 
     React.useEffect(() => {
         const next = getInitialState(preset)
@@ -163,9 +165,10 @@ export function DiceRollerPanel({ preset, className }: DiceRollerPanelProps) {
                         result={result}
                         isRolling={isRolling}
                         mode={activeMode}
+                        criticalState={criticalState}
                         onAnimationStateChange={handleAnimationStateChange}
                     />
-                    <DiceResultSummary result={result} />
+                    <DiceResultSummary result={result} criticalState={criticalState} />
                 </div>
 
                 <div className="space-y-4">

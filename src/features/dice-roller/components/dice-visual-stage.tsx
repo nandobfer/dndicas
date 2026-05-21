@@ -1,12 +1,13 @@
 "use client"
 
 import * as React from "react"
+import { motion } from "framer-motion"
 import { colors } from "@/lib/config/colors"
 import { cn } from "@/core/utils"
 import { loadDiceBox } from "../dice-box-loader"
 import { buildDiceBoxNotation, buildDiceBoxStandbyNotation, expandStandbyVisualTerms, expandVisualResult } from "../dice-box-notation"
 import { renderStaticDiceBoxStandby } from "../dice-box-static-standby"
-import type { DiceRollMode, DiceRollResponse, DiceTerm } from "../types"
+import type { DiceCriticalState, DiceRollMode, DiceRollResponse, DiceTerm } from "../types"
 import type DiceBox from "@3d-dice/dice-box-threejs"
 
 interface DiceVisualStageProps {
@@ -14,10 +15,25 @@ interface DiceVisualStageProps {
     result: DiceRollResponse | null
     isRolling: boolean
     mode: DiceRollMode
+    criticalState: DiceCriticalState | null
     onAnimationStateChange?: (isAnimating: boolean) => void
 }
 
-function getStageColor(mode: DiceRollMode) {
+const CRITICAL_STAGE_CONFIG: Record<DiceCriticalState, { color: string, label: string, badgeClassName: string }> = {
+    "critical-success": {
+        color: colors.rarity.uncommon,
+        label: "Sucesso crítico",
+        badgeClassName: "border-emerald-300/40 bg-emerald-400/18 text-emerald-50 shadow-[0_0_24px_rgba(16,185,129,0.4)]",
+    },
+    "critical-failure": {
+        color: colors.rarity.artifact,
+        label: "Falha crítica",
+        badgeClassName: "border-red-300/40 bg-red-400/18 text-red-50 shadow-[0_0_24px_rgba(239,68,68,0.38)]",
+    },
+}
+
+function getStageColor(mode: DiceRollMode, criticalState: DiceCriticalState | null) {
+    if (criticalState) return CRITICAL_STAGE_CONFIG[criticalState].color
     if (mode === "advantage") return colors.rarity.uncommon
     if (mode === "disadvantage") return colors.rarity.artifact
     return colors.rarity.rare
@@ -29,7 +45,7 @@ function buildContainerId(reactId: string) {
 
 const DICE_TEXTURE = "stainedglass"
 
-export function DiceVisualStage({ terms, result, isRolling, mode, onAnimationStateChange }: DiceVisualStageProps) {
+export function DiceVisualStage({ terms, result, isRolling, mode, criticalState, onAnimationStateChange }: DiceVisualStageProps) {
     const reactId = React.useId()
     const containerId = React.useMemo(() => buildContainerId(reactId), [reactId])
     const containerRef = React.useRef<HTMLDivElement | null>(null)
@@ -41,10 +57,12 @@ export function DiceVisualStage({ terms, result, isRolling, mode, onAnimationSta
     const [isReady, setIsReady] = React.useState(false)
     const [visualError, setVisualError] = React.useState<string | null>(null)
     const dice = result ? expandVisualResult(result) : expandStandbyVisualTerms(terms, mode)
-    const stageColor = getStageColor(mode)
+    const stageColor = getStageColor(mode, criticalState)
+    const criticalConfig = criticalState ? CRITICAL_STAGE_CONFIG[criticalState] : null
 
     React.useEffect(() => {
         let cancelled = false
+        const containerElement = containerRef.current
 
         async function initializeDiceBox() {
             try {
@@ -96,7 +114,7 @@ export function DiceVisualStage({ terms, result, isRolling, mode, onAnimationSta
             onAnimationStateChange?.(false)
             diceBoxRef.current?.clearDice?.()
             diceBoxRef.current = null
-            containerRef.current?.replaceChildren()
+            containerElement?.replaceChildren()
         }
     }, [containerId, onAnimationStateChange])
 
@@ -170,16 +188,62 @@ export function DiceVisualStage({ terms, result, isRolling, mode, onAnimationSta
         <div
             data-testid="dice-visual-stage"
             data-mode={mode}
+            data-critical-state={criticalState ?? "none"}
             data-border-color={stageColor}
             className={cn(
-                "relative flex min-h-[260px] items-center justify-center overflow-hidden rounded-[2rem] border bg-[radial-gradient(circle_at_center,rgba(255,255,255,0.08),rgba(0,0,0,0.08)_46%,rgba(0,0,0,0.38))] p-5 transition-colors",
+                "relative flex min-h-[260px] items-center justify-center overflow-hidden rounded-[2rem] border bg-[radial-gradient(circle_at_center,rgba(255,255,255,0.08),rgba(0,0,0,0.08)_46%,rgba(0,0,0,0.38))] p-5 transition-colors duration-500",
                 mode === "normal" ? "border-blue-400/25" : "border-white/10"
             )}
             style={{
                 borderColor: `${stageColor}80`,
-                boxShadow: `inset 0 0 32px ${stageColor}16, 0 0 42px ${stageColor}12`,
+                boxShadow: criticalConfig
+                    ? `inset 0 0 36px ${stageColor}30, 0 0 48px ${stageColor}40, 0 0 120px ${stageColor}24`
+                    : `inset 0 0 32px ${stageColor}16, 0 0 42px ${stageColor}12`,
             }}
         >
+            {criticalConfig && (
+                <>
+                    <motion.div
+                        aria-hidden="true"
+                        className="pointer-events-none absolute inset-[-12%] z-0 rounded-full blur-3xl"
+                        style={{ background: `radial-gradient(circle, ${stageColor}55 0%, ${stageColor}18 35%, transparent 72%)` }}
+                        animate={{ opacity: [0.5, 0.95, 0.6], scale: [0.94, 1.08, 0.97] }}
+                        transition={{ duration: 1.45, repeat: Infinity, ease: "easeInOut" }}
+                    />
+                    <motion.div
+                        aria-hidden="true"
+                        className="pointer-events-none absolute inset-2 z-0 rounded-[1.9rem]"
+                        style={{
+                            background: `conic-gradient(from 0deg, transparent 0deg, ${stageColor} 60deg, transparent 132deg, ${stageColor} 220deg, transparent 290deg, ${stageColor} 360deg)`,
+                            opacity: 0.2,
+                            filter: "blur(10px)",
+                        }}
+                        animate={{ rotate: [0, 360] }}
+                        transition={{ duration: 5.8, repeat: Infinity, ease: "linear" }}
+                    />
+                    <motion.div
+                        aria-hidden="true"
+                        className="pointer-events-none absolute inset-3 z-0 rounded-[1.8rem] border"
+                        style={{
+                            borderColor: `${stageColor}cc`,
+                            boxShadow: `0 0 40px ${stageColor}70, inset 0 0 22px ${stageColor}50`,
+                        }}
+                        animate={{ opacity: [0.45, 1, 0.55], scale: [0.985, 1.01, 0.99] }}
+                        transition={{ duration: 1.05, repeat: Infinity, ease: "easeInOut" }}
+                    />
+                    <div className="pointer-events-none absolute inset-x-5 top-5 z-30 flex justify-center">
+                        <span
+                            data-testid="dice-critical-banner"
+                            className={cn(
+                                "rounded-full border px-4 py-1.5 text-[11px] font-black uppercase tracking-[0.34em] backdrop-blur",
+                                criticalConfig.badgeClassName
+                            )}
+                        >
+                            {criticalConfig.label}
+                        </span>
+                    </div>
+                </>
+            )}
             <div className="absolute inset-6 rounded-full border border-white/10 blur-sm" />
             <div className="absolute h-52 w-52 rounded-full blur-3xl" style={{ backgroundColor: `${stageColor}18` }} />
             <div

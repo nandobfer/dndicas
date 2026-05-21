@@ -4,6 +4,8 @@ export type DiceType = (typeof DICE_TYPES)[number]
 
 export type DiceRollMode = "disadvantage" | "normal" | "advantage"
 
+export type DiceCriticalState = "critical-success" | "critical-failure"
+
 export type DiceRollSource = "manual" | "sheet" | "owlbear"
 
 export interface DiceTerm {

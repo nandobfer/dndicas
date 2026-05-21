@@ -134,11 +134,13 @@ describe("DiceRollerPanel", () => {
                 })
             )
         })
-        expect(diceBoxMocks.startClickThrow).toHaveBeenCalledWith("1d20@20")
-        expect(diceBoxMocks.spawnDice).toHaveBeenCalledTimes(1)
-        expect(diceBoxMocks.simulateThrow).toHaveBeenCalled()
-        expect(diceBoxMocks.render).toHaveBeenCalled()
-        expect(diceBoxMocks.roll).not.toHaveBeenCalled()
+        await waitFor(() => {
+            expect(diceBoxMocks.startClickThrow).toHaveBeenCalledWith("1d20@20")
+            expect(diceBoxMocks.spawnDice).toHaveBeenCalledTimes(1)
+            expect(diceBoxMocks.simulateThrow).toHaveBeenCalled()
+            expect(diceBoxMocks.render).toHaveBeenCalled()
+            expect(diceBoxMocks.roll).not.toHaveBeenCalled()
+        })
 
         fireEvent.click(screen.getByRole("button", { name: "Rolar dados" }))
 
@@ -353,6 +355,64 @@ describe("DiceRollerPanel", () => {
         })
     })
 
+    it("highlights critical success and keeps it active until returning to standby", async () => {
+        requestDiceRollMock.mockResolvedValueOnce({
+            rollId: "roll-crit-success",
+            label: "Rolagem manual",
+            terms: [{ dice: "d20", quantity: 1, results: [20] }],
+            mode: "normal",
+            selectedD20: { kept: 20, reason: "normal" },
+            diceTotal: 20,
+            modifier: 0,
+            total: 20,
+            createdAt: "2026-01-01T00:00:00.000Z",
+        })
+
+        render(<DiceRollerPanel />)
+
+        fireEvent.click(screen.getByRole("button", { name: "Rolar dados" }))
+
+        await waitFor(() => {
+            expect(screen.getByTestId("dice-visual-stage")).toHaveAttribute("data-critical-state", "critical-success")
+        })
+        expect(screen.getByTestId("dice-visual-stage")).toHaveAttribute("data-border-color", colors.rarity.uncommon)
+        expect(screen.getByTestId("dice-critical-banner")).toHaveTextContent("Sucesso crítico")
+        expect(screen.getByTestId("dice-result-summary")).toHaveAttribute("data-critical-state", "critical-success")
+        expect(screen.getByTestId("dice-critical-summary-badge")).toHaveTextContent("Sucesso crítico")
+
+        fireEvent.click(screen.getByRole("button", { name: "d4" }))
+
+        expect(screen.getByTestId("dice-visual-stage")).toHaveAttribute("data-critical-state", "none")
+        expect(screen.queryByTestId("dice-critical-banner")).not.toBeInTheDocument()
+        expect(screen.queryByTestId("dice-result-summary")).not.toBeInTheDocument()
+    })
+
+    it("treats only the kept die as critical during disadvantage", async () => {
+        requestDiceRollMock.mockResolvedValueOnce({
+            rollId: "roll-crit-failure",
+            label: "Rolagem manual",
+            terms: [{ dice: "d20", quantity: 1, results: [1] }],
+            mode: "disadvantage",
+            selectedD20: { kept: 1, discarded: 20, reason: "disadvantage" },
+            diceTotal: 1,
+            modifier: 0,
+            total: 1,
+            createdAt: "2026-01-01T00:00:00.000Z",
+        })
+
+        render(<DiceRollerPanel />)
+
+        fireEvent.click(screen.getByRole("button", { name: "Desvantagem" }))
+        fireEvent.click(screen.getByRole("button", { name: "Rolar dados" }))
+
+        await waitFor(() => {
+            expect(screen.getByTestId("dice-visual-stage")).toHaveAttribute("data-critical-state", "critical-failure")
+        })
+        expect(screen.getByTestId("dice-visual-stage")).toHaveAttribute("data-border-color", colors.rarity.artifact)
+        expect(screen.getByTestId("dice-critical-banner")).toHaveTextContent("Falha crítica")
+        expect(screen.getByTestId("dice-critical-summary-badge")).toHaveTextContent("Falha crítica")
+    })
+
     it("clears the result and resets the visual stage when the combination changes", async () => {
         render(<DiceRollerPanel />)
 
@@ -385,6 +445,35 @@ describe("DiceRollerPanel", () => {
         fireEvent.blur(modifierInput)
 
         expect(screen.queryByText("16")).not.toBeInTheDocument()
+    })
+
+    it("does not mark mixed rolls as critical even when a d20 shows 20", async () => {
+        requestDiceRollMock.mockResolvedValueOnce({
+            rollId: "roll-mixed",
+            label: "Rolagem manual",
+            terms: [
+                { dice: "d20", quantity: 1, results: [20] },
+                { dice: "d4", quantity: 1, results: [4] },
+            ],
+            mode: "normal",
+            diceTotal: 24,
+            modifier: 0,
+            total: 24,
+            createdAt: "2026-01-01T00:00:00.000Z",
+        })
+
+        render(<DiceRollerPanel />)
+
+        fireEvent.click(screen.getByRole("button", { name: "d4" }))
+        fireEvent.click(screen.getByRole("button", { name: "Rolar dados" }))
+
+        await waitFor(() => {
+            expect(screen.getByTestId("dice-result-summary")).toBeInTheDocument()
+        })
+        expect(screen.getByTestId("dice-visual-stage")).toHaveAttribute("data-critical-state", "none")
+        expect(screen.getByTestId("dice-result-summary")).toHaveAttribute("data-critical-state", "none")
+        expect(screen.queryByTestId("dice-critical-banner")).not.toBeInTheDocument()
+        expect(screen.queryByTestId("dice-critical-summary-badge")).not.toBeInTheDocument()
     })
 
     it("colors the visual stage by roll mode", async () => {
