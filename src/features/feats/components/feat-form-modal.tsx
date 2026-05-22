@@ -3,7 +3,7 @@
 import * as React from "react";
 import { useForm, Controller, useFieldArray } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { Loader2, Zap, Link, AlignLeft, Info, Trophy, Plus, X, Tag } from "lucide-react";
+import { Loader2, Zap, Link, AlignLeft, Info, Trophy, Plus, X, Tag, Languages } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { cn } from "@/core/utils";
 import { GlassModal, GlassModalContent, GlassModalHeader, GlassModalTitle, GlassModalDescription } from "@/components/ui/glass-modal";
@@ -12,11 +12,13 @@ import { GlassStatusSwitch } from "@/components/ui/glass-status-switch"
 import { GlassSelector } from "@/components/ui/glass-selector"
 import { GlassConfirmClosing } from "@/components/ui/glass-confirm-closing"
 import { GlassInlineEmptyState } from "@/components/ui/glass-inline-empty-state"
-import { createFeatSchema, type CreateFeatSchema } from "../api/validation"
+import { createFeatSchema } from "../api/validation"
 import { Feat, CreateFeatInput, UpdateFeatInput } from "../types/feats.types"
 import { RichTextEditor } from "@/features/rules/components/rich-text-editor"
 import { attributeColors, AttributeType } from "@/lib/config/colors"
 import { FEAT_CATEGORY_OPTIONS, type FeatCategory } from "../lib/feat-categories"
+import { ChargesFormSection } from "@/features/shared/charges/charges-form-section";
+import { z } from "zod";
 
 export interface FeatFormModalProps {
     isOpen: boolean
@@ -25,6 +27,8 @@ export interface FeatFormModalProps {
     feat?: Feat | null
     isSubmitting?: boolean
 }
+
+type FeatFormValues = z.input<typeof createFeatSchema>
 
 export function FeatFormModal({ isOpen, onClose, onSubmit, feat, isSubmitting = false }: FeatFormModalProps) {
     const isEditMode = !!feat
@@ -36,14 +40,17 @@ export function FeatFormModal({ isOpen, onClose, onSubmit, feat, isSubmitting = 
         handleSubmit,
         watch,
         setValue,
+        getFieldState,
         control,
         reset,
-        formState: { errors, isDirty }
-    } = useForm<CreateFeatSchema>({
+        formState: { errors, isDirty, submitCount }
+    } = useForm<FeatFormValues>({
         resolver: zodResolver(createFeatSchema) as any,
         defaultValues: {
             name: feat?.name || "",
+            originalName: feat?.originalName || "",
             description: feat?.description || "",
+            charges: feat?.charges || undefined,
             source: feat?.source || "LDJ pág. ",
             level: feat?.level || 1,
             prerequisites: feat?.prerequisites || [],
@@ -81,7 +88,9 @@ export function FeatFormModal({ isOpen, onClose, onSubmit, feat, isSubmitting = 
             setLastAddedIndex(null)
             reset({
                 name: feat?.name || "",
+                originalName: feat?.originalName || "",
                 description: feat?.description || "",
+                charges: feat?.charges || undefined,
                 source: feat?.source || "LDJ pág. ",
                 level: feat?.level || 1,
                 prerequisites: feat?.prerequisites || [],
@@ -92,10 +101,11 @@ export function FeatFormModal({ isOpen, onClose, onSubmit, feat, isSubmitting = 
         }
     }, [isOpen, feat, reset])
 
-    const handleFormSubmit = async (data: CreateFeatSchema) => {
+    const handleFormSubmit = async (data: FeatFormValues) => {
         // Filter out empty prerequisites (considering TipTap might return <p></p>)
         const cleanedData = {
             ...data,
+            originalName: data.originalName?.trim() || undefined,
             prerequisites: (data.prerequisites || []).filter((p: string) => {
                 if (!p) return false
                 const plainText = p.replace(/<[^>]*>/g, "").trim()
@@ -189,8 +199,7 @@ export function FeatFormModal({ isOpen, onClose, onSubmit, feat, isSubmitting = 
                             )}
                         </div>
 
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                            {/* Source */}
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                             <GlassInput
                                 id="source"
                                 label="Fonte / Referência"
@@ -199,8 +208,15 @@ export function FeatFormModal({ isOpen, onClose, onSubmit, feat, isSubmitting = 
                                 error={errors.source?.message}
                                 {...register("source")}
                             />
+                            <GlassInput
+                                id="originalName"
+                                label="Nome em Inglês"
+                                placeholder="Ex: Great Weapon Master"
+                                icon={<Languages />}
+                                error={errors.originalName?.message}
+                                {...register("originalName")}
+                            />
 
-                            {/* Level */}
                             <GlassInput
                                 id="level"
                                 type="text"
@@ -404,6 +420,17 @@ export function FeatFormModal({ isOpen, onClose, onSubmit, feat, isSubmitting = 
                                 )}
                             </AnimatePresence>
                         </div>
+
+                        <ChargesFormSection
+                            control={control}
+                            register={register}
+                            setValue={setValue}
+                            getFieldState={getFieldState}
+                            errors={errors}
+                            submitCount={submitCount}
+                            disabled={isSubmitting}
+                            initialCharges={feat?.charges}
+                        />
 
                         {/* Rich Text Description */}
                         <div className="space-y-2">

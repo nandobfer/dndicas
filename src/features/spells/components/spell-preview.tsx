@@ -277,7 +277,7 @@ export function SpellPreview({ spell, showStatus = true, hideStatusChip = false,
             <SpellVisualHeader name={spell.name} description={spell.description} image={spell.image} />
 
             {/* Source */}
-            <EntitySource source={spell.source} />
+            <EntitySource source={spell.source} originalName={spell.originalName} />
         </div>
     )
 }

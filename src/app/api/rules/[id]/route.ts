@@ -7,6 +7,7 @@ import { z } from "zod"
 
 const updateReferenceSchema = z.object({
   name: z.string().min(3).max(100).optional(),
+  originalName: z.union([z.string().trim().max(100), z.literal("")]).optional().transform((val) => val || undefined),
   description: z.string().min(10).max(50000).optional(),
   source: z.string().optional(),
   status: z.enum(["active", "inactive"]).optional(),
@@ -75,12 +76,14 @@ export async function PUT(
       // Capture previous state for audit
       const previousData = {
           name: existingReference.name,
+          originalName: existingReference.originalName,
           description: existingReference.description,
           source: existingReference.source,
           status: existingReference.status,
       }
 
       // Apply updates
+      existingReference.originalName = validation.data.originalName ?? existingReference.originalName
       if (validation.data.name) existingReference.name = validation.data.name
       if (validation.data.description) existingReference.description = validation.data.description
       if (validation.data.source) existingReference.source = validation.data.source
@@ -98,6 +101,7 @@ export async function PUT(
               previousData,
               newData: {
                   name: updatedReference.name,
+                  originalName: updatedReference.originalName,
                   description: updatedReference.description,
                   source: updatedReference.source,
                   status: updatedReference.status,
@@ -152,6 +156,7 @@ export async function DELETE(
 
       const previousData = {
           name: existingReference.name,
+          originalName: existingReference.originalName,
           source: existingReference.source,
           status: existingReference.status,
       }

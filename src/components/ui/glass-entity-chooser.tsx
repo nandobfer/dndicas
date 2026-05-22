@@ -3,7 +3,7 @@ import { cn } from '@/core/utils'
 import { glassConfig } from '@/lib/config/glass-config'
 import { entityColors } from "@/lib/config/colors"
 import { performUnifiedSearch } from '@/core/utils/search-engine'
-import { Search, X, Check, Scroll, Sparkles, Zap, Wand, Sword, User, Plus, ShieldCheck } from "lucide-react"
+import { Search, X, Check, Scroll, Sparkles, Zap, Wand, Sword, User, Plus, ShieldCheck, GraduationCap } from "lucide-react"
 import { motion, AnimatePresence } from "framer-motion"
 import { DebounceProgress } from "@/components/ui/debounce-progress"
 import { EntityProvider } from "@/lib/config/entities"
@@ -22,6 +22,10 @@ const SpellFormModal = dynamic(() => import("@/features/spells/components/spell-
 
 import { createPortal } from "react-dom"
 
+function normalizeProviderMapResult(mapped: ReturnType<EntityProvider["map"]>) {
+    return Array.isArray(mapped) ? mapped[0] : mapped
+}
+
 function EntityCreatorModal({ provider, isOpen, onClose, onSuccess }: { provider: EntityProvider; isOpen: boolean; onClose: () => void; onSuccess: (entity: any) => void }) {
     const [mounted, setMounted] = useState(false)
     const ruleMutations = useRuleMutations()
@@ -36,7 +40,7 @@ function EntityCreatorModal({ provider, isOpen, onClose, onSuccess }: { provider
     const handleSuccess = (createdItem: any) => {
         // Mapeamos para o formato unificado antes de devolver
         if (createdItem) {
-            const mapped = provider.map(createdItem)
+            const mapped = normalizeProviderMapResult(provider.map(createdItem))
             onSuccess({
                 ...mapped,
                 id: mapped.id || mapped._id,
@@ -133,6 +137,7 @@ const entityIcons: Record<string, any> = {
     Talento: Zap,
     Magia: Wand,
     Classe: Sword,
+    Subclasse: GraduationCap,
     Origem: ShieldCheck,
     Atores: User,
 }
@@ -200,7 +205,7 @@ export function GlassEntityChooser({ value, onChange, provider, placeholder, dis
                         const data = await response.json()
                         const items = Array.isArray(data) ? data : data.items || []
                         filtered = items.map((item: any) => {
-                            const unified = provider.map(item)
+                            const unified = normalizeProviderMapResult(provider.map(item))
                             return {
                                 ...unified,
                                 id: unified.id || unified._id,
@@ -432,4 +437,3 @@ export function GlassEntityChooser({ value, onChange, provider, placeholder, dis
         </div>
     )
 }
-

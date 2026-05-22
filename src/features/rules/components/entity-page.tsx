@@ -26,9 +26,10 @@ interface EntityPageProps {
     onDelete?: (item: any) => void
     /** Whether to hide action icons (like open in window) when already in a page */
     hideActionIcons?: boolean
+    renderOptions?: { showStatus?: boolean; hideStatusChip?: boolean; hideActionIcons?: boolean; initialSelectedSubclassIds?: string[] }
 }
 
-export function EntityPage({ item, entityType, isLoading, isAdmin, onEdit, onDelete, hideActionIcons = false }: EntityPageProps) {
+export function EntityPage({ item, entityType, isLoading, isAdmin, onEdit, onDelete, hideActionIcons = false, renderOptions }: EntityPageProps) {
     const router = useRouter()
     const { addWindow } = useWindows()
 
@@ -138,7 +139,7 @@ export function EntityPage({ item, entityType, isLoading, isAdmin, onEdit, onDel
                                 </Chip>
                             </div>
                         </div>
-                        <div className="max-w-full overflow-hidden">{renderEntity(item, entityType, { showStatus: false, hideActionIcons: true })}</div>
+                        <div className="max-w-full overflow-hidden">{renderEntity(item, entityType, { showStatus: false, hideActionIcons: true, ...renderOptions })}</div>
                     </GlassCardContent>
                 </GlassCard>
 

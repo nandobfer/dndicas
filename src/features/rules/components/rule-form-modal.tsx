@@ -3,7 +3,7 @@
 import * as React from "react"
 import { useForm, Controller } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
-import { Loader2, ScrollText, Link, AlignLeft, Info } from "lucide-react"
+import { Loader2, ScrollText, Link, AlignLeft, Info, Languages } from "lucide-react"
 import { cn } from "@/core/utils"
 // Ensure these imports point to the correct files
 import { GlassModal, GlassModalContent, GlassModalHeader, GlassModalTitle, GlassModalDescription } from "@/components/ui/glass-modal"
@@ -38,6 +38,7 @@ export function RuleFormModal({ isOpen, onClose, onSubmit, rule, isSubmitting = 
         resolver: zodResolver(isEditMode ? updateReferenceSchema : createReferenceSchema),
         defaultValues: {
             name: rule?.name || "",
+            originalName: rule?.originalName || "",
             description: rule?.description || "",
             source: rule?.source || "LDJ pág. ",
             status: rule?.status || "active"
@@ -50,6 +51,7 @@ export function RuleFormModal({ isOpen, onClose, onSubmit, rule, isSubmitting = 
             setShowConfirmClose(false)
             reset({
                 name: rule?.name || "",
+                originalName: rule?.originalName || "",
                 description: rule?.description || "",
                 source: rule?.source || "LDJ pág. ",
                 status: rule?.status || "active"
@@ -58,8 +60,11 @@ export function RuleFormModal({ isOpen, onClose, onSubmit, rule, isSubmitting = 
     }, [isOpen, rule, reset])
 
     const handleFormSubmit = async (data: CreateReferenceSchema | UpdateReferenceSchema) => {
-        // Cast to appropriate input type as the schema infers slightly different types than the interface
-        await onSubmit(data as CreateReferenceInput | UpdateReferenceInput)
+        const cleanedData = {
+            ...data,
+            originalName: data.originalName?.trim() || undefined,
+        }
+        await onSubmit(cleanedData as CreateReferenceInput | UpdateReferenceInput)
         setShowConfirmClose(false)
     }
 
@@ -94,15 +99,24 @@ export function RuleFormModal({ isOpen, onClose, onSubmit, rule, isSubmitting = 
                                 {...register("name")}
                             />
 
-                            {/* Source */}
-                            <GlassInput
-                                id="source"
-                                label="Fonte / Referência"
-                                placeholder="Ex: PHB pg. 195"
-                                icon={<Link />}
-                                error={errors.source?.message}
-                                {...register("source")}
-                            />
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <GlassInput
+                                    id="source"
+                                    label="Fonte / Referência"
+                                    placeholder="Ex: PHB pg. 195"
+                                    icon={<Link />}
+                                    error={errors.source?.message}
+                                    {...register("source")}
+                                />
+                                <GlassInput
+                                    id="originalName"
+                                    label="Nome em Inglês"
+                                    placeholder="Ex: Grapple"
+                                    icon={<Languages />}
+                                    error={errors.originalName?.message}
+                                    {...register("originalName")}
+                                />
+                            </div>
                         </div>
 
                         {/* Status Switch */}

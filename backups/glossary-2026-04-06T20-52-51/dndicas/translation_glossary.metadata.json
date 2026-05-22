@@ -1,0 +1,1 @@
+{"indexes":[{"v":{"$numberInt":"2"},"key":{"_id":{"$numberInt":"1"}},"name":"_id_"},{"v":{"$numberInt":"2"},"key":{"from":{"$numberInt":"1"}},"name":"from_1","unique":true}],"uuid":"ec60dc33e3ee493d8935aa73696d8ca4","collectionName":"translation_glossary","type":"collection"}

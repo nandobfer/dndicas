@@ -9,7 +9,7 @@ import * as React from "react"
 import { useForm, Controller, useFieldArray } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { motion, AnimatePresence } from "framer-motion"
-import { Fingerprint, BookOpen, X, Loader2, Info, Sparkles, ScrollText, GraduationCap, Link, Move, Zap, Wand, Plus, Users, Pencil, Check } from "lucide-react"
+import { Fingerprint, BookOpen, X, Loader2, Info, Sparkles, ScrollText, GraduationCap, Link, Move, Zap, Wand, Plus, Users, Pencil, Check, Languages } from "lucide-react"
 import { toast } from "sonner"
 import { cn } from "@/core/utils"
 import { Control } from "react-hook-form"
@@ -216,14 +216,24 @@ const RaceFormFields = ({
                         error={errors.name?.message} 
                         {...register("name")} 
                     />
-                    <GlassInput 
-                        id="source" 
-                        label="Fonte" 
-                        placeholder="Ex: LDJ pág. " 
-                        icon={<Link className="h-4 w-4" />} 
-                        error={errors.source?.message} 
-                        {...register("source")} 
-                    />
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <GlassInput
+                            id="source"
+                            label="Fonte"
+                            placeholder="Ex: LDJ pág. "
+                            icon={<Link className="h-4 w-4" />}
+                            error={errors.source?.message}
+                            {...register("source")}
+                        />
+                        <GlassInput
+                            id="originalName"
+                            label="Nome em Inglês"
+                            placeholder="Ex: Elf"
+                            icon={<Languages className="h-4 w-4" />}
+                            error={errors.originalName?.message}
+                            {...register("originalName")}
+                        />
+                    </div>
                 </div>
             )}
 
@@ -372,6 +382,7 @@ export function RaceFormModal({ race, isOpen, onClose, onSuccess }: RaceFormModa
         resolver: zodResolver(createRaceSchema) as any,
         defaultValues: {
             name: race?.name ?? "",
+            originalName: race?.originalName ?? "",
             description: race?.description ?? "",
             source: race?.source ?? "LDJ pág. ",
             status: race?.status ?? "active",
@@ -403,6 +414,7 @@ export function RaceFormModal({ race, isOpen, onClose, onSuccess }: RaceFormModa
             setRenamingIndex(null)
             reset({
                 name: race?.name ?? "",
+                originalName: race?.originalName ?? "",
                 description: race?.description ?? "",
                 source: race?.source ?? "LDJ pág. ",
                 status: race?.status ?? "active",
@@ -505,6 +517,7 @@ export function RaceFormModal({ race, isOpen, onClose, onSuccess }: RaceFormModa
 
         const cleanData = {
             ...data,
+            originalName: data.originalName?.trim() || undefined,
             traits: (data.traits || [])
                 .filter(t => t.description && t.description.trim() !== ""),
             spells: cleanSpells(data.spells),

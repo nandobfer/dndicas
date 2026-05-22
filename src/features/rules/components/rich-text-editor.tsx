@@ -5,14 +5,271 @@ import StarterKit from '@tiptap/starter-kit'
 import ImageExtension from "@tiptap/extension-image"
 import Placeholder from '@tiptap/extension-placeholder'
 import Mention from "@tiptap/extension-mention"
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { cn } from '@/core/utils'
 import { Button } from '@/core/ui/button'
 import { glassConfig } from "@/lib/config/glass-config"
 import { Bold, Italic, Strikethrough, List, ListOrdered, Undo, Redo, Image as ImageIcon } from "lucide-react"
 import { getSuggestionConfig } from "../utils/suggestion"
-import { entityColors } from "@/lib/config/colors"
-import { EntityPreviewTooltip } from "./entity-preview-tooltip"
+import { Extension, Node, InputRule } from "@tiptap/core"
+import { Plugin, PluginKey } from "@tiptap/pm/state"
+import { Decoration, DecorationSet } from "@tiptap/pm/view"
+import { GlassDiceValue } from "@/components/ui/glass-dice-value"
+import type { DiceType } from "@/features/spells/types/spells.types"
+import { diceFuse, DICE_LOOKAHEAD_REGEX } from "../utils/dice-render-utils"
+import type { EntityType } from "@/lib/config/colors"
+
+// ─── Dice Highlight Extension ────────────────────────────────────────────────
+// Colors plain-text dice notation and damage-type phrases.
+// Acts as backward-compat for existing content (plain text "2d6").
+// Newly typed dice are handled by DiceValueNode (below).
+const diceHighlightKey = new PluginKey("diceHighlight")
+
+const DiceHighlight = Extension.create({
+    name: "diceHighlight",
+    addProseMirrorPlugins() {
+        return [
+            new Plugin({
+                key: diceHighlightKey,
+                props: {
+                    decorations(state) {
+                        const decorations: Decoration[] = []
+                        const DICE_REGEX = /(\d+)d(4|6|8|10|12|20|100)(?:\s*\+\s*\d+)?/gi
+                        const DAMAGE_REGEX = /(?:pontos de dano|(?:de )?danos?) (?:de )?([a-zA-Záàâãéèêíïóôõöúçñ]+)/gi
+
+                        let lastDiceAtomEndPos = -1
+
+                        state.doc.descendants((node, pos) => {
+                            // Track DiceValueNode atoms so we can color following text
+                            if ((node as any).type?.name === "diceValue") {
+                                lastDiceAtomEndPos = pos + node.nodeSize
+                                return
+                            }
+
+                            if (!node.isText || !node.text) return
+                            const text = node.text
+
+                            // ── Damage type text immediately after a DiceValueNode atom ──
+                            if (lastDiceAtomEndPos >= 0 && pos === lastDiceAtomEndPos) {
+                                lastDiceAtomEndPos = -1
+
+                                // Try "de dano X" prefix first
+                                const deDanoMatch = /^(\s*(?:pontos de dano|de dano) (?:de )?([a-záàâãéèêíïóôõöúçñ]+))/i.exec(text)
+                                if (deDanoMatch) {
+                                    const fuseResult = diceFuse.search(deDanoMatch[2])
+                                    if (fuseResult.length > 0) {
+                                        decorations.push(
+                                            Decoration.inline(pos, pos + deDanoMatch[1].length, {
+                                                style: `color: ${fuseResult[0].item.hex}; font-weight: 500;`,
+                                                class: "damage-type-notation",
+                                            })
+                                        )
+                                    }
+                                } else {
+                                    // Try standalone damage type word at start of text
+                                    const wordMatch = /^(\s*)([a-záàâãéèêíïóôõöúçñ]{4,})/i.exec(text)
+                                    if (wordMatch) {
+                                        const fuseResult = diceFuse.search(wordMatch[2])
+                                        if (fuseResult.length > 0) {
+                                            const wordStart = wordMatch[1].length
+                                            decorations.push(
+                                                Decoration.inline(pos + wordStart, pos + wordStart + wordMatch[2].length, {
+                                                    style: `color: ${fuseResult[0].item.hex}; font-weight: 600;`,
+                                                    class: "damage-type-notation",
+                                                })
+                                            )
+                                        }
+                                    }
+                                }
+                            } else {
+                                lastDiceAtomEndPos = -1
+                            }
+
+                            // ── Dice notation coloring ──────────────────────
+                            DICE_REGEX.lastIndex = 0
+                            let match: RegExpExecArray | null
+                            while ((match = DICE_REGEX.exec(text)) !== null) {
+                                const from = pos + match.index
+                                const to = from + match[0].length
+                                const remainingText = text.substring(DICE_REGEX.lastIndex)
+                                const nextNaturalMatch = DICE_LOOKAHEAD_REGEX.exec(remainingText)
+
+                                let colorHex = "#a78bfa"
+                                if (nextNaturalMatch) {
+                                    const fuseResult = diceFuse.search(nextNaturalMatch[1])
+                                    if (fuseResult.length > 0) colorHex = fuseResult[0].item.hex
+                                } else {
+                                    const ctxAfter = text.substring(match.index + match[0].length, match.index + match[0].length + 40)
+                                    const words = ctxAfter.match(/[a-záàâãéèêíïóôõöúçñ]+/gi) ?? []
+                                    for (const word of words) {
+                                        const result = diceFuse.search(word)
+                                        if (result.length > 0) { colorHex = result[0].item.hex; break }
+                                    }
+                                }
+
+                                decorations.push(
+                                    Decoration.inline(from, to, {
+                                        style: `color: ${colorHex}; font-weight: 700;`,
+                                        class: "dice-notation",
+                                    })
+                                )
+                            }
+
+                            // ── Damage type text coloring ───────────────────
+                            DAMAGE_REGEX.lastIndex = 0
+                            while ((match = DAMAGE_REGEX.exec(text)) !== null) {
+                                const fuseResult = diceFuse.search(match[1])
+                                if (fuseResult.length === 0) continue
+                                const colorHex = fuseResult[0].item.hex
+                                const from = pos + match.index
+                                const to = from + match[0].length
+                                decorations.push(
+                                    Decoration.inline(from, to, {
+                                        style: `color: ${colorHex}; font-weight: 500;`,
+                                        class: "damage-type-notation",
+                                    })
+                                )
+                            }
+                        })
+
+                        return DecorationSet.create(state.doc, decorations)
+                    },
+                },
+            }),
+        ]
+    },
+})
+
+// ─── DiceValueNode ────────────────────────────────────────────────────────────
+// Inline atom node that renders GlassDiceValue for newly typed dice notation.
+const DICE_INPUT_RULE_REGEX = /(\d+)d(4|6|8|10|12|20|100)$/
+
+const DiceNodeView = (props: { node: { attrs: { qty: number; faces: number; colorHex?: string | null; bonus?: number | null } } }) => {
+    const { qty, faces, colorHex, bonus } = props.node.attrs
+    const tipo = `d${faces}` as DiceType
+    const colorOverride = colorHex ? { text: colorHex } : undefined
+    const bonusValue = bonus ?? undefined
+    return (
+        <NodeViewWrapper className="inline-block align-middle">
+            <GlassDiceValue value={{ quantidade: qty, tipo }} bonus={bonusValue} colorOverride={colorOverride} className="mx-0.5" />
+        </NodeViewWrapper>
+    )
+}
+
+const DiceValueNode = Node.create({
+    name: "diceValue",
+    inline: true,
+    group: "inline",
+    atom: true,
+
+    addAttributes() {
+        return {
+            qty: { default: 1, parseHTML: (el) => parseInt(el.getAttribute("data-qty") || "1", 10) },
+            faces: { default: 6, parseHTML: (el) => parseInt(el.getAttribute("data-faces") || "6", 10) },
+            colorHex: { default: null, parseHTML: (el) => el.getAttribute("data-color-hex") || null },
+            bonus: { default: null, parseHTML: (el) => { const v = el.getAttribute("data-bonus"); return v ? parseInt(v, 10) : null } },
+        }
+    },
+
+    parseHTML() {
+        return [{ tag: 'span[data-type="dice-value"]' }]
+    },
+
+    renderHTML({ HTMLAttributes }) {
+        const { qty, faces, colorHex, bonus } = HTMLAttributes
+        const attrs: Record<string, string> = {
+            "data-type": "dice-value",
+            "data-qty": String(qty),
+            "data-faces": String(faces),
+        }
+        if (colorHex) attrs["data-color-hex"] = colorHex
+        if (bonus != null) attrs["data-bonus"] = String(bonus)
+        return ["span", attrs]
+    },
+
+    addNodeView() {
+        return ReactNodeViewRenderer(DiceNodeView as any)
+    },
+
+    addInputRules() {
+        const type = this.type
+        return [
+            new InputRule({
+                find: DICE_INPUT_RULE_REGEX,
+                handler: ({ state, range, match }) => {
+                    const node = type.create({
+                        qty: parseInt(match[1], 10),
+                        faces: parseInt(match[2], 10),
+                        colorHex: null,
+                    })
+                    state.tr.replaceWith(range.from, range.to, node)
+                },
+            }),
+        ]
+    },
+
+    addProseMirrorPlugins() {
+        const nodeType = this.type
+        return [
+            new Plugin({
+                appendTransaction(transactions, _oldState, newState) {
+                    if (!transactions.some((tr) => tr.docChanged)) return null
+
+                    const tr = newState.tr
+                    let modified = false
+
+                    newState.doc.descendants((node, pos) => {
+                        if (node.type !== nodeType) return
+
+                        const nodeEnd = pos + node.nodeSize
+                        const end = Math.min(nodeEnd + 60, newState.doc.content.size)
+                        if (end <= nodeEnd) return
+
+                        const textAfter = newState.doc.textBetween(nodeEnd, end, " ")
+
+                        // Absorb "+ N" text immediately after the atom into the bonus attribute
+                        const bonusMatch = /^\s*\+\s*(\d+)/.exec(textAfter)
+                        const bonus: number | null = bonusMatch ? parseInt(bonusMatch[1], 10) : null
+                        const currentBonus: number | null = node.attrs.bonus ?? null
+
+                        if (bonusMatch && bonus !== currentBonus) {
+                            tr.delete(nodeEnd, nodeEnd + bonusMatch[0].length)
+                            tr.setNodeMarkup(pos, null, { ...node.attrs, bonus })
+                            modified = true
+                            return
+                        }
+
+                        let colorHex: string | null = null
+
+                        const textForLookahead = bonusMatch ? textAfter.slice(bonusMatch[0].length) : textAfter
+                        const lookaheadMatch = DICE_LOOKAHEAD_REGEX.exec(textForLookahead)
+                        if (lookaheadMatch) {
+                            const fuseResult = diceFuse.search(lookaheadMatch[1])
+                            if (fuseResult.length > 0) colorHex = fuseResult[0].item.hex
+                        } else {
+                            const words = textAfter.match(/[a-záàâãéèêíïóôõöúçñ]+/gi) ?? []
+                            for (const word of words) {
+                                const result = diceFuse.search(word)
+                                if (result.length > 0) {
+                                    colorHex = result[0].item.hex
+                                    break
+                                }
+                            }
+                        }
+
+                        const currentColor = node.attrs.colorHex || null
+                        if (colorHex !== currentColor) {
+                            tr.setNodeMarkup(pos, null, { ...node.attrs, colorHex })
+                            modified = true
+                        }
+                    })
+
+                    return modified ? tr : null
+                },
+            }),
+        ]
+    },
+})
 import { MentionBadge } from "./mention-badge"
 
 const MentionNode = (props: any) => {
@@ -75,18 +332,40 @@ const CustomMention = Mention.extend({
     },
 })
 
+// ─── DisableNewlinesExtension ─────────────────────────────────────────────────
+// Blocks Enter (new paragraph) when disableNewlines is active.
+// Priority 50 is intentionally lower than the default (100) so that the
+// CustomMention suggestion plugin — which runs at higher priority — can handle
+// Enter first (e.g. selecting from the dropdown) before this extension blocks it.
+const DisableNewlinesExtension = Extension.create({
+    name: "disableNewlines",
+    priority: 50,
+    addKeyboardShortcuts() {
+        return {
+            Enter: () => true,
+        }
+    },
+})
+
 interface RichTextEditorProps {
     value: string
     onChange: (value: string) => void
+    onBlur?: () => void
     placeholder?: string
     className?: string
     disabled?: boolean
     excludeId?: string
     variant?: "full" | "simple"
     autoFocus?: boolean
+    focusToken?: string | null
+    onAutoFocusApplied?: () => void
+    minRows?: number
+    disableNewlines?: boolean
+    blurOnMentionSelect?: boolean
+    specificEntityMention?: EntityType
 }
 
-const MenuBar = ({ editor, addImage }: { editor: Editor | null; addImage: () => void }) => {
+const MenuBar = ({ editor, addImage, disabled = false }: { editor: Editor | null; addImage: () => void; disabled?: boolean }) => {
     if (!editor) {
         return null
     }
@@ -98,8 +377,8 @@ const MenuBar = ({ editor, addImage }: { editor: Editor | null; addImage: () => 
                 variant="ghost"
                 size="sm"
                 tabIndex={-1}
+                disabled={disabled || !editor.can().chain().focus().toggleBold().run()}
                 onClick={() => editor.chain().focus().toggleBold().run()}
-                disabled={!editor.can().chain().focus().toggleBold().run()}
                 className={cn(editor.isActive("bold") ? "bg-white/10" : "", "h-8 w-8 p-0")}
             >
                 <Bold className="h-4 w-4" />
@@ -109,8 +388,8 @@ const MenuBar = ({ editor, addImage }: { editor: Editor | null; addImage: () => 
                 variant="ghost"
                 size="sm"
                 tabIndex={-1}
+                disabled={disabled || !editor.can().chain().focus().toggleItalic().run()}
                 onClick={() => editor.chain().focus().toggleItalic().run()}
-                disabled={!editor.can().chain().focus().toggleItalic().run()}
                 className={cn(editor.isActive("italic") ? "bg-white/10" : "", "h-8 w-8 p-0")}
             >
                 <Italic className="h-4 w-4" />
@@ -120,8 +399,8 @@ const MenuBar = ({ editor, addImage }: { editor: Editor | null; addImage: () => 
                 variant="ghost"
                 size="sm"
                 tabIndex={-1}
+                disabled={disabled || !editor.can().chain().focus().toggleStrike().run()}
                 onClick={() => editor.chain().focus().toggleStrike().run()}
-                disabled={!editor.can().chain().focus().toggleStrike().run()}
                 className={cn(editor.isActive("strike") ? "bg-white/10" : "", "h-8 w-8 p-0")}
             >
                 <Strikethrough className="h-4 w-4" />
@@ -134,6 +413,7 @@ const MenuBar = ({ editor, addImage }: { editor: Editor | null; addImage: () => 
                 variant="ghost"
                 size="sm"
                 tabIndex={-1}
+                disabled={disabled}
                 onClick={() => editor.chain().focus().toggleBulletList().run()}
                 className={cn(editor.isActive("bulletList") ? "bg-white/10" : "", "h-8 w-8 p-0")}
             >
@@ -144,6 +424,7 @@ const MenuBar = ({ editor, addImage }: { editor: Editor | null; addImage: () => 
                 variant="ghost"
                 size="sm"
                 tabIndex={-1}
+                disabled={disabled}
                 onClick={() => editor.chain().focus().toggleOrderedList().run()}
                 className={cn(editor.isActive("orderedList") ? "bg-white/10" : "", "h-8 w-8 p-0")}
             >
@@ -152,24 +433,41 @@ const MenuBar = ({ editor, addImage }: { editor: Editor | null; addImage: () => 
 
             <div className="w-px h-6 bg-white/10 mx-1 self-center" />
 
-            <Button type="button" variant="ghost" size="sm" tabIndex={-1} onClick={addImage} className="h-8 w-8 p-0" title="Upload Image">
+            <Button type="button" variant="ghost" size="sm" tabIndex={-1} disabled={disabled} onClick={addImage} className="h-8 w-8 p-0" title="Upload Image">
                 <ImageIcon className="h-4 w-4" />
             </Button>
 
             <div className="w-px h-6 bg-white/10 mx-1 self-center" />
 
-            <Button type="button" variant="ghost" size="sm" tabIndex={-1} onClick={() => editor.chain().focus().undo().run()} disabled={!editor.can().chain().focus().undo().run()} className="h-8 w-8 p-0">
+            <Button type="button" variant="ghost" size="sm" tabIndex={-1} onClick={() => editor.chain().focus().undo().run()} disabled={disabled || !editor.can().chain().focus().undo().run()} className="h-8 w-8 p-0">
                 <Undo className="h-4 w-4" />
             </Button>
-            <Button type="button" variant="ghost" size="sm" tabIndex={-1} onClick={() => editor.chain().focus().redo().run()} disabled={!editor.can().chain().focus().redo().run()} className="h-8 w-8 p-0">
+            <Button type="button" variant="ghost" size="sm" tabIndex={-1} onClick={() => editor.chain().focus().redo().run()} disabled={disabled || !editor.can().chain().focus().redo().run()} className="h-8 w-8 p-0">
                 <Redo className="h-4 w-4" />
             </Button>
         </div>
     )
 }
 
-export function RichTextEditor({ value, onChange, className, disabled = false, excludeId, variant = "full", autoFocus = false }: RichTextEditorProps) {
+export function RichTextEditor({
+    value,
+    onChange,
+    onBlur,
+    className,
+    disabled = false,
+    excludeId,
+    variant = "full",
+    autoFocus = false,
+    focusToken = null,
+    onAutoFocusApplied,
+    placeholder,
+    minRows,
+    disableNewlines = false,
+    blurOnMentionSelect = false,
+    specificEntityMention,
+}: RichTextEditorProps) {
     const [isUploading, setIsUploading] = useState(false)
+    const lastAppliedFocusTokenRef = useRef<string | null>(null)
 
     const uploadImage = useCallback(async (file: File) => {
         setIsUploading(true)
@@ -199,21 +497,27 @@ export function RichTextEditor({ value, onChange, className, disabled = false, e
 
     const editor = useEditor({
         immediatelyRender: false,
-        autofocus: autoFocus,
+        autofocus: false,
         extensions: [
             StarterKit,
             ImageExtension,
             Placeholder.configure({
-                placeholder: "Dica: digite '@' para referenciar regras, habilidades, magias, etc.",
+                placeholder: placeholder ?? "Digite '@' para referenciar habilidades, magias, etc.",
             }),
             CustomMention.configure({
-                suggestion: getSuggestionConfig({ excludeId }),
+                suggestion: getSuggestionConfig({ excludeId, blurOnMentionSelect, specificEntityMention }),
             }),
+            DiceHighlight,
+            DiceValueNode,
+            ...(disableNewlines ? [DisableNewlinesExtension] : []),
         ],
         content: value,
         editable: !disabled,
         onUpdate: ({ editor }) => {
             onChange(editor.getHTML())
+        },
+        onBlur: () => {
+            onBlur?.()
         },
         editorProps: {
             attributes: {
@@ -229,7 +533,9 @@ export function RichTextEditor({ value, onChange, className, disabled = false, e
                     "dark:prose-invert",
                     // TipTap placeholder CSS logic
                     "relative [&_p.is-editor-empty:first-child]:before:content-[attr(data-placeholder)] [&_p.is-editor-empty:first-child]:before:text-white/30 [&_p.is-editor-empty:first-child]:before:float-left [&_p.is-editor-empty:first-child]:before:h-0 [&_p.is-editor-empty:first-child]:before:pointer-events-none",
+                    variant === "simple" && "[&_p.is-editor-empty:first-child]:before:text-xs",
                 ),
+                ...(variant === "full" && minRows ? { style: `min-height: ${minRows * 1.75}rem` } : {}),
             },
             handlePaste: (view, event) => {
                 const item = event.clipboardData?.items[0]
@@ -265,7 +571,7 @@ export function RichTextEditor({ value, onChange, className, disabled = false, e
                     if (hasHyphenatedLineBreak || hasMidSentenceLineBreak) {
                         event.preventDefault()
 
-                        let cleanedText = text
+                        const cleanedText = text
                             // Remove hyphenation: "apre-\nsentados" -> "apresentados"
                             .replace(/(\w+)-\s*[\n\r]+\s*(\w+)/g, "$1$2")
                             // Join lines that end with a word and start with a word (mid-sentence)
@@ -304,9 +610,25 @@ export function RichTextEditor({ value, onChange, className, disabled = false, e
         },
     })
 
+    useEffect(() => {
+        const requestedFocusToken = focusToken ?? (autoFocus ? "__legacy-auto-focus__" : null)
+        if (!editor || !requestedFocusToken || disabled) return
+        if (lastAppliedFocusTokenRef.current === requestedFocusToken) return
+
+        const timeoutId = window.setTimeout(() => {
+            if (!editor.isDestroyed && editor.isEditable) {
+                editor.commands.focus("end")
+                lastAppliedFocusTokenRef.current = requestedFocusToken
+                onAutoFocusApplied?.()
+            }
+        }, 60)
+
+        return () => window.clearTimeout(timeoutId)
+    }, [editor, autoFocus, focusToken, disabled, onAutoFocusApplied])
+
     // Need to pass addImage to MenuBar inside the component to access editor and uploadImage
     const handleAddImageClick = useCallback(() => {
-        if (!editor) return
+        if (!editor || disabled) return
         const input = document.createElement("input")
         input.type = "file"
         input.accept = "image/*"
@@ -321,18 +643,18 @@ export function RichTextEditor({ value, onChange, className, disabled = false, e
             }
         }
         input.click()
-    }, [editor, uploadImage])
+    }, [disabled, editor, uploadImage])
 
     // Update content if value changes externally
     useEffect(() => {
-        if (editor && value && value !== editor.getHTML()) {
-            // Avoid cursor jumps validation
+        if (editor && value !== editor.getHTML()) {
+            // No-op: both editor and incoming value are empty — avoids redundant setContent
             if (editor.getText() === "" && (value === "<p></p>" || value === "")) return
             if (!editor.isFocused) {
                 // Ensure the update happens outside the current rendering cycle to avoid flushSync errors
                 setTimeout(() => {
                     if (editor && !editor.isDestroyed) {
-                        editor.commands.setContent(value)
+                        editor.commands.setContent(value ?? "")
                     }
                 }, 0)
             }
@@ -346,13 +668,13 @@ export function RichTextEditor({ value, onChange, className, disabled = false, e
                 glassConfig.input.background,
                 glassConfig.input.blur,
                 glassConfig.input.border,
-                "focus-within:ring-2 focus-within:ring-blue-500/50 focus-within:border-blue-500/50",
+                !disabled && "focus-within:ring-2 focus-within:ring-blue-500/50 focus-within:border-blue-500/50",
                 disabled && "opacity-50 cursor-not-allowed",
                 isUploading && "animate-pulse pointer-events-none",
                 className,
             )}
         >
-            {variant === "full" && <MenuBar editor={editor} addImage={handleAddImageClick} />}
+            {variant === "full" && !disabled && <MenuBar editor={editor} addImage={handleAddImageClick} disabled={disabled} />}
             <div className="relative">
                 <EditorContent editor={editor} />
                 {isUploading && <div className="absolute inset-0 bg-black/50 flex items-center justify-center text-xs text-white">Uploading...</div>}

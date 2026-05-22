@@ -1,5 +1,6 @@
 export type ItemType = "ferramenta" | "arma" | "armadura" | "escudo" | "consumível" | "munição" | "qualquer";
 export type ItemRarity = "comum" | "incomum" | "raro" | "muito raro" | "lendário" | "artefato";
+import type { Charges } from "@/features/shared/charges/types";
 export type ArmorType = "leve" | "média" | "pesada" | "nenhuma";
 export type DamageType = 
     | "cortante" | "perfurante" | "concussão" | "ácido" | "fogo" | "frio" 
@@ -21,13 +22,16 @@ export interface Item {
     _id: string
     id: string // Used in frontend, mapped from _id
     name: string
+    originalName?: string
     description: string
     source: string
     status: "active" | "inactive"
     image?: string
+    charges?: Charges
     price?: string
     isMagic: boolean
     type: ItemType
+    itemType?: ItemType
     rarity: ItemRarity
     traits: ItemTrait[]
 

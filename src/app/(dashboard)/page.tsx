@@ -16,6 +16,7 @@ import { RacesEntityCard } from "./_components/races-entity-card"
 import { BackgroundsEntityCard } from "./_components/backgrounds-entity-card"
 import { ItemsEntityCard } from "./_components/items-entity-card"
 import { WipEntityCard } from "./_components/wip-entity-card"
+import { SheetsEntityCard } from "./_components/sheets-entity-card"
 import { AnimatedNumber } from "@/components/ui/animated-number"
 import { InlineSearch } from "@/components/ui/inline-search"
 import Image from "next/image"
@@ -173,7 +174,7 @@ export default function DashboardPage() {
 
             {/* Full Width Info */}
             <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.8 }}>
-                <WipEntityCard index={0} title="Fichas" description="Fichas de jogador para integrar com Owlbear Rodeo" />
+                <SheetsEntityCard index={0} />
             </motion.div>
 
             {/* Full Width Info */}

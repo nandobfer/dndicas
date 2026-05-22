@@ -7,10 +7,11 @@ export async function GET(req: NextRequest) {
         await dbConnect()
         const url = new URL(req.url)
         const q = url.searchParams.get("q") || url.searchParams.get("query") || ""
-        const limit = parseInt(url.searchParams.get("limit") || "10", 10)
+        const limitParam = url.searchParams.get("limit")
+        const limit = limitParam ? parseInt(limitParam, 10) : undefined
 
         // Simple regex search for now
-        const results = await BackgroundModel.find({
+        let query = BackgroundModel.find({
             $or: [
                 { name: { $regex: q, $options: "i" } },
                 { description: { $regex: q, $options: "i" } },
@@ -18,8 +19,13 @@ export async function GET(req: NextRequest) {
             ],
             status: "active"
         })
-            .limit(limit)
             .sort({ name: 1 })
+
+        if (limit) {
+            query = query.limit(limit)
+        }
+
+        const results = await query
 
         return NextResponse.json(results)
     } catch (error) {

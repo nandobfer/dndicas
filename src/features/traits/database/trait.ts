@@ -1,8 +1,12 @@
 import mongoose, { Schema, Document, Model } from "mongoose";
+import type { Charges } from "@/features/shared/charges/types";
+import { ChargesSchema } from "@/features/shared/charges/mongoose";
 
 export interface ITrait extends Document {
     name: string;
+    originalName?: string;
     description: string;
+    charges?: Charges;
     source: string;
     status: "active" | "inactive";
     createdAt: Date;
@@ -18,10 +22,21 @@ const TraitSchema = new Schema<ITrait>(
             maxlength: 100,
             trim: true,
         },
+        originalName: {
+            type: String,
+            required: false,
+            maxlength: 100,
+            trim: true,
+        },
         description: {
             type: String,
             required: true,
             // Rich Text is stored as raw HTML string with mentions and S3 images
+        },
+        charges: {
+            type: ChargesSchema,
+            required: false,
+            default: undefined,
         },
         source: {
             type: String,

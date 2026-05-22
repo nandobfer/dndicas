@@ -23,6 +23,7 @@ import { MentionRenderer } from "@/features/classes/components/mention-renderer"
 import { WeaponPreview } from "./weapon-preview"
 import { ArmorPreview } from "./armor-preview"
 import { ToolPreview } from "./tool-preview"
+import { ChargesPreview } from "@/features/shared/charges/charges-preview"
 
 const TYPE_ICONS: Record<ItemType, any> = {
     arma: Sword,
@@ -126,6 +127,8 @@ export function ItemPreview({ item, showStatus = true, hideStatusChip = false, h
                 </div>
             </div>
 
+            <ChargesPreview charges={item.charges} />
+
             {/* Specialized Previews baseados no tipo */}
             <div>
                 <WeaponPreview item={item} />
@@ -170,9 +173,8 @@ export function ItemPreview({ item, showStatus = true, hideStatusChip = false, h
 
             {/* Footer */}
             <div className="pt-2">
-                <EntitySource source={item.source} />
+                <EntitySource source={item.source} originalName={item.originalName} />
             </div>
         </div>
     )
 }
-

@@ -2,6 +2,7 @@ import { z } from "zod"
 import { SKILL_OPTIONS, HIT_DICE_OPTIONS } from "../types/classes.types"
 
 const ATTRIBUTES = ["Força", "Destreza", "Constituição", "Inteligência", "Sabedoria", "Carisma"] as const
+const optionalOriginalNameSchema = z.union([z.string().trim().max(100, "Nome original muito longo"), z.literal("")]).optional().transform((val) => val || undefined)
 
 // ─── Progression Table Schemas ───────────────────────────────────────────────
 
@@ -58,6 +59,7 @@ const classTraitSchema = z.object({
 
 export const createClassSchema = z.object({
     name: z.string().min(2, "Nome deve ter pelo menos 2 caracteres").max(100, "Nome muito longo"),
+    originalName: optionalOriginalNameSchema,
     image: z.string().optional().or(z.literal("")),
     description: z.string().min(10, "Descrição deve ter pelo menos 10 caracteres").max(20000, "Descrição muito longa"),
     source: z.string().max(200, "Fonte muito longa").optional(),
@@ -86,6 +88,7 @@ export const createClassSchema = z.object({
 
 export const updateClassSchema = z.object({
     name: z.string().min(2).max(100).optional(),
+    originalName: optionalOriginalNameSchema,
     image: z.string().optional().or(z.literal("")),
     description: z.string().min(10).max(20000).optional(),
     source: z.string().max(200).optional(),
@@ -118,4 +121,3 @@ export const classesQuerySchema = z.object({
 export type CreateClassSchema = z.infer<typeof createClassSchema>
 export type UpdateClassSchema = z.infer<typeof updateClassSchema>
 export type ClassesQuerySchema = z.infer<typeof classesQuerySchema>
-

@@ -6,7 +6,10 @@
       "Bash(npm run build:*)",
       "Bash(npm run dev)",
       "Bash(npm install:*)",
-      "Bash(ls:*)"
+      "Bash(ls:*)",
+      "Bash(npx tsc:*)",
+      "Bash(echo \"EXIT: $?\")",
+      "Bash(echo \"EXIT:$?\")"
     ]
   }
 }

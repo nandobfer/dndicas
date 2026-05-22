@@ -1,5 +1,6 @@
 import Fuse from "fuse.js"
 import { ENTITY_PROVIDERS } from "@/lib/config/entities"
+import type { EntityType } from "@/lib/config/colors"
 
 /**
  * @fileoverview Central search engine for multi-entity lookups.
@@ -10,8 +11,9 @@ export interface UnifiedEntity {
     id: string
     _id?: string
     name: string
+    originalName?: string
     label?: string // For compatibility
-    type: "Regra" | "Magia" | "Habilidade" | "Talento" | "Classe" | "Origem" | "Raça" | "Item"
+    type: "Regra" | "Magia" | "Habilidade" | "Talento" | "Classe" | "Subclasse" | "Origem" | "Raça" | "Item"
     description?: string
     source?: string
     status: "active" | "inactive"
@@ -39,6 +41,10 @@ export interface UnifiedEntity {
     additionalDamage?: any[]
     mastery?: string
     score?: number // Added for weighted sorting visibility if needed
+}
+
+export interface UnifiedSearchOptions {
+    specificEntityType?: EntityType
 }
 
 // Simple in-memory cache for search data
@@ -72,7 +78,7 @@ async function getSearchData(): Promise<UnifiedEntity[]> {
             else if (data.races) rawItems = data.races
             else if (data.data) rawItems = data.data // Fallback para padrões comuns
 
-            return rawItems.map(provider.map)
+            return rawItems.flatMap((item) => provider.map(item))
         } catch (err) {
             console.error(`Fetch failed for ${provider.name}:`, err)
             return []
@@ -85,10 +91,16 @@ async function getSearchData(): Promise<UnifiedEntity[]> {
     return cachedData
 }
 
+function filterEntitiesByOptions(items: UnifiedEntity[], options?: UnifiedSearchOptions): UnifiedEntity[] {
+    return options?.specificEntityType
+        ? items.filter((entity) => entity.type === options.specificEntityType)
+        : items
+}
+
 /**
  * Applies weighted fuzzy search to a list of entities.
  */
-export function applyFuzzySearch<T extends { name?: string; label?: string; source?: string; description?: string }>(
+export function applyFuzzySearch<T extends { name?: string; originalName?: string; label?: string; source?: string; description?: string }>(
     items: T[],
     query: string,
     limit?: number,
@@ -102,6 +114,7 @@ export function applyFuzzySearch<T extends { name?: string; label?: string; sour
     const fuse = new Fuse(items, {
         keys: [
             { name: "name", weight: 10 },
+            { name: "originalName", weight: 8 },
             { name: "label", weight: 10 },
             { name: "source", weight: 5 },
             { name: "description", weight: 1 }
@@ -132,13 +145,34 @@ export function applyFuzzySearch<T extends { name?: string; label?: string; sour
 }
 
 /**
+ * Returns cached search results synchronously when available.
+ * Useful for instantly populating mention lists before the async search resolves.
+ */
+export function peekUnifiedSearch(
+    query: string,
+    limit = 20,
+    offset = 0,
+    options?: UnifiedSearchOptions
+): UnifiedEntity[] | null {
+    if (!cachedData) return null
+
+    const filteredEntities = filterEntitiesByOptions(cachedData, options)
+    return applyFuzzySearch(filteredEntities, query, limit, offset)
+}
+
+/**
  * Performs a fuzzy search across all entities with weighted scoring.
  */
-export async function performUnifiedSearch(query: string, limit = 20, offset = 0): Promise<UnifiedEntity[]> {
-    if (!query.trim()) return []
-
+export async function performUnifiedSearch(
+    query: string,
+    limit = 20,
+    offset = 0,
+    options?: UnifiedSearchOptions
+): Promise<UnifiedEntity[]> {
     const allEntities = await getSearchData()
-    return applyFuzzySearch(allEntities, query, limit, offset)
+    const filteredEntities = filterEntitiesByOptions(allEntities, options)
+
+    return applyFuzzySearch(filteredEntities, query, limit, offset)
 }
 
 /**

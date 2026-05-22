@@ -1,7 +1,7 @@
 "use client"
 
 import * as React from "react"
-import { useParams, useRouter } from "next/navigation"
+import { useParams, useRouter, useSearchParams } from "next/navigation"
 import { useQuery, useQueryClient } from "@tanstack/react-query"
 import { EntityPage } from "@/features/rules/components/entity-page"
 import { entityConfig } from "@/lib/config/entities"
@@ -41,10 +41,12 @@ interface GenericEntityPageProps {
 export default function GenericEntityPage({ entityTypeKey }: GenericEntityPageProps) {
     const params = useParams()
     const router = useRouter()
+    const searchParams = useSearchParams()
     const queryClient = useQueryClient()
     const { addWindow } = useWindows()
     const { isAdmin } = useAuth()
     const slug = params.slug as string
+    const selectedSubclassId = searchParams.get("subclass") || undefined
     const config = entityConfig[entityTypeKey]
 
     // Initialize hooks to get modal actions
@@ -163,6 +165,8 @@ export default function GenericEntityPage({ entityTypeKey }: GenericEntityPagePr
         enabled: !!slug && !!config.provider,
     })
 
+    const renderOptions = entityTypeKey === "Classe" && selectedSubclassId ? { initialSelectedSubclassIds: [selectedSubclassId] } : undefined
+
     return (
         <>
             <div className="relative">
@@ -186,7 +190,7 @@ export default function GenericEntityPage({ entityTypeKey }: GenericEntityPagePr
                         <span>Janela Solta</span>
                     </motion.button>
                 )}
-                <EntityPage item={item} entityType={entityTypeKey} isLoading={isLoading} isAdmin={isAdmin} onEdit={onEdit} onDelete={onDelete} hideActionIcons={true} />
+                <EntityPage item={item} entityType={entityTypeKey} isLoading={isLoading} isAdmin={isAdmin} onEdit={onEdit} onDelete={onDelete} hideActionIcons={true} renderOptions={renderOptions} />
             </div>
 
             {/* Entity-specific Modals (imported from hooks) */}

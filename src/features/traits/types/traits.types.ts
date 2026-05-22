@@ -1,8 +1,12 @@
+import type { Charges } from "@/features/shared/charges/types";
+
 export interface Trait {
     _id: string; // Mongoose ID
     id: string; // Frontend ID (mapped from _id)
     name: string;
+    originalName?: string;
     description: string; // HTML content with mentions and S3 images
+    charges?: Charges;
     source: string;
     status: 'active' | 'inactive';
     createdAt: string;
@@ -13,7 +17,9 @@ export type TraitResponse = Trait;
 
 export interface CreateTraitInput {
     name: string;
+    originalName?: string;
     description: string;
+    charges?: Charges;
     source: string;
     status: 'active' | 'inactive';
 }

@@ -76,6 +76,12 @@ const RaceSchema = new Schema<IRace>(
             minlength: [2, "Nome deve ter pelo menos 2 caracteres"],
             maxlength: [100, "Nome deve ter no máximo 100 caracteres"],
         },
+        originalName: {
+            type: String,
+            required: false,
+            trim: true,
+            maxlength: [100, "Nome original deve ter no máximo 100 caracteres"],
+        },
         image: {
             type: String,
             required: false,

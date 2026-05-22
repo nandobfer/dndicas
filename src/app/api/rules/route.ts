@@ -8,6 +8,7 @@ import mongoose from "mongoose"
 
 const createReferenceSchema = z.object({
   name: z.string().min(3).max(100),
+  originalName: z.union([z.string().trim().max(100), z.literal("")]).optional().transform((val) => val || undefined),
   description: z.string().min(10).max(50000), // HTML string
   source: z.string(),
   status: z.enum(["active", "inactive"]),

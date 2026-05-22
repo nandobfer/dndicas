@@ -1,17 +1,19 @@
 "use client";
 
 import * as React from "react";
-import { useForm, Controller } from "react-hook-form";
+import { useForm, Controller, useWatch } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { Loader2, Sparkles, Link, AlignLeft, Info } from "lucide-react";
+import { Loader2, Sparkles, Link, AlignLeft, Info, Languages } from "lucide-react";
 import { cn } from "@/core/utils";
 import { GlassModal, GlassModalContent, GlassModalHeader, GlassModalTitle, GlassModalDescription } from "@/components/ui/glass-modal";
 import { GlassInput } from "@/components/ui/glass-input";
 import { GlassStatusSwitch } from "@/components/ui/glass-status-switch"
 import { GlassConfirmClosing } from "@/components/ui/glass-confirm-closing"
-import { createTraitSchema, updateTraitSchema, type CreateTraitSchema, type UpdateTraitSchema } from "../api/validation"
+import { createTraitSchema } from "../api/validation"
 import { Trait, CreateTraitInput, UpdateTraitInput } from "../types/traits.types"
 import { RichTextEditor } from "@/features/rules/components/rich-text-editor"
+import { z } from "zod";
+import { ChargesFormSection } from "@/features/shared/charges/charges-form-section";
 
 export interface TraitFormModalProps {
     isOpen: boolean
@@ -21,6 +23,8 @@ export interface TraitFormModalProps {
     isSubmitting?: boolean
 }
 
+type TraitFormValues = z.input<typeof createTraitSchema>
+
 export function TraitFormModal({ isOpen, onClose, onSubmit, trait, isSubmitting = false }: TraitFormModalProps) {
     const isEditMode = !!trait
     const [showConfirmClose, setShowConfirmClose] = React.useState(false)
@@ -28,20 +32,24 @@ export function TraitFormModal({ isOpen, onClose, onSubmit, trait, isSubmitting 
     const {
         register,
         handleSubmit,
-        watch,
         setValue,
+        getFieldState,
         control,
         reset,
-        formState: { errors, isDirty }
-    } = useForm<CreateTraitSchema | UpdateTraitSchema>({
-        resolver: zodResolver(isEditMode ? updateTraitSchema : createTraitSchema),
+        formState: { errors, isDirty, submitCount }
+    } = useForm<TraitFormValues>({
+        resolver: zodResolver(createTraitSchema),
         defaultValues: {
             name: trait?.name || "",
+            originalName: trait?.originalName || "",
             description: trait?.description || "",
+            charges: trait?.charges || undefined,
             source: trait?.source || "LDJ pág. ",
             status: trait?.status || "active"
         }
     })
+
+    const watchedStatus = useWatch({ control, name: "status" })
 
     // Reset form when modal opens/closes or trait changes
     React.useEffect(() => {
@@ -49,16 +57,30 @@ export function TraitFormModal({ isOpen, onClose, onSubmit, trait, isSubmitting 
             setShowConfirmClose(false)
             reset({
                 name: trait?.name || "",
+                originalName: trait?.originalName || "",
                 description: trait?.description || "",
+                charges: trait?.charges || undefined,
                 source: trait?.source || "LDJ pág. ",
                 status: trait?.status || "active"
             })
         }
     }, [isOpen, trait, reset])
 
-    const handleFormSubmit = async (data: CreateTraitSchema | UpdateTraitSchema) => {
-        // Cast to appropriate input type as the schema infers slightly different types than the interface
-        await onSubmit(data as CreateTraitInput | UpdateTraitInput)
+    const handleFormSubmit = async (data: TraitFormValues) => {
+        const cleanedData = {
+            ...data,
+            originalName: data.originalName?.trim() || undefined,
+            charges: data.charges
+                ? data.charges.mode === "fixed"
+                    ? { mode: "fixed" as const, value: data.charges.value }
+                    : data.charges.mode === "proficiency"
+                        ? { mode: "proficiency" as const }
+                        : data.charges.mode === "attribute"
+                            ? { mode: "attribute" as const, attribute: data.charges.attribute }
+                    : { mode: "byLevel" as const, values: data.charges.values }
+                : undefined,
+        }
+        await onSubmit(cleanedData as CreateTraitInput | UpdateTraitInput)
         setShowConfirmClose(false)
     }
 
@@ -93,22 +115,31 @@ export function TraitFormModal({ isOpen, onClose, onSubmit, trait, isSubmitting 
                                 {...register("name")}
                             />
 
-                            {/* Source */}
-                            <GlassInput
-                                id="source"
-                                label="Fonte / Referência"
-                                placeholder="Ex: PHB pg. 48"
-                                icon={<Link />}
-                                error={errors.source?.message}
-                                {...register("source")}
-                            />
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <GlassInput
+                                    id="source"
+                                    label="Fonte / Referência"
+                                    placeholder="Ex: PHB pg. 48"
+                                    icon={<Link />}
+                                    error={errors.source?.message}
+                                    {...register("source")}
+                                />
+                                <GlassInput
+                                    id="originalName"
+                                    label="Nome em Inglês"
+                                    placeholder="Ex: Barbarian Rage"
+                                    icon={<Languages />}
+                                    error={errors.originalName?.message}
+                                    {...register("originalName")}
+                                />
+                            </div>
                         </div>
 
                         {/* Status Switch */}
                         <GlassStatusSwitch
                             entityLabel="Status da Habilidade"
                             description="Habilidades inativas não aparecem nas buscas públicas"
-                            checked={watch("status") === "active"}
+                            checked={watchedStatus === "active"}
                             onCheckedChange={(checked) => setValue("status", checked ? "active" : "inactive")}
                             disabled={isSubmitting}
                         />
@@ -140,6 +171,17 @@ export function TraitFormModal({ isOpen, onClose, onSubmit, trait, isSubmitting 
                                 </p>
                             )}
                         </div>
+
+                        <ChargesFormSection
+                            control={control}
+                            register={register}
+                            setValue={setValue}
+                            getFieldState={getFieldState}
+                            errors={errors}
+                            submitCount={submitCount}
+                            disabled={isSubmitting}
+                            initialCharges={trait?.charges}
+                        />
 
                         {/* Actions */}
                         <div className="flex justify-end gap-3 pt-6 border-t border-white/10">

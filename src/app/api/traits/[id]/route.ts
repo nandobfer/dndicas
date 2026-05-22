@@ -1,16 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth, currentUser } from "@clerk/nextjs/server";
 import { Trait } from "@/features/traits/database/trait";
+import { updateTraitSchema } from "@/features/traits/api/validation";
 import { createAuditLog } from "@/features/users/api/audit-service";
 import dbConnect from "@/core/database/db";
-import { z } from "zod";
-
-const updateTraitSchema = z.object({
-  name: z.string().min(3).max(100).optional(),
-  description: z.string().min(10).max(50000).optional(),
-  source: z.string().min(1).max(200).optional(),
-  status: z.enum(["active", "inactive"]).optional(),
-});
 
 export async function GET(
   req: NextRequest,
@@ -78,14 +71,18 @@ export async function PUT(
     // Capture previous state for audit
     const previousData = {
       name: existingTrait.name,
+      originalName: existingTrait.originalName,
       description: existingTrait.description,
+      charges: existingTrait.charges,
       source: existingTrait.source,
       status: existingTrait.status,
     };
 
     // Apply updates
+    existingTrait.originalName = validation.data.originalName ?? existingTrait.originalName;
     if (validation.data.name) existingTrait.name = validation.data.name;
     if (validation.data.description) existingTrait.description = validation.data.description;
+    if ("charges" in validation.data) existingTrait.charges = validation.data.charges;
     if (validation.data.source) existingTrait.source = validation.data.source;
     if (validation.data.status) existingTrait.status = validation.data.status;
 
@@ -101,7 +98,9 @@ export async function PUT(
         previousData,
         newData: {
           name: updatedTrait.name,
+          originalName: updatedTrait.originalName,
           description: updatedTrait.description,
+          charges: updatedTrait.charges,
           source: updatedTrait.source,
           status: updatedTrait.status,
         },
@@ -154,6 +153,8 @@ export async function DELETE(
 
     const previousData = {
       name: existingTrait.name,
+      originalName: existingTrait.originalName,
+      charges: existingTrait.charges,
       source: existingTrait.source,
       status: existingTrait.status,
     };

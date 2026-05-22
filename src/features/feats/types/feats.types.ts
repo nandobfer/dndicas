@@ -5,12 +5,15 @@
  */
 
 import type { FeatCategory } from "../lib/feat-categories"
+import type { Charges } from "@/features/shared/charges/types"
 export type { FeatCategory }
 
 export interface Feat {
     _id: string
     name: string
+    originalName?: string
     description: string
+    charges?: Charges
     source: string
     level: number
     prerequisites: string[]
@@ -26,7 +29,9 @@ export interface Feat {
 
 export interface CreateFeatInput {
     name: string
+    originalName?: string
     description: string
+    charges?: Charges
     source: string
     level?: number // Optional, defaults to 1
     prerequisites?: string[] // Optional, defaults to []
@@ -40,7 +45,9 @@ export interface CreateFeatInput {
 
 export interface UpdateFeatInput {
     name?: string
+    originalName?: string
     description?: string
+    charges?: Charges
     source?: string
     level?: number
     prerequisites?: string[]
@@ -78,6 +85,7 @@ export interface FeatSearchResult {
   _id: string
   label: string
   name: string
+  originalName?: string
   entityType: 'Talento'
   description: string
   source: string

@@ -2,6 +2,7 @@ export interface Reference {
     _id: string; // Mongoose ID
     id: string; // Frontend ID (mapped from _id)
     name: string;
+    originalName?: string;
     description: string; // HTML content
     source: string;
     status: 'active' | 'inactive';
@@ -13,6 +14,7 @@ export type ReferenceResponse = Reference;
 
 export interface CreateReferenceInput {
     name: string;
+    originalName?: string;
     description: string;
     source: string;
     status: 'active' | 'inactive';

@@ -257,6 +257,12 @@ export class SpellsProvider extends BaseProvider<FiveEToolsSpell, CreateSpellInp
     readonly dataFilePath = 'src/lib/5etools-data/spells-xphb.json';
     readonly dataKey = 'spell';
 
+    protected override buildFilterDocument(spell: FiveEToolsSpell) {
+        return {
+            name: spell.name,
+        };
+    }
+
     async processItem(spell: FiveEToolsSpell): Promise<CreateSpellInput | null> {
         const school = SCHOOL_MAP[spell.school];
         if (!school) {
@@ -271,6 +277,7 @@ export class SpellsProvider extends BaseProvider<FiveEToolsSpell, CreateSpellInp
         // Deterministic field mapping (no AI needed)
         return {
             name,
+            originalName: spell.name,
             description,
             circle: spell.level,
             school,
@@ -290,11 +297,17 @@ export class SpellsProvider extends BaseProvider<FiveEToolsSpell, CreateSpellInp
 
     async findExisting(spell: CreateSpellInput): Promise<CreateSpellInput | null> {
         await dbConnect();
-        const nameRegex = new RegExp(`^${spell.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i');
-        const doc = await Spell.findOne({ name: nameRegex }).lean();
+        const escape = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        const nameRegex = new RegExp(`^${escape(spell.name)}$`, 'i');
+        const orClauses: Record<string, unknown>[] = [{ name: nameRegex }];
+        if (spell.originalName) {
+            orClauses.push({ originalName: new RegExp(`^${escape(spell.originalName)}$`, 'i') });
+        }
+        const doc = await Spell.findOne({ $or: orClauses }).lean();
         if (!doc) return null;
         return {
             name: doc.name,
+            originalName: doc.originalName ?? undefined,
             description: doc.description,
             circle: doc.circle,
             school: doc.school,

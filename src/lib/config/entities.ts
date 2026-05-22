@@ -10,7 +10,11 @@ export interface EntityProvider {
     name: keyof typeof entityColors
     label: string
     endpoint: () => string
-    map: (item: any) => UnifiedEntity
+    map: (item: any) => UnifiedEntity | UnifiedEntity[]
+}
+
+function createSubclassSearchId(parentClassId: string, subclassId: string) {
+    return `subclass:${parentClassId}:${subclassId}`
 }
 
 export const ENTITY_PROVIDERS: EntityProvider[] = [
@@ -22,6 +26,7 @@ export const ENTITY_PROVIDERS: EntityProvider[] = [
             id: item._id || item.id,
             _id: item._id,
             name: item.name,
+            originalName: item.originalName,
             label: item.name,
             type: "Regra",
             description: item.description,
@@ -37,6 +42,7 @@ export const ENTITY_PROVIDERS: EntityProvider[] = [
             id: item._id || item.id,
             _id: item._id,
             name: item.name,
+            originalName: item.originalName,
             label: item.name,
             type: "Habilidade",
             description: item.description,
@@ -52,6 +58,7 @@ export const ENTITY_PROVIDERS: EntityProvider[] = [
             id: item.id || item._id,
             _id: item._id,
             name: item.label || item.name,
+            originalName: item.originalName,
             label: item.label || item.name,
             type: "Talento",
             description: item.metadata?.description || item.description,
@@ -68,6 +75,7 @@ export const ENTITY_PROVIDERS: EntityProvider[] = [
             id: item.id || item._id,
             _id: item._id,
             name: item.label || item.name,
+            originalName: item.originalName,
             label: item.label || item.name,
             type: "Magia",
             description: item.description,
@@ -85,16 +93,50 @@ export const ENTITY_PROVIDERS: EntityProvider[] = [
         name: "Classe",
         label: "Classes",
         endpoint: () => `/api/classes/search`,
-        map: (item: any): UnifiedEntity => ({
-            id: item.id || item._id,
-            _id: item._id,
-            name: item.label || item.name,
-            label: item.label || item.name,
-            type: "Classe",
-            description: item.description,
-            source: item.source,
-            status: item.status || "active",
-        }),
+        map: (item: any): UnifiedEntity[] => {
+            const classId = String(item.id || item._id)
+            const classLabel = item.label || item.name
+            const subclasses = Array.isArray(item.subclasses) ? item.subclasses : []
+
+            return [
+                {
+                    id: classId,
+                    _id: item._id ? String(item._id) : classId,
+                    name: classLabel,
+                    originalName: item.originalName,
+                    label: classLabel,
+                    type: "Classe",
+                    description: item.description,
+                    source: item.source,
+                    status: item.status || "active",
+                    metadata: {
+                        subclasses,
+                    },
+                },
+                ...subclasses.map((subclass: any) => {
+                    const subclassId = String(subclass._id || subclass.name)
+                    return {
+                        id: createSubclassSearchId(classId, subclassId),
+                        _id: createSubclassSearchId(classId, subclassId),
+                        name: subclass.name,
+                        originalName: subclass.originalName,
+                        label: subclass.name,
+                        type: "Subclasse" as const,
+                        description: subclass.description,
+                        source: subclass.source || item.source,
+                        image: subclass.image,
+                        status: item.status || "active",
+                        metadata: {
+                            parentClassId: classId,
+                            parentClassName: classLabel,
+                            subclassId,
+                            subclassName: subclass.name,
+                            subclassColor: subclass.color,
+                        },
+                    }
+                }),
+            ]
+        },
     },
     {
         name: "Origem",
@@ -104,6 +146,7 @@ export const ENTITY_PROVIDERS: EntityProvider[] = [
             id: item.id || item._id,
             _id: item._id,
             name: item.label || item.name,
+            originalName: item.originalName,
             label: item.label || item.name,
             type: "Origem",
             description: item.description,
@@ -119,6 +162,7 @@ export const ENTITY_PROVIDERS: EntityProvider[] = [
             id: item.id || item._id,
             _id: item._id,
             name: item.label || item.name,
+            originalName: item.originalName,
             label: item.label || item.name,
             type: "Raça",
             description: item.description,
@@ -134,6 +178,7 @@ export const ENTITY_PROVIDERS: EntityProvider[] = [
             id: item._id || item.id,
             _id: item._id,
             name: item.name,
+            originalName: item.originalName,
             label: item.name,
             type: "Item",
             description: item.description,

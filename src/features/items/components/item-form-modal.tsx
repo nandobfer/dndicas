@@ -25,6 +25,7 @@ import {
     Tag,
     Search,
     Link,
+    Languages,
     Library,
     Scale,
     Weight,
@@ -58,6 +59,7 @@ import { diceColors } from "@/lib/config/colors"
 import { createItemSchema, type CreateItemSchema } from "../api/validation"
 import { Item, ItemType, ItemRarity, ArmorType, DamageType, CreateItemInput, UpdateItemInput } from "../types/items.types"
 import { useCreateItem, useUpdateItem } from "../api/items-queries"
+import { ChargesFormSection } from "@/features/shared/charges/charges-form-section"
 
 // ── Shared Constants ─────────────────────────────────────────────────────────
 
@@ -107,14 +109,17 @@ const {
     handleSubmit,
     watch,
     setValue,
+    getFieldState,
     control,
     reset,
-    formState: { errors, isDirty },
+    formState: { errors, isDirty, submitCount },
 } = useForm<CreateItemSchema>({
     resolver: zodResolver(createItemSchema) as any,
     defaultValues: {
         name: item?.name ?? "",
+        originalName: item?.originalName ?? "",
         description: item?.description ?? "",
+        charges: item?.charges ?? undefined,
         source: item?.source ?? "LDJ pág. ",
         status: item?.status ?? "active",
         type: item?.type ?? "qualquer",
@@ -171,7 +176,9 @@ React.useEffect(() => {
         setIsPriceActive(!!item?.price)
         reset({
             name: item?.name ?? "",
+            originalName: item?.originalName ?? "",
             description: item?.description ?? "",
+            charges: item?.charges ?? undefined,
             source: item?.source ?? "LDJ pág. ",
             status: item?.status ?? "active",
             type: item?.type ?? "qualquer",
@@ -208,12 +215,16 @@ const handleCloseAttempt = () => {
 }
 
 const onSubmit = async (data: CreateItemSchema) => {
-    console.log("[ItemFormModal] Submitting data:", data)
+    const cleanedData = {
+        ...data,
+        originalName: data.originalName?.trim() || undefined,
+    }
+    console.log("[ItemFormModal] Submitting data:", cleanedData)
     try {
         if (isEditMode && item) {
-            await updateMutation.mutateAsync({ id: item._id, data: data as UpdateItemInput })
+            await updateMutation.mutateAsync({ id: item._id, data: cleanedData as UpdateItemInput })
         } else {
-            await createMutation.mutateAsync(data as CreateItemInput)
+            await createMutation.mutateAsync(cleanedData as CreateItemInput)
         }
         toast.success(item ? "Item atualizado com sucesso!" : "Item criado com sucesso!")
         onSuccess()
@@ -261,7 +272,10 @@ return (
                             error={errors.name?.message}
                             {...register("name")}
                         />
-                        <GlassInput id="source" label="Fonte" placeholder="Ex: PHB pg. 150" icon={<Link className="h-4 w-4" />} error={errors.source?.message} {...register("source")} />
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <GlassInput id="source" label="Fonte" placeholder="Ex: PHB pg. 150" icon={<Link className="h-4 w-4" />} error={errors.source?.message} {...register("source")} />
+                            <GlassInput id="originalName" label="Nome em Inglês" placeholder="Ex: Longsword +1" icon={<Languages className="h-4 w-4" />} error={errors.originalName?.message} {...register("originalName")} />
+                        </div>
                     </div>
 
                     {/* Image + Description Section */}
@@ -393,6 +407,17 @@ return (
 
                     {/* Tool Specifics */}
                     {selectedType === "ferramenta" && <ToolFormFields watch={watch} setValue={setValue} />}
+
+                    <ChargesFormSection
+                        control={control}
+                        register={register}
+                        setValue={setValue}
+                        getFieldState={getFieldState}
+                        errors={errors}
+                        submitCount={submitCount}
+                        disabled={isSubmitting}
+                        initialCharges={item?.charges}
+                    />
 
                     {/* Public Traits Section (Global/Non-Weapon specific traits) */}
                     <EntityListChooser

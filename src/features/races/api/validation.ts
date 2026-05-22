@@ -1,6 +1,7 @@
 
 import { z } from "zod"
 import { SizeCategory } from "../types/races.types"
+const optionalOriginalNameSchema = z.union([z.string().trim().max(100, "Nome original muito longo"), z.literal("")]).optional().transform((val) => val || undefined)
 
 export const raceTraitSchema = z.object({
     _id: z.string().optional(),
@@ -24,6 +25,7 @@ export const raceVariationSchema = z.object({
 
 export const createRaceSchema = z.object({
     name: z.string().min(2, "O nome deve ter pelo menos 2 caracteres").max(100),
+    originalName: optionalOriginalNameSchema,
     description: z.string().min(10, "A descrição deve ter pelo menos 10 caracteres"),
     source: z.string().min(1, "A fonte é obrigatória"),
     status: z.enum(["active", "inactive"]).default("active"),

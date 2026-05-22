@@ -2,18 +2,50 @@
 
 import { motion } from "framer-motion"
 import { useRouter } from "next/navigation"
-import { ScrollText, Trash2, User, Swords, Star } from "lucide-react"
+import { ScrollText, Trash2, Star, Shield } from "lucide-react"
 import { GlassCard } from "@/components/ui/glass-card"
 import { cn } from "@/core/utils"
 import type { CharacterSheet } from "@/features/character-sheets/types/character-sheet.types"
+import { attributeColors } from "@/lib/config/colors"
+import { MentionContent } from "@/features/rules/components/mention-badge"
+
+const isHtmlContent = (s: string) => s.includes("<")
+
+function RichFieldValue({ value }: { value: string }) {
+    if (isHtmlContent(value)) {
+        return <MentionContent html={value} mode="inline" />
+    }
+    return <span>{value}</span>
+}
+
+const ATTR_LABELS: {
+    key: keyof CharacterSheet
+    label: string
+    bgAlpha: string
+    text: string
+    border: string
+}[] = [
+    { key: "strength",      label: "FOR", ...attributeColors["Força"] },
+    { key: "dexterity",     label: "DES", ...attributeColors["Destreza"] },
+    { key: "constitution",  label: "CON", ...attributeColors["Constituição"] },
+    { key: "intelligence",  label: "INT", ...attributeColors["Inteligência"] },
+    { key: "wisdom",        label: "SAB", ...attributeColors["Sabedoria"] },
+    { key: "charisma",      label: "CAR", ...attributeColors["Carisma"] },
+]
+
+const formatMod = (score: number): string => {
+    const mod = Math.floor((score - 10) / 2)
+    if (mod > 0) return `+${mod}`
+    return String(mod)
+}
 
 interface GlassSheetCardProps {
     sheet: CharacterSheet
-    onDelete: (id: string) => void
+    onRequestDelete: (sheet: CharacterSheet) => void
     isDeleting?: boolean
 }
 
-export function GlassSheetCard({ sheet, onDelete, isDeleting }: GlassSheetCardProps) {
+export function GlassSheetCard({ sheet, onRequestDelete, isDeleting }: GlassSheetCardProps) {
     const router = useRouter()
 
     const handleOpen = () => {
@@ -22,8 +54,10 @@ export function GlassSheetCard({ sheet, onDelete, isDeleting }: GlassSheetCardPr
 
     const handleDelete = (e: React.MouseEvent) => {
         e.stopPropagation()
-        onDelete(sheet._id)
+        onRequestDelete(sheet)
     }
+
+    const ca = sheet.computedArmorClass ?? 10
 
     return (
         <GlassCard
@@ -41,17 +75,36 @@ export function GlassSheetCard({ sheet, onDelete, isDeleting }: GlassSheetCardPr
             <div className="p-4 space-y-3">
                 {/* Header */}
                 <div className="flex items-start justify-between gap-2">
-                    <div className="flex items-center gap-2.5 min-w-0">
+                    <div className="flex items-center gap-2.5 min-w-0 flex-1">
                         <div className="w-9 h-9 rounded-lg bg-violet-500/10 border border-violet-500/20 flex items-center justify-center flex-shrink-0">
                             <ScrollText className="w-4 h-4 text-violet-400" />
                         </div>
-                        <div className="min-w-0">
-                            <h3 className="text-sm font-bold text-white truncate leading-tight">
-                                {sheet.name}
-                            </h3>
-                            {sheet.class && (
-                                <p className="text-[10px] text-white/50 uppercase font-semibold tracking-wider truncate mt-0.5">
-                                    {sheet.class}{sheet.subclass ? ` · ${sheet.subclass}` : ""}
+                        <div className="min-w-0 flex-1">
+                            <div className="flex items-center justify-between gap-2">
+                                <h3 className="text-sm font-bold text-white truncate leading-tight">
+                                    {sheet.name}
+                                </h3>
+                                <div className="flex items-center gap-1.5 flex-shrink-0">
+                                    {sheet.level > 0 && (
+                                        <div className="flex items-center gap-0.5 text-[10px] font-semibold text-amber-400/80">
+                                            <Star className="w-3 h-3" />
+                                            <span>{sheet.level}</span>
+                                        </div>
+                                    )}
+                                    <div className="flex items-center gap-0.5 text-[10px] font-semibold text-sky-400/80">
+                                        <Shield className="w-3 h-3" />
+                                        <span>{ca}</span>
+                                    </div>
+                                </div>
+                            </div>
+                            {(sheet.class || sheet.race || sheet.origin) && (
+                                <p className="text-[10px] text-white/50 font-semibold tracking-wider truncate mt-0.5">
+                                    {[
+                                        sheet.class ? <RichFieldValue key="class" value={sheet.class} /> : null,
+                                        sheet.subclass ? <RichFieldValue key="subclass" value={sheet.subclass} /> : null,
+                                        sheet.race ? <RichFieldValue key="race" value={sheet.race} /> : null,
+                                        sheet.origin ? <RichFieldValue key="origin" value={sheet.origin} /> : null,
+                                    ].filter(Boolean).reduce<React.ReactNode[]>((acc, el, i) => (i === 0 ? [el] : [...acc, " · ", el]), [])}
                                 </p>
                             )}
                         </div>
@@ -72,27 +125,14 @@ export function GlassSheetCard({ sheet, onDelete, isDeleting }: GlassSheetCardPr
                         <Trash2 className="w-3.5 h-3.5" />
                     </motion.button>
                 </div>
-
-                {/* Stats row */}
-                <div className="flex items-center gap-3 flex-wrap">
-                    {sheet.level > 0 && (
-                        <div className="flex items-center gap-1 text-[10px] font-semibold text-amber-400/80">
-                            <Star className="w-3 h-3" />
-                            <span>Nível {sheet.level}</span>
+                {/* Attribute modifiers */}
+                <div className="grid grid-cols-6 gap-1">
+                    {ATTR_LABELS.map(({ key, label, bgAlpha, text, border }) => (
+                        <div key={key} className={cn("flex flex-col items-center gap-0.5 rounded py-1 px-0.5 border", bgAlpha, border)}>
+                            <span className="text-[8px] font-bold uppercase text-white/40">{label}</span>
+                            <span className={cn("text-[10px] font-bold", text)}>{formatMod(sheet[key] as number)}</span>
                         </div>
-                    )}
-                    {sheet.race && (
-                        <div className="flex items-center gap-1 text-[10px] font-semibold text-white/40">
-                            <User className="w-3 h-3" />
-                            <span>{sheet.race}</span>
-                        </div>
-                    )}
-                    {sheet.origin && (
-                        <div className="flex items-center gap-1 text-[10px] font-semibold text-white/40">
-                            <Swords className="w-3 h-3" />
-                            <span>{sheet.origin}</span>
-                        </div>
-                    )}
+                    ))}
                 </div>
 
                 {/* HP bar */}

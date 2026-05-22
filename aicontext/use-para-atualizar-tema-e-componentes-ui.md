@@ -289,7 +289,6 @@ Edite `src/core/ui/layout/sidebar.tsx` para adicionar itens:
 ```typescript
 export const SidebarItems = [
   { label: "Início", href: "/", icon: Home },
-  { label: "Empresas", href: "/companies", icon: Building },
   { label: "Perfil", href: "/profile", icon: User },
 ];
 ```

@@ -327,6 +327,12 @@ export class FeatsProvider extends BaseProvider<FiveEToolsFeat, CreateFeatInput>
     readonly dataFilePath = 'src/lib/5etools-data/feats.json';
     readonly dataKey = 'feat';
 
+    protected override buildFilterDocument(feat: FiveEToolsFeat) {
+        return {
+            name: feat.name,
+        };
+    }
+
     async processItem(feat: FiveEToolsFeat): Promise<CreateFeatInput | null> {
         // Skip reprinted (superseded) feats — their replacement is the canonical version
         if (feat.reprintedAs) {
@@ -353,6 +359,7 @@ export class FeatsProvider extends BaseProvider<FiveEToolsFeat, CreateFeatInput>
 
         return {
             name,
+            originalName: feat.name,
             description,
             source,
             level,
@@ -365,15 +372,18 @@ export class FeatsProvider extends BaseProvider<FiveEToolsFeat, CreateFeatInput>
 
     async findExisting(feat: CreateFeatInput): Promise<CreateFeatInput | null> {
         await dbConnect();
-        const nameRegex = new RegExp(
-            `^${feat.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`,
-            'i',
-        );
-        const doc = await Feat.findOne({ name: nameRegex }).lean();
+        const escape = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        const nameRegex = new RegExp(`^${escape(feat.name)}$`, 'i');
+        const orClauses: Record<string, unknown>[] = [{ name: nameRegex }];
+        if (feat.originalName) {
+            orClauses.push({ originalName: new RegExp(`^${escape(feat.originalName)}$`, 'i') });
+        }
+        const doc = await Feat.findOne({ $or: orClauses }).lean();
         if (!doc) return null;
 
         return {
             name: doc.name,
+            originalName: doc.originalName,
             description: doc.description,
             source: doc.source,
             level: doc.level,

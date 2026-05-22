@@ -319,6 +319,12 @@ export class ItemsProvider extends BaseProvider<FiveEToolsBaseItem, CreateItemIn
     readonly dataFilePath = 'src/lib/5etools-data/items-base.json';
     readonly dataKey = 'baseitem';
 
+    protected override buildFilterDocument(item: FiveEToolsBaseItem) {
+        return {
+            name: item.name,
+        };
+    }
+
     async processItem(item: FiveEToolsBaseItem): Promise<CreateItemInput | null> {
         // Stage 1: only XPHB base items (PHB 2024)
         if (item.source !== 'XPHB') {
@@ -396,6 +402,7 @@ export class ItemsProvider extends BaseProvider<FiveEToolsBaseItem, CreateItemIn
 
         return {
             name,
+            originalName: item.name,
             description,
             source,
             status: 'active',
@@ -427,15 +434,18 @@ export class ItemsProvider extends BaseProvider<FiveEToolsBaseItem, CreateItemIn
 
     async findExisting(item: CreateItemInput): Promise<CreateItemInput | null> {
         await dbConnect();
-        const nameRegex = new RegExp(
-            `^${item.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`,
-            'i',
-        );
-        const doc = await ItemModel.findOne({ name: nameRegex }).lean();
+        const escape = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        const nameRegex = new RegExp(`^${escape(item.name)}$`, 'i');
+        const orClauses: Record<string, unknown>[] = [{ name: nameRegex }];
+        if (item.originalName) {
+            orClauses.push({ originalName: new RegExp(`^${escape(item.originalName)}$`, 'i') });
+        }
+        const doc = await ItemModel.findOne({ $or: orClauses }).lean();
         if (!doc) return null;
 
         return {
             name: doc.name,
+            originalName: doc.originalName,
             description: doc.description,
             source: doc.source,
             status: doc.status,

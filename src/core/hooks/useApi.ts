@@ -27,7 +27,7 @@ interface UseApiResult<T> {
  * @example
  * ```tsx
  * const { data, error, loading, execute } = useApi(
- *   (id: string) => api.get(`/api/companies/${id}`)
+ *   (id: string) => api.get(`/api/users/${id}`)
  * );
  *
  * useEffect(() => {
@@ -119,8 +119,8 @@ export function useApi<T = any>(
  *
  * @example
  * ```tsx
- * const { data, error, loading, refetch } = useFetch<Company[]>(
- *   '/api/companies',
+ * const { data, error, loading, refetch } = useFetch<UserResponse[]>(
+ *   '/api/users',
  *   [page]
  * );
  * ```
@@ -160,7 +160,7 @@ import React from 'react';
  *
  * @example
  * ```tsx
- * const { mutate, loading, error } = useMutation('POST', '/api/companies');
+ * const { mutate, loading, error } = useMutation('POST', '/api/feedback');
  *
  * const handleSubmit = async (data) => {
  *   await mutate(data);

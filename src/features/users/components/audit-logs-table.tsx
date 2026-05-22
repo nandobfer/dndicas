@@ -29,7 +29,6 @@ const entityIcons: Record<string, any> = {
 // todo: mover essa lógica para um hook ou contexto de configuração global para evitar repetição e garantir consistência (duplicata de lógica em EntityMultiSelect e AuditLogDetailModal)
 const entityLabels: Record<string, string> = {
     User: "Usuário",
-    Company: "Empresa",
     Organization: "Organização",
     Rule: "Regra",
     Reference: "Regra",

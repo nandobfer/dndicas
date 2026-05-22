@@ -4,7 +4,7 @@ import { glassConfig } from '@/lib/config/glass-config'
 import { entityColors } from "@/lib/config/colors"
 import { EntityPreviewTooltip } from "./entity-preview-tooltip"
 import { DebounceProgress } from "@/components/ui/debounce-progress"
-import { Scroll, Sparkles, Zap, Wand, Sword, ShieldCheck, Box, Fingerprint } from "lucide-react"
+import { Scroll, Sparkles, Zap, Wand, Sword, ShieldCheck, Box, Fingerprint, GraduationCap } from "lucide-react"
 
 const entityIcons: Record<string, any> = {
     Regra: Scroll,
@@ -12,6 +12,7 @@ const entityIcons: Record<string, any> = {
     Talento: Zap,
     Magia: Wand,
     Classe: Sword,
+    Subclasse: GraduationCap,
     Origem: ShieldCheck,
     Item: Box,
     Raça: Fingerprint,
@@ -108,6 +109,9 @@ const MentionList = forwardRef<MentionListRef, MentionListProps>((props, ref) =>
                                             return <Icon className="w-3.5 h-3.5 opacity-50 shrink-0" />
                                         })()}
                                     <span className="text-sm font-medium text-white truncate max-w-[150px]">{item.label}</span>
+                                    {item.entityType === "Subclasse" && item.metadata?.parentClassName && (
+                                        <span className="text-[10px] text-white/35 truncate max-w-[120px]">de {item.metadata.parentClassName}</span>
+                                    )}
                                 </div>
                                 <div className="flex items-center gap-1.5 shrink-0 ml-2">
                                     {item.entityType === "Magia" && (

@@ -24,7 +24,6 @@ import type { ClassTrait } from "../types/classes.types"
 import type { ClassProgressionData, SpellProgressionType } from "../types/progression.types"
 import {
     buildProgressionRows,
-    getProficiencyBonus,
     applySpellTemplate,
     hasSpellSlotData,
     SPELL_TEMPLATE_LABELS,
@@ -171,6 +170,9 @@ export interface ClassProgressionTableProps {
     onProgressionDataChange?: (data: ClassProgressionData) => void
     /** Compact mode reduces cell padding and font size (for popovers) */
     compact?: boolean
+    defaultOpen?: boolean
+    forceOpen?: boolean
+    hideToggle?: boolean
     className?: string
 }
 
@@ -184,12 +186,16 @@ export function ClassProgressionTable({
     isEditable = false,
     onProgressionDataChange,
     compact = false,
+    defaultOpen = false,
+    forceOpen,
+    hideToggle = false,
     className,
 }: ClassProgressionTableProps) {
-    const [isOpen, setIsOpen] = React.useState(false)
+    const [internalOpen, setInternalOpen] = React.useState(defaultOpen)
     const [pendingTemplate, setPendingTemplate] = React.useState<SpellProgressionType | null>(null)
     const [newColumnLabel, setNewColumnLabel] = React.useState("")
     const [isAddingColumn, setIsAddingColumn] = React.useState(false)
+    const isOpen = forceOpen ?? internalOpen
 
     // Use JSON.stringify(traits) as dependency so that nested field edits (e.g. changing
     // a trait's level via react-hook-form Controller) always trigger a recomputation.
@@ -325,27 +331,28 @@ export function ClassProgressionTable({
                 className,
             )}
         >
-            {/* Toggle Header */}
-            <button
-                type="button"
-                onClick={() => setIsOpen((p) => !p)}
-                className="w-full flex items-center justify-between px-4 py-3 hover:bg-white/[0.02] transition-colors"
-            >
-                <div className="flex items-center gap-3">
-                    <div className="p-1 px-1.5 rounded-lg border bg-white/5 border-white/10">
-                        <Table2 className="h-3.5 w-3.5 text-white/40" />
+            {!hideToggle && (
+                <button
+                    type="button"
+                    onClick={() => setInternalOpen((p) => !p)}
+                    className="w-full flex items-center justify-between px-4 py-3 hover:bg-white/[0.02] transition-colors"
+                >
+                    <div className="flex items-center gap-3">
+                        <div className="p-1 px-1.5 rounded-lg border bg-white/5 border-white/10">
+                            <Table2 className="h-3.5 w-3.5 text-white/40" />
+                        </div>
+                        <div className="text-left">
+                            <span className="text-[10px] font-bold text-white/40 uppercase tracking-widest block">
+                                Progressão
+                            </span>
+                            <span className="text-xs font-semibold text-white/90">Tabela de Progressão</span>
+                        </div>
                     </div>
-                    <div className="text-left">
-                        <span className="text-[10px] font-bold text-white/40 uppercase tracking-widest block">
-                            Progressão
-                        </span>
-                        <span className="text-xs font-semibold text-white/90">Tabela de Progressão</span>
-                    </div>
-                </div>
-                <motion.div animate={{ rotate: isOpen ? 90 : 0 }} transition={{ duration: 0.2 }}>
-                    <ChevronRight className="h-4 w-4 text-white/20" />
-                </motion.div>
-            </button>
+                    <motion.div animate={{ rotate: isOpen ? 90 : 0 }} transition={{ duration: 0.2 }}>
+                        <ChevronRight className="h-4 w-4 text-white/20" />
+                    </motion.div>
+                </button>
+            )}
 
             <AnimatePresence>
                 {isOpen && (
@@ -354,7 +361,7 @@ export function ClassProgressionTable({
                         animate={{ height: "auto", opacity: 1 }}
                         exit={{ height: 0, opacity: 0 }}
                         transition={{ duration: 0.25, ease: [0.23, 1, 0.32, 1] }}
-                        className="border-t border-white/5 overflow-hidden"
+                        className={cn(!hideToggle && "border-t border-white/5", "overflow-hidden")}
                     >
                         {/* Spell Template Shortcuts (edit mode only) */}
                         {isEditable && shouldShowSpellColumns && (

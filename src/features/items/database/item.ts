@@ -1,10 +1,14 @@
 import mongoose, { Schema, Document, Model } from "mongoose";
 import { DiceValue, ItemType, ItemRarity, ArmorType, DamageType, ItemTrait } from "../types/items.types";
+import type { Charges } from "@/features/shared/charges/types";
+import { ChargesSchema } from "@/features/shared/charges/mongoose";
 
 export interface IItem extends Document {
     _id: mongoose.Types.ObjectId
     name: string
+    originalName?: string
     description: string
+    charges?: Charges
     source: string
     status: "active" | "inactive"
     image?: string
@@ -71,9 +75,20 @@ const ItemSchema = new Schema<IItem>(
             maxlength: 100,
             trim: true,
         },
+        originalName: {
+            type: String,
+            required: false,
+            maxlength: 100,
+            trim: true,
+        },
         description: {
             type: String,
             required: [true, "Descrição é obrigatória"],
+        },
+        charges: {
+            type: ChargesSchema,
+            required: false,
+            default: undefined,
         },
         source: {
             type: String,

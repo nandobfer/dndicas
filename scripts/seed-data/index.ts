@@ -35,6 +35,8 @@ const { FeatsProvider } = require('./providers/feats-provider') as typeof import
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const { ItemsProvider } = require('./providers/items-provider') as typeof import('./providers/items-provider');
 // eslint-disable-next-line @typescript-eslint/no-require-imports
+const { ClassesProvider } = require('./providers/classes-provider') as typeof import('./providers/classes-provider');
+// eslint-disable-next-line @typescript-eslint/no-require-imports
 const { ALL_TRANSLATORS, GenAITranslator, LibreTranslateTranslator } = require('./translation') as typeof import('./translation');
 
 const term = terminal.terminal;
@@ -42,11 +44,12 @@ const term = terminal.terminal;
 // ─── Register providers here ──────────────────────────────────────────────────
 // When new providers are created, just add them to this array.
 
-const providers: BaseProvider<unknown, unknown>[] = [
+const providers: BaseProvider<any, any>[] = [
     new SpellsProvider(),
     new RacesProvider(),
     new FeatsProvider(),
     new ItemsProvider(),
+    new ClassesProvider(),
 ];
 
 // ─── Database ─────────────────────────────────────────────────────────────────
@@ -84,7 +87,13 @@ function printHelp(): void {
     term.green('  --test / --dry-run ');
     term('Revisão interativa do 1º item, não salva no banco\n');
     term.green('  --auto             ');
-    term('Processa todos os itens sem confirmação (batch)\n\n');
+    term('Processa todos os itens sem confirmação (batch)\n');
+    term.green('  --from-start       ');
+    term('Ignora o progresso salvo e começa a iterar do índice 0\n');
+    term.green('  --from <índice>    ');
+    term('Começa a iterar a partir do índice especificado (ex: --from 117)\n\n');
+    term.green('  --filter <termo>   ');
+    term('Filtra os dados por nome usando busca fuzzy; não usa nem salva progresso\n\n');
 
     term.bold('Modos de execução:\n\n');
 
@@ -475,7 +484,7 @@ async function selectTranslator(): Promise<BaseTranslator> {
 
 // ─── Provider selector ────────────────────────────────────────────────────────
 
-async function selectProvider(): Promise<BaseProvider<unknown, unknown>> {
+async function selectProvider(): Promise<BaseProvider<any, any>> {
     term.bold.cyan('\n🎲 D&D Seed Data Script\n');
     term('─────────────────────────────────────────\n\n');
     term('Select a provider:\n\n');
@@ -560,6 +569,22 @@ async function main(): Promise<void> {
     // Detect --test or --dry-run mode
     const testMode = process.argv.includes('--test') || process.argv.includes('--dry-run');
     const autoMode = process.argv.includes('--auto');
+    const fromStart = process.argv.includes('--from-start');
+    const filterIdx = process.argv.indexOf('--filter');
+    const filterValue = filterIdx !== -1 ? process.argv[filterIdx + 1] : undefined;
+
+    const fromIdx = process.argv.indexOf('--from');
+    const fromIndex = fromIdx !== -1 ? parseInt(process.argv[fromIdx + 1] ?? '', 10) : NaN;
+
+    if (filterIdx !== -1 && (!filterValue || filterValue.startsWith('--'))) {
+        term.red('✗ --filter requer um valor. Exemplo: --filter yan-ti\n');
+        process.exit(1);
+    }
+
+    if (filterIdx !== -1 && (fromStart || fromIdx !== -1)) {
+        term.red('✗ --filter não pode ser combinado com --from ou --from-start\n');
+        process.exit(1);
+    }
 
     if (testMode) {
         term.yellow('\n🧪 TEST/DRY-RUN MODE ENABLED\n');
@@ -576,9 +601,32 @@ async function main(): Promise<void> {
         term.dim('   • You can add glossary corrections before confirming\n\n');
     }
 
+    if (fromStart) {
+        term.yellow('⏮  FROM-START MODE ENABLED\n');
+        term.dim('   • Saved progress will be ignored\n');
+        term.dim('   • Iteration will begin from index 0\n\n');
+    }
+
+    if (fromIdx !== -1) {
+        if (isNaN(fromIndex)) {
+            term.red('✗ --from requer um número válido. Exemplo: --from 117\n');
+            process.exit(1);
+        }
+        term.yellow(`⏩  FROM INDEX: ${fromIndex}\n`);
+        term.dim(`   • Saved progress will be ignored\n`);
+        term.dim(`   • Iteration will begin from index ${fromIndex}\n\n`);
+    }
+
+    if (filterIdx !== -1) {
+        term.yellow(`🔎  FILTER MODE: ${filterValue}\n`);
+        term.dim('   • Will fuzzy-filter provider items by name\n');
+        term.dim('   • Saved progress will be ignored\n');
+        term.dim('   • No progress will be persisted for this run\n\n');
+    }
+
     setupExitHandler();
 
-    let provider: BaseProvider<unknown, unknown>;
+    let provider: BaseProvider<any, any>;
     let translator: BaseTranslator;
 
     try {
@@ -596,6 +644,15 @@ async function main(): Promise<void> {
     }
     if (autoMode) {
         provider!.setAutoMode(true);
+    }
+    if (fromStart) {
+        provider!.setFromStart(true);
+    }
+    if (!isNaN(fromIndex)) {
+        provider!.setFromIndex(fromIndex);
+    }
+    if (filterValue) {
+        provider!.setFilter(filterValue);
     }
 
     // If LibreTranslate was selected, start its server (and run setup if needed).
