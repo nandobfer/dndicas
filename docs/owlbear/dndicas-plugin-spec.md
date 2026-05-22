@@ -564,21 +564,26 @@ A ação deve aparecer quando houver token/item elegível selecionado.
 
 Rótulos:
 
-- `Vincular ficha`
+- `Vincular a personagem`
+- `Vincular a NPC`
 - `Desvincular ficha`
 
 ### Fluxo de vínculo
 
-Ao clicar em `Vincular ficha`:
+Ao clicar em `Vincular a personagem`:
 
 1. abrir seletor integrado do plugin;
-2. oferecer como opções:
-   - fichas de jogadores já vinculadas à sala;
-   - NPCs locais da sala;
+2. oferecer como opções as fichas de jogadores já vinculadas à sala;
 3. ao confirmar:
-   - gravar vínculo no `item metadata` do token;
+   - gravar vínculo no `item metadata` do token com `kind: "player"`;
    - criar ou atualizar overlays de HP;
    - não depender de endpoint backend para persistir o vínculo do token.
+
+Ao clicar em `Vincular a NPC`:
+
+1. abrir o fluxo específico de NPC;
+2. na primeira entrega, permitir placeholder `WIP`;
+3. na entrega completa, selecionar NPC local da sala e gravar o vínculo com `kind: "npc"`.
 
 ### Cardinalidade
 
@@ -625,6 +630,11 @@ Para fichas persistentes:
 Para NPC local:
 
 - usar os mesmos campos armazenados no registro do NPC local no Dndicas.
+
+Regra de visibilidade:
+
+- vínculo com personagem: overlay visível para todos;
+- vínculo com NPC: overlay visível apenas para o GM.
 
 ### Sincronização obrigatória
 
@@ -745,8 +755,8 @@ O plugin deve:
 
 ### Vínculo com token
 
-- Mestre seleciona token e usa `Vincular ficha`.
-- Mestre escolhe ficha de jogador ou NPC local.
+- Mestre seleciona token e usa `Vincular a personagem` para escolher uma ficha de jogador vinculada à sala.
+- Mestre vê `Vincular a NPC` como fluxo separado, inicialmente podendo aparecer em modo `WIP`.
 - O vínculo é salvo no `item metadata` do token.
 - Mestre consegue `Desvincular ficha`.
 

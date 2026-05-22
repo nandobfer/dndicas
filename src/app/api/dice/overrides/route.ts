@@ -2,10 +2,10 @@ import { auth } from "@clerk/nextjs/server"
 import { NextRequest, NextResponse } from "next/server"
 import { z } from "zod"
 import type { ApiResponse } from "@/core/types/common"
-import { DiceOverrideCreateSchema, DiceOverrideDeleteSchema } from "@/features/dice-roller/schemas"
+import { DiceOverrideCreateSchema, DiceOverrideDeleteSchema, type DiceOverrideCreateInput, type DiceOverrideDeleteInput } from "@/features/dice-roller/schemas"
 import { resolveGeneralDiceTarget } from "@/features/dice-roller/server/dice-target"
 import { clearDiceOverrides, listDiceOverrides, upsertDiceOverride } from "@/features/dice-roller/server/dice-override-service"
-import type { DiceRollOverrideRecord } from "@/features/dice-roller/types"
+import { DICE_TYPES, type DiceRollOverrideInput, type DiceRollOverrideRecord, type DiceType } from "@/features/dice-roller/types"
 
 function missingTargetResponse() {
     const response: ApiResponse<null> = {
@@ -16,6 +16,30 @@ function missingTargetResponse() {
     return NextResponse.json(response, { status: 400 })
 }
 
+function getOptionalString(value: unknown) {
+    return typeof value === "string" ? value : undefined
+}
+
+function getRequiredInteger(value: unknown) {
+    if (typeof value !== "number" || !Number.isInteger(value)) {
+        throw new Error("Expected integer value in dice override payload.")
+    }
+
+    return value
+}
+
+function getRequiredDiceType(value: unknown): DiceType {
+    if (typeof value !== "string" || !DICE_TYPES.includes(value as DiceType)) {
+        throw new Error("Expected dice type in dice override payload.")
+    }
+
+    return value as DiceType
+}
+
+function getOptionalDiceType(value: unknown) {
+    return value === undefined ? undefined : getRequiredDiceType(value)
+}
+
 export async function GET(req: NextRequest) {
     try {
         const { userId } = await auth()
@@ -23,6 +47,7 @@ export async function GET(req: NextRequest) {
         const target = resolveGeneralDiceTarget({
             userId,
             diceSessionId: url.searchParams.get("diceSessionId"),
+            owlbearPlayerId: url.searchParams.get("owlbearPlayerId"),
         })
 
         if (!target) return missingTargetResponse()
@@ -47,19 +72,24 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
     try {
         const { userId } = await auth()
-        const parsed = DiceOverrideCreateSchema.parse(await req.json())
-        const target = resolveGeneralDiceTarget({ userId, diceSessionId: parsed.diceSessionId })
+        const parsed: DiceOverrideCreateInput = DiceOverrideCreateSchema.parse(await req.json())
+        const target = resolveGeneralDiceTarget({
+            userId,
+            diceSessionId: getOptionalString(parsed.diceSessionId),
+            owlbearPlayerId: getOptionalString(parsed.owlbearPlayerId),
+        })
 
         if (!target) return missingTargetResponse()
 
-        const input =
+        const dice = getRequiredDiceType(parsed.dice)
+        const input: DiceRollOverrideInput =
             parsed.action === "min"
-                ? { dice: parsed.dice, min: parsed.value }
+                ? { dice, min: getRequiredInteger(parsed.value) }
                 : parsed.action === "max"
-                  ? { dice: parsed.dice, max: parsed.value }
+                  ? { dice, max: getRequiredInteger(parsed.value) }
                   : parsed.action === "range"
-                    ? { dice: parsed.dice, min: parsed.min, max: parsed.max }
-                    : { dice: parsed.dice, exact: parsed.value }
+                    ? { dice, min: getRequiredInteger(parsed.min), max: getRequiredInteger(parsed.max) }
+                    : { dice, exact: getRequiredInteger(parsed.value) }
 
         const data = await upsertDiceOverride(target, input)
         const response: ApiResponse<DiceRollOverrideRecord> = {
@@ -91,12 +121,16 @@ export async function POST(req: NextRequest) {
 export async function DELETE(req: NextRequest) {
     try {
         const { userId } = await auth()
-        const parsed = DiceOverrideDeleteSchema.parse(await req.json().catch(() => ({})))
-        const target = resolveGeneralDiceTarget({ userId, diceSessionId: parsed.diceSessionId })
+        const parsed: DiceOverrideDeleteInput = DiceOverrideDeleteSchema.parse(await req.json().catch(() => ({})))
+        const target = resolveGeneralDiceTarget({
+            userId,
+            diceSessionId: getOptionalString(parsed.diceSessionId),
+            owlbearPlayerId: getOptionalString(parsed.owlbearPlayerId),
+        })
 
         if (!target) return missingTargetResponse()
 
-        const data = await clearDiceOverrides(target, parsed.dice)
+        const data = await clearDiceOverrides(target, getOptionalDiceType(parsed.dice))
         const response: ApiResponse<typeof data> = {
             success: true,
             data,

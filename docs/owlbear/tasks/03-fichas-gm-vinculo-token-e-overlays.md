@@ -1,13 +1,20 @@
-# Task 03 — Fichas do GM, Vínculo de Token e Overlays
+# Task 03 — Base do GM, Vinculo de Token e Overlay Inicial
+
+> Este documento passa a registrar o baseline inicial da experiencia do GM.
+>
+> As evolucoes do `contextMenu`, do vinculo com NPC e da barra de vida visual foram desmembradas em:
+>
+> - `10-context-menu-vinculo-personagem-npc-e-barras-de-vida.md`
+> - `11-wip-aba-npcs-do-gm.md`
 
 ## Objetivo
 
-Entregar a experiência principal do mestre para:
+Entregar a experiencia inicial do mestre para:
 
 - visualizar e editar fichas de jogadores vinculadas à sala;
 - desvincular fichas de jogadores da sala;
-- vincular tokens a fichas por `contextMenu`;
-- criar e manter overlays de HP e HP temporário no token.
+- vincular tokens a fichas de jogador por `contextMenu`;
+- criar e manter o overlay inicial de HP e HP temporario no token.
 
 ## Escopo funcional
 
@@ -16,8 +23,8 @@ Entregar a experiência principal do mestre para:
 - A aba `Fichas` do GM lista as fichas de jogador vinculadas na sala.
 - O mestre pode abrir e editar essas fichas com permissão total.
 - O mestre pode remover o vínculo da ficha com a sala.
-- O `contextMenu` exibe `Vincular ficha` e `Desvincular ficha` para tokens elegíveis.
-- Tokens vinculados exibem HUD de HP e HP temporário.
+- O `contextMenu` exibe `Vincular ficha` e `Desvincular ficha` para tokens elegiveis.
+- Tokens vinculados exibem o overlay inicial de HP e HP temporario.
 
 ### Entregáveis técnicos
 
@@ -38,12 +45,12 @@ Entregar a experiência principal do mestre para:
 - Implementar aba `Fichas` do GM baseada na lista de fichas vinculadas à sala.
 - Permitir abrir/editar ficha persistente do jogador.
 - Permitir desvincular a ficha da sala.
-- Criar seletor de ficha para o `contextMenu` de vínculo do token.
+- Criar seletor de ficha de jogador para o `contextMenu` de vinculo do token.
 
 ### Integração SDK
 
 - Criar itens de `OBR.contextMenu` com filtro de papel `GM`.
-- Ler/escrever `item metadata` para vínculo do token.
+- Ler/escrever `item metadata` para vinculo do token do tipo `player`.
 - Criar, atualizar e remover overlays na cena.
 - Reagir a movimento e escala dos tokens.
 
@@ -69,7 +76,7 @@ Entregar a experiência principal do mestre para:
 5. Criar `OBR.contextMenu` para `Vincular ficha` e `Desvincular ficha`.
 6. Implementar seletor de ficha para o vínculo do token.
 7. Persistir vínculo do token em `item metadata`.
-8. Implementar infraestrutura dos overlays de HP e HP temporário.
+8. Implementar infraestrutura do overlay inicial de HP e HP temporario.
 9. Sincronizar overlays com movimento, escala e atualização da ficha.
 10. Limpar overlays e metadata ao desvincular.
 11. Adicionar testes Owlbear desta etapa.
@@ -80,7 +87,7 @@ Entregar a experiência principal do mestre para:
 - O GM pode editar a ficha persistente do jogador no contexto Owlbear.
 - O GM pode desvincular a ficha da sala sem apagar a ficha persistente.
 - O token vinculado guarda o vínculo em `item metadata`.
-- O token vinculado exibe corretamente HP e HP temporário.
+- O token vinculado exibe corretamente o overlay inicial de HP e HP temporario.
 - O overlay acompanha movimento e escala do token.
 - Ao desvincular token ou ficha, overlays e metadados relacionados são limpos.
 
@@ -98,6 +105,8 @@ Os testes desta etapa devem ficar em `tests/owlbear` e cobrir, no mínimo:
 
 ## Fora desta etapa
 
-- CRUD completo de NPCs.
-- Vínculo de tokens a NPCs.
-- Valores clicáveis e rolagem.
+- Evolucao do menu para `Vincular a personagem` e `Vincular a NPC`.
+- Barra de vida visual refinada.
+- CRUD e aba funcional de NPCs.
+- Vinculo real de tokens a NPCs.
+- Valores clicaveis e rolagem.

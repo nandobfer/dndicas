@@ -10,8 +10,18 @@ import { SheetForm } from "@/features/character-sheets/components/sheet-form"
 import { useCharacterSheetRealtime } from "@/features/character-sheets/hooks/use-character-sheet-realtime"
 import { CharacterSheetClientProvider } from "@/features/character-sheets/api/character-sheet-client-config"
 import type { CharacterSheet } from "@/features/character-sheets/types/character-sheet.types"
+import { MentionContent } from "@/features/rules/components/mention-badge"
 import type { OwlbearSessionState } from "./types"
 import { useRoomLinkedSheets } from "./use-room-linked-sheets"
+
+const isHtmlContent = (value: string) => value.includes("<")
+
+function RichFieldValue({ value }: { value: string }) {
+    if (isHtmlContent(value)) {
+        return <MentionContent html={value} mode="inline" />
+    }
+    return <span>{value}</span>
+}
 
 function InlineStatus({ tone = "neutral", message }: { tone?: "neutral" | "error"; message: string }) {
     return (
@@ -138,7 +148,9 @@ function UnlinkSheetDialog({
                                 <p className="text-xs uppercase tracking-wider text-white/40">Ficha a desvincular</p>
                                 <p className="truncate text-base font-semibold text-white">{sheet.name}</p>
                                 <p className="text-sm text-white/60">
-                                    Nível {sheet.level} · {sheet.class || "Sem classe"}
+                                    <span>Nível {sheet.level}</span>
+                                    <span> · </span>
+                                    <RichFieldValue value={sheet.class || "Sem classe"} />
                                 </p>
                             </div>
                         </div>

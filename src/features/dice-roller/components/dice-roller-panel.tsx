@@ -10,7 +10,7 @@ import { cn } from "@/core/utils"
 import { colors, diceColors } from "@/lib/config/colors"
 import { getDiceCriticalState } from "../critical-state"
 import { requestDiceRoll } from "../dice-api"
-import { DICE_TYPES, type DiceRollMode, type DiceRollPreset, type DiceRollResponse, type DiceTerm, type DiceType } from "../types"
+import { DICE_TYPES, type DiceRollMode, type DiceRollPreset, type DiceRollRequest, type DiceRollResponse, type DiceTerm, type DiceType } from "../types"
 import { DiceVisualStage } from "./dice-visual-stage"
 import { DiceModeSelector } from "./dice-mode-selector"
 import { DiceResultSummary } from "./dice-result-summary"
@@ -36,9 +36,22 @@ function getInitialState(preset?: DiceRollPreset | null) {
 interface DiceRollerPanelProps {
     preset?: DiceRollPreset | null
     className?: string
+    requestContext?: Pick<DiceRollRequest, "source" | "playerName" | "owlbearRoomId" | "owlbearPlayerId">
+    onRollResolved?: (result: DiceRollResponse) => void
+    externalResult?: DiceRollResponse | null
+    disableRolling?: boolean
+    disabledRollingMessage?: string | null
 }
 
-export function DiceRollerPanel({ preset, className }: DiceRollerPanelProps) {
+export function DiceRollerPanel({
+    preset,
+    className,
+    requestContext,
+    onRollResolved,
+    externalResult,
+    disableRolling = false,
+    disabledRollingMessage = null,
+}: DiceRollerPanelProps) {
     const [terms, setTerms] = React.useState<DiceTerm[]>(() => getInitialState(preset).terms)
     const [modifier, setModifier] = React.useState<number | "">(() => getInitialState(preset).modifier)
     const [mode, setMode] = React.useState<DiceRollMode>(() => getInitialState(preset).mode)
@@ -48,11 +61,13 @@ export function DiceRollerPanel({ preset, className }: DiceRollerPanelProps) {
     const [isRolling, setIsRolling] = React.useState(false)
     const [isAnimatingDice, setIsAnimatingDice] = React.useState(false)
     const [errorMessage, setErrorMessage] = React.useState<string | null>(null)
+    const lastExternalRollIdRef = React.useRef<string | null>(null)
     const normalizedTerms = normalizeTerms(terms)
     const canUseD20Mode = isSingleD20(normalizedTerms)
     const activeMode: DiceRollMode = canUseD20Mode ? mode : "normal"
+    const displayedMode: DiceRollMode = result?.mode ?? activeMode
     const d20ModeLocked = canUseD20Mode && activeMode !== "normal"
-    const isRollButtonDisabled = isRolling || isAnimatingDice
+    const isRollButtonDisabled = isRolling || isAnimatingDice || disableRolling
     const criticalState = React.useMemo(() => getDiceCriticalState(result), [result])
 
     React.useEffect(() => {
@@ -66,6 +81,15 @@ export function DiceRollerPanel({ preset, className }: DiceRollerPanelProps) {
         setIsAnimatingDice(false)
         setErrorMessage(null)
     }, [preset])
+
+    React.useEffect(() => {
+        if (!externalResult || lastExternalRollIdRef.current === externalResult.rollId) return
+
+        lastExternalRollIdRef.current = externalResult.rollId
+        setResult(externalResult)
+        setIsRolling(false)
+        setErrorMessage(null)
+    }, [externalResult])
 
     React.useEffect(() => {
         if (!canUseD20Mode && mode !== "normal") {
@@ -135,9 +159,13 @@ export function DiceRollerPanel({ preset, className }: DiceRollerPanelProps) {
                 modifier: modifier === "" ? 0 : modifier,
                 mode: activeMode,
                 label: labelRef.current,
-                source: sourceRef.current,
+                source: requestContext?.source ?? sourceRef.current,
+                playerName: requestContext?.playerName,
+                owlbearRoomId: requestContext?.owlbearRoomId,
+                owlbearPlayerId: requestContext?.owlbearPlayerId,
             })
             setResult(nextResult)
+            onRollResolved?.(nextResult)
         } catch (error) {
             console.error("Failed to roll dice", error)
             setErrorMessage(error instanceof Error ? error.message : "Não foi possível rolar os dados.")
@@ -149,7 +177,7 @@ export function DiceRollerPanel({ preset, className }: DiceRollerPanelProps) {
     return (
         <GlassCard className={cn("relative overflow-hidden border-white/10 bg-black/35 p-0", className)}>
             <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(59,130,246,0.18),transparent_32%),radial-gradient(circle_at_bottom_right,rgba(245,158,11,0.12),transparent_30%)]" />
-            <div className="relative grid gap-5 p-5 md:grid-cols-[1fr_320px] md:p-7">
+            <div className="relative grid gap-5 p-5 md:grid-cols-[minmax(0,1fr)_minmax(420px,0.8fr)] md:p-7">
                 <div className="space-y-5">
                     <GlassButton
                         type="button"
@@ -158,13 +186,13 @@ export function DiceRollerPanel({ preset, className }: DiceRollerPanelProps) {
                         disabled={isRollButtonDisabled}
                         className="w-full border-blue-400/20 bg-blue-500/20 text-blue-100 hover:bg-blue-500/30"
                     >
-                        {isRollButtonDisabled ? "Rolando..." : "Rolar dados"}
+                        {isRollButtonDisabled ? "Rolando..." : "JOGAR"}
                     </GlassButton>
                     <DiceVisualStage
                         terms={normalizedTerms}
                         result={result}
                         isRolling={isRolling}
-                        mode={activeMode}
+                        mode={displayedMode}
                         criticalState={criticalState}
                         onAnimationStateChange={handleAnimationStateChange}
                     />
@@ -180,7 +208,7 @@ export function DiceRollerPanel({ preset, className }: DiceRollerPanelProps) {
                                 limpar
                             </button>
                         </div>
-                        <div className="grid grid-cols-3 gap-2">
+                        <div data-testid="dice-add-grid" className="grid grid-cols-4 gap-2">
                             {DICE_TYPES.map((dice) => (
                                 <motion.button
                                     key={dice}
@@ -200,44 +228,56 @@ export function DiceRollerPanel({ preset, className }: DiceRollerPanelProps) {
                         </div>
                     </div>
 
-                    <div className="rounded-2xl border border-white/10 bg-black/25 p-4">
-                        <p className="mb-3 text-[10px] font-black uppercase tracking-widest text-white/40">Combinação</p>
-                        <div className="space-y-2">
-                            {normalizedTerms.map((term) => {
-                                const termControlsDisabled = d20ModeLocked && term.dice === "d20"
-                                return (
-                                <div key={term.dice} className="flex items-center justify-between rounded-xl border border-white/10 bg-white/5 px-3 py-2">
-                                    <span className="text-sm font-black" style={{ color: colors.rarity[diceColors[term.dice].rarity] }}>{term.quantity}{term.dice}</span>
-                                    <div className="flex items-center gap-1">
-                                        <button
-                                            type="button"
-                                            aria-label={`Remover ${term.dice}`}
-                                            onClick={() => adjustDie(term.dice, -1)}
-                                            disabled={termControlsDisabled}
-                                            className={cn(
-                                                "rounded-full p-1 text-white/45 hover:bg-white/10 hover:text-white",
-                                                termControlsDisabled && "cursor-not-allowed opacity-35 hover:bg-transparent hover:text-white/45"
-                                            )}
+                    <div data-testid="dice-combination-modifier-grid" className="grid gap-4 xl:grid-cols-2">
+                        <div data-testid="dice-combination-card" className="rounded-2xl border border-white/10 bg-black/25 p-4">
+                            <p className="mb-3 text-[10px] font-black uppercase tracking-widest text-white/40">Combinação</p>
+                            <div className="space-y-2">
+                                {normalizedTerms.map((term) => {
+                                    const termControlsDisabled = d20ModeLocked && term.dice === "d20"
+                                    return (
+                                        <div
+                                            key={term.dice}
+                                            data-testid={`dice-combination-row-${term.dice}`}
+                                            className="flex min-h-[40px] items-center rounded-xl border border-white/10 bg-white/5 px-2"
                                         >
-                                            <Minus className="h-3.5 w-3.5" />
-                                        </button>
-                                        <button
-                                            type="button"
-                                            aria-label={`Adicionar ${term.dice}`}
-                                            onClick={() => adjustDie(term.dice, 1)}
-                                            disabled={termControlsDisabled}
-                                            className={cn(
-                                                "rounded-full p-1 text-white/45 hover:bg-white/10 hover:text-white",
-                                                termControlsDisabled && "cursor-not-allowed opacity-35 hover:bg-transparent hover:text-white/45"
-                                            )}
-                                        >
-                                            <Plus className="h-3.5 w-3.5" />
-                                        </button>
-                                    </div>
-                                </div>
-                                )
-                            })}
+                                            <button
+                                                type="button"
+                                                aria-label={`Remover ${term.dice}`}
+                                                onClick={() => adjustDie(term.dice, -1)}
+                                                disabled={termControlsDisabled}
+                                                className={cn(
+                                                    "rounded-full p-1 text-white/45 transition-colors hover:bg-white/10 hover:text-white",
+                                                    termControlsDisabled && "cursor-not-allowed opacity-35 hover:bg-transparent hover:text-white/45"
+                                                )}
+                                            >
+                                                <Minus className="h-3.5 w-3.5" />
+                                            </button>
+                                            <span className="min-w-0 flex-1 px-2 py-1 text-center text-lg font-black" style={{ color: colors.rarity[diceColors[term.dice].rarity] }}>{term.quantity}{term.dice}</span>
+                                            <button
+                                                type="button"
+                                                aria-label={`Adicionar ${term.dice}`}
+                                                onClick={() => adjustDie(term.dice, 1)}
+                                                disabled={termControlsDisabled}
+                                                className={cn(
+                                                    "rounded-full p-1 text-white/45 transition-colors hover:bg-white/10 hover:text-white",
+                                                    termControlsDisabled && "cursor-not-allowed opacity-35 hover:bg-transparent hover:text-white/45"
+                                                )}
+                                            >
+                                                <Plus className="h-3.5 w-3.5" />
+                                            </button>
+                                        </div>
+                                    )
+                                })}
+                            </div>
                         </div>
+
+                        <GlassNumberInput
+                            label="Modificador"
+                            value={modifier}
+                            onChange={handleModifierChange}
+                            placeholder="0"
+                            className="rounded-2xl border border-white/10 bg-black/25 p-4"
+                        />
                     </div>
 
                     {canUseD20Mode && (
@@ -246,15 +286,17 @@ export function DiceRollerPanel({ preset, className }: DiceRollerPanelProps) {
                         </div>
                     )}
 
-                    <GlassNumberInput
-                        label="Modificador"
-                        value={modifier}
-                        onChange={handleModifierChange}
-                        placeholder="0"
-                        className="rounded-2xl border border-white/10 bg-black/25 p-4"
-                    />
-
-                    {errorMessage && <p className="rounded-xl border border-red-500/20 bg-red-500/10 px-3 py-2 text-sm text-red-100">{errorMessage}</p>}
+                    {(errorMessage || disabledRollingMessage) && (
+                        <p className={cn(
+                            "rounded-xl px-3 py-2 text-sm",
+                            errorMessage
+                                ? "border border-red-500/20 bg-red-500/10 text-red-100"
+                                : "border border-amber-500/20 bg-amber-500/10 text-amber-100"
+                        )}
+                        >
+                            {errorMessage ?? disabledRollingMessage}
+                        </p>
+                    )}
                 </div>
             </div>
         </GlassCard>

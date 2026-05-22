@@ -34,3 +34,14 @@ O dice roller fornece rolagens manuais e originadas de ficha/Owlbear com resulta
 - Mocke `@3d-dice/dice-box-threejs` em testes jsdom; nao importe Three/Cannon reais nos testes de componente.
 - Cubra helpers puros de notacao separadamente para preservar regras como vantagem e `d100`.
 - Testes backend de motor e rotas ficam em `tests/backend/dice/` e devem continuar autoritativos para regras de jogo.
+
+## Features
+
+### Owlbear shared dice tab and player-targeted overrides
+Quando o roller roda dentro da action do Owlbear, a request pode enviar `owlbearPlayerId` para que overrides sejam resolvidos pelo identificador tecnico do jogador, em vez de depender apenas de `userId`, `diceSessionId` ou do nome visivel na sala. O contrato global `window.diceResult` aceita tanto a assinatura antiga (`diceResult.min("d20", 20)`) quanto a assinatura direcionada por jogador (`diceResult.min("player-id", "d20", 20)`), e dentro do Owlbear a assinatura curta passa a mirar o proprio `playerId` atual da sala.
+
+### Owlbear embedded panel reuse
+`src/features/dice-roller/components/dice-roller-panel.tsx` pode ser usado tanto no modal do site quanto embutido em outras superficies, aceitando contexto opcional de rolagem Owlbear, callback de sucesso e replay de resultado remoto. Isso permite que a mesma UI base alimente a nova aba compartilhada sem duplicar a logica principal do roller.
+
+### Dice panel responsive controls layout
+O painel usa uma grade de 4 colunas em `Adicionar dados`. Em superficies largas, `Combinação` e `Modificador` compartilham uma linha responsiva; as linhas de combinacao seguem o padrao do controle numerico, com remover/adicionar nas pontas e o valor centralizado. O botao principal de rolagem usa o label `JOGAR` quando esta disponivel e preserva `Rolando...` durante a execucao.

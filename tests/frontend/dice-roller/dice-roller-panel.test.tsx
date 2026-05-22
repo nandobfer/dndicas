@@ -1,4 +1,4 @@
-import { render, screen, fireEvent, waitFor } from "@testing-library/react"
+import { render, screen, fireEvent, waitFor, within } from "@testing-library/react"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { DiceRollerPanel } from "@/features/dice-roller/components/dice-roller-panel"
 import { DiceRollerProvider } from "@/features/dice-roller/components/dice-roll-context"
@@ -120,6 +120,8 @@ describe("DiceRollerPanel", () => {
         expect(screen.queryByText("Resultado gerado pelo servidor. Overrides ocultos afetam só o valor bruto do dado.")).not.toBeInTheDocument()
         expect(screen.queryByText("Nome da rolagem")).not.toBeInTheDocument()
         expect(screen.queryByText("Fórmula")).not.toBeInTheDocument()
+        expect(screen.queryByRole("button", { name: "Rolar dados" })).not.toBeInTheDocument()
+        expect(screen.getByRole("button", { name: "JOGAR" })).toBeInTheDocument()
         expect(screen.getByRole("button", { name: "d20" })).toBeInTheDocument()
         expect(screen.getAllByTestId("dice-visual-die")).toHaveLength(1)
         expect(screen.queryByText("preparando dados")).not.toBeInTheDocument()
@@ -142,7 +144,7 @@ describe("DiceRollerPanel", () => {
             expect(diceBoxMocks.roll).not.toHaveBeenCalled()
         })
 
-        fireEvent.click(screen.getByRole("button", { name: "Rolar dados" }))
+        fireEvent.click(screen.getByRole("button", { name: "JOGAR" }))
 
         await waitFor(() => {
             expect(screen.getByText("16")).toBeInTheDocument()
@@ -150,6 +152,19 @@ describe("DiceRollerPanel", () => {
         await waitFor(() => {
             expect(diceBoxMocks.roll).toHaveBeenCalledWith("1d20@14!!")
         })
+    })
+
+    it("uses the Owlbear-friendly controls layout", () => {
+        render(<DiceRollerPanel />)
+
+        expect(screen.getByTestId("dice-add-grid")).toHaveClass("grid-cols-4")
+        expect(screen.getByTestId("dice-combination-modifier-grid")).toHaveClass("xl:grid-cols-2")
+
+        const row = screen.getByTestId("dice-combination-row-d20")
+        expect(row).toHaveClass("min-h-[40px]", "items-center")
+        expect(within(row).getByRole("button", { name: "Remover d20" })).toBeInTheDocument()
+        expect(within(row).getByText("1d20")).toHaveClass("flex-1", "text-center")
+        expect(within(row).getByRole("button", { name: "Adicionar d20" })).toBeInTheDocument()
     })
 
     it("renders one visual die per selected die", async () => {
@@ -175,6 +190,30 @@ describe("DiceRollerPanel", () => {
         expect(diceBoxMocks.startClickThrow).toHaveBeenCalledWith("1d6+1d6+1d4@6,6,4")
         expect(new Set(diceBoxMocks.dicePositions.map((position) => position.x)).size).toBeGreaterThan(1)
         expect(diceBoxMocks.roll).not.toHaveBeenCalled()
+    })
+
+    it("sends Owlbear player context with shared rolls", async () => {
+        render(
+            <DiceRollerPanel
+                requestContext={{
+                    source: "owlbear",
+                    playerName: "Nando",
+                    owlbearRoomId: "room-1",
+                    owlbearPlayerId: "player-nando",
+                }}
+            />
+        )
+
+        fireEvent.click(screen.getByRole("button", { name: "JOGAR" }))
+
+        await waitFor(() => {
+            expect(requestDiceRollMock).toHaveBeenCalledWith(expect.objectContaining({
+                source: "owlbear",
+                playerName: "Nando",
+                owlbearRoomId: "room-1",
+                owlbearPlayerId: "player-nando",
+            }))
+        })
     })
 
     it("wraps standby dice into additional rows when the selection is wide", async () => {
@@ -266,7 +305,7 @@ describe("DiceRollerPanel", () => {
             />
         )
 
-        fireEvent.click(screen.getByRole("button", { name: "Rolar dados" }))
+        fireEvent.click(screen.getByRole("button", { name: "JOGAR" }))
 
         await waitFor(() => {
             expect(screen.getAllByText("88").length).toBeGreaterThan(0)
@@ -289,7 +328,7 @@ describe("DiceRollerPanel", () => {
             expect(screen.getByText("Visual 3D indisponível neste navegador.")).toBeInTheDocument()
         })
 
-        fireEvent.click(screen.getByRole("button", { name: "Rolar dados" }))
+        fireEvent.click(screen.getByRole("button", { name: "JOGAR" }))
 
         await waitFor(() => {
             expect(screen.getByText("16")).toBeInTheDocument()
@@ -336,7 +375,7 @@ describe("DiceRollerPanel", () => {
         render(<DiceRollerPanel />)
 
         fireEvent.click(screen.getByRole("button", { name: "Vantagem" }))
-        fireEvent.click(screen.getByRole("button", { name: "Rolar dados" }))
+        fireEvent.click(screen.getByRole("button", { name: "JOGAR" }))
 
         await waitFor(() => {
             expect(screen.getByText("20")).toBeInTheDocument()
@@ -370,7 +409,7 @@ describe("DiceRollerPanel", () => {
 
         render(<DiceRollerPanel />)
 
-        fireEvent.click(screen.getByRole("button", { name: "Rolar dados" }))
+        fireEvent.click(screen.getByRole("button", { name: "JOGAR" }))
 
         await waitFor(() => {
             expect(screen.getByTestId("dice-visual-stage")).toHaveAttribute("data-critical-state", "critical-success")
@@ -403,7 +442,7 @@ describe("DiceRollerPanel", () => {
         render(<DiceRollerPanel />)
 
         fireEvent.click(screen.getByRole("button", { name: "Desvantagem" }))
-        fireEvent.click(screen.getByRole("button", { name: "Rolar dados" }))
+        fireEvent.click(screen.getByRole("button", { name: "JOGAR" }))
 
         await waitFor(() => {
             expect(screen.getByTestId("dice-visual-stage")).toHaveAttribute("data-critical-state", "critical-failure")
@@ -416,7 +455,7 @@ describe("DiceRollerPanel", () => {
     it("clears the result and resets the visual stage when the combination changes", async () => {
         render(<DiceRollerPanel />)
 
-        fireEvent.click(screen.getByRole("button", { name: "Rolar dados" }))
+        fireEvent.click(screen.getByRole("button", { name: "JOGAR" }))
 
         await waitFor(() => {
             expect(screen.getByText("16")).toBeInTheDocument()
@@ -434,7 +473,7 @@ describe("DiceRollerPanel", () => {
     it("clears the result when the modifier changes", async () => {
         render(<DiceRollerPanel />)
 
-        fireEvent.click(screen.getByRole("button", { name: "Rolar dados" }))
+        fireEvent.click(screen.getByRole("button", { name: "JOGAR" }))
 
         await waitFor(() => {
             expect(screen.getByText("16")).toBeInTheDocument()
@@ -465,7 +504,7 @@ describe("DiceRollerPanel", () => {
         render(<DiceRollerPanel />)
 
         fireEvent.click(screen.getByRole("button", { name: "d4" }))
-        fireEvent.click(screen.getByRole("button", { name: "Rolar dados" }))
+        fireEvent.click(screen.getByRole("button", { name: "JOGAR" }))
 
         await waitFor(() => {
             expect(screen.getByTestId("dice-result-summary")).toBeInTheDocument()
@@ -508,7 +547,7 @@ describe("DiceRollerPanel", () => {
         expect(screen.queryByRole("button", { name: "Vantagem" })).not.toBeInTheDocument()
         expect(screen.queryByText("Vantagem/desvantagem afeta o primeiro d20 da rolagem.")).not.toBeInTheDocument()
 
-        fireEvent.click(screen.getByRole("button", { name: "Rolar dados" }))
+        fireEvent.click(screen.getByRole("button", { name: "JOGAR" }))
 
         await waitFor(() => {
             expect(requestDiceRoll).toHaveBeenCalledWith(expect.objectContaining({ mode: "normal" }))
@@ -543,7 +582,7 @@ describe("DiceRollerPanel", () => {
         expect(screen.queryAllByTestId("dice-visual-die")).toHaveLength(0)
         expect(screen.queryByText("1d20")).not.toBeInTheDocument()
 
-        fireEvent.click(screen.getByRole("button", { name: "Rolar dados" }))
+        fireEvent.click(screen.getByRole("button", { name: "JOGAR" }))
 
         expect(screen.getByText("Adicione pelo menos um dado.")).toBeInTheDocument()
     })

@@ -1,4 +1,5 @@
 import type { ContextMenuIconFilter } from "@owlbear-rodeo/sdk"
+import type { DiceRollResponse } from "@/features/dice-roller/types"
 
 export type OwlbearRole = "GM" | "PLAYER"
 
@@ -6,13 +7,24 @@ export type OwlbearThemeMode = "light" | "dark"
 
 export type OwlbearRuntimeStatus = "booting" | "ready" | "unavailable"
 
-export type OwlbearTabId = "ficha" | "fichas" | "npcs" | "catalogo"
+export type OwlbearTabId = "ficha" | "fichas" | "npcs" | "catalogo" | "dados"
 
 export type OwlbearSheetViewMode = "picker" | "editor"
+
+export interface OwlbearDiceHistoryEntry {
+    id: string
+    playerName: string
+    playerId?: string
+    playerRole?: OwlbearRole
+    characterName?: string
+    result: DiceRollResponse
+    createdAt: string
+}
 
 export interface OwlbearRoomMetadataState {
     version: number
     playerLinks: Record<string, string>
+    diceHistory: OwlbearDiceHistoryEntry[]
     lastSyncAt?: string
 }
 
@@ -81,17 +93,24 @@ export interface OwlbearContextMenuContext {
     items: OwlbearSceneItem[]
 }
 
+export interface OwlbearPartyPlayer {
+    id: string
+    name: string
+    role: OwlbearRole
+}
+
 export interface OwlbearSdkLike {
     onReady: (callback: () => void) => void | (() => void)
     readonly isReady: boolean
     isAvailable: boolean
-    action: {
-        setWidth: (width: number) => Promise<unknown>
-        setHeight: (height: number) => Promise<unknown>
-    }
     player: {
         getId: () => Promise<string>
+        getName: () => Promise<string>
         getRole: () => Promise<OwlbearRole>
+    }
+    party: {
+        getPlayers: () => Promise<OwlbearPartyPlayer[]>
+        onChange: (callback: (players: OwlbearPartyPlayer[]) => void) => void | (() => void)
     }
     room: {
         id?: string

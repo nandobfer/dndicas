@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server"
-import { OWLBEAR_MANIFEST_ACTION_TITLE, OWLBEAR_POPOVER_SIZES } from "@/features/owlbear/config"
+import { OWLBEAR_ACTION_SIZE, OWLBEAR_MANIFEST_ACTION_TITLE } from "@/features/owlbear/config"
 
 const CORS_HEADERS = {
     "Access-Control-Allow-Origin": "*",
@@ -47,8 +47,8 @@ export function GET(request: Request) {
                 title: OWLBEAR_MANIFEST_ACTION_TITLE,
                 icon: iconUrl,
                 popover: `${origin}/owlbear/action`,
-                width: OWLBEAR_POPOVER_SIZES.catalogo.width,
-                height: OWLBEAR_POPOVER_SIZES.catalogo.height,
+                width: OWLBEAR_ACTION_SIZE.width,
+                height: OWLBEAR_ACTION_SIZE.height,
             },
         },
         {

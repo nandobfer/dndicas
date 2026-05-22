@@ -1,13 +1,15 @@
 import {
+    OWLBEAR_DICE_HISTORY_LIMIT,
     OWLBEAR_OVERLAY_METADATA_KEY,
     OWLBEAR_OVERLAY_METADATA_VERSION,
-    OWLBEAR_POPOVER_SIZES,
     OWLBEAR_ROOM_METADATA_KEY,
     OWLBEAR_ROOM_METADATA_VERSION,
     OWLBEAR_TOKEN_METADATA_KEY,
     OWLBEAR_TOKEN_METADATA_VERSION,
 } from "./config"
+import { DICE_TYPES, type DiceRollMode, type DiceRollResponse, type DiceRollTermResult, type DiceType } from "@/features/dice-roller/types"
 import type {
+    OwlbearDiceHistoryEntry,
     OwlbearOverlayMetadata,
     OwlbearRoomMetadataState,
     OwlbearRuntimeState,
@@ -27,14 +29,99 @@ function getEmptyRoomMetadata(): OwlbearRoomMetadataState {
     return {
         version: OWLBEAR_ROOM_METADATA_VERSION,
         playerLinks: {},
+        diceHistory: [],
+    }
+}
+
+function isDiceType(value: unknown): value is DiceType {
+    return typeof value === "string" && DICE_TYPES.includes(value as DiceType)
+}
+
+function isDiceRollMode(value: unknown): value is DiceRollMode {
+    return value === "normal" || value === "advantage" || value === "disadvantage"
+}
+
+function parseDiceRollTermResult(value: unknown): DiceRollTermResult | null {
+    if (!value || typeof value !== "object") return null
+
+    const parsed = value as Partial<DiceRollTermResult>
+    if (!isDiceType(parsed.dice) || typeof parsed.quantity !== "number" || !Array.isArray(parsed.results)) {
+        return null
+    }
+
+    const results = parsed.results.filter((result): result is number => typeof result === "number")
+    if (results.length !== parsed.results.length) return null
+
+    return {
+        dice: parsed.dice,
+        quantity: parsed.quantity,
+        results,
+    }
+}
+
+function parseDiceRollResponse(value: unknown): DiceRollResponse | null {
+    if (!value || typeof value !== "object") return null
+
+    const parsed = value as Partial<DiceRollResponse>
+    if (
+        typeof parsed.rollId !== "string"
+        || !Array.isArray(parsed.terms)
+        || !isDiceRollMode(parsed.mode)
+        || typeof parsed.diceTotal !== "number"
+        || typeof parsed.modifier !== "number"
+        || typeof parsed.total !== "number"
+        || typeof parsed.createdAt !== "string"
+    ) {
+        return null
+    }
+
+    const terms = parsed.terms.map(parseDiceRollTermResult)
+    if (terms.some((term) => !term)) return null
+
+    return {
+        rollId: parsed.rollId,
+        label: typeof parsed.label === "string" ? parsed.label : undefined,
+        terms: terms.filter((term): term is DiceRollTermResult => Boolean(term)),
+        mode: parsed.mode,
+        selectedD20: parsed.selectedD20 && typeof parsed.selectedD20 === "object"
+            ? {
+                kept: typeof parsed.selectedD20.kept === "number" ? parsed.selectedD20.kept : 0,
+                discarded: typeof parsed.selectedD20.discarded === "number" ? parsed.selectedD20.discarded : undefined,
+                reason: isDiceRollMode(parsed.selectedD20.reason) ? parsed.selectedD20.reason : "normal",
+            }
+            : undefined,
+        diceTotal: parsed.diceTotal,
+        modifier: parsed.modifier,
+        total: parsed.total,
+        createdAt: parsed.createdAt,
+    }
+}
+
+function parseDiceHistoryEntry(value: unknown): OwlbearDiceHistoryEntry | null {
+    if (!value || typeof value !== "object") return null
+
+    const parsed = value as Partial<OwlbearDiceHistoryEntry>
+    const result = parseDiceRollResponse(parsed.result)
+    if (!result || typeof parsed.id !== "string" || typeof parsed.playerName !== "string" || typeof parsed.createdAt !== "string") {
+        return null
+    }
+
+    return {
+        id: parsed.id,
+        playerName: parsed.playerName,
+        playerId: typeof parsed.playerId === "string" ? parsed.playerId : undefined,
+        playerRole: parsed.playerRole === "GM" || parsed.playerRole === "PLAYER" ? parsed.playerRole : undefined,
+        characterName: typeof parsed.characterName === "string" && parsed.characterName.trim() ? parsed.characterName : undefined,
+        result,
+        createdAt: parsed.createdAt,
     }
 }
 
 export async function loadOwlbearSdk(): Promise<OwlbearSdkLike | null> {
     if (typeof window === "undefined") return null
 
-    const module = await import("@owlbear-rodeo/sdk")
-    return module.default as OwlbearSdkLike
+    const sdkModule = await import("@owlbear-rodeo/sdk")
+    return sdkModule.default as OwlbearSdkLike
 }
 
 export async function loadOwlbearSdkModule() {
@@ -103,14 +190,6 @@ export async function bootstrapOwlbearRuntime(): Promise<OwlbearRuntimeState> {
     }
 }
 
-export async function setActionPopoverSize(tabId: keyof typeof OWLBEAR_POPOVER_SIZES) {
-    const sdk = await loadOwlbearSdk()
-    if (!sdk || !sdk.isAvailable || !sdk.isReady) return
-
-    const size = OWLBEAR_POPOVER_SIZES[tabId]
-    await Promise.all([sdk.action.setWidth(size.width), sdk.action.setHeight(size.height)])
-}
-
 export async function openOwlbearBackendSession(input: {
     roomId: string
     owlbearPlayerId: string
@@ -134,6 +213,15 @@ export async function openOwlbearBackendSession(input: {
     return response.json() as Promise<{ token: string; expiresAt: string }>
 }
 
+export async function getOwlbearPlayerName() {
+    const sdk = await loadOwlbearSdk()
+    if (!sdk || !sdk.isAvailable || !sdk.isReady) {
+        throw new Error("Owlbear SDK indisponível para obter o nome do jogador")
+    }
+
+    return sdk.player.getName()
+}
+
 export function parseRoomMetadata(metadata: Record<string, unknown> | null | undefined): OwlbearRoomMetadataState {
     const value = metadata?.[OWLBEAR_ROOM_METADATA_KEY]
     if (!value || typeof value !== "object") {
@@ -144,6 +232,11 @@ export function parseRoomMetadata(metadata: Record<string, unknown> | null | und
     return {
         version: typeof parsed.version === "number" ? parsed.version : OWLBEAR_ROOM_METADATA_VERSION,
         playerLinks: parsed.playerLinks && typeof parsed.playerLinks === "object" ? parsed.playerLinks : {},
+        diceHistory: Array.isArray(parsed.diceHistory)
+            ? parsed.diceHistory
+                .map(parseDiceHistoryEntry)
+                .filter((entry): entry is OwlbearDiceHistoryEntry => Boolean(entry))
+            : [],
         lastSyncAt: typeof parsed.lastSyncAt === "string" ? parsed.lastSyncAt : undefined,
     }
 }
@@ -208,6 +301,15 @@ export async function subscribeToRoomMetadata(callback: (state: OwlbearRoomMetad
     return sdk.room.onMetadataChange((metadata) => {
         callback(parseRoomMetadata(metadata))
     }) || (() => undefined)
+}
+
+export async function appendRoomDiceHistoryEntry(entry: OwlbearDiceHistoryEntry) {
+    return updateRoomMetadata((current) => ({
+        ...current,
+        version: OWLBEAR_ROOM_METADATA_VERSION,
+        diceHistory: [entry, ...current.diceHistory.filter((currentEntry) => currentEntry.id !== entry.id)].slice(0, OWLBEAR_DICE_HISTORY_LIMIT),
+        lastSyncAt: new Date().toISOString(),
+    }))
 }
 
 export function parseTokenLinkMetadata(metadata: Record<string, unknown> | null | undefined): OwlbearTokenLinkMetadata | null {

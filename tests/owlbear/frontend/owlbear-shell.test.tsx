@@ -71,13 +71,14 @@ const sdkMock = vi.hoisted(() => {
             callbacks.push(callback)
             return () => undefined
         }),
-        action: {
-            setWidth: vi.fn().mockResolvedValue(undefined),
-            setHeight: vi.fn().mockResolvedValue(undefined),
-        },
         player: {
             getId: vi.fn().mockResolvedValue("player-1"),
+            getName: vi.fn().mockResolvedValue("Nando"),
             getRole: vi.fn<() => Promise<"GM" | "PLAYER">>(),
+        },
+        party: {
+            getPlayers: vi.fn().mockResolvedValue([]),
+            onChange: vi.fn(() => () => undefined),
         },
         room: {
             id: "room-1",
@@ -146,22 +147,38 @@ vi.mock("@/features/character-sheets/hooks/use-character-sheet-realtime", () => 
     useCharacterSheetRealtime: () => undefined,
 }))
 
+vi.mock("@/features/rules/components/mention-badge", () => ({
+    MentionContent: ({ html }: { html: string }) => (
+        <span data-testid="mention-content">
+            {html.replace(/<[^>]*>/g, "")}
+        </span>
+    ),
+}))
+
 vi.mock("@/components/ui/glass-sheet-card", () => ({
     GlassSheetCard: ({
         sheet,
         onOpen,
         interactive = true,
         actionLabel,
+        onAction,
     }: {
         sheet: { name: string }
         onOpen?: (sheet: { name: string }) => void
         interactive?: boolean
         actionLabel?: string
+        onAction?: (sheet: { name: string }) => void
     }) => interactive ? (
-        <button type="button" data-testid="glass-sheet-card" data-interactive="true" onClick={() => onOpen?.(sheet)}>
-            {sheet.name}
-            {actionLabel ? ` ${actionLabel}` : ""}
-        </button>
+        <div>
+            <button type="button" data-testid="glass-sheet-card" data-interactive="true" onClick={() => onOpen?.(sheet)}>
+                {sheet.name}
+            </button>
+            {actionLabel && (
+                <button type="button" onClick={() => onAction?.(sheet)}>
+                    {actionLabel}
+                </button>
+            )}
+        </div>
     ) : (
         <div data-testid="glass-sheet-card" data-interactive="false">
             {sheet.name}
@@ -189,7 +206,10 @@ describe("OwlbearShell", () => {
         sdkMock.room.setMetadata.mockResolvedValue(undefined)
         sdkMock.room.onMetadataChange.mockReturnValue(() => undefined)
         sdkMock.player.getId.mockResolvedValue("player-1")
+        sdkMock.player.getName.mockResolvedValue("Nando")
         sdkMock.player.getRole.mockReset()
+        sdkMock.party.getPlayers.mockResolvedValue([])
+        sdkMock.party.onChange.mockReturnValue(() => undefined)
         sdkMock.scene.isReady.mockResolvedValue(true)
         sdkMock.scene.items.getItems.mockResolvedValue([])
         sdkMock.scene.items.updateItems.mockResolvedValue(undefined)
@@ -239,7 +259,7 @@ describe("OwlbearShell", () => {
         }))))
     })
 
-    it("renders GM tabs and sizes the catalog popover on load", async () => {
+    it("renders GM tabs without resizing the action on load", async () => {
         sdkMock.player.getRole.mockResolvedValue("GM")
 
         render(<OwlbearShell />)
@@ -247,15 +267,11 @@ describe("OwlbearShell", () => {
         expect(await screen.findByRole("button", { name: "Fichas" })).toBeInTheDocument()
         expect(screen.getByRole("button", { name: "NPCs" })).toBeInTheDocument()
         expect(screen.getByRole("button", { name: "Catálogo" })).toBeInTheDocument()
+        expect(screen.getByRole("button", { name: "Dados" })).toBeInTheDocument()
         expect(screen.queryByRole("button", { name: "Ficha" })).not.toBeInTheDocument()
-        expect(screen.getByTitle("Dndicas Dashboard")).toHaveAttribute("src", "/")
+        expect(screen.getByTitle("Dndicas Dashboard")).toHaveAttribute("src", "/?owlbearCatalogEmbed=1")
         expect(screen.queryByText("Dashboard completo do Dndicas")).not.toBeInTheDocument()
         expect(screen.queryByText("Abrir fora")).not.toBeInTheDocument()
-
-        await waitFor(() => {
-            expect(sdkMock.action.setWidth).toHaveBeenCalledWith(1320)
-            expect(sdkMock.action.setHeight).toHaveBeenCalledWith(900)
-        })
 
         expect(screen.getByTitle("Dndicas Dashboard")).not.toHaveAttribute("scrolling", "no")
     })
@@ -266,6 +282,7 @@ describe("OwlbearShell", () => {
         render(<OwlbearShell />)
 
         expect(await screen.findByRole("button", { name: "Catálogo" })).toBeInTheDocument()
+        expect(screen.getByRole("button", { name: "Dados" })).toBeInTheDocument()
         expect(screen.getByRole("button", { name: "Ficha" })).toBeInTheDocument()
         expect(screen.getByRole("button", { name: "Catálogo" })).toBeInTheDocument()
         expect(screen.queryByRole("button", { name: "Fichas" })).not.toBeInTheDocument()
@@ -273,7 +290,7 @@ describe("OwlbearShell", () => {
         expect(screen.getByTitle("Dndicas Dashboard")).toBeInTheDocument()
     })
 
-    it("changes popover size when switching tabs", async () => {
+    it("does not resize the action when switching tabs", async () => {
         sdkMock.player.getRole.mockResolvedValue("GM")
 
         render(<OwlbearShell />)
@@ -281,10 +298,41 @@ describe("OwlbearShell", () => {
         await screen.findByRole("button", { name: "Fichas" })
         fireEvent.click(screen.getByRole("button", { name: "Fichas" }))
 
-        await waitFor(() => {
-            expect(sdkMock.action.setWidth).toHaveBeenCalledWith(1180)
-            expect(sdkMock.action.setHeight).toHaveBeenCalledWith(900)
+        expect(await screen.findByRole("heading", { name: "Nenhuma ficha vinculada" })).toBeInTheDocument()
+    })
+
+    it("renders the shared dice tab without resizing the action when opening it", async () => {
+        sdkMock.player.getRole.mockResolvedValue("PLAYER")
+        sdkMock.room.getMetadata.mockResolvedValue({
+            "com.dndicas.owlbear/room": {
+                version: 1,
+                playerLinks: {},
+                diceHistory: [{
+                    id: "roll-1",
+                    playerName: "Nando",
+                    createdAt: "2026-01-01T00:00:00.000Z",
+                    result: {
+                        rollId: "roll-1",
+                        terms: [{ dice: "d20", quantity: 1, results: [18] }],
+                        mode: "advantage",
+                        selectedD20: { kept: 18, discarded: 7, reason: "advantage" },
+                        diceTotal: 18,
+                        modifier: 2,
+                        total: 20,
+                        createdAt: "2026-01-01T00:00:00.000Z",
+                    },
+                }],
+            },
         })
+
+        render(<OwlbearShell />)
+
+        await screen.findByRole("button", { name: "Dados" })
+        fireEvent.click(screen.getByRole("button", { name: "Dados" }))
+
+        expect(await screen.findByText("HISTÓRICO")).toBeInTheDocument()
+        expect(screen.queryByText("Dados da sala")).not.toBeInTheDocument()
+        expect(screen.queryByText("Histórico compartilhado")).not.toBeInTheDocument()
     })
 
     it("shows the GM fichas tab without Clerk login", async () => {
@@ -343,8 +391,6 @@ describe("OwlbearShell", () => {
         expect(await screen.findByText("SDK Owlbear indisponível nesta action.")).toBeInTheDocument()
         expect(screen.getByRole("button", { name: "Catálogo" })).toBeInTheDocument()
         expect(screen.getByTitle("Dndicas Dashboard")).toBeInTheDocument()
-        expect(sdkMock.action.setWidth).not.toHaveBeenCalled()
-        expect(sdkMock.action.setHeight).not.toHaveBeenCalled()
     })
 
     it("waits for OBR.onReady before leaving booting state", async () => {
@@ -360,7 +406,7 @@ describe("OwlbearShell", () => {
         })
     })
 
-    it("shows the shared my-sheets picker and uses picker sizing when no room link exists", async () => {
+    it("shows the shared my-sheets picker without resizing the action when no room link exists", async () => {
         sdkMock.player.getRole.mockResolvedValue("PLAYER")
         clerkState.isSignedIn = true
         clerkState.userId = "user-1"
@@ -386,11 +432,6 @@ describe("OwlbearShell", () => {
         fireEvent.click(screen.getByRole("button", { name: "Ficha" }))
 
         expect(await screen.findByRole("heading", { name: "Minhas Fichas" }, { timeout: 3000 })).toBeInTheDocument()
-
-        await waitFor(() => {
-            expect(sdkMock.action.setWidth).toHaveBeenCalledWith(980)
-            expect(sdkMock.action.setHeight).toHaveBeenCalledWith(820)
-        })
     })
 
     it("shows the my-sheets login view instead of a technical session error when the player is anonymous", async () => {
@@ -596,6 +637,44 @@ describe("OwlbearShell", () => {
             expect(screen.getByTestId("sheet-form")).toHaveAttribute("data-sheet-name", "Kael Atualizado")
             expect(screen.getAllByTestId("glass-sheet-card").some((node) => node.textContent?.includes("Kael Atualizado"))).toBe(true)
         })
+    })
+
+    it("renders rich class content in the GM unlink confirmation modal", async () => {
+        sdkMock.player.getRole.mockResolvedValue("GM")
+
+        const richClassSheet = {
+            ...kaelSheet,
+            class: "<span data-type=\"mention\" data-id=\"class-1\" data-label=\"Guerreiro\" data-entity-type=\"Classe\">Guerreiro</span>",
+        }
+
+        useRoomLinkedSheetsMock.mockReturnValue({
+            entries: [{ playerId: "player-1", sheetId: "sheet-1" }],
+            sheets: [richClassSheet],
+            isLoading: false,
+            errorMessage: null,
+            reload: vi.fn(),
+            unlinkSheet: vi.fn(),
+        })
+        useSheetMock.mockImplementation((id: string | null) => ({
+            data: id === "sheet-1" ? richClassSheet : null,
+            isLoading: false,
+            isFetching: false,
+            isError: false,
+            error: null,
+        }))
+
+        render(<OwlbearShell />)
+
+        await screen.findByRole("button", { name: "Fichas" })
+        fireEvent.click(screen.getByRole("button", { name: "Fichas" }))
+
+        const unlinkAction = await screen.findByRole("button", { name: /Desvincular Kael/i })
+        fireEvent.click(unlinkAction)
+
+        expect(await screen.findByRole("heading", { name: "Desvincular Ficha" })).toBeInTheDocument()
+        expect(screen.getByText("Ficha a desvincular")).toBeInTheDocument()
+        expect(screen.getByTestId("mention-content")).toHaveTextContent("Guerreiro")
+        expect(screen.queryByText(/data-type="mention"/)).not.toBeInTheDocument()
     })
 
 })

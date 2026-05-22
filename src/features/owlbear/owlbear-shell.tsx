@@ -1,19 +1,19 @@
 "use client"
 
 import * as React from "react"
-import { Compass, Library, Shield, Users } from "lucide-react"
+import { Compass, Dices, Library, Shield, Users } from "lucide-react"
 import { LiquidGlassBackground } from "@/components/ui/glass-background"
 import { GlassSelector } from "@/components/ui/glass-selector"
 import { cn } from "@/core/utils"
 import { colors } from "@/lib/config/colors"
-import { setActionPopoverSize } from "./sdk"
 import { useOwlbearRuntime } from "./use-owlbear-runtime"
 import { useOwlbearSession } from "./use-owlbear-session"
 import { CatalogDashboardFrame } from "./catalog-dashboard-frame"
+import { OwlbearDiceTab } from "./owlbear-dice-tab"
 import { OwlbearPlayerSheetTab } from "./player-sheet-tab"
 import { OwlbearGmSheetsTab } from "./gm-sheets-tab"
 import { OwlbearGmSceneController } from "./gm-scene-controller"
-import type { OwlbearRole, OwlbearSheetViewMode, OwlbearTabId } from "./types"
+import type { OwlbearRole, OwlbearTabId } from "./types"
 
 type TabDefinition = {
     id: OwlbearTabId
@@ -25,12 +25,14 @@ type TabDefinition = {
 
 const GM_TABS: TabDefinition[] = [
     { id: "catalogo", label: "Catálogo", icon: Library, activeColorHex: colors.rarity.rare, textColorHex: colors.rarity.rare },
+    { id: "dados", label: "Dados", icon: Dices, activeColorHex: colors.rarity.uncommon, textColorHex: colors.rarity.uncommon },
     { id: "fichas", label: "Fichas", icon: Users, activeColorHex: colors.rarity.veryRare, textColorHex: colors.rarity.veryRare },
     { id: "npcs", label: "NPCs", icon: Shield, activeColorHex: colors.rarity.legendary, textColorHex: colors.rarity.legendary },
 ]
 
 const PLAYER_TABS: TabDefinition[] = [
     { id: "catalogo", label: "Catálogo", icon: Library, activeColorHex: colors.rarity.rare, textColorHex: colors.rarity.rare },
+    { id: "dados", label: "Dados", icon: Dices, activeColorHex: colors.rarity.uncommon, textColorHex: colors.rarity.uncommon },
     { id: "ficha", label: "Ficha", icon: Compass, activeColorHex: colors.rarity.veryRare, textColorHex: colors.rarity.veryRare },
 ]
 
@@ -72,35 +74,12 @@ export function OwlbearShell() {
     const { session, isAuthLoaded, isAuthenticated } = useOwlbearSession(runtime)
     const tabs = React.useMemo(() => getTabsForRole(runtime.role), [runtime.role])
     const [activeTab, setActiveTab] = React.useState<OwlbearTabId>("catalogo")
-    const [sheetViewMode, setSheetViewMode] = React.useState<OwlbearSheetViewMode>("picker")
-
-    const resizeForTab = React.useCallback((tabId: OwlbearTabId, nextSheetViewMode = sheetViewMode) => {
-        if (runtime.status !== "ready") return
-
-        const nextTab = tabId === "ficha"
-            ? nextSheetViewMode === "editor"
-                ? "ficha-editor"
-                : "ficha-picker"
-            : tabId
-
-        void setActionPopoverSize(nextTab)
-    }, [runtime.status, sheetViewMode])
 
     React.useEffect(() => {
         if (!tabs.some((tab) => tab.id === activeTab)) {
             setActiveTab("catalogo")
         }
     }, [activeTab, tabs])
-
-    React.useEffect(() => {
-        resizeForTab(activeTab, sheetViewMode)
-    }, [activeTab, resizeForTab, sheetViewMode])
-
-    React.useEffect(() => {
-        if (runtime.status === "unavailable") {
-            void setActionPopoverSize("fallback")
-        }
-    }, [runtime.status])
 
     return (
         <div
@@ -123,7 +102,6 @@ export function OwlbearShell() {
                         onChange={(value) => {
                             const nextTab = value as OwlbearTabId
                             setActiveTab(nextTab)
-                            resizeForTab(nextTab)
                         }}
                         options={tabs.map((tab) => {
                             const Icon = tab.icon
@@ -148,6 +126,11 @@ export function OwlbearShell() {
                     <div className={cn("h-full min-h-0", activeTab === "catalogo" ? "block" : "hidden")} aria-hidden={activeTab !== "catalogo"}>
                         <CatalogDashboardFrame />
                     </div>
+                    {tabs.some((tab) => tab.id === "dados") && (
+                        <div className={cn("h-full min-h-0", activeTab === "dados" ? "block" : "hidden")} aria-hidden={activeTab !== "dados"}>
+                            {activeTab === "dados" && <OwlbearDiceTab runtime={runtime} session={session} />}
+                        </div>
+                    )}
                     {tabs.some((tab) => tab.id === "ficha") && (
                         <div className={cn("h-full min-h-0", activeTab === "ficha" ? "block" : "hidden")} aria-hidden={activeTab !== "ficha"}>
                             <OwlbearPlayerSheetTab
@@ -155,7 +138,6 @@ export function OwlbearShell() {
                                 session={session}
                                 isAuthenticated={isAuthenticated}
                                 isAuthLoaded={isAuthLoaded}
-                                onViewModeChange={setSheetViewMode}
                             />
                         </div>
                     )}

@@ -20,6 +20,9 @@ export interface DiceRollRequest {
     label?: string
     source?: DiceRollSource
     diceSessionId?: string
+    playerName?: string
+    owlbearRoomId?: string
+    owlbearPlayerId?: string
 }
 
 export interface DiceRollOverrideInput {
@@ -74,11 +77,33 @@ export interface DiceRollPreset {
     }
 }
 
+export interface DiceOverrideScopedTarget {
+    owlbearPlayerId: string
+}
+
 export interface DiceResultConsoleApi {
-    min: (dice: DiceType, value: number) => Promise<DiceRollOverrideRecord | null>
-    max: (dice: DiceType, value: number) => Promise<DiceRollOverrideRecord | null>
-    range: (dice: DiceType, min: number, max: number) => Promise<DiceRollOverrideRecord | null>
-    exact: (dice: DiceType, value: number) => Promise<DiceRollOverrideRecord | null>
-    clear: (dice?: DiceType) => Promise<{ deletedCount: number } | null>
-    list: () => Promise<DiceRollOverrideRecord[] | null>
+    min: {
+        (dice: DiceType, value: number): Promise<DiceRollOverrideRecord | null>
+        (owlbearPlayerId: string, dice: DiceType, value: number): Promise<DiceRollOverrideRecord | null>
+    }
+    max: {
+        (dice: DiceType, value: number): Promise<DiceRollOverrideRecord | null>
+        (owlbearPlayerId: string, dice: DiceType, value: number): Promise<DiceRollOverrideRecord | null>
+    }
+    range: {
+        (dice: DiceType, min: number, max: number): Promise<DiceRollOverrideRecord | null>
+        (owlbearPlayerId: string, dice: DiceType, min: number, max: number): Promise<DiceRollOverrideRecord | null>
+    }
+    exact: {
+        (dice: DiceType, value: number): Promise<DiceRollOverrideRecord | null>
+        (owlbearPlayerId: string, dice: DiceType, value: number): Promise<DiceRollOverrideRecord | null>
+    }
+    clear: {
+        (dice?: DiceType): Promise<{ deletedCount: number } | null>
+        (owlbearPlayerId: string, dice?: DiceType): Promise<{ deletedCount: number } | null>
+    }
+    list: {
+        (): Promise<DiceRollOverrideRecord[] | null>
+        (owlbearPlayerId: string): Promise<DiceRollOverrideRecord[] | null>
+    }
 }
