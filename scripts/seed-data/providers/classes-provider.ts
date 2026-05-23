@@ -1391,6 +1391,7 @@ export class ClassesProvider extends BaseProvider<FiveEToolsClass, CreateClassIn
         let subclass = this.findSubclass(current, subclassName);
         if (!subclass) return output;
         let traits = [...(subclass.traits ?? [])];
+        const existingTraitKeys = await this.buildExistingSubclassTraitKeys(traits);
 
         for (const [index, feature] of pending.features.entries()) {
             term.cyan('\n  Traduzindo feature ');
@@ -1398,6 +1399,11 @@ export class ClassesProvider extends BaseProvider<FiveEToolsClass, CreateClassIn
             term(`: ${feature.originalName} (nível ${feature.level})\n`);
 
             const { name, description } = await this.translateItem(feature.originalName, feature.descriptionHtml);
+            const candidateKeys = this.buildSubclassTraitCandidateKeys(feature.level, subclass.name, feature.originalName, name);
+            if (candidateKeys.some((key) => existingTraitKeys.has(key))) {
+                continue;
+            }
+
             const resolvedTrait = await this.resolveTrait({
                 level: feature.level,
                 description: convertFeetToMeters(description),
@@ -1407,6 +1413,7 @@ export class ClassesProvider extends BaseProvider<FiveEToolsClass, CreateClassIn
             if (!resolvedTrait) continue;
 
             traits = [...traits, resolvedTrait];
+            candidateKeys.forEach((key) => existingTraitKeys.add(key));
             subclass = { ...subclass, traits };
             current = this.upsertSubclass(current, subclass);
             await this.update(current);
@@ -2281,6 +2288,53 @@ export class ClassesProvider extends BaseProvider<FiveEToolsClass, CreateClassIn
 
         return names.some((name) =>
             [...this.pendingSubclassesByClassKey.keys()].some((key) => key.startsWith(`${name}|`)),
+        );
+    }
+
+    private buildSubclassTraitCandidateKeys(level: number, subclassName: string, originalName: string, translatedName: string): string[] {
+        return [
+            originalName,
+            translatedName,
+            `${originalName} (${subclassName})`,
+            `${translatedName} (${subclassName})`,
+        ]
+            .map((name) => this.buildSubclassTraitKey(level, name))
+            .filter((key, index, allKeys) => allKeys.indexOf(key) === index);
+    }
+
+    private buildSubclassTraitKey(level: number, name: string): string {
+        return `${level}|${cleanText(name).trim().toLowerCase()}`;
+    }
+
+    private extractMentionIdsFromHtml(html: string): string[] {
+        return [...html.matchAll(/data-id="([^"]+)"/g)].map((match) => match[1]);
+    }
+
+    private async buildExistingSubclassTraitKeys(traits: ClassTrait[]): Promise<Set<string>> {
+        const traitIds = traits.flatMap((trait) => this.extractMentionIdsFromHtml(trait.description ?? ''));
+        if (traitIds.length === 0) return new Set();
+
+        const referencedTraits = await Trait.find({ _id: { $in: traitIds } }).lean() as Array<{
+            _id?: unknown;
+            name?: string;
+            originalName?: string;
+        }>;
+        const referencedTraitMap = new Map(
+            referencedTraits
+                .filter((trait) => trait._id)
+                .map((trait) => [String(trait._id), trait]),
+        );
+
+        return new Set(
+            traits.flatMap((trait) => {
+                const level = trait.level;
+                const names = this.extractMentionIdsFromHtml(trait.description ?? '')
+                    .map((traitId) => referencedTraitMap.get(traitId))
+                    .flatMap((referencedTrait) => [referencedTrait?.name, referencedTrait?.originalName])
+                    .filter((name): name is string => Boolean(name?.trim()));
+
+                return names.map((name) => this.buildSubclassTraitKey(level, name));
+            }),
         );
     }
 

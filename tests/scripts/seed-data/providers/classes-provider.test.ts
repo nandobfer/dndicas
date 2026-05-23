@@ -82,6 +82,7 @@ import {
     mapWeaponProficiencies,
     parseClassFeatureRef,
 } from '../../../../scripts/seed-data/providers/classes-provider';
+import type { CreateClassInput } from '../../../../src/features/classes/types/classes.types';
 import { CharacterClass } from '../../../../src/features/classes/models/character-class';
 import { Trait } from '../../../../src/features/traits/database/trait';
 import { Spell } from '../../../../src/features/spells/models/spell';
@@ -751,7 +752,11 @@ describe('ClassesProvider.processItem', () => {
             },
         });
 
-        const pending = (provider as unknown as { pendingSubclassesByClassKey: Map<string, unknown[]> })
+        const pending = (provider as unknown as {
+            pendingSubclassesByClassKey: Map<string, Array<{
+                features: Array<{ originalName: string; level: number }>
+            }>>
+        })
             .pendingSubclassesByClassKey.get('fighter|ldj pág. 89');
 
         expect(result!.subclasses).toEqual([]);
@@ -1018,7 +1023,7 @@ describe('ClassesProvider.findExisting', () => {
             name: incoming!.name,
             originalName: incoming!.originalName!,
             description: incoming!.description,
-            source: incoming!.source,
+            source: incoming!.source!,
             status: 'active',
             hitDice: 'd10',
             primaryAttributes: ['Força'],
@@ -1737,7 +1742,7 @@ describe('ClassesProvider.afterReview', () => {
                     output: unknown,
                     subclassName: string,
                     originalSubclass: unknown,
-                ) => Promise<{ subclasses: Array<{ name: string; spells: Array<{ id: string; name: string; circle: number }> }> }>;
+                ) => Promise<{ subclasses: Array<{ name: string; spellcasting: boolean; spells: Array<{ id: string; name: string; circle: number }> }> }>;
             }
         ).resolveSubclassSpellsForClass(
             {
@@ -1817,6 +1822,93 @@ describe('ClassesProvider.afterReview', () => {
             },
             { runValidators: true },
         );
+    });
+
+    it('skips subclass features that are already represented by existing subclass traits', async () => {
+        const updateSpy = vi.spyOn(provider as unknown as { update: (cls: CreateClassInput) => Promise<void> }, 'update')
+            .mockResolvedValue(undefined)
+        const resolveTraitSpy = vi.spyOn(provider as unknown as {
+            resolveTrait: (...args: unknown[]) => Promise<unknown>
+        }, 'resolveTrait')
+
+        vi.mocked(Trait.find).mockReturnValue({
+            lean: vi.fn().mockResolvedValue([
+                {
+                    _id: 'existing-trait',
+                    name: 'Ferramentas do Comércio',
+                    originalName: 'Tools of the Trade',
+                },
+            ]),
+        } as never)
+
+        const result = await (
+            provider as unknown as {
+                resolvePendingFeaturesForSubclass: (
+                    output: CreateClassInput,
+                    subclassName: string,
+                    pending: {
+                        features: Array<{
+                            level: number
+                            originalName: string
+                            descriptionHtml: string
+                        }>
+                    },
+                ) => Promise<CreateClassInput>
+            }
+        ).resolvePendingFeaturesForSubclass(
+            {
+                name: 'Artífice',
+                originalName: 'Artificer',
+                image: '',
+                description: '<p>Classe válida com descrição longa.</p>',
+                source: 'EFA',
+                status: 'active',
+                hitDice: 'd8',
+                primaryAttributes: ['Inteligência'],
+                savingThrows: ['Constituição', 'Inteligência'],
+                armorProficiencies: [],
+                weaponProficiencies: ['Armas Simples'],
+                skillCount: 2,
+                availableSkills: ['Arcanismo'],
+                spellcasting: true,
+                spells: [],
+                traits: [],
+                subclasses: [
+                    {
+                        name: 'Alquimista',
+                        source: 'EFA',
+                        description: '<p>Descrição da subclasse.</p>',
+                        spellcasting: false,
+                        traits: [
+                            {
+                                level: 3,
+                                description: '<span data-type="mention" data-id="existing-trait" data-entity-type="Habilidade" class="mention">Ferramentas do Comércio</span>',
+                            },
+                        ],
+                        spells: [],
+                    },
+                ],
+            },
+            'Alquimista',
+            {
+                features: [
+                    {
+                        level: 3,
+                        originalName: 'Tools of the Trade',
+                        descriptionHtml: '<p>Gain tool proficiencies.</p>',
+                    },
+                ],
+            },
+        )
+
+        expect(resolveTraitSpy).not.toHaveBeenCalled()
+        expect(updateSpy).not.toHaveBeenCalled()
+        expect(result.subclasses?.[0]?.traits).toEqual([
+            {
+                level: 3,
+                description: '<span data-type="mention" data-id="existing-trait" data-entity-type="Habilidade" class="mention">Ferramentas do Comércio</span>',
+            },
+        ])
     });
 
     it('skips only the new trait when trait review is canceled', async () => {

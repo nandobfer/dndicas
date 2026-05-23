@@ -252,17 +252,6 @@ export function SpellcastingSection({ control, watch, setValue, isSubmitting, sp
     // Ensure we have a valid initial state for comparison
     const isSpellcaster = spellcasting === true
 
-    // We'll use a hidden field to store spells if we had it in the schema,
-    // for now we'll just implement the UI for adding spells
-    const {
-        fields: spellFields,
-        append: appendSpell,
-        remove: removeSpell,
-    } = useFieldArray({
-        control,
-        name: spellcastingFieldName.includes(".") ? `${spellcastingFieldName.split(".")[0]}.${spellcastingFieldName.split(".")[1]}.spells` : "spells",
-    })
-
     return (
         <div className="space-y-4">
             <div className="space-y-3">
@@ -322,107 +311,6 @@ export function SpellcastingSection({ control, watch, setValue, isSubmitting, sp
                                         />
                                     )}
                                 />
-                            </div>
-
-                            <div className="space-y-4 pt-4 border-t border-white/5">
-                                <div className="flex items-center justify-between group/title">
-                                    <label className="text-sm font-medium text-white/80 flex items-center gap-2">
-                                        <Wand className="h-4 w-4 text-blue-400 group-hover/title:rotate-12 transition-transform" />
-                                        Magias
-                                    </label>
-                                    <button
-                                        type="button"
-                                        onClick={() => {
-                                            // Adicionamos um item vazio com circle undefined/null para a linha de escolha
-                                            appendSpell({ id: "", name: "", circle: -1, isPending: true })
-                                        }}
-                                        disabled={isSubmitting}
-                                        className={cn(
-                                            "px-3 py-1.5 rounded-lg text-xs font-medium transition-all",
-                                            "bg-blue-500/20 text-blue-400 hover:bg-blue-500/30",
-                                            "border border-blue-500/30",
-                                            "disabled:opacity-50 disabled:cursor-not-allowed",
-                                            "flex items-center gap-1.5 active:scale-95",
-                                        )}
-                                    >
-                                        <Plus className="h-3 w-3" />
-                                        Adicionar Magia
-                                    </button>
-                                </div>
-
-                                {/* Area de Escolha (Linha igual a TraitsSection) */}
-                                {(() => {
-                                    const pendingFields = spellFields.map((f, i) => ({ ...f, index: i })).filter((f: any) => f.isPending)
-                                    if (pendingFields.length === 0) return null
-
-                                    return (
-                                        <div className="space-y-2">
-                                            {pendingFields.map((field: any) => (
-                                                <motion.div
-                                                    key={field.id}
-                                                    initial={{ opacity: 0, y: -10 }}
-                                                    animate={{ opacity: 1, y: 0 }}
-                                                    className="flex items-center gap-2 p-3 rounded-xl bg-blue-500/5 border border-blue-500/20"
-                                                >
-                                                    <div className="flex-1">
-                                                        <GlassEntityChooser
-                                                            provider={providerMagia}
-                                                            placeholder="Escolha a magia para adicionar..."
-                                                            onChange={(val) => {
-                                                                if (val) {
-                                                                    const circle = val.circle !== undefined ? val.circle : 0
-                                                                    // Atualizamos o item pendente para ser uma magia real
-                                                                    removeSpell(field.index)
-                                                                    appendSpell({
-                                                                        id: val.id,
-                                                                        _id: val.id, // Ensure both are present for compatibility
-                                                                        name: val.label,
-                                                                        circle,
-                                                                    })
-                                                                }
-                                                            }}
-                                                            disabled={isSubmitting}
-                                                        />
-                                                    </div>
-                                                    <button
-                                                        type="button"
-                                                        onClick={() => removeSpell(field.index)}
-                                                        className="h-10 px-3 rounded-lg border border-white/10 bg-white/5 text-rose-400 hover:bg-rose-500/20 transition-colors"
-                                                    >
-                                                        <X className="h-4 w-4" />
-                                                    </button>
-                                                </motion.div>
-                                            ))}
-                                        </div>
-                                    )
-                                })()}
-
-                                <div className="space-y-2">
-                                    {(() => {
-                                        // Agrupamos as magias JA VINCULADAS (não pendentes) por círculo
-                                        const groupedSpells: Record<number, any[]> = {}
-                                        let totalSpells = 0
-
-                                        spellFields.forEach((field: any, index: number) => {
-                                            if (field.isPending) return
-                                            totalSpells++
-                                            const circle = field.circle || 0
-                                            if (!groupedSpells[circle]) groupedSpells[circle] = []
-                                            groupedSpells[circle].push({ ...field, originalIndex: index })
-                                        })
-
-                                        // Ordenamos os círculos
-                                        const sortedCircles = Object.keys(groupedSpells)
-                                            .map(Number)
-                                            .sort((a, b) => a - b)
-
-                                        if (totalSpells === 0 && spellFields.filter((f: any) => f.isPending).length === 0) {
-                                            return <GlassInlineEmptyState message="Nenhuma magia vinculada" />
-                                        }
-
-                                        return sortedCircles.map((circle) => <SpellCircleAccordion key={circle} circle={circle} spells={groupedSpells[circle]} onRemove={(idx) => removeSpell(idx)} />)
-                                    })()}
-                                </div>
                             </div>
                         </motion.div>
                     ) : null}
