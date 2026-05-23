@@ -29,7 +29,11 @@ const features = [
     },
 ]
 
-export function UnauthenticatedView() {
+interface UnauthenticatedViewProps {
+    redirectUrl?: string
+}
+
+export function UnauthenticatedView({ redirectUrl = "/my-sheets" }: UnauthenticatedViewProps) {
     return (
         <motion.div
             variants={motionConfig.variants.fadeInUp}
@@ -80,7 +84,7 @@ export function UnauthenticatedView() {
 
                 {/* Right — Clerk SignIn, sticky on desktop */}
                 <div className="w-full lg:w-auto flex-shrink-0 flex justify-center lg:sticky lg:top-6">
-                    <SignIn routing="hash" afterSignInUrl="/my-sheets" afterSignUpUrl="/my-sheets" />
+                    <SignIn routing="hash" fallbackRedirectUrl={redirectUrl} forceRedirectUrl={redirectUrl} />
                 </div>
             </div>
         </motion.div>

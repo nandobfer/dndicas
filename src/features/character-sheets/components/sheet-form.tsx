@@ -23,14 +23,30 @@ import { useMediaQuery } from "@/core/hooks/useMediaQuery"
 
 interface SheetFormProps {
     sheet: CharacterSheetFull
+    layoutMode?: "responsive" | "desktop"
+    editMode?: "auto" | "editable" | "read-only"
+    onSlugChange?: (newSlug: string) => void
+    navigateOnSlugChange?: boolean
+    runtimeContext?: "default" | "owlbear"
 }
 
-export function SheetForm({ sheet }: SheetFormProps) {
+export function SheetForm({
+    sheet,
+    layoutMode = "responsive",
+    editMode = "auto",
+    onSlugChange,
+    navigateOnSlugChange = true,
+    runtimeContext = "default",
+}: SheetFormProps) {
     const router = useRouter()
     const { userId, isSignedIn, isLoaded } = useAuth()
     const isDesktop = useMediaQuery("(min-width: 1024px)")
     const [hasHydrated, setHasHydrated] = useState(false)
-    const canEdit = isLoaded && isSignedIn && userId === sheet.userId
+    const canEdit = editMode === "editable"
+        ? true
+        : editMode === "read-only"
+            ? false
+            : isLoaded && isSignedIn && userId === sheet.userId
     const isReadOnly = !canEdit
 
     useEffect(() => {
@@ -41,8 +57,10 @@ export function SheetForm({ sheet }: SheetFormProps) {
     }, [])
 
     const handleSlugChange = useCallback((newSlug: string) => {
+        onSlugChange?.(newSlug)
+        if (!navigateOnSlugChange) return
         router.replace(`/sheets/${newSlug}`)
-    }, [router])
+    }, [navigateOnSlugChange, onSlugChange, router])
 
     const form = useSheetAutoSave(sheet, { onSlugChange: handleSlugChange, disabled: isReadOnly })
     const { data: items = [] } = useItems(sheet._id)
@@ -52,19 +70,20 @@ export function SheetForm({ sheet }: SheetFormProps) {
     const attacksSections = useSheetAttacksAndTraitsSections({ sheet, form, isReadOnly })
 
     useSheetMentionSync({ sheet, form, isReadOnly })
-    useCharacterSheetRealtime({ sheetId: sheet._id, currentSlug: sheet.slug })
+    useCharacterSheetRealtime({ sheetId: sheet._id, currentSlug: sheet.slug, navigateOnSlugChange })
 
-    const shouldRenderDesktop = hasHydrated ? isDesktop : true
+    const shouldRenderDesktop = layoutMode === "desktop" ? true : hasHydrated ? isDesktop : true
+    const forceDesktopLayout = layoutMode === "desktop"
 
     return (
         <motion.div variants={motionConfig.variants.fadeInUp} initial="initial" animate="animate" className="space-y-4">
             {shouldRenderDesktop ? (
                 <div className="space-y-4">
-                    <SheetHeader sheet={sheet} form={form} items={items} isReadOnly={isReadOnly} />
+                    <SheetHeader sheet={sheet} form={form} items={items} isReadOnly={isReadOnly} isOwlbear={runtimeContext === "owlbear"} />
 
-                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 items-start">
-                        <SheetAttributesAndItems sheet={sheet} form={form} isReadOnly={isReadOnly} />
-                        <SheetAttacksTraitsSpells sheet={sheet} form={form} isReadOnly={isReadOnly} />
+                    <div className={forceDesktopLayout ? "grid grid-cols-2 gap-4 items-start" : "grid grid-cols-1 gap-4 items-start lg:grid-cols-2"}>
+                        <SheetAttributesAndItems sheet={sheet} form={form} isReadOnly={isReadOnly} forceDesktopLayout={forceDesktopLayout} />
+                        <SheetAttacksTraitsSpells sheet={sheet} form={form} isReadOnly={isReadOnly} forceDesktopLayout={forceDesktopLayout} />
                     </div>
 
                     <SheetNotes sheet={sheet} form={form} isReadOnly={isReadOnly} />

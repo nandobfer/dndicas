@@ -15,12 +15,13 @@ interface SheetAttributesAndItemsProps {
         patchField: (field: keyof PatchSheetBody, value: unknown) => void
     }
     isReadOnly?: boolean
+    forceDesktopLayout?: boolean
 }
 
-export function SheetAttributesAndItems({ sheet, form, isReadOnly = false }: SheetAttributesAndItemsProps) {
+export function SheetAttributesAndItems({ sheet, form, isReadOnly = false, forceDesktopLayout = false }: SheetAttributesAndItemsProps) {
     return (
         <div className="space-y-4">
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            <div className={forceDesktopLayout ? "grid grid-cols-2 gap-4" : "grid grid-cols-1 gap-4 lg:grid-cols-2"}>
                 <GlassCard>
                     <GlassCardContent className="pt-4 pb-4">
                         <SheetAttributesLeft sheet={sheet} form={form} isReadOnly={isReadOnly} />

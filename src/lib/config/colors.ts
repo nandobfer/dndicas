@@ -510,6 +510,12 @@ export const diceColors = {
         bg: "bg-red-400/20",
         border: "border-red-400/20",
     },
+    d100: {
+        rarity: "divine" as RarityColor,
+        text: "text-cyan-400",
+        bg: "bg-cyan-400/20",
+        border: "border-cyan-400/20",
+    },
 } as const
 
 export type SpellSchool = keyof typeof spellSchoolColors

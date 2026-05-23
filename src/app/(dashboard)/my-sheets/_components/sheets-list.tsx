@@ -13,6 +13,10 @@ interface SheetsListProps {
     hasNextPage: boolean
     isFetchingNextPage: boolean
     fetchNextPage: () => void
+    onSheetOpen?: (sheet: CharacterSheet) => void
+    onRequestDelete?: (sheet: CharacterSheet) => void
+    showDelete?: boolean
+    emptyMessage?: string
 }
 
 const gridVariants = {
@@ -25,14 +29,26 @@ const cardVariants = {
     show: { opacity: 1, y: 0, transition: { duration: 0.2 } },
 }
 
-export function SheetsList({ sheets, isLoading, hasNextPage, isFetchingNextPage, fetchNextPage }: SheetsListProps) {
+export function SheetsList({
+    sheets,
+    isLoading,
+    hasNextPage,
+    isFetchingNextPage,
+    fetchNextPage,
+    onSheetOpen,
+    onRequestDelete,
+    showDelete = true,
+    emptyMessage = "Nenhuma ficha encontrada. Crie sua primeira ficha de personagem para começar.",
+}: SheetsListProps) {
     const [sheetToDelete, setSheetToDelete] = useState<CharacterSheet | null>(null)
     const sentinelRef = useRef<HTMLDivElement>(null)
+    const effectiveOnRequestDelete = onRequestDelete ?? setSheetToDelete
 
     // Infinite scroll via IntersectionObserver
     useEffect(() => {
         const el = sentinelRef.current
         if (!el) return
+        if (typeof IntersectionObserver === "undefined") return
 
         const observer = new IntersectionObserver(
             (entries) => {
@@ -59,7 +75,7 @@ export function SheetsList({ sheets, isLoading, hasNextPage, isFetchingNextPage,
     if (sheets.length === 0) {
         return (
             <GlassInlineEmptyState
-                message="Nenhuma ficha encontrada. Crie sua primeira ficha de personagem para começar."
+                message={emptyMessage}
             />
         )
     }
@@ -77,7 +93,9 @@ export function SheetsList({ sheets, isLoading, hasNextPage, isFetchingNextPage,
                         <motion.div key={sheet._id} variants={cardVariants} layout>
                             <GlassSheetCard
                                 sheet={sheet}
-                                onRequestDelete={setSheetToDelete}
+                                onOpen={onSheetOpen}
+                                onRequestDelete={effectiveOnRequestDelete}
+                                showDelete={showDelete}
                             />
                         </motion.div>
                     ))}
@@ -93,11 +111,13 @@ export function SheetsList({ sheets, isLoading, hasNextPage, isFetchingNextPage,
                 </div>
             )}
 
-            <DeleteSheetDialog
-                isOpen={sheetToDelete !== null}
-                onClose={() => setSheetToDelete(null)}
-                sheet={sheetToDelete}
-            />
+            {showDelete && !onRequestDelete && (
+                <DeleteSheetDialog
+                    isOpen={sheetToDelete !== null}
+                    onClose={() => setSheetToDelete(null)}
+                    sheet={sheetToDelete}
+                />
+            )}
         </>
     )
 }

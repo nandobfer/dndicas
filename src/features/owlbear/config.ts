@@ -1,11 +1,9 @@
-import type { OwlbearTabId } from "./types"
-
-export const OWLBEAR_POPOVER_SIZES: Record<OwlbearTabId | "fallback", { width: number; height: number }> = {
-    ficha: { width: 1180, height: 900 },
-    fichas: { width: 920, height: 760 },
-    npcs: { width: 920, height: 760 },
-    catalogo: { width: 1320, height: 900 },
-    fallback: { width: 720, height: 520 },
-}
-
+export const OWLBEAR_ACTION_SIZE = { width: 1320, height: 900 } as const
 export const OWLBEAR_MANIFEST_ACTION_TITLE = "Dndicas"
+export const OWLBEAR_ROOM_METADATA_KEY = "com.dndicas.owlbear/room"
+export const OWLBEAR_ROOM_METADATA_VERSION = 1
+export const OWLBEAR_DICE_HISTORY_LIMIT = 50
+export const OWLBEAR_TOKEN_METADATA_KEY = "com.dndicas.owlbear/token"
+export const OWLBEAR_OVERLAY_METADATA_KEY = "com.dndicas.owlbear/overlay"
+export const OWLBEAR_TOKEN_METADATA_VERSION = 1
+export const OWLBEAR_OVERLAY_METADATA_VERSION = 1

@@ -75,7 +75,7 @@ export function useInfiniteSheets(search?: string, limit = 12) {
         getNextPageParam: (lastPage) =>
             lastPage.hasNextPage ? lastPage.page + 1 : undefined,
         staleTime: 0,
-        refetchOnWindowFocus: true,
+        refetchOnWindowFocus: false,
     })
 }
 
@@ -87,7 +87,7 @@ export function useSheet(id: string | null) {
         queryFn: () => fetchSheet(id!),
         enabled: !!id,
         staleTime: 0,
-        refetchOnWindowFocus: true,
+        refetchOnWindowFocus: false,
     })
 }
 
@@ -97,7 +97,7 @@ export function useSheetBySlug(slug: string | null) {
         queryFn: () => fetchSheetBySlug(slug!),
         enabled: !!slug,
         staleTime: 0,
-        refetchOnWindowFocus: true,
+        refetchOnWindowFocus: false,
     })
 }
 
@@ -157,7 +157,7 @@ export function useItems(sheetId: string) {
         },
         enabled: !!sheetId,
         staleTime: 0,
-        refetchOnWindowFocus: true,
+        refetchOnWindowFocus: false,
     })
 }
 
@@ -256,7 +256,7 @@ export function useSheetSpells(sheetId: string) {
         },
         enabled: !!sheetId,
         staleTime: 0,
-        refetchOnWindowFocus: true,
+        refetchOnWindowFocus: false,
     })
 }
 
@@ -330,7 +330,7 @@ export function useTraits(sheetId: string) {
         queryFn: () => fetchTraits(sheetId),
         enabled: !!sheetId,
         staleTime: 0,
-        refetchOnWindowFocus: true,
+        refetchOnWindowFocus: false,
     })
 }
 
@@ -358,7 +358,7 @@ export function useSheetFeats(sheetId: string) {
         queryFn: () => fetchFeats(sheetId),
         enabled: !!sheetId,
         staleTime: 0,
-        refetchOnWindowFocus: true,
+        refetchOnWindowFocus: false,
     })
 }
 
@@ -395,7 +395,7 @@ export function useAttacks(sheetId: string) {
         },
         enabled: !!sheetId,
         staleTime: 0,
-        refetchOnWindowFocus: true,
+        refetchOnWindowFocus: false,
     })
 }
 

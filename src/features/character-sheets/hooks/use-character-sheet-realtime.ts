@@ -34,6 +34,7 @@ type CollectionRecordMap = {
 interface UseCharacterSheetRealtimeOptions {
     sheetId: string
     currentSlug: string
+    navigateOnSlugChange?: boolean
 }
 
 function upsertCollectionRecord<TRecord extends { _id: string }>(current: TRecord[] | undefined, next: TRecord): TRecord[] {
@@ -54,7 +55,7 @@ function removeCollectionRecord<TRecord extends { _id: string }>(current: TRecor
  * Subscribes the sheet screen to realtime updates and keeps React Query caches
  * aligned with changes produced by other viewers.
  */
-export function useCharacterSheetRealtime({ sheetId, currentSlug }: UseCharacterSheetRealtimeOptions) {
+export function useCharacterSheetRealtime({ sheetId, currentSlug, navigateOnSlugChange = true }: UseCharacterSheetRealtimeOptions) {
     const queryClient = useQueryClient()
     const router = useRouter()
 
@@ -76,7 +77,7 @@ export function useCharacterSheetRealtime({ sheetId, currentSlug }: UseCharacter
 
             syncSheetDetail(payload.sheet)
 
-            if (payload.sheet.slug !== currentSlug) {
+            if (navigateOnSlugChange && payload.sheet.slug !== currentSlug) {
                 router.replace(`/sheets/${payload.sheet.slug}`)
             }
         }
@@ -187,5 +188,5 @@ export function useCharacterSheetRealtime({ sheetId, currentSlug }: UseCharacter
             channel.unbind(CHARACTER_SHEET_PUSHER_EVENTS.featsChanged)
             pusher.unsubscribe(channelName)
         }
-    }, [currentSlug, queryClient, router, sheetId])
+    }, [currentSlug, navigateOnSlugChange, queryClient, router, sheetId])
 }
