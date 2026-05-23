@@ -179,6 +179,16 @@ interface SpellSourceEntry {
 
 type SpellSourcesFile = Record<string, Record<string, SpellSourceEntry>>;
 
+interface FiveEToolsSpellSummary {
+    name: string;
+    source: string;
+    level: number;
+}
+
+interface SpellsDataFile {
+    spell?: FiveEToolsSpellSummary[];
+}
+
 interface RawClassSpellRef {
     _raw: true;
     name: string;
@@ -810,6 +820,7 @@ export class ClassesProvider extends BaseProvider<FiveEToolsClass, CreateClassIn
     private pendingSubclassesByClassKey: Map<string, PendingSubclass[]> = new Map();
     private originalClassByClassKey: Map<string, FiveEToolsClass> = new Map();
     private spellSources: SpellSourcesFile | null = null;
+    private xphbSpells: FiveEToolsSpellSummary[] | null = null;
 
     protected override buildFilterDocument(cls: FiveEToolsClass) {
         return {
@@ -913,7 +924,7 @@ export class ClassesProvider extends BaseProvider<FiveEToolsClass, CreateClassIn
     }
 
     private getSubclassIntroFeatureName(subclass: FiveEToolsSubclass): string {
-        return (subclass.shortName ?? subclass.name).trim().toLowerCase();
+        return subclass.name.trim().toLowerCase();
     }
 
     private getSubclassDescriptionHtml(pending: PendingSubclass): string {
@@ -1275,7 +1286,7 @@ export class ClassesProvider extends BaseProvider<FiveEToolsClass, CreateClassIn
         let current: CreateClassInput = { ...output, subclasses: [...(output.subclasses ?? [])] };
 
         for (const [index, pending] of pendingSubclasses.entries()) {
-            const originalName = pending.original.shortName ?? pending.original.name;
+            const originalName = pending.original.name;
             term.cyan('\n  Subclasse ');
             term.bold(`${index + 1}/${pendingSubclasses.length}`);
             term(`: ${originalName} (${pending.original.source})\n`);
@@ -1304,7 +1315,7 @@ export class ClassesProvider extends BaseProvider<FiveEToolsClass, CreateClassIn
         const subclass = pending.original;
         const fluff = this.getSubclassFluff(subclass);
         const descriptionHtml = this.getSubclassDescriptionHtml(pending);
-        const originalName = subclass.shortName ?? subclass.name;
+        const originalName = subclass.name;
         const { name, description } = await this.translateItem(originalName, descriptionHtml || `<p>${originalName}</p>`);
         const progressionTable = await buildClassProgressionTable(
             { subclassTableGroups: subclass.subclassTableGroups },
@@ -1338,7 +1349,7 @@ export class ClassesProvider extends BaseProvider<FiveEToolsClass, CreateClassIn
 
         while (true) {
             this.renderReviewState(current, {
-                name: originalSubclass.shortName ?? originalSubclass.name,
+                name: originalSubclass.name,
                 source: originalSubclass.source,
                 className: originalSubclass.className,
                 description: this.getSubclassDescriptionHtml({
@@ -1539,6 +1550,14 @@ export class ClassesProvider extends BaseProvider<FiveEToolsClass, CreateClassIn
         return this.spellSources;
     }
 
+    private getXphbSpells(): FiveEToolsSpellSummary[] {
+        if (this.xphbSpells) return this.xphbSpells;
+        const filePath = path.resolve(PROJECT_ROOT, 'src/lib/5etools-data/spells-xphb.json');
+        const parsed = JSON.parse(fs.readFileSync(filePath, 'utf-8')) as SpellsDataFile;
+        this.xphbSpells = parsed.spell ?? [];
+        return this.xphbSpells;
+    }
+
     private buildClassSpellRefs(cls: FiveEToolsClass): RawClassSpellRef[] {
         const spellSources = this.getSpellSources();
         const refs: RawClassSpellRef[] = [];
@@ -1565,6 +1584,10 @@ export class ClassesProvider extends BaseProvider<FiveEToolsClass, CreateClassIn
         return name.trim().replace(/\s+/g, ' ').toLowerCase();
     }
 
+    private normalizeSpellRefPart(value: string): string {
+        return value.replace(/#.*$/, '').trim();
+    }
+
     private pushSpellRef(refs: RawClassSpellRef[], seen: Set<string>, name: string, source: string): void {
         const normalizedName = this.normalizeSpellRefKey(name);
         if (!normalizedName) return;
@@ -1580,15 +1603,69 @@ export class ClassesProvider extends BaseProvider<FiveEToolsClass, CreateClassIn
 
     private buildAdditionalSpellRef(rawValue: string, defaultSource: string): RawClassSpellRef | null {
         const [rawName, rawSource] = rawValue.split('|');
-        const name = rawName?.trim();
+        const name = this.normalizeSpellRefPart(rawName ?? '');
         if (!name) return null;
 
-        const source = rawSource?.trim() || defaultSource;
+        const source = this.normalizeSpellRefPart(rawSource ?? '') || defaultSource;
         return {
             _raw: true,
             name,
             source,
         };
+    }
+
+    private parseSpellFilter(filter: string): { levels: Set<number>; className?: string } | null {
+        const parts = filter.split('|').map((part) => part.trim()).filter(Boolean);
+        const levels = new Set<number>();
+        let className: string | undefined;
+
+        for (const part of parts) {
+            const [key, rawValue] = part.split('=');
+            if (!key || !rawValue) continue;
+
+            if (key === 'level') {
+                for (const value of rawValue.split(';')) {
+                    const level = Number(value.trim());
+                    if (!Number.isNaN(level)) levels.add(level);
+                }
+                continue;
+            }
+
+            if (key === 'class') {
+                className = rawValue.split(';')[0]?.trim();
+            }
+        }
+
+        return levels.size > 0 && className ? { levels, className } : null;
+    }
+
+    private collectAllFilterSpellRefs(
+        filter: string,
+        defaultSource: string,
+        refs: RawClassSpellRef[],
+        seen: Set<string>,
+    ): void {
+        const parsedFilter = this.parseSpellFilter(filter);
+        if (!parsedFilter) return;
+
+        const spellData = new Map(
+            this.getXphbSpells().map((spell) => [`${spell.name.toLowerCase()}|${spell.source.toLowerCase()}`, spell]),
+        );
+        const spellSources = this.getSpellSources();
+
+        for (const [source, spells] of Object.entries(spellSources)) {
+            for (const [spellName, entry] of Object.entries(spells)) {
+                const spell = spellData.get(`${spellName.toLowerCase()}|${source.toLowerCase()}`);
+                if (!spell || !parsedFilter.levels.has(spell.level)) continue;
+
+                const matchesClass = (entry.class ?? []).some(
+                    (classRef) => classRef.name === parsedFilter.className && classRef.source === spell.source,
+                );
+                if (!matchesClass) continue;
+
+                this.pushSpellRef(refs, seen, spellName, source || defaultSource);
+            }
+        }
     }
 
     private collectAdditionalSpellRefs(
@@ -1612,7 +1689,14 @@ export class ClassesProvider extends BaseProvider<FiveEToolsClass, CreateClassIn
         if (!value || typeof value !== 'object') return;
 
         for (const [key, nestedValue] of Object.entries(value as Record<string, unknown>)) {
-            if (key === 'name' || key === 'all' || key === 'choose' || key === 'from') continue;
+            if (key === 'all') {
+                if (typeof nestedValue === 'string') {
+                    this.collectAllFilterSpellRefs(nestedValue, defaultSource, refs, seen);
+                }
+                continue;
+            }
+
+            if (key === 'name' || key === 'choose' || key === 'from' || key === 'resourceName' || key === 'ability') continue;
             this.collectAdditionalSpellRefs(nestedValue, defaultSource, refs, seen);
         }
     }
@@ -2051,11 +2135,16 @@ export class ClassesProvider extends BaseProvider<FiveEToolsClass, CreateClassIn
         ];
 
         term('\n');
-        const choice = await new Promise<number>((resolve) => {
-            term.singleColumnMenu(menuItems, (_, response) => {
-                resolve(response.selectedIndex);
+        const choice = await new Promise<number | null>((resolve) => {
+            term.singleColumnMenu(menuItems, { cancelable: true }, (_, response) => {
+                resolve(response.canceled ? null : response.selectedIndex);
             });
         });
+
+        if (choice === null) {
+            term.yellow('  ⏭  Trait pulada.\n');
+            return null;
+        }
 
         if (choice === 0) {
             return this.reviewAndCreateTrait({
