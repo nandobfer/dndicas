@@ -2,6 +2,11 @@
 
 ## Features
 
+### Preview de subclasses com habilidades e magias próprias
+O `SubclassPreview` exibe, logo abaixo da descrição, as mesmas seções expansíveis de habilidades por nível e de magias usadas no preview de classes, inclusive quando a subclasse é renderizada de forma embutida dentro de `ClassPreview`.
+
+Essas listas usam exclusivamente os dados da própria subclasse selecionada (`subclass.traits` e `subclass.spells`), sem misturar habilidades ou magias da classe base. A seção de magias só aparece quando a subclasse possui conjuração habilitada.
+
 ### Seed provider de classes e subclasses
 O seed-data possui um `ClassesProvider` para importar classes base e subclasses de D&D a partir de `src/lib/5etools-data/classes/class-*.json`, usando os arquivos `fluff-class-*.json` do mesmo diretório para descrição narrativa e imagem.
 
