@@ -7,6 +7,7 @@ import { GoogleGenAI } from "@google/genai";
 import { logUsage } from "./usage-log";
 
 const API_KEY = process.env.GOOGLE_API_KEY;
+const HIGH_DEMAND_RETRY_DELAY_MS = 1000;
 
 if (!API_KEY) {
     console.warn("GOOGLE_API_KEY is not set. GenAI service will not work.");
@@ -14,6 +15,68 @@ if (!API_KEY) {
 
 // Singleton client
 let client: GoogleGenAI | null = null;
+
+const sleep = (ms: number): Promise<void> => new Promise(resolve => setTimeout(resolve, ms));
+
+const getErrorStatus = (error: unknown): number | undefined => {
+    if (!error || typeof error !== 'object') {
+        return undefined;
+    }
+
+    const candidate = error as { status?: unknown; code?: unknown; error?: { code?: unknown } };
+    const status = candidate.status ?? candidate.code ?? candidate.error?.code;
+
+    if (typeof status === 'number') {
+        return status;
+    }
+
+    if (typeof status === 'string') {
+        const parsed = Number(status);
+        return Number.isNaN(parsed) ? undefined : parsed;
+    }
+
+    return undefined;
+}
+
+const stringifyError = (error: unknown): string => {
+    if (error instanceof Error) {
+        return error.message;
+    }
+
+    try {
+        return JSON.stringify(error);
+    } catch {
+        return String(error);
+    }
+}
+
+const isGeminiHighDemandError = (error: unknown): boolean => {
+    const status = getErrorStatus(error);
+    const message = stringifyError(error).toLowerCase();
+
+    return status === 503 && message.includes('high demand');
+}
+
+const withHighDemandRetry = async <T>(
+    operationName: string,
+    operation: () => Promise<T>
+): Promise<T> => {
+    let attempt = 1;
+
+    while (true) {
+        try {
+            return await operation();
+        } catch (error) {
+            if (!isGeminiHighDemandError(error)) {
+                throw error;
+            }
+
+            console.warn(`GenAI ${operationName} hit Gemini high demand. Retrying in 1s (attempt ${attempt + 1}).`);
+            attempt += 1;
+            await sleep(HIGH_DEMAND_RETRY_DELAY_MS);
+        }
+    }
+}
 
 /**
  * Obtém ou cria uma instância do cliente GenAI
@@ -57,27 +120,29 @@ export async function generateText(
     const ai = getGenAIClient();
 
     try {
-        const response = await ai.models.generateContent({
-            model: modelName,
-            contents: prompt,
+        return await withHighDemandRetry('generateText', async () => {
+            const response = await ai.models.generateContent({
+                model: modelName,
+                contents: prompt,
+            });
+
+            // Log de uso com tokens
+            if (response.usageMetadata) {
+                const { promptTokenCount, candidatesTokenCount, totalTokenCount } = response.usageMetadata;
+
+                await logUsage(
+                    modelName,
+                    promptTokenCount || 0,
+                    candidatesTokenCount || 0,
+                    totalTokenCount || 0,
+                    userId
+                );
+
+                console.log(`GenAI Usage: ${totalTokenCount} tokens (in: ${promptTokenCount}, out: ${candidatesTokenCount})`);
+            }
+
+            return response.text || '';
         });
-
-        // Log de uso com tokens
-        if (response.usageMetadata) {
-            const { promptTokenCount, candidatesTokenCount, totalTokenCount } = response.usageMetadata;
-
-            await logUsage(
-                modelName,
-                promptTokenCount || 0,
-                candidatesTokenCount || 0,
-                totalTokenCount || 0,
-                userId
-            );
-
-            console.log(`GenAI Usage: ${totalTokenCount} tokens (in: ${promptTokenCount}, out: ${candidatesTokenCount})`);
-        }
-
-        return response.text || '';
     } catch (error) {
         console.error("GenAI Error:", error);
         throw new Error(`Failed to generate text: ${error instanceof Error ? error.message : 'Unknown error'}`);
@@ -108,38 +173,40 @@ export async function generateTextStream(
     const ai = getGenAIClient();
 
     try {
-        const response = await ai.models.generateContentStream({
-            model: modelName,
-            contents: prompt,
-        });
+        await withHighDemandRetry('generateTextStream', async () => {
+            const response = await ai.models.generateContentStream({
+                model: modelName,
+                contents: prompt,
+            });
 
-        let fullText = '';
-        let totalTokens = 0;
-        let finalResponse;
+            let fullText = '';
+            let totalTokens = 0;
+            let finalResponse;
 
-        for await (const chunk of response) {
-            const text = chunk.text || '';
-            fullText += text;
-            onChunk(text);
+            for await (const chunk of response) {
+                const text = chunk.text || '';
+                fullText += text;
+                onChunk(text);
 
-            if (chunk.usageMetadata) {
-                totalTokens = chunk.usageMetadata.totalTokenCount || 0;
+                if (chunk.usageMetadata) {
+                    totalTokens = chunk.usageMetadata.totalTokenCount || 0;
+                }
+                finalResponse = chunk;
             }
-            finalResponse = chunk;
-        }
 
-        // Log final
-        if (finalResponse?.usageMetadata) {
-            const { promptTokenCount, candidatesTokenCount, totalTokenCount } = finalResponse.usageMetadata;
+            // Log final
+            if (finalResponse?.usageMetadata) {
+                const { promptTokenCount, candidatesTokenCount, totalTokenCount } = finalResponse.usageMetadata;
 
-            await logUsage(
-                modelName,
-                promptTokenCount || 0,
-                candidatesTokenCount || 0,
-                totalTokenCount || totalTokens,
-                userId
-            );
-        }
+                await logUsage(
+                    modelName,
+                    promptTokenCount || 0,
+                    candidatesTokenCount || 0,
+                    totalTokenCount || totalTokens,
+                    userId
+                );
+            }
+        });
     } catch (error) {
         console.error("GenAI Stream Error:", error);
         throw new Error(`Failed to generate text stream: ${error instanceof Error ? error.message : 'Unknown error'}`);
@@ -165,10 +232,10 @@ export async function countTokens(
     const ai = getGenAIClient();
 
     try {
-        const response = await ai.models.countTokens({
+        const response = await withHighDemandRetry('countTokens', () => ai.models.countTokens({
             model: modelName,
             contents: text,
-        });
+        }));
 
         return response.totalTokens || 0;
     } catch (error) {
@@ -209,25 +276,27 @@ export async function chat(
             parts: [{ text: msg.parts }]
         }));
 
-        const response = await ai.models.generateContent({
-            model: modelName,
-            contents,
+        return await withHighDemandRetry('chat', async () => {
+            const response = await ai.models.generateContent({
+                model: modelName,
+                contents,
+            });
+
+            // Log de uso
+            if (response.usageMetadata) {
+                const { promptTokenCount, candidatesTokenCount, totalTokenCount } = response.usageMetadata;
+
+                await logUsage(
+                    modelName,
+                    promptTokenCount || 0,
+                    candidatesTokenCount || 0,
+                    totalTokenCount || 0,
+                    userId
+                );
+            }
+
+            return response.text || '';
         });
-
-        // Log de uso
-        if (response.usageMetadata) {
-            const { promptTokenCount, candidatesTokenCount, totalTokenCount } = response.usageMetadata;
-
-            await logUsage(
-                modelName,
-                promptTokenCount || 0,
-                candidatesTokenCount || 0,
-                totalTokenCount || 0,
-                userId
-            );
-        }
-
-        return response.text || '';
     } catch (error) {
         console.error("Chat Error:", error);
         throw new Error(`Failed to chat: ${error instanceof Error ? error.message : 'Unknown error'}`);

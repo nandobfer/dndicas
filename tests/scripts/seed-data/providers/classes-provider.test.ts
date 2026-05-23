@@ -382,6 +382,123 @@ function seedCompositeSubclassFixture(provider: ClassesProvider): void {
     ]);
 }
 
+function seedFullNameIntroSubclassFixture(provider: ClassesProvider): void {
+    (provider as unknown as { subclassFeatureData: Map<string, unknown> }).subclassFeatureData = new Map([
+        [
+            'life domain|cleric|xphb|life|xphb|xphb|3',
+            {
+                name: 'Life Domain',
+                source: 'XPHB',
+                className: 'Cleric',
+                classSource: 'XPHB',
+                subclassShortName: 'Life',
+                subclassSource: 'XPHB',
+                level: 3,
+                entries: [
+                    '{@i Soothe the Hurts of the World}',
+                    'The Life Domain focuses on the positive energy that helps sustain all life in the multiverse.',
+                    {
+                        type: 'refSubclassFeature',
+                        subclassFeature: 'Life Domain Spells|Cleric|XPHB|Life|XPHB|3',
+                    },
+                    {
+                        type: 'refSubclassFeature',
+                        subclassFeature: 'Disciple of Life|Cleric|XPHB|Life|XPHB|3',
+                    },
+                    {
+                        type: 'refSubclassFeature',
+                        subclassFeature: 'Preserve Life|Cleric|XPHB|Life|XPHB|3',
+                    },
+                ],
+            },
+        ],
+        [
+            'life domain spells|cleric|xphb|life|xphb|xphb|3',
+            {
+                name: 'Life Domain Spells',
+                source: 'XPHB',
+                className: 'Cleric',
+                classSource: 'XPHB',
+                subclassShortName: 'Life',
+                subclassSource: 'XPHB',
+                level: 3,
+                entries: ['You always have certain spells ready.'],
+            },
+        ],
+        [
+            'disciple of life|cleric|xphb|life|xphb|xphb|3',
+            {
+                name: 'Disciple of Life',
+                source: 'XPHB',
+                className: 'Cleric',
+                classSource: 'XPHB',
+                subclassShortName: 'Life',
+                subclassSource: 'XPHB',
+                level: 3,
+                entries: ['Healing spells restore additional Hit Points.'],
+            },
+        ],
+        [
+            'preserve life|cleric|xphb|life|xphb|xphb|3',
+            {
+                name: 'Preserve Life',
+                source: 'XPHB',
+                className: 'Cleric',
+                classSource: 'XPHB',
+                subclassShortName: 'Life',
+                subclassSource: 'XPHB',
+                level: 3,
+                entries: ['You evoke healing energy with Channel Divinity.'],
+            },
+        ],
+        [
+            'blessed healer|cleric|xphb|life|xphb|xphb|6',
+            {
+                name: 'Blessed Healer',
+                source: 'XPHB',
+                className: 'Cleric',
+                classSource: 'XPHB',
+                subclassShortName: 'Life',
+                subclassSource: 'XPHB',
+                level: 6,
+                entries: ['The healing spells you cast on others heal you as well.'],
+            },
+        ],
+    ]);
+    (provider as unknown as { subclassFluffData: Map<string, unknown> }).subclassFluffData = new Map([
+        [
+            'cleric|life|xphb',
+            {
+                name: 'Life Domain',
+                shortName: 'Life',
+                source: 'XPHB',
+                className: 'Cleric',
+                classSource: 'XPHB',
+                images: [{ type: 'image', href: { type: 'internal', path: 'classes/XPHB/Life Cleric.webp' } }],
+            },
+        ],
+    ]);
+    (provider as unknown as { subclassData: Map<string, unknown[]> }).subclassData = new Map([
+        [
+            'cleric|xphb',
+            [
+                {
+                    name: 'Life Domain',
+                    shortName: 'Life',
+                    source: 'XPHB',
+                    page: 73,
+                    className: 'Cleric',
+                    classSource: 'XPHB',
+                    subclassFeatures: [
+                        'Life Domain|Cleric|XPHB|Life|XPHB|3',
+                        'Blessed Healer|Cleric|XPHB|Life|XPHB|6',
+                    ],
+                },
+            ],
+        ],
+    ]);
+}
+
 function getTranslateSpy(provider: ClassesProvider) {
     return vi.mocked((provider as unknown as { translateItem: (...args: unknown[]) => unknown }).translateItem);
 }
@@ -415,7 +532,9 @@ function mockSpellSearch(candidates: Array<{ _id: string; name: string; original
 function mockMenuChoices(...choices: number[]): void {
     const menu = (termKit as unknown as { terminal: { singleColumnMenu: ReturnType<typeof vi.fn> } })
         .terminal.singleColumnMenu;
-    menu.mockImplementation((_: unknown, cb: (err: unknown, response: { selectedIndex: number }) => void) => {
+    menu.mockImplementation((...args: unknown[]) => {
+        const cb = args.find((arg): arg is (err: unknown, response: { selectedIndex: number }) => void => typeof arg === 'function');
+        if (!cb) return;
         cb(null, { selectedIndex: choices.shift() ?? 4 });
     });
 }
@@ -813,6 +932,62 @@ describe('ClassesProvider.processItem', () => {
         expect(getTranslateSpy(provider)).toHaveBeenCalledWith('Eldritch Knight', '<p>Eldritch Knights blend spell and steel.</p>');
     });
 
+    it('uses the full subclass name as intro and derives traits from intro refs', async () => {
+        seedFullNameIntroSubclassFixture(provider);
+
+        await provider.processItem({
+            name: 'Cleric',
+            source: 'XPHB',
+            page: 69,
+            hd: { faces: 8 },
+            proficiency: ['wis', 'cha'],
+            startingProficiencies: {
+                armor: ['light', 'medium', 'shield'],
+                weapons: ['simple'],
+                skills: [{ choose: { from: ['medicine', 'religion'], count: 2 } }],
+            },
+        });
+
+        const pending = (provider as unknown as {
+            pendingSubclassesByClassKey: Map<string, Array<{ descriptionHtml?: string; features: Array<{ originalName: string; level: number }> }>>;
+            buildSubclassForReview: (pendingSubclass: {
+                original: unknown;
+                descriptionHtml?: string;
+                features: Array<{ originalName: string; level: number }>;
+            }, index: number) => Promise<{ name: string; description: string; image?: string }>;
+        }).pendingSubclassesByClassKey.get('cleric|ldj pág. 69');
+
+        expect(pending).toHaveLength(1);
+        expect(pending?.[0]?.descriptionHtml).toBe(
+            '<p>Soothe the Hurts of the World</p><p>The Life Domain focuses on the positive energy that helps sustain all life in the multiverse.</p>',
+        );
+        expect(pending?.[0]?.features.map((feature) => feature.originalName)).toEqual([
+            'Life Domain Spells',
+            'Disciple of Life',
+            'Preserve Life',
+            'Blessed Healer',
+        ]);
+
+        getTranslateSpy(provider).mockClear();
+        const subclass = await (provider as unknown as {
+            buildSubclassForReview: (pendingSubclass: NonNullable<typeof pending>[number], index: number) => Promise<{
+                name: string;
+                description: string;
+                image?: string;
+            }>;
+        }).buildSubclassForReview(pending![0], 0);
+
+        expect(subclass.name).toBe('[PT] Life Domain');
+        expect(subclass.description).toBe(
+            '[PT] <p>Soothe the Hurts of the World</p><p>The Life Domain focuses on the positive energy that helps sustain all life in the multiverse.</p>',
+        );
+        expect(subclass.image).toBe('https://5e.tools/img/classes/XPHB/Life Cleric.webp');
+        expect(getTranslateSpy(provider)).toHaveBeenCalledWith(
+            'Life Domain',
+            '<p>Soothe the Hurts of the World</p><p>The Life Domain focuses on the positive energy that helps sustain all life in the multiverse.</p>',
+        );
+    });
+
     it('composes nested subclass feature refs inline for compound subclass traits', async () => {
         seedCompositeSubclassFixture(provider);
 
@@ -849,6 +1024,69 @@ describe('ClassesProvider.processItem', () => {
         expect(armorModel?.descriptionHtml).toContain('Defensive Field');
         expect(armorModel?.descriptionHtml).toContain('Lightning Launcher');
         expect(pending?.[0]?.features.map((feature) => feature.originalName)).toEqual(['Armor Model']);
+    });
+});
+
+describe('ClassesProvider subclass spell refs', () => {
+    let provider: ClassesProvider;
+
+    beforeEach(() => {
+        provider = makeProvider();
+    });
+
+    it('expands deterministic all filters and ignores open choices and metadata', () => {
+        (provider as unknown as { spellSources: unknown }).spellSources = {
+            XPHB: {
+                'Acid Splash': { class: [{ name: 'Wizard', source: 'XPHB' }] },
+                Shield: { class: [{ name: 'Wizard', source: 'XPHB' }] },
+                Fireball: { class: [{ name: 'Wizard', source: 'XPHB' }] },
+                'Cure Wounds': { class: [{ name: 'Cleric', source: 'XPHB' }] },
+            },
+        };
+        (provider as unknown as { xphbSpells: unknown }).xphbSpells = [
+            { name: 'Acid Splash', source: 'XPHB', level: 0 },
+            { name: 'Shield', source: 'XPHB', level: 1 },
+            { name: 'Fireball', source: 'XPHB', level: 3 },
+            { name: 'Cure Wounds', source: 'XPHB', level: 1 },
+        ];
+
+        const refs = (provider as unknown as {
+            buildSubclassSpellRefs: (subclass: unknown) => Array<{ name: string; source: string }>;
+        }).buildSubclassSpellRefs({
+            name: 'Arcane Trickster',
+            shortName: 'Arcane Trickster',
+            source: 'XPHB',
+            className: 'Rogue',
+            classSource: 'XPHB',
+            additionalSpells: [
+                {
+                    known: {
+                        3: [
+                            'mage hand|xphb#c',
+                            { choose: 'level=0;1|class=Wizard' },
+                        ],
+                    },
+                    expanded: {
+                        3: [
+                            { all: 'level=0;1|class=Wizard' },
+                        ],
+                    },
+                    resourceName: 'Focus Point',
+                    ability: 'wis',
+                },
+            ],
+        });
+
+        expect(refs).toEqual(expect.arrayContaining([
+            { _raw: true, name: 'Acid Splash', source: 'XPHB' },
+            { _raw: true, name: 'mage hand', source: 'xphb' },
+            { _raw: true, name: 'Shield', source: 'XPHB' },
+        ]));
+        expect(refs).toHaveLength(3);
+        expect(refs.map((ref) => ref.name)).not.toContain('Focus Point');
+        expect(refs.map((ref) => ref.name)).not.toContain('wis');
+        expect(refs.map((ref) => ref.name)).not.toContain('Fireball');
+        expect(refs.map((ref) => ref.name)).not.toContain('Cure Wounds');
     });
 });
 
@@ -1945,6 +2183,49 @@ describe('ClassesProvider.afterReview', () => {
         expect(vi.mocked(CharacterClass.findOneAndUpdate)).not.toHaveBeenCalled();
         expect(result.traits).toEqual([]);
         expect('__pendingClassFeatures' in result).toBe(false);
+    });
+
+    it('skips only the current trait when candidate selection is canceled', async () => {
+        vi.mocked(Trait.find).mockReturnValue(mockFindResults([
+            {
+                _id: 'trait-existing',
+                name: 'Retomar o Fôlego',
+                originalName: 'Second Wind',
+                description: '<p>Existing trait.</p>',
+            },
+        ]) as never);
+        (termKit as unknown as { terminal: { singleColumnMenu: ReturnType<typeof vi.fn> } })
+            .terminal.singleColumnMenu.mockImplementationOnce((...args: unknown[]) => {
+                const cb = args.find((arg): arg is (err: unknown, response: { selectedIndex: number; canceled?: boolean }) => void =>
+                    typeof arg === 'function',
+                );
+                cb?.(null, { selectedIndex: 0, canceled: true });
+            });
+
+        const result = await (
+            provider as unknown as {
+                resolveTrait: (
+                    trait: unknown,
+                    className: string,
+                    classSource: string,
+                    originalFeature?: unknown,
+                ) => Promise<unknown>;
+            }
+        ).resolveTrait(
+            {
+                level: 1,
+                name: 'Retomar o Fôlego',
+                originalName: 'Second Wind',
+                description: '<p>Regain hit points.</p>',
+            },
+            'Guerreiro',
+            'LDJ pág. 89',
+        );
+
+        expect(result).toBeNull();
+        expect(Trait.create).not.toHaveBeenCalled();
+        expect((termKit as unknown as { terminal: { inputField: ReturnType<typeof vi.fn> } }).terminal.inputField)
+            .not.toHaveBeenCalled();
     });
 
     it('renders trait review with original feature data and formatted result output', async () => {
