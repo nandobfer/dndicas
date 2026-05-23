@@ -673,7 +673,7 @@ describe('RacesProvider.resolveTraits — originalName lookup', () => {
         // Auto-pick "use existing" (index 1) so interactive menu resolves immediately
         (termKit as unknown as { terminal: { singleColumnMenu: ReturnType<typeof vi.fn> } })
             .terminal.singleColumnMenu.mockImplementation(
-                (_: unknown, cb: (err: unknown, resp: { selectedIndex: number }) => void) => {
+                (_: unknown, __: unknown, cb: (err: unknown, resp: { selectedIndex: number }) => void) => {
                     cb(null, { selectedIndex: 1 });
                 },
             );
