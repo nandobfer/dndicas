@@ -44,6 +44,7 @@ import { ImageAndDescriptionSection, SpellcastingSection, TraitsSection, SkillSe
 import { ClassProgressionTable } from "./class-progression-table"
 
 import { createClassSchema, type CreateClassSchema } from "../api/validation"
+import { buildClassFormDefaults } from "./class-form-normalization"
 import {
     CharacterClass,
     CreateClassInput,
@@ -269,27 +270,7 @@ export function ClassFormModal({ characterClass, isOpen, onClose, onSuccess }: C
         formState: { errors, isDirty },
     } = useForm<CreateClassSchema>({
         resolver: zodResolver(createClassSchema) as any,
-        defaultValues: {
-            name: characterClass?.name ?? "",
-            originalName: characterClass?.originalName ?? "",
-            description: characterClass?.description ?? "",
-            source: characterClass?.source ?? "",
-            status: characterClass?.status ?? "active",
-            hitDice: characterClass?.hitDice ?? "d8",
-            primaryAttributes: characterClass?.primaryAttributes ?? [],
-            savingThrows: characterClass?.savingThrows ?? [],
-            armorProficiencies: characterClass?.armorProficiencies ?? [],
-            weaponProficiencies: characterClass?.weaponProficiencies ?? ["Armas simples" as WeaponProficiency],
-            skillCount: characterClass?.skillCount ?? 2,
-            availableSkills: characterClass?.availableSkills ?? [],
-            spellcasting: characterClass?.spellcasting ?? false,
-            spellcastingAttribute: characterClass?.spellcastingAttribute ?? undefined,
-            spells: characterClass?.spells ?? [],
-            subclasses: characterClass?.subclasses ?? [],
-            traits: characterClass?.traits ?? [],
-            image: characterClass?.image ?? "",
-            progressionTable: characterClass?.progressionTable ?? undefined,
-        },
+        defaultValues: buildClassFormDefaults(characterClass),
     })
 
     const {
@@ -319,29 +300,8 @@ export function ClassFormModal({ characterClass, isOpen, onClose, onSuccess }: C
             setNewSubclassSource("")
             setRenamingIndex(null)
             reset({
-                name: characterClass?.name ?? "",
-                originalName: characterClass?.originalName ?? "",
-                description: characterClass?.description ?? "",
+                ...buildClassFormDefaults(characterClass),
                 source: characterClass?.source ?? "LDJ pág. ",
-                status: characterClass?.status ?? "active",
-                hitDice: characterClass?.hitDice ?? "d8",
-                primaryAttributes: characterClass?.primaryAttributes ?? [],
-                savingThrows: characterClass?.savingThrows ?? [],
-                armorProficiencies: characterClass?.armorProficiencies ?? [],
-                weaponProficiencies: characterClass?.weaponProficiencies ?? ["Armas simples" as WeaponProficiency],
-                skillCount: characterClass?.skillCount ?? 2,
-                availableSkills: characterClass?.availableSkills ?? [],
-                spellcasting: Boolean(characterClass?.spellcasting),
-                spellcastingAttribute: characterClass?.spellcastingAttribute ?? undefined,
-                spells: characterClass?.spells ?? [],
-                subclasses: (characterClass?.subclasses || []).map((s) => ({
-                    ...s,
-                    spellcasting: Boolean(s.spellcasting),
-                    spells: s.spells ?? [],
-                })),
-                traits: characterClass?.traits ?? [],
-                image: characterClass?.image ?? "",
-                progressionTable: characterClass?.progressionTable ?? undefined,
             })
         }
     }, [isOpen, characterClass, reset])

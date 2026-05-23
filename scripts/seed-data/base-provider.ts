@@ -365,8 +365,8 @@ export abstract class BaseProvider<TInput, TOutput> {
     }
 
     private diffObjects(existing: TOutput, incoming: TOutput): DiffEntry[] {
-        const a = existing as Record<string, unknown>;
-        const b = incoming as Record<string, unknown>;
+        const a = this.getComparableOutput(existing) as Record<string, unknown>;
+        const b = this.getComparableOutput(incoming) as Record<string, unknown>;
         const allFields = new Set([...Object.keys(a), ...Object.keys(b)]);
         const diffs: DiffEntry[] = [];
         for (const field of allFields) {
@@ -484,6 +484,27 @@ export abstract class BaseProvider<TInput, TOutput> {
         return result as TOutput;
     }
 
+    protected getReviewDisplayOutput(output: unknown): unknown {
+        return output;
+    }
+
+    protected getComparableOutput(output: TOutput): TOutput {
+        return output;
+    }
+
+    protected renderReviewState(current: unknown, originalItem?: unknown): void {
+        term('\n');
+        if (originalItem !== undefined) {
+            term.bold('─── Original (EN) ──────────────────────────────────────────\n');
+            printRedJson(originalItem);
+            term('\n');
+        }
+        term.bold('─── Resultado ─────────────────────────────────────────────\n');
+        printColoredJson(this.getReviewDisplayOutput(current));
+        term('\n');
+        term.bold('────────────────────────────────────────────────────────────\n');
+    }
+
     // ─── Interactive review ───────────────────────────────────────────────────
 
     /**
@@ -502,19 +523,9 @@ export abstract class BaseProvider<TInput, TOutput> {
         let entries = await loadAllEntries();
         let current = this.applyGlossaryToOutput(output, entries);
 
-        // eslint-disable-next-line no-constant-condition
         while (true) {
             // Display current state
-            term('\n');
-            if (originalItem !== undefined) {
-                term.bold('─── Original (EN) ──────────────────────────────────────────\n');
-                printRedJson(originalItem);
-                term('\n');
-            }
-            term.bold('─── Resultado ─────────────────────────────────────────────\n');
-            printColoredJson(current);
-            term('\n');
-            term.bold('────────────────────────────────────────────────────────────\n');
+            this.renderReviewState(current, originalItem);
 
             if (isDryRun) {
                 term.yellow('  (modo dry-run — não será salvo no banco)\n');
@@ -768,10 +779,10 @@ export abstract class BaseProvider<TInput, TOutput> {
                     return 'skipped';
                 }
                 working = resolved;
-            } else if (!isDryRun) {
-                term.yellow('  ⚠  Já existe no banco e está igual — ignorando.\n');
+            } else if (!isDryRun && !this.shouldReviewExistingEqualAfterBaseReview(glossarized, item)) {
+                const existingEqualResult = await this.handleExistingEqual(existing, glossarized, item);
                 await this.persistProgressIfEnabled(index);
-                return 'exists';
+                return existingEqualResult;
             }
         }
 
@@ -784,8 +795,42 @@ export abstract class BaseProvider<TInput, TOutput> {
             return 'skipped';
         }
 
+        let reviewedOutput = reviewed;
+        const reviewedLabel = this.getItemLabel(reviewedOutput);
+        const glossarizedLabel = this.getItemLabel(glossarized);
+        let persistedExisting = existing;
+
+        if (!isDryRun && this.shouldPersistBeforeAfterReview(reviewedOutput)) {
+            if (reviewedLabel !== glossarizedLabel) {
+                persistedExisting = await this.findExisting(reviewedOutput);
+                if (persistedExisting !== null) {
+                    term.yellow(`  ⚠  O nome foi alterado para "${reviewedLabel}", que já existe no banco. Iniciando resolução de conflito.\n`);
+                    const conflictDiffs = this.diffObjects(persistedExisting, reviewedOutput);
+                    if (conflictDiffs.length > 0) {
+                        const resolved = await this.resolveConflictsFieldByField(persistedExisting, reviewedOutput, conflictDiffs);
+                        if (resolved === null) {
+                            await this.persistProgressIfEnabled(index);
+                            return 'skipped';
+                        }
+                        reviewedOutput = resolved;
+                    }
+                }
+            }
+
+            if (persistedExisting) {
+                const reviewedDiffs = this.diffObjects(persistedExisting, reviewedOutput);
+                if (reviewedDiffs.length > 0) {
+                    await this.update(reviewedOutput);
+                }
+            } else {
+                await this.create(reviewedOutput);
+            }
+
+            persistedExisting = await this.findExisting(reviewedOutput);
+        }
+
         // Hook for providers to run post-review steps (e.g. trait resolution)
-        let finalOutput = await this.afterReview(reviewed, isDryRun);
+        let finalOutput = await this.afterReview(reviewedOutput, isDryRun);
 
         if (isDryRun) {
             term.green('\n✓ Modo dry-run — nenhum dado foi salvo.\n');
@@ -795,9 +840,9 @@ export abstract class BaseProvider<TInput, TOutput> {
         // Re-check existence in case the glossary review changed the item's name
         // (e.g., user maps "Condenar a Maldição" → "Rogar Maldição" which already exists).
         // The pre-review `existing` may be stale if the name changed.
-        const nameBeforeReview = this.getItemLabel(glossarized);
+        const nameBeforeReview = this.getItemLabel(reviewedOutput);
         const nameAfterReview = this.getItemLabel(finalOutput);
-        let finalExisting = existing;
+        let finalExisting = persistedExisting;
 
         if (nameAfterReview !== nameBeforeReview) {
             finalExisting = await this.findExisting(finalOutput);
@@ -844,7 +889,31 @@ export abstract class BaseProvider<TInput, TOutput> {
      * Override in subclasses to run additional interactive steps (e.g. trait resolution).
      */
     protected async afterReview(output: TOutput, _isDryRun: boolean): Promise<TOutput> {
+        void _isDryRun;
         return output;
+    }
+
+    protected shouldPersistBeforeAfterReview(_output: TOutput): boolean {
+        void _output;
+        return false;
+    }
+
+    protected shouldReviewExistingEqualAfterBaseReview(_incoming: TOutput, _originalItem: TInput): boolean {
+        void _incoming;
+        void _originalItem;
+        return false;
+    }
+
+    protected async handleExistingEqual(
+        _existing: TOutput,
+        _incoming: TOutput,
+        _originalItem: TInput,
+    ): Promise<'created' | 'updated' | 'skipped' | 'exists'> {
+        void _existing;
+        void _incoming;
+        void _originalItem;
+        term.yellow('  ⚠  Já existe no banco e está igual — ignorando.\n');
+        return 'exists';
     }
 
     // ─── Abstract methods ─────────────────────────────────────────────────────
@@ -875,6 +944,7 @@ export abstract class BaseProvider<TInput, TOutput> {
      * Override in subclasses that support conflict resolution updates.
      */
     async update(_item: TOutput): Promise<void> {
+        void _item;
         this.log('update() not implemented for this provider — skipping.', 'warn');
     }
 

@@ -36,7 +36,12 @@ export default defineConfig({
                     restoreMocks: true,
                     unstubEnvs: true,
                     setupFiles: ['./tests/backend/setup.ts', './tests/frontend/setup.ts'],
-                    include: ['tests/frontend/**/*.test.ts', 'tests/frontend/**/*.test.tsx'],
+                    include: [
+                        'tests/frontend/**/*.test.ts',
+                        'tests/frontend/**/*.test.tsx',
+                        'tests/owlbear/**/*.test.ts',
+                        'tests/owlbear/**/*.test.tsx',
+                    ],
                     exclude: ['**/node_modules/**'],
                 },
             }),

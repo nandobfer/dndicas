@@ -153,7 +153,7 @@ ${descriptionHtml}`;
             );
         }
 
-        if (!translated.name || !translated.description) {
+        if (!translated.name || typeof translated.description !== 'string') {
             throw new Error(`AI response missing name or description for "${name}"`);
         }
 
