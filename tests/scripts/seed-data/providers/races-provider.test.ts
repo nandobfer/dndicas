@@ -52,6 +52,7 @@ vi.mock('terminal-kit', () => ({
                 gray: vi.fn(),
                 cyan: vi.fn(),
                 dim: vi.fn(),
+                brightRed: vi.fn(),
                 bold: Object.assign(vi.fn(), { cyan: vi.fn(), white: vi.fn() }),
                 blue: vi.fn(),
                 progressBar: vi.fn(() => ({ update: vi.fn(), stop: vi.fn() })),
