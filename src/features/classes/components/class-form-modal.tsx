@@ -40,7 +40,7 @@ import { GlassColorPicker } from "@/components/ui/glass-color-picker"
 import { RichTextEditor } from "@/features/rules/components/rich-text-editor"
 
 import { attributeColors, diceColors, rarityColors, type AttributeType } from "@/lib/config/colors"
-import { ImageAndDescriptionSection, SpellcastingSection, TraitsSection, SkillSelection } from "./shared-form-components"
+import { ImageAndDescriptionSection, SpellcastingSection, SpellsSection, TraitsSection, SkillSelection } from "./shared-form-components"
 import { ClassProgressionTable } from "./class-progression-table"
 
 import { createClassSchema, type CreateClassSchema } from "../api/validation"
@@ -129,6 +129,10 @@ function SubclassTraitsWrapper({ control, activeTab, isSubmitting, errors }: { c
     })
 
     return <TraitsSection fields={fields} append={append} remove={remove} control={control} isSubmitting={isSubmitting} traitsFieldName={`subclasses.${activeTab}.traits`} errors={errors} />
+}
+
+function SubclassSpellsWrapper({ control, activeTab, isSubmitting, errors }: { control: any; activeTab: number; isSubmitting: boolean; errors: any }) {
+    return <SpellsSection control={control} isSubmitting={isSubmitting} spellsFieldName={`subclasses.${activeTab}.spells`} errors={errors} />
 }
 
 // ─── Subclass Progression Table Wrapper ──────────────────────────────────────
@@ -274,6 +278,16 @@ export function ClassFormModal({ characterClass, isOpen, onClose, onSuccess }: C
     })
 
     const {
+        fields: subclassFields,
+        append: appendSubclass,
+        remove: removeSubclass,
+        update: updateSubclass,
+    } = useFieldArray({
+        control,
+        name: "subclasses",
+    })
+
+    const {
         fields: weaponFields,
         append: appendWeapon,
         remove: removeWeapon,
@@ -306,7 +320,7 @@ export function ClassFormModal({ characterClass, isOpen, onClose, onSuccess }: C
         }
     }, [isOpen, characterClass, reset])
 
-    const subclasses = watch("subclasses") || []
+    const subclasses = watch("subclasses", subclassFields as CreateClassSchema["subclasses"]) || subclassFields
     const spellcasting = watch("spellcasting")
 
     // ── Subclass management ──────────────────────────────────────────────────
@@ -329,7 +343,7 @@ export function ClassFormModal({ characterClass, isOpen, onClose, onSuccess }: C
             image: "",
         }
 
-        setValue("subclasses", [...subclasses, newSubclass])
+        appendSubclass(newSubclass)
         setNewSubclassName("")
         setNewSubclassSource("")
         setNewSubclassColor(SUBCLASS_COLORS[(subclasses.length + 1) % SUBCLASS_COLORS.length])
@@ -349,9 +363,9 @@ export function ClassFormModal({ characterClass, isOpen, onClose, onSuccess }: C
     }
 
     const handleDeleteSubclass = (index: number) => {
-        const updated = subclasses.filter((_, i) => i !== index)
-        setValue("subclasses", updated)
+        removeSubclass(index)
         if (activeTab === index) setActiveTab("base")
+        if (typeof activeTab === "number" && activeTab > index) setActiveTab(activeTab - 1)
     }
 
     const handleStartRename = (index: number, name: string) => {
@@ -362,16 +376,18 @@ export function ClassFormModal({ characterClass, isOpen, onClose, onSuccess }: C
     const handleConfirmRename = (index: number) => {
         const trimmed = renameValue.trim()
         if (!trimmed) return
-        const updated = subclasses.map((s, i) => (i === index ? { ...s, name: trimmed } : s))
-        setValue("subclasses", updated)
+        const currentSubclass = subclasses[index]
+        if (!currentSubclass) return
+        updateSubclass(index, { ...currentSubclass, name: trimmed })
         setRenamingIndex(null)
     }
 
     const handleCancelRename = () => setRenamingIndex(null)
 
     const handleUpdateSubclassColor = (index: number, color: string) => {
-        const updated = subclasses.map((s, i) => (i === index ? { ...s, color } : s))
-        setValue("subclasses", updated)
+        const currentSubclass = subclasses[index]
+        if (!currentSubclass) return
+        updateSubclass(index, { ...currentSubclass, color })
     }
 
     const handleCloseAttempt = () => {
@@ -723,6 +739,10 @@ export function ClassFormModal({ characterClass, isOpen, onClose, onSuccess }: C
                                     layoutIdPrefix="base"
                                 />
 
+                                {watch("spellcasting") === true && (
+                                    <SpellsSection control={control} isSubmitting={isSubmitting} spellsFieldName="spells" errors={errors} />
+                                )}
+
                                 {/* Row 10: Class Traits */}
                                 <TraitsSection fields={traitFields} append={appendTrait} remove={removeTrait} control={control} isSubmitting={isSubmitting} traitsFieldName="traits" errors={errors} />
 
@@ -909,6 +929,10 @@ export function ClassFormModal({ characterClass, isOpen, onClose, onSuccess }: C
                                         attributeFieldName={`subclasses.${activeTab}.spellcastingAttribute`}
                                         layoutIdPrefix={`subclass-${activeTab}`}
                                     />
+
+                                    {watch(`subclasses.${activeTab}.spellcasting`) === true && (
+                                        <SubclassSpellsWrapper control={control} activeTab={activeTab} isSubmitting={isSubmitting} errors={errors} />
+                                    )}
 
                                     <div className="h-px bg-white/5" />
 
