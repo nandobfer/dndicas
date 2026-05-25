@@ -62,6 +62,7 @@ export function DiceRollerPanel({
     const [isAnimatingDice, setIsAnimatingDice] = React.useState(false)
     const [errorMessage, setErrorMessage] = React.useState<string | null>(null)
     const lastExternalRollIdRef = React.useRef<string | null>(null)
+    const animationTimeoutRef = React.useRef<number | null>(null)
     const normalizedTerms = normalizeTerms(terms)
     const canUseD20Mode = isSingleD20(normalizedTerms)
     const activeMode: DiceRollMode = canUseD20Mode ? mode : "normal"
@@ -71,6 +72,10 @@ export function DiceRollerPanel({
     const criticalState = React.useMemo(() => getDiceCriticalState(result), [result])
 
     React.useEffect(() => {
+        if (animationTimeoutRef.current) {
+            window.clearTimeout(animationTimeoutRef.current)
+            animationTimeoutRef.current = null
+        }
         const next = getInitialState(preset)
         setTerms(next.terms)
         setModifier(next.modifier)
@@ -81,6 +86,14 @@ export function DiceRollerPanel({
         setIsAnimatingDice(false)
         setErrorMessage(null)
     }, [preset])
+
+    React.useEffect(() => {
+        return () => {
+            if (animationTimeoutRef.current) {
+                window.clearTimeout(animationTimeoutRef.current)
+            }
+        }
+    }, [])
 
     React.useEffect(() => {
         if (!externalResult || lastExternalRollIdRef.current === externalResult.rollId) return
@@ -98,6 +111,10 @@ export function DiceRollerPanel({
     }, [canUseD20Mode, mode])
 
     const markDirty = () => {
+        if (animationTimeoutRef.current) {
+            window.clearTimeout(animationTimeoutRef.current)
+            animationTimeoutRef.current = null
+        }
         setResult(null)
         setIsAnimatingDice(false)
         setErrorMessage(null)
@@ -130,6 +147,10 @@ export function DiceRollerPanel({
     }
 
     const clear = () => {
+        if (animationTimeoutRef.current) {
+            window.clearTimeout(animationTimeoutRef.current)
+            animationTimeoutRef.current = null
+        }
         setTerms([])
         setModifier(0)
         setMode("normal")
@@ -141,7 +162,20 @@ export function DiceRollerPanel({
     }
 
     const handleAnimationStateChange = React.useCallback((nextIsAnimating: boolean) => {
-        setIsAnimatingDice(nextIsAnimating)
+        if (animationTimeoutRef.current) {
+            window.clearTimeout(animationTimeoutRef.current)
+            animationTimeoutRef.current = null
+        }
+
+        if (nextIsAnimating) {
+            setIsAnimatingDice(true)
+            animationTimeoutRef.current = window.setTimeout(() => {
+                setIsAnimatingDice(false)
+                animationTimeoutRef.current = null
+            }, 1000)
+        } else {
+            setIsAnimatingDice(false)
+        }
     }, [])
 
     const handleRoll = async () => {

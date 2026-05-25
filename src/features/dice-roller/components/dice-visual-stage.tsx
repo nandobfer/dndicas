@@ -71,7 +71,9 @@ export function DiceVisualStage({ terms, result, isRolling, mode, criticalState,
 
                 const box = new DiceBoxCtor(`#${containerId}`, {
                     assetPath: "/",
-                    sounds: false,
+                    sounds: true,
+                    volume: 100,
+                    sound_dieMaterial: "plastic",
                     shadows: true,
                     theme_surface: "default",
                     theme_texture: "none",
@@ -84,16 +86,40 @@ export function DiceVisualStage({ terms, result, isRolling, mode, criticalState,
                         texture: DICE_TEXTURE,
                         material: "glass",
                     },
-                    gravity_multiplier: 360,
+                    gravity_multiplier: 280,
                     light_intensity: 0.85,
                     baseScale: 67,
-                    strength: 1.2,
+                    strength: 2.0,
                 })
 
                 await box.initialize()
                 if (cancelled) {
                     box.clearDice?.()
                     return
+                }
+
+                // Override startClickThrow to ensure throws are consistently strong and cover distance
+                const anyBox = box as any
+                if (anyBox.startClickThrow && anyBox.getNotationVectors && anyBox.display) {
+                    anyBox.startClickThrow = function(notation: string) {
+                        if (this.rolling) {
+                            this.clearDice()
+                            this.rolling = false
+                        }
+                        const w = this.display.currentWidth || 800
+                        const h = this.display.currentHeight || 600
+                        const maxDim = Math.max(w, h)
+                        const angle = Math.random() * Math.PI * 2
+                        const distance = (0.75 + Math.random() * 0.25) * maxDim
+                        const t = {
+                            x: Math.cos(angle) * distance,
+                            y: Math.sin(angle) * distance,
+                        }
+                        const n = Math.sqrt(t.x * t.x + t.y * t.y) + 100
+                        const forceMultiplier = 3.2 + Math.random() * 0.6
+                        const i = forceMultiplier * n * this.strength
+                        return this.getNotationVectors(notation, t, i, n)
+                    }
                 }
 
                 diceBoxRef.current = box
@@ -170,6 +196,7 @@ export function DiceVisualStage({ terms, result, isRolling, mode, criticalState,
         setVisualError(null)
         onAnimationStateChange?.(true)
 
+        box.clearDice?.()
         box.roll(notation)
             .catch((error) => {
                 console.error("Failed to roll dice box", error)

@@ -597,4 +597,27 @@ describe("DiceRollerPanel", () => {
         expect(screen.getByLabelText("Abrir rolagem de dados")).toBeInTheDocument()
         expect(screen.queryByText("Dados")).not.toBeInTheDocument()
     })
+
+    it("releases the play button after 1 second even if the animation is still running", async () => {
+        render(<DiceRollerPanel />)
+
+        await waitFor(() => {
+            expect(diceBoxMocks.startClickThrow).toHaveBeenCalled()
+        })
+
+        // Mock roll to return a promise that never resolves (so animation stays active)
+        diceBoxMocks.roll.mockReturnValue(new Promise(() => {}))
+
+        fireEvent.click(screen.getByRole("button", { name: "JOGAR" }))
+
+        // The button should say "Rolando..." and be disabled initially
+        await waitFor(() => {
+            expect(screen.getByRole("button", { name: "Rolando..." })).toBeDisabled()
+        })
+
+        // The button should eventually be released (after 1 second) and say "JOGAR" again
+        await waitFor(() => {
+            expect(screen.getByRole("button", { name: "JOGAR" })).not.toBeDisabled()
+        }, { timeout: 2500 })
+    })
 })

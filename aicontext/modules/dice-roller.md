@@ -45,3 +45,10 @@ Quando o roller roda dentro da action do Owlbear, a request pode enviar `owlbear
 
 ### Dice panel responsive controls layout
 O painel usa uma grade de 4 colunas em `Adicionar dados`. Em superficies largas, `Combinação` e `Modificador` compartilham uma linha responsiva; as linhas de combinacao seguem o padrao do controle numerico, com remover/adicionar nas pontas e o valor centralizado. O botao principal de rolagem usa o label `JOGAR` quando esta disponivel e preserva `Rolando...` durante a execucao.
+
+### Dice sound effects and physics tuning
+O rolar de dados 3D utiliza efeitos sonoros do pacote original (copiados para `public/sounds/` e servidos no root). A física dos dados foi ajustada para proporcionar maior dinamismo e consistência: a força de arremesso (`strength`) foi configurada em `2.0` e a gravidade (`gravity_multiplier`) reduzida para `280`. Além disso, o método `startClickThrow` foi sobrescrito para garantir que a coordenada de destino (`t`) seja posicionada de forma angular a uma distância mínima de 75% da dimensão máxima da tela, evitando lançamentos "fracos" ou muito próximos do centro da tela.
+
+### Play button timeout and animation interruption
+Ao iniciar uma animação de rolagem de dados, o botão "JOGAR" é desabilitado por no máximo 1 segundo (usando um timer reativo no frontend). Após 1 segundo, o botão é liberado para novas jogadas. Caso o usuário clique em "JOGAR" novamente enquanto dados ainda estão na mesa, a animação anterior é interrompida imediatamente (`box.clearDice()`) para iniciar a nova rolagem sem atrasos.
+
