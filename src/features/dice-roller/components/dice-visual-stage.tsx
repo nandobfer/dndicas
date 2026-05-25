@@ -230,7 +230,7 @@ export function DiceVisualStage({ terms, result, isRolling, mode, criticalState,
             data-critical-state={showStageResults && criticalState ? criticalState : "none"}
             data-border-color={stageColor}
             className={cn(
-                "relative flex min-h-[260px] items-center justify-center overflow-hidden rounded-[2rem] border bg-[radial-gradient(circle_at_center,rgba(255,255,255,0.08),rgba(0,0,0,0.08)_46%,rgba(0,0,0,0.38))] p-5 transition-colors duration-500",
+                "relative flex min-h-[260px] w-[450px] max-w-full mx-auto items-center justify-center overflow-hidden rounded-[2rem] border bg-[radial-gradient(circle_at_center,rgba(255,255,255,0.08),rgba(0,0,0,0.08)_46%,rgba(0,0,0,0.38))] p-5 transition-colors duration-500",
                 mode === "normal" ? "border-blue-400/25" : "border-white/10"
             )}
             style={{

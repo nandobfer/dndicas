@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { DiceRollerPanel } from "@/features/dice-roller/components/dice-roller-panel"
 import { DiceRollerProvider } from "@/features/dice-roller/components/dice-roll-context"
 import { DiceRollerFab } from "@/features/dice-roller/components/dice-roller-fab"
+import { WindowProvider } from "@/core/context/window-context"
 import { requestDiceRoll } from "@/features/dice-roller/dice-api"
 import { colors } from "@/lib/config/colors"
 
@@ -589,9 +590,11 @@ describe("DiceRollerPanel", () => {
 
     it("renders the dice fab as icon only", () => {
         render(
-            <DiceRollerProvider>
-                <DiceRollerFab />
-            </DiceRollerProvider>
+            <WindowProvider>
+                <DiceRollerProvider>
+                    <DiceRollerFab />
+                </DiceRollerProvider>
+            </WindowProvider>
         )
 
         expect(screen.getByLabelText("Abrir rolagem de dados")).toBeInTheDocument()

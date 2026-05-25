@@ -65,6 +65,35 @@ export function DiceRollerPanel({
     const animationTimeoutRef = React.useRef<number | null>(null)
     const [showResults, setShowResults] = React.useState(false)
     const isLocalRollRef = React.useRef(false)
+    const [containerWidth, setContainerWidth] = React.useState(0)
+    const observerRef = React.useRef<ResizeObserver | null>(null)
+
+    const containerRef = React.useCallback((node: HTMLElement | null) => {
+        if (observerRef.current) {
+            observerRef.current.disconnect()
+            observerRef.current = null
+        }
+
+        if (node) {
+            if (typeof window !== "undefined" && typeof ResizeObserver !== "undefined") {
+                const observer = new ResizeObserver((entries) => {
+                    if (!entries || entries.length === 0) return
+                    const { width } = entries[0].contentRect
+                    setContainerWidth(width)
+                })
+                observer.observe(node)
+                observerRef.current = observer
+            }
+        }
+    }, [])
+
+    React.useEffect(() => {
+        return () => {
+            if (observerRef.current) {
+                observerRef.current.disconnect()
+            }
+        }
+    }, [])
     const normalizedTerms = normalizeTerms(terms)
     const canUseD20Mode = isSingleD20(normalizedTerms)
     const activeMode: DiceRollMode = canUseD20Mode ? mode : "normal"
@@ -233,9 +262,16 @@ export function DiceRollerPanel({
     }
 
     return (
-        <GlassCard className={cn("relative overflow-hidden border-white/10 bg-black/35 p-0", className)}>
+        <GlassCard ref={containerRef} className={cn("w-full max-w-full relative overflow-hidden border-white/10 bg-black/35 p-0", className)}>
             <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(59,130,246,0.18),transparent_32%),radial-gradient(circle_at_bottom_right,rgba(245,158,11,0.12),transparent_30%)]" />
-            <div className="relative grid gap-5 p-5 md:grid-cols-[minmax(0,1fr)_minmax(420px,0.8fr)] md:p-7">
+            <div className={cn(
+                "relative grid gap-5 p-5 md:p-7",
+                containerWidth === 0
+                    ? "grid-cols-1"
+                    : containerWidth >= 950
+                        ? "grid-cols-[minmax(0,1fr)_minmax(420px,0.8fr)]"
+                        : "grid-cols-1"
+            )}>
                 <div className="space-y-5">
                     <GlassButton
                         type="button"
