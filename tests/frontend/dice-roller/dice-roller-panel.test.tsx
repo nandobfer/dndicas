@@ -1,4 +1,4 @@
-import { render, screen, fireEvent, waitFor, within } from "@testing-library/react"
+import { render, screen, fireEvent, waitFor, within, act } from "@testing-library/react"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { DiceRollerPanel } from "@/features/dice-roller/components/dice-roller-panel"
 import { DiceRollerProvider } from "@/features/dice-roller/components/dice-roll-context"
@@ -619,5 +619,49 @@ describe("DiceRollerPanel", () => {
         await waitFor(() => {
             expect(screen.getByRole("button", { name: "JOGAR" })).not.toBeDisabled()
         }, { timeout: 2500 })
+    })
+
+    it("hides the roll results, critical glows, and result total until the animation completes", async () => {
+        render(<DiceRollerPanel />)
+
+        await waitFor(() => {
+            expect(diceBoxMocks.startClickThrow).toHaveBeenCalled()
+        })
+
+        let resolveRoll: (val: any) => void = () => {}
+        diceBoxMocks.roll.mockImplementation(() => new Promise((resolve) => {
+            resolveRoll = resolve
+        }))
+
+        fireEvent.click(screen.getByRole("button", { name: "JOGAR" }))
+
+        // Wait for requestDiceRoll to resolve and animation to start
+        await waitFor(() => {
+            expect(diceBoxMocks.roll).toHaveBeenCalled()
+        })
+
+        // The summary showing the total "16" should NOT be in the document
+        expect(screen.queryByText("16")).not.toBeInTheDocument()
+
+        // The critical state glows should not be active (data-critical-state should be "none")
+        const stage = screen.getByTestId("dice-visual-stage")
+        expect(stage.getAttribute("data-critical-state")).toBe("none")
+
+        // The die visual chip should not show the rolled value (data-value should be undefined/null)
+        const die = screen.getByTestId("dice-visual-die")
+        expect(die.getAttribute("data-value")).toBeNull()
+
+        // Resolve the roll animation
+        await act(async () => {
+            resolveRoll([])
+        })
+
+        // Now the summary showing "16" should be visible
+        await waitFor(() => {
+            expect(screen.getByText("16")).toBeInTheDocument()
+        })
+
+        // The die visual chip should now show the rolled value "14"
+        expect(die.getAttribute("data-value")).toBe("14")
     })
 })

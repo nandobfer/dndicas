@@ -63,6 +63,8 @@ export function DiceRollerPanel({
     const [errorMessage, setErrorMessage] = React.useState<string | null>(null)
     const lastExternalRollIdRef = React.useRef<string | null>(null)
     const animationTimeoutRef = React.useRef<number | null>(null)
+    const [showResults, setShowResults] = React.useState(false)
+    const isLocalRollRef = React.useRef(false)
     const normalizedTerms = normalizeTerms(terms)
     const canUseD20Mode = isSingleD20(normalizedTerms)
     const activeMode: DiceRollMode = canUseD20Mode ? mode : "normal"
@@ -70,6 +72,11 @@ export function DiceRollerPanel({
     const d20ModeLocked = canUseD20Mode && activeMode !== "normal"
     const isRollButtonDisabled = isRolling || isAnimatingDice || disableRolling
     const criticalState = React.useMemo(() => getDiceCriticalState(result), [result])
+
+    const onRollResolvedRef = React.useRef(onRollResolved)
+    React.useEffect(() => {
+        onRollResolvedRef.current = onRollResolved
+    }, [onRollResolved])
 
     React.useEffect(() => {
         if (animationTimeoutRef.current) {
@@ -84,6 +91,8 @@ export function DiceRollerPanel({
         sourceRef.current = next.source
         setResult(null)
         setIsAnimatingDice(false)
+        setShowResults(false)
+        isLocalRollRef.current = false
         setErrorMessage(null)
     }, [preset])
 
@@ -96,13 +105,15 @@ export function DiceRollerPanel({
     }, [])
 
     React.useEffect(() => {
-        if (!externalResult || lastExternalRollIdRef.current === externalResult.rollId) return
+        if (!externalResult || lastExternalRollIdRef.current === externalResult.rollId || result?.rollId === externalResult.rollId) return
 
         lastExternalRollIdRef.current = externalResult.rollId
+        isLocalRollRef.current = false
         setResult(externalResult)
         setIsRolling(false)
+        setShowResults(false)
         setErrorMessage(null)
-    }, [externalResult])
+    }, [externalResult, result])
 
     React.useEffect(() => {
         if (!canUseD20Mode && mode !== "normal") {
@@ -117,6 +128,8 @@ export function DiceRollerPanel({
         }
         setResult(null)
         setIsAnimatingDice(false)
+        setShowResults(false)
+        isLocalRollRef.current = false
         setErrorMessage(null)
     }
 
@@ -158,6 +171,8 @@ export function DiceRollerPanel({
         sourceRef.current = "manual"
         setResult(null)
         setIsAnimatingDice(false)
+        setShowResults(false)
+        isLocalRollRef.current = false
         setErrorMessage(null)
     }
 
@@ -178,6 +193,14 @@ export function DiceRollerPanel({
         }
     }, [])
 
+    const handleRollComplete = React.useCallback((completedResult: DiceRollResponse) => {
+        setShowResults(true)
+        if (isLocalRollRef.current) {
+            onRollResolvedRef.current?.(completedResult)
+            isLocalRollRef.current = false
+        }
+    }, [])
+
     const handleRoll = async () => {
         const nextTerms = normalizedTerms
         if (nextTerms.length === 0) {
@@ -186,6 +209,7 @@ export function DiceRollerPanel({
         }
 
         setIsRolling(true)
+        setShowResults(false)
         setErrorMessage(null)
         try {
             const nextResult = await requestDiceRoll({
@@ -198,8 +222,8 @@ export function DiceRollerPanel({
                 owlbearRoomId: requestContext?.owlbearRoomId,
                 owlbearPlayerId: requestContext?.owlbearPlayerId,
             })
+            isLocalRollRef.current = true
             setResult(nextResult)
-            onRollResolved?.(nextResult)
         } catch (error) {
             console.error("Failed to roll dice", error)
             setErrorMessage(error instanceof Error ? error.message : "Não foi possível rolar os dados.")
@@ -229,8 +253,9 @@ export function DiceRollerPanel({
                         mode={displayedMode}
                         criticalState={criticalState}
                         onAnimationStateChange={handleAnimationStateChange}
+                        onRollComplete={handleRollComplete}
                     />
-                    <DiceResultSummary result={result} criticalState={criticalState} />
+                    <DiceResultSummary result={showResults ? result : null} criticalState={showResults ? criticalState : null} />
                 </div>
 
                 <div className="space-y-4">

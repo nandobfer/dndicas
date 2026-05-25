@@ -52,3 +52,8 @@ O rolar de dados 3D utiliza efeitos sonoros do pacote original (copiados para `p
 ### Play button timeout and animation interruption
 Ao iniciar uma animação de rolagem de dados, o botão "JOGAR" é desabilitado por no máximo 1 segundo (usando um timer reativo no frontend). Após 1 segundo, o botão é liberado para novas jogadas. Caso o usuário clique em "JOGAR" novamente enquanto dados ainda estão na mesa, a animação anterior é interrompida imediatamente (`box.clearDice()`) para iniciar a nova rolagem sem atrasos.
 
+### Delayed result display until animation completes
+O resumo do resultado numérico (`DiceResultSummary`), os destaques de sucesso ou falha crítica (incluindo cores e banners na stage visual), bem como os valores numéricos exibidos nos chips individuais de dados na base da stage, permanecem ocultos/inativos durante o período em que a animação 3D dos dados está rodando. Eles só aparecem/são ativados assim que a promessa da animação de rolagem do ThreeJS se resolve, garantindo sincronia entre o visual 3D e a exibição textual dos dados. O callback `onRollResolved` (que insere a rolagem no histórico compartilhado do Owlbear) também é postergado até a conclusão da animação. Se o visual 3D falhar ou estiver indisponível, os resultados e o callback são revelados/executados imediatamente como fallback.
+
+
+
