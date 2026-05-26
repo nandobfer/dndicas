@@ -94,6 +94,7 @@ export default function GenericEntityPage({ entityTypeKey }: GenericEntityPagePr
         Raça: "races",
         Monstro: "monsters",
     }
+    const backHref = `/${routeMap[entityTypeKey]}`
 
     // Wrap the submit handler to invalidate the query and handle slug changes
     const handleWrappedSubmit = async (originalSubmit: Function, formData: any) => {
@@ -196,7 +197,7 @@ export default function GenericEntityPage({ entityTypeKey }: GenericEntityPagePr
                         <span>Janela Solta</span>
                     </motion.button>
                 )}
-                <EntityPage item={item} entityType={entityTypeKey} isLoading={isLoading} isAdmin={isAdmin} onEdit={onEdit} onDelete={onDelete} hideActionIcons={true} renderOptions={renderOptions} />
+                <EntityPage item={item} entityType={entityTypeKey} isLoading={isLoading} isAdmin={isAdmin} onEdit={onEdit} onDelete={onDelete} hideActionIcons={true} renderOptions={renderOptions} backHref={backHref} />
             </div>
 
             {/* Entity-specific Modals (imported from hooks) */}

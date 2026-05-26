@@ -76,8 +76,76 @@ const XP_BY_CR: Record<string, number> = {
     "30": 155000,
 }
 
+const PURE_NUMBER_REGEX = /^\d+(?:\.\d+)?$/
+const SIMPLE_HP_EXPRESSION_REGEX = /^[\dd.+-]+$/
+
 export function getMonsterXp(challengeRating: MonsterChallengeRating, override?: number) {
     return override ?? XP_BY_CR[challengeRating] ?? 0
+}
+
+export function isMonsterHitPointFormulaStatic(hitPointsFormula: string) {
+    return PURE_NUMBER_REGEX.test(hitPointsFormula.trim())
+}
+
+export function getMonsterHitPointAverage(hitPointsFormula: string): number | null {
+    const normalizedFormula = hitPointsFormula.replace(/\s+/g, "").toLowerCase()
+
+    if (!normalizedFormula) {
+        return null
+    }
+
+    if (PURE_NUMBER_REGEX.test(normalizedFormula)) {
+        return Number(normalizedFormula)
+    }
+
+    if (!normalizedFormula.includes("d") || !SIMPLE_HP_EXPRESSION_REGEX.test(normalizedFormula)) {
+        return null
+    }
+
+    const parts = normalizedFormula.match(/[+-]?[^+-]+/g)
+
+    if (!parts || parts.length === 0) {
+        return null
+    }
+
+    let total = 0
+
+    for (const part of parts) {
+        const sign = part.startsWith("-") ? -1 : 1
+        const token = part.startsWith("+") || part.startsWith("-") ? part.slice(1) : part
+
+        if (!token) {
+            return null
+        }
+
+        if (PURE_NUMBER_REGEX.test(token)) {
+            total += sign * Number(token)
+            continue
+        }
+
+        const diceMatch = token.match(/^(\d+)d(\d+)$/)
+
+        if (!diceMatch) {
+            return null
+        }
+
+        const quantity = Number(diceMatch[1])
+        const dieFaces = Number(diceMatch[2])
+
+        if (!Number.isFinite(quantity) || !Number.isFinite(dieFaces) || quantity <= 0 || dieFaces <= 0) {
+            return null
+        }
+
+        total += sign * quantity * ((dieFaces + 1) / 2)
+    }
+
+    return Math.floor(total)
+}
+
+export function formatMonsterHitPointAverage(hitPointAverage: number) {
+    return hitPointAverage.toLocaleString("pt-BR", {
+        maximumFractionDigits: 0,
+    })
 }
 
 export function getMonsterProficiencyBonus(challengeRating: MonsterChallengeRating, override?: number) {

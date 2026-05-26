@@ -10,7 +10,7 @@ import { EntitySource } from "@/features/rules/components/entity-source"
 import { entityColors, attributeColors, damageTypeColors } from "@/lib/config/colors"
 import { cn } from "@/core/utils"
 import type { Monster } from "../types/monsters.types"
-import { getMonsterPassivePerception, getMonsterProficiencyBonus, getMonsterSavingThrowBonus, getMonsterSkillBonus, getMonsterXp, formatSigned } from "../utils/monster-calculations"
+import { formatMonsterHitPointAverage, formatSigned, getMonsterHitPointAverage, getMonsterPassivePerception, getMonsterProficiencyBonus, getMonsterSavingThrowBonus, getMonsterSkillBonus, getMonsterXp, isMonsterHitPointFormulaStatic } from "../utils/monster-calculations"
 import { ALIGNMENT_LABELS, ATTRIBUTE_KEYS, ATTRIBUTE_LABELS, CONDITION_LABELS, MONSTER_SIZE_LABELS, MONSTER_TYPE_LABELS, SKILL_NAMES } from "./monster-options"
 import { NpcParamPreview } from "./npc-param-preview"
 
@@ -61,6 +61,7 @@ export function MonsterPreview({ monster, showStatus = true, hideStatusChip = fa
     const { addWindow } = useWindows()
     const proficiencyBonus = getMonsterProficiencyBonus(monster.challengeRating, monster.proficiencyBonusOverride)
     const passivePerception = getMonsterPassivePerception(monster.attributes, monster.skills?.Percepção, proficiencyBonus, monster.senses?.passivePerception)
+    const hitPointAverage = getMonsterHitPointAverage(monster.hitPointsFormula)
     const xp = getMonsterXp(monster.challengeRating, monster.experienceOverride)
     const speeds = [
         monster.speed,
@@ -115,7 +116,12 @@ export function MonsterPreview({ monster, showStatus = true, hideStatusChip = fa
 
             <div className="grid grid-cols-2 md:grid-cols-5 gap-2">
                 <SummaryCard icon={<Shield className="h-3 w-3 text-white/35" />} label="CA" value={monster.armorClass} />
-                <SummaryCard icon={<HeartPulse className="h-3 w-3 text-white/35" />} label="PV" value={monster.hitPointsFormula} />
+                <SummaryCard
+                    icon={<HeartPulse className="h-3 w-3 text-white/35" />}
+                    label="PV"
+                    value={hitPointAverage !== null ? formatMonsterHitPointAverage(hitPointAverage) : monster.hitPointsFormula}
+                    detail={hitPointAverage !== null && !isMonsterHitPointFormulaStatic(monster.hitPointsFormula) ? monster.hitPointsFormula : undefined}
+                />
                 <SummaryCard icon={<Swords className="h-3 w-3 text-white/35" />} label="CR" value={monster.challengeRating} detail={`${xp.toLocaleString("pt-BR")} XP`} />
                 <SummaryCard icon={<Footprints className="h-3 w-3 text-white/35" />} label="Velocidade" value={<span className="text-sm">{speeds.join(", ") || "—"}</span>} />
                 <SummaryCard icon={<Eye className="h-3 w-3 text-white/35" />} label="Percepção passiva" value={passivePerception} />

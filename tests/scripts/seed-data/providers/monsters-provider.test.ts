@@ -1,3 +1,4 @@
+import fs from 'fs';
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 
 vi.mock('terminal-kit', () => ({
@@ -59,17 +60,18 @@ import {
     mapNpcParams,
     mapSize,
     mapSpeed,
+    shouldTranslateSpecialStatText,
 } from '../../../../scripts/seed-data/providers/monsters-provider';
 import { createMonsterSchema } from '../../../../src/features/monsters/api/validation';
 
-function makeProvider(): MonstersProvider {
+function makeProvider(): { provider: MonstersProvider; translateSpy: ReturnType<typeof vi.spyOn> } {
     const provider = new MonstersProvider();
-    vi.spyOn(provider as unknown as { translateItem: (...args: unknown[]) => unknown }, 'translateItem')
+    const translateSpy = vi.spyOn(provider as unknown as { translateItem: (...args: unknown[]) => unknown }, 'translateItem')
         .mockImplementation(async (...args: unknown[]) => ({
             name: `[PT] ${args[0] as string}`,
             description: `[PT] ${args[1] as string}`,
         }));
-    return provider;
+    return { provider, translateSpy };
 }
 
 describe('monster seed helpers', () => {
@@ -140,6 +142,13 @@ describe('monster seed helpers', () => {
         expect(params[0].description).toContain('Ataque corpo a corpo ou à distância');
         expect(cleanText('{@spell Gust of Wind|XPHB} at {@dc 13}')).toBe('Gust of Wind at CD 13');
     });
+
+    it('detects when special AC or HP text still needs translation', () => {
+        expect(shouldTranslateSpecialStatText('17')).toBe(false);
+        expect(shouldTranslateSpecialStatText('12d8 + 24')).toBe(false);
+        expect(shouldTranslateSpecialStatText("11 + the spell's level")).toBe(true);
+        expect(shouldTranslateSpecialStatText('30 (Ghostly and Putrid only) or 20 (Skeletal only) + 10 for each spell level above 3')).toBe(true);
+    });
 });
 
 describe('MonstersProvider', () => {
@@ -148,7 +157,7 @@ describe('MonstersProvider', () => {
     });
 
     it('processes a concrete XMM monster with actions, defenses, saves, and skills', async () => {
-        const provider = makeProvider();
+        const { provider } = makeProvider();
         const output = await provider.processItem({
             name: 'Aarakocra Aeromancer',
             source: 'XMM',
@@ -198,21 +207,21 @@ describe('MonstersProvider', () => {
         expect(output?.actions[0]).toMatchObject({ label: '[PT] Wind Staff', attackRoll: 5, hitRoll: '1d8 + 3 concussão + 2d10 elétrico' });
     });
 
-    it('processes an XPHB special stat block with textual AC, HP, and missing CR', async () => {
-        const provider = makeProvider();
+    it('translates special AC and HP text when they contain prose', async () => {
+        const { provider, translateSpy } = makeProvider();
         const output = await provider.processItem({
-            name: 'Aberrant Spirit',
-            source: 'XPHB',
+            name: 'Summoned Undead',
+            source: 'XMM',
             size: ['M'],
-            type: 'aberration',
+            type: 'undead',
             alignment: [{ special: 'any alignment' }],
-            ac: [{ special: "11 + the spell's level" }],
-            hp: { special: '40 + 10 for each spell level above 4' },
+            ac: [{ special: '30 (Ghostly and Putrid only) or 20 (Skeletal only) + 10 for each spell level above 3' }],
+            hp: { special: "40 + 10 for each spell level above 4" },
             speed: { walk: 30, fly: { number: 30, condition: '(hover)' } },
-            str: 16,
+            str: 12,
             dex: 10,
             con: 15,
-            int: 16,
+            int: 6,
             wis: 10,
             cha: 6,
             passive: 10,
@@ -220,12 +229,95 @@ describe('MonstersProvider', () => {
         });
 
         expect(output).toMatchObject({
-            armorClass: "11 + the spell's level",
-            hitPointsFormula: '40 + 10 for each spell level above 4',
+            armorClass: '[PT] 30 (Ghostly and Putrid only) or 20 (Skeletal only) + 10 for each spell level above 3',
+            hitPointsFormula: "[PT] 40 + 10 for each spell level above 4",
             challengeRating: '0',
             experience: 0,
             alignment: 'any',
             flySpeed: '9m (hover)',
         });
+        expect(translateSpy).toHaveBeenCalledWith(
+            '30 (Ghostly and Putrid only) or 20 (Skeletal only) + 10 for each spell level above 3',
+            '<p>30 (Ghostly and Putrid only) or 20 (Skeletal only) + 10 for each spell level above 3</p>',
+        );
+        expect(translateSpy).toHaveBeenCalledWith(
+            '40 + 10 for each spell level above 4',
+            '<p>40 + 10 for each spell level above 4</p>',
+        );
+    });
+
+    it('keeps formula-only special AC and HP text without extra translation', async () => {
+        const { provider, translateSpy } = makeProvider();
+        const output = await provider.processItem({
+            name: 'Clockwork Guardian',
+            source: 'XMM',
+            size: ['L'],
+            type: 'construct',
+            alignment: ['U'],
+            ac: [{ special: '17' }],
+            hp: { special: '12d8 + 24' },
+            speed: { walk: 30 },
+            str: 18,
+            dex: 10,
+            con: 14,
+            int: 3,
+            wis: 10,
+            cha: 1,
+            passive: 10,
+            cr: '4',
+        });
+
+        expect(output).toMatchObject({
+            armorClass: '17',
+            hitPointsFormula: '12d8 + 24',
+        });
+        const translatedLabels = translateSpy.mock.calls.map((call) => call[0]);
+        expect(translatedLabels).not.toContain('17');
+        expect(translatedLabels).not.toContain('12d8 + 24');
+    });
+
+    it('loads all bestiary files, pairs matching fluff files, and keeps legendary groups static', () => {
+        const originalReadDir = fs.readdirSync;
+        const originalReadFile = fs.readFileSync;
+
+        vi.spyOn(fs, 'readdirSync').mockImplementation((filePath, options) => {
+            if (String(filePath).includes('/src/lib/5etools-data/bestiary')) {
+                return [
+                    'bestiary-alpha.json',
+                    'bestiary-beta.json',
+                    'fluff-bestiary-alpha.json',
+                    'fluff-bestiary-unused.json',
+                    'legendarygroups.json',
+                    'readme.txt',
+                ] as unknown as ReturnType<typeof originalReadDir>;
+            }
+            return originalReadDir(filePath, options as never);
+        });
+        const readFileSpy = vi.spyOn(fs, 'readFileSync').mockImplementation((filePath, options) => {
+            const file = String(filePath);
+            if (file.endsWith('fluff-bestiary-alpha.json')) return JSON.stringify({ monsterFluff: [{ name: 'Alpha Beast', source: 'ALPHA', entries: ['Alpha lore'] }] }) as never;
+            if (file.endsWith('legendarygroups.json')) return JSON.stringify({ legendaryGroup: [{ name: 'Alpha Lair', source: 'ALPHA' }] }) as never;
+            if (file.endsWith('bestiary-alpha.json')) return JSON.stringify({ monster: [{ name: 'Alpha Beast', source: 'ALPHA' }] }) as never;
+            if (file.endsWith('bestiary-beta.json')) return JSON.stringify({ monster: [{ name: 'Beta Beast', source: 'BETA' }] }) as never;
+            return originalReadFile(filePath, options as never);
+        });
+
+        const provider = new MonstersProvider();
+        const monsters = provider.readDataFile();
+        const alphaFluff = (
+            provider as unknown as {
+                resolveFluff: (monster: { name: string; source: string }) => { entries?: string[] } | undefined;
+            }
+        ).resolveFluff({ name: 'Alpha Beast', source: 'ALPHA' });
+
+        expect(monsters).toEqual([
+            { name: 'Alpha Beast', source: 'ALPHA' },
+            { name: 'Beta Beast', source: 'BETA' },
+        ]);
+        expect(alphaFluff?.entries).toEqual(['Alpha lore']);
+        const readPaths = readFileSpy.mock.calls.map((call) => String(call[0]));
+        expect(readPaths.some((file) => file.includes('legendarygroups.json'))).toBe(true);
+        expect(readPaths.some((file) => file.includes('fluff-bestiary-alpha.json'))).toBe(true);
+        expect(readPaths.some((file) => file.includes('fluff-bestiary-unused.json'))).toBe(false);
     });
 });

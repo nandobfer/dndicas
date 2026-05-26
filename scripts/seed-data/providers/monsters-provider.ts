@@ -2,8 +2,7 @@
  * @fileoverview MonstersProvider — seeds monsters from 5etools bestiary data.
  *
  * Reads:
- *  - src/lib/5etools-data/bestiary/bestiary-xmm.json
- *  - src/lib/5etools-data/bestiary/bestiary-xphb.json
+ *  - src/lib/5etools-data/bestiary/bestiary-*.json
  *  - src/lib/5etools-data/bestiary/fluff-bestiary-*.json
  *  - src/lib/5etools-data/bestiary/legendarygroups.json
  */
@@ -296,19 +295,14 @@ export function mapAlignment(alignment?: unknown[]): MonsterAlignment {
     return 'any';
 }
 
-function mapArmorClass(ac?: FiveEToolsMonster['ac']): string {
-    const first = ac?.[0];
-    if (typeof first === 'number') return String(first);
-    if (first?.ac !== undefined) return String(first.ac);
-    if (first?.special) return cleanText(first.special);
-    return '10';
-}
-
-function mapHitPoints(hp?: FiveEToolsMonster['hp']): string {
-    if (hp?.formula) return hp.formula;
-    if (hp?.special) return cleanText(hp.special);
-    if (hp?.average !== undefined) return String(hp.average);
-    return '1';
+export function shouldTranslateSpecialStatText(value: string): boolean {
+    const normalized = cleanText(value);
+    const leftover = normalized
+        .toLowerCase()
+        .replace(/\b\d+d\d+\b/g, '')
+        .replace(/\b\d+\b/g, '')
+        .replace(/[+\-*/x×÷=<>~\s()[\]{}.,;:/\\|%]+/g, '');
+    return leftover.length > 0;
 }
 
 function mapChallengeRating(cr: FiveEToolsMonster['cr']): string {
@@ -463,7 +457,7 @@ function buildImageUrl(fluff?: MonsterFluff): string {
 
 export class MonstersProvider extends BaseProvider<FiveEToolsMonster, CreateMonsterInput> {
     readonly name = 'Monsters';
-    readonly dataFilePath = `${BESTIARY_DIR}/bestiary-xmm.json`;
+    readonly dataFilePath = BESTIARY_DIR;
     readonly dataKey = 'monster';
 
     private fluff = new Map<string, MonsterFluff>();
@@ -475,8 +469,8 @@ export class MonstersProvider extends BaseProvider<FiveEToolsMonster, CreateMons
     }
 
     override readDataFile(): FiveEToolsMonster[] {
-        const files = ['bestiary-xmm.json', 'bestiary-xphb.json'];
-        return files.flatMap((file) => readJsonFile<{ monster?: FiveEToolsMonster[] }>(`${BESTIARY_DIR}/${file}`).monster ?? []);
+        return this.listBestiaryFiles()
+            .flatMap((file) => readJsonFile<{ monster?: FiveEToolsMonster[] }>(`${BESTIARY_DIR}/${file}`).monster ?? []);
     }
 
     protected override buildFilterDocument(monster: FiveEToolsMonster) {
@@ -484,13 +478,25 @@ export class MonstersProvider extends BaseProvider<FiveEToolsMonster, CreateMons
     }
 
     private loadSupplementalData() {
-        const fluffFiles = ['fluff-bestiary-xmm.json', 'fluff-bestiary-xphb.json'];
-        for (const file of fluffFiles) {
+        for (const file of this.listFluffFiles()) {
             const data = readJsonFile<{ monsterFluff?: MonsterFluff[] }>(`${BESTIARY_DIR}/${file}`);
             for (const item of data.monsterFluff ?? []) this.fluff.set(this.key(item.name, item.source), item);
         }
         const legendary = readJsonFile<{ legendaryGroup?: LegendaryGroup[] }>(`${BESTIARY_DIR}/legendarygroups.json`);
         for (const item of legendary.legendaryGroup ?? []) this.legendaryGroups.set(this.key(item.name, item.source), item);
+    }
+
+    private listBestiaryFiles(): string[] {
+        return fs.readdirSync(path.resolve(PROJECT_ROOT, BESTIARY_DIR))
+            .sort()
+            .filter((file) => /^bestiary-.*\.json$/.test(file));
+    }
+
+    private listFluffFiles(): string[] {
+        const allFiles = new Set(fs.readdirSync(path.resolve(PROJECT_ROOT, BESTIARY_DIR)));
+        return this.listBestiaryFiles()
+            .map((file) => `fluff-${file}`)
+            .filter((file) => allFiles.has(file));
     }
 
     private key(name: string, source: string) {
@@ -518,6 +524,28 @@ export class MonstersProvider extends BaseProvider<FiveEToolsMonster, CreateMons
         return translated;
     }
 
+    private async translateSpecialStatValue(value: string): Promise<string> {
+        const normalized = cleanText(value);
+        if (!shouldTranslateSpecialStatText(normalized)) return normalized;
+        const { name } = await this.translateItem(normalized, `<p>${normalized}</p>`);
+        return name.trim();
+    }
+
+    private async mapArmorClass(ac?: FiveEToolsMonster['ac']): Promise<string> {
+        const first = ac?.[0];
+        if (typeof first === 'number') return String(first);
+        if (first?.ac !== undefined) return String(first.ac);
+        if (first?.special) return this.translateSpecialStatValue(first.special);
+        return '10';
+    }
+
+    private async mapHitPoints(hp?: FiveEToolsMonster['hp']): Promise<string> {
+        if (hp?.formula) return hp.formula;
+        if (hp?.special) return this.translateSpecialStatValue(hp.special);
+        if (hp?.average !== undefined) return String(hp.average);
+        return '1';
+    }
+
     async processItem(monster: FiveEToolsMonster): Promise<CreateMonsterInput | null> {
         const fluff = this.resolveFluff(monster);
         const descriptionHtml = buildEntriesHtml(fluff?.entries) || `<p>${monster.name}</p>`;
@@ -533,6 +561,8 @@ export class MonstersProvider extends BaseProvider<FiveEToolsMonster, CreateMons
         const challengeRating = mapChallengeRating(monster.cr);
         const { conditionImmunities, conditionImmunityNotes } = mapConditionImmunities(monster.conditionImmune);
         const speeds = mapSpeed(monster.speed);
+        const armorClass = await this.mapArmorClass(monster.ac);
+        const hitPointsFormula = await this.mapHitPoints(monster.hp);
 
         return {
             name,
@@ -544,9 +574,9 @@ export class MonstersProvider extends BaseProvider<FiveEToolsMonster, CreateMons
             type: mapMonsterType(monster.type),
             size: mapSize(monster.size),
             alignment: mapAlignment(monster.alignment),
-            armorClass: mapArmorClass(monster.ac),
+            armorClass,
             initiative: undefined,
-            hitPointsFormula: mapHitPoints(monster.hp),
+            hitPointsFormula,
             ...speeds,
             attributes: {
                 strength: monster.str ?? 10,
