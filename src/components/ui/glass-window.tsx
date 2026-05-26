@@ -20,6 +20,8 @@ interface GlassWindowProps {
     entityType?: string
     initialPosition?: { x: number, y: number }
     isMinimized?: boolean
+    initialSize?: { width: number | string, height: number | string }
+    minSize?: { width: number, height: number }
 }
 
 export function GlassWindow({ 
@@ -34,7 +36,9 @@ export function GlassWindow({
     item, 
     entityType, 
     initialPosition,
-    isMinimized = false
+    isMinimized = false,
+    initialSize,
+    minSize
 }: GlassWindowProps) {
     const dragControls = useDragControls()
     const containerRef = React.useRef<HTMLDivElement>(null)
@@ -50,10 +54,10 @@ export function GlassWindow({
         }
     }, [initialPosition])
 
-    const [size, setSize] = React.useState<{ width: number | string, height: number | string }>({ 
-        width: isMinimized ? 200 : "min(450px, 35vw)", 
-        height: isMinimized ? "auto" : "min(400px, 40vh)" 
-    })
+    const [size, setSize] = React.useState<{ width: number | string, height: number | string }>(() => ({ 
+        width: isMinimized ? 200 : (initialSize?.width ?? "min(450px, 35vw)"), 
+        height: isMinimized ? "auto" : (initialSize?.height ?? "min(400px, 40vh)") 
+    }))
     const [isResizing, setIsResizing] = React.useState(false)
     // Constraints logic
     const [constraints, setConstraints] = React.useState<{ left: number; right: number; top: number; bottom: number }>({
@@ -105,8 +109,10 @@ export function GlassWindow({
         const startHeight = rect?.height || 300
 
         const onPointerMove = (moveEvent: PointerEvent) => {
-            const newWidth = Math.max(150, startWidth + (moveEvent.clientX - startX))
-            const newHeight = Math.max(100, startHeight + (moveEvent.clientY - startY))
+            const minW = minSize?.width ?? 150
+            const minH = minSize?.height ?? 100
+            const newWidth = Math.max(minW, startWidth + (moveEvent.clientX - startX))
+            const newHeight = Math.max(minH, startHeight + (moveEvent.clientY - startY))
             setSize({ width: newWidth, height: newHeight })
         }
 

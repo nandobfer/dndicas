@@ -17,6 +17,7 @@ interface DiceVisualStageProps {
     mode: DiceRollMode
     criticalState: DiceCriticalState | null
     onAnimationStateChange?: (isAnimating: boolean) => void
+    onRollComplete?: (result: DiceRollResponse) => void
 }
 
 const CRITICAL_STAGE_CONFIG: Record<DiceCriticalState, { color: string, label: string, badgeClassName: string }> = {
@@ -45,7 +46,7 @@ function buildContainerId(reactId: string) {
 
 const DICE_TEXTURE = "stainedglass"
 
-export function DiceVisualStage({ terms, result, isRolling, mode, criticalState, onAnimationStateChange }: DiceVisualStageProps) {
+export function DiceVisualStage({ terms, result, isRolling, mode, criticalState, onAnimationStateChange, onRollComplete }: DiceVisualStageProps) {
     const reactId = React.useId()
     const containerId = React.useMemo(() => buildContainerId(reactId), [reactId])
     const containerRef = React.useRef<HTMLDivElement | null>(null)
@@ -56,9 +57,11 @@ export function DiceVisualStage({ terms, result, isRolling, mode, criticalState,
     const standbyNotationRef = React.useRef<string | null>(null)
     const [isReady, setIsReady] = React.useState(false)
     const [visualError, setVisualError] = React.useState<string | null>(null)
-    const dice = result ? expandVisualResult(result) : expandStandbyVisualTerms(terms, mode)
-    const stageColor = getStageColor(mode, criticalState)
-    const criticalConfig = criticalState ? CRITICAL_STAGE_CONFIG[criticalState] : null
+    const [showRollResults, setShowRollResults] = React.useState(false)
+    const showStageResults = result && showRollResults
+    const dice = showStageResults ? expandVisualResult(result) : expandStandbyVisualTerms(terms, mode)
+    const stageColor = getStageColor(mode, showStageResults ? criticalState : null)
+    const criticalConfig = showStageResults && criticalState ? CRITICAL_STAGE_CONFIG[criticalState] : null
 
     React.useEffect(() => {
         let cancelled = false
@@ -71,7 +74,9 @@ export function DiceVisualStage({ terms, result, isRolling, mode, criticalState,
 
                 const box = new DiceBoxCtor(`#${containerId}`, {
                     assetPath: "/",
-                    sounds: false,
+                    sounds: true,
+                    volume: 100,
+                    sound_dieMaterial: "plastic",
                     shadows: true,
                     theme_surface: "default",
                     theme_texture: "none",
@@ -84,16 +89,40 @@ export function DiceVisualStage({ terms, result, isRolling, mode, criticalState,
                         texture: DICE_TEXTURE,
                         material: "glass",
                     },
-                    gravity_multiplier: 360,
+                    gravity_multiplier: 280,
                     light_intensity: 0.85,
                     baseScale: 67,
-                    strength: 1.2,
+                    strength: 2.0,
                 })
 
                 await box.initialize()
                 if (cancelled) {
                     box.clearDice?.()
                     return
+                }
+
+                // Override startClickThrow to ensure throws are consistently strong and cover distance
+                const anyBox = box as any
+                if (anyBox.startClickThrow && anyBox.getNotationVectors && anyBox.display) {
+                    anyBox.startClickThrow = function(notation: string) {
+                        if (this.rolling) {
+                            this.clearDice()
+                            this.rolling = false
+                        }
+                        const w = this.display.currentWidth || 800
+                        const h = this.display.currentHeight || 600
+                        const maxDim = Math.max(w, h)
+                        const angle = Math.random() * Math.PI * 2
+                        const distance = (0.75 + Math.random() * 0.25) * maxDim
+                        const t = {
+                            x: Math.cos(angle) * distance,
+                            y: Math.sin(angle) * distance,
+                        }
+                        const n = Math.sqrt(t.x * t.x + t.y * t.y) + 100
+                        const forceMultiplier = 3.2 + Math.random() * 0.6
+                        const i = forceMultiplier * n * this.strength
+                        return this.getNotationVectors(notation, t, i, n)
+                    }
                 }
 
                 diceBoxRef.current = box
@@ -121,6 +150,9 @@ export function DiceVisualStage({ terms, result, isRolling, mode, criticalState,
     React.useEffect(() => {
         const box = diceBoxRef.current
         if (!box || !isReady) {
+            if (result && visualError) {
+                onRollComplete?.(result)
+            }
             return
         }
 
@@ -128,6 +160,7 @@ export function DiceVisualStage({ terms, result, isRolling, mode, criticalState,
             rollTokenRef.current += 1
             onAnimationStateChange?.(false)
             lastRolledResultIdRef.current = null
+            setShowRollResults(false)
 
             const standbyNotation = buildDiceBoxStandbyNotation(terms, mode)
             if (!standbyNotation) {
@@ -169,7 +202,9 @@ export function DiceVisualStage({ terms, result, isRolling, mode, criticalState,
         rollTokenRef.current = token
         setVisualError(null)
         onAnimationStateChange?.(true)
+        setShowRollResults(false)
 
+        box.clearDice?.()
         box.roll(notation)
             .catch((error) => {
                 console.error("Failed to roll dice box", error)
@@ -180,18 +215,22 @@ export function DiceVisualStage({ terms, result, isRolling, mode, criticalState,
             .finally(() => {
                 if (rollTokenRef.current === token) {
                     onAnimationStateChange?.(false)
+                    setShowRollResults(true)
+                    if (result) {
+                        onRollComplete?.(result)
+                    }
                 }
             })
-    }, [isReady, mode, onAnimationStateChange, result, terms])
+    }, [isReady, mode, onAnimationStateChange, onRollComplete, result, terms, visualError])
 
     return (
         <div
             data-testid="dice-visual-stage"
             data-mode={mode}
-            data-critical-state={criticalState ?? "none"}
+            data-critical-state={showStageResults && criticalState ? criticalState : "none"}
             data-border-color={stageColor}
             className={cn(
-                "relative flex min-h-[260px] items-center justify-center overflow-hidden rounded-[2rem] border bg-[radial-gradient(circle_at_center,rgba(255,255,255,0.08),rgba(0,0,0,0.08)_46%,rgba(0,0,0,0.38))] p-5 transition-colors duration-500",
+                "relative flex min-h-[260px] w-[450px] max-w-full mx-auto items-center justify-center overflow-hidden rounded-[2rem] border bg-[radial-gradient(circle_at_center,rgba(255,255,255,0.08),rgba(0,0,0,0.08)_46%,rgba(0,0,0,0.38))] p-5 transition-colors duration-500",
                 mode === "normal" ? "border-blue-400/25" : "border-white/10"
             )}
             style={{
@@ -268,19 +307,22 @@ export function DiceVisualStage({ terms, result, isRolling, mode, criticalState,
                 </div>
             )}
             <div className="pointer-events-none absolute inset-x-4 bottom-4 z-30 flex max-w-full flex-wrap items-center justify-center gap-2">
-                {dice.map((die, index) => (
-                    <span
-                        key={`${die.sourceDice}-${die.dice}-${index}`}
-                        data-testid="dice-visual-die"
-                        data-dice={die.dice}
-                        data-source-dice={die.sourceDice}
-                        data-value={typeof die.value === "number" ? die.value : undefined}
-                        data-roll-role={die.rollRole}
-                        className="rounded-full border border-white/10 bg-black/35 px-3 py-1 text-xs font-black text-white/70 backdrop-blur"
-                    >
-                        {die.sourceDice}{typeof die.value === "number" ? ` ${die.value}` : ""}
-                    </span>
-                ))}
+                {dice.map((die, index) => {
+                    const hasValue = showStageResults || !result
+                    return (
+                        <span
+                            key={`${die.sourceDice}-${die.dice}-${index}`}
+                            data-testid="dice-visual-die"
+                            data-dice={die.dice}
+                            data-source-dice={die.sourceDice}
+                            data-value={hasValue && typeof die.value === "number" ? die.value : undefined}
+                            data-roll-role={die.rollRole}
+                            className="rounded-full border border-white/10 bg-black/35 px-3 py-1 text-xs font-black text-white/70 backdrop-blur"
+                        >
+                            {die.sourceDice}{hasValue && typeof die.value === "number" ? ` ${die.value}` : ""}
+                        </span>
+                    )
+                })}
             </div>
         </div>
     )

@@ -45,6 +45,17 @@ const makeHighDemandError = (): Error & { status: number } => Object.assign(
     { status: 503 }
 )
 
+const makeServiceUnavailableError = (): Error & { status: number } => Object.assign(
+    new Error(JSON.stringify({
+        error: {
+            code: 503,
+            message: "The service is currently unavailable.",
+            status: "UNAVAILABLE",
+        },
+    })),
+    { status: 503 }
+)
+
 async function* makeStream() {
     yield {
         text: "streamed",
@@ -116,6 +127,28 @@ describe("GenAI high demand retry", () => {
         await expect(generateText("prompt")).rejects.toThrow("Failed to generate text: invalid prompt")
         expect(genAiMocks.generateContent).toHaveBeenCalledTimes(1)
         expect(warnSpy).not.toHaveBeenCalled()
+    })
+
+    it("retries generateText after 1s when Gemini reports temporary unavailability", async () => {
+        genAiMocks.generateContent
+            .mockRejectedValueOnce(makeServiceUnavailableError())
+            .mockResolvedValueOnce({
+                text: "ok",
+                usageMetadata: {
+                    promptTokenCount: 2,
+                    candidatesTokenCount: 3,
+                    totalTokenCount: 5,
+                },
+            })
+
+        const { generateText } = await import("@/core/ai/genai")
+        const resultPromise = generateText("prompt", "gemini-test", "user-1")
+
+        await vi.advanceTimersByTimeAsync(1000)
+
+        await expect(resultPromise).resolves.toBe("ok")
+        expect(genAiMocks.generateContent).toHaveBeenCalledTimes(2)
+        expect(warnSpy).toHaveBeenCalledWith("GenAI generateText hit Gemini temporary unavailability. Retrying in 1s (attempt 2).")
     })
 
     it("retries generateTextStream before streaming chunks", async () => {

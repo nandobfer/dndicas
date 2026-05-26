@@ -3,7 +3,8 @@
 import * as React from "react"
 import type { DiceRollPreset } from "../types"
 import { useDiceResultConsoleApi } from "../hooks/use-dice-result-console-api"
-import { DiceRollerModal } from "./dice-roller-modal"
+import { useWindows } from "@/core/context/window-context"
+import { DiceRollerPanel } from "./dice-roller-panel"
 
 interface DiceRollerContextValue {
     openManual: () => void
@@ -14,26 +15,38 @@ interface DiceRollerContextValue {
 const DiceRollerContext = React.createContext<DiceRollerContextValue | null>(null)
 
 export function DiceRollerProvider({ children }: { children: React.ReactNode }) {
-    const [open, setOpen] = React.useState(false)
-    const [preset, setPreset] = React.useState<DiceRollPreset | null>(null)
+    const { addWindow, removeWindow } = useWindows()
     useDiceResultConsoleApi()
 
-    const close = React.useCallback(() => setOpen(false), [])
+    const close = React.useCallback(() => {
+        removeWindow("dice-roller")
+    }, [removeWindow])
+
     const openManual = React.useCallback(() => {
-        setPreset(null)
-        setOpen(true)
-    }, [])
+        addWindow({
+            id: "dice-roller",
+            title: "Rolagem de dados",
+            initialSize: { width: "min(554px, 95vw)", height: "min(620px, 85vh)" },
+            minSize: { width: 400, height: 250 },
+            content: <DiceRollerPanel preset={null} />
+        })
+    }, [addWindow])
+
     const openPreset = React.useCallback((nextPreset: DiceRollPreset) => {
-        setPreset(nextPreset)
-        setOpen(true)
-    }, [])
+        addWindow({
+            id: "dice-roller",
+            title: "Rolagem de dados",
+            initialSize: { width: "min(554px, 95vw)", height: "min(620px, 85vh)" },
+            minSize: { width: 400, height: 250 },
+            content: <DiceRollerPanel preset={nextPreset} />
+        })
+    }, [addWindow])
 
     const value = React.useMemo(() => ({ openManual, openPreset, close }), [close, openManual, openPreset])
 
     return (
         <DiceRollerContext.Provider value={value}>
             {children}
-            <DiceRollerModal open={open} onOpenChange={setOpen} preset={preset} />
         </DiceRollerContext.Provider>
     )
 }

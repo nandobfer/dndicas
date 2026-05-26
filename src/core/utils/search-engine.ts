@@ -13,7 +13,7 @@ export interface UnifiedEntity {
     name: string
     originalName?: string
     label?: string // For compatibility
-    type: "Regra" | "Magia" | "Habilidade" | "Talento" | "Classe" | "Subclasse" | "Origem" | "Raça" | "Item"
+    type: "Regra" | "Magia" | "Habilidade" | "Talento" | "Classe" | "Subclasse" | "Origem" | "Raça" | "Item" | "Monstro"
     description?: string
     source?: string
     status: "active" | "inactive"

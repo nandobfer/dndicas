@@ -62,6 +62,38 @@ export function DiceRollerPanel({
     const [isAnimatingDice, setIsAnimatingDice] = React.useState(false)
     const [errorMessage, setErrorMessage] = React.useState<string | null>(null)
     const lastExternalRollIdRef = React.useRef<string | null>(null)
+    const animationTimeoutRef = React.useRef<number | null>(null)
+    const [showResults, setShowResults] = React.useState(false)
+    const isLocalRollRef = React.useRef(false)
+    const [containerWidth, setContainerWidth] = React.useState(0)
+    const observerRef = React.useRef<ResizeObserver | null>(null)
+
+    const containerRef = React.useCallback((node: HTMLElement | null) => {
+        if (observerRef.current) {
+            observerRef.current.disconnect()
+            observerRef.current = null
+        }
+
+        if (node) {
+            if (typeof window !== "undefined" && typeof ResizeObserver !== "undefined") {
+                const observer = new ResizeObserver((entries) => {
+                    if (!entries || entries.length === 0) return
+                    const { width } = entries[0].contentRect
+                    setContainerWidth(width)
+                })
+                observer.observe(node)
+                observerRef.current = observer
+            }
+        }
+    }, [])
+
+    React.useEffect(() => {
+        return () => {
+            if (observerRef.current) {
+                observerRef.current.disconnect()
+            }
+        }
+    }, [])
     const normalizedTerms = normalizeTerms(terms)
     const canUseD20Mode = isSingleD20(normalizedTerms)
     const activeMode: DiceRollMode = canUseD20Mode ? mode : "normal"
@@ -70,7 +102,16 @@ export function DiceRollerPanel({
     const isRollButtonDisabled = isRolling || isAnimatingDice || disableRolling
     const criticalState = React.useMemo(() => getDiceCriticalState(result), [result])
 
+    const onRollResolvedRef = React.useRef(onRollResolved)
     React.useEffect(() => {
+        onRollResolvedRef.current = onRollResolved
+    }, [onRollResolved])
+
+    React.useEffect(() => {
+        if (animationTimeoutRef.current) {
+            window.clearTimeout(animationTimeoutRef.current)
+            animationTimeoutRef.current = null
+        }
         const next = getInitialState(preset)
         setTerms(next.terms)
         setModifier(next.modifier)
@@ -79,17 +120,29 @@ export function DiceRollerPanel({
         sourceRef.current = next.source
         setResult(null)
         setIsAnimatingDice(false)
+        setShowResults(false)
+        isLocalRollRef.current = false
         setErrorMessage(null)
     }, [preset])
 
     React.useEffect(() => {
-        if (!externalResult || lastExternalRollIdRef.current === externalResult.rollId) return
+        return () => {
+            if (animationTimeoutRef.current) {
+                window.clearTimeout(animationTimeoutRef.current)
+            }
+        }
+    }, [])
+
+    React.useEffect(() => {
+        if (!externalResult || lastExternalRollIdRef.current === externalResult.rollId || result?.rollId === externalResult.rollId) return
 
         lastExternalRollIdRef.current = externalResult.rollId
+        isLocalRollRef.current = false
         setResult(externalResult)
         setIsRolling(false)
+        setShowResults(false)
         setErrorMessage(null)
-    }, [externalResult])
+    }, [externalResult, result])
 
     React.useEffect(() => {
         if (!canUseD20Mode && mode !== "normal") {
@@ -98,8 +151,14 @@ export function DiceRollerPanel({
     }, [canUseD20Mode, mode])
 
     const markDirty = () => {
+        if (animationTimeoutRef.current) {
+            window.clearTimeout(animationTimeoutRef.current)
+            animationTimeoutRef.current = null
+        }
         setResult(null)
         setIsAnimatingDice(false)
+        setShowResults(false)
+        isLocalRollRef.current = false
         setErrorMessage(null)
     }
 
@@ -130,6 +189,10 @@ export function DiceRollerPanel({
     }
 
     const clear = () => {
+        if (animationTimeoutRef.current) {
+            window.clearTimeout(animationTimeoutRef.current)
+            animationTimeoutRef.current = null
+        }
         setTerms([])
         setModifier(0)
         setMode("normal")
@@ -137,11 +200,34 @@ export function DiceRollerPanel({
         sourceRef.current = "manual"
         setResult(null)
         setIsAnimatingDice(false)
+        setShowResults(false)
+        isLocalRollRef.current = false
         setErrorMessage(null)
     }
 
     const handleAnimationStateChange = React.useCallback((nextIsAnimating: boolean) => {
-        setIsAnimatingDice(nextIsAnimating)
+        if (animationTimeoutRef.current) {
+            window.clearTimeout(animationTimeoutRef.current)
+            animationTimeoutRef.current = null
+        }
+
+        if (nextIsAnimating) {
+            setIsAnimatingDice(true)
+            animationTimeoutRef.current = window.setTimeout(() => {
+                setIsAnimatingDice(false)
+                animationTimeoutRef.current = null
+            }, 1000)
+        } else {
+            setIsAnimatingDice(false)
+        }
+    }, [])
+
+    const handleRollComplete = React.useCallback((completedResult: DiceRollResponse) => {
+        setShowResults(true)
+        if (isLocalRollRef.current) {
+            onRollResolvedRef.current?.(completedResult)
+            isLocalRollRef.current = false
+        }
     }, [])
 
     const handleRoll = async () => {
@@ -152,6 +238,7 @@ export function DiceRollerPanel({
         }
 
         setIsRolling(true)
+        setShowResults(false)
         setErrorMessage(null)
         try {
             const nextResult = await requestDiceRoll({
@@ -164,8 +251,8 @@ export function DiceRollerPanel({
                 owlbearRoomId: requestContext?.owlbearRoomId,
                 owlbearPlayerId: requestContext?.owlbearPlayerId,
             })
+            isLocalRollRef.current = true
             setResult(nextResult)
-            onRollResolved?.(nextResult)
         } catch (error) {
             console.error("Failed to roll dice", error)
             setErrorMessage(error instanceof Error ? error.message : "Não foi possível rolar os dados.")
@@ -175,9 +262,16 @@ export function DiceRollerPanel({
     }
 
     return (
-        <GlassCard className={cn("relative overflow-hidden border-white/10 bg-black/35 p-0", className)}>
+        <GlassCard ref={containerRef} className={cn("w-full max-w-full relative overflow-hidden border-white/10 bg-black/35 p-0", className)}>
             <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(59,130,246,0.18),transparent_32%),radial-gradient(circle_at_bottom_right,rgba(245,158,11,0.12),transparent_30%)]" />
-            <div className="relative grid gap-5 p-5 md:grid-cols-[minmax(0,1fr)_minmax(420px,0.8fr)] md:p-7">
+            <div className={cn(
+                "relative grid gap-5 p-5 md:p-7",
+                containerWidth === 0
+                    ? "grid-cols-1"
+                    : containerWidth >= 950
+                        ? "grid-cols-[minmax(0,1fr)_minmax(420px,0.8fr)]"
+                        : "grid-cols-1"
+            )}>
                 <div className="space-y-5">
                     <GlassButton
                         type="button"
@@ -195,8 +289,9 @@ export function DiceRollerPanel({
                         mode={displayedMode}
                         criticalState={criticalState}
                         onAnimationStateChange={handleAnimationStateChange}
+                        onRollComplete={handleRollComplete}
                     />
-                    <DiceResultSummary result={result} criticalState={criticalState} />
+                    <DiceResultSummary result={showResults ? result : null} criticalState={showResults ? criticalState : null} />
                 </div>
 
                 <div className="space-y-4">

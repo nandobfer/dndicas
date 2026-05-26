@@ -17,6 +17,7 @@ import { BackgroundsEntityCard } from "./_components/backgrounds-entity-card"
 import { ItemsEntityCard } from "./_components/items-entity-card"
 import { WipEntityCard } from "./_components/wip-entity-card"
 import { SheetsEntityCard } from "./_components/sheets-entity-card"
+import { MonstersEntityCard } from "./_components/monsters-entity-card"
 import { AnimatedNumber } from "@/components/ui/animated-number"
 import { InlineSearch } from "@/components/ui/inline-search"
 import Image from "next/image"
@@ -74,7 +75,7 @@ const dndEntities = [
         title: "Monstros",
         icon: Skull,
         description: "Criaturas, feras e adversários",
-        component: WipEntityCard,
+        component: MonstersEntityCard,
     },
 ]
 

@@ -14,11 +14,13 @@ export type WindowInstance = {
     initialPosition?: { x: number, y: number }
     lastPosition?: { x: number, y: number }
     isMinimized?: boolean
+    initialSize?: { width: number | string, height: number | string }
+    minSize?: { width: number, height: number }
 }
 
 interface WindowContextType {
     windows: WindowInstance[]
-    addWindow: (window: Omit<WindowInstance, "id" | "zIndex">) => void
+    addWindow: (window: Omit<WindowInstance, "id" | "zIndex"> & { id?: string }) => void
     removeWindow: (id: string) => void
     bringToFront: (id: string) => void
     toggleMinimize: (id: string) => void
@@ -31,21 +33,37 @@ export function WindowProvider({ children }: { children: React.ReactNode }) {
     const [windows, setWindows] = React.useState<WindowInstance[]>([])
     const [nextZIndex, setNextZIndex] = React.useState(10) // Lower base z-index
 
-    const addWindow = React.useCallback((window: Omit<WindowInstance, "id" | "zIndex">) => {
-        const id = Math.random().toString(36).substring(2, 9)
-        const offset = windows.length * 30 // 30px offset per open window
-        setWindows((prev) => [
-            ...prev,
-            { 
-                ...window, 
-                id, 
-                zIndex: nextZIndex,
-                initialPosition: { x: 50 + offset, y: 50 + offset },
-                isMinimized: false
+    const addWindow = React.useCallback((window: Omit<WindowInstance, "id" | "zIndex"> & { id?: string }) => {
+        const targetId = window.id ?? Math.random().toString(36).substring(2, 9)
+        setWindows((prev) => {
+            const existing = prev.find((w) => w.id === targetId)
+            if (existing) {
+                return prev.map((w) => 
+                    w.id === targetId 
+                        ? { 
+                            ...w, 
+                            title: window.title,
+                            content: window.content, 
+                            isMinimized: false, 
+                            zIndex: nextZIndex 
+                          } 
+                        : w
+                )
             }
-        ])
+            const offset = prev.length * 30 // 30px offset per open window
+            return [
+                ...prev,
+                { 
+                    ...window, 
+                    id: targetId, 
+                    zIndex: nextZIndex,
+                    initialPosition: window.initialPosition ?? { x: 50 + offset, y: 50 + offset },
+                    isMinimized: false
+                }
+            ]
+        })
         setNextZIndex((prev) => prev + 1)
-    }, [nextZIndex, windows.length])
+    }, [nextZIndex])
 
     const removeWindow = React.useCallback((id: string) => {
         setWindows((prev) => prev.filter((w) => w.id !== id))
@@ -151,6 +169,8 @@ function WindowRenderer({ window }: { window: WindowInstance }) {
             entityType={window.entityType}
             initialPosition={window.lastPosition || window.initialPosition}
             isMinimized={false}
+            initialSize={window.initialSize}
+            minSize={window.minSize}
         >
             {window.content}
         </GlassWindow>
