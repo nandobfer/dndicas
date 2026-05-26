@@ -328,6 +328,7 @@ interface SpellsSectionProps {
 }
 
 export function SpellsSection({ control, isSubmitting, spellsFieldName, errors }: SpellsSectionProps) {
+    const spellCountId = React.useId()
     const {
         fields: spellFields,
         append: appendSpell,
@@ -369,10 +370,16 @@ export function SpellsSection({ control, isSubmitting, spellsFieldName, errors }
             </div>
 
             <div className="rounded-xl border border-white/10 bg-white/5 overflow-hidden">
-                <button type="button" onClick={() => setIsExpanded(!isExpanded)} className="w-full flex items-center justify-between px-3 py-2 hover:bg-white/5 transition-colors group">
+                <button
+                    type="button"
+                    aria-label="Lista de Magias"
+                    aria-describedby={spellCountId}
+                    onClick={() => setIsExpanded(!isExpanded)}
+                    className="w-full flex items-center justify-between px-3 py-2 hover:bg-white/5 transition-colors group"
+                >
                     <div className="flex items-center gap-2">
                         <span className="text-sm font-medium text-white/80">Lista de Magias</span>
-                        <span className="text-[10px] text-white/20 uppercase tracking-widest font-bold ml-2 group-hover:text-white/40 transition-colors">
+                        <span id={spellCountId} className="text-[10px] text-white/20 uppercase tracking-widest font-bold ml-2 group-hover:text-white/40 transition-colors">
                             {spellFields.filter((f: any) => !f.isPending).length} {spellFields.filter((f: any) => !f.isPending).length === 1 ? "magia" : "magias"}
                         </span>
                     </div>
@@ -549,6 +556,7 @@ export function EquipmentSection({ isSubmitting }: { isSubmitting: boolean }) {
 }
 
 export function TraitsSection({ fields, append, remove, control, isSubmitting, traitsFieldName, errors }: TraitsSectionProps) {
+    const traitCountId = React.useId()
     const [isExpanded, setIsExpanded] = React.useState(false)
 
     return (
@@ -579,10 +587,16 @@ export function TraitsSection({ fields, append, remove, control, isSubmitting, t
             </div>
 
             <div className="rounded-xl border border-white/10 bg-white/5 overflow-hidden">
-                <button type="button" onClick={() => setIsExpanded(!isExpanded)} className="w-full flex items-center justify-between px-3 py-2 hover:bg-white/5 transition-colors group">
+                <button
+                    type="button"
+                    aria-label="Lista de Habilidades"
+                    aria-describedby={traitCountId}
+                    onClick={() => setIsExpanded(!isExpanded)}
+                    className="w-full flex items-center justify-between px-3 py-2 hover:bg-white/5 transition-colors group"
+                >
                     <div className="flex items-center gap-2">
                         <span className="text-sm font-medium text-white/80">Lista de Habilidades</span>
-                        <span className="text-[10px] text-white/20 uppercase tracking-widest font-bold ml-2 group-hover:text-white/40 transition-colors">
+                        <span id={traitCountId} className="text-[10px] text-white/20 uppercase tracking-widest font-bold ml-2 group-hover:text-white/40 transition-colors">
                             {fields.length} {fields.length === 1 ? "habilidade" : "habilidades"}
                         </span>
                     </div>
