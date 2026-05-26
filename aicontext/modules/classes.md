@@ -2,6 +2,13 @@
 
 ## Features
 
+### Filtro de fonte aplicado às subclasses no preview
+O `ClassPreview` respeita o filtro de fonte ativo na página de classes para a lista de subclasses. Quando o usuário seleciona fontes no `ClassesFilters`, o preview renderizado pela lista mostra apenas subclasses cujo `source` começa com uma das fontes selecionadas, usando a mesma comparação por prefixo case-insensitive da API de classes.
+
+O dropdown de fontes de classes também inclui fontes cadastradas em `subclasses.source`. Ao filtrar por uma fonte exclusiva de subclasse, a listagem inclui a classe pai porque a consulta de classes compara a fonte selecionada tanto com `source` quanto com `subclasses.source`.
+
+As subclasses filtradas deixam de alimentar o seletor, o preview embutido e os dados de progressão/habilidades das subclasses selecionadas.
+
 ### Preview de subclasses com habilidades e magias próprias
 O `SubclassPreview` exibe, logo abaixo da descrição, as mesmas seções expansíveis de habilidades por nível e de magias usadas no preview de classes, inclusive quando a subclasse é renderizada de forma embutida dentro de `ClassPreview`.
 

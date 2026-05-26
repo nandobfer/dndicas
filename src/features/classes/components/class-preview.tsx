@@ -15,7 +15,7 @@ import { Chip } from "@/components/ui/chip"
 import { MentionContent, EntityTitleLink } from "@/features/rules/components/mention-badge"
 import { entityColors, diceColors, attributeColors, DiceType } from "@/lib/config/colors"
 import { cn } from "@/core/utils"
-import type { CharacterClass, SkillType, AttributeType } from "../types/classes.types"
+import type { CharacterClass, SkillType, AttributeType, Subclass } from "../types/classes.types"
 import { useState, useMemo } from "react"
 import { motion, AnimatePresence } from "framer-motion"
 import { ENTITY_RENDERERS } from "@/features/rules/components/entity-renderers"
@@ -45,6 +45,14 @@ const SKILL_TO_ATTR: Record<string, string> = {
     Intimidação: "Carisma",
     Atuação: "Carisma",
     Persuasão: "Carisma",
+}
+
+export function subclassMatchesSourceFilters(subclass: Subclass, sourceFilters?: string[]) {
+    if (!sourceFilters || sourceFilters.length === 0) return true
+    if (!subclass.source) return false
+
+    const source = subclass.source.toLowerCase()
+    return sourceFilters.some((filter) => source.startsWith(filter.toLowerCase()))
 }
 
 function SpellCircleAccordion({ circle, items, color }: { circle: number; items: any[]; color?: string }) {
@@ -251,19 +259,29 @@ export interface ClassPreviewProps {
     characterClass: CharacterClass
     showStatus?: boolean
     initialSelectedSubclassIds?: string[]
+    sourceFilters?: string[]
 }
 
-export function ClassPreview({ characterClass, showStatus = true, initialSelectedSubclassIds }: ClassPreviewProps) {
+export function ClassPreview({ characterClass, showStatus = true, initialSelectedSubclassIds, sourceFilters }: ClassPreviewProps) {
     const [levelFilter, setLevelFilter] = useState<number | undefined>(undefined)
     const [filterMode, setFilterMode] = useState<"upTo" | "exact">("upTo")
     const [selectedSubclassIds, setSelectedSubclassIds] = useState<string[]>(initialSelectedSubclassIds ?? [])
     const [isTraitsOpen, setIsTraitsOpen] = useState(false)
 
-    const subclasses = characterClass.subclasses || []
+    const subclasses = useMemo(
+        () => (characterClass.subclasses || []).filter((subclass) => subclassMatchesSourceFilters(subclass, sourceFilters)),
+        [characterClass.subclasses, sourceFilters],
+    )
+
+    const visibleSubclassIds = useMemo(() => new Set(subclasses.map((subclass) => subclass._id || subclass.name)), [subclasses])
+    const activeSelectedSubclassIds = useMemo(
+        () => selectedSubclassIds.filter((id) => visibleSubclassIds.has(id)),
+        [selectedSubclassIds, visibleSubclassIds],
+    )
 
     const selectedSubclasses = useMemo(() => {
-        return subclasses.filter((s) => selectedSubclassIds.includes(s._id || s.name))
-    }, [subclasses, selectedSubclassIds])
+        return subclasses.filter((s) => activeSelectedSubclassIds.includes(s._id || s.name))
+    }, [subclasses, activeSelectedSubclassIds])
 
     const diceColor = diceColors[characterClass.hitDice as keyof typeof diceColors]
 
@@ -454,7 +472,7 @@ export function ClassPreview({ characterClass, showStatus = true, initialSelecte
                             <span>Subclasses</span>
                         </div>
                         <GlassSelector
-                            value={selectedSubclassIds}
+                            value={activeSelectedSubclassIds}
                             onChange={(val) => setSelectedSubclassIds(val as string[])}
                             options={subclasses.map((s) => ({
                                 value: s._id || s.name,

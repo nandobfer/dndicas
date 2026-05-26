@@ -6,6 +6,7 @@ import { X, GripHorizontal, Maximize2, Minus } from "lucide-react"
 import { GlassCard, GlassCardContent } from "./glass-card"
 import { cn } from "@/core/utils"
 import { renderEntity } from "@/features/rules/components/entity-renderers"
+import type { EntityRenderOptions } from "@/features/rules/components/entity-renderers"
 
 interface GlassWindowProps {
     id: string
@@ -18,6 +19,7 @@ interface GlassWindowProps {
     zIndex: number
     item?: any
     entityType?: string
+    renderOptions?: EntityRenderOptions
     initialPosition?: { x: number, y: number }
     isMinimized?: boolean
     initialSize?: { width: number | string, height: number | string }
@@ -35,6 +37,7 @@ export function GlassWindow({
     zIndex, 
     item, 
     entityType, 
+    renderOptions,
     initialPosition,
     isMinimized = false,
     initialSize,
@@ -241,7 +244,7 @@ export function GlassWindow({
                         className="p-4 flex-1 overflow-y-auto glass-scrollbar pointer-events-auto"
                     >
                         <div onPointerDown={(e) => e.stopPropagation()}>
-                            {item && entityType ? renderEntity(item, entityType) : children}
+                            {item && entityType ? renderEntity(item, entityType, renderOptions) : children}
                         </div>
                     </div>
                 )}
@@ -259,4 +262,3 @@ export function GlassWindow({
         </motion.div>
     )
 }
-

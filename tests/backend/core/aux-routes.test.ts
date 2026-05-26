@@ -77,6 +77,39 @@ describe('auxiliary backend routes', () => {
         expect(payload.sources).toEqual(['LDM', 'XMM']);
     });
 
+    it('GET /api/sources includes subclass sources for classes', async () => {
+        const distinct = vi.fn((path: string) => {
+            if (path === 'source') return Promise.resolve(['LDJ p. 70', 'XPHB p. 50']);
+            if (path === 'subclasses.source') return Promise.resolve(['TCE p. 29', 'LDJ p. 72']);
+            return Promise.resolve([]);
+        });
+
+        vi.doMock('@/core/database/db', () => ({
+            default: vi.fn().mockResolvedValue(undefined),
+        }));
+        vi.doMock('@/core/utils/source-utils', () => ({
+            extractBookName: vi.fn((value: string) => value.split(' p.')[0]),
+        }));
+        vi.doMock('@/features/spells/models/spell', () => ({ Spell: {} }));
+        vi.doMock('@/features/classes/models/character-class', () => ({ CharacterClass: { distinct } }));
+        vi.doMock('@/features/races/models/race', () => ({ RaceModel: {} }));
+        vi.doMock('@/features/backgrounds/models/background', () => ({ BackgroundModel: {} }));
+        vi.doMock('@/features/feats/models/feat', () => ({ Feat: {} }));
+        vi.doMock('@/core/database/models/reference', () => ({ Reference: {} }));
+        vi.doMock('@/features/traits/database/trait', () => ({ Trait: {} }));
+        vi.doMock('@/features/items/database/item', () => ({ ItemModel: {} }));
+        vi.doMock('@/features/monsters/models/monster', () => ({ MonsterModel: {} }));
+
+        const mod = await importFresh<typeof import('@/app/api/sources/route')>('@/app/api/sources/route');
+        const response = await mod.GET(new Request('http://localhost/api/sources?entity=classes'));
+        const payload = await readJson(response);
+
+        expect(response.status).toBe(200);
+        expect(distinct).toHaveBeenCalledWith('source');
+        expect(distinct).toHaveBeenCalledWith('subclasses.source');
+        expect(payload.sources).toEqual(['LDJ', 'TCE', 'XPHB']);
+    });
+
     it('GET /api/core/health returns a healthy payload even when dbConnect throws', async () => {
         vi.doMock('@/core/database/db', () => ({
             default: vi.fn().mockRejectedValue(new Error('down')),

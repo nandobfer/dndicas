@@ -10,6 +10,7 @@ import { ScrollText, Sparkles, Wand, Zap, MoreHorizontal, Pencil, Trash2, Extern
 import { motionConfig } from "@/lib/config/motion-configs"
 import { GlassDropdownMenu, GlassDropdownMenuTrigger, GlassDropdownMenuContent, GlassDropdownMenuItem } from "@/components/ui/glass-dropdown-menu"
 import { renderEntity } from "./entity-renderers"
+import type { EntityRenderOptions } from "./entity-renderers"
 import { useWindows } from "@/core/context/window-context"
 
 interface EntityListProps {
@@ -22,9 +23,10 @@ interface EntityListProps {
     onEdit?: (item: any) => void
     onDelete?: (item: any) => void
     isAdmin?: boolean
+    renderOptions?: EntityRenderOptions
 }
 
-export function EntityList({ items, entityType, isLoading, hasNextPage, isFetchingNextPage, onLoadMore, onEdit, onDelete, isAdmin }: EntityListProps) {
+export function EntityList({ items, entityType, isLoading, hasNextPage, isFetchingNextPage, onLoadMore, onEdit, onDelete, isAdmin, renderOptions }: EntityListProps) {
     const observer = React.useRef<IntersectionObserver | null>(null)
     const { addWindow } = useWindows()
 
@@ -82,6 +84,7 @@ export function EntityList({ items, entityType, isLoading, hasNextPage, isFetchi
                                                 content: null, // content will be handled by item/entityType in GlassWindow
                                                 item,
                                                 entityType: entityType === "Mixed" ? item.type : entityType,
+                                                renderOptions,
                                             })
                                         }
                                         className="p-1.5 rounded-lg text-white/40 hover:text-white hover:bg-white/10 transition-colors"
@@ -118,7 +121,7 @@ export function EntityList({ items, entityType, isLoading, hasNextPage, isFetchi
                                         </GlassDropdownMenu>
                                     )}
                                 </div>
-                                <div className="max-w-full overflow-hidden -mt-2">{renderEntity(item, entityType, { showStatus: false, hideActionIcons: true } as any)}</div>
+                                <div className="max-w-full overflow-hidden -mt-2">{renderEntity(item, entityType, { ...renderOptions, showStatus: false, hideActionIcons: true })}</div>
                             </GlassCardContent>
                         </GlassCard>
                     </motion.div>

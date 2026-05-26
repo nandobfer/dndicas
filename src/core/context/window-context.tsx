@@ -2,6 +2,7 @@
 
 import * as React from "react"
 import { AnimatePresence, motion } from "framer-motion"
+import type { EntityRenderOptions } from "@/features/rules/components/entity-renderers"
 
 export type WindowInstance = {
     id: string
@@ -10,6 +11,7 @@ export type WindowInstance = {
     entityId?: string
     entityType?: string
     item?: any
+    renderOptions?: EntityRenderOptions
     zIndex: number
     initialPosition?: { x: number, y: number }
     lastPosition?: { x: number, y: number }
@@ -130,6 +132,7 @@ export function WindowProvider({ children }: { children: React.ReactNode }) {
                                     onMinimize={() => toggleMinimize(window.id)}
                                     item={window.item}
                                     entityType={window.entityType}
+                                    renderOptions={window.renderOptions}
                                     isMinimized={true}
                                 />
                             </motion.div>
@@ -167,6 +170,7 @@ function WindowRenderer({ window }: { window: WindowInstance }) {
             onPositionChange={(pos) => updatePosition(window.id, pos)}
             item={window.item}
             entityType={window.entityType}
+            renderOptions={window.renderOptions}
             initialPosition={window.lastPosition || window.initialPosition}
             isMinimized={false}
             initialSize={window.initialSize}
