@@ -4,7 +4,6 @@ import * as React from "react"
 import { motion } from "framer-motion"
 import Link from "next/link"
 import { cn } from "@/core/utils"
-import { entityColors } from "@/lib/config/colors"
 
 interface EntityTitleLinkProps {
     name: string
@@ -26,6 +25,7 @@ export function EntityTitleLink({ name, entityType, className, style, disableLin
         Origem: "backgrounds",
         Raça: "races",
         Item: "items",
+        Monstro: "monsters",
     }
 
     const route = routeMap[entityType] || "rules"

@@ -11,7 +11,6 @@ import { motionConfig } from "@/lib/config/motion-configs"
 import { renderEntity } from "./entity-renderers"
 import { useRouter } from "next/navigation"
 import { Button } from "@/core/ui/button"
-import { EntityPreviewTooltip } from "./entity-preview-tooltip"
 import { useWindows } from "@/core/context/window-context"
 import { Pencil, Trash2, MoreHorizontal } from "lucide-react"
 import { GlassDropdownMenu, GlassDropdownMenuTrigger, GlassDropdownMenuContent, GlassDropdownMenuItem } from "@/components/ui/glass-dropdown-menu"
@@ -27,11 +26,20 @@ interface EntityPageProps {
     /** Whether to hide action icons (like open in window) when already in a page */
     hideActionIcons?: boolean
     renderOptions?: { showStatus?: boolean; hideStatusChip?: boolean; hideActionIcons?: boolean; initialSelectedSubclassIds?: string[] }
+    backHref?: string
 }
 
-export function EntityPage({ item, entityType, isLoading, isAdmin, onEdit, onDelete, hideActionIcons = false, renderOptions }: EntityPageProps) {
+export function EntityPage({ item, entityType, isLoading, isAdmin, onEdit, onDelete, hideActionIcons = false, renderOptions, backHref }: EntityPageProps) {
     const router = useRouter()
     const { addWindow } = useWindows()
+    const handleBack = React.useCallback(() => {
+        if (backHref) {
+            router.push(backHref)
+            return
+        }
+
+        router.back()
+    }, [backHref, router])
 
     const mentions = React.useMemo(() => {
         if (!item?.description) return []
@@ -62,7 +70,7 @@ export function EntityPage({ item, entityType, isLoading, isAdmin, onEdit, onDel
             <div className="py-12">
                 <EmptyState title={`${entityType} não encontrada`} description="O item que você procura pode ter sido removido ou o link está incorreto." icon={ScrollText} />
                 <div className="mt-6 flex justify-center">
-                    <Button variant="ghost" onClick={() => router.back()}>
+                    <Button variant="ghost" onClick={handleBack}>
                         <ArrowLeft className="mr-2 h-4 w-4" />
                         Voltar
                     </Button>
@@ -78,7 +86,7 @@ export function EntityPage({ item, entityType, isLoading, isAdmin, onEdit, onDel
         <div className="space-y-6 py-2 w-full">
             <motion.div initial="initial" animate="animate" variants={motionConfig.variants.fadeInUp} className="w-full">
                 <div className="mb-4 flex items-center justify-between">
-                    <Button variant="ghost" size="sm" onClick={() => router.back()} className="text-white/40 hover:text-white">
+                    <Button variant="ghost" size="sm" onClick={handleBack} className="text-white/40 hover:text-white">
                         <ArrowLeft className="mr-2 h-4 w-4" />
                         Voltar
                     </Button>

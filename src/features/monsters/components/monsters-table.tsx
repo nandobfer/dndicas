@@ -6,6 +6,7 @@ import { MoreHorizontal, Pencil, Shield, Skull, Trash2 } from "lucide-react"
 import { Chip } from "@/components/ui/chip"
 import { GlassDropdownMenu, GlassDropdownMenuContent, GlassDropdownMenuItem, GlassDropdownMenuTrigger } from "@/components/ui/glass-dropdown-menu"
 import { cn } from "@/core/utils"
+import { EntityTitleLink } from "@/features/rules/components/entity-title-link"
 import type { Monster } from "../types/monsters.types"
 import { MONSTER_SIZE_LABELS, MONSTER_TYPE_LABELS } from "./monster-options"
 import { getMonsterXp } from "../utils/monster-calculations"
@@ -34,7 +35,11 @@ export function MonstersTable({ items, onEdit, onDelete, isAdmin }: { items: Mon
                                         <Skull className="h-3.5 w-3.5 text-red-300" />
                                     </div>
                                     <div>
-                                        <span className={cn("text-sm font-medium block", monster.status === "inactive" ? "text-white/30" : "text-white/80")}>{monster.name}</span>
+                                        <EntityTitleLink
+                                            name={monster.name}
+                                            entityType="Monstro"
+                                            className={cn("text-sm font-medium block", monster.status === "inactive" ? "text-white/30" : "text-white/80")}
+                                        />
                                         <span className="text-[10px] text-white/20 font-mono tracking-tighter truncate max-w-[180px] block">{monster.source}</span>
                                     </div>
                                 </div>

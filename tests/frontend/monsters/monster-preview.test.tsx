@@ -1,22 +1,32 @@
 import { render, screen, within } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
-import type { CSSProperties, ReactNode } from 'react'
+import * as React from 'react'
+import type { ReactNode } from 'react'
 import { MonsterPreview } from '@/features/monsters/components/monster-preview'
 import { NpcParamPreview } from '@/features/monsters/components/npc-param-preview'
 import type { Monster } from '@/features/monsters/types/monsters.types'
+
+vi.mock('next/link', () => ({
+    default: ({ href, children, ...props }: { href: string; children: ReactNode }) => <a href={href} {...props}>{children}</a>,
+}))
 
 vi.mock('@/core/context/window-context', () => ({
     useWindows: () => ({ addWindow: vi.fn() }),
 }))
 
-vi.mock('@/features/rules/components/mention-badge', () => ({
-    MentionContent: ({ html, className }: { html: string; className?: string }) => <div className={className}>{html}</div>,
-    EntityTitleLink: ({ name, className, style }: { name: string; className?: string; style?: CSSProperties }) => <span className={className} style={style}>{name}</span>,
-}))
+vi.mock('@/features/rules/components/mention-badge', async () => {
+    const actual = await vi.importActual<typeof import('@/features/rules/components/mention-badge')>('@/features/rules/components/mention-badge')
+    return {
+        ...actual,
+        MentionContent: ({ html, className }: { html: string; className?: string }) => <div className={className}>{html}</div>,
+    }
+})
 
 vi.mock('framer-motion', () => ({
     motion: {
-        button: ({ children }: { children: ReactNode }) => <button>{children}</button>,
+        button: ({ children, ...props }: React.ButtonHTMLAttributes<HTMLButtonElement>) => <button {...props}>{children}</button>,
+        div: ({ children, ...props }: React.HTMLAttributes<HTMLDivElement>) => <div {...props}>{children}</div>,
+        span: ({ children, ...props }: React.HTMLAttributes<HTMLSpanElement>) => <span {...props}>{children}</span>,
     },
 }))
 
@@ -58,6 +68,12 @@ const baseMonster: Monster = {
 }
 
 describe('MonsterPreview', () => {
+    it('links the monster title to the monster detail page', () => {
+        render(<MonsterPreview monster={baseMonster} hideActionIcons />)
+
+        expect(screen.getByRole('link', { name: 'Dragão Teste' })).toHaveAttribute('href', '/monsters/drag%C3%A3o-teste')
+    })
+
     it('renders type before size, summary labels inline, CR with XP, and full attribute names', () => {
         render(<MonsterPreview monster={baseMonster} hideActionIcons />)
 
