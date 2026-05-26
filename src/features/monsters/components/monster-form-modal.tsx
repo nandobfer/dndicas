@@ -126,7 +126,12 @@ function MaskedNumberField({
     )
 }
 
-function SpeedFields({ watch, setValue, disabled }: { watch: any; setValue: any; disabled?: boolean }) {
+function SpeedFields({ watch, setValue, unregister, disabled }: { watch: any; setValue: any; unregister: any; disabled?: boolean }) {
+    const removeSpeed = (name: (typeof SPEED_FIELDS)[number]["name"]) => {
+        setValue(name, null as any, { shouldDirty: true, shouldValidate: true })
+        unregister(name, { keepDirty: true, keepTouched: false, keepValue: false })
+    }
+
     return (
         <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
             {SPEED_FIELDS.map((speedField) => {
@@ -141,7 +146,7 @@ function SpeedFields({ watch, setValue, disabled }: { watch: any; setValue: any;
                                 {speedField.label}
                             </span>
                             {isDefined && (
-                                <button type="button" onClick={() => setValue(speedField.name, undefined, { shouldDirty: true })} disabled={disabled} className="p-1 rounded-md text-white/35 hover:text-rose-400 hover:bg-rose-400/10 transition-colors">
+                                <button type="button" aria-label={`Remover ${speedField.label}`} onClick={() => removeSpeed(speedField.name)} disabled={disabled} className="p-1 rounded-md text-white/35 hover:text-rose-400 hover:bg-rose-400/10 transition-colors">
                                     <X className="h-3.5 w-3.5" />
                                 </button>
                             )}
@@ -152,7 +157,7 @@ function SpeedFields({ watch, setValue, disabled }: { watch: any; setValue: any;
                             <button
                                 type="button"
                                 aria-label={`Adicionar ${speedField.label}`}
-                                onClick={() => setValue(speedField.name, speedField.name === "speed" ? "9m" : "", { shouldDirty: true })}
+                                onClick={() => setValue(speedField.name, speedField.name === "speed" ? "9m" : "", { shouldDirty: true, shouldValidate: true })}
                                 disabled={disabled}
                                 className="w-full h-10 rounded-lg border border-dashed border-white/15 bg-white/[0.02] text-xs font-semibold text-white/45 hover:text-white hover:border-white/30 hover:bg-white/5 transition-colors flex items-center justify-center gap-2"
                             >
@@ -179,6 +184,7 @@ export function MonsterFormModal({ monster, isOpen, onClose, onSuccess }: { mons
         handleSubmit,
         watch,
         setValue,
+        unregister,
         control,
         reset,
         formState: { errors, isDirty },
@@ -293,14 +299,18 @@ export function MonsterFormModal({ monster, isOpen, onClose, onSuccess }: { mons
 
     const onSubmit = async (data: CreateMonsterSchema) => {
         const challengeRating = data.challengeRating.trim() || "0"
+        const currentSpeed = watch("speed")
+        const currentFlySpeed = watch("flySpeed")
+        const currentSwimSpeed = watch("swimSpeed")
+        const currentClimbSpeed = watch("climbSpeed")
         const cleaned = {
             ...data,
             challengeRating,
             originalName: data.originalName?.trim() || undefined,
-            speed: data.speed?.trim() || undefined,
-            flySpeed: data.flySpeed?.trim() || undefined,
-            swimSpeed: data.swimSpeed?.trim() || undefined,
-            climbSpeed: data.climbSpeed?.trim() || undefined,
+            speed: currentSpeed === null || currentSpeed === undefined ? null : currentSpeed.trim() || null,
+            flySpeed: currentFlySpeed === null || currentFlySpeed === undefined ? null : currentFlySpeed.trim() || null,
+            swimSpeed: currentSwimSpeed === null || currentSwimSpeed === undefined ? null : currentSwimSpeed.trim() || null,
+            climbSpeed: currentClimbSpeed === null || currentClimbSpeed === undefined ? null : currentClimbSpeed.trim() || null,
             experience: getMonsterXp(challengeRating, data.experienceOverride),
         }
 
@@ -362,7 +372,7 @@ export function MonsterFormModal({ monster, isOpen, onClose, onSuccess }: { mons
                                 <GlassInput label="PV" placeholder="12d8 + 12" icon={<HeartPulse />} {...register("hitPointsFormula")} error={errors.hitPointsFormula?.message} disabled={isSubmitting} />
                                 <Controller name="proficiencyBonusOverride" control={control} render={({ field }) => <MaskedNumberField label="Proficiência" value={field.value} onChange={(value) => field.onChange(value)} min={0} max={20} allowEmpty placeholder={`Derivado: +${prof}`} disabled={isSubmitting} />} />
                             </div>
-                            <SpeedFields watch={watch} setValue={setValue} disabled={isSubmitting} />
+                            <SpeedFields watch={watch} setValue={setValue} unregister={unregister} disabled={isSubmitting} />
                             <div className="grid grid-cols-1 md:grid-cols-[1fr_160px_160px] gap-4 items-end">
                                 <Controller name="challengeRating" control={control} render={({ field }) => <MaskedNumberField label="Challenge Rating" value={field.value} onChange={(value) => field.onChange(value)} mode="text" mask={challengeRatingMask} placeholder="1/4" disabled={isSubmitting} />} />
                                 <Controller name="experienceOverride" control={control} render={({ field }) => <MaskedNumberField label="XP Override" value={field.value} onChange={(value) => field.onChange(value)} min={0} allowEmpty placeholder={String(xp)} disabled={isSubmitting} />} />

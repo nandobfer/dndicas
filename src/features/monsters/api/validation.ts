@@ -2,7 +2,7 @@ import { z } from "zod"
 
 const optionalTrimmed = (max = 200) =>
     z
-        .union([z.string().trim().max(max), z.literal("")])
+        .union([z.string().trim().max(max), z.literal(""), z.null()])
         .optional()
         .transform((value) => value || undefined)
 

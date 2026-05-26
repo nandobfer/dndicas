@@ -15,6 +15,8 @@ The Monsters module manages D&D 5e monster and NPC stat blocks with CRUD, dashbo
 - Monster form classification autocompletes fill their row, numeric combat fields use immediate masks, optional speeds can be added as empty fields, and list custom values render beside the section title.
 - Challenge Rating uses the same masked field style as combat numbers, preserving string CR values with `/` and `-` while keeping XP/proficiency derivation safe for intermediate input.
 - New monsters show an empty Challenge Rating field; submit normalizes an empty CR to `"0"` before deriving XP and saving.
+- Monster previews render type before size, compact stat cards with inline labels, CR with XP beside it, full attribute names with modifier-first values, and colored damage words in NPC hit rolls.
+- Monster preview defenses render localized, capitalized Portuguese damage labels separated by commas while preserving internal damage keys.
 
 Core behavior:
 - Browse monsters with search, type, size, challenge rating, source, and status filters.

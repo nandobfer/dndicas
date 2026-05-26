@@ -2,10 +2,25 @@
 
 import { Dices, Swords, RotateCcw } from "lucide-react"
 import { MentionContent } from "@/features/rules/components/mention-badge"
+import { getDamageColorByKey } from "@/lib/config/colors"
 import { cn } from "@/core/utils"
 import type { NpcParam } from "../types/monsters.types"
 
+function renderColoredHitRoll(hitRoll: string) {
+    return hitRoll.split(/(\s+|[+(),])/).map((part, index) => {
+        const color = getDamageColorByKey(part)
+        if (!color) return <span key={`${part}-${index}`}>{part}</span>
+        return (
+            <span key={`${part}-${index}`} style={{ color: color.hex }}>
+                {part}
+            </span>
+        )
+    })
+}
+
 export function NpcParamPreview({ param, compact = false }: { param: NpcParam; compact?: boolean }) {
+    const hitRollDamageColor = param.hitRoll?.split(/(\s+|[+(),])/).map((part) => getDamageColorByKey(part)).find(Boolean)
+
     return (
         <div className={cn("rounded-lg border border-white/10 bg-white/[0.03] p-3", compact && "p-2")}>
             <div className="flex flex-wrap items-start justify-between gap-2">
@@ -18,9 +33,20 @@ export function NpcParamPreview({ param, compact = false }: { param: NpcParam; c
                         </span>
                     )}
                     {param.hitRoll && (
-                        <span className="inline-flex items-center gap-1 rounded border border-amber-400/20 bg-amber-400/10 px-2 py-0.5 text-[10px] font-bold text-amber-300">
+                        <span
+                            className={cn("inline-flex items-center gap-1 rounded border px-2 py-0.5 text-[10px] font-bold", !hitRollDamageColor && "border-amber-400/20 bg-amber-400/10 text-amber-300")}
+                            style={
+                                hitRollDamageColor
+                                    ? {
+                                          borderColor: `${hitRollDamageColor.hex}33`,
+                                          backgroundColor: `${hitRollDamageColor.hex}1A`,
+                                          color: hitRollDamageColor.hex,
+                                      }
+                                    : undefined
+                            }
+                        >
                             <Dices className="h-3 w-3" />
-                            {param.hitRoll}
+                            <span>{renderColoredHitRoll(param.hitRoll)}</span>
                         </span>
                     )}
                     {(param.recharge || param.usage) && (

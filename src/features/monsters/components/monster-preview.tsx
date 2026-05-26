@@ -32,6 +32,31 @@ function ParamList({ title, items }: { title: string; items?: Monster["actions"]
     )
 }
 
+function SummaryCard({ icon, label, value, detail }: { icon: React.ReactNode; label: string; value: React.ReactNode; detail?: React.ReactNode }) {
+    return (
+        <div className="rounded-lg border border-white/10 bg-white/[0.03] p-3">
+            <div className="flex items-center gap-1.5 mb-1">
+                {icon}
+                <div className="text-[10px] text-white/35">{label}</div>
+            </div>
+            {detail ? (
+                <div className="flex items-baseline gap-2">
+                    <div className="text-lg font-bold text-white">{value}</div>
+                    <div className="h-3 w-px bg-white/15" />
+                    <div className="text-[10px] text-white/35">{detail}</div>
+                </div>
+            ) : (
+                <div className="text-lg font-bold text-white">{value}</div>
+            )}
+        </div>
+    )
+}
+
+function getDamageTypeLabel(value: keyof typeof damageTypeColors) {
+    const label = damageTypeColors[value]?.keys[0] ?? value
+    return label.charAt(0).toLocaleUpperCase("pt-BR") + label.slice(1)
+}
+
 export function MonsterPreview({ monster, showStatus = true, hideStatusChip = false, hideActionIcons = false }: { monster: Monster; showStatus?: boolean; hideStatusChip?: boolean; hideActionIcons?: boolean }) {
     const { addWindow } = useWindows()
     const proficiencyBonus = getMonsterProficiencyBonus(monster.challengeRating, monster.proficiencyBonusOverride)
@@ -68,7 +93,7 @@ export function MonsterPreview({ monster, showStatus = true, hideStatusChip = fa
                     <div>
                         <EntityTitleLink name={monster.name} entityType="Monstro" className="text-base font-bold" style={{ color: entityColors.Monstro.hex }} />
                         <p className="text-[10px] uppercase font-bold tracking-widest text-white/40 mt-0.5">
-                            {MONSTER_SIZE_LABELS[monster.size]} {MONSTER_TYPE_LABELS[monster.type]}, {ALIGNMENT_LABELS[monster.alignment]}
+                            {MONSTER_TYPE_LABELS[monster.type]} {MONSTER_SIZE_LABELS[monster.size]}, {ALIGNMENT_LABELS[monster.alignment]}
                         </p>
                     </div>
                 </div>
@@ -89,11 +114,11 @@ export function MonsterPreview({ monster, showStatus = true, hideStatusChip = fa
             </div>
 
             <div className="grid grid-cols-2 md:grid-cols-5 gap-2">
-                <div className="rounded-lg border border-white/10 bg-white/[0.03] p-3"><Shield className="h-3 w-3 text-white/35 mb-1" /><div className="text-lg font-bold text-white">{monster.armorClass}</div><div className="text-[10px] text-white/35">CA</div></div>
-                <div className="rounded-lg border border-white/10 bg-white/[0.03] p-3"><HeartPulse className="h-3 w-3 text-white/35 mb-1" /><div className="text-lg font-bold text-white">{monster.hitPointsFormula}</div><div className="text-[10px] text-white/35">PV</div></div>
-                <div className="rounded-lg border border-white/10 bg-white/[0.03] p-3"><Swords className="h-3 w-3 text-white/35 mb-1" /><div className="text-lg font-bold text-white">{monster.challengeRating}</div><div className="text-[10px] text-white/35">{xp.toLocaleString("pt-BR")} XP</div></div>
-                <div className="rounded-lg border border-white/10 bg-white/[0.03] p-3"><Footprints className="h-3 w-3 text-white/35 mb-1" /><div className="text-sm font-bold text-white">{speeds.join(", ") || "—"}</div><div className="text-[10px] text-white/35">Velocidade</div></div>
-                <div className="rounded-lg border border-white/10 bg-white/[0.03] p-3"><Eye className="h-3 w-3 text-white/35 mb-1" /><div className="text-lg font-bold text-white">{passivePerception}</div><div className="text-[10px] text-white/35">Percepção passiva</div></div>
+                <SummaryCard icon={<Shield className="h-3 w-3 text-white/35" />} label="CA" value={monster.armorClass} />
+                <SummaryCard icon={<HeartPulse className="h-3 w-3 text-white/35" />} label="PV" value={monster.hitPointsFormula} />
+                <SummaryCard icon={<Swords className="h-3 w-3 text-white/35" />} label="CR" value={monster.challengeRating} detail={`${xp.toLocaleString("pt-BR")} XP`} />
+                <SummaryCard icon={<Footprints className="h-3 w-3 text-white/35" />} label="Velocidade" value={<span className="text-sm">{speeds.join(", ") || "—"}</span>} />
+                <SummaryCard icon={<Eye className="h-3 w-3 text-white/35" />} label="Percepção passiva" value={passivePerception} />
             </div>
 
             <div className="grid grid-cols-3 md:grid-cols-6 gap-2">
@@ -103,9 +128,11 @@ export function MonsterPreview({ monster, showStatus = true, hideStatusChip = fa
                     const color = attributeColors[label as keyof typeof attributeColors]
                     return (
                         <div key={attribute} className={cn("rounded-lg border p-2 text-center", color.border, color.bgAlpha)}>
-                            <div className={cn("text-[10px] font-bold", color.text)}>{color.abbreviation}</div>
-                            <div className="text-base font-bold text-white">{monster.attributes[attribute]}</div>
-                            <div className="text-[10px] text-white/45">{formatSigned(mod)}</div>
+                            <div className={cn("text-[10px] font-bold", color.text)}>{label}</div>
+                            <div className="flex items-baseline justify-center gap-1">
+                                <span className="text-base font-bold text-white">{formatSigned(mod)}</span>
+                                <span className="text-[10px] text-white/45">({monster.attributes[attribute]})</span>
+                            </div>
                         </div>
                     )
                 })}
@@ -150,8 +177,11 @@ export function MonsterPreview({ monster, showStatus = true, hideStatusChip = fa
                                 {defenses.map((defense) => (
                                     <div key={defense.label}>
                                         <span className="font-bold text-white/80">{defense.label}:</span>{" "}
-                                        {defense.values.map((value) => (
-                                            <span key={value} className="mr-2" style={{ color: damageTypeColors[value]?.hex }}>{value}</span>
+                                        {defense.values.map((value, index) => (
+                                            <span key={value}>
+                                                <span style={{ color: damageTypeColors[value]?.hex }}>{getDamageTypeLabel(value)}</span>
+                                                {index < defense.values.length - 1 && <span className="text-white/35">, </span>}
+                                            </span>
                                         ))}
                                     </div>
                                 ))}

@@ -1,3 +1,5 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
+
 import { describe, expect, it, vi } from 'vitest'
 import { makeJsonRequest, readJson } from '../helpers/http'
 import { importFresh } from '../helpers/module'
@@ -85,6 +87,55 @@ describe('monsters backend routes', () => {
         }) as any)
 
         expect(response.status).toBe(409)
+    })
+
+    it('PUT /api/monsters/[id] unsets removed speed fields', async () => {
+        const oldMonster = {
+            _id: 'monster-1',
+            toObject: () => ({ _id: 'monster-1', name: 'Sahuagin', speed: '9m', flySpeed: '18m', swimSpeed: '12m', climbSpeed: '6m' }),
+        }
+        const updatedMonster = {
+            _id: 'monster-1',
+            toObject: () => ({ _id: 'monster-1', name: 'Sahuagin' }),
+        }
+        const findById = vi.fn().mockResolvedValue(oldMonster)
+        const findByIdAndUpdate = vi.fn().mockResolvedValue(updatedMonster)
+
+        vi.doMock('@clerk/nextjs/server', () => ({ auth: vi.fn().mockResolvedValue({ userId: 'clerk-1' }) }))
+        vi.doMock('@/features/monsters/models/monster', () => ({ MonsterModel: { findById, findByIdAndUpdate } }))
+        vi.doMock('@/core/database/db', () => ({ default: vi.fn().mockResolvedValue(undefined) }))
+        vi.doMock('@/features/users/api/audit-service', () => ({ createAuditLog: vi.fn() }))
+
+        const mod = await importFresh<typeof import('@/app/api/monsters/[id]/route')>('@/app/api/monsters/[id]/route')
+        const response = await mod.PUT(makeJsonRequest('http://localhost/api/monsters/monster-1', {
+            method: 'PUT',
+            body: JSON.stringify({
+                name: 'Sahuagin',
+                description: 'Descrição válida para monstro.',
+                source: 'LDM',
+                type: 'humanoid',
+                size: 'M',
+                alignment: 'LE',
+                armorClass: 12,
+                hitPointsFormula: '4d8 + 4',
+                attributes: { strength: 13, dexterity: 11, constitution: 12, intelligence: 12, wisdom: 13, charisma: 9 },
+                challengeRating: '1/2',
+                speed: null,
+                flySpeed: null,
+                swimSpeed: null,
+                climbSpeed: null,
+            }),
+        }) as any, { params: Promise.resolve({ id: 'monster-1' }) })
+
+        expect(response.status).toBe(200)
+        expect(findByIdAndUpdate).toHaveBeenCalledWith('monster-1', expect.objectContaining({
+            $unset: {
+                speed: '',
+                flySpeed: '',
+                swimSpeed: '',
+                climbSpeed: '',
+            },
+        }), { new: true })
     })
 
     it('GET /api/monsters/search returns active fuzzy results', async () => {

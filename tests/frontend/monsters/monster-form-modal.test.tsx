@@ -1,3 +1,5 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
+
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import { Controller } from 'react-hook-form'
 import { describe, expect, it, beforeEach, vi } from 'vitest'
@@ -171,6 +173,67 @@ describe('MonsterFormModal', () => {
                 id: 'monster-1',
                 data: expect.objectContaining({
                     actions: [expect.objectContaining({ label: 'Garras', attackRoll: 4, hitRoll: '2d6 + 2 cortante' })],
+                }),
+            })
+        })
+    })
+
+    it('clears removed speed values when editing', async () => {
+        const monster = {
+            _id: 'monster-1',
+            id: 'monster-1',
+            name: 'Sahuagin',
+            source: 'LDM pág. 1',
+            description: 'Descrição existente de monstro.',
+            image: '',
+            status: 'active' as const,
+            type: 'humanoid' as const,
+            size: 'M' as const,
+            alignment: 'LE' as const,
+            armorClass: 12,
+            hitPointsFormula: '4d8 + 4',
+            speed: '9m',
+            flySpeed: '18m',
+            swimSpeed: '12m',
+            climbSpeed: '6m',
+            attributes: { strength: 13, dexterity: 11, constitution: 12, intelligence: 12, wisdom: 13, charisma: 9 },
+            savingThrows: {},
+            skills: {},
+            senses: {},
+            sensesAndLanguages: [],
+            challengeRating: '1/2' as const,
+            languages: 'Comum',
+            damageVulnerabilities: [],
+            damageResistances: [],
+            damageImmunities: [],
+            conditionImmunities: [],
+            traits: [],
+            actions: [],
+            bonusActions: [],
+            reactions: [],
+            legendaryActions: [],
+            lairActions: [],
+            regionalEffects: [],
+            createdAt: '',
+            updatedAt: '',
+        }
+
+        render(<MonsterFormModal monster={monster} isOpen={true} onClose={vi.fn()} onSuccess={vi.fn()} />)
+
+        fireEvent.click(screen.getByRole('button', { name: 'Remover Deslocamento' }))
+        fireEvent.click(screen.getByRole('button', { name: 'Remover Voo' }))
+        fireEvent.click(screen.getByRole('button', { name: 'Remover Nado' }))
+        fireEvent.click(screen.getByRole('button', { name: 'Remover Escalada' }))
+        fireEvent.submit(screen.getByPlaceholderText('Ex: Dragão Vermelho Adulto').closest('form')!)
+
+        await waitFor(() => {
+            expect(updateMonsterMutateAsync).toHaveBeenCalledWith({
+                id: 'monster-1',
+                data: expect.objectContaining({
+                    speed: null,
+                    flySpeed: null,
+                    swimSpeed: null,
+                    climbSpeed: null,
                 }),
             })
         })

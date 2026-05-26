@@ -6,6 +6,8 @@ import { MonsterModel } from "@/features/monsters/models/monster"
 import { updateMonsterSchema } from "@/features/monsters/api/validation"
 import { getMonsterXp } from "@/features/monsters/utils/monster-calculations"
 
+const SPEED_FIELDS = ["speed", "flySpeed", "swimSpeed", "climbSpeed"] as const
+
 function serializeMonster(monster: { toObject?: () => Record<string, unknown> } | Record<string, unknown>) {
     const base = typeof monster.toObject === "function" ? monster.toObject() : monster
     return {
@@ -49,7 +51,15 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
             updateData.experience = getMonsterXp(updateData.challengeRating, updateData.experienceOverride)
         }
 
-        const newMonster = await MonsterModel.findByIdAndUpdate(id, updateData, { new: true })
+        const unsetData = Object.fromEntries(
+            SPEED_FIELDS.filter((field) => Object.prototype.hasOwnProperty.call(body, field) && (body[field] === null || body[field] === "")).map((field) => {
+                delete updateData[field]
+                return [field, ""]
+            }),
+        )
+        const updateOperation = Object.keys(unsetData).length > 0 ? { $set: updateData, $unset: unsetData } : updateData
+
+        const newMonster = await MonsterModel.findByIdAndUpdate(id, updateOperation, { new: true })
         if (!newMonster) return NextResponse.json({ error: "Monstro não encontrado" }, { status: 404 })
 
         try {
