@@ -16,6 +16,8 @@ The Monsters module manages D&D 5e monster and NPC stat blocks with CRUD, dashbo
 - Challenge Rating uses the same masked field style as combat numbers, preserving string CR values with `/` and `-` while keeping XP/proficiency derivation safe for intermediate input.
 - New monsters show an empty Challenge Rating field; submit normalizes an empty CR to `"0"` before deriving XP and saving.
 - Monster previews render type before size, compact stat cards with inline labels, CR with XP beside it, full attribute names with modifier-first values, and colored damage words in NPC hit rolls.
+- Monster mention autocomplete rows show CR and localized monster type metadata, and mention hover previews load the full stat block from `/api/monsters/[id]` before rendering `MonsterPreview`.
+- Monster catalog results are sorted alphabetically by name and both list and table views consume the same infinite query; the table loads additional pages through an intersection sentinel.
 - Monster tables render the monster image in the first column when available, falling back to the skull icon otherwise; table CA and PV are shown in separate columns, and both table and preview show the derived average PV for numeric or simple dice formulas rounded down while preserving the original formula when applicable.
 - Monster preview defenses render localized, capitalized Portuguese damage labels separated by commas while preserving internal damage keys.
 - Monster seed data imports every `bestiary-*.json` file under `src/lib/5etools-data/bestiary/`, pairs each source with `fluff-bestiary-*.json` when present, always loads `legendarygroups.json` separately, and translates special textual AC/PV seed values when they contain prose; manual form input for AC remains numeric.
@@ -70,6 +72,7 @@ Routes:
 - `DELETE /api/monsters/[id]`
 - `GET /api/monsters/search`
 - `GET /api/stats/monsters`
+- `GET /api/sources?entity=monsters`
 
 List filters:
 - `search`

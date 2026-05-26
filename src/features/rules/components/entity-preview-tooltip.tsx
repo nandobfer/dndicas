@@ -21,6 +21,8 @@ import { RacePreview } from "@/features/races/components/race-preview"
 import type { Race } from "@/features/races/types/races.types"
 import { ItemPreview } from "@/features/items/components/item-preview"
 import type { Item } from "@/features/items/types/items.types"
+import { MonsterPreview } from "@/features/monsters/components/monster-preview"
+import type { Monster } from "@/features/monsters/types/monsters.types"
 import { useWindows } from "@/core/context/window-context"
 import { motion } from "framer-motion"
 import { EntitySource } from "./entity-source"
@@ -249,6 +251,8 @@ export const EntityPreviewTooltip = ({ entityId, entityType, children, side = "t
                 endpoint = `/api/races/${entityId}`
             } else if (entityType === "Item") {
                 endpoint = `/api/items/${entityId}`
+            } else if (entityType === "Monstro") {
+                endpoint = `/api/monsters/${entityId}`
             }
 
             if (!endpoint) return
@@ -320,6 +324,8 @@ export const EntityPreviewTooltip = ({ entityId, entityType, children, side = "t
                 return <RacePreviewWithActions race={data as Race} showStatus={true} />
             case "Item":
                 return <ItemPreview item={data as Item} showStatus={true} />
+            case "Monstro":
+                return <MonsterPreview monster={data as Monster} showStatus={true} />
             default: {
                 const fallbackData = (data ?? {}) as Record<string, unknown>
                 return (

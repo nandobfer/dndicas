@@ -4,7 +4,9 @@ import { glassConfig } from '@/lib/config/glass-config'
 import { entityColors } from "@/lib/config/colors"
 import { EntityPreviewTooltip } from "./entity-preview-tooltip"
 import { DebounceProgress } from "@/components/ui/debounce-progress"
-import { Scroll, Sparkles, Zap, Wand, Sword, ShieldCheck, Box, Fingerprint, GraduationCap } from "lucide-react"
+import { Scroll, Sparkles, Zap, Wand, Sword, ShieldCheck, Box, Fingerprint, GraduationCap, Skull } from "lucide-react"
+import { MONSTER_TYPE_LABELS } from "@/features/monsters/components/monster-options"
+import type { MonsterType } from "@/features/monsters/types/monsters.types"
 
 const entityIcons: Record<string, any> = {
     Regra: Scroll,
@@ -16,6 +18,15 @@ const entityIcons: Record<string, any> = {
     Origem: ShieldCheck,
     Item: Box,
     Raça: Fingerprint,
+    Monstro: Skull,
+}
+
+function getMonsterTypeLabel(value: unknown) {
+    return typeof value === "string" && value in MONSTER_TYPE_LABELS
+        ? MONSTER_TYPE_LABELS[value as MonsterType]
+        : typeof value === "string"
+            ? value
+            : null
 }
 
 export interface MentionListProps {
@@ -131,6 +142,19 @@ const MentionList = forwardRef<MentionListRef, MentionListProps>((props, ref) =>
                                                     <span className="text-[9px] text-white/40">•</span>
                                                     <span className="text-[9px] text-white/40">{item.price}</span>
                                                 </>
+                                            )}
+                                        </div>
+                                    )}
+                                    {item.entityType === "Monstro" && (
+                                        <div className="flex items-center gap-1.5 mr-1">
+                                            {item.metadata?.challengeRating && (
+                                                <span className="text-[9px] text-white/40 italic">CR {item.metadata.challengeRating}</span>
+                                            )}
+                                            {item.metadata?.challengeRating && getMonsterTypeLabel(item.metadata?.monsterType) && (
+                                                <span className="text-[9px] text-white/40">•</span>
+                                            )}
+                                            {getMonsterTypeLabel(item.metadata?.monsterType) && (
+                                                <span className="text-[9px] text-white/40">{getMonsterTypeLabel(item.metadata.monsterType)}</span>
                                             )}
                                         </div>
                                     )}
