@@ -19,7 +19,7 @@ export function TraitsPage() {
     const { isAdmin } = useAuth()
 
     // Logic moved to custom hook for better maintainability (T044)
-    const { isMobile, filters, pagination, data, actions, modals, viewMode, setViewMode, isDefault } = useTraitsPage()
+    const { filters, data, actions, modals, viewMode, setViewMode, isDefault } = useTraitsPage()
 
     return (
         <motion.div variants={motionConfig.variants.fadeInUp} initial="initial" animate="animate" className="space-y-6">
@@ -80,14 +80,13 @@ export function TraitsPage() {
                 />
             ) : (
                 <TraitsTable
-                    traits={data.paginated.items}
-                    total={pagination.total}
-                    page={pagination.page}
-                    limit={pagination.limit}
-                    isLoading={data.paginated.isLoading}
+                    traits={data.infinite.items}
+                    isLoading={data.infinite.isLoading}
+                    hasNextPage={data.infinite.hasNextPage}
+                    isFetchingNextPage={data.infinite.isFetchingNextPage}
+                    onLoadMore={data.infinite.fetchNextPage}
                     onEdit={actions.handleEditClick}
                     onDelete={actions.handleDeleteClick}
-                    onPageChange={pagination.setPage}
                 />
             )}
 

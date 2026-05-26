@@ -8,7 +8,7 @@ import { GlassCard } from "@/components/ui/glass-card"
 import { Chip } from "@/components/ui/chip"
 import { LoadingState } from "@/components/ui/loading-state"
 import { EmptyState } from "@/components/ui/empty-state"
-import { DataTablePagination } from "@/components/ui/data-table-pagination"
+import { InfiniteScrollSentinel } from "@/components/ui/infinite-scroll-sentinel"
 import {
     GlassDropdownMenu,
     GlassDropdownMenuContent,
@@ -36,18 +36,17 @@ const spellcastingColorMap: Record<string, string> = {
 export interface ClassesTableProps {
     classes: CharacterClass[]
     total: number
-    page: number
-    limit: number
     isLoading?: boolean
+    hasNextPage?: boolean
+    isFetchingNextPage?: boolean
     hasActiveFilters?: boolean
     onEdit: (characterClass: CharacterClass) => void
     onDelete: (characterClass: CharacterClass) => void
-    onPageChange: (page: number) => void
+    onLoadMore?: () => void
 }
 
-export function ClassesTable({ classes, total, page, limit, isLoading = false, hasActiveFilters = false, onEdit, onDelete, onPageChange }: ClassesTableProps) {
+export function ClassesTable({ classes, total, isLoading = false, hasNextPage = false, isFetchingNextPage = false, hasActiveFilters = false, onEdit, onDelete, onLoadMore }: ClassesTableProps) {
     const { isAdmin } = useAuth()
-    const totalPages = Math.ceil(total / limit)
 
     if (isLoading && classes.length === 0) {
         return (
@@ -223,10 +222,13 @@ export function ClassesTable({ classes, total, page, limit, isLoading = false, h
                 </table>
             </div>
 
-            {/* Pagination */}
-            {totalPages > 1 && (
-                <DataTablePagination page={page} totalPages={totalPages} total={total} limit={limit} onPageChange={onPageChange} itemLabel="classes" className="border-t border-white/5" />
-            )}
+            <InfiniteScrollSentinel
+                isLoading={isLoading}
+                hasNextPage={hasNextPage}
+                isFetchingNextPage={isFetchingNextPage}
+                onLoadMore={onLoadMore}
+                className="py-8 flex justify-center w-full border-t border-white/5"
+            />
         </GlassCard>
     )
 }

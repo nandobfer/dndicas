@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react"
-import { useClasses, useInfiniteClasses, useDeleteClass } from "../api/classes-queries"
+import { useInfiniteClasses, useDeleteClass } from "../api/classes-queries"
 import { useClassFilters } from "./useClassFilters"
 import { useIsMobile } from "@/core/hooks/useMediaQuery"
 import { useViewMode } from "@/core/hooks/useViewMode"
@@ -10,12 +10,17 @@ import type { CharacterClass } from "../types/classes.types"
 
 export function useClassesPage() {
     const isMobile = useIsMobile()
-    const { viewMode, setViewMode, isTable, isDefault } = useViewMode()
+    const { viewMode, setViewMode, isDefault } = useViewMode()
 
     const { filters, search, setSearch, setStatus, setSources, setPage } = useClassFilters()
 
-    const paginatedData = useClasses(filters, filters.page, filters.limit, { enabled: isTable })
-    const infiniteData = useInfiniteClasses(filters, { enabled: !isTable })
+    const infiniteFilters = React.useMemo(() => {
+        const { page: _page, ...rest } = filters
+        void _page
+        return rest
+    }, [filters])
+
+    const infiniteData = useInfiniteClasses(infiniteFilters)
     const deleteMutation = useDeleteClass()
 
     const [isFormOpen, setIsFormOpen] = React.useState(false)
@@ -70,14 +75,14 @@ export function useClassesPage() {
         pagination: {
             page: filters.page,
             setPage,
-            total: paginatedData.data?.total || 0,
+            total: infiniteData.data?.pages[0]?.total || 0,
             limit: filters.limit
         },
         data: {
             paginated: {
-                items: paginatedData.data?.classes || [],
-                isLoading: paginatedData.isLoading,
-                isFetching: paginatedData.isFetching
+                items: [],
+                isLoading: infiniteData.isLoading,
+                isFetching: infiniteData.isFetching
             },
             infinite: {
                 items: infiniteData.data?.pages.flatMap((page) => page.classes) || [],
@@ -85,7 +90,8 @@ export function useClassesPage() {
                 isFetchingNextPage: infiniteData.isFetchingNextPage,
                 isFetching: infiniteData.isFetching,
                 hasNextPage: !!infiniteData.hasNextPage,
-                fetchNextPage: infiniteData.fetchNextPage
+                fetchNextPage: infiniteData.fetchNextPage,
+                total: infiniteData.data?.pages[0]?.total || 0
             }
         },
         actions: {

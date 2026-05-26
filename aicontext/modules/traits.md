@@ -11,10 +11,15 @@
 The Traits module provides CRUD functionality for managing D&D 5e character traits (e.g., darkvision, fey ancestry) in a structured catalog. It follows the exact same architecture, components, and patterns established by the Rules module (`src/features/rules/`).
 
 Users can:
-- View paginated list of traits with search and status filtering
+- View infinite scrolling list/table of traits with search and status filtering
 - Create/edit/delete traits with rich-text descriptions
 - Reference traits via @mentions in other entity descriptions
 - Track all changes via audit logs
+
+## Features
+
+### Infinite scroll nas tabelas de catálogo
+As tabelas de habilidades usam `useInfiniteTraits`, a mesma fonte de dados do modo lista. Ao chegar ao fim da tabela, um sentinel carrega a próxima página automaticamente e substitui a paginação tradicional.
 
 ---
 
@@ -32,7 +37,7 @@ src/features/traits/
 │   └── useTraitMutations.ts      # TanStack Query for mutations
 ├── components/
 │   ├── traits-page.tsx            # Main orchestrator component
-│   ├── traits-table.tsx           # Paginated data table
+│   ├── traits-table.tsx           # Infinite scrolling data table
 │   ├── traits-filters.tsx         # Search and status filters
 │   ├── trait-form-modal.tsx       # Create/edit modal
 │   └── delete-trait-dialog.tsx    # Confirmation dialog

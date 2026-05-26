@@ -6,7 +6,7 @@
 "use client";
 
 import * as React from "react"
-import { useBackgrounds, useInfiniteBackgrounds } from "../api/backgrounds-queries"
+import { useInfiniteBackgrounds } from "../api/backgrounds-queries"
 import { useIsMobile } from "@/core/hooks/useMediaQuery"
 import { useViewMode } from "@/core/hooks/useViewMode"
 import type { Background } from "../types/backgrounds.types"
@@ -59,21 +59,37 @@ export function useBackgroundsPage() {
     // Only server-filterable fields go to the API
     const serverFilters = { search, status, sources: sources.length > 0 ? sources : undefined }
 
-    const tableData = useBackgrounds(serverFilters, 1, 100)
     const infiniteData = useInfiniteBackgrounds(serverFilters)
 
-    const allTableItems = tableData.data?.items || []
-    const allInfiniteItems = infiniteData.data?.pages.flatMap((p) => p.items) || []
-
-    const filteredTableItems = React.useMemo(
-        () => applyClientFilters(allTableItems, suggestedAttributes, skillProficiencies, featIds),
-        [allTableItems, suggestedAttributes, skillProficiencies, featIds],
+    const allInfiniteItems = React.useMemo(
+        () => infiniteData.data?.pages.flatMap((p) => p.items) || [],
+        [infiniteData.data?.pages],
     )
 
     const filteredInfiniteItems = React.useMemo(
         () => applyClientFilters(allInfiniteItems, suggestedAttributes, skillProficiencies, featIds),
         [allInfiniteItems, suggestedAttributes, skillProficiencies, featIds],
     )
+
+    const hasClientFilters = suggestedAttributes.length > 0 || skillProficiencies.length > 0 || featIds.length > 0
+
+    const hasNextInfinitePage = !!infiniteData.hasNextPage
+    const isInfiniteLoading = infiniteData.isLoading
+    const isFetchingNextInfinitePage = infiniteData.isFetchingNextPage
+    const fetchNextInfinitePage = infiniteData.fetchNextPage
+
+    React.useEffect(() => {
+        if (
+            hasClientFilters &&
+            filteredInfiniteItems.length === 0 &&
+            allInfiniteItems.length > 0 &&
+            hasNextInfinitePage &&
+            !isInfiniteLoading &&
+            !isFetchingNextInfinitePage
+        ) {
+            fetchNextInfinitePage()
+        }
+    }, [allInfiniteItems.length, fetchNextInfinitePage, filteredInfiniteItems.length, hasClientFilters, hasNextInfinitePage, isFetchingNextInfinitePage, isInfiniteLoading])
 
     // Modal states
     const [isFormOpen, setIsFormOpen] = React.useState(false)
@@ -123,13 +139,13 @@ export function useBackgroundsPage() {
             sources,
         },
         data: {
-            backgrounds:
-                viewMode === "table" ? filteredTableItems : filteredInfiniteItems,
-            isLoading: viewMode === "table" ? tableData.isLoading : infiniteData.isLoading || infiniteData.isFetching,
+            backgrounds: filteredInfiniteItems,
+            isLoading: infiniteData.isLoading,
+            isFetching: infiniteData.isFetching,
             hasNextPage: !!infiniteData.hasNextPage,
             fetchNextPage: infiniteData.fetchNextPage,
             isFetchingNextPage: !!infiniteData.isFetchingNextPage,
-            total: filteredTableItems.length,
+            total: hasClientFilters ? filteredInfiniteItems.length : infiniteData.data?.pages[0]?.total || 0,
         },
         actions: {
             handleSearchChange,

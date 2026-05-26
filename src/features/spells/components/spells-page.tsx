@@ -25,7 +25,7 @@ export function SpellsPage() {
     const { isAdmin } = useAuth()
 
     // Logic moved to custom hook for better maintainability (T044)
-    const { isMobile, filters, pagination, data, actions, modals, viewMode, setViewMode, isDefault } = useSpellsPage()
+    const { filters, data, actions, modals, viewMode, setViewMode, isDefault } = useSpellsPage()
 
     return (
         <motion.div variants={motionConfig.variants.fadeInUp} initial="initial" animate="animate" className="space-y-6">
@@ -88,13 +88,13 @@ export function SpellsPage() {
                 />
             ) : (
                 <SpellsTable
-                    spells={data.paginated.items}
-                    isLoading={data.paginated.isLoading}
-                    total={pagination.total}
-                    page={pagination.page}
-                    limit={pagination.limit}
+                    spells={data.infinite.items}
+                    isLoading={data.infinite.isLoading}
+                    total={data.infinite.total}
+                    hasNextPage={data.infinite.hasNextPage}
+                    isFetchingNextPage={data.infinite.isFetchingNextPage}
+                    onLoadMore={data.infinite.fetchNextPage}
                     hasActiveFilters={modals.hasActiveFilters}
-                    onPageChange={pagination.setPage}
                     onEdit={actions.handleEditClick}
                     onDelete={actions.handleDeleteClick}
                 />

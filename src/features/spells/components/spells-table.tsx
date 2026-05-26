@@ -15,7 +15,7 @@ import { GlassCard } from '@/components/ui/glass-card';
 import { Chip } from '@/components/ui/chip';
 import { LoadingState } from '@/components/ui/loading-state';
 import { EmptyState } from '@/components/ui/empty-state';
-import { DataTablePagination } from '@/components/ui/data-table-pagination';
+import { InfiniteScrollSentinel } from '@/components/ui/infinite-scroll-sentinel';
 import {
   GlassDropdownMenu,
   GlassDropdownMenuContent,
@@ -44,20 +44,17 @@ export interface SpellsTableProps {
     spells: Spell[]
     /** Total number of spells (for pagination) */
     total: number
-    /** Current page number */
-    page: number
-    /** Items per page */
-    limit: number
     /** Loading state */
     isLoading?: boolean
+    hasNextPage?: boolean
+    isFetchingNextPage?: boolean
     /** Whether filters are currently active */
     hasActiveFilters?: boolean
     /** Edit handler (admin only) */
     onEdit: (spell: Spell) => void
     /** Delete handler (admin only) */
     onDelete: (spell: Spell) => void
-    /** Page change handler */
-    onPageChange: (page: number) => void
+    onLoadMore?: () => void
 }
 
 /**
@@ -74,24 +71,9 @@ export interface SpellsTableProps {
  * - Description preview
  * - Preview button with tooltip
  * - Actions dropdown (admin only)
- *
- * @example
- * ```tsx
- * <SpellsTable
- *   spells={data?.spells || []}
- *   total={data?.total || 0}
- *   page={page}
- *   limit={limit}
- *   isLoading={isLoading}
- *   onEdit={handleEdit}
- *   onDelete={handleDelete}
- *   onPageChange={setPage}
- * />
- * ```
  */
-export function SpellsTable({ spells, total, page, limit, isLoading = false, hasActiveFilters = false, onEdit, onDelete, onPageChange }: SpellsTableProps) {
+export function SpellsTable({ spells, total, isLoading = false, hasNextPage = false, isFetchingNextPage = false, hasActiveFilters = false, onEdit, onDelete, onLoadMore }: SpellsTableProps) {
     const { isAdmin } = useAuth()
-    const totalPages = Math.ceil(total / limit)
 
     if (isLoading && spells.length === 0) {
         return (
@@ -115,11 +97,11 @@ export function SpellsTable({ spells, total, page, limit, isLoading = false, has
                 />
             </GlassCard>
         )
-        {
-            /* Result Count */
-        }
-        {
-            total > 0 && (
+    }
+
+    return (
+        <GlassCard className="overflow-hidden">
+            {total > 0 && (
                 <div className="px-6 py-3 border-b border-white/5 bg-white/5">
                     <p className="text-sm text-white/60">
                         {hasActiveFilters ? (
@@ -133,12 +115,7 @@ export function SpellsTable({ spells, total, page, limit, isLoading = false, has
                         )}
                     </p>
                 </div>
-            )
-        }
-    }
-
-    return (
-        <GlassCard className="overflow-hidden">
+            )}
             <div className="overflow-x-auto">
                 <table className="w-full">
                     <thead>
@@ -259,10 +236,13 @@ export function SpellsTable({ spells, total, page, limit, isLoading = false, has
                 </table>
             </div>
 
-            {/* Pagination */}
-            <div className="p-4 border-t border-white/5">
-                <DataTablePagination page={page} totalPages={totalPages} total={total} limit={limit} onPageChange={onPageChange} itemLabel="magias" />
-            </div>
+            <InfiniteScrollSentinel
+                isLoading={isLoading}
+                hasNextPage={hasNextPage}
+                isFetchingNextPage={isFetchingNextPage}
+                onLoadMore={onLoadMore}
+                className="py-8 flex justify-center w-full border-t border-white/5"
+            />
         </GlassCard>
     )
 }

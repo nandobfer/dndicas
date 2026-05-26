@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from 'react';
-import { useFeats, useInfiniteFeats, featKeys } from './useFeats';
+import { useInfiniteFeats } from './useFeats';
 import { useFeatMutations } from './useFeatMutations';
 import { useDebounce } from '@/core/hooks/useDebounce';
 import { useIsMobile } from '@/core/hooks/useMediaQuery';
@@ -9,15 +9,18 @@ import { useViewMode } from "@/core/hooks/useViewMode"
 import { toast } from "sonner"
 import type { Feat, CreateFeatInput, UpdateFeatInput, FeatsFilters, FeatCategory } from "../types/feats.types"
 
+function getErrorMessage(error: unknown, fallback: string) {
+    return error instanceof Error ? error.message : fallback
+}
+
 /**
  * T044: Logic for the Feats page, including filters, modals, and responsive data fetching.
  */
 export function useFeatsPage() {
     const isMobile = useIsMobile()
-    const { viewMode, setViewMode, isTable, isDefault } = useViewMode()
+    const { viewMode, setViewMode, isDefault } = useViewMode()
 
     // State
-    const [page, setPage] = React.useState(1)
     const [search, setSearch] = React.useState("")
     const [status, setStatus] = React.useState<FeatsFilters["status"]>("all")
     const [level, setLevel] = React.useState<number | undefined>(undefined)
@@ -46,18 +49,10 @@ export function useFeatsPage() {
 
     /**
      * Data Fetching
-     * Uses regular query for table view and infinite query for list/grid view.
+     * Uses infinite query for both table and list/grid view.
      */
 
-    const paginatedData = useFeats(
-        {
-            ...filters,
-            page,
-        },
-        { enabled: isTable },
-    )
-
-    const infiniteData = useInfiniteFeats(filters, { enabled: !isTable })
+    const infiniteData = useInfiniteFeats(filters)
 
     // Mutations
     const { createFeat, updateFeat, deleteFeat } = useFeatMutations()
@@ -70,12 +65,10 @@ export function useFeatsPage() {
     // Handlers
     const handleSearchChange = (value: string) => {
         setSearch(value)
-        setPage(1)
     }
 
     const handleStatusChange = (value: FeatsFilters["status"]) => {
         setStatus(value)
-        setPage(1)
     }
 
     const handleLevelChange = (value: number | undefined, mode: "exact" | "upto") => {
@@ -89,22 +82,18 @@ export function useFeatsPage() {
             setLevelMax(value)
             setLevel(undefined)
         }
-        setPage(1)
     }
 
     const handleAttributesChange = (val: string[]) => {
         setAttributes(val)
-        setPage(1)
     }
 
     const handleCategoriesChange = (val: FeatCategory[]) => {
         setCategories(val)
-        setPage(1)
     }
 
     const handleSourcesChange = (val: string[]) => {
         setSources(val)
-        setPage(1)
     }
 
     const handleCreateClick = () => {
@@ -136,8 +125,8 @@ export function useFeatsPage() {
             }
             setIsFormOpen(false)
             setSelectedFeat(null)
-        } catch (error: any) {
-            toast.error(error.message || "Erro ao salvar talento")
+        } catch (error: unknown) {
+            toast.error(getErrorMessage(error, "Erro ao salvar talento"))
         }
     }
 
@@ -148,8 +137,8 @@ export function useFeatsPage() {
                 setIsDeleteOpen(false)
                 setSelectedFeat(null)
                 toast.success("Talento deletado com sucesso!")
-            } catch (error: any) {
-                toast.error(error.message || "Erro ao deletar talento")
+            } catch (error: unknown) {
+                toast.error(getErrorMessage(error, "Erro ao deletar talento"))
             }
         }
     }
@@ -169,16 +158,16 @@ export function useFeatsPage() {
             sources,
         },
         pagination: {
-            page,
-            setPage,
-            total: paginatedData.data?.total || 0,
+            page: 1,
+            setPage: () => {},
+            total: infiniteData.data?.pages[0]?.total || 0,
             limit: 10,
         },
         data: {
             paginated: {
-                items: paginatedData.data?.items || [],
-                isLoading: paginatedData.isLoading,
-                isFetching: paginatedData.isFetching,
+                items: [],
+                isLoading: infiniteData.isLoading,
+                isFetching: infiniteData.isFetching,
             },
             infinite: {
                 items: infiniteData.data?.pages.flatMap((page) => page.items) || [],
@@ -187,6 +176,7 @@ export function useFeatsPage() {
                 isFetching: infiniteData.isFetching,
                 hasNextPage: !!infiniteData.hasNextPage,
                 fetchNextPage: infiniteData.fetchNextPage,
+                total: infiniteData.data?.pages[0]?.total || 0,
             },
         },
         actions: {

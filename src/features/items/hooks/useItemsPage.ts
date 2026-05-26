@@ -5,7 +5,7 @@
 "use client";
 
 import * as React from "react"
-import { useItems, useInfiniteItems } from "../api/items-queries"
+import { useInfiniteItems } from "../api/items-queries"
 import { useIsMobile } from "@/core/hooks/useMediaQuery"
 import { useViewMode } from "@/core/hooks/useViewMode"
 import type { Item, ItemType, ItemRarity } from "../types/items.types"
@@ -22,7 +22,6 @@ export function useItemsPage() {
 
     const filters = { search, type, rarity, status, sources: sources.length > 0 ? sources : undefined }
 
-    const tableData = useItems(filters, 1, 100)
     const infiniteData = useInfiniteItems(filters)
 
     const [isFormOpen, setIsFormOpen] = React.useState(false)
@@ -73,12 +72,13 @@ export function useItemsPage() {
             setSources,
         },
         data: {
-            items: viewMode === "table" ? (tableData.data?.items || []) : (infiniteData.data?.pages.flatMap(p => p.items) || []),
-            isLoading: viewMode === "table" ? tableData.isLoading : (infiniteData.isLoading || infiniteData.isFetching),
+            items: infiniteData.data?.pages.flatMap(p => p.items) || [],
+            isLoading: infiniteData.isLoading,
+            isFetching: infiniteData.isFetching,
             hasNextPage: !!infiniteData.hasNextPage,
             fetchNextPage: infiniteData.fetchNextPage,
             isFetchingNextPage: !!infiniteData.isFetchingNextPage,
-            total: tableData.data?.total || 0,
+            total: infiniteData.data?.pages[0]?.total || 0,
         },
         actions: {
             handleSearchChange,

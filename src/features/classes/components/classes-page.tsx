@@ -22,7 +22,7 @@ import { useClassesPage } from "../hooks/useClassesPage"
 export function ClassesPage() {
     const { isAdmin } = useAuth()
 
-    const { isMobile, filters, pagination, data, actions, modals, viewMode, setViewMode, isDefault } = useClassesPage()
+    const { filters, data, actions, modals, viewMode, setViewMode, isDefault } = useClassesPage()
 
     return (
         <motion.div variants={motionConfig.variants.fadeInUp} initial="initial" animate="animate" className="space-y-6">
@@ -84,13 +84,13 @@ export function ClassesPage() {
                 />
             ) : (
                 <ClassesTable
-                    classes={data.paginated.items}
-                    isLoading={data.paginated.isLoading}
-                    total={pagination.total}
-                    page={pagination.page}
-                    limit={pagination.limit}
+                    classes={data.infinite.items}
+                    isLoading={data.infinite.isLoading}
+                    total={data.infinite.total}
+                    hasNextPage={data.infinite.hasNextPage}
+                    isFetchingNextPage={data.infinite.isFetchingNextPage}
+                    onLoadMore={data.infinite.fetchNextPage}
                     hasActiveFilters={modals.hasActiveFilters}
-                    onPageChange={pagination.setPage}
                     onEdit={actions.handleEditClick}
                     onDelete={actions.handleDeleteClick}
                 />

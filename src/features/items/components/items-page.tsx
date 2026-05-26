@@ -22,7 +22,7 @@ import { DeleteItemDialog } from "./delete-item-dialog"
 export function ItemsPage() {
     const { isAdmin } = useAuth()
 
-    const { isMobile, filters, data, viewMode, setViewMode, actions, modals } = useItemsPage()
+    const { filters, data, viewMode, setViewMode, actions, modals } = useItemsPage()
 
     const deleteMutation = useDeleteItem()
 
@@ -83,7 +83,7 @@ export function ItemsPage() {
                         onRarityChange={actions.handleRarityChange}
                         onStatusChange={actions.handleStatusChange}
                         onSourcesChange={actions.handleSourcesChange}
-                        isSearching={data.isLoading}
+                        isSearching={data.isFetching}
                     />
                 </GlassCardContent>
             </GlassCard>
@@ -93,7 +93,7 @@ export function ItemsPage() {
                 <GlassCardContent className="p-0">
                     {viewMode === "default" ? (
                         <EntityList
-                            items={data.items as any}
+                            items={data.items}
                             isLoading={data.isLoading}
                             hasNextPage={data.hasNextPage}
                             onLoadMore={data.fetchNextPage}
@@ -104,7 +104,16 @@ export function ItemsPage() {
                             isAdmin={isAdmin}
                         />
                     ) : (
-                        <ItemsTable items={data.items as any} onEdit={actions.handleEditClick} onDelete={actions.handleDeleteClick} isAdmin={isAdmin} />
+                        <ItemsTable
+                            items={data.items}
+                            isLoading={data.isLoading}
+                            hasNextPage={data.hasNextPage}
+                            isFetchingNextPage={data.isFetchingNextPage}
+                            onLoadMore={data.fetchNextPage}
+                            onEdit={actions.handleEditClick}
+                            onDelete={actions.handleDeleteClick}
+                            isAdmin={isAdmin}
+                        />
                     )}
                 </GlassCardContent>
             </div>

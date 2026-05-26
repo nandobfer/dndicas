@@ -2,6 +2,9 @@
 
 ## Features
 
+### Infinite scroll nas tabelas de catálogo
+As tabelas de classes usam o mesmo fluxo de `useInfiniteClasses` do modo lista. O modo tabela carrega a primeira página de resultados e busca páginas seguintes automaticamente quando o sentinel no fim da tabela entra na viewport, sem paginação tradicional.
+
 ### Filtro de fonte aplicado às subclasses no preview
 O `ClassPreview` respeita o filtro de fonte ativo na página de classes para a lista de subclasses. Quando o usuário seleciona fontes no `ClassesFilters`, o preview renderizado pela lista mostra apenas subclasses cujo `source` começa com uma das fontes selecionadas, usando a mesma comparação por prefixo case-insensitive da API de classes.
 

@@ -3,10 +3,10 @@
 import { motion, AnimatePresence } from "framer-motion"
 import { MoreHorizontal, Pencil, Trash2, Fingerprint } from "lucide-react"
 import { useAuth } from "@/core/hooks/useAuth"
-import { cn } from "@/core/utils"
 import { Chip } from "@/components/ui/chip"
 import { LoadingState } from "@/components/ui/loading-state"
 import { EmptyState } from "@/components/ui/empty-state"
+import { InfiniteScrollSentinel } from "@/components/ui/infinite-scroll-sentinel"
 import {
     GlassDropdownMenu,
     GlassDropdownMenuContent,
@@ -20,11 +20,14 @@ import type { Race } from "../types/races.types"
 interface RacesTableProps {
     data: Race[]
     isLoading: boolean
+    hasNextPage?: boolean
+    isFetchingNextPage?: boolean
+    onLoadMore?: () => void
     onEdit: (race: Race) => void
     onDelete: (race: Race) => void
 }
 
-export function RacesTable({ data, isLoading, onEdit, onDelete }: RacesTableProps) {
+export function RacesTable({ data, isLoading, hasNextPage = false, isFetchingNextPage = false, onLoadMore, onEdit, onDelete }: RacesTableProps) {
     const { isAdmin } = useAuth()
 
     if (isLoading) return <LoadingState message="Carregando raças..." />
@@ -100,6 +103,12 @@ export function RacesTable({ data, isLoading, onEdit, onDelete }: RacesTableProp
                     </tbody>
                 </table>
             </div>
+            <InfiniteScrollSentinel
+                isLoading={isLoading}
+                hasNextPage={hasNextPage}
+                isFetchingNextPage={isFetchingNextPage}
+                onLoadMore={onLoadMore}
+            />
         </div>
     )
 }
