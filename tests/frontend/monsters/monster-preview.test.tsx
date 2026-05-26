@@ -10,6 +10,10 @@ vi.mock('next/link', () => ({
     default: ({ href, children, ...props }: { href: string; children: ReactNode }) => <a href={href} {...props}>{children}</a>,
 }))
 
+vi.mock('@/components/ui/glass-image', () => ({
+    GlassImage: ({ src, alt, className }: { src: string; alt: string; className?: string }) => <img src={src} alt={alt} className={className} />,
+}))
+
 vi.mock('@/core/context/window-context', () => ({
     useWindows: () => ({ addWindow: vi.fn() }),
 }))
@@ -89,6 +93,38 @@ describe('MonsterPreview', () => {
         expect(within(strengthCard!).getByText('+5')).toBeInTheDocument()
         expect(within(strengthCard!).getByText('(20)')).toBeInTheDocument()
         expect(screen.queryByText('FOR')).not.toBeInTheDocument()
+    })
+
+    it('shows the derived hit point average while preserving the original formula', () => {
+        render(<MonsterPreview monster={baseMonster} hideActionIcons />)
+
+        const hitPointCard = screen.getByText('PV').closest('div')?.parentElement?.parentElement
+
+        expect(hitPointCard).toBeInTheDocument()
+        expect(within(hitPointCard!).getByText('210')).toBeInTheDocument()
+        expect(within(hitPointCard!).getByText('20d10 + 100')).toBeInTheDocument()
+    })
+
+    it('rounds derived hit point averages down in the preview', () => {
+        render(<MonsterPreview monster={{ ...baseMonster, hitPointsFormula: '3d8 - 3' }} hideActionIcons />)
+
+        const hitPointCard = screen.getByText('PV').closest('div')?.parentElement?.parentElement
+
+        expect(hitPointCard).toBeInTheDocument()
+        expect(within(hitPointCard!).getByText('10')).toBeInTheDocument()
+        expect(within(hitPointCard!).getByText('3d8 - 3')).toBeInTheDocument()
+        expect(within(hitPointCard!).queryByText('10.5')).not.toBeInTheDocument()
+    })
+
+    it('keeps a numeric hit point value unchanged and renders the image when available', () => {
+        render(<MonsterPreview monster={{ ...baseMonster, hitPointsFormula: '42', image: '/dragon.png' }} hideActionIcons />)
+
+        const hitPointCard = screen.getByText('PV').closest('div')?.parentElement?.parentElement
+
+        expect(hitPointCard).toBeInTheDocument()
+        expect(within(hitPointCard!).getByText('42')).toBeInTheDocument()
+        expect(within(hitPointCard!).queryByText('20d10 + 100')).not.toBeInTheDocument()
+        expect(screen.getByRole('img', { name: 'Dragão Teste' })).toHaveAttribute('src', '/dragon.png')
     })
 
     it('renders defense damage types in Portuguese', () => {

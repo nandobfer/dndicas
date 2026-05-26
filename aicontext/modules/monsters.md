@@ -16,6 +16,7 @@ The Monsters module manages D&D 5e monster and NPC stat blocks with CRUD, dashbo
 - Challenge Rating uses the same masked field style as combat numbers, preserving string CR values with `/` and `-` while keeping XP/proficiency derivation safe for intermediate input.
 - New monsters show an empty Challenge Rating field; submit normalizes an empty CR to `"0"` before deriving XP and saving.
 - Monster previews render type before size, compact stat cards with inline labels, CR with XP beside it, full attribute names with modifier-first values, and colored damage words in NPC hit rolls.
+- Monster tables render the monster image in the first column when available, falling back to the skull icon otherwise; table CA and PV are shown in separate columns, and both table and preview show the derived average PV for numeric or simple dice formulas rounded down while preserving the original formula when applicable.
 - Monster preview defenses render localized, capitalized Portuguese damage labels separated by commas while preserving internal damage keys.
 - Monster seed data imports XMM/XPHB bestiary stat blocks, including special textual AC/PV values from summon-style blocks; manual form input for AC remains numeric.
 - Bestiary seed translation retries transient invalid/truncated GenAI JSON before failing, so long monster entries can resume without manual data changes.

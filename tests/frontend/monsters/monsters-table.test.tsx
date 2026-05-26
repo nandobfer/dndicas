@@ -9,6 +9,10 @@ vi.mock('next/link', () => ({
     default: ({ href, children, ...props }: { href: string; children: ReactNode }) => <a href={href} {...props}>{children}</a>,
 }))
 
+vi.mock('@/components/ui/glass-image', () => ({
+    GlassImage: ({ src, alt, className }: { src: string; alt: string; className?: string }) => <img src={src} alt={alt} className={className} />,
+}))
+
 vi.mock('framer-motion', () => ({
     motion: {
         button: ({ children, ...props }: React.ButtonHTMLAttributes<HTMLButtonElement>) => <button {...props}>{children}</button>,
@@ -62,6 +66,18 @@ const baseMonster: Monster = {
 }
 
 describe('MonstersTable', () => {
+    it('renders the monster image when available and shows the derived hit point average', () => {
+        render(<MonstersTable items={[{ ...baseMonster, image: '/adult-silver-dragon.png' }]} />)
+
+        expect(screen.getByRole('img', { name: 'Adult Silver Dragon' })).toHaveAttribute('src', '/adult-silver-dragon.png')
+        expect(screen.getByText('CA')).toBeInTheDocument()
+        expect(screen.getByText('PV')).toBeInTheDocument()
+        expect(screen.queryByText('CA/PV')).not.toBeInTheDocument()
+        expect(screen.getByText('19')).toBeInTheDocument()
+        expect(screen.getByText('210')).toBeInTheDocument()
+        expect(screen.getByText('20d10 + 100')).toBeInTheDocument()
+    })
+
     it('links the monster name cell to the monster detail page', () => {
         render(<MonstersTable items={[baseMonster]} />)
 
@@ -72,5 +88,20 @@ describe('MonstersTable', () => {
         render(<MonstersTable items={[{ ...baseMonster, status: 'inactive' }]} />)
 
         expect(screen.getByRole('link', { name: 'Adult Silver Dragon' })).toHaveClass('text-white/30')
+    })
+
+    it('keeps the stored number when hit points are already a static average', () => {
+        render(<MonstersTable items={[{ ...baseMonster, hitPointsFormula: '42' }]} />)
+
+        expect(screen.getByText('42')).toBeInTheDocument()
+        expect(screen.queryByText('20d10 + 100')).not.toBeInTheDocument()
+    })
+
+    it('rounds derived hit point averages down in the pv column', () => {
+        render(<MonstersTable items={[{ ...baseMonster, hitPointsFormula: '3d8 - 3' }]} />)
+
+        expect(screen.getByText('10')).toBeInTheDocument()
+        expect(screen.getByText('3d8 - 3')).toBeInTheDocument()
+        expect(screen.queryByText('10.5')).not.toBeInTheDocument()
     })
 })
