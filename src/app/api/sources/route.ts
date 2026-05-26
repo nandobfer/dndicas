@@ -8,6 +8,7 @@ import { Feat } from "@/features/feats/models/feat"
 import { Reference } from "@/core/database/models/reference"
 import { Trait } from "@/features/traits/database/trait"
 import { ItemModel } from "@/features/items/database/item"
+import { MonsterModel } from "@/features/monsters/models/monster"
 import type { Model, Document } from "mongoose"
 import { extractBookName } from "@/core/utils/source-utils"
 
@@ -20,6 +21,7 @@ const ENTITY_MODEL_MAP: Record<string, Model<Document>> = {
     rules: Reference as unknown as Model<Document>,
     traits: Trait as unknown as Model<Document>,
     items: ItemModel as unknown as Model<Document>,
+    monsters: MonsterModel as unknown as Model<Document>,
 }
 
 /**
@@ -33,7 +35,7 @@ export async function GET(req: NextRequest) {
 
         if (!entity || !ENTITY_MODEL_MAP[entity]) {
             return NextResponse.json(
-                { error: "Parâmetro 'entity' inválido ou ausente. Use: spells, classes, races, backgrounds, feats, rules, traits, items" },
+                { error: "Parâmetro 'entity' inválido ou ausente. Use: spells, classes, races, backgrounds, feats, rules, traits, items, monsters" },
                 { status: 400 }
             )
         }

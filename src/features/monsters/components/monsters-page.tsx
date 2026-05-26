@@ -65,7 +65,7 @@ export function MonstersPage() {
                     {viewMode === "default" ? (
                         <EntityList items={data.items} isLoading={data.isLoading} hasNextPage={data.hasNextPage} onLoadMore={data.fetchNextPage} isFetchingNextPage={data.isFetchingNextPage} entityType="Monstro" onEdit={actions.handleEditClick} onDelete={actions.handleDeleteClick} isAdmin={isAdmin} />
                     ) : (
-                        <MonstersTable items={data.items} onEdit={actions.handleEditClick} onDelete={actions.handleDeleteClick} isAdmin={isAdmin} />
+                        <MonstersTable items={data.items} isLoading={data.isLoading} hasNextPage={data.hasNextPage} onLoadMore={data.fetchNextPage} isFetchingNextPage={data.isFetchingNextPage} onEdit={actions.handleEditClick} onDelete={actions.handleDeleteClick} isAdmin={isAdmin} />
                     )}
                 </GlassCardContent>
             </div>

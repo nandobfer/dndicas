@@ -3,7 +3,7 @@
 import * as React from "react"
 import { useViewMode } from "@/core/hooks/useViewMode"
 import { useIsMobile } from "@/core/hooks/useMediaQuery"
-import { useInfiniteMonsters, useMonsters } from "../api/monsters-queries"
+import { useInfiniteMonsters } from "../api/monsters-queries"
 import type { Monster, MonsterFilterParams, MonsterSize, MonsterType } from "../types/monsters.types"
 
 export function useMonstersPage() {
@@ -17,7 +17,6 @@ export function useMonstersPage() {
     const [sources, setSources] = React.useState<string[]>([])
 
     const filters: MonsterFilterParams = { search, type: type.length > 0 ? type : undefined, size: size.length > 0 ? size : undefined, challengeRating: challengeRating || undefined, status, sources: sources.length > 0 ? sources : undefined }
-    const tableData = useMonsters(filters, 1, 100)
     const infiniteData = useInfiniteMonsters(filters)
 
     const [isFormOpen, setIsFormOpen] = React.useState(false)
@@ -48,12 +47,12 @@ export function useMonstersPage() {
         setViewMode,
         filters: { search, type, size, challengeRating, status, sources },
         data: {
-            items: viewMode === "table" ? tableData.data?.items || [] : infiniteData.data?.pages.flatMap((page) => page.items) || [],
-            isLoading: viewMode === "table" ? tableData.isLoading : infiniteData.isLoading || infiniteData.isFetching,
+            items: infiniteData.data?.pages.flatMap((page) => page.items) || [],
+            isLoading: infiniteData.isLoading,
             hasNextPage: !!infiniteData.hasNextPage,
             fetchNextPage: infiniteData.fetchNextPage,
             isFetchingNextPage: !!infiniteData.isFetchingNextPage,
-            total: tableData.data?.total || 0,
+            total: infiniteData.data?.pages[0]?.total || 0,
         },
         actions: {
             handleSearchChange: setSearch,

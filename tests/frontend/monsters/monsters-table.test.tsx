@@ -1,5 +1,5 @@
-import { render, screen } from '@testing-library/react'
-import { describe, expect, it, vi } from 'vitest'
+import { act, render, screen } from '@testing-library/react'
+import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import * as React from 'react'
 import type { ReactNode } from 'react'
 import { MonstersTable } from '@/features/monsters/components/monsters-table'
@@ -65,7 +65,41 @@ const baseMonster: Monster = {
     updatedAt: '',
 }
 
+const intersectionObservers: Array<{ trigger: (isIntersecting: boolean) => void; observe: ReturnType<typeof vi.fn>; disconnect: ReturnType<typeof vi.fn> }> = []
+
 describe('MonstersTable', () => {
+    beforeEach(() => {
+        intersectionObservers.length = 0
+        class MockIntersectionObserver {
+            observe = vi.fn()
+            disconnect = vi.fn()
+            unobserve = vi.fn()
+            takeRecords = vi.fn(() => [])
+            root = null
+            rootMargin = ''
+            thresholds = []
+            private callback: IntersectionObserverCallback
+
+            constructor(callback: IntersectionObserverCallback) {
+                this.callback = callback
+                intersectionObservers.push(this)
+            }
+
+            trigger(isIntersecting: boolean) {
+                this.callback([{ isIntersecting } as IntersectionObserverEntry], this as unknown as IntersectionObserver)
+            }
+        }
+
+        vi.stubGlobal(
+            'IntersectionObserver',
+            MockIntersectionObserver,
+        )
+    })
+
+    afterAll(() => {
+        vi.unstubAllGlobals()
+    })
+
     it('renders the monster image when available and shows the derived hit point average', () => {
         render(<MonstersTable items={[{ ...baseMonster, image: '/adult-silver-dragon.png' }]} />)
 
@@ -103,5 +137,42 @@ describe('MonstersTable', () => {
         expect(screen.getByText('10')).toBeInTheDocument()
         expect(screen.getByText('3d8 - 3')).toBeInTheDocument()
         expect(screen.queryByText('10.5')).not.toBeInTheDocument()
+    })
+
+    it('renders initial loading and empty states', () => {
+        const { rerender } = render(<MonstersTable items={[]} isLoading />)
+
+        expect(screen.getAllByText('Carregando monstros...')[0]).toBeInTheDocument()
+
+        rerender(<MonstersTable items={[]} isLoading={false} />)
+
+        expect(screen.getByText('Nenhum monstro encontrado')).toBeInTheDocument()
+        expect(screen.getByText('Tente ajustar os filtros.')).toBeInTheDocument()
+    })
+
+    it('loads the next page when the table sentinel intersects', () => {
+        const onLoadMore = vi.fn()
+        render(<MonstersTable items={[baseMonster]} hasNextPage onLoadMore={onLoadMore} />)
+
+        act(() => {
+            intersectionObservers[0].trigger(true)
+        })
+
+        expect(onLoadMore).toHaveBeenCalledTimes(1)
+    })
+
+    it('does not load more without a next page or while fetching', () => {
+        const onLoadMore = vi.fn()
+        const { rerender } = render(<MonstersTable items={[baseMonster]} hasNextPage={false} onLoadMore={onLoadMore} />)
+
+        act(() => {
+            intersectionObservers[0].trigger(true)
+        })
+
+        expect(onLoadMore).not.toHaveBeenCalled()
+
+        rerender(<MonstersTable items={[baseMonster]} hasNextPage onLoadMore={onLoadMore} isFetchingNextPage />)
+
+        expect(onLoadMore).not.toHaveBeenCalled()
     })
 })

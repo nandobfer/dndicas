@@ -5,8 +5,11 @@ import { makeJsonRequest, readJson } from '../helpers/http'
 import { importFresh } from '../helpers/module'
 
 describe('monsters backend routes', () => {
-    it('GET /api/monsters applies filters and fuzzy search', async () => {
-        const monsters = [{ _id: 'monster-1', name: 'Lobo', source: 'LDM', status: 'active' }]
+    it('GET /api/monsters applies filters, fuzzy search, source matching, and alphabetical sorting', async () => {
+        const monsters = [
+            { _id: 'monster-2', name: 'Zumbi', source: 'LDM', status: 'active' },
+            { _id: 'monster-1', name: 'Aranha', source: 'LDM', status: 'active' },
+        ]
         const sort = vi.fn().mockResolvedValue(monsters)
         const find = vi.fn(() => ({ sort }))
         const applyFuzzySearch = vi.fn().mockReturnValue(monsters)
@@ -29,8 +32,9 @@ describe('monsters backend routes', () => {
             status: 'active',
             source: { $in: [expect.any(RegExp)] },
         }))
+        expect(sort).toHaveBeenCalledWith({ name: 1 })
         expect(applyFuzzySearch).toHaveBeenCalled()
-        expect(payload.items).toEqual(monsters.map((monster) => expect.objectContaining({ name: monster.name })))
+        expect(payload.items.map((monster: { name: string }) => monster.name)).toEqual(['Aranha', 'Zumbi'])
     })
 
     it('POST /api/monsters rejects anonymous users', async () => {

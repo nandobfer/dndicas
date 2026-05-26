@@ -19,6 +19,7 @@ describe('auxiliary backend routes', () => {
         vi.doMock('@/core/database/models/reference', () => ({ Reference: {} }));
         vi.doMock('@/features/traits/database/trait', () => ({ Trait: {} }));
         vi.doMock('@/features/items/database/item', () => ({ ItemModel: {} }));
+        vi.doMock('@/features/monsters/models/monster', () => ({ MonsterModel: {} }));
 
         const mod = await importFresh<typeof import('@/app/api/sources/route')>('@/app/api/sources/route');
         const response = await mod.GET(new Request('http://localhost/api/sources?entity=unknown'));
@@ -41,6 +42,7 @@ describe('auxiliary backend routes', () => {
         vi.doMock('@/core/database/models/reference', () => ({ Reference: {} }));
         vi.doMock('@/features/traits/database/trait', () => ({ Trait: {} }));
         vi.doMock('@/features/items/database/item', () => ({ ItemModel: {} }));
+        vi.doMock('@/features/monsters/models/monster', () => ({ MonsterModel: {} }));
 
         const mod = await importFresh<typeof import('@/app/api/sources/route')>('@/app/api/sources/route');
         const response = await mod.GET(new Request('http://localhost/api/sources?entity=spells'));
@@ -48,6 +50,31 @@ describe('auxiliary backend routes', () => {
 
         expect(response.status).toBe(200);
         expect(payload.sources).toEqual(['PHB', 'XPHB']);
+    });
+
+    it('GET /api/sources supports monster sources', async () => {
+        vi.doMock('@/core/database/db', () => ({
+            default: vi.fn().mockResolvedValue(undefined),
+        }));
+        vi.doMock('@/core/utils/source-utils', () => ({
+            extractBookName: vi.fn((value: string) => value.split(' p.')[0]),
+        }));
+        vi.doMock('@/features/spells/models/spell', () => ({ Spell: {} }));
+        vi.doMock('@/features/classes/models/character-class', () => ({ CharacterClass: {} }));
+        vi.doMock('@/features/races/models/race', () => ({ RaceModel: {} }));
+        vi.doMock('@/features/backgrounds/models/background', () => ({ BackgroundModel: {} }));
+        vi.doMock('@/features/feats/models/feat', () => ({ Feat: {} }));
+        vi.doMock('@/core/database/models/reference', () => ({ Reference: {} }));
+        vi.doMock('@/features/traits/database/trait', () => ({ Trait: {} }));
+        vi.doMock('@/features/items/database/item', () => ({ ItemModel: {} }));
+        vi.doMock('@/features/monsters/models/monster', () => ({ MonsterModel: { distinct: vi.fn().mockResolvedValue(['LDM p. 12', 'XMM p. 5', 'LDM p. 99']) } }));
+
+        const mod = await importFresh<typeof import('@/app/api/sources/route')>('@/app/api/sources/route');
+        const response = await mod.GET(new Request('http://localhost/api/sources?entity=monsters'));
+        const payload = await readJson(response);
+
+        expect(response.status).toBe(200);
+        expect(payload.sources).toEqual(['LDM', 'XMM']);
     });
 
     it('GET /api/core/health returns a healthy payload even when dbConnect throws', async () => {
