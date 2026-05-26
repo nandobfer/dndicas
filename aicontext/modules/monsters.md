@@ -18,7 +18,7 @@ The Monsters module manages D&D 5e monster and NPC stat blocks with CRUD, dashbo
 - Monster previews render type before size, compact stat cards with inline labels, CR with XP beside it, full attribute names with modifier-first values, and colored damage words in NPC hit rolls.
 - Monster tables render the monster image in the first column when available, falling back to the skull icon otherwise; table CA and PV are shown in separate columns, and both table and preview show the derived average PV for numeric or simple dice formulas rounded down while preserving the original formula when applicable.
 - Monster preview defenses render localized, capitalized Portuguese damage labels separated by commas while preserving internal damage keys.
-- Monster seed data imports XMM/XPHB bestiary stat blocks, including special textual AC/PV values from summon-style blocks; manual form input for AC remains numeric.
+- Monster seed data imports every `bestiary-*.json` file under `src/lib/5etools-data/bestiary/`, pairs each source with `fluff-bestiary-*.json` when present, always loads `legendarygroups.json` separately, and translates special textual AC/PV seed values when they contain prose; manual form input for AC remains numeric.
 - Bestiary seed translation retries transient invalid/truncated GenAI JSON before failing, so long monster entries can resume without manual data changes.
 
 Core behavior:
