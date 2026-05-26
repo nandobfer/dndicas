@@ -7,7 +7,7 @@ import { GlassCard } from "@/components/ui/glass-card";
 import { Chip } from "@/components/ui/chip";
 import { LoadingState } from "@/components/ui/loading-state";
 import { EmptyState } from "@/components/ui/empty-state";
-import { DataTablePagination } from "@/components/ui/data-table-pagination";
+import { InfiniteScrollSentinel } from "@/components/ui/infinite-scroll-sentinel";
 import { 
     GlassDropdownMenu, 
     GlassDropdownMenuContent, 
@@ -28,27 +28,24 @@ const traitStatusVariantMap: Record<string, "uncommon" | "common"> = {
 
 interface TraitsTableProps {
     traits: Trait[];
-    total: number;
-    page: number;
-    limit: number;
     isLoading?: boolean;
+    hasNextPage?: boolean;
+    isFetchingNextPage?: boolean;
     onEdit: (trait: Trait) => void;
     onDelete: (trait: Trait) => void;
-    onPageChange: (page: number) => void;
+    onLoadMore?: () => void;
 }
 
 export function TraitsTable({ 
     traits, 
-    total, 
-    page, 
-    limit, 
     isLoading = false, 
+    hasNextPage = false,
+    isFetchingNextPage = false,
     onEdit, 
     onDelete, 
-    onPageChange 
+    onLoadMore 
 }: TraitsTableProps) {
     const { isAdmin } = useAuth()
-    const totalPages = Math.ceil(total / limit);
 
     if (isLoading && traits.length === 0) {
         return (
@@ -150,16 +147,13 @@ export function TraitsTable({
                 </table>
             </div>
 
-            <div className="p-4 border-t border-white/5">
-                <DataTablePagination
-                    page={page}
-                    totalPages={totalPages}
-                    total={total}
-                    limit={limit}
-                    onPageChange={onPageChange}
-                    itemLabel="habilidades"
-                />
-            </div>
+            <InfiniteScrollSentinel
+                isLoading={isLoading}
+                hasNextPage={hasNextPage}
+                isFetchingNextPage={isFetchingNextPage}
+                onLoadMore={onLoadMore}
+                className="py-8 flex justify-center w-full border-t border-white/5"
+            />
         </GlassCard>
     )
 }

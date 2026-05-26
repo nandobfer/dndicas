@@ -13,13 +13,18 @@
 The Feats module manages D&D 5e feats/talents with full CRUD operations, level-based filtering, rich text descriptions with mentions, and audit logging integration.
 
 **Key Features**:
-- Browse paginated list with search and filters (status, level, text)
+- Browse infinite scrolling list/table with search and filters (status, level, text)
 - Create/edit/delete feats with form validation
 - Level-based rarity color coding (1-3=common, 4-8=uncommon, 9-13=rare, 14-17=veryRare, 18-19=legendary, 20=artifact)
 - Dynamic prerequisites list with add/remove UI
 - Rich text editor with mentions (@Regras, @Habilidades, @Talentos) and S3 image upload
 - Dashboard statistics card with growth chart
 - Audit logs tracking all CRUD operations
+
+## Features
+
+### Infinite scroll nas tabelas de catálogo
+As tabelas de talentos usam `useInfiniteFeats`, a mesma fonte de dados do modo lista. Ao chegar ao fim da tabela, um sentinel carrega a próxima página automaticamente e substitui a paginação tradicional.
 
 ---
 
@@ -34,7 +39,7 @@ src/features/feats/
 │   ├── feat-form-modal.tsx   # Create/edit form with dynamic prerequisites
 │   ├── feat-preview.tsx      # Tooltip preview component
 │   ├── feats-filters.tsx     # SearchInput + StatusChips + Level filter
-│   └── feats-table.tsx       # Paginated table with level chips
+│   └── feats-table.tsx       # Infinite scrolling table with level chips
 ├── hooks/
 │   ├── useFeatMutations.ts   # TanStack Query mutations (create/update/delete)
 │   └── useFeats.ts           # TanStack Query hook with filters
@@ -148,7 +153,7 @@ src/app/(dashboard)/_components/
 - Framer Motion row animations (staggered delays)
 - Level-to-rarity color mapping via `getLevelRarityVariant(level)`
 - EmptyState, LoadingState, ErrorState
-- DataTablePagination
+- Infinite scroll sentinel
 - EntityPreviewTooltip integration on preview icon
 
 **Level Color Mapping**:

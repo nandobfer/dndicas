@@ -1,19 +1,18 @@
 "use client";
 
 import * as React from 'react';
-import { useSpells, useInfiniteSpells, useCreateSpell, useUpdateSpell, useDeleteSpell } from '../api/spells-queries';
+import { useInfiniteSpells } from '../api/spells-queries';
 import { useSpellFilters } from './useSpellFilters';
 import { useIsMobile } from '@/core/hooks/useMediaQuery';
 import { useViewMode } from "@/core/hooks/useViewMode"
-import { toast } from "sonner"
-import type { Spell, CreateSpellInput, UpdateSpellInput } from "../types/spells.types"
+import type { Spell } from "../types/spells.types"
 
 /**
  * T044: Logic for the Spells page, including filters, modals, and responsive data fetching.
  */
 export function useSpellsPage() {
     const isMobile = useIsMobile()
-    const { viewMode, setViewMode, isTable, isDefault } = useViewMode()
+    const { viewMode, setViewMode, isDefault } = useViewMode()
 
     // Filters logic from existing hook
     const { filters, search, setSearch, setStatus, setCircles, setSchools, setSaveAttributes, setDiceTypes, setSources, circleMode, setCircleMode, setPage } = useSpellFilters()
@@ -22,14 +21,13 @@ export function useSpellsPage() {
      * Data Fetching
      */
 
-    const paginatedData = useSpells(filters, filters.page, filters.limit, { enabled: isTable })
+    const infiniteFilters = React.useMemo(() => {
+        const { page: _page, ...rest } = filters
+        void _page
+        return rest
+    }, [filters])
 
-    const infiniteData = useInfiniteSpells(filters, { enabled: !isTable })
-
-    // Mutations
-    const createMutation = useCreateSpell()
-    const updateMutation = useUpdateSpell()
-    const deleteMutation = useDeleteSpell()
+    const infiniteData = useInfiniteSpells(infiniteFilters)
 
     // UI state
     const [isFormOpen, setIsFormOpen] = React.useState(false)
@@ -100,14 +98,14 @@ export function useSpellsPage() {
         pagination: {
             page: filters.page,
             setPage,
-            total: paginatedData.data?.total || 0,
+            total: infiniteData.data?.pages[0]?.total || 0,
             limit: filters.limit,
         },
         data: {
             paginated: {
-                items: paginatedData.data?.spells || [],
-                isLoading: paginatedData.isLoading,
-                isFetching: paginatedData.isFetching,
+                items: [],
+                isLoading: infiniteData.isLoading,
+                isFetching: infiniteData.isFetching,
             },
             infinite: {
                 items: infiniteData.data?.pages.flatMap((page) => page.spells) || [],
@@ -116,6 +114,7 @@ export function useSpellsPage() {
                 isFetching: infiniteData.isFetching,
                 hasNextPage: !!infiniteData.hasNextPage,
                 fetchNextPage: infiniteData.fetchNextPage,
+                total: infiniteData.data?.pages[0]?.total || 0,
             },
         },
         actions: {

@@ -6,16 +6,19 @@
 
 import * as React from "react"
 import { motion } from "framer-motion"
-import { Backpack, MoreHorizontal, Pencil, Trash2, Shield, Sword, Hammer, Package, Coins, Anchor } from "lucide-react"
-import { GlassCard } from "@/components/ui/glass-card"
+import { Backpack, MoreHorizontal, Pencil, Trash2, Shield, Sword, Hammer, Package, Coins, Anchor, type LucideIcon } from "lucide-react"
 import { Chip } from "@/components/ui/chip"
+import { GlassImage } from "@/components/ui/glass-image"
 import { GlassLevelChip } from "@/components/ui/glass-level-chip"
 import { GlassDiceValue } from "@/components/ui/glass-dice-value"
 import { GlassDropdownMenu, GlassDropdownMenuTrigger, GlassDropdownMenuContent, GlassDropdownMenuItem } from "@/components/ui/glass-dropdown-menu"
+import { EmptyState } from "@/components/ui/empty-state"
+import { InfiniteScrollSentinel } from "@/components/ui/infinite-scroll-sentinel"
+import { LoadingState } from "@/components/ui/loading-state"
 import { cn } from "@/core/utils"
 import type { Item, ItemType } from "../types/items.types"
 
-const TYPE_ICONS: Record<ItemType, any> = {
+const TYPE_ICONS: Record<ItemType, LucideIcon> = {
     arma: Sword,
     armadura: Shield,
     escudo: Shield,
@@ -27,40 +30,69 @@ const TYPE_ICONS: Record<ItemType, any> = {
 
 interface ItemsTableProps {
     items: Item[]
+    isLoading?: boolean
+    hasNextPage?: boolean
+    isFetchingNextPage?: boolean
+    onLoadMore?: () => void
     onEdit?: (item: Item) => void
     onDelete?: (item: Item) => void
     isAdmin?: boolean
 }
 
-export function ItemsTable({ items, onEdit, onDelete, isAdmin }: ItemsTableProps) {
-    if (items.length === 0) return null
+export function ItemsTable({ items, isLoading = false, hasNextPage = false, isFetchingNextPage = false, onLoadMore, onEdit, onDelete, isAdmin }: ItemsTableProps) {
+    if (isLoading && items.length === 0) {
+        return (
+            <div className="py-12 flex justify-center">
+                <LoadingState variant="spinner" message="Carregando itens..." />
+            </div>
+        )
+    }
+
+    if (!isLoading && items.length === 0) {
+        return (
+            <div className="py-12">
+                <EmptyState title="Nenhum item encontrado" description="Tente ajustar os filtros." icon={Backpack} />
+            </div>
+        )
+    }
 
     return (
-        <div className="w-full overflow-x-auto">
-            <table className="w-full text-left border-collapse min-w-[700px]">
-                <thead>
-                    <tr className="border-b border-white/5">
-                        <th className="px-4 py-3 text-[10px] uppercase font-bold tracking-widest text-white/20">Item</th>
-                        <th className="px-4 py-3 text-[10px] uppercase font-bold tracking-widest text-white/20">Tipo</th>
-                        <th className="px-4 py-3 text-[10px] uppercase font-bold tracking-widest text-white/20">Raridade</th>
-                        <th className="px-4 py-3 text-[10px] uppercase font-bold tracking-widest text-white/20">Custo</th>
-                        <th className="px-4 py-3 text-[10px] uppercase font-bold tracking-widest text-white/20">Dano/CA</th>
-                        <th className="px-4 py-3 text-[10px] uppercase font-bold tracking-widest text-white/20 text-right">Ações</th>
-                    </tr>
-                </thead>
-                <tbody className="divide-y divide-white/5">
-                    {items.map((item) => (
-                        <tr key={item.id} className="group hover:bg-white/[0.02] transition-colors">
+        <div className="w-full">
+            <div className="w-full overflow-x-auto">
+                <table className="w-full text-left border-collapse min-w-[700px]">
+                    <thead>
+                        <tr className="border-b border-white/5">
+                            <th className="px-4 py-3 text-[10px] uppercase font-bold tracking-widest text-white/20">Item</th>
+                            <th className="px-4 py-3 text-[10px] uppercase font-bold tracking-widest text-white/20">Tipo</th>
+                            <th className="px-4 py-3 text-[10px] uppercase font-bold tracking-widest text-white/20">Raridade</th>
+                            <th className="px-4 py-3 text-[10px] uppercase font-bold tracking-widest text-white/20">Custo</th>
+                            <th className="px-4 py-3 text-[10px] uppercase font-bold tracking-widest text-white/20">Dano/CA</th>
+                            <th className="px-4 py-3 text-[10px] uppercase font-bold tracking-widest text-white/20 text-right">Ações</th>
+                        </tr>
+                    </thead>
+                    <tbody className="divide-y divide-white/5">
+                        {items.map((item) => (
+                            <tr key={item.id || item._id} className="group hover:bg-white/[0.02] transition-colors">
                             <td className="px-4 py-3">
                                 <div className="flex items-center gap-3">
-                                    <div className={cn(
-                                        "p-1.5 rounded-md border bg-white/[0.03]",
-                                        item.status === 'inactive' ? "border-white/5 opacity-50" : "border-white/10"
-                                    )}>
-                                        {React.createElement(TYPE_ICONS[item.type] || Backpack, {
-                                            className: "h-3.5 w-3.5 text-slate-400"
-                                        })}
-                                    </div>
+                                    {item.image ? (
+                                        <GlassImage
+                                            src={item.image}
+                                            alt={item.name}
+                                            className={cn("h-10 w-10 shrink-0 rounded-md border", item.status === "inactive" ? "border-white/5 opacity-50" : "border-slate-500/20")}
+                                            imageClassName="object-cover mix-blend-normal"
+                                            showOverlay={false}
+                                        />
+                                    ) : (
+                                        <div className={cn(
+                                            "p-1.5 rounded-md border bg-white/[0.03]",
+                                            item.status === 'inactive' ? "border-white/5 opacity-50" : "border-white/10"
+                                        )}>
+                                            {React.createElement(TYPE_ICONS[item.type] || Backpack, {
+                                                className: "h-3.5 w-3.5 text-slate-400"
+                                            })}
+                                        </div>
+                                    )}
                                     <div>
                                         <span className={cn(
                                             "text-sm font-medium block",
@@ -90,7 +122,7 @@ export function ItemsTable({ items, onEdit, onDelete, isAdmin }: ItemsTableProps
                                 <div className="flex flex-col gap-0.5">
                                     {item.type === "arma" && item.damageDice && (
                                         <div className="flex items-center gap-1.5">
-                                            <GlassDiceValue value={item.damageDice as any} />
+                                            <GlassDiceValue value={item.damageDice} />
                                             <span className="text-[10px] text-white/20">{item.damageType}</span>
                                         </div>
                                     )}
@@ -138,10 +170,17 @@ export function ItemsTable({ items, onEdit, onDelete, isAdmin }: ItemsTableProps
                                     </Chip>
                                 </div>
                             </td>
-                        </tr>
-                    ))}
-                </tbody>
-            </table>
+                            </tr>
+                        ))}
+                    </tbody>
+                </table>
+            </div>
+            <InfiniteScrollSentinel
+                isLoading={isLoading}
+                hasNextPage={hasNextPage}
+                isFetchingNextPage={isFetchingNextPage}
+                onLoadMore={onLoadMore}
+            />
         </div>
     )
 }

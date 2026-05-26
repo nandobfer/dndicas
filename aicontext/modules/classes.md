@@ -2,12 +2,23 @@
 
 ## Features
 
+### Infinite scroll nas tabelas de catálogo
+As tabelas de classes usam o mesmo fluxo de `useInfiniteClasses` do modo lista. O modo tabela carrega a primeira página de resultados e busca páginas seguintes automaticamente quando o sentinel no fim da tabela entra na viewport, sem paginação tradicional.
+
+### Identidade visual na primeira coluna da tabela
+A tabela de classes usa a primeira coluna como célula de identidade: imagem da classe quando disponível, fallback com ícone de espada, nome linkado e fonte em texto auxiliar. A coluna dedicada de status não é exibida nessa tabela.
+
 ### Filtro de fonte aplicado às subclasses no preview
 O `ClassPreview` respeita o filtro de fonte ativo na página de classes para a lista de subclasses. Quando o usuário seleciona fontes no `ClassesFilters`, o preview renderizado pela lista mostra apenas subclasses cujo `source` começa com uma das fontes selecionadas, usando a mesma comparação por prefixo case-insensitive da API de classes.
 
 O dropdown de fontes de classes também inclui fontes cadastradas em `subclasses.source`. Ao filtrar por uma fonte exclusiva de subclasse, a listagem inclui a classe pai porque a consulta de classes compara a fonte selecionada tanto com `source` quanto com `subclasses.source`.
 
 As subclasses filtradas deixam de alimentar o seletor, o preview embutido e os dados de progressão/habilidades das subclasses selecionadas.
+
+### Subclasses selecionadas sincronizadas na URL da página de detalhe
+A página de detalhe de classes aceita múltiplos query params `subclass`, como `/classes/guerreiro?subclass=champion&subclass=eldritch-knight`, e repassa esses IDs ao `ClassPreview` para abrir a página com as subclasses correspondentes já selecionadas.
+
+Quando o usuário seleciona ou desseleciona subclasses no preview, a própria página atualiza a URL com os mesmos params repetidos, sem reload e preservando outros filtros/query params já presentes. Se a URL mudar enquanto o preview continuar montado, a seleção interna acompanha o novo estado.
 
 ### Preview de subclasses com habilidades e magias próprias
 O `SubclassPreview` exibe, logo abaixo da descrição, as mesmas seções expansíveis de habilidades por nível e de magias usadas no preview de classes, inclusive quando a subclasse é renderizada de forma embutida dentro de `ClassPreview`.

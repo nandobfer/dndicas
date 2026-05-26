@@ -5,7 +5,7 @@
 "use client";
 
 import * as React from "react"
-import { useRaces, useInfiniteRaces } from "../api/races-queries"
+import { useInfiniteRaces } from "../api/races-queries"
 import { useIsMobile } from "@/core/hooks/useMediaQuery"
 import { useViewMode } from "@/core/hooks/useViewMode"
 import type { Race } from "../types/races.types"
@@ -20,7 +20,6 @@ export function useRacesPage() {
 
     const filters = { search, status, sources: sources.length > 0 ? sources : undefined }
 
-    const tableData = useRaces(filters, 1, 100)
     const infiniteData = useInfiniteRaces(filters)
 
     const [isFormOpen, setIsFormOpen] = React.useState(false)
@@ -65,12 +64,13 @@ export function useRacesPage() {
             setSources,
         },
         data: {
-            races: viewMode === "table" ? tableData.data?.items || [] : infiniteData.data?.pages.flatMap((p) => p.items) || [],
-            isLoading: viewMode === "table" ? tableData.isLoading : infiniteData.isLoading || infiniteData.isFetching,
+            races: infiniteData.data?.pages.flatMap((p) => p.items) || [],
+            isLoading: infiniteData.isLoading,
+            isFetching: infiniteData.isFetching,
             hasNextPage: !!infiniteData.hasNextPage,
             fetchNextPage: infiniteData.fetchNextPage,
             isFetchingNextPage: !!infiniteData.isFetchingNextPage,
-            total: tableData.data?.total || 0,
+            total: infiniteData.data?.pages[0]?.total || 0,
         },
         actions: {
             handleSearchChange,

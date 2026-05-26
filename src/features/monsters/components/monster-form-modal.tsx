@@ -10,6 +10,7 @@ import { toast } from "sonner"
 import { GlassConfirmClosing } from "@/components/ui/glass-confirm-closing"
 import { GlassInput } from "@/components/ui/glass-input"
 import { GlassModal, GlassModalContent, GlassModalDescription, GlassModalHeader, GlassModalTitle } from "@/components/ui/glass-modal"
+import { OptionAutocomplete } from "@/components/ui/option-autocomplete"
 import { GlassStatusSwitch } from "@/components/ui/glass-status-switch"
 import { ImageAndDescriptionSection } from "@/features/classes/components/shared-form-components"
 import { cn } from "@/core/utils"
@@ -18,7 +19,6 @@ import { useCreateMonster, useUpdateMonster } from "../api/monsters-queries"
 import type { Monster, MonsterChallengeRating, MonsterSize, MonsterType, UpdateMonsterInput } from "../types/monsters.types"
 import { getMonsterProficiencyBonus, getMonsterXp } from "../utils/monster-calculations"
 import { ALIGNMENT_OPTIONS, ATTRIBUTE_KEYS, CONDITION_OPTIONS, MONSTER_SIZE_OPTIONS, MONSTER_TYPE_OPTIONS, SPEED_FIELDS } from "./monster-options"
-import { MonsterOptionAutocomplete } from "./monster-option-autocomplete"
 import { NpcParamFormList } from "./npc-param-form-list"
 import { MonsterAttributeBlock } from "./monster-attribute-block"
 import { MonsterDefenseSelector, type DamageDefenseState } from "./monster-defense-selector"
@@ -352,15 +352,15 @@ export function MonsterFormModal({ monster, isOpen, onClose, onSuccess }: { mons
                             <div className="flex flex-col md:flex-row gap-4">
                                 <div className="space-y-2 flex-1 min-w-0">
                                     <span className="text-xs text-white/50">Tipo</span>
-                                    <MonsterOptionAutocomplete value={watch("type") as MonsterType} onChange={(value) => setValue("type", value as MonsterType, { shouldDirty: true })} options={MONSTER_TYPE_OPTIONS} placeholder="Selecione o tipo" title="Tipo de monstro" mode="single" className="w-full min-w-0" />
+                                    <OptionAutocomplete value={watch("type") as MonsterType} onChange={(value) => setValue("type", value as MonsterType, { shouldDirty: true })} options={MONSTER_TYPE_OPTIONS} placeholder="Selecione o tipo" title="Tipo de monstro" mode="single" className="w-full min-w-0" />
                                 </div>
                                 <div className="space-y-2 flex-1 min-w-0">
                                     <span className="text-xs text-white/50">Tamanho</span>
-                                    <MonsterOptionAutocomplete value={watch("size") as MonsterSize} onChange={(value) => setValue("size", value as MonsterSize, { shouldDirty: true })} options={MONSTER_SIZE_OPTIONS} placeholder="Selecione o tamanho" title="Tamanho" mode="single" accentClass="amber" className="w-full min-w-0" />
+                                    <OptionAutocomplete value={watch("size") as MonsterSize} onChange={(value) => setValue("size", value as MonsterSize, { shouldDirty: true })} options={MONSTER_SIZE_OPTIONS} placeholder="Selecione o tamanho" title="Tamanho" mode="single" accentClass="amber" className="w-full min-w-0" />
                                 </div>
                                 <div className="space-y-2 flex-1 min-w-0">
                                     <span className="text-xs text-white/50">Alinhamento</span>
-                                    <MonsterOptionAutocomplete value={watch("alignment")} onChange={(value) => setValue("alignment", value as CreateMonsterSchema["alignment"], { shouldDirty: true })} options={ALIGNMENT_OPTIONS} placeholder="Selecione o alinhamento" title="Alinhamento" mode="single" accentClass="purple" className="w-full min-w-0" />
+                                    <OptionAutocomplete value={watch("alignment")} onChange={(value) => setValue("alignment", value as CreateMonsterSchema["alignment"], { shouldDirty: true })} options={ALIGNMENT_OPTIONS} placeholder="Selecione o alinhamento" title="Alinhamento" mode="single" accentClass="purple" className="w-full min-w-0" />
                                 </div>
                             </div>
                         </FormSection>
@@ -408,7 +408,7 @@ export function MonsterFormModal({ monster, isOpen, onClose, onSuccess }: { mons
                             <MonsterDefenseSelector value={defenseState} onChange={setDefenseState} />
                             <div className="space-y-2">
                                 <span className="text-xs text-white/50">Imunidade a condições</span>
-                                <MonsterOptionAutocomplete value={watch("conditionImmunities") ?? []} onChange={(value) => setValue("conditionImmunities", (Array.isArray(value) ? value : value ? [value] : []) as CreateMonsterSchema["conditionImmunities"], { shouldDirty: true })} options={CONDITION_OPTIONS} placeholder="Nenhuma condição" title="Imunidade a condições" accentClass="emerald" />
+                                <OptionAutocomplete value={watch("conditionImmunities") ?? []} onChange={(value) => setValue("conditionImmunities", (Array.isArray(value) ? value : value ? [value] : []) as CreateMonsterSchema["conditionImmunities"], { shouldDirty: true })} options={CONDITION_OPTIONS} placeholder="Nenhuma condição" title="Imunidade a condições" accentClass="emerald" />
                             </div>
                         </FormSection>
 

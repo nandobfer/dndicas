@@ -57,7 +57,7 @@ export function RacesPage() {
             {/* Filters Panel */}
             <GlassCard>
                 <GlassCardContent className="py-4">
-                    <RaceFilters filters={filters} onSearchChange={actions.handleSearchChange} onStatusChange={actions.handleStatusChange} onSourcesChange={actions.handleSourcesChange} isSearching={data.isLoading} />
+                    <RaceFilters filters={filters} onSearchChange={actions.handleSearchChange} onStatusChange={actions.handleStatusChange} onSourcesChange={actions.handleSourcesChange} isSearching={data.isFetching} />
                 </GlassCardContent>
             </GlassCard>
 
@@ -65,10 +65,18 @@ export function RacesPage() {
             <GlassCard className="border-white/5 overflow-hidden">
                 <GlassCardContent className="p-0">
                     {viewMode === "table" && !isMobile ? (
-                        <RacesTable data={data.races} isLoading={data.isLoading} onEdit={actions.handleEditClick} onDelete={actions.handleDeleteClick} />
+                        <RacesTable
+                            data={data.races}
+                            isLoading={data.isLoading}
+                            hasNextPage={data.hasNextPage}
+                            isFetchingNextPage={data.isFetchingNextPage}
+                            onLoadMore={data.fetchNextPage}
+                            onEdit={actions.handleEditClick}
+                            onDelete={actions.handleDeleteClick}
+                        />
                     ) : (
                         <EntityList
-                            items={data.races as any}
+                            items={data.races}
                             isLoading={data.isLoading}
                             hasNextPage={data.hasNextPage}
                             onLoadMore={data.fetchNextPage}

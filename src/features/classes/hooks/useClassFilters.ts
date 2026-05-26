@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useMemo, useCallback, useEffect } from "react"
-import { useRouter, useSearchParams } from "next/navigation"
+import { usePathname, useRouter, useSearchParams } from "next/navigation"
 import { useDebounce } from "@/core/hooks/useDebounce"
 import type { ClassesFilters } from "../types/classes.types"
 
@@ -9,6 +9,7 @@ const DEFAULT_LIMIT = 10
 const SEARCH_DEBOUNCE_MS = 300
 
 export function useClassFilters() {
+    const pathname = usePathname()
     const router = useRouter()
     const searchParams = useSearchParams()
 
@@ -65,6 +66,10 @@ export function useClassFilters() {
     )
 
     useEffect(() => {
+        if (pathname !== "/classes") {
+            return
+        }
+
         const params = new URLSearchParams()
         if (search) params.set("search", search)
         if (status && status !== "all") params.set("status", status)
@@ -72,9 +77,9 @@ export function useClassFilters() {
         if (sources.length > 0) params.set("sources", sources.join(","))
 
         const qs = params.toString()
-        const newUrl = qs ? `?${qs}` : window.location.pathname
+        const newUrl = qs ? `${pathname}?${qs}` : pathname
         router.replace(newUrl, { scroll: false })
-    }, [search, status, page, sources, router])
+    }, [page, pathname, router, search, sources, status])
 
     return {
         filters,

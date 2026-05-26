@@ -17,7 +17,6 @@ import { GlassCard, GlassCardContent } from "@/components/ui/glass-card"
 import { GlassViewSelector } from "@/components/ui/glass-view-selector"
 import { motionConfig } from "@/lib/config/motion-configs"
 import { useBackgroundsPage } from "../hooks/useBackgroundsPage"
-import { Button } from "@/core/ui/button"
 import { cn } from "@/core/utils/index"
 
 export function BackgroundsPage() {
@@ -67,7 +66,7 @@ export function BackgroundsPage() {
                         onSkillsChange={actions.handleSkillsChange}
                         onFeatsChange={actions.handleFeatsChange}
                         onSourcesChange={actions.handleSourcesChange}
-                        isSearching={data.isLoading}
+                        isSearching={data.isFetching}
                     />
                 </GlassCardContent>
             </GlassCard>
@@ -76,10 +75,18 @@ export function BackgroundsPage() {
             <GlassCard className="border-white/5 overflow-hidden">
                 <GlassCardContent className="p-0">
                     {viewMode === "table" && !isMobile ? (
-                        <BackgroundsTable data={data.backgrounds} isLoading={data.isLoading} onEdit={actions.handleEditClick} onDelete={actions.handleDeleteClick} />
+                        <BackgroundsTable
+                            data={data.backgrounds}
+                            isLoading={data.isLoading}
+                            hasNextPage={data.hasNextPage}
+                            isFetchingNextPage={data.isFetchingNextPage}
+                            onLoadMore={data.fetchNextPage}
+                            onEdit={actions.handleEditClick}
+                            onDelete={actions.handleDeleteClick}
+                        />
                     ) : (
                         <EntityList
-                            items={data.backgrounds as any}
+                            items={data.backgrounds}
                             isLoading={data.isLoading}
                             hasNextPage={data.hasNextPage}
                             onLoadMore={data.fetchNextPage}

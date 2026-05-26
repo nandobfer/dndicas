@@ -4,9 +4,10 @@ import { motion, AnimatePresence } from "framer-motion"
 import { MoreHorizontal, Pencil, Trash2, Fingerprint } from "lucide-react"
 import { useAuth } from "@/core/hooks/useAuth"
 import { cn } from "@/core/utils"
-import { Chip } from "@/components/ui/chip"
+import { GlassImage } from "@/components/ui/glass-image"
 import { LoadingState } from "@/components/ui/loading-state"
 import { EmptyState } from "@/components/ui/empty-state"
+import { InfiniteScrollSentinel } from "@/components/ui/infinite-scroll-sentinel"
 import {
     GlassDropdownMenu,
     GlassDropdownMenuContent,
@@ -20,11 +21,14 @@ import type { Race } from "../types/races.types"
 interface RacesTableProps {
     data: Race[]
     isLoading: boolean
+    hasNextPage?: boolean
+    isFetchingNextPage?: boolean
+    onLoadMore?: () => void
     onEdit: (race: Race) => void
     onDelete: (race: Race) => void
 }
 
-export function RacesTable({ data, isLoading, onEdit, onDelete }: RacesTableProps) {
+export function RacesTable({ data, isLoading, hasNextPage = false, isFetchingNextPage = false, onLoadMore, onEdit, onDelete }: RacesTableProps) {
     const { isAdmin } = useAuth()
 
     if (isLoading) return <LoadingState message="Carregando raças..." />
@@ -36,8 +40,7 @@ export function RacesTable({ data, isLoading, onEdit, onDelete }: RacesTableProp
                 <table className="w-full text-left border-separate border-spacing-0">
                     <thead>
                         <tr className="bg-white/5 uppercase text-[10px] font-bold tracking-widest text-white/40">
-                            <th className="px-6 py-4 rounded-tl-xl w-[100px]">Status</th>
-                            <th className="px-6 py-4">Nome da Raça</th>
+                            <th className="px-6 py-4 rounded-tl-xl">Raça</th>
                             <th className="px-6 py-4">Tamanho</th>
                             <th className="px-6 py-4">Deslocamento</th>
                             <th className="px-6 py-4">Fonte</th>
@@ -57,12 +60,29 @@ export function RacesTable({ data, isLoading, onEdit, onDelete }: RacesTableProp
                                     className="group hover:bg-white/[0.02] transition-colors"
                                 >
                                     <td className="px-6 py-4">
-                                        <Chip variant={race.status === "active" ? "uncommon" : "common"} size="sm">
-                                            {race.status === "active" ? "Ativo" : "Inativo"}
-                                        </Chip>
-                                    </td>
-                                    <td className="px-6 py-4">
-                                        <EntityTitleLink name={race.name} entityType="Raça" />
+                                        <div className="flex items-center gap-3">
+                                            {race.image ? (
+                                                <GlassImage
+                                                    src={race.image}
+                                                    alt={race.name}
+                                                    className={cn("h-10 w-10 shrink-0 rounded-md border", race.status === "inactive" ? "border-white/5 opacity-50" : "border-red-500/20")}
+                                                    imageClassName="object-cover mix-blend-normal"
+                                                    showOverlay={false}
+                                                />
+                                            ) : (
+                                                <div className={cn("p-1.5 rounded-md border bg-red-500/10", race.status === "inactive" ? "border-white/5 opacity-50" : "border-red-500/20")}>
+                                                    <Fingerprint className="h-3.5 w-3.5 text-red-300" />
+                                                </div>
+                                            )}
+                                            <div>
+                                                <EntityTitleLink
+                                                    name={race.name}
+                                                    entityType="Raça"
+                                                    className={cn("text-sm font-medium block", race.status === "inactive" ? "text-white/30" : "text-white/80")}
+                                                />
+                                                <span className="text-[10px] text-white/20 font-mono tracking-tighter truncate max-w-[180px] block">{race.source}</span>
+                                            </div>
+                                        </div>
                                     </td>
                                     <td className="px-6 py-4">
                                         <span className="text-sm text-white/60">{race.size}</span>
@@ -100,6 +120,12 @@ export function RacesTable({ data, isLoading, onEdit, onDelete }: RacesTableProp
                     </tbody>
                 </table>
             </div>
+            <InfiniteScrollSentinel
+                isLoading={isLoading}
+                hasNextPage={hasNextPage}
+                isFetchingNextPage={isFetchingNextPage}
+                onLoadMore={onLoadMore}
+            />
         </div>
     )
 }

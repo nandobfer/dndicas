@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from "next/server"
-import { auth, currentUser } from "@clerk/nextjs/server"
+import { auth } from "@clerk/nextjs/server"
 import { listClasses, createClass } from "@/features/classes/api/classes-service"
 import { classesQuerySchema, createClassSchema } from "@/features/classes/api/validation"
 import type { ClassesFilters, HitDiceType } from "@/features/classes/types/classes.types"
+import { getLocalUserByClerkId } from "@/features/users/api/get-current-user"
 
 /**
  * GET /api/classes
@@ -11,8 +12,8 @@ import type { ClassesFilters, HitDiceType } from "@/features/classes/types/class
 export async function GET(req: NextRequest) {
     try {
         const { userId } = await auth()
-        const user = userId ? await currentUser() : null
-        const isAdmin = user?.publicMetadata?.role === "admin"
+        const user = userId ? await getLocalUserByClerkId(userId) : null
+        const isAdmin = user?.role === "admin"
 
         const url = new URL(req.url)
 
@@ -38,7 +39,7 @@ export async function GET(req: NextRequest) {
         }
 
         const { page, limit, ...filters } = validation.data
-        const result = await listClasses(filters as ClassesFilters, page || 1, limit || 10, true)
+        const result = await listClasses(filters as ClassesFilters, page || 1, limit || 10, isAdmin)
 
         return NextResponse.json(result)
     } catch (error) {
@@ -57,10 +58,10 @@ export async function POST(req: NextRequest) {
 
         if (!userId) return NextResponse.json({ error: "Não autorizado" }, { status: 401 })
 
-        const user = await currentUser()
+        const user = await getLocalUserByClerkId(userId)
         if (!user) return NextResponse.json({ error: "Usuário não encontrado" }, { status: 404 })
 
-        const isAdmin = user.publicMetadata?.role === "admin"
+        const isAdmin = user.role === "admin"
         if (!isAdmin) return NextResponse.json({ error: "Acesso negado. Apenas administradores podem criar classes." }, { status: 403 })
 
         let body

@@ -3,13 +3,13 @@
 import { SearchInput } from "@/components/ui/search-input"
 import { StatusChips, type StatusFilter } from "@/components/ui/status-chips"
 import { GlassInput } from "@/components/ui/glass-input"
+import { OptionAutocomplete } from "@/components/ui/option-autocomplete"
 import { SourceFilter } from "@/components/ui/source-filter"
 import { useAuth } from "@/core/hooks/useAuth"
 import { useIsMobile } from "@/core/hooks/useMediaQuery"
 import { cn } from "@/core/utils"
 import type { MonsterSize, MonsterType } from "../types/monsters.types"
 import { MONSTER_SIZE_OPTIONS, MONSTER_TYPE_OPTIONS } from "./monster-options"
-import { MonsterOptionAutocomplete } from "./monster-option-autocomplete"
 
 export function MonsterFilters({
     filters,
@@ -66,11 +66,11 @@ export function MonsterFilters({
             <div className="flex flex-col sm:flex-row sm:flex-wrap sm:items-center gap-6">
                 <div className="flex flex-col sm:flex-row sm:items-center gap-2 w-full sm:w-auto">
                     <span className="text-[10px] sm:text-xs font-semibold text-white/40 uppercase tracking-wider whitespace-nowrap">Tipo:</span>
-                    <MonsterOptionAutocomplete value={filters.type || []} onChange={(value) => onTypeChange((Array.isArray(value) ? value : value ? [value] : []) as MonsterType[])} options={MONSTER_TYPE_OPTIONS} placeholder="Todos os tipos" title="Filtrar por tipo" className="w-full sm:w-auto" />
+                    <OptionAutocomplete value={filters.type || []} onChange={(value) => onTypeChange((Array.isArray(value) ? value : value ? [value] : []) as MonsterType[])} options={MONSTER_TYPE_OPTIONS} placeholder="Todos os tipos" title="Filtrar por tipo" className="w-full sm:w-auto" />
                 </div>
                 <div className="flex flex-col sm:flex-row sm:items-center gap-2 w-full sm:w-auto">
                     <span className="text-[10px] sm:text-xs font-semibold text-white/40 uppercase tracking-wider whitespace-nowrap">Tamanho:</span>
-                    <MonsterOptionAutocomplete value={filters.size || []} onChange={(value) => onSizeChange((Array.isArray(value) ? value : value ? [value] : []) as MonsterSize[])} options={MONSTER_SIZE_OPTIONS} placeholder="Todos os tamanhos" title="Filtrar por tamanho" className="w-full sm:w-auto" accentClass="amber" />
+                    <OptionAutocomplete value={filters.size || []} onChange={(value) => onSizeChange((Array.isArray(value) ? value : value ? [value] : []) as MonsterSize[])} options={MONSTER_SIZE_OPTIONS} placeholder="Todos os tamanhos" title="Filtrar por tamanho" className="w-full sm:w-auto" accentClass="amber" />
                 </div>
                 <div className="flex items-center gap-3 w-full sm:w-auto">
                     <span className="text-[10px] sm:text-xs font-semibold text-white/40 uppercase tracking-wider whitespace-nowrap">CR:</span>

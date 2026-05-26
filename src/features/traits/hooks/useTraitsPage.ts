@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from 'react';
-import { useTraits, useInfiniteTraits, traitKeys } from './useTraits';
+import { useInfiniteTraits } from './useTraits';
 import { useTraitMutations } from './useTraitMutations';
 import { useDebounce } from '@/core/hooks/useDebounce';
 import { useIsMobile } from '@/core/hooks/useMediaQuery';
@@ -13,10 +13,9 @@ import type { Trait, CreateTraitInput, UpdateTraitInput, TraitFilterParams } fro
  */
 export function useTraitsPage() {
     const isMobile = useIsMobile()
-    const { viewMode, setViewMode, isTable, isDefault } = useViewMode()
+    const { viewMode, setViewMode, isDefault } = useViewMode()
 
     // State
-    const [page, setPage] = React.useState(1)
     const [search, setSearch] = React.useState("")
     const [status, setStatus] = React.useState<TraitFilterParams["status"]>("all")
     const [sources, setSources] = React.useState<string[]>([])
@@ -37,18 +36,10 @@ export function useTraitsPage() {
 
     /**
      * Data Fetching
-     * Uses regular query for table view and infinite query for list/grid view.
+     * Uses infinite query for both table and list/grid views.
      */
 
-    const paginatedData = useTraits(
-        {
-            ...filters,
-            page,
-        },
-        { enabled: isTable },
-    )
-
-    const infiniteData = useInfiniteTraits(filters, { enabled: !isTable })
+    const infiniteData = useInfiniteTraits(filters)
 
     // Mutations
     const { create, update, remove } = useTraitMutations()
@@ -61,17 +52,14 @@ export function useTraitsPage() {
     // Handlers
     const handleSearchChange = (value: string) => {
         setSearch(value)
-        setPage(1)
     }
 
     const handleStatusChange = (value: TraitFilterParams["status"]) => {
         setStatus(value)
-        setPage(1)
     }
 
     const handleSourcesChange = (value: string[]) => {
         setSources(value)
-        setPage(1)
     }
 
     const handleCreateClick = () => {
@@ -117,16 +105,16 @@ export function useTraitsPage() {
         isDefault,
         filters: { search, status, sources },
         pagination: {
-            page,
-            setPage,
-            total: paginatedData.data?.total || 0,
+            page: 1,
+            setPage: () => {},
+            total: infiniteData.data?.pages[0]?.total || 0,
             limit: 10,
         },
         data: {
             paginated: {
-                items: paginatedData.data?.items || [],
-                isLoading: paginatedData.isLoading,
-                isFetching: paginatedData.isFetching,
+                items: [],
+                isLoading: infiniteData.isLoading,
+                isFetching: infiniteData.isFetching,
             },
             infinite: {
                 items: infiniteData.data?.pages.flatMap((page) => page.items) || [],
@@ -135,6 +123,7 @@ export function useTraitsPage() {
                 isFetchingNextPage: infiniteData.isFetchingNextPage,
                 hasNextPage: !!infiniteData.hasNextPage,
                 fetchNextPage: infiniteData.fetchNextPage,
+                total: infiniteData.data?.pages[0]?.total || 0,
             },
         },
         actions: {

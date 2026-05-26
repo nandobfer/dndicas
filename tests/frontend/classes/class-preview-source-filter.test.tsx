@@ -1,5 +1,5 @@
 import type { ComponentPropsWithoutRef, ReactNode } from "react"
-import { render, screen } from "@testing-library/react"
+import { fireEvent, render, screen } from "@testing-library/react"
 import { describe, expect, it, vi } from "vitest"
 
 import { ClassPreview, subclassMatchesSourceFilters } from "@/features/classes/components/class-preview"
@@ -30,11 +30,29 @@ vi.mock("@/components/ui/glass-input", () => ({
 }))
 
 vi.mock("@/components/ui/glass-selector", () => ({
-    GlassSelector: ({ options }: { options: Array<{ value: string; label: string }> }) => (
+    GlassSelector: ({
+        options,
+        value = [],
+        onChange,
+    }: {
+        options: Array<{ value: string; label: string }>
+        value?: string | string[]
+        onChange?: (value: string | string[]) => void
+    }) => (
         <div data-testid="glass-selector">
-            {options.map((option) => (
-                <span key={option.value}>{option.label}</span>
-            ))}
+            {options.map((option) => {
+                const selectedValues = Array.isArray(value) ? value : value ? [value] : []
+                const isSelected = selectedValues.includes(option.value)
+                const nextValue = isSelected
+                    ? selectedValues.filter((selectedValue) => selectedValue !== option.value)
+                    : [...selectedValues, option.value]
+
+                return (
+                    <button key={option.value} type="button" onClick={() => onChange?.(nextValue)}>
+                        {option.label}
+                    </button>
+                )
+            })}
         </div>
     ),
 }))
@@ -67,7 +85,7 @@ vi.mock("@/features/classes/components/class-progression-table", () => ({
 }))
 
 vi.mock("@/features/classes/components/subclass-preview", () => ({
-    SubclassPreview: ({ subclass }: { subclass: Subclass }) => <div>{subclass.name}</div>,
+    SubclassPreview: ({ subclass }: { subclass: Subclass }) => <div data-testid="selected-subclass">{subclass.name}</div>,
 }))
 
 const makeSubclass = (overrides: Partial<Subclass>): Subclass => ({
@@ -151,5 +169,53 @@ describe("ClassPreview source filters", () => {
 
         expect(screen.getByTestId("class-progression-subclasses")).toHaveTextContent("")
         expect(screen.queryByText("Samurai")).not.toBeInTheDocument()
+    })
+
+    it("preselects multiple subclasses from props", () => {
+        render(
+            <ClassPreview
+                characterClass={makeClass([
+                    makeSubclass({ _id: "ldj-sub", name: "Campeão", source: "LDJ pág. 72" }),
+                    makeSubclass({ _id: "xge-sub", name: "Samurai", source: "XGE pág. 31" }),
+                ])}
+                initialSelectedSubclassIds={["ldj-sub", "xge-sub"]}
+            />,
+        )
+
+        expect(screen.getByTestId("class-progression-subclasses")).toHaveTextContent("Campeão,Samurai")
+        expect(screen.getAllByTestId("selected-subclass")).toHaveLength(2)
+    })
+
+    it("updates the selected subclasses and emits the callback when the selection changes", () => {
+        const onSelectedSubclassIdsChange = vi.fn()
+
+        render(
+            <ClassPreview
+                characterClass={makeClass([
+                    makeSubclass({ _id: "ldj-sub", name: "Campeão", source: "LDJ pág. 72" }),
+                    makeSubclass({ _id: "xge-sub", name: "Samurai", source: "XGE pág. 31" }),
+                ])}
+                onSelectedSubclassIdsChange={onSelectedSubclassIdsChange}
+            />,
+        )
+
+        fireEvent.click(screen.getByRole("button", { name: "Samurai" }))
+
+        expect(onSelectedSubclassIdsChange).toHaveBeenCalledWith(["xge-sub"])
+        expect(screen.getByTestId("class-progression-subclasses")).toHaveTextContent("Samurai")
+    })
+
+    it("synchronizes internal selection when the initial props change", () => {
+        const characterClass = makeClass([
+            makeSubclass({ _id: "ldj-sub", name: "Campeão", source: "LDJ pág. 72" }),
+            makeSubclass({ _id: "xge-sub", name: "Samurai", source: "XGE pág. 31" }),
+        ])
+        const { rerender } = render(<ClassPreview characterClass={characterClass} initialSelectedSubclassIds={["ldj-sub"]} />)
+
+        expect(screen.getByTestId("class-progression-subclasses")).toHaveTextContent("Campeão")
+
+        rerender(<ClassPreview characterClass={characterClass} initialSelectedSubclassIds={["xge-sub"]} />)
+
+        expect(screen.getByTestId("class-progression-subclasses")).toHaveTextContent("Samurai")
     })
 })

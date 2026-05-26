@@ -12,10 +12,10 @@ import { MoreHorizontal, Pencil, Trash2, Wand, Eye } from 'lucide-react';
 import { useAuth } from '@/core/hooks/useAuth';
 import { cn } from '@/core/utils';
 import { GlassCard } from '@/components/ui/glass-card';
-import { Chip } from '@/components/ui/chip';
+import { GlassImage } from '@/components/ui/glass-image';
 import { LoadingState } from '@/components/ui/loading-state';
 import { EmptyState } from '@/components/ui/empty-state';
-import { DataTablePagination } from '@/components/ui/data-table-pagination';
+import { InfiniteScrollSentinel } from '@/components/ui/infinite-scroll-sentinel';
 import {
   GlassDropdownMenu,
   GlassDropdownMenuContent,
@@ -34,37 +34,29 @@ import { motionConfig } from "@/lib/config/motion-configs"
 import { spellComponentConfig } from "@/lib/config/colors"
 import type { Spell } from "../types/spells.types"
 
-const spellStatusVariantMap: Record<string, "uncommon" | "common"> = {
-    active: "uncommon",
-    inactive: "common",
-}
-
 export interface SpellsTableProps {
     /** Array of spells to display */
     spells: Spell[]
     /** Total number of spells (for pagination) */
     total: number
-    /** Current page number */
-    page: number
-    /** Items per page */
-    limit: number
     /** Loading state */
     isLoading?: boolean
+    hasNextPage?: boolean
+    isFetchingNextPage?: boolean
     /** Whether filters are currently active */
     hasActiveFilters?: boolean
     /** Edit handler (admin only) */
     onEdit: (spell: Spell) => void
     /** Delete handler (admin only) */
     onDelete: (spell: Spell) => void
-    /** Page change handler */
-    onPageChange: (page: number) => void
+    onLoadMore?: () => void
 }
 
 /**
  * Spells Table Component
  *
- * Displays a paginated table of spells with:
- * - Status chip (admin only)
+ * Displays an infinite scrolling table of spells with:
+ * - Visual identity cell with image fallback
  * - Circle chip with rarity color
  * - Spell name
  * - School chip with mapped color
@@ -74,24 +66,9 @@ export interface SpellsTableProps {
  * - Description preview
  * - Preview button with tooltip
  * - Actions dropdown (admin only)
- *
- * @example
- * ```tsx
- * <SpellsTable
- *   spells={data?.spells || []}
- *   total={data?.total || 0}
- *   page={page}
- *   limit={limit}
- *   isLoading={isLoading}
- *   onEdit={handleEdit}
- *   onDelete={handleDelete}
- *   onPageChange={setPage}
- * />
- * ```
  */
-export function SpellsTable({ spells, total, page, limit, isLoading = false, hasActiveFilters = false, onEdit, onDelete, onPageChange }: SpellsTableProps) {
+export function SpellsTable({ spells, total, isLoading = false, hasNextPage = false, isFetchingNextPage = false, hasActiveFilters = false, onEdit, onDelete, onLoadMore }: SpellsTableProps) {
     const { isAdmin } = useAuth()
-    const totalPages = Math.ceil(total / limit)
 
     if (isLoading && spells.length === 0) {
         return (
@@ -115,11 +92,11 @@ export function SpellsTable({ spells, total, page, limit, isLoading = false, has
                 />
             </GlassCard>
         )
-        {
-            /* Result Count */
-        }
-        {
-            total > 0 && (
+    }
+
+    return (
+        <GlassCard className="overflow-hidden">
+            {total > 0 && (
                 <div className="px-6 py-3 border-b border-white/5 bg-white/5">
                     <p className="text-sm text-white/60">
                         {hasActiveFilters ? (
@@ -133,20 +110,14 @@ export function SpellsTable({ spells, total, page, limit, isLoading = false, has
                         )}
                     </p>
                 </div>
-            )
-        }
-    }
-
-    return (
-        <GlassCard className="overflow-hidden">
+            )}
             <div className="overflow-x-auto">
                 <table className="w-full">
                     <thead>
                         <tr className="border-b border-white/5 bg-white/5">
-                            <th className="px-6 py-4 text-left text-xs font-semibold text-white/50 uppercase tracking-wider w-[100px]">Status</th>
+                            <th className="px-6 py-4 text-left text-xs font-semibold text-white/50 uppercase tracking-wider">Magia</th>
                             <th className="px-6 py-4 text-left text-xs font-semibold text-white/50 uppercase tracking-wider w-[120px]">Círculo</th>
                             <th className="px-6 py-4 text-left text-xs font-semibold text-white/50 uppercase tracking-wider w-[140px]">Escola</th>
-                            <th className="px-6 py-4 text-left text-xs font-semibold text-white/50 uppercase tracking-wider">Nome</th>
                             <th className="px-6 py-4 text-left text-xs font-semibold text-white/50 uppercase tracking-wider w-[200px]">Componentes</th>
                             <th className="px-6 py-4 text-left text-xs font-semibold text-white/50 uppercase tracking-wider w-[120px]">Resistência</th>
                             <th className="px-6 py-4 text-left text-xs font-semibold text-white/50 uppercase tracking-wider w-[100px]">Dado Base</th>
@@ -167,9 +138,31 @@ export function SpellsTable({ spells, total, page, limit, isLoading = false, has
                                     transition={{ delay: index * 0.05 }}
                                     className="group hover:bg-white/5 transition-colors"
                                 >
-                                    {/* Status */}
-                                    <td className="px-6 py-4 whitespace-nowrap">
-                                        <Chip variant={spellStatusVariantMap[spell.status] || "common"}>{spell.status === "active" ? "Ativo" : "Inativo"}</Chip>
+                                    {/* Identity */}
+                                    <td className="px-6 py-4">
+                                        <div className="flex items-center gap-3">
+                                            {spell.image ? (
+                                                <GlassImage
+                                                    src={spell.image}
+                                                    alt={spell.name}
+                                                    className={cn("h-10 w-10 shrink-0 rounded-md border", spell.status === "inactive" ? "border-white/5 opacity-50" : "border-purple-500/20")}
+                                                    imageClassName="object-cover mix-blend-normal"
+                                                    showOverlay={false}
+                                                />
+                                            ) : (
+                                                <div className={cn("p-1.5 rounded-md border bg-purple-500/10", spell.status === "inactive" ? "border-white/5 opacity-50" : "border-purple-500/20")}>
+                                                    <Wand className="h-3.5 w-3.5 text-purple-300" />
+                                                </div>
+                                            )}
+                                            <div>
+                                                <EntityTitleLink
+                                                    name={spell.name}
+                                                    entityType="Magia"
+                                                    className={cn("text-sm font-medium block", spell.status === "inactive" ? "text-white/30" : "text-white/80")}
+                                                />
+                                                <span className="text-[10px] text-white/20 font-mono tracking-tighter truncate max-w-[180px] block">{spell.source}</span>
+                                            </div>
+                                        </div>
                                     </td>
 
                                     {/* Circle */}
@@ -180,11 +173,6 @@ export function SpellsTable({ spells, total, page, limit, isLoading = false, has
                                     {/* School */}
                                     <td className="px-6 py-4 whitespace-nowrap">
                                         <GlassSpellSchool school={spell.school} />
-                                    </td>
-
-                                    {/* Name */}
-                                    <td className="px-6 py-4">
-                                        <EntityTitleLink name={spell.name} entityType="Magia" />
                                     </td>
 
                                     {/* Components */}
@@ -259,10 +247,13 @@ export function SpellsTable({ spells, total, page, limit, isLoading = false, has
                 </table>
             </div>
 
-            {/* Pagination */}
-            <div className="p-4 border-t border-white/5">
-                <DataTablePagination page={page} totalPages={totalPages} total={total} limit={limit} onPageChange={onPageChange} itemLabel="magias" />
-            </div>
+            <InfiniteScrollSentinel
+                isLoading={isLoading}
+                hasNextPage={hasNextPage}
+                isFetchingNextPage={isFetchingNextPage}
+                onLoadMore={onLoadMore}
+                className="py-8 flex justify-center w-full border-t border-white/5"
+            />
         </GlassCard>
     )
 }
