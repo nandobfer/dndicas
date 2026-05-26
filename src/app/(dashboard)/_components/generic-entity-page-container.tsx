@@ -33,9 +33,12 @@ import { DeleteSpellDialog } from "@/features/spells/components/delete-spell-dia
 import { useItemsPage } from "@/features/items/hooks/useItemsPage"
 import { ItemFormModal } from "@/features/items/components/item-form-modal"
 import { DeleteItemDialog } from "@/features/items/components/delete-item-dialog"
+import { useMonstersPage } from "@/features/monsters/hooks/useMonstersPage"
+import { MonsterFormModal } from "@/features/monsters/components/monster-form-modal"
+import { DeleteMonsterDialog } from "@/features/monsters/components/delete-monster-dialog"
 
 interface GenericEntityPageProps {
-    entityTypeKey: "Regra" | "Habilidade" | "Talento" | "Magia" | "Classe" | "Origem" | "Raça" | "Item"
+    entityTypeKey: "Regra" | "Habilidade" | "Talento" | "Magia" | "Classe" | "Origem" | "Raça" | "Item" | "Monstro"
 }
 
 export default function GenericEntityPage({ entityTypeKey }: GenericEntityPageProps) {
@@ -58,6 +61,7 @@ export default function GenericEntityPage({ entityTypeKey }: GenericEntityPagePr
     const backgroundsPage = useBackgroundsPage()
     const racesPage = useRacesPage()
     const itemsPage = useItemsPage()
+    const monstersPage = useMonstersPage()
 
     const queryKey = [entityTypeKey.toLowerCase(), slug]
 
@@ -71,6 +75,7 @@ export default function GenericEntityPage({ entityTypeKey }: GenericEntityPagePr
         Origem: backgroundsPage,
         Raça: racesPage,
         Item: itemsPage,
+        Monstro: monstersPage,
     }
 
     const currentPage = hookMap[entityTypeKey]
@@ -87,6 +92,7 @@ export default function GenericEntityPage({ entityTypeKey }: GenericEntityPagePr
         Item: "items",
         Origem: "backgrounds",
         Raça: "races",
+        Monstro: "monsters",
     }
 
     // Wrap the submit handler to invalidate the query and handle slug changes
@@ -334,6 +340,30 @@ export default function GenericEntityPage({ entityTypeKey }: GenericEntityPagePr
                             await itemsPage.modals.closeAll()
                             queryClient.invalidateQueries({ queryKey })
                             router.push("/items")
+                        }}
+                    />
+                </>
+            )}
+
+            {entityTypeKey === "Monstro" && (
+                <>
+                    <MonsterFormModal
+                        monster={monstersPage.modals.selectedMonster}
+                        isOpen={monstersPage.modals.isFormOpen}
+                        onClose={() => monstersPage.modals.setIsFormOpen(false)}
+                        onSuccess={() => {
+                            monstersPage.modals.setIsFormOpen(false)
+                            queryClient.invalidateQueries({ queryKey })
+                        }}
+                    />
+                    <DeleteMonsterDialog
+                        monster={monstersPage.modals.selectedMonster}
+                        isOpen={monstersPage.modals.isDeleteOpen}
+                        onClose={() => monstersPage.modals.setIsDeleteOpen(false)}
+                        onConfirm={async () => {
+                            await monstersPage.modals.closeAll()
+                            queryClient.invalidateQueries({ queryKey })
+                            router.push("/monsters")
                         }}
                     />
                 </>

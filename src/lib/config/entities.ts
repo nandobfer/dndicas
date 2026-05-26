@@ -204,6 +204,30 @@ export const ENTITY_PROVIDERS: EntityProvider[] = [
             status: item.status || "active",
         }),
     },
+    {
+        name: "Monstro",
+        label: "Monstros",
+        endpoint: () => `/api/monsters/search`,
+        map: (item: any): UnifiedEntity => ({
+            id: item._id || item.id,
+            _id: item._id,
+            name: item.name,
+            originalName: item.originalName,
+            label: item.name,
+            type: "Monstro",
+            description: item.description,
+            image: item.image,
+            source: item.source,
+            status: item.status || "active",
+            metadata: {
+                monsterType: item.type,
+                size: item.size,
+                challengeRating: item.challengeRating,
+                armorClass: item.armorClass,
+                hitPointsFormula: item.hitPointsFormula,
+            },
+        }),
+    },
 ]
 
 export const entityConfig = ENTITY_PROVIDERS.reduce((acc, provider) => {

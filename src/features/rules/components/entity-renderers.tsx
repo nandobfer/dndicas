@@ -7,12 +7,14 @@ import { SubclassPreview } from "@/features/classes/components/subclass-preview"
 import { BackgroundPreview } from "@/features/backgrounds/components/background-preview"
 import { RacePreview } from "@/features/races/components/race-preview"
 import { ItemPreview } from "@/features/items/components/item-preview"
+import { MonsterPreview } from "@/features/monsters/components/monster-preview"
 import { fetchTraitById } from "@/features/traits/api/traits-api"
 import { fetchSpell } from "@/features/spells/api/spells-api"
 import { fetchFeat } from "@/features/feats/api/feats-api"
 import { fetchItemById } from "@/features/items/api/items-api"
+import { fetchMonsterById } from "@/features/monsters/api/monsters-api"
 import { LoadingState } from "@/components/ui/loading-state"
-import { Wand, GraduationCap, Star, Backpack, ScrollText } from "lucide-react"
+import { Wand, GraduationCap, Star, Backpack, ScrollText, Skull } from "lucide-react"
 import type { CharacterClass as CharacterClassType } from "@/features/classes/types/classes.types"
 
 /**
@@ -29,6 +31,7 @@ export const ENTITY_RENDERERS: Record<string, (item: any, options?: { showStatus
     Origem: (idOrItem, opts) => <BackgroundAsyncRenderer item={idOrItem} />,
     Raça: (idOrItem, opts) => <RaceAsyncRenderer item={idOrItem} />,
     Item: (idOrItem, opts) => <ItemAsyncRenderer item={idOrItem} showStatus={opts?.showStatus ?? true} hideStatusChip={opts?.hideStatusChip} hideActionIcons={opts?.hideActionIcons} />,
+    Monstro: (idOrItem, opts) => <MonsterAsyncRenderer item={idOrItem} showStatus={opts?.showStatus ?? true} hideStatusChip={opts?.hideStatusChip} hideActionIcons={opts?.hideActionIcons} />,
 }
 
 function parseSubclassSearchId(id: string) {
@@ -135,6 +138,49 @@ function ItemAsyncRenderer({ item, showStatus = true, hideStatusChip, hideAction
     return (
         <div className="p-4">
             <ItemPreview item={itemData} showStatus={showStatus} hideStatusChip={hideStatusChip} hideActionIcons={hideActionIcons} />
+        </div>
+    )
+}
+
+function MonsterAsyncRenderer({ item, showStatus = true, hideStatusChip, hideActionIcons }: { item: any; showStatus?: boolean; hideStatusChip?: boolean; hideActionIcons?: boolean }) {
+    const [monsterData, setMonsterData] = React.useState<any>(null)
+    const [loading, setLoading] = React.useState(true)
+    const id = typeof item === "string" ? item : item?._id || item?.id
+
+    React.useEffect(() => {
+        if (item && typeof item === "object" && (item.challengeRating || item.description)) {
+            setMonsterData(item)
+            setLoading(false)
+            return
+        }
+        if (!id) {
+            setLoading(false)
+            return
+        }
+        fetchMonsterById(id)
+            .then(setMonsterData)
+            .catch(console.error)
+            .finally(() => setLoading(false))
+    }, [id, item])
+
+    if (loading)
+        return (
+            <div className="p-8 flex flex-col items-center justify-center gap-3 bg-white/[0.02] rounded-xl border border-white/5 animate-in fade-in duration-300">
+                <LoadingState variant="spinner" size="md" />
+                <span className="text-[10px] uppercase font-bold tracking-widest text-white/20">Buscando Monstro...</span>
+            </div>
+        )
+    if (!monsterData)
+        return (
+            <div className="p-8 flex flex-col items-center justify-center gap-3 bg-white/[0.02] rounded-xl border border-white/5 text-center">
+                <Skull className="h-8 w-8 text-white/10" />
+                <p className="text-xs text-white/20 italic">Monstro não encontrado</p>
+            </div>
+        )
+
+    return (
+        <div className="p-4">
+            <MonsterPreview monster={monsterData} showStatus={showStatus} hideStatusChip={hideStatusChip} hideActionIcons={hideActionIcons} />
         </div>
     )
 }
