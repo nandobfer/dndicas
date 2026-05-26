@@ -1,7 +1,7 @@
 "use client"
 
 import * as React from "react"
-import { useParams, useRouter, useSearchParams } from "next/navigation"
+import { useParams, usePathname, useRouter, useSearchParams } from "next/navigation"
 import { useQuery, useQueryClient } from "@tanstack/react-query"
 import { EntityPage } from "@/features/rules/components/entity-page"
 import { entityConfig } from "@/lib/config/entities"
@@ -43,13 +43,17 @@ interface GenericEntityPageProps {
 
 export default function GenericEntityPage({ entityTypeKey }: GenericEntityPageProps) {
     const params = useParams()
+    const pathname = usePathname()
     const router = useRouter()
     const searchParams = useSearchParams()
     const queryClient = useQueryClient()
     const { addWindow } = useWindows()
     const { isAdmin } = useAuth()
     const slug = params.slug as string
-    const selectedSubclassId = searchParams.get("subclass") || undefined
+    const selectedSubclassIds = React.useMemo(() => {
+        const subclassIds = searchParams.getAll("subclass").filter((subclassId) => subclassId.length > 0)
+        return Array.from(new Set(subclassIds))
+    }, [searchParams])
     const config = entityConfig[entityTypeKey]
 
     // Initialize hooks to get modal actions
@@ -95,6 +99,26 @@ export default function GenericEntityPage({ entityTypeKey }: GenericEntityPagePr
         Monstro: "monsters",
     }
     const backHref = `/${routeMap[entityTypeKey]}`
+
+    const handleSelectedSubclassIdsChange = React.useCallback(
+        (subclassIds: string[]) => {
+            if (entityTypeKey !== "Classe") {
+                return
+            }
+
+            const params = new URLSearchParams(searchParams.toString())
+            params.delete("subclass")
+
+            subclassIds.forEach((subclassId) => {
+                params.append("subclass", subclassId)
+            })
+
+            const queryString = params.toString()
+            const nextUrl = queryString ? `${pathname}?${queryString}` : pathname
+            router.replace(nextUrl, { scroll: false })
+        },
+        [entityTypeKey, pathname, router, searchParams],
+    )
 
     // Wrap the submit handler to invalidate the query and handle slug changes
     const handleWrappedSubmit = async (originalSubmit: Function, formData: any) => {
@@ -172,7 +196,13 @@ export default function GenericEntityPage({ entityTypeKey }: GenericEntityPagePr
         enabled: !!slug && !!config.provider,
     })
 
-    const renderOptions = entityTypeKey === "Classe" && selectedSubclassId ? { initialSelectedSubclassIds: [selectedSubclassId] } : undefined
+    const renderOptions =
+        entityTypeKey === "Classe"
+            ? {
+                  initialSelectedSubclassIds: selectedSubclassIds,
+                  onSelectedSubclassIdsChange: handleSelectedSubclassIdsChange,
+              }
+            : undefined
 
     return (
         <>

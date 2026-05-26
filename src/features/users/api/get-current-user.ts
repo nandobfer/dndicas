@@ -46,6 +46,17 @@ function convertCurrentUser(user: Awaited<ReturnType<typeof currentUser>>): Cler
 }
 
 /**
+ * Get a local MongoDB user document by Clerk ID without calling Clerk's Backend API.
+ *
+ * @param clerkId - Clerk user ID
+ * @returns The local user document if found
+ */
+export async function getLocalUserByClerkId(clerkId: string): Promise<IUser | null> {
+  await dbConnect()
+  return User.findByClerkId(clerkId)
+}
+
+/**
  * Get the current authenticated user from MongoDB.
  * Creates the user if they don't exist (fallback sync).
  *

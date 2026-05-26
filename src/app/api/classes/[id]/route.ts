@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server"
-import { auth, currentUser } from "@clerk/nextjs/server"
+import { auth } from "@clerk/nextjs/server"
 import { getClassById, updateClass, deleteClass } from "@/features/classes/api/classes-service"
 import { updateClassSchema } from "@/features/classes/api/validation"
+import { getLocalUserByClerkId } from "@/features/users/api/get-current-user"
 
 /**
  * GET /api/classes/[id]
@@ -10,8 +11,8 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
     try {
         const { id } = await params
         const { userId } = await auth()
-        const user = userId ? await currentUser() : null
-        const isAdmin = user?.publicMetadata?.role === "admin"
+        const user = userId ? await getLocalUserByClerkId(userId) : null
+        const isAdmin = user?.role === "admin"
 
         const doc = await getClassById(id, isAdmin)
         if (!doc) return NextResponse.json({ error: "Classe não encontrada" }, { status: 404 })
@@ -34,10 +35,10 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
         const { userId } = await auth()
         if (!userId) return NextResponse.json({ error: "Não autorizado" }, { status: 401 })
 
-        const user = await currentUser()
+        const user = await getLocalUserByClerkId(userId)
         if (!user) return NextResponse.json({ error: "Usuário não encontrado" }, { status: 404 })
 
-        const isAdmin = user.publicMetadata?.role === "admin"
+        const isAdmin = user.role === "admin"
         if (!isAdmin) return NextResponse.json({ error: "Acesso negado. Apenas administradores podem editar classes." }, { status: 403 })
 
         const { id } = await params
@@ -83,10 +84,10 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
         const { userId } = await auth()
         if (!userId) return NextResponse.json({ error: "Não autorizado" }, { status: 401 })
 
-        const user = await currentUser()
+        const user = await getLocalUserByClerkId(userId)
         if (!user) return NextResponse.json({ error: "Usuário não encontrado" }, { status: 404 })
 
-        const isAdmin = user.publicMetadata?.role === "admin"
+        const isAdmin = user.role === "admin"
         if (!isAdmin) return NextResponse.json({ error: "Acesso negado. Apenas administradores podem excluir classes." }, { status: 403 })
 
         const { id } = await params

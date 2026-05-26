@@ -19,6 +19,10 @@ vi.mock('@/components/ui/glass-dropdown-menu', () => ({
     GlassDropdownMenuItem: ({ children, ...props }: React.HTMLAttributes<HTMLDivElement>) => <div {...props}>{children}</div>,
 }))
 
+vi.mock('@/components/ui/glass-image', () => ({
+    GlassImage: ({ src, alt, className }: { src: string; alt: string; className?: string }) => <img src={src} alt={alt} className={className} />,
+}))
+
 const baseItem: Item = {
     _id: 'item-1',
     id: 'item-1',
@@ -68,9 +72,17 @@ describe('ItemsTable', () => {
     })
 
     it('renders items with the infinite scroll end state', () => {
-        render(<ItemsTable items={[baseItem]} />)
+        render(<ItemsTable items={[{ ...baseItem, image: '/longsword.png' }]} />)
 
+        expect(screen.getByRole('img', { name: 'Espada Longa' })).toHaveAttribute('src', '/longsword.png')
         expect(screen.getByText('Espada Longa')).toBeInTheDocument()
         expect(screen.getByText('Fim da lista')).toBeInTheDocument()
+    })
+
+    it('falls back to the item type icon when there is no image', () => {
+        render(<ItemsTable items={[baseItem]} />)
+
+        expect(screen.queryByRole('img', { name: 'Espada Longa' })).not.toBeInTheDocument()
+        expect(screen.getByText('Espada Longa')).toBeInTheDocument()
     })
 })

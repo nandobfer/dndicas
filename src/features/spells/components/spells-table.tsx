@@ -12,7 +12,7 @@ import { MoreHorizontal, Pencil, Trash2, Wand, Eye } from 'lucide-react';
 import { useAuth } from '@/core/hooks/useAuth';
 import { cn } from '@/core/utils';
 import { GlassCard } from '@/components/ui/glass-card';
-import { Chip } from '@/components/ui/chip';
+import { GlassImage } from '@/components/ui/glass-image';
 import { LoadingState } from '@/components/ui/loading-state';
 import { EmptyState } from '@/components/ui/empty-state';
 import { InfiniteScrollSentinel } from '@/components/ui/infinite-scroll-sentinel';
@@ -33,11 +33,6 @@ import { EntityTitleLink } from "@/features/rules/components/entity-title-link"
 import { motionConfig } from "@/lib/config/motion-configs"
 import { spellComponentConfig } from "@/lib/config/colors"
 import type { Spell } from "../types/spells.types"
-
-const spellStatusVariantMap: Record<string, "uncommon" | "common"> = {
-    active: "uncommon",
-    inactive: "common",
-}
 
 export interface SpellsTableProps {
     /** Array of spells to display */
@@ -60,8 +55,8 @@ export interface SpellsTableProps {
 /**
  * Spells Table Component
  *
- * Displays a paginated table of spells with:
- * - Status chip (admin only)
+ * Displays an infinite scrolling table of spells with:
+ * - Visual identity cell with image fallback
  * - Circle chip with rarity color
  * - Spell name
  * - School chip with mapped color
@@ -120,10 +115,9 @@ export function SpellsTable({ spells, total, isLoading = false, hasNextPage = fa
                 <table className="w-full">
                     <thead>
                         <tr className="border-b border-white/5 bg-white/5">
-                            <th className="px-6 py-4 text-left text-xs font-semibold text-white/50 uppercase tracking-wider w-[100px]">Status</th>
+                            <th className="px-6 py-4 text-left text-xs font-semibold text-white/50 uppercase tracking-wider">Magia</th>
                             <th className="px-6 py-4 text-left text-xs font-semibold text-white/50 uppercase tracking-wider w-[120px]">Círculo</th>
                             <th className="px-6 py-4 text-left text-xs font-semibold text-white/50 uppercase tracking-wider w-[140px]">Escola</th>
-                            <th className="px-6 py-4 text-left text-xs font-semibold text-white/50 uppercase tracking-wider">Nome</th>
                             <th className="px-6 py-4 text-left text-xs font-semibold text-white/50 uppercase tracking-wider w-[200px]">Componentes</th>
                             <th className="px-6 py-4 text-left text-xs font-semibold text-white/50 uppercase tracking-wider w-[120px]">Resistência</th>
                             <th className="px-6 py-4 text-left text-xs font-semibold text-white/50 uppercase tracking-wider w-[100px]">Dado Base</th>
@@ -144,9 +138,31 @@ export function SpellsTable({ spells, total, isLoading = false, hasNextPage = fa
                                     transition={{ delay: index * 0.05 }}
                                     className="group hover:bg-white/5 transition-colors"
                                 >
-                                    {/* Status */}
-                                    <td className="px-6 py-4 whitespace-nowrap">
-                                        <Chip variant={spellStatusVariantMap[spell.status] || "common"}>{spell.status === "active" ? "Ativo" : "Inativo"}</Chip>
+                                    {/* Identity */}
+                                    <td className="px-6 py-4">
+                                        <div className="flex items-center gap-3">
+                                            {spell.image ? (
+                                                <GlassImage
+                                                    src={spell.image}
+                                                    alt={spell.name}
+                                                    className={cn("h-10 w-10 shrink-0 rounded-md border", spell.status === "inactive" ? "border-white/5 opacity-50" : "border-purple-500/20")}
+                                                    imageClassName="object-cover mix-blend-normal"
+                                                    showOverlay={false}
+                                                />
+                                            ) : (
+                                                <div className={cn("p-1.5 rounded-md border bg-purple-500/10", spell.status === "inactive" ? "border-white/5 opacity-50" : "border-purple-500/20")}>
+                                                    <Wand className="h-3.5 w-3.5 text-purple-300" />
+                                                </div>
+                                            )}
+                                            <div>
+                                                <EntityTitleLink
+                                                    name={spell.name}
+                                                    entityType="Magia"
+                                                    className={cn("text-sm font-medium block", spell.status === "inactive" ? "text-white/30" : "text-white/80")}
+                                                />
+                                                <span className="text-[10px] text-white/20 font-mono tracking-tighter truncate max-w-[180px] block">{spell.source}</span>
+                                            </div>
+                                        </div>
                                     </td>
 
                                     {/* Circle */}
@@ -157,11 +173,6 @@ export function SpellsTable({ spells, total, isLoading = false, hasNextPage = fa
                                     {/* School */}
                                     <td className="px-6 py-4 whitespace-nowrap">
                                         <GlassSpellSchool school={spell.school} />
-                                    </td>
-
-                                    {/* Name */}
-                                    <td className="px-6 py-4">
-                                        <EntityTitleLink name={spell.name} entityType="Magia" />
                                     </td>
 
                                     {/* Components */}

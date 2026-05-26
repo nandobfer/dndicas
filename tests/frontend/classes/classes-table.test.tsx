@@ -13,6 +13,10 @@ vi.mock('@/core/hooks/useAuth', () => ({
     useAuth: () => ({ isAdmin: false }),
 }))
 
+vi.mock('@/components/ui/glass-image', () => ({
+    GlassImage: ({ src, alt, className }: { src: string; alt: string; className?: string }) => <img src={src} alt={alt} className={className} />,
+}))
+
 vi.mock('framer-motion', () => ({
     AnimatePresence: ({ children }: { children: ReactNode }) => <>{children}</>,
     motion: {
@@ -92,12 +96,22 @@ describe('ClassesTable', () => {
         vi.unstubAllGlobals()
     })
 
-    it('renders table rows with an infinite scroll sentinel instead of pagination', () => {
-        render(<ClassesTable classes={[baseClass]} total={1} onEdit={vi.fn()} onDelete={vi.fn()} />)
+    it('renders table rows with an image identity cell and an infinite scroll sentinel', () => {
+        render(<ClassesTable classes={[{ ...baseClass, image: '/fighter.png' }]} total={1} onEdit={vi.fn()} onDelete={vi.fn()} />)
 
+        expect(screen.getByRole('img', { name: 'Guerreiro' })).toHaveAttribute('src', '/fighter.png')
         expect(screen.getByRole('link', { name: 'Guerreiro' })).toHaveAttribute('href', '/classes/guerreiro')
         expect(screen.getByText('Fim da lista')).toBeInTheDocument()
+        expect(screen.queryByText('Status')).not.toBeInTheDocument()
+        expect(screen.queryByText('Ativo')).not.toBeInTheDocument()
         expect(screen.queryByText('Próxima')).not.toBeInTheDocument()
+    })
+
+    it('falls back to the class icon when there is no image', () => {
+        render(<ClassesTable classes={[baseClass]} total={1} onEdit={vi.fn()} onDelete={vi.fn()} />)
+
+        expect(screen.queryByRole('img', { name: 'Guerreiro' })).not.toBeInTheDocument()
+        expect(screen.getByRole('link', { name: 'Guerreiro' })).toBeInTheDocument()
     })
 
     it('loads the next page when the table sentinel intersects', () => {

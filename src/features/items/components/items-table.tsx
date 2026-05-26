@@ -8,6 +8,7 @@ import * as React from "react"
 import { motion } from "framer-motion"
 import { Backpack, MoreHorizontal, Pencil, Trash2, Shield, Sword, Hammer, Package, Coins, Anchor, type LucideIcon } from "lucide-react"
 import { Chip } from "@/components/ui/chip"
+import { GlassImage } from "@/components/ui/glass-image"
 import { GlassLevelChip } from "@/components/ui/glass-level-chip"
 import { GlassDiceValue } from "@/components/ui/glass-dice-value"
 import { GlassDropdownMenu, GlassDropdownMenuTrigger, GlassDropdownMenuContent, GlassDropdownMenuItem } from "@/components/ui/glass-dropdown-menu"
@@ -74,14 +75,24 @@ export function ItemsTable({ items, isLoading = false, hasNextPage = false, isFe
                             <tr key={item.id || item._id} className="group hover:bg-white/[0.02] transition-colors">
                             <td className="px-4 py-3">
                                 <div className="flex items-center gap-3">
-                                    <div className={cn(
-                                        "p-1.5 rounded-md border bg-white/[0.03]",
-                                        item.status === 'inactive' ? "border-white/5 opacity-50" : "border-white/10"
-                                    )}>
-                                        {React.createElement(TYPE_ICONS[item.type] || Backpack, {
-                                            className: "h-3.5 w-3.5 text-slate-400"
-                                        })}
-                                    </div>
+                                    {item.image ? (
+                                        <GlassImage
+                                            src={item.image}
+                                            alt={item.name}
+                                            className={cn("h-10 w-10 shrink-0 rounded-md border", item.status === "inactive" ? "border-white/5 opacity-50" : "border-slate-500/20")}
+                                            imageClassName="object-cover mix-blend-normal"
+                                            showOverlay={false}
+                                        />
+                                    ) : (
+                                        <div className={cn(
+                                            "p-1.5 rounded-md border bg-white/[0.03]",
+                                            item.status === 'inactive' ? "border-white/5 opacity-50" : "border-white/10"
+                                        )}>
+                                            {React.createElement(TYPE_ICONS[item.type] || Backpack, {
+                                                className: "h-3.5 w-3.5 text-slate-400"
+                                            })}
+                                        </div>
+                                    )}
                                     <div>
                                         <span className={cn(
                                             "text-sm font-medium block",

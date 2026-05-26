@@ -25,7 +25,14 @@ interface EntityPageProps {
     onDelete?: (item: any) => void
     /** Whether to hide action icons (like open in window) when already in a page */
     hideActionIcons?: boolean
-    renderOptions?: { showStatus?: boolean; hideStatusChip?: boolean; hideActionIcons?: boolean; initialSelectedSubclassIds?: string[] }
+    renderOptions?: {
+        showStatus?: boolean
+        hideStatusChip?: boolean
+        hideActionIcons?: boolean
+        initialSelectedSubclassIds?: string[]
+        sourceFilters?: string[]
+        onSelectedSubclassIdsChange?: (subclassIds: string[]) => void
+    }
     backHref?: string
 }
 

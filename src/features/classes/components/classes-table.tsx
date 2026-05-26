@@ -5,7 +5,7 @@ import { MoreHorizontal, Pencil, Trash2, GraduationCap, Sword, TableProperties }
 import { useAuth } from "@/core/hooks/useAuth"
 import { cn } from "@/core/utils"
 import { GlassCard } from "@/components/ui/glass-card"
-import { Chip } from "@/components/ui/chip"
+import { GlassImage } from "@/components/ui/glass-image"
 import { LoadingState } from "@/components/ui/loading-state"
 import { EmptyState } from "@/components/ui/empty-state"
 import { InfiniteScrollSentinel } from "@/components/ui/infinite-scroll-sentinel"
@@ -22,11 +22,6 @@ import { motionConfig } from "@/lib/config/motion-configs"
 import { diceColors } from "@/lib/config/colors"
 import { ClassProgressionTable } from "./class-progression-table"
 import type { CharacterClass } from "../types/classes.types"
-
-const classStatusVariantMap: Record<string, "uncommon" | "common"> = {
-    active: "uncommon",
-    inactive: "common",
-}
 
 const spellcastingColorMap: Record<string, string> = {
     true: "text-amber-400",
@@ -95,14 +90,13 @@ export function ClassesTable({ classes, total, isLoading = false, hasNextPage = 
                 <table className="w-full">
                     <thead>
                         <tr className="border-b border-white/5 bg-white/5">
-                            <th className="px-6 py-4 text-left text-xs font-semibold text-white/50 uppercase tracking-wider w-[100px]">Status</th>
-                            <th className="px-6 py-4 text-left text-xs font-semibold text-white/50 uppercase tracking-wider w-[80px]">Dado</th>
                             <th className="px-6 py-4 text-left text-xs font-semibold text-white/50 uppercase tracking-wider">
                                 <div className="flex items-center gap-1.5">
                                     <Sword className="h-3 w-3" />
-                                    Nome
+                                    Classe
                                 </div>
                             </th>
+                            <th className="px-6 py-4 text-left text-xs font-semibold text-white/50 uppercase tracking-wider w-[80px]">Dado</th>
                             <th className="px-6 py-4 text-left text-xs font-semibold text-white/50 uppercase tracking-wider w-[120px]">Conjuração</th>
                             <th className="px-6 py-4 text-left text-xs font-semibold text-white/50 uppercase tracking-wider w-[100px]">Subclasses</th>
                             <th className="px-6 py-4 text-left text-xs font-semibold text-white/50 uppercase tracking-wider w-[120px]">Fonte</th>
@@ -124,21 +118,36 @@ export function ClassesTable({ classes, total, isLoading = false, hasNextPage = 
                                         transition={{ delay: index * 0.02 }}
                                         className="hover:bg-white/3 group"
                                     >
-                                        {/* Status */}
+                                        {/* Identity */}
                                         <td className="px-6 py-4">
-                                            <Chip variant={classStatusVariantMap[c.status] || "common"} size="sm">
-                                                {c.status === "active" ? "Ativo" : "Inativo"}
-                                            </Chip>
+                                            <div className="flex items-center gap-3">
+                                                {c.image ? (
+                                                    <GlassImage
+                                                        src={c.image}
+                                                        alt={c.name}
+                                                        className={cn("h-10 w-10 shrink-0 rounded-md border", c.status === "inactive" ? "border-white/5 opacity-50" : "border-amber-500/20")}
+                                                        imageClassName="object-cover mix-blend-normal"
+                                                        showOverlay={false}
+                                                    />
+                                                ) : (
+                                                    <div className={cn("p-1.5 rounded-md border bg-amber-500/10", c.status === "inactive" ? "border-white/5 opacity-50" : "border-amber-500/20")}>
+                                                        <Sword className="h-3.5 w-3.5 text-amber-300" />
+                                                    </div>
+                                                )}
+                                                <div>
+                                                    <EntityTitleLink
+                                                        name={c.name}
+                                                        entityType="Classe"
+                                                        className={cn("text-sm font-medium block", c.status === "inactive" ? "text-white/30" : "text-white/80")}
+                                                    />
+                                                    <span className="text-[10px] text-white/20 font-mono tracking-tighter truncate max-w-[180px] block">{c.source}</span>
+                                                </div>
+                                            </div>
                                         </td>
 
                                         {/* Hit Dice */}
                                         <td className="px-6 py-4">
                                             <span className={cn("inline-flex items-center px-2 py-0.5 rounded text-xs font-bold", diceColor?.bg, diceColor?.text)}>{c.hitDice}</span>
-                                        </td>
-
-                                        {/* Name */}
-                                        <td className="px-6 py-4">
-                                            <EntityTitleLink name={c.name} entityType="Classe" />
                                         </td>
 
                                         {/* Spellcasting */}

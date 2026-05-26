@@ -9,7 +9,6 @@ import { motion, AnimatePresence } from "framer-motion"
 import { MoreHorizontal, Pencil, Trash2, ShieldCheck, ScrollText } from "lucide-react"
 import { useAuth } from "@/core/hooks/useAuth"
 import { cn } from "@/core/utils"
-import { Chip } from "@/components/ui/chip"
 import { LoadingState } from "@/components/ui/loading-state"
 import { EmptyState } from "@/components/ui/empty-state"
 import { InfiniteScrollSentinel } from "@/components/ui/infinite-scroll-sentinel"
@@ -49,11 +48,6 @@ const SKILL_TO_ATTR: Record<string, string> = {
     Persuasão: "Carisma",
 }
 
-const backgroundStatusVariantMap: Record<string, "uncommon" | "common"> = {
-    active: "uncommon",
-    inactive: "common",
-}
-
 interface BackgroundsTableProps {
     data: Background[]
     isLoading: boolean
@@ -76,8 +70,7 @@ export function BackgroundsTable({ data, isLoading, hasNextPage = false, isFetch
                 <table className="w-full text-left border-separate border-spacing-0">
                     <thead>
                         <tr className="bg-white/5 uppercase text-[10px] font-bold tracking-widest text-white/40">
-                            <th className="px-6 py-4 rounded-tl-xl w-[100px]">Status</th>
-                            <th className="px-6 py-4">Nome da Origem</th>
+                            <th className="px-6 py-4 rounded-tl-xl">Nome da Origem</th>
                             <th className="px-6 py-4">Proficiência nas Perícias</th>
                             <th className="px-6 py-4">Bônus de Atributo</th>
                             <th className="px-6 py-4">Fonte</th>
@@ -96,11 +89,6 @@ export function BackgroundsTable({ data, isLoading, hasNextPage = false, isFetch
                                     transition={{ delay: idx * 0.03 }}
                                     className="group hover:bg-white/[0.02] transition-colors"
                                 >
-                                    <td className="px-6 py-4">
-                                        <Chip variant={backgroundStatusVariantMap[background.status] || "common"} size="sm">
-                                            {background.status === "active" ? "Ativo" : "Inativo"}
-                                        </Chip>
-                                    </td>
                                     <td className="px-6 py-4">
                                         <div className="flex items-center gap-3">
                                             {background.image ? (

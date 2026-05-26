@@ -6,6 +6,7 @@
 
 import * as React from "react"
 import { ChevronDown, Check, Sparkles } from "lucide-react"
+import { OptionAutocomplete, type OptionAutocompleteOption } from "@/components/ui/option-autocomplete"
 import { SearchInput } from "@/components/ui/search-input"
 import { StatusChips, type StatusFilter } from "@/components/ui/status-chips"
 import { GlassSelector } from "@/components/ui/glass-selector"
@@ -37,6 +38,19 @@ const ATTRIBUTE_OPTIONS = (Object.entries(attributeColors) as [AttributeType, (t
     textColor: config.text,
 }))
 
+const SKILL_OPTIONS = (Object.entries(SKILL_MAP) as [AttributeType, SkillType[]][])
+    .flatMap(([attribute, skills]) => {
+        const config = attributeColors[attribute]
+
+        return skills.map<OptionAutocompleteOption<SkillType>>((skill) => ({
+            value: skill,
+            label: skill,
+            badge: attribute,
+            badgeClassName: cn("border-white/10 bg-black/15", config.text),
+            searchText: `${skill} ${attribute}`,
+        }))
+    })
+
 // ── Props ────────────────────────────────────────────────────────────────────
 
 export interface BackgroundFiltersProps {
@@ -49,7 +63,7 @@ export interface BackgroundFiltersProps {
         sources?: string[]
     }
     onSearchChange: (search: string) => void
-    onStatusChange?: (status: any) => void
+    onStatusChange?: (status: StatusFilter) => void
     onAttributesChange?: (attrs: string[]) => void
     onSkillsChange?: (skills: string[]) => void
     onFeatsChange?: (ids: string[]) => void
@@ -218,7 +232,7 @@ export function BackgroundFilters({
                 </div>
             </div>
 
-            {/* Row 2: Attributes + Skills inline columns */}
+            {/* Row 2: Attributes + Skills */}
             <div className="flex flex-wrap items-start gap-6">
                 <div className="flex items-center gap-3 shrink-0">
                     <span className={cn("text-xs font-semibold text-white/40 uppercase tracking-wider whitespace-nowrap", isMobile && "hidden")}>
@@ -239,49 +253,20 @@ export function BackgroundFilters({
                 </div>
 
                 <div className="flex items-start gap-3 flex-1 min-w-0">
-                    <span className={cn("text-xs font-semibold text-white/40 uppercase tracking-wider whitespace-nowrap pt-1", isMobile && "hidden")}>
+                    <span className={cn("text-xs font-semibold text-white/40 uppercase tracking-wider whitespace-nowrap pt-2", isMobile && "hidden")}>
                         Perícias:
                     </span>
-                    <div className="space-y-1.5 flex-1 min-w-0">
-                        {selectedSkills.length > 0 && (
-                            <button
-                                type="button"
-                                onClick={() => onSkillsChange?.([])}
-                                className="text-[10px] text-white/25 hover:text-white/50 transition-colors"
-                            >
-                                Limpar ({selectedSkills.length})
-                            </button>
-                        )}
-                        <div className="flex flex-wrap gap-4">
-                            {(Object.keys(SKILL_MAP) as AttributeType[]).map((attr) => {
-                                const skills = SKILL_MAP[attr]
-                                if (skills.length === 0) return null
-                                const config = attributeColors[attr]
-                                return (
-                                    <div key={attr} className="space-y-1.5 min-w-[120px]">
-                                        <h4 className={cn("text-[10px] font-bold uppercase tracking-widest pb-1 border-b border-white/10 text-center", config.text)}>
-                                            {attr}
-                                        </h4>
-                                        <GlassSelector
-                                            options={skills.map((skill) => ({
-                                                value: skill,
-                                                label: skill,
-                                                activeColor: config.bgAlpha,
-                                                textColor: config.text,
-                                            }))}
-                                            value={selectedSkills}
-                                            onChange={(v) => onSkillsChange?.(v as string[])}
-                                            mode="multi"
-                                            layout="grid"
-                                            cols={1}
-                                            size="sm"
-                                            layoutId={`bg-filter-skills-${attr}`}
-                                            className="bg-transparent border-none p-0 gap-1"
-                                        />
-                                    </div>
-                                )
-                            })}
-                        </div>
+                    <div className="flex-1 min-w-0">
+                        <OptionAutocomplete
+                            value={selectedSkills}
+                            onChange={(value) => onSkillsChange?.((Array.isArray(value) ? value : value ? [value] : []) as string[])}
+                            options={SKILL_OPTIONS}
+                            placeholder="Todas as perícias"
+                            title="Filtrar por perícia"
+                            searchPlaceholder="Buscar perícia..."
+                            accentClass="blue"
+                            className={cn("w-full", !isMobile && "max-w-md")}
+                        />
                     </div>
                 </div>
             </div>

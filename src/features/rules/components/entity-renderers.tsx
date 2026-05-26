@@ -27,6 +27,7 @@ export interface EntityRenderOptions {
     hideActionIcons?: boolean
     initialSelectedSubclassIds?: string[]
     sourceFilters?: string[]
+    onSelectedSubclassIdsChange?: (subclassIds: string[]) => void
 }
 
 export const ENTITY_RENDERERS: Record<string, (item: any, options?: EntityRenderOptions) => React.ReactNode> = {
@@ -34,7 +35,15 @@ export const ENTITY_RENDERERS: Record<string, (item: any, options?: EntityRender
     Habilidade: (id, opts) => <TraitAsyncRenderer id={id} showStatus={opts?.showStatus ?? true} hideStatusChip={opts?.hideStatusChip} hideActionIcons={opts?.hideActionIcons} />,
     Talento: (idOrItem, opts) => <FeatAsyncRenderer item={idOrItem} showStatus={opts?.showStatus ?? true} hideStatusChip={opts?.hideStatusChip} hideActionIcons={opts?.hideActionIcons} />,
     Magia: (idOrItem, opts) => <SpellAsyncRenderer item={idOrItem} showStatus={opts?.showStatus ?? true} hideStatusChip={opts?.hideStatusChip} hideActionIcons={opts?.hideActionIcons} />,
-    Classe: (idOrItem, opts) => <ClassAsyncRenderer item={idOrItem} showStatus={opts?.showStatus ?? true} initialSelectedSubclassIds={opts?.initialSelectedSubclassIds} sourceFilters={opts?.sourceFilters} />,
+    Classe: (idOrItem, opts) => (
+        <ClassAsyncRenderer
+            item={idOrItem}
+            showStatus={opts?.showStatus ?? true}
+            initialSelectedSubclassIds={opts?.initialSelectedSubclassIds}
+            sourceFilters={opts?.sourceFilters}
+            onSelectedSubclassIdsChange={opts?.onSelectedSubclassIdsChange}
+        />
+    ),
     Subclasse: (idOrItem, opts) => <SubclassAsyncRenderer item={idOrItem} showStatus={opts?.showStatus ?? true} />,
     Origem: (idOrItem, opts) => <BackgroundAsyncRenderer item={idOrItem} />,
     Raça: (idOrItem, opts) => <RaceAsyncRenderer item={idOrItem} />,
@@ -286,7 +295,19 @@ function SpellAsyncRenderer({ item, showStatus = true, hideStatusChip, hideActio
     )
 }
 
-function ClassAsyncRenderer({ item, showStatus = true, initialSelectedSubclassIds, sourceFilters }: { item: any; showStatus?: boolean; initialSelectedSubclassIds?: string[]; sourceFilters?: string[] }) {
+function ClassAsyncRenderer({
+    item,
+    showStatus = true,
+    initialSelectedSubclassIds,
+    sourceFilters,
+    onSelectedSubclassIdsChange,
+}: {
+    item: any
+    showStatus?: boolean
+    initialSelectedSubclassIds?: string[]
+    sourceFilters?: string[]
+    onSelectedSubclassIdsChange?: (subclassIds: string[]) => void
+}) {
     const [characterClass, setCharacterClass] = React.useState<any>(null)
     const [loading, setLoading] = React.useState(true)
 
@@ -332,7 +353,13 @@ function ClassAsyncRenderer({ item, showStatus = true, initialSelectedSubclassId
 
     return (
         <div className="p-4">
-            <ClassPreview characterClass={characterClass} showStatus={showStatus} initialSelectedSubclassIds={initialSelectedSubclassIds} sourceFilters={sourceFilters} />
+            <ClassPreview
+                characterClass={characterClass}
+                showStatus={showStatus}
+                initialSelectedSubclassIds={initialSelectedSubclassIds}
+                sourceFilters={sourceFilters}
+                onSelectedSubclassIdsChange={onSelectedSubclassIdsChange}
+            />
         </div>
     )
 }
