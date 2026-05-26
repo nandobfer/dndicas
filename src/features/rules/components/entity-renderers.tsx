@@ -45,6 +45,12 @@ function findSubclassPayload(characterClass: CharacterClassType | any, subclassI
     return subclasses.find((sub: any) => String(sub._id || sub.name) === subclassId || sub.name === subclassName) || null
 }
 
+const MONSTER_ATTRIBUTE_KEYS = ["strength", "dexterity", "constitution", "intelligence", "wisdom", "charisma"] as const
+
+function hasCompleteMonsterAttributes(item: any) {
+    return Boolean(item?.attributes && MONSTER_ATTRIBUTE_KEYS.every((attribute) => item.attributes[attribute] !== undefined))
+}
+
 function RuleAsyncRenderer({ item, showStatus = true }: { item: any; showStatus?: boolean }) {
     const [rule, setRule] = React.useState<any>(null)
     const [loading, setLoading] = React.useState(true)
@@ -148,7 +154,7 @@ function MonsterAsyncRenderer({ item, showStatus = true, hideStatusChip, hideAct
     const id = typeof item === "string" ? item : item?._id || item?.id
 
     React.useEffect(() => {
-        if (item && typeof item === "object" && (item.challengeRating || item.description)) {
+        if (item && typeof item === "object" && hasCompleteMonsterAttributes(item)) {
             setMonsterData(item)
             setLoading(false)
             return

@@ -22,7 +22,7 @@ Core behavior:
 - Browse monsters with search, type, size, challenge rating, source, and status filters.
 - Create/edit/delete monsters through a glass modal matching the items catalog style.
 - Store structured combat stats, attributes, saving throws, skills, senses, defenses, and stat-block action sections.
-- Render monsters through the shared entity renderer, floating windows, generic entity pages, and global search.
+- Render monsters through the shared entity renderer, floating windows, generic entity pages, and global search; partial global-search results fetch the full monster before preview rendering.
 
 ## Data Model
 
@@ -101,6 +101,7 @@ Global integrations:
 
 Coverage lives in:
 - `tests/frontend/monsters/monster-form-modal.test.tsx`
+- `tests/frontend/monsters/monster-async-renderer.test.tsx`
 - `tests/backend/catalogs/monsters-routes.test.ts`
 
 Run focused checks:
