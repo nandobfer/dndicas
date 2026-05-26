@@ -86,12 +86,14 @@ export class GenAITranslator extends BaseTranslator {
 
     // ─── Translation ──────────────────────────────────────────────────────────
 
-    async translateItem(
-        name: string,
-        descriptionHtml: string,
-    ): Promise<{ name: string; description: string }> {
-        const prompt = `You are a D&D 5e expert and Brazilian Portuguese translator.
+    private buildPrompt(name: string, descriptionHtml: string, retryInvalidJson = false): string {
+        const retryInstruction = retryInvalidJson
+            ? '\nIMPORTANT: Your previous response was invalid JSON. Return a single complete JSON object only, with properly escaped string values. Do not use markdown fences.\n'
+            : '';
+
+        return `You are a D&D 5e expert and Brazilian Portuguese translator.
 Translate the following D&D 5e item from English to Brazilian Portuguese (pt-BR).
+${retryInstruction}
 
 ═══ OUTPUT FORMAT ═══
 Return ONLY a valid JSON object — no markdown, no backticks, no extra text:
@@ -112,13 +114,14 @@ Name (English): ${name}
 
 Description (HTML, English):
 ${descriptionHtml}`;
+    }
 
+    private async generateTranslationText(prompt: string): Promise<string> {
         await this.enforceRateLimits();
 
-        let aiResponse: string;
         try {
             this.recordRequest();
-            aiResponse = await generateText(prompt, this.aiModel, 'seed-script');
+            return await generateText(prompt, this.aiModel, 'seed-script');
         } catch (err) {
             const isRateLimit =
                 err instanceof Error &&
@@ -133,33 +136,64 @@ ${descriptionHtml}`;
                 const retrySeconds = retryMatch ? parseInt(retryMatch[1], 10) + 5 : 65;
                 await this.sleep(retrySeconds * 1000, `429 from API — retry in ${retrySeconds}s`);
                 this.recordRequest();
-                aiResponse = await generateText(prompt, this.aiModel, 'seed-script');
-            } else {
-                throw err;
+                return await generateText(prompt, this.aiModel, 'seed-script');
             }
-        }
 
+            throw err;
+        }
+    }
+
+    private cleanJsonResponse(aiResponse: string): string {
         const clean = aiResponse
             .replace(/^```(?:json)?\s*/i, '')
             .replace(/```\s*$/, '')
             .trim();
 
-        let translated: { name: string; description: string };
-        try {
-            translated = JSON.parse(clean);
-        } catch {
-            throw new Error(
-                `AI returned invalid JSON for "${name}": ${aiResponse.slice(0, 300)}`,
-            );
+        if (clean.startsWith('{') && clean.endsWith('}')) return clean;
+
+        const firstBrace = clean.indexOf('{');
+        const lastBrace = clean.lastIndexOf('}');
+        if (firstBrace >= 0 && lastBrace > firstBrace) {
+            return clean.slice(firstBrace, lastBrace + 1);
         }
 
-        if (!translated.name || typeof translated.description !== 'string') {
-            throw new Error(`AI response missing name or description for "${name}"`);
-        }
+        return clean;
+    }
 
-        return {
-            name: translated.name,
-            description: convertFeetToMeters(translated.description),
-        };
+    private parseTranslation(aiResponse: string): { name: string; description: string } {
+        const parsed = JSON.parse(this.cleanJsonResponse(aiResponse)) as unknown;
+        if (
+            !parsed ||
+            typeof parsed !== 'object' ||
+            typeof (parsed as { name?: unknown }).name !== 'string' ||
+            typeof (parsed as { description?: unknown }).description !== 'string'
+        ) {
+            throw new Error('AI response missing name or description');
+        }
+        return parsed as { name: string; description: string };
+    }
+
+    async translateItem(
+        name: string,
+        descriptionHtml: string,
+    ): Promise<{ name: string; description: string }> {
+        let attempt = 1;
+
+        while (true) {
+            const prompt = this.buildPrompt(name, descriptionHtml, attempt > 1);
+            const aiResponse = await this.generateTranslationText(prompt);
+
+            try {
+                const translated = this.parseTranslation(aiResponse);
+                return {
+                    name: translated.name,
+                    description: convertFeetToMeters(translated.description),
+                };
+            } catch (error) {
+                const detail = error instanceof Error ? ` (${error.message})` : '';
+                term.yellow(`⚠ AI returned invalid JSON for "${name}" (attempt ${attempt}). Retrying...${detail}\n`);
+                attempt += 1;
+            }
+        }
     }
 }

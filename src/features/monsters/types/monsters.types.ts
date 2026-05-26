@@ -102,7 +102,7 @@ export interface Monster {
     type: MonsterType
     size: MonsterSize
     alignment: MonsterAlignment
-    armorClass: number
+    armorClass: string | number
     initiative?: number
     hitPointsFormula: string
     speed?: string

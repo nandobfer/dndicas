@@ -50,14 +50,30 @@ const stringifyError = (error: unknown): string => {
     }
 }
 
-const isGeminiHighDemandError = (error: unknown): boolean => {
+const getGeminiRetryableUnavailableReason = (error: unknown): string | null => {
     const status = getErrorStatus(error);
     const message = stringifyError(error).toLowerCase();
 
-    return status === 503 && message.includes('high demand');
+    if (status !== 503) {
+        return null;
+    }
+
+    if (message.includes('high demand')) {
+        return 'high demand';
+    }
+
+    if (
+        message.includes('currently unavailable') ||
+        message.includes('"status":"unavailable"') ||
+        message.includes('"status": "unavailable"')
+    ) {
+        return 'temporary unavailability';
+    }
+
+    return null;
 }
 
-const withHighDemandRetry = async <T>(
+const withRetryableUnavailableRetry = async <T>(
     operationName: string,
     operation: () => Promise<T>
 ): Promise<T> => {
@@ -67,11 +83,13 @@ const withHighDemandRetry = async <T>(
         try {
             return await operation();
         } catch (error) {
-            if (!isGeminiHighDemandError(error)) {
+            const retryReason = getGeminiRetryableUnavailableReason(error);
+
+            if (!retryReason) {
                 throw error;
             }
 
-            console.warn(`GenAI ${operationName} hit Gemini high demand. Retrying in 1s (attempt ${attempt + 1}).`);
+            console.warn(`GenAI ${operationName} hit Gemini ${retryReason}. Retrying in 1s (attempt ${attempt + 1}).`);
             attempt += 1;
             await sleep(HIGH_DEMAND_RETRY_DELAY_MS);
         }
@@ -120,7 +138,7 @@ export async function generateText(
     const ai = getGenAIClient();
 
     try {
-        return await withHighDemandRetry('generateText', async () => {
+        return await withRetryableUnavailableRetry('generateText', async () => {
             const response = await ai.models.generateContent({
                 model: modelName,
                 contents: prompt,
@@ -173,7 +191,7 @@ export async function generateTextStream(
     const ai = getGenAIClient();
 
     try {
-        await withHighDemandRetry('generateTextStream', async () => {
+        await withRetryableUnavailableRetry('generateTextStream', async () => {
             const response = await ai.models.generateContentStream({
                 model: modelName,
                 contents: prompt,
@@ -232,7 +250,7 @@ export async function countTokens(
     const ai = getGenAIClient();
 
     try {
-        const response = await withHighDemandRetry('countTokens', () => ai.models.countTokens({
+        const response = await withRetryableUnavailableRetry('countTokens', () => ai.models.countTokens({
             model: modelName,
             contents: text,
         }));
@@ -276,7 +294,7 @@ export async function chat(
             parts: [{ text: msg.parts }]
         }));
 
-        return await withHighDemandRetry('chat', async () => {
+        return await withRetryableUnavailableRetry('chat', async () => {
             const response = await ai.models.generateContent({
                 model: modelName,
                 contents,

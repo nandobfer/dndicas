@@ -17,6 +17,8 @@ The Monsters module manages D&D 5e monster and NPC stat blocks with CRUD, dashbo
 - New monsters show an empty Challenge Rating field; submit normalizes an empty CR to `"0"` before deriving XP and saving.
 - Monster previews render type before size, compact stat cards with inline labels, CR with XP beside it, full attribute names with modifier-first values, and colored damage words in NPC hit rolls.
 - Monster preview defenses render localized, capitalized Portuguese damage labels separated by commas while preserving internal damage keys.
+- Monster seed data imports XMM/XPHB bestiary stat blocks, including special textual AC/PV values from summon-style blocks; manual form input for AC remains numeric.
+- Bestiary seed translation retries transient invalid/truncated GenAI JSON before failing, so long monster entries can resume without manual data changes.
 
 Core behavior:
 - Browse monsters with search, type, size, challenge rating, source, and status filters.
@@ -29,7 +31,7 @@ Core behavior:
 Main fields:
 - `name`, `originalName`, `source`, `description`, `image`, `status`
 - `type`, `size`, `alignment`
-- `armorClass`, `initiative`, `hitPointsFormula`
+- `armorClass` as a flexible string, `initiative`, `hitPointsFormula`
 - `speed`, `flySpeed`, `swimSpeed`, `climbSpeed`
 - `attributes`, `savingThrows`, `skills`, `senses`
 - `challengeRating`, `experience`, `experienceOverride`, `proficiencyBonusOverride`
@@ -49,6 +51,7 @@ Main fields:
 ## Derived Rules
 
 Challenge rating drives default XP and proficiency bonus through `monster-calculations.ts`.
+Seeded monsters with missing CR are normalized to `"0"` for XP/proficiency derivation.
 
 Overrides:
 - `experienceOverride` replaces derived XP.
@@ -102,6 +105,7 @@ Global integrations:
 Coverage lives in:
 - `tests/frontend/monsters/monster-form-modal.test.tsx`
 - `tests/frontend/monsters/monster-async-renderer.test.tsx`
+- `tests/scripts/seed-data/providers/monsters-provider.test.ts`
 - `tests/backend/catalogs/monsters-routes.test.ts`
 
 Run focused checks:

@@ -6,7 +6,10 @@ const optionalTrimmed = (max = 200) =>
         .optional()
         .transform((value) => value || undefined)
 
-const diceTextSchema = z.string().trim().regex(/^\d+(?:d(?:4|6|8|10|12|20|100)(?:\s*[+-]\s*\d+)?)?(?:\s+.*)?$/i, "Use número, dados ou dados + bônus")
+const hitPointsTextSchema = z.string().trim().min(1, "PV é obrigatório").max(160, "PV muito longo")
+const armorClassSchema = z
+    .union([z.coerce.number().int().min(0).max(50), z.string().trim().min(1, "CA é obrigatória").max(120, "CA muito longa")])
+    .transform((value) => String(value).trim())
 
 const monsterTypeSchema = z.enum(["aberration", "beast", "celestial", "construct", "dragon", "elemental", "fey", "fiend", "giant", "humanoid", "monstrosity", "ooze", "plant", "undead"])
 const monsterSizeSchema = z.enum(["F", "D", "T", "S", "M", "L", "H", "G", "C", "V"])
@@ -58,9 +61,9 @@ export const createMonsterSchema = z.object({
     type: monsterTypeSchema,
     size: monsterSizeSchema,
     alignment: alignmentSchema,
-    armorClass: z.coerce.number().int().min(0).max(50),
+    armorClass: armorClassSchema,
     initiative: z.coerce.number().int().min(-20).max(50).optional(),
-    hitPointsFormula: diceTextSchema.max(80),
+    hitPointsFormula: hitPointsTextSchema,
     speed: optionalTrimmed(80),
     flySpeed: optionalTrimmed(80),
     swimSpeed: optionalTrimmed(80),
@@ -105,5 +108,5 @@ export const updateMonsterSchema = createMonsterSchema.partial().omit({ name: tr
     name: z.string().trim().min(2).max(100).optional(),
 })
 
-export type CreateMonsterSchema = z.infer<typeof createMonsterSchema>
-export type UpdateMonsterSchema = z.infer<typeof updateMonsterSchema>
+export type CreateMonsterSchema = Omit<z.infer<typeof createMonsterSchema>, "armorClass"> & { armorClass: string | number }
+export type UpdateMonsterSchema = Omit<z.infer<typeof updateMonsterSchema>, "armorClass"> & { armorClass?: string | number }
