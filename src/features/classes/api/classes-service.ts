@@ -32,7 +32,11 @@ export async function listClasses(filters: ClassesFilters, page = 1, limit = 10,
 
     if (filters.sources && filters.sources.length > 0) {
         const escapeRegex = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-        query.source = { $in: filters.sources.map(s => new RegExp(`^${escapeRegex(s)}`, 'i')) }
+        const sourceRegexes = filters.sources.map(s => new RegExp(`^${escapeRegex(s)}`, 'i'))
+        query.$or = [
+            { source: { $in: sourceRegexes } },
+            { "subclasses.source": { $in: sourceRegexes } },
+        ]
     }
 
     if (filters.status && filters.status !== "all") {

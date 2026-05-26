@@ -80,6 +80,7 @@ export function ClassesPage() {
                     onEdit={actions.handleEditClick}
                     onDelete={actions.handleDeleteClick}
                     isAdmin={isAdmin}
+                    renderOptions={{ sourceFilters: filters.sources }}
                 />
             ) : (
                 <ClassesTable

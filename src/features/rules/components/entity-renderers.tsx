@@ -21,12 +21,20 @@ import type { CharacterClass as CharacterClassType } from "@/features/classes/ty
  * Registry of renderers for different entity types.
  * T042: Shared entity renderer configuration for EntityList and GlassWindow.
  */
-export const ENTITY_RENDERERS: Record<string, (item: any, options?: { showStatus?: boolean; hideStatusChip?: boolean; hideActionIcons?: boolean; initialSelectedSubclassIds?: string[] }) => React.ReactNode> = {
+export interface EntityRenderOptions {
+    showStatus?: boolean
+    hideStatusChip?: boolean
+    hideActionIcons?: boolean
+    initialSelectedSubclassIds?: string[]
+    sourceFilters?: string[]
+}
+
+export const ENTITY_RENDERERS: Record<string, (item: any, options?: EntityRenderOptions) => React.ReactNode> = {
     Regra: (idOrItem, opts) => <RuleAsyncRenderer item={idOrItem} showStatus={opts?.showStatus ?? false} />,
     Habilidade: (id, opts) => <TraitAsyncRenderer id={id} showStatus={opts?.showStatus ?? true} hideStatusChip={opts?.hideStatusChip} hideActionIcons={opts?.hideActionIcons} />,
     Talento: (idOrItem, opts) => <FeatAsyncRenderer item={idOrItem} showStatus={opts?.showStatus ?? true} hideStatusChip={opts?.hideStatusChip} hideActionIcons={opts?.hideActionIcons} />,
     Magia: (idOrItem, opts) => <SpellAsyncRenderer item={idOrItem} showStatus={opts?.showStatus ?? true} hideStatusChip={opts?.hideStatusChip} hideActionIcons={opts?.hideActionIcons} />,
-    Classe: (idOrItem, opts) => <ClassAsyncRenderer item={idOrItem} showStatus={opts?.showStatus ?? true} />,
+    Classe: (idOrItem, opts) => <ClassAsyncRenderer item={idOrItem} showStatus={opts?.showStatus ?? true} initialSelectedSubclassIds={opts?.initialSelectedSubclassIds} sourceFilters={opts?.sourceFilters} />,
     Subclasse: (idOrItem, opts) => <SubclassAsyncRenderer item={idOrItem} showStatus={opts?.showStatus ?? true} />,
     Origem: (idOrItem, opts) => <BackgroundAsyncRenderer item={idOrItem} />,
     Raça: (idOrItem, opts) => <RaceAsyncRenderer item={idOrItem} />,
@@ -278,7 +286,7 @@ function SpellAsyncRenderer({ item, showStatus = true, hideStatusChip, hideActio
     )
 }
 
-function ClassAsyncRenderer({ item, showStatus = true, initialSelectedSubclassIds }: { item: any; showStatus?: boolean; initialSelectedSubclassIds?: string[] }) {
+function ClassAsyncRenderer({ item, showStatus = true, initialSelectedSubclassIds, sourceFilters }: { item: any; showStatus?: boolean; initialSelectedSubclassIds?: string[]; sourceFilters?: string[] }) {
     const [characterClass, setCharacterClass] = React.useState<any>(null)
     const [loading, setLoading] = React.useState(true)
 
@@ -324,7 +332,7 @@ function ClassAsyncRenderer({ item, showStatus = true, initialSelectedSubclassId
 
     return (
         <div className="p-4">
-            <ClassPreview characterClass={characterClass} showStatus={showStatus} initialSelectedSubclassIds={initialSelectedSubclassIds} />
+            <ClassPreview characterClass={characterClass} showStatus={showStatus} initialSelectedSubclassIds={initialSelectedSubclassIds} sourceFilters={sourceFilters} />
         </div>
     )
 }
@@ -532,7 +540,7 @@ function RaceAsyncRenderer({ item }: { item: any }) {
 }
 
 
-export const renderEntity = (item: any, entityType: string, options?: { showStatus?: boolean; hideStatusChip?: boolean; hideActionIcons?: boolean; initialSelectedSubclassIds?: string[] }) => {
+export const renderEntity = (item: any, entityType: string, options?: EntityRenderOptions) => {
     const type = entityType === "Mixed" ? item.type : entityType
     const renderer = ENTITY_RENDERERS[type]
     return renderer ? renderer(item, options) : <div>{item.name || "Unknown item"}</div>

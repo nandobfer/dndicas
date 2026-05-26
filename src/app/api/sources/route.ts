@@ -43,7 +43,13 @@ export async function GET(req: NextRequest) {
         await dbConnect()
 
         const model = ENTITY_MODEL_MAP[entity]
-        const rawSources = (await model.distinct("source")) as string[]
+        const rawSources =
+            entity === "classes"
+                ? [
+                      ...((await model.distinct("source")) as string[]),
+                      ...((await model.distinct("subclasses.source")) as string[]),
+                  ]
+                : ((await model.distinct("source")) as string[])
 
         const bookNames = Array.from(
             new Set(
