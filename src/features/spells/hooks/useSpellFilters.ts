@@ -7,7 +7,7 @@
 "use client";
 
 import { useState, useMemo, useCallback, useEffect } from 'react';
-import { useRouter, useSearchParams } from 'next/navigation';
+import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useDebounce } from '@/core/hooks/useDebounce';
 import type { SpellsFilters, SpellSchool, AttributeType, DiceType } from '../types/spells.types';
 
@@ -74,6 +74,7 @@ const SEARCH_DEBOUNCE_MS = 300; // 300ms as per T024 requirement
  * ```
  */
 export function useSpellFilters(): UseSpellFiltersReturn {
+  const pathname = usePathname();
   const router = useRouter();
   const searchParams = useSearchParams();
 
@@ -217,6 +218,10 @@ export function useSpellFilters(): UseSpellFiltersReturn {
 
   // Sync filters to URL query params
   useEffect(() => {
+    if (pathname !== '/spells') {
+      return;
+    }
+
     const params = new URLSearchParams();
 
     // Add non-default values to URL
@@ -231,11 +236,11 @@ export function useSpellFilters(): UseSpellFiltersReturn {
     if (sources.length > 0) params.set('sources', sources.join(','));
 
     const queryString = params.toString();
-    const newUrl = queryString ? `?${queryString}` : window.location.pathname;
+    const newUrl = queryString ? `${pathname}?${queryString}` : pathname;
 
     // Use shallow routing to update URL without page reload
     router.replace(newUrl, { scroll: false });
-  }, [search, status, page, circles, schools, saveAttributes, diceTypes, circleMode, sources, router]);
+  }, [search, status, page, circles, schools, saveAttributes, diceTypes, circleMode, sources, pathname, router]);
 
   return {
     filters,
