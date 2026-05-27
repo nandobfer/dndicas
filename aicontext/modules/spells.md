@@ -2,6 +2,9 @@
 
 ## Features
 
+### Geração com IA por magia
+Admins podem usar a ação `Gerar com IA` nos menus de magias da tabela, da lista em cards e do preview tooltip. A ação abre a modal genérica de geração de entidades com adapter específico de magia, usa o modelo `gemini-3.1-flash-lite`, consome progresso por Pusher no canal `entity-generation.<runId>`, busca candidatos em `spells-xphb.json`, gera nome/descrição via `GenAITranslator` e mapeia campos determinísticos no mesmo formato do provider de spells. Ao salvar, a magia sobrescreve os campos gerados e preserva a imagem atual quando o candidato não fornece uma nova.
+
 ### Infinite scroll nas tabelas de catálogo
 As tabelas de magias usam `useInfiniteSpells`, a mesma fonte de dados do modo lista. O modo tabela carrega a primeira página e busca páginas seguintes automaticamente quando o sentinel no fim da tabela entra na viewport, sem paginação tradicional.
 

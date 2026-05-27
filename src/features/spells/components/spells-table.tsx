@@ -8,7 +8,7 @@
 "use client";
 
 import { motion, AnimatePresence } from 'framer-motion';
-import { MoreHorizontal, Pencil, Trash2, Wand, Eye } from 'lucide-react';
+import { MoreHorizontal, Pencil, Trash2, Wand, Eye, Sparkles } from 'lucide-react';
 import { useAuth } from '@/core/hooks/useAuth';
 import { cn } from '@/core/utils';
 import { GlassCard } from '@/components/ui/glass-card';
@@ -49,6 +49,7 @@ export interface SpellsTableProps {
     onEdit: (spell: Spell) => void
     /** Delete handler (admin only) */
     onDelete: (spell: Spell) => void
+    onGenerateAI?: (spell: Spell) => void
     onLoadMore?: () => void
 }
 
@@ -67,7 +68,7 @@ export interface SpellsTableProps {
  * - Preview button with tooltip
  * - Actions dropdown (admin only)
  */
-export function SpellsTable({ spells, total, isLoading = false, hasNextPage = false, isFetchingNextPage = false, hasActiveFilters = false, onEdit, onDelete, onLoadMore }: SpellsTableProps) {
+export function SpellsTable({ spells, total, isLoading = false, hasNextPage = false, isFetchingNextPage = false, hasActiveFilters = false, onEdit, onDelete, onGenerateAI, onLoadMore }: SpellsTableProps) {
     const { isAdmin } = useAuth()
 
     if (isLoading && spells.length === 0) {
@@ -232,6 +233,14 @@ export function SpellsTable({ spells, total, isLoading = false, hasNextPage = fa
                                                         <Pencil className="mr-2 h-4 w-4" />
                                                         Editar
                                                     </GlassDropdownMenuItem>
+                                                    {onGenerateAI && (
+                                                        <GlassDropdownMenuItem onClick={() => onGenerateAI(spell)}>
+                                                            <Sparkles className="mr-2 h-4 w-4 text-purple-300 animate-pulse" />
+                                                            <span className="bg-gradient-to-r from-blue-300 via-purple-300 to-blue-300 bg-clip-text text-transparent">
+                                                                Gerar com IA
+                                                            </span>
+                                                        </GlassDropdownMenuItem>
+                                                    )}
                                                     <GlassDropdownMenuItem onClick={() => onDelete(spell)} className="text-red-400 hover:text-red-300 focus:text-red-300">
                                                         <Trash2 className="mr-2 h-4 w-4" />
                                                         Excluir

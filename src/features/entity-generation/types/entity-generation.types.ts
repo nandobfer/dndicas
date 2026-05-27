@@ -1,7 +1,7 @@
 import type { CreateRaceInput, Race, RaceTrait, RaceVariation, SizeCategory } from "@/features/races/types/races.types"
-import type { CreateSpellInput } from "@/features/spells/types/spells.types"
+import type { CreateSpellInput, Spell } from "@/features/spells/types/spells.types"
 
-export type EntityGenerationKind = "race"
+export type EntityGenerationKind = "race" | "spell"
 
 export interface EntityGenerationProgress {
     current: number
@@ -58,6 +58,28 @@ export interface RaceGenerationApplyRequest {
 
 export interface RaceGenerationApplyResponse {
     race: Race
+}
+
+export interface GeneratedSpellCandidate extends CreateSpellInput {
+    candidateId: string
+    matchLabel: string
+}
+
+export interface SpellGenerationGenerateRequest {
+    runId: string
+}
+
+export interface SpellGenerationGenerateResponse {
+    current: Spell
+    candidates: GeneratedSpellCandidate[]
+}
+
+export interface SpellGenerationApplyRequest {
+    candidate: GeneratedSpellCandidate
+}
+
+export interface SpellGenerationApplyResponse {
+    spell: Spell
 }
 
 export interface FiveEToolsGenerationRace {
