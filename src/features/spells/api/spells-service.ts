@@ -8,6 +8,7 @@ import dbConnect from '@/core/database/db';
 import { Spell, type ISpell } from '../models/spell';
 import { logCreate, logUpdate, logDelete } from '@/features/users/api/audit-service';
 import { applyFuzzySearch } from "@/core/utils/search-engine"
+import { buildSourcePrefixRegexes } from "@/core/utils/source-utils"
 import type {
   CreateSpellInput,
   UpdateSpellInput,
@@ -63,8 +64,7 @@ export async function listSpells(filters: SpellsFilters, page = 1, limit = 10, i
 
         // Source filter (prefix match against book name)
         if (filters.sources && filters.sources.length > 0) {
-            const escapeRegex = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-            query.source = { $in: filters.sources.map(s => new RegExp(`^${escapeRegex(s)}`, 'i')) }
+            query.source = { $in: buildSourcePrefixRegexes(filters.sources) }
         }
 
         // Status filter

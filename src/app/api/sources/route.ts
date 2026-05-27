@@ -10,7 +10,7 @@ import { Trait } from "@/features/traits/database/trait"
 import { ItemModel } from "@/features/items/database/item"
 import { MonsterModel } from "@/features/monsters/models/monster"
 import type { Model, Document } from "mongoose"
-import { extractBookName } from "@/core/utils/source-utils"
+import { getBookDisplayName } from "@/core/utils/source-utils"
 
 const ENTITY_MODEL_MAP: Record<string, Model<Document>> = {
     spells: Spell as unknown as Model<Document>,
@@ -55,7 +55,7 @@ export async function GET(req: NextRequest) {
             new Set(
                 rawSources
                     .filter((s) => typeof s === "string" && s.trim().length > 0)
-                    .map(extractBookName)
+                    .map((source) => getBookDisplayName(source))
             )
         ).sort((a, b) => a.localeCompare(b, "pt-BR"))
 

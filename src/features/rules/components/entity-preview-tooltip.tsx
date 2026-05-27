@@ -31,6 +31,8 @@ import type { Trait } from "@/features/traits/types/traits.types"
 import { ChargesPreview } from "@/features/shared/charges/charges-preview"
 import { EntityGenerationAIModal } from "@/features/entity-generation/components/entity-generation-ai-modal"
 import { spellGenerationAdapter } from "@/features/entity-generation/adapters/spell-generation-adapter"
+import { featGenerationAdapter } from "@/features/entity-generation/adapters/feat-generation-adapter"
+import { monsterGenerationAdapter } from "@/features/entity-generation/adapters/monster-generation-adapter"
 
 interface RulePreviewProps {
     rule: Reference
@@ -229,6 +231,7 @@ export const EntityPreviewTooltip = ({ entityId, entityType, children, side = "t
     const [open, setOpen] = React.useState(false)
     const [generationOpen, setGenerationOpen] = React.useState(false)
     const timeoutRef = React.useRef<NodeJS.Timeout | null>(null)
+    const canGenerateAI = isAdmin && (entityType === "Magia" || entityType === "Talento" || entityType === "Monstro")
 
     const fetchData = React.useCallback(async () => {
         if (data || loading) return
@@ -307,28 +310,35 @@ export const EntityPreviewTooltip = ({ entityId, entityType, children, side = "t
         if (loading) return <div className="p-4 text-xs text-white/40 animate-pulse text-center w-[200px]">Carregando detalhes...</div>
         if (!data) return <div className="p-4 text-xs text-white/40 text-center w-[200px]">Sem informações disponíveis</div>
 
+        const generateAIButton = canGenerateAI ? (
+            <button
+                type="button"
+                onClick={() => setGenerationOpen(true)}
+                className="inline-flex items-center gap-2 rounded-lg border border-purple-300/25 bg-purple-500/10 px-3 py-2 text-xs font-medium text-purple-100 transition-colors hover:bg-purple-500/15"
+            >
+                <Sparkles className="h-3.5 w-3.5 animate-pulse text-purple-200" />
+                <span className="bg-gradient-to-r from-blue-300 via-purple-300 to-blue-300 bg-clip-text text-transparent">
+                    Gerar com IA
+                </span>
+            </button>
+        ) : null
+
         switch (entityType) {
             case "Regra":
                 return <RulePreview rule={data as Reference} />
             case "Habilidade":
                 return <TraitPreview trait={data as Trait} />
             case "Talento":
-                return <FeatPreview feat={data as Feat} />
+                return (
+                    <div className="space-y-3">
+                        {generateAIButton}
+                        <FeatPreview feat={data as Feat} />
+                    </div>
+                )
             case "Magia":
                 return (
                     <div className="space-y-3">
-                        {isAdmin && (
-                            <button
-                                type="button"
-                                onClick={() => setGenerationOpen(true)}
-                                className="inline-flex items-center gap-2 rounded-lg border border-purple-300/25 bg-purple-500/10 px-3 py-2 text-xs font-medium text-purple-100 transition-colors hover:bg-purple-500/15"
-                            >
-                                <Sparkles className="h-3.5 w-3.5 animate-pulse text-purple-200" />
-                                <span className="bg-gradient-to-r from-blue-300 via-purple-300 to-blue-300 bg-clip-text text-transparent">
-                                    Gerar com IA
-                                </span>
-                            </button>
-                        )}
+                        {generateAIButton}
                         <SpellPreview spell={data as Spell} />
                     </div>
                 )
@@ -346,7 +356,12 @@ export const EntityPreviewTooltip = ({ entityId, entityType, children, side = "t
             case "Item":
                 return <ItemPreview item={data as Item} showStatus={true} />
             case "Monstro":
-                return <MonsterPreview monster={data as Monster} showStatus={true} />
+                return (
+                    <div className="space-y-3">
+                        {generateAIButton}
+                        <MonsterPreview monster={data as Monster} showStatus={true} />
+                    </div>
+                )
             default: {
                 const fallbackData = (data ?? {}) as Record<string, unknown>
                 return (
@@ -359,7 +374,7 @@ export const EntityPreviewTooltip = ({ entityId, entityType, children, side = "t
                 )
             }
         }
-    }, [entityType, data, loading, entityId, isAdmin])
+    }, [entityType, data, loading, entityId, canGenerateAI])
 
     return (
         <>
@@ -384,6 +399,24 @@ export const EntityPreviewTooltip = ({ entityId, entityType, children, side = "t
                     open={generationOpen}
                     entity={(data as Spell | null) ?? null}
                     adapter={spellGenerationAdapter}
+                    onOpenChange={setGenerationOpen}
+                    onApplied={() => setData(null)}
+                />
+            )}
+            {entityType === "Talento" && (
+                <EntityGenerationAIModal
+                    open={generationOpen}
+                    entity={(data as Feat | null) ?? null}
+                    adapter={featGenerationAdapter}
+                    onOpenChange={setGenerationOpen}
+                    onApplied={() => setData(null)}
+                />
+            )}
+            {entityType === "Monstro" && (
+                <EntityGenerationAIModal
+                    open={generationOpen}
+                    entity={(data as Monster | null) ?? null}
+                    adapter={monsterGenerationAdapter}
                     onOpenChange={setGenerationOpen}
                     onApplied={() => setData(null)}
                 />

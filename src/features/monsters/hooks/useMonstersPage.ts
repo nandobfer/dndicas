@@ -1,14 +1,17 @@
 "use client"
 
 import * as React from "react"
+import { useQueryClient } from "@tanstack/react-query"
 import { useViewMode } from "@/core/hooks/useViewMode"
 import { useIsMobile } from "@/core/hooks/useMediaQuery"
-import { useInfiniteMonsters } from "../api/monsters-queries"
+import { invalidateSearchCache } from "@/core/utils/search-engine"
+import { monstersKeys, useInfiniteMonsters } from "../api/monsters-queries"
 import type { Monster, MonsterFilterParams, MonsterSize, MonsterType } from "../types/monsters.types"
 
 export function useMonstersPage() {
     const isMobile = useIsMobile()
     const { viewMode, setViewMode } = useViewMode()
+    const queryClient = useQueryClient()
     const [search, setSearch] = React.useState("")
     const [type, setType] = React.useState<MonsterType[]>([])
     const [size, setSize] = React.useState<MonsterSize[]>([])
@@ -21,6 +24,7 @@ export function useMonstersPage() {
 
     const [isFormOpen, setIsFormOpen] = React.useState(false)
     const [isDeleteOpen, setIsDeleteOpen] = React.useState(false)
+    const [isGenerationOpen, setIsGenerationOpen] = React.useState(false)
     const [selectedMonster, setSelectedMonster] = React.useState<Monster | null>(null)
 
     const handleCreateClick = () => {
@@ -35,9 +39,20 @@ export function useMonstersPage() {
         setSelectedMonster(monster)
         setIsDeleteOpen(true)
     }
+    const handleGenerateAIClick = (monster: Monster) => {
+        setSelectedMonster(monster)
+        setIsGenerationOpen(true)
+    }
+    const handleGenerationApplied = () => {
+        queryClient.invalidateQueries({ queryKey: monstersKeys.all })
+        queryClient.invalidateQueries({ queryKey: ["audit-logs"] })
+        queryClient.invalidateQueries({ queryKey: ["dashboard-stats"] })
+        invalidateSearchCache()
+    }
     const closeAll = () => {
         setIsFormOpen(false)
         setIsDeleteOpen(false)
+        setIsGenerationOpen(false)
         setSelectedMonster(null)
     }
 
@@ -64,16 +79,21 @@ export function useMonstersPage() {
             handleCreateClick,
             handleEditClick,
             handleDeleteClick,
+            handleGenerateAIClick,
+            handleGenerationApplied,
         },
         modals: {
             isFormOpen,
             setIsFormOpen,
             isDeleteOpen,
             setIsDeleteOpen,
+            isGenerationOpen,
+            setIsGenerationOpen,
             selectedMonster,
             handleCreateClick,
             handleEditClick,
             handleDeleteClick,
+            handleGenerateAIClick,
             closeAll,
         },
     }

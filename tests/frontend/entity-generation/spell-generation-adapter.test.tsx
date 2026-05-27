@@ -23,7 +23,7 @@ const currentSpell: Spell = {
     circle: 0,
     school: "Evocação",
     component: ["Verbal", "Material"],
-    source: "Fonte Antiga",
+    source: "ABH p. 9",
     status: "active",
     createdAt: new Date(),
     updatedAt: new Date(),
@@ -31,14 +31,14 @@ const currentSpell: Spell = {
 
 const candidate: GeneratedSpellCandidate = {
     candidateId: "light:xphb",
-    matchLabel: "light (XPHB)",
+    matchLabel: "light (Livro do Jogador pág. 12)",
     name: "Luz Gerada",
     originalName: "light",
     description: "<p>Descrição nova.</p>",
     circle: 0,
     school: "Evocação",
     component: ["Verbal"],
-    source: "Fonte Nova",
+    source: "XPHB p. 12",
     status: "active",
 }
 
@@ -51,9 +51,9 @@ describe("spellGenerationAdapter comparison", () => {
         renderComparison(spellGenerationAdapter.renderComparison(currentSpell, candidate))
 
         expect(screen.getByText("Luz")).toBeInTheDocument()
-        expect(screen.getByText("Fonte Antiga")).toBeInTheDocument()
+        expect(screen.getByText("Astarion's Book of Hungers pág. 9")).toBeInTheDocument()
         expect(screen.getByText("Luz Gerada")).toBeInTheDocument()
-        expect(screen.getByText("Fonte Nova")).toBeInTheDocument()
+        expect(screen.getByText("Livro do Jogador pág. 12")).toBeInTheDocument()
         expect(screen.getByText("Descrição antiga.")).toBeInTheDocument()
         expect(screen.getByText("Descrição nova.")).toBeInTheDocument()
     })

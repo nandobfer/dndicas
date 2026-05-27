@@ -5,6 +5,7 @@ import { Feat as FeatModel } from "@/features/feats/models/feat"
 import { createAuditLog } from "@/features/users/api/audit-service"
 import dbConnect from "@/core/database/db"
 import { z } from "zod"
+import { buildSourcePrefixRegexes } from "@/core/utils/source-utils"
 
 const backgroundSchema = z.object({
     name: z.string().min(2).max(100),
@@ -45,10 +46,9 @@ export async function GET(req: NextRequest) {
         }
         const sourcesParam = url.searchParams.get("sources")
         if (sourcesParam) {
-            const escapeRegex = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
             const sourcesList = sourcesParam.split(",").map(s => s.trim()).filter(Boolean)
             if (sourcesList.length > 0) {
-                query.source = { $in: sourcesList.map(s => new RegExp(`^${escapeRegex(s)}`, 'i')) }
+                query.source = { $in: buildSourcePrefixRegexes(sourcesList) }
             }
         }
 

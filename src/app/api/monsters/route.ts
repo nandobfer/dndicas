@@ -6,10 +6,7 @@ import { createAuditLog } from "@/features/users/api/audit-service"
 import { MonsterModel } from "@/features/monsters/models/monster"
 import { createMonsterSchema } from "@/features/monsters/api/validation"
 import { getMonsterProficiencyBonus, getMonsterXp } from "@/features/monsters/utils/monster-calculations"
-
-function escapeRegex(value: string) {
-    return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
-}
+import { buildSourcePrefixRegexes } from "@/core/utils/source-utils"
 
 function serializeMonster(monster: { toObject?: () => Record<string, unknown> } | Record<string, unknown>) {
     const base = typeof monster.toObject === "function" ? monster.toObject() : monster
@@ -46,7 +43,7 @@ export async function GET(req: NextRequest) {
         if (challengeRating && challengeRating !== "all") query.challengeRating = challengeRating
         if (sourcesParam) {
             const sources = sourcesParam.split(",").map((source) => source.trim()).filter(Boolean)
-            if (sources.length > 0) query.source = { $in: sources.map((source) => new RegExp(`^${escapeRegex(source)}`, "i")) }
+            if (sources.length > 0) query.source = { $in: buildSourcePrefixRegexes(sources) }
         }
 
         const monsters = (await MonsterModel.find(query).sort({ name: 1 })).map(serializeMonster)

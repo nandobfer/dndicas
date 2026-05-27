@@ -6,6 +6,7 @@ import dbConnect from "@/core/database/db"
 import { CharacterClass } from "../models/character-class"
 import { logCreate, logUpdate, logDelete } from "@/features/users/api/audit-service"
 import { applyFuzzySearch } from "@/core/utils/search-engine"
+import { buildSourcePrefixRegexes } from "@/core/utils/source-utils"
 import type {
     CreateClassInput,
     UpdateClassInput,
@@ -31,8 +32,7 @@ export async function listClasses(filters: ClassesFilters, page = 1, limit = 10,
     }
 
     if (filters.sources && filters.sources.length > 0) {
-        const escapeRegex = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-        const sourceRegexes = filters.sources.map(s => new RegExp(`^${escapeRegex(s)}`, 'i'))
+        const sourceRegexes = buildSourcePrefixRegexes(filters.sources)
         query.$or = [
             { source: { $in: sourceRegexes } },
             { "subclasses.source": { $in: sourceRegexes } },

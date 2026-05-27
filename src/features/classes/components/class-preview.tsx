@@ -25,6 +25,7 @@ import { GlassDiceValue } from "@/components/ui/glass-dice-value"
 import { EntitySource } from "@/features/rules/components/entity-source"
 import { ClassProgressionTable } from "./class-progression-table"
 import { SubclassPreview } from "./subclass-preview"
+import { matchesSourceFilter } from "@/core/utils/source-utils"
 
 const SKILL_TO_ATTR: Record<string, string> = {
     Atletismo: "Força",
@@ -48,11 +49,7 @@ const SKILL_TO_ATTR: Record<string, string> = {
 }
 
 export function subclassMatchesSourceFilters(subclass: Subclass, sourceFilters?: string[]) {
-    if (!sourceFilters || sourceFilters.length === 0) return true
-    if (!subclass.source) return false
-
-    const source = subclass.source.toLowerCase()
-    return sourceFilters.some((filter) => source.startsWith(filter.toLowerCase()))
+    return matchesSourceFilter(subclass.source, sourceFilters)
 }
 
 function normalizeSelectedSubclassIds(selectedSubclassIds?: string[]) {

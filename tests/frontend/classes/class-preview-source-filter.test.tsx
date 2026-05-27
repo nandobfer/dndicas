@@ -122,6 +122,7 @@ const makeClass = (subclasses: Subclass[]): CharacterClass => ({
 describe("ClassPreview source filters", () => {
     it("matches subclass sources by case-insensitive prefix", () => {
         expect(subclassMatchesSourceFilters(makeSubclass({ source: "LDJ pág. 72" }), ["ldj"])).toBe(true)
+        expect(subclassMatchesSourceFilters(makeSubclass({ source: "Player's Handbook 2024 p. 72" }), ["Livro do Jogador"])).toBe(true)
         expect(subclassMatchesSourceFilters(makeSubclass({ source: "XGE pág. 31" }), ["LDJ"])).toBe(false)
         expect(subclassMatchesSourceFilters(makeSubclass({ source: undefined }), ["LDJ"])).toBe(false)
     })

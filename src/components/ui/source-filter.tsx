@@ -7,7 +7,7 @@ import { cn } from "@/core/utils"
 import { GlassPopover, GlassPopoverContent, GlassPopoverTrigger } from "@/components/ui/glass-popover"
 import { glassConfig } from "@/lib/config/glass-config"
 import { useSources } from "@/core/hooks/useSources"
-import { getBookDisplayName } from "@/core/utils/source-utils"
+import { getBookDisplayName, getSourceSearchTerms, normalizeSourceSelection } from "@/core/utils/source-utils"
 
 export interface SourceFilterProps {
     value: string[]
@@ -20,26 +20,30 @@ export function SourceFilter({ value, onChange, entityType, className }: SourceF
     const [isOpen, setIsOpen] = React.useState(false)
     const [search, setSearch] = React.useState("")
     const { sources, isLoading } = useSources(entityType)
+    const normalizedValue = React.useMemo(() => normalizeSourceSelection(value), [value])
+
+    React.useEffect(() => {
+        if (normalizedValue.length !== value.length || normalizedValue.some((item, index) => item !== value[index])) {
+            onChange(normalizedValue)
+        }
+    }, [normalizedValue, onChange, value])
 
     const filtered = React.useMemo(
         () =>
             search.trim().length === 0
                 ? sources
-                : sources.filter((s) => {
+                : sources.filter((source) => {
                       const term = search.toLowerCase()
-                      return (
-                          getBookDisplayName(s).toLowerCase().includes(term) ||
-                          s.toLowerCase().includes(term)
-                      )
+                      return getSourceSearchTerms(source).some((sourceTerm) => sourceTerm.toLowerCase().includes(term))
                   }),
         [sources, search]
     )
 
     const toggle = (source: string) => {
-        if (value.includes(source)) {
-            onChange(value.filter((s) => s !== source))
+        if (normalizedValue.includes(source)) {
+            onChange(normalizedValue.filter((selectedSource) => selectedSource !== source))
         } else {
-            onChange([...value, source])
+            onChange([...normalizedValue, source])
         }
     }
 
@@ -48,14 +52,14 @@ export function SourceFilter({ value, onChange, entityType, className }: SourceF
         onChange([])
     }
 
-    const hasValue = value.length > 0
+    const hasValue = normalizedValue.length > 0
 
     const displayText =
-        value.length === 0
+        normalizedValue.length === 0
             ? "Todas as fontes"
-            : value.length === 1
-              ? getBookDisplayName(value[0])
-              : `${value.length} fontes`
+            : normalizedValue.length === 1
+              ? getBookDisplayName(normalizedValue[0])
+              : `${normalizedValue.length} fontes`
 
     return (
         <GlassPopover open={isOpen} onOpenChange={(open) => { setIsOpen(open); if (!open) setSearch("") }}>
@@ -145,7 +149,7 @@ export function SourceFilter({ value, onChange, entityType, className }: SourceF
                             </p>
                         ) : (
                             filtered.map((source) => {
-                                const isSelected = value.includes(source)
+                                const isSelected = normalizedValue.includes(source)
 
                                 return (
                                     <button
@@ -194,7 +198,7 @@ export function SourceFilter({ value, onChange, entityType, className }: SourceF
 
                     {/* Footer with clear button */}
                     <AnimatePresence>
-                        {value.length > 0 && (
+                        {normalizedValue.length > 0 && (
                             <motion.div
                                 initial={{ opacity: 0, height: 0 }}
                                 animate={{ opacity: 1, height: "auto" }}
@@ -205,7 +209,7 @@ export function SourceFilter({ value, onChange, entityType, className }: SourceF
                                     onClick={() => onChange([])}
                                     className="w-full text-xs text-white/40 hover:text-white/70 transition-colors py-1 text-center"
                                 >
-                                    Limpar seleção ({value.length})
+                                    Limpar seleção ({normalizedValue.length})
                                 </button>
                             </motion.div>
                         )}

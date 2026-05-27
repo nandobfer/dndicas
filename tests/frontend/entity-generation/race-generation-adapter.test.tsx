@@ -24,7 +24,7 @@ const currentRace: Race = {
     originalName: "Elf",
     image: "/old-elf.png",
     description: "<p>Descrição antiga.</p>",
-    source: "Fonte Antiga",
+    source: "ABH p. 9",
     status: "active",
     size: "Médio",
     speed: "9 metros",
@@ -37,12 +37,12 @@ const currentRace: Race = {
 
 const candidate: GeneratedRaceCandidate = {
     candidateId: "elf:phb",
-    matchLabel: "Elf (PHB)",
+    matchLabel: "Elf (Livro do Jogador pág. 21)",
     name: "Elfo Gerado",
     originalName: "Elf",
     image: "/new-elf.png",
     description: "<p>Descrição nova.</p>",
-    source: "Fonte Nova",
+    source: "PHB p. 21",
     status: "active",
     size: "Médio",
     speed: "9 metros",
@@ -59,6 +59,8 @@ describe("raceGenerationAdapter comparison", () => {
     it("renders old and new images", () => {
         renderComparison(raceGenerationAdapter.renderComparison(currentRace, candidate))
 
+        expect(screen.getByText("Astarion's Book of Hungers pág. 9")).toBeInTheDocument()
+        expect(screen.getByText("Livro do Jogador pág. 21")).toBeInTheDocument()
         expect(screen.getByRole("img", { name: "Imagem atual de Elfo" })).toHaveAttribute("src", "/old-elf.png")
         expect(screen.getByRole("img", { name: "Nova imagem de Elfo Gerado" })).toHaveAttribute("src", "/new-elf.png")
     })

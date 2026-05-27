@@ -10,6 +10,7 @@ import { useState, useMemo, useCallback, useEffect } from 'react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useDebounce } from '@/core/hooks/useDebounce';
 import type { SpellsFilters, SpellSchool, AttributeType, DiceType } from '../types/spells.types';
+import { normalizeSourceSelection } from '@/core/utils/source-utils';
 
 export interface UseSpellFiltersReturn {
   /** Current filter state */
@@ -123,7 +124,7 @@ export function useSpellFilters(): UseSpellFiltersReturn {
 
   const [sources, setSourcesState] = useState<string[]>(() => {
     const sourcesParam = searchParams.get('sources');
-    return sourcesParam ? sourcesParam.split(',') : [];
+    return sourcesParam ? normalizeSourceSelection(sourcesParam.split(',')) : [];
   });
 
   // Debounced search for API calls
@@ -173,7 +174,7 @@ export function useSpellFilters(): UseSpellFiltersReturn {
 
   // Update sources and reset page
   const setSources = useCallback((value: string[]) => {
-    setSourcesState(value);
+    setSourcesState(normalizeSourceSelection(value));
     setPageState(1);
   }, []);
 

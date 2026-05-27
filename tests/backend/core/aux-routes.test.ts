@@ -8,9 +8,6 @@ describe('auxiliary backend routes', () => {
         vi.doMock('@/core/database/db', () => ({
             default: vi.fn(),
         }));
-        vi.doMock('@/core/utils/source-utils', () => ({
-            extractBookName: vi.fn((value: string) => value),
-        }));
         vi.doMock('@/features/spells/models/spell', () => ({ Spell: {} }));
         vi.doMock('@/features/classes/models/character-class', () => ({ CharacterClass: {} }));
         vi.doMock('@/features/races/models/race', () => ({ RaceModel: {} }));
@@ -31,9 +28,6 @@ describe('auxiliary backend routes', () => {
         vi.doMock('@/core/database/db', () => ({
             default: vi.fn().mockResolvedValue(undefined),
         }));
-        vi.doMock('@/core/utils/source-utils', () => ({
-            extractBookName: vi.fn((value: string) => value.split(' p.')[0]),
-        }));
         vi.doMock('@/features/spells/models/spell', () => ({ Spell: { distinct: vi.fn().mockResolvedValue(['XPHB p. 2', 'PHB p. 1', 'PHB p. 99']) } }));
         vi.doMock('@/features/classes/models/character-class', () => ({ CharacterClass: {} }));
         vi.doMock('@/features/races/models/race', () => ({ RaceModel: {} }));
@@ -51,15 +45,12 @@ describe('auxiliary backend routes', () => {
         }>(response);
 
         expect(response.status).toBe(200);
-        expect(payload.sources).toEqual(['PHB', 'XPHB']);
+        expect(payload.sources).toEqual(['Livro do Jogador']);
     });
 
     it('GET /api/sources supports monster sources', async () => {
         vi.doMock('@/core/database/db', () => ({
             default: vi.fn().mockResolvedValue(undefined),
-        }));
-        vi.doMock('@/core/utils/source-utils', () => ({
-            extractBookName: vi.fn((value: string) => value.split(' p.')[0]),
         }));
         vi.doMock('@/features/spells/models/spell', () => ({ Spell: {} }));
         vi.doMock('@/features/classes/models/character-class', () => ({ CharacterClass: {} }));
@@ -78,7 +69,7 @@ describe('auxiliary backend routes', () => {
         }>(response);
 
         expect(response.status).toBe(200);
-        expect(payload.sources).toEqual(['LDM', 'XMM']);
+        expect(payload.sources).toEqual(['Monster Manual', 'Monster Manual 2024']);
     });
 
     it('GET /api/sources includes subclass sources for classes', async () => {
@@ -90,9 +81,6 @@ describe('auxiliary backend routes', () => {
 
         vi.doMock('@/core/database/db', () => ({
             default: vi.fn().mockResolvedValue(undefined),
-        }));
-        vi.doMock('@/core/utils/source-utils', () => ({
-            extractBookName: vi.fn((value: string) => value.split(' p.')[0]),
         }));
         vi.doMock('@/features/spells/models/spell', () => ({ Spell: {} }));
         vi.doMock('@/features/classes/models/character-class', () => ({ CharacterClass: { distinct } }));
@@ -113,7 +101,7 @@ describe('auxiliary backend routes', () => {
         expect(response.status).toBe(200);
         expect(distinct).toHaveBeenCalledWith('source');
         expect(distinct).toHaveBeenCalledWith('subclasses.source');
-        expect(payload.sources).toEqual(['LDJ', 'TCE', 'XPHB']);
+        expect(payload.sources).toEqual(['Livro do Jogador', "Tasha's Cauldron of Everything"]);
     });
 
     it('GET /api/core/health returns a healthy payload even when dbConnect throws', async () => {

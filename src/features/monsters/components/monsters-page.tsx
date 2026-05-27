@@ -5,6 +5,8 @@ import { motion } from "framer-motion"
 import { GlassCard, GlassCardContent } from "@/components/ui/glass-card"
 import { GlassViewSelector } from "@/components/ui/glass-view-selector"
 import { EntityList } from "@/features/rules/components/entity-list"
+import { EntityGenerationAIModal } from "@/features/entity-generation/components/entity-generation-ai-modal"
+import { monsterGenerationAdapter } from "@/features/entity-generation/adapters/monster-generation-adapter"
 import { useAuth } from "@/core/hooks/useAuth"
 import { cn } from "@/core/utils"
 import { motionConfig } from "@/lib/config/motion-configs"
@@ -63,15 +65,22 @@ export function MonstersPage() {
             <div className="overflow-hidden">
                 <GlassCardContent className="p-0">
                     {viewMode === "default" ? (
-                        <EntityList items={data.items} isLoading={data.isLoading} hasNextPage={data.hasNextPage} onLoadMore={data.fetchNextPage} isFetchingNextPage={data.isFetchingNextPage} entityType="Monstro" onEdit={actions.handleEditClick} onDelete={actions.handleDeleteClick} isAdmin={isAdmin} />
+                        <EntityList items={data.items} isLoading={data.isLoading} hasNextPage={data.hasNextPage} onLoadMore={data.fetchNextPage} isFetchingNextPage={data.isFetchingNextPage} entityType="Monstro" onEdit={actions.handleEditClick} onGenerateAI={actions.handleGenerateAIClick} onDelete={actions.handleDeleteClick} isAdmin={isAdmin} />
                     ) : (
-                        <MonstersTable items={data.items} isLoading={data.isLoading} hasNextPage={data.hasNextPage} onLoadMore={data.fetchNextPage} isFetchingNextPage={data.isFetchingNextPage} onEdit={actions.handleEditClick} onDelete={actions.handleDeleteClick} isAdmin={isAdmin} />
+                        <MonstersTable items={data.items} isLoading={data.isLoading} hasNextPage={data.hasNextPage} onLoadMore={data.fetchNextPage} isFetchingNextPage={data.isFetchingNextPage} onEdit={actions.handleEditClick} onGenerateAI={actions.handleGenerateAIClick} onDelete={actions.handleDeleteClick} isAdmin={isAdmin} />
                     )}
                 </GlassCardContent>
             </div>
 
             <MonsterFormModal monster={modals.selectedMonster} isOpen={modals.isFormOpen} onClose={modals.closeAll} onSuccess={() => {}} />
             <DeleteMonsterDialog monster={modals.selectedMonster} isOpen={modals.isDeleteOpen} onClose={modals.closeAll} onConfirm={handleConfirmDelete} isDeleting={deleteMutation.isPending} />
+            <EntityGenerationAIModal
+                open={modals.isGenerationOpen}
+                entity={modals.selectedMonster}
+                adapter={monsterGenerationAdapter}
+                onOpenChange={modals.setIsGenerationOpen}
+                onApplied={actions.handleGenerationApplied}
+            />
         </motion.div>
     )
 }

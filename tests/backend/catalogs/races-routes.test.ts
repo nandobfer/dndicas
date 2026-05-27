@@ -31,13 +31,16 @@ describe("races backend routes", () => {
                 { originalName: { $regex: "elf", $options: "i" } },
             ],
             status: "active",
-            source: { $in: [expect.any(RegExp)] },
+            source: { $in: expect.arrayContaining([expect.any(RegExp)]) },
         }))
         const lastFindCall = find.mock.lastCall
         expect(lastFindCall).toBeDefined()
         if (!lastFindCall) {
             throw new Error("Expected RaceModel.find to be called.")
         }
+        const sourceMatchers = (lastFindCall[0] as { source: { $in: RegExp[] } }).source.$in
+        expect(sourceMatchers.some((regex) => regex.test("PHB p. 1"))).toBe(true)
+        expect(sourceMatchers.some((regex) => regex.test("XPHB p. 2"))).toBe(true)
         expect(JSON.stringify(lastFindCall[0])).not.toContain("description")
         expect(payload.items).toMatchObject([{ id: "race-1", name: "Elfo", originalName: "Elf", source: "PHB" }])
         expect(countDocuments).toHaveBeenCalledWith(expect.objectContaining({

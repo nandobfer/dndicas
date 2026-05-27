@@ -1,4 +1,4 @@
-import { act, render, screen } from '@testing-library/react'
+import { act, fireEvent, render, screen } from '@testing-library/react'
 import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import * as React from 'react'
 import type { ReactNode } from 'react'
@@ -159,6 +159,16 @@ describe('MonstersTable', () => {
         })
 
         expect(onLoadMore).toHaveBeenCalledTimes(1)
+    })
+
+    it('renders the AI generation action for admins', () => {
+        const onGenerateAI = vi.fn()
+
+        render(<MonstersTable items={[baseMonster]} isAdmin onGenerateAI={onGenerateAI} />)
+
+        fireEvent.click(screen.getByText('Gerar com IA'))
+
+        expect(onGenerateAI).toHaveBeenCalledWith(baseMonster)
     })
 
     it('does not load more without a next page or while fetching', () => {

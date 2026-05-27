@@ -5,6 +5,7 @@ import { createAuditLog } from "@/features/users/api/audit-service";
 import dbConnect from "@/core/database/db";
 import { applyFuzzySearch } from "@/core/utils/search-engine"
 import { createTraitSchema } from "@/features/traits/api/validation";
+import { buildSourcePrefixRegexes } from "@/core/utils/source-utils"
 
 export async function GET(req: NextRequest) {
   try {
@@ -23,10 +24,9 @@ export async function GET(req: NextRequest) {
     }
     const sourcesParam = url.searchParams.get("sources")
     if (sourcesParam) {
-        const escapeRegex = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
         const sourcesList = sourcesParam.split(",").map(s => s.trim()).filter(Boolean)
         if (sourcesList.length > 0) {
-            query.source = { $in: sourcesList.map(s => new RegExp(`^${escapeRegex(s)}`, 'i')) }
+            query.source = { $in: buildSourcePrefixRegexes(sourcesList) }
         }
     }
 

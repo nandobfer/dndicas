@@ -1,7 +1,7 @@
 "use client";
 
 import { motion, AnimatePresence } from "framer-motion";
-import { MoreHorizontal, Pencil, Trash2, Zap, Eye } from "lucide-react";
+import { MoreHorizontal, Pencil, Sparkles, Trash2, Zap, Eye } from "lucide-react";
 import { useAuth } from "@/core/hooks/useAuth"
 import { cn } from "@/core/utils"
 import { GlassCard } from "@/components/ui/glass-card"
@@ -44,11 +44,12 @@ interface FeatsTableProps {
     hasNextPage?: boolean
     isFetchingNextPage?: boolean
     onEdit: (feat: Feat) => void
+    onGenerateAI?: (feat: Feat) => void
     onDelete: (feat: Feat) => void
     onLoadMore?: () => void
 }
 
-export function FeatsTable({ feats, isLoading = false, hasNextPage = false, isFetchingNextPage = false, onEdit, onDelete, onLoadMore }: FeatsTableProps) {
+export function FeatsTable({ feats, isLoading = false, hasNextPage = false, isFetchingNextPage = false, onEdit, onGenerateAI, onDelete, onLoadMore }: FeatsTableProps) {
     const { isAdmin } = useAuth()
 
     if (isLoading && feats.length === 0) {
@@ -215,6 +216,14 @@ export function FeatsTable({ feats, isLoading = false, hasNextPage = false, isFe
                                                         <Pencil className="mr-2 h-4 w-4" />
                                                         Editar
                                                     </GlassDropdownMenuItem>
+                                                    {onGenerateAI && (
+                                                        <GlassDropdownMenuItem onClick={() => onGenerateAI(feat)}>
+                                                            <Sparkles className="mr-2 h-4 w-4 animate-pulse text-purple-300" />
+                                                            <span className="bg-gradient-to-r from-blue-300 via-purple-300 to-blue-300 bg-clip-text text-transparent">
+                                                                Gerar com IA
+                                                            </span>
+                                                        </GlassDropdownMenuItem>
+                                                    )}
                                                     <GlassDropdownMenuItem
                                                         onClick={() => onDelete(feat)}
                                                         className="text-red-400 hover:text-red-300 focus:text-red-300"

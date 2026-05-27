@@ -41,4 +41,13 @@ describe("useSpellFilters", () => {
 
         expect(routerReplace).toHaveBeenCalledWith("/spells", { scroll: false })
     })
+
+    it("normalizes legacy source values from the url before syncing them back", () => {
+        currentSearchParams = new URLSearchParams("sources=LDJ%20p%C3%A1g.,Livro%20do%20Jogador")
+
+        const { result } = renderHook(() => useSpellFilters())
+
+        expect(result.current.filters.sources).toEqual(["Livro do Jogador"])
+        expect(routerReplace).toHaveBeenCalledWith("/spells?sources=Livro+do+Jogador", { scroll: false })
+    })
 })

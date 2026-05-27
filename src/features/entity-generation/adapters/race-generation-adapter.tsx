@@ -3,6 +3,7 @@
 import type * as React from "react"
 import { Sparkles } from "lucide-react"
 import { GlassImage } from "@/components/ui/glass-image"
+import { getSourceDisplayLabel } from "@/core/utils/source-utils"
 import { MentionContent } from "@/features/rules/components/mention-badge"
 import { applyRaceGenerationCandidate, generateRaceGenerationCandidates } from "../api/entity-generation-api"
 import type { EntityGenerationAdapter } from "../components/entity-generation-ai-modal"
@@ -84,7 +85,7 @@ function VariationList({ variations }: { variations: RaceVariation[] }) {
             {variations.map((variation, index) => (
                 <div key={`${variation.name}-${index}`} className="rounded border border-white/10 bg-white/[0.03] p-2">
                     <div className="mb-1 text-xs font-medium text-white/80">{variation.name}</div>
-                    <div className="text-[11px] text-white/45">{variation.source}</div>
+                    <div className="text-[11px] text-white/45">{variation.source ? getSourceDisplayLabel(variation.source) : null}</div>
                 </div>
             ))}
         </div>
@@ -100,7 +101,7 @@ function RaceGenerationComparison({ current, candidate }: { current: Race; candi
                     Estado Atual
                 </div>
                 <FieldBlock title="Nome" tone="old" value={current.name} />
-                <FieldBlock title="Fonte" tone="old" value={current.source} />
+                <FieldBlock title="Fonte" tone="old" value={getSourceDisplayLabel(current.source)} />
                 <FieldBlock title="Imagem" tone="old" value={<ImageValue src={current.image} alt={`Imagem atual de ${current.name}`} tone="old" />} />
                 <FieldBlock title="Descrição" tone="old" value={<HtmlValue html={current.description} />} />
                 <FieldBlock title="Habilidades" tone="old" value={<TraitList traits={current.traits ?? []} tone="old" />} />
@@ -113,7 +114,7 @@ function RaceGenerationComparison({ current, candidate }: { current: Race; candi
                     Novo Resultado
                 </div>
                 <FieldBlock title="Nome" tone="new" value={candidate.name} />
-                <FieldBlock title="Fonte" tone="new" value={candidate.source} />
+                <FieldBlock title="Fonte" tone="new" value={getSourceDisplayLabel(candidate.source)} />
                 <FieldBlock title="Imagem" tone="new" value={<ImageValue src={candidate.image} alt={`Nova imagem de ${candidate.name}`} tone="new" />} />
                 <FieldBlock title="Descrição" tone="new" value={<HtmlValue html={candidate.description} />} />
                 <FieldBlock title="Habilidades" tone="new" value={<TraitList traits={candidate.traits ?? []} tone="new" />} />
@@ -128,7 +129,7 @@ export const raceGenerationAdapter: EntityGenerationAdapter<Race, GeneratedRaceC
     entityName: "Raça",
     getId: (race) => race._id,
     getTitle: (race) => race.name,
-    getSource: (race) => race.source,
+    getSource: (race) => getSourceDisplayLabel(race.source),
     getCandidateId: (candidate) => candidate.candidateId,
     getCandidateLabel: (candidate) => candidate.matchLabel,
     generate: (race, runId) => generateRaceGenerationCandidates(race._id, runId),

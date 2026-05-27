@@ -1,7 +1,9 @@
 import type { CreateRaceInput, Race, RaceTrait, RaceVariation, SizeCategory } from "@/features/races/types/races.types"
 import type { CreateSpellInput, Spell } from "@/features/spells/types/spells.types"
+import type { CreateFeatInput, Feat } from "@/features/feats/types/feats.types"
+import type { CreateMonsterInput, Monster } from "@/features/monsters/types/monsters.types"
 
-export type EntityGenerationKind = "race" | "spell"
+export type EntityGenerationKind = "race" | "spell" | "feat" | "monster"
 
 export interface EntityGenerationProgress {
     current: number
@@ -80,6 +82,50 @@ export interface SpellGenerationApplyRequest {
 
 export interface SpellGenerationApplyResponse {
     spell: Spell
+}
+
+export interface GeneratedFeatCandidate extends CreateFeatInput {
+    candidateId: string
+    matchLabel: string
+}
+
+export interface FeatGenerationGenerateRequest {
+    runId: string
+}
+
+export interface FeatGenerationGenerateResponse {
+    current: Feat
+    candidates: GeneratedFeatCandidate[]
+}
+
+export interface FeatGenerationApplyRequest {
+    candidate: GeneratedFeatCandidate
+}
+
+export interface FeatGenerationApplyResponse {
+    feat: Feat
+}
+
+export interface GeneratedMonsterCandidate extends CreateMonsterInput {
+    candidateId: string
+    matchLabel: string
+}
+
+export interface MonsterGenerationGenerateRequest {
+    runId: string
+}
+
+export interface MonsterGenerationGenerateResponse {
+    current: Monster
+    candidates: GeneratedMonsterCandidate[]
+}
+
+export interface MonsterGenerationApplyRequest {
+    candidate: GeneratedMonsterCandidate
+}
+
+export interface MonsterGenerationApplyResponse {
+    monster: Monster
 }
 
 export interface FiveEToolsGenerationRace {

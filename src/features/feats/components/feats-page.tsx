@@ -13,6 +13,8 @@ import { FeatsFilters } from "./feats-filters"
 import { FeatFormModal } from "./feat-form-modal"
 import { DeleteFeatDialog } from "./delete-feat-dialog"
 import { EntityList } from "@/features/rules/components/entity-list"
+import { EntityGenerationAIModal } from "@/features/entity-generation/components/entity-generation-ai-modal"
+import { featGenerationAdapter } from "@/features/entity-generation/adapters/feat-generation-adapter"
 
 export function FeatsPage() {
     const { isAdmin } = useAuth()
@@ -85,6 +87,7 @@ export function FeatsPage() {
                     isFetchingNextPage={data.infinite.isFetchingNextPage}
                     onLoadMore={data.infinite.fetchNextPage}
                     onEdit={actions.handleEditClick}
+                    onGenerateAI={actions.handleGenerateAIClick}
                     onDelete={actions.handleDeleteClick}
                     isAdmin={isAdmin}
                 />
@@ -96,6 +99,7 @@ export function FeatsPage() {
                     isFetchingNextPage={data.infinite.isFetchingNextPage}
                     onLoadMore={data.infinite.fetchNextPage}
                     onEdit={actions.handleEditClick}
+                    onGenerateAI={actions.handleGenerateAIClick}
                     onDelete={actions.handleDeleteClick}
                 />
             )}
@@ -116,6 +120,13 @@ export function FeatsPage() {
                 onConfirm={actions.handleDeleteConfirm}
                 feat={modals.selectedFeat}
                 isDeleting={modals.isDeleting}
+            />
+            <EntityGenerationAIModal
+                open={modals.isGenerationOpen}
+                entity={modals.selectedFeat}
+                adapter={featGenerationAdapter}
+                onOpenChange={modals.setIsGenerationOpen}
+                onApplied={actions.handleGenerationApplied}
             />
         </motion.div>
     )

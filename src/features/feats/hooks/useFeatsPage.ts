@@ -1,11 +1,14 @@
 "use client";
 
 import * as React from 'react';
+import { useQueryClient } from "@tanstack/react-query"
 import { useInfiniteFeats } from './useFeats';
+import { featKeys } from "./useFeats"
 import { useFeatMutations } from './useFeatMutations';
 import { useDebounce } from '@/core/hooks/useDebounce';
 import { useIsMobile } from '@/core/hooks/useMediaQuery';
 import { useViewMode } from "@/core/hooks/useViewMode"
+import { invalidateSearchCache } from "@/core/utils/search-engine"
 import { toast } from "sonner"
 import type { Feat, CreateFeatInput, UpdateFeatInput, FeatsFilters, FeatCategory } from "../types/feats.types"
 
@@ -19,6 +22,7 @@ function getErrorMessage(error: unknown, fallback: string) {
 export function useFeatsPage() {
     const isMobile = useIsMobile()
     const { viewMode, setViewMode, isDefault } = useViewMode()
+    const queryClient = useQueryClient()
 
     // State
     const [search, setSearch] = React.useState("")
@@ -60,6 +64,7 @@ export function useFeatsPage() {
     // UI state
     const [isFormOpen, setIsFormOpen] = React.useState(false)
     const [isDeleteOpen, setIsDeleteOpen] = React.useState(false)
+    const [isGenerationOpen, setIsGenerationOpen] = React.useState(false)
     const [selectedFeat, setSelectedFeat] = React.useState<Feat | null>(null)
 
     // Handlers
@@ -109,6 +114,18 @@ export function useFeatsPage() {
     const handleDeleteClick = (feat: Feat) => {
         setSelectedFeat(feat)
         setIsDeleteOpen(true)
+    }
+
+    const handleGenerateAIClick = (feat: Feat) => {
+        setSelectedFeat(feat)
+        setIsGenerationOpen(true)
+    }
+
+    const handleGenerationApplied = () => {
+        queryClient.invalidateQueries({ queryKey: featKeys.all })
+        queryClient.invalidateQueries({ queryKey: ["audit-logs"] })
+        queryClient.invalidateQueries({ queryKey: ["dashboard-stats"] })
+        invalidateSearchCache()
     }
 
     const handleFormSubmit = async (formData: CreateFeatInput | UpdateFeatInput) => {
@@ -189,6 +206,8 @@ export function useFeatsPage() {
             handleCreateClick,
             handleEditClick,
             handleDeleteClick,
+            handleGenerateAIClick,
+            handleGenerationApplied,
             handleFormSubmit,
             handleDeleteConfirm,
         },
@@ -197,6 +216,8 @@ export function useFeatsPage() {
             setIsFormOpen,
             isDeleteOpen,
             setIsDeleteOpen,
+            isGenerationOpen,
+            setIsGenerationOpen,
             selectedFeat,
             isSaving: createFeat.isPending || updateFeat.isPending,
             isDeleting: deleteFeat.isPending,

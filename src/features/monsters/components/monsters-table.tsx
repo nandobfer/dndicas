@@ -2,7 +2,7 @@
 
 import * as React from "react"
 import { motion } from "framer-motion"
-import { MoreHorizontal, Pencil, Shield, Skull, Trash2 } from "lucide-react"
+import { MoreHorizontal, Pencil, Shield, Skull, Sparkles, Trash2 } from "lucide-react"
 import { Chip } from "@/components/ui/chip"
 import { GlassImage } from "@/components/ui/glass-image"
 import { GlassDropdownMenu, GlassDropdownMenuContent, GlassDropdownMenuItem, GlassDropdownMenuTrigger } from "@/components/ui/glass-dropdown-menu"
@@ -21,6 +21,7 @@ export function MonstersTable({
     onLoadMore = () => {},
     isFetchingNextPage = false,
     onEdit,
+    onGenerateAI,
     onDelete,
     isAdmin,
 }: {
@@ -30,6 +31,7 @@ export function MonstersTable({
     onLoadMore?: () => void
     isFetchingNextPage?: boolean
     onEdit?: (monster: Monster) => void
+    onGenerateAI?: (monster: Monster) => void
     onDelete?: (monster: Monster) => void
     isAdmin?: boolean
 }) {
@@ -139,6 +141,14 @@ export function MonstersTable({
                                                     </GlassDropdownMenuTrigger>
                                                     <GlassDropdownMenuContent align="end">
                                                         <GlassDropdownMenuItem onClick={() => onEdit?.(monster)}><Pencil className="h-4 w-4 mr-2" />Editar</GlassDropdownMenuItem>
+                                                        {onGenerateAI && (
+                                                            <GlassDropdownMenuItem onClick={() => onGenerateAI(monster)}>
+                                                                <Sparkles className="h-4 w-4 mr-2 animate-pulse text-purple-300" />
+                                                                <span className="bg-gradient-to-r from-blue-300 via-purple-300 to-blue-300 bg-clip-text text-transparent">
+                                                                    Gerar com IA
+                                                                </span>
+                                                            </GlassDropdownMenuItem>
+                                                        )}
                                                         <GlassDropdownMenuItem onClick={() => onDelete?.(monster)} className="text-red-400 focus:text-red-400"><Trash2 className="h-4 w-4 mr-2" />Excluir</GlassDropdownMenuItem>
                                                     </GlassDropdownMenuContent>
                                                 </GlassDropdownMenu>
