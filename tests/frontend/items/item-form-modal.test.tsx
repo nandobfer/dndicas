@@ -65,10 +65,26 @@ vi.mock('@clerk/nextjs', () => ({
 
 vi.mock('framer-motion', async () => {
     const actual = await vi.importActual<typeof import('framer-motion')>('framer-motion')
-    const MockDiv = ({ children, layoutId, initial, animate, exit, transition, ...props }: React.HTMLAttributes<HTMLDivElement> & { children?: React.ReactNode; layoutId?: string }) => (
+    type MockMotionDivProps = React.HTMLAttributes<HTMLDivElement> & {
+        children?: React.ReactNode
+        layoutId?: string
+        initial?: unknown
+        animate?: unknown
+        exit?: unknown
+        transition?: unknown
+    }
+    type MockMotionButtonProps = React.ButtonHTMLAttributes<HTMLButtonElement> & {
+        children?: React.ReactNode
+        layoutId?: string
+        initial?: unknown
+        animate?: unknown
+        exit?: unknown
+        transition?: unknown
+    }
+    const MockDiv = ({ children, layoutId, initial, animate, exit, transition, ...props }: MockMotionDivProps) => (
         <div {...props}>{children}</div>
     )
-    const MockButton = ({ children, layoutId, initial, animate, exit, transition, ...props }: React.ButtonHTMLAttributes<HTMLButtonElement> & { children?: React.ReactNode; layoutId?: string }) => (
+    const MockButton = ({ children, layoutId, initial, animate, exit, transition, ...props }: MockMotionButtonProps) => (
         <button {...props}>{children}</button>
     )
     return {

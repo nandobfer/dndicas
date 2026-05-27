@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 
-import { makeJsonRequest, readJson } from '../helpers/http';
+import { makeJsonRequest, makeRequest, readJson } from '../helpers/http';
 import { importFresh } from '../helpers/module';
 
 describe('auxiliary backend routes', () => {
@@ -22,7 +22,7 @@ describe('auxiliary backend routes', () => {
         vi.doMock('@/features/monsters/models/monster', () => ({ MonsterModel: {} }));
 
         const mod = await importFresh<typeof import('@/app/api/sources/route')>('@/app/api/sources/route');
-        const response = await mod.GET(new Request('http://localhost/api/sources?entity=unknown'));
+        const response = await mod.GET(makeRequest('http://localhost/api/sources?entity=unknown'));
 
         expect(response.status).toBe(400);
     });
@@ -45,8 +45,10 @@ describe('auxiliary backend routes', () => {
         vi.doMock('@/features/monsters/models/monster', () => ({ MonsterModel: {} }));
 
         const mod = await importFresh<typeof import('@/app/api/sources/route')>('@/app/api/sources/route');
-        const response = await mod.GET(new Request('http://localhost/api/sources?entity=spells'));
-        const payload = await readJson(response);
+        const response = await mod.GET(makeRequest('http://localhost/api/sources?entity=spells'));
+        const payload = await readJson<{
+            sources: string[];
+        }>(response);
 
         expect(response.status).toBe(200);
         expect(payload.sources).toEqual(['PHB', 'XPHB']);
@@ -70,8 +72,10 @@ describe('auxiliary backend routes', () => {
         vi.doMock('@/features/monsters/models/monster', () => ({ MonsterModel: { distinct: vi.fn().mockResolvedValue(['LDM p. 12', 'XMM p. 5', 'LDM p. 99']) } }));
 
         const mod = await importFresh<typeof import('@/app/api/sources/route')>('@/app/api/sources/route');
-        const response = await mod.GET(new Request('http://localhost/api/sources?entity=monsters'));
-        const payload = await readJson(response);
+        const response = await mod.GET(makeRequest('http://localhost/api/sources?entity=monsters'));
+        const payload = await readJson<{
+            sources: string[];
+        }>(response);
 
         expect(response.status).toBe(200);
         expect(payload.sources).toEqual(['LDM', 'XMM']);
@@ -101,8 +105,10 @@ describe('auxiliary backend routes', () => {
         vi.doMock('@/features/monsters/models/monster', () => ({ MonsterModel: {} }));
 
         const mod = await importFresh<typeof import('@/app/api/sources/route')>('@/app/api/sources/route');
-        const response = await mod.GET(new Request('http://localhost/api/sources?entity=classes'));
-        const payload = await readJson(response);
+        const response = await mod.GET(makeRequest('http://localhost/api/sources?entity=classes'));
+        const payload = await readJson<{
+            sources: string[];
+        }>(response);
 
         expect(response.status).toBe(200);
         expect(distinct).toHaveBeenCalledWith('source');
@@ -116,8 +122,13 @@ describe('auxiliary backend routes', () => {
         }));
 
         const mod = await importFresh<typeof import('@/app/api/core/health/route')>('@/app/api/core/health/route');
-        const response = await mod.GET(new Request('http://localhost/api/core/health'));
-        const payload = await readJson(response);
+        const response = await mod.GET(makeRequest('http://localhost/api/core/health'));
+        const payload = await readJson<{
+            success: boolean;
+            data: {
+                database: string;
+            };
+        }>(response);
 
         expect(response.status).toBe(200);
         expect(payload.success).toBe(true);
@@ -202,11 +213,13 @@ describe('auxiliary backend routes', () => {
 
         const mod = await importFresh<typeof import('@/app/api/core/storage/upload/route')>('@/app/api/core/storage/upload/route');
         const form = new FormData();
-        const response = await mod.POST(new Request('http://localhost/api/core/storage/upload', {
+        const response = await mod.POST(makeRequest('http://localhost/api/core/storage/upload', {
             method: 'POST',
             body: form,
         }));
-        const payload = await readJson(response);
+        const payload = await readJson<{
+            code: string;
+        }>(response);
 
         expect(response.status).toBe(400);
         expect(payload.code).toBe('FILE_REQUIRED');
@@ -296,7 +309,7 @@ describe('auxiliary backend routes', () => {
         vi.doMock('@/features/traits/database/trait', () => ({ Trait: { find: vi.fn() } }));
 
         const mod = await importFresh<typeof import('@/app/api/admin/mention-audit/route')>('@/app/api/admin/mention-audit/route');
-        const response = await mod.GET(new Request('http://localhost/api/admin/mention-audit'));
+        const response = await mod.GET(makeRequest('http://localhost/api/admin/mention-audit'));
 
         expect(response.status).toBe(401);
     });

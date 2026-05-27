@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { NextRequest } from 'next/server';
 
-import { makeJsonRequest, readJson } from '../helpers/http';
+import { makeJsonRequest, makeRequest, readJson } from '../helpers/http';
 import { importFresh } from '../helpers/module';
 
 describe('character sheets backend', () => {
@@ -84,7 +84,7 @@ describe('character sheets backend', () => {
         }));
 
         const mod = await importFresh<typeof import('@/app/api/character-sheets/route')>('@/app/api/character-sheets/route');
-        const response = await mod.GET(new Request('http://localhost/api/character-sheets'));
+        const response = await mod.GET(makeRequest('http://localhost/api/character-sheets'));
 
         expect(response.status).toBe(401);
     });
@@ -143,7 +143,9 @@ describe('character sheets backend', () => {
             method: 'PATCH',
             body: JSON.stringify({ level: 99 }),
         }), { params: Promise.resolve({ id: 'sheet-1' }) });
-        const payload = await readJson(response);
+        const payload = await readJson<{
+            error: string;
+        }>(response);
 
         expect(response.status).toBe(400);
         expect(payload.error).toBe('Dados inválidos');
@@ -163,7 +165,7 @@ describe('character sheets backend', () => {
         }));
 
         const mod = await importFresh<typeof import('@/app/api/character-sheets/[id]/long-rest/route')>('@/app/api/character-sheets/[id]/long-rest/route');
-        const response = await mod.POST(new Request('http://localhost/api/character-sheets/sheet-1/long-rest', {
+        const response = await mod.POST(makeRequest('http://localhost/api/character-sheets/sheet-1/long-rest', {
             method: 'POST',
             headers: { 'x-pusher-origin': 'origin-1' },
         }), { params: Promise.resolve({ id: 'sheet-1' }) });

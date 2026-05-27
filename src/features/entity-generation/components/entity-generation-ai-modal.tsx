@@ -4,6 +4,8 @@ import * as React from "react"
 import { Check, Loader2, Sparkles, X } from "lucide-react"
 import { toast } from "sonner"
 import { cn } from "@/core/utils"
+import { getPusherBrowserConfig } from "@/core/realtime/pusher-browser-config"
+import { PusherBrowserService } from "@/core/realtime/pusher-browser-service"
 import {
     GlassModal,
     GlassModalContent,
@@ -12,15 +14,22 @@ import {
     GlassModalHeader,
     GlassModalTitle,
 } from "@/components/ui/glass-modal"
+import {
+    ENTITY_GENERATION_PUSHER_EVENTS,
+    getEntityGenerationChannelName,
+    type EntityGenerationFailurePayload,
+    type EntityGenerationProgressPayload,
+} from "../realtime/entity-generation-pusher"
 import type { EntityGenerationProgress } from "../types/entity-generation.types"
 
 export interface EntityGenerationAdapter<TEntity, TCandidate> {
     entityName: string
     getId: (entity: TEntity) => string
     getTitle: (entity: TEntity) => string
+    getSource?: (entity: TEntity) => string | undefined
     getCandidateId: (candidate: TCandidate) => string
     getCandidateLabel: (candidate: TCandidate) => string
-    streamUrl: (entity: TEntity) => string
+    generate: (entity: TEntity, runId: string) => Promise<{ candidates: TCandidate[] }>
     apply: (entity: TEntity, candidate: TCandidate) => Promise<unknown>
     renderComparison: (entity: TEntity, candidate: TCandidate) => React.ReactNode
 }
@@ -35,6 +44,24 @@ interface EntityGenerationAIModalProps<TEntity, TCandidate> {
 
 type Phase = "idle" | "loading" | "ready" | "saving" | "error"
 
+function createGenerationRunId(): string {
+    if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+        return crypto.randomUUID()
+    }
+
+    const randomPart = Math.random().toString(36).slice(2)
+    return `${Date.now().toString(36)}-${randomPart}`
+}
+
+function formatProgressMessage(message: string): string {
+    const normalized = message.trim()
+    const lower = normalized.toLowerCase()
+
+    if (lower.includes("traduzindo habilidade") || lower.includes("gerando habilidade")) return "Gerando características"
+    if (lower.startsWith("traduzindo ")) return `Gerando ${normalized.slice("Traduzindo ".length)}`
+    return normalized
+}
+
 export function EntityGenerationAIModal<TEntity, TCandidate>({ open, entity, adapter, onOpenChange, onApplied }: EntityGenerationAIModalProps<TEntity, TCandidate>) {
     const [phase, setPhase] = React.useState<Phase>("idle")
     const [progress, setProgress] = React.useState<EntityGenerationProgress>({ current: 0, total: 1, message: "Preparando geração..." })
@@ -48,6 +75,11 @@ export function EntityGenerationAIModal<TEntity, TCandidate>({ open, entity, ada
     React.useEffect(() => {
         if (!open || !entity) return
 
+        let disposed = false
+        let channelName: string | null = null
+        let channel: ReturnType<PusherBrowserService["subscribe"]> | null = null
+        let generationStarted = false
+
         setEntitySnapshot(entity)
         setPhase("loading")
         setProgress({ current: 0, total: 1, message: "Buscando fonte de dados..." })
@@ -55,40 +87,67 @@ export function EntityGenerationAIModal<TEntity, TCandidate>({ open, entity, ada
         setSelectedId(null)
         setError(null)
 
-        const source = new EventSource(adapter.streamUrl(entity))
+        const runId = createGenerationRunId()
 
-        source.addEventListener("progress", (event) => {
-            setProgress(JSON.parse((event as MessageEvent).data) as EntityGenerationProgress)
-        })
+        const startGeneration = async () => {
+            if (generationStarted || disposed) return
 
-        source.addEventListener("candidate", (event) => {
-            const candidate = JSON.parse((event as MessageEvent).data) as TCandidate
-            setCandidates((current) => {
-                const next = [...current, candidate]
-                if (next.length === 1) setSelectedId(adapter.getCandidateId(candidate))
-                return next
-            })
-        })
+            generationStarted = true
+            try {
+                const result = await adapter.generate(entity, runId)
+                if (disposed) return
 
-        source.addEventListener("done", () => {
-            setPhase("ready")
-            source.close()
-        })
+                setCandidates(result.candidates)
+                setSelectedId(result.candidates[0] ? adapter.getCandidateId(result.candidates[0]) : null)
+                setPhase("ready")
+            } catch (error) {
+                if (disposed) return
 
-        source.addEventListener("failure", (event) => {
-            const raw = (event as MessageEvent).data
-            setError(raw ? JSON.parse(raw).message : "Erro ao gerar dados com IA.")
-            setPhase("error")
-            source.close()
-        })
-
-        source.onerror = () => {
-            setError("Conexão com a geração foi encerrada.")
-            setPhase("error")
-            source.close()
+                setError(error instanceof Error ? error.message : "Erro ao gerar dados com IA.")
+                setPhase("error")
+            }
         }
 
-        return () => source.close()
+        void (async () => {
+            const browserConfig = await getPusherBrowserConfig()
+            if (disposed) return
+
+            if (!browserConfig) {
+                setProgress({ current: 0, total: 1, message: "Gerando dados..." })
+                await startGeneration()
+                return
+            }
+
+            channelName = getEntityGenerationChannelName(runId)
+            const pusher = PusherBrowserService.getInstance()
+            channel = pusher.subscribe(browserConfig, channelName)
+
+            channel.bind(ENTITY_GENERATION_PUSHER_EVENTS.progress, (payload: EntityGenerationProgressPayload) => {
+                setProgress({ current: payload.current, total: payload.total, message: payload.message })
+            })
+            channel.bind(ENTITY_GENERATION_PUSHER_EVENTS.failure, (payload: EntityGenerationFailurePayload) => {
+                setError(payload.message)
+                setPhase("error")
+            })
+            channel.bind("pusher:subscription_succeeded", () => {
+                void startGeneration()
+            })
+            channel.bind("pusher:subscription_error", () => {
+                setProgress({ current: 0, total: 1, message: "Gerando dados..." })
+                void startGeneration()
+            })
+        })()
+
+        return () => {
+            disposed = true
+            if (!channel || !channelName) return
+
+            channel.unbind(ENTITY_GENERATION_PUSHER_EVENTS.progress)
+            channel.unbind(ENTITY_GENERATION_PUSHER_EVENTS.failure)
+            channel.unbind("pusher:subscription_succeeded")
+            channel.unbind("pusher:subscription_error")
+            PusherBrowserService.getInstance().unsubscribe(channelName)
+        }
     }, [adapter, entity, open])
 
     React.useEffect(() => {
@@ -104,6 +163,9 @@ export function EntityGenerationAIModal<TEntity, TCandidate>({ open, entity, ada
 
     const selectedCandidate = React.useMemo(() => candidates.find((candidate) => adapter.getCandidateId(candidate) === selectedId) ?? null, [adapter, candidates, selectedId])
     const progressPercent = Math.min(100, Math.round((progress.current / Math.max(progress.total, 1)) * 100))
+    const activeTitle = activeEntity ? adapter.getTitle(activeEntity) : null
+    const activeSource = activeEntity ? adapter.getSource?.(activeEntity) : undefined
+    const progressMessage = phase === "saving" ? "Salvando alterações..." : formatProgressMessage(progress.message)
 
     const handleSave = async () => {
         if (!activeEntity || !selectedCandidate) return
@@ -130,16 +192,28 @@ export function EntityGenerationAIModal<TEntity, TCandidate>({ open, entity, ada
                         <div>
                             <GlassModalTitle>Gerar com IA</GlassModalTitle>
                             <GlassModalDescription>
-                                {activeEntity ? `${adapter.entityName}: ${adapter.getTitle(activeEntity)}` : "Preparando entidade..."}
+                                {activeEntity ? adapter.entityName : "Preparando entidade..."}
                             </GlassModalDescription>
                         </div>
                     </div>
                 </GlassModalHeader>
 
+                {activeEntity && (
+                    <div className="flex flex-wrap items-center gap-2 rounded-lg border border-white/10 bg-white/[0.03] px-4 py-3">
+                        <span className="text-xs font-semibold uppercase tracking-wide text-white/40">{adapter.entityName}</span>
+                        <span className="text-base font-semibold text-white">{activeTitle}</span>
+                        {activeSource && (
+                            <span className="inline-flex items-center rounded-full border border-amber-200/25 bg-amber-300/10 px-2.5 py-1 text-[11px] font-medium text-amber-100 shadow-[0_0_18px_rgba(251,191,36,0.12)]">
+                                {activeSource}
+                            </span>
+                        )}
+                    </div>
+                )}
+
                 {(phase === "loading" || phase === "saving") && (
-                    <div className="rounded-lg border border-white/10 bg-white/[0.03] p-4">
-                        <div className="mb-3 flex items-center justify-between gap-3 text-xs text-white/60">
-                            <span>{phase === "saving" ? "Salvando alterações..." : progress.message}</span>
+                    <div className="rounded-lg border border-purple-300/20 bg-white/[0.04] p-4 shadow-[0_20px_60px_rgba(0,0,0,0.18)]">
+                        <div className="mb-3 flex items-center justify-between gap-3 text-xs text-white/65">
+                            <span className="font-medium text-white/75">{progressMessage}</span>
                             <span className="font-mono">{phase === "saving" ? "..." : `${progressPercent}%`}</span>
                         </div>
                         <div className="h-2 overflow-hidden rounded-full bg-white/10">

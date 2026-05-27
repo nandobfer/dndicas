@@ -1,5 +1,3 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
-
 import { describe, expect, it, vi } from 'vitest';
 
 import { importFresh } from '../helpers/module';
@@ -8,7 +6,7 @@ describe('classes service', () => {
     it('matches source filters against class and subclass sources', async () => {
         const lean = vi.fn().mockResolvedValue([]);
         const sort = vi.fn(() => ({ lean }));
-        const find = vi.fn(() => ({ sort }));
+        const find = vi.fn((_query?: unknown) => ({ sort }));
 
         vi.doMock('@/core/database/db', () => ({ default: vi.fn().mockResolvedValue(undefined) }));
         vi.doMock('@/features/classes/models/character-class', () => ({ CharacterClass: { find } }));
@@ -29,7 +27,19 @@ describe('classes service', () => {
                 { 'subclasses.source': { $in: [expect.any(RegExp)] } },
             ],
         }));
-        expect(String((find.mock.calls[0][0] as any).$or[0].source.$in[0])).toBe('/^TCE/i');
+        const lastFindCall = find.mock.lastCall;
+        expect(lastFindCall).toBeDefined();
+        if (!lastFindCall) {
+            throw new Error('Expected CharacterClass.find to be called.');
+        }
+
+        const query = lastFindCall[0] as {
+            $or: Array<{
+                source?: { $in: RegExp[] };
+            }>;
+        };
+
+        expect(String(query.$or[0]?.source?.$in[0])).toBe('/^TCE/i');
         expect(sort).toHaveBeenCalledWith({ createdAt: 1 });
         expect(lean).toHaveBeenCalled();
     });

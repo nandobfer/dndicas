@@ -4,7 +4,7 @@ import type * as React from "react"
 import { Sparkles } from "lucide-react"
 import { GlassImage } from "@/components/ui/glass-image"
 import { MentionContent } from "@/features/rules/components/mention-badge"
-import { applyRaceGenerationCandidate } from "../api/entity-generation-api"
+import { applyRaceGenerationCandidate, generateRaceGenerationCandidates } from "../api/entity-generation-api"
 import type { EntityGenerationAdapter } from "../components/entity-generation-ai-modal"
 import type { GeneratedRaceCandidate } from "../types/entity-generation.types"
 import type { Race, RaceTrait, RaceVariation } from "@/features/races/types/races.types"
@@ -128,9 +128,10 @@ export const raceGenerationAdapter: EntityGenerationAdapter<Race, GeneratedRaceC
     entityName: "Raça",
     getId: (race) => race._id,
     getTitle: (race) => race.name,
+    getSource: (race) => race.source,
     getCandidateId: (candidate) => candidate.candidateId,
     getCandidateLabel: (candidate) => candidate.matchLabel,
-    streamUrl: (race) => `/api/admin/entity-generation/races/${race._id}/stream`,
+    generate: (race, runId) => generateRaceGenerationCandidates(race._id, runId),
     apply: (race, candidate) => applyRaceGenerationCandidate(race._id, candidate),
     renderComparison: (race, candidate) => <RaceGenerationComparison current={race} candidate={candidate} />,
 }

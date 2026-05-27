@@ -2,8 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
     generateText: vi.fn(),
-    terminalYellow: vi.fn(),
-    terminalGray: vi.fn(),
+    stderrWrite: vi.fn(() => true),
 }));
 
 vi.mock('../../../../src/core/ai/genai', () => ({
@@ -11,25 +10,13 @@ vi.mock('../../../../src/core/ai/genai', () => ({
     generateText: (...args: unknown[]) => mocks.generateText(...args),
 }));
 
-vi.mock('terminal-kit', () => ({
-    default: {
-        terminal: Object.assign(
-            vi.fn(),
-            {
-                yellow: mocks.terminalYellow,
-                gray: mocks.terminalGray,
-            },
-        ),
-    },
-}));
-
 import { GenAITranslator } from '../../../../scripts/seed-data/translation/genai-translator';
 
 describe('GenAITranslator invalid JSON recovery', () => {
     beforeEach(() => {
         mocks.generateText.mockReset();
-        mocks.terminalYellow.mockReset();
-        mocks.terminalGray.mockReset();
+        mocks.stderrWrite.mockClear();
+        vi.spyOn(process.stderr, 'write').mockImplementation(mocks.stderrWrite as never);
     });
 
     it('retries invalid JSON and returns the next valid translation', async () => {
@@ -86,6 +73,6 @@ describe('GenAITranslator invalid JSON recovery', () => {
         expect(mocks.generateText.mock.calls[1][0]).toContain('previous response was invalid JSON');
         expect(mocks.generateText.mock.calls[2][0]).toContain('previous response was invalid JSON');
         expect(mocks.generateText.mock.calls[3][0]).toContain('previous response was invalid JSON');
-        expect(mocks.terminalYellow).toHaveBeenCalledWith(expect.stringContaining('attempt 3'));
+        expect(mocks.stderrWrite).toHaveBeenCalledWith(expect.stringContaining('attempt 3'));
     });
 });

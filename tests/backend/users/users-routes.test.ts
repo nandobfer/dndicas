@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 
-import { makeJsonRequest, readJson } from '../helpers/http';
+import { makeJsonRequest, makeRequest, readJson } from '../helpers/http';
 import { importFresh } from '../helpers/module';
 
 describe('/api/users routes', () => {
@@ -30,8 +30,10 @@ describe('/api/users routes', () => {
         }));
 
         const mod = await importFresh<typeof import('@/app/api/users/route')>('@/app/api/users/route');
-        const response = await mod.GET(new Request('http://localhost/api/users?page=0'));
-        const payload = await readJson(response);
+        const response = await mod.GET(makeRequest('http://localhost/api/users?page=0'));
+        const payload = await readJson<{
+            error: string;
+        }>(response);
 
         expect(response.status).toBe(400);
         expect(payload.error).toBe('Filtros inválidos');
@@ -82,8 +84,10 @@ describe('/api/users routes', () => {
         }));
 
         const mod = await importFresh<typeof import('@/app/api/users/route')>('@/app/api/users/route');
-        const response = await mod.GET(new Request('http://localhost/api/users?search=hero&status=all&role=admin&page=1&limit=10'));
-        const payload = await readJson(response);
+        const response = await mod.GET(makeRequest('http://localhost/api/users?search=hero&status=all&role=admin&page=1&limit=10'));
+        const payload = await readJson<{
+            error: string;
+        }>(response);
 
         expect(response.status).toBe(200);
         expect(payload).toEqual({
@@ -177,7 +181,9 @@ describe('/api/users routes', () => {
             method: 'PUT',
             body: JSON.stringify({ role: 'user' }),
         }), { params: Promise.resolve({ id: 'mongo-1' }) });
-        const payload = await readJson(response);
+        const payload = await readJson<{
+            error: string;
+        }>(response);
 
         expect(response.status).toBe(400);
         expect(payload.error).toContain('própria função');
@@ -203,10 +209,12 @@ describe('/api/users routes', () => {
         }));
 
         const mod = await importFresh<typeof import('@/app/api/users/[id]/route')>('@/app/api/users/[id]/route');
-        const response = await mod.DELETE(new Request('http://localhost/api/users/mongo-1', {
+        const response = await mod.DELETE(makeRequest('http://localhost/api/users/mongo-1', {
             method: 'DELETE',
         }), { params: Promise.resolve({ id: 'mongo-1' }) });
-        const payload = await readJson(response);
+        const payload = await readJson<{
+            error: string;
+        }>(response);
 
         expect(response.status).toBe(400);
         expect(payload.error).toContain('própria conta');

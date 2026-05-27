@@ -46,8 +46,8 @@ interface FiveEToolsMonster {
     int?: number;
     wis?: number;
     cha?: number;
-    save?: Record<string, string>;
-    skill?: Record<string, string>;
+    save?: Record<string, unknown>;
+    skill?: Record<string, unknown>;
     senses?: string[];
     passive?: number;
     languages?: string[];
@@ -313,31 +313,34 @@ function mapChallengeRating(cr: FiveEToolsMonster['cr']): string {
     return '0';
 }
 
-function parseSigned(value?: string): number | undefined {
-    if (!value) return undefined;
+function parseSigned(value: unknown): number | undefined {
+    if (typeof value === 'number') return Number.isFinite(value) ? value : undefined;
+    if (typeof value !== 'string') return undefined;
     const parsed = Number(value.replace('+', '').trim());
     return Number.isFinite(parsed) ? parsed : undefined;
 }
 
-function mapSavingThrows(save?: Record<string, string>): CreateMonsterInput['savingThrows'] {
+function mapSavingThrows(save?: Record<string, unknown>): CreateMonsterInput['savingThrows'] {
     return Object.fromEntries(
         Object.entries(save ?? {})
             .map(([key, value]) => {
                 const attribute = ATTRIBUTE_MAP[key];
+                if (!attribute) return null;
                 const override = parseSigned(value);
-                return attribute && override !== undefined ? [attribute, { proficient: false, override }] : null;
+                return override !== undefined ? [attribute, { proficient: false, override }] : null;
             })
             .filter((item): item is [AttributeType, { proficient: boolean; override: number }] => item !== null),
     );
 }
 
-function mapSkills(skill?: Record<string, string>): CreateMonsterInput['skills'] {
+function mapSkills(skill?: Record<string, unknown>): CreateMonsterInput['skills'] {
     return Object.fromEntries(
         Object.entries(skill ?? {})
             .map(([key, value]) => {
                 const skillName = SKILL_MAP[key];
+                if (!skillName) return null;
                 const override = parseSigned(value);
-                return skillName && override !== undefined ? [skillName, { proficient: false, expertise: false, override }] : null;
+                return override !== undefined ? [skillName, { proficient: false, expertise: false, override }] : null;
             })
             .filter((item): item is [SkillName, { proficient: boolean; expertise: boolean; override: number }] => item !== null),
     );

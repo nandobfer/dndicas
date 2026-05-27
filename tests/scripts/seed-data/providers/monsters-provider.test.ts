@@ -207,6 +207,40 @@ describe('MonstersProvider', () => {
         expect(output?.actions[0]).toMatchObject({ label: '[PT] Wind Staff', attackRoll: 5, hitRoll: '1d8 + 3 concussão + 2d10 elétrico' });
     });
 
+    it('ignores structured unsupported skill entries without crashing while keeping mapped overrides', async () => {
+        const { provider } = makeProvider();
+        const output = await provider.processItem({
+            name: 'Adult Oblex',
+            source: 'MTF',
+            size: ['H'],
+            type: 'ooze',
+            alignment: ['L', 'E'],
+            ac: [16],
+            hp: { average: 115, formula: '10d12 + 50' },
+            speed: { walk: 20 },
+            str: 8,
+            dex: 16,
+            con: 21,
+            int: 19,
+            wis: 12,
+            cha: 18,
+            save: { int: '+7', cha: '+5' },
+            skill: {
+                deception: '+5',
+                perception: '+4',
+                other: [{ oneOf: { arcana: '+7', history: '+7', nature: '+7', religion: '+7' } }],
+            },
+            passive: 14,
+            cr: '5',
+        });
+
+        expect(output?.savingThrows.intelligence?.override).toBe(7);
+        expect(output?.savingThrows.charisma?.override).toBe(5);
+        expect(output?.skills.Enganação?.override).toBe(5);
+        expect(output?.skills.Percepção?.override).toBe(4);
+        expect(output?.skills.Arcanismo).toBeUndefined();
+    });
+
     it('translates special AC and HP text when they contain prose', async () => {
         const { provider, translateSpy } = makeProvider();
         const output = await provider.processItem({
@@ -271,7 +305,7 @@ describe('MonstersProvider', () => {
             armorClass: '17',
             hitPointsFormula: '12d8 + 24',
         });
-        const translatedLabels = translateSpy.mock.calls.map((call) => call[0]);
+        const translatedLabels = translateSpy.mock.calls.map((call: [string, ...unknown[]]) => call[0]);
         expect(translatedLabels).not.toContain('17');
         expect(translatedLabels).not.toContain('12d8 + 24');
     });
@@ -280,7 +314,10 @@ describe('MonstersProvider', () => {
         const originalReadDir = fs.readdirSync;
         const originalReadFile = fs.readFileSync;
 
-        vi.spyOn(fs, 'readdirSync').mockImplementation((filePath, options) => {
+        vi.spyOn(fs, 'readdirSync').mockImplementation(((filePath: fs.PathLike, options?: fs.ObjectEncodingOptions & {
+            withFileTypes?: boolean;
+            recursive?: boolean;
+        }) => {
             if (String(filePath).includes('/src/lib/5etools-data/bestiary')) {
                 return [
                     'bestiary-alpha.json',
@@ -289,10 +326,10 @@ describe('MonstersProvider', () => {
                     'fluff-bestiary-unused.json',
                     'legendarygroups.json',
                     'readme.txt',
-                ] as unknown as ReturnType<typeof originalReadDir>;
+                ] as never;
             }
-            return originalReadDir(filePath, options as never);
-        });
+            return originalReadDir(filePath, options as never) as never;
+        }) as unknown as typeof fs.readdirSync);
         const readFileSpy = vi.spyOn(fs, 'readFileSync').mockImplementation((filePath, options) => {
             const file = String(filePath);
             if (file.endsWith('fluff-bestiary-alpha.json')) return JSON.stringify({ monsterFluff: [{ name: 'Alpha Beast', source: 'ALPHA', entries: ['Alpha lore'] }] }) as never;
