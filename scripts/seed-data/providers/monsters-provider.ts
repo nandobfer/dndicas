@@ -28,6 +28,8 @@ type RawEntry = string | {
     items?: RawEntry[];
 };
 
+type MonsterFluffImage = { href?: { type?: string; path?: string; url?: string } };
+
 interface FiveEToolsMonster {
     name: string;
     source: string;
@@ -85,13 +87,13 @@ interface MonsterFluff {
     name: string;
     source: string;
     entries?: RawEntry[];
-    images?: Array<{ href?: { type?: string; path?: string; url?: string } }>;
+    images?: MonsterFluffImage[];
     _copy?: {
         name: string;
         source: string;
         _mod?: {
-            entries?: { mode?: string; items?: RawEntry[] };
-            images?: { mode?: string; items?: Array<{ href?: { type?: string; path?: string; url?: string } }> };
+            entries?: { mode?: string; items?: RawEntry | RawEntry[] };
+            images?: { mode?: string; items?: MonsterFluffImage | MonsterFluffImage[] };
         };
     };
 }
@@ -455,6 +457,11 @@ function buildImageUrl(fluff?: MonsterFluff): string {
     return '';
 }
 
+function normalizeFluffItems<T>(items?: T | T[]): T[] {
+    if (items === undefined) return [];
+    return Array.isArray(items) ? items : [items];
+}
+
 export class MonstersProvider extends BaseProvider<FiveEToolsMonster, CreateMonsterInput> {
     readonly name = 'Monsters';
     readonly dataFilePath = BESTIARY_DIR;
@@ -510,8 +517,8 @@ export class MonstersProvider extends BaseProvider<FiveEToolsMonster, CreateMons
         const mod = direct._copy._mod;
         return {
             ...direct,
-            entries: [...(mod?.entries?.items ?? []), ...(direct.entries ?? []), ...(base?.entries ?? [])],
-            images: [...(mod?.images?.items ?? []), ...(direct.images ?? []), ...(base?.images ?? [])],
+            entries: [...normalizeFluffItems(mod?.entries?.items), ...(direct.entries ?? []), ...(base?.entries ?? [])],
+            images: [...normalizeFluffItems(mod?.images?.items), ...(direct.images ?? []), ...(base?.images ?? [])],
         };
     }
 

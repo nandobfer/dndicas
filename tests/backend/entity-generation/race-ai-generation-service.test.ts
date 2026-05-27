@@ -111,7 +111,12 @@ describe("applyRaceGenerationCandidate", () => {
                 description: "<p>new</p>",
                 source: "Plane Shift p. 1",
                 image: "https://example.com/vampire.png",
-                traits: [expect.objectContaining({ name: "Idade", description: expect.stringContaining("data-id=\"trait-age\"") })],
+                traits: [
+                    expect.objectContaining({
+                        name: "Habilidade sem Nome",
+                        description: '<span data-type="mention" data-id="trait-age" data-entity-type="Habilidade" class="mention">Idade (Vampiro)</span>',
+                    }),
+                ],
             }),
             { new: true, runValidators: true },
         )

@@ -20,9 +20,14 @@ export function useRacesPage() {
     const [status, setStatus] = React.useState<"active" | "inactive" | "all">("all")
     const [sources, setSources] = React.useState<string[]>([])
 
-    const filters = { search, status, sources: sources.length > 0 ? sources : undefined }
+    const queryFilters = {
+        search,
+        searchField: "name" as const,
+        status,
+        sources: sources.length > 0 ? sources : undefined,
+    }
 
-    const infiniteData = useInfiniteRaces(filters)
+    const infiniteData = useInfiniteRaces(queryFilters)
 
     const [isFormOpen, setIsFormOpen] = React.useState(false)
     const [isDeleteOpen, setIsDeleteOpen] = React.useState(false)

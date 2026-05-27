@@ -16,6 +16,7 @@ export async function fetchRaces(
     if (params.page) query.append("page", params.page.toString())
     if (params.limit) query.append("limit", params.limit.toString())
     if (params.search) query.append("search", params.search)
+    if (params.searchField) query.append("searchField", params.searchField)
     if (params.status && params.status !== "all") query.append("status", params.status)
     if (params.sources && params.sources.length > 0) query.append("sources", params.sources.join(","))
 

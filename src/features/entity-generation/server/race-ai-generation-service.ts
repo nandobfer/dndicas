@@ -492,8 +492,8 @@ async function findOrCreateTraitMention(trait: GeneratedRaceTrait, scopeName: st
     }
 
     const id = String(doc._id)
-    const mention = `<span class="mention" data-type="trait" data-id="${id}" data-label="${exactName}">@${exactName}</span>`
-    return { name: trait.name, level: trait.level ?? 1, description: mention }
+    const mention = `<span data-type="mention" data-id="${id}" data-entity-type="Habilidade" class="mention">${doc.name}</span>`
+    return { name: "Habilidade sem Nome", level: trait.level ?? 1, description: mention }
 }
 
 async function resolveSpellMention(spell: RawGenerationSpellRef, raceName: string, userId: string) {
