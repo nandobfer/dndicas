@@ -128,6 +128,7 @@ export const raceGenerationAdapter: EntityGenerationAdapter<Race, GeneratedRaceC
     entityName: "Raça",
     getId: (race) => race._id,
     getTitle: (race) => race.name,
+    getSource: (race) => race.source,
     getCandidateId: (candidate) => candidate.candidateId,
     getCandidateLabel: (candidate) => candidate.matchLabel,
     generate: (race, runId) => generateRaceGenerationCandidates(race._id, runId),

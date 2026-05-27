@@ -42,6 +42,7 @@ vi.mock("@/core/realtime/pusher-browser-service", () => ({
 interface TestEntity {
     _id: string
     name: string
+    source?: string
 }
 
 interface TestCandidate {
@@ -85,7 +86,7 @@ describe("EntityGenerationAIModal", () => {
     it("subscribes to Pusher, updates progress, and keeps an entity snapshot while saving", async () => {
         const channel = new MockChannel()
         realtimeMocks.mockSubscribe.mockReturnValue(channel)
-        const entity = { _id: "entity-1", name: "Entidade Atual" }
+        const entity = { _id: "entity-1", name: "Entidade Atual", source: "Fonte Atual" }
         const candidate = { id: "candidate-1", label: "Candidato" }
         const renderComparison = vi.fn((current: TestEntity) => <div>Comparando {current.name}</div>)
         const generate = vi.fn().mockResolvedValue({ candidates: [candidate] })
@@ -94,6 +95,7 @@ describe("EntityGenerationAIModal", () => {
             entityName: "Entidade",
             getId: (item) => item._id,
             getTitle: (item) => item.name,
+            getSource: (item) => item.source,
             getCandidateId: (item) => item.id,
             getCandidateLabel: (item) => item.label,
             generate,
@@ -118,13 +120,17 @@ describe("EntityGenerationAIModal", () => {
 
         render(<Harness />)
 
+        expect(screen.getByText("Entidade Atual")).toBeInTheDocument()
+        expect(screen.getByText("Fonte Atual")).toBeInTheDocument()
+
         await waitFor(() => expect(realtimeMocks.mockSubscribe).toHaveBeenCalledWith(expect.any(Object), "entity-generation.run-1"))
 
         await act(async () => {
-            channel.emit(ENTITY_GENERATION_PUSHER_EVENTS.progress, { current: 2, total: 4, message: "Traduzindo raça" })
+            channel.emit(ENTITY_GENERATION_PUSHER_EVENTS.progress, { current: 2, total: 4, message: "Traduzindo habilidade Darkvision (Elf)" })
         })
 
-        expect(screen.getByText("Traduzindo raça")).toBeInTheDocument()
+        expect(screen.getByText("Gerando características")).toBeInTheDocument()
+        expect(screen.queryByText("Traduzindo habilidade Darkvision (Elf)")).not.toBeInTheDocument()
         expect(screen.getByText("50%")).toBeInTheDocument()
         expect(generate).not.toHaveBeenCalled()
 

@@ -21,7 +21,7 @@ describe("POST /api/admin/entity-generation/races/[id]/generate", () => {
         const publishProgress = vi.fn().mockResolvedValue(undefined)
         const publishFailure = vi.fn().mockResolvedValue(undefined)
         const generateRaceCandidates = vi.fn(async (_id: string, onProgress: (progress: { current: number; total: number; message: string }) => Promise<void>) => {
-            await onProgress({ current: 1, total: 2, message: "Traduzindo raça" })
+            await onProgress({ current: 1, total: 2, message: "Gerando raça" })
             return { current: { _id: "race-1" }, candidates: [{ candidateId: "candidate-1" }] }
         })
 
@@ -47,7 +47,7 @@ describe("POST /api/admin/entity-generation/races/[id]/generate", () => {
         expect(response.status).toBe(200)
         expect(generateRaceCandidates).toHaveBeenCalledWith("race-1", expect.any(Function))
         expect(publishProgress).toHaveBeenCalledWith("run-1", { current: 0, total: 1, message: "Buscando fonte de dados..." })
-        expect(publishProgress).toHaveBeenCalledWith("run-1", { current: 1, total: 2, message: "Traduzindo raça" })
+        expect(publishProgress).toHaveBeenCalledWith("run-1", { current: 1, total: 2, message: "Gerando raça" })
         expect(publishFailure).not.toHaveBeenCalled()
         expect(payload.candidates[0].candidateId).toBe("candidate-1")
     })

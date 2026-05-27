@@ -26,6 +26,7 @@ export interface EntityGenerationAdapter<TEntity, TCandidate> {
     entityName: string
     getId: (entity: TEntity) => string
     getTitle: (entity: TEntity) => string
+    getSource?: (entity: TEntity) => string | undefined
     getCandidateId: (candidate: TCandidate) => string
     getCandidateLabel: (candidate: TCandidate) => string
     generate: (entity: TEntity, runId: string) => Promise<{ candidates: TCandidate[] }>
@@ -50,6 +51,15 @@ function createGenerationRunId(): string {
 
     const randomPart = Math.random().toString(36).slice(2)
     return `${Date.now().toString(36)}-${randomPart}`
+}
+
+function formatProgressMessage(message: string): string {
+    const normalized = message.trim()
+    const lower = normalized.toLowerCase()
+
+    if (lower.includes("traduzindo habilidade") || lower.includes("gerando habilidade")) return "Gerando características"
+    if (lower.startsWith("traduzindo ")) return `Gerando ${normalized.slice("Traduzindo ".length)}`
+    return normalized
 }
 
 export function EntityGenerationAIModal<TEntity, TCandidate>({ open, entity, adapter, onOpenChange, onApplied }: EntityGenerationAIModalProps<TEntity, TCandidate>) {
@@ -153,6 +163,9 @@ export function EntityGenerationAIModal<TEntity, TCandidate>({ open, entity, ada
 
     const selectedCandidate = React.useMemo(() => candidates.find((candidate) => adapter.getCandidateId(candidate) === selectedId) ?? null, [adapter, candidates, selectedId])
     const progressPercent = Math.min(100, Math.round((progress.current / Math.max(progress.total, 1)) * 100))
+    const activeTitle = activeEntity ? adapter.getTitle(activeEntity) : null
+    const activeSource = activeEntity ? adapter.getSource?.(activeEntity) : undefined
+    const progressMessage = phase === "saving" ? "Salvando alterações..." : formatProgressMessage(progress.message)
 
     const handleSave = async () => {
         if (!activeEntity || !selectedCandidate) return
@@ -179,16 +192,28 @@ export function EntityGenerationAIModal<TEntity, TCandidate>({ open, entity, ada
                         <div>
                             <GlassModalTitle>Gerar com IA</GlassModalTitle>
                             <GlassModalDescription>
-                                {activeEntity ? `${adapter.entityName}: ${adapter.getTitle(activeEntity)}` : "Preparando entidade..."}
+                                {activeEntity ? adapter.entityName : "Preparando entidade..."}
                             </GlassModalDescription>
                         </div>
                     </div>
                 </GlassModalHeader>
 
+                {activeEntity && (
+                    <div className="flex flex-wrap items-center gap-2 rounded-lg border border-white/10 bg-white/[0.03] px-4 py-3">
+                        <span className="text-xs font-semibold uppercase tracking-wide text-white/40">{adapter.entityName}</span>
+                        <span className="text-base font-semibold text-white">{activeTitle}</span>
+                        {activeSource && (
+                            <span className="inline-flex items-center rounded-full border border-amber-200/25 bg-amber-300/10 px-2.5 py-1 text-[11px] font-medium text-amber-100 shadow-[0_0_18px_rgba(251,191,36,0.12)]">
+                                {activeSource}
+                            </span>
+                        )}
+                    </div>
+                )}
+
                 {(phase === "loading" || phase === "saving") && (
-                    <div className="rounded-lg border border-white/10 bg-white/[0.03] p-4">
-                        <div className="mb-3 flex items-center justify-between gap-3 text-xs text-white/60">
-                            <span>{phase === "saving" ? "Salvando alterações..." : progress.message}</span>
+                    <div className="rounded-lg border border-purple-300/20 bg-white/[0.04] p-4 shadow-[0_20px_60px_rgba(0,0,0,0.18)]">
+                        <div className="mb-3 flex items-center justify-between gap-3 text-xs text-white/65">
+                            <span className="font-medium text-white/75">{progressMessage}</span>
                             <span className="font-mono">{phase === "saving" ? "..." : `${progressPercent}%`}</span>
                         </div>
                         <div className="h-2 overflow-hidden rounded-full bg-white/10">

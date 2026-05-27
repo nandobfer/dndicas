@@ -375,11 +375,10 @@ async function translateTraits(
     translator: GenAITranslator,
     counter: TranslationCounter,
     rawTraits: RaceTrait[],
-    scopeName: string,
 ): Promise<GeneratedRaceTrait[]> {
     const result: GeneratedRaceTrait[] = []
     for (const trait of rawTraits) {
-        const translated = await translateItem(translator, counter, trait.name, trait.description, `Traduzindo habilidade ${trait.name} (${scopeName})`)
+        const translated = await translateItem(translator, counter, trait.name, trait.description, "Gerando características")
         result.push({ name: translated.name, originalName: trait.name, description: translated.description, level: trait.level ?? 1 })
     }
     return result
@@ -395,7 +394,7 @@ async function translateSpells(
     for (const spell of rawSpells) {
         const sourceSpell = spellSources.find((item) => normalize(item.name) === normalize(spell.nameEN))
         const circle = sourceSpell?.level ?? (spell.isCantrip ? 0 : undefined)
-        const translated = await translateItem(translator, counter, spell.nameEN, sourceSpell ? buildSpellDescriptionHtml(sourceSpell) : "", `Traduzindo magia ${spell.nameEN}`)
+        const translated = await translateItem(translator, counter, spell.nameEN, sourceSpell ? buildSpellDescriptionHtml(sourceSpell) : "", `Gerando magia ${spell.nameEN}`)
         result.push({
             _raw: true,
             name: translated.name,
@@ -420,22 +419,22 @@ async function buildCandidate(
 ): Promise<GeneratedRaceCandidate> {
     const fluff = fluffEntries.find((item) => normalize(item.name) === normalize(race.name) && item.source === race.source)
     const description = buildDescriptionHtml(fluff?.entries ?? race.entries)
-    const translatedRace = await translateItem(translator, counter, race.name, description, `Traduzindo raça ${race.name}`)
+    const translatedRace = await translateItem(translator, counter, race.name, description, `Gerando raça ${race.name}`)
     const subraces = allSubraces.filter((subrace) => normalize(subrace.raceName) === normalize(race.name) && subrace.raceSource === race.source)
 
-    const traits = await translateTraits(translator, counter, extractTraits(race.entries), translatedRace.name)
+    const traits = await translateTraits(translator, counter, extractTraits(race.entries))
     const spells = await translateSpells(translator, counter, collectAdditionalSpells(race.additionalSpells), spellSources)
 
     const variations: GeneratedRaceVariation[] = []
     for (const subrace of subraces) {
         const subraceName = subrace.name ? `${subrace.name} ${race.name}` : race.name
-        const translatedVariation = await translateItem(translator, counter, subraceName, buildDescriptionHtml(subrace.entries), `Traduzindo variação ${subraceName}`)
+        const translatedVariation = await translateItem(translator, counter, subraceName, buildDescriptionHtml(subrace.entries), `Gerando variação ${subraceName}`)
         variations.push({
             name: translatedVariation.name,
             description: translatedVariation.description,
             source: formatSource(subrace.source, subrace.page),
             image: getRaceImage(fluff),
-            traits: await translateTraits(translator, counter, extractTraits(subrace.entries), translatedVariation.name),
+            traits: await translateTraits(translator, counter, extractTraits(subrace.entries)),
             spells: await translateSpells(translator, counter, collectAdditionalSpells(subrace.additionalSpells), spellSources),
             size: mapSize(subrace.size),
             speed: subrace.speed ? mapSpeed(subrace.speed) : undefined,
