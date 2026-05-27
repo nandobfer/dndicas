@@ -22,7 +22,9 @@ describe('monsters backend routes', () => {
 
         const mod = await importFresh<typeof import('@/app/api/monsters/route')>('@/app/api/monsters/route')
         const response = await mod.GET(new Request('http://localhost/api/monsters?search=lobo&type=beast&size=M&challengeRating=1&status=active&sources=LDM') as any)
-        const payload = await readJson(response)
+        const payload = await readJson<{
+            items: Array<{ name: string }>
+        }>(response)
 
         expect(response.status).toBe(200)
         expect(find).toHaveBeenCalledWith(expect.objectContaining({
@@ -154,7 +156,9 @@ describe('monsters backend routes', () => {
 
         const mod = await importFresh<typeof import('@/app/api/monsters/search/route')>('@/app/api/monsters/search/route')
         const response = await mod.GET(new Request('http://localhost/api/monsters/search?q=lobo') as any)
-        const payload = await readJson(response)
+        const payload = await readJson<{
+            items: unknown[]
+        }>(response)
 
         expect(response.status).toBe(200)
         expect(find).toHaveBeenCalledWith({ status: 'active' })

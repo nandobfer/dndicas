@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest"
 
-import { readJson } from "../helpers/http"
+import { makeRequest, readJson } from "../helpers/http"
 import { importFresh } from "../helpers/module"
 
 describe("races backend routes", () => {
@@ -11,7 +11,7 @@ describe("races backend routes", () => {
         const limit = vi.fn(() => ({ lean }))
         const skip = vi.fn(() => ({ limit }))
         const sort = vi.fn(() => ({ skip, lean }))
-        const find = vi.fn(() => ({ sort }))
+        const find = vi.fn((_query?: unknown) => ({ sort }))
 
         vi.doMock("@/core/database/db", () => ({ default: vi.fn().mockResolvedValue(undefined) }))
         vi.doMock("@/features/races/models/race", () => ({ RaceModel: { find, countDocuments } }))
@@ -19,8 +19,10 @@ describe("races backend routes", () => {
         vi.doMock("@/features/users/api/audit-service", () => ({ createAuditLog: vi.fn() }))
 
         const mod = await importFresh<typeof import("@/app/api/races/route")>("@/app/api/races/route")
-        const response = await mod.GET(new Request("http://localhost/api/races?page=1&limit=10&search=elf&searchField=name&status=active&sources=PHB") as never)
-        const payload = await readJson(response)
+        const response = await mod.GET(makeRequest("http://localhost/api/races?page=1&limit=10&search=elf&searchField=name&status=active&sources=PHB"))
+        const payload = await readJson<{
+            items: Array<{ id: string; name: string; originalName: string; source: string }>
+        }>(response)
 
         expect(response.status).toBe(200)
         expect(find).toHaveBeenCalledWith(expect.objectContaining({
@@ -31,7 +33,12 @@ describe("races backend routes", () => {
             status: "active",
             source: { $in: [expect.any(RegExp)] },
         }))
-        expect(JSON.stringify(find.mock.calls[0][0])).not.toContain("description")
+        const lastFindCall = find.mock.lastCall
+        expect(lastFindCall).toBeDefined()
+        if (!lastFindCall) {
+            throw new Error("Expected RaceModel.find to be called.")
+        }
+        expect(JSON.stringify(lastFindCall[0])).not.toContain("description")
         expect(payload.items).toMatchObject([{ id: "race-1", name: "Elfo", originalName: "Elf", source: "PHB" }])
         expect(countDocuments).toHaveBeenCalledWith(expect.objectContaining({
             $or: [
@@ -45,7 +52,7 @@ describe("races backend routes", () => {
         const countDocuments = vi.fn().mockResolvedValue(0)
         const lean = vi.fn().mockResolvedValue([])
         const sort = vi.fn(() => ({ lean }))
-        const find = vi.fn(() => ({ sort }))
+        const find = vi.fn((_query?: unknown) => ({ sort }))
 
         vi.doMock("@/core/database/db", () => ({ default: vi.fn().mockResolvedValue(undefined) }))
         vi.doMock("@/features/races/models/race", () => ({ RaceModel: { find, countDocuments } }))
@@ -53,7 +60,7 @@ describe("races backend routes", () => {
         vi.doMock("@/features/users/api/audit-service", () => ({ createAuditLog: vi.fn() }))
 
         const mod = await importFresh<typeof import("@/app/api/races/route")>("@/app/api/races/route")
-        const response = await mod.GET(new Request("http://localhost/api/races?search=elf") as never)
+        const response = await mod.GET(makeRequest("http://localhost/api/races?search=elf"))
 
         expect(response.status).toBe(200)
         expect(find).toHaveBeenCalledWith(expect.objectContaining({

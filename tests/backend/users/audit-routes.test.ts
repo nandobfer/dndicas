@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 
-import { readJson } from '../helpers/http';
+import { makeRequest, readJson } from '../helpers/http';
 import { importFresh } from '../helpers/module';
 
 describe('/api/audit-logs routes', () => {
@@ -17,10 +17,12 @@ describe('/api/audit-logs routes', () => {
         }));
 
         const mod = await importFresh<typeof import('@/app/api/audit-logs/[id]/route')>('@/app/api/audit-logs/[id]/route');
-        const response = await mod.GET(new Request('http://localhost/api/audit-logs/bad'), {
+        const response = await mod.GET(makeRequest('http://localhost/api/audit-logs/bad'), {
             params: Promise.resolve({ id: 'bad' }),
         });
-        const payload = await readJson(response);
+        const payload = await readJson<{
+            code: string;
+        }>(response);
 
         expect(response.status).toBe(400);
         expect(payload.code).toBe('INVALID_ID');
@@ -39,7 +41,7 @@ describe('/api/audit-logs routes', () => {
         }));
 
         const mod = await importFresh<typeof import('@/app/api/audit-logs/[id]/route')>('@/app/api/audit-logs/[id]/route');
-        const response = await mod.GET(new Request('http://localhost/api/audit-logs/507f1f77bcf86cd799439011'), {
+        const response = await mod.GET(makeRequest('http://localhost/api/audit-logs/507f1f77bcf86cd799439011'), {
             params: Promise.resolve({ id: '507f1f77bcf86cd799439011' }),
         });
 
@@ -108,8 +110,15 @@ describe('/api/audit-logs routes', () => {
         }));
 
         const mod = await importFresh<typeof import('@/app/api/audit-logs/route')>('@/app/api/audit-logs/route');
-        const response = await mod.GET(new Request('http://localhost/api/audit-logs?page=1&limit=10'));
-        const payload = await readJson(response);
+        const response = await mod.GET(makeRequest('http://localhost/api/audit-logs?page=1&limit=10'));
+        const payload = await readJson<{
+            success: boolean;
+            data: Array<{
+                entity: string;
+                entityId: string;
+                performedBy: string;
+            }>;
+        }>(response);
 
         expect(response.status).toBe(200);
         expect(payload.success).toBe(true);

@@ -6,6 +6,8 @@
 import { createFeatSchema, updateFeatSchema } from '@/features/feats/api/validation'
 import { FEAT_CATEGORIES } from '@/features/feats/lib/feat-categories'
 
+type FeatCategory = typeof FEAT_CATEGORIES[number]
+
 const validBase = {
     name: 'Talento de Teste',
     description: 'Descrição com mais de dez caracteres.',
@@ -26,7 +28,7 @@ describe('createFeatSchema', () => {
         }
     })
 
-    it.each(FEAT_CATEGORIES)('accepts valid category "%s"', (category) => {
+    it.each(FEAT_CATEGORIES)('accepts valid category "%s"', (category: FeatCategory) => {
         const result = createFeatSchema.safeParse({ ...validBase, category })
         expect(result.success).toBe(true)
     })
@@ -55,7 +57,7 @@ describe('updateFeatSchema', () => {
         expect(result.success).toBe(true)
     })
 
-    it.each(FEAT_CATEGORIES)('accepts valid category "%s" on update', (category) => {
+    it.each(FEAT_CATEGORIES)('accepts valid category "%s" on update', (category: FeatCategory) => {
         const result = updateFeatSchema.safeParse({ category })
         expect(result.success).toBe(true)
         if (result.success) {

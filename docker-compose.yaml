@@ -23,6 +23,10 @@ services:
       - "4005:4005"
     env_file:
       - .env
+    environment:
+      - PUSHER_HOST=soketi
+      - PUSHER_PORT=6001
+      - PUSHER_SCHEME=http
     networks:
       - mongodb-network
       - minio-network

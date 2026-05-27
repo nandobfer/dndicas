@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest"
-import { readJson } from "./helpers/http"
+import { makeRequest, readJson } from "./helpers/http"
 import { importFresh } from "./helpers/module"
 
 describe("owlbear session backend", () => {
@@ -68,7 +68,7 @@ describe("owlbear session backend", () => {
         }))
 
         const mod = await importFresh<typeof import("@/app/api/owlbear/session/route")>("@/app/api/owlbear/session/route")
-        const response = await mod.POST(new Request("http://localhost/api/owlbear/session", {
+        const response = await mod.POST(makeRequest("http://localhost/api/owlbear/session", {
             method: "POST",
             headers: { "content-type": "application/json" },
             body: JSON.stringify({
@@ -98,7 +98,7 @@ describe("owlbear session backend", () => {
         }))
 
         const mod = await importFresh<typeof import("@/app/api/owlbear/session/route")>("@/app/api/owlbear/session/route")
-        const response = await mod.POST(new Request("http://localhost/api/owlbear/session", {
+        const response = await mod.POST(makeRequest("http://localhost/api/owlbear/session", {
             method: "POST",
             headers: { "content-type": "application/json" },
             body: JSON.stringify({
@@ -150,8 +150,10 @@ describe("owlbear session backend", () => {
         }))
 
         const mod = await importFresh<typeof import("@/app/api/owlbear/character-sheets/route")>("@/app/api/owlbear/character-sheets/route")
-        const response = await mod.GET(new Request("http://localhost/api/owlbear/character-sheets"))
-        const payload = await readJson(response)
+        const response = await mod.GET(makeRequest("http://localhost/api/owlbear/character-sheets"))
+        const payload = await readJson<{
+            error: string
+        }>(response)
 
         expect(response.status).toBe(401)
         expect(payload.error).toMatch(/Sessão Owlbear/i)
@@ -213,7 +215,7 @@ describe("owlbear session backend", () => {
         }))
 
         const mod = await importFresh<typeof import("@/app/api/owlbear/character-sheets/route")>("@/app/api/owlbear/character-sheets/route")
-        const response = await mod.GET(new Request("http://localhost/api/owlbear/character-sheets?page=1", {
+        const response = await mod.GET(makeRequest("http://localhost/api/owlbear/character-sheets?page=1", {
             headers: { Authorization: "Bearer plain-token" },
         }))
 

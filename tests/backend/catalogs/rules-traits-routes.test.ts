@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 
-import { makeJsonRequest, readJson } from '../helpers/http';
+import { makeJsonRequest, makeRequest, readJson } from '../helpers/http';
 import { importFresh } from '../helpers/module';
 
 describe('rules and traits backend routes', () => {
@@ -26,8 +26,10 @@ describe('rules and traits backend routes', () => {
         }));
 
         const mod = await importFresh<typeof import('@/app/api/rules/route')>('@/app/api/rules/route');
-        const response = await mod.GET(new Request('http://localhost/api/rules?page=1&limit=10&search=Regra&searchField=name&status=active&sources=PHB'));
-        const payload = await readJson(response);
+        const response = await mod.GET(makeRequest('http://localhost/api/rules?page=1&limit=10&search=Regra&searchField=name&status=active&sources=PHB'));
+        const payload = await readJson<{
+            items: Array<{ _id: string; name: string; source: string }>
+        }>(response);
 
         expect(response.status).toBe(200);
         expect(find).toHaveBeenCalledWith(expect.objectContaining({
@@ -95,8 +97,10 @@ describe('rules and traits backend routes', () => {
         }));
 
         const mod = await importFresh<typeof import('@/app/api/traits/route')>('@/app/api/traits/route');
-        const response = await mod.GET(new Request('http://localhost/api/traits?search=furia&status=active&sources=PHB'));
-        const payload = await readJson(response);
+        const response = await mod.GET(makeRequest('http://localhost/api/traits?search=furia&status=active&sources=PHB'));
+        const payload = await readJson<{
+            items: Array<{ _id: string; name: string }>
+        }>(response);
 
         expect(response.status).toBe(200);
         expect(applyFuzzySearch).toHaveBeenCalled();

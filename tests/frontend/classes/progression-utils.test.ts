@@ -24,7 +24,7 @@ describe("getProficiencyBonus", () => {
         [9, 4], [10, 4], [11, 4], [12, 4],
         [13, 5], [14, 5], [15, 5], [16, 5],
         [17, 6], [18, 6], [19, 6], [20, 6],
-    ] as [number, number][])("level %i returns +%i", (level, expected) => {
+    ] as [number, number][])("level %i returns +%i", (level: number, expected: number) => {
         expect(getProficiencyBonus(level)).toBe(expected)
     })
 

@@ -43,6 +43,15 @@ export interface RaceGenerationResponse {
     candidates: GeneratedRaceCandidate[]
 }
 
+export interface RaceGenerationGenerateRequest {
+    runId: string
+}
+
+export interface RaceGenerationGenerateResponse {
+    current: Race
+    candidates: GeneratedRaceCandidate[]
+}
+
 export interface RaceGenerationApplyRequest {
     candidate: GeneratedRaceCandidate
 }

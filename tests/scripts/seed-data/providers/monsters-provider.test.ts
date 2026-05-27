@@ -271,7 +271,7 @@ describe('MonstersProvider', () => {
             armorClass: '17',
             hitPointsFormula: '12d8 + 24',
         });
-        const translatedLabels = translateSpy.mock.calls.map((call) => call[0]);
+        const translatedLabels = translateSpy.mock.calls.map((call: [string, ...unknown[]]) => call[0]);
         expect(translatedLabels).not.toContain('17');
         expect(translatedLabels).not.toContain('12d8 + 24');
     });
@@ -280,7 +280,10 @@ describe('MonstersProvider', () => {
         const originalReadDir = fs.readdirSync;
         const originalReadFile = fs.readFileSync;
 
-        vi.spyOn(fs, 'readdirSync').mockImplementation((filePath, options) => {
+        vi.spyOn(fs, 'readdirSync').mockImplementation(((filePath: fs.PathLike, options?: fs.ObjectEncodingOptions & {
+            withFileTypes?: boolean;
+            recursive?: boolean;
+        }) => {
             if (String(filePath).includes('/src/lib/5etools-data/bestiary')) {
                 return [
                     'bestiary-alpha.json',
@@ -289,10 +292,10 @@ describe('MonstersProvider', () => {
                     'fluff-bestiary-unused.json',
                     'legendarygroups.json',
                     'readme.txt',
-                ] as unknown as ReturnType<typeof originalReadDir>;
+                ] as never;
             }
-            return originalReadDir(filePath, options as never);
-        });
+            return originalReadDir(filePath, options as never) as never;
+        }) as unknown as typeof fs.readdirSync);
         const readFileSpy = vi.spyOn(fs, 'readFileSync').mockImplementation((filePath, options) => {
             const file = String(filePath);
             if (file.endsWith('fluff-bestiary-alpha.json')) return JSON.stringify({ monsterFluff: [{ name: 'Alpha Beast', source: 'ALPHA', entries: ['Alpha lore'] }] }) as never;

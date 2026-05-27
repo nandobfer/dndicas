@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 
-import { makeJsonRequest, readJson } from '../helpers/http';
+import { makeJsonRequest, makeRequest, readJson } from '../helpers/http';
 import { importFresh } from '../helpers/module';
 
 describe('feats backend', () => {
@@ -19,7 +19,7 @@ describe('feats backend', () => {
         }));
 
         const mod = await importFresh<typeof import('@/app/api/feats/route')>('@/app/api/feats/route');
-        const response = await mod.GET(new Request('http://localhost/api/feats?page=2&limit=5&search=war&searchField=name&status=inactive&level=3&levelMax=9&attributes=forca,destreza&categories=Geral&sources=PHB,XPHB'));
+        const response = await mod.GET(makeRequest('http://localhost/api/feats?page=2&limit=5&search=war&searchField=name&status=inactive&level=3&levelMax=9&attributes=forca,destreza&categories=Geral&sources=PHB,XPHB'));
 
         expect(response.status).toBe(200);
         expect(listFeats).toHaveBeenCalledWith({
