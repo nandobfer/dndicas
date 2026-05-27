@@ -29,6 +29,8 @@ import { DeleteBackgroundDialog } from "@/features/backgrounds/components/delete
 import { useRacesPage } from "@/features/races/hooks/useRacesPage"
 import { RaceFormModal } from "@/features/races/components/race-form-modal"
 import { DeleteRaceDialog } from "@/features/races/components/delete-race-dialog"
+import { EntityGenerationAIModal } from "@/features/entity-generation/components/entity-generation-ai-modal"
+import { raceGenerationAdapter } from "@/features/entity-generation/adapters/race-generation-adapter"
 import { DeleteSpellDialog } from "@/features/spells/components/delete-spell-dialog"
 import { useItemsPage } from "@/features/items/hooks/useItemsPage"
 import { ItemFormModal } from "@/features/items/components/item-form-modal"
@@ -86,6 +88,7 @@ export default function GenericEntityPage({ entityTypeKey }: GenericEntityPagePr
 
     const onEdit = currentPage?.actions?.handleEditClick || (currentPage as any)?.handleEditClick
     const onDelete = currentPage?.actions?.handleDeleteClick || (currentPage as any)?.handleDeleteClick
+    const onGenerateAI = entityTypeKey === "Raça" ? racesPage.actions.handleGenerateAIClick : undefined
 
     const routeMap = {
         Regra: "rules",
@@ -227,7 +230,18 @@ export default function GenericEntityPage({ entityTypeKey }: GenericEntityPagePr
                         <span>Janela Solta</span>
                     </motion.button>
                 )}
-                <EntityPage item={item} entityType={entityTypeKey} isLoading={isLoading} isAdmin={isAdmin} onEdit={onEdit} onDelete={onDelete} hideActionIcons={true} renderOptions={renderOptions} backHref={backHref} />
+                <EntityPage
+                    item={item}
+                    entityType={entityTypeKey}
+                    isLoading={isLoading}
+                    isAdmin={isAdmin}
+                    onEdit={onEdit}
+                    onGenerateAI={onGenerateAI}
+                    onDelete={onDelete}
+                    hideActionIcons={true}
+                    renderOptions={renderOptions}
+                    backHref={backHref}
+                />
             </div>
 
             {/* Entity-specific Modals (imported from hooks) */}
@@ -349,6 +363,19 @@ export default function GenericEntityPage({ entityTypeKey }: GenericEntityPagePr
                         race={racesPage.modals.selectedRace}
                     />
                     <DeleteRaceDialog isOpen={racesPage.modals.isDeleteOpen} onClose={() => racesPage.modals.setIsDeleteOpen(false)} race={racesPage.modals.selectedRace} />
+                    <EntityGenerationAIModal
+                        open={racesPage.modals.isGenerationOpen}
+                        entity={racesPage.modals.selectedRace}
+                        adapter={raceGenerationAdapter}
+                        onOpenChange={(open) => {
+                            if (!open) racesPage.modals.closeAll()
+                            else racesPage.modals.setIsGenerationOpen(true)
+                        }}
+                        onApplied={() => {
+                            racesPage.actions.handleGenerationApplied()
+                            queryClient.invalidateQueries({ queryKey })
+                        }}
+                    />
                 </>
             )}
 

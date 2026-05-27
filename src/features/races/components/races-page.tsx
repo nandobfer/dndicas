@@ -12,6 +12,8 @@ import { RaceFilters } from "./race-filters"
 import { EntityList } from "@/features/rules/components/entity-list"
 import { RaceFormModal } from "./race-form-modal"
 import { DeleteRaceDialog } from "./delete-race-dialog"
+import { EntityGenerationAIModal } from "@/features/entity-generation/components/entity-generation-ai-modal"
+import { raceGenerationAdapter } from "@/features/entity-generation/adapters/race-generation-adapter"
 import { GlassCard, GlassCardContent } from "@/components/ui/glass-card"
 import { GlassViewSelector } from "@/components/ui/glass-view-selector"
 import { motionConfig } from "@/lib/config/motion-configs"
@@ -72,6 +74,7 @@ export function RacesPage() {
                             isFetchingNextPage={data.isFetchingNextPage}
                             onLoadMore={data.fetchNextPage}
                             onEdit={actions.handleEditClick}
+                            onGenerateAI={actions.handleGenerateAIClick}
                             onDelete={actions.handleDeleteClick}
                         />
                     ) : (
@@ -83,6 +86,7 @@ export function RacesPage() {
                             isFetchingNextPage={data.isFetchingNextPage}
                             entityType="Raça"
                             onEdit={actions.handleEditClick}
+                            onGenerateAI={actions.handleGenerateAIClick}
                             onDelete={actions.handleDeleteClick}
                             isAdmin={isAdmin}
                         />
@@ -94,6 +98,17 @@ export function RacesPage() {
             <RaceFormModal isOpen={modals.isFormOpen} race={modals.selectedRace} onClose={modals.closeAll} onSuccess={modals.closeAll} />
 
             <DeleteRaceDialog isOpen={modals.isDeleteOpen} race={modals.selectedRace} onClose={modals.closeAll} />
+
+            <EntityGenerationAIModal
+                open={modals.isGenerationOpen}
+                entity={modals.selectedRace}
+                adapter={raceGenerationAdapter}
+                onOpenChange={(open) => {
+                    if (!open) modals.closeAll()
+                    else modals.setIsGenerationOpen(true)
+                }}
+                onApplied={actions.handleGenerationApplied}
+            />
         </motion.div>
     )
 }

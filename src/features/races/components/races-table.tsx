@@ -1,7 +1,7 @@
 "use client";
 
 import { motion, AnimatePresence } from "framer-motion"
-import { MoreHorizontal, Pencil, Trash2, Fingerprint } from "lucide-react"
+import { MoreHorizontal, Pencil, Trash2, Fingerprint, Sparkles } from "lucide-react"
 import { useAuth } from "@/core/hooks/useAuth"
 import { cn } from "@/core/utils"
 import { GlassImage } from "@/components/ui/glass-image"
@@ -25,10 +25,11 @@ interface RacesTableProps {
     isFetchingNextPage?: boolean
     onLoadMore?: () => void
     onEdit: (race: Race) => void
+    onGenerateAI?: (race: Race) => void
     onDelete: (race: Race) => void
 }
 
-export function RacesTable({ data, isLoading, hasNextPage = false, isFetchingNextPage = false, onLoadMore, onEdit, onDelete }: RacesTableProps) {
+export function RacesTable({ data, isLoading, hasNextPage = false, isFetchingNextPage = false, onLoadMore, onEdit, onGenerateAI, onDelete }: RacesTableProps) {
     const { isAdmin } = useAuth()
 
     if (isLoading) return <LoadingState message="Carregando raças..." />
@@ -106,6 +107,14 @@ export function RacesTable({ data, isLoading, hasNextPage = false, isFetchingNex
                                                         <Pencil className="mr-2 h-4 w-4 text-blue-400" />
                                                         Editar Raça
                                                     </GlassDropdownMenuItem>
+                                                    {onGenerateAI && (
+                                                        <GlassDropdownMenuItem onClick={() => onGenerateAI(race)}>
+                                                            <Sparkles className="mr-2 h-4 w-4 text-purple-300 animate-pulse" />
+                                                            <span className="bg-gradient-to-r from-blue-300 via-purple-300 to-blue-300 bg-clip-text text-transparent">
+                                                                Gerar com IA
+                                                            </span>
+                                                        </GlassDropdownMenuItem>
+                                                    )}
                                                     <GlassDropdownMenuItem onClick={() => onDelete(race)} className="text-red-400 hover:text-red-300 focus:text-red-300">
                                                         <Trash2 className="mr-2 h-4 w-4" />
                                                         Excluir Raça

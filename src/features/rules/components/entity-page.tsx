@@ -6,7 +6,7 @@ import { GlassCard, GlassCardContent } from "@/components/ui/glass-card"
 import { LoadingState } from "@/components/ui/loading-state"
 import { EmptyState } from "@/components/ui/empty-state"
 import { Chip } from "@/components/ui/chip"
-import { ScrollText, ExternalLink, ArrowLeft } from "lucide-react"
+import { ScrollText, ExternalLink, ArrowLeft, Sparkles } from "lucide-react"
 import { motionConfig } from "@/lib/config/motion-configs"
 import { renderEntity } from "./entity-renderers"
 import { useRouter } from "next/navigation"
@@ -22,6 +22,7 @@ interface EntityPageProps {
     isLoading: boolean
     isAdmin?: boolean
     onEdit?: (item: any) => void
+    onGenerateAI?: (item: any) => void
     onDelete?: (item: any) => void
     /** Whether to hide action icons (like open in window) when already in a page */
     hideActionIcons?: boolean
@@ -36,7 +37,7 @@ interface EntityPageProps {
     backHref?: string
 }
 
-export function EntityPage({ item, entityType, isLoading, isAdmin, onEdit, onDelete, hideActionIcons = false, renderOptions, backHref }: EntityPageProps) {
+export function EntityPage({ item, entityType, isLoading, isAdmin, onEdit, onGenerateAI, onDelete, hideActionIcons = false, renderOptions, backHref }: EntityPageProps) {
     const router = useRouter()
     const { addWindow } = useWindows()
     const handleBack = React.useCallback(() => {
@@ -103,7 +104,7 @@ export function EntityPage({ item, entityType, isLoading, isAdmin, onEdit, onDel
                     <GlassCardContent className="p-6 md:p-8">
                         <div className="absolute top-4 right-4 z-10 flex flex-col items-end gap-2">
                             <div className="flex items-center gap-2">
-                                {isAdmin && (onEdit || onDelete) && (
+                                {isAdmin && (onEdit || onGenerateAI || onDelete) && (
                                     <GlassDropdownMenu>
                                         <GlassDropdownMenuTrigger asChild>
                                             <motion.button
@@ -119,6 +120,14 @@ export function EntityPage({ item, entityType, isLoading, isAdmin, onEdit, onDel
                                                 <GlassDropdownMenuItem onClick={() => onEdit(item)}>
                                                     <Pencil className="mr-2 h-4 w-4" />
                                                     Editar
+                                                </GlassDropdownMenuItem>
+                                            )}
+                                            {onGenerateAI && (
+                                                <GlassDropdownMenuItem onClick={() => onGenerateAI(item)}>
+                                                    <Sparkles className="mr-2 h-4 w-4 text-purple-300 animate-pulse" />
+                                                    <span className="bg-gradient-to-r from-blue-300 via-purple-300 to-blue-300 bg-clip-text text-transparent">
+                                                        Gerar com IA
+                                                    </span>
                                                 </GlassDropdownMenuItem>
                                             )}
                                             {onDelete && (

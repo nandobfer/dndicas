@@ -320,4 +320,119 @@ describe('MonstersProvider', () => {
         expect(readPaths.some((file) => file.includes('fluff-bestiary-alpha.json'))).toBe(true);
         expect(readPaths.some((file) => file.includes('fluff-bestiary-unused.json'))).toBe(false);
     });
+
+    it('normalizes single _copy mod items when processing fluff-based descriptions and images', async () => {
+        const { provider } = makeProvider();
+        const state = provider as unknown as {
+            fluff: Map<string, unknown>;
+        };
+
+        state.fluff = new Map([
+            ['aerosaur|bgg', {
+                name: 'Aerosaur',
+                source: 'BGG',
+                _copy: {
+                    name: 'Dinosaurs',
+                    source: 'BGG',
+                    _mod: {
+                        entries: {
+                            mode: 'prependArr',
+                            items: {
+                                type: 'entries',
+                                entries: ['Prepended lore'],
+                            },
+                        },
+                        images: {
+                            mode: 'prependArr',
+                            items: {
+                                href: {
+                                    type: 'internal',
+                                    path: 'bestiary/bgg/Aerosaur.webp',
+                                },
+                            },
+                        },
+                    },
+                },
+            }],
+            ['dinosaurs|bgg', {
+                name: 'Dinosaurs',
+                source: 'BGG',
+                entries: ['Base lore'],
+                images: [{ href: { url: 'https://example.com/base.webp' } }],
+            }],
+        ]);
+
+        const output = await provider.processItem({
+            name: 'Aerosaur',
+            source: 'BGG',
+            size: ['L'],
+            type: 'beast',
+            alignment: ['U'],
+            ac: [15],
+            hp: { average: 36, formula: '8d10 + 8' },
+            speed: { walk: 20, fly: 60 },
+            str: 18,
+            dex: 14,
+            con: 12,
+            int: 2,
+            wis: 12,
+            cha: 7,
+            passive: 11,
+            cr: '2',
+        });
+
+        expect(output).toMatchObject({
+            description: '[PT] <p>Prepended lore</p><p>Base lore</p>',
+            image: 'https://5e.tools/img/bestiary/bgg/Aerosaur.webp',
+        });
+    });
+
+    it('preserves array-based _copy mod items when resolving fluff', () => {
+        const provider = new MonstersProvider();
+        const state = provider as unknown as {
+            fluff: Map<string, unknown>;
+            resolveFluff: (monster: { name: string; source: string }) => {
+                entries?: unknown[];
+                images?: Array<{ href?: { url?: string } }>;
+            } | undefined;
+        };
+
+        state.fluff = new Map([
+            ['storm raptor|bgg', {
+                name: 'Storm Raptor',
+                source: 'BGG',
+                entries: ['Direct lore'],
+                images: [{ href: { url: 'https://example.com/direct.webp' } }],
+                _copy: {
+                    name: 'Dinosaurs',
+                    source: 'BGG',
+                    _mod: {
+                        entries: {
+                            mode: 'prependArr',
+                            items: ['Mod lore 1', 'Mod lore 2'],
+                        },
+                        images: {
+                            mode: 'prependArr',
+                            items: [{ href: { url: 'https://example.com/mod.webp' } }],
+                        },
+                    },
+                },
+            }],
+            ['dinosaurs|bgg', {
+                name: 'Dinosaurs',
+                source: 'BGG',
+                entries: ['Base lore'],
+                images: [{ href: { url: 'https://example.com/base.webp' } }],
+            }],
+        ]);
+
+        const fluff = state.resolveFluff({ name: 'Storm Raptor', source: 'BGG' });
+
+        expect(fluff?.entries).toEqual(['Mod lore 1', 'Mod lore 2', 'Direct lore', 'Base lore']);
+        expect(fluff?.images).toEqual([
+            { href: { url: 'https://example.com/mod.webp' } },
+            { href: { url: 'https://example.com/direct.webp' } },
+            { href: { url: 'https://example.com/base.webp' } },
+        ]);
+    });
 });

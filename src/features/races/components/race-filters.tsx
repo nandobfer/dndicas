@@ -35,7 +35,7 @@ export function RaceFilters({ filters, onSearchChange, onStatusChange, onSources
                             value={filters.search || ""}
                             onChange={onSearchChange}
                             isLoading={isSearching}
-                            placeholder="Buscar raças por nome, descrição ou fonte..."
+                            placeholder="Buscar raças por nome ou nome original..."
                         />
                     </div>
                     <SourceFilter

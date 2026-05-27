@@ -177,6 +177,7 @@ export abstract class BaseProvider<TInput, TOutput> {
     private currentTotal = 0;
     private testMode = false;
     private autoMode = false;
+    private updateOnly = false;
     private fromStart = false;
     private fromIndex: number | null = null;
     private filterTerm: string | null = null;
@@ -195,6 +196,14 @@ export abstract class BaseProvider<TInput, TOutput> {
 
     setAutoMode(enabled: boolean): void {
         this.autoMode = enabled;
+    }
+
+    protected isAutoMode(): boolean {
+        return this.autoMode;
+    }
+
+    setUpdateOnly(enabled: boolean): void {
+        this.updateOnly = enabled;
     }
 
     setFromStart(enabled: boolean): void {
@@ -646,6 +655,7 @@ export abstract class BaseProvider<TInput, TOutput> {
         }
 
         let created = 0;
+        let updated = 0;
         let skipped = 0;
 
         for (let i = startIndex; i < items.length; i++) {
@@ -662,19 +672,37 @@ export abstract class BaseProvider<TInput, TOutput> {
                     continue;
                 }
 
-                // Always apply glossary post-processing
-                const output = this.applyGlossaryToOutput(raw, entries);
+                // Always apply glossary post-processing before matching existing records.
+                const candidate = this.applyGlossaryToOutput(raw, entries);
 
-                const exists = await this.findExisting(output);
+                const exists = await this.findExisting(candidate);
+                if (exists === null && this.updateOnly) {
+                    this.log(`[${i}] New item skipped by --update-only`, 'dim');
+                    skipped++;
+                    await this.persistProgressIfEnabled(i);
+                    this.updateProgressBar(i + 1, this.getItemLabel(candidate));
+                    continue;
+                }
+
+                const output = await this.prepareAutoOutput(candidate, exists);
+
                 if (exists !== null) {
                     this.logOriginalNameMatchIfNeeded(exists, output);
                     const diffs = this.diffObjects(exists, output);
                     if (diffs.length > 0) {
-                        this.log(`[${i}] Conflito: ${diffs.length} campo(s) diferente(s) — mantendo existente (use modo interativo para resolver)`, 'warn');
+                        const resolved = await this.resolveAutoConflict(exists, output, diffs);
+                        if (resolved) {
+                            await this.update(resolved);
+                            this.log(`[${i}] Conflito: ${diffs.length} campo(s) diferente(s) — atualizado automaticamente`, 'success');
+                            updated++;
+                        } else {
+                            this.log(`[${i}] Conflito: ${diffs.length} campo(s) diferente(s) — mantendo existente (use modo interativo para resolver)`, 'warn');
+                            skipped++;
+                        }
                     } else {
                         this.log(`[${i}] Already exists — skipping`, 'dim');
+                        skipped++;
                     }
-                    skipped++;
                 } else {
                     await this.create(output);
                     this.log(`[${i}] Created successfully`, 'success');
@@ -697,6 +725,7 @@ export abstract class BaseProvider<TInput, TOutput> {
         term('\n\n');
         term.bold(`─── ${this.name} Summary ───────────────────────────\n`);
         term.green(`  Created:  ${created}\n`);
+        term.cyan(`  Updated:  ${updated}\n`);
         term.yellow(`  Skipped:  ${skipped}\n`);
         term(`  Total processed: ${items.length - startIndex}\n`);
         term.bold(`────────────────────────────────────────────────\n`);
@@ -891,6 +920,22 @@ export abstract class BaseProvider<TInput, TOutput> {
     protected async afterReview(output: TOutput, _isDryRun: boolean): Promise<TOutput> {
         void _isDryRun;
         return output;
+    }
+
+    protected async prepareAutoOutput(output: TOutput, _existing: TOutput | null): Promise<TOutput> {
+        void _existing;
+        return output;
+    }
+
+    protected async resolveAutoConflict(
+        _existing: TOutput,
+        _incoming: TOutput,
+        _diffs: DiffEntry[],
+    ): Promise<TOutput | null> {
+        void _existing;
+        void _incoming;
+        void _diffs;
+        return null;
     }
 
     protected shouldPersistBeforeAfterReview(_output: TOutput): boolean {

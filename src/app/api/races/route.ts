@@ -4,6 +4,7 @@ import { RaceModel } from "@/features/races/models/race"
 import dbConnect from "@/core/database/db"
 import { z } from "zod"
 import { createAuditLog } from "@/features/users/api/audit-service"
+import type { RacesFilters } from "@/features/races/types/races.types"
 
 const raceTraitSchema = z.object({
     name: z.string().min(1),
@@ -38,7 +39,7 @@ const raceSchema = z.object({
 })
 
 type RaceListQuery = {
-    $or?: Array<{ name?: { $regex: string; $options: string }; description?: { $regex: string; $options: string } }>
+    $or?: Array<{ name?: { $regex: string; $options: "i" }; originalName?: { $regex: string; $options: "i" } }>
     status?: string
     source?: { $in: RegExp[] }
 }
@@ -47,6 +48,30 @@ type RaceTraitInput = {
     name?: string
     level?: number
     description: string
+}
+
+const escapeRegex = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
+
+function buildRaceListQuery(filters: Pick<RacesFilters, "search" | "status" | "sources">): RaceListQuery {
+    const query: RaceListQuery = {}
+    const search = filters.search?.trim()
+
+    if (search) {
+        const searchRegex = { $regex: escapeRegex(search), $options: "i" as const }
+        query.$or = [{ name: searchRegex }, { originalName: searchRegex }]
+    }
+
+    if (filters.status && filters.status !== "all") {
+        query.status = filters.status
+    } else if (!filters.status) {
+        query.status = "active"
+    }
+
+    if (filters.sources && filters.sources.length > 0) {
+        query.source = { $in: filters.sources.map((source) => new RegExp(`^${escapeRegex(source)}`, "i")) }
+    }
+
+    return query
 }
 
 export async function GET(req: NextRequest) {
@@ -59,24 +84,12 @@ export async function GET(req: NextRequest) {
         const limit = limitParam ? parseInt(limitParam, 10) : undefined
         const search = url.searchParams.get("search") || ""
         const status = url.searchParams.get("status")
-
-        const query: RaceListQuery = {}
-        if (search) {
-            query.$or = [{ name: { $regex: search, $options: "i" } }, { description: { $regex: search, $options: "i" } }]
-        }
-        if (status && status !== "all") {
-            query.status = status
-        } else if (!status) {
-            query.status = "active"
-        }
         const sourcesParam = url.searchParams.get("sources")
-        if (sourcesParam) {
-            const escapeRegex = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-            const sourcesList = sourcesParam.split(",").map(s => s.trim()).filter(Boolean)
-            if (sourcesList.length > 0) {
-                query.source = { $in: sourcesList.map(s => new RegExp(`^${escapeRegex(s)}`, 'i')) }
-            }
-        }
+        const sources = sourcesParam
+            ? sourcesParam.split(",").map((source) => source.trim()).filter(Boolean)
+            : undefined
+
+        const query = buildRaceListQuery({ search, status: status as RacesFilters["status"], sources })
 
         let itemsQuery = RaceModel.find(query).sort({ name: 1 })
 
