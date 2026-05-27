@@ -16,3 +16,6 @@ As tabelas de raças usam `useInfiniteRaces`, a mesma fonte de dados do modo lis
 
 ### Identidade visual na primeira coluna da tabela
 A tabela de raças usa a primeira coluna como célula de identidade: imagem da raça quando disponível, fallback com ícone de impressão digital, nome linkado e fonte em texto auxiliar. A coluna dedicada de status não é exibida nessa tabela.
+
+### Renderização de deslocamento na tabela
+O valor de deslocamento na `RacesTable` respeita strings já formatadas como `9 metros` e só adiciona a unidade quando o dado vier puramente numérico, evitando duplicações como `9 metrosm`.

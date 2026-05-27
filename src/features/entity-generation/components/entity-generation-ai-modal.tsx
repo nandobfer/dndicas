@@ -4,6 +4,7 @@ import * as React from "react"
 import { Check, Loader2, Sparkles, X } from "lucide-react"
 import { toast } from "sonner"
 import { cn } from "@/core/utils"
+import { getSourceDisplayLabel } from "@/core/utils/source-utils"
 import { getPusherBrowserConfig } from "@/core/realtime/pusher-browser-config"
 import { PusherBrowserService } from "@/core/realtime/pusher-browser-service"
 import {
@@ -164,7 +165,8 @@ export function EntityGenerationAIModal<TEntity, TCandidate>({ open, entity, ada
     const selectedCandidate = React.useMemo(() => candidates.find((candidate) => adapter.getCandidateId(candidate) === selectedId) ?? null, [adapter, candidates, selectedId])
     const progressPercent = Math.min(100, Math.round((progress.current / Math.max(progress.total, 1)) * 100))
     const activeTitle = activeEntity ? adapter.getTitle(activeEntity) : null
-    const activeSource = activeEntity ? adapter.getSource?.(activeEntity) : undefined
+    const rawActiveSource = activeEntity ? adapter.getSource?.(activeEntity) : undefined
+    const activeSource = rawActiveSource ? getSourceDisplayLabel(rawActiveSource) : undefined
     const progressMessage = phase === "saving" ? "Salvando alterações..." : formatProgressMessage(progress.message)
 
     const handleSave = async () => {

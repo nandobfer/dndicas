@@ -82,4 +82,17 @@ describe('RacesTable', () => {
         expect(screen.queryByRole('img', { name: 'Elfo' })).not.toBeInTheDocument()
         expect(screen.getByRole('link', { name: 'Elfo' })).toBeInTheDocument()
     })
+
+    it('renders preformatted speed values without duplicating the unit', () => {
+        render(<RacesTable data={[{ ...baseRace, speed: '9 metros' }]} isLoading={false} onEdit={vi.fn()} onDelete={vi.fn()} />)
+
+        expect(screen.getByText('9 metros')).toBeInTheDocument()
+        expect(screen.queryByText('9 metrosm')).not.toBeInTheDocument()
+    })
+
+    it('adds the meter suffix only when the speed is numeric', () => {
+        render(<RacesTable data={[{ ...baseRace, speed: '9' }]} isLoading={false} onEdit={vi.fn()} onDelete={vi.fn()} />)
+
+        expect(screen.getByText('9 m')).toBeInTheDocument()
+    })
 })

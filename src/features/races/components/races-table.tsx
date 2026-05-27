@@ -32,6 +32,16 @@ interface RacesTableProps {
 export function RacesTable({ data, isLoading, hasNextPage = false, isFetchingNextPage = false, onLoadMore, onEdit, onGenerateAI, onDelete }: RacesTableProps) {
     const { isAdmin } = useAuth()
 
+    const getSpeedLabel = (speed: string) => {
+        const trimmedSpeed = speed.trim()
+
+        if (!trimmedSpeed) {
+            return trimmedSpeed
+        }
+
+        return /[a-zA-Z\u00C0-\u024F]/.test(trimmedSpeed) ? trimmedSpeed : `${trimmedSpeed} m`
+    }
+
     if (isLoading) return <LoadingState message="Carregando raças..." />
     if (!data.length) return <EmptyState title="Nenhuma raça encontrada" description="Tente ajustar seus filtros ou crie uma nova raça." icon={Fingerprint} />
 
@@ -89,7 +99,7 @@ export function RacesTable({ data, isLoading, hasNextPage = false, isFetchingNex
                                         <span className="text-sm text-white/60">{race.size}</span>
                                     </td>
                                     <td className="px-6 py-4">
-                                        <span className="text-sm text-white/60 font-medium">{race.speed}m</span>
+                                        <span className="text-sm text-white/60 font-medium">{getSpeedLabel(race.speed)}</span>
                                     </td>
                                     <td className="px-6 py-4">
                                         <span className="text-xs text-white/40 italic">{race.source}</span>

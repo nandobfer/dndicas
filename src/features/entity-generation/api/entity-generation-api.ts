@@ -1,4 +1,17 @@
-import type { GeneratedRaceCandidate, GeneratedSpellCandidate, RaceGenerationApplyResponse, RaceGenerationGenerateResponse, SpellGenerationApplyResponse, SpellGenerationGenerateResponse } from "../types/entity-generation.types"
+import type {
+    FeatGenerationApplyResponse,
+    FeatGenerationGenerateResponse,
+    GeneratedFeatCandidate,
+    GeneratedMonsterCandidate,
+    GeneratedRaceCandidate,
+    GeneratedSpellCandidate,
+    MonsterGenerationApplyResponse,
+    MonsterGenerationGenerateResponse,
+    RaceGenerationApplyResponse,
+    RaceGenerationGenerateResponse,
+    SpellGenerationApplyResponse,
+    SpellGenerationGenerateResponse,
+} from "../types/entity-generation.types"
 
 export async function generateRaceGenerationCandidates(raceId: string, runId: string): Promise<RaceGenerationGenerateResponse> {
     const response = await fetch(`/api/admin/entity-generation/races/${raceId}/generate`, {
@@ -47,6 +60,66 @@ export async function generateSpellGenerationCandidates(spellId: string, runId: 
 
 export async function applySpellGenerationCandidate(spellId: string, candidate: GeneratedSpellCandidate): Promise<SpellGenerationApplyResponse> {
     const response = await fetch(`/api/admin/entity-generation/spells/${spellId}/apply`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ candidate }),
+    })
+
+    if (!response.ok) {
+        const data = await response.json().catch(() => null)
+        throw new Error(data?.error ?? "Erro ao salvar geração com IA.")
+    }
+
+    return response.json()
+}
+
+export async function generateFeatGenerationCandidates(featId: string, runId: string): Promise<FeatGenerationGenerateResponse> {
+    const response = await fetch(`/api/admin/entity-generation/feats/${featId}/generate`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ runId }),
+    })
+
+    if (!response.ok) {
+        const data = await response.json().catch(() => null)
+        throw new Error(data?.error ?? "Erro ao gerar dados com IA.")
+    }
+
+    return response.json()
+}
+
+export async function applyFeatGenerationCandidate(featId: string, candidate: GeneratedFeatCandidate): Promise<FeatGenerationApplyResponse> {
+    const response = await fetch(`/api/admin/entity-generation/feats/${featId}/apply`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ candidate }),
+    })
+
+    if (!response.ok) {
+        const data = await response.json().catch(() => null)
+        throw new Error(data?.error ?? "Erro ao salvar geração com IA.")
+    }
+
+    return response.json()
+}
+
+export async function generateMonsterGenerationCandidates(monsterId: string, runId: string): Promise<MonsterGenerationGenerateResponse> {
+    const response = await fetch(`/api/admin/entity-generation/monsters/${monsterId}/generate`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ runId }),
+    })
+
+    if (!response.ok) {
+        const data = await response.json().catch(() => null)
+        throw new Error(data?.error ?? "Erro ao gerar dados com IA.")
+    }
+
+    return response.json()
+}
+
+export async function applyMonsterGenerationCandidate(monsterId: string, candidate: GeneratedMonsterCandidate): Promise<MonsterGenerationApplyResponse> {
+    const response = await fetch(`/api/admin/entity-generation/monsters/${monsterId}/apply`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ candidate }),

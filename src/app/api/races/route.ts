@@ -5,6 +5,7 @@ import dbConnect from "@/core/database/db"
 import { z } from "zod"
 import { createAuditLog } from "@/features/users/api/audit-service"
 import type { RacesFilters } from "@/features/races/types/races.types"
+import { buildSourcePrefixRegexes } from "@/core/utils/source-utils"
 
 const raceTraitSchema = z.object({
     name: z.string().min(1),
@@ -50,11 +51,10 @@ type RaceTraitInput = {
     description: string
 }
 
-const escapeRegex = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
-
 function buildRaceListQuery(filters: Pick<RacesFilters, "search" | "status" | "sources">): RaceListQuery {
     const query: RaceListQuery = {}
     const search = filters.search?.trim()
+    const escapeRegex = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
 
     if (search) {
         const searchRegex = { $regex: escapeRegex(search), $options: "i" as const }
@@ -68,7 +68,7 @@ function buildRaceListQuery(filters: Pick<RacesFilters, "search" | "status" | "s
     }
 
     if (filters.sources && filters.sources.length > 0) {
-        query.source = { $in: filters.sources.map((source) => new RegExp(`^${escapeRegex(source)}`, "i")) }
+        query.source = { $in: buildSourcePrefixRegexes(filters.sources) }
     }
 
     return query

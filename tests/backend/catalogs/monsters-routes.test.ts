@@ -32,11 +32,36 @@ describe('monsters backend routes', () => {
             size: { $in: ['M'] },
             challengeRating: '1',
             status: 'active',
-            source: { $in: [expect.any(RegExp)] },
+            source: { $in: expect.arrayContaining([expect.any(RegExp)]) },
         }))
         expect(sort).toHaveBeenCalledWith({ name: 1 })
         expect(applyFuzzySearch).toHaveBeenCalled()
         expect(payload.items.map((monster: { name: string }) => monster.name)).toEqual(['Aranha', 'Zumbi'])
+    })
+
+    it('GET /api/monsters accepts canonical source labels and still matches legacy abbreviations', async () => {
+        const monsters = [{ _id: 'monster-1', name: 'Aranha', source: 'LDM', status: 'active' }]
+        const sort = vi.fn().mockResolvedValue(monsters)
+        const find = vi.fn(() => ({ sort }))
+
+        vi.doMock('@/core/database/db', () => ({ default: vi.fn().mockResolvedValue(undefined) }))
+        vi.doMock('@/features/monsters/models/monster', () => ({ MonsterModel: { find } }))
+        vi.doMock('@/core/utils/search-engine', () => ({ applyFuzzySearch: vi.fn().mockReturnValue(monsters) }))
+        vi.doMock('@clerk/nextjs/server', () => ({ auth: vi.fn() }))
+        vi.doMock('@/features/users/api/audit-service', () => ({ createAuditLog: vi.fn() }))
+
+        const mod = await importFresh<typeof import('@/app/api/monsters/route')>('@/app/api/monsters/route')
+        const response = await mod.GET(new Request('http://localhost/api/monsters?sources=Monster%20Manual') as any)
+
+        expect(response.status).toBe(200)
+        expect(find).toHaveBeenCalledWith(expect.objectContaining({
+            source: {
+                $in: expect.arrayContaining([expect.any(RegExp)]),
+            },
+        }))
+
+        const sourceMatchers = (find.mock.calls[0]?.[0] as { source: { $in: RegExp[] } }).source.$in
+        expect(sourceMatchers.some((regex) => regex.test('LDM pág. 98'))).toBe(true)
     })
 
     it('POST /api/monsters rejects anonymous users', async () => {

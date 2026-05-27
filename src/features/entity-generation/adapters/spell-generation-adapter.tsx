@@ -7,6 +7,7 @@ import { GlassDiceValue } from "@/components/ui/glass-dice-value"
 import { GlassEmptyValue } from "@/components/ui/glass-empty-value"
 import { GlassLevelChip } from "@/components/ui/glass-level-chip"
 import { GlassSpellSchool } from "@/components/ui/glass-spell-school"
+import { getSourceDisplayLabel } from "@/core/utils/source-utils"
 import { applySpellGenerationCandidate, generateSpellGenerationCandidates } from "../api/entity-generation-api"
 import type { EntityGenerationAdapter } from "../components/entity-generation-ai-modal"
 import type { GeneratedSpellCandidate } from "../types/entity-generation.types"
@@ -88,7 +89,7 @@ function SpellGenerationComparison({ current, candidate }: { current: Spell; can
                     Estado Atual
                 </div>
                 <FieldBlock title="Nome" tone="old" value={current.name} />
-                <FieldBlock title="Fonte" tone="old" value={current.source} />
+                <FieldBlock title="Fonte" tone="old" value={getSourceDisplayLabel(current.source)} />
                 <FieldBlock title="Propriedades" tone="old" value={<SpellProperties spell={current} />} />
                 <FieldBlock title="Componentes" tone="old" value={<ComponentsValue components={current.component} />} />
                 <FieldBlock title="Dados" tone="old" value={<DiceValue spell={current} />} />
@@ -100,7 +101,7 @@ function SpellGenerationComparison({ current, candidate }: { current: Spell; can
                     Novo Resultado
                 </div>
                 <FieldBlock title="Nome" tone="new" value={candidate.name} />
-                <FieldBlock title="Fonte" tone="new" value={candidate.source} />
+                <FieldBlock title="Fonte" tone="new" value={candidate.source ? getSourceDisplayLabel(candidate.source) : <GlassEmptyValue />} />
                 <FieldBlock title="Propriedades" tone="new" value={<SpellProperties spell={candidate} />} />
                 <FieldBlock title="Componentes" tone="new" value={<ComponentsValue components={candidate.component} />} />
                 <FieldBlock title="Dados" tone="new" value={<DiceValue spell={candidate} />} />
@@ -114,7 +115,7 @@ export const spellGenerationAdapter: EntityGenerationAdapter<Spell, GeneratedSpe
     entityName: "Magia",
     getId: (spell) => spell._id,
     getTitle: (spell) => spell.name,
-    getSource: (spell) => spell.source,
+    getSource: (spell) => (spell.source ? getSourceDisplayLabel(spell.source) : undefined),
     getCandidateId: (candidate) => candidate.candidateId,
     getCandidateLabel: (candidate) => candidate.matchLabel,
     generate: (spell, runId) => generateSpellGenerationCandidates(spell._id, runId),

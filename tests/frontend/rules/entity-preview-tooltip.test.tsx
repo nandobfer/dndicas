@@ -21,6 +21,17 @@ const fetchedSpell = {
     status: 'active',
 }
 
+const fetchedFeat = {
+    _id: 'feat-1',
+    name: 'Ator',
+    description: '<p>Atuação.</p>',
+    source: 'PHB',
+    level: 4,
+    prerequisites: [],
+    attributeBonuses: [],
+    status: 'active',
+}
+
 const authMocks = vi.hoisted(() => ({
     isAdmin: false,
 }))
@@ -50,6 +61,10 @@ vi.mock('@/features/spells/components/spell-preview', () => ({
     SpellPreview: ({ spell }: { spell: { name: string } }) => <div data-testid="spell-preview">{spell.name}</div>,
 }))
 
+vi.mock('@/features/feats/components/feat-preview', () => ({
+    FeatPreview: ({ feat }: { feat: { name: string } }) => <div data-testid="feat-preview">{feat.name}</div>,
+}))
+
 vi.mock('@/core/hooks/useAuth', () => ({
     useAuth: () => ({ isAdmin: authMocks.isAdmin }),
 }))
@@ -60,6 +75,14 @@ vi.mock('@/features/entity-generation/components/entity-generation-ai-modal', ()
 
 vi.mock('@/features/entity-generation/adapters/spell-generation-adapter', () => ({
     spellGenerationAdapter: {},
+}))
+
+vi.mock('@/features/entity-generation/adapters/feat-generation-adapter', () => ({
+    featGenerationAdapter: {},
+}))
+
+vi.mock('@/features/entity-generation/adapters/monster-generation-adapter', () => ({
+    monsterGenerationAdapter: {},
 }))
 
 vi.mock('@/core/context/window-context', () => ({
@@ -132,5 +155,57 @@ describe('EntityPreviewTooltip', () => {
         expect(fetch).toHaveBeenCalledWith('/api/spells/spell-1')
         expect(screen.getByTestId('spell-preview')).toHaveTextContent('Luz')
         expect(screen.getByTestId('generation-modal')).toHaveTextContent('Luz')
+    })
+
+    it('renders the AI generation action for admin feat previews', async () => {
+        authMocks.isAdmin = true
+        vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+            ok: true,
+            json: vi.fn().mockResolvedValue(fetchedFeat),
+        }))
+
+        render(
+            <EntityPreviewTooltip entityId="feat-1" entityType="Talento">
+                <button type="button">Ator</button>
+            </EntityPreviewTooltip>,
+        )
+
+        fireEvent.mouseEnter(screen.getByRole('button', { name: 'Ator' }))
+
+        await act(async () => {
+            vi.advanceTimersByTime(300)
+            await Promise.resolve()
+            await Promise.resolve()
+        })
+
+        fireEvent.click(screen.getByText('Gerar com IA'))
+
+        expect(fetch).toHaveBeenCalledWith('/api/feats/feat-1')
+        expect(screen.getByTestId('feat-preview')).toHaveTextContent('Ator')
+        expect(screen.getByTestId('generation-modal')).toHaveTextContent('Ator')
+    })
+
+    it('renders the AI generation action for admin monster previews', async () => {
+        authMocks.isAdmin = true
+
+        render(
+            <EntityPreviewTooltip entityId="monster-1" entityType="Monstro">
+                <button type="button">Dragão Vermelho</button>
+            </EntityPreviewTooltip>,
+        )
+
+        fireEvent.mouseEnter(screen.getByRole('button', { name: 'Dragão Vermelho' }))
+
+        await act(async () => {
+            vi.advanceTimersByTime(300)
+            await Promise.resolve()
+            await Promise.resolve()
+        })
+
+        fireEvent.click(screen.getByText('Gerar com IA'))
+
+        expect(fetch).toHaveBeenCalledWith('/api/monsters/monster-1')
+        expect(screen.getByTestId('monster-preview')).toHaveTextContent('Dragão Vermelho')
+        expect(screen.getByTestId('generation-modal')).toHaveTextContent('Dragão Vermelho')
     })
 })

@@ -69,12 +69,12 @@ function leanResult<T>(value: T) {
 function candidate(overrides: Partial<GeneratedRaceCandidate> = {}): GeneratedRaceCandidate {
     return {
         candidateId: "Vampire:PSX:1",
-        matchLabel: "Vampire (PSX)",
+        matchLabel: "Vampire (Plane Shift: Ixalan pág. 1)",
         name: "Vampiro",
         originalName: "Vampire",
         description: "<p>new</p>",
         image: "https://example.com/vampire.png",
-        source: "Plane Shift p. 1",
+        source: "Plane Shift: Ixalan pág. 1",
         status: "active",
         size: "Médio",
         speed: "9 metros",
@@ -109,7 +109,7 @@ describe("applyRaceGenerationCandidate", () => {
             expect.objectContaining({
                 name: "Vampiro",
                 description: "<p>new</p>",
-                source: "Plane Shift p. 1",
+                source: "Plane Shift: Ixalan pág. 1",
                 image: "https://example.com/vampire.png",
                 traits: [
                     expect.objectContaining({
@@ -129,7 +129,7 @@ describe("applyRaceGenerationCandidate", () => {
 
         await applyRaceGenerationCandidate("race-1", candidate(), "user-1")
 
-        expect(Trait.create).toHaveBeenCalledWith(expect.objectContaining({ name: "Idade (Vampiro)", source: "Plane Shift p. 1" }))
+        expect(Trait.create).toHaveBeenCalledWith(expect.objectContaining({ name: "Idade (Vampiro)", source: "Plane Shift: Ixalan pág. 1" }))
     })
 
     it("reuses existing spells by originalName without updating them", async () => {

@@ -23,8 +23,8 @@ describe('classes service', () => {
         expect(find).toHaveBeenCalledWith(expect.objectContaining({
             status: 'active',
             $or: [
-                { source: { $in: [expect.any(RegExp)] } },
-                { 'subclasses.source': { $in: [expect.any(RegExp)] } },
+                { source: { $in: expect.arrayContaining([expect.any(RegExp)]) } },
+                { 'subclasses.source': { $in: expect.arrayContaining([expect.any(RegExp)]) } },
             ],
         }));
         const lastFindCall = find.mock.lastCall;
@@ -39,7 +39,9 @@ describe('classes service', () => {
             }>;
         };
 
-        expect(String(query.$or[0]?.source?.$in[0])).toBe('/^TCE/i');
+        const sourceMatchers = query.$or[0]?.source?.$in ?? []
+        expect(sourceMatchers.some((regex) => regex.test("TCE p. 1"))).toBe(true)
+        expect(sourceMatchers.some((regex) => regex.test("Tasha's Cauldron of Everything p. 1"))).toBe(true)
         expect(sort).toHaveBeenCalledWith({ createdAt: 1 });
         expect(lean).toHaveBeenCalled();
     });

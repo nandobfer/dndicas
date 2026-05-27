@@ -142,8 +142,11 @@ describe('feats backend', () => {
 
         expect(find).toHaveBeenCalledWith(expect.objectContaining({
             status: 'active',
-            source: { $in: [expect.any(RegExp), expect.any(RegExp)] },
+            source: { $in: expect.arrayContaining([expect.any(RegExp)]) },
         }));
+        const sourceMatchers = (find.mock.calls[0]?.[0] as { source: { $in: RegExp[] } }).source.$in
+        expect(sourceMatchers.some((regex) => regex.test('PHB p. 1'))).toBe(true)
+        expect(sourceMatchers.some((regex) => regex.test('XPHB p. 2'))).toBe(true)
         expect(applyFuzzySearch).toHaveBeenCalled();
         expect(result.items).toEqual([{ _id: '2', name: 'B', status: 'active', level: 2, source: 'XPHB p. 2' }]);
         expect(result.total).toBe(2);

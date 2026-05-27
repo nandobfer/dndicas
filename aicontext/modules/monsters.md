@@ -11,6 +11,7 @@ The Monsters module manages D&D 5e monster and NPC stat blocks with CRUD, dashbo
 
 ## Features
 
+- Admins podem usar `Gerar com IA` nos menus de monstros da tabela, da lista em cards e do preview tooltip. A ação usa `EntityGenerationAIModal` com `monsterGenerationAdapter`, progresso via Pusher, candidatos dos arquivos `bestiary-*.json`/`fluff-bestiary-*.json`/`legendarygroups.json`, tradução com `GenAITranslator` no modelo `gemini-3.1-flash-lite` e comparação de nome, fonte, imagem, resumo, descrição, características e ações. Ao salvar, `/api/admin/entity-generation/monsters/[id]/apply` sobrescreve o stat block pelo candidato, preserva imagem atual se a fonte não trouxer imagem e grava audit log como `Monstro`.
 - Adds `Monstros` to the expandable sidebar catalog navigation, pointing to `/monsters`.
 - Monster form classification autocompletes fill their row, numeric combat fields use immediate masks, optional speeds can be added as empty fields, and list custom values render beside the section title.
 - Challenge Rating uses the same masked field style as combat numbers, preserving string CR values with `/` and `-` while keeping XP/proficiency derivation safe for intermediate input.
@@ -22,6 +23,7 @@ The Monsters module manages D&D 5e monster and NPC stat blocks with CRUD, dashbo
 - Monster preview defenses render localized, capitalized Portuguese damage labels separated by commas while preserving internal damage keys.
 - Monster seed data imports every `bestiary-*.json` file under `src/lib/5etools-data/bestiary/`, pairs each source with `fluff-bestiary-*.json` when present, always loads `legendarygroups.json` separately, and translates special textual AC/PV seed values when they contain prose; manual form input for AC remains numeric.
 - Bestiary seed translation retries transient invalid/truncated GenAI JSON before failing, so long monster entries can resume without manual data changes.
+- O filtro compartilhado de fontes consome `GET /api/sources?entity=monsters`, exibe nomes completos canônicos no multiselect e expande aliases legados (`LDM`, `XMM`, etc.) no matching do backend para continuar encontrando registros antigos.
 
 Core behavior:
 - Browse monsters with search, type, size, challenge rating, source, and status filters.

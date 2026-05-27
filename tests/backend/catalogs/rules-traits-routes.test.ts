@@ -35,8 +35,11 @@ describe('rules and traits backend routes', () => {
         expect(find).toHaveBeenCalledWith(expect.objectContaining({
             name: { $regex: 'Regra', $options: 'i' },
             status: 'active',
-            source: { $in: [expect.any(RegExp)] },
+            source: { $in: expect.arrayContaining([expect.any(RegExp)]) },
         }));
+        const sourceMatchers = (find.mock.calls[0]?.[0] as { source: { $in: RegExp[] } }).source.$in
+        expect(sourceMatchers.some((regex) => regex.test('PHB p. 1'))).toBe(true)
+        expect(sourceMatchers.some((regex) => regex.test('LDJ pág. 72'))).toBe(true)
         expect(payload.items).toEqual(items);
     });
 

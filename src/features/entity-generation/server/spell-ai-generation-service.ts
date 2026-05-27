@@ -1,6 +1,7 @@
 import fs from "node:fs/promises"
 import path from "node:path"
 import dbConnect from "@/core/database/db"
+import { formatSourceDisplay } from "@/core/utils/source-utils"
 import { Spell } from "@/features/spells/models/spell"
 import { updateSpell } from "@/features/spells/api/spells-service"
 import type { AttributeType, CastingTime, CreateSpellInput, DiceType, Spell as SpellType, SpellComponent, SpellSchool } from "@/features/spells/types/spells.types"
@@ -23,17 +24,6 @@ interface TranslationCounter {
 }
 
 const DATA_ROOT = path.join(process.cwd(), "src/lib/5etools-data")
-
-const SOURCE_NAMES: Record<string, string> = {
-    PHB: "Manual do Jogador",
-    XPHB: "Player's Handbook 2024",
-    DMG: "Dungeon Master's Guide",
-    MM: "Monster Manual",
-    MPMM: "Mordenkainen Presents: Monsters of the Multiverse",
-    SCAG: "Sword Coast Adventurer's Guide",
-    ERLW: "Eberron: Rising from the Last War",
-    VRGR: "Van Richten's Guide to Ravenloft",
-}
 
 const SCHOOL_MAP: Record<string, SpellSchool> = {
     A: "Abjuração",
@@ -82,11 +72,6 @@ function feetToMeters(feet: number): string {
 function milesToKm(miles: number): string {
     const km = miles * 1.5
     return Number.isInteger(km) ? String(km) : km.toFixed(1).replace(".", ",")
-}
-
-function formatSource(source: string, page?: number): string {
-    const book = SOURCE_NAMES[source] ?? source
-    return page ? `${book} p. ${page}` : book
 }
 
 async function readJson<T>(fileName: string): Promise<T> {
@@ -243,7 +228,7 @@ async function buildCandidate(
 
     return {
         candidateId: `${spell.name}:${spell.source}:${spell.page ?? ""}`,
-        matchLabel: `${spell.name} (${formatSource(spell.source, spell.page)})`,
+        matchLabel: `${spell.name} (${formatSourceDisplay(spell.source, spell.page)})`,
         name: translated.name,
         originalName: spell.name,
         description: translated.description,
@@ -257,7 +242,7 @@ async function buildCandidate(
         baseDice: extractDiceFromEntries(spell.entries, undefined, DICE_REGEX),
         extraDicePerLevel: extractDiceFromEntries(spell.entries, spell.entriesHigherLevel, SCALE_DICE_REGEX),
         image: currentImage,
-        source: formatSource(spell.source, spell.page),
+        source: formatSourceDisplay(spell.source, spell.page),
         status: "active",
     }
 }

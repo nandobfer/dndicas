@@ -10,3 +10,6 @@ As tabelas de magias usam `useInfiniteSpells`, a mesma fonte de dados do modo li
 
 ### Identidade visual na primeira coluna da tabela
 A tabela de magias usa a primeira coluna como célula de identidade: imagem da magia quando disponível, fallback com ícone de varinha, nome linkado e fonte em texto auxiliar. A coluna dedicada de status não é exibida nessa tabela.
+
+### Canonização compartilhada das fontes
+Os filtros de fonte das entidades usam o `SourceFilter` compartilhado com opções vindas de `GET /api/sources`. O pipeline canoniza aliases e abreviações para nomes completos no multiselect; no caso de PHB/XPHB/Player's Handbook/LDJ, tudo converge para `Livro do Jogador`, enquanto o backend continua aceitando aliases legados ao montar o filtro por `source`.

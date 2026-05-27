@@ -92,14 +92,14 @@ function leanResult<T>(value: T) {
 function candidate(overrides: Partial<GeneratedSpellCandidate> = {}): GeneratedSpellCandidate {
     return {
         candidateId: "magic missile:XPHB:288",
-        matchLabel: "magic missile (Player's Handbook 2024 p. 288)",
+        matchLabel: "magic missile (Livro do Jogador pág. 288)",
         name: "Mísseis Mágicos",
         originalName: "magic missile",
         description: "<p>new</p>",
         circle: 1,
         school: "Evocação",
         component: ["Verbal", "Somático"],
-        source: "Player's Handbook 2024 p. 288",
+        source: "Livro do Jogador pág. 288",
         status: "active",
         ...overrides,
     }
@@ -123,7 +123,7 @@ describe("spell AI generation service", () => {
             originalName: "magic missile",
             circle: 1,
             school: "Evocação",
-            source: "Player's Handbook 2024 p. 288",
+            source: "Livro do Jogador pág. 288",
             image: "/old.png",
         }))
         expect(onProgress).toHaveBeenCalledWith({ current: 1, total: 1, message: "Gerando magia magic missile" })

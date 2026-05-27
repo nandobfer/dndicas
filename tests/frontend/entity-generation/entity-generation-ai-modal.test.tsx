@@ -86,7 +86,7 @@ describe("EntityGenerationAIModal", () => {
     it("subscribes to Pusher, updates progress, and keeps an entity snapshot while saving", async () => {
         const channel = new MockChannel()
         realtimeMocks.mockSubscribe.mockReturnValue(channel)
-        const entity = { _id: "entity-1", name: "Entidade Atual", source: "Fonte Atual" }
+        const entity = { _id: "entity-1", name: "Entidade Atual", source: "ABH p. 9" }
         const candidate = { id: "candidate-1", label: "Candidato" }
         const renderComparison = vi.fn((current: TestEntity) => <div>Comparando {current.name}</div>)
         const generate = vi.fn().mockResolvedValue({ candidates: [candidate] })
@@ -121,7 +121,7 @@ describe("EntityGenerationAIModal", () => {
         render(<Harness />)
 
         expect(screen.getByText("Entidade Atual")).toBeInTheDocument()
-        expect(screen.getByText("Fonte Atual")).toBeInTheDocument()
+        expect(screen.getByText("Astarion's Book of Hungers pág. 9")).toBeInTheDocument()
 
         await waitFor(() => expect(realtimeMocks.mockSubscribe).toHaveBeenCalledWith(expect.any(Object), "entity-generation.run-1"))
 

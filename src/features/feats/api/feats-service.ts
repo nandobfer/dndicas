@@ -8,6 +8,7 @@ import dbConnect from '@/core/database/db';
 import { Feat, type IFeat } from '../models/feat';
 import { logCreate, logUpdate, logDelete } from '@/features/users/api/audit-service';
 import { applyFuzzySearch } from '@/core/utils/search-engine';
+import { buildSourcePrefixRegexes } from "@/core/utils/source-utils"
 import type {
   CreateFeatInput,
   UpdateFeatInput,
@@ -63,8 +64,7 @@ export async function listFeats(
     }
 
     if (filters.sources && filters.sources.length > 0) {
-      const escapeRegex = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-      query.source = { $in: filters.sources.map(s => new RegExp(`^${escapeRegex(s)}`, 'i')) }
+      query.source = { $in: buildSourcePrefixRegexes(filters.sources) }
     }
 
     const items = await Feat.find(query as unknown as Parameters<typeof Feat.find>[0])

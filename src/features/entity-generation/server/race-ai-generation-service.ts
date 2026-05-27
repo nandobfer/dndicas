@@ -1,6 +1,7 @@
 import fs from "node:fs/promises"
 import path from "node:path"
 import dbConnect from "@/core/database/db"
+import { formatSourceDisplay, getSourceDisplayLabel } from "@/core/utils/source-utils"
 import { RaceModel } from "@/features/races/models/race"
 import { Trait } from "@/features/traits/database/trait"
 import { Spell } from "@/features/spells/models/spell"
@@ -58,17 +59,6 @@ interface TranslationCounter {
 }
 
 const DATA_ROOT = path.join(process.cwd(), "src/lib/5etools-data")
-
-const SOURCE_NAMES: Record<string, string> = {
-    PHB: "Manual do Jogador",
-    XPHB: "Player's Handbook 2024",
-    DMG: "Dungeon Master's Guide",
-    MM: "Monster Manual",
-    MPMM: "Mordenkainen Presents: Monsters of the Multiverse",
-    SCAG: "Sword Coast Adventurer's Guide",
-    ERLW: "Eberron: Rising from the Last War",
-    VRGR: "Van Richten's Guide to Ravenloft",
-}
 
 const SCHOOL_MAP: Record<string, SpellSchool> = {
     A: "Abjuração",
@@ -192,11 +182,6 @@ function escapeRegex(value: string): string {
 
 function normalize(value: string | undefined): string {
     return (value ?? "").trim().toLowerCase()
-}
-
-function formatSource(source: string, page?: number): string {
-    const book = SOURCE_NAMES[source] ?? source
-    return page ? `${book} p. ${page}` : book
 }
 
 async function readJson<T>(fileName: string): Promise<T> {
@@ -337,7 +322,7 @@ function buildCreateSpellInput(spell: FiveEToolsGenerationSpell, translated: { n
         range: formatRange(spell.range),
         duration: formatDuration(spell.duration),
         saveAttribute: spell.savingThrow?.[0] ? SAVE_ATTRIBUTE_MAP[spell.savingThrow[0]] : undefined,
-        source: formatSource(spell.source, spell.page),
+        source: formatSourceDisplay(spell.source, spell.page),
         status: "active",
     }
 }
@@ -350,7 +335,7 @@ function minimalSpellInput(spell: RawGenerationSpellRef, raceName: string): Crea
         circle: spell.circle ?? 1,
         school: "Evocação",
         component: [],
-        source: `Geração IA: ${raceName}${spell.source ? ` (${spell.source})` : ""}`,
+        source: `Geração IA: ${raceName}${spell.source ? ` (${getSourceDisplayLabel(spell.source)})` : ""}`,
         status: "active",
     }
 }
@@ -402,7 +387,7 @@ async function translateSpells(
             originalName: spell.nameEN,
             level: spell.charLevel,
             circle,
-            source: sourceSpell ? formatSource(sourceSpell.source, sourceSpell.page) : undefined,
+            source: sourceSpell ? formatSourceDisplay(sourceSpell.source, sourceSpell.page) : undefined,
             createInput: sourceSpell ? buildCreateSpellInput(sourceSpell, translated) : undefined,
             requiresManualReview: !sourceSpell,
         })
@@ -433,7 +418,7 @@ async function buildCandidate(
         variations.push({
             name: translatedVariation.name,
             description: translatedVariation.description,
-            source: formatSource(subrace.source, subrace.page),
+            source: formatSourceDisplay(subrace.source, subrace.page),
             image: getRaceImage(fluff),
             traits: await translateTraits(translator, counter, extractTraits(subrace.entries)),
             spells: await translateSpells(translator, counter, collectAdditionalSpells(subrace.additionalSpells), spellSources),
@@ -444,12 +429,12 @@ async function buildCandidate(
 
     return {
         candidateId: `${race.name}:${race.source}:${race.page ?? ""}`,
-        matchLabel: `${race.name} (${formatSource(race.source, race.page)})`,
+        matchLabel: `${race.name} (${formatSourceDisplay(race.source, race.page)})`,
         name: translatedRace.name,
         originalName: race.name,
         description: translatedRace.description,
         image: getRaceImage(fluff),
-        source: formatSource(race.source, race.page),
+        source: formatSourceDisplay(race.source, race.page),
         status: "active",
         size: mapSize(race.size),
         speed: mapSpeed(race.speed),
