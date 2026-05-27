@@ -17,7 +17,6 @@ import mongoose from 'mongoose';
 import terminal from 'terminal-kit';
 
 // Type-only imports — erased at compile time, generate no require() calls.
-import type { BaseProvider } from './base-provider';
 import type { BaseTranslator, RateLimitConfig, LibreTranslateTranslator as LibreTranslateTranslatorType } from './translation';
 import { countEntries, clearAllEntries, backupGlossary, restoreGlossary } from './glossary/glossary-store';
 import { listAllProgress, resetProgress } from './progress/progress-store';
@@ -43,10 +42,22 @@ const { ALL_TRANSLATORS, GenAITranslator, LibreTranslateTranslator } = require('
 
 const term = terminal.terminal;
 
+interface SeedProvider {
+    readonly name: string;
+    setTranslator(translator: BaseTranslator): void;
+    setTestMode(enabled: boolean): void;
+    setAutoMode(enabled: boolean): void;
+    setUpdateOnly(enabled: boolean): void;
+    setFromStart(enabled: boolean): void;
+    setFromIndex(index: number): void;
+    setFilter(term: string): void;
+    run(): Promise<void>;
+}
+
 // ─── Register providers here ──────────────────────────────────────────────────
 // When new providers are created, just add them to this array.
 
-const providers: BaseProvider<any, any>[] = [
+const providers: SeedProvider[] = [
     new SpellsProvider(),
     new RacesProvider(),
     new FeatsProvider(),
@@ -91,6 +102,8 @@ function printHelp(): void {
     term('Revisão interativa do 1º item, não salva no banco\n');
     term.green('  --auto             ');
     term('Processa todos os itens sem confirmação (batch)\n');
+    term.green('  --update-only      ');
+    term('No modo auto, atualiza existentes e pula itens novos\n');
     term.green('  --from-start       ');
     term('Ignora o progresso salvo e começa a iterar do índice 0\n');
     term.green('  --from <índice>    ');
@@ -487,7 +500,7 @@ async function selectTranslator(): Promise<BaseTranslator> {
 
 // ─── Provider selector ────────────────────────────────────────────────────────
 
-async function selectProvider(): Promise<BaseProvider<any, any>> {
+async function selectProvider(): Promise<SeedProvider> {
     term.bold.cyan('\n🎲 D&D Seed Data Script\n');
     term('─────────────────────────────────────────\n\n');
     term('Select a provider:\n\n');
@@ -572,6 +585,7 @@ async function main(): Promise<void> {
     // Detect --test or --dry-run mode
     const testMode = process.argv.includes('--test') || process.argv.includes('--dry-run');
     const autoMode = process.argv.includes('--auto');
+    const updateOnly = process.argv.includes('--update-only');
     const fromStart = process.argv.includes('--from-start');
     const filterIdx = process.argv.indexOf('--filter');
     const filterValue = filterIdx !== -1 ? process.argv[filterIdx + 1] : undefined;
@@ -589,6 +603,11 @@ async function main(): Promise<void> {
         process.exit(1);
     }
 
+    if (updateOnly && !autoMode) {
+        term.red('✗ --update-only só pode ser usado com --auto\n');
+        process.exit(1);
+    }
+
     if (testMode) {
         term.yellow('\n🧪 TEST/DRY-RUN MODE ENABLED\n');
         term.dim('   • Will process only the first item\n');
@@ -598,6 +617,9 @@ async function main(): Promise<void> {
         term.cyan('\n⚡ AUTO MODE ENABLED\n');
         term.dim('   • Will process all items without confirmation\n');
         term.dim('   • Glossary will be applied automatically\n\n');
+        if (updateOnly) {
+            term.dim('   • New items will be skipped (--update-only)\n\n');
+        }
     } else {
         term.cyan('\n💬 INTERACTIVE MODE\n');
         term.dim('   • Each item will be shown for review\n');
@@ -629,7 +651,7 @@ async function main(): Promise<void> {
 
     setupExitHandler();
 
-    let provider: BaseProvider<any, any>;
+    let provider: SeedProvider;
     let translator: BaseTranslator;
 
     try {
@@ -647,6 +669,9 @@ async function main(): Promise<void> {
     }
     if (autoMode) {
         provider!.setAutoMode(true);
+    }
+    if (updateOnly) {
+        provider!.setUpdateOnly(true);
     }
     if (fromStart) {
         provider!.setFromStart(true);

@@ -71,7 +71,9 @@ class TestProvider extends BaseProvider<TestItem, TestItem> {
         return null;
     }
 
-    async create(): Promise<void> {}
+    async create(_item: TestItem): Promise<void> {
+        void _item;
+    }
 }
 
 class ExistingEqualProvider extends TestProvider {
@@ -91,6 +93,36 @@ class ComparableProvider extends TestProvider {
         const { ignored: _ignored, ...comparable } = output as TestItem & { ignored?: string };
         void _ignored;
         return comparable;
+    }
+}
+
+class AutoConflictProvider extends TestProvider {
+    updatedItems: TestItem[] = [];
+
+    async findExisting(): Promise<TestItem | null> {
+        return { name: 'Fighter' };
+    }
+
+    protected override async resolveAutoConflict(_existing: TestItem, incoming: TestItem): Promise<TestItem | null> {
+        return incoming;
+    }
+
+    override async update(item: TestItem): Promise<void> {
+        this.updatedItems.push(item);
+    }
+}
+
+class UpdateOnlyNewProvider extends TestProvider {
+    createdItems: TestItem[] = [];
+    preparedItems: TestItem[] = [];
+
+    protected override async prepareAutoOutput(output: TestItem): Promise<TestItem> {
+        this.preparedItems.push(output);
+        return output;
+    }
+
+    override async create(item: TestItem): Promise<void> {
+        this.createdItems.push(item);
     }
 }
 
@@ -258,5 +290,38 @@ describe('BaseProvider filter support', () => {
             'find:Fighter',
             'after:Fighter',
         ]);
+    });
+
+    it('updates automatically when auto conflict hook returns a merged item', async () => {
+        const provider = new AutoConflictProvider([{ name: 'Fighter Updated' }]);
+        provider.setAutoMode(true);
+        provider.setFilter('fighter');
+
+        await provider.run();
+
+        expect(provider.updatedItems).toEqual([{ name: 'Fighter Updated' }]);
+    });
+
+    it('skips new items before auto preparation when update-only is enabled', async () => {
+        const provider = new UpdateOnlyNewProvider([{ name: 'Fighter' }]);
+        provider.setAutoMode(true);
+        provider.setUpdateOnly(true);
+        provider.setFilter('fighter');
+
+        await provider.run();
+
+        expect(provider.preparedItems).toEqual([]);
+        expect(provider.createdItems).toEqual([]);
+    });
+
+    it('still updates existing items when update-only is enabled', async () => {
+        const provider = new AutoConflictProvider([{ name: 'Fighter Updated' }]);
+        provider.setAutoMode(true);
+        provider.setUpdateOnly(true);
+        provider.setFilter('fighter');
+
+        await provider.run();
+
+        expect(provider.updatedItems).toEqual([{ name: 'Fighter Updated' }]);
     });
 });

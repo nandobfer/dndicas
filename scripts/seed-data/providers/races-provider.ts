@@ -74,7 +74,7 @@
 
 import path from 'path';
 import fs from 'fs';
-import { BaseProvider, convertFeetToMeters, formatSource } from '../base-provider';
+import { BaseProvider, convertFeetToMeters, formatSource, type DiffEntry } from '../base-provider';
 import type { GlossaryEntry } from '../glossary/glossary-store';
 import { applyGlossary } from '../glossary/glossary-store';
 import type { CreateRaceInput, RaceTrait, RaceVariation, SizeCategory } from '../../../src/features/races/types/races.types';
@@ -493,6 +493,11 @@ export class RacesProvider extends BaseProvider<FiveEToolsRace, CreateRaceInput>
             return null;
         }
 
+        if (this.isAutoMode() && race.source.toUpperCase() === 'XPHB') {
+            this.log(`Skipping XPHB race in auto mode: ${race.name} (${race.source})`, 'dim');
+            return null;
+        }
+
         const fluff = this.getFluff(race.name, race.source);
 
         // Description comes from fluff lore entries
@@ -623,7 +628,7 @@ export class RacesProvider extends BaseProvider<FiveEToolsRace, CreateRaceInput>
         for (const variation of output.variations) {
             const resolvedVarTraits = await this.resolveTraits(
                 variation.traits,
-                `${output.name} (${variation.name})`,
+                variation.name,
                 output.source,
             );
 
@@ -640,6 +645,104 @@ export class RacesProvider extends BaseProvider<FiveEToolsRace, CreateRaceInput>
         const resolvedSpells = await this.resolveSpells(output.spells, output.name);
 
         return { ...output, traits: resolvedTraits, spells: resolvedSpells, variations: resolvedVariations };
+    }
+
+    protected override async prepareAutoOutput(
+        output: CreateRaceInput,
+        existing: CreateRaceInput | null,
+    ): Promise<CreateRaceInput> {
+        await dbConnect();
+
+        const resolvedTraits = await this.resolveTraits(output.traits, output.name, output.source);
+        const resolvedVariations: RaceVariation[] = [];
+
+        for (const variation of output.variations) {
+            const matchingExistingVariation = existing
+                ? this.findMatchingVariation(existing.variations, variation)
+                : null;
+            const resolvedVarTraits = await this.resolveTraits(
+                variation.traits,
+                variation.name,
+                output.source,
+            );
+
+            resolvedVariations.push({
+                ...variation,
+                traits: resolvedVarTraits,
+                spells: matchingExistingVariation?.spells ?? [],
+            });
+        }
+
+        return {
+            ...output,
+            traits: resolvedTraits,
+            spells: existing?.spells ?? [],
+            variations: resolvedVariations,
+        };
+    }
+
+    protected override async resolveAutoConflict(
+        existing: CreateRaceInput,
+        incoming: CreateRaceInput,
+        _diffs: DiffEntry[],
+    ): Promise<CreateRaceInput | null> {
+        void _diffs;
+        const mergedVariations = this.mergeAutoVariations(existing.variations, incoming.variations);
+
+        return {
+            ...existing,
+            name: incoming.name,
+            originalName: incoming.originalName ?? existing.originalName,
+            description: incoming.description,
+            image: incoming.image,
+            traits: incoming.traits,
+            spells: existing.spells,
+            variations: mergedVariations,
+        };
+    }
+
+    private mergeAutoVariations(existing: RaceVariation[], incoming: RaceVariation[]): RaceVariation[] {
+        const usedExisting = new Set<number>();
+
+        const normalize = (value: string | undefined): string => (value ?? '').trim().toLowerCase();
+        const findMatchingExisting = (variation: RaceVariation): { variation: RaceVariation; index: number } | null => {
+            for (let i = 0; i < existing.length; i++) {
+                if (usedExisting.has(i)) continue;
+                if (normalize(existing[i].name) === normalize(variation.name)) {
+                    return { variation: existing[i], index: i };
+                }
+            }
+
+            return null;
+        };
+
+        const merged = incoming.map((variation) => {
+            const match = findMatchingExisting(variation);
+            if (!match) return variation;
+
+            usedExisting.add(match.index);
+            return {
+                ...match.variation,
+                name: variation.name,
+                description: variation.description,
+                image: variation.image,
+                traits: variation.traits,
+                spells: match.variation.spells,
+            };
+        });
+
+        existing.forEach((variation, index) => {
+            if (!usedExisting.has(index)) {
+                merged.push(variation);
+            }
+        });
+
+        return merged;
+    }
+
+    private findMatchingVariation(existing: RaceVariation[], incoming: RaceVariation): RaceVariation | null {
+        const normalize = (value: string | undefined): string => (value ?? '').trim().toLowerCase();
+        return existing.find((variation) => normalize(variation.name) === normalize(incoming.name)) ?? null;
     }
 
     /**
@@ -672,6 +775,11 @@ export class RacesProvider extends BaseProvider<FiveEToolsRace, CreateRaceInput>
 
         const resolved: RaceTrait[] = [];
         const escape = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        const isDuplicateKeyError = (error: unknown): boolean =>
+            typeof error === 'object'
+            && error !== null
+            && 'code' in error
+            && (error as { code?: unknown }).code === 11000;
 
         for (const trait of traits) {
             const originalName = (trait as ProcessingRaceTrait).originalName ?? trait.name;
@@ -699,14 +807,35 @@ export class RacesProvider extends BaseProvider<FiveEToolsRace, CreateRaceInput>
                 return true;
             });
 
+            const raceSpecificName = `${trait.name} (${raceName})`;
+            const findTraitByExactName = async (name: string) => Trait.findOne({
+                name: { $regex: new RegExp(`^${escape(name)}$`, 'i') },
+            }).lean();
+            const createTraitOrUseExistingOnDuplicate = async (name: string) => {
+                try {
+                    return await Trait.create({
+                        name,
+                        originalName,
+                        description: trait.description,
+                        source: raceSource,
+                        status: 'active',
+                    });
+                } catch (error) {
+                    if (!isDuplicateKeyError(error)) throw error;
+                    const existing = await findTraitByExactName(name);
+                    if (existing) return existing;
+                    throw error;
+                }
+            };
+
             // Rank by translated name (PT) — stable even when originalName is empty
             const ranked = applyFuzzySearch(results, trait.name, 5);
             let topResults = ranked.length > 0 ? ranked : results.slice(0, 5);
 
             // Inject the race-specific variant at position 0 if it exists in the pool but
             // wasn't selected by Fuse.js (common when many candidates share the same prefix).
-            const raceSpecificName = `${trait.name} (${raceName})`;
-            const raceSpecificCandidate = results.find(
+            const exactRaceSpecificCandidate = await findTraitByExactName(raceSpecificName);
+            const raceSpecificCandidate = exactRaceSpecificCandidate ?? results.find(
                 (r) => r.name.toLowerCase() === raceSpecificName.toLowerCase(),
             );
             if (raceSpecificCandidate && !topResults.some((r) => String(r._id) === String(raceSpecificCandidate._id))) {
@@ -716,6 +845,33 @@ export class RacesProvider extends BaseProvider<FiveEToolsRace, CreateRaceInput>
             /** Build the mention span that is stored in the race document. */
             const buildMentionHtml = (id: string, traitName: string): string =>
                 `<span data-type="mention" data-id="${id}" data-entity-type="Habilidade" class="mention">${traitName}</span>`;
+
+            const newName = raceSpecificName;
+
+            if (this.isAutoMode()) {
+                if (raceSpecificCandidate) {
+                    const traitId = String(raceSpecificCandidate._id);
+                    term.green(`  ✓ Usando existente automaticamente: "${raceSpecificCandidate.name}" (${traitId})\n`);
+                    resolved.push({
+                        name: 'Habilidade sem Nome',
+                        level: trait.level ?? 1,
+                        description: buildMentionHtml(traitId, raceSpecificCandidate.name),
+                    });
+                    continue;
+                }
+
+                term.dim(`  → Variante específica não encontrada. Será criada.\n`);
+                const created = await createTraitOrUseExistingOnDuplicate(newName);
+                const traitId = String(created._id);
+                term.green(`  ✓ Criada: "${newName}" (${traitId})\n`);
+
+                resolved.push({
+                    name: 'Habilidade sem Nome',
+                    level: trait.level ?? 1,
+                    description: buildMentionHtml(traitId, newName),
+                });
+                continue;
+            }
 
             if (results.length === 0) {
                 term.dim(`  → Nenhum resultado encontrado. Será criada.\n`);
@@ -747,7 +903,6 @@ export class RacesProvider extends BaseProvider<FiveEToolsRace, CreateRaceInput>
                 term.dim(`       id: ${String(r._id)}\n`);
             });
 
-            const newName = `${trait.name} (${raceName})`;
             const menuItems = [
                 `[0] CRIAR NOVA: "${newName}"`,
                 ...topResults.map((r, i) => `[${i + 1}] USAR EXISTENTE: "${r.name}"`),
@@ -767,13 +922,7 @@ export class RacesProvider extends BaseProvider<FiveEToolsRace, CreateRaceInput>
             }
 
             if (choice === 0) {
-                const created = await Trait.create({
-                    name: newName,
-                    originalName,
-                    description: trait.description,
-                    source: raceSource,
-                    status: 'active',
-                });
+                const created = await createTraitOrUseExistingOnDuplicate(newName);
                 const traitId = String(created._id);
                 term.green(`  ✓ Criada: "${newName}" (${traitId})\n`);
 
@@ -1016,8 +1165,13 @@ export class RacesProvider extends BaseProvider<FiveEToolsRace, CreateRaceInput>
 
     async update(race: CreateRaceInput): Promise<void> {
         await dbConnect();
+        const escape = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        const orClauses: Record<string, unknown>[] = [{ name: new RegExp(`^${escape(race.name)}$`, 'i') }];
+        if (race.originalName) {
+            orClauses.push({ originalName: new RegExp(`^${escape(race.originalName)}$`, 'i') });
+        }
         await RaceModel.findOneAndUpdate(
-            { name: race.name },
+            { $or: orClauses },
             { $set: race },
             { runValidators: true },
         );

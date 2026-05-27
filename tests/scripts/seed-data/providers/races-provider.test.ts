@@ -26,6 +26,7 @@ vi.mock('../../../../src/features/races/models/race', () => ({
 vi.mock('../../../../src/features/traits/database/trait', () => ({
     Trait: {
         find: vi.fn(),
+        findOne: vi.fn(),
         create: vi.fn(),
     },
 }));
@@ -362,6 +363,47 @@ describe('RacesProvider.processItem', () => {
         expect(result).toBeNull();
     });
 
+    it('returns null for XPHB races in auto mode', async () => {
+        provider.setAutoMode(true);
+
+        const result = await provider.processItem({
+            name: 'Aasimar',
+            source: 'XPHB',
+            size: ['M'],
+            speed: 30,
+        });
+
+        expect(result).toBeNull();
+    });
+
+    it('processes XPHB races outside auto mode', async () => {
+        const result = await provider.processItem({
+            name: 'Aasimar',
+            source: 'XPHB',
+            size: ['M'],
+            speed: 30,
+        });
+
+        expect(result).not.toBeNull();
+        expect(result!.name).toBe('[PT] Aasimar');
+        expect(result!.source).toBe('LDJ');
+    });
+
+    it('processes non-XPHB races in auto mode', async () => {
+        provider.setAutoMode(true);
+
+        const result = await provider.processItem({
+            name: 'Aasimar',
+            source: 'PHB',
+            size: ['M'],
+            speed: 30,
+        });
+
+        expect(result).not.toBeNull();
+        expect(result!.name).toBe('[PT] Aasimar');
+        expect(result!.source).toBe('LDJ');
+    });
+
     it('maps a valid race to CreateRaceInput with traits from entries', async () => {
         const race = {
             name: 'Aasimar',
@@ -539,6 +581,272 @@ describe('RacesProvider.findExisting', () => {
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
+// resolveAutoConflict
+// ─────────────────────────────────────────────────────────────────────────────
+
+type PrivatePrepareAutoOutput = {
+    prepareAutoOutput: (
+        output: {
+            name: string;
+            originalName?: string;
+            description: string;
+            source: string;
+            status: 'active' | 'inactive';
+            size: 'Médio';
+            speed: string;
+            image: string;
+            traits: { name: string; description: string; level?: number }[];
+            spells: unknown[];
+            variations: {
+                name: string;
+                description: string;
+                image?: string;
+                traits: { name: string; description: string; level?: number }[];
+                spells: unknown[];
+            }[];
+        },
+        existing: {
+            name: string;
+            originalName?: string;
+            description: string;
+            source: string;
+            status: 'active' | 'inactive';
+            size: 'Médio';
+            speed: string;
+            image: string;
+            traits: { name: string; description: string; level?: number }[];
+            spells: unknown[];
+            variations: {
+                name: string;
+                description: string;
+                image?: string;
+                traits: { name: string; description: string; level?: number }[];
+                spells: unknown[];
+            }[];
+        } | null,
+    ) => Promise<{
+        spells: unknown[];
+        variations: { name: string; spells: unknown[] }[];
+    }>;
+};
+
+type PrivateResolveAutoConflict = {
+    resolveAutoConflict: (
+        existing: {
+            name: string;
+            originalName?: string;
+            description: string;
+            source: string;
+            status: 'active' | 'inactive';
+            size: 'Médio';
+            speed: string;
+            image: string;
+            traits: { name: string; description: string; level?: number }[];
+            spells: unknown[];
+            variations: {
+                name: string;
+                description: string;
+                image?: string;
+                traits: { name: string; description: string; level?: number }[];
+                spells: unknown[];
+            }[];
+        },
+        incoming: {
+            name: string;
+            originalName?: string;
+            description: string;
+            source: string;
+            status: 'active' | 'inactive';
+            size: 'Médio';
+            speed: string;
+            image: string;
+            traits: { name: string; description: string; level?: number }[];
+            spells: unknown[];
+            variations: {
+                name: string;
+                description: string;
+                image?: string;
+                traits: { name: string; description: string; level?: number }[];
+                spells: unknown[];
+            }[];
+        },
+        diffs: unknown[],
+    ) => Promise<{
+        name: string;
+        description: string;
+        image: string;
+        traits: { name: string; description: string; level?: number }[];
+        spells: unknown[];
+        variations: {
+            name: string;
+            description: string;
+            image?: string;
+            traits: { name: string; description: string; level?: number }[];
+            spells: unknown[];
+        }[];
+    } | null>;
+};
+
+describe('RacesProvider.prepareAutoOutput', () => {
+    beforeEach(() => {
+        vi.mocked(Spell.find).mockReset();
+    });
+
+    it('does not resolve raw spells in auto preparation and preserves existing spells', async () => {
+        const provider = makeProvider();
+        provider.setAutoMode(true);
+        const incoming = {
+            name: 'Elfo',
+            originalName: 'Elf',
+            description: '<p>new</p>',
+            source: 'LDJ',
+            status: 'active' as const,
+            size: 'Médio' as const,
+            speed: '9 metros',
+            image: '',
+            traits: [],
+            spells: [{ _raw: true, name: 'Luz', originalName: 'light', level: 1 }],
+            variations: [{
+                name: 'Elfo do Mar',
+                description: '<p>new var</p>',
+                image: '',
+                traits: [],
+                spells: [{ _raw: true, name: 'Luzes Dançantes', originalName: 'dancing lights', level: 1 }],
+            }],
+        };
+        const existing = {
+            ...incoming,
+            description: '<p>old</p>',
+            spells: [{ id: 'spell-old', name: 'Magia Atual', circle: 1, level: 1 }],
+            variations: [{
+                ...incoming.variations[0],
+                spells: [{ id: 'var-spell-old', name: 'Magia Atual Var', circle: 0, level: 1 }],
+            }],
+        };
+
+        const prepared = await (provider as unknown as PrivatePrepareAutoOutput)
+            .prepareAutoOutput(incoming, existing);
+
+        expect(Spell.find).not.toHaveBeenCalled();
+        expect(prepared.spells).toEqual([{ id: 'spell-old', name: 'Magia Atual', circle: 1, level: 1 }]);
+        expect(prepared.variations[0].spells).toEqual([{ id: 'var-spell-old', name: 'Magia Atual Var', circle: 0, level: 1 }]);
+    });
+
+    it('drops raw spells for new races in auto preparation instead of resolving them', async () => {
+        const provider = makeProvider();
+        provider.setAutoMode(true);
+        const incoming = {
+            name: 'Nova Raça',
+            originalName: 'New Race',
+            description: '<p>new</p>',
+            source: 'LDJ',
+            status: 'active' as const,
+            size: 'Médio' as const,
+            speed: '9 metros',
+            image: '',
+            traits: [],
+            spells: [{ _raw: true, name: 'Luz', originalName: 'light', level: 1 }],
+            variations: [{
+                name: 'Variação',
+                description: '<p>var</p>',
+                image: '',
+                traits: [],
+                spells: [{ _raw: true, name: 'Luzes Dançantes', originalName: 'dancing lights', level: 1 }],
+            }],
+        };
+
+        const prepared = await (provider as unknown as PrivatePrepareAutoOutput)
+            .prepareAutoOutput(incoming, null);
+
+        expect(Spell.find).not.toHaveBeenCalled();
+        expect(prepared.spells).toEqual([]);
+        expect(prepared.variations[0].spells).toEqual([]);
+    });
+});
+
+describe('RacesProvider.resolveAutoConflict', () => {
+    it('uses incoming race content while preserving existing spells', async () => {
+        const provider = makeProvider();
+        const existing = {
+            name: 'Elfo',
+            originalName: 'Elf',
+            description: '<p>old</p>',
+            source: 'LDJ',
+            status: 'active' as const,
+            size: 'Médio' as const,
+            speed: '9 metros',
+            image: 'old.webp',
+            traits: [{ name: 'Old', description: 'old' }],
+            spells: [{ id: 'spell-old', name: 'Magia Atual', circle: 1, level: 1 }],
+            variations: [],
+        };
+        const incoming = {
+            ...existing,
+            name: 'Elfo Novo',
+            description: '<p>new</p>',
+            image: 'new.webp',
+            traits: [{ name: 'New', description: 'new' }],
+            spells: [{ id: 'spell-new', name: 'Magia Nova', circle: 2, level: 3 }],
+        };
+
+        const resolved = await (provider as unknown as PrivateResolveAutoConflict)
+            .resolveAutoConflict(existing, incoming, []);
+
+        expect(resolved).not.toBeNull();
+        expect(resolved!.name).toBe('Elfo Novo');
+        expect(resolved!.description).toBe('<p>new</p>');
+        expect(resolved!.image).toBe('new.webp');
+        expect(resolved!.traits).toEqual([{ name: 'New', description: 'new' }]);
+        expect(resolved!.spells).toEqual([{ id: 'spell-old', name: 'Magia Atual', circle: 1, level: 1 }]);
+    });
+
+    it('merges matching variations with incoming content while preserving existing variation spells', async () => {
+        const provider = makeProvider();
+        const existing = {
+            name: 'Elfo',
+            originalName: 'Elf',
+            description: '<p>old</p>',
+            source: 'LDJ',
+            status: 'active' as const,
+            size: 'Médio' as const,
+            speed: '9 metros',
+            image: '',
+            traits: [],
+            spells: [],
+            variations: [{
+                name: 'Elfo do Mar',
+                description: '<p>old var</p>',
+                image: 'old-var.webp',
+                traits: [{ name: 'Old Var', description: 'old' }],
+                spells: [{ id: 'var-spell-old', name: 'Magia Atual', circle: 0, level: 1 }],
+            }],
+        };
+        const incoming = {
+            ...existing,
+            variations: [{
+                name: 'Elfo do Mar',
+                description: '<p>new var</p>',
+                image: 'new-var.webp',
+                traits: [{ name: 'New Var', description: 'new' }],
+                spells: [{ id: 'var-spell-new', name: 'Magia Nova', circle: 1, level: 3 }],
+            }],
+        };
+
+        const resolved = await (provider as unknown as PrivateResolveAutoConflict)
+            .resolveAutoConflict(existing, incoming, []);
+
+        expect(resolved!.variations).toHaveLength(1);
+        expect(resolved!.variations[0]).toMatchObject({
+            name: 'Elfo do Mar',
+            description: '<p>new var</p>',
+            image: 'new-var.webp',
+            traits: [{ name: 'New Var', description: 'new' }],
+            spells: [{ id: 'var-spell-old', name: 'Magia Atual', circle: 0, level: 1 }],
+        });
+    });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
 // processItem — originalName preservation
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -597,7 +905,7 @@ describe('RacesProvider.processItem — originalName preservation', () => {
             size: ['M'] as string[],
             speed: 30,
             additionalSpells: [
-                { known: { '1': ['dancing lights#c'] } },
+                { known: { '1': { _: ['dancing lights#c'] } } },
             ],
         };
 
@@ -618,7 +926,7 @@ describe('RacesProvider.processItem — originalName preservation', () => {
             source: 'PHB',
             size: ['M'] as string[],
             speed: 30,
-            additionalSpells: [{ known: { '1': ['darkness'] } }],
+            additionalSpells: [{ known: { '1': { _: ['darkness'] } } }],
         };
 
         const result = await provider.processItem(race);
@@ -662,14 +970,20 @@ type PrivateResolveTraits = {
 describe('RacesProvider.resolveTraits — originalName lookup', () => {
     let provider: RacesProvider;
     let traitFindMock: MockInstance;
+    let traitFindOneMock: MockInstance;
     let traitCreateMock: MockInstance;
 
     beforeEach(() => {
         provider = makeProvider();
         traitFindMock = vi.mocked(Trait.find);
+        traitFindOneMock = vi.mocked(Trait.findOne);
         traitCreateMock = vi.mocked(Trait.create);
         traitFindMock.mockReset();
+        traitFindOneMock.mockReset();
         traitCreateMock.mockReset();
+        traitFindOneMock.mockReturnValue({ lean: vi.fn().mockResolvedValue(null) });
+        (termKit as unknown as { terminal: { singleColumnMenu: ReturnType<typeof vi.fn> } })
+            .terminal.singleColumnMenu.mockClear();
         // Auto-pick "use existing" (index 1) so interactive menu resolves immediately
         (termKit as unknown as { terminal: { singleColumnMenu: ReturnType<typeof vi.fn> } })
             .terminal.singleColumnMenu.mockImplementation(
@@ -763,6 +1077,100 @@ describe('RacesProvider.resolveTraits — originalName lookup', () => {
 
         // The resolved mention should reference the race-specific "Tipo Criatura (Fada)"
         expect(resolved[0].description).toContain('id-fada');
+    });
+
+    it('in auto mode uses exact race-specific trait immediately when it exists', async () => {
+        provider.setAutoMode(true);
+        const raceSpecific = { _id: 'trait-sea-elf', name: 'Transe (Elfo do Mar)', description: '<p>desc</p>' };
+        traitFindMock.mockReturnValue({ limit: vi.fn().mockReturnValue({ lean: vi.fn().mockResolvedValue([
+            { _id: 'trait-generic', name: 'Transe', description: '<p>generic</p>' },
+        ]) }) });
+        traitFindOneMock.mockReturnValue({ lean: vi.fn().mockResolvedValue(raceSpecific) });
+
+        const traits = [{ name: 'Transe', description: '<p>desc</p>', originalName: 'Trance' }];
+        const resolved = await (provider as unknown as PrivateResolveTraits).resolveTraits(traits, 'Elfo do Mar', 'LDJ');
+
+        expect(traitCreateMock).not.toHaveBeenCalled();
+        expect((termKit as unknown as { terminal: { singleColumnMenu: ReturnType<typeof vi.fn> } }).terminal.singleColumnMenu)
+            .not.toHaveBeenCalled();
+        expect(resolved[0].description).toContain('trait-sea-elf');
+        expect(resolved[0].description).toContain('Transe (Elfo do Mar)');
+    });
+
+    it('in auto mode uses exact race-specific trait even when it is outside the broad candidate batch', async () => {
+        provider.setAutoMode(true);
+        const exactTrait = { _id: 'trait-vampiro-age', name: 'Idade (Vampiro)', description: '<p>desc</p>' };
+        traitFindMock.mockReturnValue({ limit: vi.fn().mockReturnValue({ lean: vi.fn().mockResolvedValue([
+            { _id: 'trait-age-generic', name: 'Idade', description: '<p>generic</p>' },
+        ]) }) });
+        traitFindOneMock.mockReturnValue({ lean: vi.fn().mockResolvedValue(exactTrait) });
+
+        const traits = [{ name: 'Idade', description: '<p>desc</p>', originalName: 'Age' }];
+        const resolved = await (provider as unknown as PrivateResolveTraits).resolveTraits(traits, 'Vampiro', 'PSX');
+
+        expect(traitCreateMock).not.toHaveBeenCalled();
+        expect(resolved[0].description).toContain('trait-vampiro-age');
+        expect(resolved[0].description).toContain('Idade (Vampiro)');
+    });
+
+    it('in auto mode falls back to the existing exact trait when create hits a duplicate key', async () => {
+        provider.setAutoMode(true);
+        const exactTrait = { _id: 'trait-vampiro-age', name: 'Idade (Vampiro)', description: '<p>desc</p>' };
+        traitFindMock.mockReturnValue({ limit: vi.fn().mockReturnValue({ lean: vi.fn().mockResolvedValue([
+            { _id: 'trait-age-generic', name: 'Idade', description: '<p>generic</p>' },
+        ]) }) });
+        traitFindOneMock
+            .mockReturnValueOnce({ lean: vi.fn().mockResolvedValue(null) })
+            .mockReturnValueOnce({ lean: vi.fn().mockResolvedValue(exactTrait) });
+        traitCreateMock.mockRejectedValue({ code: 11000 });
+
+        const traits = [{ name: 'Idade', description: '<p>desc</p>', originalName: 'Age' }];
+        const resolved = await (provider as unknown as PrivateResolveTraits).resolveTraits(traits, 'Vampiro', 'PSX');
+
+        expect(traitCreateMock).toHaveBeenCalledWith(expect.objectContaining({
+            name: 'Idade (Vampiro)',
+        }));
+        expect(traitFindOneMock).toHaveBeenCalledTimes(2);
+        expect(resolved[0].description).toContain('trait-vampiro-age');
+        expect(resolved[0].description).toContain('Idade (Vampiro)');
+    });
+
+    it('injects exact race-specific trait found by findOne at the top of the interactive menu', async () => {
+        const exactTrait = { _id: 'trait-vampiro-age', name: 'Idade (Vampiro)', description: '<p>desc</p>' };
+        traitFindMock.mockReturnValue({ limit: vi.fn().mockReturnValue({ lean: vi.fn().mockResolvedValue([
+            { _id: 'trait-age-generic', name: 'Idade', description: '<p>generic</p>' },
+        ]) }) });
+        traitFindOneMock.mockReturnValue({ lean: vi.fn().mockResolvedValue(exactTrait) });
+
+        const traits = [{ name: 'Idade', description: '<p>desc</p>', originalName: 'Age' }];
+        const resolved = await (provider as unknown as PrivateResolveTraits).resolveTraits(traits, 'Vampiro', 'PSX');
+
+        expect(traitCreateMock).not.toHaveBeenCalled();
+        expect(resolved[0].description).toContain('trait-vampiro-age');
+        expect(resolved[0].description).toContain('Idade (Vampiro)');
+    });
+
+    it('in auto mode creates a race-specific trait when no exact variant exists', async () => {
+        provider.setAutoMode(true);
+        traitFindMock.mockReturnValue({ limit: vi.fn().mockReturnValue({ lean: vi.fn().mockResolvedValue([
+            { _id: 'trait-generic', name: 'Transe', description: '<p>generic</p>' },
+        ]) }) });
+        traitCreateMock.mockResolvedValue({ _id: 'trait-created', name: 'Transe (Elfo do Mar)' });
+
+        const traits = [{ name: 'Transe', description: '<p>desc</p>', originalName: 'Trance' }];
+        const resolved = await (provider as unknown as PrivateResolveTraits).resolveTraits(traits, 'Elfo do Mar', 'LDJ');
+
+        expect(traitCreateMock).toHaveBeenCalledWith(expect.objectContaining({
+            name: 'Transe (Elfo do Mar)',
+            originalName: 'Trance',
+            description: '<p>desc</p>',
+            source: 'LDJ',
+            status: 'active',
+        }));
+        expect((termKit as unknown as { terminal: { singleColumnMenu: ReturnType<typeof vi.fn> } }).terminal.singleColumnMenu)
+            .not.toHaveBeenCalled();
+        expect(resolved[0].description).toContain('trait-created');
+        expect(resolved[0].description).toContain('Transe (Elfo do Mar)');
     });
 });
 
