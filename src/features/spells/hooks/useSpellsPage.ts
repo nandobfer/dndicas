@@ -1,10 +1,12 @@
 "use client";
 
 import * as React from 'react';
+import { useQueryClient } from "@tanstack/react-query"
 import { useInfiniteSpells } from '../api/spells-queries';
 import { useSpellFilters } from './useSpellFilters';
 import { useIsMobile } from '@/core/hooks/useMediaQuery';
 import { useViewMode } from "@/core/hooks/useViewMode"
+import { invalidateSearchCache } from "@/core/utils/search-engine"
 import type { Spell } from "../types/spells.types"
 
 /**
@@ -13,6 +15,7 @@ import type { Spell } from "../types/spells.types"
 export function useSpellsPage() {
     const isMobile = useIsMobile()
     const { viewMode, setViewMode, isDefault } = useViewMode()
+    const queryClient = useQueryClient()
 
     // Filters logic from existing hook
     const { filters, search, setSearch, setStatus, setCircles, setSchools, setSaveAttributes, setDiceTypes, setSources, circleMode, setCircleMode, setPage } = useSpellFilters()
@@ -32,6 +35,7 @@ export function useSpellsPage() {
     // UI state
     const [isFormOpen, setIsFormOpen] = React.useState(false)
     const [isDeleteDialogOpen, setIsDeleteDialogOpen] = React.useState(false)
+    const [isGenerationOpen, setIsGenerationOpen] = React.useState(false)
     const [selectedSpell, setSelectedSpell] = React.useState<Spell | null>(null)
 
     // Handlers
@@ -66,6 +70,18 @@ export function useSpellsPage() {
         setIsDeleteDialogOpen(true)
     }
 
+    const handleGenerateAIClick = (spell: Spell) => {
+        setSelectedSpell(spell)
+        setIsGenerationOpen(true)
+    }
+
+    const handleGenerationApplied = () => {
+        queryClient.invalidateQueries({ queryKey: ["spells"] })
+        queryClient.invalidateQueries({ queryKey: ["audit-logs"] })
+        queryClient.invalidateQueries({ queryKey: ["dashboard-stats"] })
+        invalidateSearchCache()
+    }
+
     const handleFormSuccess = () => {
         setIsFormOpen(false)
         setSelectedSpell(null)
@@ -73,6 +89,13 @@ export function useSpellsPage() {
 
     const handleDeleteSuccess = () => {
         setIsDeleteDialogOpen(false)
+        setSelectedSpell(null)
+    }
+
+    const closeAll = () => {
+        setIsFormOpen(false)
+        setIsDeleteDialogOpen(false)
+        setIsGenerationOpen(false)
         setSelectedSpell(null)
     }
 
@@ -128,16 +151,21 @@ export function useSpellsPage() {
             handleCreateClick,
             handleEditClick,
             handleDeleteClick,
+            handleGenerateAIClick,
             handleFormSuccess,
             handleDeleteSuccess,
+            handleGenerationApplied,
         },
         modals: {
             isFormOpen,
             setIsFormOpen,
             isDeleteDialogOpen,
             setIsDeleteDialogOpen,
+            isGenerationOpen,
+            setIsGenerationOpen,
             selectedSpell,
             hasActiveFilters,
+            closeAll,
         },
     }
 }

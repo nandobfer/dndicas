@@ -1,16 +1,20 @@
-import { render, screen } from '@testing-library/react'
+import { fireEvent, render, screen } from '@testing-library/react'
 import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import * as React from 'react'
 import type { ReactNode } from 'react'
 import { SpellsTable } from '@/features/spells/components/spells-table'
 import type { Spell } from '@/features/spells/types/spells.types'
 
+const authMocks = vi.hoisted(() => ({
+    isAdmin: false,
+}))
+
 vi.mock('next/link', () => ({
     default: ({ href, children, ...props }: { href: string; children: ReactNode }) => <a href={href} {...props}>{children}</a>,
 }))
 
 vi.mock('@/core/hooks/useAuth', () => ({
-    useAuth: () => ({ isAdmin: false }),
+    useAuth: () => ({ isAdmin: authMocks.isAdmin }),
 }))
 
 vi.mock('@/components/ui/glass-image', () => ({
@@ -57,6 +61,7 @@ const baseSpell: Spell = {
 
 describe('SpellsTable', () => {
     beforeEach(() => {
+        authMocks.isAdmin = false
         class MockIntersectionObserver {
             observe = vi.fn()
             disconnect = vi.fn()
@@ -88,5 +93,16 @@ describe('SpellsTable', () => {
 
         expect(screen.queryByRole('img', { name: 'Bola de Fogo' })).not.toBeInTheDocument()
         expect(screen.getByRole('link', { name: 'Bola de Fogo' })).toBeInTheDocument()
+    })
+
+    it('renders the AI generation action for admins', () => {
+        authMocks.isAdmin = true
+        const onGenerateAI = vi.fn()
+
+        render(<SpellsTable spells={[baseSpell]} total={1} onEdit={vi.fn()} onDelete={vi.fn()} onGenerateAI={onGenerateAI} />)
+
+        fireEvent.click(screen.getByText('Gerar com IA'))
+
+        expect(onGenerateAI).toHaveBeenCalledWith(baseSpell)
     })
 })

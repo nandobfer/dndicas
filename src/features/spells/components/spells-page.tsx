@@ -16,6 +16,8 @@ import { SpellsFilters } from "./spells-filters"
 import { EntityList } from "@/features/rules/components/entity-list"
 import { SpellFormModal } from "./spell-form-modal"
 import { DeleteSpellDialog } from "./delete-spell-dialog"
+import { EntityGenerationAIModal } from "@/features/entity-generation/components/entity-generation-ai-modal"
+import { spellGenerationAdapter } from "@/features/entity-generation/adapters/spell-generation-adapter"
 import { GlassCard, GlassCardContent } from "@/components/ui/glass-card"
 import { GlassViewSelector } from "@/components/ui/glass-view-selector"
 import { motionConfig } from "@/lib/config/motion-configs"
@@ -83,6 +85,7 @@ export function SpellsPage() {
                     isFetchingNextPage={data.infinite.isFetchingNextPage}
                     onLoadMore={data.infinite.fetchNextPage}
                     onEdit={actions.handleEditClick}
+                    onGenerateAI={actions.handleGenerateAIClick}
                     onDelete={actions.handleDeleteClick}
                     isAdmin={isAdmin}
                 />
@@ -96,6 +99,7 @@ export function SpellsPage() {
                     onLoadMore={data.infinite.fetchNextPage}
                     hasActiveFilters={modals.hasActiveFilters}
                     onEdit={actions.handleEditClick}
+                    onGenerateAI={actions.handleGenerateAIClick}
                     onDelete={actions.handleDeleteClick}
                 />
             )}
@@ -107,6 +111,16 @@ export function SpellsPage() {
                 onSuccess={actions.handleFormSuccess}
             />
             <DeleteSpellDialog isOpen={modals.isDeleteDialogOpen} spell={modals.selectedSpell} onClose={() => modals.setIsDeleteDialogOpen(false)} />
+            <EntityGenerationAIModal
+                open={modals.isGenerationOpen}
+                entity={modals.selectedSpell}
+                adapter={spellGenerationAdapter}
+                onOpenChange={(open) => {
+                    if (!open) modals.closeAll()
+                    else modals.setIsGenerationOpen(true)
+                }}
+                onApplied={actions.handleGenerationApplied}
+            />
         </motion.div>
     )
 }

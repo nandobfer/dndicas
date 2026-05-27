@@ -24,10 +24,13 @@ import type { Item } from "@/features/items/types/items.types"
 import { MonsterPreview } from "@/features/monsters/components/monster-preview"
 import type { Monster } from "@/features/monsters/types/monsters.types"
 import { useWindows } from "@/core/context/window-context"
+import { useAuth } from "@/core/hooks/useAuth"
 import { motion } from "framer-motion"
 import { EntitySource } from "./entity-source"
 import type { Trait } from "@/features/traits/types/traits.types"
 import { ChargesPreview } from "@/features/shared/charges/charges-preview"
+import { EntityGenerationAIModal } from "@/features/entity-generation/components/entity-generation-ai-modal"
+import { spellGenerationAdapter } from "@/features/entity-generation/adapters/spell-generation-adapter"
 
 interface RulePreviewProps {
     rule: Reference
@@ -220,9 +223,11 @@ interface EntityPreviewTooltipProps {
 }
 
 export const EntityPreviewTooltip = ({ entityId, entityType, children, side = "top", delayDuration = 300 }: EntityPreviewTooltipProps) => {
+    const { isAdmin } = useAuth()
     const [data, setData] = React.useState<unknown>(null)
     const [loading, setLoading] = React.useState(false)
     const [open, setOpen] = React.useState(false)
+    const [generationOpen, setGenerationOpen] = React.useState(false)
     const timeoutRef = React.useRef<NodeJS.Timeout | null>(null)
 
     const fetchData = React.useCallback(async () => {
@@ -310,7 +315,23 @@ export const EntityPreviewTooltip = ({ entityId, entityType, children, side = "t
             case "Talento":
                 return <FeatPreview feat={data as Feat} />
             case "Magia":
-                return <SpellPreview spell={data as Spell} />
+                return (
+                    <div className="space-y-3">
+                        {isAdmin && (
+                            <button
+                                type="button"
+                                onClick={() => setGenerationOpen(true)}
+                                className="inline-flex items-center gap-2 rounded-lg border border-purple-300/25 bg-purple-500/10 px-3 py-2 text-xs font-medium text-purple-100 transition-colors hover:bg-purple-500/15"
+                            >
+                                <Sparkles className="h-3.5 w-3.5 animate-pulse text-purple-200" />
+                                <span className="bg-gradient-to-r from-blue-300 via-purple-300 to-blue-300 bg-clip-text text-transparent">
+                                    Gerar com IA
+                                </span>
+                            </button>
+                        )}
+                        <SpellPreview spell={data as Spell} />
+                    </div>
+                )
             case "Classe":
                 return <ClassPreview characterClass={data as CharacterClass} showStatus={true} />
             case "Subclasse":
@@ -338,24 +359,35 @@ export const EntityPreviewTooltip = ({ entityId, entityType, children, side = "t
                 )
             }
         }
-    }, [entityType, data, loading, entityId])
+    }, [entityType, data, loading, entityId, isAdmin])
 
     return (
-        <GlassPopover open={open} onOpenChange={setOpen}>
-            <GlassPopoverTrigger asChild onMouseEnter={handleMouseEnter} onMouseLeave={handleMouseLeave}>
-                {children}
-            </GlassPopoverTrigger>
-            <GlassPopoverContent
-                side={side}
-                className="w-[calc(100vw-2rem)] sm:w-auto max-w-[95vw] sm:max-w-xl md:max-w-2xl max-h-[85vh] sm:max-h-[400px] overflow-y-auto glass-scrollbar pointer-events-auto"
-                onMouseEnter={handleMouseEnter}
-                onMouseLeave={handleMouseLeave}
-                onOpenAutoFocus={(e) => e.preventDefault()}
-                onWheel={(e) => e.stopPropagation()}
-                style={{ isolation: "isolate" }}
-            >
-                {content}
-            </GlassPopoverContent>
-        </GlassPopover>
+        <>
+            <GlassPopover open={open} onOpenChange={setOpen}>
+                <GlassPopoverTrigger asChild onMouseEnter={handleMouseEnter} onMouseLeave={handleMouseLeave}>
+                    {children}
+                </GlassPopoverTrigger>
+                <GlassPopoverContent
+                    side={side}
+                    className="w-[calc(100vw-2rem)] sm:w-auto max-w-[95vw] sm:max-w-xl md:max-w-2xl max-h-[85vh] sm:max-h-[400px] overflow-y-auto glass-scrollbar pointer-events-auto"
+                    onMouseEnter={handleMouseEnter}
+                    onMouseLeave={handleMouseLeave}
+                    onOpenAutoFocus={(e) => e.preventDefault()}
+                    onWheel={(e) => e.stopPropagation()}
+                    style={{ isolation: "isolate" }}
+                >
+                    {content}
+                </GlassPopoverContent>
+            </GlassPopover>
+            {entityType === "Magia" && (
+                <EntityGenerationAIModal
+                    open={generationOpen}
+                    entity={(data as Spell | null) ?? null}
+                    adapter={spellGenerationAdapter}
+                    onOpenChange={setGenerationOpen}
+                    onApplied={() => setData(null)}
+                />
+            )}
+        </>
     )
 }

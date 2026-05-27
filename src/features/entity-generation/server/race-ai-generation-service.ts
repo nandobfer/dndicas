@@ -9,6 +9,7 @@ import { logUpdate } from "@/features/users/api/audit-service"
 import type { CreateSpellInput, SpellSchool, SpellComponent, AttributeType, CastingTime } from "@/features/spells/types/spells.types"
 import type { Race, RaceTrait, RaceVariation, SizeCategory } from "@/features/races/types/races.types"
 import { GenAITranslator } from "../../../../scripts/seed-data/translation/genai-translator"
+import { ENTITY_GENERATION_MODEL } from "./entity-generation-model"
 import type {
     AdditionalSpellGroup,
     FiveEToolsGenerationEntry,
@@ -228,7 +229,7 @@ function getRaceImage(fluff: FluffGenerationRaceEntry | undefined): string {
 
 function createTranslator(): GenAITranslator {
     const translator = new GenAITranslator()
-    translator.configure({ model: "", rpm: 0, rpd: 0 })
+    translator.configure({ model: ENTITY_GENERATION_MODEL, rpm: 0, rpd: 0 })
     return translator
 }
 
