@@ -10,10 +10,31 @@
 
 import { generateText, defaultModel } from '../../../src/core/ai/genai';
 import { BaseTranslator } from './base-translator';
-import { convertFeetToMeters } from '../base-provider';
-import terminal from 'terminal-kit';
 
-const term = terminal.terminal;
+const term = {
+    yellow: (message: string) => process.stderr.write(message),
+    gray: (message: string) => process.stderr.write(message),
+};
+
+function convertFeetToMeters(text: string): string {
+    return text
+        .replace(/(\d+(?:[.,]\d+)?)\s*(?:pés?|feet|foot|ft\.?)/gi, (_, numStr: string) => {
+            const feet = parseFloat(numStr.replace(',', '.'));
+            const meters = feet * 0.3;
+            const formatted = Number.isInteger(meters)
+                ? String(meters)
+                : meters.toFixed(1).replace('.', ',');
+            return `${formatted} metros`;
+        })
+        .replace(/(\d+(?:[.,]\d+)?)\s*(?:milhas?|miles?)/gi, (_, numStr: string) => {
+            const miles = parseFloat(numStr.replace(',', '.'));
+            const km = miles * 1.5;
+            const formatted = Number.isInteger(km)
+                ? String(km)
+                : km.toFixed(1).replace('.', ',');
+            return `${formatted} km`;
+        });
+}
 
 export interface RateLimitConfig {
     /** AI model name — empty string means use defaultModel */

@@ -5,6 +5,7 @@
 "use client";
 
 import * as React from "react"
+import { useQueryClient } from "@tanstack/react-query"
 import { useInfiniteRaces } from "../api/races-queries"
 import { useIsMobile } from "@/core/hooks/useMediaQuery"
 import { useViewMode } from "@/core/hooks/useViewMode"
@@ -13,6 +14,7 @@ import type { Race } from "../types/races.types"
 export function useRacesPage() {
     const isMobile = useIsMobile()
     const { viewMode, setViewMode } = useViewMode()
+    const queryClient = useQueryClient()
 
     const [search, setSearch] = React.useState("")
     const [status, setStatus] = React.useState<"active" | "inactive" | "all">("all")
@@ -24,6 +26,7 @@ export function useRacesPage() {
 
     const [isFormOpen, setIsFormOpen] = React.useState(false)
     const [isDeleteOpen, setIsDeleteOpen] = React.useState(false)
+    const [isGenerationOpen, setIsGenerationOpen] = React.useState(false)
     const [selectedRace, setSelectedRace] = React.useState<Race | null>(null)
 
     const handleSearchChange = (value: string) => setSearch(value)
@@ -45,9 +48,21 @@ export function useRacesPage() {
         setIsDeleteOpen(true)
     }
 
+    const handleGenerateAIClick = (race: Race) => {
+        setSelectedRace(race)
+        setIsGenerationOpen(true)
+    }
+
+    const handleGenerationApplied = () => {
+        queryClient.invalidateQueries({ queryKey: ["races"] })
+        queryClient.invalidateQueries({ queryKey: ["audit-logs"] })
+        queryClient.invalidateQueries({ queryKey: ["dashboard-stats"] })
+    }
+
     const closeAll = () => {
         setIsFormOpen(false)
         setIsDeleteOpen(false)
+        setIsGenerationOpen(false)
         setSelectedRace(null)
     }
 
@@ -79,16 +94,21 @@ export function useRacesPage() {
             handleCreateClick,
             handleEditClick,
             handleDeleteClick,
+            handleGenerateAIClick,
+            handleGenerationApplied,
         },
         modals: {
             isFormOpen,
             setIsFormOpen,
             isDeleteOpen,
             setIsDeleteOpen,
+            isGenerationOpen,
+            setIsGenerationOpen,
             selectedRace,
             handleCreateClick,
             handleEditClick,
             handleDeleteClick,
+            handleGenerateAIClick,
             closeAll,
         },
     }

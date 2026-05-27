@@ -21,12 +21,13 @@ interface EntityListProps {
     isFetchingNextPage: boolean
     onLoadMore: () => void
     onEdit?: (item: any) => void
+    onGenerateAI?: (item: any) => void
     onDelete?: (item: any) => void
     isAdmin?: boolean
     renderOptions?: EntityRenderOptions
 }
 
-export function EntityList({ items, entityType, isLoading, hasNextPage, isFetchingNextPage, onLoadMore, onEdit, onDelete, isAdmin, renderOptions }: EntityListProps) {
+export function EntityList({ items, entityType, isLoading, hasNextPage, isFetchingNextPage, onLoadMore, onEdit, onGenerateAI, onDelete, isAdmin, renderOptions }: EntityListProps) {
     const observer = React.useRef<IntersectionObserver | null>(null)
     const { addWindow } = useWindows()
 
@@ -93,7 +94,7 @@ export function EntityList({ items, entityType, isLoading, hasNextPage, isFetchi
                                         <ExternalLink className="h-4 w-4" />
                                     </motion.button>
 
-                                    {isAdmin && (onEdit || onDelete) && (
+                                    {isAdmin && (onEdit || onGenerateAI || onDelete) && (
                                         <GlassDropdownMenu>
                                             <GlassDropdownMenuTrigger asChild>
                                                 <motion.button
@@ -109,6 +110,14 @@ export function EntityList({ items, entityType, isLoading, hasNextPage, isFetchi
                                                     <GlassDropdownMenuItem onClick={() => onEdit(item)}>
                                                         <Pencil className="mr-2 h-4 w-4" />
                                                         Editar
+                                                    </GlassDropdownMenuItem>
+                                                )}
+                                                {onGenerateAI && (
+                                                    <GlassDropdownMenuItem onClick={() => onGenerateAI(item)}>
+                                                        <Sparkles className="mr-2 h-4 w-4 text-purple-300 animate-pulse" />
+                                                        <span className="bg-gradient-to-r from-blue-300 via-purple-300 to-blue-300 bg-clip-text text-transparent">
+                                                            Gerar com IA
+                                                        </span>
                                                     </GlassDropdownMenuItem>
                                                 )}
                                                 {onDelete && (
