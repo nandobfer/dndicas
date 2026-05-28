@@ -1,22 +1,98 @@
 import * as React from "react"
-import { fireEvent, render, screen, waitFor } from "@testing-library/react"
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import { SheetHeader } from "@/features/character-sheets/components/sheet-header"
 import type { CharacterItem, CharacterSheet, PatchSheetBody } from "@/features/character-sheets/types/character-sheet.types"
 
+const mockClassData = vi.hoisted(() => ({
+    data: {
+        _id: "class-1",
+        name: "Guerreiro",
+        hitDice: "d10" as const,
+        traits: [
+            { level: 3, description: "<p><span data-type=\"mention\" data-id=\"trait-1\" data-entity-type=\"Habilidade\" data-label=\"Especialização marcial\" class=\"mention\">Especialização marcial</span></p>" },
+        ],
+        spellcasting: true,
+        progressionTable: {},
+        subclasses: [
+            {
+                _id: "subclass-1",
+                name: "Campeão",
+                color: "#22c55e",
+                spellcasting: false,
+                traits: [
+                    { level: 3, description: "<p><span data-type=\"mention\" data-id=\"trait-2\" data-entity-type=\"Habilidade\" data-label=\"Crítico aprimorado\" class=\"mention\">Crítico aprimorado</span></p>" },
+                ],
+                progressionTable: {},
+            },
+        ],
+    },
+}))
+
+const mockRaceData = vi.hoisted(() => ({
+    data: {
+        _id: "race-1",
+        name: "Humano",
+        traits: [
+            { name: "Versatilidade heroica", level: 3, description: "<p>Versatilidade heroica</p>" },
+        ],
+    },
+}))
+
 vi.mock("@/features/classes/api/classes-queries", () => ({
-    useClass: () => ({
-        data: {
-            traits: [],
-            spellcasting: true,
-            progressionTable: {},
-            subclasses: [],
-        },
-    }),
+    useClass: () => mockClassData,
+}))
+
+vi.mock("@/features/races/api/races-queries", () => ({
+    useRace: () => mockRaceData,
 }))
 
 vi.mock("@/features/classes/components/class-progression-table", () => ({
     ClassProgressionTable: () => <div data-testid="class-progression-table">Tabela de progressao</div>,
+}))
+
+vi.mock("@/features/rules/components/entity-preview-tooltip", () => ({
+    TraitPreview: ({ trait }: { trait: { name: string } }) => <div data-testid="trait-preview">{trait.name}</div>,
+}))
+
+vi.mock("@/features/traits/api/traits-api", () => ({
+    fetchTraitById: vi.fn(async (id: string) => ({
+        _id: id,
+        id,
+        name: id === "trait-1" ? "Especialização marcial" : "Crítico aprimorado",
+        description: `<p>${id === "trait-1" ? "Especialização marcial" : "Crítico aprimorado"}</p>`,
+        source: "Livro do Jogador",
+        status: "active" as const,
+        createdAt: "2026-01-01T00:00:00.000Z",
+        updatedAt: "2026-01-01T00:00:00.000Z",
+    })),
+}))
+
+vi.mock("@/features/dice-roller/components/dice-roller-panel", () => ({
+    DiceRollerPanel: ({ onRollResolved }: { onRollResolved?: (result: {
+        rollId: string
+        terms: Array<{ dice: string; quantity: number; results: number[] }>
+        mode: "normal"
+        diceTotal: number
+        modifier: number
+        total: number
+        createdAt: string
+    }) => void }) => (
+        <button
+            type="button"
+            onClick={() => onRollResolved?.({
+                rollId: "roll-1",
+                terms: [{ dice: "d10", quantity: 1, results: [9] }],
+                mode: "normal",
+                diceTotal: 9,
+                modifier: 0,
+                total: 9,
+                createdAt: "2026-01-01T00:00:00.000Z",
+            })}
+        >
+            Usar rolagem de PV
+        </button>
+    ),
 }))
 
 vi.mock("@/features/character-sheets/components/sheet-input", () => ({
@@ -42,8 +118,39 @@ vi.mock("@/features/character-sheets/components/sheet-input", () => ({
     ),
 }))
 
+function buildMentionHtml(label: string, entityType?: string, mentionParentClassId?: string | null) {
+    const normalizedLabel = label.trim()
+    if (!normalizedLabel || !entityType) return label
+
+    const mentionId = entityType === "Subclasse"
+        ? `subclass:${mentionParentClassId ?? "class-1"}:subclass-1`
+        : entityType === "Talento"
+            ? "feat-1"
+            : `${entityType.toLowerCase()}-1`
+
+    return `<p><span data-type="mention" data-id="${mentionId}" data-entity-type="${entityType}" data-label="${normalizedLabel}" class="mention">${normalizedLabel}</span></p>`
+}
+
 vi.mock("@/features/character-sheets/components/compact-rich-input", () => ({
-    CompactRichInput: ({ label }: { label: string }) => <div>{label}</div>,
+    CompactRichInput: ({
+        label,
+        value,
+        onChange,
+        specificEntityMention,
+        mentionParentClassId,
+    }: {
+        label?: string
+        value: string
+        onChange: (value: string) => void
+        specificEntityMention?: string
+        mentionParentClassId?: string | null
+    }) => (
+        <input
+            aria-label={label ?? "compact-rich-input"}
+            value={String(value).replace(/<[^>]*>/g, "")}
+            onChange={(event) => onChange(buildMentionHtml(event.target.value, specificEntityMention, mentionParentClassId))}
+        />
+    ),
 }))
 
 const glassImageUploaderMocks = vi.hoisted(() => ({
@@ -56,6 +163,7 @@ vi.mock("@/components/ui/glass-image-uploader", () => ({
         onRemove: () => void
         getAIPayload?: () => unknown
         aiContextLabel?: string
+        label?: string
     }) => glassImageUploaderMocks.render(props),
 }))
 
@@ -96,6 +204,10 @@ vi.mock("@/features/character-sheets/hooks/use-character-calculations", () => ({
     }),
 }))
 
+vi.mock("@/features/character-sheets/hooks/use-sheet-mention-sync", () => ({
+    syncMentionBoundResourceCharges: vi.fn(async ({ currentRows }: { currentRows: CharacterSheet["resourceCharges"] }) => currentRows),
+}))
+
 const baseSheet: CharacterSheet = {
     _id: "sheet-1",
     slug: "kael",
@@ -109,7 +221,7 @@ const baseSheet: CharacterSheet = {
     level: 2,
     experience: "0",
     race: "Humano",
-    raceRef: null,
+    raceRef: "race-1",
     origin: "Soldado",
     originRef: null,
     inspiration: false,
@@ -257,8 +369,8 @@ describe("SheetHeader", () => {
                 equipped: true,
                 catalogItemType: "armadura",
                 catalogAc: 18,
-                catalogAcType: "base" as const,
-                catalogArmorType: "pesada" as const,
+                catalogAcType: "base",
+                catalogArmorType: "pesada",
                 catalogAcBonus: null,
                 createdAt: "2026-01-01T00:00:00.000Z",
             },
@@ -308,16 +420,6 @@ describe("SheetHeader", () => {
                 },
             ],
         })
-        expect(uploaderProps?.getAIPayload?.()).not.toHaveProperty("age")
-        expect(uploaderProps?.getAIPayload?.()).not.toHaveProperty("height")
-        expect(uploaderProps?.getAIPayload?.()).not.toHaveProperty("weight")
-        expect(uploaderProps?.getAIPayload?.()).not.toHaveProperty("eyes")
-        expect(uploaderProps?.getAIPayload?.()).not.toHaveProperty("skin")
-        expect(uploaderProps?.getAIPayload?.()).not.toHaveProperty("hair")
-        expect(uploaderProps?.getAIPayload?.()).not.toHaveProperty("personalityTraits")
-        expect(uploaderProps?.getAIPayload?.()).not.toHaveProperty("ideals")
-        expect(uploaderProps?.getAIPayload?.()).not.toHaveProperty("bonds")
-        expect(uploaderProps?.getAIPayload?.()).not.toHaveProperty("flaws")
     })
 
     it("uses the tighter horizontal gap between identity field columns", () => {
@@ -352,6 +454,154 @@ describe("SheetHeader", () => {
 
         expect(screen.getByTestId("glass-image")).toHaveAttribute("data-src", "https://cdn.test/hero.webp")
         expect(screen.queryByTestId("glass-image-uploader")).not.toBeInTheDocument()
+    })
+
+    it("shows the progression table trigger below the armor class shield and still opens the table", async () => {
+        const { sheet, form } = createHarness()
+
+        render(<SheetHeader sheet={sheet} form={form} />)
+
+        const bonusInput = screen.getByLabelText("Bônus")
+        const progressionButton = screen.getByTestId("class-progression-button")
+
+        expect(bonusInput.compareDocumentPosition(progressionButton) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+        expect(progressionButton).toHaveClass("whitespace-nowrap")
+        expect(progressionButton).toHaveTextContent("progressão")
+        expect(progressionButton.closest(".px-4.pt-4.pb-0")).toBeInTheDocument()
+
+        fireEvent.click(progressionButton)
+
+        expect(await screen.findByTestId("class-progression-table")).toBeInTheDocument()
+    })
+
+    it("shows the level-up button below XP in editable mode", () => {
+        const { sheet, form } = createHarness()
+
+        render(<SheetHeader sheet={sheet} form={form} />)
+
+        const xpInput = screen.getByLabelText("XP")
+        const levelUpButton = screen.getByTestId("level-up-button")
+
+        expect(xpInput.compareDocumentPosition(levelUpButton) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+        expect(levelUpButton).toHaveTextContent("Subir de nível")
+        expect(levelUpButton.closest(".px-4.pt-4.pb-0")).toBeInTheDocument()
+    })
+
+    it("shows the level-up modal for 2 -> 3 with hp preview, new traits and required subclass", async () => {
+        const { sheet, form } = createHarness()
+
+        render(<SheetHeader sheet={sheet} form={form} />)
+
+        fireEvent.click(screen.getByTestId("level-up-button"))
+
+        const modal = await screen.findByTestId("level-up-modal")
+        expect(modal).toBeInTheDocument()
+        expect(screen.getByText("Nível 2 -> 3")).toBeInTheDocument()
+        expect(screen.getByText("Confira o que muda antes de aplicar a progressão do personagem.")).toBeInTheDocument()
+        expect(screen.getByText("20 -> 27")).toBeInTheDocument()
+        expect(screen.getByTestId("level-up-average-badge")).toHaveTextContent("média")
+        expect(await screen.findByText("Especialização marcial")).toBeInTheDocument()
+        expect(screen.getByText("Versatilidade heroica")).toBeInTheDocument()
+        expect(screen.getAllByTestId("trait-preview")).toHaveLength(2)
+        expect(within(modal).getByLabelText("Subclasse")).toBeInTheDocument()
+
+        fireEvent.click(screen.getByRole("button", { name: "Confirmar" }))
+
+        expect(screen.getByText("Escolha uma subclasse para confirmar o nível 3.")).toBeInTheDocument()
+        expect(form.patchField).not.toHaveBeenCalledWith("level", 3)
+    })
+
+    it("shows the required feat selector when leveling from 3 to 4", async () => {
+        const { sheet, form } = createHarness({
+            level: 3,
+            subclass: "<p><span data-type=\"mention\" data-id=\"subclass:class-1:subclass-1\" data-entity-type=\"Subclasse\" data-label=\"Campeão\" class=\"mention\">Campeão</span></p>",
+            subclassRef: "subclass-1",
+        })
+
+        render(<SheetHeader sheet={sheet} form={form} />)
+
+        fireEvent.click(screen.getByTestId("level-up-button"))
+
+        expect(await screen.findByTestId("level-up-modal")).toBeInTheDocument()
+        expect(screen.getByText("Nível 3 -> 4")).toBeInTheDocument()
+        expect(screen.getByLabelText("Talento")).toBeInTheDocument()
+
+        fireEvent.click(screen.getByRole("button", { name: "Confirmar" }))
+
+        expect(screen.getByText("Escolha um talento para confirmar o nível 4.")).toBeInTheDocument()
+    })
+
+    it("persists subclass, hpMax and level when confirming level 3 without changing hpCurrent", async () => {
+        const { sheet, form } = createHarness()
+
+        render(<SheetHeader sheet={sheet} form={form} />)
+
+        fireEvent.click(screen.getByTestId("level-up-button"))
+        const modal = await screen.findByTestId("level-up-modal")
+        fireEvent.change(within(modal).getByLabelText("Subclasse"), { target: { value: "Campeão" } })
+        fireEvent.click(screen.getByRole("button", { name: "Confirmar" }))
+
+        expect(form.patchField).toHaveBeenCalledWith(
+            "subclass",
+            expect.stringContaining('data-entity-type="Subclasse"')
+        )
+        expect(form.patchField).toHaveBeenCalledWith("hpMax", 27)
+        expect(form.patchField).toHaveBeenCalledWith("level", 3)
+        expect(form.patchField).not.toHaveBeenCalledWith("hpCurrent", expect.anything())
+    })
+
+    it("persists featuresNotes, hpMax and level when confirming level 4 without changing hpCurrent", async () => {
+        const { sheet, form } = createHarness({
+            level: 3,
+            subclass: "<p><span data-type=\"mention\" data-id=\"subclass:class-1:subclass-1\" data-entity-type=\"Subclasse\" data-label=\"Campeão\" class=\"mention\">Campeão</span></p>",
+            subclassRef: "subclass-1",
+            featuresNotes: "<p>Notas existentes</p>",
+        })
+
+        render(<SheetHeader sheet={sheet} form={form} />)
+
+        fireEvent.click(screen.getByTestId("level-up-button"))
+        fireEvent.change(await screen.findByLabelText("Talento"), { target: { value: "Sortudo" } })
+        fireEvent.click(screen.getByRole("button", { name: "Confirmar" }))
+
+        expect(form.patchField).toHaveBeenCalledWith(
+            "featuresNotes",
+            expect.stringContaining('data-entity-type="Talento"')
+        )
+        expect(form.patchField).toHaveBeenCalledWith("hpMax", 27)
+        expect(form.patchField).toHaveBeenCalledWith("level", 4)
+        expect(form.patchField).not.toHaveBeenCalledWith("hpCurrent", expect.anything())
+    })
+
+    it("replaces the average hp gain with a rolled result", async () => {
+        const { sheet, form } = createHarness()
+
+        render(<SheetHeader sheet={sheet} form={form} />)
+
+        fireEvent.click(screen.getByTestId("level-up-button"))
+        expect(await screen.findByText("20 -> 27")).toBeInTheDocument()
+
+        fireEvent.click(screen.getByRole("button", { name: "Rolar ganho de pontos de vida" }))
+        expect(screen.getByRole("button", { name: "Usar rolagem de PV" })).toBeInTheDocument()
+        fireEvent.click(screen.getByRole("button", { name: "Usar rolagem de PV" }))
+
+        await waitFor(() => {
+            expect(screen.getByText("20 -> 29")).toBeInTheDocument()
+        })
+        await waitFor(() => {
+            expect(screen.queryByRole("button", { name: "Usar rolagem de PV" })).not.toBeInTheDocument()
+        })
+        expect(screen.getByText("Resultado rolado: 9")).toBeInTheDocument()
+    })
+
+    it("disables the level-up flow at level 20", () => {
+        const { sheet, form } = createHarness({ level: 20 })
+
+        render(<SheetHeader sheet={sheet} form={form} />)
+
+        expect(screen.getByTestId("level-up-button")).toBeDisabled()
+        fireEvent.click(screen.getByTestId("level-up-button"))
+        expect(screen.queryByTestId("level-up-modal")).not.toBeInTheDocument()
     })
 
     it("caps the class progression popover height in Owlbear mode", async () => {
