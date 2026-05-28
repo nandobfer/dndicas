@@ -68,6 +68,7 @@ export interface ICharacterSheet extends Document {
     ideals: string
     bonds: string
     flaws: string
+    history: string
     notes: string
     // 2024 sheet fields
     classFeatures: string
@@ -180,6 +181,7 @@ const CharacterSheetSchema = new Schema<ICharacterSheet>(
         ideals: { type: String, default: "" },
         bonds: { type: String, default: "" },
         flaws: { type: String, default: "" },
+        history: { type: String, default: "" },
         notes: { type: String, default: "" },
         classFeatures: { type: String, default: "" },
         speciesTraits: { type: String, default: "" },

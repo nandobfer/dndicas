@@ -1,6 +1,6 @@
 import * as React from "react"
 import { fireEvent, render, screen, waitFor } from "@testing-library/react"
-import { describe, expect, it, vi } from "vitest"
+import { beforeEach, describe, expect, it, vi } from "vitest"
 import { SheetHeader } from "@/features/character-sheets/components/sheet-header"
 import type { CharacterSheet, PatchSheetBody } from "@/features/character-sheets/types/character-sheet.types"
 
@@ -44,6 +44,37 @@ vi.mock("@/features/character-sheets/components/sheet-input", () => ({
 
 vi.mock("@/features/character-sheets/components/compact-rich-input", () => ({
     CompactRichInput: ({ label }: { label: string }) => <div>{label}</div>,
+}))
+
+const glassImageUploaderMocks = vi.hoisted(() => ({
+    render: vi.fn(),
+}))
+
+vi.mock("@/components/ui/glass-image-uploader", () => ({
+    GlassImageUploader: (props: {
+        onChange: (value: string) => void
+        onRemove: () => void
+        getAIPayload?: () => unknown
+        aiContextLabel?: string
+    }) => glassImageUploaderMocks.render(props),
+}))
+
+vi.mock("@/components/ui/glass-image", () => ({
+    GlassImage: ({
+        src,
+        alt,
+        renderTrigger,
+    }: {
+        src: string
+        alt: string
+        renderTrigger?: (props: { open: () => void; label: string; isOpen: boolean }) => React.ReactNode
+    }) => renderTrigger
+        ? (
+            <div data-testid="glass-image-trigger-wrapper" data-src={src} aria-label={alt}>
+                {renderTrigger({ open: vi.fn(), label: `Abrir imagem ampliada de ${alt}`, isOpen: false })}
+            </div>
+        )
+        : <div data-testid="glass-image" data-src={src} aria-label={alt} />,
 }))
 
 vi.mock("@/components/ui/glass-selector", () => ({
@@ -148,6 +179,7 @@ const baseSheet: CharacterSheet = {
     ideals: "",
     bonds: "",
     flaws: "",
+    history: "",
     notes: "",
     classFeatures: "",
     speciesTraits: "",
@@ -161,21 +193,119 @@ const baseSheet: CharacterSheet = {
     updatedAt: "2026-01-01T00:00:00.000Z",
 }
 
-const form = {
-    watch: ((field?: keyof PatchSheetBody) => {
-        if (!field) return {}
-        return baseSheet[field]
-    }) as {
-        (): PatchSheetBody
-        <TFieldName extends keyof PatchSheetBody>(name: TFieldName): PatchSheetBody[TFieldName]
-    },
-    setFieldLocally: () => undefined,
-    patchField: () => undefined,
+function createHarness(overrides: Partial<CharacterSheet> = {}) {
+    const sheet = { ...baseSheet, ...overrides }
+    const form = {
+        watch: ((field?: keyof PatchSheetBody) => {
+            if (!field) return {}
+            return sheet[field]
+        }) as {
+            (): PatchSheetBody
+            <TFieldName extends keyof PatchSheetBody>(name: TFieldName): PatchSheetBody[TFieldName]
+        },
+        setFieldLocally: () => undefined,
+        patchField: vi.fn(),
+    }
+
+    return { sheet, form }
 }
 
 describe("SheetHeader", () => {
+    beforeEach(() => {
+        glassImageUploaderMocks.render.mockReset()
+        glassImageUploaderMocks.render.mockImplementation(({
+            onChange,
+            onRemove,
+        }: {
+            onChange: (value: string) => void
+            onRemove: () => void
+        }) => (
+            <div data-testid="glass-image-uploader">
+                <button type="button" onClick={() => onChange("https://cdn.test/hero.webp")}>upload</button>
+                <button type="button" onClick={onRemove}>remove</button>
+            </div>
+        ))
+    })
+
+    it("shows the image uploader in editable mode and persists photo changes", () => {
+        const { sheet, form } = createHarness()
+
+        render(<SheetHeader sheet={sheet} form={form} />)
+
+        fireEvent.click(screen.getByRole("button", { name: "upload" }))
+        expect(form.patchField).toHaveBeenCalledWith("photo", "https://cdn.test/hero.webp")
+
+        fireEvent.click(screen.getByRole("button", { name: "remove" }))
+        expect(form.patchField).toHaveBeenCalledWith("photo", null)
+    })
+
+    it("passes character context to the uploader AI action", () => {
+        const { sheet, form } = createHarness({
+            subclass: "<p>Campeao</p>",
+            appearance: "<p>Armadura dourada e olhos azuis.</p>",
+            history: "<p>Veterano da guarda real.</p>",
+        })
+
+        render(<SheetHeader sheet={sheet} form={form} />)
+
+        const uploaderProps = glassImageUploaderMocks.render.mock.calls[0]?.[0] as {
+            getAIPayload?: () => unknown
+            aiContextLabel?: string
+            label?: string
+        } | undefined
+
+        expect(uploaderProps?.aiContextLabel).toBe("Personagem")
+        expect(uploaderProps?.label).toBeUndefined()
+        expect(uploaderProps?.getAIPayload?.()).toMatchObject({
+            name: "Kael",
+            class: "Guerreiro",
+            subclass: "Campeao",
+            race: "Humano",
+            origin: "Soldado",
+            level: 2,
+            appearance: "Armadura dourada e olhos azuis.",
+            history: "Veterano da guarda real.",
+        })
+    })
+
+    it("uses the tighter horizontal gap between identity field columns", () => {
+        const { sheet, form } = createHarness()
+
+        const { container } = render(<SheetHeader sheet={sheet} form={form} />)
+
+        expect(container.querySelector(".grid.grid-cols-2.gap-x-4.gap-y-2")).toBeInTheDocument()
+    })
+
+    it("shows the view-photo action below the uploader when a photo exists in edit mode", () => {
+        const { sheet, form } = createHarness({ photo: "https://cdn.test/hero.webp" })
+
+        render(<SheetHeader sheet={sheet} form={form} />)
+
+        expect(screen.getByTitle("Abrir imagem ampliada de Imagem de Kael")).toBeInTheDocument()
+        expect(screen.getByRole("button", { name: "Ver foto" })).toBeInTheDocument()
+    })
+
+    it("hides the view-photo action when there is no current photo", () => {
+        const { sheet, form } = createHarness()
+
+        render(<SheetHeader sheet={sheet} form={form} />)
+
+        expect(screen.queryByRole("button", { name: "Ver foto" })).not.toBeInTheDocument()
+    })
+
+    it("shows a static image instead of the uploader in read-only mode", () => {
+        const { sheet, form } = createHarness({ photo: "https://cdn.test/hero.webp" })
+
+        render(<SheetHeader sheet={sheet} form={form} isReadOnly />)
+
+        expect(screen.getByTestId("glass-image")).toHaveAttribute("data-src", "https://cdn.test/hero.webp")
+        expect(screen.queryByTestId("glass-image-uploader")).not.toBeInTheDocument()
+    })
+
     it("caps the class progression popover height in Owlbear mode", async () => {
-        render(<SheetHeader sheet={baseSheet} form={form} isOwlbear />)
+        const { sheet, form } = createHarness()
+
+        render(<SheetHeader sheet={sheet} form={form} isOwlbear />)
 
         fireEvent.click(screen.getByRole("button", { name: "Ver progressão da classe" }))
 

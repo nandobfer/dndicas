@@ -2,8 +2,9 @@
 
 import { motion } from "framer-motion"
 import type { LucideIcon } from "lucide-react"
-import { ScrollText, Trash2, Star, Shield } from "lucide-react"
+import { Trash2, Star, Shield } from "lucide-react"
 import { GlassCard } from "@/components/ui/glass-card"
+import { GlassImage } from "@/components/ui/glass-image"
 import { cn } from "@/core/utils"
 import type { CharacterSheet } from "@/features/character-sheets/types/character-sheet.types"
 import { attributeColors } from "@/lib/config/colors"
@@ -80,6 +81,7 @@ export function GlassSheetCard({
     }
 
     const ca = sheet.computedArmorClass ?? 10
+    const fallbackInitial = (sheet.name || "?").trim().charAt(0).toUpperCase() || "?"
     const shouldShowAction = showDelete && (onAction || onRequestDelete)
     const actionDisabled = isDeleting || isActionPending
     const actionButtonClassName = cn(
@@ -106,13 +108,29 @@ export function GlassSheetCard({
             {/* Top accent bar */}
             <div className="h-0.5 w-full bg-gradient-to-r from-violet-500/40 via-blue-400/40 to-transparent" />
 
-            <div className="p-4 space-y-3">
+            <div className="flex gap-3 p-4">
+                <div className="h-[128px] w-[88px] shrink-0 overflow-hidden rounded-lg border border-white/10 bg-white/[0.04]">
+                    {sheet.photo ? (
+                        <GlassImage
+                            src={sheet.photo}
+                            alt={`Imagem de ${sheet.name}`}
+                            triggerClassName="h-full w-full"
+                            className="h-full w-full rounded-lg aspect-auto"
+                            imageClassName="object-cover mix-blend-normal"
+                            showOverlay={false}
+                            expandLabel={`Abrir imagem ampliada de ${sheet.name}`}
+                        />
+                    ) : (
+                        <div className="flex h-full w-full items-center justify-center bg-gradient-to-br from-white/10 via-violet-500/10 to-sky-500/10 text-3xl font-black text-white/25">
+                            {fallbackInitial}
+                        </div>
+                    )}
+                </div>
+
+                <div className="min-w-0 flex-1 space-y-3">
                 {/* Header */}
                 <div className="flex items-start justify-between gap-2">
                     <div className="flex items-center gap-2.5 min-w-0 flex-1">
-                        <div className="w-9 h-9 rounded-lg bg-violet-500/10 border border-violet-500/20 flex items-center justify-center flex-shrink-0">
-                            <ScrollText className="w-4 h-4 text-violet-400" />
-                        </div>
                         <div className="min-w-0 flex-1">
                             <div className="flex items-center justify-between gap-2">
                                 <h3 className="text-sm font-bold text-white truncate leading-tight">
@@ -185,6 +203,7 @@ export function GlassSheetCard({
                             }}
                         />
                     </div>
+                </div>
                 </div>
             </div>
         </GlassCard>

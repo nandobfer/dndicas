@@ -109,7 +109,7 @@ export function AdminSheetsList({ items, isLoading, hasNextPage, isFetchingNextP
                             onClick={() => router.push(`/sheets/${item.slug}`)}
                         >
                             <GlassCardContent className="p-4 space-y-4">
-                                <AdminSheetCharacterMini name={item.name} photo={item.photo} />
+                                <AdminSheetCharacterMini name={item.name} photo={item.photo} level={item.level} />
 
                                 <div className="grid grid-cols-2 gap-3 text-sm">
                                     <div>

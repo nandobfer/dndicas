@@ -11,6 +11,11 @@ import { AnimatePresence, motion, type Transition } from "framer-motion";
 import { Expand, X } from "lucide-react";
 import { cn } from "@/core/utils";
 
+type ClosableInteractionEvent = {
+    preventDefault: () => void
+    stopPropagation: () => void
+}
+
 interface GlassImageProps {
     /** Image source URL */
     src: string;
@@ -28,6 +33,10 @@ interface GlassImageProps {
     expandLabel?: string;
     /** Additional classes for the expanded dialog frame */
     dialogClassName?: string;
+    /** Optional custom trigger renderer for the lightbox */
+    renderTrigger?: (props: { open: () => void; label: string; isOpen: boolean }) => React.ReactNode;
+    /** Optional classes for the default expandable trigger wrapper */
+    triggerClassName?: string;
 }
 
 const imageTransition: Transition = {
@@ -52,6 +61,8 @@ export function GlassImage({
     enableExpand = true,
     expandLabel,
     dialogClassName,
+    renderTrigger,
+    triggerClassName,
 }: GlassImageProps) {
     const [isOpen, setIsOpen] = React.useState(false);
     const reactId = React.useId();
@@ -60,6 +71,14 @@ export function GlassImage({
     if (!src) return null;
 
     const triggerLabel = expandLabel || `Abrir imagem ampliada de ${alt}`;
+    const openDialog = () => {
+        setIsOpen(true);
+    };
+    const closeDialog = (event?: ClosableInteractionEvent) => {
+        event?.preventDefault();
+        event?.stopPropagation();
+        setIsOpen(false);
+    };
 
     const triggerFrame = (
         <motion.div
@@ -100,24 +119,32 @@ export function GlassImage({
     const handleKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
         if (event.key === "Enter" || event.key === " ") {
             event.preventDefault();
-            setIsOpen(true);
+            event.stopPropagation();
+            openDialog();
         }
     };
 
     return (
         <DialogPrimitive.Root open={isOpen} onOpenChange={setIsOpen}>
-            <motion.div
-                role="button"
-                tabIndex={0}
-                aria-label={triggerLabel}
-                aria-haspopup="dialog"
-                aria-expanded={isOpen}
-                className="group/image block"
-                onClick={() => setIsOpen(true)}
-                onKeyDown={handleKeyDown}
-            >
-                {triggerFrame}
-            </motion.div>
+            {renderTrigger ? (
+                renderTrigger({ open: openDialog, label: triggerLabel, isOpen })
+            ) : (
+                <motion.div
+                    role="button"
+                    tabIndex={0}
+                    aria-label={triggerLabel}
+                    aria-haspopup="dialog"
+                    aria-expanded={isOpen}
+                    className={cn("group/image block", triggerClassName)}
+                    onClick={(event) => {
+                        event.stopPropagation();
+                        openDialog();
+                    }}
+                    onKeyDown={handleKeyDown}
+                >
+                    {triggerFrame}
+                </motion.div>
+            )}
 
             <AnimatePresence>
                 {isOpen && (
@@ -125,15 +152,27 @@ export function GlassImage({
                         <DialogPrimitive.Overlay asChild>
                             <motion.div
                                 className="fixed inset-0 z-50 bg-black/82 backdrop-blur-xl"
+                                onClick={closeDialog}
+                                onPointerDown={(event) => event.stopPropagation()}
+                                onPointerUp={(event) => event.stopPropagation()}
                                 initial={{ opacity: 0 }}
                                 animate={{ opacity: 1 }}
                                 exit={{ opacity: 0 }}
                                 transition={{ duration: 0.22, ease: "easeOut" }}
                             />
                         </DialogPrimitive.Overlay>
-                        <DialogPrimitive.Content asChild>
+                        <DialogPrimitive.Content
+                            className="fixed inset-0 z-[60] flex items-center justify-center p-4 sm:p-8 focus:outline-none"
+                            onEscapeKeyDown={closeDialog}
+                            onPointerDownOutside={(event) => event.preventDefault()}
+                        >
                             <motion.div
-                                className="fixed inset-0 z-[60] flex items-center justify-center p-4 sm:p-8 focus:outline-none"
+                                className="flex h-full w-full items-center justify-center"
+                                onClick={(event) => event.stopPropagation()}
+                                onPointerDown={(event) => event.stopPropagation()}
+                                onPointerUp={(event) => event.stopPropagation()}
+                                onMouseUp={(event) => event.stopPropagation()}
+                                onTouchEnd={(event) => event.stopPropagation()}
                                 initial={{ opacity: 0 }}
                                 animate={{ opacity: 1 }}
                                 exit={{ opacity: 0 }}
@@ -165,15 +204,18 @@ export function GlassImage({
                                         </div>
                                     </motion.div>
 
-                                    <DialogPrimitive.Close asChild>
-                                        <button
-                                            type="button"
-                                            className="absolute right-3 top-3 inline-flex h-10 w-10 items-center justify-center rounded-full border border-white/10 bg-black/45 text-white/80 transition hover:bg-black/60 hover:text-white focus:outline-none focus:ring-2 focus:ring-white/30"
-                                            aria-label="Fechar visualização ampliada"
-                                        >
-                                            <X className="h-4 w-4" />
-                                        </button>
-                                    </DialogPrimitive.Close>
+                                    <button
+                                        type="button"
+                                        className="absolute right-3 top-3 inline-flex h-10 w-10 items-center justify-center rounded-full border border-white/10 bg-black/45 text-white/80 transition hover:bg-black/60 hover:text-white focus:outline-none focus:ring-2 focus:ring-white/30"
+                                        aria-label="Fechar visualização ampliada"
+                                        onClick={closeDialog}
+                                        onPointerDown={(event) => event.stopPropagation()}
+                                        onPointerUp={(event) => event.stopPropagation()}
+                                        onMouseUp={(event) => event.stopPropagation()}
+                                        onTouchEnd={(event) => event.stopPropagation()}
+                                    >
+                                        <X className="h-4 w-4" />
+                                    </button>
                                 </div>
                             </motion.div>
                         </DialogPrimitive.Content>
