@@ -10,6 +10,7 @@ import { getMonsterXp } from "@/features/monsters/utils/monster-calculations"
 import { createAuditLog } from "@/features/users/api/audit-service"
 import { GenAITranslator } from "../../../../scripts/seed-data/translation/genai-translator"
 import { ENTITY_GENERATION_MODEL } from "./entity-generation-model"
+import { resolveCandidateImage } from "./entity-generation-image-service"
 import type { EntityGenerationProgress, GeneratedMonsterCandidate } from "../types/entity-generation.types"
 
 type RawEntry = string | { type?: string; name?: string; entry?: string; entries?: RawEntry[]; items?: RawEntry[] }
@@ -543,7 +544,7 @@ function countParams(monster: FiveEToolsMonster, legendaryGroup?: LegendaryGroup
     )
 }
 
-async function buildCandidate(monster: FiveEToolsMonster, data: LoadedMonsterData, translator: GenAITranslator, counter: TranslationCounter, currentImage?: string): Promise<GeneratedMonsterCandidate> {
+async function buildCandidate(monster: FiveEToolsMonster, data: LoadedMonsterData, translator: GenAITranslator, counter: TranslationCounter, userId: string): Promise<GeneratedMonsterCandidate> {
     const fluff = resolveFluff(monster, data.fluff)
     const descriptionHtml = buildEntriesHtml(fluff?.entries) || `<p>${monster.name}</p>`
     const translated = await translator.translateItem(monster.name, descriptionHtml)
@@ -559,16 +560,16 @@ async function buildCandidate(monster: FiveEToolsMonster, data: LoadedMonsterDat
     const legendaryGroup = monster.legendaryGroup ? data.legendaryGroups.get(key(monster.legendaryGroup.name, monster.legendaryGroup.source)) : undefined
     const challengeRating = mapChallengeRating(monster.cr)
     const { conditionImmunities, conditionImmunityNotes } = mapConditionImmunities(monster.conditionImmune)
-    const image = buildImageUrl(fluff) || currentImage || ""
+    const sourceImage = buildImageUrl(fluff)
 
-    return {
+    const candidate: GeneratedMonsterCandidate = {
         candidateId: `${monster.name}:${monster.source}:${monster.page ?? ""}`,
         matchLabel: `${monster.name} (${formatSourceDisplay(monster.source, monster.page)})`,
         name: translated.name,
         originalName: monster.name,
         source: formatSourceDisplay(monster.source, monster.page),
         description: translated.description,
-        image,
+        image: sourceImage,
         status: "active",
         type: mapMonsterType(monster.type),
         size: mapSize(monster.size),
@@ -616,6 +617,17 @@ async function buildCandidate(monster: FiveEToolsMonster, data: LoadedMonsterDat
         lairActionInitiative: legendaryGroup?.lairActions?.length ? 20 : undefined,
         regionalEffects: await translateParams(mapLegendaryEntries(legendaryGroup?.regionalEffects), translator, counter, "Gerando efeitos regionais"),
     }
+
+    return {
+        ...candidate,
+        image: await resolveCandidateImage({
+            sourceImage,
+            entityLabel: "Monstro",
+            formData: candidate,
+            userId,
+            counter,
+        }),
+    }
 }
 
 function findMatchingMonsters(current: Monster, monsters: FiveEToolsMonster[]): FiveEToolsMonster[] {
@@ -642,6 +654,7 @@ function serializeMonster(value: Record<string, unknown>): Monster {
 
 export async function generateMonsterCandidates(
     monsterId: string,
+    userId: string,
     onProgress?: (progress: EntityGenerationProgress) => void | Promise<void>,
 ): Promise<{ current: Monster; candidates: GeneratedMonsterCandidate[] }> {
     await dbConnect()
@@ -666,7 +679,7 @@ export async function generateMonsterCandidates(
     const translator = createTranslator()
     const candidates: GeneratedMonsterCandidate[] = []
     for (const match of matches) {
-        candidates.push(await buildCandidate(match, data, translator, counter, current.image))
+        candidates.push(await buildCandidate(match, data, translator, counter, userId))
     }
 
     return { current, candidates }

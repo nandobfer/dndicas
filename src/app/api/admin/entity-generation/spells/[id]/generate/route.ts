@@ -17,7 +17,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     let runId: string | undefined
 
     try {
-        await requireAdmin()
+        const user = await requireAdmin()
         const { id } = await params
         const body = (await request.json()) as SpellGenerationGenerateRequest
         runId = body.runId?.trim()
@@ -30,7 +30,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
         const pusher = EntityGenerationPusherService.getInstance()
         await pusher.publishProgress(generationRunId, { current: 0, total: 1, message: "Buscando fonte de dados..." })
 
-        const result = await generateSpellCandidates(id, (progress) => pusher.publishProgress(generationRunId, progress))
+        const result = await generateSpellCandidates(id, user.id, (progress) => pusher.publishProgress(generationRunId, progress))
         return Response.json(result)
     } catch (error) {
         const message = error instanceof Error ? error.message : "Erro ao gerar dados com IA."

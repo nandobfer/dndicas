@@ -5,6 +5,7 @@ import { Sparkles } from "lucide-react"
 import { GlassAttributeChip } from "@/components/ui/glass-attribute-chip"
 import { GlassDiceValue } from "@/components/ui/glass-dice-value"
 import { GlassEmptyValue } from "@/components/ui/glass-empty-value"
+import { GlassImage } from "@/components/ui/glass-image"
 import { GlassLevelChip } from "@/components/ui/glass-level-chip"
 import { GlassSpellSchool } from "@/components/ui/glass-spell-school"
 import { getSourceDisplayLabel } from "@/core/utils/source-utils"
@@ -30,6 +31,22 @@ function HtmlValue({ html }: { html: string }) {
     return (
         <div className="max-h-56 overflow-y-auto rounded border border-white/5 bg-black/15 p-2 custom-scrollbar">
             <div className="[&_p]:my-1 [&_p]:text-xs [&_p]:leading-relaxed [&_ul]:text-xs [&_li]:text-xs" dangerouslySetInnerHTML={{ __html: html || "<p>Vazio</p>" }} />
+        </div>
+    )
+}
+
+function ImageValue({ src, alt, tone }: { src?: string; alt: string; tone: ComparisonTone }) {
+    if (!src) {
+        return (
+            <div className="flex aspect-[16/9] min-h-32 items-center justify-center rounded-lg border border-dashed border-white/10 bg-black/15 text-xs text-white/35">
+                Sem imagem
+            </div>
+        )
+    }
+
+    return (
+        <div className={tone === "old" ? "aspect-[16/9] min-h-32 overflow-hidden rounded-lg border border-red-300/20 bg-black/20" : "aspect-[16/9] min-h-32 overflow-hidden rounded-lg border border-emerald-300/25 bg-black/20"}>
+            <GlassImage src={src} alt={alt} className="h-full w-full rounded-none border-0 shadow-none" imageClassName="object-cover mix-blend-normal" showOverlay={false} />
         </div>
     )
 }
@@ -90,6 +107,7 @@ function SpellGenerationComparison({ current, candidate }: { current: Spell; can
                 </div>
                 <FieldBlock title="Nome" tone="old" value={current.name} />
                 <FieldBlock title="Fonte" tone="old" value={getSourceDisplayLabel(current.source)} />
+                <FieldBlock title="Imagem" tone="old" value={<ImageValue src={current.image} alt={`Imagem atual de ${current.name}`} tone="old" />} />
                 <FieldBlock title="Propriedades" tone="old" value={<SpellProperties spell={current} />} />
                 <FieldBlock title="Componentes" tone="old" value={<ComponentsValue components={current.component} />} />
                 <FieldBlock title="Dados" tone="old" value={<DiceValue spell={current} />} />
@@ -102,6 +120,7 @@ function SpellGenerationComparison({ current, candidate }: { current: Spell; can
                 </div>
                 <FieldBlock title="Nome" tone="new" value={candidate.name} />
                 <FieldBlock title="Fonte" tone="new" value={candidate.source ? getSourceDisplayLabel(candidate.source) : <GlassEmptyValue />} />
+                <FieldBlock title="Imagem" tone="new" value={<ImageValue src={candidate.image} alt={`Nova imagem de ${candidate.name}`} tone="new" />} />
                 <FieldBlock title="Propriedades" tone="new" value={<SpellProperties spell={candidate} />} />
                 <FieldBlock title="Componentes" tone="new" value={<ComponentsValue components={candidate.component} />} />
                 <FieldBlock title="Dados" tone="new" value={<DiceValue spell={candidate} />} />

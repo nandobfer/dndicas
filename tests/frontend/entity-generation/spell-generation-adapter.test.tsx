@@ -10,6 +10,10 @@ vi.mock("@/features/rules/components/mention-badge", () => ({
     MentionContent: ({ html }: { html: string }) => <div dangerouslySetInnerHTML={{ __html: html }} />,
 }))
 
+vi.mock("@/components/ui/glass-image", () => ({
+    GlassImage: ({ src, alt }: { src: string; alt: string }) => <img src={src} alt={alt} />,
+}))
+
 vi.mock("@/features/entity-generation/api/entity-generation-api", () => ({
     applySpellGenerationCandidate: vi.fn(),
     generateSpellGenerationCandidates: vi.fn(),
@@ -23,6 +27,7 @@ const currentSpell: Spell = {
     circle: 0,
     school: "Evocação",
     component: ["Verbal", "Material"],
+    image: "/old-spell.png",
     source: "ABH p. 9",
     status: "active",
     createdAt: new Date(),
@@ -38,6 +43,7 @@ const candidate: GeneratedSpellCandidate = {
     circle: 0,
     school: "Evocação",
     component: ["Verbal"],
+    image: "/new-spell.png",
     source: "XPHB p. 12",
     status: "active",
 }
@@ -54,6 +60,8 @@ describe("spellGenerationAdapter comparison", () => {
         expect(screen.getByText("Astarion's Book of Hungers pág. 9")).toBeInTheDocument()
         expect(screen.getByText("Luz Gerada")).toBeInTheDocument()
         expect(screen.getByText("Livro do Jogador pág. 12")).toBeInTheDocument()
+        expect(screen.getByRole("img", { name: "Imagem atual de Luz" })).toHaveAttribute("src", "/old-spell.png")
+        expect(screen.getByRole("img", { name: "Nova imagem de Luz Gerada" })).toHaveAttribute("src", "/new-spell.png")
         expect(screen.getByText("Descrição antiga.")).toBeInTheDocument()
         expect(screen.getByText("Descrição nova.")).toBeInTheDocument()
     })
