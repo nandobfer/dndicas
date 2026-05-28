@@ -269,6 +269,7 @@ export function ClassFormModal({ characterClass, isOpen, onClose, onSuccess }: C
         handleSubmit,
         watch,
         setValue,
+        getValues,
         control,
         reset,
         formState: { errors, isDirty },
@@ -520,6 +521,8 @@ export function ClassFormModal({ characterClass, isOpen, onClose, onSuccess }: C
                                     errors={errors}
                                     imageFieldName="image"
                                     descriptionFieldName="description"
+                                    getAIPayload={() => getValues()}
+                                    aiContextLabel="Classe"
                                     entityId={characterClass?._id}
                                     placeholder="Descreva a classe detalhadamente... (Suporta imagens S3 e formatação)"
                                 />
@@ -903,6 +906,8 @@ export function ClassFormModal({ characterClass, isOpen, onClose, onSuccess }: C
                                     errors={errors}
                                     imageFieldName={`subclasses.${activeTab}.image`}
                                     descriptionFieldName={`subclasses.${activeTab}.description`}
+                                    getAIPayload={() => getValues()}
+                                    aiContextLabel="Subclasse"
                                     entityId={characterClass?._id}
                                     placeholder={`Descreva a subclasse ${subclasses[activeTab]?.name} detalhadamente...`}
                                 />

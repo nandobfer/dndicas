@@ -184,6 +184,7 @@ export function MonsterFormModal({ monster, isOpen, onClose, onSuccess }: { mons
         handleSubmit,
         watch,
         setValue,
+        getValues,
         unregister,
         control,
         reset,
@@ -346,7 +347,17 @@ export function MonsterFormModal({ monster, isOpen, onClose, onSuccess }: { mons
                             </div>
                         </div>
 
-                        <ImageAndDescriptionSection control={control} isSubmitting={isSubmitting} errors={errors} imageFieldName="image" descriptionFieldName="description" entityId={monster?._id} placeholder="Descreva o monstro detalhadamente..." />
+                        <ImageAndDescriptionSection
+                            control={control}
+                            isSubmitting={isSubmitting}
+                            errors={errors}
+                            imageFieldName="image"
+                            descriptionFieldName="description"
+                            getAIPayload={() => getValues()}
+                            aiContextLabel="Monstro"
+                            entityId={monster?._id}
+                            placeholder="Descreva o monstro detalhadamente..."
+                        />
 
                         <FormSection title="Classificação" icon={<Sparkles className="h-4 w-4" />}>
                             <div className="flex flex-col md:flex-row gap-4">

@@ -6,6 +6,12 @@ const ENDPOINT = process.env.S3_ENDPOINT;
 const ACCESS_KEY = process.env.S3_ACCESS_KEY;
 const SECRET_KEY = process.env.S3_SECRET_KEY;
 const BUCKET = process.env.S3_BUCKET || 'default';
+const IMAGE_EXTENSION_BY_MIME_TYPE: Record<string, string> = {
+    'image/gif': 'gif',
+    'image/jpeg': 'jpg',
+    'image/png': 'png',
+    'image/webp': 'webp',
+};
 
 let s3Client: S3Client | null = null;
 
@@ -33,6 +39,18 @@ export const uploadFile = async (key: string, body: Buffer | Uint8Array | Blob |
         ContentType: mimeType,
     });
     return s3Client.send(command);
+}
+
+export const buildFileProxyUrl = (key: string): string => `/api/upload?key=${encodeURIComponent(key)}`;
+
+export const getImageExtensionFromMimeType = (mimeType: string): string => {
+    const extension = IMAGE_EXTENSION_BY_MIME_TYPE[mimeType.toLowerCase()];
+
+    if (!extension) {
+        throw new Error(`Unsupported image MIME type: ${mimeType}`);
+    }
+
+    return extension;
 }
 
 export const getFileUrl = async (key: string) => {

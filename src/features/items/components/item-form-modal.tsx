@@ -109,6 +109,7 @@ const {
     handleSubmit,
     watch,
     setValue,
+    getValues,
     getFieldState,
     control,
     reset,
@@ -285,6 +286,8 @@ return (
                         errors={errors}
                         imageFieldName="image"
                         descriptionFieldName="description"
+                        getAIPayload={() => getValues()}
+                        aiContextLabel="Item"
                         entityId={item?._id}
                         placeholder="Descreva o item detalhadamente... (Suporta imagens e formatação)"
                     />

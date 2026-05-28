@@ -66,6 +66,7 @@ export function BackgroundFormModal({ background, isOpen, onClose, onSuccess }: 
         handleSubmit,
         watch,
         setValue,
+        getValues,
         control,
         reset,
         formState: { errors, isDirty }
@@ -220,6 +221,8 @@ export function BackgroundFormModal({ background, isOpen, onClose, onSuccess }: 
                             errors={errors}
                             imageFieldName="image"
                             descriptionFieldName="description"
+                            getAIPayload={() => getValues()}
+                            aiContextLabel="Origem"
                             entityId={background?._id}
                             placeholder="Descreva a história, as influências e o papel desta origem no mundo..."
                         />

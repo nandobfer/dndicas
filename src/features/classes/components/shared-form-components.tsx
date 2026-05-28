@@ -180,6 +180,8 @@ interface ImageAndDescriptionSectionProps {
     errors: FieldErrors<any>
     imageFieldName: string
     descriptionFieldName: string
+    getAIPayload: () => unknown
+    aiContextLabel: string
     entityId?: string
     placeholder?: string
 }
@@ -190,6 +192,8 @@ export function ImageAndDescriptionSection({
     errors,
     imageFieldName,
     descriptionFieldName,
+    getAIPayload,
+    aiContextLabel,
     entityId,
     placeholder = "Descreva detalhadamente...",
 }: ImageAndDescriptionSectionProps) {
@@ -204,7 +208,15 @@ export function ImageAndDescriptionSection({
                     name={imageFieldName}
                     control={control}
                     render={({ field }) => (
-                        <GlassImageUploader value={field.value || ""} onChange={field.onChange} onRemove={() => field.onChange("")} disabled={isSubmitting} className="w-full flex-1" />
+                        <GlassImageUploader
+                            value={field.value || ""}
+                            onChange={field.onChange}
+                            onRemove={() => field.onChange("")}
+                            disabled={isSubmitting}
+                            className="w-full flex-1"
+                            getAIPayload={getAIPayload}
+                            aiContextLabel={aiContextLabel}
+                        />
                     )}
                 />
             </div>

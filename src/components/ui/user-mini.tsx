@@ -6,9 +6,8 @@
  */
 
 import * as React from 'react';
-import Image from "next/image";
 import { cn } from "@/core/utils";
-import { Chip } from './chip';
+import { GlassImage } from "./glass-image";
 
 export interface UserMiniProps extends React.HTMLAttributes<HTMLDivElement> {
     /** User display name */
@@ -30,7 +29,6 @@ export interface UserMiniProps extends React.HTMLAttributes<HTMLDivElement> {
 export function UserMini({
     name,
     username,
-    email,
     avatarUrl,
     size = 'md',
     className,
@@ -46,25 +44,28 @@ export function UserMini({
     return (
         <div className={cn("flex items-center gap-2", className)} {...props}>
             {/* Avatar */}
-            <div 
-                className={cn(
-                    "flex-shrink-0 rounded-full bg-white/5 border border-white/10 flex items-center justify-center font-medium text-white overflow-hidden relative",
-                    size === 'md' ? "h-10 w-10 text-sm" : "h-8 w-8 text-xs"
-                )}
-            >
-                {avatarUrl ? (
-                    <Image
-                        src={avatarUrl}
-                        alt={name || username}
-                        fill
-                        className="object-cover"
-                        referrerPolicy="no-referrer"
-                        unoptimized
-                    />
-                ) : (
-                    initials
-                )}
-            </div>
+            {avatarUrl ? (
+                <GlassImage
+                    src={avatarUrl}
+                    alt={name || username}
+                    expandLabel={`Abrir avatar ampliado de ${name || username}`}
+                    className={cn(
+                        "flex-shrink-0 rounded-full border border-white/10 bg-white/5 shadow-none",
+                        size === 'md' ? "h-10 w-10 text-sm" : "h-8 w-8 text-xs"
+                    )}
+                    imageClassName="object-cover mix-blend-normal"
+                    showOverlay={false}
+                />
+            ) : (
+                <div 
+                    className={cn(
+                        "flex-shrink-0 rounded-full bg-white/5 border border-white/10 flex items-center justify-center font-medium text-white overflow-hidden relative",
+                        size === 'md' ? "h-10 w-10 text-sm" : "h-8 w-8 text-xs"
+                    )}
+                >
+                    {initials}
+                </div>
+            )}
 
             {/* Name and Username with Divider */}
             <div className="flex flex-col min-w-0">
