@@ -172,6 +172,7 @@ interface RaceFormFieldsProps {
     removeTrait?: any;
     watch?: any;
     setValue?: any;
+    getValues?: () => unknown;
 }
 
 const RaceFormFields = ({
@@ -187,7 +188,8 @@ const RaceFormFields = ({
     appendTrait,
     removeTrait,
     watch,
-    setValue
+    setValue,
+    getValues
 }: RaceFormFieldsProps) => {
     const prefix = isVariation ? `variations.${index}.` : "";
     
@@ -305,6 +307,8 @@ const RaceFormFields = ({
                 errors={errors}
                 imageFieldName={`${prefix}image` as any}
                 descriptionFieldName={`${prefix}description` as any}
+                getAIPayload={() => getValues?.() ?? {}}
+                aiContextLabel={isVariation ? "Variação de Raça" : "Raça"}
                 entityId={entityId}
                 placeholder={placeholder || (isVariation ? "Descreva os detalhes desta variação..." : "Descreva os detalhes desta raça...")}
             />
@@ -375,6 +379,7 @@ export function RaceFormModal({ race, isOpen, onClose, onSuccess }: RaceFormModa
         handleSubmit,
         watch,
         setValue,
+        getValues,
         control,
         reset,
         formState: { errors, isDirty }
@@ -635,6 +640,7 @@ export function RaceFormModal({ race, isOpen, onClose, onSuccess }: RaceFormModa
                                     removeTrait={removeTrait}
                                     watch={watch}
                                     setValue={setValue}
+                                    getValues={getValues}
                                 />
 
                                 {/* Row 8: Variations management */}
@@ -793,6 +799,7 @@ export function RaceFormModal({ race, isOpen, onClose, onSuccess }: RaceFormModa
                                     index={activeTab}
                                     entityId={race?._id}
                                     placeholder={`Descreva a variação ${variations[activeTab]?.name} detalhadamente...`}
+                                    getValues={getValues}
                                 />
 
                                 <div className="flex flex-col-reverse sm:flex-row justify-end gap-3 pt-6 border-t border-white/10">

@@ -11,6 +11,7 @@ The Monsters module manages D&D 5e monster and NPC stat blocks with CRUD, dashbo
 
 ## Features
 
+- O formulário de monstros agora reutiliza o `GlassImageUploader` com geração de arte por IA no empty state e na preview já preenchida. A ação envia o JSON inteiro do monstro para `POST /api/core/ai/image`, usa um prompt especializado em estética oficial de D&D com preferência por 1:1 e preenche o campo `image` com a URL persistida no bucket.
 - Admins podem usar `Gerar com IA` nos menus de monstros da tabela, da lista em cards e do preview tooltip. A ação usa `EntityGenerationAIModal` com `monsterGenerationAdapter`, progresso via Pusher, candidatos dos arquivos `bestiary-*.json`/`fluff-bestiary-*.json`/`legendarygroups.json`, tradução com `GenAITranslator` no modelo `gemini-3.1-flash-lite` e comparação de nome, fonte, imagem, resumo, descrição, características e ações. Ao salvar, `/api/admin/entity-generation/monsters/[id]/apply` sobrescreve o stat block pelo candidato, preserva imagem atual se a fonte não trouxer imagem e grava audit log como `Monstro`.
 - Adds `Monstros` to the expandable sidebar catalog navigation, pointing to `/monsters`.
 - Monster form classification autocompletes fill their row, numeric combat fields use immediate masks, optional speeds can be added as empty fields, and list custom values render beside the section title.

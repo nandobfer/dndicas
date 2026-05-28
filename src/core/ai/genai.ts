@@ -116,6 +116,54 @@ export const getGenAIClient = (): GoogleGenAI => {
  * Usando gemini-2.0-flash-exp conforme SDK atual
  */
 export const defaultModel = "gemini-2.5-flash-lite";
+export const defaultImageModel = "gemini-2.5-flash-image";
+
+interface GenAIInlineData {
+    data?: string;
+    mimeType?: string;
+}
+
+interface GenAIPart {
+    text?: string;
+    inlineData?: GenAIInlineData;
+}
+
+interface GenAICandidate {
+    content?: {
+        parts?: GenAIPart[];
+    };
+}
+
+interface GenAIUsageMetadata {
+    promptTokenCount?: number;
+    candidatesTokenCount?: number;
+    totalTokenCount?: number;
+}
+
+interface GenAIImageResponse {
+    candidates?: GenAICandidate[];
+    usageMetadata?: GenAIUsageMetadata;
+}
+
+export interface GeneratedImagePayload {
+    buffer: Buffer;
+    mimeType: string;
+}
+
+const extractImageParts = (response: GenAIImageResponse): GeneratedImagePayload[] => {
+    const parts = response.candidates?.flatMap(candidate => candidate.content?.parts ?? []) ?? [];
+
+    return parts.flatMap(part => {
+        if (!part.inlineData?.data || !part.inlineData.mimeType) {
+            return [];
+        }
+
+        return [{
+            buffer: Buffer.from(part.inlineData.data, "base64"),
+            mimeType: part.inlineData.mimeType,
+        }];
+    });
+}
 
 /**
  * Gera texto a partir de um prompt
@@ -259,6 +307,54 @@ export async function countTokens(
     } catch (error) {
         console.error("Token Count Error:", error);
         return 0;
+    }
+}
+
+/**
+ * Gera uma imagem a partir de um prompt
+ * @param prompt - Texto do prompt
+ * @param modelName - Nome do modelo de imagem (opcional)
+ * @param userId - ID do usuário para logging (opcional)
+ * @returns Buffer e MIME type da primeira imagem retornada pelo Gemini
+ */
+export async function generateImage(
+    prompt: string,
+    modelName: string = defaultImageModel,
+    userId?: string
+): Promise<GeneratedImagePayload> {
+    const ai = getGenAIClient();
+
+    try {
+        return await withRetryableUnavailableRetry('generateImage', async () => {
+            const response = await ai.models.generateContent({
+                model: modelName,
+                contents: prompt,
+            });
+
+            if (response.usageMetadata) {
+                const { promptTokenCount, candidatesTokenCount, totalTokenCount } = response.usageMetadata;
+
+                await logUsage(
+                    modelName,
+                    promptTokenCount || 0,
+                    candidatesTokenCount || 0,
+                    totalTokenCount || 0,
+                    userId
+                );
+            }
+
+            const images = extractImageParts(response);
+            const firstImage = images[0];
+
+            if (!firstImage) {
+                throw new Error("Gemini response did not include an image.");
+            }
+
+            return firstImage;
+        });
+    } catch (error) {
+        console.error("GenAI Image Error:", error);
+        throw new Error(`Failed to generate image: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
 }
 

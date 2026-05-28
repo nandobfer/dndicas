@@ -7,7 +7,6 @@
  */
 
 import * as React from 'react';
-import Image from "next/image"
 import { motion, AnimatePresence } from "framer-motion"
 import { MoreHorizontal, Pencil, Trash2, Users } from "lucide-react"
 import { cn } from "@/core/utils"

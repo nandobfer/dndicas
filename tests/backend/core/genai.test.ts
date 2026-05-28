@@ -195,4 +195,51 @@ describe("GenAI high demand retry", () => {
         await expect(resultPromise).resolves.toBe("chat ok")
         expect(genAiMocks.generateContent).toHaveBeenCalledTimes(2)
     })
+
+    it("returns the first generated image buffer and logs usage", async () => {
+        const imageBuffer = Buffer.from("generated-image")
+
+        genAiMocks.generateContent.mockResolvedValueOnce({
+            candidates: [{
+                content: {
+                    parts: [
+                        { text: "imagem pronta" },
+                        {
+                            inlineData: {
+                                data: imageBuffer.toString("base64"),
+                                mimeType: "image/png",
+                            },
+                        },
+                    ],
+                },
+            }],
+            usageMetadata: {
+                promptTokenCount: 6,
+                candidatesTokenCount: 7,
+                totalTokenCount: 13,
+            },
+        })
+
+        const { generateImage } = await import("@/core/ai/genai")
+
+        await expect(generateImage("prompt", "gemini-image", "user-1")).resolves.toEqual({
+            buffer: imageBuffer,
+            mimeType: "image/png",
+        })
+        expect(usageLogMocks.logUsage).toHaveBeenCalledWith("gemini-image", 6, 7, 13, "user-1")
+    })
+
+    it("throws when Gemini returns no inline image data", async () => {
+        genAiMocks.generateContent.mockResolvedValueOnce({
+            candidates: [{
+                content: {
+                    parts: [{ text: "somente texto" }],
+                },
+            }],
+        })
+
+        const { generateImage } = await import("@/core/ai/genai")
+
+        await expect(generateImage("prompt")).rejects.toThrow("Failed to generate image: Gemini response did not include an image.")
+    })
 })

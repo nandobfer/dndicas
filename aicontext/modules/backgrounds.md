@@ -2,6 +2,9 @@
 
 ## Features
 
+### Geração de arte com IA no formulário
+O formulário de origens reutiliza o `GlassImageUploader` com uma ação premium de IA que lê o JSON inteiro do formulário, pede uma arte consistente com o visual editorial de D&D e grava a imagem gerada no bucket antes de preencher o campo `image`.
+
 ### Infinite scroll nas tabelas de catálogo
 As tabelas de origens usam `useInfiniteBackgrounds`, a mesma fonte de dados do modo lista. O modo tabela substitui a paginação placeholder por carregamento automático no fim da tabela.
 

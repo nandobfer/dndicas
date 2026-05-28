@@ -124,6 +124,7 @@ export function SpellFormModal({ spell, isOpen, onClose, onSuccess }: SpellFormM
         handleSubmit,
         watch,
         setValue,
+        getValues,
         control,
         reset,
         formState: { errors, isDirty }
@@ -297,6 +298,8 @@ export function SpellFormModal({ spell, isOpen, onClose, onSuccess }: SpellFormM
                             errors={errors}
                             imageFieldName="image"
                             descriptionFieldName="description"
+                            getAIPayload={() => getValues()}
+                            aiContextLabel="Magia"
                             entityId={spell?._id}
                             placeholder="Descreva os efeitos da magia... (Suporta imagens S3 e formatação)"
                         />
