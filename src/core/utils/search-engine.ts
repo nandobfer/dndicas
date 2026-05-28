@@ -17,17 +17,17 @@ export interface UnifiedEntity {
     description?: string
     source?: string
     status: "active" | "inactive"
-    metadata?: any
+    metadata?: unknown
     school?: string
     circle?: number
     saveAttribute?: string
     component?: string[]
-    baseDice?: any
-    extraDicePerLevel?: any
+    baseDice?: unknown
+    extraDicePerLevel?: unknown
     rarity?: string
     itemType?: string
     price?: string
-    damageDice?: any
+    damageDice?: unknown
     damageType?: string
     ac?: number
     acType?: string
@@ -36,9 +36,9 @@ export interface UnifiedEntity {
     attributeUsed?: string
     image?: string
     isMagic?: boolean
-    traits?: any[]
-    properties?: any[]
-    additionalDamage?: any[]
+    traits?: unknown[]
+    properties?: unknown[]
+    additionalDamage?: unknown[]
     mastery?: string
     score?: number // Added for weighted sorting visibility if needed
 }
@@ -47,10 +47,39 @@ export interface UnifiedSearchOptions {
     specificEntityType?: EntityType
 }
 
+type SearchableEntity = { name?: string; originalName?: string; label?: string; source?: string; description?: string }
+type SearchResultItem = SearchableEntity & {
+    id?: { toString: () => string } | string
+    _id?: { toString: () => string } | string
+    toObject?: () => Record<string, unknown>
+}
+type SearchDataResponse = Partial<Record<"items" | "spells" | "traits" | "rules" | "feats" | "classes" | "backgrounds" | "races" | "data", unknown[]>>
+
+const FUSE_OPTIONS = {
+    keys: [
+        { name: "name", weight: 10 },
+        { name: "originalName", weight: 8 },
+        { name: "label", weight: 10 },
+        { name: "source", weight: 5 },
+        { name: "description", weight: 1 }
+    ],
+    threshold: 0.35,
+    includeScore: true,
+    shouldSort: true,
+    minMatchCharLength: 2
+}
+
+type FuzzyCacheEntry<T extends SearchableEntity> = {
+    fuse: Fuse<T>
+    rankedResultsByQuery: Map<string, T[]>
+}
+
 // Simple in-memory cache for search data
 let cachedData: UnifiedEntity[] | null = null
 let lastFetchTime = 0
 const CACHE_TTL = 1000 * 60 * 5 // 5 minutes
+let fuzzyCache = new WeakMap<SearchableEntity[], FuzzyCacheEntry<SearchableEntity>>()
+const unifiedFilteredCache = new Map<string, UnifiedEntity[]>()
 
 async function getSearchData(): Promise<UnifiedEntity[]> {
     const now = Date.now()
@@ -64,9 +93,9 @@ async function getSearchData(): Promise<UnifiedEntity[]> {
             // Mas as rotas /search sem 'q' devem retornar a lista completa
             const res = await fetch(provider.endpoint())
             if (!res.ok) return []
-            const data = await res.json()
+            const data = await res.json() as SearchDataResponse | unknown[]
 
-            let rawItems: any[] = []
+            let rawItems: unknown[] = []
             if (Array.isArray(data)) rawItems = data
             else if (data.items) rawItems = data.items
             else if (data.spells) rawItems = data.spells
@@ -92,15 +121,59 @@ async function getSearchData(): Promise<UnifiedEntity[]> {
 }
 
 function filterEntitiesByOptions(items: UnifiedEntity[], options?: UnifiedSearchOptions): UnifiedEntity[] {
-    return options?.specificEntityType
-        ? items.filter((entity) => entity.type === options.specificEntityType)
-        : items
+    if (!options?.specificEntityType) return items
+
+    const cacheKey = options.specificEntityType
+    const cached = unifiedFilteredCache.get(cacheKey)
+    if (cached) return cached
+
+    const filtered = items.filter((entity) => entity.type === options.specificEntityType)
+    unifiedFilteredCache.set(cacheKey, filtered)
+    return filtered
+}
+
+function getFuzzyCacheEntry<T extends SearchableEntity>(items: T[]): FuzzyCacheEntry<T> {
+    const cached = fuzzyCache.get(items as SearchableEntity[])
+    if (cached) return cached as FuzzyCacheEntry<T>
+
+    const entry: FuzzyCacheEntry<T> = {
+        fuse: new Fuse(items, FUSE_OPTIONS),
+        rankedResultsByQuery: new Map(),
+    }
+    fuzzyCache.set(items as SearchableEntity[], entry as FuzzyCacheEntry<SearchableEntity>)
+    return entry
+}
+
+function getRankedFuzzyResults<T extends SearchableEntity>(items: T[], query: string): T[] {
+    const cacheEntry = getFuzzyCacheEntry(items)
+    const cachedResults = cacheEntry.rankedResultsByQuery.get(query)
+    if (cachedResults) return cachedResults
+
+    const fuseResults = cacheEntry.fuse.search(query)
+    const mapped = fuseResults.map((result) => {
+        // Handle both plain objects and Mongoose/class instances
+        const item = result.item as SearchResultItem
+        const baseItem = (typeof item.toObject === "function" ? item.toObject() : { ...result.item }) as Record<string, unknown> & SearchResultItem
+
+        // Ensure ID compatibility
+        const id = baseItem._id?.toString() || baseItem.id?.toString()
+
+        return {
+            ...baseItem,
+            id: id,
+            _id: id,
+            score: result.score
+        } as unknown as T
+    })
+
+    cacheEntry.rankedResultsByQuery.set(query, mapped)
+    return mapped
 }
 
 /**
  * Applies weighted fuzzy search to a list of entities.
  */
-export function applyFuzzySearch<T extends { name?: string; originalName?: string; label?: string; source?: string; description?: string }>(
+export function applyFuzzySearch<T extends SearchableEntity>(
     items: T[],
     query: string,
     limit?: number,
@@ -111,35 +184,7 @@ export function applyFuzzySearch<T extends { name?: string; originalName?: strin
         return sliced
     }
 
-    const fuse = new Fuse(items, {
-        keys: [
-            { name: "name", weight: 10 },
-            { name: "originalName", weight: 8 },
-            { name: "label", weight: 10 },
-            { name: "source", weight: 5 },
-            { name: "description", weight: 1 }
-        ],
-        threshold: 0.35,
-        includeScore: true,
-        shouldSort: true,
-        minMatchCharLength: 2
-    })
-
-    const fuseResults = fuse.search(query)
-    const mapped = fuseResults.map((result) => {
-        // Handle both plain objects and Mongoose/class instances
-        const baseItem = typeof (result.item as any).toObject === "function" ? (result.item as any).toObject() : { ...result.item }
-
-        // Ensure ID compatibility
-        const id = baseItem._id?.toString() || baseItem.id?.toString()
-
-        return {
-            ...baseItem,
-            id: id,
-            _id: id,
-            score: result.score
-        }
-    })
+    const mapped = getRankedFuzzyResults(items, query)
 
     return limit ? mapped.slice(offset, offset + limit) : mapped
 }
@@ -189,4 +234,6 @@ export function warmSearchCache(): void {
 export function invalidateSearchCache(): void {
     cachedData = null
     lastFetchTime = 0
+    fuzzyCache = new WeakMap<SearchableEntity[], FuzzyCacheEntry<SearchableEntity>>()
+    unifiedFilteredCache.clear()
 }
