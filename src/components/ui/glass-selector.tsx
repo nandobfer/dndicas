@@ -33,6 +33,8 @@ export interface GlassSelectorProps<T extends string | number> {
     size?: "sm" | "md" | "lg" | "normal"
     /** Whether the component is disabled */
     disabled?: boolean
+    /** Allows a selected single option to be cleared by clicking it again. */
+    allowDeselect?: boolean
     /** Additional class names */
     className?: string
     /** Unique ID for Framer Motion layout animations */
@@ -53,6 +55,7 @@ export function GlassSelector<T extends string | number>({
     fullWidth = false,
     size = "md",
     disabled = false,
+    allowDeselect = false,
     className,
     layoutId = "glass-selector-indicator"
 }: GlassSelectorProps<T>) {
@@ -83,6 +86,10 @@ export function GlassSelector<T extends string | number>({
             }
             onChange(currentValues)
         } else {
+            if (allowDeselect && value === optionValue) {
+                onChange(undefined as unknown as T)
+                return
+            }
             onChange(optionValue)
         }
     }

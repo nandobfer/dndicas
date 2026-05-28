@@ -168,6 +168,36 @@ describe("DiceRollerPanel", () => {
         expect(within(row).getByRole("button", { name: "Adicionar d20" })).toBeInTheDocument()
     })
 
+    it("can hide dice configuration controls while keeping the preset roll button", async () => {
+        render(
+            <DiceRollerPanel
+                preset={{
+                    label: "Atributo",
+                    terms: [{ dice: "d6", quantity: 4 }],
+                    modifier: 0,
+                    mode: "normal",
+                    source: "manual",
+                }}
+                hideConfigurationControls
+            />
+        )
+
+        expect(screen.getByRole("button", { name: "JOGAR" })).toBeInTheDocument()
+        expect(screen.queryByTestId("dice-add-grid")).not.toBeInTheDocument()
+        expect(screen.queryByTestId("dice-combination-card")).not.toBeInTheDocument()
+        expect(screen.queryByText("Modificador")).not.toBeInTheDocument()
+
+        fireEvent.click(screen.getByRole("button", { name: "JOGAR" }))
+
+        await waitFor(() => {
+            expect(requestDiceRollMock).toHaveBeenCalledWith(expect.objectContaining({
+                terms: [{ dice: "d6", quantity: 4 }],
+                modifier: 0,
+                mode: "normal",
+            }))
+        })
+    })
+
     it("renders one visual die per selected die", async () => {
         render(
             <DiceRollerPanel
@@ -631,7 +661,7 @@ describe("DiceRollerPanel", () => {
             expect(diceBoxMocks.startClickThrow).toHaveBeenCalled()
         })
 
-        let resolveRoll: (val: any) => void = () => {}
+        let resolveRoll: (val: unknown[]) => void = () => {}
         diceBoxMocks.roll.mockImplementation(() => new Promise((resolve) => {
             resolveRoll = resolve
         }))

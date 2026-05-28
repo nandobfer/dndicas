@@ -250,6 +250,10 @@ export interface AdminSheetsListResponse {
 
 export type PatchSheetBody = Partial<Omit<CharacterSheet, "_id" | "slug" | "userId" | "createdAt" | "updatedAt">>
 
+export interface CreateAssistedSheetBody {
+    sheet: PatchSheetBody & { name: string }
+}
+
 export interface CreateItemBody {
     catalogItemId?: string
     name: string
@@ -404,6 +408,12 @@ export const PatchSheetSchema = z.object({
     armorTraining: z.object({ light: z.boolean(), medium: z.boolean(), heavy: z.boolean(), shields: z.boolean() }).optional(),
     weaponProficiencies: z.string().optional(),
     toolProficiencies: z.string().optional(),
+})
+
+export const CreateAssistedSheetSchema = z.object({
+    sheet: PatchSheetSchema.extend({
+        name: z.string().trim().min(1).max(100),
+    }),
 })
 
 export const CreateItemSchema = z.object({
