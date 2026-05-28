@@ -1,1 +1,1 @@
-export const APP_VERSION = "v3.0.0"
+gxport const APP_VERSION = "v3.0.1"

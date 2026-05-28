@@ -38,6 +38,7 @@ import { GlassImageUploader } from "@/components/ui/glass-image-uploader"
 import { GlassInlineEmptyState } from "@/components/ui/glass-inline-empty-state"
 import { GlassColorPicker } from "@/components/ui/glass-color-picker"
 import { RichTextEditor } from "@/features/rules/components/rich-text-editor"
+import { extractIndexedBranchFromImagePayload, omitNestedArrayFromImagePayload } from "@/features/shared/ai/image-form-payload"
 
 import { attributeColors, diceColors, rarityColors, type AttributeType } from "@/lib/config/colors"
 import { ImageAndDescriptionSection, SpellcastingSection, SpellsSection, TraitsSection, SkillSelection } from "./shared-form-components"
@@ -521,7 +522,7 @@ export function ClassFormModal({ characterClass, isOpen, onClose, onSuccess }: C
                                     errors={errors}
                                     imageFieldName="image"
                                     descriptionFieldName="description"
-                                    getAIPayload={() => getValues()}
+                                    getAIPayload={() => omitNestedArrayFromImagePayload(getValues(), "subclasses")}
                                     aiContextLabel="Classe"
                                     entityId={characterClass?._id}
                                     placeholder="Descreva a classe detalhadamente... (Suporta imagens S3 e formatação)"
@@ -906,7 +907,7 @@ export function ClassFormModal({ characterClass, isOpen, onClose, onSuccess }: C
                                     errors={errors}
                                     imageFieldName={`subclasses.${activeTab}.image`}
                                     descriptionFieldName={`subclasses.${activeTab}.description`}
-                                    getAIPayload={() => getValues()}
+                                    getAIPayload={() => extractIndexedBranchFromImagePayload(getValues(), "subclasses", activeTab)}
                                     aiContextLabel="Subclasse"
                                     entityId={characterClass?._id}
                                     placeholder={`Descreva a subclasse ${subclasses[activeTab]?.name} detalhadamente...`}

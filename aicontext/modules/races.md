@@ -3,7 +3,7 @@
 ## Features
 
 ### Geração de arte com IA no formulário
-Os formulários de raça base e variação usam o mesmo `GlassImageUploader` com atalho de IA no empty state e na preview existente. Ao acionar a geração, o frontend envia o JSON completo da raça para o backend especializado em D&D e atualiza o campo `image` com a URL salva no bucket.
+Os formulários de raça base e variação usam o mesmo `GlassImageUploader` com atalho de IA no empty state e na preview existente. Na aba base, o frontend envia a raça atual sem o array de `variations`; na aba de variação, envia apenas a sub-raça ativa para o backend especializado em D&D. Quando a geração termina, o campo `image` é atualizado com a URL salva no bucket.
 
 ### Busca textual do catálogo de raças
 O campo de busca da listagem de raças consulta apenas `name` e `originalName` em `GET /api/races`. A UI do filtro deixa isso explícito no placeholder e não considera mais descrição como critério da busca textual principal.

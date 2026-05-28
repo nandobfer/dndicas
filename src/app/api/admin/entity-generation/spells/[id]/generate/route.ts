@@ -3,6 +3,8 @@ import { generateSpellCandidates } from "@/features/entity-generation/server/spe
 import { EntityGenerationPusherService } from "@/features/entity-generation/realtime/entity-generation-pusher-service"
 import type { SpellGenerationGenerateRequest } from "@/features/entity-generation/types/entity-generation.types"
 
+export const maxDuration = 300
+
 async function requireAdmin() {
     const user = await currentUser()
     if (!user || user.publicMetadata?.role !== "admin") {

@@ -3,7 +3,7 @@
 ## Features
 
 ### Geração de arte com IA no formulário
-Os formulários de classe e subclasse exibem um atalho premium de `Sparkles` no `GlassImageUploader`, tanto no empty state quanto sobre uma imagem já existente. A ação envia o JSON inteiro do formulário atual para `POST /api/core/ai/image`, pede uma ilustração coerente com D&D em composição preferencialmente 1:1 e substitui o campo `image` pela URL retornada do bucket quando a geração termina.
+Os formulários de classe e subclasse exibem um atalho premium de `Sparkles` no `GlassImageUploader`, tanto no empty state quanto sobre uma imagem já existente. Na aba base, a ação envia a classe atual sem o array de `subclasses`; na aba de subclasse, envia apenas a subclasse ativa para `POST /api/core/ai/image`. O backend pede uma ilustração coerente com D&D em composição preferencialmente 1:1 e o frontend substitui o campo `image` pela URL retornada do bucket quando a geração termina.
 
 ### Infinite scroll nas tabelas de catálogo
 As tabelas de classes usam o mesmo fluxo de `useInfiniteClasses` do modo lista. O modo tabela carrega a primeira página de resultados e busca páginas seguintes automaticamente quando o sentinel no fim da tabela entra na viewport, sem paginação tradicional.

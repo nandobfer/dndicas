@@ -83,13 +83,19 @@ describe("EntityGenerationAIModal", () => {
         })
     })
 
-    it("subscribes to Pusher, updates progress, and keeps an entity snapshot while saving", async () => {
+    it("subscribes to Pusher, starts generation immediately, and keeps an entity snapshot while saving", async () => {
         const channel = new MockChannel()
         realtimeMocks.mockSubscribe.mockReturnValue(channel)
         const entity = { _id: "entity-1", name: "Entidade Atual", source: "ABH p. 9" }
         const candidate = { id: "candidate-1", label: "Candidato" }
         const renderComparison = vi.fn((current: TestEntity) => <div>Comparando {current.name}</div>)
-        const generate = vi.fn().mockResolvedValue({ candidates: [candidate] })
+        let resolveGenerate: ((value: { candidates: TestCandidate[] }) => void) | null = null
+        const generate = vi.fn().mockImplementation(
+            () =>
+                new Promise<{ candidates: TestCandidate[] }>((resolve) => {
+                    resolveGenerate = resolve
+                }),
+        )
         const apply = vi.fn().mockResolvedValue(undefined)
         const adapter: EntityGenerationAdapter<TestEntity, TestCandidate> = {
             entityName: "Entidade",
@@ -124,6 +130,7 @@ describe("EntityGenerationAIModal", () => {
         expect(screen.getByText("Astarion's Book of Hungers pág. 9")).toBeInTheDocument()
 
         await waitFor(() => expect(realtimeMocks.mockSubscribe).toHaveBeenCalledWith(expect.any(Object), "entity-generation.run-1"))
+        await waitFor(() => expect(generate).toHaveBeenCalledWith(entity, "run-1"))
 
         await act(async () => {
             channel.emit(ENTITY_GENERATION_PUSHER_EVENTS.progress, { current: 2, total: 4, message: "Traduzindo habilidade Darkvision (Elf)" })
@@ -132,13 +139,11 @@ describe("EntityGenerationAIModal", () => {
         expect(screen.getByText("Gerando características")).toBeInTheDocument()
         expect(screen.queryByText("Traduzindo habilidade Darkvision (Elf)")).not.toBeInTheDocument()
         expect(screen.getByText("50%")).toBeInTheDocument()
-        expect(generate).not.toHaveBeenCalled()
 
         await act(async () => {
-            channel.emit("pusher:subscription_succeeded")
+            resolveGenerate?.({ candidates: [candidate] })
         })
 
-        await waitFor(() => expect(generate).toHaveBeenCalledWith(entity, "run-1"))
         expect(screen.getByText("Comparando Entidade Atual")).toBeInTheDocument()
 
         fireEvent.click(screen.getByRole("button", { name: /salvar/i }))
@@ -188,11 +193,6 @@ describe("EntityGenerationAIModal", () => {
         render(<EntityGenerationAIModal open entity={entity} adapter={adapter} onOpenChange={vi.fn()} />)
 
         await waitFor(() => expect(realtimeMocks.mockSubscribe).toHaveBeenCalledWith(expect.any(Object), "entity-generation.loyw3v28-i"))
-
-        await act(async () => {
-            channel.emit("pusher:subscription_succeeded")
-        })
-
         await waitFor(() => expect(adapter.generate).toHaveBeenCalledWith(entity, "loyw3v28-i"))
     })
 })
