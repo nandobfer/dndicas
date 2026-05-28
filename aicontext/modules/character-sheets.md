@@ -19,6 +19,13 @@ As menções da ficha respeitam filtros por contexto: itens aceitam apenas entid
 ### Sincronização de PV nível 1
 Quando a ficha está no nível 1 e possui uma classe mencionada, a vida máxima é sincronizada com o dado de vida máximo da classe mais o modificador de Constituição. Níveis acima de 1 permanecem manuais.
 
+### Fluxo de subir nível no cabeçalho
+A ficha mostra a tabela de progressão da classe abaixo do escudo de Classe de Armadura, preservando o mesmo popover com `ClassProgressionTable`. Em modo editável, abaixo de XP aparece o botão `Subir de nível`, destacado com a cor `colors.rarity.uncommon`; no nível 20 ele fica indisponível.
+
+Ao abrir o modal glass de subir nível, o cabeçalho faz preview de `nível atual -> próximo nível`, `PV máximo atual -> novo PV máximo` e das traits novas da classe, subclasse e raça que entram exatamente no novo nível usando cards de preview de trait consistentes com o restante da interface. O ganho padrão de PV usa `ceil(dado de vida / 2) + modificador de Constituição`, mas o usuário pode clicar em um botão dedicado com `GlassDiceValue` para abrir um `DiceRollerPanel` fixo em `1dX + CON`; a abertura/fechamento é animada e, após a rolagem, o painel fecha mantendo o resultado aplicado ao preview.
+
+O modal também lista mudanças de totais em `resourceCharges`, quando houver, e exige escolhas obrigatórias de progressão: no nível 3, uma `Subclasse` filtrada pela classe atual; no nível 4, um `Talento`. Ao confirmar, o fluxo persiste `level` e `hpMax`; se subir para o nível 3, também salva a subclasse escolhida, e se subir para o nível 4, anexa o talento selecionado em `featuresNotes`. O sincronizador existente continua responsável por inserir traits, recalcular derivados e refletir recursos após a mudança de nível.
+
 ### Imagem e biografia da ficha
 A ficha usa `photo` como imagem principal do personagem. No cabeçalho editável, `GlassImageUploader` salva, remove e sempre oferece a ação de gerar com IA para o retrato, usando como contexto apenas os campos atualmente expostos na ficha (`name`, `class`, `subclass`, `race`, `origin`, `level`, `size`, `appearance`, `history`, `notes`) e também a lista de itens marcados como `equipped`; a URL proxy `/api/upload?key=...` gerada pela IA é persistida imediatamente no auto-save da ficha. O fluxo não envia mais campos antigos de aparência/personalidade que não aparecem na UI ativa da ficha. Quando já existe uma foto, o cabeçalho editável também mostra o botão `Ver foto`, que abre a imagem ampliada no mesmo viewer do `GlassImage`. Em modo somente leitura, `GlassImage` exibe a imagem sem controles de upload. Os cards de `Minhas Fichas` também mostram `photo` na coluna visual à esquerda e permitem ampliar a imagem sem propagar o clique para abrir a ficha.
 

@@ -691,7 +691,7 @@ async function resolveSheetSyncState(
     }
 }
 
-async function syncMentionBoundResourceCharges({
+export async function syncMentionBoundResourceCharges({
     classFeatures,
     speciesTraits,
     featuresNotes,
