@@ -2,7 +2,7 @@ import * as React from "react"
 import { fireEvent, render, screen, waitFor } from "@testing-library/react"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import { SheetHeader } from "@/features/character-sheets/components/sheet-header"
-import type { CharacterSheet, PatchSheetBody } from "@/features/character-sheets/types/character-sheet.types"
+import type { CharacterItem, CharacterSheet, PatchSheetBody } from "@/features/character-sheets/types/character-sheet.types"
 
 vi.mock("@/features/classes/api/classes-queries", () => ({
     useClass: () => ({
@@ -245,8 +245,42 @@ describe("SheetHeader", () => {
             appearance: "<p>Armadura dourada e olhos azuis.</p>",
             history: "<p>Veterano da guarda real.</p>",
         })
+        const items: CharacterItem[] = [
+            {
+                _id: "item-equipped",
+                sheetId: sheet._id,
+                catalogItemId: "armor-1",
+                name: "<p>Armadura de placas</p>",
+                image: null,
+                quantity: 1,
+                notes: "",
+                equipped: true,
+                catalogItemType: "armadura",
+                catalogAc: 18,
+                catalogAcType: "base" as const,
+                catalogArmorType: "pesada" as const,
+                catalogAcBonus: null,
+                createdAt: "2026-01-01T00:00:00.000Z",
+            },
+            {
+                _id: "item-unequipped",
+                sheetId: sheet._id,
+                catalogItemId: "weapon-1",
+                name: "Espada longa",
+                image: null,
+                quantity: 1,
+                notes: "",
+                equipped: false,
+                catalogItemType: "arma",
+                catalogAc: null,
+                catalogAcType: null,
+                catalogArmorType: null,
+                catalogAcBonus: null,
+                createdAt: "2026-01-01T00:00:00.000Z",
+            },
+        ]
 
-        render(<SheetHeader sheet={sheet} form={form} />)
+        render(<SheetHeader sheet={sheet} form={form} items={items} />)
 
         const uploaderProps = glassImageUploaderMocks.render.mock.calls[0]?.[0] as {
             getAIPayload?: () => unknown
@@ -265,7 +299,25 @@ describe("SheetHeader", () => {
             level: 2,
             appearance: "Armadura dourada e olhos azuis.",
             history: "Veterano da guarda real.",
+            notes: null,
+            equippedItems: [
+                {
+                    name: "Armadura de placas",
+                    quantity: 1,
+                    type: "armadura",
+                },
+            ],
         })
+        expect(uploaderProps?.getAIPayload?.()).not.toHaveProperty("age")
+        expect(uploaderProps?.getAIPayload?.()).not.toHaveProperty("height")
+        expect(uploaderProps?.getAIPayload?.()).not.toHaveProperty("weight")
+        expect(uploaderProps?.getAIPayload?.()).not.toHaveProperty("eyes")
+        expect(uploaderProps?.getAIPayload?.()).not.toHaveProperty("skin")
+        expect(uploaderProps?.getAIPayload?.()).not.toHaveProperty("hair")
+        expect(uploaderProps?.getAIPayload?.()).not.toHaveProperty("personalityTraits")
+        expect(uploaderProps?.getAIPayload?.()).not.toHaveProperty("ideals")
+        expect(uploaderProps?.getAIPayload?.()).not.toHaveProperty("bonds")
+        expect(uploaderProps?.getAIPayload?.()).not.toHaveProperty("flaws")
     })
 
     it("uses the tighter horizontal gap between identity field columns", () => {

@@ -69,7 +69,16 @@ function normalizeCharacterText(value: string | null | undefined): string | null
   return normalizedValue || null
 }
 
-function buildCharacterPortraitAIPayload(sheet: CharacterSheet) {
+function buildCharacterPortraitAIPayload(sheet: CharacterSheet, items: CharacterItem[]) {
+  const equippedItems = items
+    .filter((item) => item.equipped)
+    .map((item) => ({
+      name: normalizeCharacterText(item.name),
+      quantity: item.quantity,
+      type: normalizeCharacterText(item.catalogItemType),
+    }))
+    .filter((item): item is { name: string; quantity: number; type: string | null } => Boolean(item.name))
+
   return {
     name: normalizeCharacterText(sheet.name),
     class: normalizeCharacterText(sheet.class),
@@ -78,19 +87,10 @@ function buildCharacterPortraitAIPayload(sheet: CharacterSheet) {
     origin: normalizeCharacterText(sheet.origin),
     level: sheet.level,
     size: normalizeCharacterText(sheet.size),
-    age: normalizeCharacterText(sheet.age),
-    height: normalizeCharacterText(sheet.height),
-    weight: normalizeCharacterText(sheet.weight),
-    eyes: normalizeCharacterText(sheet.eyes),
-    skin: normalizeCharacterText(sheet.skin),
-    hair: normalizeCharacterText(sheet.hair),
     appearance: normalizeCharacterText(sheet.appearance),
-    personalityTraits: normalizeCharacterText(sheet.personalityTraits),
-    ideals: normalizeCharacterText(sheet.ideals),
-    bonds: normalizeCharacterText(sheet.bonds),
-    flaws: normalizeCharacterText(sheet.flaws),
     history: normalizeCharacterText(sheet.history),
     notes: normalizeCharacterText(sheet.notes),
+    equippedItems,
   }
 }
 
@@ -219,7 +219,7 @@ export function useSheetHeaderSections({ sheet, form, items = [], isReadOnly = f
                   aspectRatio="portrait"
                   disabled={isReadOnly}
                   className="min-h-0 flex-1 [&>div]:h-full"
-                  getAIPayload={() => buildCharacterPortraitAIPayload(currentSheet)}
+                  getAIPayload={() => buildCharacterPortraitAIPayload(currentSheet, items)}
                   aiContextLabel="Personagem"
                 />
                 {photo && (
