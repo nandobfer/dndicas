@@ -12,12 +12,14 @@ import { cn } from "@/core/utils"
 import { GlassCard, GlassCardContent } from "@/components/ui/glass-card"
 import { GlassSelector } from "@/components/ui/glass-selector"
 import { GlassPopover, GlassPopoverContent, GlassPopoverTrigger } from "@/components/ui/glass-popover"
+import { GlassImage } from "@/components/ui/glass-image"
+import { GlassImageUploader } from "@/components/ui/glass-image-uploader"
 import { colors, diceColors, type DiceType, type EntityType } from "@/lib/config/colors"
-import { Table2 } from "lucide-react"
 import { useClass } from "@/features/classes/api/classes-queries"
 import { ClassProgressionTable } from "@/features/classes/components/class-progression-table"
 import { useCharacterCalculations } from "../hooks/use-character-calculations"
 import { CalcTooltip } from "./calc-tooltip"
+import { getActiveClassMentions } from "../utils/mention-sync"
 
 const HIT_DIE_OPTIONS: DiceType[] = ["d4", "d6", "d8", "d10", "d12"]
 const IDENTITY_FIELDS = [
@@ -62,16 +64,50 @@ function getArmorClassBonusValue(item: CharacterItem): number | null {
   return null
 }
 
+function normalizeCharacterText(value: string | null | undefined): string | null {
+  const normalizedValue = stripHtml(value)
+  return normalizedValue || null
+}
+
+function buildCharacterPortraitAIPayload(sheet: CharacterSheet, items: CharacterItem[]) {
+  const equippedItems = items
+    .filter((item) => item.equipped)
+    .map((item) => ({
+      name: normalizeCharacterText(item.name),
+      quantity: item.quantity,
+      type: normalizeCharacterText(item.catalogItemType),
+    }))
+    .filter((item): item is { name: string; quantity: number; type: string | null } => Boolean(item.name))
+
+  return {
+    name: normalizeCharacterText(sheet.name),
+    class: normalizeCharacterText(sheet.class),
+    subclass: normalizeCharacterText(sheet.subclass),
+    race: normalizeCharacterText(sheet.race),
+    origin: normalizeCharacterText(sheet.origin),
+    level: sheet.level,
+    size: normalizeCharacterText(sheet.size),
+    appearance: normalizeCharacterText(sheet.appearance),
+    history: normalizeCharacterText(sheet.history),
+    notes: normalizeCharacterText(sheet.notes),
+    equippedItems,
+  }
+}
+
 export function useSheetHeaderSections({ sheet, form, items = [], isReadOnly = false, isOwlbear = false }: UseSheetHeaderSectionsProps) {
   const { watch, setFieldLocally, patchField } = form
   const hitDiceValue = (watch("hitDiceTotal") || "d8") as DiceType
   const hpCurrent = watch("hpCurrent") ?? 0
   const hpTemp = watch("hpTemp") ?? 0
   const hpMax = watch("hpMax") ?? 0
+  const photo = watch("photo") ?? sheet.photo ?? null
   const [hpAdjustmentValue, setHpAdjustmentValue] = useState("0")
   const classRef = watch("classRef") ?? sheet.classRef
   const subclassRef = watch("subclassRef") ?? sheet.subclassRef
-  const { data: currentClass } = useClass(classRef ?? null)
+  const classValue = String(watch("class") ?? sheet.class ?? "")
+  const activeClassMentionId = getActiveClassMentions(classValue)[0]?.id ?? null
+  const subclassParentClassId = classRef ?? activeClassMentionId
+  const { data: currentClass } = useClass(subclassParentClassId ?? null)
   const [isProgressionOpen, setIsProgressionOpen] = useState(false)
   const closeTimeoutRef = useRef<NodeJS.Timeout | null>(null)
 
@@ -156,33 +192,86 @@ export function useSheetHeaderSections({ sheet, form, items = [], isReadOnly = f
   const hpTempWidth = hpMax > 0
     ? `${Math.max(0, Math.min(100, (hpTemp / hpMax) * 100))}%`
     : "0%"
+  const shouldShowIdentityImage = !isReadOnly || !!photo
 
   const identityCard = (
     <GlassCard className="border-white/10 bg-white/[0.02]">
-      <GlassCardContent className="p-4 flex flex-col gap-4 h-full">
-        <SheetInput
-          label="Nome do Personagem"
-          placeholder="NOME DO PERSONAGEM"
-          value={watch("name") || ""}
-          onChangeValue={(val) => patchField("name", val)}
-          className="tracking-tight"
-          readOnlyMode={isReadOnly}
-        />
+      <GlassCardContent className={cn(
+        "grid h-full grid-cols-1 gap-4 p-4",
+        shouldShowIdentityImage && "sm:grid-cols-[132px_minmax(0,1fr)]"
+      )}>
+        {shouldShowIdentityImage && (
+          <div className="flex h-full min-h-[176px] flex-col">
+            {isReadOnly && photo ? (
+              <GlassImage
+                src={photo}
+                alt={`Imagem de ${watch("name") || sheet.name || "personagem"}`}
+                className="h-full min-h-[176px] rounded-lg"
+                imageClassName="object-cover mix-blend-normal"
+                showOverlay={false}
+              />
+            ) : !isReadOnly ? (
+              <div className="flex h-full min-h-0 flex-col gap-1.5">
+                <GlassImageUploader
+                  value={photo ?? ""}
+                  onChange={(url) => patchField("photo", url)}
+                  onRemove={() => patchField("photo", null)}
+                  aspectRatio="portrait"
+                  disabled={isReadOnly}
+                  className="min-h-0 flex-1 [&>div]:h-full"
+                  getAIPayload={() => buildCharacterPortraitAIPayload(currentSheet, items)}
+                  aiContextLabel="Personagem"
+                />
+                {photo && (
+                  <GlassImage
+                    src={photo}
+                    alt={`Imagem de ${watch("name") || sheet.name || "personagem"}`}
+                    showOverlay={false}
+                    imageClassName="object-cover mix-blend-normal"
+                    renderTrigger={({ open, label }) => (
+                      <button
+                        type="button"
+                        onClick={open}
+                        title={label}
+                        className="mt-auto h-7 rounded-md border border-white/10 bg-white/[0.04] px-2.5 text-[11px] font-medium text-white/70 transition-colors hover:bg-white/[0.08] hover:text-white"
+                      >
+                        Ver foto
+                      </button>
+                    )}
+                  />
+                )}
+              </div>
+            ) : null}
+          </div>
+        )}
 
-        <div className="grid grid-cols-2 gap-x-8 gap-y-2">
-          {IDENTITY_FIELDS.map((item) => (
-            <CompactRichInput
-              key={item.field}
-              label={item.label}
-              value={String(watch(item.field) || "")}
-              onChange={(val) => setFieldLocally(item.field, val)}
-              onBlur={(val) => patchField(item.field, val)}
-              placeholder={item.placeholder}
-              excludeId={sheet._id}
-              disabled={isReadOnly}
-              specificEntityMention={item.specificEntityMention}
-            />
-          ))}
+        <div className="flex min-w-0 flex-col gap-4">
+          <SheetInput
+            label="Nome do Personagem"
+            placeholder="NOME DO PERSONAGEM"
+            value={watch("name") || ""}
+            onChangeValue={(val) => patchField("name", val)}
+            className="tracking-tight"
+            readOnlyMode={isReadOnly}
+          />
+
+          <div className="grid grid-cols-2 gap-x-4 gap-y-2">
+            {IDENTITY_FIELDS.map((item) => (
+              <CompactRichInput
+                key={item.field}
+                label={item.label}
+                value={String(watch(item.field) || "")}
+                onChange={(val) => setFieldLocally(item.field, val)}
+                onBlur={(val) => patchField(item.field, val)}
+                placeholder={item.placeholder}
+                excludeId={sheet._id}
+                disabled={isReadOnly}
+                specificEntityMention={item.specificEntityMention}
+                mentionParentClassId={item.field === "subclass" ? subclassParentClassId : null}
+                openMentionsOnFocus
+              />
+            ))}
+          </div>
         </div>
       </GlassCardContent>
     </GlassCard>
@@ -225,10 +314,10 @@ export function useSheetHeaderSections({ sheet, form, items = [], isReadOnly = f
                               onMouseEnter={handleProgressionEnter}
                               onMouseLeave={handleProgressionLeave}
                               onClick={() => setIsProgressionOpen((prev) => !prev)}
-                              className="mt-3 z-10 inline-flex items-center justify-center w-8 h-8 rounded-full border border-amber-400/20 bg-amber-500/10 text-amber-400/70 hover:text-amber-300 hover:bg-amber-500/15 transition-colors"
+                              className="mt-3 z-10 inline-flex items-center justify-center rounded-md border border-amber-400/30 bg-amber-500/15 px-3 py-1.5 text-[9px] font-black uppercase tracking-widest text-amber-300/85 shadow-[0_0_18px_rgba(245,158,11,0.12)] hover:border-amber-300/50 hover:bg-amber-500/25 hover:text-amber-200 transition-colors"
                               aria-label="Ver progressão da classe"
                           >
-                              <Table2 className="w-3.5 h-3.5" />
+                              tabela de progressão
                           </button>
                       </GlassPopoverTrigger>
                       <GlassPopoverContent

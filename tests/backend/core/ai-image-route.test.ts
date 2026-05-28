@@ -112,6 +112,58 @@ describe('POST /api/core/ai/image', () => {
         });
     });
 
+    it('logs the parsed AI image payload received by the server', async () => {
+        const requireAuth = vi.fn().mockResolvedValue('clerk-1');
+        const generateImage = vi.fn().mockResolvedValue({
+            buffer: Buffer.from('generated-image'),
+            mimeType: 'image/png',
+        });
+        const uploadFile = vi.fn().mockResolvedValue(undefined);
+        const buildFileProxyUrl = vi.fn((key: string) => `/api/upload?key=${encodeURIComponent(key)}`);
+        const getImageExtensionFromMimeType = vi.fn().mockReturnValue('png');
+        const consoleLogSpy = vi.spyOn(console, 'log').mockImplementation(() => undefined);
+
+        vi.spyOn(Date, 'now').mockReturnValue(1700000000001);
+
+        vi.doMock('@/core/auth', () => ({
+            requireAuth,
+        }));
+        vi.doMock('@/core/ai/genai', () => ({
+            generateImage,
+        }));
+        vi.doMock('@/core/storage/s3', () => ({
+            uploadFile,
+            buildFileProxyUrl,
+            getImageExtensionFromMimeType,
+        }));
+
+        const formData = {
+            name: 'Kael',
+            equippedItems: [{ name: 'Armadura de placas', quantity: 1, type: 'armadura' }],
+        };
+
+        const mod = await importFresh<typeof import('@/app/api/core/ai/image/route')>('@/app/api/core/ai/image/route');
+        const response = await mod.POST(makeJsonRequest('http://localhost/api/core/ai/image', {
+            method: 'POST',
+            body: JSON.stringify({
+                entityLabel: 'Personagem',
+                formData,
+                preferredAspectRatio: '3:4',
+            }),
+        }));
+
+        expect(response.status).toBe(201);
+        expect(consoleLogSpy).toHaveBeenCalledWith('[AI image] Received payload', {
+            prompt: undefined,
+            model: undefined,
+            entityLabel: 'Personagem',
+            preferredAspectRatio: '3:4',
+            formData,
+        });
+
+        consoleLogSpy.mockRestore();
+    });
+
     it('rejects generated images larger than 5MB before upload', async () => {
         const requireAuth = vi.fn().mockResolvedValue('clerk-1');
         const generateImage = vi.fn().mockResolvedValue({

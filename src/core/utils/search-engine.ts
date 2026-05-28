@@ -17,7 +17,7 @@ export interface UnifiedEntity {
     description?: string
     source?: string
     status: "active" | "inactive"
-    metadata?: unknown
+    metadata?: UnifiedEntityMetadata
     school?: string
     circle?: number
     saveAttribute?: string
@@ -43,8 +43,20 @@ export interface UnifiedEntity {
     score?: number // Added for weighted sorting visibility if needed
 }
 
+export interface UnifiedEntityMetadata extends Record<string, unknown> {
+    parentClassId?: string
+    parentClassName?: string
+    subclassId?: string
+    subclassName?: string
+    subclassColor?: string
+}
+
 export interface UnifiedSearchOptions {
     specificEntityType?: EntityType
+    specificEntityTypes?: EntityType[]
+    itemTypes?: string[]
+    circles?: number[]
+    parentClassId?: string | null
 }
 
 type SearchableEntity = { name?: string; originalName?: string; label?: string; source?: string; description?: string }
@@ -120,15 +132,58 @@ async function getSearchData(): Promise<UnifiedEntity[]> {
     return cachedData
 }
 
-function filterEntitiesByOptions(items: UnifiedEntity[], options?: UnifiedSearchOptions): UnifiedEntity[] {
-    if (!options?.specificEntityType) return items
+function buildFilterCacheKey(options?: UnifiedSearchOptions): string | null {
+    if (!options) return null
 
-    const cacheKey = options.specificEntityType
-    const cached = unifiedFilteredCache.get(cacheKey)
-    if (cached) return cached
+    const entityTypes = options.specificEntityTypes?.length
+        ? [...options.specificEntityTypes].sort()
+        : options.specificEntityType
+            ? [options.specificEntityType]
+            : []
 
-    const filtered = items.filter((entity) => entity.type === options.specificEntityType)
-    unifiedFilteredCache.set(cacheKey, filtered)
+    const itemTypes = options.itemTypes?.length ? [...options.itemTypes].sort() : []
+    const circles = options.circles?.length ? [...options.circles].sort((left, right) => left - right) : []
+    const parentClassId = options.parentClassId ?? null
+
+    if (entityTypes.length === 0 && itemTypes.length === 0 && circles.length === 0 && parentClassId === null) {
+        return null
+    }
+
+    return JSON.stringify({
+        entityTypes,
+        itemTypes,
+        circles,
+        parentClassId,
+    })
+}
+
+export function filterEntitiesByOptions(items: UnifiedEntity[], options?: UnifiedSearchOptions): UnifiedEntity[] {
+    if (!options) return items
+
+    const cacheKey = buildFilterCacheKey(options)
+    if (cacheKey) {
+        const cached = unifiedFilteredCache.get(cacheKey)
+        if (cached) return cached
+    }
+
+    const entityTypes = options.specificEntityTypes?.length
+        ? options.specificEntityTypes
+        : options.specificEntityType
+            ? [options.specificEntityType]
+            : null
+
+    const filtered = items.filter((entity) => {
+        if (entityTypes && !entityTypes.includes(entity.type as EntityType)) return false
+        if (options.itemTypes?.length && entity.type === "Item" && !options.itemTypes.includes(entity.itemType ?? "")) return false
+        if (options.circles?.length && entity.type === "Magia" && !options.circles.includes(entity.circle ?? -1)) return false
+        if (options.parentClassId && entity.type === "Subclasse" && entity.metadata?.parentClassId !== options.parentClassId) return false
+        return true
+    })
+
+    if (cacheKey) {
+        unifiedFilteredCache.set(cacheKey, filtered)
+    }
+
     return filtered
 }
 

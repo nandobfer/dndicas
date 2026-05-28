@@ -12,6 +12,10 @@ export const getSuggestionConfig = (options?: {
     excludeId?: string
     blurOnMentionSelect?: boolean
     specificEntityMention?: EntityType
+    specificEntityMentions?: EntityType[]
+    itemTypes?: string[]
+    circles?: number[]
+    parentClassId?: string | null
 }) => {
     let component: ReactRenderer<MentionListRef, MentionListProps> | null = null
     let loading = false
@@ -19,6 +23,10 @@ export const getSuggestionConfig = (options?: {
 
     const searchOptions: UnifiedSearchOptions = {
         specificEntityType: options?.specificEntityMention,
+        specificEntityTypes: options?.specificEntityMentions,
+        itemTypes: options?.itemTypes,
+        circles: options?.circles,
+        parentClassId: options?.parentClassId,
     }
 
     const normalizeResults = (results: UnifiedEntity[]) =>

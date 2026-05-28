@@ -2,6 +2,7 @@
 
 import type { CharacterAttack } from "../types/character-sheet.types"
 import type { ItemType, Item } from "@/features/items/types/items.types"
+import type { Spell } from "@/features/spells/types/spells.types"
 import { getDiceHex } from "@/features/rules/utils/dice-render-utils"
 
 interface CalcValues {
@@ -37,6 +38,36 @@ export function buildDiceValueHtml(quantity: number, faces: string, bonus?: numb
     const bonusAttr = bonus !== undefined ? ` data-bonus="${bonus}"` : ""
     const colorAttr = colorHex ? ` data-color-hex="${colorHex}"` : ""
     return `<span data-type="dice-value" data-qty="${quantity}" data-faces="${faces.replace("d", "")}"${bonusAttr}${colorAttr}></span>`
+}
+
+export function getCantripDamageDiceQuantity(baseQuantity: number, characterLevel: number): number {
+    const multiplier = characterLevel >= 17 ? 4 : characterLevel >= 11 ? 3 : characterLevel >= 5 ? 2 : 1
+    return Math.max(1, baseQuantity) * multiplier
+}
+
+export function buildSpellAttackAutofill(
+    catalogSpell: Pick<Spell, "circle" | "baseDice">,
+    calc: Pick<CalcValues, "spellAttackBonus">,
+    characterLevel: number
+): Pick<CharacterAttack, "attackBonus" | "damageType"> {
+    let damageText = ""
+
+    if (catalogSpell.baseDice) {
+        const { quantidade, tipo } = catalogSpell.baseDice
+        const nextQuantity = catalogSpell.circle === 0
+            ? getCantripDamageDiceQuantity(quantidade, characterLevel)
+            : quantidade
+        damageText = buildDiceValueHtml(nextQuantity, tipo)
+    }
+
+    return {
+        damageType: damageText ? `<p>${damageText}</p>` : "",
+        attackBonus: formatBonus(calc.spellAttackBonus.value),
+    }
+}
+
+export function getAutoSpellAttackNotes(spellId: string): string {
+    return `auto:spell:${spellId}`
 }
 
 export function buildWeaponAttackAutofill(catalogItem: Item, calc: CalcValues): Pick<CharacterAttack, "attackBonus" | "damageType"> {

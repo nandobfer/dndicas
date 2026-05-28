@@ -363,6 +363,11 @@ interface RichTextEditorProps {
     disableNewlines?: boolean
     blurOnMentionSelect?: boolean
     specificEntityMention?: EntityType
+    specificEntityMentions?: EntityType[]
+    mentionItemTypes?: string[]
+    mentionCircles?: number[]
+    mentionParentClassId?: string | null
+    openMentionsOnFocus?: boolean
 }
 
 const MenuBar = ({ editor, addImage, disabled = false }: { editor: Editor | null; addImage: () => void; disabled?: boolean }) => {
@@ -465,9 +470,15 @@ export function RichTextEditor({
     disableNewlines = false,
     blurOnMentionSelect = false,
     specificEntityMention,
+    specificEntityMentions,
+    mentionItemTypes,
+    mentionCircles,
+    mentionParentClassId,
+    openMentionsOnFocus = false,
 }: RichTextEditorProps) {
     const [isUploading, setIsUploading] = useState(false)
     const lastAppliedFocusTokenRef = useRef<string | null>(null)
+    const activeEditorRef = useRef<Editor | null>(null)
 
     const uploadImage = useCallback(async (file: File) => {
         setIsUploading(true)
@@ -505,7 +516,15 @@ export function RichTextEditor({
                 placeholder: placeholder ?? "Digite '@' para referenciar habilidades, magias, etc.",
             }),
             CustomMention.configure({
-                suggestion: getSuggestionConfig({ excludeId, blurOnMentionSelect, specificEntityMention }),
+                suggestion: getSuggestionConfig({
+                    excludeId,
+                    blurOnMentionSelect,
+                    specificEntityMention,
+                    specificEntityMentions,
+                    itemTypes: mentionItemTypes,
+                    circles: mentionCircles,
+                    parentClassId: mentionParentClassId,
+                }),
             }),
             DiceHighlight,
             DiceValueNode,
@@ -516,7 +535,10 @@ export function RichTextEditor({
         onUpdate: ({ editor }) => {
             onChange(editor.getHTML())
         },
-        onBlur: () => {
+        onBlur: ({ editor }) => {
+            if (openMentionsOnFocus && editor.getText().trim() === "@") {
+                editor.commands.clearContent()
+            }
             onBlur?.()
         },
         editorProps: {
@@ -586,6 +608,18 @@ export function RichTextEditor({
 
                 return false
             },
+            handleDOMEvents: {
+                focus: () => {
+                    if (!openMentionsOnFocus || disabled) return false
+                    window.setTimeout(() => {
+                        const currentEditor = activeEditorRef.current
+                        if (!currentEditor || currentEditor.isDestroyed || !currentEditor.isEditable) return
+                        if (currentEditor.getText().trim() !== "") return
+                        currentEditor.commands.insertContent("@")
+                    }, 0)
+                    return false
+                },
+            },
             handleDrop: (view, event, _slice, moved) => {
                 if (!moved && event.dataTransfer && event.dataTransfer.files && event.dataTransfer.files[0]) {
                     const file = event.dataTransfer.files[0]
@@ -608,7 +642,21 @@ export function RichTextEditor({
                 return false
             },
         },
-    })
+    }, [
+        excludeId,
+        blurOnMentionSelect,
+        specificEntityMention,
+        JSON.stringify(specificEntityMentions ?? []),
+        JSON.stringify(mentionItemTypes ?? []),
+        JSON.stringify(mentionCircles ?? []),
+        mentionParentClassId,
+        openMentionsOnFocus,
+        disabled,
+    ])
+
+    useEffect(() => {
+        activeEditorRef.current = editor
+    }, [editor])
 
     useEffect(() => {
         const requestedFocusToken = focusToken ?? (autoFocus ? "__legacy-auto-focus__" : null)

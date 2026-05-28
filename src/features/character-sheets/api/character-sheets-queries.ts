@@ -29,6 +29,8 @@ import {
     removeAttack,
 } from "./character-sheets-api"
 import type {
+    CharacterSheet,
+    CharacterSheetFull,
     CharacterAttack,
     CharacterItem,
     CharacterSpell,
@@ -49,6 +51,11 @@ interface OptimisticEntityOptions {
     onOptimisticCreate?: (optimisticId: string) => void
     onCreateSuccess?: (payload: { optimisticId: string; createdId: string }) => void
 }
+
+const mergeCachedSheet = (
+    current: CharacterSheetFull | CharacterSheet | undefined,
+    updated: CharacterSheet
+): CharacterSheetFull | CharacterSheet => current ? { ...current, ...updated } : updated
 
 export const sheetsKeys = {
     all: ["character-sheets"] as const,
@@ -111,12 +118,22 @@ export function useCreateSheet() {
     })
 }
 
-export function usePatchSheet(id: string) {
+export function usePatchSheet(id: string, currentSlug?: string) {
     const qc = useQueryClient()
     return useMutation({
         mutationFn: (data: PatchSheetBody) => patchSheet(id, data),
         onSuccess: (updated) => {
-            qc.setQueryData(sheetsKeys.detail(id), updated)
+            const cachedDetail = qc.getQueryData<CharacterSheetFull | CharacterSheet>(sheetsKeys.detail(id))
+            const cachedByCurrentSlug = currentSlug
+                ? qc.getQueryData<CharacterSheetFull | CharacterSheet>(sheetsKeys.bySlug(currentSlug))
+                : undefined
+            const mergedSheet = mergeCachedSheet(cachedByCurrentSlug ?? cachedDetail, updated)
+
+            qc.setQueryData(sheetsKeys.detail(id), mergeCachedSheet(cachedDetail ?? cachedByCurrentSlug, updated))
+            if (currentSlug) {
+                qc.setQueryData(sheetsKeys.bySlug(currentSlug), mergedSheet)
+            }
+            qc.setQueryData(sheetsKeys.bySlug(updated.slug), mergedSheet)
             qc.invalidateQueries({ queryKey: sheetsKeys.details() })
         },
     })

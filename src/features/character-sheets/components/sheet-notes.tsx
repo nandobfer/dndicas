@@ -19,22 +19,42 @@ interface SheetNotesProps {
 export function SheetNotes({ sheet, form, isReadOnly = false }: SheetNotesProps) {
     const { watch, setFieldLocally, patchField } = form
     const { isPending: isLoading } = usePatchSheet(sheet._id)
+    const fields = [
+        {
+            field: "appearance" as const,
+            label: "Aparência",
+            placeholder: "Descrição física, roupas, marcas, postura... use @ para mencionar",
+        },
+        {
+            field: "history" as const,
+            label: "História",
+            placeholder: "Origem, jornada, vínculos, eventos marcantes... use @ para mencionar",
+        },
+        {
+            field: "notes" as const,
+            label: "Notas",
+            placeholder: "Anotações livres, recompensas, NPCs... use @ para mencionar",
+        },
+    ]
 
     return (
         <GlassCard>
-            <GlassCardContent className="p-4">
-                <CompactRichInput
-                    variant="full"
-                    label="Notas"
-                    value={watch("notes") ?? sheet.notes ?? ""}
-                    onChange={(v) => setFieldLocally("notes" as keyof PatchSheetBody, v)}
-                    onBlur={(v) => patchField("notes" as keyof PatchSheetBody, v)}
-                    placeholder="Anotações livres, histórico, recompensas, NPCs... use @ para mencionar"
-                    isLoading={isLoading}
-                    minRows={5}
-                    excludeId={sheet._id}
-                    disabled={isReadOnly}
-                />
+            <GlassCardContent className="grid grid-cols-1 gap-4 p-4 lg:grid-cols-3">
+                {fields.map((item) => (
+                    <CompactRichInput
+                        key={item.field}
+                        variant="full"
+                        label={item.label}
+                        value={watch(item.field) ?? sheet[item.field] ?? ""}
+                        onChange={(v) => setFieldLocally(item.field as keyof PatchSheetBody, v)}
+                        onBlur={(v) => patchField(item.field as keyof PatchSheetBody, v)}
+                        placeholder={item.placeholder}
+                        isLoading={isLoading}
+                        minRows={5}
+                        excludeId={sheet._id}
+                        disabled={isReadOnly}
+                    />
+                ))}
             </GlassCardContent>
         </GlassCard>
     )

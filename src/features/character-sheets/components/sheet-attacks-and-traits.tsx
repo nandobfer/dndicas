@@ -1,6 +1,6 @@
 "use client"
 
-import { useCallback, useState } from "react"
+import { useCallback, useEffect, useState } from "react"
 import { Plus, Trash2 } from "lucide-react"
 import { motion, AnimatePresence } from "framer-motion"
 import type { UseFormWatch } from "react-hook-form"
@@ -13,6 +13,9 @@ import { SheetInput } from "./sheet-input"
 import { CompactRichInput } from "./compact-rich-input"
 import { useAttackNameSync } from "./hooks/use-attack-name-sync"
 import { ResourceChargeList } from "./resource-charge-list"
+import { extractMentionsFromHtml } from "../utils/mention-sync"
+import { buildSpellAttackAutofill } from "../utils/attack-autofill"
+import { fetchSpell } from "@/features/spells/api/spells-api"
 
 interface SheetAttacksAndTraitsProps {
     sheet: CharacterSheet
@@ -49,9 +52,39 @@ export function useSheetAttacksAndTraitsSections({ sheet, form, isReadOnly = fal
 
     const { handleAttackNameChange } = useAttackNameSync({
         calc,
+        level: currentSheet.level,
         isReadOnly,
         onPatch: (attackId, data) => patchAttack.mutate({ attackId, data }),
     })
+
+    useEffect(() => {
+        if (isReadOnly || attacks.length === 0) return
+        let cancelled = false
+
+        void (async () => {
+            await Promise.all(attacks.map(async (attack) => {
+                const spellMention = extractMentionsFromHtml(attack.name).find((mention) => mention.entityType === "Magia")
+                if (!spellMention) return
+
+                try {
+                    const catalogSpell = await fetchSpell(spellMention.id)
+                    if (catalogSpell.circle !== 0 || !catalogSpell.baseDice) return
+
+                    const nextAttack = buildSpellAttackAutofill(catalogSpell, calc, currentSheet.level)
+                    if (cancelled) return
+                    if (attack.damageType !== nextAttack.damageType || attack.attackBonus !== nextAttack.attackBonus) {
+                        patchAttack.mutate({ attackId: attack._id, data: nextAttack })
+                    }
+                } catch {
+                    // Ignore catalog fetch failures; manual attack rows should remain editable.
+                }
+            }))
+        })()
+
+        return () => {
+            cancelled = true
+        }
+    }, [attacks, calc, currentSheet.level, isReadOnly, patchAttack])
 
     const combatStatsCard = (
         <div className="grid grid-cols-4 gap-2">
@@ -130,6 +163,9 @@ export function useSheetAttacksAndTraitsSections({ sheet, form, isReadOnly = fal
                                 onBlur={(v) => handleAttackNameChange(attack._id, v)}
                                 placeholder="Nome"
                                 disabled={isReadOnly}
+                                specificEntityMentions={["Item", "Magia"]}
+                                mentionItemTypes={["arma"]}
+                                openMentionsOnFocus
                                 focusToken={!isReadOnly && focusAttackId === rowKey ? rowKey : null}
                                 onAutoFocusApplied={clearFocusAttackId}
                             />
