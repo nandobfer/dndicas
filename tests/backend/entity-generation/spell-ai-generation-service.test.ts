@@ -59,6 +59,10 @@ vi.mock("../../../src/features/spells/api/spells-service", () => ({
     updateSpell: vi.fn(),
 }))
 
+vi.mock("../../../src/features/entity-generation/server/entity-generation-image-service", () => ({
+    resolveCandidateImage: vi.fn().mockResolvedValue("/generated-spell.png"),
+}))
+
 vi.mock("../../../scripts/seed-data/translation/genai-translator", () => ({
     GenAITranslator: class {
         configure(config: unknown) {
@@ -116,7 +120,7 @@ describe("spell AI generation service", () => {
     it("finds source spells by originalName and configures the entity generation model", async () => {
         const onProgress = vi.fn()
 
-        const result = await generateSpellCandidates("spell-1", onProgress)
+        const result = await generateSpellCandidates("spell-1", "user-1", onProgress)
 
         expect(translatorMocks.configure).toHaveBeenCalledWith({ model: ENTITY_GENERATION_MODEL, rpm: 0, rpd: 0 })
         expect(result.candidates[0]).toEqual(expect.objectContaining({
@@ -124,7 +128,7 @@ describe("spell AI generation service", () => {
             circle: 1,
             school: "Evocação",
             source: "Livro do Jogador pág. 288",
-            image: "/old.png",
+            image: "/generated-spell.png",
         }))
         expect(onProgress).toHaveBeenCalledWith({ current: 1, total: 1, message: "Gerando magia magic missile" })
     })

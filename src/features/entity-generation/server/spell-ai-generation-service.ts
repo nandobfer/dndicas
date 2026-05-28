@@ -7,6 +7,7 @@ import { updateSpell } from "@/features/spells/api/spells-service"
 import type { AttributeType, CastingTime, CreateSpellInput, DiceType, Spell as SpellType, SpellComponent, SpellSchool } from "@/features/spells/types/spells.types"
 import { GenAITranslator } from "../../../../scripts/seed-data/translation/genai-translator"
 import { ENTITY_GENERATION_MODEL } from "./entity-generation-model"
+import { resolveCandidateImage } from "./entity-generation-image-service"
 import type {
     EntityGenerationProgress,
     FiveEToolsGenerationSpell,
@@ -220,13 +221,13 @@ async function buildCandidate(
     spell: FiveEToolsGenerationSpell,
     translator: GenAITranslator,
     counter: TranslationCounter,
-    currentImage?: string,
+    userId: string,
 ): Promise<GeneratedSpellCandidate> {
     const translated = await translator.translateItem(spell.name, buildEntriesHtml(spell))
     counter.current += 1
     await counter.onProgress?.({ current: counter.current, total: counter.total, message: `Gerando magia ${spell.name}` })
 
-    return {
+    const candidate: GeneratedSpellCandidate = {
         candidateId: `${spell.name}:${spell.source}:${spell.page ?? ""}`,
         matchLabel: `${spell.name} (${formatSourceDisplay(spell.source, spell.page)})`,
         name: translated.name,
@@ -241,14 +242,24 @@ async function buildCandidate(
         saveAttribute: spell.savingThrow?.[0] ? SAVE_ATTRIBUTE_MAP[spell.savingThrow[0]] : undefined,
         baseDice: extractDiceFromEntries(spell.entries, undefined, DICE_REGEX),
         extraDicePerLevel: extractDiceFromEntries(spell.entries, spell.entriesHigherLevel, SCALE_DICE_REGEX),
-        image: currentImage,
         source: formatSourceDisplay(spell.source, spell.page),
         status: "active",
+    }
+
+    return {
+        ...candidate,
+        image: await resolveCandidateImage({
+            entityLabel: "Magia",
+            formData: candidate,
+            userId,
+            counter,
+        }),
     }
 }
 
 export async function generateSpellCandidates(
     spellId: string,
+    userId: string,
     onProgress?: (progress: EntityGenerationProgress) => void | Promise<void>,
 ): Promise<{ current: SpellType; candidates: GeneratedSpellCandidate[] }> {
     await dbConnect()
@@ -274,7 +285,7 @@ export async function generateSpellCandidates(
     const translator = createTranslator()
     const candidates: GeneratedSpellCandidate[] = []
     for (const match of matches) {
-        candidates.push(await buildCandidate(match, translator, counter, current.image))
+        candidates.push(await buildCandidate(match, translator, counter, userId))
     }
 
     return { current, candidates }

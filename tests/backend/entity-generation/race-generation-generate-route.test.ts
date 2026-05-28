@@ -20,7 +20,7 @@ describe("POST /api/admin/entity-generation/races/[id]/generate", () => {
     it("publishes progress through Pusher and returns generated candidates", async () => {
         const publishProgress = vi.fn().mockResolvedValue(undefined)
         const publishFailure = vi.fn().mockResolvedValue(undefined)
-        const generateRaceCandidates = vi.fn(async (_id: string, onProgress: (progress: { current: number; total: number; message: string }) => Promise<void>) => {
+        const generateRaceCandidates = vi.fn(async (_id: string, _userId: string, onProgress: (progress: { current: number; total: number; message: string }) => Promise<void>) => {
             await onProgress({ current: 1, total: 2, message: "Gerando raça" })
             return { current: { _id: "race-1" }, candidates: [{ candidateId: "candidate-1" }] }
         })
@@ -45,7 +45,7 @@ describe("POST /api/admin/entity-generation/races/[id]/generate", () => {
         const payload = await readJson<{ candidates: Array<{ candidateId: string }> }>(response)
 
         expect(response.status).toBe(200)
-        expect(generateRaceCandidates).toHaveBeenCalledWith("race-1", expect.any(Function))
+        expect(generateRaceCandidates).toHaveBeenCalledWith("race-1", "user-1", expect.any(Function))
         expect(publishProgress).toHaveBeenCalledWith("run-1", { current: 0, total: 1, message: "Buscando fonte de dados..." })
         expect(publishProgress).toHaveBeenCalledWith("run-1", { current: 1, total: 2, message: "Gerando raça" })
         expect(publishFailure).not.toHaveBeenCalled()

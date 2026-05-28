@@ -11,6 +11,7 @@ import type { CreateSpellInput, SpellSchool, SpellComponent, AttributeType, Cast
 import type { Race, RaceTrait, RaceVariation, SizeCategory } from "@/features/races/types/races.types"
 import { GenAITranslator } from "../../../../scripts/seed-data/translation/genai-translator"
 import { ENTITY_GENERATION_MODEL } from "./entity-generation-model"
+import { resolveCandidateImage } from "./entity-generation-image-service"
 import type {
     AdditionalSpellGroup,
     FiveEToolsGenerationEntry,
@@ -402,11 +403,13 @@ async function buildCandidate(
     spellSources: FiveEToolsGenerationSpell[],
     translator: GenAITranslator,
     counter: TranslationCounter,
+    userId: string,
 ): Promise<GeneratedRaceCandidate> {
     const fluff = fluffEntries.find((item) => normalize(item.name) === normalize(race.name) && item.source === race.source)
     const description = buildDescriptionHtml(fluff?.entries ?? race.entries)
     const translatedRace = await translateItem(translator, counter, race.name, description, `Gerando raça ${race.name}`)
     const subraces = allSubraces.filter((subrace) => normalize(subrace.raceName) === normalize(race.name) && subrace.raceSource === race.source)
+    const sourceImage = getRaceImage(fluff)
 
     const traits = await translateTraits(translator, counter, extractTraits(race.entries))
     const spells = await translateSpells(translator, counter, collectAdditionalSpells(race.additionalSpells), spellSources)
@@ -419,7 +422,7 @@ async function buildCandidate(
             name: translatedVariation.name,
             description: translatedVariation.description,
             source: formatSourceDisplay(subrace.source, subrace.page),
-            image: getRaceImage(fluff),
+            image: sourceImage,
             traits: await translateTraits(translator, counter, extractTraits(subrace.entries)),
             spells: await translateSpells(translator, counter, collectAdditionalSpells(subrace.additionalSpells), spellSources),
             size: mapSize(subrace.size),
@@ -427,13 +430,13 @@ async function buildCandidate(
         })
     }
 
-    return {
+    const candidate: GeneratedRaceCandidate = {
         candidateId: `${race.name}:${race.source}:${race.page ?? ""}`,
         matchLabel: `${race.name} (${formatSourceDisplay(race.source, race.page)})`,
         name: translatedRace.name,
         originalName: race.name,
         description: translatedRace.description,
-        image: getRaceImage(fluff),
+        image: sourceImage,
         source: formatSourceDisplay(race.source, race.page),
         status: "active",
         size: mapSize(race.size),
@@ -441,6 +444,19 @@ async function buildCandidate(
         traits,
         spells,
         variations,
+    }
+    const image = await resolveCandidateImage({
+        sourceImage,
+        entityLabel: "Raça",
+        formData: candidate,
+        userId,
+        counter,
+    })
+
+    return {
+        ...candidate,
+        image,
+        variations: candidate.variations.map((variation) => ({ ...variation, image: variation.image || image })),
     }
 }
 
@@ -521,6 +537,7 @@ async function resolveRaceSpells(spells: RawGenerationSpellRef[], scopeName: str
 
 export async function generateRaceCandidates(
     raceId: string,
+    userId: string,
     onProgress?: (progress: EntityGenerationProgress) => void | Promise<void>,
 ): Promise<{ current: Race; candidates: GeneratedRaceCandidate[] }> {
     await dbConnect()
@@ -541,7 +558,7 @@ export async function generateRaceCandidates(
     const candidates: GeneratedRaceCandidate[] = []
 
     for (const race of matches) {
-        candidates.push(await buildCandidate(race, data.subraces, data.fluff, data.spells, translator, counter))
+        candidates.push(await buildCandidate(race, data.subraces, data.fluff, data.spells, translator, counter, userId))
     }
 
     return { current, candidates }

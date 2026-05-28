@@ -20,7 +20,7 @@ describe("POST /api/admin/entity-generation/spells/[id]/generate", () => {
     it("publishes progress through Pusher and returns generated candidates", async () => {
         const publishProgress = vi.fn().mockResolvedValue(undefined)
         const publishFailure = vi.fn().mockResolvedValue(undefined)
-        const generateSpellCandidates = vi.fn(async (_id: string, onProgress: (progress: { current: number; total: number; message: string }) => Promise<void>) => {
+        const generateSpellCandidates = vi.fn(async (_id: string, _userId: string, onProgress: (progress: { current: number; total: number; message: string }) => Promise<void>) => {
             await onProgress({ current: 1, total: 1, message: "Gerando magia magic missile" })
             return { current: { _id: "spell-1" }, candidates: [{ candidateId: "magic missile:xphb:1" }] }
         })
@@ -45,7 +45,7 @@ describe("POST /api/admin/entity-generation/spells/[id]/generate", () => {
         const payload = await readJson<{ candidates: Array<{ candidateId: string }> }>(response)
 
         expect(response.status).toBe(200)
-        expect(generateSpellCandidates).toHaveBeenCalledWith("spell-1", expect.any(Function))
+        expect(generateSpellCandidates).toHaveBeenCalledWith("spell-1", "user-1", expect.any(Function))
         expect(publishProgress).toHaveBeenCalledWith("run-1", { current: 0, total: 1, message: "Buscando fonte de dados..." })
         expect(publishProgress).toHaveBeenCalledWith("run-1", { current: 1, total: 1, message: "Gerando magia magic missile" })
         expect(publishFailure).not.toHaveBeenCalled()

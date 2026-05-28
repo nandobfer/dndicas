@@ -1,13 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 
-import { generateImage } from '@/core/ai/genai';
+import { GeneratedImageTooLargeError, generateAndStoreDndImage } from '@/core/ai/dnd-image-generation-service';
 import { requireAuth } from '@/core/auth';
-import { uploadFile, buildFileProxyUrl, getImageExtensionFromMimeType } from '@/core/storage/s3';
 import { ApiResponse } from '@/core/types';
-
-const MAX_GENERATED_IMAGE_SIZE_BYTES = 5 * 1024 * 1024;
-const DEFAULT_ASPECT_RATIO = '1:1';
 
 const GenerateImageSchema = z.object({
     prompt: z.string().trim().min(1, 'Prompt é obrigatório').optional(),
@@ -25,30 +21,6 @@ interface GenerateImageResponseData {
     url: string;
     mimeType: string;
 }
-
-const buildDndImagePrompt = ({
-    entityLabel,
-    formData,
-    preferredAspectRatio,
-}: {
-    entityLabel?: string;
-    formData: unknown;
-    preferredAspectRatio?: string;
-}): string => {
-    const serializedFormData = JSON.stringify(formData, null, 2);
-
-    return [
-        'Você é um diretor de arte especializado em Dungeons & Dragons 5e, criando ilustrações com aparência premium de livro oficial.',
-        `Crie uma única arte final em aspecto ${preferredAspectRatio || DEFAULT_ASPECT_RATIO}, priorizando composição 1:1, leitura clara do sujeito principal e enquadramento adequado para uso como imagem de catálogo.`,
-        'A estética deve ser coerente com D&D: fantasia heroica, acabamento editorial, iluminação dramática, riqueza de materiais, silhueta legível e consistência com artes de sourcebooks oficiais.',
-        'Regras obrigatórias: sem texto, sem logos, sem molduras, sem watermark, sem interface, sem colagem, sem múltiplos quadros e sem visual fotográfico moderno fora do tema de fantasia.',
-        'Use TODO o JSON abaixo como fonte de verdade. Não dependa de campos específicos; leia o objeto inteiro e extraia dele o que for necessário para representar com precisão a entidade.',
-        `Contexto principal da entidade: ${entityLabel || 'Entidade de D&D'}.`,
-        'Prefira uma saída visualmente rica, mas com composição eficiente para web e adequada a um arquivo final de até 5MB.',
-        'JSON do formulário:',
-        serializedFormData,
-    ].join('\n\n');
-};
 
 /**
  * @openapi
@@ -95,7 +67,6 @@ export async function POST(request: NextRequest) {
         const userId = await requireAuth();
         const body = await request.json();
         const { prompt, model, formData, entityLabel, preferredAspectRatio } = GenerateImageSchema.parse(body);
-
         console.log('[AI image] Received payload', {
             prompt,
             model,
@@ -103,33 +74,20 @@ export async function POST(request: NextRequest) {
             preferredAspectRatio,
             formData,
         });
-
-        const promptToUse = typeof formData === 'undefined'
-            ? prompt!
-            : buildDndImagePrompt({ entityLabel, formData, preferredAspectRatio });
-
-        const generatedImage = await generateImage(promptToUse, model, userId);
-
-        if (generatedImage.buffer.byteLength > MAX_GENERATED_IMAGE_SIZE_BYTES) {
-            const response: ApiResponse = {
-                success: false,
-                error: 'A imagem gerada excedeu o limite de 5MB.',
-                code: 'AI_IMAGE_TOO_LARGE',
-            };
-
-            return NextResponse.json(response, { status: 422 });
-        }
-
-        const fileExtension = getImageExtensionFromMimeType(generatedImage.mimeType);
-        const key = `ai/generated/${userId}/${Date.now()}.${fileExtension}`;
-
-        await uploadFile(key, generatedImage.buffer, generatedImage.mimeType);
+        const generatedImage = await generateAndStoreDndImage({
+            prompt,
+            model,
+            formData,
+            entityLabel,
+            preferredAspectRatio,
+            userId,
+        });
 
         const response: ApiResponse<GenerateImageResponseData> = {
             success: true,
             data: {
-                key,
-                url: buildFileProxyUrl(key),
+                key: generatedImage.key,
+                url: generatedImage.url,
                 mimeType: generatedImage.mimeType,
             },
         };
@@ -155,6 +113,16 @@ export async function POST(request: NextRequest) {
                 code: "UNAUTHORIZED",
             };
             return NextResponse.json(response, { status: 401 });
+        }
+
+        if (error instanceof GeneratedImageTooLargeError) {
+            const response: ApiResponse = {
+                success: false,
+                error: error.message,
+                code: 'AI_IMAGE_TOO_LARGE',
+            };
+
+            return NextResponse.json(response, { status: 422 });
         }
 
         const response: ApiResponse = {
