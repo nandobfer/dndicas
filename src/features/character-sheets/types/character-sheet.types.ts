@@ -1,5 +1,8 @@
 import { z } from "zod"
 
+const relativeImageUrlSchema = z.string().startsWith("/api/upload?key=")
+const imageUrlSchema = z.union([z.string().url(), relativeImageUrlSchema])
+
 // ─── Attribute types ──────────────────────────────────────────────────────────
 
 export type AttributeType = "strength" | "dexterity" | "constitution" | "intelligence" | "wisdom" | "charisma"
@@ -94,6 +97,7 @@ export interface CharacterSheet {
     ideals: string
     bonds: string
     flaws: string
+    history: string
     notes: string
     // 2024 sheet fields
     classFeatures: string
@@ -225,6 +229,7 @@ export interface AdminSheetListItem {
     slug: string
     name: string
     photo: string | null
+    level: number | null
     class: string
     subclass: string
     race: string
@@ -339,7 +344,7 @@ export const PatchSheetSchema = z.object({
     originRef: z.string().nullable().optional(),
     inspiration: z.boolean().optional(),
     multiclassNotes: z.string().optional(),
-    photo: z.string().url().nullable().optional(),
+    photo: imageUrlSchema.nullable().optional(),
     age: z.string().optional(),
     height: z.string().optional(),
     weight: z.string().optional(),
@@ -390,6 +395,7 @@ export const PatchSheetSchema = z.object({
     ideals: z.string().optional(),
     bonds: z.string().optional(),
     flaws: z.string().optional(),
+    history: z.string().optional(),
     notes: z.string().optional(),
     classFeatures: z.string().optional(),
     speciesTraits: z.string().optional(),

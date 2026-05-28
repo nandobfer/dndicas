@@ -75,10 +75,42 @@ describe("GlassImage", () => {
         })
     })
 
+    it("does not bubble trigger or close interactions to the surrounding container", async () => {
+        const onContainerClick = vi.fn()
+
+        render(
+            <div onClick={onContainerClick}>
+                <GlassImage src="https://example.com/image.png" alt="Imagem protegida" />
+            </div>
+        )
+
+        fireEvent.click(screen.getByRole("button", { name: "Abrir imagem ampliada de Imagem protegida" }))
+
+        expect(onContainerClick).not.toHaveBeenCalled()
+
+        fireEvent.click(screen.getByRole("button", { name: "Fechar visualização ampliada" }))
+
+        await waitFor(() => {
+            expect(screen.queryByRole("dialog", { name: "Imagem protegida" })).not.toBeInTheDocument()
+        })
+
+        expect(onContainerClick).not.toHaveBeenCalled()
+    })
+
     it("renders as a static image when expand is disabled", () => {
         render(<GlassImage src="https://example.com/image.png" alt="Imagem estática" enableExpand={false} />)
 
         expect(screen.queryByRole("button", { name: /Abrir imagem ampliada/i })).not.toBeInTheDocument()
         expect(screen.getByAltText("Imagem estática")).toBeInTheDocument()
+    })
+
+    it("only stretches the default trigger wrapper when explicitly requested", () => {
+        const { rerender } = render(<GlassImage src="https://example.com/image.png" alt="Imagem compacta" />)
+
+        expect(screen.getByRole("button", { name: "Abrir imagem ampliada de Imagem compacta" })).not.toHaveClass("h-full", "w-full")
+
+        rerender(<GlassImage src="https://example.com/image.png" alt="Imagem compacta" triggerClassName="h-full w-full" />)
+
+        expect(screen.getByRole("button", { name: "Abrir imagem ampliada de Imagem compacta" })).toHaveClass("h-full", "w-full")
     })
 })

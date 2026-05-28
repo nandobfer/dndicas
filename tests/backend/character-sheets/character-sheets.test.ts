@@ -3,8 +3,23 @@ import { NextRequest } from 'next/server';
 
 import { makeJsonRequest, makeRequest, readJson } from '../helpers/http';
 import { importFresh } from '../helpers/module';
+import { PatchSheetSchema } from '@/features/character-sheets/types/character-sheet.types';
 
 describe('character sheets backend', () => {
+    it('PatchSheetSchema accepts character biography fields and sheet photo urls', () => {
+        expect(PatchSheetSchema.safeParse({
+            appearance: '<p>Aparência</p>',
+            history: '<p>História</p>',
+            notes: '<p>Notas</p>',
+            photo: 'https://cdn.test/kael.webp',
+        }).success).toBe(true);
+        expect(PatchSheetSchema.safeParse({
+            photo: '/api/upload?key=ai%2Fgenerated%2Fclerk-1%2F1700000000000.png',
+        }).success).toBe(true);
+
+        expect(PatchSheetSchema.safeParse({ photo: 'not-a-url' }).success).toBe(false);
+    });
+
     it('getAllUserSheets performs Fuse search, paginates, and computes hasNextPage', async () => {
         const sheetDocs = [
             { _id: 'sheet-1', name: 'Aragorn', class: 'Ranger', race: 'Humano', subclass: 'Hunter', updatedAt: new Date('2024-01-03T00:00:00.000Z') },

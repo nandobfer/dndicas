@@ -12,7 +12,7 @@ interface UseSheetAutoSaveOptions {
 
 
 export function useSheetAutoSave(sheet: CharacterSheet, options?: UseSheetAutoSaveOptions) {
-    const { mutate: patch, isPending } = usePatchSheet(sheet?._id)
+    const { mutate: patch, isPending } = usePatchSheet(sheet?._id, sheet?.slug)
 
     const form = useForm<PatchSheetBody>({
         defaultValues: sheet as PatchSheetBody

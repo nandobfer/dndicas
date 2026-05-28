@@ -230,6 +230,7 @@ export function SpellList({ sheet, form, isReadOnly = false }: SpellListProps) {
                                 excludeId={sheet._id}
                                 disabled={isReadOnly}
                                 specificEntityMention="Magia"
+                                openMentionsOnFocus
                                 focusToken={!isReadOnly && focusSpellId === rowKey ? rowKey : null}
                                 onAutoFocusApplied={clearFocusSpellId}
                             />

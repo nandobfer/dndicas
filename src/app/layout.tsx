@@ -10,6 +10,7 @@ import { Toaster } from "@/core/ui/toast"
 import { GlassTooltipProvider } from "@/components/ui/glass-tooltip"
 import { ScrollToTop } from "@/core/ui/scroll-to-top"
 import { WindowProvider } from "@/core/context/window-context"
+import { ChunkLoadRecovery } from "@/core/ui/chunk-load-recovery"
 export const metadata: Metadata = {
     title: "Dungeons & Dicas",
     description: "Dungeons & Dragons em Português",
@@ -64,6 +65,7 @@ export default function RootLayout({
                     />
                 </head>
                 <body className={cn("min-h-screen bg-background font-sans antialiased")}>
+                    <ChunkLoadRecovery />
                     <ScrollToTop />
                     <AppProvider>
                         <GlassTooltipProvider>

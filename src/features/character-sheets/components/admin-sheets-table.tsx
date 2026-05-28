@@ -147,7 +147,7 @@ export function AdminSheetsTable({ items, total, page, limit, isLoading = false,
                                     tabIndex={0}
                                 >
                                     <td className="px-4 py-4 min-w-[260px]">
-                                        <AdminSheetCharacterMini name={item.name} photo={item.photo} />
+                                        <AdminSheetCharacterMini name={item.name} photo={item.photo} level={item.level} />
                                     </td>
                                     <td className="px-4 py-4 align-middle"><RichSheetCell html={item.class} /></td>
                                     <td className="px-4 py-4 align-middle"><RichSheetCell html={item.subclass} /></td>

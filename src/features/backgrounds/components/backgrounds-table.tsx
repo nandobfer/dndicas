@@ -19,6 +19,7 @@ import {
     GlassDropdownMenuTrigger,
 } from "@/components/ui/glass-dropdown-menu"
 import { GlassEmptyValue } from "@/components/ui/glass-empty-value"
+import { GlassImage } from "@/components/ui/glass-image"
 import { EntityTitleLink } from "@/features/rules/components/entity-title-link"
 import { GlassAttributeChip } from "@/components/ui/glass-attribute-chip"
 import { AttributeType, attributeColors } from "@/lib/config/colors"
@@ -92,9 +93,13 @@ export function BackgroundsTable({ data, isLoading, hasNextPage = false, isFetch
                                     <td className="px-6 py-4">
                                         <div className="flex items-center gap-3">
                                             {background.image ? (
-                                                <div className="w-10 h-10 rounded-lg overflow-hidden border border-white/10 shrink-0">
-                                                    <img src={background.image} alt={background.name} className="w-full h-full object-cover" />
-                                                </div>
+                                                <GlassImage
+                                                    src={background.image}
+                                                    alt={background.name}
+                                                    className="h-10 w-10 shrink-0 rounded-lg border border-white/10"
+                                                    imageClassName="object-cover mix-blend-normal"
+                                                    showOverlay={false}
+                                                />
                                             ) : (
                                                 <div className="w-10 h-10 rounded-lg bg-blue-500/10 border border-blue-500/20 flex items-center justify-center shrink-0">
                                                     <ShieldCheck className="w-5 h-5 text-blue-400" />

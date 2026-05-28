@@ -95,6 +95,15 @@ export async function POST(request: NextRequest) {
         const userId = await requireAuth();
         const body = await request.json();
         const { prompt, model, formData, entityLabel, preferredAspectRatio } = GenerateImageSchema.parse(body);
+
+        console.log('[AI image] Received payload', {
+            prompt,
+            model,
+            entityLabel,
+            preferredAspectRatio,
+            formData,
+        });
+
         const promptToUse = typeof formData === 'undefined'
             ? prompt!
             : buildDndImagePrompt({ entityLabel, formData, preferredAspectRatio });

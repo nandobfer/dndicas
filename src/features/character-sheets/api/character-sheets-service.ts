@@ -127,6 +127,7 @@ export async function getAllSheetsForAdmin(search?: string, page = 1, limit = 10
                             slug: 1,
                             name: 1,
                             photo: 1,
+                            level: 1,
                             class: 1,
                             subclass: 1,
                             race: 1,
@@ -156,6 +157,7 @@ export async function getAllSheetsForAdmin(search?: string, page = 1, limit = 10
         slug: string
         name?: string
         photo?: string | null
+        level?: number | null
         class?: string
         subclass?: string
         race?: string
@@ -174,6 +176,7 @@ export async function getAllSheetsForAdmin(search?: string, page = 1, limit = 10
         slug: item.slug,
         name: item.name || "Ficha sem nome",
         photo: item.photo ?? null,
+        level: item.level ?? null,
         class: item.class || "—",
         subclass: item.subclass || "—",
         race: item.race || "—",
