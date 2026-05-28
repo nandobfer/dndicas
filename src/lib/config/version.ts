@@ -1,1 +1,1 @@
-gxport const APP_VERSION = "v3.0.1"
+gxport const APP_VERSION = "v3.0.2"
