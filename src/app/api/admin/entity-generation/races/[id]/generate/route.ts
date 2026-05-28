@@ -3,6 +3,8 @@ import { generateRaceCandidates } from "@/features/entity-generation/server/race
 import { EntityGenerationPusherService } from "@/features/entity-generation/realtime/entity-generation-pusher-service"
 import type { RaceGenerationGenerateRequest } from "@/features/entity-generation/types/entity-generation.types"
 
+export const maxDuration = 300
+
 async function requireAdmin() {
     const user = await currentUser()
     if (!user || user.publicMetadata?.role !== "admin") {

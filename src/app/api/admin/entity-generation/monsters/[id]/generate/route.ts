@@ -3,6 +3,8 @@ import { EntityGenerationPusherService } from "@/features/entity-generation/real
 import { generateMonsterCandidates } from "@/features/entity-generation/server/monster-ai-generation-service"
 import type { MonsterGenerationGenerateRequest } from "@/features/entity-generation/types/entity-generation.types"
 
+export const maxDuration = 300
+
 async function requireAdmin() {
     const user = await currentUser()
     if (!user || user.publicMetadata?.role !== "admin") {

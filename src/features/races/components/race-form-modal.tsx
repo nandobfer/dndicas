@@ -22,6 +22,11 @@ import { GlassStatusSwitch } from "@/components/ui/glass-status-switch"
 import { GlassInlineEmptyState } from "@/components/ui/glass-inline-empty-state"
 import { GlassColorPicker } from "@/components/ui/glass-color-picker"
 import { ImageAndDescriptionSection, TraitsSection, SpellsSection } from "@/features/classes/components/shared-form-components"
+import {
+    extractIndexedBranchFromImagePayload,
+    isImageFormPayload,
+    omitNestedArrayFromImagePayload,
+} from "@/features/shared/ai/image-form-payload"
 
 import { sizeColors, rarityColors } from "@/lib/config/colors"
 import { 
@@ -307,7 +312,19 @@ const RaceFormFields = ({
                 errors={errors}
                 imageFieldName={`${prefix}image` as any}
                 descriptionFieldName={`${prefix}description` as any}
-                getAIPayload={() => getValues?.() ?? {}}
+                getAIPayload={() => {
+                    const values = getValues?.()
+
+                    if (!isImageFormPayload(values)) {
+                        return {}
+                    }
+
+                    if (isVariation && typeof index === "number") {
+                        return extractIndexedBranchFromImagePayload(values, "variations", index)
+                    }
+
+                    return omitNestedArrayFromImagePayload(values, "variations")
+                }}
                 aiContextLabel={isVariation ? "Variação de Raça" : "Raça"}
                 entityId={entityId}
                 placeholder={placeholder || (isVariation ? "Descreva os detalhes desta variação..." : "Descreva os detalhes desta raça...")}

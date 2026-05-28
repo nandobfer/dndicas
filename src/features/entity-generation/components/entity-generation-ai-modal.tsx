@@ -130,13 +130,9 @@ export function EntityGenerationAIModal<TEntity, TCandidate>({ open, entity, ada
                 setError(payload.message)
                 setPhase("error")
             })
-            channel.bind("pusher:subscription_succeeded", () => {
-                void startGeneration()
-            })
-            channel.bind("pusher:subscription_error", () => {
-                setProgress({ current: 0, total: 1, message: "Gerando dados..." })
-                void startGeneration()
-            })
+
+            setProgress({ current: 0, total: 1, message: "Gerando dados..." })
+            await startGeneration()
         })()
 
         return () => {
@@ -145,8 +141,6 @@ export function EntityGenerationAIModal<TEntity, TCandidate>({ open, entity, ada
 
             channel.unbind(ENTITY_GENERATION_PUSHER_EVENTS.progress)
             channel.unbind(ENTITY_GENERATION_PUSHER_EVENTS.failure)
-            channel.unbind("pusher:subscription_succeeded")
-            channel.unbind("pusher:subscription_error")
             PusherBrowserService.getInstance().unsubscribe(channelName)
         }
     }, [adapter, entity, open])
