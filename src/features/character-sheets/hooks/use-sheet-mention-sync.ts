@@ -98,6 +98,7 @@ export function useSheetMentionSync({ sheet, form, isReadOnly = false }: UseShee
     const currentSpellSlots = watch("spellSlots") ?? sheet.spellSlots
     const currentHitDiceTotal = watch("hitDiceTotal") ?? sheet.hitDiceTotal ?? null
     const currentHpMax = watch("hpMax") ?? sheet.hpMax ?? null
+    const currentHpCurrent = watch("hpCurrent") ?? sheet.hpCurrent ?? null
     const currentMovementSpeed = watch("movementSpeed") ?? sheet.movementSpeed ?? ""
     const currentSize = watch("size") ?? sheet.size ?? ""
     const watchedClassRef = watch("classRef")
@@ -315,6 +316,7 @@ export function useSheetMentionSync({ sheet, form, isReadOnly = false }: UseShee
             }
             if (nextLevelOneHpMax != null) {
                 assignIfChanged(patch, "hpMax", nextLevelOneHpMax, currentHpMax)
+                assignIfChanged(patch, "hpCurrent", nextLevelOneHpMax, currentHpCurrent)
             }
 
             // ── Saving throws (class-contributed, ownership-aware) ──────────────
@@ -462,6 +464,7 @@ export function useSheetMentionSync({ sheet, form, isReadOnly = false }: UseShee
         currentSpellSlots,
         currentSpellcastingAttribute,
         currentHitDiceTotal,
+        currentHpCurrent,
         currentHpMax,
         currentArmorTraining,
         currentWeaponProficiencies,
@@ -475,6 +478,7 @@ export function useSheetMentionSync({ sheet, form, isReadOnly = false }: UseShee
         proficiencyBonusOverride,
         raceValue,
         sheet.classRef,
+        sheet.hpCurrent,
         sheet.hpMax,
         sheet.movementSpeed,
         sheet.originRef,
