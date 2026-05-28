@@ -2,6 +2,15 @@
 
 ## Features
 
+### Assistente de criação de ficha
+A tela `Minhas Fichas` oferece o menu `Criar ficha` com criação em branco e assistente guiado. A criação em branco preserva o fluxo antigo de nome aleatório + persistência imediata; o assistente abre um modal com abas não lineares para info, raça, origem, classe e atributos.
+
+O assistente mantém uma ficha temporária local compatível com os componentes da ficha, sem usar auto-save e sem persistir nada enquanto o usuário preenche. O salvamento usa `POST /api/character-sheets/assisted`, que cria a ficha, aplica os campos assistidos em uma operação lógica e retorna o `slug` para navegação. Itens e magias ficam fora do assistente nesta versão.
+
+As abas mostram status por ícone: warning enquanto incompletas e check verde quando concluídas. `info` exige apenas nome; aparência e história são opcionais. Raça, origem e classe usam seleção de catálogo com preview. A origem aplica proficiências de perícia, e a classe impede selecionar perícias já concedidas pela origem. Atributos aceitam point buy, standard array ou rolagem 4d6 removendo o menor dado, com o sexto valor calculado por `72 - soma das cinco rolagens`.
+
+Na aba de atributos, os blocos de atributo são apenas leitura; cada método possui controles próprios. A compra de pontos reinicia atributos para 8 e mostra pontos disponíveis. Valores padrão e rolagem de dados usam seletores desselecionáveis com cores por atributo. A rolagem de dados usa o painel de dados em modo travado, sempre com `4d6` e sem controles de dado, combinação, modificador ou modo.
+
 ### Menções compactas e autofill de combate
 Os inputs compactos da ficha abrem a lista de menções ao focar quando estão vazios, sem exigir digitar `@`. Isso vale para identidade, itens, magias e ataques, mantendo editores longos com o comportamento antigo.
 

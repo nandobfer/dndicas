@@ -41,6 +41,7 @@ interface DiceRollerPanelProps {
     externalResult?: DiceRollResponse | null
     disableRolling?: boolean
     disabledRollingMessage?: string | null
+    hideConfigurationControls?: boolean
 }
 
 export function DiceRollerPanel({
@@ -51,6 +52,7 @@ export function DiceRollerPanel({
     externalResult,
     disableRolling = false,
     disabledRollingMessage = null,
+    hideConfigurationControls = false,
 }: DiceRollerPanelProps) {
     const [terms, setTerms] = React.useState<DiceTerm[]>(() => getInitialState(preset).terms)
     const [modifier, setModifier] = React.useState<number | "">(() => getInitialState(preset).modifier)
@@ -266,7 +268,9 @@ export function DiceRollerPanel({
             <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(59,130,246,0.18),transparent_32%),radial-gradient(circle_at_bottom_right,rgba(245,158,11,0.12),transparent_30%)]" />
             <div className={cn(
                 "relative grid gap-5 p-5 md:p-7",
-                containerWidth === 0
+                hideConfigurationControls
+                    ? "grid-cols-1"
+                    : containerWidth === 0
                     ? "grid-cols-1"
                     : containerWidth >= 950
                         ? "grid-cols-[minmax(0,1fr)_minmax(420px,0.8fr)]"
@@ -294,91 +298,96 @@ export function DiceRollerPanel({
                     <DiceResultSummary result={showResults ? result : null} criticalState={showResults ? criticalState : null} />
                 </div>
 
+                {(!hideConfigurationControls || errorMessage || disabledRollingMessage) && (
                 <div className="space-y-4">
-                    <div className="rounded-2xl border border-white/10 bg-black/25 p-4">
-                        <div className="mb-3 flex items-center justify-between">
-                            <span className="text-[10px] font-black uppercase tracking-widest text-white/40">Adicionar dados</span>
-                            <button type="button" onClick={clear} className="inline-flex items-center gap-1 text-xs text-white/40 transition-colors hover:text-white">
-                                <RotateCcw className="h-3 w-3" />
-                                limpar
-                            </button>
-                        </div>
-                        <div data-testid="dice-add-grid" className="grid grid-cols-4 gap-2">
-                            {DICE_TYPES.map((dice) => (
-                                <motion.button
-                                    key={dice}
-                                    type="button"
-                                    whileTap={{ scale: 0.96 }}
-                                    onClick={() => addDie(dice)}
-                                    disabled={d20ModeLocked}
-                                    className={cn(
-                                        "rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm font-black transition-colors hover:bg-white/10",
-                                        d20ModeLocked && "cursor-not-allowed opacity-35 hover:bg-white/5"
-                                    )}
-                                    style={{ color: colors.rarity[diceColors[dice].rarity] }}
-                                >
-                                    {dice}
-                                </motion.button>
-                            ))}
-                        </div>
-                    </div>
-
-                    <div data-testid="dice-combination-modifier-grid" className="grid gap-4 xl:grid-cols-2">
-                        <div data-testid="dice-combination-card" className="rounded-2xl border border-white/10 bg-black/25 p-4">
-                            <p className="mb-3 text-[10px] font-black uppercase tracking-widest text-white/40">Combinação</p>
-                            <div className="space-y-2">
-                                {normalizedTerms.map((term) => {
-                                    const termControlsDisabled = d20ModeLocked && term.dice === "d20"
-                                    return (
-                                        <div
-                                            key={term.dice}
-                                            data-testid={`dice-combination-row-${term.dice}`}
-                                            className="flex min-h-[40px] items-center rounded-xl border border-white/10 bg-white/5 px-2"
+                    {!hideConfigurationControls && (
+                        <>
+                            <div className="rounded-2xl border border-white/10 bg-black/25 p-4">
+                                <div className="mb-3 flex items-center justify-between">
+                                    <span className="text-[10px] font-black uppercase tracking-widest text-white/40">Adicionar dados</span>
+                                    <button type="button" onClick={clear} className="inline-flex items-center gap-1 text-xs text-white/40 transition-colors hover:text-white">
+                                        <RotateCcw className="h-3 w-3" />
+                                        limpar
+                                    </button>
+                                </div>
+                                <div data-testid="dice-add-grid" className="grid grid-cols-4 gap-2">
+                                    {DICE_TYPES.map((dice) => (
+                                        <motion.button
+                                            key={dice}
+                                            type="button"
+                                            whileTap={{ scale: 0.96 }}
+                                            onClick={() => addDie(dice)}
+                                            disabled={d20ModeLocked}
+                                            className={cn(
+                                                "rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm font-black transition-colors hover:bg-white/10",
+                                                d20ModeLocked && "cursor-not-allowed opacity-35 hover:bg-white/5"
+                                            )}
+                                            style={{ color: colors.rarity[diceColors[dice].rarity] }}
                                         >
-                                            <button
-                                                type="button"
-                                                aria-label={`Remover ${term.dice}`}
-                                                onClick={() => adjustDie(term.dice, -1)}
-                                                disabled={termControlsDisabled}
-                                                className={cn(
-                                                    "rounded-full p-1 text-white/45 transition-colors hover:bg-white/10 hover:text-white",
-                                                    termControlsDisabled && "cursor-not-allowed opacity-35 hover:bg-transparent hover:text-white/45"
-                                                )}
-                                            >
-                                                <Minus className="h-3.5 w-3.5" />
-                                            </button>
-                                            <span className="min-w-0 flex-1 px-2 py-1 text-center text-lg font-black" style={{ color: colors.rarity[diceColors[term.dice].rarity] }}>{term.quantity}{term.dice}</span>
-                                            <button
-                                                type="button"
-                                                aria-label={`Adicionar ${term.dice}`}
-                                                onClick={() => adjustDie(term.dice, 1)}
-                                                disabled={termControlsDisabled}
-                                                className={cn(
-                                                    "rounded-full p-1 text-white/45 transition-colors hover:bg-white/10 hover:text-white",
-                                                    termControlsDisabled && "cursor-not-allowed opacity-35 hover:bg-transparent hover:text-white/45"
-                                                )}
-                                            >
-                                                <Plus className="h-3.5 w-3.5" />
-                                            </button>
-                                        </div>
-                                    )
-                                })}
+                                            {dice}
+                                        </motion.button>
+                                    ))}
+                                </div>
                             </div>
-                        </div>
 
-                        <GlassNumberInput
-                            label="Modificador"
-                            value={modifier}
-                            onChange={handleModifierChange}
-                            placeholder="0"
-                            className="rounded-2xl border border-white/10 bg-black/25 p-4"
-                        />
-                    </div>
+                            <div data-testid="dice-combination-modifier-grid" className="grid gap-4 xl:grid-cols-2">
+                                <div data-testid="dice-combination-card" className="rounded-2xl border border-white/10 bg-black/25 p-4">
+                                    <p className="mb-3 text-[10px] font-black uppercase tracking-widest text-white/40">Combinação</p>
+                                    <div className="space-y-2">
+                                        {normalizedTerms.map((term) => {
+                                            const termControlsDisabled = d20ModeLocked && term.dice === "d20"
+                                            return (
+                                                <div
+                                                    key={term.dice}
+                                                    data-testid={`dice-combination-row-${term.dice}`}
+                                                    className="flex min-h-[40px] items-center rounded-xl border border-white/10 bg-white/5 px-2"
+                                                >
+                                                    <button
+                                                        type="button"
+                                                        aria-label={`Remover ${term.dice}`}
+                                                        onClick={() => adjustDie(term.dice, -1)}
+                                                        disabled={termControlsDisabled}
+                                                        className={cn(
+                                                            "rounded-full p-1 text-white/45 transition-colors hover:bg-white/10 hover:text-white",
+                                                            termControlsDisabled && "cursor-not-allowed opacity-35 hover:bg-transparent hover:text-white/45"
+                                                        )}
+                                                    >
+                                                        <Minus className="h-3.5 w-3.5" />
+                                                    </button>
+                                                    <span className="min-w-0 flex-1 px-2 py-1 text-center text-lg font-black" style={{ color: colors.rarity[diceColors[term.dice].rarity] }}>{term.quantity}{term.dice}</span>
+                                                    <button
+                                                        type="button"
+                                                        aria-label={`Adicionar ${term.dice}`}
+                                                        onClick={() => adjustDie(term.dice, 1)}
+                                                        disabled={termControlsDisabled}
+                                                        className={cn(
+                                                            "rounded-full p-1 text-white/45 transition-colors hover:bg-white/10 hover:text-white",
+                                                            termControlsDisabled && "cursor-not-allowed opacity-35 hover:bg-transparent hover:text-white/45"
+                                                        )}
+                                                    >
+                                                        <Plus className="h-3.5 w-3.5" />
+                                                    </button>
+                                                </div>
+                                            )
+                                        })}
+                                    </div>
+                                </div>
 
-                    {canUseD20Mode && (
-                        <div className="space-y-3 rounded-2xl border border-white/10 bg-black/25 p-4">
-                            <DiceModeSelector value={activeMode} onChange={handleModeChange} />
-                        </div>
+                                <GlassNumberInput
+                                    label="Modificador"
+                                    value={modifier}
+                                    onChange={handleModifierChange}
+                                    placeholder="0"
+                                    className="rounded-2xl border border-white/10 bg-black/25 p-4"
+                                />
+                            </div>
+
+                            {canUseD20Mode && (
+                                <div className="space-y-3 rounded-2xl border border-white/10 bg-black/25 p-4">
+                                    <DiceModeSelector value={activeMode} onChange={handleModeChange} />
+                                </div>
+                            )}
+                        </>
                     )}
 
                     {(errorMessage || disabledRollingMessage) && (
@@ -393,6 +402,7 @@ export function DiceRollerPanel({
                         </p>
                     )}
                 </div>
+                )}
             </div>
         </GlassCard>
     )

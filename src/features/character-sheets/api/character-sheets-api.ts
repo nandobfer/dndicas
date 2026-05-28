@@ -12,6 +12,7 @@ import type {
     CharacterAttack,
     SheetsListResponse,
     PatchSheetBody,
+    CreateAssistedSheetBody,
     CreateItemBody,
     PatchItemBody,
     CreateSpellBody,
@@ -71,6 +72,10 @@ export const fetchSheetBySlug = (slug: string): Promise<CharacterSheetFull> =>
 
 export const createSheet = (name?: string): Promise<CharacterSheet> =>
     fetch(getCharacterSheetClientConfig().apiBase, buildJsonRequestInit("POST", name ? { name } : {}))
+        .then(handleResponse<CharacterSheet>)
+
+export const createAssistedSheet = (data: CreateAssistedSheetBody): Promise<CharacterSheet> =>
+    fetch(`${getCharacterSheetClientConfig().apiBase}/assisted`, buildJsonRequestInit("POST", data))
         .then(handleResponse<CharacterSheet>)
 
 export const patchSheet = (id: string, data: PatchSheetBody): Promise<CharacterSheet> =>

@@ -6,6 +6,7 @@ import {
     fetchSheet,
     fetchSheetBySlug,
     createSheet,
+    createAssistedSheet,
     patchSheet,
     deleteSheet,
     triggerLongRest,
@@ -43,6 +44,7 @@ import type {
     CreateFeatBody,
     CreateAttackBody,
     PatchAttackBody,
+    CreateAssistedSheetBody,
 } from "../types/character-sheet.types"
 
 const buildOptimisticId = (prefix: string) => `optimistic-${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
@@ -114,6 +116,14 @@ export function useCreateSheet() {
     const qc = useQueryClient()
     return useMutation({
         mutationFn: (name?: string) => createSheet(name),
+        onSuccess: () => qc.invalidateQueries({ queryKey: sheetsKeys.lists() }),
+    })
+}
+
+export function useCreateAssistedSheet() {
+    const qc = useQueryClient()
+    return useMutation({
+        mutationFn: (data: CreateAssistedSheetBody) => createAssistedSheet(data),
         onSuccess: () => qc.invalidateQueries({ queryKey: sheetsKeys.lists() }),
     })
 }

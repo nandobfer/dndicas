@@ -129,6 +129,61 @@ describe('character sheets backend', () => {
         expect(createBlankSheet).toHaveBeenCalledWith('clerk-1', 'hero', 'Nova Ficha');
     });
 
+    it('POST /api/character-sheets/assisted creates a sheet and patches assisted fields', async () => {
+        const createBlankSheet = vi.fn().mockResolvedValue({ _id: 'sheet-1', slug: 'hero/kael', name: 'Kael' });
+        const patchSheet = vi.fn().mockResolvedValue({ _id: 'sheet-1', slug: 'hero/kael', name: 'Kael', race: 'Humano' });
+
+        vi.doMock('@clerk/nextjs/server', () => ({
+            auth: vi.fn().mockResolvedValue({ userId: 'clerk-1' }),
+            currentUser: vi.fn().mockResolvedValue({
+                username: 'hero',
+                firstName: 'Hero',
+            }),
+        }));
+        vi.doMock('@/features/character-sheets/api/character-sheets-service', () => ({
+            createBlankSheet,
+            patchSheet,
+        }));
+
+        const mod = await importFresh<typeof import('@/app/api/character-sheets/assisted/route')>('@/app/api/character-sheets/assisted/route');
+        const response = await mod.POST(makeJsonRequest('http://localhost/api/character-sheets/assisted', {
+            method: 'POST',
+            body: JSON.stringify({
+                sheet: {
+                    name: 'Kael',
+                    race: 'Humano',
+                    strength: 15,
+                },
+            }),
+        }));
+
+        expect(response.status).toBe(201);
+        expect(createBlankSheet).toHaveBeenCalledWith('clerk-1', 'hero', 'Kael');
+        expect(patchSheet).toHaveBeenCalledWith('sheet-1', 'clerk-1', {
+            race: 'Humano',
+            strength: 15,
+        });
+    });
+
+    it('POST /api/character-sheets/assisted rejects missing character names', async () => {
+        vi.doMock('@clerk/nextjs/server', () => ({
+            auth: vi.fn().mockResolvedValue({ userId: 'clerk-1' }),
+            currentUser: vi.fn(),
+        }));
+        vi.doMock('@/features/character-sheets/api/character-sheets-service', () => ({
+            createBlankSheet: vi.fn(),
+            patchSheet: vi.fn(),
+        }));
+
+        const mod = await importFresh<typeof import('@/app/api/character-sheets/assisted/route')>('@/app/api/character-sheets/assisted/route');
+        const response = await mod.POST(makeJsonRequest('http://localhost/api/character-sheets/assisted', {
+            method: 'POST',
+            body: JSON.stringify({ sheet: { race: 'Humano' } }),
+        }));
+
+        expect(response.status).toBe(400);
+    });
+
     it('GET /api/character-sheets/by-slug validates missing slug', async () => {
         vi.doMock('@/features/character-sheets/api/character-sheets-service', () => ({
             getSheetBySlug: vi.fn(),

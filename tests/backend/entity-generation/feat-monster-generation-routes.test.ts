@@ -37,7 +37,7 @@ describe("entity generation feat and monster routes", () => {
     it("generates monster candidates through Pusher", async () => {
         const publishProgress = vi.fn().mockResolvedValue(undefined)
         const publishFailure = vi.fn().mockResolvedValue(undefined)
-        const generateMonsterCandidates = vi.fn(async (_id: string, onProgress: (progress: { current: number; total: number; message: string }) => Promise<void>) => {
+        const generateMonsterCandidates = vi.fn(async (_id: string, _userId: string, onProgress: (progress: { current: number; total: number; message: string }) => Promise<void>) => {
             await onProgress({ current: 1, total: 2, message: "Gerando monstro Goblin" })
             await onProgress({ current: 2, total: 2, message: "Gerando características" })
             return { current: { _id: "monster-1" }, candidates: [{ candidateId: "goblin:mm" }] }
@@ -59,7 +59,7 @@ describe("entity generation feat and monster routes", () => {
         const payload = await readJson<{ candidates: Array<{ candidateId: string }> }>(response)
 
         expect(response.status).toBe(200)
-        expect(generateMonsterCandidates).toHaveBeenCalledWith("monster-1", expect.any(Function))
+        expect(generateMonsterCandidates).toHaveBeenCalledWith("monster-1", "user-1", expect.any(Function))
         expect(publishProgress).toHaveBeenCalledWith("run-monster", { current: 0, total: 1, message: "Buscando fonte de dados..." })
         expect(publishProgress).toHaveBeenCalledWith("run-monster", { current: 1, total: 2, message: "Gerando monstro Goblin" })
         expect(publishProgress).toHaveBeenCalledWith("run-monster", { current: 2, total: 2, message: "Gerando características" })

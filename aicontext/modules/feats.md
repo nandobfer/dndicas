@@ -24,7 +24,7 @@ The Feats module manages D&D 5e feats/talents with full CRUD operations, level-b
 ## Features
 
 ### Geração com IA por talento
-Admins podem usar `Gerar com IA` nos menus de talentos da tabela, da lista em cards e do preview tooltip. A ação usa `EntityGenerationAIModal` com `featGenerationAdapter`, publica progresso via Pusher, busca candidatos em `src/lib/5etools-data/feats.json`, ignora feats com `reprintedAs`, traduz nome/descrição com `GenAITranslator` no modelo `gemini-3.1-flash-lite` e compara o estado atual com o candidato gerado. Ao salvar, `/api/admin/entity-generation/feats/[id]/apply` sobrescreve nome, descrição, fonte, nível, pré-requisitos, bônus de atributo, categoria e status, mantendo o audit log pelo `updateFeat`.
+Admins podem usar `Gerar com IA` nos menus de talentos da tabela, da lista em cards e do preview tooltip. A ação usa `EntityGenerationAIModal` com `featGenerationAdapter`, publica progresso via Pusher, busca candidatos em `src/lib/5etools-data/feats.json`, ignora feats com `reprintedAs`, traduz nome/descrição com `GenAITranslator` no modelo `gemini-3.1-flash-lite` e compara o estado atual com o candidato gerado. Talentos não geram imagem nesse fluxo porque o modelo atual de `Feat` não possui campo `image`. Ao salvar, `/api/admin/entity-generation/feats/[id]/apply` sobrescreve nome, descrição, fonte, nível, pré-requisitos, bônus de atributo, categoria e status, mantendo o audit log pelo `updateFeat`.
 
 ### Infinite scroll nas tabelas de catálogo
 As tabelas de talentos usam `useInfiniteFeats`, a mesma fonte de dados do modo lista. Ao chegar ao fim da tabela, um sentinel carrega a próxima página automaticamente e substitui a paginação tradicional.

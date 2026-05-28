@@ -17,7 +17,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     let runId: string | undefined
 
     try {
-        await requireAdmin()
+        const user = await requireAdmin()
         const { id } = await params
         const body = (await request.json()) as MonsterGenerationGenerateRequest
         runId = body.runId?.trim()
@@ -27,7 +27,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
         const pusher = EntityGenerationPusherService.getInstance()
         await pusher.publishProgress(runId, { current: 0, total: 1, message: "Buscando fonte de dados..." })
 
-        const result = await generateMonsterCandidates(id, (progress) => pusher.publishProgress(runId!, progress))
+        const result = await generateMonsterCandidates(id, user.id, (progress) => pusher.publishProgress(runId!, progress))
         return Response.json(result)
     } catch (error) {
         const message = error instanceof Error ? error.message : "Erro ao gerar dados com IA."
