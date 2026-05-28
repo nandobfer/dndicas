@@ -5,7 +5,7 @@ import { fetchSpell } from "@/features/spells/api/spells-api"
 import { fetchItemById } from "@/features/items/api/items-api"
 import { extractMentionsFromHtml } from "../../utils/mention-sync"
 import type { CharacterAttack } from "../../types/character-sheet.types"
-import { buildDiceValueHtml, buildWeaponAttackAutofill, formatBonus, resolveCatalogItemType } from "../../utils/attack-autofill"
+import { buildSpellAttackAutofill, buildWeaponAttackAutofill, resolveCatalogItemType } from "../../utils/attack-autofill"
 
 interface CalcValues {
     spellAttackBonus: { value: number }
@@ -18,11 +18,12 @@ interface CalcValues {
 
 interface UseAttackNameSyncOptions {
     calc: CalcValues
+    level: number
     isReadOnly?: boolean
     onPatch: (attackId: string, data: Partial<Omit<CharacterAttack, "_id" | "sheetId" | "createdAt">>) => void
 }
 
-export function useAttackNameSync({ calc, isReadOnly = false, onPatch }: UseAttackNameSyncOptions) {
+export function useAttackNameSync({ calc, level, isReadOnly = false, onPatch }: UseAttackNameSyncOptions) {
     // Cache: attackId → last processed catalogId
     const processedRef = useRef<Map<string, string>>(new Map())
 
@@ -50,16 +51,8 @@ export function useAttackNameSync({ calc, isReadOnly = false, onPatch }: UseAtta
                 if (spellMention) {
                     const catalogSpell = await fetchSpell(spellMention.id)
 
-                    // Format damage from baseDice
-                    let damageText = ""
-                    if (catalogSpell.baseDice) {
-                        const { quantidade, tipo } = catalogSpell.baseDice
-                        damageText = `${buildDiceValueHtml(quantidade, tipo)}`
-                    }
-
                     onPatch(attackId, {
-                        damageType: damageText,
-                        attackBonus: formatBonus(calc.spellAttackBonus.value),
+                        ...buildSpellAttackAutofill(catalogSpell, calc, level),
                     })
                 } else if (itemMention) {
                     const catalogItem = await fetchItemById(itemMention.id)
@@ -71,7 +64,7 @@ export function useAttackNameSync({ calc, isReadOnly = false, onPatch }: UseAtta
                 // Silently ignore fetch errors
             }
         },
-        [isReadOnly, onPatch, calc]
+        [isReadOnly, onPatch, calc, level]
     )
 
     return { handleAttackNameChange }

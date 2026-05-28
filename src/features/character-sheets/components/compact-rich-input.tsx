@@ -30,6 +30,11 @@ interface CompactRichInputProps {
     focusToken?: string | null
     onAutoFocusApplied?: () => void
     specificEntityMention?: EntityType
+    specificEntityMentions?: EntityType[]
+    mentionItemTypes?: string[]
+    mentionCircles?: number[]
+    mentionParentClassId?: string | null
+    openMentionsOnFocus?: boolean
 }
 
 export function CompactRichInput({
@@ -51,6 +56,11 @@ export function CompactRichInput({
     focusToken,
     onAutoFocusApplied,
     specificEntityMention,
+    specificEntityMentions,
+    mentionItemTypes,
+    mentionCircles,
+    mentionParentClassId,
+    openMentionsOnFocus = false,
 }: CompactRichInputProps) {
     const blockNewlines = disableNewlines ?? variant === "simple"
     const [localValue, setLocalValue] = useState(value)
@@ -69,7 +79,8 @@ export function CompactRichInput({
     )
 
     const handleBlur = useCallback(() => {
-        onBlur?.(localValue)
+        const nextValue = localValue.replace(/<p>\s*@\s*<\/p>/gi, "").trim()
+        onBlur?.(nextValue === "@" ? "" : nextValue)
     }, [onBlur, localValue])
 
     if (variant === "full") {
@@ -101,6 +112,11 @@ export function CompactRichInput({
                         focusToken={focusToken}
                         onAutoFocusApplied={onAutoFocusApplied}
                         specificEntityMention={specificEntityMention}
+                        specificEntityMentions={specificEntityMentions}
+                        mentionItemTypes={mentionItemTypes}
+                        mentionCircles={mentionCircles}
+                        mentionParentClassId={mentionParentClassId}
+                        openMentionsOnFocus={openMentionsOnFocus}
                     />
                 </div>
             </div>
@@ -129,6 +145,11 @@ export function CompactRichInput({
                     focusToken={focusToken}
                     onAutoFocusApplied={onAutoFocusApplied}
                     specificEntityMention={specificEntityMention}
+                    specificEntityMentions={specificEntityMentions}
+                    mentionItemTypes={mentionItemTypes}
+                    mentionCircles={mentionCircles}
+                    mentionParentClassId={mentionParentClassId}
+                    openMentionsOnFocus={openMentionsOnFocus}
                     className={cn(
                         // Strip glass container for simple variant so our bottom border is the only affordance
                         "!bg-transparent !border-0 !shadow-none !backdrop-blur-none !rounded-none",

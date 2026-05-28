@@ -45,6 +45,10 @@ export interface UnifiedEntity {
 
 export interface UnifiedSearchOptions {
     specificEntityType?: EntityType
+    specificEntityTypes?: EntityType[]
+    itemTypes?: string[]
+    circles?: number[]
+    parentClassId?: string | null
 }
 
 // Simple in-memory cache for search data
@@ -91,10 +95,22 @@ async function getSearchData(): Promise<UnifiedEntity[]> {
     return cachedData
 }
 
-function filterEntitiesByOptions(items: UnifiedEntity[], options?: UnifiedSearchOptions): UnifiedEntity[] {
-    return options?.specificEntityType
-        ? items.filter((entity) => entity.type === options.specificEntityType)
-        : items
+export function filterEntitiesByOptions(items: UnifiedEntity[], options?: UnifiedSearchOptions): UnifiedEntity[] {
+    if (!options) return items
+
+    const entityTypes = options.specificEntityTypes?.length
+        ? options.specificEntityTypes
+        : options.specificEntityType
+            ? [options.specificEntityType]
+            : null
+
+    return items.filter((entity) => {
+        if (entityTypes && !entityTypes.includes(entity.type as EntityType)) return false
+        if (options.itemTypes?.length && entity.type === "Item" && !options.itemTypes.includes(entity.itemType ?? "")) return false
+        if (options.circles?.length && entity.type === "Magia" && !options.circles.includes(entity.circle ?? -1)) return false
+        if (options.parentClassId && entity.type === "Subclasse" && entity.metadata?.parentClassId !== options.parentClassId) return false
+        return true
+    })
 }
 
 /**

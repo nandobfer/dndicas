@@ -13,11 +13,11 @@ import { GlassCard, GlassCardContent } from "@/components/ui/glass-card"
 import { GlassSelector } from "@/components/ui/glass-selector"
 import { GlassPopover, GlassPopoverContent, GlassPopoverTrigger } from "@/components/ui/glass-popover"
 import { colors, diceColors, type DiceType, type EntityType } from "@/lib/config/colors"
-import { Table2 } from "lucide-react"
 import { useClass } from "@/features/classes/api/classes-queries"
 import { ClassProgressionTable } from "@/features/classes/components/class-progression-table"
 import { useCharacterCalculations } from "../hooks/use-character-calculations"
 import { CalcTooltip } from "./calc-tooltip"
+import { getActiveClassMentions } from "../utils/mention-sync"
 
 const HIT_DIE_OPTIONS: DiceType[] = ["d4", "d6", "d8", "d10", "d12"]
 const IDENTITY_FIELDS = [
@@ -71,7 +71,10 @@ export function useSheetHeaderSections({ sheet, form, items = [], isReadOnly = f
   const [hpAdjustmentValue, setHpAdjustmentValue] = useState("0")
   const classRef = watch("classRef") ?? sheet.classRef
   const subclassRef = watch("subclassRef") ?? sheet.subclassRef
-  const { data: currentClass } = useClass(classRef ?? null)
+  const classValue = String(watch("class") ?? sheet.class ?? "")
+  const activeClassMentionId = getActiveClassMentions(classValue)[0]?.id ?? null
+  const subclassParentClassId = classRef ?? activeClassMentionId
+  const { data: currentClass } = useClass(subclassParentClassId ?? null)
   const [isProgressionOpen, setIsProgressionOpen] = useState(false)
   const closeTimeoutRef = useRef<NodeJS.Timeout | null>(null)
 
@@ -181,6 +184,8 @@ export function useSheetHeaderSections({ sheet, form, items = [], isReadOnly = f
               excludeId={sheet._id}
               disabled={isReadOnly}
               specificEntityMention={item.specificEntityMention}
+              mentionParentClassId={item.field === "subclass" ? subclassParentClassId : null}
+              openMentionsOnFocus
             />
           ))}
         </div>
@@ -225,10 +230,10 @@ export function useSheetHeaderSections({ sheet, form, items = [], isReadOnly = f
                               onMouseEnter={handleProgressionEnter}
                               onMouseLeave={handleProgressionLeave}
                               onClick={() => setIsProgressionOpen((prev) => !prev)}
-                              className="mt-3 z-10 inline-flex items-center justify-center w-8 h-8 rounded-full border border-amber-400/20 bg-amber-500/10 text-amber-400/70 hover:text-amber-300 hover:bg-amber-500/15 transition-colors"
+                              className="mt-3 z-10 inline-flex items-center justify-center rounded-md border border-amber-400/30 bg-amber-500/15 px-3 py-1.5 text-[9px] font-black uppercase tracking-widest text-amber-300/85 shadow-[0_0_18px_rgba(245,158,11,0.12)] hover:border-amber-300/50 hover:bg-amber-500/25 hover:text-amber-200 transition-colors"
                               aria-label="Ver progressão da classe"
                           >
-                              <Table2 className="w-3.5 h-3.5" />
+                              tabela de progressão
                           </button>
                       </GlassPopoverTrigger>
                       <GlassPopoverContent

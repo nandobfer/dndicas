@@ -97,6 +97,7 @@ export function useSheetMentionSync({ sheet, form, isReadOnly = false }: UseShee
     const currentSavingThrows = watch("savingThrows") ?? sheet.savingThrows
     const currentSpellSlots = watch("spellSlots") ?? sheet.spellSlots
     const currentHitDiceTotal = watch("hitDiceTotal") ?? sheet.hitDiceTotal ?? null
+    const currentHpMax = watch("hpMax") ?? sheet.hpMax ?? null
     const currentMovementSpeed = watch("movementSpeed") ?? sheet.movementSpeed ?? ""
     const currentSize = watch("size") ?? sheet.size ?? ""
     const watchedClassRef = watch("classRef")
@@ -264,6 +265,9 @@ export function useSheetMentionSync({ sheet, form, isReadOnly = false }: UseShee
             const nextSpellcastingAttribute = mapCatalogAttributeToSheetAttribute(winningSpellSource?.spellcastingAttribute)
             const nextSpellSlots = mapSpellSlotsForLevel(level, winningSpellSource, currentSpellSlots)
             const nextHitDice = mapHitDiceToSheetHitDice(resolved.activeClasses[0]?.hitDice)
+            const nextLevelOneHpMax = level === 1 && resolved.activeClasses[0]?.hitDice
+                ? getLevelOneHpMax(resolved.activeClasses[0].hitDice, calc.attrMods.constitution.value)
+                : null
             const nextResourceCharges = await syncMentionBoundResourceCharges({
                 classFeatures: nextClassFeatures,
                 speciesTraits: nextSpeciesTraits,
@@ -308,6 +312,9 @@ export function useSheetMentionSync({ sheet, form, isReadOnly = false }: UseShee
             assignIfChanged(patch, "featuresNotes", nextFeaturesNotes, featuresNotes)
             if (nextHitDice) {
                 assignIfChanged(patch, "hitDiceTotal", nextHitDice, currentHitDiceTotal)
+            }
+            if (nextLevelOneHpMax != null) {
+                assignIfChanged(patch, "hpMax", nextLevelOneHpMax, currentHpMax)
             }
 
             // ── Saving throws (class-contributed, ownership-aware) ──────────────
@@ -455,6 +462,7 @@ export function useSheetMentionSync({ sheet, form, isReadOnly = false }: UseShee
         currentSpellSlots,
         currentSpellcastingAttribute,
         currentHitDiceTotal,
+        currentHpMax,
         currentArmorTraining,
         currentWeaponProficiencies,
         dexterity,
@@ -467,6 +475,7 @@ export function useSheetMentionSync({ sheet, form, isReadOnly = false }: UseShee
         proficiencyBonusOverride,
         raceValue,
         sheet.classRef,
+        sheet.hpMax,
         sheet.movementSpeed,
         sheet.originRef,
         sheet.raceRef,
@@ -538,6 +547,12 @@ function isSpellcastingSubclass(subclass: ResolvedSubclass) {
 
 function dedupeStrings(items: string[]): string[] {
     return Array.from(new Set(items))
+}
+
+export function getLevelOneHpMax(hitDice: string, constitutionModifier: number): number {
+    const dieValue = parseInt(hitDice.replace(/^d/i, ""), 10)
+    if (!Number.isFinite(dieValue)) return Math.max(1, constitutionModifier + 1)
+    return Math.max(1, dieValue + constitutionModifier)
 }
 
 function dedupeSkillNames(skills: string[]): SkillName[] {

@@ -132,6 +132,8 @@ export function ItemList({ sheet, form, isReadOnly = false }: ItemListProps) {
                                     placeholder="Nome do item"
                                     excludeId={sheet._id}
                                     disabled={isReadOnly}
+                                    specificEntityMention="Item"
+                                    openMentionsOnFocus
                                     focusToken={!isReadOnly && focusItemId === rowKey ? rowKey : null}
                                     onAutoFocusApplied={clearFocusItemId}
                                 />
