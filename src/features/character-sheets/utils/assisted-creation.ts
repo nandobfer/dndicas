@@ -42,7 +42,7 @@ export const POINT_BUY_COSTS: Record<number, number> = {
     15: 9,
 }
 
-const CATALOG_TO_SHEET_ATTRIBUTE: Record<CatalogAttributeType, AttributeType> = {
+export const CATALOG_TO_SHEET_ATTRIBUTE: Record<CatalogAttributeType, AttributeType> = {
     Força: "strength",
     Destreza: "dexterity",
     Constituição: "constitution",

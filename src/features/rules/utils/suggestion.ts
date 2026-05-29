@@ -1,4 +1,5 @@
 import { ReactRenderer } from '@tiptap/react'
+import type { Editor } from '@tiptap/core'
 import tippy from 'tippy.js'
 import MentionList, { MentionListProps, MentionListRef } from '../components/mention-list'
 import { performUnifiedSearch, peekUnifiedSearch, type UnifiedEntity, type UnifiedSearchOptions } from '@/core/utils/search-engine'
@@ -16,10 +17,14 @@ export const getSuggestionConfig = (options?: {
     itemTypes?: string[]
     circles?: number[]
     parentClassId?: string | null
+    onStart?: (context: { editor: Editor | null }) => void
+    onExit?: (context: { editor: Editor | null; wasSelection: boolean }) => void
 }) => {
     let component: ReactRenderer<MentionListRef, MentionListProps> | null = null
     let loading = false
     let currentQuery = ""
+    let currentEditor: Editor | null = null
+    let wasSelection = false
 
     const searchOptions: UnifiedSearchOptions = {
         specificEntityType: options?.specificEntityMention,
@@ -43,9 +48,10 @@ export const getSuggestionConfig = (options?: {
         normalizeResults(peekUnifiedSearch(query, 10, 0, searchOptions) ?? [])
 
     const wrapCommand = (props: any) => {
-        if (!options?.blurOnMentionSelect) return props.command
         return (item: any) => {
+            wasSelection = true
             props.command(item)
+            if (!options?.blurOnMentionSelect) return
             setTimeout(() => {
                 if (!props.editor.isDestroyed) {
                     props.editor.commands.blur()
@@ -87,6 +93,9 @@ export const getSuggestionConfig = (options?: {
 
             return {
                 onStart: (props: any) => {
+                    currentEditor = props.editor
+                    wasSelection = false
+                    options?.onStart?.({ editor: currentEditor })
                     const cachedItems = getCachedItems(currentQuery)
 
                     component = new ReactRenderer(MentionList, {
@@ -125,6 +134,7 @@ export const getSuggestionConfig = (options?: {
                 },
 
                 onUpdate: (props: any) => {
+                    currentEditor = props.editor
                     if (component) {
                         component.updateProps({ ...props, command: wrapCommand(props), loading, query: currentQuery })
                     }
@@ -148,6 +158,7 @@ export const getSuggestionConfig = (options?: {
                 },
 
                 onExit: () => {
+                    options?.onExit?.({ editor: currentEditor, wasSelection })
                     if (popup && popup[0]) {
                         popup[0].destroy()
                     }
@@ -155,6 +166,8 @@ export const getSuggestionConfig = (options?: {
                         component.destroy()
                         component = null
                     }
+                    currentEditor = null
+                    wasSelection = false
                 },
             }
         },

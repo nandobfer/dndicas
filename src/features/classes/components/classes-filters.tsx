@@ -13,10 +13,11 @@ export interface ClassesFiltersProps {
     onStatusChange: (status: ClassesFilters["status"]) => void
     onSourcesChange: (sources: string[]) => void
     isSearching?: boolean
+    hideStatus?: boolean
     className?: string
 }
 
-export function ClassesFilters({ filters, onSearchChange, onStatusChange, onSourcesChange, isSearching = false, className }: ClassesFiltersProps) {
+export function ClassesFilters({ filters, onSearchChange, onStatusChange, onSourcesChange, isSearching = false, hideStatus = false, className }: ClassesFiltersProps) {
     const { isAdmin } = useAuth()
 
     return (
@@ -39,8 +40,12 @@ export function ClassesFilters({ filters, onSearchChange, onStatusChange, onSour
                 </div>
 
                 <div className="flex items-center gap-3">
-                    <span className="text-xs font-semibold text-white/40 uppercase tracking-wider whitespace-nowrap">Status:</span>
-                    <StatusChips value={(filters.status as StatusFilter) || "all"} onChange={(v) => onStatusChange(v as ClassesFilters["status"])} />
+                    {!hideStatus && (
+                        <>
+                            <span className="text-xs font-semibold text-white/40 uppercase tracking-wider whitespace-nowrap">Status:</span>
+                            <StatusChips value={(filters.status as StatusFilter) || "all"} onChange={(v) => onStatusChange(v as ClassesFilters["status"])} />
+                        </>
+                    )}
                 </div>
             </div>
         </div>

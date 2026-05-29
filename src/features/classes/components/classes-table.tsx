@@ -35,12 +35,15 @@ export interface ClassesTableProps {
     hasNextPage?: boolean
     isFetchingNextPage?: boolean
     hasActiveFilters?: boolean
-    onEdit: (characterClass: CharacterClass) => void
-    onDelete: (characterClass: CharacterClass) => void
+    onEdit?: (characterClass: CharacterClass) => void
+    onDelete?: (characterClass: CharacterClass) => void
     onLoadMore?: () => void
+    selectedId?: string | null
+    onSelect?: (characterClass: CharacterClass) => void
+    hideActions?: boolean
 }
 
-export function ClassesTable({ classes, total, isLoading = false, hasNextPage = false, isFetchingNextPage = false, hasActiveFilters = false, onEdit, onDelete, onLoadMore }: ClassesTableProps) {
+export function ClassesTable({ classes, total, isLoading = false, hasNextPage = false, isFetchingNextPage = false, hasActiveFilters = false, onEdit, onDelete, onLoadMore, selectedId, onSelect, hideActions = false }: ClassesTableProps) {
     const { isAdmin } = useAuth()
 
     if (isLoading && classes.length === 0) {
@@ -101,7 +104,7 @@ export function ClassesTable({ classes, total, isLoading = false, hasNextPage = 
                             <th className="px-6 py-4 text-left text-xs font-semibold text-white/50 uppercase tracking-wider w-[100px]">Subclasses</th>
                             <th className="px-6 py-4 text-left text-xs font-semibold text-white/50 uppercase tracking-wider w-[120px]">Fonte</th>
                             <th className="px-6 py-4 text-center text-xs font-semibold text-white/50 uppercase tracking-wider w-[60px]">Prog.</th>
-                            {isAdmin && <th className="px-6 py-4 text-right text-xs font-semibold text-white/50 uppercase tracking-wider w-[80px]">Ações</th>}
+                            {!hideActions && isAdmin && <th className="px-6 py-4 text-right text-xs font-semibold text-white/50 uppercase tracking-wider w-[80px]">Ações</th>}
                         </tr>
                     </thead>
                     <tbody className="divide-y divide-white/5">
@@ -116,7 +119,12 @@ export function ClassesTable({ classes, total, isLoading = false, hasNextPage = 
                                         animate="animate"
                                         exit={{ opacity: 0 }}
                                         transition={{ delay: index * 0.02 }}
-                                        className="hover:bg-white/3 group"
+                                        onClick={onSelect ? () => onSelect(c) : undefined}
+                                        className={cn(
+                                            "group",
+                                            onSelect ? "cursor-pointer" : "",
+                                            selectedId === c._id ? "bg-violet-500/15 hover:bg-violet-500/20" : "hover:bg-white/3",
+                                        )}
                                     >
                                         {/* Identity */}
                                         <td className="px-6 py-4">
@@ -139,6 +147,7 @@ export function ClassesTable({ classes, total, isLoading = false, hasNextPage = 
                                                         name={c.name}
                                                         entityType="Classe"
                                                         className={cn("text-sm font-medium block", c.status === "inactive" ? "text-white/30" : "text-white/80")}
+                                                        disableLink={hideActions}
                                                     />
                                                     <span className="text-[10px] text-white/20 font-mono tracking-tighter truncate max-w-[180px] block">{c.source}</span>
                                                 </div>
@@ -202,7 +211,7 @@ export function ClassesTable({ classes, total, isLoading = false, hasNextPage = 
                                         </td>
 
                                         {/* Actions */}
-                                        {isAdmin && (
+                                        {!hideActions && isAdmin && onEdit && onDelete && (
                                             <td className="px-6 py-4 text-right">
                                                 <GlassDropdownMenu>
                                                     <GlassDropdownMenuTrigger asChild>

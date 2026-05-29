@@ -499,7 +499,7 @@ describe("SheetHeader", () => {
         expect(screen.getByText("Nível 2 -> 3")).toBeInTheDocument()
         expect(screen.getByText("Confira o que muda antes de aplicar a progressão do personagem.")).toBeInTheDocument()
         expect(screen.getByText("20 -> 27")).toBeInTheDocument()
-        expect(screen.getByTestId("level-up-average-badge")).toHaveTextContent("média")
+        expect(screen.getByTestId("level-up-average-badge").parentElement).toHaveTextContent("Ganho de PV: 7")
         expect(await screen.findByText("Especialização marcial")).toBeInTheDocument()
         expect(screen.getByText("Versatilidade heroica")).toBeInTheDocument()
         expect(screen.getAllByTestId("trait-preview")).toHaveLength(2)

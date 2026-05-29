@@ -18,6 +18,14 @@ import { GlassDiceValue } from "@/components/ui/glass-dice-value"
 import type { DiceType } from "@/features/spells/types/spells.types"
 import { diceFuse, DICE_LOOKAHEAD_REGEX } from "../utils/dice-render-utils"
 import type { EntityType } from "@/lib/config/colors"
+import {
+    MENTION_INTERACTION_SURFACE_SELECTOR,
+    isTemporaryOpenMentionText,
+    isPointerWithinMentionInteractionSurface,
+    shouldAutoOpenMentionsOnFocus,
+    shouldClearTemporaryMentionOnExit,
+    shouldPreserveMentionBlur,
+} from "../utils/mention-interaction-surface"
 
 // ─── Dice Highlight Extension ────────────────────────────────────────────────
 // Colors plain-text dice notation and damage-type phrases.
@@ -479,6 +487,8 @@ export function RichTextEditor({
     const [isUploading, setIsUploading] = useState(false)
     const lastAppliedFocusTokenRef = useRef<string | null>(null)
     const activeEditorRef = useRef<Editor | null>(null)
+    const hasActiveMentionSessionRef = useRef(false)
+    const hasSyntheticOpenMentionRef = useRef(false)
 
     const uploadImage = useCallback(async (file: File) => {
         setIsUploading(true)
@@ -506,6 +516,31 @@ export function RichTextEditor({
         }
     }, [])
 
+    const handleMentionStart = useCallback(({ editor }: { editor: Editor | null }) => {
+        if (!editor || editor.isDestroyed) return
+        hasActiveMentionSessionRef.current = true
+    }, [])
+
+    const handleMentionExit = useCallback(({ editor, wasSelection }: { editor: Editor | null; wasSelection: boolean }) => {
+        if (!editor || editor.isDestroyed) return
+
+        if (
+            shouldClearTemporaryMentionOnExit({
+                hasSyntheticTrigger: hasSyntheticOpenMentionRef.current,
+                editorText: editor.getText(),
+                wasSelection,
+            })
+        ) {
+            editor.commands.clearContent()
+        }
+
+        hasActiveMentionSessionRef.current = false
+
+        if (wasSelection || !isTemporaryOpenMentionText(editor.getText())) {
+            hasSyntheticOpenMentionRef.current = false
+        }
+    }, [])
+
     const editor = useEditor({
         immediatelyRender: false,
         autofocus: false,
@@ -524,6 +559,8 @@ export function RichTextEditor({
                     itemTypes: mentionItemTypes,
                     circles: mentionCircles,
                     parentClassId: mentionParentClassId,
+                    onStart: handleMentionStart,
+                    onExit: handleMentionExit,
                 }),
             }),
             DiceHighlight,
@@ -533,13 +570,45 @@ export function RichTextEditor({
         content: value,
         editable: !disabled,
         onUpdate: ({ editor }) => {
+            if (hasSyntheticOpenMentionRef.current && !isTemporaryOpenMentionText(editor.getText())) {
+                hasSyntheticOpenMentionRef.current = false
+            }
             onChange(editor.getHTML())
         },
-        onBlur: ({ editor }) => {
-            if (openMentionsOnFocus && editor.getText().trim() === "@") {
-                editor.commands.clearContent()
+        onBlur: ({ editor, event }) => {
+            const hadActiveMentionSession = hasActiveMentionSessionRef.current
+            const wasPointerWithinMentionInteractionSurface = isPointerWithinMentionInteractionSurface()
+
+            const finalizeBlur = () => {
+                if (editor.isDestroyed) return
+
+                const activeElement = document.activeElement instanceof Element ? document.activeElement : null
+                const hasOpenMentionInteractionSurface = Boolean(document.querySelector(MENTION_INTERACTION_SURFACE_SELECTOR))
+
+                if (shouldPreserveMentionBlur({
+                    relatedTarget: event.relatedTarget,
+                    activeElement,
+                    hasActiveMentionSession: hadActiveMentionSession,
+                    hasOpenMentionInteractionSurface,
+                    wasPointerWithinMentionInteractionSurface,
+                })) {
+                    return
+                }
+
+                if (hasSyntheticOpenMentionRef.current && isTemporaryOpenMentionText(editor.getText())) {
+                    editor.commands.clearContent()
+                    hasSyntheticOpenMentionRef.current = false
+                }
+
+                onBlur?.()
             }
-            onBlur?.()
+
+            if (openMentionsOnFocus || hadActiveMentionSession) {
+                window.setTimeout(finalizeBlur, 0)
+                return
+            }
+
+            finalizeBlur()
         },
         editorProps: {
             attributes: {
@@ -614,7 +683,23 @@ export function RichTextEditor({
                     window.setTimeout(() => {
                         const currentEditor = activeEditorRef.current
                         if (!currentEditor || currentEditor.isDestroyed || !currentEditor.isEditable) return
-                        if (currentEditor.getText().trim() !== "") return
+                        const editorText = currentEditor.getText()
+
+                        if (
+                            !shouldAutoOpenMentionsOnFocus({
+                                openMentionsOnFocus,
+                                editorText,
+                                hasSyntheticTrigger: hasSyntheticOpenMentionRef.current,
+                            })
+                        ) {
+                            return
+                        }
+
+                        if (hasSyntheticOpenMentionRef.current && isTemporaryOpenMentionText(editorText)) {
+                            currentEditor.commands.clearContent()
+                        }
+
+                        hasSyntheticOpenMentionRef.current = true
                         currentEditor.commands.insertContent("@")
                     }, 0)
                     return false
@@ -652,6 +737,8 @@ export function RichTextEditor({
         mentionParentClassId,
         openMentionsOnFocus,
         disabled,
+        handleMentionStart,
+        handleMentionExit,
     ])
 
     useEffect(() => {

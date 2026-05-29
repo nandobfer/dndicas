@@ -1,5 +1,6 @@
 "use client"
 
+import type { InfiniteData } from "@tanstack/react-query"
 import { useInfiniteQuery, useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
 import {
     fetchSheets,
@@ -45,6 +46,7 @@ import type {
     CreateAttackBody,
     PatchAttackBody,
     CreateAssistedSheetBody,
+    SheetsListResponse,
 } from "../types/character-sheet.types"
 
 const buildOptimisticId = (prefix: string) => `optimistic-${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
@@ -58,6 +60,22 @@ const mergeCachedSheet = (
     current: CharacterSheetFull | CharacterSheet | undefined,
     updated: CharacterSheet
 ): CharacterSheetFull | CharacterSheet => current ? { ...current, ...updated } : updated
+
+const removeDeletedSheetFromInfiniteCache = (
+    current: InfiniteData<SheetsListResponse> | undefined,
+    deletedSheetId: string
+): InfiniteData<SheetsListResponse> | undefined => {
+    if (!current) return current
+
+    return {
+        ...current,
+        pages: current.pages.map((page) => ({
+            ...page,
+            sheets: page.sheets.filter((sheet) => sheet._id !== deletedSheetId),
+            total: Math.max(page.total - Number(page.sheets.some((sheet) => sheet._id === deletedSheetId)), 0),
+        })),
+    }
+}
 
 export const sheetsKeys = {
     all: ["character-sheets"] as const,
@@ -153,7 +171,18 @@ export function useDeleteSheet() {
     const qc = useQueryClient()
     return useMutation({
         mutationFn: (id: string) => deleteSheet(id),
-        onSuccess: () => qc.invalidateQueries({ queryKey: sheetsKeys.lists() }),
+        onSuccess: async (_data, deletedSheetId) => {
+            qc.setQueriesData<InfiniteData<SheetsListResponse>>(
+                { queryKey: [...sheetsKeys.all, "infinite"] },
+                (current) => removeDeletedSheetFromInfiniteCache(current, deletedSheetId)
+            )
+            qc.removeQueries({ queryKey: sheetsKeys.detail(deletedSheetId) })
+            await Promise.all([
+                qc.invalidateQueries({ queryKey: [...sheetsKeys.all, "infinite"] }),
+                qc.invalidateQueries({ queryKey: sheetsKeys.lists() }),
+                qc.invalidateQueries({ queryKey: sheetsKeys.details() }),
+            ])
+        },
     })
 }
 
