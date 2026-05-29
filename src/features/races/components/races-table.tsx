@@ -24,12 +24,15 @@ interface RacesTableProps {
     hasNextPage?: boolean
     isFetchingNextPage?: boolean
     onLoadMore?: () => void
-    onEdit: (race: Race) => void
+    onEdit?: (race: Race) => void
     onGenerateAI?: (race: Race) => void
-    onDelete: (race: Race) => void
+    onDelete?: (race: Race) => void
+    selectedId?: string | null
+    onSelect?: (race: Race) => void
+    hideActions?: boolean
 }
 
-export function RacesTable({ data, isLoading, hasNextPage = false, isFetchingNextPage = false, onLoadMore, onEdit, onGenerateAI, onDelete }: RacesTableProps) {
+export function RacesTable({ data, isLoading, hasNextPage = false, isFetchingNextPage = false, onLoadMore, onEdit, onGenerateAI, onDelete, selectedId, onSelect, hideActions = false }: RacesTableProps) {
     const { isAdmin } = useAuth()
 
     const getSpeedLabel = (speed: string) => {
@@ -55,7 +58,8 @@ export function RacesTable({ data, isLoading, hasNextPage = false, isFetchingNex
                             <th className="px-6 py-4">Tamanho</th>
                             <th className="px-6 py-4">Deslocamento</th>
                             <th className="px-6 py-4">Fonte</th>
-                            <th className="px-6 py-4 rounded-tr-xl text-right">Ações</th>
+                            {!hideActions && <th className="px-6 py-4 rounded-tr-xl text-right">Ações</th>}
+                            {hideActions && <th className="px-6 py-4 rounded-tr-xl" />}
                         </tr>
                     </thead>
                     <tbody className="divide-y divide-white/5">
@@ -68,7 +72,12 @@ export function RacesTable({ data, isLoading, hasNextPage = false, isFetchingNex
                                     animate="animate"
                                     exit="exit"
                                     transition={{ delay: idx * 0.03 }}
-                                    className="group hover:bg-white/[0.02] transition-colors"
+                                    onClick={onSelect ? () => onSelect(race) : undefined}
+                                    className={cn(
+                                        "group transition-colors",
+                                        onSelect ? "cursor-pointer" : "",
+                                        selectedId === race._id ? "bg-violet-500/15 hover:bg-violet-500/20" : "hover:bg-white/[0.02]",
+                                    )}
                                 >
                                     <td className="px-6 py-4">
                                         <div className="flex items-center gap-3">
@@ -90,6 +99,7 @@ export function RacesTable({ data, isLoading, hasNextPage = false, isFetchingNex
                                                     name={race.name}
                                                     entityType="Raça"
                                                     className={cn("text-sm font-medium block", race.status === "inactive" ? "text-white/30" : "text-white/80")}
+                                                    disableLink={hideActions}
                                                 />
                                                 <span className="text-[10px] text-white/20 font-mono tracking-tighter truncate max-w-[180px] block">{race.source}</span>
                                             </div>
@@ -104,8 +114,8 @@ export function RacesTable({ data, isLoading, hasNextPage = false, isFetchingNex
                                     <td className="px-6 py-4">
                                         <span className="text-xs text-white/40 italic">{race.source}</span>
                                     </td>
-                                    <td className="px-6 py-4 text-right">
-                                        {isAdmin && (
+                                     <td className="px-6 py-4 text-right">
+                                        {!hideActions && isAdmin && onEdit && onDelete && (
                                             <GlassDropdownMenu>
                                                 <GlassDropdownMenuTrigger asChild>
                                                     <button className="p-2 rounded-lg text-white/40 hover:text-white hover:bg-white/10 transition-colors">

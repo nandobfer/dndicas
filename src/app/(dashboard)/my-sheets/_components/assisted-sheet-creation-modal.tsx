@@ -1,30 +1,37 @@
 "use client"
 
 import * as React from "react"
-import { AlertTriangle, CheckCircle2, Loader2, Search } from "lucide-react"
+import { AlertTriangle, CheckCircle2, Fingerprint, Loader2, ScrollText, Swords } from "lucide-react"
 import { toast } from "sonner"
 import { cn } from "@/core/utils"
 import { Tabs, TabsList, TabsTrigger } from "@/core/ui/tabs"
 import { GlassModal, GlassModalContent, GlassModalDescription, GlassModalFooter, GlassModalHeader, GlassModalTitle } from "@/components/ui/glass-modal"
 import { GlassSelector } from "@/components/ui/glass-selector"
-import { GlassInput } from "@/components/ui/glass-input"
 import { CompactRichInput } from "@/features/character-sheets/components/compact-rich-input"
 import { SheetInput } from "@/features/character-sheets/components/sheet-input"
 import { AttributeBlock } from "@/features/character-sheets/components/attribute-block"
+import { EmptyState } from "@/components/ui/empty-state"
 import { RacePreview } from "@/features/races/components/race-preview"
 import { BackgroundPreview } from "@/features/backgrounds/components/background-preview"
 import { ClassPreview } from "@/features/classes/components/class-preview"
 import { DiceRollerPanel } from "@/features/dice-roller/components/dice-roller-panel"
+import { RaceFilters } from "@/features/races/components/race-filters"
+import { BackgroundFilters } from "@/features/backgrounds/components/background-filters"
+import { ClassesFilters } from "@/features/classes/components/classes-filters"
+import { RacesTable } from "@/features/races/components/races-table"
+import { BackgroundsTable } from "@/features/backgrounds/components/backgrounds-table"
+import { ClassesTable } from "@/features/classes/components/classes-table"
 import { attributeColors } from "@/lib/config/colors"
-import { useRaces } from "@/features/races/api/races-queries"
-import { useBackgrounds } from "@/features/backgrounds/api/backgrounds-queries"
-import { useClasses } from "@/features/classes/api/classes-queries"
+import { useInfiniteRaces } from "@/features/races/api/races-queries"
+import { useInfiniteBackgrounds } from "@/features/backgrounds/api/backgrounds-queries"
+import { useInfiniteClasses } from "@/features/classes/api/classes-queries"
 import { useCreateAssistedSheet } from "@/features/character-sheets/api/character-sheets-queries"
 import { useCharacterCalculations } from "@/features/character-sheets/hooks/use-character-calculations"
 import { SKILL_ATTRIBUTE_MAP } from "@/features/character-sheets/utils/dnd-calculations"
 import {
     ASSISTED_ATTRIBUTE_KEYS,
     ASSISTED_SKILLS,
+    CATALOG_TO_SHEET_ATTRIBUTE,
     POINT_BUY_COSTS,
     STANDARD_ARRAY_VALUES,
     applyBackgroundToSheet,
@@ -111,61 +118,6 @@ function getAttributeColor(attr: AttributeType) {
     return attributeColors[ATTRIBUTE_COLOR_KEY[attr]]
 }
 
-function CatalogSearch<TItem extends { _id: string; name: string }>({
-    label,
-    search,
-    onSearchChange,
-    items,
-    selectedId,
-    isLoading,
-    onSelect,
-}: {
-    label: string
-    search: string
-    onSearchChange: (value: string) => void
-    items: TItem[]
-    selectedId: string | null
-    isLoading: boolean
-    onSelect: (item: TItem) => void
-}) {
-    return (
-        <div className="space-y-3">
-            <div className="relative">
-                <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-white/35" />
-                <GlassInput
-                    value={search}
-                    onChange={(event) => onSearchChange(event.target.value)}
-                    placeholder={`Buscar ${label.toLowerCase()}`}
-                    className="pl-9"
-                />
-            </div>
-
-            <div className="grid max-h-52 grid-cols-1 gap-2 overflow-y-auto pr-1 sm:grid-cols-2">
-                {isLoading && <p className="text-sm text-white/45">Carregando...</p>}
-                {!isLoading && items.length === 0 && <p className="text-sm text-white/45">Nenhum resultado encontrado.</p>}
-                {items.map((item) => {
-                    const selected = selectedId === item._id
-                    return (
-                        <button
-                            key={item._id}
-                            type="button"
-                            onClick={() => onSelect(item)}
-                            className={cn(
-                                "rounded-lg border px-3 py-2 text-left text-sm transition-colors",
-                                selected
-                                    ? "border-violet-300/40 bg-violet-500/15 text-white"
-                                    : "border-white/10 bg-white/[0.03] text-white/70 hover:border-white/20 hover:bg-white/[0.06] hover:text-white"
-                            )}
-                        >
-                            {item.name}
-                        </button>
-                    )
-                })}
-            </div>
-        </div>
-    )
-}
-
 function PointBuyControls({
     scores,
     onChange,
@@ -231,9 +183,19 @@ export function AssistedSheetCreationModal({ open, onOpenChange, onCreated }: As
     const [selectedBackground, setSelectedBackground] = React.useState<Background | null>(null)
     const [selectedClass, setSelectedClass] = React.useState<CharacterClass | null>(null)
     const [selectedClassSkills, setSelectedClassSkills] = React.useState<SkillType[]>([])
-    const [raceSearch, setRaceSearch] = React.useState("")
-    const [backgroundSearch, setBackgroundSearch] = React.useState("")
-    const [classSearch, setClassSearch] = React.useState("")
+
+    const [raceFilters, setRaceFilters] = React.useState({ search: "", sources: [] as string[] })
+    const [backgroundFilters, setBackgroundFilters] = React.useState({
+        search: "",
+        sources: [] as string[],
+        suggestedAttributes: [] as string[],
+        skillProficiencies: [] as string[],
+        featIds: [] as string[],
+    })
+    const [classFilters, setClassFilters] = React.useState({ search: "", sources: [] as string[], status: "active" as const })
+
+    const [backgroundAttrBonuses, setBackgroundAttrBonuses] = React.useState<Partial<Record<AssistedAttributeKey, number>>>({})
+
     const [attributeMethod, setAttributeMethod] = React.useState<AttributeMethod>("point-buy")
     const [attributesTouched, setAttributesTouched] = React.useState(false)
     const [standardAssignments, setStandardAssignments] = React.useState<Partial<Record<AttributeType, number>>>({})
@@ -242,12 +204,28 @@ export function AssistedSheetCreationModal({ open, onOpenChange, onCreated }: As
     const [diceError, setDiceError] = React.useState<string | null>(null)
     const createAssistedSheet = useCreateAssistedSheet()
 
-    const { data: racesData, isLoading: isLoadingRaces } = useRaces({ search: raceSearch, status: "active" }, 1, 20, { enabled: open })
-    const { data: backgroundsData, isLoading: isLoadingBackgrounds } = useBackgrounds({ search: backgroundSearch, status: "active" }, 1, 20, { enabled: open })
-    const { data: classesData, isLoading: isLoadingClasses } = useClasses({ search: classSearch, status: "active" }, 1, 20, { enabled: open })
+    const { data: racesInfiniteData, isLoading: isLoadingRaces, hasNextPage: racesHasNext, isFetchingNextPage: racesFetching, fetchNextPage: racesFetchNext } =
+        useInfiniteRaces({ search: raceFilters.search, status: "active", sources: raceFilters.sources }, { enabled: open })
 
-    const currentSheet = sheet as CharacterSheet
-    const calc = useCharacterCalculations(currentSheet)
+    const { data: backgroundsInfiniteData, isLoading: isLoadingBackgrounds, hasNextPage: backgroundsHasNext, isFetchingNextPage: backgroundsFetching, fetchNextPage: backgroundsFetchNext } =
+        useInfiniteBackgrounds({ ...backgroundFilters, status: "active" }, { enabled: open })
+
+    const { data: classesInfiniteData, isLoading: isLoadingClasses, hasNextPage: classesHasNext, isFetchingNextPage: classesFetching, fetchNextPage: classesFetchNext } =
+        useInfiniteClasses({ ...classFilters }, { enabled: open })
+
+    const races = React.useMemo(() => racesInfiniteData?.pages.flatMap((p) => p.items) ?? [], [racesInfiniteData])
+    const backgrounds = React.useMemo(() => backgroundsInfiniteData?.pages.flatMap((p) => p.items) ?? [], [backgroundsInfiniteData])
+    const classes = React.useMemo(() => classesInfiniteData?.pages.flatMap((p) => p.classes) ?? [], [classesInfiniteData])
+    const classesTotal = React.useMemo(() => classesInfiniteData?.pages[classesInfiniteData.pages.length - 1]?.total ?? 0, [classesInfiniteData])
+
+    const sheetForCalc = React.useMemo(() => ({
+        ...sheet,
+        ...Object.fromEntries(
+            ASSISTED_ATTRIBUTE_KEYS.map((attr) => [attr, sheet[attr] + (backgroundAttrBonuses[attr] ?? 0)])
+        ),
+    } as CharacterSheet), [sheet, backgroundAttrBonuses])
+
+    const calc = useCharacterCalculations(sheetForCalc)
 
     const form = React.useMemo(() => ({
         watch: ((field?: keyof PatchSheetBody) => {
@@ -287,10 +265,20 @@ export function AssistedSheetCreationModal({ open, onOpenChange, onCreated }: As
             ? standardComplete
             : diceComplete
 
+    const suggestedAttrKeys: AssistedAttributeKey[] = React.useMemo(() => {
+        if (!selectedBackground?.suggestedAttributes?.length) return []
+        return selectedBackground.suggestedAttributes
+            .map((attr) => CATALOG_TO_SHEET_ATTRIBUTE[attr as keyof typeof CATALOG_TO_SHEET_ATTRIBUTE])
+            .filter((key): key is AssistedAttributeKey => Boolean(key))
+    }, [selectedBackground])
+
+    const bonusTotal = Object.values(backgroundAttrBonuses).reduce((sum, v) => sum + (v ?? 0), 0)
+    const backgroundBonusComplete = suggestedAttrKeys.length === 0 || bonusTotal === 3
+
     const completion: Record<AssistantTab, boolean> = {
         info: sheet.name.trim().length > 0,
         race: Boolean(selectedRace),
-        background: Boolean(selectedBackground),
+        background: Boolean(selectedBackground) && backgroundBonusComplete,
         class: Boolean(selectedClass) && selectedClassSkills.length === requiredClassSkillCount,
         attributes: attributesComplete,
     }
@@ -331,9 +319,10 @@ export function AssistedSheetCreationModal({ open, onOpenChange, onCreated }: As
         setSelectedBackground(null)
         setSelectedClass(null)
         setSelectedClassSkills([])
-        setRaceSearch("")
-        setBackgroundSearch("")
-        setClassSearch("")
+        setRaceFilters({ search: "", sources: [] })
+        setBackgroundFilters({ search: "", sources: [], suggestedAttributes: [], skillProficiencies: [], featIds: [] })
+        setClassFilters({ search: "", sources: [], status: "active" })
+        setBackgroundAttrBonuses({})
         resetAttributeMethod("point-buy")
     }, [open, resetAttributeMethod])
 
@@ -343,12 +332,28 @@ export function AssistedSheetCreationModal({ open, onOpenChange, onCreated }: As
     }, [])
 
     const handleRaceSelect = (race: Race) => {
+        if (selectedRace?._id === race._id) {
+            setSelectedRace(null)
+            setSheet((current) => ({ ...current, race: "", raceRef: null, movementSpeed: "", size: "" }))
+            return
+        }
         setSelectedRace(race)
         setSheet((current) => applyRaceToSheet(current, race))
     }
 
     const handleBackgroundSelect = (background: Background) => {
+        if (selectedBackground?._id === background._id) {
+            setSelectedBackground(null)
+            setBackgroundAttrBonuses({})
+            setSelectedClassSkills([])
+            setSheet((current) => {
+                const withoutBackground = { ...current, origin: "", originRef: null, skills: createEmptySkills() }
+                return selectedClass ? applyClassToSheet(withoutBackground, selectedClass, []) : withoutBackground
+            })
+            return
+        }
         setSelectedBackground(background)
+        setBackgroundAttrBonuses({})
         const nextClassSkills = selectedClassSkills.filter((skill) => !background.skillProficiencies?.includes(skill))
         setSelectedClassSkills(nextClassSkills)
         setSheet((current) => {
@@ -358,6 +363,15 @@ export function AssistedSheetCreationModal({ open, onOpenChange, onCreated }: As
     }
 
     const handleClassSelect = (characterClass: CharacterClass) => {
+        if (selectedClass?._id === characterClass._id) {
+            setSelectedClass(null)
+            setSelectedClassSkills([])
+            setSheet((current) => {
+                const withoutClass = { ...current, class: "", classRef: null, subclass: "", hitDiceTotal: "", savingThrows: { strength: false, dexterity: false, constitution: false, intelligence: false, wisdom: false, charisma: false }, armorTraining: { light: false, medium: false, heavy: false, shields: false }, spellcasting: false as const, skills: buildSkills(selectedBackground, []) }
+                return withoutClass
+            })
+            return
+        }
         setSelectedClass(characterClass)
         setSelectedClassSkills([])
         setSheet((current) => applyClassToSheet({ ...current, skills: buildSkills(selectedBackground, []) }, characterClass, []))
@@ -372,6 +386,17 @@ export function AssistedSheetCreationModal({ open, onOpenChange, onCreated }: As
         setSelectedClassSkills(next)
         setSheet((current) => applyClassToSheet({ ...current, skills: buildSkills(selectedBackground, next) }, selectedClass, next))
     }
+
+    const handleBonusChange = React.useCallback((attr: AssistedAttributeKey, delta: number) => {
+        setBackgroundAttrBonuses((current) => {
+            const currentValue = current[attr] ?? 0
+            const newValue = Math.min(2, Math.max(0, currentValue + delta))
+            const currentTotal = Object.values(current).reduce((sum, v) => sum + (v ?? 0), 0)
+            const newTotal = currentTotal - currentValue + newValue
+            if (newTotal > 3) return current
+            return { ...current, [attr]: newValue }
+        })
+    }, [])
 
     const handleStandardAssignment = (attr: AttributeType, value: string | number | Array<string | number> | undefined) => {
         if (value === undefined) {
@@ -453,8 +478,14 @@ export function AssistedSheetCreationModal({ open, onOpenChange, onCreated }: As
     const handleSave = async () => {
         if (!canSave) return
         try {
+            const sheetWithBonuses = {
+                ...sheet,
+                ...Object.fromEntries(
+                    ASSISTED_ATTRIBUTE_KEYS.map((attr) => [attr, sheet[attr] + (backgroundAttrBonuses[attr] ?? 0)])
+                ),
+            }
             const created = await createAssistedSheet.mutateAsync({
-                sheet: buildAssistedSheetPayload(sheet) as PatchSheetBody & { name: string },
+                sheet: buildAssistedSheetPayload(sheetWithBonuses) as PatchSheetBody & { name: string },
             })
             toast.success("Ficha criada.")
             onOpenChange(false)
@@ -466,39 +497,42 @@ export function AssistedSheetCreationModal({ open, onOpenChange, onCreated }: As
 
     const renderAttributeBlocks = () => (
         <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
-            {ASSISTED_ATTRIBUTE_KEYS.map((attr) => (
-                <AttributeBlock
-                    key={attr}
-                    attributeKey={attr}
-                    value={sheet[attr]}
-                    onValueChange={(value) => patchAttribute(attr, value)}
-                    modifier={calc.attrMods[attr].value}
-                    modifierFormula={calc.attrMods[attr].formula}
-                    modifierParts={calc.attrMods[attr].parts}
-                    modifierResult={calc.attrMods[attr].result}
-                    savingThrow={{
-                        proficient: !!sheet.savingThrows[attr],
-                        value: calc.savingThrows[attr].value,
-                        formula: calc.savingThrows[attr].formula,
-                        parts: calc.savingThrows[attr].parts,
-                        result: calc.savingThrows[attr].result,
-                    }}
-                    onSavingThrowToggle={() => undefined}
-                    skills={ASSISTED_SKILLS
-                        .filter((skill) => SKILL_ATTRIBUTE_MAP[skill] === attr)
-                        .map((skill) => ({
-                            name: skill,
-                            proficient: !!sheet.skills[skill]?.proficient,
-                            expertise: !!sheet.skills[skill]?.expertise,
-                            value: calc.skills[skill]?.value ?? 0,
-                            formula: calc.skills[skill]?.formula ?? "",
-                            parts: calc.skills[skill]?.parts,
-                            result: calc.skills[skill]?.result,
-                        }))}
-                    onSkillChange={() => undefined}
-                    isReadOnly
-                />
-            ))}
+            {ASSISTED_ATTRIBUTE_KEYS.map((attr) => {
+                const bonus = backgroundAttrBonuses[attr] ?? 0
+                return (
+                    <AttributeBlock
+                        key={attr}
+                        attributeKey={attr}
+                        value={sheet[attr] + bonus}
+                        onValueChange={(value) => patchAttribute(attr, value)}
+                        modifier={calc.attrMods[attr].value}
+                        modifierFormula={calc.attrMods[attr].formula}
+                        modifierParts={calc.attrMods[attr].parts}
+                        modifierResult={calc.attrMods[attr].result}
+                        savingThrow={{
+                            proficient: !!sheet.savingThrows[attr],
+                            value: calc.savingThrows[attr].value,
+                            formula: calc.savingThrows[attr].formula,
+                            parts: calc.savingThrows[attr].parts,
+                            result: calc.savingThrows[attr].result,
+                        }}
+                        onSavingThrowToggle={() => undefined}
+                        skills={ASSISTED_SKILLS
+                            .filter((skill) => SKILL_ATTRIBUTE_MAP[skill] === attr)
+                            .map((skill) => ({
+                                name: skill,
+                                proficient: !!sheet.skills[skill]?.proficient,
+                                expertise: !!sheet.skills[skill]?.expertise,
+                                value: calc.skills[skill]?.value ?? 0,
+                                formula: calc.skills[skill]?.formula ?? "",
+                                parts: calc.skills[skill]?.parts,
+                                result: calc.skills[skill]?.result,
+                            }))}
+                        onSkillChange={() => undefined}
+                        isReadOnly
+                    />
+                )
+            })}
         </div>
     )
 
@@ -524,6 +558,7 @@ export function AssistedSheetCreationModal({ open, onOpenChange, onCreated }: As
                     </TabsList>
 
                     <div className="mt-4 min-h-[560px] space-y-4">
+                        {/* ── Info ── */}
                         <section className={cn(activeTab === "info" ? "block" : "hidden")} aria-hidden={activeTab !== "info"}>
                             <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
                                 <SheetInput
@@ -556,101 +591,164 @@ export function AssistedSheetCreationModal({ open, onOpenChange, onCreated }: As
                             </div>
                         </section>
 
+                        {/* ── Race ── */}
                         <section className={cn(activeTab === "race" ? "block" : "hidden", "space-y-4")} aria-hidden={activeTab !== "race"}>
-                            <CompactRichInput
-                                label="Raça"
-                                value={sheet.race}
-                                onChange={(value) => form.setFieldLocally("race", value)}
-                                onBlur={(value) => form.patchField("race", value)}
-                                placeholder="@Elfo"
-                                specificEntityMention="Raça"
-                                openMentionsOnFocus
-                                excludeId={sheet._id}
+                            <RaceFilters
+                                filters={raceFilters}
+                                onSearchChange={(search) => setRaceFilters((f) => ({ ...f, search }))}
+                                onSourcesChange={(sources) => setRaceFilters((f) => ({ ...f, sources }))}
                             />
-                            <CatalogSearch
-                                label="Raça"
-                                search={raceSearch}
-                                onSearchChange={setRaceSearch}
-                                items={racesData?.items ?? []}
-                                selectedId={selectedRace?._id ?? null}
-                                isLoading={isLoadingRaces}
-                                onSelect={handleRaceSelect}
-                            />
-                            {selectedRace && <RacePreview race={selectedRace} showStatus={false} />}
+                            <div className="h-72 overflow-y-auto rounded-lg">
+                                <RacesTable
+                                    data={races}
+                                    isLoading={isLoadingRaces}
+                                    hasNextPage={racesHasNext}
+                                    isFetchingNextPage={racesFetching}
+                                    onLoadMore={racesFetchNext}
+                                    selectedId={selectedRace?._id ?? null}
+                                    onSelect={handleRaceSelect}
+                                    hideActions
+                                />
+                            </div>
+                            {selectedRace
+                                ? <RacePreview race={selectedRace} showStatus={false} />
+                                : <EmptyState size="sm" icon={Fingerprint} title="Nenhuma raça selecionada" description="Clique em uma raça acima para ver os detalhes." />
+                            }
                         </section>
 
+                        {/* ── Background ── */}
                         <section className={cn(activeTab === "background" ? "block" : "hidden", "space-y-4")} aria-hidden={activeTab !== "background"}>
-                            <CompactRichInput
-                                label="Origem"
-                                value={sheet.origin}
-                                onChange={(value) => form.setFieldLocally("origin", value)}
-                                onBlur={(value) => form.patchField("origin", value)}
-                                placeholder="@Sábio"
-                                specificEntityMention="Origem"
-                                openMentionsOnFocus
-                                excludeId={sheet._id}
+                            <BackgroundFilters
+                                filters={backgroundFilters}
+                                onSearchChange={(search) => setBackgroundFilters((f) => ({ ...f, search }))}
+                                onSourcesChange={(sources) => setBackgroundFilters((f) => ({ ...f, sources }))}
+                                onAttributesChange={(suggestedAttributes) => setBackgroundFilters((f) => ({ ...f, suggestedAttributes }))}
+                                onSkillsChange={(skillProficiencies) => setBackgroundFilters((f) => ({ ...f, skillProficiencies }))}
+                                onFeatsChange={(featIds) => setBackgroundFilters((f) => ({ ...f, featIds }))}
                             />
-                            <CatalogSearch
-                                label="Origem"
-                                search={backgroundSearch}
-                                onSearchChange={setBackgroundSearch}
-                                items={backgroundsData?.items ?? []}
-                                selectedId={selectedBackground?._id ?? null}
-                                isLoading={isLoadingBackgrounds}
-                                onSelect={handleBackgroundSelect}
-                            />
-                            {selectedBackground && <BackgroundPreview background={selectedBackground} showStatus={false} />}
-                        </section>
-
-                        <section className={cn(activeTab === "class" ? "block" : "hidden", "space-y-4")} aria-hidden={activeTab !== "class"}>
-                            <CompactRichInput
-                                label="Classe"
-                                value={sheet.class}
-                                onChange={(value) => form.setFieldLocally("class", value)}
-                                onBlur={(value) => form.patchField("class", value)}
-                                placeholder="@Mago"
-                                specificEntityMention="Classe"
-                                openMentionsOnFocus
-                                excludeId={sheet._id}
-                            />
-                            <CatalogSearch
-                                label="Classe"
-                                search={classSearch}
-                                onSearchChange={setClassSearch}
-                                items={classesData?.classes ?? []}
-                                selectedId={selectedClass?._id ?? null}
-                                isLoading={isLoadingClasses}
-                                onSelect={handleClassSelect}
-                            />
-                            {selectedClass && (
-                                <div className="space-y-4">
-                                    <div className="rounded-lg border border-white/10 bg-white/[0.03] p-3">
-                                        <div className="mb-2 flex items-center justify-between gap-3">
-                                            <span className="text-[10px] font-black uppercase tracking-[0.2em] text-white/40">Perícias de classe</span>
-                                            <span className="text-xs text-white/45">{selectedClassSkills.length}/{requiredClassSkillCount}</span>
-                                        </div>
-                                        <GlassSelector
-                                            mode="multi"
-                                            layout="grid"
-                                            cols={3}
-                                            smCols={2}
-                                            value={selectedClassSkills}
-                                            onChange={handleClassSkillChange}
-                                            options={availableClassSkills.map((skill) => ({
-                                                value: skill,
-                                                label: originSkillSet.has(skill) ? `${skill} (origem)` : skill,
-                                                activeColor: getAttributeColor(SKILL_ATTRIBUTE_MAP[normalizeSkill(skill)]).hex,
-                                                textColor: getAttributeColor(SKILL_ATTRIBUTE_MAP[normalizeSkill(skill)]).hex,
-                                                disabled: originSkillSet.has(skill) || (!selectedClassSkills.includes(skill) && selectedClassSkills.length >= requiredClassSkillCount),
-                                            }))}
-                                            layoutId="assisted-class-skills"
-                                        />
+                            <div className="h-72 overflow-y-auto rounded-lg">
+                                <BackgroundsTable
+                                    data={backgrounds}
+                                    isLoading={isLoadingBackgrounds}
+                                    hasNextPage={backgroundsHasNext}
+                                    isFetchingNextPage={backgroundsFetching}
+                                    onLoadMore={backgroundsFetchNext}
+                                    selectedId={selectedBackground?._id ?? null}
+                                    onSelect={handleBackgroundSelect}
+                                    hideActions
+                                />
+                            </div>
+                            {selectedBackground && suggestedAttrKeys.length > 0 && (
+                                <div className="rounded-lg border border-white/10 bg-white/[0.03] p-4 space-y-3">
+                                    <div className="flex items-center justify-between">
+                                        <span className="text-[10px] font-black uppercase tracking-[0.2em] text-white/40">Bônus de Atributo da Origem</span>
+                                        <span className={cn("text-xs font-bold", bonusTotal === 3 ? "text-emerald-400" : "text-white/45")}>
+                                            {bonusTotal}/3 pontos
+                                        </span>
                                     </div>
-                                    <ClassPreview characterClass={selectedClass} showStatus={false} />
+                                    <p className="text-xs text-white/40">Distribua 3 pontos entre os atributos sugeridos pela origem (máx. 2 por atributo).</p>
+                                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                                        {suggestedAttrKeys.map((attr) => {
+                                            const colors = getAttributeColor(attr)
+                                            const currentBonus = backgroundAttrBonuses[attr] ?? 0
+                                            const decrementDisabled = currentBonus <= 0
+                                            const incrementDisabled = currentBonus >= 2 || bonusTotal >= 3
+                                            return (
+                                                <div key={attr} className={cn("rounded-lg border p-3", colors.border, colors.bgAlpha)}>
+                                                    <div className="mb-2 flex items-center justify-between">
+                                                        <span className={cn("text-[10px] font-black uppercase tracking-[0.2em]", colors.text)}>{ATTRIBUTE_LABELS[attr]}</span>
+                                                        <span className={cn("text-sm font-bold", colors.text)}>
+                                                            {currentBonus > 0 ? `+${currentBonus}` : "—"}
+                                                        </span>
+                                                    </div>
+                                                    <div className="grid grid-cols-[36px_minmax(0,1fr)_36px] items-center gap-2">
+                                                        <button
+                                                            type="button"
+                                                            disabled={decrementDisabled}
+                                                            onClick={() => handleBonusChange(attr, -1)}
+                                                            className="h-9 rounded-lg border border-white/10 bg-white/[0.04] text-lg font-bold text-white/70 transition-colors hover:bg-white/[0.08] disabled:cursor-not-allowed disabled:opacity-35"
+                                                        >
+                                                            -
+                                                        </button>
+                                                        <div className="rounded-lg border border-white/10 bg-black/20 px-2 py-1.5 text-center text-xl font-black text-white">
+                                                            {sheet[attr]}{currentBonus > 0 && <span className={cn("text-sm ml-1", colors.text)}>+{currentBonus}</span>}
+                                                        </div>
+                                                        <button
+                                                            type="button"
+                                                            disabled={incrementDisabled}
+                                                            onClick={() => handleBonusChange(attr, 1)}
+                                                            className="h-9 rounded-lg border border-white/10 bg-white/[0.04] text-lg font-bold text-white/70 transition-colors hover:bg-white/[0.08] disabled:cursor-not-allowed disabled:opacity-35"
+                                                        >
+                                                            +
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                            )
+                                        })}
+                                    </div>
                                 </div>
                             )}
+                            {selectedBackground
+                                ? <BackgroundPreview background={selectedBackground} showStatus={false} />
+                                : <EmptyState size="sm" icon={ScrollText} title="Nenhuma origem selecionada" description="Clique em uma origem acima para ver os detalhes." />
+                            }
                         </section>
 
+                        {/* ── Class ── */}
+                        <section className={cn(activeTab === "class" ? "block" : "hidden", "space-y-4")} aria-hidden={activeTab !== "class"}>
+                            <ClassesFilters
+                                filters={classFilters}
+                                onSearchChange={(search) => setClassFilters((f) => ({ ...f, search }))}
+                                onStatusChange={() => undefined}
+                                onSourcesChange={(sources) => setClassFilters((f) => ({ ...f, sources }))}
+                                hideStatus
+                            />
+                            <div className="h-72 overflow-y-auto rounded-lg">
+                                <ClassesTable
+                                    classes={classes}
+                                    total={classesTotal}
+                                    isLoading={isLoadingClasses}
+                                    hasNextPage={classesHasNext}
+                                    isFetchingNextPage={classesFetching}
+                                    onLoadMore={classesFetchNext}
+                                    selectedId={selectedClass?._id ?? null}
+                                    onSelect={handleClassSelect}
+                                    hideActions
+                                />
+                            </div>
+                            {selectedClass
+                                ? (
+                                    <div className="space-y-4">
+                                        <div className="rounded-lg border border-white/10 bg-white/[0.03] p-3">
+                                            <div className="mb-2 flex items-center justify-between gap-3">
+                                                <span className="text-[10px] font-black uppercase tracking-[0.2em] text-white/40">Perícias de classe</span>
+                                                <span className="text-xs text-white/45">{selectedClassSkills.length}/{requiredClassSkillCount}</span>
+                                            </div>
+                                            <GlassSelector
+                                                mode="multi"
+                                                layout="grid"
+                                                cols={3}
+                                                smCols={2}
+                                                value={selectedClassSkills}
+                                                onChange={handleClassSkillChange}
+                                                options={availableClassSkills.map((skill) => ({
+                                                    value: skill,
+                                                    label: originSkillSet.has(skill) ? `${skill} (origem)` : skill,
+                                                    activeColor: getAttributeColor(SKILL_ATTRIBUTE_MAP[normalizeSkill(skill)]).hex,
+                                                    textColor: getAttributeColor(SKILL_ATTRIBUTE_MAP[normalizeSkill(skill)]).hex,
+                                                    disabled: originSkillSet.has(skill) || (!selectedClassSkills.includes(skill) && selectedClassSkills.length >= requiredClassSkillCount),
+                                                }))}
+                                                layoutId="assisted-class-skills"
+                                            />
+                                        </div>
+                                        <ClassPreview characterClass={selectedClass} showStatus={false} />
+                                    </div>
+                                )
+                                : <EmptyState size="sm" icon={Swords} title="Nenhuma classe selecionada" description="Clique em uma classe acima para ver os detalhes." />
+                            }
+                        </section>
+
+                        {/* ── Attributes ── */}
                         <section className={cn(activeTab === "attributes" ? "block" : "hidden", "space-y-4")} aria-hidden={activeTab !== "attributes"}>
                             <GlassSelector
                                 value={attributeMethod}
@@ -780,3 +878,4 @@ export function AssistedSheetCreationModal({ open, onOpenChange, onCreated }: As
         </GlassModal>
     )
 }
+

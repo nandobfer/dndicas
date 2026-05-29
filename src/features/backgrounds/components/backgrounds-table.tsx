@@ -55,11 +55,14 @@ interface BackgroundsTableProps {
     hasNextPage?: boolean
     isFetchingNextPage?: boolean
     onLoadMore?: () => void
-    onEdit: (background: Background) => void
-    onDelete: (background: Background) => void
+    onEdit?: (background: Background) => void
+    onDelete?: (background: Background) => void
+    selectedId?: string | null
+    onSelect?: (background: Background) => void
+    hideActions?: boolean
 }
 
-export function BackgroundsTable({ data, isLoading, hasNextPage = false, isFetchingNextPage = false, onLoadMore, onEdit, onDelete }: BackgroundsTableProps) {
+export function BackgroundsTable({ data, isLoading, hasNextPage = false, isFetchingNextPage = false, onLoadMore, onEdit, onDelete, selectedId, onSelect, hideActions = false }: BackgroundsTableProps) {
     const { isAdmin } = useAuth()
 
     if (isLoading) return <LoadingState message="Carregando origens..." />
@@ -75,7 +78,8 @@ export function BackgroundsTable({ data, isLoading, hasNextPage = false, isFetch
                             <th className="px-6 py-4">Proficiência nas Perícias</th>
                             <th className="px-6 py-4">Bônus de Atributo</th>
                             <th className="px-6 py-4">Fonte</th>
-                            <th className="px-6 py-4 rounded-tr-xl text-right">Ações</th>
+                            {!hideActions && <th className="px-6 py-4 rounded-tr-xl text-right">Ações</th>}
+                            {hideActions && <th className="px-6 py-4 rounded-tr-xl" />}
                         </tr>
                     </thead>
                     <tbody className="divide-y divide-white/5">
@@ -88,7 +92,12 @@ export function BackgroundsTable({ data, isLoading, hasNextPage = false, isFetch
                                     animate="animate"
                                     exit="exit"
                                     transition={{ delay: idx * 0.03 }}
-                                    className="group hover:bg-white/[0.02] transition-colors"
+                                    onClick={onSelect ? () => onSelect(background) : undefined}
+                                    className={cn(
+                                        "group transition-colors",
+                                        onSelect ? "cursor-pointer" : "",
+                                        selectedId === background._id ? "bg-violet-500/15 hover:bg-violet-500/20" : "hover:bg-white/[0.02]",
+                                    )}
                                 >
                                     <td className="px-6 py-4">
                                         <div className="flex items-center gap-3">
@@ -106,7 +115,7 @@ export function BackgroundsTable({ data, isLoading, hasNextPage = false, isFetch
                                                 </div>
                                             )}
                                             <div className="flex flex-col min-w-0">
-                                                <EntityTitleLink name={background.name} entityType="Origem" className="font-bold text-white group-hover:text-blue-400 transition-colors truncate" />
+                                                <EntityTitleLink name={background.name} entityType="Origem" className="font-bold text-white group-hover:text-blue-400 transition-colors truncate" disableLink={hideActions} />
                                                 <span className="text-[10px] text-white/30 truncate flex items-center gap-1">
                                                     <ScrollText className="w-2.5 h-2.5" />
                                                     {background.source}
@@ -183,23 +192,25 @@ export function BackgroundsTable({ data, isLoading, hasNextPage = false, isFetch
                                         <span className="text-[10px] text-white/60 font-medium">{background.source || <GlassEmptyValue />}</span>
                                     </td>
                                     <td className="px-6 py-4 text-right">
-                                        <GlassDropdownMenu>
-                                            <GlassDropdownMenuTrigger asChild>
-                                                <Button variant="ghost" size="icon" className="w-8 h-8 hover:bg-white/10 text-white/40 group-hover:text-white">
-                                                    <MoreHorizontal className="w-4 h-4" />
-                                                </Button>
-                                            </GlassDropdownMenuTrigger>
-                                            <GlassDropdownMenuContent align="end">
-                                                <GlassDropdownMenuItem onClick={() => onEdit(background)}>
-                                                    <Pencil className="w-4 h-4 mr-2" /> Editar
-                                                </GlassDropdownMenuItem>
-                                                {isAdmin && (
-                                                    <GlassDropdownMenuItem onClick={() => onDelete(background)} className="text-red-400 focus:text-red-400">
-                                                        <Trash2 className="w-4 h-4 mr-2" /> Excluir
+                                        {!hideActions && onEdit && onDelete && (
+                                            <GlassDropdownMenu>
+                                                <GlassDropdownMenuTrigger asChild>
+                                                    <Button variant="ghost" size="icon" className="w-8 h-8 hover:bg-white/10 text-white/40 group-hover:text-white">
+                                                        <MoreHorizontal className="w-4 h-4" />
+                                                    </Button>
+                                                </GlassDropdownMenuTrigger>
+                                                <GlassDropdownMenuContent align="end">
+                                                    <GlassDropdownMenuItem onClick={() => onEdit(background)}>
+                                                        <Pencil className="w-4 h-4 mr-2" /> Editar
                                                     </GlassDropdownMenuItem>
-                                                )}
-                                            </GlassDropdownMenuContent>
-                                        </GlassDropdownMenu>
+                                                    {isAdmin && (
+                                                        <GlassDropdownMenuItem onClick={() => onDelete(background)} className="text-red-400 focus:text-red-400">
+                                                            <Trash2 className="w-4 h-4 mr-2" /> Excluir
+                                                        </GlassDropdownMenuItem>
+                                                    )}
+                                                </GlassDropdownMenuContent>
+                                            </GlassDropdownMenu>
+                                        )}
                                     </td>
                                 </motion.tr>
                             ))}
