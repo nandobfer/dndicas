@@ -1018,10 +1018,15 @@ export function useSheetHeaderSections({ sheet, form, items = [], isReadOnly = f
              <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
                <div>
                  <p className="text-[10px] font-black uppercase tracking-[0.35em] text-white/45">PV máximo</p>
-                 <div className="mt-1 flex flex-wrap items-center gap-2">
-                   <p className="text-2xl font-black text-white">
-                     {hpMax} -&gt; {nextHpMax}
-                   </p>
+                 <p className="mt-1 text-2xl font-black text-white">
+                   {hpMax} -&gt; {nextHpMax}
+                 </p>
+               </div>
+               <div className="flex flex-col items-start gap-2 text-sm text-white/70">
+                 <div className="flex flex-wrap items-center gap-2">
+                   <span>
+                     Ganho de PV: <span className="font-bold text-white">{hpGainPreview}</span>
+                   </span>
                    <span
                      data-testid="level-up-average-badge"
                      className="rounded-full border border-white/12 bg-white/[0.06] px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.18em] text-white/65"
@@ -1029,11 +1034,6 @@ export function useSheetHeaderSections({ sheet, form, items = [], isReadOnly = f
                      média
                    </span>
                  </div>
-               </div>
-               <div className="flex flex-col items-start gap-2 text-sm text-white/70">
-                 <span>
-                   Ganho de PV: <span className="font-bold text-white">{hpGainPreview}</span>
-                 </span>
                  <div className="flex flex-wrap items-center gap-2">
                    <motion.button
                      type="button"

@@ -224,87 +224,155 @@ interface EntityPreviewTooltipProps {
     delayDuration?: number
 }
 
-export const EntityPreviewTooltip = ({ entityId, entityType, children, side = "top", delayDuration = 300 }: EntityPreviewTooltipProps) => {
-    const { isAdmin } = useAuth()
+const getEntityPreviewEndpoint = (entityId: string, entityType: string) => {
+    if (entityType === "Regra") {
+        return `/api/rules/${entityId}`
+    }
+
+    if (entityType === "Habilidade") {
+        return `/api/traits/${entityId}`
+    }
+
+    if (entityType === "Talento") {
+        return `/api/feats/${entityId}`
+    }
+
+    if (entityType === "Magia") {
+        return `/api/spells/${entityId}`
+    }
+
+    if (entityType === "Classe") {
+        return `/api/classes/${entityId}`
+    }
+
+    if (entityType === "Subclasse") {
+        const match = /^subclass:([^:]+):(.+)$/.exec(entityId)
+        return match ? `/api/classes/${match[1]}` : ""
+    }
+
+    if (entityType === "Origem") {
+        return `/api/backgrounds/${entityId}`
+    }
+
+    if (entityType === "Raça") {
+        return `/api/races/${entityId}`
+    }
+
+    if (entityType === "Item") {
+        return `/api/items/${entityId}`
+    }
+
+    if (entityType === "Monstro") {
+        return `/api/monsters/${entityId}`
+    }
+
+    return `/api/core/${entityType.toLowerCase()}/${entityId}`
+}
+
+const normalizeEntityPreviewData = (entityId: string, entityType: string, json: unknown) => {
+    if (entityType !== "Subclasse") {
+        return json
+    }
+
+    const parentData = json as SubclassParentData
+    const match = /^subclass:([^:]+):(.+)$/.exec(entityId)
+    const subclassId = match?.[2]
+    const subclass = parentData.subclasses?.find((sub) => String(sub._id || sub.name) === subclassId) || null
+
+    return { parentClass: parentData, subclass }
+}
+
+const buildEntityPreviewCacheKey = (entityId: string, entityType: string) => `${entityType}:${entityId}`
+
+const useEntityPreviewData = ({ entityId, entityType, enabled }: { entityId: string; entityType: string; enabled: boolean }) => {
+    const cacheRef = React.useRef(new Map<string, unknown>())
     const [data, setData] = React.useState<unknown>(null)
     const [loading, setLoading] = React.useState(false)
-    const [open, setOpen] = React.useState(false)
-    const [generationOpen, setGenerationOpen] = React.useState(false)
-    const timeoutRef = React.useRef<NodeJS.Timeout | null>(null)
-    const canGenerateAI = isAdmin && (entityType === "Magia" || entityType === "Talento" || entityType === "Monstro")
+    const [reloadVersion, setReloadVersion] = React.useState(0)
+    const cacheKey = React.useMemo(() => buildEntityPreviewCacheKey(entityId, entityType), [entityId, entityType])
 
-    const fetchData = React.useCallback(async () => {
-        if (data || loading) return
+    const invalidate = React.useCallback(() => {
+        cacheRef.current.delete(cacheKey)
+        setData(null)
+        setReloadVersion((currentVersion) => currentVersion + 1)
+    }, [cacheKey])
 
+    React.useEffect(() => {
+        if (!enabled) {
+            setLoading(false)
+            return
+        }
+
+        const cachedData = cacheRef.current.get(cacheKey)
+        if (cachedData) {
+            setData(cachedData)
+            setLoading(false)
+            return
+        }
+
+        const endpoint = getEntityPreviewEndpoint(entityId, entityType)
+        if (!endpoint) {
+            setData(null)
+            setLoading(false)
+            return
+        }
+
+        let cancelled = false
+        setData(null)
         setLoading(true)
-        try {
-            // T041: Updated endpoint logic to support Habilidade via /api/traits and Talento via /api/feats
-            let endpoint = `/api/core/${entityType.toLowerCase()}/${entityId}`
-            if (entityType === "Regra") {
-                endpoint = `/api/rules/${entityId}`
-            } else if (entityType === "Habilidade") {
-                endpoint = `/api/traits/${entityId}`
-            } else if (entityType === "Talento") {
-                endpoint = `/api/feats/${entityId}`
-            } else if (entityType === "Magia") {
-                endpoint = `/api/spells/${entityId}`
-            } else if (entityType === "Classe") {
-                endpoint = `/api/classes/${entityId}`
-            } else if (entityType === "Subclasse") {
-                const match = /^subclass:([^:]+):(.+)$/.exec(entityId)
-                endpoint = match ? `/api/classes/${match[1]}` : ""
-            } else if (entityType === "Origem") {
-                endpoint = `/api/backgrounds/${entityId}`
-            } else if (entityType === "Raça") {
-                endpoint = `/api/races/${entityId}`
-            } else if (entityType === "Item") {
-                endpoint = `/api/items/${entityId}`
-            } else if (entityType === "Monstro") {
-                endpoint = `/api/monsters/${entityId}`
-            }
 
-            if (!endpoint) return
+        const run = async () => {
+            try {
+                const response = await fetch(endpoint)
+                if (!response.ok) {
+                    if (!cancelled) {
+                        setData(null)
+                    }
+                    return
+                }
 
-            const res = await fetch(endpoint)
-            if (res.ok) {
-                const json = await res.json()
-                if (entityType === "Subclasse") {
-                    const parentData = json as SubclassParentData
-                    const match = /^subclass:([^:]+):(.+)$/.exec(entityId)
-                    const subclassId = match?.[2]
-                    const subclass = parentData.subclasses?.find((sub) => String(sub._id || sub.name) === subclassId) || null
-                    setData({ parentClass: parentData, subclass })
-                } else {
-                    setData(json)
+                const json = await response.json()
+                const normalizedData = normalizeEntityPreviewData(entityId, entityType, json)
+
+                if (cancelled) {
+                    return
+                }
+
+                cacheRef.current.set(cacheKey, normalizedData)
+                setData(normalizedData)
+            } catch (error) {
+                console.error("Failed to fetch entity preview:", error)
+                if (!cancelled) {
+                    setData(null)
+                }
+            } finally {
+                if (!cancelled) {
+                    setLoading(false)
                 }
             }
-        } catch (e) {
-            console.error("Failed to fetch entity preview:", e)
-        } finally {
-            setLoading(false)
         }
-    }, [entityId, entityType, data, loading])
 
-    // Fetch data when popover opens, ensuring mobile clicks and desktop hovers both trigger loading
-    React.useEffect(() => {
-        if (open) {
-            fetchData()
+        void run()
+
+        return () => {
+            cancelled = true
         }
-    }, [open, fetchData])
+    }, [cacheKey, enabled, entityId, entityType, reloadVersion])
 
-    const handleMouseEnter = () => {
-        if (timeoutRef.current) clearTimeout(timeoutRef.current)
-        timeoutRef.current = setTimeout(() => {
-            setOpen(true)
-        }, delayDuration)
-    }
+    return { data, loading, invalidate }
+}
 
-    const handleMouseLeave = () => {
-        if (timeoutRef.current) clearTimeout(timeoutRef.current)
-        timeoutRef.current = setTimeout(() => {
-            setOpen(false)
-        }, 300) // Small delay to allow moving between trigger and content
-    }
+interface EntityPreviewPanelProps {
+    entityId: string
+    entityType: string
+    enabled?: boolean
+}
+
+export const EntityPreviewPanel = ({ entityId, entityType, enabled = true }: EntityPreviewPanelProps) => {
+    const { isAdmin } = useAuth()
+    const [generationOpen, setGenerationOpen] = React.useState(false)
+    const { data, loading, invalidate } = useEntityPreviewData({ entityId, entityType, enabled })
+    const canGenerateAI = isAdmin && (entityType === "Magia" || entityType === "Talento" || entityType === "Monstro")
 
     const content = React.useMemo(() => {
         if (loading) return <div className="p-4 text-xs text-white/40 animate-pulse text-center w-[200px]">Carregando detalhes...</div>
@@ -374,33 +442,18 @@ export const EntityPreviewTooltip = ({ entityId, entityType, children, side = "t
                 )
             }
         }
-    }, [entityType, data, loading, entityId, canGenerateAI])
+    }, [canGenerateAI, data, entityId, entityType, loading])
 
     return (
         <>
-            <GlassPopover open={open} onOpenChange={setOpen}>
-                <GlassPopoverTrigger asChild onMouseEnter={handleMouseEnter} onMouseLeave={handleMouseLeave}>
-                    {children}
-                </GlassPopoverTrigger>
-                <GlassPopoverContent
-                    side={side}
-                    className="w-[calc(100vw-2rem)] sm:w-auto max-w-[95vw] sm:max-w-xl md:max-w-2xl max-h-[85vh] sm:max-h-[400px] overflow-y-auto glass-scrollbar pointer-events-auto"
-                    onMouseEnter={handleMouseEnter}
-                    onMouseLeave={handleMouseLeave}
-                    onOpenAutoFocus={(e) => e.preventDefault()}
-                    onWheel={(e) => e.stopPropagation()}
-                    style={{ isolation: "isolate" }}
-                >
-                    {content}
-                </GlassPopoverContent>
-            </GlassPopover>
+            {content}
             {entityType === "Magia" && (
                 <EntityGenerationAIModal
                     open={generationOpen}
                     entity={(data as Spell | null) ?? null}
                     adapter={spellGenerationAdapter}
                     onOpenChange={setGenerationOpen}
-                    onApplied={() => setData(null)}
+                    onApplied={invalidate}
                 />
             )}
             {entityType === "Talento" && (
@@ -409,7 +462,7 @@ export const EntityPreviewTooltip = ({ entityId, entityType, children, side = "t
                     entity={(data as Feat | null) ?? null}
                     adapter={featGenerationAdapter}
                     onOpenChange={setGenerationOpen}
-                    onApplied={() => setData(null)}
+                    onApplied={invalidate}
                 />
             )}
             {entityType === "Monstro" && (
@@ -418,9 +471,56 @@ export const EntityPreviewTooltip = ({ entityId, entityType, children, side = "t
                     entity={(data as Monster | null) ?? null}
                     adapter={monsterGenerationAdapter}
                     onOpenChange={setGenerationOpen}
-                    onApplied={() => setData(null)}
+                    onApplied={invalidate}
                 />
             )}
+        </>
+    )
+}
+
+export const EntityPreviewTooltip = ({ entityId, entityType, children, side = "top", delayDuration = 300 }: EntityPreviewTooltipProps) => {
+    const [open, setOpen] = React.useState(false)
+    const timeoutRef = React.useRef<NodeJS.Timeout | null>(null)
+
+    const handleMouseEnter = () => {
+        if (timeoutRef.current) clearTimeout(timeoutRef.current)
+        timeoutRef.current = setTimeout(() => {
+            setOpen(true)
+        }, delayDuration)
+    }
+
+    const handleMouseLeave = () => {
+        if (timeoutRef.current) clearTimeout(timeoutRef.current)
+        timeoutRef.current = setTimeout(() => {
+            setOpen(false)
+        }, 300)
+    }
+
+    React.useEffect(() => () => {
+        if (timeoutRef.current) {
+            clearTimeout(timeoutRef.current)
+        }
+    }, [])
+
+    return (
+        <>
+            <GlassPopover open={open} onOpenChange={setOpen}>
+                <GlassPopoverTrigger asChild onMouseEnter={handleMouseEnter} onMouseLeave={handleMouseLeave}>
+                    {children}
+                </GlassPopoverTrigger>
+                <GlassPopoverContent
+                    data-mention-interaction-surface="entity-preview"
+                    side={side}
+                    className="w-[calc(100vw-2rem)] sm:w-auto max-w-[95vw] sm:max-w-xl md:max-w-2xl max-h-[85vh] sm:max-h-[400px] overflow-y-auto glass-scrollbar pointer-events-auto"
+                    onMouseEnter={handleMouseEnter}
+                    onMouseLeave={handleMouseLeave}
+                    onOpenAutoFocus={(e) => e.preventDefault()}
+                    onWheel={(e) => e.stopPropagation()}
+                    style={{ isolation: "isolate" }}
+                >
+                    <EntityPreviewPanel entityId={entityId} entityType={entityType} enabled={open} />
+                </GlassPopoverContent>
+            </GlassPopover>
         </>
     )
 }
