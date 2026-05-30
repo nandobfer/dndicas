@@ -25,6 +25,8 @@ export const getSuggestionConfig = (options?: {
     let currentQuery = ""
     let currentEditor: Editor | null = null
     let wasSelection = false
+    let debounceTimer: NodeJS.Timeout | null = null
+    let latestQueryId = 0
 
     const searchOptions: UnifiedSearchOptions = {
         specificEntityType: options?.specificEntityMention,
@@ -74,18 +76,28 @@ export const getSuggestionConfig = (options?: {
                 })
             }
 
-            try {
-                const results = await performUnifiedSearch(query, 10, 0, searchOptions)
-                const filteredResults = normalizeResults(results)
+            const queryId = ++latestQueryId
 
-                loading = false
+            return new Promise<any[]>((resolve) => {
+                if (debounceTimer) clearTimeout(debounceTimer)
 
-                return filteredResults
-            } catch (e) {
-                console.error("Mention search system failed:", e)
-                loading = false
-                return []
-            }
+                debounceTimer = setTimeout(async () => {
+                    if (queryId !== latestQueryId) return resolve(cachedItems)
+
+                    try {
+                        const results = await performUnifiedSearch(query, 10, 0, searchOptions)
+                        if (queryId !== latestQueryId) return resolve(cachedItems)
+
+                        const filteredResults = normalizeResults(results)
+                        loading = false
+                        resolve(filteredResults)
+                    } catch (e) {
+                        console.error("Mention search system failed:", e)
+                        loading = false
+                        resolve([])
+                    }
+                }, 150)
+            })
         },
 
         render: () => {
@@ -152,6 +164,15 @@ export const getSuggestionConfig = (options?: {
                     if (props.event.key === "Escape") {
                         popup[0].hide()
                         return true
+                    }
+
+                    if (props.event.key === "ArrowRight") {
+                        const { selection } = props.editor.state
+                        if (selection.empty && selection.from >= props.range.to) {
+                            // Step out of the badge by inserting a zero-width space
+                            props.editor.commands.insertContent("\u200B")
+                            return true
+                        }
                     }
 
                     return component?.ref?.onKeyDown(props) || false
