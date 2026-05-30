@@ -2,21 +2,21 @@
 
 import * as React from "react"
 import { Plus, X, ChevronDown, Zap, ScrollText } from "lucide-react"
-import { Control, FieldErrors, Controller } from "react-hook-form"
+import { Control, FieldErrors, Controller, FieldValues, Path } from "react-hook-form"
 import { motion, AnimatePresence } from "framer-motion"
 import { GlassEntityChooser } from "@/components/ui/glass-entity-chooser"
 import { GlassInlineEmptyState } from "@/components/ui/glass-inline-empty-state"
 import { ENTITY_PROVIDERS } from "@/lib/config/entities"
 import { cn } from "@/core/utils"
 
-interface EntityListChooserProps {
+interface EntityListChooserProps<T extends FieldValues> {
     fields: any[]
     append: (value: any) => void
     remove: (index: number) => void
-    control: Control<any>
+    control: Control<T>
     isSubmitting: boolean
-    fieldName: string
-    errors: FieldErrors<any>
+    fieldName: Path<T>
+    errors: FieldErrors<T>
     entityType?: "Habilidade" | "Regra" | "Talento" | "Magia"
     title?: string
     description?: string
@@ -28,7 +28,7 @@ interface EntityListChooserProps {
  * A generalized component for selecting and listing entities (Rules, Traits, etc.)
  * with an optional Level field and high-fidelity accordion UX.
  */
-export function EntityListChooser({
+export function EntityListChooser<T extends FieldValues>({
     fields,
     append,
     remove,
@@ -41,7 +41,7 @@ export function EntityListChooser({
     description,
     icon,
     showLevel = false
-}: EntityListChooserProps) {
+}: EntityListChooserProps<T>) {
     const [isExpanded, setIsExpanded] = React.useState(false)
     const provider = ENTITY_PROVIDERS.find(p => p.name === entityType)
     
@@ -117,7 +117,7 @@ export function EntityListChooser({
                                                 {showLevel && (
                                                     <div className="w-16 self-stretch flex flex-col">
                                                         <Controller
-                                                            name={`${fieldName}.${index}.level`}
+                                                            name={`${fieldName as string}.${index}.level` as any}
                                                             control={control}
                                                             render={({ field: levelField }) => (
                                                                 <div className="space-y-1 flex-1 flex flex-col group/level">
@@ -149,12 +149,12 @@ export function EntityListChooser({
                                                             {entityType}
                                                         </label>
                                                         <Controller
-                                                            name={`${fieldName}.${index}.description`}
+                                                            name={`${fieldName as string}.${index}.description` as any}
                                                             control={control}
                                                             render={({ field: descField }) => (
                                                                 <div className="space-y-1">
                                                                     <GlassEntityChooser
-                                                                        value={descField.value ? { label: descField.value.replace(/<[^>]*>/g, ""), id: field.id } : undefined}
+                                                                        value={descField.value ? { label: (descField.value as string).replace(/<[^>]*>/g, ""), id: field.id } : undefined}
                                                                         onChange={(val: any) => {
                                                                             if (val) {
                                                                                 descField.onChange(
@@ -168,7 +168,7 @@ export function EntityListChooser({
                                                                         placeholder={`Vincular @${displayTitle.toLowerCase()}...`}
                                                                         disabled={isSubmitting}
                                                                         className={cn(
-                                                                            ((errors as any)?.[fieldName.split(".")[0]]?.[index]?.description ||
+                                                                            ((errors as any)?.[(fieldName as string).split(".")[0]]?.[index]?.description ||
                                                                                 (errors as any)?.[fieldName]?.[index]?.description) &&
                                                                                 "border-rose-500/50",
                                                                         )}

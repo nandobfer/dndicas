@@ -5,7 +5,7 @@
 "use client";
 
 import * as React from "react"
-import { Controller, Control, FieldErrors, UseFormWatch, UseFormSetValue, useFieldArray } from "react-hook-form"
+import { Controller, Control, FieldErrors, UseFormWatch, UseFormSetValue, useFieldArray, FieldValues, Path, PathValue } from "react-hook-form"
 import { Info, BookOpen, Zap, Plus, X, Wand, ChevronDown, Check, Package } from "lucide-react"
 import { motion, AnimatePresence } from "framer-motion"
 import { cn } from "@/core/utils"
@@ -45,16 +45,16 @@ const SKILL_MAP: Record<AttributeType, SkillType[]> = {
 
 // ── Components ───────────────────────────────────────────────────────────────
 
-interface SkillSelectionProps {
-    control: Control<any>
+interface SkillSelectionProps<T extends FieldValues> {
+    control: Control<T>
     isSubmitting: boolean
-    errors: FieldErrors<any>
-    availableSkillsFieldName: string
-    skillCountFieldName?: string
+    errors: FieldErrors<T>
+    availableSkillsFieldName: Path<T>
+    skillCountFieldName?: Path<T>
     label?: string
 }
 
-export function SkillSelection({ control, isSubmitting, errors, availableSkillsFieldName, skillCountFieldName, label = "Perícias" }: SkillSelectionProps) {
+export function SkillSelection<T extends FieldValues>({ control, isSubmitting, errors, availableSkillsFieldName, skillCountFieldName, label = "Perícias" }: SkillSelectionProps<T>) {
     return (
         <div className="space-y-4">
             <label className="text-sm font-medium text-white/80 flex items-center gap-2 w-full pb-2 border-b border-white/5">
@@ -122,7 +122,7 @@ export function SkillSelection({ control, isSubmitting, errors, availableSkillsF
                     )
                 })}
             </div>
-            {errors[availableSkillsFieldName] && <p className="text-xs text-rose-400">{errors[availableSkillsFieldName]?.message as string}</p>}
+            {errors[availableSkillsFieldName] && <p className="text-xs text-rose-400">{(errors[availableSkillsFieldName]?.message as string) || ""}</p>}
         </div>
     )
 }
@@ -174,19 +174,19 @@ function SpellCircleAccordion({ circle, spells, onRemove }: { circle: number; sp
     )
 }
 
-interface ImageAndDescriptionSectionProps {
-    control: Control<any>
+interface ImageAndDescriptionSectionProps<T extends FieldValues> {
+    control: Control<T>
     isSubmitting: boolean
-    errors: FieldErrors<any>
-    imageFieldName: string
-    descriptionFieldName: string
+    errors: FieldErrors<T>
+    imageFieldName: Path<T>
+    descriptionFieldName: Path<T>
     getAIPayload: () => unknown
     aiContextLabel: string
     entityId?: string
     placeholder?: string
 }
 
-export function ImageAndDescriptionSection({
+export function ImageAndDescriptionSection<T extends FieldValues>({
     control,
     isSubmitting,
     errors,
@@ -196,7 +196,7 @@ export function ImageAndDescriptionSection({
     aiContextLabel,
     entityId,
     placeholder = "Descreva detalhadamente...",
-}: ImageAndDescriptionSectionProps) {
+}: ImageAndDescriptionSectionProps<T>) {
     return (
         <div className="grid grid-cols-1 md:grid-cols-[250px_1fr] gap-6">
             <div className="space-y-2 flex flex-col">
@@ -242,23 +242,23 @@ export function ImageAndDescriptionSection({
                         )}
                     />
                 </div>
-                {errors[descriptionFieldName] && <p className="text-xs text-rose-400">{errors[descriptionFieldName]?.message as string}</p>}
+                {errors[descriptionFieldName] && <p className="text-xs text-rose-400">{(errors[descriptionFieldName]?.message as string) || ""}</p>}
             </div>
         </div>
     )
 }
 
-interface SpellcastingSectionProps {
-    control: Control<any>
-    watch: UseFormWatch<any>
-    setValue: UseFormSetValue<any>
+interface SpellcastingSectionProps<T extends FieldValues> {
+    control: Control<T>
+    watch: UseFormWatch<T>
+    setValue: UseFormSetValue<T>
     isSubmitting: boolean
-    spellcastingFieldName: string
-    attributeFieldName: string
+    spellcastingFieldName: Path<T>
+    attributeFieldName: Path<T>
     layoutIdPrefix?: string
 }
 
-export function SpellcastingSection({ control, watch, setValue, isSubmitting, spellcastingFieldName, attributeFieldName, layoutIdPrefix = "base" }: SpellcastingSectionProps) {
+export function SpellcastingSection<T extends FieldValues>({ control, watch, setValue, isSubmitting, spellcastingFieldName, attributeFieldName, layoutIdPrefix = "base" }: SpellcastingSectionProps<T>) {
     const spellcasting = watch(spellcastingFieldName)
 
     // Ensure we have a valid initial state for comparison
@@ -279,11 +279,11 @@ export function SpellcastingSection({ control, watch, setValue, isSubmitting, sp
                                 onCheckedChange={(checked) => {
                                     field.onChange(checked)
                                     if (!checked) {
-                                        setValue(attributeFieldName, undefined, { shouldDirty: true, shouldValidate: true })
+                                        setValue(attributeFieldName, undefined as any, { shouldDirty: true, shouldValidate: true })
                                         // Também precisamos limpar as magias
-                                        const parts = spellcastingFieldName.split(".")
+                                        const parts = (spellcastingFieldName as string).split(".")
                                         const spellsPath = parts.length > 1 ? `subclasses.${parts[1]}.spells` : "spells"
-                                        setValue(spellsPath as any, [], { shouldDirty: true, shouldValidate: true })
+                                        setValue(spellsPath as any, [] as any, { shouldDirty: true, shouldValidate: true })
                                     }
                                 }}
                                 disabled={isSubmitting}
@@ -332,14 +332,14 @@ export function SpellcastingSection({ control, watch, setValue, isSubmitting, sp
     )
 }
 
-interface SpellsSectionProps {
-    control: Control<any>
+interface SpellsSectionProps<T extends FieldValues> {
+    control: Control<T>
     isSubmitting: boolean
-    spellsFieldName: string
-    errors: FieldErrors<any>
+    spellsFieldName: Path<T>
+    errors: FieldErrors<T>
 }
 
-export function SpellsSection({ control, isSubmitting, spellsFieldName, errors }: SpellsSectionProps) {
+export function SpellsSection<T extends FieldValues>({ control, isSubmitting, spellsFieldName, errors }: SpellsSectionProps<T>) {
     const spellCountId = React.useId()
     const {
         fields: spellFields,
@@ -347,7 +347,7 @@ export function SpellsSection({ control, isSubmitting, spellsFieldName, errors }
         remove: removeSpell,
     } = useFieldArray({
         control,
-        name: spellsFieldName,
+        name: spellsFieldName as any,
     })
 
     const [isExpanded, setIsExpanded] = React.useState(false)
@@ -364,7 +364,7 @@ export function SpellsSection({ control, isSubmitting, spellsFieldName, errors }
                 <button
                     type="button"
                     onClick={() => {
-                        appendSpell({ id: "", name: "", circle: -1, level: 1, isPending: true })
+                        appendSpell({ id: "", name: "", circle: -1, level: 1, isPending: true } as any)
                         setIsExpanded(true)
                     }}
                     disabled={isSubmitting}
@@ -427,7 +427,7 @@ export function SpellsSection({ control, isSubmitting, spellsFieldName, errors }
                                                                     name: val.label,
                                                                     circle,
                                                                     level,
-                                                                })
+                                                                } as any)
                                                             }
                                                         }}
                                                         disabled={isSubmitting}
@@ -463,7 +463,7 @@ export function SpellsSection({ control, isSubmitting, spellsFieldName, errors }
                                                 >
                                                     <div className="w-20 self-stretch flex flex-col">
                                                         <Controller
-                                                            name={`${spellsFieldName}.${field.originalIndex}.level`}
+                                                            name={`${spellsFieldName as string}.${field.originalIndex}.level` as any}
                                                             control={control}
                                                             render={({ field: levelField }) => (
                                                                 <div className="space-y-1.5 flex-1 flex flex-col group/level">
@@ -516,14 +516,14 @@ export function SpellsSection({ control, isSubmitting, spellsFieldName, errors }
     )
 }
 
-interface TraitsSectionProps {
+interface TraitsSectionProps<T extends FieldValues> {
     fields: any[]
     append: (value: any) => void
     remove: (index: number) => void
-    control: Control<any>
+    control: Control<T>
     isSubmitting: boolean
-    traitsFieldName: string
-    errors: FieldErrors<any>
+    traitsFieldName: Path<T>
+    errors: FieldErrors<T>
 }
 
 /**
@@ -567,7 +567,7 @@ export function EquipmentSection({ isSubmitting }: { isSubmitting: boolean }) {
     )
 }
 
-export function TraitsSection({ fields, append, remove, control, isSubmitting, traitsFieldName, errors }: TraitsSectionProps) {
+export function TraitsSection<T extends FieldValues>({ fields, append, remove, control, isSubmitting, traitsFieldName, errors }: TraitsSectionProps<T>) {
     const traitCountId = React.useId()
     const [isExpanded, setIsExpanded] = React.useState(false)
 
@@ -633,7 +633,7 @@ export function TraitsSection({ fields, append, remove, control, isSubmitting, t
                                             >
                                                 <div className="w-20 self-stretch flex flex-col">
                                                     <Controller
-                                                        name={`${traitsFieldName}.${index}.level`}
+                                                        name={`${traitsFieldName as string}.${index}.level` as any}
                                                         control={control}
                                                         render={({ field: levelField }) => (
                                                             <div className="space-y-1.5 flex-1 flex flex-col group/level">
@@ -658,12 +658,12 @@ export function TraitsSection({ fields, append, remove, control, isSubmitting, t
                                                     <div className="space-y-1.5 flex-1 flex flex-col">
                                                         <label className="text-sm font-medium text-white/80 block shrink-0">Habilidade (Traço ou Regra)</label>
                                                         <Controller
-                                                            name={`${traitsFieldName}.${index}.description`}
+                                                            name={`${traitsFieldName as string}.${index}.description` as any}
                                                             control={control}
                                                             render={({ field: descField }) => (
                                                                 <div className="space-y-1">
                                                                     <GlassEntityChooser
-                                                                        value={descField.value ? { label: descField.value.replace(/<[^>]*>/g, ""), id: field.id } : undefined}
+                                                                        value={descField.value ? { label: (descField.value as string).replace(/<[^>]*>/g, ""), id: field.id } : undefined}
                                                                         onChange={(val) => {
                                                                             if (val) {
                                                                                 descField.onChange(
@@ -677,15 +677,15 @@ export function TraitsSection({ fields, append, remove, control, isSubmitting, t
                                                                         placeholder="Vincular @Habilidade..."
                                                                         disabled={isSubmitting}
                                                                         className={cn(
-                                                                            ((errors as any)?.[traitsFieldName.split(".")[0]]?.[index]?.description ||
+                                                                            ((errors as any)?.[(traitsFieldName as string).split(".")[0]]?.[index]?.description ||
                                                                                 (errors as any)?.[traitsFieldName]?.[index]?.description) &&
                                                                                 "border-rose-500/50",
                                                                         )}
                                                                     />
-                                                                    {((errors as any)?.[traitsFieldName.split(".")[0]]?.[index]?.description ||
+                                                                    {((errors as any)?.[(traitsFieldName as string).split(".")[0]]?.[index]?.description ||
                                                                         (errors as any)?.[traitsFieldName]?.[index]?.description) && (
                                                                         <p className="text-[10px] text-rose-400 font-medium pl-1">
-                                                                            {(errors as any)?.[traitsFieldName.split(".")[0]]?.[index]?.description?.message ||
+                                                                            {(errors as any)?.[(traitsFieldName as string).split(".")[0]]?.[index]?.description?.message ||
                                                                                 (errors as any)?.[traitsFieldName]?.[index]?.description?.message}
                                                                         </p>
                                                                     )}

@@ -41,7 +41,7 @@ const raceSchema = z.object({
 
 type RaceListQuery = {
     $or?: Array<{ name?: { $regex: string; $options: "i" }; originalName?: { $regex: string; $options: "i" } }>
-    status?: string
+    status?: "active" | "inactive"
     source?: { $in: RegExp[] }
 }
 

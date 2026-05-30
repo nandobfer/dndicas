@@ -189,13 +189,13 @@ export function filterEntitiesByOptions(items: UnifiedEntity[], options?: Unifie
 
 function getFuzzyCacheEntry<T extends SearchableEntity>(items: T[]): FuzzyCacheEntry<T> {
     const cached = fuzzyCache.get(items as SearchableEntity[])
-    if (cached) return cached as FuzzyCacheEntry<T>
+    if (cached) return cached as unknown as FuzzyCacheEntry<T>
 
     const entry: FuzzyCacheEntry<T> = {
         fuse: new Fuse(items, FUSE_OPTIONS),
         rankedResultsByQuery: new Map(),
     }
-    fuzzyCache.set(items as SearchableEntity[], entry as FuzzyCacheEntry<SearchableEntity>)
+    fuzzyCache.set(items as SearchableEntity[], entry as unknown as FuzzyCacheEntry<SearchableEntity>)
     return entry
 }
 
