@@ -19,9 +19,10 @@ O dice roller fornece rolagens manuais e originadas de ficha/Owlbear com resulta
 - A stage 3D usa notacao com `@`, por exemplo `1d20@14` ou `1d20+1d20@18,7`, apenas para rolagens oficiais.
 - Rolagens oficiais usam boost moderado `!!` na notacao da Dice Box para prolongar a animacao visual.
 - Antes de rolar, a stage renderiza meshes estaticos da propria Dice Box usando a face maxima de cada dado; standby nao chama `box.roll`.
-- O standby usa internals encapsulados em helper para criar/simular/fixar o mesh sem iniciar `animateThrow`.
+- O standby usa internals encapsulados em helper para criar e fixar o mesh sem iniciar `animateThrow`. A simulação de física síncrona foi removida do standby para evitar bloqueio da thread principal (CPU), utilizando posicionamento matemático e rotações aleatórias.
 - Depois de fixar a face maxima, o standby reposiciona os meshes em grade estatica da esquerda para a direita, quebrando linha quando necessario.
 - Os assets de textura necessarios da Dice Box ficam em `public/textures/` para atender ao `assetPath: "/"` usado pela lib.
+- Uma estratégia de **Preload Agressivo** é executada no `DiceRollerProvider` (global), instanciando um `DiceBox` oculto no boot da aplicação para aquecer o cache do navegador (WASM, modelos 3D e shaders).
 - Ao voltar para standby depois de uma rolagem, a stage limpa o canvas 3D anterior sem iniciar nova fisica/animacao.
 - A Dice Box usa `baseScale: 67` para manter os dados menores dentro da janela do roller.
 - Vantagem/desvantagem em `1d20` renderiza dois d20 visuais com papeis `kept` e `discarded`.
@@ -60,6 +61,9 @@ O dice roller foi refatorado de um modal convencional para uma janela flutuante 
 
 ### Responsive container query layout
 O painel do roller (`DiceRollerPanel`) monitora sua própria largura de contêiner usando um `ResizeObserver`. Se a largura do contêiner for menor que `800px` (como no tamanho padrão inicial ou quando o usuário redimensiona a janela para dimensões mais estreitas), os controles de seleção e modificadores são empilhados verticalmente abaixo da stage 3D e do resumo de resultados. Se o contêiner for mais largo que `800px`, os elementos mudam dinamicamente para um layout de duas colunas lado a lado.
+
+### Aggressive 3D assets preloading and physics-free standby
+Para eliminar o atraso percebido ao abrir o painel de dados, a aplicação realiza um preload agressivo dos recursos 3D (`DiceBox`). Ao montar o `DiceRollerProvider`, uma instância oculta do motor é inicializada em background usando `requestIdleCallback`, forçando o download e cache de assets pesados (WebAssembly do motor físico, modelos 3D dos dados e texturas). Adicionalmente, a renderização de dados em "standby" (dados aguardando na mesa) foi otimizada para ser puramente matemática: a simulação física síncrona foi removida, eliminando o congelamento da thread principal (Main Thread). Os dados são posicionados em grade e recebem rotações aleatórias instantâneas, garantindo que o painel apareça de forma imediata e fluida para o usuário.
 
 
 

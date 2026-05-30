@@ -140,7 +140,7 @@ describe("DiceRollerPanel", () => {
         await waitFor(() => {
             expect(diceBoxMocks.startClickThrow).toHaveBeenCalledWith("1d20@20")
             expect(diceBoxMocks.spawnDice).toHaveBeenCalledTimes(1)
-            expect(diceBoxMocks.simulateThrow).toHaveBeenCalled()
+            expect(diceBoxMocks.simulateThrow).not.toHaveBeenCalled()
             expect(diceBoxMocks.render).toHaveBeenCalled()
             expect(diceBoxMocks.roll).not.toHaveBeenCalled()
         })

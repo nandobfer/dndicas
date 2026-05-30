@@ -5,6 +5,7 @@ import type { DiceRollPreset } from "../types"
 import { useDiceResultConsoleApi } from "../hooks/use-dice-result-console-api"
 import { useWindows } from "@/core/context/window-context"
 import { DiceRollerPanel } from "./dice-roller-panel"
+import { preloadDiceBoxAssets } from "../dice-box-loader"
 
 interface DiceRollerContextValue {
     openManual: () => void
@@ -17,6 +18,10 @@ const DiceRollerContext = React.createContext<DiceRollerContextValue | null>(nul
 export function DiceRollerProvider({ children }: { children: React.ReactNode }) {
     const { addWindow, removeWindow } = useWindows()
     useDiceResultConsoleApi()
+
+    React.useEffect(() => {
+        preloadDiceBoxAssets()
+    }, [])
 
     const close = React.useCallback(() => {
         removeWindow("dice-roller")
