@@ -1,4 +1,4 @@
-import Fuse from "fuse.js"
+import Fuse, { type FuseResult } from "fuse.js"
 import { ENTITY_PROVIDERS } from "@/lib/config/entities"
 import type { EntityType } from "@/lib/config/colors"
 
@@ -72,8 +72,6 @@ const FUSE_OPTIONS = {
         { name: "name", weight: 10 },
         { name: "originalName", weight: 8 },
         { name: "label", weight: 10 },
-        { name: "source", weight: 5 },
-        { name: "description", weight: 1 }
     ],
     threshold: 0.35,
     includeScore: true,
@@ -83,7 +81,7 @@ const FUSE_OPTIONS = {
 
 type FuzzyCacheEntry<T extends SearchableEntity> = {
     fuse: Fuse<T>
-    rankedResultsByQuery: Map<string, T[]>
+    rankedResultsByQuery: Map<string, FuseResult<T>[]>
 }
 
 // Simple in-memory cache for search data
@@ -199,30 +197,14 @@ function getFuzzyCacheEntry<T extends SearchableEntity>(items: T[]): FuzzyCacheE
     return entry
 }
 
-function getRankedFuzzyResults<T extends SearchableEntity>(items: T[], query: string): T[] {
+function getRankedFuzzyResults<T extends SearchableEntity>(items: T[], query: string): FuseResult<T>[] {
     const cacheEntry = getFuzzyCacheEntry(items)
     const cachedResults = cacheEntry.rankedResultsByQuery.get(query)
     if (cachedResults) return cachedResults
 
     const fuseResults = cacheEntry.fuse.search(query)
-    const mapped = fuseResults.map((result) => {
-        // Handle both plain objects and Mongoose/class instances
-        const item = result.item as SearchResultItem
-        const baseItem = (typeof item.toObject === "function" ? item.toObject() : { ...result.item }) as Record<string, unknown> & SearchResultItem
-
-        // Ensure ID compatibility
-        const id = baseItem._id?.toString() || baseItem.id?.toString()
-
-        return {
-            ...baseItem,
-            id: id,
-            _id: id,
-            score: result.score
-        } as unknown as T
-    })
-
-    cacheEntry.rankedResultsByQuery.set(query, mapped)
-    return mapped
+    cacheEntry.rankedResultsByQuery.set(query, fuseResults)
+    return fuseResults
 }
 
 /**
@@ -239,9 +221,26 @@ export function applyFuzzySearch<T extends SearchableEntity>(
         return sliced
     }
 
-    const mapped = getRankedFuzzyResults(items, query)
+    const rawResults = getRankedFuzzyResults(items, query)
+    const paginatedRawResults = limit
+        ? rawResults.slice(offset, offset + limit)
+        : rawResults.slice(offset)
 
-    return limit ? mapped.slice(offset, offset + limit) : mapped
+    return paginatedRawResults.map((result) => {
+        // Handle both plain objects and Mongoose/class instances
+        const item = result.item as SearchResultItem
+        const baseItem = (typeof item.toObject === "function" ? item.toObject() : { ...result.item }) as Record<string, unknown> & SearchResultItem
+
+        // Ensure ID compatibility
+        const id = baseItem._id?.toString() || baseItem.id?.toString()
+
+        return {
+            ...baseItem,
+            id: id,
+            _id: id,
+            score: result.score
+        } as unknown as T
+    })
 }
 
 /**
