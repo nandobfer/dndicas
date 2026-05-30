@@ -73,7 +73,7 @@ const FUSE_OPTIONS = {
         { name: "originalName", weight: 8 },
         { name: "label", weight: 10 },
     ],
-    threshold: 0.35,
+    threshold: 0.15,
     includeScore: true,
     shouldSort: true,
     minMatchCharLength: 2

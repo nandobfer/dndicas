@@ -120,6 +120,19 @@ function arrangeStaticDice(staticBox: StaticDiceBox) {
         setVector(die.body?.velocity, 0, 0, 0)
         setVector(die.body?.angularVelocity, 0, 0, 0)
 
+        // Randomize rotation for a more natural static look
+        const anyDie = die as any
+        const rx = Math.random() * Math.PI * 2
+        const ry = Math.random() * Math.PI * 2
+        const rz = Math.random() * Math.PI * 2
+        
+        if (anyDie.rotation && typeof anyDie.rotation.set === "function") {
+            anyDie.rotation.set(rx, ry, rz)
+        }
+        if (anyDie.body && anyDie.body.quaternion && typeof anyDie.body.quaternion.setFromEuler === "function") {
+            anyDie.body.quaternion.setFromEuler(rx, ry, rz)
+        }
+
         if (die.body) {
             die.body.type = 4
             die.body.sleepState = 2
@@ -145,7 +158,8 @@ export function renderStaticDiceBoxStandby(box: DiceBox, notation: string) {
         staticBox.spawnDice?.(vector)
     }
 
-    staticBox.simulateThrow?.()
+    // REMOVED: staticBox.simulateThrow?.() - This was blocking the main thread synchronously.
+    // Without simulation, we rely on arrangeStaticDice to place them and swapDiceFace to orient them if needed.
 
     if (Array.isArray(notationVectors.result)) {
         for (let index = 0; index < notationVectors.result.length; index += 1) {
