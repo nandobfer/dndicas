@@ -10,40 +10,7 @@ import { useInfiniteBackgrounds } from "../api/backgrounds-queries"
 import { useIsMobile } from "@/core/hooks/useMediaQuery"
 import { useViewMode } from "@/core/hooks/useViewMode"
 import type { Background } from "../types/backgrounds.types"
-
-function applyClientFilters(
-    items: Background[],
-    suggestedAttributes: string[],
-    skillProficiencies: string[],
-    featIds: string[],
-): Background[] {
-    let result = items
-
-    if (suggestedAttributes.length > 0) {
-        result = result.filter((bg) =>
-            bg.suggestedAttributes?.some((a) => suggestedAttributes.includes(a)),
-        )
-    }
-
-    if (skillProficiencies.length > 0) {
-        result = result.filter((bg) =>
-            bg.skillProficiencies?.some((s) => skillProficiencies.includes(s)),
-        )
-    }
-
-    if (featIds.length > 0) {
-        result = result.filter((bg) => {
-            if (!bg.featId) return false
-            // API returns featId as { id, label } object or as a plain string
-            const resolvedId = typeof bg.featId === "object"
-                ? (bg.featId as unknown as { id: string }).id
-                : bg.featId
-            return featIds.includes(resolvedId)
-        })
-    }
-
-    return result
-}
+import { useClientFilteredBackgrounds } from "./useClientFilteredBackgrounds"
 
 export function useBackgroundsPage() {
     const isMobile = useIsMobile()
@@ -61,35 +28,14 @@ export function useBackgroundsPage() {
 
     const infiniteData = useInfiniteBackgrounds(serverFilters)
 
-    const allInfiniteItems = React.useMemo(
-        () => infiniteData.data?.pages.flatMap((p) => p.items) || [],
-        [infiniteData.data?.pages],
-    )
-
-    const filteredInfiniteItems = React.useMemo(
-        () => applyClientFilters(allInfiniteItems, suggestedAttributes, skillProficiencies, featIds),
-        [allInfiniteItems, suggestedAttributes, skillProficiencies, featIds],
-    )
-
-    const hasClientFilters = suggestedAttributes.length > 0 || skillProficiencies.length > 0 || featIds.length > 0
-
-    const hasNextInfinitePage = !!infiniteData.hasNextPage
-    const isInfiniteLoading = infiniteData.isLoading
-    const isFetchingNextInfinitePage = infiniteData.isFetchingNextPage
-    const fetchNextInfinitePage = infiniteData.fetchNextPage
-
-    React.useEffect(() => {
-        if (
-            hasClientFilters &&
-            filteredInfiniteItems.length === 0 &&
-            allInfiniteItems.length > 0 &&
-            hasNextInfinitePage &&
-            !isInfiniteLoading &&
-            !isFetchingNextInfinitePage
-        ) {
-            fetchNextInfinitePage()
-        }
-    }, [allInfiniteItems.length, fetchNextInfinitePage, filteredInfiniteItems.length, hasClientFilters, hasNextInfinitePage, isFetchingNextInfinitePage, isInfiniteLoading])
+    const { filteredItems: filteredInfiniteItems, hasClientFilters } = useClientFilteredBackgrounds({
+        infiniteData: { pages: infiniteData.data?.pages },
+        filters: { suggestedAttributes, skillProficiencies, featIds },
+        hasNextPage: !!infiniteData.hasNextPage,
+        isLoading: infiniteData.isLoading,
+        isFetchingNextPage: infiniteData.isFetchingNextPage,
+        fetchNextPage: infiniteData.fetchNextPage,
+    })
 
     // Modal states
     const [isFormOpen, setIsFormOpen] = React.useState(false)
