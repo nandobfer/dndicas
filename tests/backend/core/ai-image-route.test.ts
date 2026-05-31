@@ -100,6 +100,7 @@ describe('POST /api/core/ai/image', () => {
         expect(response.status).toBe(201);
         expect(requireAuth).toHaveBeenCalledTimes(1);
         expect(generateImage).toHaveBeenCalledWith(expect.stringContaining('Dungeons & Dragons 5e'), 'gemini-image-test', 'clerk-1');
+        expect(generateImage).toHaveBeenCalledWith(expect.stringContaining('realismo clássico'), 'gemini-image-test', 'clerk-1');
         expect(generateImage).toHaveBeenCalledWith(expect.stringContaining('"name": "Guerreiro"'), 'gemini-image-test', 'clerk-1');
         expect(generateImage).toHaveBeenCalledWith(expect.stringContaining('Contexto principal da entidade: Classe.'), 'gemini-image-test', 'clerk-1');
         expect(getImageExtensionFromMimeType).toHaveBeenCalledWith('image/png');

@@ -31,7 +31,7 @@ export function buildDndImagePrompt({
     return [
         "Você é um diretor de arte especializado em Dungeons & Dragons 5e, criando ilustrações com aparência premium de livro oficial.",
         `Crie uma única arte final em aspecto ${preferredAspectRatio || DEFAULT_GENERATED_IMAGE_ASPECT_RATIO}, priorizando composição 1:1, leitura clara do sujeito principal e enquadramento adequado para uso como imagem de catálogo.`,
-        "A estética deve ser coerente com D&D: fantasia heroica, acabamento editorial, iluminação dramática, riqueza de materiais, silhueta legível e consistência com artes de sourcebooks oficiais.",
+        "A estética deve ser coerente com D&D: realismo clássico, fantasia heroica, acabamento editorial, iluminação dramática, riqueza de materiais, silhueta legível e consistência com artes de sourcebooks oficiais.",
         "Regras obrigatórias: sem texto, sem logos, sem molduras, sem watermark, sem interface, sem colagem, sem múltiplos quadros e sem visual fotográfico moderno fora do tema de fantasia.",
         "Use TODO o JSON abaixo como fonte de verdade. Não dependa de campos específicos; leia o objeto inteiro e extraia dele o que for necessário para representar com precisão a entidade.",
         `Contexto principal da entidade: ${entityLabel || "Entidade de D&D"}.`,
