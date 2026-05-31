@@ -24,6 +24,7 @@ import { ClassesTable } from "@/features/classes/components/classes-table"
 import { attributeColors } from "@/lib/config/colors"
 import { useInfiniteRaces } from "@/features/races/api/races-queries"
 import { useInfiniteBackgrounds } from "@/features/backgrounds/api/backgrounds-queries"
+import { useClientFilteredBackgrounds } from "@/features/backgrounds/hooks/useClientFilteredBackgrounds"
 import { useInfiniteClasses } from "@/features/classes/api/classes-queries"
 import { useCreateAssistedSheet } from "@/features/character-sheets/api/character-sheets-queries"
 import { useCharacterCalculations } from "@/features/character-sheets/hooks/use-character-calculations"
@@ -210,11 +211,19 @@ export function AssistedSheetCreationModal({ open, onOpenChange, onCreated }: As
     const { data: backgroundsInfiniteData, isLoading: isLoadingBackgrounds, hasNextPage: backgroundsHasNext, isFetchingNextPage: backgroundsFetching, fetchNextPage: backgroundsFetchNext } =
         useInfiniteBackgrounds({ ...backgroundFilters, status: "active" }, { enabled: open })
 
+    const { filteredItems: backgrounds } = useClientFilteredBackgrounds({
+        infiniteData: { pages: backgroundsInfiniteData?.pages },
+        filters: backgroundFilters,
+        hasNextPage: !!backgroundsHasNext,
+        isLoading: isLoadingBackgrounds,
+        isFetchingNextPage: backgroundsFetching,
+        fetchNextPage: backgroundsFetchNext,
+    })
+
     const { data: classesInfiniteData, isLoading: isLoadingClasses, hasNextPage: classesHasNext, isFetchingNextPage: classesFetching, fetchNextPage: classesFetchNext } =
         useInfiniteClasses({ ...classFilters }, { enabled: open })
 
     const races = React.useMemo(() => racesInfiniteData?.pages.flatMap((p) => p.items) ?? [], [racesInfiniteData])
-    const backgrounds = React.useMemo(() => backgroundsInfiniteData?.pages.flatMap((p) => p.items) ?? [], [backgroundsInfiniteData])
     const classes = React.useMemo(() => classesInfiniteData?.pages.flatMap((p) => p.classes) ?? [], [classesInfiniteData])
     const classesTotal = React.useMemo(() => classesInfiniteData?.pages[classesInfiniteData.pages.length - 1]?.total ?? 0, [classesInfiniteData])
 
