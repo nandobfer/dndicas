@@ -5,11 +5,12 @@ import StarterKit from '@tiptap/starter-kit'
 import ImageExtension from "@tiptap/extension-image"
 import Placeholder from '@tiptap/extension-placeholder'
 import Mention from "@tiptap/extension-mention"
+import { Table as TableExtension, TableRow, TableHeader, TableCell } from "@tiptap/extension-table"
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { cn } from '@/core/utils'
 import { Button } from '@/core/ui/button'
 import { glassConfig } from "@/lib/config/glass-config"
-import { Bold, Italic, Strikethrough, List, ListOrdered, Undo, Redo, Image as ImageIcon } from "lucide-react"
+import { Bold, Italic, Strikethrough, List, ListOrdered, Undo, Redo, Image as ImageIcon, Table2 } from "lucide-react"
 import { getSuggestionConfig } from "../utils/suggestion"
 import { Extension, Node, InputRule } from "@tiptap/core"
 import { Plugin, PluginKey } from "@tiptap/pm/state"
@@ -378,7 +379,7 @@ interface RichTextEditorProps {
     openMentionsOnFocus?: boolean
 }
 
-const MenuBar = ({ editor, addImage, disabled = false }: { editor: Editor | null; addImage: () => void; disabled?: boolean }) => {
+const MenuBar = ({ editor, addImage, addTable, disabled = false }: { editor: Editor | null; addImage: () => void; addTable: () => void; disabled?: boolean }) => {
     if (!editor) {
         return null
     }
@@ -448,6 +449,18 @@ const MenuBar = ({ editor, addImage, disabled = false }: { editor: Editor | null
 
             <Button type="button" variant="ghost" size="sm" tabIndex={-1} disabled={disabled} onClick={addImage} className="h-8 w-8 p-0" title="Upload Image">
                 <ImageIcon className="h-4 w-4" />
+            </Button>
+            <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                tabIndex={-1}
+                disabled={disabled}
+                onClick={addTable}
+                className="h-8 w-8 p-0"
+                title="Inserir Tabela"
+            >
+                <Table2 className="h-4 w-4" />
             </Button>
 
             <div className="w-px h-6 bg-white/10 mx-1 self-center" />
@@ -601,6 +614,10 @@ export function RichTextEditor({
             }),
             DiceHighlight,
             DiceValueNode,
+            TableExtension.configure({ resizable: false }),
+            TableRow,
+            TableHeader,
+            TableCell,
             ...(disableNewlines ? [DisableNewlinesExtension] : []),
         ],
         content: value,
@@ -657,6 +674,11 @@ export function RichTextEditor({
                     "[&_ul]:list-disc [&_ul]:pl-5 [&_ol]:list-decimal [&_ol]:pl-5 [&_li]:my-1",
                     "prose-blockquote:border-l-4 prose-blockquote:border-primary/50 prose-blockquote:pl-4 prose-blockquote:italic",
                     "prose-img:rounded-md prose-img:border prose-img:border-white/10",
+                    // Table styles
+                    "[&_table]:w-full [&_table]:border-collapse [&_table]:my-3",
+                    "[&_th]:border [&_th]:border-white/20 [&_th]:px-3 [&_th]:py-2 [&_th]:text-left [&_th]:text-xs [&_th]:font-bold [&_th]:bg-white/[0.04] [&_th]:text-white/70",
+                    "[&_td]:border [&_td]:border-white/10 [&_td]:px-3 [&_td]:py-2 [&_td]:text-xs [&_td]:text-white/60",
+                    "[&_.selectedCell]:bg-blue-500/20",
                     "dark:prose-invert",
                     // TipTap placeholder CSS logic
                     "relative [&_p.is-editor-empty:first-child]:before:content-[attr(data-placeholder)] [&_p.is-editor-empty:first-child]:before:text-white/30 [&_p.is-editor-empty:first-child]:before:float-left [&_p.is-editor-empty:first-child]:before:h-0 [&_p.is-editor-empty:first-child]:before:pointer-events-none",
@@ -797,6 +819,11 @@ export function RichTextEditor({
         return () => window.clearTimeout(timeoutId)
     }, [editor, autoFocus, focusToken, disabled, onAutoFocusApplied])
 
+    const handleAddTableClick = useCallback(() => {
+        if (!editor || disabled) return
+        editor.chain().focus().insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run()
+    }, [disabled, editor])
+
     // Need to pass addImage to MenuBar inside the component to access editor and uploadImage
     const handleAddImageClick = useCallback(() => {
         if (!editor || disabled) return
@@ -845,7 +872,7 @@ export function RichTextEditor({
                 className,
             )}
         >
-            {variant === "full" && !disabled && <MenuBar editor={editor} addImage={handleAddImageClick} disabled={disabled} />}
+            {variant === "full" && !disabled && <MenuBar editor={editor} addImage={handleAddImageClick} addTable={handleAddTableClick} disabled={disabled} />}
             <div className="relative">
                 <EditorContent editor={editor} />
                 {isUploading && <div className="absolute inset-0 bg-black/50 flex items-center justify-center text-xs text-white">Uploading...</div>}

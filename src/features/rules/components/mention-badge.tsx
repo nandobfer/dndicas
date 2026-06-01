@@ -231,6 +231,43 @@ export function MentionContent({
                     }
                 }
 
+                // Special handling for Tables — styled like ChargesPreview
+                if (tagName === "table") {
+                    const children = Array.from(node.childNodes).map((child, i) => convertNode(child, i))
+                    return (
+                        <div key={`table-wrapper-${index}`} className="rounded-xl overflow-hidden border border-white/10 bg-white/[0.02] my-3">
+                            <div className="overflow-x-auto">
+                                <table className="w-full border-collapse">{children}</table>
+                            </div>
+                        </div>
+                    )
+                }
+
+                if (tagName === "thead") {
+                    const children = Array.from(node.childNodes).map((child, i) => convertNode(child, i))
+                    return <thead key={`thead-${index}`} className="border-b border-white/5 bg-white/[0.03]">{children}</thead>
+                }
+
+                if (tagName === "tbody") {
+                    const children = Array.from(node.childNodes).map((child, i) => convertNode(child, i))
+                    return <tbody key={`tbody-${index}`}>{children}</tbody>
+                }
+
+                if (tagName === "tr") {
+                    const children = Array.from(node.childNodes).map((child, i) => convertNode(child, i))
+                    return <tr key={`tr-${index}`} className="border-b border-white/5 last:border-b-0">{children}</tr>
+                }
+
+                if (tagName === "th") {
+                    const children = Array.from(node.childNodes).map((child, i) => convertNode(child, i))
+                    return <th key={`th-${index}`} className="px-3 py-2 text-left text-[9px] font-black uppercase tracking-[0.15em] text-white/30">{children}</th>
+                }
+
+                if (tagName === "td") {
+                    const children = Array.from(node.childNodes).map((child, i) => convertNode(child, i))
+                    return <td key={`td-${index}`} className="px-3 py-2 text-xs text-white/70">{children}</td>
+                }
+
                 // If inline mode, flatten structural blocks to avoid breaks
                 const blockTags = ["p", "div", "ul", "ol", "li", "h1", "h2", "h3", "h4", "h5", "h6", "blockquote", "pre"]
                 if (mode === "inline" && blockTags.includes(tagName)) {
