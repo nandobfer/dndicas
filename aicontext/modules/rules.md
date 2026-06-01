@@ -29,7 +29,7 @@ This module handles the D&D Reference Rules system, allowing administrators to m
 
 ## Dependencies
 
-- `@tiptap/react` ecosystem (including `@tiptap/extension-table`, `@tiptap/extension-table-row`, `@tiptap/extension-table-header`, `@tiptap/extension-table-cell`).
+- `@tiptap/react` ecosystem (including `@tiptap/extension-table`, `@tiptap/extension-table-row`, `@tiptap/extension-table-header`, `@tiptap/extension-table-cell`, `@tiptap/extension-bubble-menu`).
 - `src/core/storage/s3.ts`.
 - `mongoose` models.
 
@@ -37,6 +37,14 @@ This module handles the D&D Reference Rules system, allowing administrators to m
 
 ### Table support in RichTextEditor
 The `RichTextEditor` (variant `"full"`) includes a **Inserir Tabela** button (Table2 icon) in the toolbar. Clicking it inserts a 3×3 table with a header row via the TipTap Table extension. Tables in the editor have styled borders and background via Tailwind `[&_table]`, `[&_th]`, `[&_td]` classes. The selected cell is highlighted via `[&_.selectedCell]:bg-blue-500/20`.
+
+### Table BubbleMenu (column/row management)
+When the cursor is inside a table cell (`tableCell` or `tableHeader`), a floating toolbar (`TableBubbleMenu`) appears above the cursor position via `createPortal` on `document.body`. It is implemented as a React component that subscribes to editor `selectionUpdate`/`focus`/`blur` events and uses `editor.view.coordsAtPos()` to compute a `position: fixed` location.
+
+Buttons exposed (each with `SimpleGlassTooltip`):
+- **Colunas**: Adicionar coluna à esquerda (`addColumnBefore`), Adicionar coluna à direita (`addColumnAfter`), Remover coluna (`deleteColumn`)
+- **Linhas**: Adicionar linha acima (`addRowBefore`), Adicionar linha abaixo (`addRowAfter`), Remover linha (`deleteRow`)
+- **Destrutivo**: Excluir tabela (`deleteTable`) — button styled red
 
 ### Styled table rendering in MentionContent
 `MentionContent` (in `mention-badge.tsx`) renders `<table>` HTML with visual styles inspired by `ChargesPreview`:
