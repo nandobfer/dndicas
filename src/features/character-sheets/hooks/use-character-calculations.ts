@@ -67,7 +67,12 @@ export function useCharacterCalculations(sheet: CharacterSheet, opts?: UseCharac
             opts?.armorClassBonusSources,
             sheet.armorClassBonus,
         )
-        const initiative = getInitiative(sheet.dexterity, sheet.initiativeOverride)
+        const initiative = getInitiative(
+            sheet.dexterity,
+            sheet.initiativeOverride,
+            profBonus.value,
+            !!sheet.initiativeProficiency
+        )
         const passivePerception = getPassivePerception(
             skills["Percepção"]?.value ?? 0,
             sheet.passivePerceptionOverride,

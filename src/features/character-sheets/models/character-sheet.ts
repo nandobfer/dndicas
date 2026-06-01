@@ -47,6 +47,7 @@ export interface ICharacterSheet extends Document {
     armorClassOverride: number | null
     armorClassBonus: number | null
     initiativeOverride: number | null
+    initiativeProficiency: boolean
     passivePerceptionOverride: number | null
     spellcastingAttribute: string | null
     spellSaveDCOverride: number | null
@@ -143,6 +144,7 @@ const CharacterSheetSchema = new Schema<ICharacterSheet>(
         armorClassOverride: { type: Number, default: null },
         armorClassBonus: { type: Number, default: null },
         initiativeOverride: { type: Number, default: null },
+        initiativeProficiency: { type: Boolean, default: false },
         passivePerceptionOverride: { type: Number, default: null },
         spellcastingAttribute: { type: String, default: null },
         spellSaveDCOverride: { type: Number, default: null },

@@ -15,44 +15,51 @@ interface GlassCheckboxProps {
     className?: string
     size?: "sm" | "md"
     disabled?: boolean
+    title?: string
 }
 
-export const GlassCheckbox = ({ checked, onChange, accentColor, accentClass, className, size = "sm", disabled = false }: GlassCheckboxProps) => {
-    const dim = size === "sm" ? "w-4 h-4" : "w-5 h-5"
+export const GlassCheckbox = React.forwardRef<HTMLButtonElement, GlassCheckboxProps>(
+    ({ checked, onChange, accentColor, accentClass, className, size = "sm", disabled = false, title, ...props }, ref) => {
+        const dim = size === "sm" ? "w-4 h-4" : "w-5 h-5"
 
-    return (
-        <button
-            type="button"
-            role="checkbox"
-            aria-checked={checked}
-            disabled={disabled}
-            onClick={() => !disabled && onChange(!checked)}
-            className={cn(
-                "relative rounded-full border border-white/20 bg-white/5 backdrop-blur-sm",
-                "transition-all duration-200 flex items-center justify-center flex-shrink-0",
-                "hover:border-white/40 hover:bg-white/10",
-                disabled && "opacity-50 cursor-not-allowed",
-                dim,
-                className,
-            )}
-            style={checked && accentColor ? { backgroundColor: accentColor + "cc", borderColor: accentColor } : undefined}
-        >
-            <AnimatePresence>
-                {checked && (
-                    <motion.span
-                        key="fill"
-                        className={cn("absolute inset-0.5 rounded-full", accentClass ?? "bg-white/60")}
-                        style={accentColor && !accentClass ? { backgroundColor: accentColor } : undefined}
-                        initial={{ scale: 0, opacity: 0 }}
-                        animate={{ scale: 1, opacity: 1 }}
-                        exit={{ scale: 0, opacity: 0 }}
-                        transition={{ type: "spring", stiffness: 400, damping: 25 }}
-                    />
+        return (
+            <button
+                ref={ref}
+                type="button"
+                role="checkbox"
+                aria-checked={checked}
+                disabled={disabled}
+                title={title}
+                onClick={() => !disabled && onChange(!checked)}
+                className={cn(
+                    "relative rounded-full border border-white/20 bg-white/5 backdrop-blur-sm",
+                    "transition-all duration-200 flex items-center justify-center flex-shrink-0",
+                    "hover:border-white/40 hover:bg-white/10",
+                    disabled && "opacity-50 cursor-not-allowed",
+                    dim,
+                    className,
                 )}
-            </AnimatePresence>
-        </button>
-    )
-}
+                style={checked && accentColor ? { backgroundColor: accentColor + "cc", borderColor: accentColor } : undefined}
+                {...props}
+            >
+                <AnimatePresence>
+                    {checked && (
+                        <motion.span
+                            key="fill"
+                            className={cn("absolute inset-0.5 rounded-full", accentClass ?? "bg-white/60")}
+                            style={accentColor && !accentClass ? { backgroundColor: accentColor } : undefined}
+                            initial={{ scale: 0, opacity: 0 }}
+                            animate={{ scale: 1, opacity: 1 }}
+                            exit={{ scale: 0, opacity: 0 }}
+                            transition={{ type: "spring", stiffness: 400, damping: 25 }}
+                        />
+                    )}
+                </AnimatePresence>
+            </button>
+        )
+    }
+)
+GlassCheckbox.displayName = "GlassCheckbox"
 
 // ─── 3-state skill GlassCheckbox ────────────────────────────────────────────
 // States: 0 = off, 1 = proficient, 2 = expertise
