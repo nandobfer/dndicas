@@ -1,6 +1,6 @@
 allowBuilds:
-  '@clerk/shared': set this to true or false
-  '@google/genai': set this to true or false
-  protobufjs: set this to true or false
-  sharp: set this to true or false
-  unrs-resolver: set this to true or false
+  '@clerk/shared': true
+  '@google/genai': true
+  protobufjs: true
+  sharp: true
+  unrs-resolver: true

@@ -5,9 +5,10 @@ This module handles the D&D Reference Rules system, allowing administrators to m
 ## Key Features
 
 - **Reference Management**: CRUD operations for Rule entities.
-- **Rich Text Editor**: Custom editor using Tiptap with image upload to S3 and mention support. Mentions are enhanced with `allowSpaces: true` and temporary badge styling (`decorationClass`). The system includes custom boundary detection (`findSuggestionMatch`) to prevent badge shrinking during navigation and a smart escape mechanism using `ArrowRight` (injecting `\u200B`) to allow exiting the mention context seamlessly.
+- **Rich Text Editor**: Custom editor using Tiptap with image upload to S3, mention support, and table insertion. Mentions are enhanced with `allowSpaces: true` and temporary badge styling (`decorationClass`). The system includes custom boundary detection (`findSuggestionMatch`) to prevent badge shrinking during navigation and a smart escape mechanism using `ArrowRight` (injecting `\u200B`) to allow exiting the mention context seamlessly.
 - **Audit Logging**: Full traceability of changes via `AuditLogExtended`.
 - **Dashboard Integration**: Real-time stats on existing rules.
+- **Entity Preview (MentionContent)**: Renders rich HTML content including styled tables, images, dice values, and mention badges.
 
 ## Data Models
 
@@ -28,6 +29,21 @@ This module handles the D&D Reference Rules system, allowing administrators to m
 
 ## Dependencies
 
-- `@tiptap/react` ecosystem.
+- `@tiptap/react` ecosystem (including `@tiptap/extension-table`, `@tiptap/extension-table-row`, `@tiptap/extension-table-header`, `@tiptap/extension-table-cell`).
 - `src/core/storage/s3.ts`.
 - `mongoose` models.
+
+## Features
+
+### Table support in RichTextEditor
+The `RichTextEditor` (variant `"full"`) includes a **Inserir Tabela** button (Table2 icon) in the toolbar. Clicking it inserts a 3×3 table with a header row via the TipTap Table extension. Tables in the editor have styled borders and background via Tailwind `[&_table]`, `[&_th]`, `[&_td]` classes. The selected cell is highlighted via `[&_.selectedCell]:bg-blue-500/20`.
+
+### Styled table rendering in MentionContent
+`MentionContent` (in `mention-badge.tsx`) renders `<table>` HTML with visual styles inspired by `ChargesPreview`:
+- Table is wrapped in a `rounded-xl overflow-hidden border border-white/10 bg-white/[0.02]` container with horizontal scroll
+- `<thead>` gets `bg-white/[0.03]` background and a bottom border
+- `<th>` gets `text-[9px] font-black uppercase tracking-[0.15em] text-white/30`
+- `<tbody tr>` gets `border-b border-white/5 last:border-b-0`
+- `<td>` gets `px-3 py-2 text-xs text-white/70`
+
+This is applied in both `mode="block"` and `mode="inline"` since the table special-cases intercept before the inline-flatten logic.
