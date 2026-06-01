@@ -49,6 +49,7 @@ const ENTITY_ICONS: Record<keyof typeof entityConfig, any> = {
     Segurança: Shield,
     Item: Backpack,
     Monstro: Skull,
+    NPC: Skull,
     Ficha: ScrollText,
 }
 
