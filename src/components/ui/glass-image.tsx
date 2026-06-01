@@ -37,6 +37,8 @@ interface GlassImageProps {
     renderTrigger?: (props: { open: () => void; label: string; isOpen: boolean }) => React.ReactNode;
     /** Optional classes for the default expandable trigger wrapper */
     triggerClassName?: string;
+    /** Image aspect ratio */
+    aspectRatio?: "square" | "video" | "portrait";
 }
 
 const imageTransition: Transition = {
@@ -63,12 +65,19 @@ export function GlassImage({
     dialogClassName,
     renderTrigger,
     triggerClassName,
+    aspectRatio = "square",
 }: GlassImageProps) {
     const [isOpen, setIsOpen] = React.useState(false);
     const reactId = React.useId();
     const layoutId = React.useMemo(() => `glass-image-${reactId.replace(/:/g, "")}`, [reactId]);
 
     if (!src) return null;
+
+    const aspectClasses = {
+        square: "aspect-square",
+        video: "aspect-video",
+        portrait: "aspect-[3/4]"
+    }
 
     const triggerLabel = expandLabel || `Abrir imagem ampliada de ${alt}`;
     const openDialog = () => {
@@ -85,7 +94,8 @@ export function GlassImage({
             layoutId={`${layoutId}-frame`}
             transition={imageTransition}
             className={cn(
-                "aspect-square rounded-xl bg-white/5 overflow-hidden shadow-2xl group/image relative bg-[image:var(--background-image-paper-texture)] bg-cover bg-center",
+                "rounded-xl bg-white/5 overflow-hidden shadow-2xl group/image relative bg-[image:var(--background-image-paper-texture)] bg-cover bg-center",
+                aspectClasses[aspectRatio],
                 enableExpand && "cursor-zoom-in focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/30 focus-visible:ring-offset-2 focus-visible:ring-offset-transparent",
                 className
             )}
