@@ -47,7 +47,8 @@ export interface ExpandableSidebarProps {
 const mainItems = [
     { label: "Início", href: "/", icon: Home },
     { label: "Perfil", href: "/profile", icon: User, authenticated: true },
-    { label: "Minhas Fichas", href: "/my-sheets", icon: ScrollText }
+    { label: "Minhas Fichas", href: "/my-sheets", icon: ScrollText },
+    { label: "Meus NPCs", href: "/my-npcs", icon: Users, authenticated: true },
 ]
 
 // T020: Renamed from "Módulos" to "Cadastros" and added "Usuários"
