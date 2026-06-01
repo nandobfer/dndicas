@@ -10,7 +10,8 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { cn } from '@/core/utils'
 import { Button } from '@/core/ui/button'
 import { glassConfig } from "@/lib/config/glass-config"
-import { Bold, Italic, Strikethrough, List, ListOrdered, Undo, Redo, Image as ImageIcon, Table2 } from "lucide-react"
+import { Bold, Italic, Strikethrough, List, ListOrdered, Undo, Redo, Image as ImageIcon, Table2, ArrowLeftToLine, ArrowRightToLine, ArrowUpToLine, ArrowDownToLine, Columns2, Rows2, Trash2 } from "lucide-react"
+import { SimpleGlassTooltip, GlassTooltipProvider } from "@/components/ui/glass-tooltip"
 import { getSuggestionConfig } from "../utils/suggestion"
 import { Extension, Node, InputRule } from "@tiptap/core"
 import { Plugin, PluginKey } from "@tiptap/pm/state"
@@ -379,6 +380,120 @@ interface RichTextEditorProps {
     openMentionsOnFocus?: boolean
 }
 
+const TableBubbleMenu = ({ editor, containerRef }: { editor: Editor | null; containerRef: React.RefObject<HTMLDivElement | null> }) => {
+    const [isVisible, setIsVisible] = useState(false)
+    const [pos, setPos] = useState({ top: 0, left: 0 })
+
+    useEffect(() => {
+        if (!editor) return
+
+        const handleSelectionUpdate = () => {
+            const inTable = editor.isActive("tableCell") || editor.isActive("tableHeader")
+            if (!inTable || !editor.isFocused) {
+                setIsVisible(false)
+                return
+            }
+            const { from } = editor.state.selection
+            const coords = editor.view.coordsAtPos(from)
+            const containerRect = containerRef.current?.getBoundingClientRect()
+            const rawLeft = coords.left - (containerRect?.left ?? 0)
+            const containerWidth = containerRect?.width ?? 400
+            const MENU_HALF_WIDTH = 120 // half of estimated ~240px menu width
+            const clampedLeft = Math.max(MENU_HALF_WIDTH, Math.min(rawLeft, containerWidth - MENU_HALF_WIDTH))
+            setPos({
+                top: coords.top - (containerRect?.top ?? 0) - 46,
+                left: clampedLeft,
+            })
+            setIsVisible(true)
+        }
+
+        const handleBlur = () => setIsVisible(false)
+
+        editor.on("selectionUpdate", handleSelectionUpdate)
+        editor.on("focus", handleSelectionUpdate)
+        editor.on("blur", handleBlur)
+
+        return () => {
+            editor.off("selectionUpdate", handleSelectionUpdate)
+            editor.off("focus", handleSelectionUpdate)
+            editor.off("blur", handleBlur)
+        }
+    }, [editor, containerRef])
+
+    if (!isVisible || !editor) return null
+
+    const btnClass = "h-7 w-7 p-0 hover:bg-white/10 rounded transition-colors flex items-center justify-center cursor-pointer"
+    const divider = <div className="w-px h-5 bg-white/15 mx-0.5 self-center" />
+
+    return (
+        <GlassTooltipProvider>
+            <div
+                style={{
+                    position: "absolute",
+                    top: pos.top,
+                    left: pos.left,
+                    zIndex: 50,
+                    transform: "translateX(-50%)",
+                    pointerEvents: "auto",
+                }}
+                onMouseDown={(e) => e.preventDefault()}
+            >
+                <div className="flex items-center gap-0.5 rounded-lg border border-white/10 bg-black/80 backdrop-blur-md p-1 shadow-2xl">
+                    <SimpleGlassTooltip content="Adicionar coluna à esquerda">
+                        <button type="button" className={btnClass} onClick={() => editor.chain().focus().addColumnBefore().run()}>
+                            <ArrowLeftToLine className="h-3.5 w-3.5 text-white/70" />
+                        </button>
+                    </SimpleGlassTooltip>
+
+                    <SimpleGlassTooltip content="Adicionar coluna à direita">
+                        <button type="button" className={btnClass} onClick={() => editor.chain().focus().addColumnAfter().run()}>
+                            <ArrowRightToLine className="h-3.5 w-3.5 text-white/70" />
+                        </button>
+                    </SimpleGlassTooltip>
+
+                    <SimpleGlassTooltip content="Remover coluna">
+                        <button type="button" className={btnClass} onClick={() => editor.chain().focus().deleteColumn().run()}>
+                            <Columns2 className="h-3.5 w-3.5 text-white/50" />
+                        </button>
+                    </SimpleGlassTooltip>
+
+                    {divider}
+
+                    <SimpleGlassTooltip content="Adicionar linha acima">
+                        <button type="button" className={btnClass} onClick={() => editor.chain().focus().addRowBefore().run()}>
+                            <ArrowUpToLine className="h-3.5 w-3.5 text-white/70" />
+                        </button>
+                    </SimpleGlassTooltip>
+
+                    <SimpleGlassTooltip content="Adicionar linha abaixo">
+                        <button type="button" className={btnClass} onClick={() => editor.chain().focus().addRowAfter().run()}>
+                            <ArrowDownToLine className="h-3.5 w-3.5 text-white/70" />
+                        </button>
+                    </SimpleGlassTooltip>
+
+                    <SimpleGlassTooltip content="Remover linha">
+                        <button type="button" className={btnClass} onClick={() => editor.chain().focus().deleteRow().run()}>
+                            <Rows2 className="h-3.5 w-3.5 text-white/50" />
+                        </button>
+                    </SimpleGlassTooltip>
+
+                    {divider}
+
+                    <SimpleGlassTooltip content="Excluir tabela">
+                        <button
+                            type="button"
+                            className={cn(btnClass, "hover:bg-red-500/20")}
+                            onClick={() => editor.chain().focus().deleteTable().run()}
+                        >
+                            <Trash2 className="h-3.5 w-3.5 text-red-400/70" />
+                        </button>
+                    </SimpleGlassTooltip>
+                </div>
+            </div>
+        </GlassTooltipProvider>
+    )
+}
+
 const MenuBar = ({ editor, addImage, addTable, disabled = false }: { editor: Editor | null; addImage: () => void; addTable: () => void; disabled?: boolean }) => {
     if (!editor) {
         return null
@@ -502,6 +617,7 @@ export function RichTextEditor({
     const activeEditorRef = useRef<Editor | null>(null)
     const hasActiveMentionSessionRef = useRef(false)
     const hasSyntheticOpenMentionRef = useRef(false)
+    const outerWrapperRef = useRef<HTMLDivElement>(null)
 
     const uploadImage = useCallback(async (file: File) => {
         setIsUploading(true)
@@ -860,23 +976,26 @@ export function RichTextEditor({
     }, [value, editor])
 
     return (
-        <div
-            className={cn(
-                "rounded-lg overflow-hidden transition-all group",
-                glassConfig.input.background,
-                glassConfig.input.blur,
-                glassConfig.input.border,
-                !disabled && "focus-within:ring-2 focus-within:ring-blue-500/50 focus-within:border-blue-500/50",
-                disabled && "opacity-50 cursor-not-allowed",
-                isUploading && "animate-pulse pointer-events-none",
-                className,
-            )}
-        >
-            {variant === "full" && !disabled && <MenuBar editor={editor} addImage={handleAddImageClick} addTable={handleAddTableClick} disabled={disabled} />}
-            <div className="relative">
-                <EditorContent editor={editor} />
-                {isUploading && <div className="absolute inset-0 bg-black/50 flex items-center justify-center text-xs text-white">Uploading...</div>}
+        <div ref={outerWrapperRef} className="relative">
+            <div
+                className={cn(
+                    "rounded-lg overflow-hidden transition-all group",
+                    glassConfig.input.background,
+                    glassConfig.input.blur,
+                    glassConfig.input.border,
+                    !disabled && "focus-within:ring-2 focus-within:ring-blue-500/50 focus-within:border-blue-500/50",
+                    disabled && "opacity-50 cursor-not-allowed",
+                    isUploading && "animate-pulse pointer-events-none",
+                    className,
+                )}
+            >
+                {variant === "full" && !disabled && <MenuBar editor={editor} addImage={handleAddImageClick} addTable={handleAddTableClick} disabled={disabled} />}
+                <div className="relative">
+                    <EditorContent editor={editor} />
+                    {isUploading && <div className="absolute inset-0 bg-black/50 flex items-center justify-center text-xs text-white">Uploading...</div>}
+                </div>
             </div>
+            {variant === "full" && !disabled && <TableBubbleMenu editor={editor} containerRef={outerWrapperRef} />}
         </div>
     )
 }
