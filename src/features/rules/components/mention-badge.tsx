@@ -17,6 +17,20 @@ import {
 } from "../utils/dice-render-utils"
 export { EntityTitleLink } from "./entity-title-link"
 
+function parseCssStyleString(cssStr: string): React.CSSProperties {
+    const style: Record<string, string> = {}
+    cssStr.split(";").forEach((rule) => {
+        const colonIndex = rule.indexOf(":")
+        if (colonIndex === -1) return
+        const property = rule.substring(0, colonIndex).trim()
+        const value = rule.substring(colonIndex + 1).trim()
+        if (!property || !value) return
+        const camelProp = property.replace(/-([a-z])/g, (_, char: string) => char.toUpperCase())
+        style[camelProp] = value
+    })
+    return style as React.CSSProperties
+}
+
 interface MentionBadgeProps {
     id: string
     label: string
@@ -280,7 +294,11 @@ export function MentionContent({
 
                 Array.from(el.attributes).forEach((attr) => {
                     const name = attr.name === "class" ? "className" : attr.name
-                    props[name] = attr.value
+                    if (name === "style") {
+                        props.style = parseCssStyleString(attr.value)
+                    } else {
+                        props[name] = attr.value
+                    }
                 })
 
                 return React.createElement(tagName, props, children.length > 0 ? children : undefined)
