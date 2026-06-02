@@ -112,6 +112,64 @@ type SubclassPreviewData = {
     subclass: Subclass
 }
 
+const normalizeMonsterPreviewData = (json: unknown): Monster => {
+    const data = (json && typeof json === "object" ? json : {}) as Partial<Monster> & Record<string, unknown>
+
+    return {
+        _id: String(data._id || data.id || ""),
+        id: String(data.id || data._id || ""),
+        name: String(data.name || "Monstro"),
+        originalName: data.originalName,
+        source: String(data.source || ""),
+        description: String(data.description || ""),
+        image: typeof data.image === "string" ? data.image : undefined,
+        status: data.status === "inactive" ? "inactive" : "active",
+        type: data.type || "beast",
+        size: data.size || "M",
+        alignment: data.alignment || "unaligned",
+        armorClass: data.armorClass ?? "—",
+        initiative: data.initiative,
+        hitPointsFormula: String(data.hitPointsFormula || "0"),
+        speed: data.speed,
+        flySpeed: data.flySpeed,
+        swimSpeed: data.swimSpeed,
+        climbSpeed: data.climbSpeed,
+        attributes: {
+            strength: data.attributes?.strength ?? 10,
+            dexterity: data.attributes?.dexterity ?? 10,
+            constitution: data.attributes?.constitution ?? 10,
+            intelligence: data.attributes?.intelligence ?? 10,
+            wisdom: data.attributes?.wisdom ?? 10,
+            charisma: data.attributes?.charisma ?? 10,
+        },
+        savingThrows: data.savingThrows || {},
+        skills: data.skills || {},
+        senses: data.senses || {},
+        sensesAndLanguages: Array.isArray(data.sensesAndLanguages) ? data.sensesAndLanguages : [],
+        challengeRating: String(data.challengeRating || "0"),
+        experience: data.experience,
+        experienceOverride: data.experienceOverride,
+        proficiencyBonusOverride: data.proficiencyBonusOverride,
+        languages: String(data.languages || ""),
+        damageVulnerabilities: Array.isArray(data.damageVulnerabilities) ? data.damageVulnerabilities : [],
+        damageResistances: Array.isArray(data.damageResistances) ? data.damageResistances : [],
+        damageImmunities: Array.isArray(data.damageImmunities) ? data.damageImmunities : [],
+        conditionImmunities: Array.isArray(data.conditionImmunities) ? data.conditionImmunities : [],
+        conditionImmunityNotes: data.conditionImmunityNotes,
+        traits: Array.isArray(data.traits) ? data.traits : [],
+        actions: Array.isArray(data.actions) ? data.actions : [],
+        bonusActions: Array.isArray(data.bonusActions) ? data.bonusActions : [],
+        reactions: Array.isArray(data.reactions) ? data.reactions : [],
+        legendaryActions: Array.isArray(data.legendaryActions) ? data.legendaryActions : [],
+        legendaryActionUses: data.legendaryActionUses,
+        lairActions: Array.isArray(data.lairActions) ? data.lairActions : [],
+        lairActionInitiative: data.lairActionInitiative,
+        regionalEffects: Array.isArray(data.regionalEffects) ? data.regionalEffects : [],
+        createdAt: String(data.createdAt || ""),
+        updatedAt: String(data.updatedAt || ""),
+    }
+}
+
 export const TraitPreview = ({ trait, showStatus = true, hideStatusChip = false, hideActionIcons = false }: TraitPreviewProps & { hideStatusChip?: boolean; hideActionIcons?: boolean }) => {
     const { addWindow } = useWindows()
     return (
@@ -270,6 +328,10 @@ const getEntityPreviewEndpoint = (entityId: string, entityType: string) => {
 }
 
 const normalizeEntityPreviewData = (entityId: string, entityType: string, json: unknown) => {
+    if (entityType === "Monstro") {
+        return normalizeMonsterPreviewData(json)
+    }
+
     if (entityType !== "Subclasse") {
         return json
     }
@@ -299,7 +361,6 @@ const useEntityPreviewData = ({ entityId, entityType, enabled }: { entityId: str
 
     React.useEffect(() => {
         if (!enabled) {
-            setLoading(false)
             return
         }
 
