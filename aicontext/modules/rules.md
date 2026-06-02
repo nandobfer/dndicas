@@ -5,10 +5,11 @@ This module handles the D&D Reference Rules system, allowing administrators to m
 ## Key Features
 
 - **Reference Management**: CRUD operations for Rule entities.
-- **Rich Text Editor**: Custom editor using Tiptap with image upload to S3, mention support, and table insertion. Mentions are enhanced with temporary badge styling (`decorationClass`). The system includes custom boundary detection (`findSuggestionMatch`) that keeps the temporary badge/query limited to the active mention word, including only the first existing word when `@` is inserted directly before text, and a smart escape mechanism using `ArrowRight` (injecting `\u200B`) to allow exiting the mention context seamlessly.
+- **Rich Text Editor**: Custom editor using Tiptap with image upload to S3, mention support, and table insertion. Mentions are enhanced with temporary badge styling (`decorationClass`). The system includes custom boundary detection (`findSuggestionMatch`) that keeps the temporary badge/query limited to the active mention word, including only the first existing word when `@` is inserted directly before text, and a smart escape mechanism using `ArrowRight` (injecting `\u200B`) to allow exiting the mention context seamlessly. Mention suggestions use the unified search worker on the client so Fuse indexing/search does not block typing in the editor UI, and results are updated progressively as providers finish loading.
 - **Audit Logging**: Full traceability of changes via `AuditLogExtended`.
 - **Dashboard Integration**: Real-time stats on existing rules.
 - **Entity Preview (MentionContent)**: Renders rich HTML content including styled tables, images, dice values, and mention badges.
+- **Mention Preview Safety**: Monster previews normalize incomplete API payloads before rendering so missing nested fields such as `attributes.wisdom`, skills, senses, or action arrays do not crash the client while hovering mention results.
 
 ## Data Models
 

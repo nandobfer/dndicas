@@ -1,5 +1,5 @@
 import { entityColors } from "@/lib/config/colors"
-import { UnifiedEntity } from "@/core/utils/search-engine"
+import type { UnifiedEntity } from "@/core/utils/search-core"
 
 /**
  * @fileoverview Unified entity configuration and data providers.

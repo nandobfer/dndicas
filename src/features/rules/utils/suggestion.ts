@@ -1,9 +1,15 @@
 import { ReactRenderer } from '@tiptap/react'
 import type { Editor } from '@tiptap/core'
-import tippy from 'tippy.js'
+import type { SuggestionKeyDownProps, SuggestionProps } from '@tiptap/suggestion'
+import tippy, { type Instance } from 'tippy.js'
 import MentionList, { MentionListProps, MentionListRef } from '../components/mention-list'
-import { performUnifiedSearch, peekUnifiedSearch, type UnifiedEntity, type UnifiedSearchOptions } from '@/core/utils/search-engine'
+import { searchUnifiedInWorkerProgressively } from '@/core/utils/search-worker-client'
+import type { UnifiedEntity, UnifiedSearchOptions } from '@/core/utils/search-core'
 import type { EntityType } from '@/lib/config/colors'
+
+type MentionListItem = MentionListProps["items"][number]
+type MentionSuggestionProps = SuggestionProps<MentionListItem, MentionListItem>
+const MENTION_SEARCH_DEBOUNCE_MS = 300
 
 /**
  * T039: Updated to support both Regra and Habilidade entity types in mentions.
@@ -27,6 +33,7 @@ export const getSuggestionConfig = (options?: {
     let wasSelection = false
     let debounceTimer: NodeJS.Timeout | null = null
     let latestQueryId = 0
+    const cachedItemsByQuery = new Map<string, MentionListItem[]>()
 
     const searchOptions: UnifiedSearchOptions = {
         specificEntityType: options?.specificEntityMention,
@@ -43,14 +50,15 @@ export const getSuggestionConfig = (options?: {
             )
             .map((item) => ({
                 ...item,
+                id: item.id || item._id || "",
+                label: item.label || item.name,
                 entityType: item.type,
             }))
 
-    const getCachedItems = (query: string) =>
-        normalizeResults(peekUnifiedSearch(query, 10, 0, searchOptions) ?? [])
+    const getCachedItems = (query: string) => cachedItemsByQuery.get(query) ?? []
 
-    const wrapCommand = (props: any) => {
-        return (item: any) => {
+    const wrapCommand = (props: MentionSuggestionProps) => {
+        return (item: MentionListItem) => {
             wasSelection = true
             props.command(item)
             if (!options?.blurOnMentionSelect) return
@@ -63,7 +71,7 @@ export const getSuggestionConfig = (options?: {
     }
 
     return {
-        items: async ({ query }: { query: string }) => {
+        items: ({ query }: { query: string }) => {
             currentQuery = query
             loading = true
             const cachedItems = getCachedItems(query)
@@ -78,33 +86,71 @@ export const getSuggestionConfig = (options?: {
 
             const queryId = ++latestQueryId
 
-            return new Promise<any[]>((resolve) => {
-                if (debounceTimer) clearTimeout(debounceTimer)
+            if (debounceTimer) {
+                clearTimeout(debounceTimer)
+                debounceTimer = null
+            }
 
-                debounceTimer = setTimeout(async () => {
-                    if (queryId !== latestQueryId) return resolve(cachedItems)
+            debounceTimer = setTimeout(() => {
+                debounceTimer = null
+
+                void (async () => {
+                    if (queryId !== latestQueryId) return
 
                     try {
-                        const results = await performUnifiedSearch(query, 10, 0, searchOptions)
-                        if (queryId !== latestQueryId) return resolve(cachedItems)
+                        const results = await searchUnifiedInWorkerProgressively(query, 10, 0, searchOptions, (update) => {
+                            if (queryId !== latestQueryId) return
+
+                            const filteredResults = normalizeResults(update.results)
+                            if (update.done) {
+                                cachedItemsByQuery.set(query, filteredResults)
+                            }
+
+                            loading = !update.done
+                            if (component) {
+                                component.updateProps({
+                                    items: filteredResults,
+                                    loading: !update.done,
+                                    query,
+                                })
+                            }
+                        })
+                        if (queryId !== latestQueryId) return
 
                         const filteredResults = normalizeResults(results)
+                        cachedItemsByQuery.set(query, filteredResults)
                         loading = false
-                        resolve(filteredResults)
+                        if (component) {
+                            component.updateProps({
+                                items: filteredResults,
+                                loading: false,
+                                query,
+                            })
+                        }
                     } catch (e) {
                         console.error("Mention search system failed:", e)
+                        if (queryId !== latestQueryId) return
+
                         loading = false
-                        resolve([])
+                        if (component) {
+                            component.updateProps({
+                                items: [],
+                                loading: false,
+                                query,
+                            })
+                        }
                     }
-                }, 150)
-            })
+                })()
+            }, MENTION_SEARCH_DEBOUNCE_MS)
+
+            return cachedItems
         },
 
         render: () => {
-            let popup: any
+            let popup: Instance | null = null
 
             return {
-                onStart: (props: any) => {
+                onStart: (props: MentionSuggestionProps) => {
                     currentEditor = props.editor
                     wasSelection = false
                     options?.onStart?.({ editor: currentEditor })
@@ -115,7 +161,7 @@ export const getSuggestionConfig = (options?: {
                             ...props,
                             items: cachedItems.length > 0 ? cachedItems : props.items,
                             command: wrapCommand(props),
-                            loading: cachedItems.length === 0,
+                            loading,
                             query: currentQuery,
                         },
                         editor: props.editor,
@@ -125,8 +171,8 @@ export const getSuggestionConfig = (options?: {
                         return
                     }
 
-                    popup = tippy("body" as any, {
-                        getReferenceClientRect: props.clientRect,
+                    popup = tippy(document.body, {
+                        getReferenceClientRect: () => props.clientRect?.() ?? new DOMRect(),
                         appendTo: () => document.body,
                         content: component.element,
                         showOnCreate: true,
@@ -145,7 +191,7 @@ export const getSuggestionConfig = (options?: {
                     })
                 },
 
-                onUpdate: (props: any) => {
+                onUpdate: (props: MentionSuggestionProps) => {
                     currentEditor = props.editor
                     if (component) {
                         component.updateProps({ ...props, command: wrapCommand(props), loading, query: currentQuery })
@@ -155,22 +201,25 @@ export const getSuggestionConfig = (options?: {
                         return
                     }
 
-                    popup[0].setProps({
-                        getReferenceClientRect: props.clientRect,
+                    popup.setProps({
+                        getReferenceClientRect: () => props.clientRect?.() ?? new DOMRect(),
                     })
                 },
 
-                onKeyDown: (props: any) => {
+                onKeyDown: (props: SuggestionKeyDownProps) => {
                     if (props.event.key === "Escape") {
-                        popup[0].hide()
+                        popup?.hide()
                         return true
                     }
 
                     if (props.event.key === "ArrowRight") {
-                        const { selection } = props.editor.state
+                        const editor = currentEditor
+                        if (!editor) return false
+
+                        const { selection } = editor.state
                         if (selection.empty && selection.from >= props.range.to) {
                             // Step out of the badge by inserting a zero-width space
-                            props.editor.commands.insertContent("\u200B")
+                            editor.commands.insertContent("\u200B")
                             return true
                         }
                     }
@@ -180,8 +229,12 @@ export const getSuggestionConfig = (options?: {
 
                 onExit: () => {
                     options?.onExit?.({ editor: currentEditor, wasSelection })
-                    if (popup && popup[0]) {
-                        popup[0].destroy()
+                    if (debounceTimer) {
+                        clearTimeout(debounceTimer)
+                        debounceTimer = null
+                    }
+                    if (popup) {
+                        popup.destroy()
                     }
                     if (component) {
                         component.destroy()
