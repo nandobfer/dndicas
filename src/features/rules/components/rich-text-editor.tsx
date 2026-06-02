@@ -22,6 +22,7 @@ import { diceFuse, DICE_LOOKAHEAD_REGEX } from "../utils/dice-render-utils"
 import type { EntityType } from "@/lib/config/colors"
 import {
     MENTION_INTERACTION_SURFACE_SELECTOR,
+    findMentionSuggestionMatch,
     isTemporaryOpenMentionText,
     isPointerWithinMentionInteractionSurface,
     shouldAutoOpenMentionsOnFocus,
@@ -683,38 +684,12 @@ export function RichTextEditor({
                 suggestion: {
                     allowSpaces: true,
                     decorationClass: "bg-white/20 text-white rounded px-1 transition-colors",
-                    findSuggestionMatch: ({ $position }) => {
-                        // Extract text of the current paragraph safely replacing inline nodes with a placeholder
-                        const text = $position.parent.textBetween(0, $position.parent.content.size, undefined, '\uFFFC');
-
-                        // Match '@' followed by anything that isn't '@', zero-width space, or object replacement char
-                        const regex = /@[^@\u200B\uFFFC]*/g;
-                        let match;
-
-                        while ((match = regex.exec(text)) !== null) {
-                            const start = match.index;
-                            const end = start + match[0].length;
-
-                            // Check if the cursor position is within the bounds of this mention
-                            if ($position.parentOffset >= start && $position.parentOffset <= end) {
-                                // Breakout rule 1: If the user typed a double space, exit the suggestion natively
-                                if (match[0].endsWith('  ')) {
-                                    return null;
-                                }
-
-                                return {
-                                    range: {
-                                        from: $position.pos - ($position.parentOffset - start),
-                                        to: $position.pos + (end - $position.parentOffset),
-                                    },
-                                    query: match[0].slice(1),
-                                    text: match[0],
-                                };
-                            }
-                        }
-
-                        return null;
-                    },
+                    findSuggestionMatch: ({ $position }) =>
+                        findMentionSuggestionMatch({
+                            text: $position.parent.textBetween(0, $position.parent.content.size, undefined, '\uFFFC'),
+                            parentOffset: $position.parentOffset,
+                            position: $position.pos,
+                        }),
                     ...getSuggestionConfig({
                         excludeId,
                         blurOnMentionSelect,
