@@ -109,14 +109,13 @@ describe('feats backend', () => {
 
     it('listFeats applies non-admin active filtering, source regex matching, and local pagination', async () => {
         vi.doUnmock('@/features/feats/api/feats-service');
-        const find = vi.fn().mockReturnValue({
-            sort: vi.fn().mockReturnValue({
-                lean: vi.fn().mockResolvedValue([
-                    { _id: '1', name: 'A', status: 'active', level: 1, source: 'PHB p. 1' },
-                    { _id: '2', name: 'B', status: 'active', level: 2, source: 'XPHB p. 2' },
-                ]),
-            }),
-        });
+        const sort = vi.fn().mockReturnValue({
+            lean: vi.fn().mockResolvedValue([
+                { _id: '1', name: 'A', status: 'active', level: 1, source: 'PHB p. 1' },
+                { _id: '2', name: 'B', status: 'active', level: 2, source: 'XPHB p. 2' },
+            ]),
+        })
+        const find = vi.fn().mockReturnValue({ sort });
         const applyFuzzySearch = vi.fn().mockImplementation((items) => items.slice().reverse());
 
         vi.doMock('@/core/database/db', () => ({
@@ -148,6 +147,7 @@ describe('feats backend', () => {
         expect(sourceMatchers.some((regex) => regex.test('PHB p. 1'))).toBe(true)
         expect(sourceMatchers.some((regex) => regex.test('XPHB p. 2'))).toBe(true)
         expect(applyFuzzySearch).toHaveBeenCalled();
+        expect(sort).toHaveBeenCalledWith({ name: 1 });
         expect(result.items).toEqual([{ _id: '2', name: 'B', status: 'active', level: 2, source: 'XPHB p. 2' }]);
         expect(result.total).toBe(2);
         expect(result.totalPages).toBe(2);

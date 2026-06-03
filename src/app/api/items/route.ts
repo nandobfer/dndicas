@@ -30,7 +30,7 @@ export async function GET(req: NextRequest) {
       }
     }
 
-    const items = await ItemModel.find(query).sort({ createdAt: -1 });
+    const items = await ItemModel.find(query).sort({ name: 1 });
 
     const searchedItems = search ? applyFuzzySearch(items, search) : items;
     const total = searchedItems.length;

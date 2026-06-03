@@ -8,6 +8,8 @@ Os formulários de classe e subclasse exibem um atalho premium de `Sparkles` no 
 ### Infinite scroll nas tabelas de catálogo
 As tabelas de classes usam o mesmo fluxo de `useInfiniteClasses` do modo lista. O modo tabela carrega a primeira página de resultados e busca páginas seguintes automaticamente quando o sentinel no fim da tabela entra na viewport, sem paginação tradicional.
 
+As listagens infinitas de classes usam ordenação alfabética por `name` quando não há pesquisa. Quando há pesquisa, a ordem dos resultados segue o ranking fuzzy.
+
 ### Identidade visual na primeira coluna da tabela
 A tabela de classes usa a primeira coluna como célula de identidade: imagem da classe quando disponível, fallback com ícone de espada, nome linkado e fonte em texto auxiliar. A coluna dedicada de status não é exibida nessa tabela.
 

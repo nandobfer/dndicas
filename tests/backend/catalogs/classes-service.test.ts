@@ -42,7 +42,7 @@ describe('classes service', () => {
         const sourceMatchers = query.$or[0]?.source?.$in ?? []
         expect(sourceMatchers.some((regex) => regex.test("TCE p. 1"))).toBe(true)
         expect(sourceMatchers.some((regex) => regex.test("Tasha's Cauldron of Everything p. 1"))).toBe(true)
-        expect(sort).toHaveBeenCalledWith({ createdAt: 1 });
+        expect(sort).toHaveBeenCalledWith({ name: 1 });
         expect(lean).toHaveBeenCalled();
     });
 });

@@ -17,10 +17,6 @@ function serializeNpc(npc: { toObject?: () => Record<string, unknown> } | Record
     }
 }
 
-function sortByName(items: Record<string, unknown>[]) {
-    return [...items].sort((a, b) => String(a.name || "").localeCompare(String(b.name || ""), "pt-BR", { sensitivity: "base" }))
-}
-
 export async function GET(req: NextRequest) {
     try {
         const session = await auth()
@@ -43,7 +39,7 @@ export async function GET(req: NextRequest) {
         if (challengeRating && challengeRating !== "all") query.challengeRating = challengeRating
 
         const npcs = (await UserNpcModel.find(query).sort({ name: 1 })).map(serializeNpc)
-        const searched = sortByName(search ? applyFuzzySearch(npcs, search) : npcs)
+        const searched = search ? applyFuzzySearch(npcs, search) : npcs
         const total = searched.length
         const offset = (page - 1) * limit
         const items = limit ? searched.slice(offset, offset + limit) : searched

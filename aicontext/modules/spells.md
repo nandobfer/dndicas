@@ -11,6 +11,8 @@ Admins podem usar a ação `Gerar com IA` nos menus de magias da tabela, da list
 ### Infinite scroll nas tabelas de catálogo
 As tabelas de magias usam `useInfiniteSpells`, a mesma fonte de dados do modo lista. O modo tabela carrega a primeira página e busca páginas seguintes automaticamente quando o sentinel no fim da tabela entra na viewport, sem paginação tradicional.
 
+As listagens infinitas de magias usam ordenação alfabética por `name` quando não há pesquisa. Quando há pesquisa, a ordem dos resultados segue o ranking fuzzy.
+
 ### Identidade visual na primeira coluna da tabela
 A tabela de magias usa a primeira coluna como célula de identidade: imagem da magia quando disponível, fallback com ícone de varinha, nome linkado e fonte em texto auxiliar. A coluna dedicada de status não é exibida nessa tabela.
 
