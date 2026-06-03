@@ -44,6 +44,9 @@ Quando o roller roda dentro da action do Owlbear, a request pode enviar `owlbear
 ### Owlbear embedded panel reuse
 `src/features/dice-roller/components/dice-roller-panel.tsx` pode ser usado tanto no modal do site quanto embutido em outras superficies, aceitando contexto opcional de rolagem Owlbear, callback de sucesso e replay de resultado remoto. Isso permite que a mesma UI base alimente a nova aba compartilhada sem duplicar a logica principal do roller.
 
+### HP dice panel reuse
+`src/features/dice-roller/components/hp-dice-panel.tsx` encapsula o `DiceRollerPanel` com preset travado e sem controles de configuração para rolagens de pontos de vida. `src/features/dice-roller/utils/hp-dice.ts` parseia fórmulas simples como `2d8 + 2`, agrega termos por dado e separa modificador fixo. O modal de subir nível da ficha e a aba `NPCs` do Owlbear usam esse componente para evitar duas implementações de rolagem de PV.
+
 ### Dice panel responsive controls layout
 O painel usa uma grade de 4 colunas em `Adicionar dados`. Em superficies largas, `Combinação` e `Modificador` compartilham uma linha responsiva; as linhas de combinacao seguem o padrao do controle numerico, com remover/adicionar nas pontas e o valor centralizado. O botao principal de rolagem usa o label `JOGAR` quando esta disponivel e preserva `Rolando...` durante a execucao.
 
@@ -64,7 +67,6 @@ O painel do roller (`DiceRollerPanel`) monitora sua própria largura de contêin
 
 ### Aggressive 3D assets preloading and physics-free standby
 Para eliminar o atraso percebido ao abrir o painel de dados, a aplicação realiza um preload agressivo dos recursos 3D (`DiceBox`). Ao montar o `DiceRollerProvider`, uma instância oculta do motor é inicializada em background usando `requestIdleCallback`, forçando o download e cache de assets pesados (WebAssembly do motor físico, modelos 3D dos dados e texturas). Adicionalmente, a renderização de dados em "standby" (dados aguardando na mesa) foi otimizada para ser puramente matemática: a simulação física síncrona foi removida, eliminando o congelamento da thread principal (Main Thread). Os dados são posicionados em grade e recebem rotações aleatórias instantâneas, garantindo que o painel apareça de forma imediata e fluida para o usuário.
-
 
 
 

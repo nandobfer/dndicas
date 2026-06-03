@@ -37,7 +37,8 @@ export function useOwlbearSession(runtime: OwlbearRuntimeState) {
         const roomId = runtime.roomId
         const owlbearPlayerId = runtime.playerId
         const owlbearRole = runtime.role
-        const runtimeIdentity = `${roomId}:${owlbearPlayerId}:${owlbearRole}`
+        const authIdentity = isSignedIn ? "auth" : "anon"
+        const runtimeIdentity = `${roomId}:${owlbearPlayerId}:${owlbearRole}:${authIdentity}`
         const identityChanged = lastRuntimeIdentityRef.current !== null && lastRuntimeIdentityRef.current !== runtimeIdentity
 
         lastRuntimeIdentityRef.current = runtimeIdentity

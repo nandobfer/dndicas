@@ -13,6 +13,10 @@ export function buildAnonymousGmSessionUserId(input: {
     return `owlbear-gm:${input.roomId}:${input.owlbearPlayerId}`
 }
 
+export function isAnonymousGmSessionUserId(userId: string) {
+    return userId.startsWith("owlbear-gm:")
+}
+
 export interface OwlbearSessionRecord {
     id: string
     userId: string
