@@ -223,6 +223,16 @@ export const entityColors = {
         text: "text-red-400",
         hex: rarityColors.artifact // #EF4444
     },
+    NPC: {
+        color: "red",
+        mention: "bg-red-500/10 text-red-400 border-red-400/20",
+        badge: "bg-red-400/20 text-red-400",
+        border: "border-red-500/20",
+        hoverBorder: "hover:border-red-500/40",
+        bgAlpha: "bg-red-500/10",
+        text: "text-red-400",
+        hex: rarityColors.artifact // #EF4444
+    },
     Ficha: {
         color: "purple",
         mention: "bg-purple-500/10 text-purple-400 border-purple-400/20",

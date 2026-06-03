@@ -83,6 +83,7 @@ export interface CharacterSheet {
     armorClassOverride: number | null
     armorClassBonus: number | null
     initiativeOverride: number | null
+    initiativeProficiency: boolean
     passivePerceptionOverride: number | null
     // Spellcasting
     spellcastingAttribute: string | null
@@ -376,6 +377,7 @@ export const PatchSheetSchema = z.object({
     armorClassOverride: z.number().int().nullable().optional(),
     armorClassBonus: z.number().int().nullable().optional(),
     initiativeOverride: z.number().int().nullable().optional(),
+    initiativeProficiency: z.boolean().optional(),
     passivePerceptionOverride: z.number().int().nullable().optional(),
     spellcastingAttribute: z.string().nullable().optional(),
     spellSaveDCOverride: z.number().int().nullable().optional(),

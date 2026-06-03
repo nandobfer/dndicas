@@ -11,6 +11,9 @@ import { CharacterSheet } from "../types/character-sheet.types"
 import { CalcTooltip } from "./calc-tooltip"
 import { SheetInput } from "./sheet-input"
 import { CompactRichInput } from "./compact-rich-input"
+import { GlassCheckbox } from "./glass-checkbox"
+import { GlassProficiencyCheckbox } from "@/components/ui/glass-proficiency-checkbox"
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/core/ui/tooltip"
 import { useAttackNameSync } from "./hooks/use-attack-name-sync"
 import { ResourceChargeList } from "./resource-charge-list"
 import { extractMentionsFromHtml } from "../utils/mention-sync"
@@ -88,7 +91,21 @@ export function useSheetAttacksAndTraitsSections({ sheet, form, isReadOnly = fal
 
     const combatStatsCard = (
         <div className="grid grid-cols-4 gap-2">
-            <div className="rounded-lg bg-white/[0.03] border border-white/10 p-2 flex flex-col items-center gap-1">
+            <div className="rounded-lg bg-white/[0.03] border border-white/10 p-2 flex flex-col items-center gap-1 relative group/initiative">
+                <div className="absolute top-2 right-2 z-10">
+                    <Tooltip delayDuration={200}>
+                        <TooltipTrigger asChild>
+                            <GlassProficiencyCheckbox
+                                checked={!!currentValues.initiativeProficiency}
+                                onCheckedChange={(checked) => patchField("initiativeProficiency", checked)}
+                                disabled={isReadOnly}
+                            />
+                        </TooltipTrigger>
+                        <TooltipContent side="top" className="text-[10px] font-bold uppercase tracking-widest px-2 py-1">
+                            Somar proficiência na iniciativa
+                        </TooltipContent>
+                    </Tooltip>
+                </div>
                 <span className="text-[8px] font-black uppercase tracking-widest text-white/40 text-center">Iniciativa</span>
                 <CalcTooltip formula={calc.initiative.formula} parts={calc.initiative.parts} result={calc.initiative.result}>
                     <span className="text-xl font-black text-white">{formatMod(calc.initiative.value)}</span>

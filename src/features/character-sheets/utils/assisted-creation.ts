@@ -112,6 +112,7 @@ export function createTemporaryAssistedSheet(userId = "assisted-user"): Characte
         armorClassOverride: null,
         armorClassBonus: null,
         initiativeOverride: null,
+        initiativeProficiency: false,
         passivePerceptionOverride: null,
         spellcastingAttribute: null,
         spellSaveDCOverride: null,

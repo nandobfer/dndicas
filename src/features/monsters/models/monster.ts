@@ -7,7 +7,7 @@ export interface IMonster extends Omit<Monster, "_id" | "id" | "createdAt" | "up
     updatedAt: Date
 }
 
-const NpcParamSchema = new Schema<NpcParam>(
+export const NpcParamSchema = new Schema<NpcParam>(
     {
         label: { type: String, required: true, trim: true, maxlength: 120 },
         description: { type: String, required: true, maxlength: 20000 },
@@ -19,7 +19,7 @@ const NpcParamSchema = new Schema<NpcParam>(
     { _id: true },
 )
 
-const AttributesSchema = new Schema(
+export const AttributesSchema = new Schema(
     {
         strength: { type: Number, required: true, default: 10, min: 1, max: 30 },
         dexterity: { type: Number, required: true, default: 10, min: 1, max: 30 },
@@ -31,7 +31,7 @@ const AttributesSchema = new Schema(
     { _id: false },
 )
 
-const StateSchema = new Schema(
+export const StateSchema = new Schema(
     {
         proficient: { type: Boolean, default: false },
         expertise: { type: Boolean, default: false },
@@ -40,7 +40,7 @@ const StateSchema = new Schema(
     { _id: false },
 )
 
-const SensesSchema = new Schema(
+export const SensesSchema = new Schema(
     {
         passivePerception: { type: Number },
         blindsight: { type: String, trim: true, maxlength: 80 },

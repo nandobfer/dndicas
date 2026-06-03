@@ -7,7 +7,7 @@ import { SubclassPreview } from "@/features/classes/components/subclass-preview"
 import { BackgroundPreview } from "@/features/backgrounds/components/background-preview"
 import { RacePreview } from "@/features/races/components/race-preview"
 import { ItemPreview } from "@/features/items/components/item-preview"
-import { MonsterPreview } from "@/features/monsters/components/monster-preview"
+import { NpcPreview } from "@/features/monsters/components/npc-preview"
 import { fetchTraitById } from "@/features/traits/api/traits-api"
 import { fetchSpell } from "@/features/spells/api/spells-api"
 import { fetchFeat } from "@/features/feats/api/feats-api"
@@ -49,6 +49,7 @@ export const ENTITY_RENDERERS: Record<string, (item: any, options?: EntityRender
     Raça: (idOrItem, opts) => <RaceAsyncRenderer item={idOrItem} />,
     Item: (idOrItem, opts) => <ItemAsyncRenderer item={idOrItem} showStatus={opts?.showStatus ?? true} hideStatusChip={opts?.hideStatusChip} hideActionIcons={opts?.hideActionIcons} />,
     Monstro: (idOrItem, opts) => <MonsterAsyncRenderer item={idOrItem} showStatus={opts?.showStatus ?? true} hideStatusChip={opts?.hideStatusChip} hideActionIcons={opts?.hideActionIcons} />,
+    NPC: (idOrItem, opts) => <MonsterAsyncRenderer item={idOrItem} showStatus={opts?.showStatus ?? true} hideStatusChip={opts?.hideStatusChip} hideActionIcons={opts?.hideActionIcons} entityType="NPC" />,
 }
 
 function parseSubclassSearchId(id: string) {
@@ -165,7 +166,7 @@ function ItemAsyncRenderer({ item, showStatus = true, hideStatusChip, hideAction
     )
 }
 
-function MonsterAsyncRenderer({ item, showStatus = true, hideStatusChip, hideActionIcons }: { item: any; showStatus?: boolean; hideStatusChip?: boolean; hideActionIcons?: boolean }) {
+function MonsterAsyncRenderer({ item, showStatus = true, hideStatusChip, hideActionIcons, entityType = "Monstro" }: { item: any; showStatus?: boolean; hideStatusChip?: boolean; hideActionIcons?: boolean; entityType?: "Monstro" | "NPC" }) {
     const [monsterData, setMonsterData] = React.useState<any>(null)
     const [loading, setLoading] = React.useState(true)
     const id = typeof item === "string" ? item : item?._id || item?.id
@@ -203,7 +204,7 @@ function MonsterAsyncRenderer({ item, showStatus = true, hideStatusChip, hideAct
 
     return (
         <div className="p-4">
-            <MonsterPreview monster={monsterData} showStatus={showStatus} hideStatusChip={hideStatusChip} hideActionIcons={hideActionIcons} />
+            <NpcPreview monster={monsterData} showStatus={showStatus} hideStatusChip={hideStatusChip} hideActionIcons={hideActionIcons} entityType={entityType} />
         </div>
     )
 }

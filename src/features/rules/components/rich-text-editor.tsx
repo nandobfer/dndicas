@@ -5,11 +5,13 @@ import StarterKit from '@tiptap/starter-kit'
 import ImageExtension from "@tiptap/extension-image"
 import Placeholder from '@tiptap/extension-placeholder'
 import Mention from "@tiptap/extension-mention"
+import { Table as TableExtension, TableRow, TableHeader, TableCell } from "@tiptap/extension-table"
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { cn } from '@/core/utils'
 import { Button } from '@/core/ui/button'
 import { glassConfig } from "@/lib/config/glass-config"
-import { Bold, Italic, Strikethrough, List, ListOrdered, Undo, Redo, Image as ImageIcon } from "lucide-react"
+import { Bold, Italic, Strikethrough, List, ListOrdered, Undo, Redo, Image as ImageIcon, Table2, ArrowLeftToLine, ArrowRightToLine, ArrowUpToLine, ArrowDownToLine, Columns2, Rows2, Trash2 } from "lucide-react"
+import { SimpleGlassTooltip, GlassTooltipProvider } from "@/components/ui/glass-tooltip"
 import { getSuggestionConfig } from "../utils/suggestion"
 import { Extension, Node, InputRule } from "@tiptap/core"
 import { Plugin, PluginKey } from "@tiptap/pm/state"
@@ -20,6 +22,7 @@ import { diceFuse, DICE_LOOKAHEAD_REGEX } from "../utils/dice-render-utils"
 import type { EntityType } from "@/lib/config/colors"
 import {
     MENTION_INTERACTION_SURFACE_SELECTOR,
+    findMentionSuggestionMatch,
     isTemporaryOpenMentionText,
     isPointerWithinMentionInteractionSurface,
     shouldAutoOpenMentionsOnFocus,
@@ -378,7 +381,121 @@ interface RichTextEditorProps {
     openMentionsOnFocus?: boolean
 }
 
-const MenuBar = ({ editor, addImage, disabled = false }: { editor: Editor | null; addImage: () => void; disabled?: boolean }) => {
+const TableBubbleMenu = ({ editor, containerRef }: { editor: Editor | null; containerRef: React.RefObject<HTMLDivElement | null> }) => {
+    const [isVisible, setIsVisible] = useState(false)
+    const [pos, setPos] = useState({ top: 0, left: 0 })
+
+    useEffect(() => {
+        if (!editor) return
+
+        const handleSelectionUpdate = () => {
+            const inTable = editor.isActive("tableCell") || editor.isActive("tableHeader")
+            if (!inTable || !editor.isFocused) {
+                setIsVisible(false)
+                return
+            }
+            const { from } = editor.state.selection
+            const coords = editor.view.coordsAtPos(from)
+            const containerRect = containerRef.current?.getBoundingClientRect()
+            const rawLeft = coords.left - (containerRect?.left ?? 0)
+            const containerWidth = containerRect?.width ?? 400
+            const MENU_HALF_WIDTH = 120 // half of estimated ~240px menu width
+            const clampedLeft = Math.max(MENU_HALF_WIDTH, Math.min(rawLeft, containerWidth - MENU_HALF_WIDTH))
+            setPos({
+                top: coords.top - (containerRect?.top ?? 0) - 46,
+                left: clampedLeft,
+            })
+            setIsVisible(true)
+        }
+
+        const handleBlur = () => setIsVisible(false)
+
+        editor.on("selectionUpdate", handleSelectionUpdate)
+        editor.on("focus", handleSelectionUpdate)
+        editor.on("blur", handleBlur)
+
+        return () => {
+            editor.off("selectionUpdate", handleSelectionUpdate)
+            editor.off("focus", handleSelectionUpdate)
+            editor.off("blur", handleBlur)
+        }
+    }, [editor, containerRef])
+
+    if (!isVisible || !editor) return null
+
+    const btnClass = "h-7 w-7 p-0 hover:bg-white/10 rounded transition-colors flex items-center justify-center cursor-pointer"
+    const divider = <div className="w-px h-5 bg-white/15 mx-0.5 self-center" />
+
+    return (
+        <GlassTooltipProvider>
+            <div
+                style={{
+                    position: "absolute",
+                    top: pos.top,
+                    left: pos.left,
+                    zIndex: 50,
+                    transform: "translateX(-50%)",
+                    pointerEvents: "auto",
+                }}
+                onMouseDown={(e) => e.preventDefault()}
+            >
+                <div className="flex items-center gap-0.5 rounded-lg border border-white/10 bg-black/80 backdrop-blur-md p-1 shadow-2xl">
+                    <SimpleGlassTooltip content="Adicionar coluna à esquerda">
+                        <button type="button" className={btnClass} onClick={() => editor.chain().focus().addColumnBefore().run()}>
+                            <ArrowLeftToLine className="h-3.5 w-3.5 text-white/70" />
+                        </button>
+                    </SimpleGlassTooltip>
+
+                    <SimpleGlassTooltip content="Adicionar coluna à direita">
+                        <button type="button" className={btnClass} onClick={() => editor.chain().focus().addColumnAfter().run()}>
+                            <ArrowRightToLine className="h-3.5 w-3.5 text-white/70" />
+                        </button>
+                    </SimpleGlassTooltip>
+
+                    <SimpleGlassTooltip content="Remover coluna">
+                        <button type="button" className={btnClass} onClick={() => editor.chain().focus().deleteColumn().run()}>
+                            <Columns2 className="h-3.5 w-3.5 text-white/50" />
+                        </button>
+                    </SimpleGlassTooltip>
+
+                    {divider}
+
+                    <SimpleGlassTooltip content="Adicionar linha acima">
+                        <button type="button" className={btnClass} onClick={() => editor.chain().focus().addRowBefore().run()}>
+                            <ArrowUpToLine className="h-3.5 w-3.5 text-white/70" />
+                        </button>
+                    </SimpleGlassTooltip>
+
+                    <SimpleGlassTooltip content="Adicionar linha abaixo">
+                        <button type="button" className={btnClass} onClick={() => editor.chain().focus().addRowAfter().run()}>
+                            <ArrowDownToLine className="h-3.5 w-3.5 text-white/70" />
+                        </button>
+                    </SimpleGlassTooltip>
+
+                    <SimpleGlassTooltip content="Remover linha">
+                        <button type="button" className={btnClass} onClick={() => editor.chain().focus().deleteRow().run()}>
+                            <Rows2 className="h-3.5 w-3.5 text-white/50" />
+                        </button>
+                    </SimpleGlassTooltip>
+
+                    {divider}
+
+                    <SimpleGlassTooltip content="Excluir tabela">
+                        <button
+                            type="button"
+                            className={cn(btnClass, "hover:bg-red-500/20")}
+                            onClick={() => editor.chain().focus().deleteTable().run()}
+                        >
+                            <Trash2 className="h-3.5 w-3.5 text-red-400/70" />
+                        </button>
+                    </SimpleGlassTooltip>
+                </div>
+            </div>
+        </GlassTooltipProvider>
+    )
+}
+
+const MenuBar = ({ editor, addImage, addTable, disabled = false }: { editor: Editor | null; addImage: () => void; addTable: () => void; disabled?: boolean }) => {
     if (!editor) {
         return null
     }
@@ -449,6 +566,18 @@ const MenuBar = ({ editor, addImage, disabled = false }: { editor: Editor | null
             <Button type="button" variant="ghost" size="sm" tabIndex={-1} disabled={disabled} onClick={addImage} className="h-8 w-8 p-0" title="Upload Image">
                 <ImageIcon className="h-4 w-4" />
             </Button>
+            <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                tabIndex={-1}
+                disabled={disabled}
+                onClick={addTable}
+                className="h-8 w-8 p-0"
+                title="Inserir Tabela"
+            >
+                <Table2 className="h-4 w-4" />
+            </Button>
 
             <div className="w-px h-6 bg-white/10 mx-1 self-center" />
 
@@ -489,6 +618,7 @@ export function RichTextEditor({
     const activeEditorRef = useRef<Editor | null>(null)
     const hasActiveMentionSessionRef = useRef(false)
     const hasSyntheticOpenMentionRef = useRef(false)
+    const outerWrapperRef = useRef<HTMLDivElement>(null)
 
     const uploadImage = useCallback(async (file: File) => {
         setIsUploading(true)
@@ -551,20 +681,34 @@ export function RichTextEditor({
                 placeholder: placeholder ?? "Digite '@' para referenciar habilidades, magias, etc.",
             }),
             CustomMention.configure({
-                suggestion: getSuggestionConfig({
-                    excludeId,
-                    blurOnMentionSelect,
-                    specificEntityMention,
-                    specificEntityMentions,
-                    itemTypes: mentionItemTypes,
-                    circles: mentionCircles,
-                    parentClassId: mentionParentClassId,
-                    onStart: handleMentionStart,
-                    onExit: handleMentionExit,
-                }),
+                suggestion: {
+                    allowSpaces: true,
+                    decorationClass: "bg-white/20 text-white rounded px-1 transition-colors",
+                    findSuggestionMatch: ({ $position }) =>
+                        findMentionSuggestionMatch({
+                            text: $position.parent.textBetween(0, $position.parent.content.size, undefined, '\uFFFC'),
+                            parentOffset: $position.parentOffset,
+                            position: $position.pos,
+                        }),
+                    ...getSuggestionConfig({
+                        excludeId,
+                        blurOnMentionSelect,
+                        specificEntityMention,
+                        specificEntityMentions,
+                        itemTypes: mentionItemTypes,
+                        circles: mentionCircles,
+                        parentClassId: mentionParentClassId,
+                        onStart: handleMentionStart,
+                        onExit: handleMentionExit,
+                    }),
+                },
             }),
             DiceHighlight,
             DiceValueNode,
+            TableExtension.configure({ resizable: false }),
+            TableRow,
+            TableHeader,
+            TableCell,
             ...(disableNewlines ? [DisableNewlinesExtension] : []),
         ],
         content: value,
@@ -621,6 +765,11 @@ export function RichTextEditor({
                     "[&_ul]:list-disc [&_ul]:pl-5 [&_ol]:list-decimal [&_ol]:pl-5 [&_li]:my-1",
                     "prose-blockquote:border-l-4 prose-blockquote:border-primary/50 prose-blockquote:pl-4 prose-blockquote:italic",
                     "prose-img:rounded-md prose-img:border prose-img:border-white/10",
+                    // Table styles
+                    "[&_table]:w-full [&_table]:border-collapse [&_table]:my-3",
+                    "[&_th]:border [&_th]:border-white/20 [&_th]:px-3 [&_th]:py-2 [&_th]:text-left [&_th]:text-xs [&_th]:font-bold [&_th]:bg-white/[0.04] [&_th]:text-white/70",
+                    "[&_td]:border [&_td]:border-white/10 [&_td]:px-3 [&_td]:py-2 [&_td]:text-xs [&_td]:text-white/60",
+                    "[&_.selectedCell]:bg-blue-500/20",
                     "dark:prose-invert",
                     // TipTap placeholder CSS logic
                     "relative [&_p.is-editor-empty:first-child]:before:content-[attr(data-placeholder)] [&_p.is-editor-empty:first-child]:before:text-white/30 [&_p.is-editor-empty:first-child]:before:float-left [&_p.is-editor-empty:first-child]:before:h-0 [&_p.is-editor-empty:first-child]:before:pointer-events-none",
@@ -761,6 +910,11 @@ export function RichTextEditor({
         return () => window.clearTimeout(timeoutId)
     }, [editor, autoFocus, focusToken, disabled, onAutoFocusApplied])
 
+    const handleAddTableClick = useCallback(() => {
+        if (!editor || disabled) return
+        editor.chain().focus().insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run()
+    }, [disabled, editor])
+
     // Need to pass addImage to MenuBar inside the component to access editor and uploadImage
     const handleAddImageClick = useCallback(() => {
         if (!editor || disabled) return
@@ -797,23 +951,26 @@ export function RichTextEditor({
     }, [value, editor])
 
     return (
-        <div
-            className={cn(
-                "rounded-lg overflow-hidden transition-all group",
-                glassConfig.input.background,
-                glassConfig.input.blur,
-                glassConfig.input.border,
-                !disabled && "focus-within:ring-2 focus-within:ring-blue-500/50 focus-within:border-blue-500/50",
-                disabled && "opacity-50 cursor-not-allowed",
-                isUploading && "animate-pulse pointer-events-none",
-                className,
-            )}
-        >
-            {variant === "full" && !disabled && <MenuBar editor={editor} addImage={handleAddImageClick} disabled={disabled} />}
-            <div className="relative">
-                <EditorContent editor={editor} />
-                {isUploading && <div className="absolute inset-0 bg-black/50 flex items-center justify-center text-xs text-white">Uploading...</div>}
+        <div ref={outerWrapperRef} className="relative">
+            <div
+                className={cn(
+                    "rounded-lg overflow-hidden transition-all group",
+                    glassConfig.input.background,
+                    glassConfig.input.blur,
+                    glassConfig.input.border,
+                    !disabled && "focus-within:ring-2 focus-within:ring-blue-500/50 focus-within:border-blue-500/50",
+                    disabled && "opacity-50 cursor-not-allowed",
+                    isUploading && "animate-pulse pointer-events-none",
+                    className,
+                )}
+            >
+                {variant === "full" && !disabled && <MenuBar editor={editor} addImage={handleAddImageClick} addTable={handleAddTableClick} disabled={disabled} />}
+                <div className="relative">
+                    <EditorContent editor={editor} />
+                    {isUploading && <div className="absolute inset-0 bg-black/50 flex items-center justify-center text-xs text-white">Uploading...</div>}
+                </div>
             </div>
+            {variant === "full" && !disabled && <TableBubbleMenu editor={editor} containerRef={outerWrapperRef} />}
         </div>
     )
 }

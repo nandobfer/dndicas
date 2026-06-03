@@ -184,21 +184,25 @@ export const getArmorClass = (
 
 // ─── Initiative ───────────────────────────────────────────────────────────────
 
-export const getInitiative = (dexterity: number, override: number | null): CalcResult => {
+export const getInitiative = (dexterity: number, override: number | null, profBonus: number, proficient: boolean): CalcResult => {
     const dexMod = Math.floor((dexterity - 10) / 2)
     if (override !== null) {
         return {
             value: override,
-            formula: `Valor manual (cálculo: DEX mod ${dexMod})`,
+            formula: `Valor manual (cálculo: DEX mod ${dexMod}${proficient ? ` + prof ${profBonus}` : ""})`,
             parts: [{ label: "Manual", value: fmt(override), color: "manual" }],
             result: fmt(override),
         }
     }
+    const total = proficient ? dexMod + profBonus : dexMod
+    const parts: CalcPart[] = [{ label: "Destreza", value: fmt(dexMod), color: "dexterity" }]
+    if (proficient) parts.push({ label: "Prof.", value: fmt(profBonus), color: "prof" })
+
     return {
-        value: dexMod,
-        formula: `DEX mod(${dexterity}) = ${fmt(dexMod)}`,
-        parts: [{ label: "Destreza", value: fmt(dexMod), color: "dexterity" }],
-        result: fmt(dexMod),
+        value: total,
+        formula: `DEX mod(${dexterity}) ${fmt(dexMod)}${proficient ? ` + prof(${profBonus})` : ""} = ${fmt(total)}`,
+        parts,
+        result: fmt(total),
     }
 }
 

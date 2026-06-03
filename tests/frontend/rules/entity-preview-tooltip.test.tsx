@@ -54,7 +54,9 @@ vi.mock('@/components/ui/glass-popover', async () => {
 })
 
 vi.mock('@/features/monsters/components/monster-preview', () => ({
-    MonsterPreview: ({ monster }: { monster: { name: string } }) => <div data-testid="monster-preview">{monster.name}</div>,
+    MonsterPreview: ({ monster }: { monster: { name: string; attributes?: { wisdom?: number } } }) => (
+        <div data-testid="monster-preview">{monster.name}:{monster.attributes?.wisdom}</div>
+    ),
 }))
 
 vi.mock('@/features/spells/components/spell-preview', () => ({
@@ -126,7 +128,30 @@ describe('EntityPreviewTooltip', () => {
         })
 
         expect(fetch).toHaveBeenCalledWith('/api/monsters/monster-1')
-        expect(screen.getByTestId('monster-preview')).toHaveTextContent('Dragão Vermelho')
+        expect(screen.getByTestId('monster-preview')).toHaveTextContent('Dragão Vermelho:10')
+    })
+
+    it('normalizes incomplete monster preview payloads before rendering MonsterPreview', async () => {
+        vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+            ok: true,
+            json: vi.fn().mockResolvedValue({ _id: 'monster-1', name: 'Dragão Parcial', status: 'active' }),
+        }))
+
+        render(
+            <EntityPreviewTooltip entityId="monster-1" entityType="Monstro">
+                <button type="button">Dragão Parcial</button>
+            </EntityPreviewTooltip>,
+        )
+
+        fireEvent.mouseEnter(screen.getByRole('button', { name: 'Dragão Parcial' }))
+
+        await act(async () => {
+            vi.advanceTimersByTime(300)
+            await Promise.resolve()
+            await Promise.resolve()
+        })
+
+        expect(screen.getByTestId('monster-preview')).toHaveTextContent('Dragão Parcial:10')
     })
 
     it('renders the AI generation action for admin spell previews', async () => {
@@ -205,7 +230,7 @@ describe('EntityPreviewTooltip', () => {
         fireEvent.click(screen.getByText('Gerar com IA'))
 
         expect(fetch).toHaveBeenCalledWith('/api/monsters/monster-1')
-        expect(screen.getByTestId('monster-preview')).toHaveTextContent('Dragão Vermelho')
+        expect(screen.getByTestId('monster-preview')).toHaveTextContent('Dragão Vermelho:10')
         expect(screen.getByTestId('generation-modal')).toHaveTextContent('Dragão Vermelho')
     })
 })

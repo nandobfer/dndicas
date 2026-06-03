@@ -587,6 +587,7 @@ export function useSheetHeaderSections({ sheet, form, items = [], isReadOnly = f
                 className="h-full min-h-[176px] rounded-lg"
                 imageClassName="object-cover mix-blend-normal"
                 showOverlay={false}
+                aspectRatio="portrait"
               />
             ) : !isReadOnly ? (
               <div className="flex h-full min-h-0 flex-col gap-1.5">
