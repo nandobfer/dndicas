@@ -12,6 +12,7 @@ import { CatalogDashboardFrame } from "./catalog-dashboard-frame"
 import { OwlbearDiceTab } from "./owlbear-dice-tab"
 import { OwlbearPlayerSheetTab } from "./player-sheet-tab"
 import { OwlbearGmSheetsTab } from "./gm-sheets-tab"
+import { OwlbearGmNpcsTab } from "./gm-npcs-tab"
 import { OwlbearGmSceneController } from "./gm-scene-controller"
 import type { OwlbearRole, OwlbearTabId } from "./types"
 import { preloadDiceBoxAssets } from "@/features/dice-roller/dice-box-loader"
@@ -47,17 +48,6 @@ function getTabsForRole(role: OwlbearRole | null) {
         activeColorHex: colors.rarity.rare,
         textColorHex: colors.rarity.rare,
     }] satisfies TabDefinition[]
-}
-
-function PlaceholderPanel({ title, description }: { title: string; description: string }) {
-    return (
-        <div className="flex h-full min-h-[420px] items-center justify-center rounded-2xl border border-dashed border-white/10 bg-black/20 p-8">
-            <div className="max-w-xl text-center">
-                <h2 className="text-xl font-semibold text-white">{title}</h2>
-                <p className="mt-3 text-sm leading-6 text-white/60">{description}</p>
-            </div>
-        </div>
-    )
 }
 
 function RuntimeBanner({
@@ -153,7 +143,14 @@ export function OwlbearShell() {
                     )}
                     {tabs.some((tab) => tab.id === "npcs") && (
                         <div className={cn("h-full min-h-0", activeTab === "npcs" ? "block" : "hidden")} aria-hidden={activeTab !== "npcs"}>
-                            <PlaceholderPanel title="NPCs da sala" description="O CRUD de NPCs locais e seus vínculos com tokens permanece fora desta etapa inicial." />
+                            {activeTab === "npcs" && (
+                                <OwlbearGmNpcsTab
+                                    runtime={runtime}
+                                    session={session}
+                                    isAuthenticated={isAuthenticated}
+                                    isAuthLoaded={isAuthLoaded}
+                                />
+                            )}
                         </div>
                     )}
                 </div>

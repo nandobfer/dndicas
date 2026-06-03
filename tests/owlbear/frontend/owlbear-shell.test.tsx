@@ -6,6 +6,7 @@ import { OwlbearShell } from "@/features/owlbear/owlbear-shell"
 
 const useSheetListMock = vi.hoisted(() => vi.fn())
 const useCreateSheetMock = vi.hoisted(() => vi.fn())
+const useCreateAssistedSheetMock = vi.hoisted(() => vi.fn())
 const useSheetMock = vi.hoisted(() => vi.fn())
 const useRoomLinkedSheetsMock = vi.hoisted(() => vi.fn())
 const clerkState = vi.hoisted(() => ({
@@ -135,6 +136,7 @@ vi.mock("@/features/character-sheets/hooks/use-sheet-list", () => ({
 }))
 
 vi.mock("@/features/character-sheets/api/character-sheets-queries", () => ({
+    useCreateAssistedSheet: () => useCreateAssistedSheetMock(),
     useCreateSheet: () => useCreateSheetMock(),
     useSheet: (id: string | null) => useSheetMock(id),
 }))
@@ -194,6 +196,10 @@ vi.mock("@/features/character-sheets/components/sheet-form", () => ({
     ),
 }))
 
+vi.mock("@/app/(dashboard)/my-sheets/_components/assisted-sheet-creation-modal", () => ({
+    AssistedSheetCreationModal: () => null,
+}))
+
 describe("OwlbearShell", () => {
     beforeEach(() => {
         vi.clearAllMocks()
@@ -232,6 +238,10 @@ describe("OwlbearShell", () => {
             fetchNextPage: vi.fn(),
         })
         useCreateSheetMock.mockReturnValue({
+            mutateAsync: vi.fn(),
+            isPending: false,
+        })
+        useCreateAssistedSheetMock.mockReturnValue({
             mutateAsync: vi.fn(),
             isPending: false,
         })
