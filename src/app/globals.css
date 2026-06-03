@@ -291,3 +291,10 @@ button {
 .glass-scrollbar::-webkit-scrollbar-thumb:hover {
   background: rgba(255, 255, 255, 0.2);
 }
+
+/* Escala de fonte para telas Ultrawide (maior que 1920px) */
+@media (min-width: 1921px) {
+  html {
+    font-size: 120%;
+  }
+}
