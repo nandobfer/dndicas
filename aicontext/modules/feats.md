@@ -29,6 +29,8 @@ Admins podem usar `Gerar com IA` nos menus de talentos da tabela, da lista em ca
 ### Infinite scroll nas tabelas de catálogo
 As tabelas de talentos usam `useInfiniteFeats`, a mesma fonte de dados do modo lista. Ao chegar ao fim da tabela, um sentinel carrega a próxima página automaticamente e substitui a paginação tradicional.
 
+As listagens infinitas de talentos usam ordenação alfabética por `name` quando não há pesquisa. Quando há pesquisa, a ordem dos resultados segue o ranking fuzzy.
+
 ---
 
 ## Directory Structure
