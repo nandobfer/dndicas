@@ -4,7 +4,7 @@ import * as React from "react"
 import { motion } from "framer-motion"
 import { colors } from "@/lib/config/colors"
 import { cn } from "@/core/utils"
-import { loadDiceBox } from "../dice-box-loader"
+import { getSharedDiceBox, releaseSharedDiceBox, type SharedDiceBox } from "../dice-box-loader"
 import { buildDiceBoxNotation, buildDiceBoxStandbyNotation, expandStandbyVisualTerms, expandVisualResult } from "../dice-box-notation"
 import { renderStaticDiceBoxStandby } from "../dice-box-static-standby"
 import type { DiceCriticalState, DiceRollMode, DiceRollResponse, DiceTerm } from "../types"
@@ -44,13 +44,12 @@ function buildContainerId(reactId: string) {
     return `dice-box-${reactId.replace(/[^a-zA-Z0-9_-]/g, "")}`
 }
 
-const DICE_TEXTURE = "stainedglass"
-
 export function DiceVisualStage({ terms, result, isRolling, mode, criticalState, onAnimationStateChange, onRollComplete }: DiceVisualStageProps) {
     const reactId = React.useId()
     const containerId = React.useMemo(() => buildContainerId(reactId), [reactId])
     const containerRef = React.useRef<HTMLDivElement | null>(null)
     const diceBoxRef = React.useRef<DiceBox | null>(null)
+    const sharedContainerRef = React.useRef<SharedDiceBox | null>(null)
     const rollTokenRef = React.useRef(0)
     const hasRenderedRollRef = React.useRef(false)
     const lastRolledResultIdRef = React.useRef<string | null>(null)
@@ -69,60 +68,33 @@ export function DiceVisualStage({ terms, result, isRolling, mode, criticalState,
 
         async function initializeDiceBox() {
             try {
-                const DiceBoxCtor = await loadDiceBox()
-                if (cancelled) return
-
-                const box = new DiceBoxCtor(`#${containerId}`, {
-                    assetPath: "/",
-                    sounds: true,
-                    volume: 100,
-                    sound_dieMaterial: "plastic",
-                    shadows: true,
-                    theme_surface: "default",
-                    theme_texture: "none",
-                    theme_material: "glass",
-                    theme_customColorset: {
-                        name: "dndicas",
-                        foreground: "#f8fafc",
-                        background: ["#0f172a", "#1f2937", "#334155", "#111827"],
-                        outline: "#f8fafc",
-                        texture: DICE_TEXTURE,
-                        material: "glass",
-                    },
-                    gravity_multiplier: 280,
-                    light_intensity: 0.85,
-                    baseScale: 67,
-                    strength: 2.0,
-                })
-
-                await box.initialize()
+                const shared = await getSharedDiceBox()
                 if (cancelled) {
-                    box.clearDice?.()
+                    releaseSharedDiceBox(shared)
                     return
                 }
 
-                // Override startClickThrow to ensure throws are consistently strong and cover distance
-                const anyBox = box as any
-                if (anyBox.startClickThrow && anyBox.getNotationVectors && anyBox.display) {
-                    anyBox.startClickThrow = function(notation: string) {
-                        if (this.rolling) {
-                            this.clearDice()
-                            this.rolling = false
+                sharedContainerRef.current = shared
+                const box = shared.box
+
+                if (containerElement && shared.container.parentElement !== containerElement) {
+                    containerElement.appendChild(shared.container)
+                    
+                    // Reset styling for the visual stage wrapper
+                    shared.container.style.position = "absolute"
+                    shared.container.style.inset = "0"
+                    shared.container.style.width = "100%"
+                    shared.container.style.height = "100%"
+                    shared.container.style.left = "0"
+                    shared.container.style.top = "0"
+                    shared.container.style.zIndex = "1"
+                    
+                    // Dispatch a resize event to ensure Three.js canvas size matches the new container
+                    setTimeout(() => {
+                        if (typeof window !== "undefined") {
+                            window.dispatchEvent(new Event("resize"))
                         }
-                        const w = this.display.currentWidth || 800
-                        const h = this.display.currentHeight || 600
-                        const maxDim = Math.max(w, h)
-                        const angle = Math.random() * Math.PI * 2
-                        const distance = (0.75 + Math.random() * 0.25) * maxDim
-                        const t = {
-                            x: Math.cos(angle) * distance,
-                            y: Math.sin(angle) * distance,
-                        }
-                        const n = Math.sqrt(t.x * t.x + t.y * t.y) + 100
-                        const forceMultiplier = 3.2 + Math.random() * 0.6
-                        const i = forceMultiplier * n * this.strength
-                        return this.getNotationVectors(notation, t, i, n)
-                    }
+                    }, 50)
                 }
 
                 diceBoxRef.current = box
@@ -141,11 +113,14 @@ export function DiceVisualStage({ terms, result, isRolling, mode, criticalState,
         return () => {
             cancelled = true
             onAnimationStateChange?.(false)
-            diceBoxRef.current?.clearDice?.()
+            if (sharedContainerRef.current) {
+                releaseSharedDiceBox(sharedContainerRef.current)
+                sharedContainerRef.current = null
+            }
             diceBoxRef.current = null
             containerElement?.replaceChildren()
         }
-    }, [containerId, onAnimationStateChange])
+    }, [onAnimationStateChange])
 
     React.useEffect(() => {
         const box = diceBoxRef.current
@@ -327,3 +302,4 @@ export function DiceVisualStage({ terms, result, isRolling, mode, criticalState,
         </div>
     )
 }
+
