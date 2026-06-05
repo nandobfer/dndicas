@@ -37,7 +37,7 @@ export function GET(request: Request) {
     return NextResponse.json(
         {
             name: "Dndicas",
-            version: "0.1.0",
+            version: "0.1.1",
             manifest_version: 1,
             description: "Integração do Dndicas com Owlbear Rodeo.",
             icon: iconUrl,

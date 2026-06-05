@@ -319,13 +319,13 @@ export function parseTokenLinkMetadata(metadata: Record<string, unknown> | null 
     }
 
     const parsed = value as Partial<OwlbearTokenLinkMetadata>
-    if (parsed.kind !== "player" || typeof parsed.refId !== "string" || typeof parsed.tokenId !== "string") {
+    if ((parsed.kind !== "player" && parsed.kind !== "npc") || typeof parsed.refId !== "string" || typeof parsed.tokenId !== "string") {
         return null
     }
 
     return {
         version: typeof parsed.version === "number" ? parsed.version : OWLBEAR_TOKEN_METADATA_VERSION,
-        kind: "player",
+        kind: parsed.kind,
         refId: parsed.refId,
         tokenId: parsed.tokenId,
         overlayIds: Array.isArray(parsed.overlayIds) ? parsed.overlayIds.filter((id): id is string => typeof id === "string") : [],
@@ -340,7 +340,7 @@ export function parseOverlayMetadata(metadata: Record<string, unknown> | null | 
     }
 
     const parsed = value as Partial<OwlbearOverlayMetadata>
-    if (typeof parsed.tokenId !== "string" || (parsed.role !== "backdrop" && parsed.role !== "label")) {
+    if (typeof parsed.tokenId !== "string" || (parsed.role !== "backdrop" && parsed.role !== "fill" && parsed.role !== "label")) {
         return null
     }
 
@@ -359,7 +359,7 @@ export function getOverlayLinkFromItem(item: OwlbearSceneItem | null | undefined
     return parseOverlayMetadata(item?.metadata)
 }
 
-export async function setTokenSheetLink(tokenId: string, sheetId: string, overlayIds: string[] = []) {
+export async function setTokenSheetLink(tokenId: string, sheetId: string, kind: "player" | "npc" = "player", overlayIds: string[] = []) {
     const sdk = await loadOwlbearSdk()
     if (!sdk || !sdk.isAvailable || !sdk.isReady) {
         throw new Error("Owlbear SDK indisponível para vincular token")
@@ -372,7 +372,7 @@ export async function setTokenSheetLink(tokenId: string, sheetId: string, overla
             ...item.metadata,
             [OWLBEAR_TOKEN_METADATA_KEY]: {
                 version: OWLBEAR_TOKEN_METADATA_VERSION,
-                kind: "player",
+                kind,
                 refId: sheetId,
                 tokenId,
                 overlayIds,

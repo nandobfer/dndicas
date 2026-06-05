@@ -36,7 +36,7 @@ export interface OwlbearSessionState {
 
 export interface OwlbearTokenLinkMetadata {
     version: number
-    kind: "player"
+    kind: "player" | "npc"
     refId: string
     tokenId: string
     overlayIds: string[]
@@ -46,7 +46,7 @@ export interface OwlbearTokenLinkMetadata {
 export interface OwlbearOverlayMetadata {
     version: number
     tokenId: string
-    role: "backdrop" | "label"
+    role: "backdrop" | "fill" | "label"
 }
 
 export interface OwlbearRuntimeState {

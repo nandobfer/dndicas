@@ -24,7 +24,8 @@ import { OWLBEAR_TOKEN_METADATA_KEY } from "./config"
 import type { OwlbearRuntimeState, OwlbearSceneItem, OwlbearSessionState } from "./types"
 import { useRoomLinkedSheets } from "./use-room-linked-sheets"
 
-const LINK_CONTEXT_MENU_ID = "com.dndicas.owlbear.link-sheet"
+const LINK_PLAYER_CONTEXT_MENU_ID = "com.dndicas.owlbear.link-player-sheet"
+const LINK_NPC_CONTEXT_MENU_ID = "com.dndicas.owlbear.link-npc-sheet"
 const UNLINK_CONTEXT_MENU_ID = "com.dndicas.owlbear.unlink-sheet"
 
 function isTokenEligible(item: OwlbearSceneItem | null | undefined) {
@@ -52,7 +53,7 @@ function getOverlayLabel(sheet: CharacterSheetFull) {
     return temp > 0 ? `HP ${current}/${max}  |  THP +${temp}` : `HP ${current}/${max}`
 }
 
-async function buildOverlayItems(token: OwlbearSceneItem, sheet: CharacterSheetFull) {
+async function buildOverlayItems(token: OwlbearSceneItem, sheet: CharacterSheetFull, kind: "player" | "npc") {
     const sdkModule = await loadOwlbearSdkModule()
     if (!sdkModule) {
         throw new Error("Owlbear SDK indisponível para criar overlay")
@@ -63,6 +64,11 @@ async function buildOverlayItems(token: OwlbearSceneItem, sheet: CharacterSheetF
         tokenId: token.id,
         version: 1,
     }
+
+    const hpCurrent = sheet.hpCurrent ?? 0
+    const hpMax = Math.max(1, sheet.hpMax ?? 1)
+    const ratio = Math.max(0, Math.min(1, hpCurrent / hpMax))
+    const isVisible = kind === "player"
 
     const backdrop = sdkModule.buildShape()
         .name(`Dndicas HP Backdrop - ${sheet.name}`)
@@ -78,10 +84,39 @@ async function buildOverlayItems(token: OwlbearSceneItem, sheet: CharacterSheetF
         .strokeColor("#60a5fa")
         .strokeOpacity(0.4)
         .strokeWidth(2)
+        .visible(isVisible)
         .metadata({
             "com.dndicas.owlbear/overlay": {
                 ...overlayMetadataBase,
                 role: "backdrop",
+            },
+        })
+        .build()
+
+    const fillWidth = Math.max(1, 152 * ratio)
+    const fillPosition = {
+        x: position.x - (152 / 2) + (fillWidth / 2),
+        y: position.y,
+    }
+    const fillColor = ratio > 0.5 ? "#22c55e" : ratio > 0.25 ? "#eab308" : "#ef4444"
+
+    const fillBar = sdkModule.buildShape()
+        .name(`Dndicas HP Fill - ${sheet.name}`)
+        .attachedTo(token.id)
+        .layer("TEXT")
+        .disableHit(true)
+        .position(fillPosition)
+        .width(fillWidth)
+        .height(28)
+        .shapeType("RECTANGLE")
+        .fillColor(fillColor)
+        .fillOpacity(0.9)
+        .strokeWidth(0)
+        .visible(isVisible)
+        .metadata({
+            "com.dndicas.owlbear/overlay": {
+                ...overlayMetadataBase,
+                role: "fill",
             },
         })
         .build()
@@ -105,6 +140,7 @@ async function buildOverlayItems(token: OwlbearSceneItem, sheet: CharacterSheetF
         .strokeWidth(3)
         .width(152)
         .height(30)
+        .visible(isVisible)
         .metadata({
             "com.dndicas.owlbear/overlay": {
                 ...overlayMetadataBase,
@@ -113,10 +149,10 @@ async function buildOverlayItems(token: OwlbearSceneItem, sheet: CharacterSheetF
         })
         .build()
 
-    return [backdrop, label]
+    return [backdrop, fillBar, label]
 }
 
-async function syncTokenOverlay(token: OwlbearSceneItem, sheet: CharacterSheetFull) {
+async function syncTokenOverlay(token: OwlbearSceneItem, sheet: CharacterSheetFull, kind: "player" | "npc") {
     const sdk = await loadOwlbearSdk()
     if (!sdk || !sdk.isAvailable || !sdk.isReady) return
 
@@ -129,22 +165,39 @@ async function syncTokenOverlay(token: OwlbearSceneItem, sheet: CharacterSheetFu
         .map((overlayId) => itemsById.get(overlayId))
         .filter((item): item is OwlbearSceneItem => Boolean(item))
 
-    if (linkedOverlayItems.length < 2) {
+    if (linkedOverlayItems.length < 3) {
         if (linkedOverlayItems.length > 0) {
             await sdk.scene.items.deleteItems(linkedOverlayItems.map((item) => item.id))
         }
-        const createdOverlays = await buildOverlayItems(token, sheet)
+        const createdOverlays = await buildOverlayItems(token, sheet, kind)
         await sdk.scene.items.addItems(createdOverlays)
         await updateTokenOverlayIds(token.id, createdOverlays.map((item) => item.id))
         return
     }
 
     const position = getOverlayPosition(token)
+    const hpCurrent = sheet.hpCurrent ?? 0
+    const hpMax = Math.max(1, sheet.hpMax ?? 1)
+    const ratio = Math.max(0, Math.min(1, hpCurrent / hpMax))
+    const fillWidth = Math.max(1, 152 * ratio)
+    const fillPosition = {
+        x: position.x - (152 / 2) + (fillWidth / 2),
+        y: position.y,
+    }
+    const fillColor = ratio > 0.5 ? "#22c55e" : ratio > 0.25 ? "#eab308" : "#ef4444"
+
     await sdk.scene.items.updateItems(linkedOverlayItems, (draft) => {
         for (const item of draft) {
             item.attachedTo = token.id
             item.position = position
-            if (item.type === "TEXT") {
+            const overlayLink = getOverlayLinkFromItem(item)
+            
+            if (overlayLink?.role === "fill") {
+                item.position = fillPosition
+                if (item.type === "SHAPE") {
+                    ;(item as any).shape = { ...((item as any).shape || {}), width: fillWidth, fillColor }
+                }
+            } else if (item.type === "TEXT") {
                 ;(item as OwlbearSceneItem & { text?: { plainText?: string } }).text = {
                     ...(item as OwlbearSceneItem & { text?: Record<string, unknown> }).text as Record<string, unknown>,
                     plainText: getOverlayLabel(sheet),
@@ -240,6 +293,36 @@ function TokenLinkDialog({
     )
 }
 
+function NpcLinkDialogWip({
+    isOpen,
+    tokenName,
+    onClose,
+}: {
+    isOpen: boolean
+    tokenName: string | null
+    onClose: () => void
+}) {
+    return (
+        <GlassModal open={isOpen} onOpenChange={(open) => !open && onClose()}>
+            <GlassModalContent size="lg">
+                <GlassModalHeader>
+                    <GlassModalTitle>Vincular a NPC</GlassModalTitle>
+                    <GlassModalDescription>
+                        {tokenName
+                            ? `Vincular o token "${tokenName}" a um NPC.`
+                            : "Vincular este token a um NPC."}
+                    </GlassModalDescription>
+                </GlassModalHeader>
+                <div className="mt-6 space-y-3">
+                    <div className="rounded-2xl border border-white/10 bg-white/5 px-4 py-6 text-sm text-white/70">
+                        <strong>Em desenvolvimento (WIP):</strong> Em breve a seleção de NPCs locais replicará o fluxo de personagens e permitirá que o GM associe fichas de monstros à cena, com barras de HP restritas ao GM.
+                    </div>
+                </div>
+            </GlassModalContent>
+        </GlassModal>
+    )
+}
+
 export function OwlbearGmSceneController({
     runtime,
     session,
@@ -250,6 +333,7 @@ export function OwlbearGmSceneController({
     const canManageScene = canManageGmScene(runtime, session)
     const { sheets } = useRoomLinkedSheets(session.sessionToken, canManageScene)
     const [selectedToken, setSelectedToken] = React.useState<OwlbearSceneItem | null>(null)
+    const [linkTargetType, setLinkTargetType] = React.useState<"player" | "npc" | null>(null)
     const [linkingSheetId, setLinkingSheetId] = React.useState<string | null>(null)
 
     const syncScene = React.useCallback(async () => {
@@ -281,7 +365,7 @@ export function OwlbearGmSceneController({
 
                 const sheet = sheetMap.get(tokenLink.refId)
                 if (!sheet) continue
-                await syncTokenOverlay(token, sheet)
+                await syncTokenOverlay(token, sheet, tokenLink.kind)
             }
         } catch (error) {
             console.error("Failed to sync Owlbear token overlays", error)
@@ -326,10 +410,10 @@ export function OwlbearGmSceneController({
             if (!sdk || !sdk.isAvailable || !sdk.isReady || !active) return
 
             await sdk.contextMenu.create({
-                id: LINK_CONTEXT_MENU_ID,
+                id: LINK_PLAYER_CONTEXT_MENU_ID,
                 icons: [{
                     icon: "/icon-96.png",
-                    label: "Vincular ficha",
+                    label: "Vincular a personagem",
                     filter: {
                         min: 1,
                         max: 1,
@@ -346,6 +430,32 @@ export function OwlbearGmSceneController({
                     const token = context.items.find((item) => isTokenEligible(item))
                     if (!token) return
                     setSelectedToken(token)
+                    setLinkTargetType("player")
+                },
+            })
+
+            await sdk.contextMenu.create({
+                id: LINK_NPC_CONTEXT_MENU_ID,
+                icons: [{
+                    icon: "/icon-96.png",
+                    label: "Vincular a NPC",
+                    filter: {
+                        min: 1,
+                        max: 1,
+                        permissions: ["UPDATE"],
+                        roles: ["GM"],
+                        some: [
+                            { key: "layer", value: "CHARACTER" },
+                            { key: "layer", value: "MOUNT" },
+                            { key: "layer", value: "PROP" },
+                        ],
+                    },
+                }],
+                onClick: (context) => {
+                    const token = context.items.find((item) => isTokenEligible(item))
+                    if (!token) return
+                    setSelectedToken(token)
+                    setLinkTargetType("npc")
                 },
             })
 
@@ -359,9 +469,6 @@ export function OwlbearGmSceneController({
                         max: 1,
                         permissions: ["UPDATE"],
                         roles: ["GM"],
-                        every: [
-                            { key: ["metadata", OWLBEAR_TOKEN_METADATA_KEY, "kind"], value: "player" },
-                        ],
                         some: [
                             { key: "layer", value: "CHARACTER" },
                             { key: "layer", value: "MOUNT" },
@@ -394,7 +501,8 @@ export function OwlbearGmSceneController({
                 const sdk = await loadOwlbearSdk()
                 if (!sdk || !sdk.isAvailable || !sdk.isReady) return
                 await Promise.allSettled([
-                    sdk.contextMenu.remove(LINK_CONTEXT_MENU_ID),
+                    sdk.contextMenu.remove(LINK_PLAYER_CONTEXT_MENU_ID),
+                    sdk.contextMenu.remove(LINK_NPC_CONTEXT_MENU_ID),
                     sdk.contextMenu.remove(UNLINK_CONTEXT_MENU_ID),
                 ])
             })()
@@ -414,7 +522,7 @@ export function OwlbearGmSceneController({
                 await sdk.scene.items.deleteItems(currentLink.overlayIds)
             }
 
-            await setTokenSheetLink(selectedToken.id, sheet._id, [])
+            await setTokenSheetLink(selectedToken.id, sheet._id, "player", [])
             await syncScene()
             setSelectedToken(null)
         } catch (error) {
@@ -427,16 +535,27 @@ export function OwlbearGmSceneController({
     if (runtime.role !== "GM") return null
 
     return (
-        <TokenLinkDialog
-            isOpen={selectedToken !== null}
-            sheets={sheets}
-            tokenName={selectedToken?.name ?? null}
-            linkingSheetId={linkingSheetId}
-            onClose={() => {
-                if (linkingSheetId) return
-                setSelectedToken(null)
-            }}
-            onLink={(sheet) => void handleLinkSheet(sheet)}
-        />
+        <>
+            <TokenLinkDialog
+                isOpen={selectedToken !== null && linkTargetType === "player"}
+                sheets={sheets}
+                tokenName={selectedToken?.name ?? null}
+                linkingSheetId={linkingSheetId}
+                onClose={() => {
+                    if (linkingSheetId) return
+                    setSelectedToken(null)
+                    setLinkTargetType(null)
+                }}
+                onLink={(sheet) => void handleLinkSheet(sheet)}
+            />
+            <NpcLinkDialogWip
+                isOpen={selectedToken !== null && linkTargetType === "npc"}
+                tokenName={selectedToken?.name ?? null}
+                onClose={() => {
+                    setSelectedToken(null)
+                    setLinkTargetType(null)
+                }}
+            />
+        </>
     )
 }
