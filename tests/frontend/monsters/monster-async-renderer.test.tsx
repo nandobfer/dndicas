@@ -8,8 +8,8 @@ vi.mock('@/features/monsters/api/monsters-api', () => ({
     fetchMonsterById: (...args: unknown[]) => fetchMonsterById(...args),
 }))
 
-vi.mock('@/features/monsters/components/monster-preview', () => ({
-    MonsterPreview: ({ monster }: { monster: { name: string } }) => <div data-testid="monster-preview">{monster.name}</div>,
+vi.mock('@/features/monsters/components/npc-preview', () => ({
+    NpcPreview: ({ monster }: { monster: { name: string } }) => <div data-testid="monster-preview">{monster.name}</div>,
 }))
 
 const completeMonster = {

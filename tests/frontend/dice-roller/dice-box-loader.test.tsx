@@ -4,9 +4,7 @@ import { preloadDiceBoxAssets } from "@/features/dice-roller/dice-box-loader"
 describe("dice-box-loader preload", () => {
     beforeEach(() => {
         vi.useFakeTimers()
-        // Clear any existing state if necessary
-        // In the real loader, preloadedBoxPromise is a module-level variable
-        // which might be hard to reset without a reset function.
+        ;(globalThis as any).__DNDICAS_DICE_BOX_LOADER__ = vi.fn()
     })
 
     afterEach(() => {

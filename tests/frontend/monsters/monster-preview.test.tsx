@@ -1,7 +1,8 @@
-import { render, screen, within } from '@testing-library/react'
+import { screen, within } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import * as React from 'react'
 import type { ReactNode } from 'react'
+import { renderWithQueryClient as render } from "../test-utils"
 import { MonsterPreview } from '@/features/monsters/components/monster-preview'
 import { NpcParamPreview } from '@/features/monsters/components/npc-param-preview'
 import type { Monster } from '@/features/monsters/types/monsters.types'
