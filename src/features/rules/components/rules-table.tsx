@@ -104,7 +104,7 @@ export function RulesTable({
                                         </Chip>
                                     </td>
                                     <td className="px-6 py-4">
-                                        <EntityTitleLink name={rule.name} entityType="Regra" />
+                                        <EntityTitleLink name={rule.name} entityType="Regra" entity={rule} />
                                     </td>
                                     <td className="px-6 py-4 text-white/40 text-sm max-w-0">
                                         <div className="min-h-[32px] flex items-center overflow-hidden">

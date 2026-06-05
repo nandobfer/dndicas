@@ -7,6 +7,19 @@ import GenericEntityPage from "@/app/(dashboard)/_components/generic-entity-page
 const routerPush = vi.fn()
 const routerReplace = vi.fn()
 const invalidateQueries = vi.fn()
+const queryMockState = vi.hoisted(
+    (): {
+        result: {
+            data: { _id: string; name: string } | null
+            isLoading: boolean
+        }
+    } => ({
+        result: {
+            data: { _id: "class-1", name: "Guerreiro" },
+            isLoading: false,
+        },
+    }),
+)
 
 let currentSearchParams = new URLSearchParams("foo=bar&subclass=champion&subclass=samurai")
 
@@ -21,10 +34,7 @@ vi.mock("next/navigation", () => ({
 }))
 
 vi.mock("@tanstack/react-query", () => ({
-    useQuery: () => ({
-        data: { _id: "class-1", name: "Guerreiro" },
-        isLoading: false,
-    }),
+    useQuery: () => queryMockState.result,
     useQueryClient: () => ({
         invalidateQueries,
     }),
@@ -82,14 +92,20 @@ vi.mock("framer-motion", () => ({
 
 vi.mock("@/features/rules/components/entity-page", () => ({
     EntityPage: ({
+        item,
+        isLoading,
         renderOptions,
     }: {
+        item?: { name?: string } | null
+        isLoading?: boolean
         renderOptions?: {
             initialSelectedSubclassIds?: string[]
             onSelectedSubclassIdsChange?: (subclassIds: string[]) => void
         }
     }) => (
         <div>
+            <div data-testid="entity-page-item">{item?.name ?? "none"}</div>
+            <div data-testid="entity-page-loading">{String(isLoading)}</div>
             <div data-testid="initial-selected-subclasses">{(renderOptions?.initialSelectedSubclassIds ?? []).join(",")}</div>
             <button type="button" onClick={() => renderOptions?.onSelectedSubclassIdsChange?.(["samurai", "eldritch-knight"])}>
                 Atualizar subclasses
@@ -173,6 +189,10 @@ vi.mock("@/features/monsters/components/delete-monster-dialog", () => ({
 describe("GenericEntityPage subclasses params", () => {
     beforeEach(() => {
         currentSearchParams = new URLSearchParams("foo=bar&subclass=champion&subclass=samurai")
+        queryMockState.result = {
+            data: { _id: "class-1", name: "Guerreiro" },
+            isLoading: false,
+        }
         routerPush.mockReset()
         routerReplace.mockReset()
         invalidateQueries.mockReset()
@@ -192,5 +212,29 @@ describe("GenericEntityPage subclasses params", () => {
         expect(routerReplace).toHaveBeenCalledWith("/classes/guerreiro?foo=bar&subclass=samurai&subclass=eldritch-knight", {
             scroll: false,
         })
+    })
+
+    it("keeps cached item visible instead of passing loading to the entity page", () => {
+        queryMockState.result = {
+            data: { _id: "class-1", name: "Guerreiro" },
+            isLoading: true,
+        }
+
+        render(<GenericEntityPage entityTypeKey="Classe" />)
+
+        expect(screen.getByTestId("entity-page-item")).toHaveTextContent("Guerreiro")
+        expect(screen.getByTestId("entity-page-loading")).toHaveTextContent("false")
+    })
+
+    it("still passes loading when there is no cached item", () => {
+        queryMockState.result = {
+            data: null,
+            isLoading: true,
+        }
+
+        render(<GenericEntityPage entityTypeKey="Classe" />)
+
+        expect(screen.getByTestId("entity-page-item")).toHaveTextContent("none")
+        expect(screen.getByTestId("entity-page-loading")).toHaveTextContent("true")
     })
 })

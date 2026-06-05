@@ -67,7 +67,7 @@ export function ItemPreview({ item, showStatus = true, hideStatusChip = false, h
                     </div>
                     <div>
                         <div className="flex items-center gap-2">
-                            <EntityTitleLink name={item.name} entityType="Item" className="text-base font-bold" style={{ color: rarityColors[getItemRarityVariant(item.rarity)] }} />
+                            <EntityTitleLink name={item.name} entityType="Item" entity={item} className="text-base font-bold" style={{ color: rarityColors[getItemRarityVariant(item.rarity)] }} />
                         </div>
                         <p className="text-[10px] uppercase font-bold tracking-widest text-white/40 mt-0.5">
                             {type} {item.rarity}

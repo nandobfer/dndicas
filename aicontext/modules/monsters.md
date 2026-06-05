@@ -122,6 +122,7 @@ Global integrations:
 - `/monsters/[slug]` generic entity page
 - `/my-npcs/[slug]` user NPC detail page
 - `EntityTitleLink` routeMap: `NPC → "my-npcs"`, `Monstro → "monsters"`
+- `EntityTitleLink` primes React Query detail caches for both monster and NPC title navigation; NPC links seed `["npc-detail", slug]` with a list-response-compatible value so `/my-npcs/[slug]` can render immediately while stale data refreshes in background.
 - dashboard `MonstersEntityCard`
 
 ## Tests
@@ -130,6 +131,7 @@ Coverage lives in:
 - `tests/frontend/monsters/monster-form-modal.test.tsx`
 - `tests/frontend/monsters/monster-async-renderer.test.tsx`
 - `tests/frontend/monsters/npc-components.test.tsx` — NpcPreview + NpcsTable
+- `tests/frontend/monsters/npc-detail-page.test.tsx` — cached NPC detail rendering without loading
 - `tests/scripts/seed-data/providers/monsters-provider.test.ts`
 - `tests/backend/catalogs/monsters-routes.test.ts`
 

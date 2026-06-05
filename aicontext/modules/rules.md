@@ -10,6 +10,7 @@ This module handles the D&D Reference Rules system, allowing administrators to m
 - **Dashboard Integration**: Real-time stats on existing rules.
 - **Entity Preview (MentionContent)**: Renders rich HTML content including styled tables, images, dice values, and mention badges.
 - **Mention Preview Safety**: Monster previews normalize incomplete API payloads before rendering so missing nested fields such as `attributes.wisdom`, skills, senses, or action arrays do not crash the client while hovering mention results.
+- **Instant Entity Navigation**: `EntityTitleLink` accepts an optional full `entity` object and primes the React Query detail cache before navigation. Generic entity pages render cached data immediately and revalidate stale entries in background instead of replacing the page with loading.
 
 ## Data Models
 
@@ -56,3 +57,6 @@ Buttons exposed (each with `SimpleGlassTooltip`):
 - `<td>` gets `px-3 py-2 text-xs text-white/70`
 
 This is applied in both `mode="block"` and `mode="inline"` since the table special-cases intercept before the inline-flatten logic.
+
+### EntityTitleLink cache priming
+`EntityTitleLink` uses `src/features/rules/utils/entity-navigation.ts` for route, slug, and detail query-key mapping. Tables and previews pass the current entity object through `entity`, so clicking a title seeds the destination query cache before Next.js navigates. Direct URL access still works because `GenericEntityPage` keeps its API fallback query by slug/name.
