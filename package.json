@@ -88,6 +88,7 @@
         "@types/nodemailer": "^7.0.5",
         "@types/react": "^19",
         "@types/react-dom": "^19",
+        "@vitest/coverage-v8": "^4.1.8",
         "cross-env": "^10.1.0",
         "eslint": "^9",
         "eslint-config-next": "16.1.4",
