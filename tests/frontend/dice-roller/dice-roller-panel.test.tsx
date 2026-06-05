@@ -218,7 +218,9 @@ describe("DiceRollerPanel", () => {
         await waitFor(() => {
             expect(diceBoxMocks.constructor).toHaveBeenCalled()
         })
-        expect(diceBoxMocks.startClickThrow).toHaveBeenCalledWith("1d6+1d6+1d4@6,6,4")
+        await waitFor(() => {
+            expect(diceBoxMocks.startClickThrow).toHaveBeenCalledWith("1d6+1d6+1d4@6,6,4")
+        })
         expect(new Set(diceBoxMocks.dicePositions.map((position) => position.x)).size).toBeGreaterThan(1)
         expect(diceBoxMocks.roll).not.toHaveBeenCalled()
     })

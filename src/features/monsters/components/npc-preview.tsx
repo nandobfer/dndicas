@@ -102,7 +102,7 @@ export function NpcPreview({ monster, showStatus = true, hideStatusChip = false,
                         <Skull className="h-4 w-4 text-red-300" />
                     </div>
                     <div>
-                        <EntityTitleLink name={monster.name} entityType={entityType} className="text-base font-bold" style={{ color: colors.hex }} />
+                        <EntityTitleLink name={monster.name} entityType={entityType} entity={monster} className="text-base font-bold" style={{ color: colors.hex }} />
                         <p className="text-[10px] uppercase font-bold tracking-widest text-white/40 mt-0.5">
                             {MONSTER_TYPE_LABELS[monster.type]} {MONSTER_SIZE_LABELS[monster.size]}, {ALIGNMENT_LABELS[monster.alignment]}
                         </p>

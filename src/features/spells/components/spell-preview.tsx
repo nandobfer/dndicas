@@ -101,7 +101,7 @@ export function SpellPreview({ spell, showStatus = true, hideStatusChip = false,
                     </div>
                     <div>
                         <div className="flex items-center gap-2">
-                            <EntityTitleLink name={spell.name} entityType="Magia" />
+                            <EntityTitleLink name={spell.name} entityType="Magia" entity={spell} />
                             <GlassLevelChip level={spell.circle} type="circle" size="sm" />
                         </div>
                         <p className="text-[10px] uppercase font-bold tracking-widest text-white/40 mt-0.5">Magia D&D 5e</p>

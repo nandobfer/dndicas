@@ -7,6 +7,10 @@ const alias = {
 
 export default defineConfig({
     test: {
+        coverage: {
+            provider: 'v8',
+            reporter: ['text', 'json', 'html'],
+        },
         projects: [
             defineProject({
                 resolve: {

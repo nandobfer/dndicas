@@ -17,10 +17,11 @@ export default function NpcDetailPage() {
     const slug = params.slug as string
     const name = decodeURIComponent(slug).replace(/-/g, " ")
 
-    const { data, isLoading, isError } = useQuery({
+    const { data, isLoading } = useQuery({
         queryKey: ["npc-detail", slug],
         queryFn: () => fetchNpcs({ search: name, limit: 20 }),
         enabled: !!slug,
+        staleTime: 60 * 1000,
     })
 
     const npc = React.useMemo(() => {
@@ -28,7 +29,7 @@ export default function NpcDetailPage() {
         return data.items.find((item) => item.name.toLowerCase() === name.toLowerCase()) ?? data.items[0] ?? null
     }, [data, name])
 
-    if (isLoading) {
+    if (isLoading && !npc) {
         return (
             <div className="flex justify-center items-center py-24">
                 <Loader2 className="h-6 w-6 animate-spin text-white/40" />
@@ -36,7 +37,7 @@ export default function NpcDetailPage() {
         )
     }
 
-    if (isError || !npc) {
+    if (!npc) {
         return (
             <div className="py-24">
                 <EmptyState title="NPC não encontrado" description="Este NPC não existe ou não pertence a você." />

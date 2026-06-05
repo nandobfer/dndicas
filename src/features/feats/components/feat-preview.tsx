@@ -32,7 +32,7 @@ export function FeatPreview({ feat, showStatus = true, hideStatusChip = false, h
                     </div>
                     <div>
                         <div className="flex items-center gap-2">
-                            <EntityTitleLink name={feat.name} entityType="Talento" />
+                            <EntityTitleLink name={feat.name} entityType="Talento" entity={feat} />
                             <Chip variant={rarityVariant} size="sm">
                                 Nv. {feat.level}
                             </Chip>

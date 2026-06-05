@@ -115,7 +115,13 @@ export function BackgroundsTable({ data, isLoading, hasNextPage = false, isFetch
                                                 </div>
                                             )}
                                             <div className="flex flex-col min-w-0">
-                                                <EntityTitleLink name={background.name} entityType="Origem" className="font-bold text-white group-hover:text-blue-400 transition-colors truncate" disableLink={hideActions} />
+                                                <EntityTitleLink
+                                                    name={background.name}
+                                                    entityType="Origem"
+                                                    entity={background}
+                                                    className="font-bold text-white group-hover:text-blue-400 transition-colors truncate"
+                                                    disableLink={hideActions}
+                                                />
                                                 <span className="text-[10px] text-white/30 truncate flex items-center gap-1">
                                                     <ScrollText className="w-2.5 h-2.5" />
                                                     {background.source}

@@ -362,7 +362,7 @@ export function ClassPreview({
                     </div>
                     <div>
                         <div className="flex items-center gap-2">
-                            <EntityTitleLink name={characterClass.name} entityType="Classe" />
+                            <EntityTitleLink name={characterClass.name} entityType="Classe" entity={characterClass} />
                         </div>
                         <p className="text-[10px] uppercase font-bold tracking-widest text-white/40 mt-0.5">Classe D&D 5e</p>
                     </div>

@@ -116,7 +116,8 @@ export function NpcsTable({
                                             <div>
                                                 <EntityTitleLink
                                                     name={monster.name}
-                                                    entityType={entityType as any}
+                                                    entityType={entityType}
+                                                    entity={monster}
                                                     className={cn("text-sm font-medium block", monster.status === "inactive" ? "text-white/30" : "text-white/80")}
                                                 />
                                                 <span className="text-[10px] text-white/20 font-mono tracking-tighter truncate max-w-[180px] block">{monster.source}</span>

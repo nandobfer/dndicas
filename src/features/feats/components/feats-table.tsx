@@ -105,7 +105,7 @@ export function FeatsTable({ feats, isLoading = false, hasNextPage = false, isFe
                                         </Chip>
                                     </td>
                                     <td className="px-6 py-4">
-                                        <EntityTitleLink name={feat.name} entityType="Talento" />
+                                        <EntityTitleLink name={feat.name} entityType="Talento" entity={feat} />
                                     </td>
                                     <td className="px-6 py-4 whitespace-nowrap">
                                         <Chip variant={getLevelRarityVariant(feat.level)}>Nv. {feat.level}</Chip>
