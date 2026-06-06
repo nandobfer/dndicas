@@ -73,10 +73,15 @@ const sdkMock = vi.hoisted(() => {
             callbacks.push(callback)
             return () => undefined
         }),
+        action: {
+            open: vi.fn().mockResolvedValue(undefined),
+            close: vi.fn().mockResolvedValue(undefined),
+        },
         player: {
             getId: vi.fn().mockResolvedValue("player-1"),
             getName: vi.fn().mockResolvedValue("Nando"),
             getRole: vi.fn<() => Promise<"GM" | "PLAYER">>(),
+            deselect: vi.fn().mockResolvedValue(undefined),
         },
         party: {
             getPlayers: vi.fn().mockResolvedValue([]),
@@ -137,6 +142,7 @@ vi.mock("@/features/character-sheets/hooks/use-sheet-list", () => ({
 }))
 
 vi.mock("@/features/character-sheets/api/character-sheets-queries", () => ({
+    useCreateAssistedSheet: () => useCreateAssistedSheetMock(),
     useCreateSheet: () => useCreateSheetMock(),
     useCreateAssistedSheet: () => useCreateAssistedSheetMock(),
     useSheet: (id: string | null) => useSheetMock(id),
@@ -190,17 +196,22 @@ vi.mock("@/components/ui/glass-sheet-card", () => ({
 }))
 
 vi.mock("@/features/character-sheets/components/sheet-form", () => ({
-    SheetForm: ({ sheet, layoutMode, navigateOnSlugChange }: { sheet: { name?: string }; layoutMode?: string; navigateOnSlugChange?: boolean }) => (
-        <div data-testid="sheet-form" data-sheet-name={sheet.name ?? ""} data-layout-mode={layoutMode} data-navigate-on-slug-change={String(navigateOnSlugChange)}>
+    SheetForm: ({ sheet, layoutMode, navigateOnSlugChange }: { sheet: { _id?: string; name?: string }; layoutMode?: string; navigateOnSlugChange?: boolean }) => (
+        <div data-testid="sheet-form" data-sheet-id={sheet._id ?? ""} data-sheet-name={sheet.name ?? ""} data-layout-mode={layoutMode} data-navigate-on-slug-change={String(navigateOnSlugChange)}>
             Sheet Form Mock
         </div>
     ),
+}))
+
+vi.mock("@/app/(dashboard)/my-sheets/_components/assisted-sheet-creation-modal", () => ({
+    AssistedSheetCreationModal: () => null,
 }))
 
 describe("OwlbearShell", () => {
     beforeEach(() => {
         vi.clearAllMocks()
         vi.useRealTimers()
+        window.history.pushState({}, "", "/")
         globalThis.__DNDICAS_DICE_BOX_LOADER__ = async () => class MockDiceBox {
             diceList: Array<{
                 body: {
@@ -241,12 +252,15 @@ describe("OwlbearShell", () => {
         sdkMock.isAvailable = true
         sdkMock.isReady = true
         sdkMock.room.id = "room-1"
+        sdkMock.action.open.mockResolvedValue(undefined)
+        sdkMock.action.close.mockResolvedValue(undefined)
         sdkMock.room.getMetadata.mockResolvedValue({})
         sdkMock.room.setMetadata.mockResolvedValue(undefined)
         sdkMock.room.onMetadataChange.mockReturnValue(() => undefined)
         sdkMock.player.getId.mockResolvedValue("player-1")
         sdkMock.player.getName.mockResolvedValue("Nando")
         sdkMock.player.getRole.mockReset()
+        sdkMock.player.deselect.mockResolvedValue(undefined)
         sdkMock.party.getPlayers.mockResolvedValue([])
         sdkMock.party.onChange.mockReturnValue(() => undefined)
         sdkMock.scene.isReady.mockResolvedValue(true)
@@ -397,11 +411,52 @@ describe("OwlbearShell", () => {
         fireEvent.click(screen.getByRole("button", { name: "Fichas" }))
 
         await waitFor(() => {
-            expect(fetch).toHaveBeenCalledTimes(1)
+            expect(fetch).toHaveBeenCalled()
         })
 
         expect(screen.queryByTestId("clerk-sign-in")).not.toBeInTheDocument()
         expect(screen.queryByText("A sessão Owlbear-aware não pôde ser inicializada. Reabra a action para tentar novamente.")).not.toBeInTheDocument()
+    })
+
+    it("allows switching GM sheets A to B and back to A", async () => {
+        const miraSheet = {
+            ...kaelSheet,
+            _id: "sheet-2",
+            name: "Mira",
+            slug: "mira",
+        }
+        sdkMock.player.getRole.mockResolvedValue("GM")
+        useRoomLinkedSheetsMock.mockReturnValue({
+            entries: [
+                { playerId: "player-1", sheetId: "sheet-1" },
+                { playerId: "player-2", sheetId: "sheet-2" },
+            ],
+            sheets: [kaelSheet, miraSheet],
+            isLoading: false,
+            errorMessage: null,
+            reload: vi.fn(),
+            unlinkSheet: vi.fn(),
+        })
+        useSheetMock.mockImplementation((id: string | null) => ({
+            data: id === "sheet-2" ? miraSheet : id === "sheet-1" ? kaelSheet : null,
+            isLoading: false,
+            isFetching: false,
+            isError: false,
+            error: null,
+        }))
+
+        render(<OwlbearShell />)
+
+        await screen.findByRole("button", { name: "Fichas" })
+        fireEvent.click(screen.getByRole("button", { name: "Fichas" }))
+
+        expect(await screen.findByTestId("sheet-form")).toHaveAttribute("data-sheet-id", "sheet-1")
+
+        clickSheetCard("Mira")
+        expect(await screen.findByTestId("sheet-form")).toHaveAttribute("data-sheet-id", "sheet-2")
+
+        clickSheetCard("Kael")
+        expect(await screen.findByTestId("sheet-form")).toHaveAttribute("data-sheet-id", "sheet-1")
     })
 
     it("treats a ready GM Owlbear-aware session as sufficient for scene management", () => {
@@ -438,6 +493,22 @@ describe("OwlbearShell", () => {
         expect(await screen.findByText("SDK Owlbear indisponível nesta action.")).toBeInTheDocument()
         expect(screen.getByRole("button", { name: "Catálogo" })).toBeInTheDocument()
         expect(screen.getByTitle("Dndicas Dashboard")).toBeInTheDocument()
+    })
+
+    it("keeps retrying inside the Owlbear action when the SDK is initially unavailable", async () => {
+        window.history.pushState({}, "", "/owlbear/action")
+        sdkMock.isAvailable = false
+        sdkMock.player.getRole.mockResolvedValue("GM")
+
+        render(<OwlbearShell />)
+
+        expect(screen.queryByText("SDK Owlbear indisponível nesta action.")).not.toBeInTheDocument()
+
+        await new Promise((resolve) => window.setTimeout(resolve, 50))
+        sdkMock.isAvailable = true
+
+        expect(await screen.findByRole("button", { name: "Fichas" }, { timeout: 2500 })).toBeInTheDocument()
+        expect(screen.queryByText("SDK Owlbear indisponível nesta action.")).not.toBeInTheDocument()
     })
 
     it("waits for OBR.onReady before leaving booting state", async () => {

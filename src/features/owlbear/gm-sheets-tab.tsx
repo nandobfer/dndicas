@@ -11,6 +11,7 @@ import { useCharacterSheetRealtime } from "@/features/character-sheets/hooks/use
 import { CharacterSheetClientProvider } from "@/features/character-sheets/api/character-sheet-client-config"
 import type { CharacterSheet } from "@/features/character-sheets/types/character-sheet.types"
 import { MentionContent } from "@/features/rules/components/mention-badge"
+import { notifyOwlbearOverlaySync } from "./overlay-sync-events"
 import type { OwlbearSessionState } from "./types"
 import { useRoomLinkedSheets } from "./use-room-linked-sheets"
 
@@ -75,6 +76,17 @@ function RealtimeLinkedSheetCard({
         currentSlug: liveSheet?.slug ?? previewSheet?.slug ?? "",
         navigateOnSlugChange: false,
     })
+
+    React.useEffect(() => {
+        if (!liveSheet) return
+        notifyOwlbearOverlaySync({
+            kind: "player",
+            refId: sheetId,
+            hpCurrent: liveSheet.hpCurrent ?? 0,
+            hpMax: liveSheet.hpMax ?? 0,
+            name: liveSheet.name,
+        })
+    }, [liveSheet?.hpCurrent, liveSheet?.hpMax, liveSheet?.name, sheetId])
 
     if (!liveSheet) {
         return (
@@ -244,6 +256,24 @@ function GmSheetsTabContent({
         }
     }, [sheetToUnlink, unlinkSheet])
 
+    const handleSelectedSheetFieldPatch = React.useCallback((field: string, value: unknown, updated?: CharacterSheet) => {
+        if (!selectedSheet || (field !== "hpCurrent" && field !== "hpMax")) return
+        const nextHpCurrent = field === "hpCurrent"
+            ? Number(value) || 0
+            : updated?.hpCurrent ?? selectedSheet.hpCurrent ?? 0
+        const nextHpMax = field === "hpMax"
+            ? Number(value) || 0
+            : updated?.hpMax ?? selectedSheet.hpMax ?? 0
+
+        notifyOwlbearOverlaySync({
+            kind: "player",
+            refId: selectedSheet._id,
+            hpCurrent: nextHpCurrent,
+            hpMax: nextHpMax,
+            name: updated?.name ?? selectedSheet.name,
+        })
+    }, [selectedSheet])
+
     if (session.sessionStatus === "error") {
         return (
             <div className="h-full min-h-0 overflow-auto pr-1">
@@ -324,9 +354,11 @@ function GmSheetsTabContent({
                         <InlineStatus tone="error" message="Não foi possível carregar a ficha selecionada no Dndicas." />
                     ) : selectedSheet ? (
                         <SheetForm
+                            key={selectedSheet._id}
                             sheet={selectedSheet}
                             layoutMode="desktop"
                             editMode="editable"
+                            onFieldPatch={handleSelectedSheetFieldPatch}
                             navigateOnSlugChange={false}
                             onSlugChange={() => undefined}
                             runtimeContext="owlbear"

@@ -36,7 +36,14 @@ export interface OwlbearSessionState {
 
 export interface OwlbearTokenLinkMetadata {
     version: number
-    kind: "player"
+    /**
+     * "player" → vínculo com ficha de personagem (CharacterSheet).
+     * "npc"    → vínculo com NPC/monstro da sala (OwlbearRoomNpc).
+     * No futuro, o fluxo "npc" repetirá o de "player" mas sincronizando
+     * com a ficha local do NPC em vez de uma CharacterSheet.
+     */
+    kind: "player" | "npc"
+    /** _id da CharacterSheet (kind=player) ou id do OwlbearRoomNpc (kind=npc). */
     refId: string
     tokenId: string
     overlayIds: string[]
@@ -46,7 +53,10 @@ export interface OwlbearTokenLinkMetadata {
 export interface OwlbearOverlayMetadata {
     version: number
     tokenId: string
-    role: "backdrop" | "label"
+    /** "label" é legado do overlay textual antigo e deve ser removido no próximo sync. */
+    role: "backdrop" | "bar" | "label"
+    barWidth?: number
+    barColor?: string
 }
 
 export interface OwlbearRuntimeState {
@@ -103,10 +113,15 @@ export interface OwlbearSdkLike {
     onReady: (callback: () => void) => void | (() => void)
     readonly isReady: boolean
     isAvailable: boolean
+    action: {
+        open: () => Promise<void>
+        close: () => Promise<void>
+    }
     player: {
         getId: () => Promise<string>
         getName: () => Promise<string>
         getRole: () => Promise<OwlbearRole>
+        deselect: (items?: string[]) => Promise<void>
     }
     party: {
         getPlayers: () => Promise<OwlbearPartyPlayer[]>

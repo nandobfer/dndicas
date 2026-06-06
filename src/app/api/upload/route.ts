@@ -10,11 +10,11 @@ const ALLOWED_TYPES = ["image/jpeg", "image/png", "image/gif", "image/webp"]
 export const dynamic = "force-dynamic"
 
 export async function GET(req: NextRequest) {
+    const { searchParams } = new URL(req.url)
+    const key = searchParams.get("key")
+
     try {
         // We allow GET without auth to support public rules viewing images
-        const { searchParams } = new URL(req.url)
-        const key = searchParams.get("key")
-
         if (!key) {
             return NextResponse.json({ error: "Missing key" }, { status: 400 })
         }
@@ -28,7 +28,11 @@ export async function GET(req: NextRequest) {
             },
         })
     } catch (error) {
-        console.error("Download error:", error)
+        console.error("Download error:", {
+            key,
+            url: req.url,
+            error,
+        })
         return NextResponse.json({ error: "File not found" }, { status: 404 })
     }
 }

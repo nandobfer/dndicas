@@ -267,11 +267,11 @@ function PlayerSheetTabContent({
         )
     }
 
-    if (session.sessionStatus === "error" || !session.sessionToken) {
+    if (session.sessionStatus === "error") {
         return <InlineStatus tone="error" message="A sessão Owlbear-aware não pôde ser inicializada. Reabra a action para tentar novamente." />
     }
 
-    if (session.sessionStatus === "loading" || !metadataLoaded) {
+    if (session.sessionStatus !== "ready" || !session.sessionToken || !metadataLoaded) {
         return (
             <div className="flex min-h-[420px] items-center justify-center">
                 <Loader2 className="h-8 w-8 animate-spin text-blue-400" />

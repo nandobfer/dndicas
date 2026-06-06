@@ -27,7 +27,7 @@ import { colors, diceColors, type DiceType, type EntityType } from "@/lib/config
 import { useClass } from "@/features/classes/api/classes-queries"
 import { ClassProgressionTable } from "@/features/classes/components/class-progression-table"
 import { useRace } from "@/features/races/api/races-queries"
-import { DiceRollerPanel } from "@/features/dice-roller/components/dice-roller-panel"
+import { HpDicePanel } from "@/features/dice-roller/components/hp-dice-panel"
 import { TraitPreview } from "@/features/rules/components/entity-preview-tooltip"
 import { fetchTraitById } from "@/features/traits/api/traits-api"
 import type { Trait } from "@/features/traits/types/traits.types"
@@ -1076,17 +1076,13 @@ export function useSheetHeaderSections({ sheet, form, items = [], isReadOnly = f
                    className="overflow-hidden"
                  >
                    <div className="mt-4 rounded-xl border border-white/10 bg-black/10 p-3">
-                     <DiceRollerPanel
-                       preset={{
-                         label: "PV ao subir de nível",
-                         terms: [{ dice: hitDieForLevelUp, quantity: 1 }],
-                         modifier: constitutionModifier,
-                         source: "sheet",
-                         sourceRef: { sheetId: sheet._id, fieldId: "level-up-hp" },
-                       }}
-                       hideConfigurationControls
-                       onRollResolved={(result) => {
-                         setRolledHpGain(result.total)
+                     <HpDicePanel
+                       label="PV ao subir de nível"
+                       terms={[{ dice: hitDieForLevelUp, quantity: 1 }]}
+                       modifier={constitutionModifier}
+                       sourceRef={{ sheetId: sheet._id, fieldId: "level-up-hp" }}
+                       onRollResolved={(total) => {
+                         setRolledHpGain(total)
                          setIsHpRollerVisible(false)
                        }}
                      />

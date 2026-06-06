@@ -18,14 +18,16 @@ import { useSheetAutoSave } from "../hooks/use-sheet-auto-save"
 import { useCharacterSheetRealtime } from "../hooks/use-character-sheet-realtime"
 import { useSheetMentionSync } from "../hooks/use-sheet-mention-sync"
 import { useItems } from "../api/character-sheets-queries"
-import type { CharacterSheetFull } from "../types/character-sheet.types"
+import type { CharacterSheet, CharacterSheetFull } from "../types/character-sheet.types"
 import { useMediaQuery } from "@/core/hooks/useMediaQuery"
+import type { PatchSheetBody } from "../types/character-sheet.types"
 
 interface SheetFormProps {
     sheet: CharacterSheetFull
     layoutMode?: "responsive" | "desktop"
     editMode?: "auto" | "editable" | "read-only"
     onSlugChange?: (newSlug: string) => void
+    onFieldPatch?: (field: keyof PatchSheetBody, value: unknown, updated?: CharacterSheet) => void
     navigateOnSlugChange?: boolean
     runtimeContext?: "default" | "owlbear"
 }
@@ -35,6 +37,7 @@ export function SheetForm({
     layoutMode = "responsive",
     editMode = "auto",
     onSlugChange,
+    onFieldPatch,
     navigateOnSlugChange = true,
     runtimeContext = "default",
 }: SheetFormProps) {
@@ -62,7 +65,7 @@ export function SheetForm({
         router.replace(`/sheets/${newSlug}`)
     }, [navigateOnSlugChange, onSlugChange, router])
 
-    const form = useSheetAutoSave(sheet, { onSlugChange: handleSlugChange, disabled: isReadOnly })
+    const form = useSheetAutoSave(sheet, { onSlugChange: handleSlugChange, disabled: isReadOnly, onFieldPatch })
     const { data: items = [] } = useItems(sheet._id)
     const headerSections = useSheetHeaderSections({ sheet, form, items, isReadOnly })
     const leftSections = useSheetAttributesLeftSections({ sheet, form, isReadOnly })
