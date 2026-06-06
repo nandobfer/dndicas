@@ -1,6 +1,7 @@
 import * as React from "react"
-import { fireEvent, render, screen, waitFor } from "@testing-library/react"
-import { beforeEach, describe, expect, it, vi } from "vitest"
+import { fireEvent, screen, waitFor } from "@testing-library/react"
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
+import { renderWithQueryClient as render } from "../../frontend/test-utils"
 import { canManageGmScene, OwlbearGmSceneController } from "@/features/owlbear/gm-scene-controller"
 import { OwlbearShell } from "@/features/owlbear/owlbear-shell"
 
@@ -143,6 +144,7 @@ vi.mock("@/features/character-sheets/hooks/use-sheet-list", () => ({
 vi.mock("@/features/character-sheets/api/character-sheets-queries", () => ({
     useCreateAssistedSheet: () => useCreateAssistedSheetMock(),
     useCreateSheet: () => useCreateSheetMock(),
+    useCreateAssistedSheet: () => useCreateAssistedSheetMock(),
     useSheet: (id: string | null) => useSheetMock(id),
 }))
 
@@ -210,6 +212,42 @@ describe("OwlbearShell", () => {
         vi.clearAllMocks()
         vi.useRealTimers()
         window.history.pushState({}, "", "/")
+        globalThis.__DNDICAS_DICE_BOX_LOADER__ = async () => class MockDiceBox {
+            diceList: Array<{
+                body: {
+                    angularVelocity: { set: () => void }
+                    position: { copy: () => void }
+                    velocity: { set: () => void }
+                }
+                getLastValue: () => { value: number }
+                position: { set: () => void }
+            }> = []
+            display = { containerWidth: 160, containerHeight: 120, scale: 10 }
+            renderer = { render: vi.fn() }
+            scene = {}
+            camera = {}
+
+            initialize = vi.fn().mockResolvedValue(undefined)
+            clearDice = vi.fn()
+            roll = vi.fn().mockResolvedValue([])
+            simulateThrow = vi.fn()
+            swapDiceFace = vi.fn()
+            startClickThrow = vi.fn((notation: string) => ({
+                vectors: notation.split("@")[0].split("+").filter(Boolean),
+                result: notation.split("@")[1]?.split(/[!,]/).map((value) => Number(value)).filter(Number.isFinite) ?? [],
+            }))
+            spawnDice = vi.fn(() => {
+                this.diceList.push({
+                    body: {
+                        angularVelocity: { set: vi.fn() },
+                        position: { copy: vi.fn() },
+                        velocity: { set: vi.fn() },
+                    },
+                    getLastValue: () => ({ value: 0 }),
+                    position: { set: vi.fn() },
+                })
+            })
+        } as never
         sdkMock.callbacks.length = 0
         sdkMock.isAvailable = true
         sdkMock.isReady = true
@@ -276,6 +314,10 @@ describe("OwlbearShell", () => {
             status: 201,
             headers: { "content-type": "application/json" },
         }))))
+    })
+
+    afterEach(() => {
+        globalThis.__DNDICAS_DICE_BOX_LOADER__ = undefined
     })
 
     it("renders GM tabs without resizing the action on load", async () => {

@@ -49,7 +49,7 @@ export const RulePreview = ({ rule, showStatus = true }: RulePreviewProps) => {
                         <ScrollText className="w-4 h-4" />
                     </div>
                     <div>
-                        <EntityTitleLink name={rule.name} entityType="Regra" />
+                        <EntityTitleLink name={rule.name} entityType="Regra" entity={rule} />
                         <p className="text-[10px] uppercase font-bold tracking-widest text-white/40 mt-0.5">Regra do Sistema</p>
                     </div>
                 </div>
@@ -180,7 +180,7 @@ export const TraitPreview = ({ trait, showStatus = true, hideStatusChip = false,
                         <Sparkles className="w-4 h-4" />
                     </div>
                     <div>
-                        <EntityTitleLink name={trait.name} entityType="Habilidade" />
+                        <EntityTitleLink name={trait.name} entityType="Habilidade" entity={trait} />
                         <p className="text-[10px] uppercase font-bold tracking-widest text-white/40 mt-0.5">Habilidade D&D</p>
                     </div>
                 </div>
@@ -240,7 +240,7 @@ export const RacePreviewWithActions = ({ race, showStatus = true }: { race: Race
                         <Fingerprint className="w-4 h-4" />
                     </div>
                     <div>
-                        <EntityTitleLink name={race.name} entityType="Raça" />
+                        <EntityTitleLink name={race.name} entityType="Raça" entity={race} />
                         <p className="text-[10px] uppercase font-bold tracking-widest text-white/40 mt-0.5">Raça D&D 5e</p>
                     </div>
                 </div>

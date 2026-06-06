@@ -1,7 +1,8 @@
-import { fireEvent, render, screen } from '@testing-library/react'
+import { fireEvent, screen } from '@testing-library/react'
 import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import * as React from 'react'
 import type { ReactNode } from 'react'
+import { renderWithQueryClient as render } from "../test-utils"
 import { SpellsTable } from '@/features/spells/components/spells-table'
 import type { Spell } from '@/features/spells/types/spells.types'
 

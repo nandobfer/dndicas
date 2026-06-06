@@ -159,6 +159,7 @@ export function SpellsTable({ spells, total, isLoading = false, hasNextPage = fa
                                                 <EntityTitleLink
                                                     name={spell.name}
                                                     entityType="Magia"
+                                                    entity={spell}
                                                     className={cn("text-sm font-medium block", spell.status === "inactive" ? "text-white/30" : "text-white/80")}
                                                 />
                                                 <span className="text-[10px] text-white/20 font-mono tracking-tighter truncate max-w-[180px] block">{spell.source}</span>

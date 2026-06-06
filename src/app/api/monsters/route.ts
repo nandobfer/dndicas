@@ -19,10 +19,6 @@ function serializeMonster(monster: { toObject?: () => Record<string, unknown> } 
     }
 }
 
-function sortMonstersByName(monsters: Record<string, unknown>[]) {
-    return [...monsters].sort((a, b) => String(a.name || "").localeCompare(String(b.name || ""), "pt-BR", { sensitivity: "base" }))
-}
-
 export async function GET(req: NextRequest) {
     try {
         await dbConnect()
@@ -47,7 +43,7 @@ export async function GET(req: NextRequest) {
         }
 
         const monsters = (await MonsterModel.find(query).sort({ name: 1 })).map(serializeMonster)
-        const searched = sortMonstersByName(search ? applyFuzzySearch(monsters, search) : monsters)
+        const searched = search ? applyFuzzySearch(monsters, search) : monsters
         const total = searched.length
         const offset = (page - 1) * limit
         const items = limit ? searched.slice(offset, offset + limit) : searched

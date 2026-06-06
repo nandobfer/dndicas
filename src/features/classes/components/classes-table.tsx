@@ -146,6 +146,7 @@ export function ClassesTable({ classes, total, isLoading = false, hasNextPage = 
                                                     <EntityTitleLink
                                                         name={c.name}
                                                         entityType="Classe"
+                                                        entity={c}
                                                         className={cn("text-sm font-medium block", c.status === "inactive" ? "text-white/30" : "text-white/80")}
                                                         disableLink={hideActions}
                                                     />

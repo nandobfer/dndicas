@@ -1,7 +1,8 @@
-import { render, screen } from "@testing-library/react"
+import { screen } from "@testing-library/react"
 import { afterAll, beforeEach, describe, expect, it, vi } from "vitest"
 import * as React from "react"
 import type { ReactNode } from "react"
+import { renderWithQueryClient as render } from "../test-utils"
 import { BackgroundsTable } from "@/features/backgrounds/components/backgrounds-table"
 import type { Background } from "@/features/backgrounds/types/backgrounds.types"
 

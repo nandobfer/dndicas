@@ -93,7 +93,7 @@ export function GlassWindow({
         window.addEventListener("resize", updateConstraints)
         return () => window.removeEventListener("resize", updateConstraints)
     }, [updateConstraints])
-    const handleResize = (e: React.PointerEvent) => {
+    const handleResize = (e: React.PointerEvent, corner: "br" | "bl" = "br") => {
         e.stopPropagation()
         e.preventDefault() // Prevent text selection
         setIsResizing(true)
@@ -101,10 +101,11 @@ export function GlassWindow({
 
         // Add class to body to prevent selection globally during resize
         document.body.style.userSelect = 'none'
-        document.body.style.cursor = 'nwse-resize'
+        document.body.style.cursor = corner === "bl" ? 'nesw-resize' : 'nwse-resize'
 
         const startX = e.clientX
         const startY = e.clientY
+        const startPosX = pos.x
         
         // Get current pixel size if auto
         const rect = containerRef.current?.parentElement?.parentElement?.getBoundingClientRect()
@@ -114,9 +115,26 @@ export function GlassWindow({
         const onPointerMove = (moveEvent: PointerEvent) => {
             const minW = minSize?.width ?? 150
             const minH = minSize?.height ?? 100
-            const newWidth = Math.max(minW, startWidth + (moveEvent.clientX - startX))
+            
+            let newWidth = startWidth
+            let newPosX = startPosX
+            
+            if (corner === "br") {
+                newWidth = Math.max(minW, startWidth + (moveEvent.clientX - startX))
+            } else if (corner === "bl") {
+                const deltaX = moveEvent.clientX - startX
+                newWidth = Math.max(minW, startWidth - deltaX)
+                if (startWidth - deltaX >= minW) {
+                    newPosX = startPosX + deltaX
+                }
+            }
+            
             const newHeight = Math.max(minH, startHeight + (moveEvent.clientY - startY))
+            
             setSize({ width: newWidth, height: newHeight })
+            if (corner === "bl") {
+                setPos(prev => ({ ...prev, x: newPosX }))
+            }
         }
 
         const onPointerUp = () => {
@@ -147,9 +165,13 @@ export function GlassWindow({
                 document.body.style.userSelect = ""
                 
                 // Calculate final position relative to total offset since drag start
-                const finalX = pos.x + info.offset.x
-                const finalY = pos.y + info.offset.y
-                const finalPos = { x: finalX, y: finalY }
+                const rawX = pos.x + info.offset.x
+                const rawY = pos.y + info.offset.y
+                
+                // Clamp against constraints
+                const clampedX = Math.max(constraints.left, Math.min(rawX, constraints.right))
+                const clampedY = Math.max(constraints.top, Math.min(rawY, constraints.bottom))
+                const finalPos = { x: clampedX, y: clampedY }
 
                 setPos(finalPos) // Update local UI
                 if (!isMinimized && onPositionChange) {
@@ -249,14 +271,22 @@ export function GlassWindow({
                     </div>
                 )}
 
-                {/* Resize Handle */}
+                {/* Resize Handles */}
                 {!isMinimized && (
-                    <div 
-                        className="absolute bottom-1 right-1 w-6 h-6 cursor-nwse-resize flex items-end justify-end p-1 z-50 group-hover:opacity-100 transition-opacity"
-                        onPointerDown={handleResize}
-                    >
-                        <div className="w-3 h-3 border-r-2 border-b-2 border-white/30 rounded-br-sm" />
-                    </div>
+                    <>
+                        <div 
+                            className="absolute bottom-1 right-1 w-6 h-6 cursor-nwse-resize flex items-end justify-end p-1 z-50 group-hover:opacity-100 transition-opacity"
+                            onPointerDown={(e) => handleResize(e, "br")}
+                        >
+                            <div className="w-3 h-3 border-r-2 border-b-2 border-white/30 rounded-br-sm" />
+                        </div>
+                        <div 
+                            className="absolute bottom-1 left-1 w-6 h-6 cursor-nesw-resize flex items-end justify-start p-1 z-50 group-hover:opacity-100 transition-opacity"
+                            onPointerDown={(e) => handleResize(e, "bl")}
+                        >
+                            <div className="w-3 h-3 border-l-2 border-b-2 border-white/30 rounded-bl-sm" />
+                        </div>
+                    </>
                 )}
             </GlassCard>
         </motion.div>

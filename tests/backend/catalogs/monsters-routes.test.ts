@@ -5,14 +5,14 @@ import { makeJsonRequest, readJson } from '../helpers/http'
 import { importFresh } from '../helpers/module'
 
 describe('monsters backend routes', () => {
-    it('GET /api/monsters applies filters, fuzzy search, source matching, and alphabetical sorting', async () => {
+    it('GET /api/monsters applies filters, fuzzy search, source matching, and preserves fuzzy ranking', async () => {
         const monsters = [
-            { _id: 'monster-2', name: 'Zumbi', source: 'LDM', status: 'active' },
-            { _id: 'monster-1', name: 'Aranha', source: 'LDM', status: 'active' },
+            { _id: 'monster-1', name: 'Extorsionista Merrow', originalName: 'Merrow Extortionist', source: 'LDM', status: 'active' },
+            { _id: 'monster-2', name: 'Merrow', originalName: 'Merrow', source: 'LDM', status: 'active' },
         ]
         const sort = vi.fn().mockResolvedValue(monsters)
         const find = vi.fn(() => ({ sort }))
-        const applyFuzzySearch = vi.fn().mockReturnValue(monsters)
+        const applyFuzzySearch = vi.fn().mockReturnValue([monsters[1], monsters[0]])
 
         vi.doMock('@/core/database/db', () => ({ default: vi.fn().mockResolvedValue(undefined) }))
         vi.doMock('@/features/monsters/models/monster', () => ({ MonsterModel: { find } }))
@@ -21,7 +21,7 @@ describe('monsters backend routes', () => {
         vi.doMock('@/features/users/api/audit-service', () => ({ createAuditLog: vi.fn() }))
 
         const mod = await importFresh<typeof import('@/app/api/monsters/route')>('@/app/api/monsters/route')
-        const response = await mod.GET(new Request('http://localhost/api/monsters?search=lobo&type=beast&size=M&challengeRating=1&status=active&sources=LDM') as any)
+        const response = await mod.GET(new Request('http://localhost/api/monsters?search=Merrow&type=beast&size=M&challengeRating=1&status=active&sources=LDM') as any)
         const payload = await readJson<{
             items: Array<{ name: string }>
         }>(response)
@@ -36,7 +36,32 @@ describe('monsters backend routes', () => {
         }))
         expect(sort).toHaveBeenCalledWith({ name: 1 })
         expect(applyFuzzySearch).toHaveBeenCalled()
-        expect(payload.items.map((monster: { name: string }) => monster.name)).toEqual(['Aranha', 'Zumbi'])
+        expect(payload.items.map((monster: { name: string }) => monster.name)).toEqual(['Merrow', 'Extorsionista Merrow'])
+    })
+
+    it('GET /api/monsters keeps alphabetical database order when there is no search', async () => {
+        const monsters = [
+            { _id: 'monster-1', name: 'Aranha', source: 'LDM', status: 'active' },
+            { _id: 'monster-2', name: 'Zumbi', source: 'LDM', status: 'active' },
+        ]
+        const sort = vi.fn().mockResolvedValue(monsters)
+        const find = vi.fn(() => ({ sort }))
+        const applyFuzzySearch = vi.fn()
+
+        vi.doMock('@/core/database/db', () => ({ default: vi.fn().mockResolvedValue(undefined) }))
+        vi.doMock('@/features/monsters/models/monster', () => ({ MonsterModel: { find } }))
+        vi.doMock('@/core/utils/search-engine', () => ({ applyFuzzySearch }))
+        vi.doMock('@clerk/nextjs/server', () => ({ auth: vi.fn() }))
+        vi.doMock('@/features/users/api/audit-service', () => ({ createAuditLog: vi.fn() }))
+
+        const mod = await importFresh<typeof import('@/app/api/monsters/route')>('@/app/api/monsters/route')
+        const response = await mod.GET(new Request('http://localhost/api/monsters') as any)
+        const payload = await readJson<{ items: Array<{ name: string }> }>(response)
+
+        expect(response.status).toBe(200)
+        expect(sort).toHaveBeenCalledWith({ name: 1 })
+        expect(applyFuzzySearch).not.toHaveBeenCalled()
+        expect(payload.items.map((monster) => monster.name)).toEqual(['Aranha', 'Zumbi'])
     })
 
     it('GET /api/monsters accepts canonical source labels and still matches legacy abbreviations', async () => {
@@ -189,5 +214,29 @@ describe('monsters backend routes', () => {
         expect(find).toHaveBeenCalledWith({ status: 'active' })
         expect(applyFuzzySearch).toHaveBeenCalledWith(expect.any(Array), 'lobo')
         expect(payload.items).toHaveLength(1)
+    })
+
+    it('GET /api/npcs preserves fuzzy ranking when search is active', async () => {
+        const npcs = [
+            { _id: 'npc-1', name: 'Extorsionista Merrow', originalName: 'Merrow Extortionist', userId: 'user-1', status: 'active' },
+            { _id: 'npc-2', name: 'Merrow', originalName: 'Merrow', userId: 'user-1', status: 'active' },
+        ]
+        const sort = vi.fn().mockResolvedValue(npcs)
+        const find = vi.fn(() => ({ sort }))
+        const applyFuzzySearch = vi.fn().mockReturnValue([npcs[1], npcs[0]])
+
+        vi.doMock('@clerk/nextjs/server', () => ({ auth: vi.fn().mockResolvedValue({ userId: 'user-1' }) }))
+        vi.doMock('@/core/database/db', () => ({ default: vi.fn().mockResolvedValue(undefined) }))
+        vi.doMock('@/features/monsters/models/user-npc', () => ({ UserNpcModel: { find } }))
+        vi.doMock('@/core/utils/search-engine', () => ({ applyFuzzySearch }))
+
+        const mod = await importFresh<typeof import('@/app/api/npcs/route')>('@/app/api/npcs/route')
+        const response = await mod.GET(new Request('http://localhost/api/npcs?search=Merrow') as any)
+        const payload = await readJson<{ items: Array<{ name: string }> }>(response)
+
+        expect(response.status).toBe(200)
+        expect(find).toHaveBeenCalledWith({ userId: 'user-1' })
+        expect(sort).toHaveBeenCalledWith({ name: 1 })
+        expect(payload.items.map((npc) => npc.name)).toEqual(['Merrow', 'Extorsionista Merrow'])
     })
 })

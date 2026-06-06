@@ -68,7 +68,7 @@ export async function listFeats(
     }
 
     const items = await Feat.find(query as unknown as Parameters<typeof Feat.find>[0])
-      .sort({ createdAt: -1 })
+      .sort({ name: 1 })
       .lean();
 
     const searchedItems =

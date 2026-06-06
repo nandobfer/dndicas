@@ -1,7 +1,8 @@
-import { act, fireEvent, render, screen } from '@testing-library/react'
+import { act, fireEvent, screen } from '@testing-library/react'
 import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import * as React from 'react'
 import type { ReactNode } from 'react'
+import { renderWithQueryClient as render } from "../test-utils"
 import { MonstersTable } from '@/features/monsters/components/monsters-table'
 import type { Monster } from '@/features/monsters/types/monsters.types'
 

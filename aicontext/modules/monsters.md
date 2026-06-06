@@ -23,6 +23,7 @@ The Monsters module manages D&D 5e monster and NPC stat blocks with CRUD, dashbo
 - Monster previews render type before size, compact stat cards with inline labels, CR with XP beside it, full attribute names with modifier-first values, and colored damage words in NPC hit rolls.
 - Monster mention autocomplete rows show CR and localized monster type metadata, and mention hover previews load the full stat block from `/api/monsters/[id]` before rendering `MonsterPreview`.
 - Monster catalog results are sorted alphabetically by name and both list and table views consume the same infinite query; the table loads additional pages through an intersection sentinel.
+- Monster and NPC catalog searches preserve Fuse ranking instead of re-sorting results alphabetically after search. Exact matches against translated `name` and `originalName` have equal priority and appear before partial matches.
 - Monster tables render the monster image in the first column when available, falling back to the skull icon otherwise; table CA and PV are shown in separate columns, and both table and preview show the derived average PV for numeric or simple dice formulas rounded down while preserving the original formula when applicable.
 - Monster preview defenses render localized, capitalized Portuguese damage labels separated by commas while preserving internal damage keys.
 - Monster seed data imports every `bestiary-*.json` file under `src/lib/5etools-data/bestiary/`, pairs each source with `fluff-bestiary-*.json` when present, always loads `legendarygroups.json` separately, and translates special textual AC/PV seed values when they contain prose; manual form input for AC remains numeric.
@@ -121,6 +122,7 @@ Global integrations:
 - `/monsters/[slug]` generic entity page
 - `/my-npcs/[slug]` user NPC detail page
 - `EntityTitleLink` routeMap: `NPC → "my-npcs"`, `Monstro → "monsters"`
+- `EntityTitleLink` primes React Query detail caches for both monster and NPC title navigation; NPC links seed `["npc-detail", slug]` with a list-response-compatible value so `/my-npcs/[slug]` can render immediately while stale data refreshes in background.
 - dashboard `MonstersEntityCard`
 
 ## Tests
@@ -129,6 +131,7 @@ Coverage lives in:
 - `tests/frontend/monsters/monster-form-modal.test.tsx`
 - `tests/frontend/monsters/monster-async-renderer.test.tsx`
 - `tests/frontend/monsters/npc-components.test.tsx` — NpcPreview + NpcsTable
+- `tests/frontend/monsters/npc-detail-page.test.tsx` — cached NPC detail rendering without loading
 - `tests/scripts/seed-data/providers/monsters-provider.test.ts`
 - `tests/backend/catalogs/monsters-routes.test.ts`
 

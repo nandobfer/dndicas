@@ -10,5 +10,7 @@ As tabelas de itens usam `useInfiniteItems`, a mesma fonte de dados do modo list
 
 `ItemsTable` também exibe estados explícitos de carregamento e vazio quando não há itens para renderizar.
 
+As listagens infinitas de itens usam ordenação alfabética por `name` quando não há pesquisa. Quando há pesquisa, a ordem dos resultados segue o ranking fuzzy.
+
 ### Imagem na primeira coluna da tabela
 A tabela de itens usa a imagem do item na primeira coluna quando disponível. Quando o item não tem imagem, mantém fallback pelo ícone do tipo de item, preservando nome, fonte e chip de status no bloco de ações.

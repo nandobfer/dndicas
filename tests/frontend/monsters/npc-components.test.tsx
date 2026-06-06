@@ -1,7 +1,8 @@
-import { render, screen } from '@testing-library/react'
+import { screen } from '@testing-library/react'
 import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import * as React from 'react'
 import type { ReactNode } from 'react'
+import { renderWithQueryClient as render } from "../test-utils"
 import { NpcPreview } from '@/features/monsters/components/npc-preview'
 import { NpcsTable } from '@/features/monsters/components/npcs-table'
 import type { Monster } from '@/features/monsters/types/monsters.types'

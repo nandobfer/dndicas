@@ -38,6 +38,7 @@ import { DeleteItemDialog } from "@/features/items/components/delete-item-dialog
 import { useMonstersPage } from "@/features/monsters/hooks/useMonstersPage"
 import { MonsterFormModal } from "@/features/monsters/components/monster-form-modal"
 import { DeleteMonsterDialog } from "@/features/monsters/components/delete-monster-dialog"
+import { getEntityDetailQueryKey, getEntityRoute } from "@/features/rules/utils/entity-navigation"
 
 interface GenericEntityPageProps {
     entityTypeKey: "Regra" | "Habilidade" | "Talento" | "Magia" | "Classe" | "Origem" | "Raça" | "Item" | "Monstro"
@@ -69,7 +70,7 @@ export default function GenericEntityPage({ entityTypeKey }: GenericEntityPagePr
     const itemsPage = useItemsPage()
     const monstersPage = useMonstersPage()
 
-    const queryKey = [entityTypeKey.toLowerCase(), slug]
+    const queryKey = getEntityDetailQueryKey(entityTypeKey, slug)
 
     // Map hooks to entity types
     const hookMap = {
@@ -90,18 +91,7 @@ export default function GenericEntityPage({ entityTypeKey }: GenericEntityPagePr
     const onDelete = currentPage?.actions?.handleDeleteClick || (currentPage as any)?.handleDeleteClick
     const onGenerateAI = entityTypeKey === "Raça" ? racesPage.actions.handleGenerateAIClick : undefined
 
-    const routeMap = {
-        Regra: "rules",
-        Habilidade: "traits",
-        Talento: "feats",
-        Magia: "spells",
-        Classe: "classes",
-        Item: "items",
-        Origem: "backgrounds",
-        Raça: "races",
-        Monstro: "monsters",
-    }
-    const backHref = `/${routeMap[entityTypeKey]}`
+    const backHref = `/${getEntityRoute(entityTypeKey)}`
 
     const handleSelectedSubclassIdsChange = React.useCallback(
         (subclassIds: string[]) => {
@@ -133,7 +123,7 @@ export default function GenericEntityPage({ entityTypeKey }: GenericEntityPagePr
 
         if (newName && newName.toLowerCase() !== currentName.toLowerCase()) {
             const newSlug = encodeURIComponent(newName.toLowerCase().trim().replace(/\s+/g, "-"))
-            const route = routeMap[entityTypeKey]
+            const route = getEntityRoute(entityTypeKey)
             router.push(`/${route}/${newSlug}`)
         } else {
             // Give a small delay to ensure the database is updated before refetching
@@ -188,7 +178,7 @@ export default function GenericEntityPage({ entityTypeKey }: GenericEntityPagePr
             if (!basicItem) return null
 
             // We fetch the full profile by ID because search/list results are often too lean (missing status, full description, etc.)
-            const route = routeMap[entityTypeKey]
+            const route = getEntityRoute(entityTypeKey)
             const fullRes = await fetch(`/api/${route}/${basicItem._id || basicItem.id || basicItem.id}`)
             if (fullRes.ok) {
                 return await fullRes.json()
@@ -197,6 +187,7 @@ export default function GenericEntityPage({ entityTypeKey }: GenericEntityPagePr
             return basicItem
         },
         enabled: !!slug && !!config.provider,
+        staleTime: 60 * 1000,
     })
 
     const renderOptions =
@@ -233,7 +224,7 @@ export default function GenericEntityPage({ entityTypeKey }: GenericEntityPagePr
                 <EntityPage
                     item={item}
                     entityType={entityTypeKey}
-                    isLoading={isLoading}
+                    isLoading={isLoading && !item}
                     isAdmin={isAdmin}
                     onEdit={onEdit}
                     onGenerateAI={onGenerateAI}

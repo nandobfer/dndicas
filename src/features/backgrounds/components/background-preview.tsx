@@ -87,7 +87,7 @@ export function BackgroundPreview({ background, showStatus = true, className }: 
                     </div>
                     <div>
                         <div className="flex items-center gap-2">
-                            <EntityTitleLink name={background.name} entityType="Origem" />
+                            <EntityTitleLink name={background.name} entityType="Origem" entity={background} />
                         </div>
                         <p className="text-[10px] uppercase font-bold tracking-widest text-white/40 mt-0.5">Origem D&D 5e</p>
                     </div>

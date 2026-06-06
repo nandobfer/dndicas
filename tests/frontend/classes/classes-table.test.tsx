@@ -1,7 +1,8 @@
-import { act, render, screen } from '@testing-library/react'
+import { act, screen } from '@testing-library/react'
 import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import * as React from 'react'
 import type { ReactNode } from 'react'
+import { renderWithQueryClient as render } from "../test-utils"
 import { ClassesTable } from '@/features/classes/components/classes-table'
 import type { CharacterClass } from '@/features/classes/types/classes.types'
 

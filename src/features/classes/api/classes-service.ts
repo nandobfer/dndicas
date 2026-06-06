@@ -43,7 +43,7 @@ export async function listClasses(filters: ClassesFilters, page = 1, limit = 10,
         query.status = filters.status
     }
 
-    const items = await CharacterClass.find(query).sort({ createdAt: 1 }).lean()
+    const items = await CharacterClass.find(query).sort({ name: 1 }).lean()
 
     const searchedItems = filters.search ? applyFuzzySearch(items, filters.search) : items
 

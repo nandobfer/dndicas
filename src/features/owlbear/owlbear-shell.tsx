@@ -15,6 +15,7 @@ import { OwlbearGmSheetsTab } from "./gm-sheets-tab"
 import { OwlbearGmNpcsTab } from "./gm-npcs-tab"
 import { OwlbearGmSceneController } from "./gm-scene-controller"
 import type { OwlbearRole, OwlbearTabId } from "./types"
+import { preloadDiceBoxAssets } from "@/features/dice-roller/dice-box-loader"
 
 type TabDefinition = {
     id: OwlbearTabId
@@ -64,6 +65,10 @@ export function OwlbearShell() {
     const { session, isAuthLoaded, isAuthenticated } = useOwlbearSession(runtime)
     const tabs = React.useMemo(() => getTabsForRole(runtime.role), [runtime.role])
     const [activeTab, setActiveTab] = React.useState<OwlbearTabId>("catalogo")
+
+    React.useEffect(() => {
+        preloadDiceBoxAssets()
+    }, [])
 
     React.useEffect(() => {
         if (!tabs.some((tab) => tab.id === activeTab)) {

@@ -154,7 +154,7 @@ export function RacePreview({ race, showStatus = true }: RacePreviewProps) {
                     </div>
                     <div>
                         <div className="flex items-center gap-2">
-                            <EntityTitleLink name={race.name} entityType="Raça" />
+                            <EntityTitleLink name={race.name} entityType="Raça" entity={race} />
                         </div>
                         <p className="text-[10px] uppercase font-bold tracking-widest text-white/40 mt-0.5">Raça D&D 5e</p>
                     </div>

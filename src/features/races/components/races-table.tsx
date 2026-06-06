@@ -98,6 +98,7 @@ export function RacesTable({ data, isLoading, hasNextPage = false, isFetchingNex
                                                 <EntityTitleLink
                                                     name={race.name}
                                                     entityType="Raça"
+                                                    entity={race}
                                                     className={cn("text-sm font-medium block", race.status === "inactive" ? "text-white/30" : "text-white/80")}
                                                     disableLink={hideActions}
                                                 />
