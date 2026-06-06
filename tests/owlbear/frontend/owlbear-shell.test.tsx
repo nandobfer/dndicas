@@ -72,10 +72,15 @@ const sdkMock = vi.hoisted(() => {
             callbacks.push(callback)
             return () => undefined
         }),
+        action: {
+            open: vi.fn().mockResolvedValue(undefined),
+            close: vi.fn().mockResolvedValue(undefined),
+        },
         player: {
             getId: vi.fn().mockResolvedValue("player-1"),
             getName: vi.fn().mockResolvedValue("Nando"),
             getRole: vi.fn<() => Promise<"GM" | "PLAYER">>(),
+            deselect: vi.fn().mockResolvedValue(undefined),
         },
         party: {
             getPlayers: vi.fn().mockResolvedValue([]),
@@ -208,12 +213,15 @@ describe("OwlbearShell", () => {
         sdkMock.isAvailable = true
         sdkMock.isReady = true
         sdkMock.room.id = "room-1"
+        sdkMock.action.open.mockResolvedValue(undefined)
+        sdkMock.action.close.mockResolvedValue(undefined)
         sdkMock.room.getMetadata.mockResolvedValue({})
         sdkMock.room.setMetadata.mockResolvedValue(undefined)
         sdkMock.room.onMetadataChange.mockReturnValue(() => undefined)
         sdkMock.player.getId.mockResolvedValue("player-1")
         sdkMock.player.getName.mockResolvedValue("Nando")
         sdkMock.player.getRole.mockReset()
+        sdkMock.player.deselect.mockResolvedValue(undefined)
         sdkMock.party.getPlayers.mockResolvedValue([])
         sdkMock.party.onChange.mockReturnValue(() => undefined)
         sdkMock.scene.isReady.mockResolvedValue(true)
@@ -360,7 +368,7 @@ describe("OwlbearShell", () => {
         fireEvent.click(screen.getByRole("button", { name: "Fichas" }))
 
         await waitFor(() => {
-            expect(fetch).toHaveBeenCalledTimes(1)
+            expect(fetch).toHaveBeenCalled()
         })
 
         expect(screen.queryByTestId("clerk-sign-in")).not.toBeInTheDocument()

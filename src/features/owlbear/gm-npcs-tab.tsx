@@ -27,6 +27,8 @@ import { NpcPreview } from "@/features/monsters/components/npc-preview"
 import type { CreateMonsterSchema } from "@/features/monsters/api/validation"
 import type { Monster } from "@/features/monsters/types/monsters.types"
 import { getMonsterHitPointAverage } from "@/features/monsters/utils/monster-calculations"
+import { getHpBarColor, hpPercent } from "./hp-bar-utils"
+import { notifyOwlbearOverlaySync } from "./overlay-sync-events"
 import { createOwlbearUserNpc, type OwlbearRoomNpc, type OwlbearRoomNpcSourceKind } from "./room-npcs-api"
 import type { OwlbearRuntimeState, OwlbearSessionState } from "./types"
 import { useRoomNpcs } from "./use-room-npcs"
@@ -48,32 +50,12 @@ function InlineStatus({ tone = "neutral", message }: { tone?: "neutral" | "error
     )
 }
 
-function hpPercent(current: number, max: number) {
-    if (max <= 0) return 0
-    return Math.max(0, Math.min(100, (current / max) * 100))
-}
-
-function interpolateColor(from: [number, number, number], to: [number, number, number], amount: number) {
-    const clamped = Math.max(0, Math.min(1, amount))
-    const [r1, g1, b1] = from
-    const [r2, g2, b2] = to
-    const r = Math.round(r1 + (r2 - r1) * clamped)
-    const g = Math.round(g1 + (g2 - g1) * clamped)
-    const b = Math.round(b1 + (b2 - b1) * clamped)
-    return `rgb(${r}, ${g}, ${b})`
-}
-
+/**
+ * @deprecated Use `getHpBarColor` from `./hp-bar-utils` directly.
+ * Mantido para compatibilidade com testes existentes.
+ */
 export function getNpcHpBarColor(current: number, max: number) {
-    const percent = hpPercent(current, max) / 100
-    const red: [number, number, number] = [88, 0, 0]
-    const yellow: [number, number, number] = [234, 179, 8]
-    const green: [number, number, number] = [52, 211, 153]
-
-    if (percent <= 0.5) {
-        return interpolateColor(red, yellow, percent / 0.5)
-    }
-
-    return interpolateColor(yellow, green, (percent - 0.5) / 0.5)
+    return getHpBarColor(current, max)
 }
 
 function getSourceLabel(sourceKind: OwlbearRoomNpcSourceKind) {
@@ -495,7 +477,23 @@ export function OwlbearGmNpcsTab({
     const handleApplyHpDelta = React.useCallback((npc: OwlbearRoomNpc, delta: number) => {
         const nextHp = Math.max(0, Math.min(npc.hpMax, npc.hpCurrent + delta))
         setPendingId(npc.id)
+        notifyOwlbearOverlaySync({
+            kind: "npc",
+            refId: npc.id,
+            hpCurrent: nextHp,
+            hpMax: npc.hpMax,
+            name: npc.source?.name ?? "NPC",
+        })
         void updateNpc(npc.id, { hpCurrent: nextHp })
+            .then((updated) => {
+                notifyOwlbearOverlaySync({
+                    kind: "npc",
+                    refId: updated.id,
+                    hpCurrent: updated.hpCurrent,
+                    hpMax: updated.hpMax,
+                    name: updated.source?.name ?? npc.source?.name ?? "NPC",
+                })
+            })
             .catch((error) => {
                 toast.error(error instanceof Error ? error.message : "Não foi possível atualizar PV.")
             })
