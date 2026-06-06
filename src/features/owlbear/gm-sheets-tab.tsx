@@ -354,6 +354,7 @@ function GmSheetsTabContent({
                         <InlineStatus tone="error" message="Não foi possível carregar a ficha selecionada no Dndicas." />
                     ) : selectedSheet ? (
                         <SheetForm
+                            key={selectedSheet._id}
                             sheet={selectedSheet}
                             layoutMode="desktop"
                             editMode="editable"

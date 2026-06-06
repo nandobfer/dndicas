@@ -25,13 +25,20 @@ O topo da aba usa `SearchInput` e busca Fuse.js local nos NPCs já vinculados. `
 As rotas Owlbear-aware de sala são `GET/POST /api/owlbear/rooms/[roomId]/npcs`, `PATCH/DELETE /api/owlbear/rooms/[roomId]/npcs/[npcId]` e `POST /api/owlbear/rooms/[roomId]/npcs/user-npcs`. Todas exigem Bearer token da sessão Owlbear, papel `GM`, `roomId` correspondente à sessão e usuário real do Clerk. Remover pela lixeira desvincula apenas a instância da sala; não apaga o NPC do usuário nem o monstro do catálogo.
 
 ### Sessão Owlbear e transição de login
-`useOwlbearSession` inclui o estado Clerk (`auth`/`anon`) na identidade interna usada para reaproveitar sessão backend. Quando um usuário entra no Dndicas sem recarregar a action, o hook invalida a sessão Owlbear anterior e abre uma nova sessão com a autenticação atual. Isso evita que abas autenticadas, como `Ficha` do jogador e `NPCs` do GM, continuem usando token anônimo depois do login, enquanto a aba `Fichas` do GM ainda pode funcionar antes do login.
+`useOwlbearSession` inclui o estado Clerk (`auth:<userId>`/`anon`) na identidade interna usada para reaproveitar sessão backend. Quando um usuário entra no Dndicas sem recarregar a action, o hook espera `useAuth.userId` existir antes de abrir sessão autenticada, invalida a sessão Owlbear anterior e abre uma nova sessão com a autenticação atual. Isso evita que abas autenticadas, como `Ficha` do jogador e `NPCs` do GM, continuem usando token anônimo depois do login, enquanto a aba `Fichas` do GM ainda pode funcionar antes do login.
+
+Durante a transição pós-login, `401` com usuário logado, erros de rede e respostas `5xx` em `/api/owlbear/session` são tratados como transitórios com backoff curto (250ms, 500ms, 1s, 2s) até o limite de tentativas. A aba `Ficha` do jogador mostra loader enquanto a sessão está `idle`/`loading` ou sem token, e só exibe `A sessão Owlbear-aware não pôde ser inicializada` quando `sessionStatus === "error"`.
 
 ### Log de mapeamento `playerId`
 Quando a action do Owlbear inicializa o contexto do roller, ela combina o jogador atual de `sdk.player` com `sdk.party.getPlayers()`, deduplica por `id` e emite um log com `{ name, id, role }` no console para facilitar overrides manuais por `playerId` sem depender do nome exibido.
 
 ### Carregamento contextual do SDK
 O SDK do Owlbear deve ser carregado apenas em superfícies Owlbear reais, como `/owlbear/*`, embeds conhecidos ou iframes ativos da integração. O site normal mantém o roller local sem importar o SDK, evitando dependências indevidas de chunks Owlbear fora desse contexto.
+
+Em superfícies `/owlbear/*`, `sdk.isAvailable === false` no primeiro tick é tratado como estado transitório. `useOwlbearRuntime` mantém `status: "booting"` e faz retry com backoff (250ms, 500ms, 1s, 2s) até o SDK ficar disponível ou `OBR.onReady` disparar. O banner `SDK Owlbear indisponível nesta action` só deve aparecer fora de contexto Owlbear real, evitando falso negativo quando a action abre antes do SDK terminar de hidratar.
+
+### Fichas do GM na action
+Na aba `Fichas`, o `SheetForm` do painel selecionado usa `key={selectedSheet._id}` para forçar remount completo ao alternar entre fichas. Isso evita reaproveitar caches internos de `react-hook-form`, subscriptions realtime e editores ricos ao voltar para uma ficha já visitada dentro da action.
 
 ### Context menu de vínculo de token com personagem ou NPC
 O `OwlbearGmSceneController` registra context menus para GM com `Vincular a personagem`, `Vincular a NPC` e `Desvincular`. O registro dos menus depende apenas do runtime Owlbear pronto e papel `GM`, não da sessão backend pronta, para evitar que falhas ou delays de sessão escondam o menu. Os filtros do SDK ficam mínimos (`min/max` e `roles`) e a validação de item elegível acontece no `onClick`, porque filtros de `layer`/permissão podem divergir do shape real do item no Owlbear e esconder completamente o botão. Ao clicar em vincular, o controller chama `OBR.action.open()` para abrir a action e mostrar o modal de seleção mesmo quando o painel do Dndicas está fechado, e chama `OBR.player.deselect([tokenId])` para fechar o context menu nativo. Depois que o usuário seleciona personagem ou NPC, o vínculo é sincronizado e a action é fechada com `OBR.action.close()`.
