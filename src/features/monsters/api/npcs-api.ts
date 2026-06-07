@@ -42,6 +42,19 @@ export async function createNpc(data: CreateMonsterInput): Promise<Monster> {
     return res.json()
 }
 
+export async function copyToNpc(data: { sourceType: "monster" | "npc"; sourceId: string }): Promise<Monster> {
+    const res = await fetch(`${API_URL}/copy`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(data),
+    })
+    if (!res.ok) {
+        const error = await res.json().catch(() => ({}))
+        throw new Error(error.error || error.message || "Erro ao copiar para NPC")
+    }
+    return res.json()
+}
+
 export async function updateNpc(id: string, data: UpdateMonsterInput): Promise<Monster> {
     const res = await fetch(`${API_URL}/${id}`, {
         method: "PUT",

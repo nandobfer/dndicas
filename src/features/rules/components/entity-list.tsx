@@ -6,7 +6,7 @@ import { GlassCard, GlassCardContent } from "@/components/ui/glass-card"
 import { LoadingState } from "@/components/ui/loading-state"
 import { EmptyState } from "@/components/ui/empty-state"
 import { Chip } from "@/components/ui/chip"
-import { ScrollText, Sparkles, Wand, Zap, MoreHorizontal, Pencil, Trash2, ExternalLink } from "lucide-react"
+import { Copy, ScrollText, Sparkles, Wand, Zap, MoreHorizontal, Pencil, Trash2, ExternalLink } from "lucide-react"
 import { motionConfig } from "@/lib/config/motion-configs"
 import { GlassDropdownMenu, GlassDropdownMenuTrigger, GlassDropdownMenuContent, GlassDropdownMenuItem } from "@/components/ui/glass-dropdown-menu"
 import { renderEntity } from "./entity-renderers"
@@ -21,13 +21,14 @@ interface EntityListProps {
     isFetchingNextPage: boolean
     onLoadMore: () => void
     onEdit?: (item: any) => void
+    onCopyToNpc?: (item: any) => void
     onGenerateAI?: (item: any) => void
     onDelete?: (item: any) => void
     isAdmin?: boolean
     renderOptions?: EntityRenderOptions
 }
 
-export function EntityList({ items, entityType, isLoading, hasNextPage, isFetchingNextPage, onLoadMore, onEdit, onGenerateAI, onDelete, isAdmin, renderOptions }: EntityListProps) {
+export function EntityList({ items, entityType, isLoading, hasNextPage, isFetchingNextPage, onLoadMore, onEdit, onCopyToNpc, onGenerateAI, onDelete, isAdmin, renderOptions }: EntityListProps) {
     const observer = React.useRef<IntersectionObserver | null>(null)
     const { addWindow } = useWindows()
 
@@ -94,7 +95,7 @@ export function EntityList({ items, entityType, isLoading, hasNextPage, isFetchi
                                         <ExternalLink className="h-4 w-4" />
                                     </motion.button>
 
-                                    {isAdmin && (onEdit || onGenerateAI || onDelete) && (
+                                    {(onCopyToNpc || (isAdmin && (onEdit || onGenerateAI || onDelete))) && (
                                         <GlassDropdownMenu>
                                             <GlassDropdownMenuTrigger asChild>
                                                 <motion.button
@@ -106,13 +107,19 @@ export function EntityList({ items, entityType, isLoading, hasNextPage, isFetchi
                                                 </motion.button>
                                             </GlassDropdownMenuTrigger>
                                             <GlassDropdownMenuContent align="end">
-                                                {onEdit && (
+                                                {onCopyToNpc && (
+                                                    <GlassDropdownMenuItem onClick={() => onCopyToNpc(item)}>
+                                                        <Copy className="mr-2 h-4 w-4" />
+                                                        Copiar para NPC
+                                                    </GlassDropdownMenuItem>
+                                                )}
+                                                {isAdmin && onEdit && (
                                                     <GlassDropdownMenuItem onClick={() => onEdit(item)}>
                                                         <Pencil className="mr-2 h-4 w-4" />
                                                         Editar
                                                     </GlassDropdownMenuItem>
                                                 )}
-                                                {onGenerateAI && (
+                                                {isAdmin && onGenerateAI && (
                                                     <GlassDropdownMenuItem onClick={() => onGenerateAI(item)}>
                                                         <Sparkles className="mr-2 h-4 w-4 text-purple-300 animate-pulse" />
                                                         <span className="bg-gradient-to-r from-blue-300 via-purple-300 to-blue-300 bg-clip-text text-transparent">
@@ -120,7 +127,7 @@ export function EntityList({ items, entityType, isLoading, hasNextPage, isFetchi
                                                         </span>
                                                     </GlassDropdownMenuItem>
                                                 )}
-                                                {onDelete && (
+                                                {isAdmin && onDelete && (
                                                     <GlassDropdownMenuItem onClick={() => onDelete(item)} className="text-red-400 hover:text-red-300 focus:text-red-300">
                                                         <Trash2 className="mr-2 h-4 w-4" />
                                                         Excluir

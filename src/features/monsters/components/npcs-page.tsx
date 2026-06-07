@@ -2,12 +2,14 @@
 
 import { Plus, Users } from "lucide-react"
 import { motion } from "framer-motion"
+import { useRouter } from "next/navigation"
 import { GlassCard, GlassCardContent } from "@/components/ui/glass-card"
 import { GlassViewSelector } from "@/components/ui/glass-view-selector"
 import { EntityList } from "@/features/rules/components/entity-list"
 import { cn } from "@/core/utils"
 import { motionConfig } from "@/lib/config/motion-configs"
 import { useDeleteNpc } from "../api/npcs-queries"
+import { getNpcDetailHref, useCopyToNpcAction } from "../hooks/useCopyToNpcAction"
 import { useNpcsPage } from "../hooks/useNpcsPage"
 import { DeleteNpcDialog } from "./delete-npc-dialog"
 import { MonsterFilters } from "./monster-filters"
@@ -15,8 +17,10 @@ import { NpcsTable } from "./npcs-table"
 import { UserNpcFormModal } from "./user-npc-form-modal"
 
 export function NpcsPage() {
+    const router = useRouter()
     const { filters, data, viewMode, setViewMode, actions, modals } = useNpcsPage()
     const deleteMutation = useDeleteNpc()
+    const copyToNpcAction = useCopyToNpcAction("npc", { openFormOnCopy: false, onCopied: (npc) => router.push(getNpcDetailHref(npc, { edit: true })) })
 
     const handleConfirmDelete = async () => {
         if (!modals.selectedNpc) return
@@ -62,14 +66,15 @@ export function NpcsPage() {
             <div className="overflow-hidden">
                 <GlassCardContent className="p-0">
                     {viewMode === "default" ? (
-                        <EntityList items={data.items} isLoading={data.isLoading} hasNextPage={data.hasNextPage} onLoadMore={data.fetchNextPage} isFetchingNextPage={data.isFetchingNextPage} entityType="NPC" onEdit={actions.handleEditClick} onDelete={actions.handleDeleteClick} isAdmin />
+                        <EntityList items={data.items} isLoading={data.isLoading} hasNextPage={data.hasNextPage} onLoadMore={data.fetchNextPage} isFetchingNextPage={data.isFetchingNextPage} entityType="NPC" onCopyToNpc={copyToNpcAction.handleCopyToNpc} onEdit={actions.handleEditClick} onDelete={actions.handleDeleteClick} isAdmin />
                     ) : (
-                        <NpcsTable items={data.items} isLoading={data.isLoading} hasNextPage={data.hasNextPage} onLoadMore={data.fetchNextPage} isFetchingNextPage={data.isFetchingNextPage} onEdit={actions.handleEditClick} onDelete={actions.handleDeleteClick} isAdmin entityType="NPC" entityLabel="NPC" />
+                        <NpcsTable items={data.items} isLoading={data.isLoading} hasNextPage={data.hasNextPage} onLoadMore={data.fetchNextPage} isFetchingNextPage={data.isFetchingNextPage} onCopyToNpc={copyToNpcAction.handleCopyToNpc} onEdit={actions.handleEditClick} onDelete={actions.handleDeleteClick} isAdmin entityType="NPC" entityLabel="NPC" />
                     )}
                 </GlassCardContent>
             </div>
 
             <UserNpcFormModal npc={modals.selectedNpc} isOpen={modals.isFormOpen} onClose={modals.closeAll} onSuccess={actions.handleSuccess} />
+            <UserNpcFormModal npc={copyToNpcAction.copiedNpc} isOpen={copyToNpcAction.isFormOpen} onClose={copyToNpcAction.closeForm} onSuccess={copyToNpcAction.handleSuccess} />
             <DeleteNpcDialog monster={modals.selectedNpc} isOpen={modals.isDeleteOpen} onClose={modals.closeAll} onConfirm={handleConfirmDelete} isDeleting={deleteMutation.isPending} entityLabel="NPC" />
         </motion.div>
     )

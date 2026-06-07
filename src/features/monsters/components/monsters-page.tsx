@@ -2,6 +2,7 @@
 
 import { Plus, Skull } from "lucide-react"
 import { motion } from "framer-motion"
+import { useRouter } from "next/navigation"
 import { GlassCard, GlassCardContent } from "@/components/ui/glass-card"
 import { GlassViewSelector } from "@/components/ui/glass-view-selector"
 import { EntityList } from "@/features/rules/components/entity-list"
@@ -11,16 +12,20 @@ import { useAuth } from "@/core/hooks/useAuth"
 import { cn } from "@/core/utils"
 import { motionConfig } from "@/lib/config/motion-configs"
 import { useDeleteMonster } from "../api/monsters-queries"
+import { getNpcDetailHref, useCopyToNpcAction } from "../hooks/useCopyToNpcAction"
 import { useMonstersPage } from "../hooks/useMonstersPage"
 import { DeleteMonsterDialog } from "./delete-monster-dialog"
 import { MonsterFilters } from "./monster-filters"
 import { MonsterFormModal } from "./monster-form-modal"
 import { MonstersTable } from "./monsters-table"
+import { UserNpcFormModal } from "./user-npc-form-modal"
 
 export function MonstersPage() {
-    const { isAdmin } = useAuth()
+    const router = useRouter()
+    const { isAdmin, isSignedIn } = useAuth()
     const { filters, data, viewMode, setViewMode, actions, modals } = useMonstersPage()
     const deleteMutation = useDeleteMonster()
+    const copyToNpcAction = useCopyToNpcAction("monster", { openFormOnCopy: false, onCopied: (npc) => router.push(getNpcDetailHref(npc, { edit: true })) })
 
     const handleConfirmDelete = async () => {
         if (!modals.selectedMonster) return
@@ -65,14 +70,15 @@ export function MonstersPage() {
             <div className="overflow-hidden">
                 <GlassCardContent className="p-0">
                     {viewMode === "default" ? (
-                        <EntityList items={data.items} isLoading={data.isLoading} hasNextPage={data.hasNextPage} onLoadMore={data.fetchNextPage} isFetchingNextPage={data.isFetchingNextPage} entityType="Monstro" onEdit={actions.handleEditClick} onGenerateAI={actions.handleGenerateAIClick} onDelete={actions.handleDeleteClick} isAdmin={isAdmin} />
+                        <EntityList items={data.items} isLoading={data.isLoading} hasNextPage={data.hasNextPage} onLoadMore={data.fetchNextPage} isFetchingNextPage={data.isFetchingNextPage} entityType="Monstro" onCopyToNpc={isSignedIn ? copyToNpcAction.handleCopyToNpc : undefined} onEdit={actions.handleEditClick} onGenerateAI={actions.handleGenerateAIClick} onDelete={actions.handleDeleteClick} isAdmin={isAdmin} />
                     ) : (
-                        <MonstersTable items={data.items} isLoading={data.isLoading} hasNextPage={data.hasNextPage} onLoadMore={data.fetchNextPage} isFetchingNextPage={data.isFetchingNextPage} onEdit={actions.handleEditClick} onGenerateAI={actions.handleGenerateAIClick} onDelete={actions.handleDeleteClick} isAdmin={isAdmin} />
+                        <MonstersTable items={data.items} isLoading={data.isLoading} hasNextPage={data.hasNextPage} onLoadMore={data.fetchNextPage} isFetchingNextPage={data.isFetchingNextPage} onCopyToNpc={isSignedIn ? copyToNpcAction.handleCopyToNpc : undefined} onEdit={actions.handleEditClick} onGenerateAI={actions.handleGenerateAIClick} onDelete={actions.handleDeleteClick} isAdmin={isAdmin} />
                     )}
                 </GlassCardContent>
             </div>
 
             <MonsterFormModal monster={modals.selectedMonster} isOpen={modals.isFormOpen} onClose={modals.closeAll} onSuccess={() => {}} />
+            <UserNpcFormModal npc={copyToNpcAction.copiedNpc} isOpen={copyToNpcAction.isFormOpen} onClose={copyToNpcAction.closeForm} onSuccess={copyToNpcAction.handleSuccess} />
             <DeleteMonsterDialog monster={modals.selectedMonster} isOpen={modals.isDeleteOpen} onClose={modals.closeAll} onConfirm={handleConfirmDelete} isDeleting={deleteMutation.isPending} />
             <EntityGenerationAIModal
                 open={modals.isGenerationOpen}

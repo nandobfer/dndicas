@@ -12,7 +12,7 @@ import { renderEntity } from "./entity-renderers"
 import { useRouter } from "next/navigation"
 import { Button } from "@/core/ui/button"
 import { useWindows } from "@/core/context/window-context"
-import { Pencil, Trash2, MoreHorizontal } from "lucide-react"
+import { Copy, Pencil, Trash2, MoreHorizontal } from "lucide-react"
 import { GlassDropdownMenu, GlassDropdownMenuTrigger, GlassDropdownMenuContent, GlassDropdownMenuItem } from "@/components/ui/glass-dropdown-menu"
 import { themeConfig } from "@/lib/config/theme-config"
 
@@ -22,6 +22,7 @@ interface EntityPageProps {
     isLoading: boolean
     isAdmin?: boolean
     onEdit?: (item: any) => void
+    onCopyToNpc?: (item: any) => void
     onGenerateAI?: (item: any) => void
     onDelete?: (item: any) => void
     /** Whether to hide action icons (like open in window) when already in a page */
@@ -37,7 +38,7 @@ interface EntityPageProps {
     backHref?: string
 }
 
-export function EntityPage({ item, entityType, isLoading, isAdmin, onEdit, onGenerateAI, onDelete, hideActionIcons = false, renderOptions, backHref }: EntityPageProps) {
+export function EntityPage({ item, entityType, isLoading, isAdmin, onEdit, onCopyToNpc, onGenerateAI, onDelete, hideActionIcons = false, renderOptions, backHref }: EntityPageProps) {
     const router = useRouter()
     const { addWindow } = useWindows()
     const handleBack = React.useCallback(() => {
@@ -104,7 +105,7 @@ export function EntityPage({ item, entityType, isLoading, isAdmin, onEdit, onGen
                     <GlassCardContent className="p-6 md:p-8">
                         <div className="absolute top-4 right-4 z-10 flex flex-col items-end gap-2">
                             <div className="flex items-center gap-2">
-                                {isAdmin && (onEdit || onGenerateAI || onDelete) && (
+                                {(onCopyToNpc || (isAdmin && (onEdit || onGenerateAI || onDelete))) && (
                                     <GlassDropdownMenu>
                                         <GlassDropdownMenuTrigger asChild>
                                             <motion.button
@@ -116,13 +117,19 @@ export function EntityPage({ item, entityType, isLoading, isAdmin, onEdit, onGen
                                             </motion.button>
                                         </GlassDropdownMenuTrigger>
                                         <GlassDropdownMenuContent align="end">
-                                            {onEdit && (
+                                            {onCopyToNpc && (
+                                                <GlassDropdownMenuItem onClick={() => onCopyToNpc(item)}>
+                                                    <Copy className="mr-2 h-4 w-4" />
+                                                    Copiar para NPC
+                                                </GlassDropdownMenuItem>
+                                            )}
+                                            {isAdmin && onEdit && (
                                                 <GlassDropdownMenuItem onClick={() => onEdit(item)}>
                                                     <Pencil className="mr-2 h-4 w-4" />
                                                     Editar
                                                 </GlassDropdownMenuItem>
                                             )}
-                                            {onGenerateAI && (
+                                            {isAdmin && onGenerateAI && (
                                                 <GlassDropdownMenuItem onClick={() => onGenerateAI(item)}>
                                                     <Sparkles className="mr-2 h-4 w-4 text-purple-300 animate-pulse" />
                                                     <span className="bg-gradient-to-r from-blue-300 via-purple-300 to-blue-300 bg-clip-text text-transparent">
@@ -130,7 +137,7 @@ export function EntityPage({ item, entityType, isLoading, isAdmin, onEdit, onGen
                                                     </span>
                                                 </GlassDropdownMenuItem>
                                             )}
-                                            {onDelete && (
+                                            {isAdmin && onDelete && (
                                                 <GlassDropdownMenuItem onClick={() => onDelete(item)} className="text-red-400 hover:text-red-300 focus:text-red-300">
                                                     <Trash2 className="mr-2 h-4 w-4" />
                                                     Excluir

@@ -29,6 +29,7 @@ The Monsters module manages D&D 5e monster and NPC stat blocks with CRUD, dashbo
 - Monster seed data imports every `bestiary-*.json` file under `src/lib/5etools-data/bestiary/`, pairs each source with `fluff-bestiary-*.json` when present, always loads `legendarygroups.json` separately, and translates special textual AC/PV seed values when they contain prose; manual form input for AC remains numeric.
 - Bestiary seed translation retries transient invalid/truncated GenAI JSON before failing, so long monster entries can resume without manual data changes.
 - O filtro compartilhado de fontes consome `GET /api/sources?entity=monsters`, exibe nomes completos canônicos no multiselect e expande aliases legados (`LDM`, `XMM`, etc.) no matching do backend para continuar encontrando registros antigos.
+- Monstros e NPCs têm a ação `Copiar para NPC` acima de `Editar` nas listas, tabelas e páginas de detalhe. A ação cria imediatamente um `UserNpc` persistido para o usuário autenticado, usando nome único automático com sufixo `(Cópia)`, navega para `/my-npcs/[slug]?edit=1` do novo NPC e abre o `UserNpcFormModal` em modo edição para ajustes antes de salvar.
 
 Core behavior:
 - Browse monsters with search, type, size, challenge rating, source, and status filters.
@@ -91,6 +92,7 @@ Routes:
 - `GET /api/npcs/[id]` — ownership check
 - `PUT /api/npcs/[id]` — ownership check
 - `DELETE /api/npcs/[id]` — ownership check
+- `POST /api/npcs/copy` — auth required, copia um `Monstro` global ou um NPC próprio para `user_npcs` e retorna o novo NPC
 
 List filters: `search`, `type`, `size`, `challengeRating`, `status`, `page`, `limit`  
 No `sources` filter (source is user-defined, not catalog-based).

@@ -1,6 +1,6 @@
 "use client"
 
-import { ExternalLink, Eye, Footprints, HeartPulse, Languages, Shield, Skull, Swords } from "lucide-react"
+import { Copy, ExternalLink, Eye, Footprints, HeartPulse, Languages, Shield, Skull, Swords } from "lucide-react"
 import { motion } from "framer-motion"
 import { useWindows } from "@/core/context/window-context"
 import { Chip } from "@/components/ui/chip"
@@ -62,11 +62,12 @@ export interface NpcPreviewProps {
     showStatus?: boolean
     hideStatusChip?: boolean
     hideActionIcons?: boolean
+    onCopyToNpc?: (monster: Monster) => void
     /** Entity type used for title links and icon color. Default: "Monstro" */
     entityType?: keyof typeof entityColors
 }
 
-export function NpcPreview({ monster, showStatus = true, hideStatusChip = false, hideActionIcons = false, entityType = "Monstro" }: NpcPreviewProps) {
+export function NpcPreview({ monster, showStatus = true, hideStatusChip = false, hideActionIcons = false, onCopyToNpc, entityType = "Monstro" }: NpcPreviewProps) {
     const { addWindow } = useWindows()
     const colors = entityColors[entityType] ?? entityColors.Monstro
     const proficiencyBonus = getMonsterProficiencyBonus(monster.challengeRating, monster.proficiencyBonusOverride)
@@ -109,6 +110,17 @@ export function NpcPreview({ monster, showStatus = true, hideStatusChip = false,
                     </div>
                 </div>
                 <div className="flex items-center gap-2">
+                    {!hideActionIcons && onCopyToNpc && (
+                        <motion.button
+                            whileHover={{ scale: 1.1 }}
+                            whileTap={{ scale: 0.9 }}
+                            onClick={() => onCopyToNpc(monster)}
+                            className="p-1.5 rounded-lg text-white/40 hover:text-white hover:bg-white/10 transition-colors"
+                            title="Copiar para NPC"
+                        >
+                            <Copy className="h-4 w-4" />
+                        </motion.button>
+                    )}
                     {!hideActionIcons && (
                         <motion.button
                             whileHover={{ scale: 1.1 }}

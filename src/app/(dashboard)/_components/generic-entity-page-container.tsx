@@ -4,6 +4,7 @@ import * as React from "react"
 import { useParams, usePathname, useRouter, useSearchParams } from "next/navigation"
 import { useQuery, useQueryClient } from "@tanstack/react-query"
 import { EntityPage } from "@/features/rules/components/entity-page"
+import type { EntityRenderOptions } from "@/features/rules/components/entity-renderers"
 import { entityConfig } from "@/lib/config/entities"
 import { useAuth } from "@/core/hooks/useAuth"
 import { useWindows } from "@/core/context/window-context"
@@ -36,8 +37,11 @@ import { useItemsPage } from "@/features/items/hooks/useItemsPage"
 import { ItemFormModal } from "@/features/items/components/item-form-modal"
 import { DeleteItemDialog } from "@/features/items/components/delete-item-dialog"
 import { useMonstersPage } from "@/features/monsters/hooks/useMonstersPage"
+import { getNpcDetailHref, useCopyToNpcAction } from "@/features/monsters/hooks/useCopyToNpcAction"
 import { MonsterFormModal } from "@/features/monsters/components/monster-form-modal"
+import { UserNpcFormModal } from "@/features/monsters/components/user-npc-form-modal"
 import { DeleteMonsterDialog } from "@/features/monsters/components/delete-monster-dialog"
+import type { Monster } from "@/features/monsters/types/monsters.types"
 import { getEntityDetailQueryKey, getEntityRoute } from "@/features/rules/utils/entity-navigation"
 
 interface GenericEntityPageProps {
@@ -51,7 +55,7 @@ export default function GenericEntityPage({ entityTypeKey }: GenericEntityPagePr
     const searchParams = useSearchParams()
     const queryClient = useQueryClient()
     const { addWindow } = useWindows()
-    const { isAdmin } = useAuth()
+    const { isAdmin, isSignedIn } = useAuth()
     const slug = params.slug as string
     const selectedSubclassIds = React.useMemo(() => {
         const subclassIds = searchParams.getAll("subclass").filter((subclassId) => subclassId.length > 0)
@@ -221,18 +225,31 @@ export default function GenericEntityPage({ entityTypeKey }: GenericEntityPagePr
                         <span>Janela Solta</span>
                     </motion.button>
                 )}
-                <EntityPage
-                    item={item}
-                    entityType={entityTypeKey}
-                    isLoading={isLoading && !item}
-                    isAdmin={isAdmin}
-                    onEdit={onEdit}
-                    onGenerateAI={onGenerateAI}
-                    onDelete={onDelete}
-                    hideActionIcons={true}
-                    renderOptions={renderOptions}
-                    backHref={backHref}
-                />
+                {entityTypeKey === "Monstro" ? (
+                    <MonsterEntityPage
+                        item={item}
+                        isLoading={isLoading && !item}
+                        isAdmin={isAdmin}
+                        isSignedIn={!!isSignedIn}
+                        onEdit={monstersPage.actions.handleEditClick}
+                        onDelete={monstersPage.actions.handleDeleteClick}
+                        renderOptions={renderOptions}
+                        backHref={backHref}
+                    />
+                ) : (
+                    <EntityPage
+                        item={item}
+                        entityType={entityTypeKey}
+                        isLoading={isLoading && !item}
+                        isAdmin={isAdmin}
+                        onEdit={onEdit}
+                        onGenerateAI={onGenerateAI}
+                        onDelete={onDelete}
+                        hideActionIcons={true}
+                        renderOptions={renderOptions}
+                        backHref={backHref}
+                    />
+                )}
             </div>
 
             {/* Entity-specific Modals (imported from hooks) */}
@@ -417,6 +434,40 @@ export default function GenericEntityPage({ entityTypeKey }: GenericEntityPagePr
                     />
                 </>
             )}
+        </>
+    )
+}
+
+interface MonsterEntityPageProps {
+    item: Monster | null
+    isLoading: boolean
+    isAdmin?: boolean
+    isSignedIn: boolean
+    onEdit?: (item: Monster) => void
+    onDelete?: (item: Monster) => void
+    renderOptions?: EntityRenderOptions
+    backHref: string
+}
+
+function MonsterEntityPage({ item, isLoading, isAdmin, isSignedIn, onEdit, onDelete, renderOptions, backHref }: MonsterEntityPageProps) {
+    const router = useRouter()
+    const copyMonsterToNpcAction = useCopyToNpcAction("monster", { openFormOnCopy: false, onCopied: (npc) => router.push(getNpcDetailHref(npc, { edit: true })) })
+
+    return (
+        <>
+            <EntityPage
+                item={item}
+                entityType="Monstro"
+                isLoading={isLoading}
+                isAdmin={isAdmin}
+                onEdit={onEdit}
+                onCopyToNpc={isSignedIn ? copyMonsterToNpcAction.handleCopyToNpc : undefined}
+                onDelete={onDelete}
+                hideActionIcons={true}
+                renderOptions={renderOptions}
+                backHref={backHref}
+            />
+            <UserNpcFormModal npc={copyMonsterToNpcAction.copiedNpc} isOpen={copyMonsterToNpcAction.isFormOpen} onClose={copyMonsterToNpcAction.closeForm} onSuccess={copyMonsterToNpcAction.handleSuccess} />
         </>
     )
 }
