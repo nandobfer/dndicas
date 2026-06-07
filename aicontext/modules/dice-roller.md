@@ -65,6 +65,23 @@ O painel do roller (`DiceRollerPanel`) monitora sua própria largura de contêin
 ### Aggressive 3D assets preloading and physics-free standby
 Para eliminar o atraso percebido ao abrir o painel de dados, a aplicação realiza um preload agressivo dos recursos 3D (`DiceBox`). Ao montar o `DiceRollerProvider`, uma instância oculta do motor é inicializada em background usando `requestIdleCallback`, forçando o download e cache de assets pesados (WebAssembly do motor físico, modelos 3D dos dados e texturas). Adicionalmente, a renderização de dados em "standby" (dados aguardando na mesa) foi otimizada para ser puramente matemática: a simulação física síncrona foi removida, eliminando o congelamento da thread principal (Main Thread). Os dados são posicionados em grade e recebem rotações aleatórias instantâneas, garantindo que o painel apareça de forma imediata e fluida para o usuário.
 
+### CLI TUI de gerenciamento de overrides (scripts/dice-override-cli.ts)
+Script de terminal interativo para criar e consultar dice overrides diretamente, sem precisar do browser. Conecta ao MongoDB via Mongoose (igual ao `search-cli.ts`) e usa `terminal-kit` para renderizar duas colunas permanentes:
+
+- **Coluna esquerda**: fluxo de criação de overrides por jogador
+  - `player-list`: lista de jogadores armazenados em memória durante a sessão. `Ctrl+N` adiciona um jogador (name + owlbear player ID).
+  - `method-list`: após selecionar um jogador, escolhe o método: `min`, `max`, `range`, `exact`, `clear` ou `list`.
+  - `param-dice`: seleção do dado (d4–d100), pré-selecionado em d20.
+  - `param-value`: input numérico do valor (dois campos sequenciais para `range`).
+  - `confirm-clear`: confirmação antes de remover overrides.
+  - `ESC` em qualquer tela volta à etapa anterior.
+
+- **Coluna direita**: todos os overrides ativos no banco (`DiceRollOverride.find({})`), agrupados por `targetId`, com nome legível quando o player está em memória. Auto-refresh a cada 5s e `Ctrl+R` manual. Ao persistir ou limpar um override, a lista é atualizada imediatamente sem aguardar o próximo ciclo.
+
+- O `DiceTarget` gerado é sempre `{ scope: 'owlbear', targetId: 'player:<id>' }`, compatível com a assinatura do `window.diceResult` no browser.
+
+- Executar com: `pnpm dice-override-cli`
+
 
 
 
