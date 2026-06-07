@@ -319,13 +319,13 @@ export function parseTokenLinkMetadata(metadata: Record<string, unknown> | null 
     }
 
     const parsed = value as Partial<OwlbearTokenLinkMetadata>
-    if (parsed.kind !== "player" || typeof parsed.refId !== "string" || typeof parsed.tokenId !== "string") {
+    if ((parsed.kind !== "player" && parsed.kind !== "npc") || typeof parsed.refId !== "string" || typeof parsed.tokenId !== "string") {
         return null
     }
 
     return {
         version: typeof parsed.version === "number" ? parsed.version : OWLBEAR_TOKEN_METADATA_VERSION,
-        kind: "player",
+        kind: parsed.kind,
         refId: parsed.refId,
         tokenId: parsed.tokenId,
         overlayIds: Array.isArray(parsed.overlayIds) ? parsed.overlayIds.filter((id): id is string => typeof id === "string") : [],
@@ -340,7 +340,7 @@ export function parseOverlayMetadata(metadata: Record<string, unknown> | null | 
     }
 
     const parsed = value as Partial<OwlbearOverlayMetadata>
-    if (typeof parsed.tokenId !== "string" || (parsed.role !== "backdrop" && parsed.role !== "label")) {
+    if (typeof parsed.tokenId !== "string" || (parsed.role !== "backdrop" && parsed.role !== "bar" && parsed.role !== "label")) {
         return null
     }
 
@@ -348,6 +348,8 @@ export function parseOverlayMetadata(metadata: Record<string, unknown> | null | 
         version: typeof parsed.version === "number" ? parsed.version : OWLBEAR_OVERLAY_METADATA_VERSION,
         tokenId: parsed.tokenId,
         role: parsed.role,
+        barWidth: typeof parsed.barWidth === "number" ? parsed.barWidth : undefined,
+        barColor: typeof parsed.barColor === "string" ? parsed.barColor : undefined,
     }
 }
 
@@ -431,4 +433,57 @@ export async function fetchOwlbearSheetById(sheetId: string, sessionToken: strin
     }
 
     return response.json()
+}
+
+/**
+ * Busca um NPC específico da sala pelo seu id.
+ * Internamente lista todos os NPCs da sala e filtra pelo id,
+ * pois a API atual não tem rota de detalhe individual.
+ */
+export async function fetchOwlbearRoomNpcById(
+    roomId: string,
+    npcId: string,
+    sessionToken: string,
+): Promise<{ hpCurrent: number; hpMax: number; name: string } | null> {
+    const response = await fetch(`/api/owlbear/rooms/${encodeURIComponent(roomId)}/npcs`, {
+        headers: { Authorization: `Bearer ${sessionToken}` },
+    })
+    if (!response.ok) return null
+    const data = await response.json()
+    const items: Array<{ id: string; hpCurrent: number; hpMax: number; source: { name: string } | null }> = data.items ?? []
+    const found = items.find((item) => item.id === npcId)
+    if (!found) return null
+    return {
+        hpCurrent: found.hpCurrent,
+        hpMax: found.hpMax,
+        name: found.source?.name ?? "NPC",
+    }
+}
+
+/**
+ * Vincula um token de cena a um NPC da sala (kind="npc").
+ * O fluxo futuro de sincronização de HP fará o mesmo que o de personagem,
+ * mas usando os dados de hpCurrent/hpMax do OwlbearRoomNpc em vez da CharacterSheet.
+ */
+export async function setTokenNpcLink(tokenId: string, roomNpcId: string, overlayIds: string[] = []) {
+    const sdk = await loadOwlbearSdk()
+    if (!sdk || !sdk.isAvailable || !sdk.isReady) {
+        throw new Error("Owlbear SDK indisponível para vincular token a NPC")
+    }
+
+    await sdk.scene.items.updateItems([tokenId], (draft) => {
+        const item = draft[0]
+        if (!item) return
+        item.metadata = {
+            ...item.metadata,
+            [OWLBEAR_TOKEN_METADATA_KEY]: {
+                version: OWLBEAR_TOKEN_METADATA_VERSION,
+                kind: "npc",
+                refId: roomNpcId,
+                tokenId,
+                overlayIds,
+                linkedAt: new Date().toISOString(),
+            } satisfies OwlbearTokenLinkMetadata,
+        }
+    })
 }

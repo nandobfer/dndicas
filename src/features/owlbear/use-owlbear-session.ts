@@ -16,8 +16,21 @@ function isSessionUsable(session: OwlbearSessionState) {
     return expiresAt > Date.now()
 }
 
+const SESSION_RETRY_DELAYS_MS = [250, 500, 1000, 2000] as const
+const MAX_SESSION_OPEN_ATTEMPTS = 8
+
+function getSessionRetryDelay(attempt: number) {
+    return SESSION_RETRY_DELAYS_MS[Math.min(attempt, SESSION_RETRY_DELAYS_MS.length - 1)]
+}
+
+function isRetryableSessionError(error: Error & { status?: number }, isSignedIn: boolean) {
+    if (error.status === 401 && isSignedIn) return true
+    if (!error.status) return true
+    return error.status >= 500
+}
+
 export function useOwlbearSession(runtime: OwlbearRuntimeState) {
-    const { isLoaded, isSignedIn } = useAuth()
+    const { isLoaded, isSignedIn, userId } = useAuth()
     const [session, setSession] = React.useState<OwlbearSessionState>({
         sessionStatus: "idle",
         sessionToken: null,
@@ -34,10 +47,20 @@ export function useOwlbearSession(runtime: OwlbearRuntimeState) {
         if (runtime.status !== "ready" || !runtime.roomId || !runtime.playerId || !runtime.role) return
         if (!isLoaded) return
 
+        if (isSignedIn && !userId) {
+            setSession({
+                sessionStatus: "idle",
+                sessionToken: null,
+                sessionExpiresAt: null,
+            })
+            return
+        }
+
         const roomId = runtime.roomId
         const owlbearPlayerId = runtime.playerId
         const owlbearRole = runtime.role
-        const runtimeIdentity = `${roomId}:${owlbearPlayerId}:${owlbearRole}`
+        const authIdentity = isSignedIn ? `auth:${userId}` : "anon"
+        const runtimeIdentity = `${roomId}:${owlbearPlayerId}:${owlbearRole}:${authIdentity}`
         const identityChanged = lastRuntimeIdentityRef.current !== null && lastRuntimeIdentityRef.current !== runtimeIdentity
 
         lastRuntimeIdentityRef.current = runtimeIdentity
@@ -66,6 +89,11 @@ export function useOwlbearSession(runtime: OwlbearRuntimeState) {
         }
 
         let cancelled = false
+        let retryTimer: ReturnType<typeof setTimeout> | undefined
+
+        const waitForRetry = (attempt: number) => new Promise<void>((resolve) => {
+            retryTimer = setTimeout(resolve, getSessionRetryDelay(attempt))
+        })
 
         setSession((current) => ({
             ...current,
@@ -73,45 +101,63 @@ export function useOwlbearSession(runtime: OwlbearRuntimeState) {
         }))
 
         void (async () => {
-            try {
-                const nextSession = await openOwlbearBackendSession({
-                    roomId,
-                    owlbearPlayerId,
-                    owlbearRole,
-                })
+            for (let attempt = 0; attempt < MAX_SESSION_OPEN_ATTEMPTS; attempt += 1) {
+                try {
+                    const nextSession = await openOwlbearBackendSession({
+                        roomId,
+                        owlbearPlayerId,
+                        owlbearRole,
+                    })
 
-                if (cancelled) return
-                setSession({
-                    sessionStatus: "ready",
-                    sessionToken: nextSession.token,
-                    sessionExpiresAt: nextSession.expiresAt,
-                })
-            } catch (error) {
-                const sessionError = error as Error & { status?: number }
-                if (cancelled) return
-
-                if (sessionError.status === 401) {
+                    if (cancelled) return
                     setSession({
-                        sessionStatus: "idle",
+                        sessionStatus: "ready",
+                        sessionToken: nextSession.token,
+                        sessionExpiresAt: nextSession.expiresAt,
+                    })
+                    return
+                } catch (error) {
+                    const sessionError = error as Error & { status?: number }
+                    if (cancelled) return
+
+                    const canRetry = attempt < MAX_SESSION_OPEN_ATTEMPTS - 1 && isRetryableSessionError(sessionError, Boolean(isSignedIn))
+                    if (canRetry) {
+                        console.warn("Retrying Owlbear backend session open", {
+                            roomId,
+                            owlbearPlayerId,
+                            owlbearRole,
+                            authIdentity,
+                            attempt: attempt + 1,
+                            status: sessionError.status,
+                        })
+                        await waitForRetry(attempt)
+                        if (cancelled) return
+                        continue
+                    }
+
+                    console.error("Failed to open Owlbear backend session", {
+                        roomId,
+                        owlbearPlayerId,
+                        owlbearRole,
+                        authIdentity,
+                        status: sessionError.status,
+                        error,
+                    })
+                    setSession({
+                        sessionStatus: "error",
                         sessionToken: null,
                         sessionExpiresAt: null,
                     })
                     return
                 }
-
-                console.error("Failed to open Owlbear backend session", error)
-                setSession({
-                    sessionStatus: "error",
-                    sessionToken: null,
-                    sessionExpiresAt: null,
-                })
             }
         })()
 
         return () => {
             cancelled = true
+            if (retryTimer) clearTimeout(retryTimer)
         }
-    }, [isLoaded, isSignedIn, runtime.playerId, runtime.role, runtime.roomId, runtime.status])
+    }, [isLoaded, isSignedIn, runtime.playerId, runtime.role, runtime.roomId, runtime.status, userId])
 
     return {
         session,

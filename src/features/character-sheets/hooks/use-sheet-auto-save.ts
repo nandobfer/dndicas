@@ -8,6 +8,7 @@ import type { CharacterSheet, PatchSheetBody } from "../types/character-sheet.ty
 interface UseSheetAutoSaveOptions {
     onSlugChange?: (newSlug: string) => void
     disabled?: boolean
+    onFieldPatch?: (field: keyof PatchSheetBody, value: unknown, updated?: CharacterSheet) => void
 }
 
 
@@ -47,12 +48,14 @@ export function useSheetAutoSave(sheet: CharacterSheet, options?: UseSheetAutoSa
 
             // Update local form state immediately
             setValue(field, value as PatchSheetBody[typeof field], { shouldDirty: true, shouldTouch: true })
+            options?.onFieldPatch?.(field, value)
 
             // Only patch if we have an ID
             if (sheet?._id) {
                 const body: PatchSheetBody = { [field]: value as PatchSheetBody[typeof field] }
                 patch(body, {
                     onSuccess: (updated) => {
+                        options?.onFieldPatch?.(field, value, updated)
                         if (field === "name" && updated?.slug && updated.slug !== sheet.slug) {
                             options?.onSlugChange?.(updated.slug)
                         }
@@ -77,11 +80,15 @@ export function useSheetAutoSave(sheet: CharacterSheet, options?: UseSheetAutoSa
 
             for (const [field, value] of entries) {
                 setValue(field, value, { shouldDirty: true, shouldTouch: true })
+                options?.onFieldPatch?.(field, value)
             }
 
             if (sheet?._id) {
                 patch(values, {
                     onSuccess: (updated) => {
+                        for (const [field, value] of entries) {
+                            options?.onFieldPatch?.(field, value, updated)
+                        }
                         if (values.name && updated?.slug && updated.slug !== sheet.slug) {
                             options?.onSlugChange?.(updated.slug)
                         }
