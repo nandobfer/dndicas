@@ -2,7 +2,7 @@
 
 import * as React from "react"
 import { motion } from "framer-motion"
-import { MoreHorizontal, Pencil, Shield, Skull, Sparkles, Trash2 } from "lucide-react"
+import { Copy, MoreHorizontal, Pencil, Shield, Skull, Sparkles, Trash2 } from "lucide-react"
 import { Chip } from "@/components/ui/chip"
 import { GlassImage } from "@/components/ui/glass-image"
 import { GlassDropdownMenu, GlassDropdownMenuContent, GlassDropdownMenuItem, GlassDropdownMenuTrigger } from "@/components/ui/glass-dropdown-menu"
@@ -21,6 +21,7 @@ export function NpcsTable({
     onLoadMore = () => {},
     isFetchingNextPage = false,
     onEdit,
+    onCopyToNpc,
     onGenerateAI,
     onDelete,
     isAdmin,
@@ -34,6 +35,7 @@ export function NpcsTable({
     onLoadMore?: () => void
     isFetchingNextPage?: boolean
     onEdit?: (monster: Monster) => void
+    onCopyToNpc?: (monster: Monster) => void
     onGenerateAI?: (monster: Monster) => void
     onDelete?: (monster: Monster) => void
     isAdmin?: boolean
@@ -139,7 +141,7 @@ export function NpcsTable({
                                     <td className="px-4 py-3 text-xs text-white/40">{monster.speed || "—"}</td>
                                     <td className="px-4 py-3 text-right">
                                         <div className="flex items-center justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                                            {isAdmin && (
+                                            {(onCopyToNpc || (isAdmin && (onEdit || onGenerateAI || onDelete))) && (
                                                 <GlassDropdownMenu>
                                                     <GlassDropdownMenuTrigger asChild>
                                                         <motion.button whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.9 }} className="p-1.5 rounded-lg text-white/40 hover:text-white hover:bg-white/10 transition-colors">
@@ -147,8 +149,9 @@ export function NpcsTable({
                                                         </motion.button>
                                                     </GlassDropdownMenuTrigger>
                                                     <GlassDropdownMenuContent align="end">
-                                                        <GlassDropdownMenuItem onClick={() => onEdit?.(monster)}><Pencil className="h-4 w-4 mr-2" />Editar</GlassDropdownMenuItem>
-                                                        {onGenerateAI && (
+                                                        {onCopyToNpc && <GlassDropdownMenuItem onClick={() => onCopyToNpc(monster)}><Copy className="h-4 w-4 mr-2" />Copiar para NPC</GlassDropdownMenuItem>}
+                                                        {isAdmin && onEdit && <GlassDropdownMenuItem onClick={() => onEdit(monster)}><Pencil className="h-4 w-4 mr-2" />Editar</GlassDropdownMenuItem>}
+                                                        {isAdmin && onGenerateAI && (
                                                             <GlassDropdownMenuItem onClick={() => onGenerateAI(monster)}>
                                                                 <Sparkles className="h-4 w-4 mr-2 animate-pulse text-purple-300" />
                                                                 <span className="bg-gradient-to-r from-blue-300 via-purple-300 to-blue-300 bg-clip-text text-transparent">
@@ -156,7 +159,7 @@ export function NpcsTable({
                                                                 </span>
                                                             </GlassDropdownMenuItem>
                                                         )}
-                                                        <GlassDropdownMenuItem onClick={() => onDelete?.(monster)} className="text-red-400 focus:text-red-400"><Trash2 className="h-4 w-4 mr-2" />Excluir</GlassDropdownMenuItem>
+                                                        {isAdmin && onDelete && <GlassDropdownMenuItem onClick={() => onDelete(monster)} className="text-red-400 focus:text-red-400"><Trash2 className="h-4 w-4 mr-2" />Excluir</GlassDropdownMenuItem>}
                                                     </GlassDropdownMenuContent>
                                                 </GlassDropdownMenu>
                                             )}

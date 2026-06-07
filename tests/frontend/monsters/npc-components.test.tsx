@@ -1,4 +1,4 @@
-import { screen } from '@testing-library/react'
+import { fireEvent, screen } from '@testing-library/react'
 import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import * as React from 'react'
 import type { ReactNode } from 'react'
@@ -76,8 +76,8 @@ const baseNpc: Monster = {
     legendaryActions: [],
     lairActions: [],
     regionalEffects: [],
-    createdAt: new Date(),
-    updatedAt: new Date(),
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
 }
 
 const intersectionObservers: Array<{ observe: ReturnType<typeof vi.fn>; disconnect: ReturnType<typeof vi.fn>; unobserve: ReturnType<typeof vi.fn> }> = []
@@ -147,6 +147,19 @@ describe('NpcsTable', () => {
         render(<NpcsTable items={[baseNpc]} entityType="NPC" entityLabel="NPC" isAdmin onEdit={onEdit} onDelete={onDelete} />)
         expect(screen.getByText('Editar')).toBeInTheDocument()
         expect(screen.getByText('Excluir')).toBeInTheDocument()
+    })
+
+    it('shows copy to NPC before edit and calls the copy action', () => {
+        const onCopyToNpc = vi.fn()
+        const onEdit = vi.fn()
+        render(<NpcsTable items={[baseNpc]} entityType="NPC" entityLabel="NPC" isAdmin onCopyToNpc={onCopyToNpc} onEdit={onEdit} />)
+
+        const copyItem = screen.getByText('Copiar para NPC')
+        const editItem = screen.getByText('Editar')
+
+        expect(copyItem.compareDocumentPosition(editItem) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+        fireEvent.click(copyItem)
+        expect(onCopyToNpc).toHaveBeenCalledWith(baseNpc)
     })
 
     it('hides edit/delete dropdown when isAdmin is false', () => {

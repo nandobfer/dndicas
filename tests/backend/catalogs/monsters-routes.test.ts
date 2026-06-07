@@ -85,7 +85,8 @@ describe('monsters backend routes', () => {
             },
         }))
 
-        const sourceMatchers = (find.mock.calls[0]?.[0] as { source: { $in: RegExp[] } }).source.$in
+        const findCalls = find.mock.calls as unknown as Array<[{ source: { $in: RegExp[] } }]>
+        const sourceMatchers = findCalls[0][0].source.$in
         expect(sourceMatchers.some((regex) => regex.test('LDM pág. 98'))).toBe(true)
     })
 
@@ -238,5 +239,145 @@ describe('monsters backend routes', () => {
         expect(find).toHaveBeenCalledWith({ userId: 'user-1' })
         expect(sort).toHaveBeenCalledWith({ name: 1 })
         expect(payload.items.map((npc) => npc.name)).toEqual(['Merrow', 'Extorsionista Merrow'])
+    })
+
+    it('POST /api/npcs/copy rejects anonymous users', async () => {
+        vi.doMock('@clerk/nextjs/server', () => ({ auth: vi.fn().mockResolvedValue({ userId: null }) }))
+        vi.doMock('@/core/database/db', () => ({ default: vi.fn().mockResolvedValue(undefined) }))
+        vi.doMock('@/features/monsters/models/monster', () => ({ MonsterModel: { findById: vi.fn() } }))
+        vi.doMock('@/features/monsters/models/user-npc', () => ({ UserNpcModel: { findOne: vi.fn(), create: vi.fn() } }))
+
+        const mod = await importFresh<typeof import('@/app/api/npcs/copy/route')>('@/app/api/npcs/copy/route')
+        const response = await mod.POST(makeJsonRequest('http://localhost/api/npcs/copy', {
+            method: 'POST',
+            body: JSON.stringify({ sourceType: 'monster', sourceId: 'monster-1' }),
+        }) as any)
+
+        expect(response.status).toBe(401)
+    })
+
+    it('POST /api/npcs/copy copies a monster into the authenticated user NPCs', async () => {
+        const sourceMonster = {
+            _id: 'monster-1',
+            toObject: () => ({
+                _id: 'monster-1',
+                name: 'Lobo',
+                source: 'LDM',
+                description: 'Descrição válida para monstro.',
+                type: 'beast',
+                size: 'M',
+                alignment: 'unaligned',
+                armorClass: '13',
+                hitPointsFormula: '2d8 + 2',
+                attributes: { strength: 12, dexterity: 15, constitution: 12, intelligence: 3, wisdom: 12, charisma: 6 },
+                challengeRating: '1/4',
+            }),
+        }
+        const createdNpc = {
+            _id: 'npc-1',
+            toObject: () => ({ _id: 'npc-1', name: 'Lobo (Cópia)', userId: 'user-1' }),
+        }
+        const findById = vi.fn().mockResolvedValue(sourceMonster)
+        const findOne = vi.fn().mockResolvedValue(null)
+        const create = vi.fn().mockResolvedValue(createdNpc)
+
+        vi.doMock('@clerk/nextjs/server', () => ({ auth: vi.fn().mockResolvedValue({ userId: 'user-1' }) }))
+        vi.doMock('@/core/database/db', () => ({ default: vi.fn().mockResolvedValue(undefined) }))
+        vi.doMock('@/features/monsters/models/monster', () => ({ MonsterModel: { findById } }))
+        vi.doMock('@/features/monsters/models/user-npc', () => ({ UserNpcModel: { findOne, create } }))
+
+        const mod = await importFresh<typeof import('@/app/api/npcs/copy/route')>('@/app/api/npcs/copy/route')
+        const response = await mod.POST(makeJsonRequest('http://localhost/api/npcs/copy', {
+            method: 'POST',
+            body: JSON.stringify({ sourceType: 'monster', sourceId: 'monster-1' }),
+        }) as any)
+        const payload = await readJson<{ name: string }>(response)
+
+        expect(response.status).toBe(201)
+        expect(findById).toHaveBeenCalledWith('monster-1')
+        expect(create).toHaveBeenCalledWith(expect.objectContaining({ userId: 'user-1', name: 'Lobo (Cópia)', source: 'LDM', experience: 50 }))
+        expect(payload.name).toBe('Lobo (Cópia)')
+    })
+
+    it('POST /api/npcs/copy copies only NPCs owned by the authenticated user', async () => {
+        const sourceNpc = {
+            _id: 'npc-1',
+            toObject: () => ({
+                _id: 'npc-1',
+                name: 'Mercador',
+                userId: 'user-1',
+                source: 'Homebrew',
+                description: 'Descrição válida para NPC.',
+                type: 'humanoid',
+                size: 'M',
+                alignment: 'N',
+                armorClass: '12',
+                hitPointsFormula: '2d8',
+                attributes: { strength: 10, dexterity: 10, constitution: 10, intelligence: 12, wisdom: 12, charisma: 14 },
+                challengeRating: '0',
+            }),
+        }
+        const createdNpc = {
+            _id: 'npc-2',
+            toObject: () => ({ _id: 'npc-2', name: 'Mercador (Cópia)', userId: 'user-1' }),
+        }
+        const findOne = vi.fn()
+            .mockResolvedValueOnce(sourceNpc)
+            .mockResolvedValueOnce(null)
+        const create = vi.fn().mockResolvedValue(createdNpc)
+
+        vi.doMock('@clerk/nextjs/server', () => ({ auth: vi.fn().mockResolvedValue({ userId: 'user-1' }) }))
+        vi.doMock('@/core/database/db', () => ({ default: vi.fn().mockResolvedValue(undefined) }))
+        vi.doMock('@/features/monsters/models/monster', () => ({ MonsterModel: { findById: vi.fn() } }))
+        vi.doMock('@/features/monsters/models/user-npc', () => ({ UserNpcModel: { findOne, create } }))
+
+        const mod = await importFresh<typeof import('@/app/api/npcs/copy/route')>('@/app/api/npcs/copy/route')
+        const response = await mod.POST(makeJsonRequest('http://localhost/api/npcs/copy', {
+            method: 'POST',
+            body: JSON.stringify({ sourceType: 'npc', sourceId: 'npc-1' }),
+        }) as any)
+
+        expect(response.status).toBe(201)
+        expect(findOne).toHaveBeenNthCalledWith(1, { _id: 'npc-1', userId: 'user-1' })
+        expect(create).toHaveBeenCalledWith(expect.objectContaining({ userId: 'user-1', name: 'Mercador (Cópia)' }))
+    })
+
+    it('POST /api/npcs/copy generates a unique copy name on conflict', async () => {
+        const sourceMonster = {
+            _id: 'monster-1',
+            toObject: () => ({
+                _id: 'monster-1',
+                name: 'Goblin',
+                source: 'LDM',
+                description: 'Descrição válida para monstro.',
+                type: 'humanoid',
+                size: 'S',
+                alignment: 'NE',
+                armorClass: '15',
+                hitPointsFormula: '2d6',
+                attributes: { strength: 8, dexterity: 14, constitution: 10, intelligence: 10, wisdom: 8, charisma: 8 },
+                challengeRating: '1/4',
+            }),
+        }
+        const findOne = vi.fn()
+            .mockResolvedValueOnce({ _id: 'npc-copy-1' })
+            .mockResolvedValueOnce(null)
+        const create = vi.fn().mockResolvedValue({ _id: 'npc-1', toObject: () => ({ _id: 'npc-1', name: 'Goblin (Cópia 2)' }) })
+
+        vi.doMock('@clerk/nextjs/server', () => ({ auth: vi.fn().mockResolvedValue({ userId: 'user-1' }) }))
+        vi.doMock('@/core/database/db', () => ({ default: vi.fn().mockResolvedValue(undefined) }))
+        vi.doMock('@/features/monsters/models/monster', () => ({ MonsterModel: { findById: vi.fn().mockResolvedValue(sourceMonster) } }))
+        vi.doMock('@/features/monsters/models/user-npc', () => ({ UserNpcModel: { findOne, create } }))
+
+        const mod = await importFresh<typeof import('@/app/api/npcs/copy/route')>('@/app/api/npcs/copy/route')
+        const response = await mod.POST(makeJsonRequest('http://localhost/api/npcs/copy', {
+            method: 'POST',
+            body: JSON.stringify({ sourceType: 'monster', sourceId: 'monster-1' }),
+        }) as any)
+
+        expect(response.status).toBe(201)
+        expect(findOne).toHaveBeenNthCalledWith(1, { userId: 'user-1', name: 'Goblin (Cópia)' })
+        expect(findOne).toHaveBeenNthCalledWith(2, { userId: 'user-1', name: 'Goblin (Cópia 2)' })
+        expect(create).toHaveBeenCalledWith(expect.objectContaining({ name: 'Goblin (Cópia 2)' }))
     })
 })

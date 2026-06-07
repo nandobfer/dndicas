@@ -2,7 +2,7 @@
 
 import { useInfiniteQuery, useMutation, useQueryClient } from "@tanstack/react-query"
 import type { CreateMonsterInput, MonsterFilterParams, UpdateMonsterInput } from "../types/monsters.types"
-import { createNpc, deleteNpc, fetchNpcs, updateNpc } from "./npcs-api"
+import { copyToNpc, createNpc, deleteNpc, fetchNpcs, updateNpc } from "./npcs-api"
 
 export const npcsKeys = {
     all: ["npcs"] as const,
@@ -29,6 +29,16 @@ export function useCreateNpc() {
     const queryClient = useQueryClient()
     return useMutation({
         mutationFn: (data: CreateMonsterInput) => createNpc(data),
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: npcsKeys.all })
+        },
+    })
+}
+
+export function useCopyToNpc() {
+    const queryClient = useQueryClient()
+    return useMutation({
+        mutationFn: (data: { sourceType: "monster" | "npc"; sourceId: string }) => copyToNpc(data),
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: npcsKeys.all })
         },

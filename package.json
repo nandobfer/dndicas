@@ -3,7 +3,7 @@
     "version": "0.1.0",
     "private": true,
     "scripts": {
-        "dev": "next dev",
+        "dev": "next dev --turbo",
         "build": "next build",
         "start": "next start",
         "lint": "eslint",
@@ -13,7 +13,8 @@
         "seed": "tsx scripts/seed-data/index.ts",
         "seed:test": "tsx scripts/seed-data/index.ts --test",
         "search": "tsx scripts/search-cli.ts",
-        "search-cli": "tsx scripts/search-cli.ts"
+        "search-cli": "tsx scripts/search-cli.ts",
+        "dice-override-cli": "tsx scripts/dice-override-cli.ts"
     },
     "dependencies": {
         "@3d-dice/dice-box-threejs": "^0.0.12",
