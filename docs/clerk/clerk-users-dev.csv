@@ -1,0 +1,17 @@
+id,first_name,last_name,username,primary_email_address,primary_phone_number,verified_email_addresses,unverified_email_addresses,verified_phone_numbers,unverified_phone_numbers,totp_secret,password_digest,password_hasher,created_at
+user_39qKqwvMZF0oDulqJQblpQDs2E7,Fernando,Burgos Fernandesa,nandoburgos,nandobfer@gmail.com,,nandobfer@gmail.com,,,,,$2a$10$eigbRMxmDCbeHs5oqbyZtuLgoUQenhWKCuwJACE9TenVb5SCqYBxu,bcrypt,2026-02-18T12:39:14Z
+user_39wcmtJoIJnEXejjrZtXdjZnzjf,Outro,Cara,abdendriel,nando.tibiabr@gmail.com,,nando.tibiabr@gmail.com,,,,,,,2026-02-20T18:05:35Z
+user_39wo7fUvrYzC0CY0bL7kVp545jD,João,Cleber,joao_cleber,joao@cleber.com,,joao@cleber.com,,,,,,,2026-02-20T19:38:47Z
+user_3ABgYdj7RYnrHKZI7CNQk31xaAc,Matheus,Oliveira,druida,theuwow@gmail.com,,theuwow@gmail.com,,,,,$2a$10$7TmyZSTEOzx9YdlVtrQzmeYAu5QhZGJSyRxyKGnQmsZOFx.zT5Dj2,bcrypt,2026-02-26T02:03:46Z
+user_3ADPsjwFJHvVPOESa3LTTPc4JdV,Alfredo,Petri,alfredopetri,alfredoaugustopetri@gmail.com,,alfredoaugustopetri@gmail.com,,,,,,,2026-02-26T16:46:16Z
+user_3AJeblry70DRtWQM9FLoAUltZLl,Meezza,Junior,meezza,cheester97@gmail.com,,cheester97@gmail.com,,,,,,,2026-02-28T21:46:13Z
+user_3ASKrav02k8Kukdt7UyfSdcfqaw,Rebeca,Silva,pernascurtas,acebercute@gmail.com,,acebercute@gmail.com,,,,,,,2026-03-03T23:32:10Z
+user_3BUVW5fbsopjHFQdZYeMHBM3yDI,Anderson,Pereira,andersonloko08,andersonvpqa@gmail.com,,andersonvpqa@gmail.com,,,,,,,2026-03-26T16:47:43Z
+user_3BiQoOCuvR9N6JzH4RUbXnP1Zxu,indira,Lima,tanbohe,indiralima@duck.com,,indiralima@duck.com,,,,,,,2026-03-31T15:06:24Z
+user_3C6PoTM9yXgrOZnSUzyb5w3y2np,Laherce,Gomes,laherce,laherce@gmail.com,,laherce@gmail.com,,,,,,,2026-04-09T02:53:40Z
+user_3CBXimY4N3XvdljuThj5VmhFUCv,Pedro,Cardoso,pedrocardoso,sm.cardosopedro@gmail.com,,sm.cardosopedro@gmail.com,,,,,,,2026-04-10T22:27:46Z
+user_3CBpWjxAWUG004LuUvKAv41ua0m,Ildo,Petri,fuleirinho,ildojuniorjogador@gmail.com,,,ildojuniorjogador@gmail.com,,,,$2a$10$ifnFnGHNtHg0hvV82Z2sXecEJCx9AjRCEHizz0GlsGk2O9f674jtW,bcrypt,2026-04-11T00:54:10Z
+user_3DuwZEp5pnb8sbt4Iyp4S540pMz,Bruno,Farias,wildlupus,brunoroseo@gmail.com,,brunoroseo@gmail.com,,,,,,,2026-05-18T23:01:55Z
+user_3ET6bJGDsKjsYTuzOTy1wuVLQcI,Daniel,Burgos,burgos02310,danibfer231010@gmail.com,,danibfer231010@gmail.com,,,,,,,2026-05-31T01:18:01Z
+user_3FhBko8X5iycVwYqEbvXBSV9Bvt,Okgawa,The king cards,yuka,okgawatheking@gmail.com,,okgawatheking@gmail.com,,,,,,,2026-06-26T23:46:05Z
+user_3G3WZBoOWl26AnszTlsZ1HI8Ggf,Nilsander,Henrique,nlsndr,nilsander@hotmail.com,,nilsander@hotmail.com,,,,,,,2026-07-04T21:33:05Z
