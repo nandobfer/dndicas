@@ -6,11 +6,16 @@ import type { OwlbearRoomNpc } from "@/features/owlbear/room-npcs-api"
 import type { Monster } from "@/features/monsters/types/monsters.types"
 
 const useRoomNpcsMock = vi.hoisted(() => vi.fn())
+const useRoomInitiativeMock = vi.hoisted(() => vi.fn())
 const useInfiniteNpcsMock = vi.hoisted(() => vi.fn())
 const useInfiniteMonstersMock = vi.hoisted(() => vi.fn())
 
 vi.mock("@/features/owlbear/use-room-npcs", () => ({
     useRoomNpcs: (...args: unknown[]) => useRoomNpcsMock(...args),
+}))
+
+vi.mock("@/features/owlbear/use-room-initiative", () => ({
+    useRoomInitiative: (...args: unknown[]) => useRoomInitiativeMock(...args),
 }))
 
 vi.mock("@/features/monsters/api/npcs-queries", () => ({
@@ -19,6 +24,11 @@ vi.mock("@/features/monsters/api/npcs-queries", () => ({
 
 vi.mock("@/features/monsters/api/monsters-queries", () => ({
     useInfiniteMonsters: (...args: unknown[]) => useInfiniteMonstersMock(...args),
+}))
+
+
+vi.mock("@/components/ui/infinite-scroll-sentinel", () => ({
+    InfiniteScrollSentinel: () => <div data-testid="infinite-scroll-sentinel" />
 }))
 
 vi.mock("@/components/ui/search-input", () => ({
@@ -47,6 +57,10 @@ vi.mock("@/components/ui/glass-dropdown-menu", () => ({
 
 vi.mock("@/components/ui/glass-image", () => ({
     GlassImage: ({ src, alt }: { src: string; alt: string }) => <img src={src} alt={alt} />,
+}))
+
+vi.mock("@/components/ui/glass-tooltip", () => ({
+    SimpleGlassTooltip: ({ children }: { children: React.ReactNode }) => <>{children}</>,
 }))
 
 vi.mock("@/features/monsters/components/npc-preview", () => ({
@@ -145,7 +159,7 @@ function roomNpc(overrides: Partial<OwlbearRoomNpc> = {}): OwlbearRoomNpc {
     }
 }
 
-function renderTab(props: { isAuthenticated?: boolean; items?: OwlbearRoomNpc[]; updateNpc?: ReturnType<typeof vi.fn>; removeNpc?: ReturnType<typeof vi.fn> } = {}) {
+function renderTab(props: { isAuthenticated?: boolean; items?: OwlbearRoomNpc[]; updateNpc?: ReturnType<typeof vi.fn>; removeNpc?: ReturnType<typeof vi.fn>; addNpcInitiative?: ReturnType<typeof vi.fn> } = {}) {
     const updateNpc = props.updateNpc ?? vi.fn().mockResolvedValue(null)
     const removeNpc = props.removeNpc ?? vi.fn().mockResolvedValue(undefined)
     useRoomNpcsMock.mockReturnValue({
@@ -155,6 +169,14 @@ function renderTab(props: { isAuthenticated?: boolean; items?: OwlbearRoomNpc[];
         linkNpc: vi.fn(),
         updateNpc,
         removeNpc,
+    })
+    useRoomInitiativeMock.mockReturnValue({
+        initiative: { npcs: {}, players: {} },
+        isLoading: false,
+        errorMessage: null,
+        addNpcInitiative: props.addNpcInitiative ?? vi.fn().mockResolvedValue(undefined),
+        removeNpcInitiative: vi.fn().mockResolvedValue(undefined),
+        setPlayerInitiative: vi.fn().mockResolvedValue(undefined),
     })
 
     render(
@@ -208,10 +230,27 @@ describe("OwlbearGmNpcsTab", () => {
     it("renders the calculated HP bar color", () => {
         renderTab({ items: [roomNpc({ hpCurrent: 10, hpMax: 20 })] })
 
+        expect(screen.getByTestId("npc-hp-bar-track-room-npc-1")).toHaveClass("w-56", "shrink-0")
         expect(screen.getByTestId("npc-hp-bar-room-npc-1")).toHaveStyle({
             width: "50%",
             backgroundColor: "rgb(234, 179, 8)",
         })
+    })
+
+    it("adds an NPC to initiative with a d20 roll plus dexterity modifier", async () => {
+        const addNpcInitiative = vi.fn().mockResolvedValue(undefined)
+        const randomSpy = vi.spyOn(Math, "random").mockReturnValue(0.5)
+        renderTab({ items: [roomNpc()], addNpcInitiative })
+
+        fireEvent.click(screen.getByLabelText("Adicionar Lobo a iniciativa"))
+
+        await waitFor(() => expect(addNpcInitiative).toHaveBeenCalledWith({
+            npcId: "room-npc-1",
+            roll: 11,
+            dexModifier: 2,
+            initiative: 13,
+        }))
+        randomSpy.mockRestore()
     })
 
     it("filters linked NPCs with local fuzzy search", () => {
@@ -247,5 +286,74 @@ describe("OwlbearGmNpcsTab", () => {
         fireEvent.click(screen.getByRole("button", { name: "Remover" }))
 
         await waitFor(() => expect(removeNpc).toHaveBeenCalledWith("room-npc-1"))
+    })
+
+    it("renders duplicate numbers for multiple NPCs with the same name", () => {
+        renderTab({
+            items: [
+                roomNpc({ id: "npc-1", createdAt: "2026-01-01T10:00:00.000Z" }),
+                roomNpc({ id: "npc-2", createdAt: "2026-01-01T11:00:00.000Z" }),
+                roomNpc({ id: "npc-3", createdAt: "2026-01-01T12:00:00.000Z", source: bandit }),
+            ]
+        })
+
+        // Wolf 1
+        expect(screen.getByText("1")).toBeInTheDocument()
+        // Wolf 2
+        expect(screen.getByText("2")).toBeInTheDocument()
+        // Bandit should not have a duplicate badge
+        expect(screen.queryByText("3")).not.toBeInTheDocument()
+    })
+
+    it("opens the manual HP modal and allows setting manual HP", async () => {
+        const linkNpc = vi.fn().mockResolvedValue(roomNpc())
+        useRoomNpcsMock.mockReturnValue({
+            items: [],
+            isLoading: false,
+            errorMessage: null,
+            linkNpc,
+            updateNpc: vi.fn(),
+            removeNpc: vi.fn(),
+        })
+
+        const staticHpMonster = {
+            ...monster,
+            _id: "static-1",
+            id: "static-1",
+            name: "Golem",
+            hitPointsFormula: "100",
+        }
+
+        useInfiniteMonstersMock.mockReturnValue({
+            data: { pages: [{ items: [staticHpMonster] }] },
+            isLoading: false,
+            isFetching: false,
+            hasNextPage: false,
+            isFetchingNextPage: false,
+            fetchNextPage: vi.fn(),
+        })
+
+        renderTab()
+
+        fireEvent.click(screen.getByRole("button", { name: "Adicionar NPC" }))
+        fireEvent.click(screen.getByText("Catálogo de Monstros"))
+
+        const golemBtn = screen.getByRole("button", { name: /Golem/ })
+        fireEvent.click(golemBtn)
+
+        expect(screen.getByText("Definir PV inicial")).toBeInTheDocument()
+        expect(screen.getByText("Valor fixo")).toBeInTheDocument()
+        expect(screen.getByText("100 PV")).toBeInTheDocument()
+        expect(screen.getByText("Manual")).toBeInTheDocument()
+
+        await screen.findByDisplayValue("100")
+        
+        await screen.findByDisplayValue("100")
+        
+        
+        const manualInput = screen.getByPlaceholderText("PV")
+        expect(manualInput).toBeInTheDocument()
+        
+        expect(screen.getByRole("button", { name: "Definir" })).toBeInTheDocument()
     })
 })

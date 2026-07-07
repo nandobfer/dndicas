@@ -1,4 +1,3 @@
-import * as React from "react"
 import { act, renderHook, waitFor } from "@testing-library/react"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { useOwlbearSession } from "@/features/owlbear/use-owlbear-session"
@@ -141,5 +140,20 @@ describe("useOwlbearSession", () => {
 
         expect(result.current.session.sessionStatus).toBe("error")
         expect(openOwlbearBackendSessionMock).toHaveBeenCalledTimes(8)
+    })
+
+    it("refreshes the Owlbear backend session before it expires", async () => {
+        const expiringSoon = new Date(Date.now() + 30_000).toISOString()
+        openOwlbearBackendSessionMock
+            .mockReset()
+            .mockResolvedValueOnce({ token: "token-expiring", expiresAt: expiringSoon })
+            .mockResolvedValueOnce({ token: "token-refreshed", expiresAt: "2099-01-01T00:00:00.000Z" })
+        authState.isSignedIn = true
+        authState.userId = "user-1"
+
+        const { result } = renderHook(() => useOwlbearSession(playerRuntime))
+
+        await waitFor(() => expect(openOwlbearBackendSessionMock).toHaveBeenCalledTimes(2))
+        await waitFor(() => expect(result.current.session.sessionToken).toBe("token-refreshed"))
     })
 })

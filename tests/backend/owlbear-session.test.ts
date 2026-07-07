@@ -1,8 +1,12 @@
-import { describe, expect, it, vi } from "vitest"
+import { afterEach, describe, expect, it, vi } from "vitest"
 import { makeRequest, readJson } from "./helpers/http"
 import { importFresh } from "./helpers/module"
 
 describe("owlbear session backend", () => {
+    afterEach(() => {
+        vi.useRealTimers()
+    })
+
     it("createOwlbearSession stores only the token hash and revokes previous active sessions in the same context", async () => {
         const updateMany = vi.fn().mockResolvedValue({ acknowledged: true })
         const create = vi.fn().mockResolvedValue({
@@ -57,6 +61,126 @@ describe("owlbear session backend", () => {
         expect(create.mock.calls[0][0]).not.toHaveProperty("token", "plain-token")
         expect(result.token).toBe("plain-token")
         expect(result.session.userId).toBe("user-1")
+    })
+
+    it("createOwlbearSession uses a long default TTL for authenticated users", async () => {
+        vi.useFakeTimers()
+        vi.setSystemTime(new Date("2026-01-01T00:00:00.000Z"))
+
+        const updateMany = vi.fn().mockResolvedValue({ acknowledged: true })
+        const create = vi.fn(async (input: Record<string, unknown>) => ({
+            _id: "session-1",
+            ...input,
+            revokedAt: null,
+        }))
+
+        vi.doMock("@/core/database/db", () => ({
+            default: vi.fn().mockResolvedValue(undefined),
+        }))
+        vi.doMock("node:crypto", () => ({
+            default: {
+                randomBytes: vi.fn(() => ({
+                    toString: vi.fn(() => "plain-token"),
+                })),
+                createHash: vi.fn(() => ({
+                    update: vi.fn().mockReturnThis(),
+                    digest: vi.fn(() => "hashed-token"),
+                })),
+            },
+        }))
+        vi.doMock("@/features/owlbear/models/owlbear-session", () => ({
+            OwlbearSession: {
+                updateMany,
+                create,
+            },
+        }))
+
+        const mod = await importFresh<typeof import("@/features/owlbear/server/session-service")>("@/features/owlbear/server/session-service")
+        await mod.createOwlbearSession({
+            userId: "user-1",
+            roomId: "room-1",
+            owlbearPlayerId: "player-1",
+            owlbearRole: "PLAYER",
+        })
+
+        const createdSession = create.mock.calls[0][0] as { expiresAt: Date }
+        expect(createdSession.expiresAt.toISOString()).toBe("2026-04-01T00:00:00.000Z")
+    })
+
+    it("createOwlbearSession uses a shorter default TTL for anonymous GMs", async () => {
+        vi.useFakeTimers()
+        vi.setSystemTime(new Date("2026-01-01T00:00:00.000Z"))
+
+        const updateMany = vi.fn().mockResolvedValue({ acknowledged: true })
+        const create = vi.fn(async (input: Record<string, unknown>) => ({
+            _id: "session-1",
+            ...input,
+            revokedAt: null,
+        }))
+
+        vi.doMock("@/core/database/db", () => ({
+            default: vi.fn().mockResolvedValue(undefined),
+        }))
+        vi.doMock("node:crypto", () => ({
+            default: {
+                randomBytes: vi.fn(() => ({
+                    toString: vi.fn(() => "plain-token"),
+                })),
+                createHash: vi.fn(() => ({
+                    update: vi.fn().mockReturnThis(),
+                    digest: vi.fn(() => "hashed-token"),
+                })),
+            },
+        }))
+        vi.doMock("@/features/owlbear/models/owlbear-session", () => ({
+            OwlbearSession: {
+                updateMany,
+                create,
+            },
+        }))
+
+        const mod = await importFresh<typeof import("@/features/owlbear/server/session-service")>("@/features/owlbear/server/session-service")
+        await mod.createOwlbearSession({
+            userId: "owlbear-gm:room-1:gm-player-1",
+            roomId: "room-1",
+            owlbearPlayerId: "gm-player-1",
+            owlbearRole: "GM",
+        })
+
+        const createdSession = create.mock.calls[0][0] as { expiresAt: Date }
+        expect(createdSession.expiresAt.toISOString()).toBe("2026-01-02T00:00:00.000Z")
+    })
+
+    it("touchOwlbearSession extends the session expiration window", async () => {
+        vi.useFakeTimers()
+        vi.setSystemTime(new Date("2026-01-01T00:00:00.000Z"))
+
+        const updateOne = vi.fn().mockResolvedValue({ acknowledged: true })
+        const lean = vi.fn().mockResolvedValue({ userId: "user-1" })
+        const findOne = vi.fn(() => ({ lean }))
+
+        vi.doMock("@/core/database/db", () => ({
+            default: vi.fn().mockResolvedValue(undefined),
+        }))
+        vi.doMock("@/features/owlbear/models/owlbear-session", () => ({
+            OwlbearSession: {
+                findOne,
+                updateOne,
+            },
+        }))
+
+        const mod = await importFresh<typeof import("@/features/owlbear/server/session-service")>("@/features/owlbear/server/session-service")
+        await mod.touchOwlbearSession("session-1", "2025-12-31T23:58:00.000Z")
+
+        expect(updateOne).toHaveBeenCalledWith(
+            { _id: "session-1", revokedAt: null },
+            expect.objectContaining({
+                $set: expect.objectContaining({
+                    expiresAt: new Date("2026-04-01T00:00:00.000Z"),
+                    lastUsedAt: new Date("2026-01-01T00:00:00.000Z"),
+                }),
+            })
+        )
     })
 
     it("POST /api/owlbear/session rejects anonymous players", async () => {

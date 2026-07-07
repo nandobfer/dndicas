@@ -7,7 +7,7 @@ export type OwlbearThemeMode = "light" | "dark"
 
 export type OwlbearRuntimeStatus = "booting" | "ready" | "unavailable"
 
-export type OwlbearTabId = "ficha" | "fichas" | "npcs" | "catalogo" | "dados"
+export type OwlbearTabId = "ficha" | "fichas" | "npcs" | "iniciativa" | "catalogo" | "dados"
 
 export type OwlbearSheetViewMode = "picker" | "editor"
 
@@ -21,10 +21,28 @@ export interface OwlbearDiceHistoryEntry {
     createdAt: string
 }
 
+export interface OwlbearNpcInitiativeEntry {
+    initiative: number
+    roll: number
+    dexModifier: number
+    addedAt: string
+}
+
+export interface OwlbearPlayerInitiativeEntry {
+    initiative: number
+    updatedAt: string
+}
+
+export interface OwlbearInitiativeState {
+    npcs: Record<string, OwlbearNpcInitiativeEntry>
+    players: Record<string, OwlbearPlayerInitiativeEntry>
+}
+
 export interface OwlbearRoomMetadataState {
     version: number
     playerLinks: Record<string, string>
     diceHistory: OwlbearDiceHistoryEntry[]
+    initiative: OwlbearInitiativeState
     lastSyncAt?: string
 }
 

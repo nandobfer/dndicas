@@ -30,6 +30,10 @@ function getEmptyRoomMetadata(): OwlbearRoomMetadataState {
         version: OWLBEAR_ROOM_METADATA_VERSION,
         playerLinks: {},
         diceHistory: [],
+        initiative: {
+            npcs: {},
+            players: {},
+        },
     }
 }
 
@@ -229,6 +233,7 @@ export function parseRoomMetadata(metadata: Record<string, unknown> | null | und
     }
 
     const parsed = value as Partial<OwlbearRoomMetadataState>
+    const initiative = parsed.initiative && typeof parsed.initiative === "object" ? parsed.initiative : undefined
     return {
         version: typeof parsed.version === "number" ? parsed.version : OWLBEAR_ROOM_METADATA_VERSION,
         playerLinks: parsed.playerLinks && typeof parsed.playerLinks === "object" ? parsed.playerLinks : {},
@@ -237,6 +242,10 @@ export function parseRoomMetadata(metadata: Record<string, unknown> | null | und
                 .map(parseDiceHistoryEntry)
                 .filter((entry): entry is OwlbearDiceHistoryEntry => Boolean(entry))
             : [],
+        initiative: {
+            npcs: initiative?.npcs && typeof initiative.npcs === "object" ? initiative.npcs : {},
+            players: initiative?.players && typeof initiative.players === "object" ? initiative.players : {},
+        },
         lastSyncAt: typeof parsed.lastSyncAt === "string" ? parsed.lastSyncAt : undefined,
     }
 }
@@ -280,16 +289,83 @@ export async function setPlayerSheetLink(owlbearPlayerId: string, sheetId: strin
 
 export async function clearPlayerSheetLink(owlbearPlayerId: string) {
     return updateRoomMetadata((current) => {
+        const sheetId = current.playerLinks[owlbearPlayerId]
         const nextLinks = { ...current.playerLinks }
         delete nextLinks[owlbearPlayerId]
+        const nextPlayerInitiatives = { ...current.initiative.players }
+        if (sheetId) delete nextPlayerInitiatives[sheetId]
 
         return {
             ...current,
             version: OWLBEAR_ROOM_METADATA_VERSION,
             playerLinks: nextLinks,
+            initiative: {
+                ...current.initiative,
+                players: nextPlayerInitiatives,
+            },
             lastSyncAt: new Date().toISOString(),
         }
     })
+}
+
+export async function setNpcInitiative(input: {
+    npcId: string
+    initiative: number
+    roll: number
+    dexModifier: number
+}) {
+    return updateRoomMetadata((current) => ({
+        ...current,
+        version: OWLBEAR_ROOM_METADATA_VERSION,
+        initiative: {
+            ...current.initiative,
+            npcs: {
+                ...current.initiative.npcs,
+                [input.npcId]: {
+                    initiative: input.initiative,
+                    roll: input.roll,
+                    dexModifier: input.dexModifier,
+                    addedAt: new Date().toISOString(),
+                },
+            },
+        },
+        lastSyncAt: new Date().toISOString(),
+    }))
+}
+
+export async function removeNpcInitiative(npcId: string) {
+    return updateRoomMetadata((current) => {
+        const nextNpcs = { ...current.initiative.npcs }
+        delete nextNpcs[npcId]
+
+        return {
+            ...current,
+            version: OWLBEAR_ROOM_METADATA_VERSION,
+            initiative: {
+                ...current.initiative,
+                npcs: nextNpcs,
+            },
+            lastSyncAt: new Date().toISOString(),
+        }
+    })
+}
+
+export async function setPlayerInitiative(sheetId: string, initiative: number) {
+    return updateRoomMetadata((current) => ({
+        ...current,
+        version: OWLBEAR_ROOM_METADATA_VERSION,
+        initiative: {
+            ...current.initiative,
+            players: {
+                ...current.initiative.players,
+                [sheetId]: {
+                    initiative,
+                    updatedAt: new Date().toISOString(),
+                },
+            },
+        },
+        lastSyncAt: new Date().toISOString(),
+    }))
 }
 
 export async function subscribeToRoomMetadata(callback: (state: OwlbearRoomMetadataState) => void) {
