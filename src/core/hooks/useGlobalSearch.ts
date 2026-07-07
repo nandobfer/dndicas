@@ -2,7 +2,8 @@
 
 import * as React from "react"
 import { useDebounce } from "./useDebounce"
-import { performUnifiedSearch, type UnifiedEntity } from "@/core/utils/search-engine"
+import type { UnifiedEntity } from "@/core/utils/search-engine"
+import { searchUnifiedEntitiesOnServer } from "@/core/utils/unified-search-client"
 
 export type SearchResult = UnifiedEntity
 
@@ -32,7 +33,7 @@ export function useGlobalSearch() {
 
         try {
             const offset = (currentPage - 1) * PAGE_SIZE
-            const searchResults = await performUnifiedSearch(q, PAGE_SIZE, offset)
+            const searchResults = await searchUnifiedEntitiesOnServer(q, PAGE_SIZE, offset)
 
             if (isInitial) {
                 setResults(searchResults)

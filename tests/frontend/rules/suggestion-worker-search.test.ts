@@ -1,8 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
+import type { Editor } from "@tiptap/core"
 
 const mocks = vi.hoisted(() => ({
-    searchUnifiedInWorkerProgressively: vi.fn(),
-    peekUnifiedSearch: vi.fn(),
+    searchUnifiedEntitiesOnServer: vi.fn(),
     reactRendererInstances: [] as Array<{
         props: Record<string, unknown>
         updateProps: ReturnType<typeof vi.fn>
@@ -11,12 +11,8 @@ const mocks = vi.hoisted(() => ({
     }>,
 }))
 
-vi.mock("@/core/utils/search-worker-client", () => ({
-    searchUnifiedInWorkerProgressively: mocks.searchUnifiedInWorkerProgressively,
-}))
-
-vi.mock("@/core/utils/search-engine", () => ({
-    peekUnifiedSearch: mocks.peekUnifiedSearch,
+vi.mock("@/core/utils/unified-search-client", () => ({
+    searchUnifiedEntitiesOnServer: mocks.searchUnifiedEntitiesOnServer,
 }))
 
 vi.mock("@tiptap/react", () => ({
@@ -44,12 +40,19 @@ vi.mock("tippy.js", () => ({
     })),
 }))
 
-describe("getSuggestionConfig worker search", () => {
+function createEditorMock(): Editor {
+    return {
+        isDestroyed: false,
+        commands: { blur: vi.fn(), insertContent: vi.fn() },
+        state: { selection: { empty: true, from: 1 } },
+    } as unknown as Editor
+}
+
+describe("getSuggestionConfig server search", () => {
     beforeEach(() => {
         vi.useFakeTimers()
         vi.resetModules()
-        mocks.searchUnifiedInWorkerProgressively.mockReset()
-        mocks.peekUnifiedSearch.mockReset()
+        mocks.searchUnifiedEntitiesOnServer.mockReset()
         mocks.reactRendererInstances.length = 0
     })
 
@@ -57,14 +60,10 @@ describe("getSuggestionConfig worker search", () => {
         vi.useRealTimers()
     })
 
-    it("returns immediately and updates the rendered mention list with worker results", async () => {
-        const editor = {
-            isDestroyed: false,
-            commands: { blur: vi.fn(), insertContent: vi.fn() },
-            state: { selection: { empty: true, from: 1 } },
-        }
+    it("returns immediately and updates the rendered mention list with server results", async () => {
+        const editor = createEditorMock()
         let resolveWorkerSearch: (items: unknown[]) => void = () => undefined
-        mocks.searchUnifiedInWorkerProgressively.mockReturnValue(new Promise((resolve) => {
+        mocks.searchUnifiedEntitiesOnServer.mockReturnValue(new Promise((resolve) => {
             resolveWorkerSearch = resolve
         }))
 
@@ -101,7 +100,7 @@ describe("getSuggestionConfig worker search", () => {
 
         await vi.advanceTimersByTimeAsync(299)
 
-        expect(mocks.searchUnifiedInWorkerProgressively).not.toHaveBeenCalled()
+        expect(mocks.searchUnifiedEntitiesOnServer).not.toHaveBeenCalled()
 
         await vi.advanceTimersByTimeAsync(1)
         resolveWorkerSearch(workerResults)
@@ -118,34 +117,19 @@ describe("getSuggestionConfig worker search", () => {
             loading: false,
             query: "raio",
         })
-        expect(mocks.searchUnifiedInWorkerProgressively).toHaveBeenCalledWith(
+        expect(mocks.searchUnifiedEntitiesOnServer).toHaveBeenCalledWith(
             "raio",
             10,
             0,
             expect.objectContaining({ specificEntityTypes: ["Magia", "Regra"] }),
-            expect.any(Function),
         )
-        expect(mocks.peekUnifiedSearch).not.toHaveBeenCalled()
     })
 
-    it("updates the rendered mention list with partial results while keeping loading active", async () => {
-        const editor = {
-            isDestroyed: false,
-            commands: { blur: vi.fn(), insertContent: vi.fn() },
-            state: { selection: { empty: true, from: 1 } },
-        }
-        mocks.searchUnifiedInWorkerProgressively.mockImplementation((_query, _limit, _offset, _options, onPartial) => {
-            onPartial?.({
-                results: [{ id: "rule-1", _id: "rule-1", name: "Raio", label: "Raio", type: "Regra", status: "active" }],
-                loadedProviders: 1,
-                totalProviders: 2,
-                done: false,
-            })
-
-            return Promise.resolve([
-                { id: "spell-1", _id: "spell-1", name: "Raio de Fogo", label: "Raio de Fogo", type: "Magia", status: "active" },
-            ])
-        })
+    it("keeps loading active until server results resolve", async () => {
+        const editor = createEditorMock()
+        mocks.searchUnifiedEntitiesOnServer.mockResolvedValue([
+            { id: "spell-1", _id: "spell-1", name: "Raio de Fogo", label: "Raio de Fogo", type: "Magia", status: "active" },
+        ])
 
         const { getSuggestionConfig } = await import("@/features/rules/utils/suggestion")
         const config = getSuggestionConfig()
@@ -166,11 +150,6 @@ describe("getSuggestionConfig worker search", () => {
         await vi.advanceTimersByTimeAsync(300)
         await vi.runAllTicks()
 
-        expect(mocks.reactRendererInstances[0].updateProps).toHaveBeenCalledWith({
-            items: [expect.objectContaining({ id: "rule-1", entityType: "Regra" })],
-            loading: true,
-            query: "raio",
-        })
         expect(mocks.reactRendererInstances[0].updateProps).toHaveBeenLastCalledWith({
             items: [expect.objectContaining({ id: "spell-1", entityType: "Magia" })],
             loading: false,
@@ -179,13 +158,9 @@ describe("getSuggestionConfig worker search", () => {
     })
 
     it("ignores stale worker responses from older queries", async () => {
-        const editor = {
-            isDestroyed: false,
-            commands: { blur: vi.fn(), insertContent: vi.fn() },
-            state: { selection: { empty: true, from: 1 } },
-        }
+        const editor = createEditorMock()
         const resolvers: Array<(items: unknown[]) => void> = []
-        mocks.searchUnifiedInWorkerProgressively.mockImplementation(() => new Promise((resolve) => {
+        mocks.searchUnifiedEntitiesOnServer.mockImplementation(() => new Promise((resolve) => {
             resolvers.push(resolve)
         }))
 
