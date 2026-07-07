@@ -3,7 +3,8 @@ import dbConnect from "@/core/database/db"
 import { OwlbearSession } from "../models/owlbear-session"
 import type { OwlbearRole } from "../types"
 
-const DEFAULT_SESSION_TTL_MS = 15 * 60 * 1000
+const AUTHENTICATED_SESSION_TTL_MS = 90 * 24 * 60 * 60 * 1000
+const ANONYMOUS_GM_SESSION_TTL_MS = 24 * 60 * 60 * 1000
 const LAST_USED_TOUCH_WINDOW_MS = 60 * 1000
 
 export function buildAnonymousGmSessionUserId(input: {
@@ -40,6 +41,10 @@ function hashToken(token: string) {
     return crypto.createHash("sha256").update(token).digest("hex")
 }
 
+function getDefaultSessionTtlMs(userId: string) {
+    return isAnonymousGmSessionUserId(userId) ? ANONYMOUS_GM_SESSION_TTL_MS : AUTHENTICATED_SESSION_TTL_MS
+}
+
 function toPlainSession(doc: {
     _id: { toString(): string } | string
     userId: string
@@ -72,7 +77,7 @@ export async function createOwlbearSession(input: {
     await dbConnect()
 
     const now = new Date()
-    const expiresAt = new Date(now.getTime() + (input.ttlMs ?? DEFAULT_SESSION_TTL_MS))
+    const expiresAt = new Date(now.getTime() + (input.ttlMs ?? getDefaultSessionTtlMs(input.userId)))
     const token = crypto.randomBytes(32).toString("base64url")
     const tokenHash = hashToken(token)
 
@@ -134,11 +139,17 @@ export async function touchOwlbearSession(sessionId: string, currentLastUsedAt: 
         return
     }
 
+    const currentSession = await OwlbearSession.findOne({ _id: sessionId, revokedAt: null }, { userId: 1 }).lean()
+    if (!currentSession) return
+
+    const expiresAt = new Date(now.getTime() + getDefaultSessionTtlMs(String(currentSession.userId)))
+
     await OwlbearSession.updateOne(
         { _id: sessionId, revokedAt: null },
         {
             $set: {
                 lastUsedAt: now,
+                expiresAt,
                 updatedAt: now,
             },
         }

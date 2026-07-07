@@ -18,6 +18,8 @@ function isSessionUsable(session: OwlbearSessionState) {
 
 const SESSION_RETRY_DELAYS_MS = [250, 500, 1000, 2000] as const
 const MAX_SESSION_OPEN_ATTEMPTS = 8
+const SESSION_REFRESH_SKEW_MS = 60 * 1000
+const MAX_BROWSER_TIMEOUT_MS = 2_147_483_647
 
 function getSessionRetryDelay(attempt: number) {
     return SESSION_RETRY_DELAYS_MS[Math.min(attempt, SESSION_RETRY_DELAYS_MS.length - 1)]
@@ -38,10 +40,30 @@ export function useOwlbearSession(runtime: OwlbearRuntimeState) {
     })
     const lastRuntimeIdentityRef = React.useRef<string | null>(null)
     const sessionRef = React.useRef(session)
+    const [refreshSequence, setRefreshSequence] = React.useState(0)
 
     React.useEffect(() => {
         sessionRef.current = session
     }, [session])
+
+    React.useEffect(() => {
+        if (session.sessionStatus !== "ready" || !session.sessionExpiresAt) return
+
+        const expiresAt = Date.parse(session.sessionExpiresAt)
+        if (Number.isNaN(expiresAt)) return
+
+        const refreshDelay = Math.min(MAX_BROWSER_TIMEOUT_MS, Math.max(0, expiresAt - Date.now() - SESSION_REFRESH_SKEW_MS))
+        const refreshTimer = setTimeout(() => {
+            setSession({
+                sessionStatus: "idle",
+                sessionToken: null,
+                sessionExpiresAt: null,
+            })
+            setRefreshSequence((current) => current + 1)
+        }, refreshDelay)
+
+        return () => clearTimeout(refreshTimer)
+    }, [session.sessionExpiresAt, session.sessionStatus])
 
     React.useEffect(() => {
         if (runtime.status !== "ready" || !runtime.roomId || !runtime.playerId || !runtime.role) return
@@ -157,7 +179,7 @@ export function useOwlbearSession(runtime: OwlbearRuntimeState) {
             cancelled = true
             if (retryTimer) clearTimeout(retryTimer)
         }
-    }, [isLoaded, isSignedIn, runtime.playerId, runtime.role, runtime.roomId, runtime.status, userId])
+    }, [isLoaded, isSignedIn, refreshSequence, runtime.playerId, runtime.role, runtime.roomId, runtime.status, userId])
 
     return {
         session,

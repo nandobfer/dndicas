@@ -3,10 +3,11 @@
 import * as React from "react"
 import Fuse from "fuse.js"
 import { AnimatePresence, motion } from "framer-motion"
-import { BookOpen, ChevronRight, Loader2, Plus, Shield, Skull, Trash2, UserRound } from "lucide-react"
+import { BookOpen, ChevronRight, Loader2, Plus, Shield, Skull, Swords, Trash2, UserRound } from "lucide-react"
 import { toast } from "sonner"
 import { cn } from "@/core/utils"
 import { GlassButton } from "@/components/ui/glass-button"
+import { GlassNumberInput } from "@/components/ui/glass-number-input"
 import {
     GlassDropdownMenu,
     GlassDropdownMenuContent,
@@ -15,6 +16,7 @@ import {
 } from "@/components/ui/glass-dropdown-menu"
 import { GlassImage } from "@/components/ui/glass-image"
 import { GlassModal, GlassModalContent, GlassModalDescription, GlassModalFooter, GlassModalHeader, GlassModalTitle } from "@/components/ui/glass-modal"
+import { SimpleGlassTooltip } from "@/components/ui/glass-tooltip"
 import { InfiniteScrollSentinel } from "@/components/ui/infinite-scroll-sentinel"
 import { SearchInput } from "@/components/ui/search-input"
 import { MySheetsContent } from "@/app/(dashboard)/my-sheets/_components/my-sheets-content"
@@ -31,6 +33,7 @@ import { getHpBarColor, hpPercent } from "./hp-bar-utils"
 import { notifyOwlbearOverlaySync } from "./overlay-sync-events"
 import { createOwlbearUserNpc, type OwlbearRoomNpc, type OwlbearRoomNpcSourceKind } from "./room-npcs-api"
 import type { OwlbearRuntimeState, OwlbearSessionState } from "./types"
+import { useRoomInitiative } from "./use-room-initiative"
 import { useRoomNpcs } from "./use-room-npcs"
 
 type PickerMode = "userNpc" | "monster"
@@ -109,17 +112,21 @@ function HpAdjustmentInput({
 
 function RoomNpcRow({
     npc,
+    duplicateIndex,
     isExpanded,
     isPending,
     onToggle,
     onApplyHpDelta,
+    onAddToInitiative,
     onRequestRemove,
 }: {
     npc: OwlbearRoomNpc
+    duplicateIndex?: number
     isExpanded: boolean
     isPending: boolean
     onToggle: () => void
     onApplyHpDelta: (npc: OwlbearRoomNpc, delta: number) => void
+    onAddToInitiative: (npc: OwlbearRoomNpc) => void
     onRequestRemove: (npc: OwlbearRoomNpc) => void
 }) {
     const source = npc.source
@@ -132,7 +139,7 @@ function RoomNpcRow({
             <button
                 type="button"
                 onClick={onToggle}
-                className="grid w-full grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-3 p-3 text-left transition-colors hover:bg-white/[0.03]"
+                className="grid w-full grid-cols-[minmax(0,1fr)_auto_auto_auto] items-center gap-3 p-3 text-left transition-colors hover:bg-white/[0.03]"
             >
                 <div className="flex min-w-0 items-center gap-3">
                     <NpcAvatar monster={source} />
@@ -145,12 +152,19 @@ function RoomNpcRow({
                             >
                                 <ChevronRight className="h-4 w-4" />
                             </motion.span>
-                            <p className="truncate text-sm font-semibold text-white">{source?.name ?? "NPC indisponível"}</p>
+                            <div className="flex items-center gap-2">
+                                <p className="truncate text-sm font-semibold text-white">{source?.name ?? "NPC indisponível"}</p>
+                                {duplicateIndex !== undefined && (
+                                    <span className="inline-flex h-5 items-center justify-center rounded-full bg-white/10 px-2 text-[10px] font-bold text-white/70">
+                                        {duplicateIndex}
+                                    </span>
+                                )}
+                            </div>
                             <span className="rounded-full border border-white/10 bg-white/[0.04] px-2 py-0.5 text-[10px] font-bold uppercase tracking-widest text-white/35">
                                 {getSourceLabel(npc.sourceKind)}
                             </span>
                         </div>
-                        <div className="mt-2 max-w-sm">
+                        <div className="mt-2 w-56 shrink-0" data-testid={`npc-hp-bar-track-${npc.id}`}>
                             <div className="mb-1 text-xs font-medium text-white/60">
                                 {npc.hpCurrent}/{npc.hpMax} PV
                             </div>
@@ -166,6 +180,21 @@ function RoomNpcRow({
                 </div>
 
                 <HpAdjustmentInput npc={npc} onApply={onApplyHpDelta} />
+
+                <SimpleGlassTooltip content="Adicionar a iniciativa" side="top">
+                    <button
+                        type="button"
+                        aria-label={`Adicionar ${source?.name ?? "NPC"} a iniciativa`}
+                        disabled={isPending}
+                        onClick={(event) => {
+                            event.stopPropagation()
+                            onAddToInitiative(npc)
+                        }}
+                        className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-amber-300/20 bg-amber-500/10 text-amber-200 transition-colors hover:bg-amber-500/20 disabled:opacity-50"
+                    >
+                        <Swords className="h-4 w-4" />
+                    </button>
+                </SimpleGlassTooltip>
 
                 <button
                     type="button"
@@ -233,7 +262,9 @@ function MonsterPickerModal({
     const items = query.data?.pages.flatMap((page) => page.items) ?? []
 
     React.useEffect(() => {
-        if (!isOpen) setSearch("")
+        if (!isOpen) {
+            setTimeout(() => setSearch(""), 0)
+        }
     }, [isOpen])
 
     return (
@@ -300,8 +331,37 @@ function InitialHpModal({
     onClose: () => void
     onConfirm: (sourceKind: OwlbearRoomNpcSourceKind, monster: Monster, hp: number) => Promise<void>
 }) {
+    const [manualHp, setManualHp] = React.useState<number | "">("")
+
+    const staticHp = React.useMemo(() => monster ? parseStaticHpValue(monster.hitPointsFormula) : null, [monster])
     const average = React.useMemo(() => monster ? getMonsterHitPointAverage(monster.hitPointsFormula) : null, [monster])
-    const parsedDice = React.useMemo(() => monster ? parseHpDiceFormula(monster.hitPointsFormula) : null, [monster])
+    
+    const parsedDice = React.useMemo(() => {
+        if (!monster) return null
+        const parsed = parseHpDiceFormula(monster.hitPointsFormula)
+        if (!parsed) return null
+        
+        if (parsed.modifier === 0 && monster.attributes?.constitution !== undefined) {
+            const conMod = Math.floor((monster.attributes.constitution - 10) / 2)
+            const numDice = parsed.terms.reduce((acc, term) => acc + term.quantity, 0)
+            parsed.modifier = conMod * numDice
+        }
+        return parsed
+    }, [monster])
+
+    React.useEffect(() => {
+        if (isOpen && monster) {
+            setTimeout(() => {
+                if (staticHp !== null) {
+                    setManualHp(staticHp)
+                } else if (average !== null) {
+                    setManualHp(average)
+                } else {
+                    setManualHp("")
+                }
+            }, 0)
+        }
+    }, [isOpen, monster, staticHp, average])
 
     if (!monster) return null
 
@@ -321,7 +381,19 @@ function InitialHpModal({
                         <p className="mt-1 text-xs text-white/45">Fórmula de PV: {monster.hitPointsFormula}</p>
                     </div>
 
-                    {average !== null && (
+                    {staticHp !== null && (
+                        <button
+                            type="button"
+                            disabled={isPending}
+                            onClick={() => void onConfirm(sourceKind, monster, staticHp)}
+                            className="flex w-full items-center justify-between rounded-2xl border border-emerald-300/20 bg-emerald-500/10 p-4 text-left text-emerald-50 transition-colors hover:bg-emerald-500/15 disabled:opacity-50"
+                        >
+                            <span className="text-sm font-semibold">Valor fixo</span>
+                            <span className="text-lg font-black">{staticHp} PV</span>
+                        </button>
+                    )}
+
+                    {average !== null && staticHp === null && (
                         <button
                             type="button"
                             disabled={isPending}
@@ -333,7 +405,7 @@ function InitialHpModal({
                         </button>
                     )}
 
-                    {parsedDice ? (
+                    {parsedDice && staticHp === null && (
                         <div className="rounded-2xl border border-white/10 bg-black/10 p-3">
                             <HpDicePanel
                                 label={`PV inicial de ${monster.name}`}
@@ -345,9 +417,33 @@ function InitialHpModal({
                                 }}
                             />
                         </div>
-                    ) : (
-                        average === null && <InlineStatus tone="error" message="Não foi possível interpretar os PV deste NPC automaticamente." />
                     )}
+
+                    <div className="space-y-3 rounded-2xl border border-white/10 bg-white/[0.03] p-4">
+                        <span className="text-sm font-semibold text-white">Manual</span>
+                        <div className="flex gap-3">
+                            <div className="flex-1">
+                                <GlassNumberInput
+                                    value={manualHp}
+                                    onChange={setManualHp}
+                                    placeholder="PV"
+                                    min={1}
+                                    allowEmpty
+                                />
+                            </div>
+                            <GlassButton
+                                type="button"
+                                disabled={isPending || manualHp === ""}
+                                onClick={() => {
+                                    if (typeof manualHp === "number") {
+                                        void onConfirm(sourceKind, monster, Math.max(0, manualHp))
+                                    }
+                                }}
+                            >
+                                Definir
+                            </GlassButton>
+                        </div>
+                    </div>
                 </div>
             </GlassModalContent>
         </GlassModal>
@@ -406,6 +502,7 @@ export function OwlbearGmNpcsTab({
         session.sessionToken,
         runtime.status === "ready" && session.sessionStatus === "ready" && isAuthenticated,
     )
+    const { addNpcInitiative } = useRoomInitiative(runtime.status === "ready" && session.sessionStatus === "ready" && isAuthenticated)
     const [search, setSearch] = React.useState("")
     const [expandedId, setExpandedId] = React.useState<string | null>(null)
     const [pickerMode, setPickerMode] = React.useState<PickerMode | null>(null)
@@ -418,7 +515,7 @@ export function OwlbearGmNpcsTab({
 
     const filteredItems = React.useMemo(() => {
         const available = items.filter((item) => item.source)
-        if (!search.trim()) return items
+        if (!search.trim()) return available
         const fuse = new Fuse(available, {
             keys: ["source.name", "source.originalName", "source.source"],
             threshold: 0.35,
@@ -427,26 +524,44 @@ export function OwlbearGmNpcsTab({
         return fuse.search(search).map((result) => result.item)
     }, [items, search])
 
+    const nameCounts = React.useMemo(() => {
+        const counts = new Map<string, number>()
+        for (const item of items) {
+            if (!item.source) continue
+            const name = item.source.name.trim().toLowerCase()
+            counts.set(name, (counts.get(name) || 0) + 1)
+        }
+        return counts
+    }, [items])
+
+    const orderedItems = React.useMemo(() => {
+        return [...items].sort((a, b) => {
+            const dateA = new Date(a.createdAt).getTime()
+            const dateB = new Date(b.createdAt).getTime()
+            return dateA - dateB
+        })
+    }, [items])
+
+    const duplicateIndices = React.useMemo(() => {
+        const indices = new Map<string, number>()
+        const counters = new Map<string, number>()
+        for (const item of orderedItems) {
+            if (!item.source) continue
+            const name = item.source.name.trim().toLowerCase()
+            const count = nameCounts.get(name) || 0
+            if (count > 1) {
+                const currentIndex = (counters.get(name) || 0) + 1
+                counters.set(name, currentIndex)
+                indices.set(item.id, currentIndex)
+            }
+        }
+        return indices
+    }, [orderedItems, nameCounts])
+
     const handleSelectMonster = React.useCallback((monster: Monster, sourceKind: OwlbearRoomNpcSourceKind) => {
         setPickerMode(null)
-        const staticHp = parseStaticHpValue(monster.hitPointsFormula)
-        if (staticHp !== null) {
-            void (async () => {
-                setIsLinking(true)
-                try {
-                    await linkNpc({ sourceKind, sourceId: monster._id, hpCurrent: staticHp, hpMax: staticHp })
-                    toast.success(`${monster.name} adicionado à sala.`)
-                } catch (error) {
-                    toast.error(error instanceof Error ? error.message : "Não foi possível adicionar NPC à sala.")
-                } finally {
-                    setIsLinking(false)
-                }
-            })()
-            return
-        }
-
         setInitialHpTarget({ sourceKind, monster })
-    }, [linkNpc])
+    }, [])
 
     const handleConfirmInitialHp = React.useCallback(async (sourceKind: OwlbearRoomNpcSourceKind, monster: Monster, hp: number) => {
         setIsLinking(true)
@@ -499,6 +614,26 @@ export function OwlbearGmNpcsTab({
             })
             .finally(() => setPendingId(null))
     }, [updateNpc])
+
+    const handleAddToInitiative = React.useCallback((npc: OwlbearRoomNpc) => {
+        const dexterity = npc.source?.attributes?.dexterity ?? 10
+        const dexModifier = Math.floor((dexterity - 10) / 2)
+        const roll = Math.floor(Math.random() * 20) + 1
+        const initiative = roll + dexModifier
+
+        void addNpcInitiative({
+            npcId: npc.id,
+            initiative,
+            roll,
+            dexModifier,
+        })
+            .then(() => {
+                toast.success(`${npc.source?.name ?? "NPC"} entrou na iniciativa com ${initiative}.`)
+            })
+            .catch((error) => {
+                toast.error(error instanceof Error ? error.message : "Não foi possível adicionar NPC à iniciativa.")
+            })
+    }, [addNpcInitiative])
 
     const handleRemove = React.useCallback(() => {
         if (!npcToRemove) return
@@ -592,10 +727,12 @@ export function OwlbearGmNpcsTab({
                             <RoomNpcRow
                                 key={npc.id}
                                 npc={npc}
+                                duplicateIndex={duplicateIndices.get(npc.id)}
                                 isExpanded={expandedId === npc.id}
                                 isPending={pendingId === npc.id}
                                 onToggle={() => setExpandedId((current) => current === npc.id ? null : npc.id)}
                                 onApplyHpDelta={handleApplyHpDelta}
+                                onAddToInitiative={handleAddToInitiative}
                                 onRequestRemove={setNpcToRemove}
                             />
                         ))}

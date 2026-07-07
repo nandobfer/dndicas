@@ -1,7 +1,7 @@
 "use client"
 
 import * as React from "react"
-import { Compass, Dices, Library, Shield, Users } from "lucide-react"
+import { Compass, Dices, Library, Shield, Swords, Users } from "lucide-react"
 import { LiquidGlassBackground } from "@/components/ui/glass-background"
 import { GlassSelector } from "@/components/ui/glass-selector"
 import { cn } from "@/core/utils"
@@ -13,6 +13,7 @@ import { OwlbearDiceTab } from "./owlbear-dice-tab"
 import { OwlbearPlayerSheetTab } from "./player-sheet-tab"
 import { OwlbearGmSheetsTab } from "./gm-sheets-tab"
 import { OwlbearGmNpcsTab } from "./gm-npcs-tab"
+import { OwlbearGmInitiativeTab } from "./gm-initiative-tab"
 import { OwlbearGmSceneController } from "./gm-scene-controller"
 import type { OwlbearRole, OwlbearTabId } from "./types"
 import { preloadDiceBoxAssets } from "@/features/dice-roller/dice-box-loader"
@@ -30,6 +31,7 @@ const GM_TABS: TabDefinition[] = [
     { id: "dados", label: "Dados", icon: Dices, activeColorHex: colors.rarity.uncommon, textColorHex: colors.rarity.uncommon },
     { id: "fichas", label: "Fichas", icon: Users, activeColorHex: colors.rarity.veryRare, textColorHex: colors.rarity.veryRare },
     { id: "npcs", label: "NPCs", icon: Shield, activeColorHex: colors.rarity.legendary, textColorHex: colors.rarity.legendary },
+    { id: "iniciativa", label: "Iniciativa", icon: Swords, activeColorHex: colors.rarity.artifact, textColorHex: colors.rarity.artifact },
 ]
 
 const PLAYER_TABS: TabDefinition[] = [
@@ -145,6 +147,18 @@ export function OwlbearShell() {
                         <div className={cn("h-full min-h-0", activeTab === "npcs" ? "block" : "hidden")} aria-hidden={activeTab !== "npcs"}>
                             {activeTab === "npcs" && (
                                 <OwlbearGmNpcsTab
+                                    runtime={runtime}
+                                    session={session}
+                                    isAuthenticated={isAuthenticated}
+                                    isAuthLoaded={isAuthLoaded}
+                                />
+                            )}
+                        </div>
+                    )}
+                    {tabs.some((tab) => tab.id === "iniciativa") && (
+                        <div className={cn("h-full min-h-0", activeTab === "iniciativa" ? "block" : "hidden")} aria-hidden={activeTab !== "iniciativa"}>
+                            {activeTab === "iniciativa" && (
+                                <OwlbearGmInitiativeTab
                                     runtime={runtime}
                                     session={session}
                                     isAuthenticated={isAuthenticated}
