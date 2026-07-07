@@ -105,6 +105,8 @@ src/
 - Serviço centralizado em `src/core/ai/genai.ts`
 - Logging automático de tokens
 - Funções: `generateText`, `generateTextStream`, `chat`, `countTokens`
+- `generateText` usa o microserviço interno `genai` como fallback HTTP quando o Gemini falha por quota, rate limit ou indisponibilidade temporária
+- Fallback configurado por `GENAI_BASE_URL`, `GENAI_API_KEY`, `GENAI_TIMEOUT_MS` e, opcionalmente, `GENAI_FALLBACK_MODEL`
 - Desenvolvedores **NÃO** devem usar `@google/genai` diretamente
 
 ### 4. Storage: S3/Minio
@@ -441,6 +443,7 @@ aicontext/
 - `MONGODB_URI`
 - `CLERK_SECRET_KEY`
 - `GOOGLE_API_KEY`
+- `GENAI_API_KEY` quando o fallback de IA estiver habilitado
 
 ## 🐛 Problemas Comuns e Soluções
 

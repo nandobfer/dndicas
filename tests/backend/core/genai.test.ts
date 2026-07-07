@@ -56,6 +56,17 @@ const makeServiceUnavailableError = (): Error & { status: number } => Object.ass
     { status: 503 }
 )
 
+const makeQuotaError = (): Error & { status: number } => Object.assign(
+    new Error("Quota exceeded for requests per minute."),
+    { status: 429 }
+)
+
+const makeFetchResponse = (body: unknown, status = 200): Response => ({
+    ok: status >= 200 && status < 300,
+    status,
+    json: vi.fn().mockResolvedValue(body),
+}) as unknown as Response
+
 async function* makeStream() {
     yield {
         text: "streamed",
@@ -72,6 +83,7 @@ describe("GenAI high demand retry", () => {
     let warnSpy: ReturnType<typeof vi.spyOn>
     let errorSpy: ReturnType<typeof vi.spyOn>
     let logSpy: ReturnType<typeof vi.spyOn>
+    let fetchMock: ReturnType<typeof vi.fn>
 
     beforeEach(() => {
         vi.useFakeTimers()
@@ -81,6 +93,8 @@ describe("GenAI high demand retry", () => {
         genAiMocks.generateContentStream.mockReset()
         genAiMocks.countTokens.mockReset()
         usageLogMocks.logUsage.mockReset()
+        fetchMock = vi.fn()
+        vi.stubGlobal("fetch", fetchMock)
         warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {})
         errorSpy = vi.spyOn(console, "error").mockImplementation(() => {})
         logSpy = vi.spyOn(console, "log").mockImplementation(() => {})
@@ -92,6 +106,7 @@ describe("GenAI high demand retry", () => {
         warnSpy.mockRestore()
         errorSpy.mockRestore()
         logSpy.mockRestore()
+        vi.unstubAllGlobals()
         process.env = originalEnv
     })
 
@@ -127,6 +142,168 @@ describe("GenAI high demand retry", () => {
         await expect(generateText("prompt")).rejects.toThrow("Failed to generate text: invalid prompt")
         expect(genAiMocks.generateContent).toHaveBeenCalledTimes(1)
         expect(warnSpy).not.toHaveBeenCalled()
+        expect(fetchMock).not.toHaveBeenCalled()
+    })
+
+    it("falls back to the GenAI microservice when Gemini returns quota errors", async () => {
+        process.env = {
+            ...process.env,
+            GENAI_BASE_URL: "http://genai:4007/",
+            GENAI_API_KEY: "fallback-key",
+        }
+        genAiMocks.generateContent.mockRejectedValueOnce(makeQuotaError())
+        fetchMock.mockResolvedValueOnce(makeFetchResponse({
+            id: "run_abc123",
+            model: "google/gemini-2.5-flash",
+            text: "fallback ok",
+            usage: {
+                inputTokens: 8,
+                outputTokens: 13,
+                totalTokens: 21,
+            },
+            costUsd: 0.001,
+            latencyMs: 321,
+        }))
+
+        const { generateText } = await import("@/core/ai/genai")
+
+        await expect(generateText("prompt", "gemini-test", "user-1")).resolves.toBe("fallback ok")
+
+        expect(fetchMock).toHaveBeenCalledTimes(1)
+        expect(fetchMock).toHaveBeenCalledWith("http://genai:4007/generate", expect.objectContaining({
+            method: "POST",
+            headers: {
+                Authorization: "Bearer fallback-key",
+                "Content-Type": "application/json",
+            },
+            signal: expect.any(AbortSignal),
+        }))
+
+        const request = fetchMock.mock.calls[0]?.[1] as RequestInit
+        expect(JSON.parse(request.body as string)).toEqual({
+            prompt: "prompt",
+            metadata: {
+                app: "dndicas",
+                feature: "core-ai-generate-text-fallback",
+                sourceModel: "gemini-test",
+                userId: "user-1",
+            },
+        })
+        expect(usageLogMocks.logUsage).toHaveBeenCalledWith("google/gemini-2.5-flash", 8, 13, 21, "user-1")
+    })
+
+    it("uses configured fallback model and logs null usage tokens as zero", async () => {
+        process.env = {
+            ...process.env,
+            GENAI_BASE_URL: "http://genai:4007",
+            GENAI_API_KEY: "fallback-key",
+            GENAI_FALLBACK_MODEL: "google/gemini-2.5-flash",
+        }
+        genAiMocks.generateContent.mockRejectedValueOnce(makeQuotaError())
+        fetchMock.mockResolvedValueOnce(makeFetchResponse({
+            id: "run_abc123",
+            model: "google/gemini-2.5-flash",
+            text: "fallback ok",
+            usage: {
+                inputTokens: null,
+                outputTokens: null,
+                totalTokens: null,
+            },
+            costUsd: null,
+            latencyMs: 321,
+        }))
+
+        const { generateText } = await import("@/core/ai/genai")
+
+        await expect(generateText("prompt", "gemini-test", "user-1")).resolves.toBe("fallback ok")
+
+        const request = fetchMock.mock.calls[0]?.[1] as RequestInit
+        expect(JSON.parse(request.body as string)).toEqual({
+            prompt: "prompt",
+            model: "google/gemini-2.5-flash",
+            metadata: {
+                app: "dndicas",
+                feature: "core-ai-generate-text-fallback",
+                sourceModel: "gemini-test",
+                userId: "user-1",
+            },
+        })
+        expect(usageLogMocks.logUsage).toHaveBeenCalledWith("google/gemini-2.5-flash", 0, 0, 0, "user-1")
+    })
+
+    it("falls back after retryable Gemini unavailability keeps failing", async () => {
+        process.env = {
+            ...process.env,
+            GENAI_BASE_URL: "http://genai:4007",
+            GENAI_API_KEY: "fallback-key",
+        }
+        genAiMocks.generateContent
+            .mockRejectedValueOnce(makeHighDemandError())
+            .mockRejectedValueOnce(makeHighDemandError())
+        fetchMock.mockResolvedValueOnce(makeFetchResponse({
+            id: "run_abc123",
+            model: "google/gemini-2.5-flash",
+            text: "fallback after retry",
+            usage: {
+                inputTokens: 1,
+                outputTokens: 2,
+                totalTokens: 3,
+            },
+            costUsd: null,
+            latencyMs: 321,
+        }))
+
+        const { generateText } = await import("@/core/ai/genai")
+        const resultPromise = generateText("prompt", "gemini-test", "user-1")
+
+        await vi.advanceTimersByTimeAsync(1000)
+
+        await expect(resultPromise).resolves.toBe("fallback after retry")
+        expect(genAiMocks.generateContent).toHaveBeenCalledTimes(2)
+        expect(fetchMock).toHaveBeenCalledTimes(1)
+    })
+
+    it("does not call fallback for non-eligible Gemini errors even when configured", async () => {
+        process.env = {
+            ...process.env,
+            GENAI_BASE_URL: "http://genai:4007",
+            GENAI_API_KEY: "fallback-key",
+        }
+        genAiMocks.generateContent.mockRejectedValueOnce(new Error("invalid prompt"))
+
+        const { generateText } = await import("@/core/ai/genai")
+
+        await expect(generateText("prompt")).rejects.toThrow("Failed to generate text: invalid prompt")
+        expect(fetchMock).not.toHaveBeenCalled()
+    })
+
+    it("reports both primary and fallback failures when the microservice fails", async () => {
+        process.env = {
+            ...process.env,
+            GENAI_BASE_URL: "http://genai:4007",
+            GENAI_API_KEY: "fallback-key",
+        }
+        genAiMocks.generateContent.mockRejectedValueOnce(makeQuotaError())
+        fetchMock.mockResolvedValueOnce(makeFetchResponse({
+            error: {
+                code: "OPENCODE_TIMEOUT",
+                message: "The AI request timed out.",
+                requestId: "run_abc123",
+            },
+        }, 504))
+
+        const { generateText } = await import("@/core/ai/genai")
+
+        await expect(generateText("prompt")).rejects.toThrow("Failed to generate text: primary provider failed (Quota exceeded for requests per minute.); fallback provider failed (The AI request timed out.)")
+    })
+
+    it("keeps the primary failure when fallback is not configured", async () => {
+        genAiMocks.generateContent.mockRejectedValueOnce(makeQuotaError())
+
+        const { generateText } = await import("@/core/ai/genai")
+
+        await expect(generateText("prompt")).rejects.toThrow("Failed to generate text: Quota exceeded for requests per minute.")
+        expect(fetchMock).not.toHaveBeenCalled()
     })
 
     it("retries generateText after 1s when Gemini reports temporary unavailability", async () => {

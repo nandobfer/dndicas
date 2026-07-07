@@ -8,6 +8,10 @@ import { logUsage } from "./usage-log";
 
 const API_KEY = process.env.GOOGLE_API_KEY;
 const HIGH_DEMAND_RETRY_DELAY_MS = 1000;
+const GENAI_FALLBACK_BASE_URL = process.env.GENAI_BASE_URL;
+const GENAI_FALLBACK_API_KEY = process.env.GENAI_API_KEY;
+const GENAI_FALLBACK_MODEL = process.env.GENAI_FALLBACK_MODEL;
+const DEFAULT_GENAI_FALLBACK_TIMEOUT_MS = 90_000;
 
 if (!API_KEY) {
     console.warn("GOOGLE_API_KEY is not set. GenAI service will not work.");
@@ -75,7 +79,8 @@ const getGeminiRetryableUnavailableReason = (error: unknown): string | null => {
 
 const withRetryableUnavailableRetry = async <T>(
     operationName: string,
-    operation: () => Promise<T>
+    operation: () => Promise<T>,
+    options?: { maxRetries?: number }
 ): Promise<T> => {
     let attempt = 1;
 
@@ -86,6 +91,10 @@ const withRetryableUnavailableRetry = async <T>(
             const retryReason = getGeminiRetryableUnavailableReason(error);
 
             if (!retryReason) {
+                throw error;
+            }
+
+            if (options?.maxRetries !== undefined && attempt > options.maxRetries) {
                 throw error;
             }
 
@@ -145,6 +154,29 @@ interface GenAIImageResponse {
     usageMetadata?: GenAIUsageMetadata;
 }
 
+interface GenAIFallbackUsage {
+    inputTokens: number | null;
+    outputTokens: number | null;
+    totalTokens: number | null;
+}
+
+interface GenAIFallbackGenerateOutput {
+    id: string;
+    model: string;
+    text: string;
+    usage?: GenAIFallbackUsage;
+    costUsd: number | null;
+    latencyMs: number;
+}
+
+interface GenAIFallbackErrorBody {
+    error?: {
+        code?: string;
+        message?: string;
+        requestId?: string;
+    };
+}
+
 export interface GeneratedImagePayload {
     buffer: Buffer;
     mimeType: string;
@@ -163,6 +195,101 @@ const extractImageParts = (response: GenAIImageResponse): GeneratedImagePayload[
             mimeType: part.inlineData.mimeType,
         }];
     });
+}
+
+const getFallbackTimeoutMs = (): number => {
+    const parsed = Number(process.env.GENAI_TIMEOUT_MS);
+    return Number.isFinite(parsed) && parsed > 0 ? parsed : DEFAULT_GENAI_FALLBACK_TIMEOUT_MS;
+}
+
+const isGenAIFallbackConfigured = (): boolean => Boolean(GENAI_FALLBACK_BASE_URL && GENAI_FALLBACK_API_KEY);
+
+const isGenAIFallbackEligibleError = (error: unknown): boolean => {
+    const status = getErrorStatus(error);
+    const message = stringifyError(error).toLowerCase();
+
+    if (status === 429) {
+        return true;
+    }
+
+    if (status === 503 && getGeminiRetryableUnavailableReason(error)) {
+        return true;
+    }
+
+    return (
+        message.includes('quota') ||
+        message.includes('rate limit') ||
+        message.includes('resource exhausted') ||
+        message.includes('too many requests') ||
+        message.includes('limit') ||
+        message.includes('exceeded')
+    );
+}
+
+const getFallbackErrorMessage = async (response: Response): Promise<string> => {
+    const body = await response.json().catch(() => null) as GenAIFallbackErrorBody | null;
+    return body?.error?.message ?? `GenAI fallback error: ${response.status}`;
+}
+
+const generateTextWithFallbackService = async (
+    prompt: string,
+    sourceModelName: string,
+    userId?: string
+): Promise<string> => {
+    if (!GENAI_FALLBACK_BASE_URL || !GENAI_FALLBACK_API_KEY) {
+        throw new Error('GENAI_BASE_URL and GENAI_API_KEY must be set to use GenAI fallback.');
+    }
+
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), getFallbackTimeoutMs());
+    const baseUrl = GENAI_FALLBACK_BASE_URL.replace(/\/+$/, '');
+
+    try {
+        const response = await fetch(`${baseUrl}/generate`, {
+            method: 'POST',
+            headers: {
+                Authorization: `Bearer ${GENAI_FALLBACK_API_KEY}`,
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                prompt,
+                ...(GENAI_FALLBACK_MODEL ? { model: GENAI_FALLBACK_MODEL } : {}),
+                metadata: {
+                    app: 'dndicas',
+                    feature: 'core-ai-generate-text-fallback',
+                    sourceModel: sourceModelName,
+                    ...(userId ? { userId } : {}),
+                },
+            }),
+            signal: controller.signal,
+        });
+
+        if (!response.ok) {
+            throw new Error(await getFallbackErrorMessage(response));
+        }
+
+        const data = await response.json() as GenAIFallbackGenerateOutput;
+
+        if (!data || typeof data.text !== 'string') {
+            throw new Error('GenAI fallback response did not include generated text.');
+        }
+
+        if (data.usage) {
+            await logUsage(
+                data.model || GENAI_FALLBACK_MODEL || 'genai-fallback',
+                data.usage.inputTokens ?? 0,
+                data.usage.outputTokens ?? 0,
+                data.usage.totalTokens ?? 0,
+                userId
+            );
+        }
+
+        console.log(`GenAI fallback used: ${data.model} (${data.latencyMs}ms)`);
+
+        return data.text;
+    } finally {
+        clearTimeout(timeout);
+    }
 }
 
 /**
@@ -208,8 +335,22 @@ export async function generateText(
             }
 
             return response.text || '';
-        });
+        }, { maxRetries: 1 });
     } catch (error) {
+        if (isGenAIFallbackEligibleError(error)) {
+            if (!isGenAIFallbackConfigured()) {
+                console.warn('GenAI fallback skipped because GENAI_BASE_URL or GENAI_API_KEY is not set.');
+            } else {
+                try {
+                    console.warn('GenAI generateText failed due to quota/limit/unavailability. Trying GenAI fallback service.');
+                    return await generateTextWithFallbackService(prompt, modelName, userId);
+                } catch (fallbackError) {
+                    console.error('GenAI Fallback Error:', fallbackError);
+                    throw new Error(`Failed to generate text: primary provider failed (${error instanceof Error ? error.message : 'Unknown error'}); fallback provider failed (${fallbackError instanceof Error ? fallbackError.message : 'Unknown error'})`);
+                }
+            }
+        }
+
         console.error("GenAI Error:", error);
         throw new Error(`Failed to generate text: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }

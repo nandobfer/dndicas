@@ -3,8 +3,8 @@ import type { Editor } from '@tiptap/core'
 import type { SuggestionKeyDownProps, SuggestionProps } from '@tiptap/suggestion'
 import tippy, { type Instance } from 'tippy.js'
 import MentionList, { MentionListProps, MentionListRef } from '../components/mention-list'
-import { searchUnifiedInWorkerProgressively } from '@/core/utils/search-worker-client'
 import type { UnifiedEntity, UnifiedSearchOptions } from '@/core/utils/search-core'
+import { searchUnifiedEntitiesOnServer } from '@/core/utils/unified-search-client'
 import type { EntityType } from '@/lib/config/colors'
 
 type MentionListItem = MentionListProps["items"][number]
@@ -98,23 +98,7 @@ export const getSuggestionConfig = (options?: {
                     if (queryId !== latestQueryId) return
 
                     try {
-                        const results = await searchUnifiedInWorkerProgressively(query, 10, 0, searchOptions, (update) => {
-                            if (queryId !== latestQueryId) return
-
-                            const filteredResults = normalizeResults(update.results)
-                            if (update.done) {
-                                cachedItemsByQuery.set(query, filteredResults)
-                            }
-
-                            loading = !update.done
-                            if (component) {
-                                component.updateProps({
-                                    items: filteredResults,
-                                    loading: !update.done,
-                                    query,
-                                })
-                            }
-                        })
+                        const results = await searchUnifiedEntitiesOnServer(query, 10, 0, searchOptions)
                         if (queryId !== latestQueryId) return
 
                         const filteredResults = normalizeResults(results)

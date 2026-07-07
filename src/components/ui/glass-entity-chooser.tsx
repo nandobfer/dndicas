@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react'
 import { cn } from '@/core/utils'
 import { glassConfig } from '@/lib/config/glass-config'
 import { entityColors } from "@/lib/config/colors"
-import { performUnifiedSearch } from '@/core/utils/search-engine'
+import { searchUnifiedEntitiesOnServer } from '@/core/utils/unified-search-client'
 import { Search, X, Check, Scroll, Sparkles, Zap, Wand, Sword, User, Plus, ShieldCheck, GraduationCap } from "lucide-react"
 import { motion, AnimatePresence } from "framer-motion"
 import { DebounceProgress } from "@/components/ui/debounce-progress"
@@ -216,7 +216,7 @@ export function GlassEntityChooser({ value, onChange, provider, placeholder, dis
                     }
                 } else {
                     // Fallback to unified search
-                    const searchResults = await performUnifiedSearch(query, 50)
+                    const searchResults = await searchUnifiedEntitiesOnServer(query, 50)
                     filtered = searchResults.map((item) => ({
                         ...item,
                         id: item._id || item.id,

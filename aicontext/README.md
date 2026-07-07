@@ -87,6 +87,7 @@ Documentação de módulos específicos do projeto.
 Arquivos:
 - **[organizations.md](./modules/organizations.md)**: CRUD de empresas, filiais e clientes (módulo exemplo)
 - **[dice-roller.md](./modules/dice-roller.md)**: rolagens autoritativas, overrides e visualização 3D dos dados
+- **[search.md](./modules/search.md)**: busca unificada server-side para entidades e menções
 
 Para cada novo módulo em `src/features/`, crie documentação aqui.
 
