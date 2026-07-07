@@ -1,6 +1,6 @@
 "use client"
 
-import { useRef, useCallback } from "react"
+import { useCallback, useEffect, useRef } from "react"
 import { fetchSpell } from "@/features/spells/api/spells-api"
 import { extractMentionsFromHtml } from "../../utils/mention-sync"
 import { buildSpellAttackAutofill, getAutoSpellAttackNotes } from "../../utils/attack-autofill"
@@ -33,10 +33,20 @@ export function useSpellNameSync({
 }: UseSpellNameSyncOptions) {
     // Cache: spellId → last processed catalogSpellId
     const processedRef = useRef<Map<string, string>>(new Map())
+    const pendingAutoAttackNotesRef = useRef<Set<string>>(new Set())
+
+    useEffect(() => {
+        attacks.forEach((attack) => {
+            if (attack.notes?.startsWith("auto:spell:")) {
+                pendingAutoAttackNotesRef.current.add(attack.notes)
+            }
+        })
+    }, [attacks])
 
     const removeAutoAttackForSpell = useCallback(
         (catalogSpellId: string) => {
             const notes = getAutoSpellAttackNotes(catalogSpellId)
+            pendingAutoAttackNotesRef.current.delete(notes)
             attacks
                 .filter((attack) => attack.notes === notes)
                 .forEach((attack) => onRemoveAttack(attack._id))
@@ -53,24 +63,29 @@ export function useSpellNameSync({
             }
 
             const attackAutofill = buildSpellAttackAutofill(catalogSpell, calc, level)
+            const autoAttackNotes = getAutoSpellAttackNotes(catalogSpellId)
             const matchingAttacks = attacks.filter((attack) =>
                 extractMentionsFromHtml(attack.name).some((mention) => mention.entityType === "Magia" && mention.id === catalogSpellId)
             )
-            const autoAttack = matchingAttacks.find((attack) => attack.notes === getAutoSpellAttackNotes(catalogSpellId))
+            const autoAttack = matchingAttacks.find((attack) => attack.notes === autoAttackNotes)
 
             if (autoAttack) {
+                pendingAutoAttackNotesRef.current.add(autoAttackNotes)
                 if (autoAttack.name !== nameHtml || autoAttack.damageType !== attackAutofill.damageType || autoAttack.attackBonus !== attackAutofill.attackBonus) {
-                    onPatchAttack(autoAttack._id, { name: nameHtml, ...attackAutofill, notes: getAutoSpellAttackNotes(catalogSpellId) })
+                    onPatchAttack(autoAttack._id, { name: nameHtml, ...attackAutofill, notes: autoAttackNotes })
                 }
                 return
             }
 
             if (matchingAttacks.length > 0) return
+            if (pendingAutoAttackNotesRef.current.has(autoAttackNotes)) return
+
+            pendingAutoAttackNotesRef.current.add(autoAttackNotes)
 
             onAddAttack({
                 name: nameHtml,
                 ...attackAutofill,
-                notes: getAutoSpellAttackNotes(catalogSpellId),
+                notes: autoAttackNotes,
             })
         },
         [attacks, calc, level, onAddAttack, onPatchAttack, removeAutoAttackForSpell]
