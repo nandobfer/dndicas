@@ -1,5 +1,5 @@
-import { OwlbearContextMenuBackgroundClient } from "@/features/owlbear/owlbear-client-only-surface"
+import { OwlbearContextMenuBackground } from "@/features/owlbear/owlbear-action-surface"
 
 export default function OwlbearNpcsBackgroundPage() {
-    return <OwlbearContextMenuBackgroundClient kind="npc" />
+    return <OwlbearContextMenuBackground kind="npc" />
 }

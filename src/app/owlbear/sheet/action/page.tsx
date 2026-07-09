@@ -1,5 +1,5 @@
-import { OwlbearSheetActionClient } from "@/features/owlbear/owlbear-client-only-surface"
+import { OwlbearSheetAction } from "@/features/owlbear/owlbear-action-surface"
 
 export default function OwlbearSheetActionPage() {
-    return <OwlbearSheetActionClient />
+    return <OwlbearSheetAction />
 }
