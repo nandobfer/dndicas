@@ -1,6 +1,24 @@
-import { describe, expect, it } from "vitest"
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { sanitizeEntityUnderstandingHtml, getPlainTextFromHtml, isMeaningfulHtml } from "@/features/entity-understanding/services/entity-understanding-html"
 import { buildEntityUnderstandingHistory, buildEntityUnderstandingSystemInstruction } from "@/features/entity-understanding/services/entity-understanding-prompt"
+import { clearChatSession, loadChatSession, saveChatSession } from "@/features/entity-understanding/services/entity-understanding-storage"
+import { ENTITY_UNDERSTANDING_IDLE_TTL_MS } from "@/features/entity-understanding/types/entity-understanding.types"
+
+function installLocalStorageMock() {
+    const store = new Map<string, string>()
+    Object.defineProperty(globalThis, "window", {
+        configurable: true,
+        value: {
+            localStorage: {
+                getItem: vi.fn((key: string) => store.get(key) ?? null),
+                setItem: vi.fn((key: string, value: string) => store.set(key, value)),
+                removeItem: vi.fn((key: string) => store.delete(key)),
+            },
+        },
+    })
+
+    return store
+}
 
 describe("entity understanding html", () => {
     it("keeps safe formatting and valid mentions", () => {
@@ -62,5 +80,44 @@ describe("entity understanding prompt", () => {
         expect(system).toContain("Não mencione JSON")
         expect(system).toContain('data-type="mention"')
         expect(system).toContain("pt-BR")
+    })
+})
+
+describe("entity understanding storage", () => {
+    beforeEach(() => {
+        installLocalStorageMock()
+        vi.useFakeTimers()
+        vi.setSystemTime(new Date("2026-07-09T12:00:00.000Z"))
+    })
+
+    afterEach(() => {
+        vi.useRealTimers()
+        vi.restoreAllMocks()
+        Reflect.deleteProperty(globalThis, "window")
+    })
+
+    it("saves and loads a valid chat session", () => {
+        const lastActivity = Date.now()
+        saveChatSession("Classe", "ladino", [{ role: "model", html: "<p>Ladino é furtivo.</p>" }], lastActivity)
+
+        expect(loadChatSession("Classe", "ladino")).toEqual({
+            messages: [{ role: "model", html: "<p>Ladino é furtivo.</p>" }],
+            lastActivity,
+        })
+    })
+
+    it("clears expired sessions", () => {
+        const lastActivity = Date.now() - ENTITY_UNDERSTANDING_IDLE_TTL_MS - 1
+        saveChatSession("Classe", "ladino", [{ role: "model", html: "<p>Expirou.</p>" }], lastActivity)
+
+        expect(loadChatSession("Classe", "ladino")).toBeNull()
+        expect(window.localStorage.removeItem).toHaveBeenCalledWith("entity-understanding:chat:Classe:ladino")
+    })
+
+    it("removes a session explicitly", () => {
+        saveChatSession("Classe", "ladino", [{ role: "user", html: "<p>Pergunta.</p>" }], Date.now())
+        clearChatSession("Classe", "ladino")
+
+        expect(loadChatSession("Classe", "ladino")).toBeNull()
     })
 })

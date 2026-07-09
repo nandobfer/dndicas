@@ -124,7 +124,7 @@ export const getGenAIClient = (): GoogleGenAI => {
  * Modelo padrão para geração de texto
  * Usando gemini-2.0-flash-exp conforme SDK atual
  */
-export const defaultModel = "gemini-2.5-flash-lite";
+export const defaultModel = "gemini-3.1-flash-lite";
 export const defaultImageModel = "gemini-2.5-flash-image";
 
 interface GenAIInlineData {

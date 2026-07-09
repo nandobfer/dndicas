@@ -87,23 +87,24 @@ Fluxo esperado:
 6. O client envia novamente a conversa completa da sessao, incluindo resumo inicial, perguntas anteriores, respostas anteriores e a nova pergunta.
 7. A IA responde considerando a entidade original e todo o historico ativo.
 
-A conversa deve continuar enquanto a sessao estiver ativa. Fechar a janela encerra a sessao local daquele chat. Se o usuario ficar inativo por aproximadamente 5 minutos, a sessao deve expirar e a proxima interacao deve iniciar uma nova conversa com um novo resumo inicial.
+A conversa deve continuar enquanto a sessao estiver ativa. Se o usuario ficar inativo por aproximadamente 24 horas, a sessao deve expirar e a proxima interacao deve iniciar uma nova conversa com um novo resumo inicial.
 
-Minimizar a janela nao deve criar uma nova conversa por si so. A sessao pode ser reiniciada se a janela for remontada pelo gerenciador global ou se o TTL de inatividade for atingido.
+Minimizar a janela nao deve criar uma nova conversa por si so. Como o gerenciador global desmonta o conteudo minimizado, o chat deve persistir mensagens e `lastActivity` no `localStorage` por entidade e restaurar essa sessao ao reabrir/restaurar a janela.
 
 Regras de contexto:
 
 - a entidade original deve permanecer fixa durante toda a sessao;
 - cada nova pergunta deve enviar o historico completo da sessao ativa;
 - respostas da IA devem considerar as mensagens anteriores;
-- o historico nao precisa ser persistido em banco nesta primeira versao;
-- o historico pode viver em estado React enquanto a janela estiver aberta;
+- o historico nao deve ser persistido em banco nesta primeira versao;
+- o historico vive no client e deve ser salvo em `localStorage` com chave `entity-understanding:chat:<entityType>:<entityId>`;
+- o `localStorage` deve guardar apenas mensagens e `lastActivity`, nunca input parcial, loading ou erro;
 - se houver expiração por inatividade, limpar mensagens e reiniciar o fluxo de resumo inicial.
 
 Timeout recomendado:
 
 ```ts
-const ENTITY_UNDERSTANDING_IDLE_TTL_MS = 5 * 60 * 1000;
+const ENTITY_UNDERSTANDING_IDLE_TTL_MS = 24 * 60 * 60 * 1000;
 ```
 
 Esse TTL e de UX/sessao local, nao uma garantia de seguranca. A API continua sendo stateless e recebe o historico enviado pelo client a cada requisicao.

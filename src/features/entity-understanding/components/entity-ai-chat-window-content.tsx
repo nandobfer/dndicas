@@ -6,6 +6,7 @@ import { cn } from "@/core/utils"
 import { MentionContent } from "@/features/rules/components/mention-badge"
 import { RichTextEditor } from "@/features/rules/components/rich-text-editor"
 import { getPlainTextFromHtml, isMeaningfulHtml, sanitizeEntityUnderstandingHtml } from "../services/entity-understanding-html"
+import { loadChatSession, saveChatSession, clearChatSession } from "../services/entity-understanding-storage"
 import { ENTITY_UNDERSTANDING_IDLE_TTL_MS, type EntityUnderstandingMessage, type EntityUnderstandingMode } from "../types/entity-understanding.types"
 
 interface EntityAIChatWindowContentProps {
@@ -74,22 +75,30 @@ const streamEntityUnderstanding = async ({
 }
 
 export function EntityAIChatWindowContent({ entity, entityId, entityType, entityName }: EntityAIChatWindowContentProps) {
-    const [messages, setMessages] = React.useState<ChatMessage[]>([])
+    const initialSession = React.useMemo(() => loadChatSession(entityType, entityId), [entityType, entityId])
+    const [messages, setMessages] = React.useState<ChatMessage[]>(() => {
+        return initialSession ? initialSession.messages.map((m) => ({ ...m, id: createId() })) : []
+    })
     const [input, setInput] = React.useState("")
     const [isLoading, setIsLoading] = React.useState(false)
     const [error, setError] = React.useState<string | null>(null)
-    const lastActivityRef = React.useRef<number>(Date.now())
+    const lastActivityRef = React.useRef<number>(initialSession?.lastActivity ?? Date.now())
     const abortControllerRef = React.useRef<AbortController | null>(null)
+    const saveDebounceRef = React.useRef<ReturnType<typeof setTimeout> | null>(null)
+    const messagesRef = React.useRef<ChatMessage[]>(messages)
 
     const resetSession = React.useCallback(() => {
         abortControllerRef.current?.abort()
         abortControllerRef.current = null
+        if (saveDebounceRef.current) clearTimeout(saveDebounceRef.current)
+        messagesRef.current = []
         setMessages([])
         setInput("")
         setError(null)
         setIsLoading(false)
         lastActivityRef.current = Date.now()
-    }, [])
+        clearChatSession(entityType, entityId)
+    }, [entityType, entityId])
 
     const requestAi = React.useCallback(async (mode: EntityUnderstandingMode, nextMessages: ChatMessage[]) => {
         const controller = new AbortController()
@@ -157,12 +166,48 @@ export function EntityAIChatWindowContent({ entity, entityId, entityType, entity
     }, [input, isLoading, messages, requestAi, startSession])
 
     React.useEffect(() => {
+        messagesRef.current = messages
+    }, [messages])
+
+    const persistCurrentSession = React.useCallback(() => {
+        const persistedMessages = messagesRef.current
+            .map(({ role, html }) => ({ role, html }))
+            .filter((message) => isMeaningfulHtml(message.html))
+
+        if (persistedMessages.length === 0) {
+            clearChatSession(entityType, entityId)
+            return
+        }
+
+        saveChatSession(entityType, entityId, persistedMessages, lastActivityRef.current)
+    }, [entityType, entityId])
+
+    // Persist session to LocalStorage on every messages change (debounced)
+    React.useEffect(() => {
+        if (saveDebounceRef.current) clearTimeout(saveDebounceRef.current)
+        saveDebounceRef.current = setTimeout(persistCurrentSession, 300)
+
+        return () => {
+            if (saveDebounceRef.current) clearTimeout(saveDebounceRef.current)
+        }
+    }, [messages, persistCurrentSession])
+
+    React.useEffect(() => {
+        return () => {
+            if (saveDebounceRef.current) clearTimeout(saveDebounceRef.current)
+            persistCurrentSession()
+        }
+    }, [persistCurrentSession])
+
+    React.useEffect(() => {
+        if (initialSession) return
+
         void requestAi("initial_summary", [])
 
         return () => {
             abortControllerRef.current?.abort()
         }
-    }, [requestAi])
+    }, [requestAi, initialSession])
 
     return (
         <div className="flex h-full min-h-0 flex-col gap-3" data-mention-interaction-surface="entity-ai-chat">
