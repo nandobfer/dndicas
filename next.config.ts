@@ -29,10 +29,10 @@ const nextConfig: NextConfig = {
                 ],
             },
             ...[
-                "/owlbear-catalog-action.svg",
-                "/owlbear-sheet-action.svg",
-                "/owlbear-npcs-action.svg",
-                "/owlbear-dice-action.svg",
+                "/owlbear/catalog.svg",
+                "/owlbear/sheet.svg",
+                "/owlbear/npc.svg",
+                "/owlbear/dice.svg",
             ].map((source) => ({
                 source,
                 headers: [

@@ -7,7 +7,7 @@ A integração do Owlbear é publicada como quatro manifests/actions independent
 
 `dndicas - catalogo` renderiza apenas o catálogo embutido. `dndicas - ficha` renderiza `OwlbearGmSheetsTab` para GM ou `OwlbearPlayerSheetTab` para PLAYER. `dndicas - npcs` renderiza uma navegação interna entre `OwlbearGmNpcsTab` e `OwlbearGmInitiativeTab`. `dndicas - dados` renderiza apenas `OwlbearDiceTab`, permitindo manter os dados abertos enquanto outra action mostra ficha, NPCs ou catálogo.
 
-Os ícones das actions são servidos por route handlers em `/owlbear/icons/catalog.svg`, `/owlbear/icons/sheet.svg`, `/owlbear/icons/npcs.svg` e `/owlbear/icons/dice.svg`, sempre com `Content-Type: image/svg+xml`, `Access-Control-Allow-Origin: *` e `Cache-Control: no-store`. Os SVGs usam `stroke="currentColor"` e não devem ter `width`/`height` fixos para permitir que o Owlbear controle cor e tamanho.
+Os ícones das actions são servidos por route handlers em `/owlbear/icons/catalog.svg`, `/owlbear/icons/sheet.svg`, `/owlbear/icons/npcs.svg` e `/owlbear/icons/dice.svg`, sempre com `Content-Type: image/svg+xml`, `Access-Control-Allow-Origin: *` e `Cache-Control: no-store`. As fontes ficam em `public/owlbear/catalog.svg`, `public/owlbear/sheet.svg`, `public/owlbear/npc.svg` e `public/owlbear/dice.svg`; os SVGs usam `currentColor`, `viewBox="0 0 24 24"` e não devem ter `width`/`height` fixos para permitir que o Owlbear controle cor e tamanho.
 
 ### Action compartilhada de dados da sala
 A action `dndicas - dados` renderiza o roller do Dndicas em modo embutido, com rolagens compartilhadas entre todos os clientes conectados à mesma sala, sem exibir aviso textual separado de quem realizou a ultima rolagem.

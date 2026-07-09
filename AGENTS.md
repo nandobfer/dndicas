@@ -8,8 +8,7 @@ Antes de implementar, leia nesta ordem:
 
 1. `aicontext/README.md`
 2. `aicontext/use-sempre-que-desenvolver.md`
-3. `aicontext/use-para-entender-o-dominio.md` quando houver regra ou termo de negócio
-4. O guia específico da tarefa:
+3. O guia específico da tarefa:
    - API: `aicontext/use-quando-desenvolver-api.md`
    - UI/tema/componentes: `aicontext/use-para-atualizar-tema-e-componentes-ui.md` e `aicontext/use-componentes-ui.md`
    - Extensão de serviços ou componentes base: `aicontext/use-para-estender-o-core.md`
