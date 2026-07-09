@@ -1,0 +1,68 @@
+{
+  "mode": "apply",
+  "targets": [
+    {
+      "collectionName": "users",
+      "fieldName": "clerkId",
+      "label": "users.clerkId",
+      "matchedCount": 15,
+      "modifiedCount": 15
+    },
+    {
+      "collectionName": "charactersheets",
+      "fieldName": "userId",
+      "label": "characterSheets.userId",
+      "matchedCount": 23,
+      "modifiedCount": 23
+    },
+    {
+      "collectionName": "owlbear_sessions",
+      "fieldName": "userId",
+      "label": "owlbearSessions.userId",
+      "matchedCount": 232,
+      "modifiedCount": 232
+    },
+    {
+      "collectionName": "owlbear_room_npcs",
+      "fieldName": "userId",
+      "label": "owlbearRoomNpcs.userId",
+      "matchedCount": 27,
+      "modifiedCount": 27
+    },
+    {
+      "collectionName": "user_npcs",
+      "fieldName": "userId",
+      "label": "userNpcs.userId",
+      "matchedCount": 11,
+      "modifiedCount": 11
+    },
+    {
+      "collectionName": "feedbacks",
+      "fieldName": "createdBy",
+      "label": "feedback.createdBy",
+      "matchedCount": 67,
+      "modifiedCount": 67
+    },
+    {
+      "collectionName": "auditlogs",
+      "fieldName": "userId",
+      "label": "auditLogs.userId",
+      "matchedCount": 0,
+      "modifiedCount": 0
+    },
+    {
+      "collectionName": "auditlogs",
+      "fieldName": "performedBy",
+      "label": "auditLogs.performedBy",
+      "matchedCount": 1722,
+      "modifiedCount": 1722
+    },
+    {
+      "collectionName": "usagelogs",
+      "fieldName": "userId",
+      "label": "usageLogs.userId",
+      "matchedCount": 239,
+      "modifiedCount": 239
+    }
+  ]
+}
