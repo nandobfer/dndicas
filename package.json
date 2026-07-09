@@ -12,6 +12,8 @@
         "deploy": "dockerbp nandoburgos/dndicas && ssh boz \"cd /home/nandoburgos/dndicas && docker compose pull && docker compose up -d\"",
         "seed": "tsx scripts/seed-data/index.ts",
         "seed:test": "tsx scripts/seed-data/index.ts --test",
+        "clerk:migrate:dry-run": "tsx scripts/migrate-clerk-dev-to-prod.ts --dry-run",
+        "clerk:migrate:apply": "tsx scripts/migrate-clerk-dev-to-prod.ts --apply --confirm-backup",
         "search": "tsx scripts/search-cli.ts",
         "search-cli": "tsx scripts/search-cli.ts",
         "dice-override-cli": "tsx scripts/dice-override-cli.ts"

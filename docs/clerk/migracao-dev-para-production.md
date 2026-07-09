@@ -66,6 +66,8 @@ O MongoDB atual deve ser consultado durante a migracao para preservar dados que 
 8. Atualizar o MongoDB para trocar referencias ao ID antigo pelo ID novo.
 9. Validar login, permissao admin e acesso aos dados existentes.
 
+Usuarios presentes no CSV mas ausentes no MongoDB local sao pulados (`skipped`) por padrao, porque o MongoDB e a fonte autoritativa para roles, status e ownership local.
+
 ## Criacao Dos Usuarios No Clerk Production
 
 Para cada usuario do CSV, o script futuro deve:
@@ -94,6 +96,12 @@ usuario@example.com,user_dev_123,user_prod_456,65f...,admin,active,created
 
 Este arquivo sera usado para auditar a migracao e para aplicar as atualizacoes no MongoDB com seguranca.
 
+O script implementado grava os artefatos em `docs/clerk/migration-output/`:
+
+- `migration-map.csv`: mapa auditavel por usuario.
+- `migration-report.json`: relatorio completo da reconciliacao com o Clerk production.
+- `mongodb-remap-report.json`: contagens por colecao/campo remapeado.
+
 ## Colecoes E Campos A Remapear
 
 Lista inicial de campos que podem conter IDs antigos do Clerk development:
@@ -104,10 +112,54 @@ Lista inicial de campos que podem conter IDs antigos do Clerk development:
 - `owlbearRoomNpcs.userId`
 - `userNpcs.userId`
 - `feedback.createdBy`
-- logs de auditoria com `performedBy` ou `userId`, se o historico precisar continuar filtravel pelo novo usuario
-- logs de uso de IA com `userId`, se o historico precisar continuar vinculado ao novo usuario
+- `auditlogs.userId`
+- `auditlogs.performedBy`
+- `usagelogs.userId`
 
-A lista deve ser confirmada no momento de implementar o script, buscando modelos e colecoes que persistem `userId`, `createdBy`, `performedBy` ou campos equivalentes.
+A lista foi confirmada contra os modelos atuais. A migracao remapeia tambem logs historicos para manter filtros e rastreabilidade usando o novo ID do Clerk production.
+
+IDs sinteticos do Owlbear, como `owlbear-gm:*` e `owlbear-player:*`, nao fazem parte do mapa Clerk e nao sao remapeados.
+
+## Script Implementado
+
+Arquivo principal: `scripts/migrate-clerk-dev-to-prod.ts`.
+
+Utilitarios testaveis: `scripts/clerk-migration-utils.ts`.
+
+Comandos principais:
+
+```bash
+pnpm clerk:migrate:dry-run
+pnpm clerk:migrate:apply
+```
+
+O modo `dry-run` e o caminho seguro inicial. Ele le o CSV, consulta MongoDB e Clerk production, gera relatorios e simula o remapeamento sem criar usuarios e sem alterar o MongoDB.
+
+O modo `apply` exige backup confirmado e so deve ser executado depois do relatorio de `dry-run` ser revisado:
+
+```bash
+pnpm clerk:migrate:apply
+```
+
+Flags aceitas pelo script:
+
+```bash
+tsx scripts/migrate-clerk-dev-to-prod.ts --dry-run
+tsx scripts/migrate-clerk-dev-to-prod.ts --apply --confirm-backup
+tsx scripts/migrate-clerk-dev-to-prod.ts --csv docs/clerk/clerk-users-dev.csv --out docs/clerk/migration-output --dry-run
+tsx scripts/migrate-clerk-dev-to-prod.ts --dry-run --skip-clerk
+tsx scripts/migrate-clerk-dev-to-prod.ts --dry-run --skip-mongodb
+```
+
+Regras de seguranca do script:
+
+- `dry-run` e o padrao quando `--apply` nao e informado.
+- `apply` exige `--confirm-backup`.
+- `apply` exige `CLERK_SECRET_KEY` iniciando com `sk_live_`, exceto quando `--skip-clerk` for usado.
+- Usuarios sem registro local no MongoDB sao marcados como `skipped`.
+- Usuarios locais com `deleted=true` sao marcados como `skipped` para evitar reativacao indevida.
+- Divergencia entre `User.clerkId` e `id` do CSV vira erro bloqueante no `apply`.
+- Usuarios sem hash importavel recebem `needsAccessSetup=true` no mapa.
 
 ## Fluxo Operacional
 
