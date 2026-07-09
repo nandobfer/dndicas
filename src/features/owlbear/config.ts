@@ -22,6 +22,7 @@ export const OWLBEAR_ACTIONS = {
         manifestPath: "/owlbear/npcs/manifest.json",
         actionPath: "/owlbear/npcs/action",
         backgroundPath: "/owlbear/npcs/background",
+        actionSize: { width: 600, height: OWLBEAR_ACTION_SIZE.height },
     },
     dice: {
         title: "Dndicas - dados",

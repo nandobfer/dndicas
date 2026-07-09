@@ -8,15 +8,17 @@ import { GlassImage } from "@/components/ui/glass-image"
 import { cn } from "@/core/utils"
 import type { CharacterSheet } from "@/features/character-sheets/types/character-sheet.types"
 import { attributeColors } from "@/lib/config/colors"
-import { MentionContent } from "@/features/rules/components/mention-badge"
 
-const isHtmlContent = (s: string) => s.includes("<")
+function extractPlainText(value: string): string {
+    if (!value.includes("<")) return value.replace(/\s+/g, " ").trim()
 
-function RichFieldValue({ value }: { value: string }) {
-    if (isHtmlContent(value)) {
-        return <MentionContent html={value} mode="inline" />
+    if (typeof document !== "undefined") {
+        const element = document.createElement("div")
+        element.innerHTML = value
+        return (element.textContent ?? "").replace(/\s+/g, " ").trim()
     }
-    return <span>{value}</span>
+
+    return value.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim()
 }
 
 const ATTR_LABELS: {
@@ -84,6 +86,9 @@ export function GlassSheetCard({
     const fallbackInitial = (sheet.name || "?").trim().charAt(0).toUpperCase() || "?"
     const shouldShowAction = showDelete && (onAction || onRequestDelete)
     const actionDisabled = isDeleting || isActionPending
+    const sheetDetails = [sheet.class, sheet.subclass, sheet.race, sheet.origin]
+        .map((value) => value ? extractPlainText(value) : "")
+        .filter(Boolean)
     const actionButtonClassName = cn(
         "opacity-0 group-hover:opacity-100 transition-opacity duration-150",
         "w-7 h-7 rounded-md flex items-center justify-center flex-shrink-0",
@@ -149,14 +154,9 @@ export function GlassSheetCard({
                                     </div>
                                 </div>
                             </div>
-                            {(sheet.class || sheet.race || sheet.origin) && (
+                            {sheetDetails.length > 0 && (
                                 <p className="text-[10px] text-white/50 font-semibold tracking-wider truncate mt-0.5">
-                                    {[
-                                        sheet.class ? <RichFieldValue key="class" value={sheet.class} /> : null,
-                                        sheet.subclass ? <RichFieldValue key="subclass" value={sheet.subclass} /> : null,
-                                        sheet.race ? <RichFieldValue key="race" value={sheet.race} /> : null,
-                                        sheet.origin ? <RichFieldValue key="origin" value={sheet.origin} /> : null,
-                                    ].filter(Boolean).reduce<React.ReactNode[]>((acc, el, i) => (i === 0 ? [el] : [...acc, " · ", el]), [])}
+                                    {sheetDetails.join(" · ")}
                                 </p>
                             )}
                         </div>

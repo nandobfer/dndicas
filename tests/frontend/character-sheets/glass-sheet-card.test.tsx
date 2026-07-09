@@ -29,10 +29,6 @@ vi.mock("@/components/ui/glass-image", () => ({
     },
 }))
 
-vi.mock("@/features/rules/components/mention-badge", () => ({
-    MentionContent: ({ html }: { html: string }) => <span>{html}</span>,
-}))
-
 const sheet = {
     _id: "sheet-1",
     name: "Kael",
@@ -88,5 +84,23 @@ describe("GlassSheetCard", () => {
 
         expect(screen.queryByTestId("sheet-card-image")).not.toBeInTheDocument()
         expect(screen.getByText("L")).toBeInTheDocument()
+    })
+
+    it("renders class, subclass, species and origin as plain text extracted from html", () => {
+        render(
+            <GlassSheetCard
+                sheet={{
+                    ...sheet,
+                    class: '<span data-mention="class">Guerreiro</span>',
+                    subclass: '<a href="/classes/campeao">Campeão</a>',
+                    race: "<p>Humano &amp; Variante</p>",
+                    origin: '<span class="mention-badge">Soldado</span>',
+                }}
+                showDelete={false}
+            />
+        )
+
+        expect(screen.getByText("Guerreiro · Campeão · Humano & Variante · Soldado")).toBeInTheDocument()
+        expect(screen.queryByText(/data-mention|href|mention-badge|<span|<a|<p/)).not.toBeInTheDocument()
     })
 })
