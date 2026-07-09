@@ -1,0 +1,137 @@
+{
+  "mode": "apply",
+  "copied": 12,
+  "wouldCopy": 0,
+  "skipped": 4,
+  "errors": 0,
+  "records": [
+    {
+      "email": "nandobfer@gmail.com",
+      "oldClerkId": "user_39qKqwvMZF0oDulqJQblpQDs2E7",
+      "newClerkId": "user_3GHSa69vWxsMx41K9SlMvc5adWo",
+      "action": "copied",
+      "oldImageUrl": "https://img.clerk.com/eyJ0eXBlIjoicHJveHkiLCJzcmMiOiJodHRwczovL2ltYWdlcy5jbGVyay5kZXYvb2F1dGhfZ29vZ2xlL2ltZ18zOXFLcXZ4U2hhUXRoWVN0QlhkNWpST0p1RHMifQ",
+      "message": "Imagem copiada para o Clerk production."
+    },
+    {
+      "email": "nando.tibiabr@gmail.com",
+      "oldClerkId": "user_39wcmtJoIJnEXejjrZtXdjZnzjf",
+      "newClerkId": "user_3GHSa9oZCBLDouPRjQ99uZGHe4t",
+      "action": "skipped",
+      "oldImageUrl": "https://img.clerk.com/eyJ0eXBlIjoiZGVmYXVsdCIsImlpZCI6Imluc18zOXFKMWl4YjlxT0x0aWE5SDJGTG00WnpFYTIiLCJyaWQiOiJ1c2VyXzM5d2NtdEpvSUpuRVhlampyWnRYZGpabnpqZiIsImluaXRpYWxzIjoiT0MifQ",
+      "message": "Usuário dev não tinha imagem personalizada."
+    },
+    {
+      "email": "joao@cleber.com",
+      "oldClerkId": "user_39wo7fUvrYzC0CY0bL7kVp545jD",
+      "newClerkId": "user_3GHSa7RrMnx6YqYpWDn9s5i6Y75",
+      "action": "skipped",
+      "oldImageUrl": "https://img.clerk.com/eyJ0eXBlIjoiZGVmYXVsdCIsImlpZCI6Imluc18zOXFKMWl4YjlxT0x0aWE5SDJGTG00WnpFYTIiLCJyaWQiOiJ1c2VyXzM5d283ZlV2cll6QzBDWTBiTDdrVnA1NDVqRCIsImluaXRpYWxzIjoiSkMifQ",
+      "message": "Usuário dev não tinha imagem personalizada."
+    },
+    {
+      "email": "theuwow@gmail.com",
+      "oldClerkId": "user_3ABgYdj7RYnrHKZI7CNQk31xaAc",
+      "newClerkId": "user_3GHSaA0nWzXrowhFewkllLY4R9F",
+      "action": "copied",
+      "oldImageUrl": "https://img.clerk.com/eyJ0eXBlIjoicHJveHkiLCJzcmMiOiJodHRwczovL2ltYWdlcy5jbGVyay5kZXYvdXBsb2FkZWQvaW1nXzNBV3JjbXJHSzYzSFY5Z2NFTlVHSEpheDV1VyJ9",
+      "message": "Imagem copiada para o Clerk production."
+    },
+    {
+      "email": "alfredoaugustopetri@gmail.com",
+      "oldClerkId": "user_3ADPsjwFJHvVPOESa3LTTPc4JdV",
+      "newClerkId": "user_3GHSa4Cc2tJ6WJtenY9OUgQ1I7R",
+      "action": "copied",
+      "oldImageUrl": "https://img.clerk.com/eyJ0eXBlIjoicHJveHkiLCJzcmMiOiJodHRwczovL2ltYWdlcy5jbGVyay5kZXYvb2F1dGhfZ29vZ2xlL2ltZ18zQURQc2lnZjFBc0p1eTZJOG9XeE0zTzk0Mk8ifQ",
+      "message": "Imagem copiada para o Clerk production."
+    },
+    {
+      "email": "cheester97@gmail.com",
+      "oldClerkId": "user_3AJeblry70DRtWQM9FLoAUltZLl",
+      "newClerkId": "user_3GHSaIM5FQaPX4lHO1jpCGppOE0",
+      "action": "copied",
+      "oldImageUrl": "https://img.clerk.com/eyJ0eXBlIjoicHJveHkiLCJzcmMiOiJodHRwczovL2ltYWdlcy5jbGVyay5kZXYvb2F1dGhfZ29vZ2xlL2ltZ18zQUplYmhVdzNQdzRvRURaTnZVRjQ0a0t2V3EifQ",
+      "message": "Imagem copiada para o Clerk production."
+    },
+    {
+      "email": "acebercute@gmail.com",
+      "oldClerkId": "user_3ASKrav02k8Kukdt7UyfSdcfqaw",
+      "newClerkId": "user_3GHSaCHK88nC2QqTKlUfpszAa79",
+      "action": "copied",
+      "oldImageUrl": "https://img.clerk.com/eyJ0eXBlIjoicHJveHkiLCJzcmMiOiJodHRwczovL2ltYWdlcy5jbGVyay5kZXYvb2F1dGhfZ29vZ2xlL2ltZ18zQVNLcldYcldMcTZ1bjJYcWR1YUVjOG4zTlMifQ",
+      "message": "Imagem copiada para o Clerk production."
+    },
+    {
+      "email": "andersonvpqa@gmail.com",
+      "oldClerkId": "user_3BUVW5fbsopjHFQdZYeMHBM3yDI",
+      "newClerkId": "user_3GHSaI3IHRHlfxjQUJ6JmLPSLcV",
+      "action": "copied",
+      "oldImageUrl": "https://img.clerk.com/eyJ0eXBlIjoicHJveHkiLCJzcmMiOiJodHRwczovL2ltYWdlcy5jbGVyay5kZXYvb2F1dGhfZ29vZ2xlL2ltZ18zQlVWVzFsZUZnNUVVOUNWaXFHQjJjYml0S0YifQ",
+      "message": "Imagem copiada para o Clerk production."
+    },
+    {
+      "email": "indiralima@duck.com",
+      "oldClerkId": "user_3BiQoOCuvR9N6JzH4RUbXnP1Zxu",
+      "newClerkId": "user_3GHSaCGlhmVZXJwzTiaDHJahqo3",
+      "action": "copied",
+      "oldImageUrl": "https://img.clerk.com/eyJ0eXBlIjoicHJveHkiLCJzcmMiOiJodHRwczovL2ltYWdlcy5jbGVyay5kZXYvb2F1dGhfZGlzY29yZC9pbWdfM0JpUW9PbWF4VDJEeDIxU1pGdUQzM3BwdlVEIn0",
+      "message": "Imagem copiada para o Clerk production."
+    },
+    {
+      "email": "laherce@gmail.com",
+      "oldClerkId": "user_3C6PoTM9yXgrOZnSUzyb5w3y2np",
+      "newClerkId": "user_3GHSaQFe9rHz3qMOvN6KXU6pOwk",
+      "action": "copied",
+      "oldImageUrl": "https://img.clerk.com/eyJ0eXBlIjoicHJveHkiLCJzcmMiOiJodHRwczovL2ltYWdlcy5jbGVyay5kZXYvb2F1dGhfZ29vZ2xlL2ltZ18zQzZQb096UnJhT3A3eEZxS1lNb3NhQ1AyYUoifQ",
+      "message": "Imagem copiada para o Clerk production."
+    },
+    {
+      "email": "sm.cardosopedro@gmail.com",
+      "oldClerkId": "user_3CBXimY4N3XvdljuThj5VmhFUCv",
+      "newClerkId": "user_3GHSaJuEscmiNZBorJT4ARS2jFw",
+      "action": "copied",
+      "oldImageUrl": "https://img.clerk.com/eyJ0eXBlIjoicHJveHkiLCJzcmMiOiJodHRwczovL2ltYWdlcy5jbGVyay5kZXYvb2F1dGhfZ29vZ2xlL2ltZ18zQ0JYaXRveERSeElwdEg4cWVyRmswUDNOeHAifQ",
+      "message": "Imagem copiada para o Clerk production."
+    },
+    {
+      "email": "ildojuniorjogador@gmail.com",
+      "oldClerkId": "user_3CBpWjxAWUG004LuUvKAv41ua0m",
+      "newClerkId": "user_3GHSaK5dIuAl4skQ9DNjNy5BYqx",
+      "action": "skipped",
+      "oldImageUrl": "https://img.clerk.com/eyJ0eXBlIjoiZGVmYXVsdCIsImlpZCI6Imluc18zOXFKMWl4YjlxT0x0aWE5SDJGTG00WnpFYTIiLCJyaWQiOiJ1c2VyXzNDQnBXanhBV1VHMDA0THVVdktBdjQxdWEwbSIsImluaXRpYWxzIjoiSVAifQ",
+      "message": "Usuário dev não tinha imagem personalizada."
+    },
+    {
+      "email": "brunoroseo@gmail.com",
+      "oldClerkId": "user_3DuwZEp5pnb8sbt4Iyp4S540pMz",
+      "newClerkId": "user_3GHSaK4YFqkHXxUJURQgHqrCnSF",
+      "action": "copied",
+      "oldImageUrl": "https://img.clerk.com/eyJ0eXBlIjoicHJveHkiLCJzcmMiOiJodHRwczovL2ltYWdlcy5jbGVyay5kZXYvb2F1dGhfZ29vZ2xlL2ltZ18zRHV3WjlSWHpZTlZZdlIzRDZSdUd2cTl4RjQifQ",
+      "message": "Imagem copiada para o Clerk production."
+    },
+    {
+      "email": "danibfer231010@gmail.com",
+      "oldClerkId": "user_3ET6bJGDsKjsYTuzOTy1wuVLQcI",
+      "newClerkId": "user_3GHSaNid6fpQLddtdLNgw5qkriN",
+      "action": "copied",
+      "oldImageUrl": "https://img.clerk.com/eyJ0eXBlIjoicHJveHkiLCJzcmMiOiJodHRwczovL2ltYWdlcy5jbGVyay5kZXYvb2F1dGhfZ29vZ2xlL2ltZ18zRVQ2YkQ2Y0dNWm42YUExR3hGZUxnNEZpbkwifQ",
+      "message": "Imagem copiada para o Clerk production."
+    },
+    {
+      "email": "okgawatheking@gmail.com",
+      "oldClerkId": "user_3FhBko8X5iycVwYqEbvXBSV9Bvt",
+      "newClerkId": "",
+      "action": "skipped",
+      "oldImageUrl": "",
+      "message": "Registro sem par old/new Clerk ID; pulado."
+    },
+    {
+      "email": "nilsander@hotmail.com",
+      "oldClerkId": "user_3G3WZBoOWl26AnszTlsZ1HI8Ggf",
+      "newClerkId": "user_3GHSaOSbbFLaPA2pFqXkpYOSDoG",
+      "action": "copied",
+      "oldImageUrl": "https://img.clerk.com/eyJ0eXBlIjoicHJveHkiLCJzcmMiOiJodHRwczovL2ltYWdlcy5jbGVyay5kZXYvdXBsb2FkZWQvaW1nXzNHNGp3TFNVR2pFZXpKWDNFZnBRUWlDelRDMiJ9",
+      "message": "Imagem copiada para o Clerk production."
+    }
+  ]
+}
