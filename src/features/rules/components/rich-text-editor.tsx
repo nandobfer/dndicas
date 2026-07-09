@@ -767,8 +767,8 @@ export function RichTextEditor({
             attributes: {
                 class: cn(
                     "prose prose-invert max-w-none focus:outline-none",
-                    variant === "full" ? "p-4 min-h-[150px]" : "px-3 py-1.5 min-h-[38px]",
-                    variant === "full" ? "prose-p:my-2" : "prose-p:my-0",
+                    variant === "full" ? "p-4 min-h-[150px]" : "px-3 py-2 min-h-9 text-sm leading-5",
+                    variant === "full" ? "prose-p:my-2" : "prose-p:my-0 prose-p:leading-5",
                     "prose-headings:mb-4 prose-headings:mt-6",
                     "prose-ul:list-disc prose-ol:list-decimal prose-li:my-1",
                     "[&_ul]:list-disc [&_ul]:pl-5 [&_ol]:list-decimal [&_ol]:pl-5 [&_li]:my-1",
@@ -782,7 +782,7 @@ export function RichTextEditor({
                     "dark:prose-invert",
                     // TipTap placeholder CSS logic
                     "relative [&_p.is-editor-empty:first-child]:before:content-[attr(data-placeholder)] [&_p.is-editor-empty:first-child]:before:text-white/30 [&_p.is-editor-empty:first-child]:before:float-left [&_p.is-editor-empty:first-child]:before:h-0 [&_p.is-editor-empty:first-child]:before:pointer-events-none",
-                    variant === "simple" && "[&_p.is-editor-empty:first-child]:before:text-xs",
+                    variant === "simple" && "[&_p.is-editor-empty:first-child]:before:text-xs [&_p.is-editor-empty:first-child]:before:leading-5",
                 ),
                 ...(variant === "full" && minRows ? { style: `min-height: ${minRows * 1.75}rem` } : {}),
             },

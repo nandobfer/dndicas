@@ -3,7 +3,7 @@
  * Wrapper para a SDK do Google Gemini com logging automático de uso
  */
 
-import { GoogleGenAI, type Content, type FunctionCall, type FunctionDeclaration } from "@google/genai";
+import { GoogleGenAI, type Content, type FunctionCall, type FunctionDeclaration, type Part } from "@google/genai";
 import { logUsage } from "./usage-log";
 
 const API_KEY = process.env.GOOGLE_API_KEY;
@@ -240,15 +240,24 @@ const getFunctionCallsFromResponse = (response: unknown): FunctionCall[] => {
     return Array.isArray(candidate.functionCalls) ? candidate.functionCalls : [];
 }
 
-const createFunctionCallContent = (functionCalls: FunctionCall[]): Content => ({
+const getFunctionCallPartsFromResponse = (response: unknown): Part[] => {
+    const candidate = response as { candidates?: Array<{ content?: { parts?: Part[] } }> };
+    const parts = candidate.candidates?.flatMap((item) => item.content?.parts ?? []) ?? [];
+
+    return parts.filter((part) => part.functionCall);
+}
+
+const createLegacyFunctionCallPart = (functionCall: FunctionCall): Part => ({
+    functionCall: {
+        ...(functionCall.id ? { id: functionCall.id } : {}),
+        name: functionCall.name,
+        args: functionCall.args ?? {},
+    },
+});
+
+const createFunctionCallContent = (functionCallParts: Part[], functionCalls: FunctionCall[]): Content => ({
     role: 'model',
-    parts: functionCalls.map((functionCall) => ({
-        functionCall: {
-            ...(functionCall.id ? { id: functionCall.id } : {}),
-            name: functionCall.name,
-            args: functionCall.args ?? {},
-        },
-    })),
+    parts: functionCallParts.length > 0 ? functionCallParts : functionCalls.map(createLegacyFunctionCallPart),
 });
 
 const createFunctionResponseContent = (functionCall: FunctionCall, response: unknown, isError = false): Content => ({
@@ -524,6 +533,7 @@ export async function chatWithToolsStream({
     try {
         for (let round = 0; round <= maxToolRounds; round += 1) {
             const functionCalls: FunctionCall[] = [];
+            const functionCallParts: Part[] = [];
             let finalUsageMetadata: GenAIUsageMetadata | undefined;
 
             await withRetryableUnavailableRetry('chatWithToolsStream', async () => {
@@ -534,10 +544,14 @@ export async function chatWithToolsStream({
                 });
 
                 for await (const chunk of response) {
-                    const chunkFunctionCalls = getFunctionCallsFromResponse(chunk);
+                    const chunkFunctionCallParts = getFunctionCallPartsFromResponse(chunk);
+                    const chunkFunctionCalls = chunkFunctionCallParts.length > 0
+                        ? chunkFunctionCallParts.flatMap((part) => part.functionCall ? [part.functionCall] : [])
+                        : getFunctionCallsFromResponse(chunk);
 
                     if (chunkFunctionCalls.length > 0) {
                         functionCalls.push(...chunkFunctionCalls);
+                        functionCallParts.push(...chunkFunctionCallParts);
                         continue;
                     }
 
@@ -562,7 +576,7 @@ export async function chatWithToolsStream({
                 throw new Error('Maximum GenAI tool rounds reached before a final response.');
             }
 
-            contents.push(createFunctionCallContent(functionCalls));
+            contents.push(createFunctionCallContent(functionCallParts, functionCalls));
 
             for (const functionCall of functionCalls) {
                 const functionName = functionCall.name;
