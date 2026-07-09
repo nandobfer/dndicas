@@ -265,7 +265,7 @@ export function GlassWindow({
                         ref={containerRef}
                         className="p-4 flex-1 overflow-y-auto glass-scrollbar pointer-events-auto"
                     >
-                        <div onPointerDown={(e) => e.stopPropagation()}>
+                        <div className="h-full" onPointerDown={(e) => e.stopPropagation()}>
                             {item && entityType ? renderEntity(item, entityType, renderOptions) : children}
                         </div>
                     </div>

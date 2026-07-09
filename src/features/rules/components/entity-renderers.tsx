@@ -31,7 +31,7 @@ export interface EntityRenderOptions {
 }
 
 export const ENTITY_RENDERERS: Record<string, (item: any, options?: EntityRenderOptions) => React.ReactNode> = {
-    Regra: (idOrItem, opts) => <RuleAsyncRenderer item={idOrItem} showStatus={opts?.showStatus ?? false} />,
+    Regra: (idOrItem, opts) => <RuleAsyncRenderer item={idOrItem} showStatus={opts?.showStatus ?? false} hideActionIcons={opts?.hideActionIcons} />,
     Habilidade: (id, opts) => <TraitAsyncRenderer id={id} showStatus={opts?.showStatus ?? true} hideStatusChip={opts?.hideStatusChip} hideActionIcons={opts?.hideActionIcons} />,
     Talento: (idOrItem, opts) => <FeatAsyncRenderer item={idOrItem} showStatus={opts?.showStatus ?? true} hideStatusChip={opts?.hideStatusChip} hideActionIcons={opts?.hideActionIcons} />,
     Magia: (idOrItem, opts) => <SpellAsyncRenderer item={idOrItem} showStatus={opts?.showStatus ?? true} hideStatusChip={opts?.hideStatusChip} hideActionIcons={opts?.hideActionIcons} />,
@@ -42,11 +42,12 @@ export const ENTITY_RENDERERS: Record<string, (item: any, options?: EntityRender
             initialSelectedSubclassIds={opts?.initialSelectedSubclassIds}
             sourceFilters={opts?.sourceFilters}
             onSelectedSubclassIdsChange={opts?.onSelectedSubclassIdsChange}
+            hideActionIcons={opts?.hideActionIcons}
         />
     ),
-    Subclasse: (idOrItem, opts) => <SubclassAsyncRenderer item={idOrItem} showStatus={opts?.showStatus ?? true} />,
-    Origem: (idOrItem, opts) => <BackgroundAsyncRenderer item={idOrItem} />,
-    Raça: (idOrItem, opts) => <RaceAsyncRenderer item={idOrItem} />,
+    Subclasse: (idOrItem, opts) => <SubclassAsyncRenderer item={idOrItem} showStatus={opts?.showStatus ?? true} hideActionIcons={opts?.hideActionIcons} />,
+    Origem: (idOrItem, opts) => <BackgroundAsyncRenderer item={idOrItem} showStatus={opts?.showStatus ?? true} hideActionIcons={opts?.hideActionIcons} />,
+    Raça: (idOrItem, opts) => <RaceAsyncRenderer item={idOrItem} showStatus={opts?.showStatus ?? true} hideActionIcons={opts?.hideActionIcons} />,
     Item: (idOrItem, opts) => <ItemAsyncRenderer item={idOrItem} showStatus={opts?.showStatus ?? true} hideStatusChip={opts?.hideStatusChip} hideActionIcons={opts?.hideActionIcons} />,
     Monstro: (idOrItem, opts) => <MonsterAsyncRenderer item={idOrItem} showStatus={opts?.showStatus ?? true} hideStatusChip={opts?.hideStatusChip} hideActionIcons={opts?.hideActionIcons} />,
     NPC: (idOrItem, opts) => <MonsterAsyncRenderer item={idOrItem} showStatus={opts?.showStatus ?? true} hideStatusChip={opts?.hideStatusChip} hideActionIcons={opts?.hideActionIcons} entityType="NPC" />,
@@ -69,7 +70,7 @@ function hasCompleteMonsterAttributes(item: any) {
     return Boolean(item?.attributes && MONSTER_ATTRIBUTE_KEYS.every((attribute) => item.attributes[attribute] !== undefined))
 }
 
-function RuleAsyncRenderer({ item, showStatus = true }: { item: any; showStatus?: boolean }) {
+function RuleAsyncRenderer({ item, showStatus = true, hideActionIcons }: { item: any; showStatus?: boolean; hideActionIcons?: boolean }) {
     const [rule, setRule] = React.useState<any>(null)
     const [loading, setLoading] = React.useState(true)
 
@@ -115,7 +116,7 @@ function RuleAsyncRenderer({ item, showStatus = true }: { item: any; showStatus?
 
     return (
         <div className="p-4">
-            <RulePreview rule={rule} showStatus={showStatus} />
+            <RulePreview rule={rule} showStatus={showStatus} hideActionIcons={hideActionIcons} />
         </div>
     )
 }
@@ -302,9 +303,11 @@ function ClassAsyncRenderer({
     initialSelectedSubclassIds,
     sourceFilters,
     onSelectedSubclassIdsChange,
+    hideActionIcons,
 }: {
     item: any
     showStatus?: boolean
+    hideActionIcons?: boolean
     initialSelectedSubclassIds?: string[]
     sourceFilters?: string[]
     onSelectedSubclassIdsChange?: (subclassIds: string[]) => void
@@ -360,12 +363,13 @@ function ClassAsyncRenderer({
                 initialSelectedSubclassIds={initialSelectedSubclassIds}
                 sourceFilters={sourceFilters}
                 onSelectedSubclassIdsChange={onSelectedSubclassIdsChange}
+                hideActionIcons={hideActionIcons}
             />
         </div>
     )
 }
 
-function SubclassAsyncRenderer({ item, showStatus = true }: { item: any; showStatus?: boolean }) {
+function SubclassAsyncRenderer({ item, showStatus = true, hideActionIcons }: { item: any; showStatus?: boolean; hideActionIcons?: boolean }) {
     const [characterClass, setCharacterClass] = React.useState<any>(null)
     const [subclass, setSubclass] = React.useState<any>(null)
     const [loading, setLoading] = React.useState(true)
@@ -419,7 +423,7 @@ function SubclassAsyncRenderer({ item, showStatus = true }: { item: any; showSta
 
     return (
         <div className="p-4">
-            <SubclassPreview subclass={subclass} parentClassName={characterClass.name} linkToParentClass />
+            <SubclassPreview subclass={subclass} parentClassName={characterClass.name} linkToParentClass mode={hideActionIcons ? "embedded" : "standalone"} />
         </div>
     )
 }
@@ -473,7 +477,7 @@ function FeatAsyncRenderer({ item, showStatus = true, hideStatusChip, hideAction
     )
 }
 
-function BackgroundAsyncRenderer({ item }: { item: any }) {
+function BackgroundAsyncRenderer({ item, showStatus = true, hideActionIcons }: { item: any; showStatus?: boolean; hideActionIcons?: boolean }) {
     const [background, setBackground] = React.useState<any>(null)
     const [loading, setLoading] = React.useState(true)
 
@@ -515,12 +519,12 @@ function BackgroundAsyncRenderer({ item }: { item: any }) {
 
     return (
         <div className="p-6">
-            <BackgroundPreview background={background} />
+            <BackgroundPreview background={background} showStatus={showStatus} hideActionIcons={hideActionIcons} />
         </div>
     )
 }
 
-function RaceAsyncRenderer({ item }: { item: any }) {
+function RaceAsyncRenderer({ item, showStatus = true, hideActionIcons }: { item: any; showStatus?: boolean; hideActionIcons?: boolean }) {
     const [race, setRace] = React.useState<any>(null)
     const [loading, setLoading] = React.useState(true)
 
@@ -562,7 +566,7 @@ function RaceAsyncRenderer({ item }: { item: any }) {
 
     return (
         <div className="p-6">
-            <RacePreview race={race} />
+            <RacePreview race={race} showStatus={showStatus} hideActionIcons={hideActionIcons} />
         </div>
     )
 }

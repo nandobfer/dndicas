@@ -26,6 +26,7 @@ import { EntitySource } from "@/features/rules/components/entity-source"
 import { ClassProgressionTable } from "./class-progression-table"
 import { SubclassPreview } from "./subclass-preview"
 import { matchesSourceFilter } from "@/core/utils/source-utils"
+import { EntityAIUnderstandButton } from "@/features/entity-understanding/components/entity-ai-understand-button"
 
 const SKILL_TO_ATTR: Record<string, string> = {
     Atletismo: "Força",
@@ -259,6 +260,7 @@ function ClassVisualHeader({ image, name, description, color }: { image?: string
 export interface ClassPreviewProps {
     characterClass: CharacterClass
     showStatus?: boolean
+    hideActionIcons?: boolean
     initialSelectedSubclassIds?: string[]
     sourceFilters?: string[]
     onSelectedSubclassIdsChange?: (subclassIds: string[]) => void
@@ -267,6 +269,7 @@ export interface ClassPreviewProps {
 export function ClassPreview({
     characterClass,
     showStatus = true,
+    hideActionIcons = false,
     initialSelectedSubclassIds,
     sourceFilters,
     onSelectedSubclassIdsChange,
@@ -367,11 +370,16 @@ export function ClassPreview({
                         <p className="text-[10px] uppercase font-bold tracking-widest text-white/40 mt-0.5">Classe D&D 5e</p>
                     </div>
                 </div>
-                {showStatus && characterClass.status === "inactive" && (
-                    <Chip variant="common" size="sm" className="opacity-50">
-                        Inativa
-                    </Chip>
-                )}
+                <div className="flex shrink-0 items-center justify-end gap-2">
+                    {!hideActionIcons && (
+                        <EntityAIUnderstandButton entity={characterClass} entityId={String(characterClass._id || characterClass.name)} entityType="Classe" entityName={characterClass.name} />
+                    )}
+                    {showStatus && characterClass.status === "inactive" && (
+                        <Chip variant="common" size="sm" className="opacity-50">
+                            Inativa
+                        </Chip>
+                    )}
+                </div>
             </div>
 
             <div className="grid grid-cols-3 gap-4 pb-2 border-b border-white/5">

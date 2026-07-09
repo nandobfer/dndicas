@@ -419,4 +419,63 @@ describe("GenAI high demand retry", () => {
 
         await expect(generateImage("prompt")).rejects.toThrow("Failed to generate image: Gemini response did not include an image.")
     })
+
+    it("executes Gemini tool calls and streams the final response", async () => {
+        async function* toolCallStream() {
+            yield {
+                functionCalls: [{ id: "call-1", name: "searchCatalogEntities", args: { query: "ladino" } }],
+            }
+        }
+
+        async function* finalTextStream() {
+            yield { text: "Ladino " }
+            yield {
+                text: "é furtivo.",
+                usageMetadata: {
+                    promptTokenCount: 3,
+                    candidatesTokenCount: 4,
+                    totalTokenCount: 7,
+                },
+            }
+        }
+
+        const execute = vi.fn().mockResolvedValue([{ id: "ladino", name: "Ladino", type: "Classe" }])
+        const onChunk = vi.fn()
+        genAiMocks.generateContentStream
+            .mockResolvedValueOnce(toolCallStream())
+            .mockResolvedValueOnce(finalTextStream())
+
+        const { chatWithToolsStream } = await import("@/core/ai/genai")
+
+        await expect(chatWithToolsStream({
+            history: [{ role: "user", parts: "Explique Ladino" }],
+            modelName: "gemini-test",
+            userId: "user-1",
+            onChunk,
+            tools: [{
+                declaration: {
+                    name: "searchCatalogEntities",
+                    description: "Busca catálogo",
+                    parameters: { type: "object", properties: { query: { type: "string" } } },
+                },
+                execute,
+            }],
+        })).resolves.toBeUndefined()
+
+        expect(execute).toHaveBeenCalledWith({ query: "ladino" })
+        expect(onChunk).toHaveBeenNthCalledWith(1, "Ladino ")
+        expect(onChunk).toHaveBeenNthCalledWith(2, "é furtivo.")
+        expect(genAiMocks.generateContentStream).toHaveBeenCalledTimes(2)
+        expect(usageLogMocks.logUsage).toHaveBeenCalledWith("gemini-test", 3, 4, 7, "user-1")
+
+        const secondCall = genAiMocks.generateContentStream.mock.calls[1]?.[0]
+        expect(secondCall.contents).toContainEqual(expect.objectContaining({
+            role: "model",
+            parts: [expect.objectContaining({ functionCall: expect.objectContaining({ name: "searchCatalogEntities" }) })],
+        }))
+        expect(secondCall.contents).toContainEqual(expect.objectContaining({
+            role: "user",
+            parts: [expect.objectContaining({ functionResponse: expect.objectContaining({ name: "searchCatalogEntities" }) })],
+        }))
+    })
 })

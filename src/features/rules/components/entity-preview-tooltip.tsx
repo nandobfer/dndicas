@@ -33,17 +33,19 @@ import { EntityGenerationAIModal } from "@/features/entity-generation/components
 import { spellGenerationAdapter } from "@/features/entity-generation/adapters/spell-generation-adapter"
 import { featGenerationAdapter } from "@/features/entity-generation/adapters/feat-generation-adapter"
 import { monsterGenerationAdapter } from "@/features/entity-generation/adapters/monster-generation-adapter"
+import { EntityAIUnderstandButton } from "@/features/entity-understanding/components/entity-ai-understand-button"
 
 interface RulePreviewProps {
     rule: Reference
     showStatus?: boolean
+    hideActionIcons?: boolean
 }
 
-export const RulePreview = ({ rule, showStatus = true }: RulePreviewProps) => {
+export const RulePreview = ({ rule, showStatus = true, hideActionIcons = false }: RulePreviewProps) => {
     const { addWindow } = useWindows()
     return (
         <div className="space-y-4 w-full">
-            <div className="flex flex-col sm:flex-row items-start sm:justify-between gap-4">
+            <div className="flex items-start justify-between gap-4">
                 <div className="flex items-center gap-2">
                     <div className={cn("p-1.5 rounded-lg border flex-shrink-0", entityColors.Regra.badge)}>
                         <ScrollText className="w-4 h-4" />
@@ -53,8 +55,11 @@ export const RulePreview = ({ rule, showStatus = true }: RulePreviewProps) => {
                         <p className="text-[10px] uppercase font-bold tracking-widest text-white/40 mt-0.5">Regra do Sistema</p>
                     </div>
                 </div>
-                <div className="flex items-center gap-2 self-end sm:self-auto">
-                    {showStatus && (
+                <div className="flex shrink-0 items-center justify-end gap-2">
+                    {!hideActionIcons && (
+                        <EntityAIUnderstandButton entity={rule} entityId={String(rule._id || rule.name)} entityType="Regra" entityName={rule.name} />
+                    )}
+                    {!hideActionIcons && (
                         <motion.button
                             whileHover={{ scale: 1.1 }}
                             whileTap={{ scale: 0.9 }}
@@ -175,7 +180,7 @@ export const TraitPreview = ({ trait, showStatus = true, hideStatusChip = false,
     return (
         <div className="space-y-4 w-full">
             <div className="flex items-start justify-between gap-4">
-                <div className="flex items-center gap-2">
+                <div className="flex shrink-0 items-center justify-end gap-2">
                     <div className={cn("p-1.5 rounded-lg border", entityColors.Habilidade.badge)}>
                         <Sparkles className="w-4 h-4" />
                     </div>
@@ -185,6 +190,9 @@ export const TraitPreview = ({ trait, showStatus = true, hideStatusChip = false,
                     </div>
                 </div>
                 <div className="flex items-center gap-2">
+                    {!hideActionIcons && (
+                        <EntityAIUnderstandButton entity={trait} entityId={String(trait._id || trait.name)} entityType="Habilidade" entityName={trait.name} />
+                    )}
                     {!hideActionIcons && (
                         <motion.button
                             whileHover={{ scale: 1.1 }}
@@ -244,7 +252,8 @@ export const RacePreviewWithActions = ({ race, showStatus = true }: { race: Race
                         <p className="text-[10px] uppercase font-bold tracking-widest text-white/40 mt-0.5">Raça D&D 5e</p>
                     </div>
                 </div>
-                <div className="flex items-center gap-2">
+                <div className="flex shrink-0 items-center justify-end gap-2">
+                    <EntityAIUnderstandButton entity={race} entityId={String(race._id || race.name)} entityType="Raça" entityName={race.name} />
                     <motion.button
                         whileHover={{ scale: 1.1 }}
                         whileTap={{ scale: 0.9 }}
@@ -269,7 +278,7 @@ export const RacePreviewWithActions = ({ race, showStatus = true }: { race: Race
                 </div>
             </div>
 
-            <RacePreview race={race} showStatus={false} />
+            <RacePreview race={race} showStatus={false} hideActionIcons />
         </div>
     )
 }

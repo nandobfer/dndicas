@@ -379,6 +379,8 @@ interface RichTextEditorProps {
     mentionCircles?: number[]
     mentionParentClassId?: string | null
     openMentionsOnFocus?: boolean
+    submitOnEnter?: boolean
+    onSubmitRequest?: () => void
 }
 
 const TableBubbleMenu = ({ editor, containerRef }: { editor: Editor | null; containerRef: React.RefObject<HTMLDivElement | null> }) => {
@@ -612,6 +614,8 @@ export function RichTextEditor({
     mentionCircles,
     mentionParentClassId,
     openMentionsOnFocus = false,
+    submitOnEnter = false,
+    onSubmitRequest,
 }: RichTextEditorProps) {
     const [isUploading, setIsUploading] = useState(false)
     const lastAppliedFocusTokenRef = useRef<string | null>(null)
@@ -619,6 +623,11 @@ export function RichTextEditor({
     const hasActiveMentionSessionRef = useRef(false)
     const hasSyntheticOpenMentionRef = useRef(false)
     const outerWrapperRef = useRef<HTMLDivElement>(null)
+    const onSubmitRequestRef = useRef(onSubmitRequest)
+
+    useEffect(() => {
+        onSubmitRequestRef.current = onSubmitRequest
+    }, [onSubmitRequest])
 
     const uploadImage = useCallback(async (file: File) => {
         setIsUploading(true)
@@ -827,6 +836,17 @@ export function RichTextEditor({
                 return false
             },
             handleDOMEvents: {
+                keydown: (_view, event) => {
+                    if (!submitOnEnter || event.key !== "Enter" || event.shiftKey || event.altKey || event.ctrlKey || event.metaKey) {
+                        return false
+                    }
+
+                    if (event.isComposing || hasActiveMentionSessionRef.current) return false
+
+                    event.preventDefault()
+                    onSubmitRequestRef.current?.()
+                    return true
+                },
                 focus: () => {
                     if (!openMentionsOnFocus || disabled) return false
                     window.setTimeout(() => {
@@ -936,25 +956,30 @@ export function RichTextEditor({
 
     // Update content if value changes externally
     useEffect(() => {
-        if (editor && value !== editor.getHTML()) {
-            // No-op: both editor and incoming value are empty — avoids redundant setContent
-            if (editor.getText() === "" && (value === "<p></p>" || value === "")) return
-            if (!editor.isFocused) {
-                // Ensure the update happens outside the current rendering cycle to avoid flushSync errors
-                setTimeout(() => {
-                    if (editor && !editor.isDestroyed) {
-                        editor.commands.setContent(value ?? "")
-                    }
-                }, 0)
+        if (!editor || editor.isDestroyed) return
+
+        const currentEditor = editor
+        if (value === currentEditor.getHTML()) return
+
+        // No-op: both editor and incoming value are empty — avoids redundant setContent
+        if (currentEditor.getText() === "" && (value === "<p></p>" || value === "")) return
+        if (currentEditor.isFocused) return
+
+        // Ensure the update happens outside the current rendering cycle to avoid flushSync errors
+        const timeoutId = window.setTimeout(() => {
+            if (!currentEditor.isDestroyed) {
+                currentEditor.commands.setContent(value ?? "")
             }
-        }
+        }, 0)
+
+        return () => window.clearTimeout(timeoutId)
     }, [value, editor])
 
     return (
-        <div ref={outerWrapperRef} className="relative">
+        <div ref={outerWrapperRef} className="relative w-full">
             <div
                 className={cn(
-                    "rounded-lg overflow-hidden transition-all group",
+                    "rounded-lg overflow-hidden transition-all group w-full",
                     glassConfig.input.background,
                     glassConfig.input.blur,
                     glassConfig.input.border,
@@ -965,7 +990,7 @@ export function RichTextEditor({
                 )}
             >
                 {variant === "full" && !disabled && <MenuBar editor={editor} addImage={handleAddImageClick} addTable={handleAddTableClick} disabled={disabled} />}
-                <div className="relative">
+                <div className="relative w-full">
                     <EditorContent editor={editor} />
                     {isUploading && <div className="absolute inset-0 bg-black/50 flex items-center justify-center text-xs text-white">Uploading...</div>}
                 </div>

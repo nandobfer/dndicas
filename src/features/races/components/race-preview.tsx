@@ -17,6 +17,7 @@ import { GlassSelector } from "@/components/ui/glass-selector"
 import { EntitySource } from "@/features/rules/components/entity-source"
 import { Chip } from "@/components/ui/chip"
 import { MentionRenderer } from "@/features/classes/components/mention-renderer"
+import { EntityAIUnderstandButton } from "@/features/entity-understanding/components/entity-ai-understand-button"
 
 import { Race, RaceVariation, RaceTrait, SizeCategory } from "../types/races.types"
 import { sizeColors, entityColors, rarityColors } from "@/lib/config/colors"
@@ -53,9 +54,10 @@ function RaceVisualHeader({ image, name, description, color }: { image?: string;
 export interface RacePreviewProps {
     race: Race
     showStatus?: boolean
+    hideActionIcons?: boolean
 }
 
-export function RacePreview({ race, showStatus = true }: RacePreviewProps) {
+export function RacePreview({ race, showStatus = true, hideActionIcons = false }: RacePreviewProps) {
     const [levelFilter, setLevelFilter] = useState<number | undefined>(undefined)
     const [filterMode, setFilterMode] = useState<"upTo" | "exact">("upTo")
     const [selectedVariationIds, setSelectedVariationIds] = useState<string[]>([])
@@ -159,7 +161,10 @@ export function RacePreview({ race, showStatus = true }: RacePreviewProps) {
                         <p className="text-[10px] uppercase font-bold tracking-widest text-white/40 mt-0.5">Raça D&D 5e</p>
                     </div>
                 </div>
-                <div className="flex items-center gap-2">
+                <div className="flex shrink-0 items-center justify-end gap-2">
+                    {!hideActionIcons && (
+                        <EntityAIUnderstandButton entity={race} entityId={String(race._id || race.name)} entityType="Raça" entityName={race.name} />
+                    )}
                     {showStatus && race.status === "inactive" && (
                         <Chip variant="common" size="sm" className="opacity-50">
                             Inativa

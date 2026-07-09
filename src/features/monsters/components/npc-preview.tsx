@@ -13,6 +13,7 @@ import type { Monster } from "../types/monsters.types"
 import { formatMonsterHitPointAverage, formatSigned, getMonsterHitPointAverage, getMonsterPassivePerception, getMonsterProficiencyBonus, getMonsterSavingThrowBonus, getMonsterSkillBonus, getMonsterXp, isMonsterHitPointFormulaStatic } from "../utils/monster-calculations"
 import { ALIGNMENT_LABELS, ATTRIBUTE_KEYS, ATTRIBUTE_LABELS, CONDITION_LABELS, MONSTER_SIZE_LABELS, MONSTER_TYPE_LABELS, SKILL_NAMES } from "./monster-options"
 import { NpcParamPreview } from "./npc-param-preview"
+import { EntityAIUnderstandButton } from "@/features/entity-understanding/components/entity-ai-understand-button"
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
     return (
@@ -109,7 +110,10 @@ export function NpcPreview({ monster, showStatus = true, hideStatusChip = false,
                         </p>
                     </div>
                 </div>
-                <div className="flex items-center gap-2">
+                <div className="flex shrink-0 items-center justify-end gap-2">
+                    {!hideActionIcons && (
+                        <EntityAIUnderstandButton entity={monster} entityId={String(monster._id || monster.name)} entityType={entityType} entityName={monster.name} />
+                    )}
                     {!hideActionIcons && onCopyToNpc && (
                         <motion.button
                             whileHover={{ scale: 1.1 }}
