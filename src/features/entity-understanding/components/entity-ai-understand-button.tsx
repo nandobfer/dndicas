@@ -44,7 +44,7 @@ export function EntityAIUnderstandButton({ entity, entityId, entityType, entityN
 
     return (
         <GlassTooltipProvider>
-            <SimpleGlassTooltip content="Entender com IA" side="top">
+            <SimpleGlassTooltip content="Entender com IA" side="top" className="z-[10000]">
                 <motion.button
                     type="button"
                     onClick={handleClick}
