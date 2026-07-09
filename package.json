@@ -14,6 +14,8 @@
         "seed:test": "tsx scripts/seed-data/index.ts --test",
         "clerk:migrate:dry-run": "tsx scripts/migrate-clerk-dev-to-prod.ts --dry-run",
         "clerk:migrate:apply": "tsx scripts/migrate-clerk-dev-to-prod.ts --apply --confirm-backup",
+        "clerk:avatars:dry-run": "tsx scripts/copy-clerk-dev-avatars-to-prod.ts --dry-run",
+        "clerk:avatars:apply": "tsx scripts/copy-clerk-dev-avatars-to-prod.ts --apply",
         "search": "tsx scripts/search-cli.ts",
         "search-cli": "tsx scripts/search-cli.ts",
         "dice-override-cli": "tsx scripts/dice-override-cli.ts"
