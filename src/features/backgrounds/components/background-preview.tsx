@@ -17,10 +17,12 @@ import type { Background } from "../types/backgrounds.types"
 import { MentionContent } from "@/features/rules/components/mention-badge";
 import { ENTITY_RENDERERS } from "@/features/rules/components/entity-renderers"
 import { EntitySource } from "@/features/rules/components/entity-source"
+import { EntityAIUnderstandButton } from "@/features/entity-understanding/components/entity-ai-understand-button"
 
 interface BackgroundPreviewProps {
     background: Background
     showStatus?: boolean
+    hideActionIcons?: boolean
     className?: string
 }
 
@@ -66,7 +68,7 @@ function BackgroundVisualHeader({ image, name, description }: { image?: string; 
     )
 }
 
-export function BackgroundPreview({ background, showStatus = true, className }: BackgroundPreviewProps) {
+export function BackgroundPreview({ background, showStatus = true, hideActionIcons = false, className }: BackgroundPreviewProps) {
     if (!background) return null
 
     // Debug to check data flow
@@ -92,11 +94,16 @@ export function BackgroundPreview({ background, showStatus = true, className }: 
                         <p className="text-[10px] uppercase font-bold tracking-widest text-white/40 mt-0.5">Origem D&D 5e</p>
                     </div>
                 </div>
-                {showStatus && background.status === "inactive" && (
-                    <Chip variant="common" size="sm" className="opacity-50">
-                        Inativa
-                    </Chip>
-                )}
+                <div className="flex shrink-0 items-center justify-end gap-2">
+                    {!hideActionIcons && (
+                        <EntityAIUnderstandButton entity={background} entityId={String(background._id || background.name)} entityType="Origem" entityName={background.name} />
+                    )}
+                    {showStatus && background.status === "inactive" && (
+                        <Chip variant="common" size="sm" className="opacity-50">
+                            Inativa
+                        </Chip>
+                    )}
+                </div>
             </div>
 
             <div className="grid grid-cols-2 gap-4 pb-2 border-b border-white/5">

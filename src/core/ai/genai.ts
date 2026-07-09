@@ -3,7 +3,7 @@
  * Wrapper para a SDK do Google Gemini com logging automático de uso
  */
 
-import { GoogleGenAI } from "@google/genai";
+import { GoogleGenAI, type Content, type FunctionCall, type FunctionDeclaration } from "@google/genai";
 import { logUsage } from "./usage-log";
 
 const API_KEY = process.env.GOOGLE_API_KEY;
@@ -182,6 +182,32 @@ export interface GeneratedImagePayload {
     mimeType: string;
 }
 
+export type GenAIToolDeclaration = {
+    name: string;
+    description: string;
+    parameters?: Record<string, unknown>;
+    parametersJsonSchema?: unknown;
+};
+
+export type GenAIToolHandler = (args: Record<string, unknown>) => Promise<unknown>;
+
+export type GenAITool = {
+    declaration: GenAIToolDeclaration;
+    execute: GenAIToolHandler;
+};
+
+export type GenAIChatMessage = { role: 'user' | 'model'; parts: string };
+
+export interface ChatWithToolsStreamInput {
+    history: GenAIChatMessage[];
+    tools: GenAITool[];
+    onChunk: (text: string) => void;
+    modelName?: string;
+    userId?: string;
+    maxToolRounds?: number;
+    systemInstruction?: string;
+}
+
 const extractImageParts = (response: GenAIImageResponse): GeneratedImagePayload[] => {
     const parts = response.candidates?.flatMap(candidate => candidate.content?.parts ?? []) ?? [];
 
@@ -195,6 +221,59 @@ const extractImageParts = (response: GenAIImageResponse): GeneratedImagePayload[
             mimeType: part.inlineData.mimeType,
         }];
     });
+}
+
+const mapHistoryToContents = (history: GenAIChatMessage[]): Content[] => history.map(msg => ({
+    role: msg.role,
+    parts: [{ text: msg.parts }],
+}));
+
+const mapToolDeclarations = (tools: GenAITool[]): FunctionDeclaration[] => tools.map((tool) => ({
+    name: tool.declaration.name,
+    description: tool.declaration.description,
+    ...(tool.declaration.parameters ? { parametersJsonSchema: tool.declaration.parameters } : {}),
+    ...(tool.declaration.parametersJsonSchema ? { parametersJsonSchema: tool.declaration.parametersJsonSchema } : {}),
+}));
+
+const getFunctionCallsFromResponse = (response: unknown): FunctionCall[] => {
+    const candidate = response as { functionCalls?: FunctionCall[] };
+    return Array.isArray(candidate.functionCalls) ? candidate.functionCalls : [];
+}
+
+const createFunctionCallContent = (functionCalls: FunctionCall[]): Content => ({
+    role: 'model',
+    parts: functionCalls.map((functionCall) => ({
+        functionCall: {
+            ...(functionCall.id ? { id: functionCall.id } : {}),
+            name: functionCall.name,
+            args: functionCall.args ?? {},
+        },
+    })),
+});
+
+const createFunctionResponseContent = (functionCall: FunctionCall, response: unknown, isError = false): Content => ({
+    role: 'user',
+    parts: [{
+        functionResponse: {
+            ...(functionCall.id ? { id: functionCall.id } : {}),
+            name: functionCall.name,
+            response: isError ? { error: response } : { output: response },
+        },
+    }],
+});
+
+const logResponseUsage = async (modelName: string, usageMetadata: GenAIUsageMetadata | undefined, userId?: string): Promise<void> => {
+    if (!usageMetadata) return;
+
+    const { promptTokenCount, candidatesTokenCount, totalTokenCount } = usageMetadata;
+
+    await logUsage(
+        modelName,
+        promptTokenCount || 0,
+        candidatesTokenCount || 0,
+        totalTokenCount || 0,
+        userId
+    );
 }
 
 const getFallbackTimeoutMs = (): number => {
@@ -417,6 +496,98 @@ export async function generateTextStream(
     } catch (error) {
         console.error("GenAI Stream Error:", error);
         throw new Error(`Failed to generate text stream: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+}
+
+/**
+ * Chat multi-turno com suporte a function-calling/tools e streaming da resposta final.
+ * As tools sao executadas exclusivamente no servidor chamador.
+ */
+export async function chatWithToolsStream({
+    history,
+    tools,
+    onChunk,
+    modelName = defaultModel,
+    userId,
+    maxToolRounds = 4,
+    systemInstruction,
+}: ChatWithToolsStreamInput): Promise<void> {
+    const ai = getGenAIClient();
+    const toolHandlers = new Map(tools.map((tool) => [tool.declaration.name, tool.execute]));
+    const contents = mapHistoryToContents(history);
+    const functionDeclarations = mapToolDeclarations(tools);
+    const config = {
+        ...(functionDeclarations.length > 0 ? { tools: [{ functionDeclarations }] } : {}),
+        ...(systemInstruction ? { systemInstruction } : {}),
+    };
+
+    try {
+        for (let round = 0; round <= maxToolRounds; round += 1) {
+            const functionCalls: FunctionCall[] = [];
+            let finalUsageMetadata: GenAIUsageMetadata | undefined;
+
+            await withRetryableUnavailableRetry('chatWithToolsStream', async () => {
+                const response = await ai.models.generateContentStream({
+                    model: modelName,
+                    contents,
+                    config,
+                });
+
+                for await (const chunk of response) {
+                    const chunkFunctionCalls = getFunctionCallsFromResponse(chunk);
+
+                    if (chunkFunctionCalls.length > 0) {
+                        functionCalls.push(...chunkFunctionCalls);
+                        continue;
+                    }
+
+                    const text = chunk.text || '';
+                    if (text) {
+                        onChunk(text);
+                    }
+
+                    if (chunk.usageMetadata) {
+                        finalUsageMetadata = chunk.usageMetadata;
+                    }
+                }
+            });
+
+            await logResponseUsage(modelName, finalUsageMetadata, userId);
+
+            if (functionCalls.length === 0) {
+                return;
+            }
+
+            if (round === maxToolRounds) {
+                throw new Error('Maximum GenAI tool rounds reached before a final response.');
+            }
+
+            contents.push(createFunctionCallContent(functionCalls));
+
+            for (const functionCall of functionCalls) {
+                const functionName = functionCall.name;
+                if (!functionName) {
+                    contents.push(createFunctionResponseContent(functionCall, 'Chamada de ferramenta sem nome.', true));
+                    continue;
+                }
+
+                const handler = toolHandlers.get(functionName);
+                if (!handler) {
+                    contents.push(createFunctionResponseContent(functionCall, `Ferramenta desconhecida: ${functionName}.`, true));
+                    continue;
+                }
+
+                try {
+                    const result = await handler(functionCall.args ?? {});
+                    contents.push(createFunctionResponseContent(functionCall, result));
+                } catch (error) {
+                    contents.push(createFunctionResponseContent(functionCall, stringifyError(error), true));
+                }
+            }
+        }
+    } catch (error) {
+        console.error("GenAI Tools Stream Error:", error);
+        throw new Error(`Failed to chat with tools stream: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
 }
 

@@ -12,6 +12,11 @@ import { GlassDropdownMenu, GlassDropdownMenuTrigger, GlassDropdownMenuContent, 
 import { renderEntity } from "./entity-renderers"
 import type { EntityRenderOptions } from "./entity-renderers"
 import { useWindows } from "@/core/context/window-context"
+import { EntityAIUnderstandButton } from "@/features/entity-understanding/components/entity-ai-understand-button"
+
+const getToolbarEntityType = (entityType: string, item: any) => entityType === "Mixed" ? item.type : entityType
+const getToolbarEntityId = (item: any) => String(item._id || item.id || item.name || "")
+const getToolbarEntityName = (item: any, entityType: string) => String(item.name || item.label || entityType)
 
 interface EntityListProps {
     items: any[]
@@ -73,9 +78,12 @@ export function EntityList({ items, entityType, isLoading, hasNextPage, isFetchi
                         <GlassCard className="relative overflow-hidden">
                             <GlassCardContent className="p-4 pt-6">
                                 <div className="absolute top-2 right-2 z-10 flex items-center gap-2">
-                                    <Chip variant={item.status === "active" ? "uncommon" : "common"} size="sm">
-                                        {item.status === "active" ? "Ativa" : "Inativa"}
-                                    </Chip>
+                                    <EntityAIUnderstandButton
+                                        entity={item}
+                                        entityId={getToolbarEntityId(item)}
+                                        entityType={getToolbarEntityType(entityType, item)}
+                                        entityName={getToolbarEntityName(item, entityType)}
+                                    />
 
                                     <motion.button
                                         whileHover={{ scale: 1.1 }}
@@ -136,6 +144,10 @@ export function EntityList({ items, entityType, isLoading, hasNextPage, isFetchi
                                             </GlassDropdownMenuContent>
                                         </GlassDropdownMenu>
                                     )}
+
+                                    <Chip variant={item.status === "active" ? "uncommon" : "common"} size="sm">
+                                        {item.status === "active" ? "Ativa" : "Inativa"}
+                                    </Chip>
                                 </div>
                                 <div className="max-w-full overflow-hidden -mt-2">{renderEntity(item, entityType, { ...renderOptions, showStatus: false, hideActionIcons: true })}</div>
                             </GlassCardContent>

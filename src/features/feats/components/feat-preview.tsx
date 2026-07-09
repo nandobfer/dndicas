@@ -12,6 +12,7 @@ import type { Feat } from "../types/feats.types"
 import type { FeatCategoryColorKey } from "@/lib/config/colors"
 import { EntitySource } from "@/features/rules/components/entity-source"
 import { ChargesPreview } from "@/features/shared/charges/charges-preview"
+import { EntityAIUnderstandButton } from "@/features/entity-understanding/components/entity-ai-understand-button"
 
 export interface FeatPreviewProps {
     feat: Feat
@@ -51,7 +52,10 @@ export function FeatPreview({ feat, showStatus = true, hideStatusChip = false, h
                         </div>
                     </div>
                 </div>
-                <div className="flex items-center gap-2">
+                <div className="flex shrink-0 items-center justify-end gap-2">
+                    {!hideActionIcons && (
+                        <EntityAIUnderstandButton entity={feat} entityId={String(feat._id || feat.name)} entityType="Talento" entityName={feat.name} />
+                    )}
                     {!hideActionIcons && (
                         <motion.button
                             whileHover={{ scale: 1.1 }}

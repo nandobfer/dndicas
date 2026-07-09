@@ -22,6 +22,7 @@ import { entityColors, spellComponentConfig, castingTimeConfig, type SpellCompon
 import { cn } from "@/core/utils"
 import type { Spell } from "../types/spells.types"
 import { EntitySource } from "@/features/rules/components/entity-source"
+import { EntityAIUnderstandButton } from "@/features/entity-understanding/components/entity-ai-understand-button"
 
 const COMPONENT_ICONS: Record<string, any> = {
     Concentração: Brain,
@@ -107,7 +108,10 @@ export function SpellPreview({ spell, showStatus = true, hideStatusChip = false,
                         <p className="text-[10px] uppercase font-bold tracking-widest text-white/40 mt-0.5">Magia D&D 5e</p>
                     </div>
                 </div>
-                <div className="flex items-center gap-2">
+                <div className="flex shrink-0 items-center justify-end gap-2">
+                    {!hideActionIcons && (
+                        <EntityAIUnderstandButton entity={spell} entityId={String(spell._id || spell.name)} entityType="Magia" entityName={spell.name} />
+                    )}
                     {!hideActionIcons && (
                         <motion.button
                             whileHover={{ scale: 1.1 }}

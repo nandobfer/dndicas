@@ -11,6 +11,7 @@ import { GlassSelector } from "@/components/ui/glass-selector"
 import { MentionContent } from "@/features/rules/components/mention-badge"
 import { MentionRenderer } from "./mention-renderer"
 import type { AttributeType, Subclass } from "../types/classes.types"
+import { EntityAIUnderstandButton } from "@/features/entity-understanding/components/entity-ai-understand-button"
 
 function toSlug(value: string) {
     return encodeURIComponent(value.toLowerCase().trim().replace(/\s+/g, "-"))
@@ -189,7 +190,7 @@ export interface SubclassPreviewProps {
     mode?: "embedded" | "standalone"
 }
 
-export function SubclassPreview({ subclass, parentClassName, linkToParentClass = false }: SubclassPreviewProps) {
+export function SubclassPreview({ subclass, parentClassName, linkToParentClass = false, mode = "standalone" }: SubclassPreviewProps) {
     const [levelFilter, setLevelFilter] = useState<number | undefined>(undefined)
     const [filterMode, setFilterMode] = useState<"upTo" | "exact">("upTo")
     const [isTraitsOpen, setIsTraitsOpen] = useState(false)
@@ -234,16 +235,21 @@ export function SubclassPreview({ subclass, parentClassName, linkToParentClass =
 
     return (
         <div className="space-y-3 p-3 rounded-xl bg-white/[0.02] border border-white/5" style={{ borderColor: subclass.color ? `${subclass.color}20` : undefined }}>
-            <div className="flex items-center gap-2">
-                <div className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: subclass.color }} />
-                {href ? (
-                    <Link href={href} className="text-xs font-bold uppercase tracking-wider hover:opacity-90 transition-opacity" style={{ color: subclass.color }}>
-                        {subclass.name}
-                    </Link>
-                ) : (
-                    <span className="text-xs font-bold uppercase tracking-wider" style={{ color: subclass.color }}>
-                        {subclass.name}
-                    </span>
+            <div className="flex items-center justify-between gap-2">
+                <div className="flex items-center gap-2">
+                    <div className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: subclass.color }} />
+                    {href ? (
+                        <Link href={href} className="text-xs font-bold uppercase tracking-wider hover:opacity-90 transition-opacity" style={{ color: subclass.color }}>
+                            {subclass.name}
+                        </Link>
+                    ) : (
+                        <span className="text-xs font-bold uppercase tracking-wider" style={{ color: subclass.color }}>
+                            {subclass.name}
+                        </span>
+                    )}
+                </div>
+                {mode === "standalone" && (
+                    <EntityAIUnderstandButton entity={subclass} entityId={String(subclass._id || subclass.name)} entityType="Subclasse" entityName={subclass.name} />
                 )}
             </div>
 

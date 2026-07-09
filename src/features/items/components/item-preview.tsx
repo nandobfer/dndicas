@@ -24,6 +24,7 @@ import { WeaponPreview } from "./weapon-preview"
 import { ArmorPreview } from "./armor-preview"
 import { ToolPreview } from "./tool-preview"
 import { ChargesPreview } from "@/features/shared/charges/charges-preview"
+import { EntityAIUnderstandButton } from "@/features/entity-understanding/components/entity-ai-understand-button"
 
 const TYPE_ICONS: Record<ItemType, any> = {
     arma: Sword,
@@ -74,7 +75,10 @@ export function ItemPreview({ item, showStatus = true, hideStatusChip = false, h
                         </p>
                     </div>
                 </div>
-                <div className="flex items-center gap-2">
+                <div className="flex shrink-0 items-center justify-end gap-2">
+                    {!hideActionIcons && (
+                        <EntityAIUnderstandButton entity={item} entityId={String(item._id || item.name)} entityType="Item" entityName={item.name} />
+                    )}
                     {!hideActionIcons && (
                         <motion.button
                             whileHover={{ scale: 1.1 }}

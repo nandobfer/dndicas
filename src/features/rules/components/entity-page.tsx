@@ -15,6 +15,7 @@ import { useWindows } from "@/core/context/window-context"
 import { Copy, Pencil, Trash2, MoreHorizontal } from "lucide-react"
 import { GlassDropdownMenu, GlassDropdownMenuTrigger, GlassDropdownMenuContent, GlassDropdownMenuItem } from "@/components/ui/glass-dropdown-menu"
 import { themeConfig } from "@/lib/config/theme-config"
+import { EntityAIUnderstandButton } from "@/features/entity-understanding/components/entity-ai-understand-button"
 
 interface EntityPageProps {
     item: any
@@ -105,6 +106,32 @@ export function EntityPage({ item, entityType, isLoading, isAdmin, onEdit, onCop
                     <GlassCardContent className="p-6 md:p-8">
                         <div className="absolute top-4 right-4 z-10 flex flex-col items-end gap-2">
                             <div className="flex items-center gap-2">
+                                <EntityAIUnderstandButton
+                                    entity={item}
+                                    entityId={String(item._id || item.id || item.name || "")}
+                                    entityType={entityType === "Mixed" ? item.type : entityType}
+                                    entityName={String(item.name || item.label || entityType)}
+                                />
+
+                                {!hideActionIcons && (
+                                    <motion.button
+                                        whileHover={{ scale: 1.1 }}
+                                        whileTap={{ scale: 0.9 }}
+                                        onClick={() =>
+                                            addWindow({
+                                                title: item.name || "Detalhes",
+                                                content: null,
+                                                item,
+                                                entityType: entityType === "Mixed" ? item.type : entityType,
+                                            })
+                                        }
+                                        className="p-1.5 rounded-lg text-white/40 hover:text-white hover:bg-white/10 transition-colors"
+                                        title="Abrir em nova janela"
+                                    >
+                                        <ExternalLink className="h-4 w-4" />
+                                    </motion.button>
+                                )}
+
                                 {(onCopyToNpc || (isAdmin && (onEdit || onGenerateAI || onDelete))) && (
                                     <GlassDropdownMenu>
                                         <GlassDropdownMenuTrigger asChild>
@@ -145,25 +172,6 @@ export function EntityPage({ item, entityType, isLoading, isAdmin, onEdit, onCop
                                             )}
                                         </GlassDropdownMenuContent>
                                     </GlassDropdownMenu>
-                                )}
-
-                                {!hideActionIcons && (
-                                    <motion.button
-                                        whileHover={{ scale: 1.1 }}
-                                        whileTap={{ scale: 0.9 }}
-                                        onClick={() =>
-                                            addWindow({
-                                                title: item.name || "Detalhes",
-                                                content: null,
-                                                item,
-                                                entityType: entityType === "Mixed" ? item.type : entityType,
-                                            })
-                                        }
-                                        className="p-1.5 rounded-lg text-white/40 hover:text-white hover:bg-white/10 transition-colors"
-                                        title="Abrir em nova janela"
-                                    >
-                                        <ExternalLink className="h-4 w-4" />
-                                    </motion.button>
                                 )}
                                 <Chip variant={item.status === "active" || item.status === true ? "uncommon" : "common"} size="sm">
                                     {item.status === "active" || item.status === true ? "Ativa" : "Inativa"}
