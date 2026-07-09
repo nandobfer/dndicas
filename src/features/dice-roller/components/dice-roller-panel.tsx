@@ -42,6 +42,7 @@ interface DiceRollerPanelProps {
     disableRolling?: boolean
     disabledRollingMessage?: string | null
     hideConfigurationControls?: boolean
+    forceCombinationModifierInline?: boolean
 }
 
 export function DiceRollerPanel({
@@ -53,6 +54,7 @@ export function DiceRollerPanel({
     disableRolling = false,
     disabledRollingMessage = null,
     hideConfigurationControls = false,
+    forceCombinationModifierInline = false,
 }: DiceRollerPanelProps) {
     const [terms, setTerms] = React.useState<DiceTerm[]>(() => getInitialState(preset).terms)
     const [modifier, setModifier] = React.useState<number | "">(() => getInitialState(preset).modifier)
@@ -330,7 +332,15 @@ export function DiceRollerPanel({
                                 </div>
                             </div>
 
-                            <div data-testid="dice-combination-modifier-grid" className="grid gap-4 xl:grid-cols-2">
+                            <div
+                                data-testid="dice-combination-modifier-grid"
+                                className={cn(
+                                    "grid gap-4",
+                                    forceCombinationModifierInline
+                                        ? "grid-cols-[minmax(0,1fr)_minmax(120px,160px)]"
+                                        : "xl:grid-cols-2"
+                                )}
+                            >
                                 <div data-testid="dice-combination-card" className="rounded-2xl border border-white/10 bg-black/25 p-4">
                                     <p className="mb-3 text-[10px] font-black uppercase tracking-widest text-white/40">Combinação</p>
                                     <div className="space-y-2">

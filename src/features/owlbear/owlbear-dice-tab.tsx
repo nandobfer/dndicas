@@ -229,6 +229,7 @@ export function OwlbearDiceTab({ runtime, session }: OwlbearDiceTabProps) {
                             externalResult={liveRoll?.result ?? null}
                             disableRolling={Boolean(rollingBlockedMessage)}
                             disabledRollingMessage={rollingBlockedMessage}
+                            forceCombinationModifierInline
                         />
                     </div>
                 </div>
