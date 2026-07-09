@@ -262,7 +262,7 @@ function PlayerSheetTabContent({
     if (!isAuthenticated) {
         return (
             <div className="h-full min-h-0 overflow-auto pr-1">
-                <MySheetsContent redirectUrl="/owlbear/action" showDelete={false} />
+                <MySheetsContent redirectUrl="/owlbear/sheet/action" showDelete={false} />
             </div>
         )
     }
@@ -288,7 +288,7 @@ function PlayerSheetTabContent({
                         <MySheetsContent
                             title="Minhas Fichas"
                             description="Selecione uma ficha existente ou crie uma nova para vinculá-la a esta sala do Owlbear."
-                            redirectUrl="/owlbear/action"
+                            redirectUrl="/owlbear/sheet/action"
                             showDelete={false}
                             onSheetOpen={(sheet) => {
                                 setSelectedExistingSheet(sheet)
@@ -319,7 +319,7 @@ function PlayerSheetTabContent({
                 <MySheetsContent
                     title="Minhas Fichas"
                     description="Selecione uma ficha existente ou crie uma nova para vinculá-la a esta sala do Owlbear."
-                    redirectUrl="/owlbear/action"
+                    redirectUrl="/owlbear/sheet/action"
                     showDelete={false}
                     emptyMessage="Nenhuma ficha encontrada. Crie sua primeira ficha para vinculá-la a esta sala."
                     onSheetOpen={(sheet) => {
@@ -372,6 +372,7 @@ function PlayerSheetTabContent({
                 <SheetForm
                     sheet={sheetQuery.data}
                     layoutMode="desktop"
+                    isOwlbear
                     navigateOnSlugChange={false}
                     onSlugChange={() => undefined}
                     runtimeContext="owlbear"

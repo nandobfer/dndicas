@@ -3,6 +3,7 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import { getNpcHpBarColor, OwlbearGmNpcsTab } from "@/features/owlbear/gm-npcs-tab"
 import type { OwlbearRoomNpc } from "@/features/owlbear/room-npcs-api"
+import type { OwlbearRuntimeState, OwlbearSessionState } from "@/features/owlbear/types"
 import type { Monster } from "@/features/monsters/types/monsters.types"
 
 const useRoomNpcsMock = vi.hoisted(() => vi.fn())
@@ -159,7 +160,15 @@ function roomNpc(overrides: Partial<OwlbearRoomNpc> = {}): OwlbearRoomNpc {
     }
 }
 
-function renderTab(props: { isAuthenticated?: boolean; items?: OwlbearRoomNpc[]; updateNpc?: ReturnType<typeof vi.fn>; removeNpc?: ReturnType<typeof vi.fn>; addNpcInitiative?: ReturnType<typeof vi.fn> } = {}) {
+function renderTab(props: {
+    runtime?: OwlbearRuntimeState
+    session?: OwlbearSessionState
+    isAuthenticated?: boolean
+    items?: OwlbearRoomNpc[]
+    updateNpc?: ReturnType<typeof vi.fn>
+    removeNpc?: ReturnType<typeof vi.fn>
+    addNpcInitiative?: ReturnType<typeof vi.fn>
+} = {}) {
     const updateNpc = props.updateNpc ?? vi.fn().mockResolvedValue(null)
     const removeNpc = props.removeNpc ?? vi.fn().mockResolvedValue(undefined)
     useRoomNpcsMock.mockReturnValue({
@@ -181,8 +190,8 @@ function renderTab(props: { isAuthenticated?: boolean; items?: OwlbearRoomNpc[];
 
     render(
         <OwlbearGmNpcsTab
-            runtime={runtime}
-            session={session}
+            runtime={props.runtime ?? runtime}
+            session={props.session ?? session}
             isAuthenticated={props.isAuthenticated ?? true}
             isAuthLoaded
         />
@@ -203,6 +212,38 @@ describe("OwlbearGmNpcsTab", () => {
 
         expect(screen.getByTestId("login-view")).toBeInTheDocument()
         expect(useRoomNpcsMock).toHaveBeenCalledWith("room-1", "token-1", false)
+    })
+
+    it("keeps loading while the Owlbear runtime is still booting", () => {
+        renderTab({
+            runtime: {
+                ...runtime,
+                status: "booting",
+                role: null,
+                roomId: null,
+                playerId: null,
+            },
+            session: {
+                sessionStatus: "idle",
+                sessionToken: null,
+                sessionExpiresAt: null,
+            },
+        })
+
+        expect(screen.queryByText("A sessão Owlbear-aware não pôde ser inicializada. Reabra a action para tentar novamente.")).not.toBeInTheDocument()
+        expect(screen.queryByTestId("gm-room-npcs-table")).not.toBeInTheDocument()
+    })
+
+    it("shows a session error only after runtime is ready and session is invalid", () => {
+        renderTab({
+            session: {
+                sessionStatus: "error",
+                sessionToken: null,
+                sessionExpiresAt: null,
+            },
+        })
+
+        expect(screen.getByText("A sessão Owlbear-aware não pôde ser inicializada. Reabra a action para tentar novamente.")).toBeInTheDocument()
     })
 
     it("renders room NPCs with HP and expands the preview", () => {

@@ -228,7 +228,7 @@ const goblinNpc = {
 
 type RegisteredContextMenu = {
     id: string
-    icons: Array<{ label: string }>
+    icons: Array<{ icon: string; label: string }>
     onClick?: (context: { items: Array<Record<string, unknown>> }) => void
 }
 
@@ -346,11 +346,55 @@ describe("OwlbearGmSceneController — context menus", () => {
         expect(npcMenu?.icons[0].label).toBe("Vincular a NPC")
     })
 
+    it("usa a rota CORS do ícone nos context menus", async () => {
+        render(<OwlbearGmSceneController runtime={readyGmRuntime} session={readySession} />)
+
+        await waitFor(() => {
+            expect(sdkMock.contextMenu.create).toHaveBeenCalledTimes(3)
+        })
+
+        for (const menu of getRegisteredContextMenus()) {
+            expect(menu.icons[0].icon).toBe("/owlbear/icons/context-menu.svg")
+        }
+    })
+
     it("não registra context menus para PLAYER", async () => {
         render(<OwlbearGmSceneController runtime={readyPlayerRuntime} session={readySession} />)
 
         await waitFor(() => {
             expect(sdkMock.contextMenu.create).not.toHaveBeenCalled()
+        })
+    })
+
+    it("não registra context menus enquanto a scene não está pronta", async () => {
+        render(
+            <OwlbearGmSceneController
+                runtime={{ ...readyGmRuntime, sceneReady: false }}
+                session={readySession}
+            />
+        )
+
+        await waitFor(() => {
+            expect(sdkMock.contextMenu.create).not.toHaveBeenCalled()
+        })
+    })
+
+    it("registra context menus quando a scene volta a ficar pronta", async () => {
+        const { rerender } = render(
+            <OwlbearGmSceneController
+                runtime={{ ...readyGmRuntime, sceneReady: false }}
+                session={readySession}
+            />
+        )
+
+        await waitFor(() => {
+            expect(sdkMock.contextMenu.create).not.toHaveBeenCalled()
+        })
+
+        rerender(<OwlbearGmSceneController runtime={readyGmRuntime} session={readySession} />)
+
+        await waitFor(() => {
+            expect(sdkMock.contextMenu.create).toHaveBeenCalledTimes(3)
         })
     })
 
@@ -370,6 +414,32 @@ describe("OwlbearGmSceneController — context menus", () => {
             expect(sdkMock.contextMenu.remove).toHaveBeenCalledWith("com.dndicas.owlbear.link-npc")
             expect(sdkMock.contextMenu.remove).toHaveBeenCalledWith("com.dndicas.owlbear.unlink-sheet")
         })
+    })
+
+    it("remove apenas o menu de NPC no cleanup do background de NPC", async () => {
+        const { unmount } = render(
+            <OwlbearGmSceneController
+                runtime={readyGmRuntime}
+                session={{ sessionStatus: "idle", sessionToken: null, sessionExpiresAt: null }}
+                contextMenuKind="npc"
+                linkDialogKind="none"
+                overlayKinds={[]}
+            />
+        )
+
+        await waitFor(() => {
+            expect(sdkMock.contextMenu.create).toHaveBeenCalledTimes(1)
+        })
+
+        expect(getRegisteredContextMenus().map((menu) => menu.id)).toEqual(["com.dndicas.owlbear.link-npc"])
+
+        unmount()
+
+        await waitFor(() => {
+            expect(sdkMock.contextMenu.remove).toHaveBeenCalledWith("com.dndicas.owlbear.link-npc")
+        })
+        expect(sdkMock.contextMenu.remove).not.toHaveBeenCalledWith("com.dndicas.owlbear.link-player")
+        expect(sdkMock.contextMenu.remove).not.toHaveBeenCalledWith("com.dndicas.owlbear.unlink-sheet")
     })
 })
 

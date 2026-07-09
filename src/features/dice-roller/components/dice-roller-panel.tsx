@@ -284,7 +284,7 @@ export function DiceRollerPanel({
                         disabled={isRollButtonDisabled}
                         className="w-full border-blue-400/20 bg-blue-500/20 text-blue-100 hover:bg-blue-500/30"
                     >
-                        {isRollButtonDisabled ? "Rolando..." : "JOGAR"}
+                        {isRolling || isAnimatingDice ? "Rolando..." : "JOGAR"}
                     </GlassButton>
                     <DiceVisualStage
                         terms={normalizedTerms}

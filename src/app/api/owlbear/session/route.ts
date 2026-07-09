@@ -1,7 +1,7 @@
 import { auth } from "@clerk/nextjs/server"
 import { NextRequest, NextResponse } from "next/server"
 import { z } from "zod"
-import { buildAnonymousGmSessionUserId, createOwlbearSession } from "@/features/owlbear/server/session-service"
+import { buildAnonymousGmSessionUserId, buildAnonymousPlayerSessionUserId, createOwlbearSession } from "@/features/owlbear/server/session-service"
 
 const OwlbearSessionRequestSchema = z.object({
     roomId: z.string().trim().min(1),
@@ -24,12 +24,11 @@ export async function POST(req: NextRequest) {
                     roomId: parsed.data.roomId,
                     owlbearPlayerId: parsed.data.owlbearPlayerId,
                 })
-                : null
+                : buildAnonymousPlayerSessionUserId({
+                    roomId: parsed.data.roomId,
+                    owlbearPlayerId: parsed.data.owlbearPlayerId,
+                })
         )
-
-        if (!sessionUserId) {
-            return NextResponse.json({ error: "Não autorizado" }, { status: 401 })
-        }
 
         const session = await createOwlbearSession({
             userId: sessionUserId,

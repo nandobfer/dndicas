@@ -1,14 +1,17 @@
 "use client"
 
 import * as React from "react"
-import { Loader2, ScrollText, Skull, Trash2 } from "lucide-react"
+import { AnimatePresence, motion } from "framer-motion"
+import { ChevronRight, Loader2, ScrollText, Skull, Trash2 } from "lucide-react"
 import { toast } from "sonner"
 import { cn } from "@/core/utils"
 import { GlassImage } from "@/components/ui/glass-image"
 import type { CharacterSheetFull } from "@/features/character-sheets/types/character-sheet.types"
+import { NpcPreview } from "@/features/monsters/components/npc-preview"
 import { getHpBarColor, hpPercent } from "./hp-bar-utils"
 import { notifyOwlbearOverlaySync } from "./overlay-sync-events"
 import type { OwlbearRoomNpc } from "./room-npcs-api"
+import { clearOwlbearNpcTokenHighlight, highlightOwlbearNpcToken } from "./sdk"
 import type { OwlbearRuntimeState, OwlbearSessionState } from "./types"
 import { useRoomInitiative } from "./use-room-initiative"
 import { useRoomLinkedSheets } from "./use-room-linked-sheets"
@@ -47,6 +50,29 @@ function HpSummary({ current, max, testId }: { current: number; max: number; tes
     )
 }
 
+function ArmorClassBadge({ value, tone = "neutral" }: { value: React.ReactNode; tone?: "neutral" | "player" }) {
+    return (
+        <span
+            className={cn(
+                "rounded-full border px-2 py-0.5 text-[10px] font-bold uppercase tracking-widest",
+                tone === "player"
+                    ? "border-blue-300/20 bg-blue-500/10 text-blue-100/70"
+                    : "border-white/10 bg-white/[0.04] text-white/45",
+            )}
+        >
+            CA {value}
+        </span>
+    )
+}
+
+function getPlayerArmorClass(sheet: CharacterSheetFull) {
+    if (typeof sheet.computedArmorClass === "number") return sheet.computedArmorClass
+    if (typeof sheet.armorClassOverride === "number") return sheet.armorClassOverride
+
+    const dexterityModifier = Math.floor((sheet.dexterity - 10) / 2)
+    return 10 + dexterityModifier + (sheet.armorClassBonus ?? 0)
+}
+
 function NpcAvatar({ npc }: { npc: OwlbearRoomNpc }) {
     if (npc.source?.image) {
         return <GlassImage src={npc.source.image} alt={npc.source.name} className="h-12 w-12 rounded-lg" imageClassName="object-cover" enableExpand={false} />
@@ -81,6 +107,7 @@ function HpAdjustmentInput({ npc, onApply }: { npc: OwlbearRoomNpc; onApply: (np
             inputMode="numeric"
             value={value}
             placeholder="+/-"
+            onClick={(event) => event.stopPropagation()}
             onChange={(event) => {
                 const next = event.target.value.replace(/[^\d-]/g, "").replace(/(?!^)-/g, "")
                 setValue(next)
@@ -88,6 +115,7 @@ function HpAdjustmentInput({ npc, onApply }: { npc: OwlbearRoomNpc; onApply: (np
             onKeyDown={(event) => {
                 if (event.key !== "Enter") return
                 event.preventDefault()
+                event.stopPropagation()
                 if (!/^-?\d+$/.test(value)) return
                 onApply(npc, Number(value))
                 setValue("")
@@ -107,10 +135,6 @@ function PlayerInitiativeInput({
     onCommit: (sheetId: string, initiative: number) => void
 }) {
     const [draft, setDraft] = React.useState(value === null ? "" : String(value))
-
-    React.useEffect(() => {
-        setDraft(value === null ? "" : String(value))
-    }, [value])
 
     return (
         <input
@@ -149,41 +173,110 @@ function InitiativeBadge({ value }: { value: number }) {
 function NpcInitiativeRow({
     npc,
     initiative,
+    isExpanded,
     isPending,
+    onToggle,
     onApplyHpDelta,
     onRemove,
+    onHighlightToken,
+    onClearTokenHighlight,
 }: {
     npc: OwlbearRoomNpc
     initiative: number
+    isExpanded: boolean
     isPending: boolean
+    onToggle: () => void
     onApplyHpDelta: (npc: OwlbearRoomNpc, delta: number) => void
     onRemove: (npcId: string) => void
+    onHighlightToken: (npcId: string) => void
+    onClearTokenHighlight: () => void
 }) {
+    const source = npc.source
+
     return (
-        <div className="grid w-full grid-cols-[minmax(0,1fr)_auto_auto_auto] items-center gap-3 rounded-2xl border border-white/10 bg-black/20 p-3">
-            <div className="flex min-w-0 items-center gap-3">
-                <NpcAvatar npc={npc} />
-                <div className="min-w-0">
-                    <div className="flex min-w-0 items-center gap-2">
-                        <p className="truncate text-sm font-semibold text-white">{npc.source?.name ?? "NPC indisponível"}</p>
-                        <span className="rounded-full border border-white/10 bg-white/[0.04] px-2 py-0.5 text-[10px] font-bold uppercase tracking-widest text-white/35">NPC</span>
-                    </div>
-                    <div className="mt-2">
-                        <HpSummary current={npc.hpCurrent} max={npc.hpMax} testId={`initiative-npc-hp-bar-${npc.id}`} />
+        <div
+            data-testid={`initiative-npc-row-${npc.id}`}
+            className="rounded-2xl border border-white/10 bg-black/20"
+            onMouseEnter={() => onHighlightToken(npc.id)}
+            onMouseLeave={onClearTokenHighlight}
+            onFocus={() => onHighlightToken(npc.id)}
+            onBlur={(event) => {
+                if (event.currentTarget.contains(event.relatedTarget)) return
+                onClearTokenHighlight()
+            }}
+        >
+            <div
+                role="button"
+                tabIndex={0}
+                onClick={onToggle}
+                onKeyDown={(event) => {
+                    if (event.target !== event.currentTarget) return
+                    if (event.key !== "Enter" && event.key !== " ") return
+                    event.preventDefault()
+                    onToggle()
+                }}
+                className="grid w-full grid-cols-[minmax(0,1fr)_auto_auto_auto] items-center gap-3 rounded-2xl p-3 text-left transition-colors hover:bg-white/[0.03] focus:outline-none focus:ring-2 focus:ring-white/20"
+            >
+                <div className="flex min-w-0 items-center gap-3">
+                    <NpcAvatar npc={npc} />
+                    <div className="min-w-0">
+                        <div className="flex min-w-0 items-center gap-2">
+                            <motion.span
+                                animate={{ rotate: isExpanded ? 90 : 0 }}
+                                transition={{ duration: 0.18, ease: "easeOut" }}
+                                className="inline-flex h-4 w-4 shrink-0 items-center justify-center text-white/35"
+                            >
+                                <ChevronRight className="h-4 w-4" />
+                            </motion.span>
+                            <p className="truncate text-sm font-semibold text-white">{source?.name ?? "NPC indisponível"}</p>
+                            {source && <ArmorClassBadge value={source.armorClass} />}
+                            <span className="rounded-full border border-white/10 bg-white/[0.04] px-2 py-0.5 text-[10px] font-bold uppercase tracking-widest text-white/35">NPC</span>
+                        </div>
+                        <div className="mt-2">
+                            <HpSummary current={npc.hpCurrent} max={npc.hpMax} testId={`initiative-npc-hp-bar-${npc.id}`} />
+                        </div>
                     </div>
                 </div>
+                <HpAdjustmentInput npc={npc} onApply={onApplyHpDelta} />
+                <InitiativeBadge value={initiative} />
+                <button
+                    type="button"
+                    aria-label={`Remover ${source?.name ?? "NPC"} da iniciativa`}
+                    disabled={isPending}
+                    onClick={(event) => {
+                        event.stopPropagation()
+                        onRemove(npc.id)
+                    }}
+                    className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-rose-500/20 bg-rose-500/10 text-rose-300 transition-colors hover:bg-rose-500/20 disabled:opacity-50"
+                >
+                    {isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+                </button>
             </div>
-            <HpAdjustmentInput npc={npc} onApply={onApplyHpDelta} />
-            <InitiativeBadge value={initiative} />
-            <button
-                type="button"
-                aria-label={`Remover ${npc.source?.name ?? "NPC"} da iniciativa`}
-                disabled={isPending}
-                onClick={() => onRemove(npc.id)}
-                className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-rose-500/20 bg-rose-500/10 text-rose-300 transition-colors hover:bg-rose-500/20 disabled:opacity-50"
-            >
-                {isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
-            </button>
+
+            <AnimatePresence initial={false}>
+                {isExpanded && (
+                    <motion.div
+                        key="preview"
+                        initial={{ height: 0, opacity: 0, y: -8 }}
+                        animate={{ height: "auto", opacity: 1, y: 0 }}
+                        exit={{ height: 0, opacity: 0, y: -8 }}
+                        transition={{ duration: 0.2, ease: "easeOut" }}
+                        className="overflow-hidden border-t border-white/10"
+                    >
+                        <div className="p-4">
+                            {source ? (
+                                <NpcPreview
+                                    monster={source}
+                                    entityType={npc.sourceKind === "userNpc" ? "NPC" : "Monstro"}
+                                    hideActionIcons
+                                />
+                            ) : (
+                                <InlineStatus tone="error" message="O NPC ou monstro vinculado não está mais disponível." />
+                            )}
+                        </div>
+                    </motion.div>
+                )}
+            </AnimatePresence>
         </div>
     )
 }
@@ -199,6 +292,7 @@ function PlayerInitiativeRow({
 }) {
     const hpCurrent = sheet.hpCurrent ?? 0
     const hpMax = sheet.hpMax ?? 0
+    const armorClass = getPlayerArmorClass(sheet)
 
     return (
         <div className="grid w-full grid-cols-[minmax(0,1fr)_auto] items-center gap-3 rounded-2xl border border-blue-300/15 bg-blue-500/10 p-3">
@@ -207,6 +301,7 @@ function PlayerInitiativeRow({
                 <div className="min-w-0">
                     <div className="flex min-w-0 items-center gap-2">
                         <p className="truncate text-sm font-semibold text-white">{sheet.name}</p>
+                        <ArmorClassBadge value={armorClass} tone="player" />
                         <span className="rounded-full border border-blue-300/20 bg-blue-500/10 px-2 py-0.5 text-[10px] font-bold uppercase tracking-widest text-blue-100/60">PC</span>
                     </div>
                     <div className="mt-2">
@@ -214,7 +309,7 @@ function PlayerInitiativeRow({
                     </div>
                 </div>
             </div>
-            <PlayerInitiativeInput sheet={sheet} value={initiative} onCommit={onCommitInitiative} />
+            <PlayerInitiativeInput key={`${sheet._id}:${initiative ?? ""}`} sheet={sheet} value={initiative} onCommit={onCommitInitiative} />
         </div>
     )
 }
@@ -250,6 +345,7 @@ export function OwlbearGmInitiativeTab({
         setPlayerInitiative,
     } = useRoomInitiative(enabled)
     const [pendingNpcId, setPendingNpcId] = React.useState<string | null>(null)
+    const [expandedNpcId, setExpandedNpcId] = React.useState<string | null>(null)
 
     const sortedItems = React.useMemo<InitiativeItem[]>(() => {
         const npcItems: InitiativeItem[] = npcs
@@ -311,6 +407,26 @@ export function OwlbearGmInitiativeTab({
         })
     }, [setPlayerInitiative])
 
+    const handleHighlightNpcToken = React.useCallback((npcId: string) => {
+        if (runtime.role !== "GM" || !runtime.sceneReady) return
+        void highlightOwlbearNpcToken(npcId).catch((error) => {
+            console.error("Failed to highlight linked Owlbear NPC token", error)
+        })
+    }, [runtime.role, runtime.sceneReady])
+
+    const handleClearNpcTokenHighlight = React.useCallback(() => {
+        if (runtime.role !== "GM" || !runtime.sceneReady) return
+        void clearOwlbearNpcTokenHighlight().catch((error) => {
+            console.error("Failed to clear linked Owlbear NPC token highlight", error)
+        })
+    }, [runtime.role, runtime.sceneReady])
+
+    React.useEffect(() => {
+        return () => {
+            void clearOwlbearNpcTokenHighlight()
+        }
+    }, [])
+
     if (!isAuthLoaded) {
         return (
             <div className="flex h-full min-h-0 items-center justify-center">
@@ -366,9 +482,13 @@ export function OwlbearGmInitiativeTab({
                                 key={item.id}
                                 npc={item.npc}
                                 initiative={item.initiative}
+                                isExpanded={expandedNpcId === item.npc.id}
                                 isPending={pendingNpcId === item.npc.id}
+                                onToggle={() => setExpandedNpcId((current) => current === item.npc.id ? null : item.npc.id)}
                                 onApplyHpDelta={handleApplyHpDelta}
                                 onRemove={handleRemoveNpc}
+                                onHighlightToken={handleHighlightNpcToken}
+                                onClearTokenHighlight={handleClearNpcTokenHighlight}
                             />
                         ) : (
                             <PlayerInitiativeRow

@@ -7,7 +7,7 @@ describe("owlbear session backend", () => {
         vi.useRealTimers()
     })
 
-    it("createOwlbearSession stores only the token hash and revokes previous active sessions in the same context", async () => {
+    it("createOwlbearSession stores only the token hash without revoking concurrent action sessions", async () => {
         const updateMany = vi.fn().mockResolvedValue({ acknowledged: true })
         const create = vi.fn().mockResolvedValue({
             _id: "session-1",
@@ -50,7 +50,7 @@ describe("owlbear session backend", () => {
             ttlMs: 15 * 60 * 1000,
         })
 
-        expect(updateMany).toHaveBeenCalledTimes(1)
+        expect(updateMany).not.toHaveBeenCalled()
         expect(create).toHaveBeenCalledWith(expect.objectContaining({
             tokenHash: "hashed-token",
             userId: "user-1",
@@ -183,12 +183,23 @@ describe("owlbear session backend", () => {
         )
     })
 
-    it("POST /api/owlbear/session rejects anonymous players", async () => {
+    it("POST /api/owlbear/session accepts anonymous players using a synthetic Owlbear session user", async () => {
+        const createOwlbearSession = vi.fn().mockResolvedValue({
+            token: "player-token",
+            expiresAt: "2026-04-20T10:15:00.000Z",
+        })
+
         vi.doMock("@clerk/nextjs/server", () => ({
             auth: vi.fn().mockResolvedValue({ userId: null }),
         }))
         vi.doMock("@/features/owlbear/server/session-service", () => ({
-            createOwlbearSession: vi.fn(),
+            createOwlbearSession,
+            buildAnonymousGmSessionUserId: vi.fn(({ roomId, owlbearPlayerId }: { roomId: string; owlbearPlayerId: string }) =>
+                `owlbear-gm:${roomId}:${owlbearPlayerId}`
+            ),
+            buildAnonymousPlayerSessionUserId: vi.fn(({ roomId, owlbearPlayerId }: { roomId: string; owlbearPlayerId: string }) =>
+                `owlbear-player:${roomId}:${owlbearPlayerId}`
+            ),
         }))
 
         const mod = await importFresh<typeof import("@/app/api/owlbear/session/route")>("@/app/api/owlbear/session/route")
@@ -202,7 +213,13 @@ describe("owlbear session backend", () => {
             }),
         }))
 
-        expect(response.status).toBe(401)
+        expect(response.status).toBe(201)
+        expect(createOwlbearSession).toHaveBeenCalledWith(expect.objectContaining({
+            userId: "owlbear-player:room-1:player-1",
+            roomId: "room-1",
+            owlbearPlayerId: "player-1",
+            owlbearRole: "PLAYER",
+        }))
     })
 
     it("POST /api/owlbear/session accepts anonymous GMs using a synthetic Owlbear session user", async () => {
@@ -218,6 +235,9 @@ describe("owlbear session backend", () => {
             createOwlbearSession,
             buildAnonymousGmSessionUserId: vi.fn(({ roomId, owlbearPlayerId }: { roomId: string; owlbearPlayerId: string }) =>
                 `owlbear-gm:${roomId}:${owlbearPlayerId}`
+            ),
+            buildAnonymousPlayerSessionUserId: vi.fn(({ roomId, owlbearPlayerId }: { roomId: string; owlbearPlayerId: string }) =>
+                `owlbear-player:${roomId}:${owlbearPlayerId}`
             ),
         }))
 
@@ -246,6 +266,12 @@ describe("owlbear session backend", () => {
             getOwlbearSessionByToken: vi.fn(),
             toOwlbearAuthContext: vi.fn(),
             touchOwlbearSession: vi.fn(),
+            buildAnonymousGmSessionUserId: vi.fn(),
+            buildAnonymousPlayerSessionUserId: vi.fn(),
+            isAnonymousPlayerSessionUserId: vi.fn(() => false),
+        }))
+        vi.doMock("@clerk/nextjs/server", () => ({
+            auth: vi.fn().mockResolvedValue({ userId: null }),
         }))
         vi.doMock("@/features/character-sheets/api/character-sheets-service", () => ({
             getAllUserSheets: vi.fn(),
@@ -280,7 +306,7 @@ describe("owlbear session backend", () => {
         }>(response)
 
         expect(response.status).toBe(401)
-        expect(payload.error).toMatch(/Sessão Owlbear/i)
+        expect(payload.error).toMatch(/Contexto Owlbear/i)
     })
 
     it("GET /api/owlbear/character-sheets uses the authenticated Owlbear session user", async () => {
@@ -309,8 +335,15 @@ describe("owlbear session backend", () => {
                 roomId: session.roomId,
                 owlbearPlayerId: session.owlbearPlayerId,
                 owlbearRole: session.owlbearRole,
+                authMode: "token",
             })),
             touchOwlbearSession: vi.fn(),
+            buildAnonymousGmSessionUserId: vi.fn(),
+            buildAnonymousPlayerSessionUserId: vi.fn(),
+            isAnonymousPlayerSessionUserId: vi.fn(() => false),
+        }))
+        vi.doMock("@clerk/nextjs/server", () => ({
+            auth: vi.fn().mockResolvedValue({ userId: null }),
         }))
         vi.doMock("@/features/character-sheets/api/character-sheets-service", () => ({
             getAllUserSheets,
@@ -345,5 +378,68 @@ describe("owlbear session backend", () => {
 
         expect(response.status).toBe(200)
         expect(getAllUserSheets).toHaveBeenCalledWith("user-1", undefined, 1, 12)
+    })
+
+    it("GET /api/owlbear/character-sheets accepts simple Owlbear context headers without bearer token", async () => {
+        const getAllUserSheets = vi.fn().mockResolvedValue({
+            sheets: [],
+            total: 0,
+            page: 1,
+            totalPages: 1,
+            hasNextPage: false,
+        })
+
+        vi.doMock("@clerk/nextjs/server", () => ({
+            auth: vi.fn().mockResolvedValue({ userId: null }),
+        }))
+        vi.doMock("@/features/owlbear/server/session-service", () => ({
+            getOwlbearSessionByToken: vi.fn(),
+            toOwlbearAuthContext: vi.fn(),
+            touchOwlbearSession: vi.fn(),
+            buildAnonymousGmSessionUserId: vi.fn(({ roomId, owlbearPlayerId }: { roomId: string; owlbearPlayerId: string }) =>
+                `owlbear-gm:${roomId}:${owlbearPlayerId}`
+            ),
+            buildAnonymousPlayerSessionUserId: vi.fn(({ roomId, owlbearPlayerId }: { roomId: string; owlbearPlayerId: string }) =>
+                `owlbear-player:${roomId}:${owlbearPlayerId}`
+            ),
+            isAnonymousPlayerSessionUserId: vi.fn(() => false),
+        }))
+        vi.doMock("@/features/character-sheets/api/character-sheets-service", () => ({
+            getAllUserSheets,
+            createBlankSheet: vi.fn(),
+            getSheetById: vi.fn(),
+            patchSheetWithAccess: vi.fn(),
+            applyLongRestWithAccess: vi.fn(),
+            getItems: vi.fn(),
+            createItem: vi.fn(),
+            updateItem: vi.fn(),
+            deleteItem: vi.fn(),
+            getSpells: vi.fn(),
+            createSpell: vi.fn(),
+            updateSpell: vi.fn(),
+            deleteSpell: vi.fn(),
+            getTraits: vi.fn(),
+            createTrait: vi.fn(),
+            deleteTrait: vi.fn(),
+            getFeats: vi.fn(),
+            createFeat: vi.fn(),
+            deleteFeat: vi.fn(),
+            getAttacks: vi.fn(),
+            createAttack: vi.fn(),
+            updateAttack: vi.fn(),
+            deleteAttack: vi.fn(),
+        }))
+
+        const mod = await importFresh<typeof import("@/app/api/owlbear/character-sheets/route")>("@/app/api/owlbear/character-sheets/route")
+        const response = await mod.GET(makeRequest("http://localhost/api/owlbear/character-sheets", {
+            headers: {
+                "x-owlbear-room-id": "room-1",
+                "x-owlbear-player-id": "player-1",
+                "x-owlbear-role": "PLAYER",
+            },
+        }))
+
+        expect(response.status).toBe(200)
+        expect(getAllUserSheets).toHaveBeenCalledWith("owlbear-player:room-1:player-1", undefined, 1, 12)
     })
 })

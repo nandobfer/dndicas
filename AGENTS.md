@@ -30,6 +30,12 @@ Antes de implementar, leia nesta ordem:
 
 ## 3. Padrões operacionais
 
+### Builds
+
+- Nunca rode `pnpm build` ou qualquer build completo automaticamente. O build é custoso para a máquina e pode travar o ambiente.
+- Só execute build quando o usuário pedir explicitamente ou autorizar de forma clara durante a conversa.
+- Para verificação autônoma, prefira testes focados, checagens de diagnóstico e validações menores compatíveis com o escopo da mudança.
+
 ### APIs
 
 - Rotas ficam em `src/app/api`.

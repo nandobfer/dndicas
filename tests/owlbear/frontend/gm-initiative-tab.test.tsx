@@ -7,6 +7,8 @@ import type { CharacterSheetFull } from "@/features/character-sheets/types/chara
 const useRoomNpcsMock = vi.hoisted(() => vi.fn())
 const useRoomLinkedSheetsMock = vi.hoisted(() => vi.fn())
 const useRoomInitiativeMock = vi.hoisted(() => vi.fn())
+const highlightOwlbearNpcTokenMock = vi.hoisted(() => vi.fn())
+const clearOwlbearNpcTokenHighlightMock = vi.hoisted(() => vi.fn())
 
 vi.mock("@/features/owlbear/use-room-npcs", () => ({
     useRoomNpcs: (...args: unknown[]) => useRoomNpcsMock(...args),
@@ -20,8 +22,17 @@ vi.mock("@/features/owlbear/use-room-initiative", () => ({
     useRoomInitiative: (...args: unknown[]) => useRoomInitiativeMock(...args),
 }))
 
+vi.mock("@/features/owlbear/sdk", () => ({
+    highlightOwlbearNpcToken: (...args: unknown[]) => highlightOwlbearNpcTokenMock(...args),
+    clearOwlbearNpcTokenHighlight: (...args: unknown[]) => clearOwlbearNpcTokenHighlightMock(...args),
+}))
+
 vi.mock("@/components/ui/glass-image", () => ({
-    GlassImage: ({ src, alt }: { src: string; alt: string }) => <img src={src} alt={alt} />,
+    GlassImage: ({ src, alt }: { src: string; alt: string }) => <span role="img" aria-label={alt} data-src={src} />,
+}))
+
+vi.mock("@/features/monsters/components/npc-preview", () => ({
+    NpcPreview: ({ monster }: { monster: { name: string } }) => <div>Preview completo de {monster.name}</div>,
 }))
 
 const runtime = {
@@ -136,6 +147,7 @@ function sheet(overrides: Partial<CharacterSheetFull> = {}): CharacterSheetFull 
         deathSavesFailure: 0,
         armorClassOverride: null,
         armorClassBonus: null,
+        computedArmorClass: 16,
         initiativeOverride: null,
         initiativeProficiency: false,
         passivePerceptionOverride: null,
@@ -172,6 +184,7 @@ function sheet(overrides: Partial<CharacterSheetFull> = {}): CharacterSheetFull 
 function renderTab(props: {
     npcs?: OwlbearRoomNpc[]
     sheets?: CharacterSheetFull[]
+    runtimeOverride?: Partial<Omit<typeof runtime, "role"> & { role: "GM" | "PLAYER" | null }>
     initiative?: {
         npcs: Record<string, { initiative: number; roll: number; dexModifier: number; addedAt: string }>
         players: Record<string, { initiative: number; updatedAt: string }>
@@ -212,7 +225,7 @@ function renderTab(props: {
         setPlayerInitiative,
     })
 
-    render(<OwlbearGmInitiativeTab runtime={runtime} session={session} isAuthenticated isAuthLoaded />)
+    render(<OwlbearGmInitiativeTab runtime={{ ...runtime, ...props.runtimeOverride }} session={session} isAuthenticated isAuthLoaded />)
 
     return { updateNpc, removeNpcInitiative, setPlayerInitiative }
 }
@@ -220,6 +233,8 @@ function renderTab(props: {
 describe("OwlbearGmInitiativeTab", () => {
     beforeEach(() => {
         vi.clearAllMocks()
+        highlightOwlbearNpcTokenMock.mockResolvedValue(undefined)
+        clearOwlbearNpcTokenHighlightMock.mockResolvedValue(undefined)
     })
 
     it("renders combatants ordered by initiative descending", () => {
@@ -239,6 +254,51 @@ describe("OwlbearGmInitiativeTab", () => {
         expect(rows[1]).toHaveTextContent("Kael")
     })
 
+    it("shows armor class for NPCs and PCs", () => {
+        renderTab()
+
+        expect(screen.getByText("CA 13")).toBeInTheDocument()
+        expect(screen.getByText("CA 16")).toBeInTheDocument()
+    })
+
+    it("expands NPC rows to show the full preview", () => {
+        renderTab()
+
+        expect(screen.queryByText("Preview completo de Lobo")).not.toBeInTheDocument()
+
+        fireEvent.click(screen.getByText("Lobo"))
+
+        expect(screen.getByText("Preview completo de Lobo")).toBeInTheDocument()
+    })
+
+    it("highlights the linked NPC token locally while hovering the NPC row", () => {
+        renderTab()
+
+        fireEvent.mouseEnter(screen.getByTestId("initiative-npc-row-npc-1"))
+
+        expect(highlightOwlbearNpcTokenMock).toHaveBeenCalledWith("npc-1")
+
+        fireEvent.mouseLeave(screen.getByTestId("initiative-npc-row-npc-1"))
+
+        expect(clearOwlbearNpcTokenHighlightMock).toHaveBeenCalled()
+    })
+
+    it("does not request token highlight for players", () => {
+        renderTab()
+
+        fireEvent.mouseEnter(screen.getByText("Kael"))
+
+        expect(highlightOwlbearNpcTokenMock).not.toHaveBeenCalled()
+    })
+
+    it("does not request token highlight when runtime is not GM", () => {
+        renderTab({ runtimeOverride: { role: "PLAYER" } })
+
+        fireEvent.mouseEnter(screen.getByTestId("initiative-npc-row-npc-1"))
+
+        expect(highlightOwlbearNpcTokenMock).not.toHaveBeenCalled()
+    })
+
     it("removes an NPC only from initiative", async () => {
         const removeNpcInitiative = vi.fn().mockResolvedValue(undefined)
         renderTab({ removeNpcInitiative })
@@ -246,6 +306,7 @@ describe("OwlbearGmInitiativeTab", () => {
         fireEvent.click(screen.getByLabelText("Remover Lobo da iniciativa"))
 
         await waitFor(() => expect(removeNpcInitiative).toHaveBeenCalledWith("npc-1"))
+        expect(screen.queryByText("Preview completo de Lobo")).not.toBeInTheDocument()
     })
 
     it("updates NPC HP through the shared room NPC endpoint", async () => {
@@ -253,10 +314,12 @@ describe("OwlbearGmInitiativeTab", () => {
         renderTab({ updateNpc })
 
         const input = screen.getByLabelText("Ajustar vida de Lobo")
+        fireEvent.click(input)
         fireEvent.change(input, { target: { value: "-4" } })
         fireEvent.keyDown(input, { key: "Enter" })
 
         await waitFor(() => expect(updateNpc).toHaveBeenCalledWith("npc-1", { hpCurrent: 8 }))
+        expect(screen.queryByText("Preview completo de Lobo")).not.toBeInTheDocument()
     })
 
     it("persists player initiative from the PC input", async () => {

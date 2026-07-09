@@ -1,5 +1,5 @@
-import { OwlbearShell } from "@/features/owlbear/owlbear-shell"
+import { OwlbearLegacyAction } from "@/features/owlbear/owlbear-action-surface"
 
 export default function OwlbearActionPage() {
-    return <OwlbearShell />
+    return <OwlbearLegacyAction />
 }

@@ -28,6 +28,19 @@ const nextConfig: NextConfig = {
                     { key: "Access-Control-Allow-Headers", value: "Content-Type" },
                 ],
             },
+            ...[
+                "/owlbear-catalog-action.svg",
+                "/owlbear-sheet-action.svg",
+                "/owlbear-npcs-action.svg",
+                "/owlbear-dice-action.svg",
+            ].map((source) => ({
+                source,
+                headers: [
+                    { key: "Access-Control-Allow-Origin", value: "*" },
+                    { key: "Access-Control-Allow-Methods", value: "GET, OPTIONS" },
+                    { key: "Access-Control-Allow-Headers", value: "Content-Type" },
+                ],
+            })),
         ]
     },
 }
