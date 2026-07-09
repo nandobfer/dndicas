@@ -3,13 +3,13 @@ export const OWLBEAR_SESSION_INVALID_EVENT = "dndicas:owlbear-session-invalid"
 
 export const OWLBEAR_ACTIONS = {
     catalog: {
-        title: "Dndicas - catalogo",
+        title: "Dndicas: Compendium",
         iconPath: "/owlbear/icons/catalog.svg",
         manifestPath: "/owlbear/catalog/manifest.json",
         actionPath: "/owlbear/catalog/action",
     },
     sheet: {
-        title: "Dndicas - ficha",
+        title: "Dndicas: Ficha",
         iconPath: "/owlbear/icons/sheet.svg",
         manifestPath: "/owlbear/sheet/manifest.json",
         actionPath: "/owlbear/sheet/action",
@@ -17,7 +17,7 @@ export const OWLBEAR_ACTIONS = {
         actionSize: { width: 1024, height: OWLBEAR_ACTION_SIZE.height },
     },
     npcs: {
-        title: "Dndicas - npcs",
+        title: "Dndicas: NPC & Iniciativa",
         iconPath: "/owlbear/icons/npcs.svg",
         manifestPath: "/owlbear/npcs/manifest.json",
         actionPath: "/owlbear/npcs/action",
@@ -25,7 +25,7 @@ export const OWLBEAR_ACTIONS = {
         actionSize: { width: 600, height: OWLBEAR_ACTION_SIZE.height },
     },
     dice: {
-        title: "Dndicas - dados",
+        title: "Dndicas: Dados",
         iconPath: "/owlbear/icons/dice.svg",
         manifestPath: "/owlbear/dice/manifest.json",
         actionPath: "/owlbear/dice/action",

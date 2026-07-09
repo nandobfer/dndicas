@@ -3,14 +3,14 @@
 ## Features
 
 ### Actions separadas
-A integração do Owlbear é publicada como quatro manifests/actions independentes: `dndicas - ficha` usa largura `1000` e altura `900`, enquanto `dndicas - catalogo`, `dndicas - npcs` e `dndicas - dados` usam largura `900` e altura `900`. O manifesto legado `/owlbear/manifest.json` aponta para a action de catálogo enquanto o produto não foi publicado; os manifests dedicados ficam em `/owlbear/catalog/manifest.json`, `/owlbear/sheet/manifest.json`, `/owlbear/npcs/manifest.json` e `/owlbear/dice/manifest.json`.
+A integração do Owlbear é publicada como quatro manifests/actions independentes: `Dndicas: Compendium`, `Dndicas: Ficha`, `Dndicas: NPC & Iniciativa` e `Dndicas: Dados`. O manifesto legado `/owlbear/manifest.json` aponta para a action de catálogo enquanto o produto não foi publicado; os manifests dedicados ficam em `/owlbear/catalog/manifest.json`, `/owlbear/sheet/manifest.json`, `/owlbear/npcs/manifest.json` e `/owlbear/dice/manifest.json`.
 
-`dndicas - catalogo` renderiza apenas o catálogo embutido. `dndicas - ficha` renderiza `OwlbearGmSheetsTab` para GM ou `OwlbearPlayerSheetTab` para PLAYER. `dndicas - npcs` renderiza uma navegação interna entre `OwlbearGmNpcsTab` e `OwlbearGmInitiativeTab`. `dndicas - dados` renderiza apenas `OwlbearDiceTab`, permitindo manter os dados abertos enquanto outra action mostra ficha, NPCs ou catálogo.
+`Dndicas: Compendium` renderiza apenas o catálogo embutido. `Dndicas: Ficha` renderiza `OwlbearGmSheetsTab` para GM ou `OwlbearPlayerSheetTab` para PLAYER. `Dndicas: NPC & Iniciativa` renderiza uma navegação interna entre `OwlbearGmNpcsTab` e `OwlbearGmInitiativeTab`. `Dndicas: Dados` renderiza apenas `OwlbearDiceTab`, permitindo manter os dados abertos enquanto outra action mostra ficha, NPCs ou catálogo.
 
 Os ícones das actions são servidos por route handlers em `/owlbear/icons/catalog.svg`, `/owlbear/icons/sheet.svg`, `/owlbear/icons/npcs.svg` e `/owlbear/icons/dice.svg`, sempre com `Content-Type: image/svg+xml`, `Access-Control-Allow-Origin: *` e `Cache-Control: no-store`. As fontes ficam em `public/owlbear/catalog.svg`, `public/owlbear/sheet.svg`, `public/owlbear/npc.svg` e `public/owlbear/dice.svg`; os SVGs usam `currentColor`, `viewBox="0 0 24 24"` e não devem ter `width`/`height` fixos para permitir que o Owlbear controle cor e tamanho.
 
 ### Action compartilhada de dados da sala
-A action `dndicas - dados` renderiza o roller do Dndicas em modo embutido, com rolagens compartilhadas entre todos os clientes conectados à mesma sala, sem exibir aviso textual separado de quem realizou a ultima rolagem.
+A action `Dndicas: Dados` renderiza o roller do Dndicas em modo embutido, com rolagens compartilhadas entre todos os clientes conectados à mesma sala, sem exibir aviso textual separado de quem realizou a ultima rolagem.
 
 ### Sincronização híbrida de rolagens
 As rolagens ao vivo da aba `Dados` usam Soketi/Pusher para disparar animação e resultado imediatamente nos outros clientes conectados, enquanto a metadata da sala do Owlbear guarda um histórico curto compartilhado. O histórico mantém até 13 entradas recentes e não é persistido no MongoDB.
@@ -22,14 +22,14 @@ Cada entrada do histórico compartilhado inclui nome exibido, fórmula ao lado d
 O modal de confirmação da aba `Fichas` renderiza campos ricos da ficha, como classe com mentions HTML, usando `MentionContent` para evitar HTML bruto no resumo da ficha a desvincular.
 
 ### Action NPCs do GM
-A action `dndicas - npcs` combina as telas `NPCs` e `Iniciativa`. O GM precisa estar logado no Dndicas; sessões GM anônimas do Owlbear não podem criar ou vincular NPCs de usuário. A sala persiste apenas vínculos em `owlbear_room_npcs` (`roomId`, `userId`, `sourceKind`, `sourceId`, `hpCurrent`, `hpMax`), apontando para `UserNpc` ou `Monster`, sem duplicar stat blocks.
+A action `Dndicas: NPC & Iniciativa` combina as telas `NPCs` e `Iniciativa`. O GM precisa estar logado no Dndicas; sessões GM anônimas do Owlbear não podem criar ou vincular NPCs de usuário. A sala persiste apenas vínculos em `owlbear_room_npcs` (`roomId`, `userId`, `sourceKind`, `sourceId`, `hpCurrent`, `hpMax`), apontando para `UserNpc` ou `Monster`, sem duplicar stat blocks.
 
 O topo da aba usa `SearchInput` e busca Fuse.js local nos NPCs já vinculados. `Adicionar NPC` abre opções para criar NPC com `NpcFormModal`, selecionar de `Meus NPCs` via `useInfiniteNpcs`, ou selecionar do `Catálogo de Monstros` via `useInfiniteMonsters`; as listas externas usam a busca Fuse.js dos endpoints existentes. Ao selecionar um monstro/NPC existente, o `InitialHpModal` é exibido oferecendo opções para usar a vida média, rolar os dados (calculando o modificador de Constituição quando omitido na fórmula) ou definir o valor manualmente. A tabela mostra foto, nome (com um badge numérico para nomes duplicados), PV atual/máximo, barra de progresso, input textual de delta de PV com suporte a `-`, e lixeira com confirmação. A barra de PV interpola cor continuamente de vermelho escuro em 0%, passando por amarelo em 50%, até verde em 100%. Clicar na linha expande `NpcPreview` com `AnimatePresence`/`motion` e também anima o fechamento.
 
 As rotas Owlbear-aware de sala são `GET/POST /api/owlbear/rooms/[roomId]/npcs`, `PATCH/DELETE /api/owlbear/rooms/[roomId]/npcs/[npcId]` e `POST /api/owlbear/rooms/[roomId]/npcs/user-npcs`. Todas exigem Bearer token da sessão Owlbear, papel `GM`, `roomId` correspondente à sessão e usuário real do Clerk. Remover pela lixeira desvincula apenas a instância da sala; não apaga o NPC do usuário nem o monstro do catálogo.
 
 ### Iniciativa do GM
-A action `dndicas - npcs` expõe uma opção interna `Iniciativa` apenas para GM. O estado da iniciativa fica na metadata da sala, em `initiative.npcs` e `initiative.players`, e é sincronizado por `useRoomInitiative` via `subscribeToRoomMetadata`.
+A action `Dndicas: NPC & Iniciativa` expõe uma opção interna `Iniciativa` apenas para GM. O estado da iniciativa fica na metadata da sala, em `initiative.npcs` e `initiative.players`, e é sincronizado por `useRoomInitiative` via `subscribeToRoomMetadata`.
 
 Na aba `NPCs`, cada container de NPC mostra um botão com ícone de duas espadas e tooltip `Adicionar a iniciativa`. O clique rola `1d20`, soma o modificador de Destreza do NPC (`Math.floor((dexterity - 10) / 2)`) e salva o resultado em `initiative.npcs[npcId]`. Se o NPC já estiver na iniciativa, o valor é substituído por uma nova rolagem.
 
@@ -58,7 +58,7 @@ A action de catálogo (`/owlbear/catalog/action`) não usa `useOwlbearRuntime`, 
 Na aba `Fichas`, o `SheetForm` do painel selecionado usa `key={selectedSheet._id}` para forçar remount completo ao alternar entre fichas. Isso evita reaproveitar caches internos de `react-hook-form`, subscriptions realtime e editores ricos ao voltar para uma ficha já visitada dentro da action.
 
 ### Context menu de vínculo de token com personagem ou NPC
-O `OwlbearGmSceneController` roda com escopos diferentes por action/background. O background da extensão `dndicas - ficha` registra `Vincular a personagem`; o background da extensão `dndicas - npcs` registra `Vincular a NPC`; o menu `Desvincular` fica no background da ficha para evitar duplicar o item quando ambas as extensões estão instaladas. O registro dos menus depende apenas do runtime Owlbear pronto e papel `GM`, não da sessão backend pronta, para evitar que falhas ou delays de sessão escondam o menu.
+O `OwlbearGmSceneController` roda com escopos diferentes por action/background. O background da extensão `Dndicas: Ficha` registra `Vincular a personagem`; o background da extensão `Dndicas: NPC & Iniciativa` registra `Vincular a NPC`; o menu `Desvincular` fica no background da ficha para evitar duplicar o item quando ambas as extensões estão instaladas. O registro dos menus depende apenas do runtime Owlbear pronto e papel `GM`, não da sessão backend pronta, para evitar que falhas ou delays de sessão escondam o menu.
 
 Ao clicar em vincular, o background salva o vínculo pendente em `OBR.player.metadata["com.dndicas.owlbear/pending-token-link"]`, chama `OBR.action.open()` da própria extensão e usa `OBR.player.deselect([tokenId])` para fechar o context menu nativo. A action correta lê essa metadata, resolve o token na cena e abre somente o modal correspondente: seleção de personagem na action de ficha ou seleção de NPC na action de NPCs. Depois que o usuário seleciona personagem ou NPC, o vínculo é sincronizado, a metadata pendente é limpa e a action é fechada com `OBR.action.close()`.
 
