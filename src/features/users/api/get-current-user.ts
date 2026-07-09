@@ -80,6 +80,15 @@ export async function getCurrentUserFromDb(): Promise<CurrentUserResult> {
       // Try to find existing user
       let user = await User.findByClerkId(userId)
 
+      if (user?.status === "inactive") {
+          return {
+              success: false,
+              user: null,
+              clerkId: userId,
+              error: "Usuário inativo",
+          }
+      }
+
       // If user exists but is missing avatar, or doesn't exist at all, sync from Clerk
       if (!user || !user.avatarUrl) {
           const clerkUser = await currentUser()
@@ -87,6 +96,15 @@ export async function getCurrentUserFromDb(): Promise<CurrentUserResult> {
 
           if (clerkUserData) {
               user = await ensureUserExists(userId, clerkUserData)
+          }
+      }
+
+      if (user?.status === "inactive") {
+          return {
+              success: false,
+              user: null,
+              clerkId: userId,
+              error: "Usuário inativo",
           }
       }
 

@@ -10,7 +10,7 @@ import mongoose from 'mongoose';
 import { clerkClient } from "@clerk/nextjs/server"
 import dbConnect from "@/core/database/db"
 import { User } from "@/features/users/models/user"
-import { requireAdmin, getCurrentUserFromDb } from "@/features/users/api/get-current-user"
+import { requireAdmin } from "@/features/users/api/get-current-user"
 import { updateUserSchema } from "@/features/users/api/validation"
 import { logUpdate, logDelete } from "@/features/users/api/audit-service"
 import type { UserResponse } from "@/features/users/types/user.types"
@@ -132,12 +132,7 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
                 // Note: simplified for this context
             }
 
-            // Handle status change - if inactive, ban in Clerk
-            if (data.status === "inactive") {
-                await client.users.banUser(user.clerkId)
-            } else if (data.status === "active") {
-                await client.users.unbanUser(user.clerkId)
-            }
+            // Status is enforced by the local backend. Clerk ban/unban are Pro features and must not be used here.
         } catch (clerkError) {
             console.error("[Clerk API] Update error:", clerkError)
             const details =
