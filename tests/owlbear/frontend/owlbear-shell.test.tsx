@@ -122,6 +122,10 @@ vi.mock("@owlbear-rodeo/sdk", () => ({
     default: sdkMock,
 }))
 
+vi.mock("@/features/owlbear/owlbear-sdk-client", () => ({
+    preloadedOwlbearSdk: sdkMock,
+}))
+
 vi.mock("@clerk/nextjs", () => ({
     SignIn: () => <div data-testid="clerk-sign-in">Clerk SignIn</div>,
     SignedIn: ({ children }: { children: React.ReactNode }) => <>{children}</>,

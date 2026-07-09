@@ -1,11 +1,11 @@
 "use client"
 
-import { LiquidGlassBackground } from '@/components/ui/glass-background';
-import { cn } from '@/core/utils';
-import * as React from 'react';
+import { LiquidGlassBackground } from "@/components/ui/glass-background"
+import { cn } from "@/core/utils"
+import * as React from "react"
 
-import { logOwlbearDebug } from './debug';
-import type { OwlbearRuntimeState } from './types';
+import { logOwlbearDebug } from "./debug"
+import type { OwlbearRuntimeState } from "./types"
 
 export function RuntimeBanner({ status }: { status: OwlbearRuntimeState["status"] }) {
     if (status !== "unavailable") return null
