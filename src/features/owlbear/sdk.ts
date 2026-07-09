@@ -4,6 +4,7 @@ import {
     OWLBEAR_OVERLAY_METADATA_VERSION,
     OWLBEAR_ROOM_METADATA_KEY,
     OWLBEAR_ROOM_METADATA_VERSION,
+    OWLBEAR_SESSION_INVALID_EVENT,
     OWLBEAR_TOKEN_METADATA_KEY,
     OWLBEAR_TOKEN_METADATA_VERSION,
 } from "./config"
@@ -18,8 +19,27 @@ import type {
     OwlbearTheme,
     OwlbearTokenLinkMetadata,
 } from "./types"
+import { logOwlbearDebug } from "./debug"
 
-const READY_TIMEOUT_MS = 4000
+const NPC_TOKEN_HIGHLIGHT_PADDING = 28
+const NPC_TOKEN_HIGHLIGHT_COLOR = "#f59e0b"
+
+let currentNpcTokenHighlightId: string | null = null
+let npcTokenHighlightRequestId = 0
+
+export function notifyOwlbearSessionInvalid() {
+    if (typeof window === "undefined") return
+    window.dispatchEvent(new CustomEvent(OWLBEAR_SESSION_INVALID_EVENT))
+}
+
+function createOwlbearHttpError(response: Response, error: { error?: string; message?: string }, fallback: string) {
+    const nextError = new Error(error.error ?? error.message ?? fallback) as Error & { status?: number }
+    nextError.status = response.status
+    if (response.status === 401 && nextError.message.toLowerCase().includes("sessão owlbear")) {
+        notifyOwlbearSessionInvalid()
+    }
+    return nextError
+}
 
 function getThemeMode(theme: OwlbearTheme | null | undefined): OwlbearRuntimeState["themeMode"] {
     return theme?.mode === "LIGHT" ? "light" : "dark"
@@ -133,37 +153,26 @@ export async function loadOwlbearSdkModule() {
     return import("@owlbear-rodeo/sdk")
 }
 
-function waitForOwlbearReady(sdk: OwlbearSdkLike, timeoutMs = READY_TIMEOUT_MS) {
-    return new Promise<void>((resolve, reject) => {
-        if (!sdk.isAvailable) {
-            reject(new Error("Owlbear SDK unavailable in this context"))
-            return
-        }
-
-        if (sdk.isReady) {
-            resolve()
-            return
-        }
-
-        const timeoutId = window.setTimeout(() => {
-            reject(new Error("Timed out waiting for Owlbear SDK ready event"))
-        }, timeoutMs)
-
-        sdk.onReady(() => {
-            window.clearTimeout(timeoutId)
-            resolve()
-        })
-    })
-}
-
-export async function bootstrapOwlbearRuntime(): Promise<OwlbearRuntimeState> {
+export async function bootstrapOwlbearRuntime(preloadedSdk?: OwlbearSdkLike | null): Promise<OwlbearRuntimeState> {
     try {
-        const sdk = await loadOwlbearSdk()
+        const sdk = preloadedSdk ?? await loadOwlbearSdk()
+        logOwlbearDebug("[Dndicas Owlbear SDK]", "bootstrap loaded sdk", {
+            hasSdk: Boolean(sdk),
+            isAvailable: sdk?.isAvailable ?? null,
+            isReady: sdk?.isReady ?? null,
+            roomId: sdk?.room?.id ?? null,
+        })
         if (!sdk) {
             throw new Error("Owlbear SDK unavailable during SSR")
         }
 
-        await waitForOwlbearReady(sdk)
+        if (!sdk.isAvailable) {
+            throw new Error("Owlbear SDK unavailable in this context")
+        }
+
+        if (!sdk.isReady) {
+            throw new Error("Owlbear SDK is not ready yet")
+        }
 
         const [role, playerId, theme, sceneReady] = await Promise.all([
             sdk.player.getRole(),
@@ -171,6 +180,14 @@ export async function bootstrapOwlbearRuntime(): Promise<OwlbearRuntimeState> {
             sdk.theme.getTheme(),
             sdk.scene.isReady(),
         ])
+
+        logOwlbearDebug("[Dndicas Owlbear SDK]", "bootstrap resolved context", {
+            role,
+            playerId,
+            roomId: sdk.room.id ?? null,
+            themeMode: getThemeMode(theme),
+            sceneReady,
+        })
 
         return {
             status: "ready",
@@ -199,6 +216,7 @@ export async function openOwlbearBackendSession(input: {
     owlbearPlayerId: string
     owlbearRole: "GM" | "PLAYER"
 }) {
+    logOwlbearDebug("[Dndicas Owlbear Session]", "opening backend session", input)
     const response = await fetch("/api/owlbear/session", {
         method: "POST",
         headers: {
@@ -209,12 +227,21 @@ export async function openOwlbearBackendSession(input: {
 
     if (!response.ok) {
         const error = await response.json().catch(() => ({ error: "Erro desconhecido" }))
-        const nextError = new Error(error.error ?? `HTTP ${response.status}`) as Error & { status?: number }
-        nextError.status = response.status
-        throw nextError
+        console.error("[Dndicas Owlbear Session] backend session failed", {
+            ...input,
+            status: response.status,
+            error,
+        })
+        throw createOwlbearHttpError(response, error, `HTTP ${response.status}`)
     }
 
-    return response.json() as Promise<{ token: string; expiresAt: string }>
+    const payload = await response.json() as { token: string; expiresAt: string }
+    logOwlbearDebug("[Dndicas Owlbear Session]", "backend session opened", {
+        ...input,
+        expiresAt: payload.expiresAt,
+        hasToken: Boolean(payload.token),
+    })
+    return payload
 }
 
 export async function getOwlbearPlayerName() {
@@ -437,6 +464,79 @@ export function getOverlayLinkFromItem(item: OwlbearSceneItem | null | undefined
     return parseOverlayMetadata(item?.metadata)
 }
 
+async function deleteCurrentNpcTokenHighlight() {
+    if (!currentNpcTokenHighlightId) return
+
+    const highlightId = currentNpcTokenHighlightId
+    currentNpcTokenHighlightId = null
+
+    const sdk = await loadOwlbearSdk()
+    if (!sdk || !sdk.isAvailable || !sdk.isReady) return
+
+    await sdk.scene.local.deleteItems([highlightId])
+}
+
+export async function clearOwlbearNpcTokenHighlight() {
+    npcTokenHighlightRequestId += 1
+    await deleteCurrentNpcTokenHighlight()
+}
+
+export async function highlightOwlbearNpcToken(npcId: string) {
+    const requestId = npcTokenHighlightRequestId + 1
+    npcTokenHighlightRequestId = requestId
+    await deleteCurrentNpcTokenHighlight()
+
+    const sdk = await loadOwlbearSdk()
+    if (!sdk || !sdk.isAvailable || !sdk.isReady) return
+
+    const sdkModule = await loadOwlbearSdkModule()
+    if (!sdkModule) return
+
+    const items = await sdk.scene.items.getItems()
+    const token = items.find((item) => {
+        const link = getTokenLinkFromItem(item)
+        return link?.kind === "npc" && link.refId === npcId
+    })
+    if (!token) return
+
+    const bounds = await sdk.scene.items.getItemBounds([token.id])
+    if (npcTokenHighlightRequestId !== requestId) return
+
+    const size = Math.max(bounds.width, bounds.height) + NPC_TOKEN_HIGHLIGHT_PADDING
+    const highlight = sdkModule.buildShape()
+        .name(`Dndicas Highlight - ${token.name}`)
+        .attachedTo(token.id)
+        .layer("CHARACTER")
+        .zIndex(token.zIndex + 1)
+        .disableHit(true)
+        .position(bounds.center)
+        .width(size)
+        .height(size)
+        .shapeType("CIRCLE")
+        .fillColor(NPC_TOKEN_HIGHLIGHT_COLOR)
+        .fillOpacity(0.08)
+        .strokeColor(NPC_TOKEN_HIGHLIGHT_COLOR)
+        .strokeOpacity(0.95)
+        .strokeWidth(8)
+        .strokeDash([12, 8])
+        .metadata({
+            "com.dndicas.owlbear/local-highlight": {
+                version: 1,
+                kind: "npc",
+                refId: npcId,
+                tokenId: token.id,
+            },
+        })
+        .build() as OwlbearSceneItem
+
+    await sdk.scene.local.addItems([highlight])
+    if (npcTokenHighlightRequestId !== requestId) {
+        await sdk.scene.local.deleteItems([highlight.id])
+        return
+    }
+    currentNpcTokenHighlightId = highlight.id
+}
+
 export async function setTokenSheetLink(tokenId: string, sheetId: string, overlayIds: string[] = []) {
     const sdk = await loadOwlbearSdk()
     if (!sdk || !sdk.isAvailable || !sdk.isReady) {
@@ -505,7 +605,7 @@ export async function fetchOwlbearSheetById(sheetId: string, sessionToken: strin
 
     if (!response.ok) {
         const error = await response.json().catch(() => ({ error: "Erro desconhecido" }))
-        throw new Error(error.error ?? `HTTP ${response.status}`)
+        throw createOwlbearHttpError(response, error, `HTTP ${response.status}`)
     }
 
     return response.json()

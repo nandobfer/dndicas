@@ -1,8 +1,9 @@
 import * as React from "react"
-import { fireEvent, screen, waitFor } from "@testing-library/react"
+import { act, fireEvent, screen, waitFor } from "@testing-library/react"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { renderWithQueryClient as render } from "../../frontend/test-utils"
 import { canManageGmScene, OwlbearGmSceneController } from "@/features/owlbear/gm-scene-controller"
+import { OwlbearCatalogAction } from "@/features/owlbear/owlbear-action-surface"
 import { OwlbearShell } from "@/features/owlbear/owlbear-shell"
 
 const useSheetListMock = vi.hoisted(() => vi.fn())
@@ -144,7 +145,6 @@ vi.mock("@/features/character-sheets/hooks/use-sheet-list", () => ({
 vi.mock("@/features/character-sheets/api/character-sheets-queries", () => ({
     useCreateAssistedSheet: () => useCreateAssistedSheetMock(),
     useCreateSheet: () => useCreateSheetMock(),
-    useCreateAssistedSheet: () => useCreateAssistedSheetMock(),
     useSheet: (id: string | null) => useSheetMock(id),
 }))
 
@@ -351,6 +351,14 @@ describe("OwlbearShell", () => {
         expect(screen.getByTitle("Dndicas Dashboard")).toBeInTheDocument()
     })
 
+    it("renders the standalone catalog action without bootstrapping the Owlbear runtime", () => {
+        render(<OwlbearCatalogAction />)
+
+        expect(screen.getByTitle("Dndicas - catalogo")).toBeInTheDocument()
+        expect(sdkMock.onReady).not.toHaveBeenCalled()
+        expect(sdkMock.player.getRole).not.toHaveBeenCalled()
+    })
+
     it("does not resize the action when switching tabs", async () => {
         sdkMock.player.getRole.mockResolvedValue("GM")
 
@@ -511,17 +519,54 @@ describe("OwlbearShell", () => {
         expect(screen.queryByText("SDK Owlbear indisponível nesta action.")).not.toBeInTheDocument()
     })
 
-    it("waits for OBR.onReady before leaving booting state", async () => {
+    it("keeps booting until OBR.onReady before reading the Owlbear runtime", async () => {
+        window.history.pushState({}, "", "/owlbear/action")
+        sdkMock.isReady = false
+        sdkMock.player.getRole.mockResolvedValue("GM")
+        const consoleErrorSpy = vi.spyOn(console, "error").mockImplementation(() => undefined)
+
+        try {
+            render(<OwlbearShell />)
+
+            expect(screen.queryByText("SDK Owlbear indisponível nesta action.")).not.toBeInTheDocument()
+            expect(screen.queryByRole("button", { name: "Fichas" })).not.toBeInTheDocument()
+
+            await waitFor(() => {
+                expect(sdkMock.onReady).toHaveBeenCalled()
+            })
+
+            sdkMock.isReady = true
+            await act(async () => {
+                sdkMock.callbacks.forEach((callback) => callback())
+            })
+
+            expect(await screen.findByRole("button", { name: "Fichas" })).toBeInTheDocument()
+            expect(screen.queryByText("SDK Owlbear indisponível nesta action.")).not.toBeInTheDocument()
+            expect(consoleErrorSpy).not.toHaveBeenCalledWith("Failed to bootstrap Owlbear runtime", expect.any(Error))
+        } finally {
+            consoleErrorSpy.mockRestore()
+        }
+    })
+
+    it("retries readiness without depending exclusively on OBR.onReady", async () => {
+        window.history.pushState({}, "", "/owlbear/action")
         sdkMock.isReady = false
         sdkMock.player.getRole.mockResolvedValue("GM")
 
         render(<OwlbearShell />)
 
         expect(screen.queryByText("SDK Owlbear indisponível nesta action.")).not.toBeInTheDocument()
+        expect(screen.queryByRole("button", { name: "Fichas" })).not.toBeInTheDocument()
 
         await waitFor(() => {
             expect(sdkMock.onReady).toHaveBeenCalled()
         })
+
+        await new Promise((resolve) => window.setTimeout(resolve, 50))
+        sdkMock.isReady = true
+
+        expect(await screen.findByRole("button", { name: "Fichas" }, { timeout: 2500 })).toBeInTheDocument()
+        expect(screen.queryByText("SDK Owlbear indisponível nesta action.")).not.toBeInTheDocument()
     })
 
     it("shows the shared my-sheets picker without resizing the action when no room link exists", async () => {

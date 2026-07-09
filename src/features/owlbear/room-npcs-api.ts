@@ -1,4 +1,5 @@
 import type { CreateMonsterInput, Monster } from "@/features/monsters/types/monsters.types"
+import { notifyOwlbearSessionInvalid } from "./sdk"
 
 export type OwlbearRoomNpcSourceKind = "userNpc" | "monster"
 
@@ -23,7 +24,12 @@ function authHeaders(sessionToken: string) {
 
 async function parseJsonError(response: Response, fallback: string) {
     const error = await response.json().catch(() => ({}))
-    return new Error(error.error || error.message || fallback)
+    const nextError = new Error(error.error || error.message || fallback) as Error & { status?: number }
+    nextError.status = response.status
+    if (response.status === 401 && nextError.message.toLowerCase().includes("sessão owlbear")) {
+        notifyOwlbearSessionInvalid()
+    }
+    return nextError
 }
 
 export async function fetchOwlbearRoomNpcs(roomId: string, sessionToken: string): Promise<OwlbearRoomNpc[]> {

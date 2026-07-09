@@ -2,6 +2,8 @@
 
 import * as React from "react"
 import { useAuth } from "@/core/hooks/useAuth"
+import { OWLBEAR_SESSION_INVALID_EVENT } from "./config"
+import { logOwlbearDebug } from "./debug"
 import { openOwlbearBackendSession } from "./sdk"
 import type { OwlbearRuntimeState, OwlbearSessionState } from "./types"
 
@@ -47,6 +49,20 @@ export function useOwlbearSession(runtime: OwlbearRuntimeState) {
     }, [session])
 
     React.useEffect(() => {
+        const handleInvalidSession = () => {
+            setSession({
+                sessionStatus: "idle",
+                sessionToken: null,
+                sessionExpiresAt: null,
+            })
+            setRefreshSequence((current) => current + 1)
+        }
+
+        window.addEventListener(OWLBEAR_SESSION_INVALID_EVENT, handleInvalidSession)
+        return () => window.removeEventListener(OWLBEAR_SESSION_INVALID_EVENT, handleInvalidSession)
+    }, [])
+
+    React.useEffect(() => {
         if (session.sessionStatus !== "ready" || !session.sessionExpiresAt) return
 
         const expiresAt = Date.parse(session.sessionExpiresAt)
@@ -66,10 +82,37 @@ export function useOwlbearSession(runtime: OwlbearRuntimeState) {
     }, [session.sessionExpiresAt, session.sessionStatus])
 
     React.useEffect(() => {
-        if (runtime.status !== "ready" || !runtime.roomId || !runtime.playerId || !runtime.role) return
-        if (!isLoaded) return
+        logOwlbearDebug("[Dndicas Owlbear Session]", "state", {
+            runtimeStatus: runtime.status,
+            roomId: runtime.roomId,
+            playerId: runtime.playerId,
+            role: runtime.role,
+            authLoaded: isLoaded,
+            signedIn: isSignedIn,
+            userId: userId ?? null,
+            sessionStatus: session.sessionStatus,
+            hasToken: Boolean(session.sessionToken),
+            expiresAt: session.sessionExpiresAt,
+        })
+    }, [isLoaded, isSignedIn, runtime.playerId, runtime.role, runtime.roomId, runtime.status, session.sessionExpiresAt, session.sessionStatus, session.sessionToken, userId])
+
+    React.useEffect(() => {
+        if (runtime.status !== "ready" || !runtime.roomId || !runtime.playerId || !runtime.role) {
+            logOwlbearDebug("[Dndicas Owlbear Session]", "waiting for runtime", {
+                runtimeStatus: runtime.status,
+                roomId: runtime.roomId,
+                playerId: runtime.playerId,
+                role: runtime.role,
+            })
+            return
+        }
+        if (!isLoaded) {
+            logOwlbearDebug("[Dndicas Owlbear Session]", "waiting for auth load")
+            return
+        }
 
         if (isSignedIn && !userId) {
+            logOwlbearDebug("[Dndicas Owlbear Session]", "waiting for Clerk userId")
             setSession({
                 sessionStatus: "idle",
                 sessionToken: null,
@@ -90,6 +133,11 @@ export function useOwlbearSession(runtime: OwlbearRuntimeState) {
         const requiresClerkAuth = owlbearRole === "PLAYER"
 
         if (requiresClerkAuth && !isSignedIn) {
+            logOwlbearDebug("[Dndicas Owlbear Session]", "player action requires Clerk auth; keeping idle", {
+                roomId,
+                owlbearPlayerId,
+                owlbearRole,
+            })
             setSession({
                 sessionStatus: "idle",
                 sessionToken: null,

@@ -30,6 +30,7 @@ interface SheetFormProps {
     onFieldPatch?: (field: keyof PatchSheetBody, value: unknown, updated?: CharacterSheet) => void
     navigateOnSlugChange?: boolean
     runtimeContext?: "default" | "owlbear"
+    isOwlbear?: boolean
 }
 
 export function SheetForm({
@@ -40,6 +41,7 @@ export function SheetForm({
     onFieldPatch,
     navigateOnSlugChange = true,
     runtimeContext = "default",
+    isOwlbear,
 }: SheetFormProps) {
     const router = useRouter()
     const { userId, isSignedIn, isLoaded } = useAuth()
@@ -77,12 +79,13 @@ export function SheetForm({
 
     const shouldRenderDesktop = layoutMode === "desktop" ? true : hasHydrated ? isDesktop : true
     const forceDesktopLayout = layoutMode === "desktop"
+    const shouldUseOwlbearLayout = isOwlbear ?? runtimeContext === "owlbear"
 
     return (
         <motion.div variants={motionConfig.variants.fadeInUp} initial="initial" animate="animate" className="space-y-4">
             {shouldRenderDesktop ? (
                 <div className="space-y-4">
-                    <SheetHeader sheet={sheet} form={form} items={items} isReadOnly={isReadOnly} isOwlbear={runtimeContext === "owlbear"} />
+                    <SheetHeader sheet={sheet} form={form} items={items} isReadOnly={isReadOnly} isOwlbear={shouldUseOwlbearLayout} />
 
                     <div className={forceDesktopLayout ? "grid grid-cols-2 gap-4 items-start" : "grid grid-cols-1 gap-4 items-start lg:grid-cols-2"}>
                         <SheetAttributesAndItems sheet={sheet} form={form} isReadOnly={isReadOnly} forceDesktopLayout={forceDesktopLayout} />

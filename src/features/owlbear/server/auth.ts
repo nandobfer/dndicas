@@ -1,6 +1,15 @@
 import { NextResponse } from "next/server"
+import { auth } from "@clerk/nextjs/server"
 import { CharacterSheet } from "@/features/character-sheets/models/character-sheet"
-import { getOwlbearSessionByToken, toOwlbearAuthContext, touchOwlbearSession, type OwlbearSessionAuthContext } from "./session-service"
+import {
+    buildAnonymousGmSessionUserId,
+    buildAnonymousPlayerSessionUserId,
+    getOwlbearSessionByToken,
+    isAnonymousPlayerSessionUserId,
+    toOwlbearAuthContext,
+    touchOwlbearSession,
+    type OwlbearSessionAuthContext,
+} from "./session-service"
 
 export class OwlbearHttpError extends Error {
     status: number
@@ -20,14 +29,42 @@ function getBearerToken(request: Request) {
     return token
 }
 
+async function getOwlbearContextFromHeaders(request: Request): Promise<OwlbearSessionAuthContext | null> {
+    const roomId = request.headers.get("x-owlbear-room-id")?.trim()
+    const owlbearPlayerId = request.headers.get("x-owlbear-player-id")?.trim()
+    const role = request.headers.get("x-owlbear-role")?.trim().toUpperCase()
+
+    if (!roomId || !owlbearPlayerId || (role !== "GM" && role !== "PLAYER")) {
+        return null
+    }
+
+    const { userId } = await auth()
+    const fallbackUserId = role === "GM"
+        ? buildAnonymousGmSessionUserId({ roomId, owlbearPlayerId })
+        : buildAnonymousPlayerSessionUserId({ roomId, owlbearPlayerId })
+
+    return {
+        sessionId: `context:${roomId}:${owlbearPlayerId}`,
+        userId: userId ?? fallbackUserId,
+        roomId,
+        owlbearPlayerId,
+        owlbearRole: role,
+        authMode: "context",
+    }
+}
+
 export async function requireOwlbearSession(request: Request): Promise<OwlbearSessionAuthContext> {
     const token = getBearerToken(request)
     if (!token) {
-        throw new OwlbearHttpError(401, "Sessão Owlbear inválida ou ausente")
+        const context = await getOwlbearContextFromHeaders(request)
+        if (context) return context
+        throw new OwlbearHttpError(401, "Contexto Owlbear inválido ou ausente")
     }
 
     const session = await getOwlbearSessionByToken(token)
     if (!session) {
+        const context = await getOwlbearContextFromHeaders(request)
+        if (context) return context
         throw new OwlbearHttpError(401, "Sessão Owlbear inválida ou expirada")
     }
 
@@ -45,7 +82,12 @@ export async function requireOwlbearSheetAccess(request: Request, sheetId: strin
     }
 
     const ownerUserId = String((sheet as { userId: string }).userId)
-    if (session.owlbearRole !== "GM" && ownerUserId !== session.userId) {
+    if (
+        session.authMode === "token"
+        && session.owlbearRole !== "GM"
+        && !isAnonymousPlayerSessionUserId(session.userId)
+        && ownerUserId !== session.userId
+    ) {
         throw new OwlbearHttpError(403, "Acesso Owlbear não autorizado para esta ficha")
     }
 

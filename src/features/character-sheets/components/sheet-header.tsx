@@ -1219,6 +1219,23 @@ export function useSheetHeaderSections({ sheet, form, items = [], isReadOnly = f
 export function SheetHeader({ sheet, form, items = [], isReadOnly = false, isOwlbear = false }: SheetHeaderProps) {
   const sections = useSheetHeaderSections({ sheet, form, items, isReadOnly, isOwlbear })
 
+  if (isOwlbear) {
+    return (
+      <>
+        <div className="space-y-2">
+          <div>{sections.identityCard}</div>
+          <div className="flex items-stretch gap-2 w-full">
+            <div className="flex-none w-36">{sections.levelCard}</div>
+            <div className="flex-none w-40">{sections.armorClassCard}</div>
+            <div className="flex-[3] h-full">{sections.hitPointsCard}</div>
+            <div className="flex-[2]">{sections.hitDiceAndDeathSavesCard}</div>
+          </div>
+        </div>
+        {sections.levelUpModal}
+      </>
+    )
+  }
+
   return (
     <>
       <div className="flex flex-col lg:flex-row items-stretch gap-2 w-full">

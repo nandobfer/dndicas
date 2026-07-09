@@ -1,4 +1,4 @@
-import type { ContextMenuIconFilter } from "@owlbear-rodeo/sdk"
+import type { ContextMenuIconFilter, Metadata } from "@owlbear-rodeo/sdk"
 import type { DiceRollResponse } from "@/features/dice-roller/types"
 
 export type OwlbearRole = "GM" | "PLAYER"
@@ -77,6 +77,14 @@ export interface OwlbearOverlayMetadata {
     barColor?: string
 }
 
+export interface OwlbearPendingTokenLinkMetadata {
+    version: number
+    kind: "player" | "npc"
+    tokenId: string
+    tokenName?: string
+    createdAt: string
+}
+
 export interface OwlbearRuntimeState {
     status: OwlbearRuntimeStatus
     role: OwlbearRole | null
@@ -117,6 +125,14 @@ export interface OwlbearSceneItem {
     description?: string
 }
 
+export interface OwlbearSceneItemBounds {
+    min: OwlbearPoint
+    max: OwlbearPoint
+    width: number
+    height: number
+    center: OwlbearPoint
+}
+
 export interface OwlbearContextMenuContext {
     items: OwlbearSceneItem[]
 }
@@ -139,7 +155,10 @@ export interface OwlbearSdkLike {
         getId: () => Promise<string>
         getName: () => Promise<string>
         getRole: () => Promise<OwlbearRole>
+        getMetadata: () => Promise<Metadata>
+        setMetadata: (update: Partial<Metadata>) => Promise<void>
         deselect: (items?: string[]) => Promise<void>
+        onChange?: (callback: (player: { metadata?: Metadata }) => void) => void | (() => void)
     }
     party: {
         getPlayers: () => Promise<OwlbearPartyPlayer[]>
@@ -166,8 +185,13 @@ export interface OwlbearSdkLike {
     scene: {
         isReady: () => Promise<boolean>
         onReadyChange: (callback: (ready: boolean) => void) => void | (() => void)
+        local: {
+            addItems: (items: OwlbearSceneItem[]) => Promise<void>
+            deleteItems: (ids: string[]) => Promise<void>
+        }
         items: {
             getItems: () => Promise<OwlbearSceneItem[]>
+            getItemBounds: (ids: string[]) => Promise<OwlbearSceneItemBounds>
             updateItems: (
                 filterOrItems: string[] | OwlbearSceneItem[],
                 update: (draft: OwlbearSceneItem[]) => void

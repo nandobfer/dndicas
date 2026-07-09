@@ -661,21 +661,21 @@ export function OwlbearGmNpcsTab({
     if (!isAuthenticated) {
         return (
             <div className="h-full min-h-0 overflow-auto pr-1">
-                <MySheetsContent redirectUrl="/owlbear/action" showDelete={false} />
+                <MySheetsContent redirectUrl="/owlbear/npcs/action" showDelete={false} />
+            </div>
+        )
+    }
+
+    if (runtime.status !== "ready" || session.sessionStatus === "idle" || session.sessionStatus === "loading" || isLoading) {
+        return (
+            <div className="flex h-full min-h-0 items-center justify-center">
+                <Loader2 className="h-8 w-8 animate-spin text-blue-400" />
             </div>
         )
     }
 
     if (session.sessionStatus === "error" || !session.sessionToken || !roomId) {
         return <InlineStatus tone="error" message="A sessão Owlbear-aware não pôde ser inicializada. Reabra a action para tentar novamente." />
-    }
-
-    if (session.sessionStatus === "loading" || isLoading) {
-        return (
-            <div className="flex h-full min-h-0 items-center justify-center">
-                <Loader2 className="h-8 w-8 animate-spin text-blue-400" />
-            </div>
-        )
     }
 
     return (

@@ -214,33 +214,38 @@ export function OwlbearDiceTab({ runtime, session }: OwlbearDiceTabProps) {
             : null
 
     return (
-        <div className="grid h-full min-h-0 gap-4 lg:grid-cols-[minmax(0,1fr)_360px]">
-            <div className="min-h-0 space-y-4 overflow-auto pr-1">
-                <DiceRollerPanel
-                    requestContext={{
-                        source: "owlbear",
-                        playerName: currentPlayerName ?? undefined,
-                        owlbearRoomId: activeRoomId ?? undefined,
-                        owlbearPlayerId: activePlayerId ?? undefined,
-                    }}
-                    onRollResolved={handleRollResolved}
-                    externalResult={liveRoll?.result ?? null}
-                    disableRolling={Boolean(rollingBlockedMessage)}
-                    disabledRollingMessage={rollingBlockedMessage}
-                />
-            </div>
-
-            <div className="min-h-0 overflow-auto pr-1">
-                <div className="rounded-3xl border border-white/10 bg-black/25 p-4 backdrop-blur-sm">
-                    <div className="mb-4">
-                        <h3 className="text-sm font-black uppercase tracking-[0.28em] text-white/45">HISTÓRICO</h3>
+        <div className="h-full min-h-0 overflow-x-auto">
+            <div className="grid h-full min-h-0 min-w-[760px] grid-cols-[minmax(0,1fr)_minmax(280px,320px)] gap-4">
+                <div className="min-h-0 space-y-4 overflow-auto pr-1">
+                    <div className="max-w-[540px]">
+                        <DiceRollerPanel
+                            requestContext={{
+                                source: "owlbear",
+                                playerName: currentPlayerName ?? undefined,
+                                owlbearRoomId: activeRoomId ?? undefined,
+                                owlbearPlayerId: activePlayerId ?? undefined,
+                            }}
+                            onRollResolved={handleRollResolved}
+                            externalResult={liveRoll?.result ?? null}
+                            disableRolling={Boolean(rollingBlockedMessage)}
+                            disabledRollingMessage={rollingBlockedMessage}
+                            forceCombinationModifierInline
+                        />
                     </div>
-                    {errorMessage && (
-                        <div className="mb-3 rounded-2xl border border-red-500/20 bg-red-500/10 px-3 py-2 text-sm text-red-100">
-                            {errorMessage}
+                </div>
+
+                <div className="min-h-0 overflow-auto pr-1">
+                    <div className="rounded-3xl border border-white/10 bg-black/25 p-4 backdrop-blur-sm">
+                        <div className="mb-4">
+                            <h3 className="text-sm font-black uppercase tracking-[0.28em] text-white/45">HISTÓRICO</h3>
                         </div>
-                    )}
-                    <OwlbearDiceHistoryList history={history} isLoading={isLoading} />
+                        {errorMessage && (
+                            <div className="mb-3 rounded-2xl border border-red-500/20 bg-red-500/10 px-3 py-2 text-sm text-red-100">
+                                {errorMessage}
+                            </div>
+                        )}
+                        <OwlbearDiceHistoryList history={history} isLoading={isLoading} />
+                    </div>
                 </div>
             </div>
         </div>

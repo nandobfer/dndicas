@@ -14,8 +14,19 @@ export function buildAnonymousGmSessionUserId(input: {
     return `owlbear-gm:${input.roomId}:${input.owlbearPlayerId}`
 }
 
+export function buildAnonymousPlayerSessionUserId(input: {
+    roomId: string
+    owlbearPlayerId: string
+}) {
+    return `owlbear-player:${input.roomId}:${input.owlbearPlayerId}`
+}
+
 export function isAnonymousGmSessionUserId(userId: string) {
     return userId.startsWith("owlbear-gm:")
+}
+
+export function isAnonymousPlayerSessionUserId(userId: string) {
+    return userId.startsWith("owlbear-player:")
 }
 
 export interface OwlbearSessionRecord {
@@ -35,6 +46,7 @@ export interface OwlbearSessionAuthContext {
     roomId: string
     owlbearPlayerId: string
     owlbearRole: OwlbearRole
+    authMode: "token" | "context"
 }
 
 function hashToken(token: string) {
@@ -42,7 +54,9 @@ function hashToken(token: string) {
 }
 
 function getDefaultSessionTtlMs(userId: string) {
-    return isAnonymousGmSessionUserId(userId) ? ANONYMOUS_GM_SESSION_TTL_MS : AUTHENTICATED_SESSION_TTL_MS
+    return isAnonymousGmSessionUserId(userId) || isAnonymousPlayerSessionUserId(userId)
+        ? ANONYMOUS_GM_SESSION_TTL_MS
+        : AUTHENTICATED_SESSION_TTL_MS
 }
 
 function toPlainSession(doc: {
@@ -80,22 +94,6 @@ export async function createOwlbearSession(input: {
     const expiresAt = new Date(now.getTime() + (input.ttlMs ?? getDefaultSessionTtlMs(input.userId)))
     const token = crypto.randomBytes(32).toString("base64url")
     const tokenHash = hashToken(token)
-
-    await OwlbearSession.updateMany(
-        {
-            userId: input.userId,
-            roomId: input.roomId,
-            owlbearPlayerId: input.owlbearPlayerId,
-            revokedAt: null,
-            expiresAt: { $gt: now },
-        },
-        {
-            $set: {
-                revokedAt: now,
-                updatedAt: now,
-            },
-        }
-    )
 
     const session = await OwlbearSession.create({
         tokenHash,
@@ -163,5 +161,6 @@ export function toOwlbearAuthContext(session: OwlbearSessionRecord): OwlbearSess
         roomId: session.roomId,
         owlbearPlayerId: session.owlbearPlayerId,
         owlbearRole: session.owlbearRole,
+        authMode: "token",
     }
 }

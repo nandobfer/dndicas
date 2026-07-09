@@ -8,8 +8,7 @@ Antes de implementar, leia nesta ordem:
 
 1. `aicontext/README.md`
 2. `aicontext/use-sempre-que-desenvolver.md`
-3. `aicontext/use-para-entender-o-dominio.md` quando houver regra ou termo de negócio
-4. O guia específico da tarefa:
+3. O guia específico da tarefa:
    - API: `aicontext/use-quando-desenvolver-api.md`
    - UI/tema/componentes: `aicontext/use-para-atualizar-tema-e-componentes-ui.md` e `aicontext/use-componentes-ui.md`
    - Extensão de serviços ou componentes base: `aicontext/use-para-estender-o-core.md`
@@ -29,6 +28,12 @@ Antes de implementar, leia nesta ordem:
 - Ao criar ou expandir um módulo em `src/features`, atualize a documentação correspondente em `aicontext/modules/`.
 
 ## 3. Padrões operacionais
+
+### Builds
+
+- Nunca rode `pnpm build` ou qualquer build completo automaticamente. O build é custoso para a máquina e pode travar o ambiente.
+- Só execute build quando o usuário pedir explicitamente ou autorizar de forma clara durante a conversa.
+- Para verificação autônoma, prefira testes focados, checagens de diagnóstico e validações menores compatíveis com o escopo da mudança.
 
 ### APIs
 

@@ -357,6 +357,7 @@ function GmSheetsTabContent({
                             key={selectedSheet._id}
                             sheet={selectedSheet}
                             layoutMode="desktop"
+                            isOwlbear
                             editMode="editable"
                             onFieldPatch={handleSelectedSheetFieldPatch}
                             navigateOnSlugChange={false}

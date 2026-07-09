@@ -1,17 +1,14 @@
 "use client"
 
 import * as React from "react"
-import { Loader2, Link2, Skull } from "lucide-react"
-import {
-    GlassModal,
-    GlassModalContent,
-    GlassModalDescription,
-    GlassModalHeader,
-    GlassModalTitle,
-} from "@/components/ui/glass-modal"
+import { Link2, Loader2, Skull } from "lucide-react"
+import { GlassModal, GlassModalContent, GlassModalDescription, GlassModalHeader, GlassModalTitle } from "@/components/ui/glass-modal"
 import type { CharacterSheetFull } from "@/features/character-sheets/types/character-sheet.types"
 import { MentionContent } from "@/features/rules/components/mention-badge"
+import { OWLBEAR_PENDING_TOKEN_LINK_METADATA_KEY, OWLBEAR_TOKEN_METADATA_KEY } from "./config"
 import { getHpBarColor, hpPercent } from "./hp-bar-utils"
+import { subscribeOwlbearOverlaySync, type OwlbearOverlaySyncEvent } from "./overlay-sync-events"
+import type { OwlbearRoomNpc } from "./room-npcs-api"
 import {
     clearTokenSheetLink,
     fetchOwlbearRoomNpcById,
@@ -24,17 +21,14 @@ import {
     setTokenSheetLink,
     updateTokenOverlayIds,
 } from "./sdk"
-import { OWLBEAR_TOKEN_METADATA_KEY } from "./config"
-import { subscribeOwlbearOverlaySync, type OwlbearOverlaySyncEvent } from "./overlay-sync-events"
-import type { OwlbearRoomNpc } from "./room-npcs-api"
-import type { OwlbearRuntimeState, OwlbearSceneItem, OwlbearSessionState } from "./types"
+import type { OwlbearPendingTokenLinkMetadata, OwlbearRuntimeState, OwlbearSceneItem, OwlbearSessionState } from "./types"
 import { useRoomLinkedSheets } from "./use-room-linked-sheets"
 import { useRoomNpcs } from "./use-room-npcs"
 
 const LINK_PLAYER_CONTEXT_MENU_ID = "com.dndicas.owlbear.link-player"
 const LINK_NPC_CONTEXT_MENU_ID = "com.dndicas.owlbear.link-npc"
 const UNLINK_CONTEXT_MENU_ID = "com.dndicas.owlbear.unlink-sheet"
-const CONTEXT_MENU_ICON = "/owlbear-context-menu.svg"
+const CONTEXT_MENU_ICON = "/owlbear/icons/context-menu.svg"
 
 /** Largura fixa da barra de HP em pixels na cena Owlbear. */
 const OVERLAY_BAR_WIDTH = 152
@@ -48,6 +42,9 @@ type OverlayHpSnapshot = {
     name: string
 }
 
+type LinkKind = "player" | "npc"
+type ControllerScope = LinkKind | "both" | "none"
+
 function getOverlaySyncCacheKey(kind: "player" | "npc", refId: string) {
     return `${kind}:${refId}`
 }
@@ -56,6 +53,75 @@ function isTokenEligible(item: OwlbearSceneItem | null | undefined) {
     if (!item) return false
     if (getOverlayLinkFromItem(item)) return false
     return ["CHARACTER", "MOUNT", "PROP"].includes(item.layer)
+}
+
+function scopeIncludes(scope: ControllerScope, kind: LinkKind) {
+    return scope === "both" || scope === kind
+}
+
+function getContextMenuIdsForScope(scope: ControllerScope) {
+    const ids: string[] = []
+    if (scopeIncludes(scope, "player")) {
+        ids.push(LINK_PLAYER_CONTEXT_MENU_ID, UNLINK_CONTEXT_MENU_ID)
+    }
+    if (scopeIncludes(scope, "npc")) {
+        ids.push(LINK_NPC_CONTEXT_MENU_ID)
+    }
+    return ids
+}
+
+function parsePendingTokenLinkMetadata(value: unknown): OwlbearPendingTokenLinkMetadata | null {
+    if (!value || typeof value !== "object") return null
+    const metadata = value as Partial<OwlbearPendingTokenLinkMetadata>
+    if (metadata.version !== 1) return null
+    if (metadata.kind !== "player" && metadata.kind !== "npc") return null
+    if (typeof metadata.tokenId !== "string" || metadata.tokenId.trim().length === 0) return null
+
+    return {
+        version: 1,
+        kind: metadata.kind,
+        tokenId: metadata.tokenId,
+        tokenName: typeof metadata.tokenName === "string" ? metadata.tokenName : undefined,
+        createdAt: typeof metadata.createdAt === "string" ? metadata.createdAt : new Date().toISOString(),
+    }
+}
+
+async function savePendingTokenLink(kind: LinkKind, token: OwlbearSceneItem) {
+    const sdk = await loadOwlbearSdk()
+    if (!sdk || !sdk.isAvailable || !sdk.isReady) return
+    if (typeof sdk.player.setMetadata !== "function") return
+    await sdk.player.setMetadata({
+        [OWLBEAR_PENDING_TOKEN_LINK_METADATA_KEY]: {
+            version: 1,
+            kind,
+            tokenId: token.id,
+            tokenName: token.name,
+            createdAt: new Date().toISOString(),
+        } satisfies OwlbearPendingTokenLinkMetadata,
+    })
+}
+
+async function clearPendingTokenLink() {
+    const sdk = await loadOwlbearSdk()
+    if (!sdk || !sdk.isAvailable || !sdk.isReady) return
+    if (typeof sdk.player.setMetadata !== "function") return
+    await sdk.player.setMetadata({ [OWLBEAR_PENDING_TOKEN_LINK_METADATA_KEY]: undefined })
+}
+
+async function resolvePendingTokenLink(kind: LinkKind) {
+    const sdk = await loadOwlbearSdk()
+    if (!sdk || !sdk.isAvailable || !sdk.isReady) return null
+    if (typeof sdk.player.getMetadata !== "function") return null
+
+    const playerMetadata = await sdk.player.getMetadata()
+    const pending = parsePendingTokenLinkMetadata(playerMetadata[OWLBEAR_PENDING_TOKEN_LINK_METADATA_KEY])
+    if (!pending || pending.kind !== kind) return null
+
+    const items = await sdk.scene.items.getItems()
+    const token = items.find((item) => item.id === pending.tokenId && isTokenEligible(item)) ?? null
+    if (!token) return null
+
+    return { kind, token } satisfies PendingLink
 }
 
 export function canManageGmScene(runtime: OwlbearRuntimeState, session: OwlbearSessionState) {
@@ -422,17 +488,31 @@ type PendingLink = { kind: "player"; token: OwlbearSceneItem } | { kind: "npc"; 
 export function OwlbearGmSceneController({
     runtime,
     session,
+    contextMenuKind = "both",
+    linkDialogKind = "both",
+    overlayKinds = ["player", "npc"],
+    canUseNpcBackend = true,
 }: {
     runtime: OwlbearRuntimeState
     session: OwlbearSessionState
+    contextMenuKind?: ControllerScope
+    linkDialogKind?: ControllerScope
+    overlayKinds?: LinkKind[]
+    canUseNpcBackend?: boolean
 }) {
     const canManageScene = canManageGmScene(runtime, session)
-    const canRegisterContextMenus = runtime.status === "ready" && runtime.role === "GM"
-    const { sheets } = useRoomLinkedSheets(session.sessionToken, canManageScene)
+    const canRegisterContextMenus = runtime.status === "ready" && runtime.role === "GM" && runtime.sceneReady && contextMenuKind !== "none"
+    const canOpenPlayerDialog = scopeIncludes(linkDialogKind, "player")
+    const canOpenNpcDialog = scopeIncludes(linkDialogKind, "npc")
+    const shouldSyncPlayerOverlays = overlayKinds.includes("player")
+    const shouldSyncNpcOverlays = overlayKinds.includes("npc") && canUseNpcBackend
+    const needsPlayerBackend = canOpenPlayerDialog || shouldSyncPlayerOverlays
+    const needsNpcBackend = (canOpenNpcDialog || shouldSyncNpcOverlays) && canUseNpcBackend
+    const { sheets } = useRoomLinkedSheets(session.sessionToken, canManageScene && needsPlayerBackend)
     const { items: npcs, isLoading: isLoadingNpcs } = useRoomNpcs(
         runtime.roomId,
         session.sessionToken,
-        canManageScene,
+        canManageScene && needsNpcBackend,
     )
 
     const [pendingLink, setPendingLink] = React.useState<PendingLink | null>(null)
@@ -453,8 +533,8 @@ export function OwlbearGmSceneController({
             const linkedTokens = items.filter((item) => isTokenEligible(item) && getTokenLinkFromItem(item))
 
             // Agrupa tokens por tipo de vínculo para carregar dados em paralelo
-            const playerTokens = linkedTokens.filter((t) => getTokenLinkFromItem(t)?.kind === "player")
-            const npcTokens = linkedTokens.filter((t) => getTokenLinkFromItem(t)?.kind === "npc")
+            const playerTokens = shouldSyncPlayerOverlays ? linkedTokens.filter((t) => getTokenLinkFromItem(t)?.kind === "player") : []
+            const npcTokens = shouldSyncNpcOverlays ? linkedTokens.filter((t) => getTokenLinkFromItem(t)?.kind === "npc") : []
 
             // Carrega fichas de personagem
             const uniqueSheetIds = Array.from(new Set(
@@ -518,7 +598,7 @@ export function OwlbearGmSceneController({
         } catch (error) {
             console.error("Failed to sync Owlbear token overlays", error)
         }
-    }, [runtime.role, runtime.roomId, session.sessionStatus, session.sessionToken])
+    }, [runtime.role, runtime.roomId, session.sessionStatus, session.sessionToken, shouldSyncNpcOverlays, shouldSyncPlayerOverlays])
 
     const syncSceneRef = React.useRef(syncScene)
     const syncTimerRef = React.useRef<number | null>(null)
@@ -609,7 +689,16 @@ export function OwlbearGmSceneController({
 
     // Registra os itens de context menu
     React.useEffect(() => {
-        if (!canRegisterContextMenus) return
+        if (!canRegisterContextMenus) {
+            if (runtime.status === "ready" && runtime.role === "GM" && contextMenuKind !== "none" && !runtime.sceneReady) {
+                console.info("[Dndicas Owlbear] Context menu aguardando scene pronta", {
+                    contextMenuKind,
+                    roomId: runtime.roomId,
+                    sceneReady: runtime.sceneReady,
+                })
+            }
+            return
+        }
 
         let active = true
 
@@ -618,6 +707,7 @@ export function OwlbearGmSceneController({
             if (!sdk || !sdk.isAvailable || !sdk.isReady || !active) return
 
             console.info("[Dndicas Owlbear] Registrando context menus de vínculo", {
+                contextMenuKind,
                 role: runtime.role,
                 roomId: runtime.roomId,
                 sceneReady: runtime.sceneReady,
@@ -626,88 +716,99 @@ export function OwlbearGmSceneController({
             // Mantemos o filtro propositalmente mínimo. Filtros de `layer`/`permissions`
             // variam conforme o item real do Owlbear e, quando falham, escondem o menu
             // inteiro. A validação de layer/overlay acontece no onClick com isTokenEligible.
-            // "Vincular a personagem" — aparece para GM com um item selecionado.
-            await sdk.contextMenu.create({
-                id: LINK_PLAYER_CONTEXT_MENU_ID,
-                icons: [{
-                    icon: CONTEXT_MENU_ICON,
-                    label: "Vincular a personagem",
-                    filter: {
-                        min: 1,
-                        max: 1,
-                        roles: ["GM"],
+            if (scopeIncludes(contextMenuKind, "player")) {
+                await sdk.contextMenu.create({
+                    id: LINK_PLAYER_CONTEXT_MENU_ID,
+                    icons: [{
+                        icon: CONTEXT_MENU_ICON,
+                        label: "Vincular a personagem",
+                        filter: {
+                            min: 1,
+                            max: 1,
+                            roles: ["GM"],
+                        },
+                    }],
+                    onClick: (context) => {
+                        const token = context.items.find((item) => isTokenEligible(item))
+                        if (!token) return
+                        if (canOpenPlayerDialog) {
+                            setPendingLink({ kind: "player", token })
+                        }
+                        void (async () => {
+                            await savePendingTokenLink("player", token)
+                            await sdk.action.open()
+                            await sdk.player.deselect([token.id])
+                        })().catch((error) => {
+                            console.error("Failed to open Owlbear action for player link", error)
+                        })
                     },
-                }],
-                onClick: (context) => {
-                    const token = context.items.find((item) => isTokenEligible(item))
-                    if (!token) return
-                    setPendingLink({ kind: "player", token })
-                    void (async () => {
-                        await sdk.action.open()
-                        await sdk.player.deselect([token.id])
-                    })().catch((error) => {
-                        console.error("Failed to open Owlbear action for player link", error)
-                    })
-                },
-            })
+                })
+            }
 
-            // "Vincular a NPC" — aparece para GM com um item selecionado.
-            await sdk.contextMenu.create({
-                id: LINK_NPC_CONTEXT_MENU_ID,
-                icons: [{
-                    icon: CONTEXT_MENU_ICON,
-                    label: "Vincular a NPC",
-                    filter: {
-                        min: 1,
-                        max: 1,
-                        roles: ["GM"],
+            if (scopeIncludes(contextMenuKind, "npc")) {
+                await sdk.contextMenu.create({
+                    id: LINK_NPC_CONTEXT_MENU_ID,
+                    icons: [{
+                        icon: CONTEXT_MENU_ICON,
+                        label: "Vincular a NPC",
+                        filter: {
+                            min: 1,
+                            max: 1,
+                            roles: ["GM"],
+                        },
+                    }],
+                    onClick: (context) => {
+                        const token = context.items.find((item) => isTokenEligible(item))
+                        if (!token) return
+                        if (canOpenNpcDialog) {
+                            setPendingLink({ kind: "npc", token })
+                        }
+                        void (async () => {
+                            await savePendingTokenLink("npc", token)
+                            await sdk.action.open()
+                            await sdk.player.deselect([token.id])
+                        })().catch((error) => {
+                            console.error("Failed to open Owlbear action for NPC link", error)
+                        })
                     },
-                }],
-                onClick: (context) => {
-                    const token = context.items.find((item) => isTokenEligible(item))
-                    if (!token) return
-                    setPendingLink({ kind: "npc", token })
-                    void (async () => {
-                        await sdk.action.open()
-                        await sdk.player.deselect([token.id])
-                    })().catch((error) => {
-                        console.error("Failed to open Owlbear action for NPC link", error)
-                    })
-                },
-            })
+                })
+            }
 
             // "Desvincular" — também usa filtro mínimo; o onClick ignora itens sem vínculo.
-            await sdk.contextMenu.create({
-                id: UNLINK_CONTEXT_MENU_ID,
-                icons: [{
-                    icon: CONTEXT_MENU_ICON,
-                    label: "Desvincular",
-                    filter: {
-                        min: 1,
-                        max: 1,
-                        roles: ["GM"],
-                        every: [
-                            { key: ["metadata", OWLBEAR_TOKEN_METADATA_KEY, "tokenId"], value: undefined, operator: "!=" },
-                        ],
-                    },
-                }],
-                onClick: (context) => {
-                    const token = context.items.find((item) => isTokenEligible(item) && getTokenLinkFromItem(item))
-                    if (!token) return
+            if (scopeIncludes(contextMenuKind, "player")) {
+                await sdk.contextMenu.create({
+                    id: UNLINK_CONTEXT_MENU_ID,
+                    icons: [{
+                        icon: CONTEXT_MENU_ICON,
+                        label: "Desvincular",
+                        filter: {
+                            min: 1,
+                            max: 1,
+                            roles: ["GM"],
+                            every: [
+                                { key: ["metadata", OWLBEAR_TOKEN_METADATA_KEY, "tokenId"], value: undefined, operator: "!=" },
+                            ],
+                        },
+                    }],
+                    onClick: (context) => {
+                        const token = context.items.find((item) => isTokenEligible(item) && getTokenLinkFromItem(item))
+                        if (!token) return
 
-                    void (async () => {
-                        const tokenLink = getTokenLinkFromItem(token)
-                        const sdk = await loadOwlbearSdk()
-                        if (!sdk || !tokenLink) return
-                        if (tokenLink.overlayIds.length > 0) {
-                            await sdk.scene.items.deleteItems(tokenLink.overlayIds)
-                        }
-                        await clearTokenSheetLink(token.id)
-                    })()
-                },
-            })
+                        void (async () => {
+                            const tokenLink = getTokenLinkFromItem(token)
+                            const sdk = await loadOwlbearSdk()
+                            if (!sdk || !tokenLink) return
+                            if (tokenLink.overlayIds.length > 0) {
+                                await sdk.scene.items.deleteItems(tokenLink.overlayIds)
+                            }
+                            await clearTokenSheetLink(token.id)
+                        })()
+                    },
+                })
+            }
 
             console.info("[Dndicas Owlbear] Context menus de vínculo registrados", {
+                contextMenuKind,
                 playerMenuId: LINK_PLAYER_CONTEXT_MENU_ID,
                 npcMenuId: LINK_NPC_CONTEXT_MENU_ID,
                 unlinkMenuId: UNLINK_CONTEXT_MENU_ID,
@@ -721,14 +822,45 @@ export function OwlbearGmSceneController({
             void (async () => {
                 const sdk = await loadOwlbearSdk()
                 if (!sdk || !sdk.isAvailable || !sdk.isReady) return
-                await Promise.allSettled([
-                    sdk.contextMenu.remove(LINK_PLAYER_CONTEXT_MENU_ID),
-                    sdk.contextMenu.remove(LINK_NPC_CONTEXT_MENU_ID),
-                    sdk.contextMenu.remove(UNLINK_CONTEXT_MENU_ID),
-                ])
+                const menuIds = getContextMenuIdsForScope(contextMenuKind)
+                console.info("[Dndicas Owlbear] Removendo context menus de vínculo", {
+                    contextMenuKind,
+                    menuIds,
+                    roomId: runtime.roomId,
+                    sceneReady: runtime.sceneReady,
+                })
+                await Promise.allSettled(menuIds.map((id) => sdk.contextMenu.remove(id)))
             })()
         }
-    }, [canRegisterContextMenus, runtime.role, runtime.roomId, runtime.sceneReady])
+    }, [canOpenNpcDialog, canOpenPlayerDialog, canRegisterContextMenus, contextMenuKind, runtime.role, runtime.roomId, runtime.sceneReady])
+
+    React.useEffect(() => {
+        if (runtime.status !== "ready" || runtime.role !== "GM" || linkDialogKind === "none") return
+
+        let active = true
+
+        const loadPendingLink = async () => {
+            const kind = scopeIncludes(linkDialogKind, "player") ? "player" : "npc"
+            const pending = await resolvePendingTokenLink(kind)
+            if (!active || !pending) return
+            setPendingLink((current) => current ?? pending)
+        }
+
+        void loadPendingLink().catch((error) => {
+            console.error("Failed to load pending Owlbear token link", error)
+        })
+
+        const intervalId = window.setInterval(() => {
+            void loadPendingLink().catch((error) => {
+                console.error("Failed to refresh pending Owlbear token link", error)
+            })
+        }, 500)
+
+        return () => {
+            active = false
+            window.clearInterval(intervalId)
+        }
+    }, [linkDialogKind, runtime.role, runtime.status])
 
     // Vincula um personagem ao token selecionado
     const handleLinkPlayer = React.useCallback(async (sheet: CharacterSheetFull) => {
@@ -753,6 +885,7 @@ export function OwlbearGmSceneController({
             })
             await runQueuedSync()
             setPendingLink(null)
+            await clearPendingTokenLink()
             await sdk.action.close()
         } catch (error) {
             console.error("Failed to link token to player sheet", error)
@@ -784,6 +917,7 @@ export function OwlbearGmSceneController({
             })
             await runQueuedSync()
             setPendingLink(null)
+            await clearPendingTokenLink()
             await sdk.action.close()
         } catch (error) {
             console.error("Failed to link token to NPC", error)
@@ -804,6 +938,7 @@ export function OwlbearGmSceneController({
                 onClose={() => {
                     if (linkingId) return
                     setPendingLink(null)
+                    void clearPendingTokenLink()
                 }}
                 onLink={(sheet) => void handleLinkPlayer(sheet)}
             />
@@ -816,6 +951,7 @@ export function OwlbearGmSceneController({
                 onClose={() => {
                     if (linkingId) return
                     setPendingLink(null)
+                    void clearPendingTokenLink()
                 }}
                 onLink={(npc) => void handleLinkNpc(npc)}
             />
