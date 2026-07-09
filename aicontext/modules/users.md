@@ -161,6 +161,7 @@ import { createUserSchema, updateUserSchema } from '@/features/users/api/validat
 3. **Sincronização Clerk**: Usuários são criados/atualizados via webhook ou middleware
 4. **Roles**: Apenas `admin` pode gerenciar usuários
 5. **Auditoria**: Todas operações CRUD são registradas em AuditLog
+6. **Status local**: `inactive` bloqueia acesso no backend local; não use `banUser`/`unbanUser` do Clerk porque são recursos Pro
 
 ---
 

@@ -90,4 +90,32 @@ describe('features/users/api/get-current-user', () => {
 
         await expect(mod.requireAdmin()).rejects.toThrow('Admin access required');
     });
+
+    it('blocks inactive local users before authorizing backend access', async () => {
+        vi.doMock('@clerk/nextjs/server', () => ({
+            auth: vi.fn().mockResolvedValue({ userId: 'clerk-1' }),
+            currentUser: vi.fn(),
+        }));
+        vi.doMock('@/core/database/db', () => ({
+            default: vi.fn().mockResolvedValue(undefined),
+        }));
+        vi.doMock('@/features/users/models/user', () => ({
+            User: {
+                findByClerkId: vi.fn().mockResolvedValue({ role: 'admin', status: 'inactive', avatarUrl: 'https://example.com/avatar.png' }),
+            },
+        }));
+        vi.doMock('@/features/users/api/sync', () => ({
+            ensureUserExists: vi.fn(),
+        }));
+
+        const mod = await importFresh<typeof import('@/features/users/api/get-current-user')>('@/features/users/api/get-current-user');
+
+        await expect(mod.getCurrentUserFromDb()).resolves.toMatchObject({
+            success: false,
+            user: null,
+            clerkId: 'clerk-1',
+            error: 'Usuário inativo',
+        });
+        await expect(mod.requireAdmin()).rejects.toThrow('Usuário inativo');
+    });
 });

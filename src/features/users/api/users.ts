@@ -43,7 +43,7 @@ async function fetchApi<T>(
     const error: ApiError = await response.json().catch(() => ({
       error: 'Unknown error',
     }));
-    throw new Error(error.error || `HTTP ${response.status}`);
+    throw new Error([error.error, error.details].filter(Boolean).join(': ') || `HTTP ${response.status}`);
   }
 
   return response.json();

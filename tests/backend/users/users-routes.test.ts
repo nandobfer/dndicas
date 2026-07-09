@@ -189,6 +189,76 @@ describe('/api/users routes', () => {
         expect(payload.error).toContain('própria função');
     });
 
+    it('PUT /api/users/[id] updates role without Clerk ban/unban Pro calls', async () => {
+        const save = vi.fn().mockResolvedValue(undefined);
+        const updateUser = vi.fn().mockResolvedValue(undefined);
+        const banUser = vi.fn();
+        const unbanUser = vi.fn();
+        const logUpdate = vi.fn();
+        const user = {
+            _id: { toString: () => 'mongo-target' },
+            clerkId: 'clerk-target',
+            username: 'target_user',
+            email: 'target@example.com',
+            name: 'Target User',
+            role: 'admin',
+            status: 'active',
+            deleted: false,
+            createdAt: new Date('2024-01-01T00:00:00.000Z'),
+            updatedAt: new Date('2024-01-02T00:00:00.000Z'),
+            save,
+        };
+
+        vi.doMock('@clerk/nextjs/server', () => ({
+            clerkClient: vi.fn().mockResolvedValue({
+                users: {
+                    getUser: vi.fn().mockResolvedValue({ publicMetadata: { role: 'admin' } }),
+                    updateUser,
+                    banUser,
+                    unbanUser,
+                },
+            }),
+        }));
+        vi.doMock('@/core/database/db', () => ({
+            default: vi.fn().mockResolvedValue(undefined),
+        }));
+        vi.doMock('@/features/users/models/user', () => ({
+            User: {
+                findOne: vi.fn().mockResolvedValue(user),
+            },
+        }));
+        vi.doMock('@/features/users/api/get-current-user', () => ({
+            requireAdmin: vi.fn().mockResolvedValue({ _id: { toString: () => 'mongo-admin' }, role: 'admin' }),
+            getCurrentUserFromDb: vi.fn(),
+        }));
+        vi.doMock('@/features/users/api/audit-service', () => ({
+            logUpdate,
+            logDelete: vi.fn(),
+        }));
+
+        const mod = await importFresh<typeof import('@/app/api/users/[id]/route')>('@/app/api/users/[id]/route');
+        const response = await mod.PUT(makeJsonRequest('http://localhost/api/users/mongo-target', {
+            method: 'PUT',
+            body: JSON.stringify({
+                username: 'target_user',
+                email: 'target@example.com',
+                name: 'Target User',
+                role: 'user',
+                status: 'active',
+            }),
+        }), { params: Promise.resolve({ id: 'mongo-target' }) });
+
+        expect(response.status).toBe(200);
+        expect(updateUser).toHaveBeenCalledWith('clerk-target', expect.objectContaining({
+            publicMetadata: { role: 'user' },
+        }));
+        expect(banUser).not.toHaveBeenCalled();
+        expect(unbanUser).not.toHaveBeenCalled();
+        expect(user.role).toBe('user');
+        expect(save).toHaveBeenCalled();
+        expect(logUpdate).toHaveBeenCalled();
+    });
+
     it('DELETE /api/users/[id] blocks self deletion', async () => {
         vi.doMock('@clerk/nextjs/server', () => ({
             clerkClient: vi.fn(),
