@@ -423,7 +423,15 @@ describe("GenAI high demand retry", () => {
     it("executes Gemini tool calls and streams the final response", async () => {
         async function* toolCallStream() {
             yield {
-                functionCalls: [{ id: "call-1", name: "searchCatalogEntities", args: { query: "ladino" } }],
+                candidates: [{
+                    content: {
+                        role: "model",
+                        parts: [{
+                            functionCall: { id: "call-1", name: "searchCatalogEntities", args: { query: "ladino" } },
+                            thoughtSignature: "opaque-thought-signature",
+                        }],
+                    },
+                }],
             }
         }
 
@@ -471,7 +479,10 @@ describe("GenAI high demand retry", () => {
         const secondCall = genAiMocks.generateContentStream.mock.calls[1]?.[0]
         expect(secondCall.contents).toContainEqual(expect.objectContaining({
             role: "model",
-            parts: [expect.objectContaining({ functionCall: expect.objectContaining({ name: "searchCatalogEntities" }) })],
+            parts: [expect.objectContaining({
+                functionCall: expect.objectContaining({ name: "searchCatalogEntities" }),
+                thoughtSignature: "opaque-thought-signature",
+            })],
         }))
         expect(secondCall.contents).toContainEqual(expect.objectContaining({
             role: "user",

@@ -80,12 +80,15 @@ export function EntityAIChatWindowContent({ entity, entityId, entityType, entity
         return initialSession ? initialSession.messages.map((m) => ({ ...m, id: createId() })) : []
     })
     const [input, setInput] = React.useState("")
+    const [inputFocusToken, setInputFocusToken] = React.useState<string | null>(null)
     const [isLoading, setIsLoading] = React.useState(false)
     const [error, setError] = React.useState<string | null>(null)
     const lastActivityRef = React.useRef<number>(initialSession?.lastActivity ?? Date.now())
     const abortControllerRef = React.useRef<AbortController | null>(null)
     const saveDebounceRef = React.useRef<ReturnType<typeof setTimeout> | null>(null)
     const messagesRef = React.useRef<ChatMessage[]>(messages)
+    const messagesViewportRef = React.useRef<HTMLDivElement | null>(null)
+    const messagesEndRef = React.useRef<HTMLDivElement | null>(null)
 
     const resetSession = React.useCallback(() => {
         abortControllerRef.current?.abort()
@@ -146,6 +149,16 @@ export function EntityAIChatWindowContent({ entity, entityId, entityType, entity
         void requestAi("initial_summary", [])
     }, [requestAi, resetSession])
 
+    const scrollMessagesToBottom = React.useCallback((behavior: ScrollBehavior = "smooth") => {
+        requestAnimationFrame(() => {
+            messagesEndRef.current?.scrollIntoView({ block: "end", behavior })
+        })
+    }, [])
+
+    const requestInputFocus = React.useCallback(() => {
+        setInputFocusToken(createId())
+    }, [])
+
     const sendUserMessage = React.useCallback(() => {
         const sanitizedInput = sanitizeEntityUnderstandingHtml(input)
         if (!isMeaningfulHtml(sanitizedInput) || isLoading) return
@@ -160,10 +173,11 @@ export function EntityAIChatWindowContent({ entity, entityId, entityType, entity
         const userMessage: ChatMessage = { id: createId(), role: "user", html: sanitizedInput }
         const nextMessages = [...messages, userMessage]
         setInput("")
+        requestInputFocus()
         setMessages(nextMessages)
         lastActivityRef.current = Date.now()
         void requestAi("conversation", nextMessages)
-    }, [input, isLoading, messages, requestAi, startSession])
+    }, [input, isLoading, messages, requestAi, requestInputFocus, startSession])
 
     React.useEffect(() => {
         messagesRef.current = messages
@@ -209,6 +223,16 @@ export function EntityAIChatWindowContent({ entity, entityId, entityType, entity
         }
     }, [requestAi, initialSession])
 
+    const lastMessageHtml = messages.at(-1)?.html ?? ""
+
+    React.useEffect(() => {
+        scrollMessagesToBottom(messages.length <= 1 ? "auto" : "smooth")
+    }, [messages.length, lastMessageHtml, isLoading, scrollMessagesToBottom])
+
+    React.useEffect(() => {
+        if (!isLoading) requestInputFocus()
+    }, [isLoading, requestInputFocus])
+
     return (
         <div className="flex h-full min-h-0 flex-col gap-3" data-mention-interaction-surface="entity-ai-chat">
             <div className="border-b border-white/10 pb-3">
@@ -219,7 +243,7 @@ export function EntityAIChatWindowContent({ entity, entityId, entityType, entity
                 <p className="mt-1 text-xs text-white/50">Chat contextual sobre {entityName || entityType}.</p>
             </div>
 
-            <div className="min-h-0 flex-1 space-y-3 overflow-y-auto pr-1">
+            <div ref={messagesViewportRef} className="min-h-0 flex-1 space-y-3 overflow-y-auto pr-1">
                 {messages.map((message) => (
                     <div key={message.id} className={cn("flex", message.role === "user" ? "justify-end" : "justify-start")}>
                         <div className={cn(
@@ -236,6 +260,7 @@ export function EntityAIChatWindowContent({ entity, entityId, entityType, entity
                         </div>
                     </div>
                 ))}
+                <div ref={messagesEndRef} aria-hidden="true" />
             </div>
 
             {error && (
@@ -256,6 +281,7 @@ export function EntityAIChatWindowContent({ entity, entityId, entityType, entity
                     placeholder="Pergunte sobre esta entidade..."
                     className="min-w-0 flex-1"
                     disabled={isLoading}
+                    focusToken={inputFocusToken}
                     submitOnEnter
                     onSubmitRequest={sendUserMessage}
                 />
