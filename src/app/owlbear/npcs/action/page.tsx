@@ -1,5 +1,5 @@
-import { OwlbearNpcsAction } from "@/features/owlbear/owlbear-action-surface"
+import { OwlbearNpcsActionClient } from "@/features/owlbear/owlbear-client-only-surface"
 
 export default function OwlbearNpcsActionPage() {
-    return <OwlbearNpcsAction />
+    return <OwlbearNpcsActionClient />
 }
