@@ -1,109 +1,22 @@
 "use client"
 
-import * as React from "react"
-import { Shield, Swords } from "lucide-react"
-import { LiquidGlassBackground } from "@/components/ui/glass-background"
 import { GlassSelector } from "@/components/ui/glass-selector"
-import { cn } from "@/core/utils"
 import { preloadDiceBoxAssets } from "@/features/dice-roller/dice-box-loader"
 import { colors } from "@/lib/config/colors"
-import { CatalogDashboardFrame } from "./catalog-dashboard-frame"
-import { logOwlbearDebug } from "./debug"
+import { Shield, Swords } from "lucide-react"
+import * as React from "react"
+
 import { OwlbearGmInitiativeTab } from "./gm-initiative-tab"
 import { OwlbearGmNpcsTab } from "./gm-npcs-tab"
 import { OwlbearGmSceneController } from "./gm-scene-controller"
 import { OwlbearGmSheetsTab } from "./gm-sheets-tab"
+import { CenteredStatus, GmOnlyMessage, OwlbearActionFrame } from "./owlbear-action-frame"
 import { OwlbearDiceTab } from "./owlbear-dice-tab"
 import { OwlbearPlayerSheetTab } from "./player-sheet-tab"
-import type { OwlbearRuntimeState } from "./types"
 import { useOwlbearRuntime } from "./use-owlbear-runtime"
 import { useOwlbearSession } from "./use-owlbear-session"
 
-const CATALOG_RUNTIME_STATE: OwlbearRuntimeState = {
-    status: "ready",
-    role: null,
-    roomId: null,
-    playerId: null,
-    themeMode: "dark",
-    sceneReady: false,
-}
-
-function RuntimeBanner({ status }: { status: OwlbearRuntimeState["status"] }) {
-    if (status !== "unavailable") return null
-
-    return <div className="rounded-2xl border border-red-500/20 bg-red-500/10 px-4 py-3 text-sm font-medium text-red-100">SDK Owlbear indisponível nesta action.</div>
-}
-
-function GmOnlyMessage({ message }: { message: string }) {
-    return (
-        <div className="flex h-full min-h-0 items-center justify-center rounded-3xl border border-white/10 bg-black/20 p-8 text-center text-sm text-white/65">
-            {message}
-        </div>
-    )
-}
-
-function CenteredStatus({ message }: { message: string }) {
-    return (
-        <div className="flex h-full min-h-0 items-center justify-center rounded-3xl border border-white/10 bg-black/20 p-8 text-center text-sm text-white/65">
-            {message}
-        </div>
-    )
-}
-
-function OwlbearActionFrame({
-    children,
-    runtime,
-    actionName,
-    contentClassName,
-}: {
-    children: React.ReactNode
-    runtime: OwlbearRuntimeState
-    actionName: string
-    contentClassName?: string
-}) {
-    React.useEffect(() => {
-        logOwlbearDebug("[Dndicas Owlbear Action]", "render", {
-            actionName,
-            runtimeStatus: runtime.status,
-            role: runtime.role,
-            roomId: runtime.roomId,
-            playerId: runtime.playerId,
-            sceneReady: runtime.sceneReady,
-        })
-    }, [actionName, runtime.playerId, runtime.role, runtime.roomId, runtime.sceneReady, runtime.status])
-
-    return (
-        <div
-            data-testid="owlbear-action-surface"
-            data-theme={runtime.themeMode}
-            className={cn(
-                "relative flex h-dvh min-h-0 flex-col overflow-hidden bg-background text-white",
-                runtime.themeMode === "light" && "text-slate-950"
-            )}
-        >
-            <LiquidGlassBackground />
-            <div
-                className={cn(
-                    "relative z-10 mx-auto flex h-full min-h-0 w-full max-w-[840px] flex-1 flex-col gap-4 overflow-hidden p-4",
-                    contentClassName,
-                )}
-            >
-                <RuntimeBanner status={runtime.status} />
-                {children}
-            </div>
-        </div>
-    )
-}
-
-export function OwlbearCatalogAction() {
-    return (
-        <OwlbearActionFrame runtime={CATALOG_RUNTIME_STATE} actionName="catalog" contentClassName="max-w-none p-0">
-            <div className="min-h-0 flex-1 overflow-hidden">
-                <CatalogDashboardFrame title="Dndicas - catalogo" />
-            </div>
-        </OwlbearActionFrame>
-    )
-}
+export { OwlbearCatalogAction, OwlbearLegacyAction } from "./owlbear-catalog-action"
 
 export function OwlbearDiceAction() {
     const runtime = useOwlbearRuntime()
@@ -248,8 +161,4 @@ export function OwlbearContextMenuBackground({ kind }: { kind: "player" | "npc" 
             overlayKinds={[]}
         />
     )
-}
-
-export function OwlbearLegacyAction() {
-    return <OwlbearCatalogAction />
 }

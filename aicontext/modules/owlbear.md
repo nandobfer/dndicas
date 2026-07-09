@@ -52,6 +52,8 @@ Em superfícies `/owlbear/*`, `sdk.isAvailable === false` no primeiro tick é tr
 
 O runtime Owlbear pré-carrega `@owlbear-rodeo/sdk` via import estático em `src/features/owlbear/owlbear-sdk-client.ts`, um módulo client-only consumido por `useOwlbearRuntime`, antes dos effects React. Não mova esse import para `useEffect` nem para `import()` assíncrono: o SDK registra o listener de `message` durante a avaliação do módulo e pode perder o evento `OBR_READY` se for importado tarde demais.
 
+As rotas que usam `useOwlbearRuntime` (`sheet`, `npcs`, `dice` e backgrounds) devem renderizar por `src/features/owlbear/owlbear-client-only-surface.tsx`, com `ssr: false`, para impedir que o import estático do SDK seja avaliado no prerender do Next. A action de catálogo/legado fica em `src/features/owlbear/owlbear-catalog-action.tsx` porque não precisa do runtime nem deve puxar o SDK no grafo SSR.
+
 A action de catálogo (`/owlbear/catalog/action`) não usa `useOwlbearRuntime`, porque não precisa de `role`, `roomId`, `playerId` ou `sceneReady`; manter runtime Owlbear nessa action pode causar retry infinito em iframes onde o catálogo não recebe `OBR_READY`. Logs verbosos de runtime/sessão/action ficam atrás de `?dndicasDebug=1` ou `localStorage.dndicasOwlbearDebug = "1"`.
 
 ### Fichas do GM na action

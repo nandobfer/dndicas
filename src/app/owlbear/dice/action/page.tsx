@@ -1,5 +1,5 @@
-import { OwlbearDiceAction } from "@/features/owlbear/owlbear-action-surface"
+import { OwlbearDiceActionClient } from "@/features/owlbear/owlbear-client-only-surface"
 
 export default function OwlbearDiceActionPage() {
-    return <OwlbearDiceAction />
+    return <OwlbearDiceActionClient />
 }

@@ -1,5 +1,5 @@
-import { OwlbearContextMenuBackground } from "@/features/owlbear/owlbear-action-surface"
+import { OwlbearContextMenuBackgroundClient } from "@/features/owlbear/owlbear-client-only-surface"
 
 export default function OwlbearSheetBackgroundPage() {
-    return <OwlbearContextMenuBackground kind="player" />
+    return <OwlbearContextMenuBackgroundClient kind="player" />
 }

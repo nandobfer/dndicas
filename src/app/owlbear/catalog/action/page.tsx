@@ -1,4 +1,4 @@
-import { OwlbearCatalogAction } from "@/features/owlbear/owlbear-action-surface"
+import { OwlbearCatalogAction } from "@/features/owlbear/owlbear-catalog-action"
 
 export default function OwlbearCatalogActionPage() {
     return <OwlbearCatalogAction />
