@@ -1,12 +1,32 @@
 "use client"
 
 import * as React from "react"
-import { motion, useDragControls, AnimatePresence } from "framer-motion"
+import { motion, useDragControls } from "framer-motion"
 import { X, GripHorizontal, Maximize2, Minus } from "lucide-react"
-import { GlassCard, GlassCardContent } from "./glass-card"
+import { GlassCard } from "./glass-card"
 import { cn } from "@/core/utils"
 import { renderEntity } from "@/features/rules/components/entity-renderers"
 import type { EntityRenderOptions } from "@/features/rules/components/entity-renderers"
+
+const MOBILE_BREAKPOINT = 768
+const MOBILE_MARGIN = 12
+const MOBILE_HEADER_HEIGHT = 64
+const MOBILE_TOP_MARGIN = MOBILE_HEADER_HEIGHT + MOBILE_MARGIN
+const DESKTOP_LEFT_BOUNDARY = 112
+
+const getDragConstraints = () => {
+    if (typeof window === "undefined") {
+        return { left: 0, right: 0, top: 0, bottom: 0 }
+    }
+
+    const edgeThreshold = 100
+    return {
+        left: DESKTOP_LEFT_BOUNDARY,
+        right: window.innerWidth - edgeThreshold,
+        top: 0,
+        bottom: window.innerHeight - 40,
+    }
+}
 
 interface GlassWindowProps {
     id: string
@@ -17,7 +37,7 @@ interface GlassWindowProps {
     onMinimize: () => void
     onPositionChange?: (position: { x: number, y: number }) => void
     zIndex: number
-    item?: any
+    item?: unknown
     entityType?: string
     renderOptions?: EntityRenderOptions
     initialPosition?: { x: number, y: number }
@@ -27,7 +47,6 @@ interface GlassWindowProps {
 }
 
 export function GlassWindow({ 
-    id, 
     title, 
     children, 
     onClose, 
@@ -45,51 +64,54 @@ export function GlassWindow({
 }: GlassWindowProps) {
     const dragControls = useDragControls()
     const containerRef = React.useRef<HTMLDivElement>(null)
+    const [isMobile, setIsMobile] = React.useState(() => (
+        typeof window !== "undefined" && window.innerWidth < MOBILE_BREAKPOINT
+    ))
+    const normalizeDesktopPosition = React.useCallback((position: { x: number, y: number }) => ({
+        x: Math.max(DESKTOP_LEFT_BOUNDARY, position.x),
+        y: Math.max(0, position.y),
+    }), [])
     const [pos, setPos] = React.useState({ 
-        x: initialPosition?.x ?? 50, 
-        y: initialPosition?.y ?? 50 
+        x: Math.max(DESKTOP_LEFT_BOUNDARY, initialPosition?.x ?? DESKTOP_LEFT_BOUNDARY),
+        y: Math.max(0, initialPosition?.y ?? 50),
     })
-    
+
+    React.useEffect(() => {
+        if (typeof window === "undefined") return
+
+        const updateViewportMode = () => {
+            setIsMobile(window.innerWidth < MOBILE_BREAKPOINT)
+        }
+
+        window.addEventListener("resize", updateViewportMode)
+        return () => window.removeEventListener("resize", updateViewportMode)
+    }, [])
+     
     // Sync local state when initialPosition changes externally (e.g. multi-tasking windows)
     React.useEffect(() => {
-        if (initialPosition) {
-            setPos(initialPosition)
-        }
-    }, [initialPosition])
+        if (!initialPosition) return
+
+        const frame = window.requestAnimationFrame(() => {
+            setPos(normalizeDesktopPosition(initialPosition))
+        })
+
+        return () => window.cancelAnimationFrame(frame)
+    }, [initialPosition, normalizeDesktopPosition])
 
     const [size, setSize] = React.useState<{ width: number | string, height: number | string }>(() => ({ 
         width: isMinimized ? 200 : (initialSize?.width ?? "min(450px, 35vw)"), 
         height: isMinimized ? "auto" : (initialSize?.height ?? "min(400px, 40vh)") 
     }))
     const [isResizing, setIsResizing] = React.useState(false)
+    const isMobileMinimized = isMinimized && isMobile
     // Constraints logic
-    const [constraints, setConstraints] = React.useState<{ left: number; right: number; top: number; bottom: number }>({
-        left: 0,
-        right: 0,
-        top: 0,
-        bottom: 0,
-    })
+    const [constraints, setConstraints] = React.useState(getDragConstraints)
 
     const updateConstraints = React.useCallback(() => {
-        if (typeof window === "undefined") return
-
-        const viewportWidth = window.innerWidth
-        const viewportHeight = window.innerHeight
-        const edgeThreshold = 100
-        const sidebarWidth = 72 // Minimum sidebar width when collapsed
-
-        // The handler (header) must stay within vertical limits (top 0 to bottom viewportHeight - headerHeight)
-        // Horizontally, the left limit is sidebarWidth, and right is viewportWidth - edgeThreshold
-        setConstraints({
-            left: sidebarWidth, 
-            right: viewportWidth - edgeThreshold,
-            top: 0,
-            bottom: viewportHeight - 40, // 40px is approximate header height
-        })
+        setConstraints(getDragConstraints())
     }, [])
 
     React.useEffect(() => {
-        updateConstraints()
         window.addEventListener("resize", updateConstraints)
         return () => window.removeEventListener("resize", updateConstraints)
     }, [updateConstraints])
@@ -151,7 +173,7 @@ export function GlassWindow({
 
     return (
         <motion.div
-            drag={!isMinimized}
+            drag={!isMinimized && !isMobile}
             dragControls={dragControls}
             dragListener={false}
             dragMomentum={false}
@@ -161,8 +183,9 @@ export function GlassWindow({
                 onFocus()
                 document.body.style.userSelect = "none"
             }}
-            onDragEnd={(e, info) => {
+            onDragEnd={(_, info) => {
                 document.body.style.userSelect = ""
+                if (isMobile) return
                 
                 // Calculate final position relative to total offset since drag start
                 const rawX = pos.x + info.offset.x
@@ -181,8 +204,8 @@ export function GlassWindow({
             initial={isMinimized ? false : { 
                 scale: 0, 
                 opacity: 0, 
-                x: pos.x, 
-                y: pos.y 
+                x: isMobile ? MOBILE_MARGIN : pos.x,
+                y: isMobile ? MOBILE_TOP_MARGIN : pos.y,
             }}
             animate={isMinimized ? { 
                 scale: 1, 
@@ -191,14 +214,13 @@ export function GlassWindow({
                 y: 0,
                 width: "auto",
                 height: "auto",
-                position: "static" as any
             } : { 
                 scale: 1, 
                 opacity: 1,
-                width: size.width,
-                height: size.height,
-                x: pos.x,
-                y: pos.y
+                width: isMobile ? `calc(100vw - ${MOBILE_MARGIN * 2}px)` : size.width,
+                height: isMobile ? `calc(100dvh - ${MOBILE_TOP_MARGIN + MOBILE_MARGIN}px)` : size.height,
+                x: isMobile ? MOBILE_MARGIN : pos.x,
+                y: isMobile ? MOBILE_TOP_MARGIN : pos.y,
             }}
             exit={{ scale: 0, opacity: 0 }}
             transition={{ 
@@ -209,52 +231,62 @@ export function GlassWindow({
             style={{ 
                 zIndex, 
                 position: isMinimized ? "static" : "absolute",
-                maxWidth: isMinimized ? "fit-content" : "90vw",
-                maxHeight: isMinimized ? "40px" : "90vh",
+                maxWidth: isMobileMinimized ? "150px" : isMinimized ? "fit-content" : isMobile ? `calc(100vw - ${MOBILE_MARGIN * 2}px)` : "90vw",
+                maxHeight: isMobileMinimized ? "32px" : isMinimized ? "40px" : isMobile ? `calc(100dvh - ${MOBILE_TOP_MARGIN + MOBILE_MARGIN}px)` : "90vh",
                 pointerEvents: "auto",
                 userSelect: isResizing ? 'none' : 'auto'
             }}
             onPointerDown={onFocus}
-            className={cn("group", isMinimized && "relative min-w-[120px]")}
+            className={cn("group", isMinimized && (isMobile ? "relative min-w-0" : "relative min-w-[120px]"))}
         >
             <GlassCard className={cn(
                 "h-full border-white/20 shadow-2xl backdrop-blur-xl bg-black/40 flex flex-col overflow-hidden select-none active:select-none",
-                isMinimized ? "h-10 w-auto inline-flex" : "w-full"
+                isMobileMinimized ? "h-8 w-auto max-w-[150px] inline-flex" : isMinimized ? "h-10 w-auto inline-flex" : "w-full"
             )}>
                 {/* Header/Drag Handle */}
                 <div 
                     onPointerDown={(e) => {
-                        if (isMinimized) return
+                        if (isMinimized || isMobile) return
                         e.preventDefault() // Prevent focus/selection triggers
                         dragControls.start(e)
                     }}
                     className={cn(
-                        "flex items-center justify-between p-2 pl-4 border-b border-white/10 shrink-0 select-none bg-white/5",
-                        !isMinimized ? "cursor-grab active:cursor-grabbing" : "cursor-default"
+                        "flex items-center justify-between border-b border-white/10 shrink-0 select-none bg-white/5",
+                        isMobileMinimized ? "h-8 gap-1 px-2 py-1" : "p-2 pl-4",
+                        !isMinimized && !isMobile ? "cursor-grab active:cursor-grabbing" : "cursor-default"
                     )}
                 >
                     <div className="flex items-center gap-2 overflow-hidden flex-1">
                         <GripHorizontal className={cn("w-4 h-4 text-white/20", isMinimized && "hidden")} />
-                        <span className="text-[10px] font-bold text-white/60 truncate uppercase tracking-widest leading-none pt-0.5">{title}</span>
+                        <span className={cn(
+                            "text-[10px] font-bold text-white/60 truncate uppercase tracking-widest leading-none pt-0.5",
+                            isMobileMinimized && "max-w-[64px] text-[9px] tracking-wide"
+                        )}>{title}</span>
                     </div>
-                    <div className="flex items-center gap-1 shrink-0 ml-2">
+                    <div className={cn("flex items-center gap-1 shrink-0", isMobileMinimized ? "ml-0" : "ml-2")}>
                         <button 
                             onClick={(e) => {
                                 e.stopPropagation();
                                 onMinimize();
                             }}
-                            className="p-1 rounded-md hover:bg-white/10 text-white/40 hover:text-white transition-colors"
+                            className={cn(
+                                "rounded-md hover:bg-white/10 text-white/40 hover:text-white transition-colors",
+                                isMobileMinimized ? "p-0.5" : "p-1"
+                            )}
                         >
-                            {isMinimized ? <Maximize2 className="w-3.5 h-3.5" /> : <Minus className="w-3.5 h-3.5" />}
+                            {isMinimized ? <Maximize2 className={cn(isMobileMinimized ? "w-3 h-3" : "w-3.5 h-3.5")} /> : <Minus className="w-3.5 h-3.5" />}
                         </button>
                         <button 
                             onClick={(e) => {
                                 e.stopPropagation();
                                 onClose();
                             }}
-                            className="p-1 rounded-md hover:bg-red-500/20 text-white/40 hover:text-red-400 transition-colors"
+                            className={cn(
+                                "rounded-md hover:bg-red-500/20 text-white/40 hover:text-red-400 transition-colors",
+                                isMobileMinimized ? "p-0.5" : "p-1"
+                            )}
                         >
-                            <X className="w-3.5 h-3.5" />
+                            <X className={cn(isMobileMinimized ? "w-3 h-3" : "w-3.5 h-3.5")} />
                         </button>
                     </div>
                 </div>
@@ -272,7 +304,7 @@ export function GlassWindow({
                 )}
 
                 {/* Resize Handles */}
-                {!isMinimized && (
+                {!isMinimized && !isMobile && (
                     <>
                         <div 
                             className="absolute bottom-1 right-1 w-6 h-6 cursor-nwse-resize flex items-end justify-end p-1 z-50 group-hover:opacity-100 transition-opacity"
