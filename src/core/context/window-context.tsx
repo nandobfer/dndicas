@@ -10,7 +10,7 @@ export type WindowInstance = {
     content: React.ReactNode
     entityId?: string
     entityType?: string
-    item?: any
+    item?: unknown
     renderOptions?: EntityRenderOptions
     zIndex: number
     initialPosition?: { x: number, y: number }
@@ -110,7 +110,7 @@ export function WindowProvider({ children }: { children: React.ReactNode }) {
             </div>
 
             {/* Taskbar-like area for minimized windows */}
-            <div className="fixed bottom-0 left-20 right-0 p-2 flex flex-wrap-reverse gap-2 pointer-events-none z-[11] items-end justify-start">
+            <div className="fixed bottom-2 left-2 right-auto p-2 flex flex-wrap-reverse gap-2 pointer-events-none z-[11] items-end justify-start md:bottom-0 md:left-20 md:right-0">
                 <AnimatePresence mode="popLayout">
                     {windows
                         .filter((w) => w.isMinimized)
