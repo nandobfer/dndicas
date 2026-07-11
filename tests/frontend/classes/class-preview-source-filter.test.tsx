@@ -134,6 +134,7 @@ describe("ClassPreview source filters", () => {
                     makeSubclass({ _id: "ldj-sub", name: "Campeão", source: "LDJ pág. 72" }),
                     makeSubclass({ _id: "xge-sub", name: "Samurai", source: "XGE pág. 31" }),
                 ])}
+                hideActionIcons
             />,
         )
 
@@ -149,6 +150,7 @@ describe("ClassPreview source filters", () => {
                     makeSubclass({ _id: "xge-sub", name: "Samurai", source: "XGE pág. 31" }),
                 ])}
                 sourceFilters={["LDJ"]}
+                hideActionIcons
             />,
         )
 
@@ -165,6 +167,7 @@ describe("ClassPreview source filters", () => {
                 ])}
                 initialSelectedSubclassIds={["xge-sub"]}
                 sourceFilters={["LDJ"]}
+                hideActionIcons
             />,
         )
 
@@ -180,6 +183,7 @@ describe("ClassPreview source filters", () => {
                     makeSubclass({ _id: "xge-sub", name: "Samurai", source: "XGE pág. 31" }),
                 ])}
                 initialSelectedSubclassIds={["ldj-sub", "xge-sub"]}
+                hideActionIcons
             />,
         )
 
@@ -197,6 +201,7 @@ describe("ClassPreview source filters", () => {
                     makeSubclass({ _id: "xge-sub", name: "Samurai", source: "XGE pág. 31" }),
                 ])}
                 onSelectedSubclassIdsChange={onSelectedSubclassIdsChange}
+                hideActionIcons
             />,
         )
 
@@ -211,11 +216,11 @@ describe("ClassPreview source filters", () => {
             makeSubclass({ _id: "ldj-sub", name: "Campeão", source: "LDJ pág. 72" }),
             makeSubclass({ _id: "xge-sub", name: "Samurai", source: "XGE pág. 31" }),
         ])
-        const { rerender } = render(<ClassPreview characterClass={characterClass} initialSelectedSubclassIds={["ldj-sub"]} />)
+        const { rerender } = render(<ClassPreview characterClass={characterClass} initialSelectedSubclassIds={["ldj-sub"]} hideActionIcons />)
 
         expect(screen.getByTestId("class-progression-subclasses")).toHaveTextContent("Campeão")
 
-        rerender(<ClassPreview characterClass={characterClass} initialSelectedSubclassIds={["xge-sub"]} />)
+        rerender(<ClassPreview characterClass={characterClass} initialSelectedSubclassIds={["xge-sub"]} hideActionIcons />)
 
         expect(screen.getByTestId("class-progression-subclasses")).toHaveTextContent("Samurai")
     })
