@@ -1,8 +1,11 @@
 "use client"
 
 import * as React from "react"
+import type { Channel } from "pusher-js"
 import { useAuth } from "@/core/hooks/useAuth"
-import { OWLBEAR_AUTH_BRIDGE_STORAGE_KEY, OWLBEAR_SESSION_INVALID_EVENT } from "./config"
+import { getPusherBrowserConfig } from "@/core/realtime/pusher-browser-config"
+import { PusherBrowserService } from "@/core/realtime/pusher-browser-service"
+import { OWLBEAR_AUTH_HANDOFF_CHANNEL_PREFIX, OWLBEAR_AUTH_HANDOFF_EVENT, OWLBEAR_SESSION_INVALID_EVENT } from "./config"
 import { logOwlbearDebug } from "./debug"
 import { openOwlbearBackendSession } from "./sdk"
 import type { OwlbearRuntimeState, OwlbearSessionState } from "./types"
@@ -27,21 +30,11 @@ function getSessionRetryDelay(attempt: number) {
     return SESSION_RETRY_DELAYS_MS[Math.min(attempt, SESSION_RETRY_DELAYS_MS.length - 1)]
 }
 
-function readBridgeTokenFromStorage() {
-    try {
-        return window.localStorage.getItem(OWLBEAR_AUTH_BRIDGE_STORAGE_KEY)
-    } catch (error) {
-        console.warn("Owlbear auth bridge storage is unavailable", error)
-        return null
+function createRandomBridgeValue() {
+    if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
+        return crypto.randomUUID()
     }
-}
-
-function removeBridgeTokenFromStorage() {
-    try {
-        window.localStorage.removeItem(OWLBEAR_AUTH_BRIDGE_STORAGE_KEY)
-    } catch (error) {
-        console.warn("Owlbear auth bridge storage is unavailable", error)
-    }
+    return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`
 }
 
 function isRetryableSessionError(error: Error & { status?: number }, isSignedIn: boolean) {
@@ -52,16 +45,24 @@ function isRetryableSessionError(error: Error & { status?: number }, isSignedIn:
 
 export function useOwlbearSession(runtime: OwlbearRuntimeState) {
     const { isLoaded, isSignedIn, userId } = useAuth()
+    const [authBridgeCredentials] = React.useState(() => ({
+        channelId: createRandomBridgeValue(),
+        nonce: createRandomBridgeValue(),
+    }))
+    const [authBridgeStatus, setAuthBridgeStatus] = React.useState<"idle" | "connecting" | "ready" | "received" | "unavailable">("idle")
+    const [handoffToken, setHandoffToken] = React.useState<string | null>(null)
     const [session, setSession] = React.useState<OwlbearSessionState>({
         sessionStatus: "idle",
         sessionToken: null,
         sessionExpiresAt: null,
         isAuthenticated: false,
     })
-    const [bridgeToken, setBridgeToken] = React.useState<string | null>(null)
     const lastRuntimeIdentityRef = React.useRef<string | null>(null)
     const sessionRef = React.useRef(session)
     const [refreshSequence, setRefreshSequence] = React.useState(0)
+    const authBridgeUrl = React.useMemo(() => {
+        return `/owlbear/auth/bridge?channelId=${encodeURIComponent(authBridgeCredentials.channelId)}&nonce=${encodeURIComponent(authBridgeCredentials.nonce)}`
+    }, [authBridgeCredentials.channelId, authBridgeCredentials.nonce])
 
     React.useEffect(() => {
         sessionRef.current = session
@@ -111,18 +112,81 @@ export function useOwlbearSession(runtime: OwlbearRuntimeState) {
             authLoaded: isLoaded,
             signedIn: isSignedIn,
             userId: userId ?? null,
-            hasBridgeToken: Boolean(bridgeToken),
+            hasHandoffToken: Boolean(handoffToken),
+            authBridgeStatus,
             sessionStatus: session.sessionStatus,
             hasToken: Boolean(session.sessionToken),
             expiresAt: session.sessionExpiresAt,
             sessionAuthenticated: session.isAuthenticated,
         })
-    }, [bridgeToken, isLoaded, isSignedIn, runtime.playerId, runtime.role, runtime.roomId, runtime.status, session.isAuthenticated, session.sessionExpiresAt, session.sessionStatus, session.sessionToken, userId])
+    }, [authBridgeStatus, handoffToken, isLoaded, isSignedIn, runtime.playerId, runtime.role, runtime.roomId, runtime.status, session.isAuthenticated, session.sessionExpiresAt, session.sessionStatus, session.sessionToken, userId])
 
     React.useEffect(() => {
-        if (typeof window === "undefined") return
-        setBridgeToken(readBridgeTokenFromStorage())
-    }, [refreshSequence])
+        if (runtime.status !== "ready" || !isLoaded || isSignedIn || handoffToken || session.isAuthenticated) return
+
+        let cancelled = false
+        let channelName: string | null = null
+        let subscribedChannel: Channel | null = null
+        let handler: ((payload: { handoffToken?: string; nonce?: string }) => void) | null = null
+        const pusherService = PusherBrowserService.getInstance()
+
+        setAuthBridgeStatus("connecting")
+
+        void (async () => {
+            try {
+                const config = await getPusherBrowserConfig()
+                if (cancelled) return
+                if (!config) {
+                    console.warn("[Dndicas Owlbear Auth] Pusher indisponível para handoff de login.")
+                    setAuthBridgeStatus("unavailable")
+                    return
+                }
+
+                channelName = `${OWLBEAR_AUTH_HANDOFF_CHANNEL_PREFIX}-${authBridgeCredentials.channelId}`
+                const channel = pusherService.subscribe(config, channelName)
+                subscribedChannel = channel
+                handler = (payload) => {
+                    logOwlbearDebug("[Dndicas Owlbear Auth]", "handoff event received", {
+                        channelName,
+                        nonceMatches: payload.nonce === authBridgeCredentials.nonce,
+                        hasToken: Boolean(payload.handoffToken),
+                    })
+
+                    if (payload.nonce !== authBridgeCredentials.nonce || !payload.handoffToken) {
+                        console.warn("[Dndicas Owlbear Auth] Handoff ignorado por nonce inválido ou token ausente.")
+                        return
+                    }
+
+                    setHandoffToken(payload.handoffToken)
+                    setAuthBridgeStatus("received")
+                    setSession({
+                        sessionStatus: "idle",
+                        sessionToken: null,
+                        sessionExpiresAt: null,
+                        isAuthenticated: false,
+                    })
+                    setRefreshSequence((current) => current + 1)
+                }
+                channel.bind(OWLBEAR_AUTH_HANDOFF_EVENT, handler)
+                setAuthBridgeStatus("ready")
+                logOwlbearDebug("[Dndicas Owlbear Auth]", "subscribed to handoff channel", { channelName })
+            } catch (error) {
+                console.error("[Dndicas Owlbear Auth] Failed to subscribe to handoff channel", error)
+                if (cancelled) return
+                setAuthBridgeStatus("unavailable")
+            }
+        })()
+
+        return () => {
+            cancelled = true
+            if (channelName && handler) {
+                subscribedChannel?.unbind(OWLBEAR_AUTH_HANDOFF_EVENT, handler)
+                pusherService.unsubscribe(channelName)
+            } else if (channelName) {
+                pusherService.unsubscribe(channelName)
+            }
+        }
+    }, [authBridgeCredentials.channelId, authBridgeCredentials.nonce, handoffToken, isLoaded, isSignedIn, runtime.status, session.isAuthenticated])
 
     React.useEffect(() => {
         if (runtime.status !== "ready" || !runtime.roomId || !runtime.playerId || !runtime.role) {
@@ -153,8 +217,8 @@ export function useOwlbearSession(runtime: OwlbearRuntimeState) {
         const roomId = runtime.roomId
         const owlbearPlayerId = runtime.playerId
         const owlbearRole = runtime.role
-        const effectiveBridgeToken = isSignedIn ? null : bridgeToken
-        const authIdentity = isSignedIn ? `auth:${userId}` : effectiveBridgeToken ? "bridge" : "anon"
+        const effectiveHandoffToken = isSignedIn ? null : handoffToken
+        const authIdentity = isSignedIn ? `auth:${userId}` : effectiveHandoffToken ? "handoff" : "anon"
         const runtimeIdentity = `${roomId}:${owlbearPlayerId}:${owlbearRole}:${authIdentity}`
         const identityChanged = lastRuntimeIdentityRef.current !== null && lastRuntimeIdentityRef.current !== runtimeIdentity
 
@@ -166,8 +230,8 @@ export function useOwlbearSession(runtime: OwlbearRuntimeState) {
         // is logged in on the main dndicas.com.br tab. We therefore open a backend session for
         // all roles unconditionally; the server issues an anonymous token when no authenticated userId
         // is present, a full authenticated token when the cookie does reach the server,
-        // or a full authenticated token when a bridge token was saved by the top-level
-        // Dndicas site in localStorage.
+        // or a full authenticated token when the external login tab sends a handoff
+        // through the Pusher channel subscribed by this action.
 
         if (identityChanged) {
             setSession({
@@ -201,14 +265,10 @@ export function useOwlbearSession(runtime: OwlbearRuntimeState) {
                         roomId,
                         owlbearPlayerId,
                         owlbearRole,
-                        ...(effectiveBridgeToken ? { bridgeToken: effectiveBridgeToken } : {}),
+                        ...(effectiveHandoffToken ? { handoffToken: effectiveHandoffToken } : {}),
                     })
 
                     if (cancelled) return
-                    if (effectiveBridgeToken && !nextSession.isAuthenticated) {
-                        removeBridgeTokenFromStorage()
-                        setBridgeToken(null)
-                    }
                     setSession({
                         sessionStatus: "ready",
                         sessionToken: nextSession.token,
@@ -258,11 +318,13 @@ export function useOwlbearSession(runtime: OwlbearRuntimeState) {
             cancelled = true
             if (retryTimer) clearTimeout(retryTimer)
         }
-    }, [bridgeToken, isLoaded, isSignedIn, refreshSequence, runtime.playerId, runtime.role, runtime.roomId, runtime.status, userId])
+    }, [handoffToken, isLoaded, isSignedIn, refreshSequence, runtime.playerId, runtime.role, runtime.roomId, runtime.status, userId])
 
     return {
         session,
         isAuthLoaded: isLoaded,
         isAuthenticated: Boolean(isSignedIn || session.isAuthenticated),
+        authBridgeUrl,
+        authBridgeStatus,
     }
 }

@@ -1,6 +1,5 @@
 import { act, renderHook, waitFor } from "@testing-library/react"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
-import { OWLBEAR_AUTH_BRIDGE_STORAGE_KEY } from "@/features/owlbear/config"
 import { useOwlbearSession } from "@/features/owlbear/use-owlbear-session"
 import type { OwlbearRuntimeState } from "@/features/owlbear/types"
 
@@ -11,6 +10,13 @@ const authState = vi.hoisted(() => ({
 }))
 
 const openOwlbearBackendSessionMock = vi.hoisted(() => vi.fn())
+const getPusherBrowserConfigMock = vi.hoisted(() => vi.fn())
+const subscribeMock = vi.hoisted(() => vi.fn())
+const unsubscribeMock = vi.hoisted(() => vi.fn())
+const pusherChannelMock = vi.hoisted(() => ({
+    bind: vi.fn(),
+    unbind: vi.fn(),
+}))
 
 vi.mock("@/core/hooks/useAuth", () => ({
     useAuth: () => ({
@@ -22,6 +28,19 @@ vi.mock("@/core/hooks/useAuth", () => ({
 
 vi.mock("@/features/owlbear/sdk", () => ({
     openOwlbearBackendSession: (...args: unknown[]) => openOwlbearBackendSessionMock(...args),
+}))
+
+vi.mock("@/core/realtime/pusher-browser-config", () => ({
+    getPusherBrowserConfig: () => getPusherBrowserConfigMock(),
+}))
+
+vi.mock("@/core/realtime/pusher-browser-service", () => ({
+    PusherBrowserService: {
+        getInstance: () => ({
+            subscribe: (...args: unknown[]) => subscribeMock(...args),
+            unsubscribe: (...args: unknown[]) => unsubscribeMock(...args),
+        }),
+    },
 }))
 
 const gmRuntime: OwlbearRuntimeState = {
@@ -44,7 +63,19 @@ describe("useOwlbearSession", () => {
         authState.isLoaded = true
         authState.isSignedIn = false
         authState.userId = null
-        window.localStorage.clear()
+        getPusherBrowserConfigMock.mockResolvedValue({
+            key: "key",
+            cluster: "mt1",
+            wsHost: "localhost",
+            wsPort: 6001,
+            wssPort: 6001,
+            forceTLS: false,
+            enabledTransports: ["ws"],
+        })
+        subscribeMock.mockReturnValue(pusherChannelMock)
+        unsubscribeMock.mockReset()
+        pusherChannelMock.bind.mockReset()
+        pusherChannelMock.unbind.mockReset()
         openOwlbearBackendSessionMock
             .mockResolvedValueOnce({ token: "token-anon", expiresAt: "2099-01-01T00:00:00.000Z", isAuthenticated: false })
             .mockResolvedValueOnce({ token: "token-auth", expiresAt: "2099-01-01T00:00:00.000Z", isAuthenticated: true })
@@ -159,23 +190,31 @@ describe("useOwlbearSession", () => {
         await waitFor(() => expect(result.current.session.sessionToken).toBe("token-refreshed"))
     })
 
-    it("uses a stored Owlbear bridge token as an authenticated session inside the iframe", async () => {
-        window.localStorage.setItem(OWLBEAR_AUTH_BRIDGE_STORAGE_KEY, "bridge-token-1")
-        openOwlbearBackendSessionMock.mockReset().mockImplementation((input: { bridgeToken?: string }) => Promise.resolve({
-            token: input.bridgeToken ? "token-bridge" : "token-anon",
+    it("uses a Pusher handoff token as an authenticated session inside the iframe", async () => {
+        openOwlbearBackendSessionMock.mockReset().mockImplementation((input: { handoffToken?: string }) => Promise.resolve({
+            token: input.handoffToken ? "token-handoff" : "token-anon",
             expiresAt: "2099-01-01T00:00:00.000Z",
-            isAuthenticated: Boolean(input.bridgeToken),
+            isAuthenticated: Boolean(input.handoffToken),
         }))
 
         const { result } = renderHook(() => useOwlbearSession(playerRuntime))
 
-        await waitFor(() => expect(result.current.session.sessionToken).toBe("token-bridge"))
+        await waitFor(() => expect(result.current.session.sessionToken).toBe("token-anon"))
+        await waitFor(() => expect(pusherChannelMock.bind).toHaveBeenCalledWith("owlbear-auth-ready", expect.any(Function)))
+
+        const handler = pusherChannelMock.bind.mock.calls[0][1] as (payload: { handoffToken: string; nonce: string }) => void
+        const nonce = new URL(result.current.authBridgeUrl, "http://localhost").searchParams.get("nonce")
+        act(() => {
+            handler({ handoffToken: "handoff-token-1", nonce: nonce ?? "" })
+        })
+
+        await waitFor(() => expect(result.current.session.sessionToken).toBe("token-handoff"))
         expect(result.current.isAuthenticated).toBe(true)
         expect(openOwlbearBackendSessionMock).toHaveBeenLastCalledWith({
             roomId: "room-1",
             owlbearPlayerId: "player-1",
             owlbearRole: "PLAYER",
-            bridgeToken: "bridge-token-1",
+            handoffToken: "handoff-token-1",
         })
     })
 })

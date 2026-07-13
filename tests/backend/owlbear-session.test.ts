@@ -261,7 +261,7 @@ describe("owlbear session backend", () => {
         }))
     })
 
-    it("POST /api/owlbear/session exchanges a valid bridge token for an authenticated Owlbear session", async () => {
+    it("POST /api/owlbear/session exchanges a valid handoff token for an authenticated Owlbear session", async () => {
         const previousSecret = process.env.AUTH_SECRET
         process.env.AUTH_SECRET = "test-secret"
         const auth = vi.fn().mockResolvedValue({ userId: null })
@@ -272,8 +272,12 @@ describe("owlbear session backend", () => {
 
         try {
             vi.doUnmock("node:crypto")
-            const bridge = await importFresh<typeof import("@/features/owlbear/server/auth-bridge-token")>("@/features/owlbear/server/auth-bridge-token")
-            const bridgeToken = bridge.createOwlbearAuthBridgeToken("user-1")
+            const handoff = await importFresh<typeof import("@/features/owlbear/server/auth-handoff-token")>("@/features/owlbear/server/auth-handoff-token")
+            const handoffToken = handoff.createOwlbearAuthHandoffToken({
+                userId: "user-1",
+                channelId: "channel-1",
+                nonce: "nonce-123",
+            })
 
             vi.doMock("@/core/auth/server", () => ({ auth }))
             vi.doMock("@/features/owlbear/server/session-service", () => ({
@@ -290,7 +294,7 @@ describe("owlbear session backend", () => {
                     roomId: "room-1",
                     owlbearPlayerId: "player-1",
                     owlbearRole: "PLAYER",
-                    bridgeToken,
+                    handoffToken,
                 }),
             }))
             const payload = await readJson<{ isAuthenticated: boolean; token: string }>(response)
@@ -304,6 +308,47 @@ describe("owlbear session backend", () => {
                 owlbearPlayerId: "player-1",
                 owlbearRole: "PLAYER",
             }))
+        } finally {
+            if (previousSecret === undefined) {
+                delete process.env.AUTH_SECRET
+            } else {
+                process.env.AUTH_SECRET = previousSecret
+            }
+        }
+    })
+
+    it("POST /api/owlbear/auth/pusher-handoff publishes a handoff event for authenticated users", async () => {
+        const previousSecret = process.env.AUTH_SECRET
+        process.env.AUTH_SECRET = "test-secret"
+        const trigger = vi.fn().mockResolvedValue(undefined)
+
+        try {
+            vi.doUnmock("node:crypto")
+            vi.doMock("@/core/auth/server", () => ({
+                auth: vi.fn().mockResolvedValue({ userId: "user-1" }),
+            }))
+            vi.doMock("@/core/realtime/pusher-service", () => ({
+                PusherService: {
+                    getInstance: vi.fn(() => ({ trigger })),
+                },
+            }))
+
+            const mod = await importFresh<typeof import("@/app/api/owlbear/auth/pusher-handoff/route")>("@/app/api/owlbear/auth/pusher-handoff/route")
+            const response = await mod.POST(makeRequest("http://localhost/api/owlbear/auth/pusher-handoff", {
+                method: "POST",
+                headers: { "content-type": "application/json" },
+                body: JSON.stringify({ channelId: "channel-1", nonce: "nonce-123" }),
+            }))
+
+            expect(response.status).toBe(200)
+            expect(trigger).toHaveBeenCalledWith(
+                "owlbear-auth-channel-1",
+                "owlbear-auth-ready",
+                expect.objectContaining({
+                    nonce: "nonce-123",
+                    handoffToken: expect.any(String),
+                })
+            )
         } finally {
             if (previousSecret === undefined) {
                 delete process.env.AUTH_SECRET

@@ -107,12 +107,16 @@ function PlayerSheetTabContent({
     session,
     isAuthenticated,
     isAuthLoaded,
+    authBridgeUrl,
+    authBridgeStatus,
     onViewModeChange,
 }: {
     runtime: OwlbearRuntimeState
     session: OwlbearSessionState
     isAuthenticated: boolean
     isAuthLoaded: boolean
+    authBridgeUrl?: string | null
+    authBridgeStatus?: "idle" | "connecting" | "ready" | "received" | "unavailable"
     onViewModeChange?: (mode: OwlbearSheetViewMode) => void
 }) {
     const [linkedSheetId, setLinkedSheetId] = React.useState<string | null>(null)
@@ -265,6 +269,8 @@ function PlayerSheetTabContent({
             <OwlbearSignInPrompt
                 title="Login necessário"
                 description="Para acessar suas fichas, faça login no Dungeons & Dicas em uma aba do navegador e reabra esta action."
+                loginUrl={authBridgeUrl}
+                bridgeStatus={authBridgeStatus}
             />
         )
     }
@@ -389,12 +395,16 @@ export function OwlbearPlayerSheetTab({
     session,
     isAuthenticated,
     isAuthLoaded,
+    authBridgeUrl,
+    authBridgeStatus,
     onViewModeChange,
 }: {
     runtime: OwlbearRuntimeState
     session: OwlbearSessionState
     isAuthenticated: boolean
     isAuthLoaded: boolean
+    authBridgeUrl?: string | null
+    authBridgeStatus?: "idle" | "connecting" | "ready" | "received" | "unavailable"
     onViewModeChange?: (mode: OwlbearSheetViewMode) => void
 }) {
     const clientConfig = React.useMemo(() => ({
@@ -411,6 +421,8 @@ export function OwlbearPlayerSheetTab({
                 session={session}
                 isAuthenticated={isAuthenticated}
                 isAuthLoaded={isAuthLoaded}
+                authBridgeUrl={authBridgeUrl}
+                authBridgeStatus={authBridgeStatus}
                 onViewModeChange={onViewModeChange}
             />
         </CharacterSheetClientProvider>

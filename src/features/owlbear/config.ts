@@ -1,6 +1,7 @@
 export const OWLBEAR_ACTION_SIZE = { width: 900, height: 900 } as const
 export const OWLBEAR_SESSION_INVALID_EVENT = "dndicas:owlbear-session-invalid"
-export const OWLBEAR_AUTH_BRIDGE_STORAGE_KEY = "dndicas:owlbear-auth-bridge-token"
+export const OWLBEAR_AUTH_HANDOFF_EVENT = "owlbear-auth-ready"
+export const OWLBEAR_AUTH_HANDOFF_CHANNEL_PREFIX = "owlbear-auth"
 
 export const OWLBEAR_ACTIONS = {
     catalog: {

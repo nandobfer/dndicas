@@ -215,11 +215,11 @@ export async function openOwlbearBackendSession(input: {
     roomId: string
     owlbearPlayerId: string
     owlbearRole: "GM" | "PLAYER"
-    bridgeToken?: string
+    handoffToken?: string
 }) {
     logOwlbearDebug("[Dndicas Owlbear Session]", "opening backend session", {
         ...input,
-        bridgeToken: input.bridgeToken ? "[present]" : undefined,
+        handoffToken: input.handoffToken ? "[present]" : undefined,
     })
     const response = await fetch("/api/owlbear/session", {
         method: "POST",
@@ -235,7 +235,7 @@ export async function openOwlbearBackendSession(input: {
             roomId: input.roomId,
             owlbearPlayerId: input.owlbearPlayerId,
             owlbearRole: input.owlbearRole,
-            bridgeToken: input.bridgeToken ? "[present]" : undefined,
+            handoffToken: input.handoffToken ? "[present]" : undefined,
             status: response.status,
             error,
         })
