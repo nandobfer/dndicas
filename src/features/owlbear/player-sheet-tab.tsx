@@ -298,6 +298,7 @@ function PlayerSheetTabContent({
                             description="Selecione uma ficha existente ou crie uma nova para vinculá-la a esta sala do Owlbear."
                             redirectUrl="/owlbear/sheet/action"
                             showDelete={false}
+                            authState={{ isLoaded: isAuthLoaded, isSignedIn: isAuthenticated }}
                             onSheetOpen={(sheet) => {
                                 setSelectedExistingSheet(sheet)
                             }}
@@ -329,6 +330,7 @@ function PlayerSheetTabContent({
                     description="Selecione uma ficha existente ou crie uma nova para vinculá-la a esta sala do Owlbear."
                     redirectUrl="/owlbear/sheet/action"
                     showDelete={false}
+                    authState={{ isLoaded: isAuthLoaded, isSignedIn: isAuthenticated }}
                     emptyMessage="Nenhuma ficha encontrada. Crie sua primeira ficha para vinculá-la a esta sala."
                     onSheetOpen={(sheet) => {
                         setNotice(null)

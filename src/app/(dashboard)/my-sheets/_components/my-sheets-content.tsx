@@ -22,6 +22,10 @@ interface MySheetsContentProps {
     showDelete?: boolean
     emptyMessage?: string
     className?: string
+    authState?: {
+        isLoaded: boolean
+        isSignedIn: boolean
+    }
 }
 
 export function MySheetsContent({
@@ -34,8 +38,11 @@ export function MySheetsContent({
     showDelete = true,
     emptyMessage,
     className = "space-y-6",
+    authState,
 }: MySheetsContentProps) {
-    const { isSignedIn, isLoaded } = useAuth()
+    const auth = useAuth()
+    const isLoaded = authState?.isLoaded ?? auth.isLoaded
+    const isSignedIn = authState?.isSignedIn ?? auth.isSignedIn
     const { sheets, search, handleSearch, isLoading, isFetchingNextPage, hasNextPage, fetchNextPage } = useSheetList()
 
     if (isLoaded && !isSignedIn) {
