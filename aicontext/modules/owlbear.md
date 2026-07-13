@@ -63,6 +63,8 @@ Na aba `Fichas`, o `SheetForm` do painel selecionado usa `key={selectedSheet._id
 
 Para jogadores sem login real no Dndicas, `OwlbearPlayerSheetTab` renderiza `OwlbearSignInPrompt` com link externo para `/owlbear/auth/bridge`. Depois do login em uma aba normal, o handoff via Pusher permite criar a sessão Owlbear autenticada sem reabrir a action; o fluxo volta para a seleção/criação de fichas com `MySheetsContent`, mantendo o vínculo da ficha na metadata da sala.
 
+Quando componentes compartilhados de fichas forem usados dentro da action, não confie no `useAuth()` interno deles, porque o iframe pode continuar sem cookie Auth.js. Passe explicitamente o estado da `OwlbearSession` como override de autenticação; `OwlbearPlayerSheetTab` usa `MySheetsContent.authState` com `isSignedIn: isAuthenticated` para listar/criar fichas via bearer token Owlbear.
+
 ### Context menu de vínculo de token com personagem ou NPC
 O `OwlbearGmSceneController` roda com escopos diferentes por action/background. O background da extensão `Dndicas: Ficha` registra `Vincular a personagem`; o background da extensão `Dndicas: NPC & Iniciativa` registra `Vincular a NPC`; o menu `Desvincular` fica no background da ficha para evitar duplicar o item quando ambas as extensões estão instaladas. O registro dos menus depende apenas do runtime Owlbear pronto e papel `GM`, não da sessão backend pronta, para evitar que falhas ou delays de sessão escondam o menu.
 
