@@ -490,11 +490,15 @@ export function OwlbearGmNpcsTab({
     session,
     isAuthenticated,
     isAuthLoaded,
+    authBridgeUrl,
+    authBridgeStatus,
 }: {
     runtime: OwlbearRuntimeState
     session: OwlbearSessionState
     isAuthenticated: boolean
     isAuthLoaded: boolean
+    authBridgeUrl?: string | null
+    authBridgeStatus?: "idle" | "connecting" | "ready" | "received" | "unavailable"
 }) {
     const roomId = runtime.roomId
     const { items, isLoading, errorMessage, linkNpc, updateNpc, removeNpc } = useRoomNpcs(
@@ -663,6 +667,8 @@ export function OwlbearGmNpcsTab({
             <OwlbearSignInPrompt
                 title="Login necessário"
                 description="Para gerenciar NPCs da sala, faça login no Dungeons & Dicas em uma aba do navegador e reabra esta action."
+                loginUrl={authBridgeUrl}
+                bridgeStatus={authBridgeStatus}
             />
         )
     }

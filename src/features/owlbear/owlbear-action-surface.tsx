@@ -37,7 +37,7 @@ export function OwlbearDiceAction() {
 
 export function OwlbearSheetAction() {
     const runtime = useOwlbearRuntime()
-    const { session, isAuthLoaded, isAuthenticated } = useOwlbearSession(runtime)
+    const { session, isAuthLoaded, isAuthenticated, authBridgeUrl, authBridgeStatus } = useOwlbearSession(runtime)
 
     return (
         <OwlbearActionFrame runtime={runtime} actionName="sheet" contentClassName="max-w-none">
@@ -59,6 +59,8 @@ export function OwlbearSheetAction() {
                         session={session}
                         isAuthenticated={isAuthenticated}
                         isAuthLoaded={isAuthLoaded}
+                        authBridgeUrl={authBridgeUrl}
+                        authBridgeStatus={authBridgeStatus}
                     />
                 ) : (
                     <CenteredStatus message="Carregando contexto da sala..." />
@@ -97,7 +99,7 @@ const NPCS_ACTION_TABS = [
 
 export function OwlbearNpcsAction() {
     const runtime = useOwlbearRuntime()
-    const { session, isAuthLoaded, isAuthenticated } = useOwlbearSession(runtime)
+    const { session, isAuthLoaded, isAuthenticated, authBridgeUrl, authBridgeStatus } = useOwlbearSession(runtime)
     const [activeTab, setActiveTab] = React.useState<NpcsActionTab>("npcs")
 
     return (
@@ -130,6 +132,8 @@ export function OwlbearNpcsAction() {
                         session={session}
                         isAuthenticated={isAuthenticated}
                         isAuthLoaded={isAuthLoaded}
+                        authBridgeUrl={authBridgeUrl}
+                        authBridgeStatus={authBridgeStatus}
                     />
                 ) : (
                     <OwlbearGmInitiativeTab

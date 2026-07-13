@@ -64,7 +64,7 @@ function RuntimeBanner({
 
 export function OwlbearShell() {
     const runtime = useOwlbearRuntime()
-    const { session, isAuthLoaded, isAuthenticated } = useOwlbearSession(runtime)
+    const { session, isAuthLoaded, isAuthenticated, authBridgeUrl, authBridgeStatus } = useOwlbearSession(runtime)
     const tabs = React.useMemo(() => getTabsForRole(runtime.role), [runtime.role])
     const [activeTab, setActiveTab] = React.useState<OwlbearTabId>("catalogo")
 
@@ -135,6 +135,8 @@ export function OwlbearShell() {
                                 session={session}
                                 isAuthenticated={isAuthenticated}
                                 isAuthLoaded={isAuthLoaded}
+                                authBridgeUrl={authBridgeUrl}
+                                authBridgeStatus={authBridgeStatus}
                             />
                         </div>
                     )}
@@ -151,6 +153,8 @@ export function OwlbearShell() {
                                     session={session}
                                     isAuthenticated={isAuthenticated}
                                     isAuthLoaded={isAuthLoaded}
+                                    authBridgeUrl={authBridgeUrl}
+                                    authBridgeStatus={authBridgeStatus}
                                 />
                             )}
                         </div>
