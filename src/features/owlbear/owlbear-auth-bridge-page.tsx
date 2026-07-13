@@ -1,12 +1,18 @@
 "use client"
 
 import * as React from "react"
+import type { Channel } from "pusher-js"
 import { useSearchParams } from "next/navigation"
 import { CheckCircle2, Loader2, ShieldAlert } from "lucide-react"
 import { SignIn } from "@/features/auth/auth-components"
 import { useAuth } from "@/core/hooks/useAuth"
+import { getPusherBrowserConfig } from "@/core/realtime/pusher-browser-config"
+import { PusherBrowserService } from "@/core/realtime/pusher-browser-service"
+import { OWLBEAR_AUTH_COMPLETED_EVENT, OWLBEAR_AUTH_HANDOFF_CHANNEL_PREFIX } from "./config"
 
-type BridgeStatus = "idle" | "publishing" | "published" | "error"
+type BridgeStatus = "idle" | "publishing" | "waiting-action" | "completed" | "sent" | "error"
+
+const AUTH_COMPLETED_TIMEOUT_MS = 10_000
 
 function buildBridgeRedirectUrl(channelId: string, nonce: string) {
     return `/owlbear/auth/bridge?channelId=${encodeURIComponent(channelId)}&nonce=${encodeURIComponent(nonce)}`
@@ -19,12 +25,51 @@ export function OwlbearAuthBridgePage() {
     const nonce = searchParams.get("nonce") ?? ""
     const [status, setStatus] = React.useState<BridgeStatus>("idle")
     const [errorMessage, setErrorMessage] = React.useState<string | null>(null)
+    const publishStartedRef = React.useRef(false)
     const redirectUrl = channelId && nonce ? buildBridgeRedirectUrl(channelId, nonce) : "/"
 
     React.useEffect(() => {
-        if (!isLoaded || !isSignedIn || !channelId || !nonce || status !== "idle") return
+        if (!channelId || !nonce) return
 
         let cancelled = false
+        let channelName: string | null = null
+        let subscribedChannel: Channel | null = null
+        let handler: ((payload: { nonce?: string; ok?: boolean }) => void) | null = null
+        const pusherService = PusherBrowserService.getInstance()
+
+        void (async () => {
+            try {
+                const config = await getPusherBrowserConfig()
+                if (cancelled || !config) return
+
+                channelName = `${OWLBEAR_AUTH_HANDOFF_CHANNEL_PREFIX}-${channelId}`
+                subscribedChannel = pusherService.subscribe(config, channelName)
+                handler = (payload) => {
+                    if (payload.nonce !== nonce || !payload.ok) return
+                    setStatus("completed")
+                }
+                subscribedChannel.bind(OWLBEAR_AUTH_COMPLETED_EVENT, handler)
+            } catch (error) {
+                console.error("Failed to subscribe to Owlbear auth completion", error)
+            }
+        })()
+
+        return () => {
+            cancelled = true
+            if (channelName && handler) {
+                subscribedChannel?.unbind(OWLBEAR_AUTH_COMPLETED_EVENT, handler)
+                pusherService.unsubscribe(channelName)
+            } else if (channelName) {
+                pusherService.unsubscribe(channelName)
+            }
+        }
+    }, [channelId, nonce])
+
+    React.useEffect(() => {
+        if (!isLoaded || !isSignedIn || !channelId || !nonce || publishStartedRef.current) return
+
+        let cancelled = false
+        publishStartedRef.current = true
         setStatus("publishing")
         setErrorMessage(null)
 
@@ -41,7 +86,14 @@ export function OwlbearAuthBridgePage() {
                     throw new Error(payload?.error ?? "Não foi possível avisar a action do Owlbear.")
                 }
 
-                if (!cancelled) setStatus("published")
+                if (!cancelled) {
+                    setStatus("waiting-action")
+                    window.setTimeout(() => {
+                        if (!cancelled) {
+                            setStatus((current) => current === "waiting-action" ? "sent" : current)
+                        }
+                    }, AUTH_COMPLETED_TIMEOUT_MS)
+                }
             } catch (error) {
                 console.error("Failed to publish Owlbear auth handoff", error)
                 if (!cancelled) {
@@ -54,7 +106,7 @@ export function OwlbearAuthBridgePage() {
         return () => {
             cancelled = true
         }
-    }, [channelId, isLoaded, isSignedIn, nonce, status])
+    }, [channelId, isLoaded, isSignedIn, nonce])
 
     if (!channelId || !nonce) {
         return (
@@ -68,12 +120,14 @@ export function OwlbearAuthBridgePage() {
         )
     }
 
-    if (!isLoaded || status === "publishing") {
+    if (!isLoaded || status === "publishing" || status === "waiting-action") {
         return (
             <div className="flex min-h-dvh items-center justify-center bg-slate-950 p-6 text-white">
                 <div className="rounded-3xl border border-white/10 bg-white/10 p-6 text-center">
                     <Loader2 className="mx-auto h-9 w-9 animate-spin text-violet-200" />
-                    <p className="mt-4 text-sm text-white/70">Conectando sua conta ao Owlbear...</p>
+                    <p className="mt-4 text-sm text-white/70">
+                        {status === "waiting-action" ? "Aguardando a action confirmar o login..." : "Conectando sua conta ao Owlbear..."}
+                    </p>
                 </div>
             </div>
         )
@@ -96,16 +150,20 @@ export function OwlbearAuthBridgePage() {
     return (
         <div className="flex min-h-dvh items-center justify-center bg-slate-950 p-6 text-white">
             <div className="w-full max-w-md rounded-3xl border border-emerald-400/20 bg-emerald-500/10 p-6 text-center">
-                {status === "published" ? (
+                {status === "completed" || status === "sent" ? (
                     <CheckCircle2 className="mx-auto h-10 w-10 text-emerald-200" />
                 ) : (
                     <ShieldAlert className="mx-auto h-10 w-10 text-amber-200" />
                 )}
-                <h1 className="mt-4 text-xl font-bold">{status === "published" ? "Login concluído" : "Não foi possível concluir"}</h1>
+                <h1 className="mt-4 text-xl font-bold">
+                    {status === "completed" ? "Pronto!" : status === "sent" ? "Login enviado" : "Não foi possível concluir"}
+                </h1>
                 <p className="mt-2 text-sm text-white/70">
-                    {status === "published"
-                        ? "Volte para a action aberta no Owlbear. Ela será atualizada automaticamente."
-                        : errorMessage ?? "Tente abrir o login pela action do Owlbear novamente."}
+                    {status === "completed"
+                        ? "Sua conta foi conectada ao Owlbear. Pode fechar esta aba."
+                        : status === "sent"
+                            ? "O login foi enviado para a action. Se ela ainda não atualizou, feche e abra a action novamente."
+                            : errorMessage ?? "Tente abrir o login pela action do Owlbear novamente."}
                 </p>
             </div>
         </div>
