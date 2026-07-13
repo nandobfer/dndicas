@@ -1,47 +1,85 @@
-"use client";
+"use client"
 
-import { useUser, useAuth as useClerkAuth } from '@clerk/nextjs';
+import * as React from "react"
+import { signOut } from "next-auth/react"
+import { AUTH_SESSION_CHANGED_EVENT, notifyAuthSessionChanged } from "@/features/auth/auth-session-events"
 
-/**
- * Hook wrapper para autenticação com Clerk
- * Fornece informações do usuário autenticado e funções de controle
- *
- * @example
- * ```tsx
- * const { user, isLoaded, isSignedIn, signOut } = useAuth();
- *
- * if (!isLoaded) return <div>Loading...</div>;
- * if (!isSignedIn) return <div>Please sign in</div>;
- *
- * return <div>Welcome {user.firstName}</div>;
- * ```
- */
+type AuthSessionUser = {
+    id: string
+    name?: string | null
+    email?: string | null
+    image?: string | null
+    username?: string | null
+    role?: "admin" | "user"
+}
+
+type AuthSessionResponse = {
+    user?: AuthSessionUser | null
+}
+
 export function useAuth() {
-  const { user, isLoaded: userLoaded, isSignedIn } = useUser();
-  const { signOut, userId } = useClerkAuth();
+    const [user, setUser] = React.useState<AuthSessionUser | null>(null)
+    const [isLoaded, setIsLoaded] = React.useState(true)
 
-  return {
-      /** Objeto do usuário autenticado (Clerk User) */
-      user,
-      /** ID do usuário (string) */
-      userId,
-      /** Se os dados do Clerk foram carregados */
-      isLoaded: userLoaded,
-      /** Se o usuário está autenticado */
-      isSignedIn,
-      /** Função para fazer logout */
-      signOut: () => signOut(),
-      /** Email do usuário */
-      email: user?.primaryEmailAddress?.emailAddress || null,
-      /** Nome completo do usuário */
-      fullName: user?.fullName || null,
-      /** Primeiro nome */
-      firstName: user?.firstName || null,
-      /** Sobrenome */
-      lastName: user?.lastName || null,
-      /** URL da imagem de perfil */
-      imageUrl: user?.imageUrl || null,
-      /** Se o usuário é um administrador */
-      isAdmin: user?.publicMetadata?.role === "admin"
-  }
+    const loadSession = React.useCallback(async (signal?: AbortSignal) => {
+        if (typeof fetch !== "function") return
+        setIsLoaded(false)
+        try {
+            const response = await fetch("/api/auth/session", { cache: "no-store", credentials: "same-origin", signal })
+            if (!response.ok) {
+                setUser(null)
+                return
+            }
+            const session = await response.json() as AuthSessionResponse
+            setUser(session.user ?? null)
+        } catch (error) {
+            if (error instanceof DOMException && error.name === "AbortError") return
+            setUser(null)
+        } finally {
+            setIsLoaded(true)
+        }
+    }, [])
+
+    React.useEffect(() => {
+        let cancelled = false
+        const controller = new AbortController()
+
+        const handleSessionChanged = (event: Event) => {
+            if (cancelled) return
+            const reason = event instanceof CustomEvent ? event.detail : "refresh"
+            if (reason === "signed-out") {
+                setUser(null)
+                setIsLoaded(true)
+                return
+            }
+            void loadSession()
+        }
+
+        void loadSession(controller.signal)
+        window.addEventListener(AUTH_SESSION_CHANGED_EVENT, handleSessionChanged)
+        return () => {
+            cancelled = true
+            controller.abort()
+            window.removeEventListener(AUTH_SESSION_CHANGED_EVENT, handleSessionChanged)
+        }
+    }, [loadSession])
+
+    const nameParts = user?.name?.trim().split(/\s+/).filter(Boolean) ?? []
+
+    return {
+        user,
+        userId: user?.id ?? null,
+        isLoaded,
+        isSignedIn: Boolean(user?.id),
+        signOut: (callbackUrl = "/sign-in") => {
+            notifyAuthSessionChanged("signed-out")
+            return signOut({ callbackUrl, redirect: false })
+        },
+        email: user?.email || null,
+        fullName: user?.name || null,
+        firstName: nameParts[0] ?? null,
+        lastName: nameParts.length > 1 ? nameParts.slice(1).join(" ") : null,
+        imageUrl: user?.image || null,
+        isAdmin: user?.role === "admin",
+    }
 }

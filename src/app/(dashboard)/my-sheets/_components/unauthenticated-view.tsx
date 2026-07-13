@@ -1,6 +1,6 @@
 "use client"
 
-import { SignIn } from "@clerk/nextjs"
+import { SignIn } from "@/features/auth/auth-components"
 import { motion } from "framer-motion"
 import { ScrollText, Sparkles, Shield, Users, PenLine } from "lucide-react"
 import { GlassCard, GlassCardContent } from "@/components/ui/glass-card"
@@ -82,7 +82,7 @@ export function UnauthenticatedView({ redirectUrl = "/my-sheets" }: Unauthentica
                     ))}
                 </div>
 
-                {/* Right — Clerk SignIn, sticky on desktop */}
+                {/* Right — local sign-in, sticky on desktop */}
                 <div className="w-full lg:w-auto flex-shrink-0 flex justify-center lg:sticky lg:top-6">
                     <SignIn routing="hash" fallbackRedirectUrl={redirectUrl} forceRedirectUrl={redirectUrl} />
                 </div>

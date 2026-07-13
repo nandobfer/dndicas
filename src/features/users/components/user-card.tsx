@@ -44,7 +44,7 @@ export function UserCard({ user, showStatus = true }: UserCardProps) {
                             </Chip>
                         </div>
                         <p className="text-[10px] uppercase font-bold tracking-widest text-white/40 mt-0.5">
-                            ID: {user.clerkId.slice(0, 10)}...
+                            ID: {user.id.slice(0, 10)}...
                         </p>
                     </div>
                 </div>

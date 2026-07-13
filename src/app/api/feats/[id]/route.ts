@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { auth } from '@clerk/nextjs/server';
+import { auth } from '@/core/auth/server';
 import { updateFeatSchema } from '@/features/feats/api/validation';
 import { getFeatById, updateFeat, deleteFeat } from '@/features/feats/api/feats-service';
 

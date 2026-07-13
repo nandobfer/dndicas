@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
-import { auth } from "@clerk/nextjs/server"
+import { auth } from "@/core/auth/server"
 import { PUSHER_ORIGIN_HEADER } from "@/core/realtime/pusher-origin"
 import { applyLongRest } from "@/features/character-sheets/api/character-sheets-service"
 

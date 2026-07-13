@@ -571,4 +571,4 @@ components:
         Autenticação via Clerk. Token JWT obtido automaticamente pelo
         cliente (Next.js middleware injeta headers de auth).
         
-        No código, use `auth()` from `@clerk/nextjs/server`.
+        No código, use `auth()` from `@/core/auth/server`.

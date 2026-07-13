@@ -6,7 +6,7 @@
 
 ## Visão Geral
 
-O módulo de Users gerencia usuários do sistema Dungeons & Dicas, incluindo sincronização com Clerk, CRUD administrativo e controle de roles.
+O módulo de Users gerencia usuários locais do sistema Dungeons & Dicas, incluindo autenticação Auth.js, CRUD administrativo e controle de roles.
 
 ---
 
@@ -39,7 +39,7 @@ src/features/users/
 
 | Campo | Tipo | Obrigatório | Descrição |
 |-------|------|-------------|-----------|
-| `clerkId` | String | Sim | ID do usuário no Clerk |
+| `legacyClerkId` | String | Não | ID legado usado apenas durante migração |
 | `username` | String | Sim | Nome de usuário (único) |
 | `email` | String | Sim | Email (único) |
 | `name` | String | Não | Nome completo |
@@ -158,10 +158,10 @@ import { createUserSchema, updateUserSchema } from '@/features/users/api/validat
 
 1. **Soft Delete**: Exclusão marca status como `inactive`, não remove registro
 2. **Auto-exclusão proibida**: Usuário não pode excluir a si mesmo
-3. **Sincronização Clerk**: Usuários são criados/atualizados via webhook ou middleware
+3. **Autenticação local**: Usuários são criados/atualizados no MongoDB e autenticados pelo Auth.js
 4. **Roles**: Apenas `admin` pode gerenciar usuários
 5. **Auditoria**: Todas operações CRUD são registradas em AuditLog
-6. **Status local**: `inactive` bloqueia acesso no backend local; não use `banUser`/`unbanUser` do Clerk porque são recursos Pro
+6. **Status local**: `inactive` bloqueia acesso no backend local
 
 ---
 
@@ -201,4 +201,4 @@ await deleteUser(userId); // Marca como inactive
 - `react-hook-form` - Formulários
 - `zod` - Validação
 - `framer-motion` - Animações
-- `@clerk/nextjs` - Autenticação
+- `next-auth` - Autenticação Auth.js

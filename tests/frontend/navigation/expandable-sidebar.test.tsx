@@ -4,23 +4,28 @@ import * as React from 'react'
 import { ExpandableSidebar } from '@/components/ui/expandable-sidebar'
 
 let pathname = '/'
+const replace = vi.fn()
+const refresh = vi.fn()
+const signOut = vi.fn()
 
 vi.mock('next/navigation', () => ({
     usePathname: () => pathname,
+    useRouter: () => ({ replace, refresh }),
 }))
 
 vi.mock('next/image', () => ({
     default: ({ alt }: { alt: string }) => <span aria-label={alt} />,
 }))
 
-vi.mock('@clerk/nextjs', () => ({
-    UserButton: () => <button type="button">Minha Conta</button>,
-    SignedIn: ({ children }: { children: React.ReactNode }) => <>{children}</>,
-    SignedOut: () => null,
-}))
-
 vi.mock('@/core/hooks/useAuth', () => ({
-    useAuth: () => ({ isSignedIn: true, isAdmin: false }),
+    useAuth: () => ({
+        isSignedIn: true,
+        isAdmin: false,
+        fullName: 'Nando Burgos',
+        email: 'nando@example.com',
+        imageUrl: 'https://example.com/avatar.png',
+        signOut,
+    }),
 }))
 
 vi.mock('framer-motion', () => {
@@ -57,6 +62,7 @@ vi.mock('framer-motion', () => {
             aside: createMotionComponent('aside'),
             div: createMotionComponent('div'),
             span: createMotionComponent('span'),
+            button: createMotionComponent('button'),
         },
     }
 })
@@ -87,5 +93,14 @@ describe('ExpandableSidebar', () => {
 
         link = screen.getByText('Monstros').closest('a')
         expect(link?.firstElementChild).toHaveClass('bg-white/15')
+    })
+
+    it('shows the authenticated user name, avatar and textual sign out action', () => {
+        render(<ExpandableSidebar isExpanded={true} onExpand={vi.fn()} onCollapse={vi.fn()} />)
+
+        expect(screen.getByText('Nando Burgos')).toBeInTheDocument()
+        expect(screen.getByRole('img', { name: 'Nando Burgos' })).toHaveAttribute('src', 'https://example.com/avatar.png')
+        expect(screen.getByRole('button', { name: /sair/i })).toBeInTheDocument()
+        expect(screen.queryByText('Minha Conta')).not.toBeInTheDocument()
     })
 })

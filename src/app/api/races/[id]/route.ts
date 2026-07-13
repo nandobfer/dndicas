@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
-import { auth } from "@clerk/nextjs/server"
+import { auth } from "@/core/auth/server"
 import { RaceModel } from "@/features/races/models/race"
 import dbConnect from "@/core/database/db"
 import { z } from "zod"

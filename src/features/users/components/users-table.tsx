@@ -160,7 +160,7 @@ export function UsersTable({ users, total, page, limit, isLoading = false, onEdi
                                                         <Pencil className="h-4 w-4" />
                                                         Editar
                                                     </GlassDropdownMenuItem>
-                                                    {user.clerkId === userId ? (
+                                                    {user.id === userId ? (
                                                         <GlassTooltip>
                                                             <GlassTooltipTrigger asChild>
                                                                 <div>

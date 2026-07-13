@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { auth } from "@clerk/nextjs/server";
+import { auth } from "@/core/auth/server";
 import { ItemModel } from "@/features/items/database/item";
 import { updateItemSchema } from "@/features/items/api/validation";
 import { createAuditLog } from "@/features/users/api/audit-service";

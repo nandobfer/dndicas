@@ -3,7 +3,7 @@ import { importFresh } from "../helpers/module"
 
 describe("dice routes", () => {
     beforeEach(() => {
-        vi.doMock("@clerk/nextjs/server", () => ({
+        vi.doMock("@/core/auth/server", () => ({
             auth: vi.fn(async () => ({ userId: null })),
         }))
     })

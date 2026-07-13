@@ -128,13 +128,13 @@ export async function GET(request: NextRequest) {
 
         // Busca os usuários atuais para garantir que avatar e status estejam presentes (especialmente para logs antigos)
         const currentUsers = await User.find({
-            $or: [{ _id: { $in: performerIds.filter((id) => /^[0-9a-fA-F]{24}$/.test(id)) } }, { clerkId: { $in: performerIds } }]
+            $or: [{ _id: { $in: performerIds.filter((id) => /^[0-9a-fA-F]{24}$/.test(id)) } }, { legacyClerkId: { $in: performerIds } }]
         }).lean()
 
         const userMap = new Map()
         currentUsers.forEach((u) => {
             userMap.set(String(u._id), u)
-            userMap.set(u.clerkId, u)
+            if (u.legacyClerkId) userMap.set(u.legacyClerkId, u)
         })
 
         const normalizedLogs = logs.map((log) => {

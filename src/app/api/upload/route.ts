@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { uploadFile, getFileUrl, getFile } from "@/core/storage/s3"
-import { auth } from "@clerk/nextjs/server"
+import { auth } from "@/core/auth/server"
 
 // Max file size: 5MB
 const MAX_FILE_SIZE = 5 * 1024 * 1024

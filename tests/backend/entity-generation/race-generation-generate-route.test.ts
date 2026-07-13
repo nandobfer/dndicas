@@ -4,7 +4,7 @@ import { importFresh } from "../helpers/module"
 
 describe("POST /api/admin/entity-generation/races/[id]/generate", () => {
     it("requires an admin user", async () => {
-        vi.doMock("@clerk/nextjs/server", () => ({
+        vi.doMock("@/core/auth/server", () => ({
             currentUser: vi.fn().mockResolvedValue(null),
         }))
 
@@ -25,7 +25,7 @@ describe("POST /api/admin/entity-generation/races/[id]/generate", () => {
             return { current: { _id: "race-1" }, candidates: [{ candidateId: "candidate-1" }] }
         })
 
-        vi.doMock("@clerk/nextjs/server", () => ({
+        vi.doMock("@/core/auth/server", () => ({
             currentUser: vi.fn().mockResolvedValue({ id: "user-1", publicMetadata: { role: "admin" } }),
         }))
         vi.doMock("@/features/entity-generation/server/race-ai-generation-service", () => ({
@@ -56,7 +56,7 @@ describe("POST /api/admin/entity-generation/races/[id]/generate", () => {
         const publishProgress = vi.fn().mockResolvedValue(undefined)
         const publishFailure = vi.fn().mockResolvedValue(undefined)
 
-        vi.doMock("@clerk/nextjs/server", () => ({
+        vi.doMock("@/core/auth/server", () => ({
             currentUser: vi.fn().mockResolvedValue({ id: "user-1", publicMetadata: { role: "admin" } }),
         }))
         vi.doMock("@/features/entity-generation/server/race-ai-generation-service", () => ({

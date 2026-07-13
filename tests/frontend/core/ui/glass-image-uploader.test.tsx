@@ -53,6 +53,22 @@ describe('GlassImageUploader', () => {
         expect(titledButtons).toEqual(['Trocar imagem', 'Gerar imagem com IA', 'Remover imagem']);
     });
 
+    it('hides AI actions when AI is disabled', () => {
+        const { container } = render(
+            <GlassImageUploader
+                value="/api/upload?key=users/avatar.png"
+                onChange={vi.fn()}
+                onRemove={vi.fn()}
+                enableAI={false}
+            />
+        );
+
+        const titledButtons = Array.from(container.querySelectorAll('button[title]')).map((button) => button.getAttribute('title'));
+
+        expect(titledButtons).toEqual(['Trocar imagem', 'Remover imagem']);
+        expect(screen.queryByTitle('Gerar imagem com IA')).not.toBeInTheDocument();
+    });
+
     it('posts a generic fallback prompt when no explicit AI payload is available', async () => {
         const onChange = vi.fn();
         const fetchMock = vi.mocked(global.fetch);

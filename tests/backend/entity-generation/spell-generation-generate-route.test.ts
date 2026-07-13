@@ -4,7 +4,7 @@ import { importFresh } from "../helpers/module"
 
 describe("POST /api/admin/entity-generation/spells/[id]/generate", () => {
     it("requires an admin user", async () => {
-        vi.doMock("@clerk/nextjs/server", () => ({
+        vi.doMock("@/core/auth/server", () => ({
             currentUser: vi.fn().mockResolvedValue(null),
         }))
 
@@ -25,7 +25,7 @@ describe("POST /api/admin/entity-generation/spells/[id]/generate", () => {
             return { current: { _id: "spell-1" }, candidates: [{ candidateId: "magic missile:xphb:1" }] }
         })
 
-        vi.doMock("@clerk/nextjs/server", () => ({
+        vi.doMock("@/core/auth/server", () => ({
             currentUser: vi.fn().mockResolvedValue({ id: "user-1", publicMetadata: { role: "admin" } }),
         }))
         vi.doMock("@/features/entity-generation/server/spell-ai-generation-service", () => ({

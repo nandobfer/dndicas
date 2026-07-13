@@ -7,7 +7,7 @@ export interface Feedback {
     type: FeedbackType;
     status: FeedbackStatus;
     priority?: FeedbackPriority;
-    createdBy: string; // Clerk userId
+    createdBy: string; // Local userId
     creatorName: string;
     creatorEmail?: string;
     createdAt: string;

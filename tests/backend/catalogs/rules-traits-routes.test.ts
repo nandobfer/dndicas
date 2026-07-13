@@ -12,7 +12,7 @@ describe('rules and traits backend routes', () => {
         const sort = vi.fn(() => ({ skip }));
         const find = vi.fn(() => ({ sort }));
 
-        vi.doMock('@clerk/nextjs/server', () => ({
+        vi.doMock('@/core/auth/server', () => ({
             auth: vi.fn(),
         }));
         vi.doMock('@/core/database/models/reference', () => ({
@@ -37,14 +37,15 @@ describe('rules and traits backend routes', () => {
             status: 'active',
             source: { $in: expect.arrayContaining([expect.any(RegExp)]) },
         }));
-        const sourceMatchers = (find.mock.calls[0]?.[0] as { source: { $in: RegExp[] } }).source.$in
+        const [findQuery] = find.mock.calls.at(0) as unknown as [{ source: { $in: RegExp[] } }]
+        const sourceMatchers = findQuery.source.$in
         expect(sourceMatchers.some((regex) => regex.test('PHB p. 1'))).toBe(true)
         expect(sourceMatchers.some((regex) => regex.test('LDJ pág. 72'))).toBe(true)
         expect(payload.items).toEqual(items);
     });
 
     it('POST /api/rules returns 409 for duplicate names', async () => {
-        vi.doMock('@clerk/nextjs/server', () => ({
+        vi.doMock('@/core/auth/server', () => ({
             auth: vi.fn().mockResolvedValue({ userId: 'clerk-1' }),
         }));
         vi.doMock('@/core/database/models/reference', () => ({
@@ -80,7 +81,7 @@ describe('rules and traits backend routes', () => {
         const applyFuzzySearch = vi.fn().mockReturnValue([{ _id: 'trait-2', name: 'Fúria' }]);
         const sort = vi.fn().mockResolvedValue([{ _id: 'trait-1', name: 'Ataque', status: 'active' }]);
 
-        vi.doMock('@clerk/nextjs/server', () => ({
+        vi.doMock('@/core/auth/server', () => ({
             auth: vi.fn(),
         }));
         vi.doMock('@/features/traits/database/trait', () => ({
@@ -111,7 +112,7 @@ describe('rules and traits backend routes', () => {
     });
 
     it('POST /api/traits returns 400 for invalid bodies', async () => {
-        vi.doMock('@clerk/nextjs/server', () => ({
+        vi.doMock('@/core/auth/server', () => ({
             auth: vi.fn().mockResolvedValue({ userId: 'clerk-1' }),
         }));
         vi.doMock('@/features/traits/database/trait', () => ({

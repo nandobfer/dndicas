@@ -1,6 +1,6 @@
 /**
  * @fileoverview User Mongoose model for MongoDB persistence.
- * Syncs with Clerk authentication and supports soft delete via status field.
+ * Stores local authentication and supports soft delete via status field.
  *
  * @see specs/000/data-model.md
  */
@@ -13,8 +13,14 @@ import type { UserRole, UserStatus } from '../types/user.types';
  */
 export interface IUser extends Document {
     _id: mongoose.Types.ObjectId
-    /** Clerk user ID for authentication linking */
-    clerkId: string
+    /** Previous Clerk user ID kept temporarily for migration/audit purposes */
+    legacyClerkId?: string
+    /** Password hash used by Auth.js credentials login */
+    passwordHash?: string
+    /** Whether the user must define a local password before signing in */
+    passwordSetupRequired: boolean
+    /** Last successful login timestamp */
+    lastLoginAt?: Date
     /** Unique username */
     username: string
     /** User email */
@@ -39,8 +45,8 @@ export interface IUser extends Document {
  * User model static methods interface.
  */
 interface IUserModel extends Model<IUser> {
-    /** Find user by Clerk ID */
-    findByClerkId(clerkId: string): Promise<IUser | null>
+    /** Find user by previous Clerk ID during migration */
+    findByLegacyClerkId(legacyClerkId: string): Promise<IUser | null>
     /** Find user by email */
     findByEmail(email: string): Promise<IUser | null>
     /** Find user by username */
@@ -49,11 +55,20 @@ interface IUserModel extends Model<IUser> {
 
 const UserSchema = new Schema<IUser>(
     {
-        clerkId: {
+        legacyClerkId: {
             type: String,
-            required: [true, "Clerk ID é obrigatório"],
-            unique: true,
+        },
+        passwordHash: {
+            type: String,
+            select: false,
+        },
+        passwordSetupRequired: {
+            type: Boolean,
+            default: false,
             index: true,
+        },
+        lastLoginAt: {
+            type: Date,
         },
         username: {
             type: String,
@@ -127,10 +142,13 @@ UserSchema.index({ status: 1, createdAt: -1 })
 // Text index for search
 UserSchema.index({ username: "text", email: "text", name: "text" }, { weights: { name: 3, username: 2, email: 1 } })
 
+UserSchema.index({ legacyClerkId: 1 }, { unique: true, sparse: true })
+
 // Static methods
-UserSchema.statics.findByClerkId = function (clerkId: string) {
-    return this.findOne({ clerkId, deleted: { $ne: true } })
+UserSchema.statics.findByLegacyClerkId = function (legacyClerkId: string) {
+    return this.findOne({ legacyClerkId, deleted: { $ne: true } })
 }
+
 
 UserSchema.statics.findByEmail = function (email: string) {
     return this.findOne({ email: email.toLowerCase(), deleted: { $ne: true } })
@@ -142,7 +160,7 @@ UserSchema.statics.findByUsername = function (username: string) {
 
 /**
  * User model for MongoDB operations.
- * Handles user persistence synced with Clerk authentication.
+ * Handles user persistence for local Auth.js authentication.
  */
 export const User: IUserModel = (mongoose.models.User as IUserModel) || mongoose.model<IUser, IUserModel>("User", UserSchema)
 

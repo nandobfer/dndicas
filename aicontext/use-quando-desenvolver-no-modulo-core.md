@@ -27,7 +27,7 @@ src/core/
 │   ├── genai.ts       # Cliente e funções principais
 │   └── usage-log.ts   # Schema e logging de uso
 ├── auth/              # Helpers de autenticação
-│   └── helpers.ts     # Funções auxiliares para Clerk
+│   └── helpers.ts     # Funções auxiliares para Auth.js
 ├── context/           # React Contexts globais
 │   └── app-context.tsx
 ├── database/          # MongoDB e auditoria
@@ -324,7 +324,7 @@ npm test  # Garanta que tudo funciona
 Teste especialmente:
 - Next.js
 - React
-- Clerk
+- Auth.js
 - Mongoose
 - ShadCN components
 

@@ -4,7 +4,7 @@ import { importFresh } from '../helpers/module';
 
 describe('core/auth helpers', () => {
     it('requireAuth returns the current user id', async () => {
-        vi.doMock('@clerk/nextjs/server', () => ({
+        vi.doMock('@/core/auth/server', () => ({
             auth: vi.fn().mockResolvedValue({ userId: 'user-1' }),
             currentUser: vi.fn(),
         }));
@@ -18,7 +18,7 @@ describe('core/auth helpers', () => {
     });
 
     it('requireAuth throws when the request is anonymous', async () => {
-        vi.doMock('@clerk/nextjs/server', () => ({
+        vi.doMock('@/core/auth/server', () => ({
             auth: vi.fn().mockResolvedValue({ userId: null }),
             currentUser: vi.fn(),
         }));
@@ -32,7 +32,7 @@ describe('core/auth helpers', () => {
     });
 
     it('hasAnyRole returns false when the user has no role', async () => {
-        vi.doMock('@clerk/nextjs/server', () => ({
+        vi.doMock('@/core/auth/server', () => ({
             auth: vi.fn(),
             currentUser: vi.fn().mockResolvedValue({
                 publicMetadata: {},
@@ -48,7 +48,7 @@ describe('core/auth helpers', () => {
     });
 
     it('hasAllRoles only returns true for the single assigned role', async () => {
-        vi.doMock('@clerk/nextjs/server', () => ({
+        vi.doMock('@/core/auth/server', () => ({
             auth: vi.fn(),
             currentUser: vi.fn().mockResolvedValue({
                 publicMetadata: { role: 'admin' },
@@ -65,13 +65,14 @@ describe('core/auth helpers', () => {
     });
 
     it('getUserInfo derives the primary email and name payload', async () => {
-        vi.doMock('@clerk/nextjs/server', () => ({
+        vi.doMock('@/core/auth/server', () => ({
             auth: vi.fn(),
             currentUser: vi.fn().mockResolvedValue({
                 id: 'user-1',
                 primaryEmailAddress: { emailAddress: 'hero@example.com' },
                 firstName: 'Hero',
                 lastName: 'Player',
+                fullName: 'Hero Player',
                 imageUrl: 'https://example.com/avatar.png',
             }),
         }));
@@ -92,7 +93,7 @@ describe('core/auth helpers', () => {
     });
 
     it('isEmailVerified checks the primary email verification status', async () => {
-        vi.doMock('@clerk/nextjs/server', () => ({
+        vi.doMock('@/core/auth/server', () => ({
             auth: vi.fn(),
             currentUser: vi.fn().mockResolvedValue({
                 primaryEmailAddressId: 'email-1',
@@ -113,7 +114,7 @@ describe('core/auth helpers', () => {
     it('logAuthAction writes an audit entry and swallows audit failures', async () => {
         const logAction = vi.fn().mockRejectedValue(new Error('db down'));
 
-        vi.doMock('@clerk/nextjs/server', () => ({
+        vi.doMock('@/core/auth/server', () => ({
             auth: vi.fn().mockResolvedValue({ userId: 'user-99' }),
             currentUser: vi.fn(),
         }));

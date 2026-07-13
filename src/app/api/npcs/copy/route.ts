@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
-import { auth } from "@clerk/nextjs/server"
+import { auth } from "@/core/auth/server"
 import { z } from "zod"
 import dbConnect from "@/core/database/db"
 import { MonsterModel } from "@/features/monsters/models/monster"

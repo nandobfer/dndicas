@@ -10,7 +10,7 @@ const api: AxiosInstance = axios.create({
 // Request Interceptor
 api.interceptors.request.use(
     (config) => {
-        // Add logic here (e.g., adding tokens if not using Clerk's automatic headers)
+        // Add logic here if a route needs custom auth headers.
         return config;
     },
     (error) => {

@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server"
-import { auth } from "@clerk/nextjs/server"
+import { auth } from "@/core/auth/server"
 import { CharacterSheet } from "@/features/character-sheets/models/character-sheet"
 import {
     buildAnonymousGmSessionUserId,

@@ -1,4 +1,4 @@
-import { currentUser } from "@clerk/nextjs/server"
+import { currentUser } from "@/core/auth/server"
 import { NextRequest, NextResponse } from "next/server"
 import { PUSHER_ORIGIN_HEADER } from "@/core/realtime/pusher-origin"
 import {

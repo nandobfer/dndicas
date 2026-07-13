@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
-import { auth } from "@clerk/nextjs/server"
+import { auth } from "@/core/auth/server"
 import dbConnect from "@/core/database/db"
 import { UserNpcModel } from "@/features/monsters/models/user-npc"
 import { updateMonsterSchema } from "@/features/monsters/api/validation"
