@@ -103,7 +103,7 @@ src/app/(dashboard)/_components/
 - Level range: `level: { $lte: levelMaxNum }`
 
 ### `POST /api/feats`
-**Auth**: Clerk (requires authentication)  
+**Auth**: Auth.js (requires authentication)  
 **Validation**: `createFeatSchema` (Zod)  
 **Uniqueness**: Case-insensitive name check  
 **Audit**: Creates log with action='CREATE', entity='Feat'
@@ -112,12 +112,12 @@ src/app/(dashboard)/_components/
 **Response**: Single feat object
 
 ### `PUT /api/feats/:id`
-**Auth**: Clerk  
+**Auth**: Auth.js  
 **Validation**: `updateFeatSchema` (partial updates)  
 **Audit**: Creates log with previousData + newData
 
 ### `DELETE /api/feats/:id`
-**Auth**: Clerk  
+**Auth**: Auth.js  
 **Audit**: Creates log with previousData
 
 ### `GET /api/feats/search`
@@ -282,7 +282,7 @@ The Feats module follows the **exact same patterns** as Rules and Traits modules
 - Mongoose model with indexes and validators
 - Zod validation on API boundaries
 - TanStack Query for data fetching + mutations
-- Clerk authentication on write endpoints
+- Auth.js authentication on write endpoints
 - Audit logging with previousData/newData
 - Rich text editor with mentions + S3
 - GlassUI components (GlassCard, GlassInput, GlassModal)
@@ -338,7 +338,7 @@ The Feats module follows the **exact same patterns** as Rules and Traits modules
 
 ## Security
 
-- **Authentication**: Clerk auth on POST/PUT/DELETE
+- **Authentication**: Auth.js auth on POST/PUT/DELETE
 - **Authorization**: Only authenticated users can create/edit/delete
 - **Validation**: Zod schemas prevent invalid data
 - **Sanitization**: HTML stored as-is, rendered via DOMParser (XSS-safe)
@@ -374,7 +374,7 @@ The Feats module follows the **exact same patterns** as Rules and Traits modules
 - Mongoose 8.x for MongoDB
 - TanStack Query v5 for data fetching
 - Zod 3.x for validation
-- Clerk for authentication
+- Auth.js for authentication
 - Framer Motion 11.x for animations
 - Tippy.js for tooltips
 - date-fns for date formatting

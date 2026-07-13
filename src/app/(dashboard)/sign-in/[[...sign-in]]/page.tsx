@@ -1,4 +1,4 @@
-import { SignIn } from "@clerk/nextjs"
+import { SignIn } from "@/features/auth/auth-components"
 
 export default function SignInPage() {
     return (

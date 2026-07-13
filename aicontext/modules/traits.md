@@ -74,7 +74,7 @@ interface ITrait {
 ## API Endpoints
 
 **Base**: `/api/traits`  
-**Authentication**: Clerk (required for mutations)  
+**Authentication**: Auth.js (required for mutations)  
 **Contract**: [contracts/traits.yaml](../../specs/002-traits-catalog/contracts/traits.yaml)
 
 ### Endpoints
@@ -386,7 +386,7 @@ Habilidade: {
 1. **Mention not showing**: Ensure `/api/traits/search` endpoint returns `entityType: "Habilidade"` in each result
 2. **Unique name error**: MongoDB unique index enforced - check name uniqueness before save
 3. **HTML not rendering**: Verify `EntityDescription` component is used to render trait descriptions
-4. **Audit log missing userId**: Ensure Clerk `auth()` is called in all mutation endpoints
+4. **Audit log missing userId**: Ensure internal `auth()` is called in all mutation endpoints
 5. **Type errors**: Keep frontend types (`Trait`) separate from Mongoose types (`ITrait`)
 
 ---

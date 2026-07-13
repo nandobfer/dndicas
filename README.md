@@ -48,13 +48,9 @@ cp .env.local.example .env.local
 # Database
 MONGODB_URI=mongodb://localhost:27017/my_database
 
-# Auth (Clerk) - OBRIGATÓRIO
-NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=pk_test_...
-CLERK_SECRET_KEY=sk_test_...
-NEXT_PUBLIC_CLERK_SIGN_IN_URL=/sign-in
-NEXT_PUBLIC_CLERK_SIGN_UP_URL=/sign-up
-NEXT_PUBLIC_CLERK_AFTER_SIGN_IN_URL=/
-NEXT_PUBLIC_CLERK_AFTER_SIGN_UP_URL=/
+# Auth.js - OBRIGATÓRIO
+AUTH_SECRET=gere_um_secret_forte
+AUTH_URL=http://localhost:3000
 
 # AI (Google Gemini)
 GOOGLE_API_KEY=AIza...
@@ -307,28 +303,28 @@ export function MyButton(props) {
 - Verifique se o MongoDB está rodando
 - Verifique `MONGODB_URI` no `.env.local`
 
-### Clerk não autentica / Redirecionamento não funciona
+### Auth.js não autentica / Redirecionamento não funciona
 
 **Sintomas**:
 - Erro: "User is not signed in"
 - Acesso direto a rotas protegidas sem login
-- Componentes do Clerk não renderizam
+- Login retorna para a tela inicial sem sessão
 
 **Solução**:
-1. Verifique se **TODAS** as variáveis do Clerk estão no `.env.local`:
+1. Verifique se as variáveis de autenticação estão no `.env.local`:
    ```env
-   NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=pk_test_...
-   CLERK_SECRET_KEY=sk_test_...
-   NEXT_PUBLIC_CLERK_SIGN_IN_URL=/sign-in
-   NEXT_PUBLIC_CLERK_SIGN_UP_URL=/sign-up
-   NEXT_PUBLIC_CLERK_AFTER_SIGN_IN_URL=/
-   NEXT_PUBLIC_CLERK_AFTER_SIGN_UP_URL=/
+   AUTH_SECRET=...
+   AUTH_URL=http://localhost:3000
+   NEXTAUTH_SECRET=...
+   NEXTAUTH_URL=http://localhost:3000
+   GOOGLE_CLIENT_ID=...
+   GOOGLE_CLIENT_SECRET=...
    ```
 2. **Reinicie o servidor** após alterar `.env.local`
 3. Limpe cookies do navegador ou use modo anônimo
-4. Verifique se as chaves são válidas no dashboard do Clerk
+4. Para Google, confirme o redirect URI `/api/auth/callback/google` no Google Cloud Console
 
-**Documentação completa**: `aicontext/configuracao-clerk.md`
+**Documentação completa**: `aicontext/use-para-configurar-authjs.md`
 
 ### Storage não funciona
 

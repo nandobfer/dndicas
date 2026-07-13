@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
-import { auth } from "@clerk/nextjs/server"
+import { auth } from "@/core/auth/server"
 import { BackgroundModel } from "@/features/backgrounds/models/background"
 import { Feat as FeatModel } from "@/features/feats/models/feat"
 import { createAuditLog } from "@/features/users/api/audit-service"

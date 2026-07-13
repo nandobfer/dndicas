@@ -70,25 +70,25 @@ describe("useOwlbearSession", () => {
         })
     })
 
-    it("keeps PLAYER sessions idle while anonymous and opens after login", async () => {
+    it("opens a synthetic PLAYER session while anonymous and refreshes after login", async () => {
         openOwlbearBackendSessionMock
             .mockReset()
-            .mockResolvedValue({ token: "token-player", expiresAt: "2099-01-01T00:00:00.000Z" })
+            .mockResolvedValueOnce({ token: "token-player-anon", expiresAt: "2099-01-01T00:00:00.000Z" })
+            .mockResolvedValueOnce({ token: "token-player-auth", expiresAt: "2099-01-01T00:00:00.000Z" })
 
         const { result, rerender } = renderHook(() => useOwlbearSession(playerRuntime))
 
-        expect(result.current.session.sessionStatus).toBe("idle")
-        expect(openOwlbearBackendSessionMock).not.toHaveBeenCalled()
+        await waitFor(() => expect(result.current.session.sessionToken).toBe("token-player-anon"))
 
         authState.isSignedIn = true
         authState.userId = "user-1"
         rerender()
 
-        await waitFor(() => expect(result.current.session.sessionToken).toBe("token-player"))
-        expect(openOwlbearBackendSessionMock).toHaveBeenCalledTimes(1)
+        await waitFor(() => expect(result.current.session.sessionToken).toBe("token-player-auth"))
+        expect(openOwlbearBackendSessionMock).toHaveBeenCalledTimes(2)
     })
 
-    it("waits for Clerk userId before opening an authenticated PLAYER session", async () => {
+    it("waits for authenticated userId before refreshing an authenticated PLAYER session", async () => {
         openOwlbearBackendSessionMock
             .mockReset()
             .mockResolvedValue({ token: "token-player", expiresAt: "2099-01-01T00:00:00.000Z" })

@@ -152,15 +152,17 @@ describe("background attribute bonus distribution", () => {
 
     it("backgroundBonusComplete is true when no suggestedAttributes", () => {
         const suggestedAttrKeys: AssistedAttributeKey[] = []
-        const bonusTotal = 0
+        const bonusTotal: number = 0
         const complete = suggestedAttrKeys.length === 0 || bonusTotal === 3
         expect(complete).toBe(true)
     })
 
     it("backgroundBonusComplete requires exactly 3 points when suggestedAttributes present", () => {
         const suggestedAttrKeys: AssistedAttributeKey[] = ["strength", "dexterity"]
-        expect(suggestedAttrKeys.length === 0 || 0 === 3).toBe(false)
-        expect(suggestedAttrKeys.length === 0 || 3 === 3).toBe(true)
+        const incompleteTotal: number = 0
+        const completeTotal: number = 3
+        expect(suggestedAttrKeys.length === 0 || incompleteTotal === 3).toBe(false)
+        expect(suggestedAttrKeys.length === 0 || completeTotal === 3).toBe(true)
     })
 })
 
@@ -182,12 +184,14 @@ describe("deselect behavior in catalog selection", () => {
             _id: "race-1",
             name: "Elfo",
             speed: "9",
-            size: "Médio",
+            size: "Médio" as const,
             description: "",
             source: "PHB",
             status: "active" as const,
-            image: null,
+            image: undefined,
             traits: [],
+            spells: [],
+            variations: [],
             createdAt: new Date(),
             updatedAt: new Date(),
         }
@@ -206,7 +210,7 @@ describe("deselect behavior in catalog selection", () => {
         const background = {
             _id: "bg-1",
             name: "Soldado",
-            skillProficiencies: ["Atletismo", "Intimidação"],
+            skillProficiencies: ["Atletismo" as const, "Intimidação" as const],
             suggestedAttributes: [],
             description: "",
             source: "PHB",

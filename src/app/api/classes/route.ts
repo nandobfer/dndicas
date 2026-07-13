@@ -1,9 +1,9 @@
 import { NextRequest, NextResponse } from "next/server"
-import { auth } from "@clerk/nextjs/server"
+import { auth } from "@/core/auth/server"
 import { listClasses, createClass } from "@/features/classes/api/classes-service"
 import { classesQuerySchema, createClassSchema } from "@/features/classes/api/validation"
 import type { ClassesFilters, HitDiceType } from "@/features/classes/types/classes.types"
-import { getLocalUserByClerkId } from "@/features/users/api/get-current-user"
+import { getLocalUserById } from "@/features/users/api/get-current-user"
 
 /**
  * GET /api/classes
@@ -12,7 +12,7 @@ import { getLocalUserByClerkId } from "@/features/users/api/get-current-user"
 export async function GET(req: NextRequest) {
     try {
         const { userId } = await auth()
-        const user = userId ? await getLocalUserByClerkId(userId) : null
+        const user = userId ? await getLocalUserById(userId) : null
         const isAdmin = user?.role === "admin"
 
         const url = new URL(req.url)
@@ -58,7 +58,7 @@ export async function POST(req: NextRequest) {
 
         if (!userId) return NextResponse.json({ error: "Não autorizado" }, { status: 401 })
 
-        const user = await getLocalUserByClerkId(userId)
+        const user = await getLocalUserById(userId)
         if (!user) return NextResponse.json({ error: "Usuário não encontrado" }, { status: 404 })
 
         const isAdmin = user.role === "admin"

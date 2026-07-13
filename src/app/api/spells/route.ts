@@ -5,7 +5,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { auth, currentUser } from '@clerk/nextjs/server';
+import { auth, currentUser } from '@/core/auth/server';
 import { listSpells, createSpell } from '@/features/spells/api/spells-service';
 import { spellsQuerySchema, createSpellSchema } from '@/features/spells/api/validation';
 import type { DiceType, SpellSchool, AttributeType, SpellsFilters } from '@/features/spells/types/spells.types';

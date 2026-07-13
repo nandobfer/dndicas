@@ -102,10 +102,15 @@ export async function getAllSheetsForAdmin(search?: string, page = 1, limit = 10
 
     const [result] = await CharacterSheet.aggregate([
         {
+            $addFields: {
+                ownerObjectId: { $convert: { input: "$userId", to: "objectId", onError: null, onNull: null } },
+            },
+        },
+        {
             $lookup: {
                 from: ownerCollection,
-                localField: "userId",
-                foreignField: "clerkId",
+                localField: "ownerObjectId",
+                foreignField: "_id",
                 as: "owner",
             },
         },

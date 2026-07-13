@@ -1,6 +1,6 @@
 "use client"
 
-import { SignedIn, SignedOut, UserButton } from "@clerk/nextjs"
+import { SignedIn, SignedOut, UserButton } from "@/features/auth/auth-components"
 import { Menu, User } from "lucide-react"
 import Link from "next/link"
 import { Button } from "@/core/ui/button"
@@ -12,7 +12,7 @@ interface GlassHeaderProps {
 
 /**
  * Mobile-only Header with Liquid Glass effect.
- * Features a sidebar toggle, application title, and Clerk UserButton.
+ * Features a sidebar toggle, application title, and local account menu.
  */
 export function GlassHeader({ onExpand, title = "Dungeons & Dicas" }: GlassHeaderProps) {
     return (

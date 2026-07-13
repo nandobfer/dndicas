@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { auth } from '@clerk/nextjs/server';
+import { auth } from '@/core/auth/server';
 import { createFeatSchema } from '@/features/feats/api/validation';
 import { listFeats, createFeat } from '@/features/feats/api/feats-service';
 import type { FeatsFilters } from '@/features/feats/types/feats.types';

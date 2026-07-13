@@ -1,4 +1,4 @@
-import { currentUser } from "@clerk/nextjs/server"
+import { currentUser } from "@/core/auth/server"
 import { applyRaceGenerationCandidate } from "@/features/entity-generation/server/race-ai-generation-service"
 import type { RaceGenerationApplyRequest } from "@/features/entity-generation/types/entity-generation.types"
 

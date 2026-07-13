@@ -59,14 +59,14 @@ Esta pasta contém documentação estruturada para desenvolvimento assistido por
 - Exemplos práticos de extensão
 - Componentes, serviços, hooks, types
 
-### Configuração do Clerk
+### Configuração do Auth.js
 
-**[use-para-configurar-clerk.md](./use-para-configurar-clerk.md)**
-- Setup completo do Clerk
+**[use-para-configurar-authjs.md](./use-para-configurar-authjs.md)**
+- Setup Auth.js com credenciais locais
 - Variáveis de ambiente necessárias
-- Configuração de rotas públicas/protegidas
-- Roles e permissions
-- Webhooks
+- Helpers server-side e client-side
+- Roles e status no MongoDB
+- Migração de usuários legados
 - Troubleshooting de autenticação
 
 ### Diretrizes e Decisões Arquiteturais
@@ -99,7 +99,7 @@ Para cada novo módulo em `src/features/`, crie documentação aqui.
 2. **Desenvolvendo APIs**: Consulte `use-quando-desenvolver-api.md`
 3. **Customizando UI**: Veja `use-para-atualizar-tema-e-componentes-ui.md`
 4. **Criando features**: Use `use-para-estender-o-core.md`
-5. **Configurando auth**: Siga `use-para-configurar-clerk.md`
+5. **Configurando auth**: Siga `use-para-configurar-authjs.md`
 
 ### Para Agentes de IA
 
@@ -109,7 +109,7 @@ Estes arquivos foram criados para fornecer contexto estruturado:
 - **Quando criar APIs**, consulte `use-quando-desenvolver-api.md`
 - **Quando customizar UI**, consulte `use-para-atualizar-tema-e-componentes-ui.md`
 - **Quando estender funcionalidades**, consulte `use-para-estender-o-core.md`
-- **Quando trabalhar com autenticação**, consulte `use-para-configurar-clerk.md`
+- **Quando trabalhar com autenticação**, consulte `use-para-configurar-authjs.md`
 - **NUNCA modifique** arquivos em `src/core/` sem consultar `use-quando-desenvolver-no-modulo-core.md`
 
 ## 🔑 Princípios-Chave
@@ -140,7 +140,7 @@ dungeons-and-dicas/
 │   ├── use-quando-desenvolver-no-modulo-core.md
 │   ├── use-para-atualizar-tema-e-componentes-ui.md
 │   ├── use-para-estender-o-core.md
-│   ├── use-para-configurar-clerk.md
+│   ├── use-para-configurar-authjs.md
 │   └── modules/
 │       └── organizations.md
 ├── src/

@@ -1,5 +1,5 @@
 "use client"
-import { UserButton } from "@clerk/nextjs";
+import { UserButton } from "@/features/auth/auth-components";
 import { Sheet, SheetContent, SheetTrigger, SheetTitle } from '@/core/ui/sheet';
 import { Button } from '@/core/ui/button';
 import { VisuallyHidden } from '@/core/ui/visually-hidden';

@@ -109,12 +109,12 @@ vi.mock('@/core/database/db', () => ({
 }));
 ```
 
-### Mock de Clerk
+### Mock de Auth Interno
 
 ```typescript
-vi.mock('@clerk/nextjs/server', () => ({
+vi.mock('@/core/auth/server', () => ({
   auth: vi.fn(() => ({ userId: 'user_123' })),
-  currentUser: vi.fn(() => ({ id: 'user_123', email: 'test@test.com' })),
+  currentUser: vi.fn(() => ({ id: 'user_123', primaryEmailAddress: { emailAddress: 'test@test.com' } })),
 }));
 ```
 

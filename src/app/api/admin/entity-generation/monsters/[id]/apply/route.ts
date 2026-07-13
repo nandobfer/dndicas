@@ -1,4 +1,4 @@
-import { currentUser } from "@clerk/nextjs/server"
+import { currentUser } from "@/core/auth/server"
 import { applyMonsterGenerationCandidate } from "@/features/entity-generation/server/monster-ai-generation-service"
 import type { MonsterGenerationApplyRequest } from "@/features/entity-generation/types/entity-generation.types"
 

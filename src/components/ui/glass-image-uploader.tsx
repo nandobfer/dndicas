@@ -25,6 +25,7 @@ interface GlassImageUploaderProps {
     aspectRatio?: "square" | "video" | "portrait"
     getAIPayload?: () => unknown
     aiContextLabel?: string
+    enableAI?: boolean
 }
 
 const preferredAspectRatioByVariant = {
@@ -66,6 +67,7 @@ export function GlassImageUploader({
     aspectRatio = "square",
     getAIPayload,
     aiContextLabel,
+    enableAI = true,
 }: GlassImageUploaderProps) {
     const [isDragging, setIsDragging] = React.useState(false)
     const [isUploading, setIsUploading] = React.useState(false)
@@ -111,7 +113,7 @@ export function GlassImageUploader({
     }
 
     const handleGenerateWithAI = async () => {
-        if (disabled || isBusy) {
+        if (!enableAI || disabled || isBusy) {
             return
         }
 
@@ -243,17 +245,19 @@ export function GlassImageUploader({
                                         >
                                             <Upload className="w-5 h-5" />
                                         </button>
-                                        <motion.button
-                                            type="button"
-                                            onClick={handleGenerateWithAI}
-                                            className={aiButtonClasses}
-                                            title="Gerar imagem com IA"
-                                            animate={{ backgroundPosition: ["0% 50%", "100% 50%", "0% 50%"] }}
-                                            transition={{ duration: 3.5, repeat: Infinity, ease: "linear" }}
-                                            disabled={disabled || isBusy}
-                                        >
-                                            <Sparkles className="w-5 h-5" />
-                                        </motion.button>
+                                        {enableAI && (
+                                            <motion.button
+                                                type="button"
+                                                onClick={handleGenerateWithAI}
+                                                className={aiButtonClasses}
+                                                title="Gerar imagem com IA"
+                                                animate={{ backgroundPosition: ["0% 50%", "100% 50%", "0% 50%"] }}
+                                                transition={{ duration: 3.5, repeat: Infinity, ease: "linear" }}
+                                                disabled={disabled || isBusy}
+                                            >
+                                                <Sparkles className="w-5 h-5" />
+                                            </motion.button>
+                                        )}
                                         <button
                                             type="button"
                                             onClick={onRemove}
@@ -300,20 +304,22 @@ export function GlassImageUploader({
                                             <FileImage className="w-6 h-6 text-white/40 group-hover:text-white/60" />
                                         )}
                                     </div>
-                                    <motion.button
-                                        type="button"
-                                        onClick={(event) => {
-                                            event.stopPropagation()
-                                            void handleGenerateWithAI()
-                                        }}
-                                        className={aiButtonClasses}
-                                        title="Gerar imagem com IA"
-                                        animate={{ backgroundPosition: ["0% 50%", "100% 50%", "0% 50%"] }}
-                                        transition={{ duration: 3.5, repeat: Infinity, ease: "linear" }}
-                                        disabled={disabled || isBusy}
-                                    >
-                                        <Sparkles className="w-5 h-5" />
-                                    </motion.button>
+                                    {enableAI && (
+                                        <motion.button
+                                            type="button"
+                                            onClick={(event) => {
+                                                event.stopPropagation()
+                                                void handleGenerateWithAI()
+                                            }}
+                                            className={aiButtonClasses}
+                                            title="Gerar imagem com IA"
+                                            animate={{ backgroundPosition: ["0% 50%", "100% 50%", "0% 50%"] }}
+                                            transition={{ duration: 3.5, repeat: Infinity, ease: "linear" }}
+                                            disabled={disabled || isBusy}
+                                        >
+                                            <Sparkles className="w-5 h-5" />
+                                        </motion.button>
+                                    )}
                                 </div>
                             )}
                             <div className="space-y-1">

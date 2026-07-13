@@ -1,4 +1,4 @@
-import { currentUser } from "@clerk/nextjs/server"
+import { currentUser } from "@/core/auth/server"
 import { applyFeatGenerationCandidate } from "@/features/entity-generation/server/feat-ai-generation-service"
 import type { FeatGenerationApplyRequest } from "@/features/entity-generation/types/entity-generation.types"
 

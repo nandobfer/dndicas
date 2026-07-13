@@ -18,18 +18,18 @@ Este guia fornece instruções rápidas para desenvolvedores que precisam trabal
 ```bash
 git clone <repo-url>
 cd d7d
-npm install
+pnpm install
 ```
 
 ### 2. Configure variáveis de ambiente
 ```bash
 cp .env.example .env.local
-# Adicione suas chaves: MONGODB_URI, NEXT_PUBLIC_CLERK_*, AWS_S3_*
+# Adicione suas chaves: MONGODB_URI, AUTH_SECRET, AUTH_URL, GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, AWS_S3_*
 ```
 
 ### 3. Rode o projeto
 ```bash
-npm run dev
+pnpm dev
 # Acesse http://localhost:3000
 ```
 
@@ -399,8 +399,8 @@ test("renders feat with level chip", () => {
 ## 🔐 Security Notes
 
 ### Authentication
-- All write operations (POST/PUT/DELETE) require Clerk authentication
-- Use `auth()` from `@clerk/nextjs/server` in API routes
+- All write operations (POST/PUT/DELETE) require project authentication
+- Use `auth()` from `@/core/auth/server` in API routes
 
 ### Input Validation
 - Client-side: React Hook Form + Zod

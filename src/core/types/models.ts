@@ -36,10 +36,10 @@ export interface IAuditLog extends BaseModel {
 }
 
 /**
- * Usuário (complementar ao Clerk)
+ * Usuário local
  */
 export interface IUser extends BaseModel {
-  clerkId: string;
+  legacyClerkId?: string;
   email: string;
   firstName?: string;
   lastName?: string;
@@ -109,7 +109,7 @@ export interface ISystemConfig extends BaseModel {
 }
 
 /**
- * Sessão de usuário (se necessário além do Clerk)
+ * Sessão de usuário (se necessário além do Auth.js)
  */
 export interface ISession extends BaseModel {
   userId: string;

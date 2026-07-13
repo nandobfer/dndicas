@@ -11,7 +11,7 @@ describe("entity generation feat and monster routes", () => {
             return { current: { _id: "feat-1" }, candidates: [{ candidateId: "actor:xphb" }] }
         })
 
-        vi.doMock("@clerk/nextjs/server", () => ({
+        vi.doMock("@/core/auth/server", () => ({
             currentUser: vi.fn().mockResolvedValue({ id: "user-1", publicMetadata: { role: "admin" } }),
         }))
         vi.doMock("@/features/entity-generation/server/feat-ai-generation-service", () => ({ generateFeatCandidates }))
@@ -43,7 +43,7 @@ describe("entity generation feat and monster routes", () => {
             return { current: { _id: "monster-1" }, candidates: [{ candidateId: "goblin:mm" }] }
         })
 
-        vi.doMock("@clerk/nextjs/server", () => ({
+        vi.doMock("@/core/auth/server", () => ({
             currentUser: vi.fn().mockResolvedValue({ id: "user-1", publicMetadata: { role: "admin" } }),
         }))
         vi.doMock("@/features/entity-generation/server/monster-ai-generation-service", () => ({ generateMonsterCandidates }))

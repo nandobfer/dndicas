@@ -13,7 +13,7 @@ describe("items backend route", () => {
         vi.doMock("@/features/items/database/item", () => ({ ItemModel: { find } }))
         vi.doMock("@/features/items/api/validation", () => ({ createItemSchema: { safeParse: vi.fn() } }))
         vi.doMock("@/features/users/api/audit-service", () => ({ createAuditLog: vi.fn() }))
-        vi.doMock("@clerk/nextjs/server", () => ({ auth: vi.fn() }))
+        vi.doMock("@/core/auth/server", () => ({ auth: vi.fn() }))
         vi.doMock("@/core/utils/search-engine", () => ({ applyFuzzySearch }))
 
         const mod = await importFresh<typeof import("@/app/api/items/route")>("@/app/api/items/route")

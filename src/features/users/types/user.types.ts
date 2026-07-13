@@ -26,8 +26,11 @@ export type UserStatus = 'active' | 'inactive';
 export interface User {
     /** MongoDB ObjectId as string */
     id: string
-    /** Clerk user ID for authentication linking */
-    clerkId: string
+    /** Previous Clerk user ID kept temporarily for migration/audit purposes */
+    legacyClerkId?: string
+    /** Whether the user must define a local password before signing in */
+    passwordSetupRequired?: boolean
+    lastLoginAt?: string
     /** Unique username for login */
     username: string
     /** User email address */
@@ -54,7 +57,9 @@ export interface User {
  */
 export interface UserResponse {
     id: string
-    clerkId: string
+    legacyClerkId?: string
+    passwordSetupRequired?: boolean
+    lastLoginAt?: string
     username: string
     email: string
     name?: string

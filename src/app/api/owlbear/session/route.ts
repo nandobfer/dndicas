@@ -1,4 +1,4 @@
-import { auth } from "@clerk/nextjs/server"
+import { auth } from "@/core/auth/server"
 import { NextRequest, NextResponse } from "next/server"
 import { z } from "zod"
 import { buildAnonymousGmSessionUserId, buildAnonymousPlayerSessionUserId, createOwlbearSession } from "@/features/owlbear/server/session-service"

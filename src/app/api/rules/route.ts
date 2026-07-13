@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
-import { auth } from "@clerk/nextjs/server"
+import { auth } from "@/core/auth/server"
 import { Reference } from "@/core/database/models/reference"
 import { createAuditLog } from "@/features/users/api/audit-service"
 import dbConnect from "@/core/database/db"

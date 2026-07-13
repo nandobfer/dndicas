@@ -17,7 +17,7 @@ describe('monsters backend routes', () => {
         vi.doMock('@/core/database/db', () => ({ default: vi.fn().mockResolvedValue(undefined) }))
         vi.doMock('@/features/monsters/models/monster', () => ({ MonsterModel: { find } }))
         vi.doMock('@/core/utils/search-engine', () => ({ applyFuzzySearch }))
-        vi.doMock('@clerk/nextjs/server', () => ({ auth: vi.fn() }))
+        vi.doMock('@/core/auth/server', () => ({ auth: vi.fn() }))
         vi.doMock('@/features/users/api/audit-service', () => ({ createAuditLog: vi.fn() }))
 
         const mod = await importFresh<typeof import('@/app/api/monsters/route')>('@/app/api/monsters/route')
@@ -51,7 +51,7 @@ describe('monsters backend routes', () => {
         vi.doMock('@/core/database/db', () => ({ default: vi.fn().mockResolvedValue(undefined) }))
         vi.doMock('@/features/monsters/models/monster', () => ({ MonsterModel: { find } }))
         vi.doMock('@/core/utils/search-engine', () => ({ applyFuzzySearch }))
-        vi.doMock('@clerk/nextjs/server', () => ({ auth: vi.fn() }))
+        vi.doMock('@/core/auth/server', () => ({ auth: vi.fn() }))
         vi.doMock('@/features/users/api/audit-service', () => ({ createAuditLog: vi.fn() }))
 
         const mod = await importFresh<typeof import('@/app/api/monsters/route')>('@/app/api/monsters/route')
@@ -72,7 +72,7 @@ describe('monsters backend routes', () => {
         vi.doMock('@/core/database/db', () => ({ default: vi.fn().mockResolvedValue(undefined) }))
         vi.doMock('@/features/monsters/models/monster', () => ({ MonsterModel: { find } }))
         vi.doMock('@/core/utils/search-engine', () => ({ applyFuzzySearch: vi.fn().mockReturnValue(monsters) }))
-        vi.doMock('@clerk/nextjs/server', () => ({ auth: vi.fn() }))
+        vi.doMock('@/core/auth/server', () => ({ auth: vi.fn() }))
         vi.doMock('@/features/users/api/audit-service', () => ({ createAuditLog: vi.fn() }))
 
         const mod = await importFresh<typeof import('@/app/api/monsters/route')>('@/app/api/monsters/route')
@@ -91,7 +91,7 @@ describe('monsters backend routes', () => {
     })
 
     it('POST /api/monsters rejects anonymous users', async () => {
-        vi.doMock('@clerk/nextjs/server', () => ({ auth: vi.fn().mockResolvedValue({ userId: null }) }))
+        vi.doMock('@/core/auth/server', () => ({ auth: vi.fn().mockResolvedValue({ userId: null }) }))
         vi.doMock('@/features/monsters/models/monster', () => ({ MonsterModel: { findOne: vi.fn(), create: vi.fn() } }))
         vi.doMock('@/core/database/db', () => ({ default: vi.fn().mockResolvedValue(undefined) }))
         vi.doMock('@/core/utils/search-engine', () => ({ applyFuzzySearch: vi.fn() }))
@@ -104,7 +104,7 @@ describe('monsters backend routes', () => {
     })
 
     it('POST /api/monsters rejects invalid bodies', async () => {
-        vi.doMock('@clerk/nextjs/server', () => ({ auth: vi.fn().mockResolvedValue({ userId: 'clerk-1' }) }))
+        vi.doMock('@/core/auth/server', () => ({ auth: vi.fn().mockResolvedValue({ userId: 'clerk-1' }) }))
         vi.doMock('@/features/monsters/models/monster', () => ({ MonsterModel: { findOne: vi.fn(), create: vi.fn() } }))
         vi.doMock('@/core/database/db', () => ({ default: vi.fn().mockResolvedValue(undefined) }))
         vi.doMock('@/core/utils/search-engine', () => ({ applyFuzzySearch: vi.fn() }))
@@ -117,7 +117,7 @@ describe('monsters backend routes', () => {
     })
 
     it('POST /api/monsters rejects duplicate names', async () => {
-        vi.doMock('@clerk/nextjs/server', () => ({ auth: vi.fn().mockResolvedValue({ userId: 'clerk-1' }) }))
+        vi.doMock('@/core/auth/server', () => ({ auth: vi.fn().mockResolvedValue({ userId: 'clerk-1' }) }))
         vi.doMock('@/features/monsters/models/monster', () => ({
             MonsterModel: { findOne: vi.fn().mockResolvedValue({ _id: 'monster-1' }), create: vi.fn() },
         }))
@@ -158,7 +158,7 @@ describe('monsters backend routes', () => {
         const findById = vi.fn().mockResolvedValue(oldMonster)
         const findByIdAndUpdate = vi.fn().mockResolvedValue(updatedMonster)
 
-        vi.doMock('@clerk/nextjs/server', () => ({ auth: vi.fn().mockResolvedValue({ userId: 'clerk-1' }) }))
+        vi.doMock('@/core/auth/server', () => ({ auth: vi.fn().mockResolvedValue({ userId: 'clerk-1' }) }))
         vi.doMock('@/features/monsters/models/monster', () => ({ MonsterModel: { findById, findByIdAndUpdate } }))
         vi.doMock('@/core/database/db', () => ({ default: vi.fn().mockResolvedValue(undefined) }))
         vi.doMock('@/features/users/api/audit-service', () => ({ createAuditLog: vi.fn() }))
@@ -226,7 +226,7 @@ describe('monsters backend routes', () => {
         const find = vi.fn(() => ({ sort }))
         const applyFuzzySearch = vi.fn().mockReturnValue([npcs[1], npcs[0]])
 
-        vi.doMock('@clerk/nextjs/server', () => ({ auth: vi.fn().mockResolvedValue({ userId: 'user-1' }) }))
+        vi.doMock('@/core/auth/server', () => ({ auth: vi.fn().mockResolvedValue({ userId: 'user-1' }) }))
         vi.doMock('@/core/database/db', () => ({ default: vi.fn().mockResolvedValue(undefined) }))
         vi.doMock('@/features/monsters/models/user-npc', () => ({ UserNpcModel: { find } }))
         vi.doMock('@/core/utils/search-engine', () => ({ applyFuzzySearch }))
@@ -242,7 +242,7 @@ describe('monsters backend routes', () => {
     })
 
     it('POST /api/npcs/copy rejects anonymous users', async () => {
-        vi.doMock('@clerk/nextjs/server', () => ({ auth: vi.fn().mockResolvedValue({ userId: null }) }))
+        vi.doMock('@/core/auth/server', () => ({ auth: vi.fn().mockResolvedValue({ userId: null }) }))
         vi.doMock('@/core/database/db', () => ({ default: vi.fn().mockResolvedValue(undefined) }))
         vi.doMock('@/features/monsters/models/monster', () => ({ MonsterModel: { findById: vi.fn() } }))
         vi.doMock('@/features/monsters/models/user-npc', () => ({ UserNpcModel: { findOne: vi.fn(), create: vi.fn() } }))
@@ -281,7 +281,7 @@ describe('monsters backend routes', () => {
         const findOne = vi.fn().mockResolvedValue(null)
         const create = vi.fn().mockResolvedValue(createdNpc)
 
-        vi.doMock('@clerk/nextjs/server', () => ({ auth: vi.fn().mockResolvedValue({ userId: 'user-1' }) }))
+        vi.doMock('@/core/auth/server', () => ({ auth: vi.fn().mockResolvedValue({ userId: 'user-1' }) }))
         vi.doMock('@/core/database/db', () => ({ default: vi.fn().mockResolvedValue(undefined) }))
         vi.doMock('@/features/monsters/models/monster', () => ({ MonsterModel: { findById } }))
         vi.doMock('@/features/monsters/models/user-npc', () => ({ UserNpcModel: { findOne, create } }))
@@ -326,7 +326,7 @@ describe('monsters backend routes', () => {
             .mockResolvedValueOnce(null)
         const create = vi.fn().mockResolvedValue(createdNpc)
 
-        vi.doMock('@clerk/nextjs/server', () => ({ auth: vi.fn().mockResolvedValue({ userId: 'user-1' }) }))
+        vi.doMock('@/core/auth/server', () => ({ auth: vi.fn().mockResolvedValue({ userId: 'user-1' }) }))
         vi.doMock('@/core/database/db', () => ({ default: vi.fn().mockResolvedValue(undefined) }))
         vi.doMock('@/features/monsters/models/monster', () => ({ MonsterModel: { findById: vi.fn() } }))
         vi.doMock('@/features/monsters/models/user-npc', () => ({ UserNpcModel: { findOne, create } }))
@@ -364,7 +364,7 @@ describe('monsters backend routes', () => {
             .mockResolvedValueOnce(null)
         const create = vi.fn().mockResolvedValue({ _id: 'npc-1', toObject: () => ({ _id: 'npc-1', name: 'Goblin (Cópia 2)' }) })
 
-        vi.doMock('@clerk/nextjs/server', () => ({ auth: vi.fn().mockResolvedValue({ userId: 'user-1' }) }))
+        vi.doMock('@/core/auth/server', () => ({ auth: vi.fn().mockResolvedValue({ userId: 'user-1' }) }))
         vi.doMock('@/core/database/db', () => ({ default: vi.fn().mockResolvedValue(undefined) }))
         vi.doMock('@/features/monsters/models/monster', () => ({ MonsterModel: { findById: vi.fn().mockResolvedValue(sourceMonster) } }))
         vi.doMock('@/features/monsters/models/user-npc', () => ({ UserNpcModel: { findOne, create } }))

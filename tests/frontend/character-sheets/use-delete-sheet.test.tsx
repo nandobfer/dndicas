@@ -158,7 +158,7 @@ describe("useDeleteSheet", () => {
             buildInfiniteResponse([deletedSheet, remainingSheet])
         )
         queryClient.setQueryData(sheetsKeys.detail(deletedSheet._id), deletedSheet)
-        deleteSheetMock.mockResolvedValue(undefined)
+        deleteSheetMock.mockResolvedValue({ success: true })
 
         const wrapper = ({ children }: { children: React.ReactNode }) => (
             <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>

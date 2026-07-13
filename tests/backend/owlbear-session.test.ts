@@ -189,7 +189,7 @@ describe("owlbear session backend", () => {
             expiresAt: "2026-04-20T10:15:00.000Z",
         })
 
-        vi.doMock("@clerk/nextjs/server", () => ({
+        vi.doMock("@/core/auth/server", () => ({
             auth: vi.fn().mockResolvedValue({ userId: null }),
         }))
         vi.doMock("@/features/owlbear/server/session-service", () => ({
@@ -228,7 +228,7 @@ describe("owlbear session backend", () => {
             expiresAt: "2026-04-20T10:15:00.000Z",
         })
 
-        vi.doMock("@clerk/nextjs/server", () => ({
+        vi.doMock("@/core/auth/server", () => ({
             auth: vi.fn().mockResolvedValue({ userId: null }),
         }))
         vi.doMock("@/features/owlbear/server/session-service", () => ({
@@ -270,7 +270,7 @@ describe("owlbear session backend", () => {
             buildAnonymousPlayerSessionUserId: vi.fn(),
             isAnonymousPlayerSessionUserId: vi.fn(() => false),
         }))
-        vi.doMock("@clerk/nextjs/server", () => ({
+        vi.doMock("@/core/auth/server", () => ({
             auth: vi.fn().mockResolvedValue({ userId: null }),
         }))
         vi.doMock("@/features/character-sheets/api/character-sheets-service", () => ({
@@ -342,7 +342,7 @@ describe("owlbear session backend", () => {
             buildAnonymousPlayerSessionUserId: vi.fn(),
             isAnonymousPlayerSessionUserId: vi.fn(() => false),
         }))
-        vi.doMock("@clerk/nextjs/server", () => ({
+        vi.doMock("@/core/auth/server", () => ({
             auth: vi.fn().mockResolvedValue({ userId: null }),
         }))
         vi.doMock("@/features/character-sheets/api/character-sheets-service", () => ({
@@ -389,7 +389,7 @@ describe("owlbear session backend", () => {
             hasNextPage: false,
         })
 
-        vi.doMock("@clerk/nextjs/server", () => ({
+        vi.doMock("@/core/auth/server", () => ({
             auth: vi.fn().mockResolvedValue({ userId: null }),
         }))
         vi.doMock("@/features/owlbear/server/session-service", () => ({
