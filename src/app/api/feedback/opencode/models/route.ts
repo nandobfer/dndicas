@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server"
-import { currentUser } from "@clerk/nextjs/server"
+import { currentUser } from "@/core/auth/server"
 import type { ApiResponse } from "@/core/types/common"
 import { listOpenCodeModels } from "@/features/feedback/services/opencode/opencode-cli-service"
 import type { OpenCodeModelOption } from "@/features/feedback/types/feedback.types"

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
-import { currentUser } from "@clerk/nextjs/server"
+import { currentUser } from "@/core/auth/server"
 import { z } from "zod"
 import dbConnect from "@/core/database/db"
 import type { ApiResponse } from "@/core/types/common"
