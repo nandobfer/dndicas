@@ -1,6 +1,5 @@
 "use client"
 
-import * as React from "react"
 import { ShieldCheck } from "lucide-react"
 import { EntityCard } from "./entity-card"
 
@@ -18,7 +17,7 @@ export function BackgroundsEntityCard({ loading, index }: { loading?: boolean; i
             icon={ShieldCheck}
             description="Antecedentes e origens dos heróis"
             href="/backgrounds"
-            statsEndpoint="/api/stats/backgrounds"
+            statsEndpoint="/api/stats/entity-usage?entityType=Origem"
         />
     )
 }

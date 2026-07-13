@@ -1,5 +1,6 @@
 "use client"
 
+import { MySheetsContent } from '@/app/(dashboard)/my-sheets/_components/my-sheets-content';
 import * as React from "react"
 import Fuse from "fuse.js"
 import { AnimatePresence, motion } from "framer-motion"
@@ -659,19 +660,8 @@ export function OwlbearGmNpcsTab({
 
     if (!isAuthenticated) {
         return (
-            <div className="flex h-full min-h-0 flex-col items-center justify-center gap-3 px-6 text-center">
-                <p className="text-sm text-white/60">
-                    Para gerenciar NPCs da sala, faça login no{" "}
-                    <a
-                        href="https://dndicas.com.br"
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-blue-400 underline hover:text-blue-300"
-                    >
-                        Dungeons &amp; Dicas
-                    </a>{" "}
-                    em uma aba do navegador e reabra esta action.
-                </p>
+            <div className="h-full min-h-0 overflow-auto pr-1">
+                <MySheetsContent redirectUrl="/owlbear/npcs/action" showDelete={false} />
             </div>
         )
     }

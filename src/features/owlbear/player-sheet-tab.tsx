@@ -261,19 +261,8 @@ function PlayerSheetTabContent({
 
     if (!isAuthenticated) {
         return (
-            <div className="flex h-full min-h-0 flex-col items-center justify-center gap-3 px-6 text-center">
-                <p className="text-sm text-white/60">
-                    Para vincular sua ficha a esta sala, faça login no{" "}
-                    <a
-                        href="https://dndicas.com.br"
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-blue-400 underline hover:text-blue-300"
-                    >
-                        Dungeons &amp; Dicas
-                    </a>{" "}
-                    em uma aba do navegador e reabra esta action.
-                </p>
+            <div className="h-full min-h-0 overflow-auto pr-1">
+                <MySheetsContent redirectUrl="/owlbear/sheet/action" showDelete={false} />
             </div>
         )
     }

@@ -1,6 +1,5 @@
 "use client"
 
-import * as React from "react"
 import { Sparkles } from "lucide-react"
 import { EntityCard } from "./entity-card"
 
@@ -18,7 +17,7 @@ export function TraitsEntityCard({ loading, index }: { loading?: boolean; index:
             icon={Sparkles}
             description="Catálogo de traços e habilidades (traits)"
             href="/traits"
-            statsEndpoint="/api/stats/traits"
+            statsEndpoint="/api/stats/entity-usage?entityType=Habilidade"
         />
     )
 }

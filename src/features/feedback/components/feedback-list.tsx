@@ -16,14 +16,13 @@ interface FeedbackListProps {
     hasNextPage: boolean
     isFetchingNextPage: boolean
     onLoadMore: () => void
-    onEdit?: (item: Feedback) => void
 }
 
 /**
  * Responsive Feedback List for mobile view.
  * Features infinite scroll and specialized FeedbackCard renderer.
  */
-export function FeedbackList({ items, isLoading, hasNextPage, isFetchingNextPage, onLoadMore, onEdit }: FeedbackListProps) {
+export function FeedbackList({ items, isLoading, hasNextPage, isFetchingNextPage, onLoadMore }: FeedbackListProps) {
     const observer = React.useRef<IntersectionObserver | null>(null)
 
     // Intersection observer for infinite scroll
@@ -67,7 +66,7 @@ export function FeedbackList({ items, isLoading, hasNextPage, isFetchingNextPage
                         <motion.div key={item.id} variants={motionConfig.variants.fadeInUp} initial="initial" animate="animate" exit="exit" transition={{ delay: (index % 10) * 0.05 }}>
                             <GlassCard className="relative overflow-hidden">
                                 <GlassCardContent className="p-4 pt-6">
-                                    <FeedbackCard feedback={item} onEdit={onEdit} />
+                                    <FeedbackCard feedback={item} />
                                 </GlassCardContent>
                             </GlassCard>
                         </motion.div>

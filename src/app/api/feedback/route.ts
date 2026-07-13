@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server"
 import { currentUser } from "@clerk/nextjs/server"
 import { FeedbackModel } from "@/features/feedback/api/feedback.model"
 import dbConnect from "@/core/database/db"
+import { logAction } from "@/core/database/audit-log"
+import { createFeedbackTimelineEvent } from "@/features/feedback/services/feedback-timeline-service"
 import { z } from "zod"
 
 const createFeedbackSchema = z.object({
@@ -23,9 +25,9 @@ export async function GET(req: NextRequest) {
     const priority = searchParams.get("priority")
     const type = searchParams.get("type")
 
-    const query: any = {}
+    const query: Record<string, unknown> = {}
     if (search) {
-      query.$or = [
+      query["$or"] = [
         { title: { $regex: search, $options: "i" } },
         { description: { $regex: search, $options: "i" } }
       ]
@@ -80,11 +82,29 @@ export async function POST(req: NextRequest) {
       creatorEmail: user.emailAddresses[0]?.emailAddress,
     })
 
+    await createFeedbackTimelineEvent({
+      feedbackId: newFeedback._id,
+      type: "feedback_created",
+      actorType: isAdmin ? "admin" : "user",
+      actorId: user.id,
+      actorName: user.fullName || user.username || "Usuário",
+      message: "Feedback criado.",
+      metadata: {
+        title: newFeedback.title,
+        type: newFeedback.type,
+      },
+    })
+
+    await logAction("CREATE", "Feedback", String(newFeedback._id), user.id, {
+      title: newFeedback.title,
+      type: newFeedback.type,
+    })
+
     return NextResponse.json(newFeedback, { status: 201 })
   } catch (error) {
     console.error("Feedback POST error:", error)
     if (error instanceof z.ZodError) {
-        return NextResponse.json({ error: (error as any).errors }, { status: 400 })
+        return NextResponse.json({ error: error.issues }, { status: 400 })
     }
     return NextResponse.json({ error: "Erro interno ao criar feedback" }, { status: 500 })
   }

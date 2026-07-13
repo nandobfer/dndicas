@@ -1,8 +1,7 @@
 "use client";
 
-import * as React from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { MoreHorizontal, Pencil, MessageSquare, AlertCircle, CheckCircle2, XCircle, Bug, Sparkles } from 'lucide-react';
+import { Eye, MessageSquare, Bug, Sparkles } from 'lucide-react';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { cn } from '@/core/utils';
@@ -11,7 +10,6 @@ import { Chip } from '@/components/ui/chip';
 import { LoadingState } from '@/components/ui/loading-state';
 import { EmptyState } from '@/components/ui/empty-state';
 import { DataTablePagination } from '@/components/ui/data-table-pagination';
-import { GlassDropdownMenu, GlassDropdownMenuTrigger, GlassDropdownMenuContent, GlassDropdownMenuItem } from '@/components/ui/glass-dropdown-menu';
 import { motionConfig } from '@/lib/config/motion-configs';
 import { feedbackStatusConfig, feedbackTypeConfig, feedbackPriorityConfig, FeedbackStatus, FeedbackPriority, FeedbackType } from '@/lib/config/colors';
 import type { Feedback } from '../types/feedback.types';
@@ -152,9 +150,9 @@ export function FeedbackTable({ feedbacks, total, page, limit, isLoading = false
                                                     "text-white/40 hover:text-white hover:bg-white/10",
                                                     "group-hover:opacity-100 focus:opacity-100"
                                                 )}
-                                                aria-label="Ver e editar feedback"
+                                                aria-label="Abrir feedback"
                                             >
-                                                <Pencil className="h-4 w-4" />
+                                                <Eye className="h-4 w-4" />
                                             </button>
                                         </td>
                                     </motion.tr>

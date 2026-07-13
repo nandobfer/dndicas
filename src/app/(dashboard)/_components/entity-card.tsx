@@ -3,14 +3,15 @@ import { motion, AnimatePresence } from "framer-motion"
 import { GlassCard, GlassCardHeader, GlassCardTitle, GlassCardDescription, GlassCardContent } from "@/components/ui/glass-card"
 import { cn } from "@/core/utils"
 import { entityColors, EntityType } from "@/lib/config/colors"
-import { MiniLineChart } from "./charts"
+import { MiniLineChart, MiniUsageChart } from "./charts"
 import { LucideIcon } from "lucide-react"
 import { AnimatedNumber } from "@/components/ui/animated-number"
 import Link from "next/link"
 
 interface Stats {
     active: number
-    growth: Array<{ date: string; count: number }>
+    growth?: Array<{ date: string; count: number }>
+    usage?: Array<{ context: string; count: number }>
 }
 
 /**
@@ -18,8 +19,8 @@ interface Stats {
  *
  * Displays entity statistics with:
  * - Icon and title with entity color theming
- * - Active count badge
- * - Growth chart
+ * - Usage count badge
+ * - Usage chart with growth fallback for legacy stats
  * - Hover animations
  */
 export function EntityCard({
@@ -31,6 +32,7 @@ export function EntityCard({
     description,
     href,
     statsEndpoint,
+    metricLabel = "usos",
 }: {
     entityType: EntityType
     loading?: boolean
@@ -40,6 +42,7 @@ export function EntityCard({
     description?: string
     href?: string
     statsEndpoint?: string
+    metricLabel?: string
 }) {
     const [stats, setStats] = React.useState<Stats | null>(null)
     const [loading, setLoading] = React.useState(true)
@@ -65,51 +68,12 @@ export function EntityCard({
     }, [statsEndpoint, title])
 
     const config = entityColors[entityType]
-    const isMasculine = entityType === "Talento" || entityType === "Usuário"
     const isLoading = parentLoading || loading
+    const usageData = stats?.usage
+    const growthData = stats?.growth
 
     // Estaturas fixas para as barras do skeleton para evitar Erro de Hidratação
     const placeholderHeights = [40, 65, 45, 80, 55, 70, 40, 60, 50, 75, 45, 60]
-
-    const cardContentInternal = (
-        <>
-            {/* Dynamic Background Hover Effect */}
-            <div 
-                className="absolute inset-0 opacity-0 group-hover:opacity-10 transition-opacity duration-500 pointer-events-none"
-                style={{ backgroundColor: config.hex }}
-            />
-            
-            <div className="absolute top-0 right-0 w-32 h-32 blur-3xl rounded-full opacity-0 group-hover:opacity-20 transition-opacity duration-500 pointer-events-none"
-                 style={{ backgroundColor: config.hex }} />
-            
-            <GlassCardHeader className="pb-0 relative z-10">
-                <div className="flex items-start justify-between">
-                    <div className={cn("p-2 rounded-lg border transition-all duration-300", config.bgAlpha, config.border, config.text, "group-hover:text-white group-hover:scale-110")}>
-                        <Icon className="h-5 w-5" />
-                    </div>
-                    <div className={cn("text-[10px] font-bold px-1.5 py-0.5 rounded border flex items-center gap-0.5", config.badge, config.border)}>
-                        <AnimatedNumber value={isLoading ? 0 : stats?.active || 0} formatter={(val) => `${Math.floor(val)}`} />
-                        <span>{isMasculine ? "ativos" : "ativas"}</span>
-                    </div>
-                </div>
-                <GlassCardTitle className="text-white/90 group-hover:text-white mt-3 transition-colors">{title}</GlassCardTitle>
-                <GlassCardDescription className="text-white/40 text-xs min-h-[32px]">{description}</GlassCardDescription>
-            </GlassCardHeader>
-            <GlassCardContent className="pt-4">
-                <div className="space-y-3">
-                    {isLoading || !stats?.growth ? (
-                        <div className="h-8 w-full flex items-end opacity-20 group-hover:opacity-40 transition-opacity">
-                            <div className={cn("w-full h-1 bg-gradient-to-r from-transparent via-current to-transparent", config.text)} />
-                        </div>
-                    ) : (
-                        <div className="opacity-60 group-hover:opacity-100 transition-opacity h-12 flex flex-col justify-end">
-                            <MiniLineChart data={stats.growth} color={config.hex} />
-                        </div>
-                    )}
-                </div>
-            </GlassCardContent>
-        </>
-    )
 
     return (
         <motion.div
@@ -158,7 +122,7 @@ export function EntityCard({
                                         className={cn("text-[10px] font-bold px-1.5 py-0.5 rounded border flex items-center gap-0.5", config.badge, config.border)}
                                     >
                                         <AnimatedNumber value={stats?.active || 0} formatter={(val) => `${Math.floor(val)}`} />
-                                        <span>{isMasculine ? "ativos" : "ativas"}</span>
+                                        <span>{metricLabel}</span>
                                     </motion.div>
                                 )}
                             </AnimatePresence>
@@ -204,13 +168,17 @@ export function EntityCard({
                                 >
                                     <GlassCardContent className="pb-6">
                                         <div className="space-y-3">
-                                            {!stats?.growth ? (
-                                                <div className="h-8 w-full flex items-end opacity-20 group-hover:opacity-40 transition-opacity">
-                                                    <div className={cn("w-full h-1 bg-gradient-to-r from-transparent via-current to-transparent", config.text)} />
+                                            {usageData ? (
+                                                <div className="opacity-70 group-hover:opacity-100 transition-opacity h-12 flex flex-col justify-end">
+                                                    <MiniUsageChart data={usageData} color={config.hex} />
+                                                </div>
+                                            ) : growthData ? (
+                                                <div className="opacity-60 group-hover:opacity-100 transition-opacity h-12 flex flex-col justify-end">
+                                                    <MiniLineChart data={growthData} color={config.hex} />
                                                 </div>
                                             ) : (
-                                                <div className="opacity-60 group-hover:opacity-100 transition-opacity h-12 flex flex-col justify-end">
-                                                    <MiniLineChart data={stats.growth} color={config.hex} />
+                                                <div className="h-8 w-full flex items-end opacity-20 group-hover:opacity-40 transition-opacity">
+                                                    <div className={cn("w-full h-1 bg-gradient-to-r from-transparent via-current to-transparent", config.text)} />
                                                 </div>
                                             )}
                                         </div>
@@ -224,4 +192,3 @@ export function EntityCard({
         </motion.div>
     )
 }
-

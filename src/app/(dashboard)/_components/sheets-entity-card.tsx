@@ -1,6 +1,5 @@
 "use client"
 
-import * as React from "react"
 import { ScrollText } from "lucide-react"
 import { EntityCard } from "./entity-card"
 
@@ -18,7 +17,8 @@ export function SheetsEntityCard({ loading, index }: { loading?: boolean; index:
             icon={ScrollText}
             description="Fichas criadas por jogadores com acesso direto a todo o repositório e dados. Todo preenchimento pode ser semi-automatizado ou totalmente manual."
             href="/my-sheets"
-            statsEndpoint="/api/stats/sheets"
+            statsEndpoint="/api/stats/entity-usage?entityType=Ficha"
+            metricLabel="criadas"
         />
     )
 }
