@@ -1,6 +1,5 @@
 "use client"
 
-import * as React from "react"
 import { useRouter } from "next/navigation"
 import { AnimatePresence, motion } from "framer-motion"
 import { ScrollText } from "lucide-react"
@@ -10,7 +9,7 @@ import { UserMini } from "@/components/ui/user-mini"
 import { LoadingState } from "@/components/ui/loading-state"
 import { EmptyState } from "@/components/ui/empty-state"
 import { ErrorState } from "@/components/ui/error-state"
-import { DataTablePagination } from "@/components/ui/data-table-pagination"
+import { InfiniteScrollSentinel } from "@/components/ui/infinite-scroll-sentinel"
 import { motionConfig } from "@/lib/config/motion-configs"
 import { MentionContent } from "@/features/rules/components/mention-badge"
 import { AdminSheetCharacterMini } from "./admin-sheet-character-mini"
@@ -18,12 +17,11 @@ import type { AdminSheetListItem } from "../types/character-sheet.types"
 
 export interface AdminSheetsTableProps {
     items: AdminSheetListItem[]
-    total: number
-    page: number
-    limit: number
     isLoading?: boolean
+    hasNextPage?: boolean
+    isFetchingNextPage?: boolean
     error?: Error | null
-    onPageChange: (page: number) => void
+    onLoadMore: () => void
     onRetry: () => void
 }
 
@@ -63,9 +61,8 @@ function RichSheetCell({ html }: { html: string }) {
     )
 }
 
-export function AdminSheetsTable({ items, total, page, limit, isLoading = false, error, onPageChange, onRetry }: AdminSheetsTableProps) {
+export function AdminSheetsTable({ items, isLoading = false, hasNextPage = false, isFetchingNextPage = false, error, onLoadMore, onRetry }: AdminSheetsTableProps) {
     const router = useRouter()
-    const totalPages = Math.ceil(total / limit)
 
     if (isLoading && items.length === 0) {
         return (
@@ -170,13 +167,11 @@ export function AdminSheetsTable({ items, total, page, limit, isLoading = false,
                 </table>
             </div>
 
-            <DataTablePagination
-                page={page}
-                totalPages={totalPages}
-                total={total}
-                limit={limit}
-                onPageChange={onPageChange}
-                itemLabel="fichas"
+            <InfiniteScrollSentinel
+                isLoading={isLoading}
+                hasNextPage={hasNextPage}
+                isFetchingNextPage={isFetchingNextPage}
+                onLoadMore={onLoadMore}
             />
         </GlassCard>
     )

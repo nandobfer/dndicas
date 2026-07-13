@@ -40,5 +40,7 @@ A área de texto livre da ficha possui três campos rich text persistidos: `appe
 ### Lista admin com foto e nível
 Na listagem administrativa de fichas, o bloco do personagem usa `GlassImage` com `photo` quando a ficha possui imagem, e o subtítulo abaixo do nome mostra o nível do personagem em vez de texto de avatar ausente. O clique na imagem preserva a ampliação do `GlassImage` sem propagar para a navegação do card/linha da ficha.
 
+A rota `/sheets` é protegida por guard server-side usando `getCurrentUserFromDb`, evitando redirects client-side prematuros enquanto `/api/auth/session` ainda está carregando. A listagem administrativa usa `useInfiniteAdminSheets` tanto no desktop quanto no mobile; a tabela desktop carrega mais itens com `InfiniteScrollSentinel` em vez de `DataTablePagination`.
+
 ### Métricas de uso no dashboard
 O dashboard usa `GET /api/stats/entity-usage?entityType=...` para exibir uso real de entidades em vez de crescimento temporal nos cards do catálogo. A rota deriva uso em fichas a partir de `classRef`, `raceRef`, `originRef`, `catalogSpellId`, `catalogFeatId`, `catalogTraitId`, `catalogItemId` e `resourceCharges.source.entityType`, retornando `{ active, usage }` para preservar o contrato visual do `EntityCard`.
