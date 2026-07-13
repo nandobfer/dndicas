@@ -62,10 +62,19 @@ describe("OwlbearAuthBridgePage", () => {
         global.fetch = vi.fn().mockResolvedValue({ ok: true }) as unknown as typeof fetch
     })
 
-    it("shows the final close-tab message after the action confirms the login", async () => {
+    it("shows the final close-tab message after publishing the login handoff", async () => {
         render(<OwlbearAuthBridgePage />)
 
         await waitFor(() => expect(global.fetch).toHaveBeenCalledWith("/api/owlbear/auth/pusher-handoff", expect.objectContaining({ method: "POST" })))
+
+        expect(await screen.findByText("Pronto!")).toBeInTheDocument()
+        expect(screen.getByText("Sua conta foi conectada ao Owlbear. Pode fechar esta aba.")).toBeInTheDocument()
+    })
+
+    it("keeps the success message if the action confirmation arrives later", async () => {
+        render(<OwlbearAuthBridgePage />)
+
+        expect(await screen.findByText("Pronto!")).toBeInTheDocument()
         await waitFor(() => expect(pusherChannelMock.bind).toHaveBeenCalledWith("owlbear-auth-completed", expect.any(Function)))
 
         const handler = pusherChannelMock.bind.mock.calls[0][1] as (payload: { nonce: string; ok: boolean }) => void
@@ -73,25 +82,7 @@ describe("OwlbearAuthBridgePage", () => {
             handler({ nonce: "nonce-123", ok: true })
         })
 
-        expect(await screen.findByText("Pronto!")).toBeInTheDocument()
+        expect(screen.getByText("Pronto!")).toBeInTheDocument()
         expect(screen.getByText("Sua conta foi conectada ao Owlbear. Pode fechar esta aba.")).toBeInTheDocument()
-    })
-
-    it("shows a sent fallback when the action does not confirm in time", async () => {
-        vi.useFakeTimers()
-
-        render(<OwlbearAuthBridgePage />)
-
-        await act(async () => {
-            await Promise.resolve()
-            await Promise.resolve()
-        })
-        expect(global.fetch).toHaveBeenCalled()
-        await act(async () => {
-            await vi.advanceTimersByTimeAsync(10_000)
-        })
-
-        expect(screen.getByText("Login enviado")).toBeInTheDocument()
-        expect(screen.getByText("O login foi enviado para a action. Se ela ainda não atualizou, feche e abra a action novamente.")).toBeInTheDocument()
     })
 })

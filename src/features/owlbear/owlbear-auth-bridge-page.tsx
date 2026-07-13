@@ -10,9 +10,7 @@ import { getPusherBrowserConfig } from "@/core/realtime/pusher-browser-config"
 import { PusherBrowserService } from "@/core/realtime/pusher-browser-service"
 import { OWLBEAR_AUTH_COMPLETED_EVENT, OWLBEAR_AUTH_HANDOFF_CHANNEL_PREFIX } from "./config"
 
-type BridgeStatus = "idle" | "publishing" | "waiting-action" | "completed" | "sent" | "error"
-
-const AUTH_COMPLETED_TIMEOUT_MS = 10_000
+type BridgeStatus = "idle" | "publishing" | "completed" | "error"
 
 function buildBridgeRedirectUrl(channelId: string, nonce: string) {
     return `/owlbear/auth/bridge?channelId=${encodeURIComponent(channelId)}&nonce=${encodeURIComponent(nonce)}`
@@ -87,12 +85,7 @@ export function OwlbearAuthBridgePage() {
                 }
 
                 if (!cancelled) {
-                    setStatus("waiting-action")
-                    window.setTimeout(() => {
-                        if (!cancelled) {
-                            setStatus((current) => current === "waiting-action" ? "sent" : current)
-                        }
-                    }, AUTH_COMPLETED_TIMEOUT_MS)
+                    setStatus("completed")
                 }
             } catch (error) {
                 console.error("Failed to publish Owlbear auth handoff", error)
@@ -120,14 +113,12 @@ export function OwlbearAuthBridgePage() {
         )
     }
 
-    if (!isLoaded || status === "publishing" || status === "waiting-action") {
+    if (!isLoaded || status === "publishing") {
         return (
             <div className="flex min-h-dvh items-center justify-center bg-slate-950 p-6 text-white">
                 <div className="rounded-3xl border border-white/10 bg-white/10 p-6 text-center">
                     <Loader2 className="mx-auto h-9 w-9 animate-spin text-violet-200" />
-                    <p className="mt-4 text-sm text-white/70">
-                        {status === "waiting-action" ? "Aguardando a action confirmar o login..." : "Conectando sua conta ao Owlbear..."}
-                    </p>
+                    <p className="mt-4 text-sm text-white/70">Conectando sua conta ao Owlbear...</p>
                 </div>
             </div>
         )
@@ -150,20 +141,18 @@ export function OwlbearAuthBridgePage() {
     return (
         <div className="flex min-h-dvh items-center justify-center bg-slate-950 p-6 text-white">
             <div className="w-full max-w-md rounded-3xl border border-emerald-400/20 bg-emerald-500/10 p-6 text-center">
-                {status === "completed" || status === "sent" ? (
+                {status === "completed" ? (
                     <CheckCircle2 className="mx-auto h-10 w-10 text-emerald-200" />
                 ) : (
                     <ShieldAlert className="mx-auto h-10 w-10 text-amber-200" />
                 )}
                 <h1 className="mt-4 text-xl font-bold">
-                    {status === "completed" ? "Pronto!" : status === "sent" ? "Login enviado" : "Não foi possível concluir"}
+                    {status === "completed" ? "Pronto!" : "Não foi possível concluir"}
                 </h1>
                 <p className="mt-2 text-sm text-white/70">
                     {status === "completed"
                         ? "Sua conta foi conectada ao Owlbear. Pode fechar esta aba."
-                        : status === "sent"
-                            ? "O login foi enviado para a action. Se ela ainda não atualizou, feche e abra a action novamente."
-                            : errorMessage ?? "Tente abrir o login pela action do Owlbear novamente."}
+                        : errorMessage ?? "Tente abrir o login pela action do Owlbear novamente."}
                 </p>
             </div>
         </div>
