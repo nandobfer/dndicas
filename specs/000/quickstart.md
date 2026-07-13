@@ -25,10 +25,11 @@ Adicione as seguintes variáveis ao `.env.local`:
 # MongoDB
 DATABASE_URL=mongodb+srv://<user>:<password>@<cluster>.mongodb.net/<database>
 
-# Clerk
-NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=pk_test_...
-CLERK_SECRET_KEY=sk_test_...
-CLERK_WEBHOOK_SECRET=whsec_...  # Para webhook de sincronização
+# Auth.js
+AUTH_SECRET=...
+AUTH_URL=http://localhost:3000
+GOOGLE_CLIENT_ID=...
+GOOGLE_CLIENT_SECRET=...
 
 # App
 NEXT_PUBLIC_APP_URL=http://localhost:3000
@@ -40,12 +41,12 @@ NEXT_PUBLIC_APP_URL=http://localhost:3000
 npm install
 ```
 
-### 1.3 Configurar Webhook do Clerk
+### 1.3 Configurar Login Google
 
-1. Acesse o Clerk Dashboard > Webhooks
-2. Crie um novo webhook com URL: `{NEXT_PUBLIC_APP_URL}/api/webhooks/clerk`
-3. Selecione eventos: `user.created`, `user.updated`
-4. Copie o signing secret para `CLERK_WEBHOOK_SECRET`
+1. Acesse Google Cloud Console > APIs e Serviços > Credenciais
+2. Configure o redirect URI: `{NEXT_PUBLIC_APP_URL}/api/auth/callback/google`
+3. Copie o client id para `GOOGLE_CLIENT_ID`
+4. Copie o client secret para `GOOGLE_CLIENT_SECRET`
 
 ---
 

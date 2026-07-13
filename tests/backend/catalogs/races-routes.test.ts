@@ -15,7 +15,7 @@ describe("races backend routes", () => {
 
         vi.doMock("@/core/database/db", () => ({ default: vi.fn().mockResolvedValue(undefined) }))
         vi.doMock("@/features/races/models/race", () => ({ RaceModel: { find, countDocuments } }))
-        vi.doMock("@clerk/nextjs/server", () => ({ auth: vi.fn() }))
+        vi.doMock("@/core/auth/server", () => ({ auth: vi.fn() }))
         vi.doMock("@/features/users/api/audit-service", () => ({ createAuditLog: vi.fn() }))
 
         const mod = await importFresh<typeof import("@/app/api/races/route")>("@/app/api/races/route")
@@ -59,7 +59,7 @@ describe("races backend routes", () => {
 
         vi.doMock("@/core/database/db", () => ({ default: vi.fn().mockResolvedValue(undefined) }))
         vi.doMock("@/features/races/models/race", () => ({ RaceModel: { find, countDocuments } }))
-        vi.doMock("@clerk/nextjs/server", () => ({ auth: vi.fn() }))
+        vi.doMock("@/core/auth/server", () => ({ auth: vi.fn() }))
         vi.doMock("@/features/users/api/audit-service", () => ({ createAuditLog: vi.fn() }))
 
         const mod = await importFresh<typeof import("@/app/api/races/route")>("@/app/api/races/route")

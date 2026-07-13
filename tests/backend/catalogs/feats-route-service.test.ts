@@ -7,7 +7,7 @@ describe('feats backend', () => {
     it('GET /api/feats forwards filters and treats authenticated users as admin-visible', async () => {
         const listFeats = vi.fn().mockResolvedValue({ items: [], total: 0, page: 2, limit: 5, totalPages: 0 });
 
-        vi.doMock('@clerk/nextjs/server', () => ({
+        vi.doMock('@/core/auth/server', () => ({
             auth: vi.fn().mockResolvedValue({ userId: 'clerk-1' }),
         }));
         vi.doMock('@/features/feats/api/validation', () => ({
@@ -35,7 +35,7 @@ describe('feats backend', () => {
     });
 
     it('POST /api/feats rejects anonymous users', async () => {
-        vi.doMock('@clerk/nextjs/server', () => ({
+        vi.doMock('@/core/auth/server', () => ({
             auth: vi.fn().mockResolvedValue({ userId: null }),
         }));
         vi.doMock('@/features/feats/api/validation', () => ({
@@ -56,7 +56,7 @@ describe('feats backend', () => {
     });
 
     it('POST /api/feats returns 400 for schema validation errors', async () => {
-        vi.doMock('@clerk/nextjs/server', () => ({
+        vi.doMock('@/core/auth/server', () => ({
             auth: vi.fn().mockResolvedValue({ userId: 'clerk-1' }),
         }));
         vi.doMock('@/features/feats/api/validation', () => ({
@@ -82,7 +82,7 @@ describe('feats backend', () => {
     });
 
     it('POST /api/feats maps duplicate-name errors to 409', async () => {
-        vi.doMock('@clerk/nextjs/server', () => ({
+        vi.doMock('@/core/auth/server', () => ({
             auth: vi.fn().mockResolvedValue({ userId: 'clerk-1' }),
         }));
         vi.doMock('@/features/feats/api/validation', () => ({

@@ -112,7 +112,7 @@ export function useOwlbearSession(runtime: OwlbearRuntimeState) {
         }
 
         if (isSignedIn && !userId) {
-            logOwlbearDebug("[Dndicas Owlbear Session]", "waiting for Clerk userId")
+            logOwlbearDebug("[Dndicas Owlbear Session]", "waiting for authenticated userId")
             setSession({
                 sessionStatus: "idle",
                 sessionToken: null,
@@ -130,21 +130,14 @@ export function useOwlbearSession(runtime: OwlbearRuntimeState) {
 
         lastRuntimeIdentityRef.current = runtimeIdentity
 
-        const requiresClerkAuth = owlbearRole === "PLAYER"
-
-        if (requiresClerkAuth && !isSignedIn) {
-            logOwlbearDebug("[Dndicas Owlbear Session]", "player action requires Clerk auth; keeping idle", {
-                roomId,
-                owlbearPlayerId,
-                owlbearRole,
-            })
-            setSession({
-                sessionStatus: "idle",
-                sessionToken: null,
-                sessionExpiresAt: null,
-            })
-            return
-        }
+        // Owlbear actions run inside a cross-origin iframe (owlbear.io -> dndicas.com.br).
+        // Browsers block third-party cookies in iframes (SameSite=Lax, Safari ITP, Firefox ETP),
+        // so the auth session cookie may not be sent and isSignedIn can stay false even when the user
+        // is logged in on the main dndicas.com.br tab. We therefore open a backend session for
+        // all roles unconditionally; the server issues an anonymous token when no authenticated userId
+        // is present and a full authenticated token when the cookie does reach the server.
+        // The isAuthenticated flag still reflects real sign-in state and is used to gate
+        // features that require a userId (character sheets, NPC management).
 
         if (identityChanged) {
             setSession({

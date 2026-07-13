@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from "next/server"
-import { auth } from "@clerk/nextjs/server"
+import { auth } from "@/core/auth/server"
 import { getClassById, updateClass, deleteClass } from "@/features/classes/api/classes-service"
 import { updateClassSchema } from "@/features/classes/api/validation"
-import { getLocalUserByClerkId } from "@/features/users/api/get-current-user"
+import { getLocalUserById } from "@/features/users/api/get-current-user"
 
 /**
  * GET /api/classes/[id]
@@ -11,7 +11,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
     try {
         const { id } = await params
         const { userId } = await auth()
-        const user = userId ? await getLocalUserByClerkId(userId) : null
+        const user = userId ? await getLocalUserById(userId) : null
         const isAdmin = user?.role === "admin"
 
         const doc = await getClassById(id, isAdmin)
@@ -35,7 +35,7 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
         const { userId } = await auth()
         if (!userId) return NextResponse.json({ error: "Não autorizado" }, { status: 401 })
 
-        const user = await getLocalUserByClerkId(userId)
+        const user = await getLocalUserById(userId)
         if (!user) return NextResponse.json({ error: "Usuário não encontrado" }, { status: 404 })
 
         const isAdmin = user.role === "admin"
@@ -84,7 +84,7 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
         const { userId } = await auth()
         if (!userId) return NextResponse.json({ error: "Não autorizado" }, { status: 401 })
 
-        const user = await getLocalUserByClerkId(userId)
+        const user = await getLocalUserById(userId)
         if (!user) return NextResponse.json({ error: "Usuário não encontrado" }, { status: 404 })
 
         const isAdmin = user.role === "admin"

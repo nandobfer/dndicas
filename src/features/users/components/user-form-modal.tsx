@@ -50,7 +50,7 @@ export interface UserFormModalProps {
 export function UserFormModal({ isOpen, onClose, onSubmit, user, isSubmitting = false }: UserFormModalProps) {
     const { userId } = useAuth()
     const isEditMode = !!user
-    const isSelfEdit = isEditMode && user?.clerkId === userId
+    const isSelfEdit = isEditMode && user?.id === userId
 
     const {
         register,

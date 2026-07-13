@@ -58,7 +58,7 @@ vi.mock('@/core/context/window-context', () => ({
     useWindows: () => ({ addWindow: vi.fn() }),
 }))
 
-vi.mock('@clerk/nextjs', () => ({
+vi.mock('@/features/auth/auth-components', () => ({
     useUser: () => ({ user: null, isLoaded: true }),
     useAuth: () => ({ userId: null }),
 }))

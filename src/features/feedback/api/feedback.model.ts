@@ -7,7 +7,7 @@ export interface IFeedback extends Document {
     type: "bug" | "melhoria"
     status: "pendente" | "concluido" | "cancelado"
     priority?: "baixa" | "media" | "alta"
-    createdBy: string // Clerk ID
+    createdBy: string // Local user ID
     creatorName: string
     creatorEmail?: string
     developmentStatus: FeedbackDevelopmentStatus

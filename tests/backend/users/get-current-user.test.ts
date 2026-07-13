@@ -3,8 +3,8 @@ import { describe, expect, it, vi } from 'vitest';
 import { importFresh } from '../helpers/module';
 
 describe('features/users/api/get-current-user', () => {
-    it('returns an unauthenticated result when Clerk has no session', async () => {
-        vi.doMock('@clerk/nextjs/server', () => ({
+    it('returns an unauthenticated result when Auth.js has no session', async () => {
+        vi.doMock('@/core/auth/server', () => ({
             auth: vi.fn().mockResolvedValue({ userId: null }),
             currentUser: vi.fn(),
         }));
@@ -12,10 +12,7 @@ describe('features/users/api/get-current-user', () => {
             default: vi.fn(),
         }));
         vi.doMock('@/features/users/models/user', () => ({
-            User: { findByClerkId: vi.fn() },
-        }));
-        vi.doMock('@/features/users/api/sync', () => ({
-            ensureUserExists: vi.fn(),
+            User: { findOne: vi.fn() },
         }));
 
         const mod = await importFresh<typeof import('@/features/users/api/get-current-user')>('@/features/users/api/get-current-user');
@@ -23,55 +20,15 @@ describe('features/users/api/get-current-user', () => {
         await expect(mod.getCurrentUserFromDb()).resolves.toMatchObject({
             success: false,
             user: null,
-            clerkId: null,
+            userId: null,
             error: 'Not authenticated',
         });
     });
 
-    it('syncs from Clerk when the local user is missing an avatar', async () => {
-        const ensureUserExists = vi.fn().mockResolvedValue({ _id: 'mongo-1', role: 'user' });
-
-        vi.doMock('@clerk/nextjs/server', () => ({
-            auth: vi.fn().mockResolvedValue({ userId: 'clerk-1' }),
-            currentUser: vi.fn().mockResolvedValue({
-                id: 'clerk-1',
-                username: 'hero',
-                emailAddresses: [{ id: 'email-1', emailAddress: 'hero@example.com' }],
-                primaryEmailAddressId: 'email-1',
-                firstName: 'Hero',
-                lastName: 'Player',
-                imageUrl: 'https://example.com/avatar.png',
-                publicMetadata: { role: 'user' },
-            }),
-        }));
-        vi.doMock('@/core/database/db', () => ({
-            default: vi.fn().mockResolvedValue(undefined),
-        }));
-        vi.doMock('@/features/users/models/user', () => ({
-            User: {
-                findByClerkId: vi.fn().mockResolvedValue({ _id: 'mongo-1', avatarUrl: undefined }),
-            },
-        }));
-        vi.doMock('@/features/users/api/sync', () => ({
-            ensureUserExists,
-        }));
-
-        const mod = await importFresh<typeof import('@/features/users/api/get-current-user')>('@/features/users/api/get-current-user');
-        const result = await mod.getCurrentUserFromDb();
-
-        expect(result).toMatchObject({
-            success: true,
-            clerkId: 'clerk-1',
-            user: { _id: 'mongo-1', role: 'user' },
-        });
-        expect(ensureUserExists).toHaveBeenCalledWith('clerk-1', expect.objectContaining({
-            image_url: 'https://example.com/avatar.png',
-        }));
-    });
-
-    it('requireAdmin throws when the current user is not an admin', async () => {
-        vi.doMock('@clerk/nextjs/server', () => ({
-            auth: vi.fn().mockResolvedValue({ userId: 'clerk-1' }),
+    it('returns the active local user for the Auth.js session id', async () => {
+        const localUser = { _id: 'mongo-1', role: 'user', status: 'active', legacyClerkId: 'legacy-1' };
+        vi.doMock('@/core/auth/server', () => ({
+            auth: vi.fn().mockResolvedValue({ userId: 'mongo-1' }),
             currentUser: vi.fn(),
         }));
         vi.doMock('@/core/database/db', () => ({
@@ -79,11 +36,33 @@ describe('features/users/api/get-current-user', () => {
         }));
         vi.doMock('@/features/users/models/user', () => ({
             User: {
-                findByClerkId: vi.fn().mockResolvedValue({ role: 'user' }),
+                findOne: vi.fn().mockResolvedValue(localUser),
             },
         }));
-        vi.doMock('@/features/users/api/sync', () => ({
-            ensureUserExists: vi.fn(),
+
+        const mod = await importFresh<typeof import('@/features/users/api/get-current-user')>('@/features/users/api/get-current-user');
+        const result = await mod.getCurrentUserFromDb();
+
+        expect(result).toMatchObject({
+            success: true,
+            userId: 'mongo-1',
+            legacyClerkId: 'legacy-1',
+            user: { _id: 'mongo-1', role: 'user' },
+        });
+    });
+
+    it('requireAdmin throws when the current user is not an admin', async () => {
+        vi.doMock('@/core/auth/server', () => ({
+            auth: vi.fn().mockResolvedValue({ userId: 'mongo-1' }),
+            currentUser: vi.fn(),
+        }));
+        vi.doMock('@/core/database/db', () => ({
+            default: vi.fn().mockResolvedValue(undefined),
+        }));
+        vi.doMock('@/features/users/models/user', () => ({
+            User: {
+                findOne: vi.fn().mockResolvedValue({ role: 'user', status: 'active' }),
+            },
         }));
 
         const mod = await importFresh<typeof import('@/features/users/api/get-current-user')>('@/features/users/api/get-current-user');
@@ -92,8 +71,8 @@ describe('features/users/api/get-current-user', () => {
     });
 
     it('blocks inactive local users before authorizing backend access', async () => {
-        vi.doMock('@clerk/nextjs/server', () => ({
-            auth: vi.fn().mockResolvedValue({ userId: 'clerk-1' }),
+        vi.doMock('@/core/auth/server', () => ({
+            auth: vi.fn().mockResolvedValue({ userId: 'mongo-1' }),
             currentUser: vi.fn(),
         }));
         vi.doMock('@/core/database/db', () => ({
@@ -101,11 +80,8 @@ describe('features/users/api/get-current-user', () => {
         }));
         vi.doMock('@/features/users/models/user', () => ({
             User: {
-                findByClerkId: vi.fn().mockResolvedValue({ role: 'admin', status: 'inactive', avatarUrl: 'https://example.com/avatar.png' }),
+                findOne: vi.fn().mockResolvedValue({ role: 'admin', status: 'inactive', legacyClerkId: 'legacy-1' }),
             },
-        }));
-        vi.doMock('@/features/users/api/sync', () => ({
-            ensureUserExists: vi.fn(),
         }));
 
         const mod = await importFresh<typeof import('@/features/users/api/get-current-user')>('@/features/users/api/get-current-user');
@@ -113,7 +89,8 @@ describe('features/users/api/get-current-user', () => {
         await expect(mod.getCurrentUserFromDb()).resolves.toMatchObject({
             success: false,
             user: null,
-            clerkId: 'clerk-1',
+            userId: 'mongo-1',
+            legacyClerkId: 'legacy-1',
             error: 'Usuário inativo',
         });
         await expect(mod.requireAdmin()).rejects.toThrow('Usuário inativo');

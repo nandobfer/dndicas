@@ -112,10 +112,10 @@ Use códigos apropriados:
 
 ## Autenticação
 
-Use helpers do Clerk para proteger rotas:
+Use os helpers internos de Auth.js para proteger rotas:
 
 ```typescript
-import { auth } from '@clerk/nextjs/server';
+import { auth } from '@/core/auth/server';
 import { ApiResponse } from '@/core/types/common';
 
 export async function GET() {
@@ -283,7 +283,7 @@ export async function GET(request: Request) {
 ## Exemplo Completo
 
 ```typescript
-import { auth } from '@clerk/nextjs/server';
+import { auth } from '@/core/auth/server';
 import { z } from 'zod';
 import dbConnect from '@/core/database/db';
 import { logAction } from '@/core/database/audit-log';

@@ -1,4 +1,4 @@
-import { currentUser } from "@clerk/nextjs/server"
+import { currentUser } from "@/core/auth/server"
 import { generateSpellCandidates } from "@/features/entity-generation/server/spell-ai-generation-service"
 import { EntityGenerationPusherService } from "@/features/entity-generation/realtime/entity-generation-pusher-service"
 import type { SpellGenerationGenerateRequest } from "@/features/entity-generation/types/entity-generation.types"

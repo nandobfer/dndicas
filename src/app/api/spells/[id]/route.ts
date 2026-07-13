@@ -5,7 +5,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { auth, currentUser } from '@clerk/nextjs/server';
+import { auth, currentUser } from '@/core/auth/server';
 import { getSpellById, updateSpell, deleteSpell } from '@/features/spells/api/spells-service';
 import { updateSpellSchema } from '@/features/spells/api/validation';
 

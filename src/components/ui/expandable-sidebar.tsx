@@ -16,14 +16,13 @@ import * as React from "react"
 import { motion } from "framer-motion"
 import Link from "next/link"
 import Image from "next/image"
-import { usePathname } from "next/navigation"
-import { Home, User, Sparkles, FileText, Users, Scroll, Zap, Wand, AtSign, MessageSquare, Sword, ShieldCheck, Fingerprint, Backpack, ScrollText, Skull, type LucideIcon } from "lucide-react"
+import { usePathname, useRouter } from "next/navigation"
+import { Home, User, Sparkles, FileText, Users, Scroll, Zap, Wand, AtSign, MessageSquare, Sword, ShieldCheck, Fingerprint, Backpack, ScrollText, Skull, LogOut, type LucideIcon } from "lucide-react"
 import { cn } from "@/core/utils"
 import { glassConfig } from "@/lib/config/glass-config"
 import { motionConfig } from "@/lib/config/motion-configs"
 import { SidebarItem, SidebarSection } from "./sidebar-item"
 import { TooltipProvider } from "@/core/ui/tooltip"
-import { UserButton, SignedIn, SignedOut } from "@clerk/nextjs"
 import { useAuth } from "@/core/hooks/useAuth"
 import { APP_VERSION } from "@/lib/config/version"
 
@@ -88,7 +87,10 @@ type NavigationItem = {
 
 export const ExpandableSidebar: React.FC<ExpandableSidebarProps> = ({ isExpanded, onExpand, onCollapse, isMobile = false, className }) => {
     const pathname = usePathname()
-    const { isSignedIn, isAdmin } = useAuth()
+    const router = useRouter()
+    const { isSignedIn, isAdmin, fullName, email, imageUrl, signOut } = useAuth()
+    const [isSigningOut, setIsSigningOut] = React.useState(false)
+    const displayName = fullName || email || "Usuário"
 
     // Slower transition for mobile
     const transition = isMobile ? motionConfig.mobileSidebarTransition : motionConfig.sidebarTransition
@@ -115,6 +117,19 @@ export const ExpandableSidebar: React.FC<ExpandableSidebarProps> = ({ isExpanded
     const handleItemClick = () => {
         if (isMobile) {
             onCollapse()
+        }
+    }
+
+    const handleSignOut = async () => {
+        if (isSigningOut) return
+        setIsSigningOut(true)
+        try {
+            await signOut("/sign-in")
+            if (isMobile) onCollapse()
+            router.replace("/sign-in")
+            router.refresh()
+        } finally {
+            setIsSigningOut(false)
         }
     }
 
@@ -223,30 +238,56 @@ export const ExpandableSidebar: React.FC<ExpandableSidebarProps> = ({ isExpanded
 
                 {/* User Area Footer */}
                 <div className={cn("border-t border-white/5 mt-auto py-4 px-2")}>
-                    <SignedIn>
-                        <div className="flex items-center gap-3">
-                            <div className="flex-shrink-0 w-8 h-8 flex items-center justify-center ml-3">
-                                <UserButton afterSignOutUrl="/sign-in" />
-                            </div>
+                    {isSignedIn ? (
+                        <div className="space-y-3">
+                            <Link
+                                href="/profile"
+                                className="flex w-full items-center gap-3 pl-[18px] pr-3 transition-all"
+                                title={displayName}
+                                onClick={handleItemClick}
+                            >
+                                <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center overflow-hidden rounded-full border border-white/10 bg-white/10 text-white/70">
+                                    {imageUrl ? (
+                                        // eslint-disable-next-line @next/next/no-img-element
+                                        <img src={imageUrl} alt={displayName} className="h-full w-full object-cover" referrerPolicy="no-referrer" />
+                                    ) : (
+                                        <User className="h-4 w-4" />
+                                    )}
+                                </div>
+                                {isExpanded && (
+                                    <motion.div
+                                        className="flex min-w-0 flex-col overflow-hidden"
+                                        initial={{ opacity: 0, x: -10 }}
+                                        animate={{ opacity: 1, x: 0 }}
+                                        exit={{ opacity: 0, x: -10 }}
+                                        transition={motionConfig.sidebarTransition}
+                                    >
+                                        <span className="truncate text-sm font-medium text-white">{displayName}</span>
+                                        <span className="mt-0.5 text-[10px] font-mono uppercase tracking-wider text-white/30">{APP_VERSION}</span>
+                                    </motion.div>
+                                )}
+                            </Link>
                             {isExpanded && (
-                                <motion.div
-                                    className="flex flex-col overflow-hidden"
+                                <motion.button
+                                    type="button"
+                                    onClick={() => void handleSignOut()}
+                                    disabled={isSigningOut}
+                                    className="ml-3 flex items-center gap-2 text-xs font-medium text-white/45 transition-colors hover:text-red-300 disabled:cursor-not-allowed disabled:opacity-50"
                                     initial={{ opacity: 0, x: -10 }}
                                     animate={{ opacity: 1, x: 0 }}
                                     exit={{ opacity: 0, x: -10 }}
                                     transition={motionConfig.sidebarTransition}
                                 >
-                                    <span className="text-sm font-medium text-white truncate">Minha Conta</span>
-                                    <span className="text-[10px] font-mono tracking-wider text-white/30 uppercase mt-0.5">{APP_VERSION}</span>
-                                </motion.div>
+                                    <LogOut className="h-3.5 w-3.5" />
+                                    {isSigningOut ? "Saindo..." : "Sair"}
+                                </motion.button>
                             )}
                         </div>
-                    </SignedIn>
-                    <SignedOut>
+                    ) : (
                         <div className={cn("flex items-center gap-3", !isExpanded && "justify-center")}>
                             <Link
                                 href="/sign-in"
-                                className={cn("flex items-center transition-all", !isExpanded ? "justify-center ml-3" : "gap-3 ml-3")}
+                                className="flex w-full items-center gap-3 pl-[18px] pr-3 transition-all"
                                 title="Acessar conta"
                                 onClick={handleItemClick}
                             >
@@ -261,7 +302,7 @@ export const ExpandableSidebar: React.FC<ExpandableSidebarProps> = ({ isExpanded
                                 )}
                             </Link>
                         </div>
-                    </SignedOut>
+                    )}
                 </div>
             </motion.aside>
         </TooltipProvider>

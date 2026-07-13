@@ -47,13 +47,13 @@ Consulte estes arquivos específicos conforme o contexto da tarefa:
   - Exemplos práticos de extensão
 
 #### Quando configurar ou resolver problemas de autenticação
-- **[use-para-configurar-clerk.md](./use-para-configurar-clerk.md)**
-  - Setup inicial do Clerk
+- **[use-para-configurar-authjs.md](./use-para-configurar-authjs.md)**
+  - Setup Auth.js com credenciais locais
   - Variáveis de ambiente
-  - Configuração de rotas públicas/privadas
-  - Roles e permissions
-  - Webhooks para sincronização
-  - Troubleshooting (UserProfile, middleware, etc.)
+  - Helpers server-side/client-side
+  - Roles e status no MongoDB
+  - Migração de usuários legados
+  - Troubleshooting de sessão e login
 
 #### Quando fazer manutenção no template (não nos projetos)
 - **[use-quando-desenvolver-no-modulo-core.md](./use-quando-desenvolver-no-modulo-core.md)**
@@ -82,7 +82,7 @@ Consulte estes arquivos específicos conforme o contexto da tarefa:
 | Adicionar tela ou alterar layout | `use-para-atualizar-tema-e-componentes-ui.md` |
 | Usar componentes (Button, Badge, Alert, etc.) | `use-componentes-ui.md` |
 | Customizar serviço do core (AI, Email, Storage) | `use-para-estender-o-core.md` |
-| Erro de autenticação (404, Unauthorized) | `use-para-configurar-clerk.md` |
+| Erro de autenticação (404, Unauthorized) | `use-para-configurar-authjs.md` |
 | Adicionar serviço ao template base | `use-quando-desenvolver-no-modulo-core.md` |
 | Entender por que algo foi feito de determinada forma | `use-diretrizes-do-projeto.md` |
 | Ver exemplo completo de CRUD | `modules/organizations.md` |

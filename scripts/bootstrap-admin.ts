@@ -5,10 +5,10 @@
  * Creates or promotes the first admin user in the system.
  *
  * Edge Cases Handled:
- * 1. Email exists in Clerk but not local → link + promote
- * 2. User exists local with role "user" → promote to admin
- * 3. Already admin → notify + skip
- * 4. Clerk/DB failure → clear error message
+ * 1. User exists local with role "user" → promote to admin
+ * 2. Already admin → notify + skip
+ * 3. User does not exist → create local admin requiring password setup
+ * 4. DB failure → clear error message
  *
  * Usage:
  *   npx ts-node scripts/bootstrap-admin.ts <email>
@@ -19,7 +19,6 @@
 
 import dotenv from 'dotenv';
 import mongoose from 'mongoose';
-import { clerkClient } from '@clerk/nextjs/server';
 
 // Load environment variables
 dotenv.config({ path: ".env" })
@@ -31,7 +30,7 @@ const UserModel = require('../src/features/users/models/user').User;
 interface BootstrapResult {
   success: boolean;
   message: string;
-  action: 'created' | 'promoted' | 'linked_promoted' | 'skipped' | 'error';
+  action: 'created' | 'promoted' | 'skipped' | 'error';
 }
 
 /**
@@ -62,58 +61,6 @@ async function connectDatabase(overrideHost?: string): Promise<void> {
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown error";
     throw new Error(`Failed to connect to MongoDB at ${overrideHost || "default host"}: ${message}`);
-  }
-}
-
-/**
- * Find Clerk user by email.
- */
-async function findClerkUserByEmail(email: string): Promise<{
-  id: string;
-  username: string | null;
-  firstName: string | null;
-  lastName: string | null;
-  imageUrl: string | null;
-} | null> {
-  try {
-    const client = await clerkClient();
-    const users = await client.users.getUserList({
-      emailAddress: [email],
-      limit: 1,
-    });
-
-    if (users.totalCount === 0 || users.data.length === 0) {
-      return null;
-    }
-
-    const user = users.data[0];
-    return {
-      id: user.id,
-      username: user.username,
-      firstName: user.firstName,
-      lastName: user.lastName,
-      imageUrl: user.imageUrl,
-    };
-  } catch (error) {
-    const message = error instanceof Error ? error.message : 'Unknown error';
-    throw new Error(`Failed to query Clerk: ${message}`);
-  }
-}
-
-/**
- * Update Clerk user metadata to include admin role.
- */
-async function updateClerkUserRole(clerkId: string, role: 'admin' | 'user'): Promise<void> {
-  try {
-    const client = await clerkClient();
-    await client.users.updateUser(clerkId, {
-      publicMetadata: { role },
-    });
-    console.log(`✅ Updated Clerk user metadata with role: ${role}`);
-  } catch (error) {
-    const message = error instanceof Error ? error.message : 'Unknown error';
-    console.warn(`⚠️  Could not update Clerk metadata: ${message}`);
-    // Don't throw - local DB is authoritative for roles
   }
 }
 
@@ -152,9 +99,6 @@ async function bootstrapAdmin(email: string): Promise<BootstrapResult> {
     localUser.role = 'admin';
     await localUser.save();
 
-    // Update Clerk metadata
-    await updateClerkUserRole(localUser.clerkId, 'admin');
-
     return {
       success: true,
       message: `User "${localUser.username}" promoted to admin successfully.`,
@@ -162,41 +106,23 @@ async function bootstrapAdmin(email: string): Promise<BootstrapResult> {
     };
   }
 
-  // User doesn't exist locally - check Clerk
-  console.log('🔍 User not found locally, checking Clerk...');
-  const clerkUser = await findClerkUserByEmail(normalizedEmail);
+  console.log('📝 Creating local admin user...');
 
-  if (!clerkUser) {
-    return {
-      success: false,
-      message: `No user found with email "${normalizedEmail}" in Clerk. Please create an account first by signing up at the application.`,
-      action: 'error',
-    };
-  }
-
-  // Case 1: Email exists in Clerk but not local → link + promote
-  console.log('📝 Creating local user and promoting to admin...');
-
-  const username = clerkUser.username || normalizedEmail.split('@')[0].replace(/[^a-zA-Z0-9_]/g, '_');
-  const name = [clerkUser.firstName, clerkUser.lastName].filter(Boolean).join(' ') || undefined;
+  const username = normalizedEmail.split('@')[0].replace(/[^a-zA-Z0-9_]/g, '_');
 
   const newUser = await UserModel.create({
-    clerkId: clerkUser.id,
     email: normalizedEmail,
     username,
-    name,
-    avatarUrl: clerkUser.imageUrl || undefined,
     role: 'admin',
     status: 'active',
+    deleted: false,
+    passwordSetupRequired: true,
   });
-
-  // Update Clerk metadata
-  await updateClerkUserRole(clerkUser.id, 'admin');
 
   return {
     success: true,
-    message: `User "${newUser.username}" created and promoted to admin successfully.`,
-    action: 'linked_promoted',
+    message: `User "${newUser.username}" created as admin. Define a local password before logging in.`,
+    action: 'created',
   };
 }
 

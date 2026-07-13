@@ -5,9 +5,6 @@ import { importFresh } from '../helpers/module';
 
 describe('/api/users routes', () => {
     it('GET /api/users validates filters and returns 400 for invalid pagination', async () => {
-        vi.doMock('@clerk/nextjs/server', () => ({
-            clerkClient: vi.fn(),
-        }));
         vi.doMock('@/core/database/db', () => ({
             default: vi.fn().mockResolvedValue(undefined),
         }));
@@ -25,9 +22,6 @@ describe('/api/users routes', () => {
             logCreate: vi.fn(),
             logUpdate: vi.fn(),
         }));
-        vi.doMock('@/features/users/api/sync', () => ({
-            syncUserFromClerk: vi.fn(),
-        }));
 
         const mod = await importFresh<typeof import('@/app/api/users/route')>('@/app/api/users/route');
         const response = await mod.GET(makeRequest('http://localhost/api/users?page=0'));
@@ -43,7 +37,6 @@ describe('/api/users routes', () => {
         const lean = vi.fn().mockResolvedValue([
             {
                 _id: { toString: () => 'mongo-1' },
-                clerkId: 'clerk-1',
                 username: 'hero',
                 email: 'hero@example.com',
                 name: 'Hero',
@@ -59,9 +52,6 @@ describe('/api/users routes', () => {
         const skip = vi.fn(() => ({ limit }));
         const sort = vi.fn(() => ({ skip }));
 
-        vi.doMock('@clerk/nextjs/server', () => ({
-            clerkClient: vi.fn(),
-        }));
         vi.doMock('@/core/database/db', () => ({
             default: vi.fn().mockResolvedValue(undefined),
         }));
@@ -79,9 +69,6 @@ describe('/api/users routes', () => {
             logCreate: vi.fn(),
             logUpdate: vi.fn(),
         }));
-        vi.doMock('@/features/users/api/sync', () => ({
-            syncUserFromClerk: vi.fn(),
-        }));
 
         const mod = await importFresh<typeof import('@/app/api/users/route')>('@/app/api/users/route');
         const response = await mod.GET(makeRequest('http://localhost/api/users?search=hero&status=all&role=admin&page=1&limit=10'));
@@ -94,7 +81,6 @@ describe('/api/users routes', () => {
             items: [
                 {
                     id: 'mongo-1',
-                    clerkId: 'clerk-1',
                     username: 'hero',
                     email: 'hero@example.com',
                     name: 'Hero',
@@ -102,6 +88,7 @@ describe('/api/users routes', () => {
                     role: 'admin',
                     status: 'active',
                     deleted: false,
+                    passwordSetupRequired: false,
                     createdAt: '2024-01-01T00:00:00.000Z',
                     updatedAt: '2024-01-02T00:00:00.000Z',
                 },
@@ -113,9 +100,6 @@ describe('/api/users routes', () => {
     });
 
     it('POST /api/users returns 403 when the current user is not admin', async () => {
-        vi.doMock('@clerk/nextjs/server', () => ({
-            clerkClient: vi.fn(),
-        }));
         vi.doMock('@/core/database/db', () => ({
             default: vi.fn(),
         }));
@@ -130,9 +114,6 @@ describe('/api/users routes', () => {
             logCreate: vi.fn(),
             logUpdate: vi.fn(),
         }));
-        vi.doMock('@/features/users/api/sync', () => ({
-            syncUserFromClerk: vi.fn(),
-        }));
 
         const mod = await importFresh<typeof import('@/app/api/users/route')>('@/app/api/users/route');
         const response = await mod.POST(makeJsonRequest('http://localhost/api/users', {
@@ -146,7 +127,6 @@ describe('/api/users routes', () => {
     it('PUT /api/users/[id] blocks self-role changes', async () => {
         const user = {
             _id: { toString: () => 'mongo-1' },
-            clerkId: 'clerk-1',
             username: 'hero',
             email: 'hero@example.com',
             name: 'Hero',
@@ -156,9 +136,6 @@ describe('/api/users routes', () => {
             save: vi.fn(),
         };
 
-        vi.doMock('@clerk/nextjs/server', () => ({
-            clerkClient: vi.fn(),
-        }));
         vi.doMock('@/core/database/db', () => ({
             default: vi.fn().mockResolvedValue(undefined),
         }));
@@ -189,15 +166,11 @@ describe('/api/users routes', () => {
         expect(payload.error).toContain('própria função');
     });
 
-    it('PUT /api/users/[id] updates role without Clerk ban/unban Pro calls', async () => {
+    it('PUT /api/users/[id] updates role locally without external provider calls', async () => {
         const save = vi.fn().mockResolvedValue(undefined);
-        const updateUser = vi.fn().mockResolvedValue(undefined);
-        const banUser = vi.fn();
-        const unbanUser = vi.fn();
         const logUpdate = vi.fn();
         const user = {
             _id: { toString: () => 'mongo-target' },
-            clerkId: 'clerk-target',
             username: 'target_user',
             email: 'target@example.com',
             name: 'Target User',
@@ -209,16 +182,6 @@ describe('/api/users routes', () => {
             save,
         };
 
-        vi.doMock('@clerk/nextjs/server', () => ({
-            clerkClient: vi.fn().mockResolvedValue({
-                users: {
-                    getUser: vi.fn().mockResolvedValue({ publicMetadata: { role: 'admin' } }),
-                    updateUser,
-                    banUser,
-                    unbanUser,
-                },
-            }),
-        }));
         vi.doMock('@/core/database/db', () => ({
             default: vi.fn().mockResolvedValue(undefined),
         }));
@@ -249,20 +212,12 @@ describe('/api/users routes', () => {
         }), { params: Promise.resolve({ id: 'mongo-target' }) });
 
         expect(response.status).toBe(200);
-        expect(updateUser).toHaveBeenCalledWith('clerk-target', expect.objectContaining({
-            publicMetadata: { role: 'user' },
-        }));
-        expect(banUser).not.toHaveBeenCalled();
-        expect(unbanUser).not.toHaveBeenCalled();
         expect(user.role).toBe('user');
         expect(save).toHaveBeenCalled();
         expect(logUpdate).toHaveBeenCalled();
     });
 
     it('DELETE /api/users/[id] blocks self deletion', async () => {
-        vi.doMock('@clerk/nextjs/server', () => ({
-            clerkClient: vi.fn(),
-        }));
         vi.doMock('@/core/database/db', () => ({
             default: vi.fn(),
         }));

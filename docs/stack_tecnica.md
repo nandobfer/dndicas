@@ -57,7 +57,7 @@ O projeto utiliza Next.js 15+ como base, com um template core já implementado. 
 
 ## 🔐 Autenticação e Segurança
 
-(Clerk)
+(Auth.js)
 
 
 ---
@@ -298,8 +298,8 @@ export const DAMAGE_TYPES = [
     "react-dom": "19.2.3",
     "typescript": "^5.0.0",
     
-    "@clerk/nextjs": "^6.36.10",
-    "@clerk/localizations": "^3.35.2",
+    "next-auth": "^4.24.14",
+    "bcryptjs": "^3.0.3",
     "@tanstack/react-query": "^5.0.0",
     "react-hook-form": "^7.0.0",
     "zod": "^3.0.0",
@@ -357,8 +357,8 @@ Docker
 - [ ] Instalar dependências (`npm install`)
 - [ ] Configurar Tailwind + Shadcn/ui
 - [ ] Configurar TanStack Query Provider
-- [ ] Implementar authentication flow (Clerk Dashboard + Middleware)
-- [ ] Criar models do Mongoose (Character, Spell, Item, etc. - User é gerenciado pelo Clerk)
+- [ ] Implementar authentication flow (Auth.js + credenciais locais)
+- [ ] Criar models do Mongoose (Character, Spell, Item, etc. - User é local)
 - [ ] Configurar Framer Motion global config
 - [ ] Definir paleta de cores (Liquid Glass + D&D theme)
 - [ ] Implementar Error Boundaries

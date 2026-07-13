@@ -1,0 +1,260 @@
+{
+  "mode": "apply",
+  "records": [
+    {
+      "email": "nandobfer@gmail.com",
+      "oldClerkId": "user_39qKqwvMZF0oDulqJQblpQDs2E7",
+      "remapSourceIds": [
+        "user_39qKqwvMZF0oDulqJQblpQDs2E7",
+        "user_3GHSa69vWxsMx41K9SlMvc5adWo"
+      ],
+      "localUserId": "699b5eba4c1065db37d4d89b",
+      "role": "admin",
+      "status": "active",
+      "action": "updated",
+      "passwordImported": true,
+      "passwordSetupRequired": false,
+      "passwordHashPresent": true,
+      "message": "Hash bcrypt importado para Auth.js."
+    },
+    {
+      "email": "nando.tibiabr@gmail.com",
+      "oldClerkId": "user_39wcmtJoIJnEXejjrZtXdjZnzjf",
+      "remapSourceIds": [
+        "user_39wcmtJoIJnEXejjrZtXdjZnzjf",
+        "user_3GHSa9oZCBLDouPRjQ99uZGHe4t"
+      ],
+      "localUserId": "699f809b7a5afa9413a07e99",
+      "role": "user",
+      "status": "active",
+      "action": "updated",
+      "passwordImported": false,
+      "passwordSetupRequired": true,
+      "passwordHashPresent": false,
+      "message": "Usuário precisa definir senha local."
+    },
+    {
+      "email": "joao@cleber.com",
+      "oldClerkId": "user_39wo7fUvrYzC0CY0bL7kVp545jD",
+      "remapSourceIds": [
+        "user_39wo7fUvrYzC0CY0bL7kVp545jD",
+        "user_3GHSa7RrMnx6YqYpWDn9s5i6Y75"
+      ],
+      "localUserId": "69aa2a7709824d0e19e9be78",
+      "role": "user",
+      "status": "active",
+      "action": "updated",
+      "passwordImported": false,
+      "passwordSetupRequired": true,
+      "passwordHashPresent": false,
+      "message": "Usuário precisa definir senha local."
+    },
+    {
+      "email": "theuwow@gmail.com",
+      "oldClerkId": "user_3ABgYdj7RYnrHKZI7CNQk31xaAc",
+      "remapSourceIds": [
+        "user_3ABgYdj7RYnrHKZI7CNQk31xaAc",
+        "user_3GHSaA0nWzXrowhFewkllLY4R9F"
+      ],
+      "localUserId": "699faa03d68d68ded79f41d8",
+      "role": "admin",
+      "status": "active",
+      "action": "updated",
+      "passwordImported": true,
+      "passwordSetupRequired": false,
+      "passwordHashPresent": true,
+      "message": "Hash bcrypt importado para Auth.js."
+    },
+    {
+      "email": "alfredoaugustopetri@gmail.com",
+      "oldClerkId": "user_3ADPsjwFJHvVPOESa3LTTPc4JdV",
+      "remapSourceIds": [
+        "user_3ADPsjwFJHvVPOESa3LTTPc4JdV",
+        "user_3GHSa4Cc2tJ6WJtenY9OUgQ1I7R"
+      ],
+      "localUserId": "69a078d99fae809ca1da8718",
+      "role": "admin",
+      "status": "active",
+      "action": "updated",
+      "passwordImported": false,
+      "passwordSetupRequired": true,
+      "passwordHashPresent": false,
+      "message": "Usuário precisa definir senha local."
+    },
+    {
+      "email": "cheester97@gmail.com",
+      "oldClerkId": "user_3AJeblry70DRtWQM9FLoAUltZLl",
+      "remapSourceIds": [
+        "user_3AJeblry70DRtWQM9FLoAUltZLl",
+        "user_3GHSaIM5FQaPX4lHO1jpCGppOE0"
+      ],
+      "localUserId": "69a36225337739eacae11fcf",
+      "role": "admin",
+      "status": "active",
+      "action": "updated",
+      "passwordImported": false,
+      "passwordSetupRequired": true,
+      "passwordHashPresent": false,
+      "message": "Usuário precisa definir senha local."
+    },
+    {
+      "email": "acebercute@gmail.com",
+      "oldClerkId": "user_3ASKrav02k8Kukdt7UyfSdcfqaw",
+      "remapSourceIds": [
+        "user_3ASKrav02k8Kukdt7UyfSdcfqaw",
+        "user_3GHSaCHK88nC2QqTKlUfpszAa79"
+      ],
+      "localUserId": "699f7bbf80fb8320c5dacc6b",
+      "role": "admin",
+      "status": "active",
+      "action": "updated",
+      "passwordImported": false,
+      "passwordSetupRequired": true,
+      "passwordHashPresent": false,
+      "message": "Usuário precisa definir senha local."
+    },
+    {
+      "email": "andersonvpqa@gmail.com",
+      "oldClerkId": "user_3BUVW5fbsopjHFQdZYeMHBM3yDI",
+      "remapSourceIds": [
+        "user_3BUVW5fbsopjHFQdZYeMHBM3yDI",
+        "user_3GHSaI3IHRHlfxjQUJ6JmLPSLcV"
+      ],
+      "localUserId": "69c5633162cb4125f0b25ab8",
+      "role": "user",
+      "status": "active",
+      "action": "updated",
+      "passwordImported": false,
+      "passwordSetupRequired": true,
+      "passwordHashPresent": false,
+      "message": "Usuário precisa definir senha local."
+    },
+    {
+      "email": "indiralima@duck.com",
+      "oldClerkId": "user_3BiQoOCuvR9N6JzH4RUbXnP1Zxu",
+      "remapSourceIds": [
+        "user_3BiQoOCuvR9N6JzH4RUbXnP1Zxu",
+        "user_3GHSaCGlhmVZXJwzTiaDHJahqo3"
+      ],
+      "localUserId": "69cbe2f1938956380db278b9",
+      "role": "user",
+      "status": "active",
+      "action": "updated",
+      "passwordImported": false,
+      "passwordSetupRequired": true,
+      "passwordHashPresent": false,
+      "message": "Usuário precisa definir senha local."
+    },
+    {
+      "email": "laherce@gmail.com",
+      "oldClerkId": "user_3C6PoTM9yXgrOZnSUzyb5w3y2np",
+      "remapSourceIds": [
+        "user_3C6PoTM9yXgrOZnSUzyb5w3y2np",
+        "user_3GHSaQFe9rHz3qMOvN6KXU6pOwk"
+      ],
+      "localUserId": "69d714b6b219a17b2965fea3",
+      "role": "user",
+      "status": "active",
+      "action": "updated",
+      "passwordImported": false,
+      "passwordSetupRequired": true,
+      "passwordHashPresent": false,
+      "message": "Usuário precisa definir senha local."
+    },
+    {
+      "email": "sm.cardosopedro@gmail.com",
+      "oldClerkId": "user_3CBXimY4N3XvdljuThj5VmhFUCv",
+      "remapSourceIds": [
+        "user_3CBXimY4N3XvdljuThj5VmhFUCv",
+        "user_3GHSaJuEscmiNZBorJT4ARS2jFw"
+      ],
+      "localUserId": "69d9796468a5bed2f2895513",
+      "role": "user",
+      "status": "active",
+      "action": "updated",
+      "passwordImported": false,
+      "passwordSetupRequired": true,
+      "passwordHashPresent": false,
+      "message": "Usuário precisa definir senha local."
+    },
+    {
+      "email": "ildojuniorjogador@gmail.com",
+      "oldClerkId": "user_3CBpWjxAWUG004LuUvKAv41ua0m",
+      "remapSourceIds": [
+        "user_3CBpWjxAWUG004LuUvKAv41ua0m",
+        "user_3GHSaK5dIuAl4skQ9DNjNy5BYqx"
+      ],
+      "localUserId": "69d99bb36b5b2bbbb8bd7b18",
+      "role": "user",
+      "status": "active",
+      "action": "updated",
+      "passwordImported": true,
+      "passwordSetupRequired": false,
+      "passwordHashPresent": true,
+      "message": "Hash bcrypt importado para Auth.js."
+    },
+    {
+      "email": "brunoroseo@gmail.com",
+      "oldClerkId": "user_3DuwZEp5pnb8sbt4Iyp4S540pMz",
+      "remapSourceIds": [
+        "user_3DuwZEp5pnb8sbt4Iyp4S540pMz",
+        "user_3GHSaK4YFqkHXxUJURQgHqrCnSF"
+      ],
+      "localUserId": "6a0b9a645303cdd51489a13c",
+      "role": "user",
+      "status": "active",
+      "action": "updated",
+      "passwordImported": false,
+      "passwordSetupRequired": true,
+      "passwordHashPresent": false,
+      "message": "Usuário precisa definir senha local."
+    },
+    {
+      "email": "danibfer231010@gmail.com",
+      "oldClerkId": "user_3ET6bJGDsKjsYTuzOTy1wuVLQcI",
+      "remapSourceIds": [
+        "user_3ET6bJGDsKjsYTuzOTy1wuVLQcI",
+        "user_3GHSaNid6fpQLddtdLNgw5qkriN"
+      ],
+      "localUserId": "6a1b8c4a4c05b47c5b35821d",
+      "role": "user",
+      "status": "active",
+      "action": "updated",
+      "passwordImported": false,
+      "passwordSetupRequired": true,
+      "passwordHashPresent": false,
+      "message": "Usuário precisa definir senha local."
+    },
+    {
+      "email": "okgawatheking@gmail.com",
+      "oldClerkId": "user_3FhBko8X5iycVwYqEbvXBSV9Bvt",
+      "remapSourceIds": [
+        "user_3FhBko8X5iycVwYqEbvXBSV9Bvt"
+      ],
+      "localUserId": "",
+      "role": "",
+      "status": "",
+      "action": "skipped",
+      "passwordImported": false,
+      "passwordSetupRequired": true,
+      "passwordHashPresent": false,
+      "message": "Usuário não existe no MongoDB local."
+    },
+    {
+      "email": "nilsander@hotmail.com",
+      "oldClerkId": "user_3G3WZBoOWl26AnszTlsZ1HI8Ggf",
+      "remapSourceIds": [
+        "user_3G3WZBoOWl26AnszTlsZ1HI8Ggf",
+        "user_3GHSaOSbbFLaPA2pFqXkpYOSDoG"
+      ],
+      "localUserId": "6a497c1258c52f2759e1d52b",
+      "role": "user",
+      "status": "active",
+      "action": "updated",
+      "passwordImported": false,
+      "passwordSetupRequired": true,
+      "passwordHashPresent": false,
+      "message": "Usuário precisa definir senha local."
+    }
+  ]
+}

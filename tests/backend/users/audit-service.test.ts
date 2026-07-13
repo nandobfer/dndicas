@@ -13,7 +13,7 @@ describe('features/users/api/audit-service', () => {
         vi.doMock('@/features/users/models/user', () => ({
             User: {
                 findById: vi.fn(),
-                findByClerkId: vi.fn(),
+                findByLegacyClerkId: vi.fn(),
             },
         }));
 
@@ -64,7 +64,8 @@ describe('features/users/api/audit-service', () => {
             newData: {
                 _id: 'mongo-2',
                 __v: 0,
-                clerkId: 'clerk-1',
+                legacyClerkId: 'clerk-1',
+                passwordHash: 'secret-hash',
                 name: 'Created User',
             },
         });

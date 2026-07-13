@@ -1,4 +1,4 @@
-import { currentUser } from "@clerk/nextjs/server"
+import { currentUser } from "@/core/auth/server"
 import { EntityGenerationPusherService } from "@/features/entity-generation/realtime/entity-generation-pusher-service"
 import { generateFeatCandidates } from "@/features/entity-generation/server/feat-ai-generation-service"
 import type { FeatGenerationGenerateRequest } from "@/features/entity-generation/types/entity-generation.types"

@@ -216,7 +216,7 @@ describe('auxiliary backend routes', () => {
     it('POST /api/feedback strips admin-only fields for non-admin creators', async () => {
         const create = vi.fn().mockResolvedValue({ _id: 'feedback-1' });
 
-        vi.doMock('@clerk/nextjs/server', () => ({
+        vi.doMock('@/core/auth/server', () => ({
             currentUser: vi.fn().mockResolvedValue({
                 id: 'clerk-1',
                 fullName: 'Hero Player',
@@ -256,7 +256,7 @@ describe('auxiliary backend routes', () => {
     });
 
     it('PATCH /api/feedback/[id] blocks non-owner non-admin users', async () => {
-        vi.doMock('@clerk/nextjs/server', () => ({
+        vi.doMock('@/core/auth/server', () => ({
             auth: vi.fn().mockResolvedValue({ userId: 'clerk-2' }),
             currentUser: vi.fn().mockResolvedValue({
                 publicMetadata: { role: 'user' },
@@ -282,7 +282,7 @@ describe('auxiliary backend routes', () => {
     });
 
     it('GET /api/admin/mention-audit requires admin users', async () => {
-        vi.doMock('@clerk/nextjs/server', () => ({
+        vi.doMock('@/core/auth/server', () => ({
             auth: vi.fn().mockResolvedValue({ userId: 'clerk-1' }),
             currentUser: vi.fn().mockResolvedValue({
                 publicMetadata: { role: 'user' },

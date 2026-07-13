@@ -91,7 +91,7 @@ const fieldLabels: Record<string, string> = {
     role: "Papel",
     status: "Status",
     imageUrl: "Avatar",
-    clerkId: "Clerk ID",
+    legacyClerkId: "ID Clerk legado",
     description: "Descrição",
     source: "Fonte",
     level: "Nível",

@@ -8,7 +8,7 @@ Este arquivo consolida todas as diretrizes, decisões arquiteturais e lições a
 
 Template starter Next.js para projetos da Sipal com:
 - Core imutável e atualizável via git
-- Autenticação (Clerk)
+- Autenticação (Auth.js)
 - Banco de dados (MongoDB)
 - IA (Google Gemini)
 - Storage (S3/Minio)
@@ -30,7 +30,7 @@ O `src/core/` é a base compartilhada entre todos os projetos derivados:
 src/
 ├── core/                    # Base imutável (NÃO MODIFICAR)
 │   ├── ai/                 # Google Gemini
-│   ├── auth/               # Helpers Clerk
+│   ├── auth/               # Helpers Auth.js
 │   ├── context/            # React Contexts
 │   ├── database/           # MongoDB + Auditoria
 │   ├── email/              # Nodemailer
@@ -57,24 +57,26 @@ src/
 
 ## 📋 Decisões Arquiteturais Importantes
 
-### 1. Autenticação: Clerk
+### 1. Autenticação: Auth.js
 
-**Decisão**: Usar Clerk em vez de NextAuth ou implementação própria
+**Decisão**: Usar Auth.js com credenciais locais e MongoDB como fonte autoritativa de usuários.
 
 **Razão**:
-- Gerenciamento completo de sessões
-- UI pronta (SignIn, SignUp, UserProfile)
-- Roles e permissions integrados
-- Webhooks para sincronização
+- Remover dependência externa de identidade.
+- Preservar usuários atuais com migração controlada.
+- Permitir login simples por email/username e senha.
+- Suportar login persistente e múltiplos dispositivos.
+- Manter roles/status no MongoDB local.
 
 **Implementação**:
-- Middleware protege todas as rotas automaticamente
-- Rotas públicas definidas via `createRouteMatcher`
-- Helper `requireAuth()` para APIs
+- `src/features/auth/auth-options.ts` configura Auth.js.
+- `src/core/auth/server.ts` expõe `auth()` e `currentUser()` internos.
+- `src/core/hooks/useAuth.ts` expõe o contrato client-side.
+- UI própria substitui componentes de provedor externo.
 
 **Problema Resolvido**:
-- Middleware original não protegia rotas (apenas logava)
-- Solução: Adicionar `await auth.protect()`
+- Evita colisão entre IDs externos e ownership local.
+- Reduz acoplamento de UI e sessão a provedor terceiro.
 
 ### 2. Banco de Dados: MongoDB + Mongoose
 
@@ -398,7 +400,7 @@ describe('Button', () => {
 ```
 aicontext/
 ├── api-guidelines.md         (redundante)
-├── configuracao-clerk.md     (nomenclatura inconsistente)
+├── configuracao-authjs.md    (nomenclatura inconsistente)
 ├── core-context.md           (redundante)
 ├── project-rules.md          (redundante)
 ├── prompt/                   (misturado com contexto)
@@ -422,7 +424,7 @@ aicontext/
 | api-guidelines.md | use-quando-desenvolver-api.md |
 | core-context.md | use-quando-desenvolver-no-modulo-core.md |
 | project-rules.md | use-sempre-que-desenvolver.md |
-| configuracao-clerk.md | use-para-configurar-clerk.md |
+| configuracao-authjs.md | use-para-configurar-authjs.md |
 | Decisões arquiteturais (espalhadas) | use-diretrizes-do-projeto.md |
 | prompt/0-desenvolvimento.md | docs/prompt-original/ |
 
@@ -441,7 +443,7 @@ aicontext/
 
 **Críticas**:
 - `MONGODB_URI`
-- `CLERK_SECRET_KEY`
+- `AUTH_SECRET`
 - `GOOGLE_API_KEY`
 - `GENAI_API_KEY` quando o fallback de IA estiver habilitado
 
@@ -532,7 +534,7 @@ aicontext/
 ## 📚 Referências
 
 - **Next.js**: https://nextjs.org/docs
-- **Clerk**: https://clerk.com/docs
+- **Auth.js**: https://authjs.dev/
 - **ShadCN**: https://ui.shadcn.com
 - **Zod**: https://zod.dev
 - **Mongoose**: https://mongoosejs.com/docs

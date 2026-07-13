@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
-import { currentUser } from "@clerk/nextjs/server"
+import { currentUser } from "@/core/auth/server"
 import { FeedbackModel } from "@/features/feedback/api/feedback.model"
 import dbConnect from "@/core/database/db"
 import { logAction } from "@/core/database/audit-log"

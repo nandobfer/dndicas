@@ -84,7 +84,7 @@ Routes:
 - `GET /api/stats/monsters`
 - `GET /api/sources?entity=monsters`
 
-Mutations require Clerk auth and create audit logs with `entity: "Monstro"`.
+Mutations require Auth.js auth and create audit logs with `entity: "Monstro"`.
 
 ### NPCs do usuário
 Routes:

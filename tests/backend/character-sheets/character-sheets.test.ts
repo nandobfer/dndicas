@@ -89,7 +89,7 @@ describe('character sheets backend', () => {
     });
 
     it('GET /api/character-sheets returns 401 for anonymous users', async () => {
-        vi.doMock('@clerk/nextjs/server', () => ({
+        vi.doMock('@/core/auth/server', () => ({
             auth: vi.fn().mockResolvedValue({ userId: null }),
             currentUser: vi.fn(),
         }));
@@ -107,7 +107,7 @@ describe('character sheets backend', () => {
     it('POST /api/character-sheets creates a blank sheet with derived username fallback', async () => {
         const createBlankSheet = vi.fn().mockResolvedValue({ _id: 'sheet-1' });
 
-        vi.doMock('@clerk/nextjs/server', () => ({
+        vi.doMock('@/core/auth/server', () => ({
             auth: vi.fn().mockResolvedValue({ userId: 'clerk-1' }),
             currentUser: vi.fn().mockResolvedValue({
                 username: null,
@@ -133,7 +133,7 @@ describe('character sheets backend', () => {
         const createBlankSheet = vi.fn().mockResolvedValue({ _id: 'sheet-1', slug: 'hero/kael', name: 'Kael' });
         const patchSheet = vi.fn().mockResolvedValue({ _id: 'sheet-1', slug: 'hero/kael', name: 'Kael', race: 'Humano' });
 
-        vi.doMock('@clerk/nextjs/server', () => ({
+        vi.doMock('@/core/auth/server', () => ({
             auth: vi.fn().mockResolvedValue({ userId: 'clerk-1' }),
             currentUser: vi.fn().mockResolvedValue({
                 username: 'hero',
@@ -166,7 +166,7 @@ describe('character sheets backend', () => {
     });
 
     it('POST /api/character-sheets/assisted rejects missing character names', async () => {
-        vi.doMock('@clerk/nextjs/server', () => ({
+        vi.doMock('@/core/auth/server', () => ({
             auth: vi.fn().mockResolvedValue({ userId: 'clerk-1' }),
             currentUser: vi.fn(),
         }));
@@ -196,7 +196,7 @@ describe('character sheets backend', () => {
     });
 
     it('PATCH /api/character-sheets/[id] validates request body before patching', async () => {
-        vi.doMock('@clerk/nextjs/server', () => ({
+        vi.doMock('@/core/auth/server', () => ({
             auth: vi.fn().mockResolvedValue({ userId: 'clerk-1' }),
         }));
         vi.doMock('@/core/realtime/pusher-origin', () => ({
@@ -224,7 +224,7 @@ describe('character sheets backend', () => {
     it('POST /api/character-sheets/[id]/long-rest forwards pusher origin and maps missing sheets to 404', async () => {
         const applyLongRest = vi.fn().mockResolvedValue(null);
 
-        vi.doMock('@clerk/nextjs/server', () => ({
+        vi.doMock('@/core/auth/server', () => ({
             auth: vi.fn().mockResolvedValue({ userId: 'clerk-1' }),
         }));
         vi.doMock('@/core/realtime/pusher-origin', () => ({

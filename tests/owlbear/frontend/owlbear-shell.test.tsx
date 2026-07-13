@@ -126,19 +126,12 @@ vi.mock("@/features/owlbear/owlbear-sdk-client", () => ({
     preloadedOwlbearSdk: sdkMock,
 }))
 
-vi.mock("@clerk/nextjs", () => ({
-    SignIn: () => <div data-testid="clerk-sign-in">Clerk SignIn</div>,
-    SignedIn: ({ children }: { children: React.ReactNode }) => <>{children}</>,
-    SignedOut: ({ children }: { children: React.ReactNode }) => <>{children}</>,
-    UserButton: () => <div data-testid="user-button" />,
-    useUser: () => ({
-        user: null,
-        isLoaded: clerkState.isLoaded,
-        isSignedIn: clerkState.isSignedIn,
-    }),
+vi.mock("@/core/hooks/useAuth", () => ({
     useAuth: () => ({
         signOut: vi.fn(),
         userId: clerkState.userId,
+        isLoaded: clerkState.isLoaded,
+        isSignedIn: clerkState.isSignedIn,
     }),
 }))
 
@@ -609,7 +602,7 @@ describe("OwlbearShell", () => {
         await screen.findByRole("button", { name: "Ficha" })
         fireEvent.click(screen.getByRole("button", { name: "Ficha" }))
 
-        expect(await screen.findByTestId("clerk-sign-in")).toBeInTheDocument()
+        expect(await screen.findByText(/Para vincular sua ficha a esta sala/i)).toBeInTheDocument()
         expect(screen.queryByText("A sessão Owlbear-aware não pôde ser inicializada. Reabra a action para tentar novamente.")).not.toBeInTheDocument()
     })
 

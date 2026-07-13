@@ -1,0 +1,335 @@
+{
+  "mode": "apply",
+  "targets": [
+    {
+      "collectionName": "charactersheets",
+      "fieldName": "userId",
+      "label": "characterSheets.userId",
+      "matchedCount": 23,
+      "modifiedCount": 23,
+      "sources": [
+        {
+          "email": "nandobfer@gmail.com",
+          "sourceId": "user_3GHSa69vWxsMx41K9SlMvc5adWo",
+          "localUserId": "699b5eba4c1065db37d4d89b",
+          "matchedCount": 9,
+          "modifiedCount": 9
+        },
+        {
+          "email": "nando.tibiabr@gmail.com",
+          "sourceId": "user_3GHSa9oZCBLDouPRjQ99uZGHe4t",
+          "localUserId": "699f809b7a5afa9413a07e99",
+          "matchedCount": 1,
+          "modifiedCount": 1
+        },
+        {
+          "email": "theuwow@gmail.com",
+          "sourceId": "user_3GHSaA0nWzXrowhFewkllLY4R9F",
+          "localUserId": "699faa03d68d68ded79f41d8",
+          "matchedCount": 3,
+          "modifiedCount": 3
+        },
+        {
+          "email": "alfredoaugustopetri@gmail.com",
+          "sourceId": "user_3GHSa4Cc2tJ6WJtenY9OUgQ1I7R",
+          "localUserId": "69a078d99fae809ca1da8718",
+          "matchedCount": 1,
+          "modifiedCount": 1
+        },
+        {
+          "email": "cheester97@gmail.com",
+          "sourceId": "user_3GHSaIM5FQaPX4lHO1jpCGppOE0",
+          "localUserId": "69a36225337739eacae11fcf",
+          "matchedCount": 1,
+          "modifiedCount": 1
+        },
+        {
+          "email": "acebercute@gmail.com",
+          "sourceId": "user_3GHSaCHK88nC2QqTKlUfpszAa79",
+          "localUserId": "699f7bbf80fb8320c5dacc6b",
+          "matchedCount": 2,
+          "modifiedCount": 2
+        },
+        {
+          "email": "andersonvpqa@gmail.com",
+          "sourceId": "user_3GHSaI3IHRHlfxjQUJ6JmLPSLcV",
+          "localUserId": "69c5633162cb4125f0b25ab8",
+          "matchedCount": 1,
+          "modifiedCount": 1
+        },
+        {
+          "email": "laherce@gmail.com",
+          "sourceId": "user_3GHSaQFe9rHz3qMOvN6KXU6pOwk",
+          "localUserId": "69d714b6b219a17b2965fea3",
+          "matchedCount": 1,
+          "modifiedCount": 1
+        },
+        {
+          "email": "sm.cardosopedro@gmail.com",
+          "sourceId": "user_3GHSaJuEscmiNZBorJT4ARS2jFw",
+          "localUserId": "69d9796468a5bed2f2895513",
+          "matchedCount": 1,
+          "modifiedCount": 1
+        },
+        {
+          "email": "ildojuniorjogador@gmail.com",
+          "sourceId": "user_3GHSaK5dIuAl4skQ9DNjNy5BYqx",
+          "localUserId": "69d99bb36b5b2bbbb8bd7b18",
+          "matchedCount": 1,
+          "modifiedCount": 1
+        },
+        {
+          "email": "danibfer231010@gmail.com",
+          "sourceId": "user_3GHSaNid6fpQLddtdLNgw5qkriN",
+          "localUserId": "6a1b8c4a4c05b47c5b35821d",
+          "matchedCount": 1,
+          "modifiedCount": 1
+        },
+        {
+          "email": "nilsander@hotmail.com",
+          "sourceId": "user_3GHSaOSbbFLaPA2pFqXkpYOSDoG",
+          "localUserId": "6a497c1258c52f2759e1d52b",
+          "matchedCount": 1,
+          "modifiedCount": 1
+        }
+      ]
+    },
+    {
+      "collectionName": "owlbear_sessions",
+      "fieldName": "userId",
+      "label": "owlbearSessions.userId",
+      "matchedCount": 232,
+      "modifiedCount": 232,
+      "sources": [
+        {
+          "email": "nandobfer@gmail.com",
+          "sourceId": "user_3GHSa69vWxsMx41K9SlMvc5adWo",
+          "localUserId": "699b5eba4c1065db37d4d89b",
+          "matchedCount": 215,
+          "modifiedCount": 215
+        },
+        {
+          "email": "nando.tibiabr@gmail.com",
+          "sourceId": "user_3GHSa9oZCBLDouPRjQ99uZGHe4t",
+          "localUserId": "699f809b7a5afa9413a07e99",
+          "matchedCount": 7,
+          "modifiedCount": 7
+        },
+        {
+          "email": "theuwow@gmail.com",
+          "sourceId": "user_3GHSaA0nWzXrowhFewkllLY4R9F",
+          "localUserId": "699faa03d68d68ded79f41d8",
+          "matchedCount": 7,
+          "modifiedCount": 7
+        },
+        {
+          "email": "danibfer231010@gmail.com",
+          "sourceId": "user_3GHSaNid6fpQLddtdLNgw5qkriN",
+          "localUserId": "6a1b8c4a4c05b47c5b35821d",
+          "matchedCount": 3,
+          "modifiedCount": 3
+        }
+      ]
+    },
+    {
+      "collectionName": "owlbear_room_npcs",
+      "fieldName": "userId",
+      "label": "owlbearRoomNpcs.userId",
+      "matchedCount": 27,
+      "modifiedCount": 27,
+      "sources": [
+        {
+          "email": "nandobfer@gmail.com",
+          "sourceId": "user_3GHSa69vWxsMx41K9SlMvc5adWo",
+          "localUserId": "699b5eba4c1065db37d4d89b",
+          "matchedCount": 27,
+          "modifiedCount": 27
+        }
+      ]
+    },
+    {
+      "collectionName": "user_npcs",
+      "fieldName": "userId",
+      "label": "userNpcs.userId",
+      "matchedCount": 11,
+      "modifiedCount": 11,
+      "sources": [
+        {
+          "email": "nandobfer@gmail.com",
+          "sourceId": "user_3GHSa69vWxsMx41K9SlMvc5adWo",
+          "localUserId": "699b5eba4c1065db37d4d89b",
+          "matchedCount": 11,
+          "modifiedCount": 11
+        }
+      ]
+    },
+    {
+      "collectionName": "feedbacks",
+      "fieldName": "createdBy",
+      "label": "feedback.createdBy",
+      "matchedCount": 67,
+      "modifiedCount": 67,
+      "sources": [
+        {
+          "email": "nandobfer@gmail.com",
+          "sourceId": "user_3GHSa69vWxsMx41K9SlMvc5adWo",
+          "localUserId": "699b5eba4c1065db37d4d89b",
+          "matchedCount": 57,
+          "modifiedCount": 57
+        },
+        {
+          "email": "theuwow@gmail.com",
+          "sourceId": "user_3GHSaA0nWzXrowhFewkllLY4R9F",
+          "localUserId": "699faa03d68d68ded79f41d8",
+          "matchedCount": 6,
+          "modifiedCount": 6
+        },
+        {
+          "email": "cheester97@gmail.com",
+          "sourceId": "user_3GHSaIM5FQaPX4lHO1jpCGppOE0",
+          "localUserId": "69a36225337739eacae11fcf",
+          "matchedCount": 2,
+          "modifiedCount": 2
+        },
+        {
+          "email": "andersonvpqa@gmail.com",
+          "sourceId": "user_3GHSaI3IHRHlfxjQUJ6JmLPSLcV",
+          "localUserId": "69c5633162cb4125f0b25ab8",
+          "matchedCount": 1,
+          "modifiedCount": 1
+        },
+        {
+          "email": "laherce@gmail.com",
+          "sourceId": "user_3GHSaQFe9rHz3qMOvN6KXU6pOwk",
+          "localUserId": "69d714b6b219a17b2965fea3",
+          "matchedCount": 1,
+          "modifiedCount": 1
+        }
+      ]
+    },
+    {
+      "collectionName": "auditlogs",
+      "fieldName": "userId",
+      "label": "auditLogs.userId",
+      "matchedCount": 0,
+      "modifiedCount": 0,
+      "sources": []
+    },
+    {
+      "collectionName": "auditlogs",
+      "fieldName": "performedBy",
+      "label": "auditLogs.performedBy",
+      "matchedCount": 1723,
+      "modifiedCount": 1723,
+      "sources": [
+        {
+          "email": "nandobfer@gmail.com",
+          "sourceId": "user_3GHSa69vWxsMx41K9SlMvc5adWo",
+          "localUserId": "699b5eba4c1065db37d4d89b",
+          "matchedCount": 1430,
+          "modifiedCount": 1430
+        },
+        {
+          "email": "theuwow@gmail.com",
+          "sourceId": "user_3GHSaA0nWzXrowhFewkllLY4R9F",
+          "localUserId": "699faa03d68d68ded79f41d8",
+          "matchedCount": 256,
+          "modifiedCount": 256
+        },
+        {
+          "email": "alfredoaugustopetri@gmail.com",
+          "sourceId": "user_3GHSa4Cc2tJ6WJtenY9OUgQ1I7R",
+          "localUserId": "69a078d99fae809ca1da8718",
+          "matchedCount": 3,
+          "modifiedCount": 3
+        },
+        {
+          "email": "cheester97@gmail.com",
+          "sourceId": "user_3GHSaIM5FQaPX4lHO1jpCGppOE0",
+          "localUserId": "69a36225337739eacae11fcf",
+          "matchedCount": 27,
+          "modifiedCount": 27
+        },
+        {
+          "email": "acebercute@gmail.com",
+          "sourceId": "user_3GHSaCHK88nC2QqTKlUfpszAa79",
+          "localUserId": "699f7bbf80fb8320c5dacc6b",
+          "matchedCount": 1,
+          "modifiedCount": 1
+        },
+        {
+          "email": "ildojuniorjogador@gmail.com",
+          "sourceId": "user_3GHSaK5dIuAl4skQ9DNjNy5BYqx",
+          "localUserId": "69d99bb36b5b2bbbb8bd7b18",
+          "matchedCount": 6,
+          "modifiedCount": 6
+        }
+      ]
+    },
+    {
+      "collectionName": "usagelogs",
+      "fieldName": "userId",
+      "label": "usageLogs.userId",
+      "matchedCount": 253,
+      "modifiedCount": 253,
+      "sources": [
+        {
+          "email": "nandobfer@gmail.com",
+          "sourceId": "user_3GHSa69vWxsMx41K9SlMvc5adWo",
+          "localUserId": "699b5eba4c1065db37d4d89b",
+          "matchedCount": 156,
+          "modifiedCount": 156
+        },
+        {
+          "email": "theuwow@gmail.com",
+          "sourceId": "user_3GHSaA0nWzXrowhFewkllLY4R9F",
+          "localUserId": "699faa03d68d68ded79f41d8",
+          "matchedCount": 65,
+          "modifiedCount": 65
+        },
+        {
+          "email": "alfredoaugustopetri@gmail.com",
+          "sourceId": "user_3GHSa4Cc2tJ6WJtenY9OUgQ1I7R",
+          "localUserId": "69a078d99fae809ca1da8718",
+          "matchedCount": 2,
+          "modifiedCount": 2
+        },
+        {
+          "email": "acebercute@gmail.com",
+          "sourceId": "user_3GHSaCHK88nC2QqTKlUfpszAa79",
+          "localUserId": "699f7bbf80fb8320c5dacc6b",
+          "matchedCount": 4,
+          "modifiedCount": 4
+        },
+        {
+          "email": "andersonvpqa@gmail.com",
+          "sourceId": "user_3GHSaI3IHRHlfxjQUJ6JmLPSLcV",
+          "localUserId": "69c5633162cb4125f0b25ab8",
+          "matchedCount": 8,
+          "modifiedCount": 8
+        },
+        {
+          "email": "laherce@gmail.com",
+          "sourceId": "user_3GHSaQFe9rHz3qMOvN6KXU6pOwk",
+          "localUserId": "69d714b6b219a17b2965fea3",
+          "matchedCount": 2,
+          "modifiedCount": 2
+        },
+        {
+          "email": "danibfer231010@gmail.com",
+          "sourceId": "user_3GHSaNid6fpQLddtdLNgw5qkriN",
+          "localUserId": "6a1b8c4a4c05b47c5b35821d",
+          "matchedCount": 8,
+          "modifiedCount": 8
+        },
+        {
+          "email": "nilsander@hotmail.com",
+          "sourceId": "user_3GHSaOSbbFLaPA2pFqXkpYOSDoG",
+          "localUserId": "6a497c1258c52f2759e1d52b",
+          "matchedCount": 8,
+          "modifiedCount": 8
+        }
+      ]
+    }
+  ]
+}

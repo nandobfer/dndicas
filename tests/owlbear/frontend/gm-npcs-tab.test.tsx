@@ -210,7 +210,7 @@ describe("OwlbearGmNpcsTab", () => {
     it("asks the GM to login before using the NPC tab", () => {
         renderTab({ isAuthenticated: false })
 
-        expect(screen.getByTestId("login-view")).toBeInTheDocument()
+        expect(screen.getByText(/Para gerenciar NPCs da sala/i)).toBeInTheDocument()
         expect(useRoomNpcsMock).toHaveBeenCalledWith("room-1", "token-1", false)
     })
 

@@ -29,7 +29,7 @@ export interface CreateAuditLogOptions {
 /**
  * Fields to exclude from audit log data.
  */
-const EXCLUDED_FIELDS = ['__v', 'clerkId'];
+const EXCLUDED_FIELDS = ['__v', 'legacyClerkId', 'passwordHash'];
 
 /**
  * Sanitize data for audit logging (remove sensitive/technical fields).
@@ -74,9 +74,9 @@ async function getUserDetails(userId: string): Promise<
         // Try to find by MongoDB ID first
         let user = await User.findById(userId).lean()
 
-        // If not found, try by clerkId
+        // If not found, try by legacy Clerk ID during migration
         if (!user) {
-            const userDoc = await User.findByClerkId(userId)
+            const userDoc = await User.findByLegacyClerkId(userId)
             user = userDoc ? userDoc.toObject() : null
         }
 

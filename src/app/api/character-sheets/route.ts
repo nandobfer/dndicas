@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
-import { auth, currentUser } from "@clerk/nextjs/server"
+import { auth, currentUser } from "@/core/auth/server"
 import { getAllUserSheets, createBlankSheet } from "@/features/character-sheets/api/character-sheets-service"
 
 export async function GET(req: NextRequest) {
