@@ -1,6 +1,5 @@
 "use client"
 
-import * as React from "react"
 import { motion } from "framer-motion"
 
 /**
@@ -61,6 +60,42 @@ export function MiniLineChart({ data, color }: { data: Array<{ count: number }>;
                     transition={{ duration: 1, ease: "easeOut" }}
                 />
             </svg>
+        </div>
+    )
+}
+
+/**
+ * Compact animated usage chart for dashboard entity cards.
+ */
+export function MiniUsageChart({ data, color }: { data: Array<{ context: string; count: number }>; color: string }) {
+    const visibleData = data.filter((item) => item.count > 0)
+    const chartData = visibleData.length > 0 ? visibleData : data
+    const max = Math.max(...chartData.map((item) => item.count), 1)
+
+    if (chartData.length === 0) {
+        return <div className="h-12 w-full" />
+    }
+
+    return (
+        <div className="h-12 w-full flex flex-col justify-end gap-1.5">
+            {chartData.slice(0, 3).map((item, index) => {
+                const width = item.count === 0 ? 8 : Math.max((item.count / max) * 100, 12)
+
+                return (
+                    <div key={item.context} className="flex items-center gap-2">
+                        <div className="h-2 flex-1 rounded-full bg-white/5 overflow-hidden">
+                            <motion.div
+                                initial={{ width: 0 }}
+                                animate={{ width: `${width}%` }}
+                                transition={{ delay: index * 0.08, duration: 0.55, ease: "easeOut" }}
+                                className="h-full rounded-full"
+                                style={{ backgroundColor: color, opacity: item.count === 0 ? 0.25 : 0.85 }}
+                            />
+                        </div>
+                        <span className="w-14 truncate text-[9px] font-medium uppercase tracking-[0.12em] text-white/35">{item.context}</span>
+                    </div>
+                )
+            })}
         </div>
     )
 }

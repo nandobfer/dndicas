@@ -5,8 +5,8 @@
       "collectionName": "charactersheets",
       "fieldName": "userId",
       "label": "characterSheets.userId",
-      "matchedCount": 23,
-      "modifiedCount": 23,
+      "matchedCount": 25,
+      "modifiedCount": 25,
       "sources": [
         {
           "email": "nandobfer@gmail.com",
@@ -82,8 +82,8 @@
           "email": "danibfer231010@gmail.com",
           "sourceId": "user_3GHSaNid6fpQLddtdLNgw5qkriN",
           "localUserId": "6a1b8c4a4c05b47c5b35821d",
-          "matchedCount": 1,
-          "modifiedCount": 1
+          "matchedCount": 3,
+          "modifiedCount": 3
         },
         {
           "email": "nilsander@hotmail.com",
@@ -270,15 +270,15 @@
       "collectionName": "usagelogs",
       "fieldName": "userId",
       "label": "usageLogs.userId",
-      "matchedCount": 253,
-      "modifiedCount": 253,
+      "matchedCount": 273,
+      "modifiedCount": 273,
       "sources": [
         {
           "email": "nandobfer@gmail.com",
           "sourceId": "user_3GHSa69vWxsMx41K9SlMvc5adWo",
           "localUserId": "699b5eba4c1065db37d4d89b",
-          "matchedCount": 156,
-          "modifiedCount": 156
+          "matchedCount": 166,
+          "modifiedCount": 166
         },
         {
           "email": "theuwow@gmail.com",
@@ -319,8 +319,8 @@
           "email": "danibfer231010@gmail.com",
           "sourceId": "user_3GHSaNid6fpQLddtdLNgw5qkriN",
           "localUserId": "6a1b8c4a4c05b47c5b35821d",
-          "matchedCount": 8,
-          "modifiedCount": 8
+          "matchedCount": 18,
+          "modifiedCount": 18
         },
         {
           "email": "nilsander@hotmail.com",

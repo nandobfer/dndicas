@@ -150,6 +150,7 @@ export function OwlbearContextMenuBackground({ kind }: { kind: "player" | "npc" 
         sessionStatus: "idle" as const,
         sessionToken: null,
         sessionExpiresAt: null,
+        isAuthenticated: false,
     }), [])
 
     return (

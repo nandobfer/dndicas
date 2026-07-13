@@ -1,5 +1,6 @@
 import { act, renderHook, waitFor } from "@testing-library/react"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
+import { OWLBEAR_AUTH_BRIDGE_STORAGE_KEY } from "@/features/owlbear/config"
 import { useOwlbearSession } from "@/features/owlbear/use-owlbear-session"
 import type { OwlbearRuntimeState } from "@/features/owlbear/types"
 
@@ -43,9 +44,10 @@ describe("useOwlbearSession", () => {
         authState.isLoaded = true
         authState.isSignedIn = false
         authState.userId = null
+        window.localStorage.clear()
         openOwlbearBackendSessionMock
-            .mockResolvedValueOnce({ token: "token-anon", expiresAt: "2099-01-01T00:00:00.000Z" })
-            .mockResolvedValueOnce({ token: "token-auth", expiresAt: "2099-01-01T00:00:00.000Z" })
+            .mockResolvedValueOnce({ token: "token-anon", expiresAt: "2099-01-01T00:00:00.000Z", isAuthenticated: false })
+            .mockResolvedValueOnce({ token: "token-auth", expiresAt: "2099-01-01T00:00:00.000Z", isAuthenticated: true })
     })
 
     afterEach(() => {
@@ -73,8 +75,8 @@ describe("useOwlbearSession", () => {
     it("opens a synthetic PLAYER session while anonymous and refreshes after login", async () => {
         openOwlbearBackendSessionMock
             .mockReset()
-            .mockResolvedValueOnce({ token: "token-player-anon", expiresAt: "2099-01-01T00:00:00.000Z" })
-            .mockResolvedValueOnce({ token: "token-player-auth", expiresAt: "2099-01-01T00:00:00.000Z" })
+            .mockResolvedValueOnce({ token: "token-player-anon", expiresAt: "2099-01-01T00:00:00.000Z", isAuthenticated: false })
+            .mockResolvedValueOnce({ token: "token-player-auth", expiresAt: "2099-01-01T00:00:00.000Z", isAuthenticated: true })
 
         const { result, rerender } = renderHook(() => useOwlbearSession(playerRuntime))
 
@@ -91,7 +93,7 @@ describe("useOwlbearSession", () => {
     it("waits for authenticated userId before refreshing an authenticated PLAYER session", async () => {
         openOwlbearBackendSessionMock
             .mockReset()
-            .mockResolvedValue({ token: "token-player", expiresAt: "2099-01-01T00:00:00.000Z" })
+            .mockResolvedValue({ token: "token-player", expiresAt: "2099-01-01T00:00:00.000Z", isAuthenticated: true })
         authState.isSignedIn = true
         authState.userId = null
 
@@ -113,7 +115,7 @@ describe("useOwlbearSession", () => {
         openOwlbearBackendSessionMock
             .mockReset()
             .mockRejectedValueOnce(unauthorized)
-            .mockResolvedValueOnce({ token: "token-player", expiresAt: "2099-01-01T00:00:00.000Z" })
+            .mockResolvedValueOnce({ token: "token-player", expiresAt: "2099-01-01T00:00:00.000Z", isAuthenticated: true })
         authState.isSignedIn = true
         authState.userId = "user-1"
 
@@ -146,8 +148,8 @@ describe("useOwlbearSession", () => {
         const expiringSoon = new Date(Date.now() + 30_000).toISOString()
         openOwlbearBackendSessionMock
             .mockReset()
-            .mockResolvedValueOnce({ token: "token-expiring", expiresAt: expiringSoon })
-            .mockResolvedValueOnce({ token: "token-refreshed", expiresAt: "2099-01-01T00:00:00.000Z" })
+            .mockResolvedValueOnce({ token: "token-expiring", expiresAt: expiringSoon, isAuthenticated: true })
+            .mockResolvedValueOnce({ token: "token-refreshed", expiresAt: "2099-01-01T00:00:00.000Z", isAuthenticated: true })
         authState.isSignedIn = true
         authState.userId = "user-1"
 
@@ -155,5 +157,25 @@ describe("useOwlbearSession", () => {
 
         await waitFor(() => expect(openOwlbearBackendSessionMock).toHaveBeenCalledTimes(2))
         await waitFor(() => expect(result.current.session.sessionToken).toBe("token-refreshed"))
+    })
+
+    it("uses a stored Owlbear bridge token as an authenticated session inside the iframe", async () => {
+        window.localStorage.setItem(OWLBEAR_AUTH_BRIDGE_STORAGE_KEY, "bridge-token-1")
+        openOwlbearBackendSessionMock.mockReset().mockImplementation((input: { bridgeToken?: string }) => Promise.resolve({
+            token: input.bridgeToken ? "token-bridge" : "token-anon",
+            expiresAt: "2099-01-01T00:00:00.000Z",
+            isAuthenticated: Boolean(input.bridgeToken),
+        }))
+
+        const { result } = renderHook(() => useOwlbearSession(playerRuntime))
+
+        await waitFor(() => expect(result.current.session.sessionToken).toBe("token-bridge"))
+        expect(result.current.isAuthenticated).toBe(true)
+        expect(openOwlbearBackendSessionMock).toHaveBeenLastCalledWith({
+            roomId: "room-1",
+            owlbearPlayerId: "player-1",
+            owlbearRole: "PLAYER",
+            bridgeToken: "bridge-token-1",
+        })
     })
 })

@@ -215,8 +215,12 @@ export async function openOwlbearBackendSession(input: {
     roomId: string
     owlbearPlayerId: string
     owlbearRole: "GM" | "PLAYER"
+    bridgeToken?: string
 }) {
-    logOwlbearDebug("[Dndicas Owlbear Session]", "opening backend session", input)
+    logOwlbearDebug("[Dndicas Owlbear Session]", "opening backend session", {
+        ...input,
+        bridgeToken: input.bridgeToken ? "[present]" : undefined,
+    })
     const response = await fetch("/api/owlbear/session", {
         method: "POST",
         headers: {
@@ -228,18 +232,24 @@ export async function openOwlbearBackendSession(input: {
     if (!response.ok) {
         const error = await response.json().catch(() => ({ error: "Erro desconhecido" }))
         console.error("[Dndicas Owlbear Session] backend session failed", {
-            ...input,
+            roomId: input.roomId,
+            owlbearPlayerId: input.owlbearPlayerId,
+            owlbearRole: input.owlbearRole,
+            bridgeToken: input.bridgeToken ? "[present]" : undefined,
             status: response.status,
             error,
         })
         throw createOwlbearHttpError(response, error, `HTTP ${response.status}`)
     }
 
-    const payload = await response.json() as { token: string; expiresAt: string }
+    const payload = await response.json() as { token: string; expiresAt: string; isAuthenticated?: boolean }
     logOwlbearDebug("[Dndicas Owlbear Session]", "backend session opened", {
-        ...input,
+        roomId: input.roomId,
+        owlbearPlayerId: input.owlbearPlayerId,
+        owlbearRole: input.owlbearRole,
         expiresAt: payload.expiresAt,
         hasToken: Boolean(payload.token),
+        isAuthenticated: Boolean(payload.isAuthenticated),
     })
     return payload
 }

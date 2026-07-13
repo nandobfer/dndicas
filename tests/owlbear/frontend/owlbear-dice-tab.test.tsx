@@ -113,6 +113,7 @@ function renderDiceTab(runtimeOverrides: Partial<OwlbearRuntimeState> = {}) {
                 sessionStatus: "ready",
                 sessionToken: "token-1",
                 sessionExpiresAt: "2099-01-01T00:00:00.000Z",
+                isAuthenticated: true,
             }}
         />
     )

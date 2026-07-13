@@ -199,6 +199,7 @@ const readySession = {
     sessionStatus: "ready" as const,
     sessionToken: "token-1",
     sessionExpiresAt: "2099-04-20T10:15:00.000Z",
+    isAuthenticated: true,
 }
 
 const kaelSheet = {
@@ -420,7 +421,7 @@ describe("OwlbearGmSceneController — context menus", () => {
         const { unmount } = render(
             <OwlbearGmSceneController
                 runtime={readyGmRuntime}
-                session={{ sessionStatus: "idle", sessionToken: null, sessionExpiresAt: null }}
+                session={{ sessionStatus: "idle", sessionToken: null, sessionExpiresAt: null, isAuthenticated: false }}
                 contextMenuKind="npc"
                 linkDialogKind="none"
                 overlayKinds={[]}

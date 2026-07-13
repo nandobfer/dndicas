@@ -1,4 +1,5 @@
 import mongoose, { Schema, Document, Model } from "mongoose"
+import type { FeedbackDevelopmentStatus } from "../types/feedback.types"
 
 export interface IFeedback extends Document {
     title: string
@@ -9,6 +10,19 @@ export interface IFeedback extends Document {
     createdBy: string // Local user ID
     creatorName: string
     creatorEmail?: string
+    developmentStatus: FeedbackDevelopmentStatus
+    opencodeSessionId?: string
+    selectedModel?: string
+    branchName?: string
+    worktreePath?: string
+    pullRequestNumber?: number
+    pullRequestUrl?: string
+    previewUrl?: string
+    previewSlug?: string
+    lastAgentRunId?: string
+    approvedBy?: string
+    approvedAt?: Date
+    completedAt?: Date
     createdAt: Date
     updatedAt: Date
 }
@@ -50,6 +64,24 @@ const FeedbackSchema = new Schema<IFeedback>(
         creatorEmail: {
             type: String,
         },
+        developmentStatus: {
+            type: String,
+            enum: ["aberto", "planejando", "plano_pronto", "implementando", "aguardando_teste", "ajustes_solicitados", "aprovado", "mergeando", "concluido", "cancelado", "falhou"],
+            default: "aberto",
+            required: true,
+        },
+        opencodeSessionId: { type: String },
+        selectedModel: { type: String },
+        branchName: { type: String },
+        worktreePath: { type: String },
+        pullRequestNumber: { type: Number },
+        pullRequestUrl: { type: String },
+        previewUrl: { type: String },
+        previewSlug: { type: String },
+        lastAgentRunId: { type: String },
+        approvedBy: { type: String },
+        approvedAt: { type: Date },
+        completedAt: { type: Date },
     },
     {
         timestamps: true,
@@ -71,6 +103,7 @@ const FeedbackSchema = new Schema<IFeedback>(
 // Indexes for search
 FeedbackSchema.index({ title: "text", description: "text" })
 FeedbackSchema.index({ status: 1 })
+FeedbackSchema.index({ developmentStatus: 1 })
 FeedbackSchema.index({ createdBy: 1 })
 
 export const FeedbackModel: Model<IFeedback> = mongoose.models.Feedback || mongoose.model<IFeedback>("Feedback", FeedbackSchema)

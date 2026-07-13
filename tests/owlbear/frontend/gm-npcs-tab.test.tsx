@@ -72,8 +72,10 @@ vi.mock("@/features/monsters/components/npc-form-modal", () => ({
     NpcFormModal: () => null,
 }))
 
-vi.mock("@/app/(dashboard)/my-sheets/_components/my-sheets-content", () => ({
-    MySheetsContent: () => <div data-testid="login-view">Login View</div>,
+vi.mock("@/features/owlbear/owlbear-sign-in-prompt", () => ({
+    OwlbearSignInPrompt: ({ title, description }: { title: string; description: string }) => (
+        <div data-testid="owlbear-sign-in-prompt"><h2>{title}</h2><p>{description}</p></div>
+    ),
 }))
 
 vi.mock("framer-motion", () => ({
@@ -97,6 +99,7 @@ const session = {
     sessionStatus: "ready" as const,
     sessionToken: "token-1",
     sessionExpiresAt: "2099-01-01T00:00:00.000Z",
+    isAuthenticated: true,
 }
 
 const monster: Monster = {
@@ -210,7 +213,8 @@ describe("OwlbearGmNpcsTab", () => {
     it("asks the GM to login before using the NPC tab", () => {
         renderTab({ isAuthenticated: false })
 
-        expect(screen.getByText(/Para gerenciar NPCs da sala/i)).toBeInTheDocument()
+        expect(screen.getByTestId("owlbear-sign-in-prompt")).toBeInTheDocument()
+        expect(screen.getByText("Para gerenciar NPCs da sala, faça login no Dungeons & Dicas em uma aba do navegador e reabra esta action.")).toBeInTheDocument()
         expect(useRoomNpcsMock).toHaveBeenCalledWith("room-1", "token-1", false)
     })
 
@@ -227,6 +231,7 @@ describe("OwlbearGmNpcsTab", () => {
                 sessionStatus: "idle",
                 sessionToken: null,
                 sessionExpiresAt: null,
+                isAuthenticated: false,
             },
         })
 
@@ -240,6 +245,7 @@ describe("OwlbearGmNpcsTab", () => {
                 sessionStatus: "error",
                 sessionToken: null,
                 sessionExpiresAt: null,
+                isAuthenticated: false,
             },
         })
 

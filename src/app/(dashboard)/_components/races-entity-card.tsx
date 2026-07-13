@@ -1,6 +1,5 @@
 "use client"
 
-import * as React from "react"
 import { Fingerprint } from "lucide-react"
 import { EntityCard } from "./entity-card"
 
@@ -18,7 +17,7 @@ export function RacesEntityCard({ loading, index }: { loading?: boolean; index: 
             icon={Fingerprint}
             description="Raças jogáveis (Humano, Elfo, etc.)"
             href="/races"
-            statsEndpoint="/api/stats/races"
+            statsEndpoint="/api/stats/entity-usage?entityType=Raça"
         />
     )
 }

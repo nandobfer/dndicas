@@ -1,6 +1,5 @@
 "use client"
 
-import * as React from "react"
 import { Zap } from "lucide-react"
 import { EntityCard } from "./entity-card"
 
@@ -9,5 +8,5 @@ import { EntityCard } from "./entity-card"
  * Uses generalized EntityCard with Amber/Orange styling.
  */
 export function FeatsEntityCard({ loading, index }: { loading?: boolean; index: number }) {
-    return <EntityCard entityType="Talento" loading={loading} index={index} title="Talentos" icon={Zap} description="Catálogo de talentos (feats)" href="/feats" statsEndpoint="/api/stats/feats" />
+    return <EntityCard entityType="Talento" loading={loading} index={index} title="Talentos" icon={Zap} description="Catálogo de talentos (feats)" href="/feats" statsEndpoint="/api/stats/entity-usage?entityType=Talento" />
 }

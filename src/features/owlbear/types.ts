@@ -50,6 +50,7 @@ export interface OwlbearSessionState {
     sessionStatus: "idle" | "loading" | "ready" | "error"
     sessionToken: string | null
     sessionExpiresAt: string | null
+    isAuthenticated: boolean
 }
 
 export interface OwlbearTokenLinkMetadata {

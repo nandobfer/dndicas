@@ -2,7 +2,16 @@ import { NextRequest, NextResponse } from "next/server"
 import { auth, currentUser } from "@/core/auth/server"
 import { FeedbackModel } from "@/features/feedback/api/feedback.model"
 import dbConnect from "@/core/database/db"
+import { logAction } from "@/core/database/audit-log"
+import type { ApiResponse } from "@/core/types/common"
+import { createFeedbackTimelineEvent } from "@/features/feedback/services/feedback-timeline-service"
 import { z } from "zod"
+
+const statusLabels = {
+  pendente: "Pendente",
+  concluido: "Concluído",
+  cancelado: "Cancelado",
+} as const
 
 const updateFeedbackSchema = z.object({
   title: z.string().min(3).max(200).optional(),
@@ -11,6 +20,44 @@ const updateFeedbackSchema = z.object({
   status: z.enum(["pendente", "concluido", "cancelado"]).optional(),
   priority: z.enum(["baixa", "media", "alta"]).optional(),
 })
+
+export async function GET(
+  _req: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    const { id } = await params
+
+    await dbConnect()
+
+    const feedback = await FeedbackModel.findById(id)
+    if (!feedback) {
+      const response: ApiResponse<null> = {
+        success: false,
+        error: "Feedback não encontrado",
+        code: "FEEDBACK_NOT_FOUND",
+      }
+
+      return NextResponse.json(response, { status: 404 })
+    }
+
+    const response: ApiResponse<typeof feedback> = {
+      success: true,
+      data: feedback,
+    }
+
+    return NextResponse.json(response)
+  } catch (error) {
+    console.error("Feedback GET by id error:", error)
+    const response: ApiResponse<null> = {
+      success: false,
+      error: "Erro interno ao buscar feedback",
+      code: "INTERNAL_ERROR",
+    }
+
+    return NextResponse.json(response, { status: 500 })
+  }
+}
 
 export async function PATCH(
   req: NextRequest,
@@ -49,13 +96,31 @@ export async function PATCH(
         delete validated.priority
     }
 
+    const previousStatus = feedback.status
     const updated = await FeedbackModel.findByIdAndUpdate(id, validated, { new: true })
+
+    await logAction("UPDATE", "Feedback", id, session.userId, validated)
+
+    if (updated && validated.status && validated.status !== previousStatus) {
+      await createFeedbackTimelineEvent({
+        feedbackId: updated._id,
+        type: "status_changed",
+        actorType: isAdmin ? "admin" : "user",
+        actorId: session.userId,
+        actorName: user.fullName || user.firstName || "Administrador",
+        message: `Status alterado manualmente para ${statusLabels[validated.status]}.`,
+        metadata: {
+          previousStatus,
+          nextStatus: validated.status,
+        },
+      })
+    }
 
     return NextResponse.json(updated)
   } catch (error) {
     console.error("Feedback PATCH error:", error)
     if (error instanceof z.ZodError) {
-        return NextResponse.json({ error: (error as any).errors }, { status: 400 })
+        return NextResponse.json({ error: error.issues }, { status: 400 })
     }
     return NextResponse.json({ error: "Erro interno ao atualizar feedback" }, { status: 500 })
   }

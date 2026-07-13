@@ -1,4 +1,3 @@
-import * as React from "react"
 import { act, fireEvent, screen, waitFor } from "@testing-library/react"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { renderWithQueryClient as render } from "../../frontend/test-utils"
@@ -64,6 +63,7 @@ const readySession = {
     sessionStatus: "ready" as const,
     sessionToken: "token-1",
     sessionExpiresAt: "2099-04-20T10:15:00.000Z",
+    isAuthenticated: true,
 }
 
 const sdkMock = vi.hoisted(() => {
@@ -594,7 +594,7 @@ describe("OwlbearShell", () => {
         expect(await screen.findByRole("heading", { name: "Minhas Fichas" }, { timeout: 3000 })).toBeInTheDocument()
     })
 
-    it("shows the my-sheets login view instead of a technical session error when the player is anonymous", async () => {
+    it("shows the external login prompt instead of a technical session error when the player is anonymous", async () => {
         sdkMock.player.getRole.mockResolvedValue("PLAYER")
 
         render(<OwlbearShell />)
@@ -602,7 +602,8 @@ describe("OwlbearShell", () => {
         await screen.findByRole("button", { name: "Ficha" })
         fireEvent.click(screen.getByRole("button", { name: "Ficha" }))
 
-        expect(await screen.findByText(/Para vincular sua ficha a esta sala/i)).toBeInTheDocument()
+        expect(await screen.findByText(/Para acessar suas fichas, faça login no Dungeons & Dicas em uma aba do navegador e reabra esta action/i)).toBeInTheDocument()
+        expect(screen.getByRole("link", { name: /Abrir login/i })).toHaveAttribute("target", "_blank")
         expect(screen.queryByText("A sessão Owlbear-aware não pôde ser inicializada. Reabra a action para tentar novamente.")).not.toBeInTheDocument()
     })
 

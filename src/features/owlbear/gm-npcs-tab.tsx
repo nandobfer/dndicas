@@ -30,6 +30,7 @@ import type { Monster } from "@/features/monsters/types/monsters.types"
 import { getMonsterHitPointAverage } from "@/features/monsters/utils/monster-calculations"
 import { getHpBarColor, hpPercent } from "./hp-bar-utils"
 import { notifyOwlbearOverlaySync } from "./overlay-sync-events"
+import { OwlbearSignInPrompt } from "./owlbear-sign-in-prompt"
 import { createOwlbearUserNpc, type OwlbearRoomNpc, type OwlbearRoomNpcSourceKind } from "./room-npcs-api"
 import type { OwlbearRuntimeState, OwlbearSessionState } from "./types"
 import { useRoomInitiative } from "./use-room-initiative"
@@ -659,20 +660,10 @@ export function OwlbearGmNpcsTab({
 
     if (!isAuthenticated) {
         return (
-            <div className="flex h-full min-h-0 flex-col items-center justify-center gap-3 px-6 text-center">
-                <p className="text-sm text-white/60">
-                    Para gerenciar NPCs da sala, faça login no{" "}
-                    <a
-                        href="https://dndicas.com.br"
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-blue-400 underline hover:text-blue-300"
-                    >
-                        Dungeons &amp; Dicas
-                    </a>{" "}
-                    em uma aba do navegador e reabra esta action.
-                </p>
-            </div>
+            <OwlbearSignInPrompt
+                title="Login necessário"
+                description="Para gerenciar NPCs da sala, faça login no Dungeons & Dicas em uma aba do navegador e reabra esta action."
+            />
         )
     }
 

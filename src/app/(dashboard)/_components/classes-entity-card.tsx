@@ -1,6 +1,5 @@
 "use client"
 
-import * as React from "react"
 import { Sword } from "lucide-react"
 import { EntityCard } from "./entity-card"
 
@@ -18,7 +17,7 @@ export function ClassesEntityCard({ loading, index }: { loading?: boolean; index
             icon={Sword}
             description="Classes de personagem (Guerreiro, Mago, etc.)"
             href="/classes"
-            statsEndpoint="/api/stats/classes"
+            statsEndpoint="/api/stats/entity-usage?entityType=Classe"
         />
     )
 }

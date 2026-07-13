@@ -1,6 +1,5 @@
 "use client"
 
-import * as React from "react"
 import { motion } from "framer-motion"
 import { Plus, MessageSquare } from "lucide-react"
 import { GlassCard, GlassCardContent } from "@/components/ui/glass-card"
@@ -8,7 +7,6 @@ import { motionConfig } from "@/lib/config/motion-configs"
 import { useAuth } from "@/core/hooks/useAuth"
 import { useFeedbackPage } from "@/features/feedback/hooks/useFeedbackPage"
 import { FeedbackFilters } from "@/features/feedback/components/feedback-filters"
-import { FeedbackTable } from "@/features/feedback/components/feedback-table"
 import { FeedbackList } from "@/features/feedback/components/feedback-list"
 import { FeedbackFormModal } from "@/features/feedback/components/feedback-form-modal"
 import { cn } from "@/core/utils"
@@ -18,11 +16,11 @@ import { cn } from "@/core/utils"
  * Permite que usuários visualizem, filtrem e enviem sugestões ou reportem bugs.
  */
 export default function FeedbackPage() {
-    const { isSignedIn, isAdmin } = useAuth()
+    const { isSignedIn } = useAuth()
 
-    const { isMobile, filters, pagination, data, actions, modals } = useFeedbackPage()
+    const { filters, data, actions, modals } = useFeedbackPage()
 
-    const isSearching = data.desktop.isFetching || data.mobile.isFetchingNextPage
+    const isSearching = data.isFetchingNextPage
 
     return (
         <motion.div variants={motionConfig.variants.fadeInUp} initial="initial" animate="animate" className="space-y-6">
@@ -67,27 +65,13 @@ export default function FeedbackPage() {
                 </GlassCardContent>
             </GlassCard>
 
-            {/* Content: Table for Desktop, List for Mobile */}
-            {isMobile ? (
-                <FeedbackList
-                    items={data.mobile.items}
-                    isLoading={data.mobile.isLoading}
-                    hasNextPage={data.mobile.hasNextPage}
-                    isFetchingNextPage={data.mobile.isFetchingNextPage}
-                    onLoadMore={data.mobile.fetchNextPage}
-                    onEdit={actions.handleEditClick}
-                />
-            ) : (
-                <FeedbackTable
-                    feedbacks={data.desktop.items}
-                    total={pagination.total}
-                    page={pagination.page}
-                    limit={pagination.limit}
-                    isLoading={data.desktop.isLoading}
-                    onEdit={actions.handleEditClick}
-                    onPageChange={pagination.setPage}
-                />
-            )}
+            <FeedbackList
+                items={data.items}
+                isLoading={data.isLoading}
+                hasNextPage={data.hasNextPage}
+                isFetchingNextPage={data.isFetchingNextPage}
+                onLoadMore={data.fetchNextPage}
+            />
 
             {/* Form Modal */}
             <FeedbackFormModal

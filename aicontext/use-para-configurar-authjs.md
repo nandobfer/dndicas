@@ -59,6 +59,7 @@ No Google Cloud Console, configure o redirect URI do ambiente local como `http:/
 - Use `currentUser()` de `@/core/auth/server` quando precisar de role/perfil no servidor.
 - Use `requireAuth()` e helpers de `@/core/auth/helpers` para rotas críticas.
 - Use `useAuth()` de `@/core/hooks/useAuth` no client.
+- Não dependa de cookie Auth.js dentro de iframe cross-origin do Owlbear. Para actions Owlbear, use o bridge token limitado emitido por `/api/owlbear/auth/bridge-token` e trocado por `OwlbearSession` em `/api/owlbear/session`.
 - Todas as mensagens de login/cadastro/perfil devem estar em pt-BR.
 - Operações administrativas de usuário devem gravar auditoria.
 

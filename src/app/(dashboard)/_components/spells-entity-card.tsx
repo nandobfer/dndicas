@@ -1,6 +1,5 @@
 "use client"
 
-import * as React from "react"
 import { Wand2 } from "lucide-react"
 import { EntityCard } from "./entity-card"
 
@@ -18,7 +17,7 @@ export function SpellsEntityCard({ loading, index }: { loading?: boolean; index:
             icon={Wand2}
             description="Catálogo completo de feitiços e truques"
             href="/spells"
-            statsEndpoint="/api/stats/spells"
+            statsEndpoint="/api/stats/entity-usage?entityType=Magia"
         />
     )
 }
