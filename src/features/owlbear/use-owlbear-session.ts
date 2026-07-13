@@ -2,7 +2,7 @@
 
 import * as React from "react"
 import { useAuth } from "@/core/hooks/useAuth"
-import { OWLBEAR_SESSION_INVALID_EVENT } from "./config"
+import { OWLBEAR_AUTH_BRIDGE_STORAGE_KEY, OWLBEAR_SESSION_INVALID_EVENT } from "./config"
 import { logOwlbearDebug } from "./debug"
 import { openOwlbearBackendSession } from "./sdk"
 import type { OwlbearRuntimeState, OwlbearSessionState } from "./types"
@@ -27,6 +27,23 @@ function getSessionRetryDelay(attempt: number) {
     return SESSION_RETRY_DELAYS_MS[Math.min(attempt, SESSION_RETRY_DELAYS_MS.length - 1)]
 }
 
+function readBridgeTokenFromStorage() {
+    try {
+        return window.localStorage.getItem(OWLBEAR_AUTH_BRIDGE_STORAGE_KEY)
+    } catch (error) {
+        console.warn("Owlbear auth bridge storage is unavailable", error)
+        return null
+    }
+}
+
+function removeBridgeTokenFromStorage() {
+    try {
+        window.localStorage.removeItem(OWLBEAR_AUTH_BRIDGE_STORAGE_KEY)
+    } catch (error) {
+        console.warn("Owlbear auth bridge storage is unavailable", error)
+    }
+}
+
 function isRetryableSessionError(error: Error & { status?: number }, isSignedIn: boolean) {
     if (error.status === 401 && isSignedIn) return true
     if (!error.status) return true
@@ -39,7 +56,9 @@ export function useOwlbearSession(runtime: OwlbearRuntimeState) {
         sessionStatus: "idle",
         sessionToken: null,
         sessionExpiresAt: null,
+        isAuthenticated: false,
     })
+    const [bridgeToken, setBridgeToken] = React.useState<string | null>(null)
     const lastRuntimeIdentityRef = React.useRef<string | null>(null)
     const sessionRef = React.useRef(session)
     const [refreshSequence, setRefreshSequence] = React.useState(0)
@@ -54,6 +73,7 @@ export function useOwlbearSession(runtime: OwlbearRuntimeState) {
                 sessionStatus: "idle",
                 sessionToken: null,
                 sessionExpiresAt: null,
+                isAuthenticated: false,
             })
             setRefreshSequence((current) => current + 1)
         }
@@ -74,6 +94,7 @@ export function useOwlbearSession(runtime: OwlbearRuntimeState) {
                 sessionStatus: "idle",
                 sessionToken: null,
                 sessionExpiresAt: null,
+                isAuthenticated: false,
             })
             setRefreshSequence((current) => current + 1)
         }, refreshDelay)
@@ -90,11 +111,18 @@ export function useOwlbearSession(runtime: OwlbearRuntimeState) {
             authLoaded: isLoaded,
             signedIn: isSignedIn,
             userId: userId ?? null,
+            hasBridgeToken: Boolean(bridgeToken),
             sessionStatus: session.sessionStatus,
             hasToken: Boolean(session.sessionToken),
             expiresAt: session.sessionExpiresAt,
+            sessionAuthenticated: session.isAuthenticated,
         })
-    }, [isLoaded, isSignedIn, runtime.playerId, runtime.role, runtime.roomId, runtime.status, session.sessionExpiresAt, session.sessionStatus, session.sessionToken, userId])
+    }, [bridgeToken, isLoaded, isSignedIn, runtime.playerId, runtime.role, runtime.roomId, runtime.status, session.isAuthenticated, session.sessionExpiresAt, session.sessionStatus, session.sessionToken, userId])
+
+    React.useEffect(() => {
+        if (typeof window === "undefined") return
+        setBridgeToken(readBridgeTokenFromStorage())
+    }, [refreshSequence])
 
     React.useEffect(() => {
         if (runtime.status !== "ready" || !runtime.roomId || !runtime.playerId || !runtime.role) {
@@ -117,6 +145,7 @@ export function useOwlbearSession(runtime: OwlbearRuntimeState) {
                 sessionStatus: "idle",
                 sessionToken: null,
                 sessionExpiresAt: null,
+                isAuthenticated: false,
             })
             return
         }
@@ -124,7 +153,8 @@ export function useOwlbearSession(runtime: OwlbearRuntimeState) {
         const roomId = runtime.roomId
         const owlbearPlayerId = runtime.playerId
         const owlbearRole = runtime.role
-        const authIdentity = isSignedIn ? `auth:${userId}` : "anon"
+        const effectiveBridgeToken = isSignedIn ? null : bridgeToken
+        const authIdentity = isSignedIn ? `auth:${userId}` : effectiveBridgeToken ? "bridge" : "anon"
         const runtimeIdentity = `${roomId}:${owlbearPlayerId}:${owlbearRole}:${authIdentity}`
         const identityChanged = lastRuntimeIdentityRef.current !== null && lastRuntimeIdentityRef.current !== runtimeIdentity
 
@@ -135,15 +165,16 @@ export function useOwlbearSession(runtime: OwlbearRuntimeState) {
         // so the auth session cookie may not be sent and isSignedIn can stay false even when the user
         // is logged in on the main dndicas.com.br tab. We therefore open a backend session for
         // all roles unconditionally; the server issues an anonymous token when no authenticated userId
-        // is present and a full authenticated token when the cookie does reach the server.
-        // The isAuthenticated flag still reflects real sign-in state and is used to gate
-        // features that require a userId (character sheets, NPC management).
+        // is present, a full authenticated token when the cookie does reach the server,
+        // or a full authenticated token when a bridge token was saved by the top-level
+        // Dndicas site in localStorage.
 
         if (identityChanged) {
             setSession({
                 sessionStatus: "idle",
                 sessionToken: null,
                 sessionExpiresAt: null,
+                isAuthenticated: false,
             })
         } else if (isSessionUsable(sessionRef.current)) {
             return
@@ -170,13 +201,19 @@ export function useOwlbearSession(runtime: OwlbearRuntimeState) {
                         roomId,
                         owlbearPlayerId,
                         owlbearRole,
+                        ...(effectiveBridgeToken ? { bridgeToken: effectiveBridgeToken } : {}),
                     })
 
                     if (cancelled) return
+                    if (effectiveBridgeToken && !nextSession.isAuthenticated) {
+                        removeBridgeTokenFromStorage()
+                        setBridgeToken(null)
+                    }
                     setSession({
                         sessionStatus: "ready",
                         sessionToken: nextSession.token,
                         sessionExpiresAt: nextSession.expiresAt,
+                        isAuthenticated: Boolean(isSignedIn || nextSession.isAuthenticated),
                     })
                     return
                 } catch (error) {
@@ -210,6 +247,7 @@ export function useOwlbearSession(runtime: OwlbearRuntimeState) {
                         sessionStatus: "error",
                         sessionToken: null,
                         sessionExpiresAt: null,
+                        isAuthenticated: false,
                     })
                     return
                 }
@@ -220,11 +258,11 @@ export function useOwlbearSession(runtime: OwlbearRuntimeState) {
             cancelled = true
             if (retryTimer) clearTimeout(retryTimer)
         }
-    }, [isLoaded, isSignedIn, refreshSequence, runtime.playerId, runtime.role, runtime.roomId, runtime.status, userId])
+    }, [bridgeToken, isLoaded, isSignedIn, refreshSequence, runtime.playerId, runtime.role, runtime.roomId, runtime.status, userId])
 
     return {
         session,
         isAuthLoaded: isLoaded,
-        isAuthenticated: Boolean(isSignedIn),
+        isAuthenticated: Boolean(isSignedIn || session.isAuthenticated),
     }
 }

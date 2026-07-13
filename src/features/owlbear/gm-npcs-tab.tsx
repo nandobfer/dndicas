@@ -1,6 +1,5 @@
 "use client"
 
-import { MySheetsContent } from '@/app/(dashboard)/my-sheets/_components/my-sheets-content';
 import * as React from "react"
 import Fuse from "fuse.js"
 import { AnimatePresence, motion } from "framer-motion"
@@ -31,6 +30,7 @@ import type { Monster } from "@/features/monsters/types/monsters.types"
 import { getMonsterHitPointAverage } from "@/features/monsters/utils/monster-calculations"
 import { getHpBarColor, hpPercent } from "./hp-bar-utils"
 import { notifyOwlbearOverlaySync } from "./overlay-sync-events"
+import { OwlbearSignInPrompt } from "./owlbear-sign-in-prompt"
 import { createOwlbearUserNpc, type OwlbearRoomNpc, type OwlbearRoomNpcSourceKind } from "./room-npcs-api"
 import type { OwlbearRuntimeState, OwlbearSessionState } from "./types"
 import { useRoomInitiative } from "./use-room-initiative"
@@ -660,9 +660,10 @@ export function OwlbearGmNpcsTab({
 
     if (!isAuthenticated) {
         return (
-            <div className="h-full min-h-0 overflow-auto pr-1">
-                <MySheetsContent redirectUrl="/owlbear/npcs/action" showDelete={false} />
-            </div>
+            <OwlbearSignInPrompt
+                title="Login necessário"
+                description="Para gerenciar NPCs da sala, faça login no Dungeons & Dicas em uma aba do navegador e reabra esta action."
+            />
         )
     }
 

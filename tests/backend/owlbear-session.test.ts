@@ -261,6 +261,58 @@ describe("owlbear session backend", () => {
         }))
     })
 
+    it("POST /api/owlbear/session exchanges a valid bridge token for an authenticated Owlbear session", async () => {
+        const previousSecret = process.env.AUTH_SECRET
+        process.env.AUTH_SECRET = "test-secret"
+        const auth = vi.fn().mockResolvedValue({ userId: null })
+        const createOwlbearSession = vi.fn().mockResolvedValue({
+            token: "auth-token",
+            expiresAt: "2026-04-20T10:15:00.000Z",
+        })
+
+        try {
+            vi.doUnmock("node:crypto")
+            const bridge = await importFresh<typeof import("@/features/owlbear/server/auth-bridge-token")>("@/features/owlbear/server/auth-bridge-token")
+            const bridgeToken = bridge.createOwlbearAuthBridgeToken("user-1")
+
+            vi.doMock("@/core/auth/server", () => ({ auth }))
+            vi.doMock("@/features/owlbear/server/session-service", () => ({
+                createOwlbearSession,
+                buildAnonymousGmSessionUserId: vi.fn(),
+                buildAnonymousPlayerSessionUserId: vi.fn(),
+            }))
+
+            const mod = await importFresh<typeof import("@/app/api/owlbear/session/route")>("@/app/api/owlbear/session/route")
+            const response = await mod.POST(makeRequest("http://localhost/api/owlbear/session", {
+                method: "POST",
+                headers: { "content-type": "application/json" },
+                body: JSON.stringify({
+                    roomId: "room-1",
+                    owlbearPlayerId: "player-1",
+                    owlbearRole: "PLAYER",
+                    bridgeToken,
+                }),
+            }))
+            const payload = await readJson<{ isAuthenticated: boolean; token: string }>(response)
+
+            expect(response.status).toBe(201)
+            expect(auth).not.toHaveBeenCalled()
+            expect(payload).toMatchObject({ isAuthenticated: true, token: "auth-token" })
+            expect(createOwlbearSession).toHaveBeenCalledWith(expect.objectContaining({
+                userId: "user-1",
+                roomId: "room-1",
+                owlbearPlayerId: "player-1",
+                owlbearRole: "PLAYER",
+            }))
+        } finally {
+            if (previousSecret === undefined) {
+                delete process.env.AUTH_SECRET
+            } else {
+                process.env.AUTH_SECRET = previousSecret
+            }
+        }
+    })
+
     it("GET /api/owlbear/character-sheets rejects missing bearer token", async () => {
         vi.doMock("@/features/owlbear/server/session-service", () => ({
             getOwlbearSessionByToken: vi.fn(),

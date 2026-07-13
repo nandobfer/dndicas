@@ -10,6 +10,7 @@ import { CharacterSheetClientProvider } from "@/features/character-sheets/api/ch
 import { useSheet } from "@/features/character-sheets/api/character-sheets-queries"
 import type { CharacterSheet } from "@/features/character-sheets/types/character-sheet.types"
 import { MySheetsContent } from "@/app/(dashboard)/my-sheets/_components/my-sheets-content"
+import { OwlbearSignInPrompt } from "./owlbear-sign-in-prompt"
 import {
     clearPlayerSheetLink,
     getRoomMetadataState,
@@ -261,9 +262,10 @@ function PlayerSheetTabContent({
 
     if (!isAuthenticated) {
         return (
-            <div className="h-full min-h-0 overflow-auto pr-1">
-                <MySheetsContent redirectUrl="/owlbear/sheet/action" showDelete={false} />
-            </div>
+            <OwlbearSignInPrompt
+                title="Login necessário"
+                description="Para acessar suas fichas, faça login no Dungeons & Dicas em uma aba do navegador e reabra esta action."
+            />
         )
     }
 

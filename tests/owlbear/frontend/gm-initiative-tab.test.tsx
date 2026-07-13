@@ -48,6 +48,7 @@ const session = {
     sessionStatus: "ready" as const,
     sessionToken: "token-1",
     sessionExpiresAt: "2099-01-01T00:00:00.000Z",
+    isAuthenticated: true,
 }
 
 function roomNpc(overrides: Partial<OwlbearRoomNpc> = {}): OwlbearRoomNpc {
