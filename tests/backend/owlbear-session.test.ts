@@ -265,6 +265,7 @@ describe("owlbear session backend", () => {
         const previousSecret = process.env.AUTH_SECRET
         process.env.AUTH_SECRET = "test-secret"
         const auth = vi.fn().mockResolvedValue({ userId: null })
+        const trigger = vi.fn().mockResolvedValue(undefined)
         const createOwlbearSession = vi.fn().mockResolvedValue({
             token: "auth-token",
             expiresAt: "2026-04-20T10:15:00.000Z",
@@ -280,6 +281,11 @@ describe("owlbear session backend", () => {
             })
 
             vi.doMock("@/core/auth/server", () => ({ auth }))
+            vi.doMock("@/core/realtime/pusher-service", () => ({
+                PusherService: {
+                    getInstance: vi.fn(() => ({ trigger })),
+                },
+            }))
             vi.doMock("@/features/owlbear/server/session-service", () => ({
                 createOwlbearSession,
                 buildAnonymousGmSessionUserId: vi.fn(),
@@ -308,6 +314,10 @@ describe("owlbear session backend", () => {
                 owlbearPlayerId: "player-1",
                 owlbearRole: "PLAYER",
             }))
+            expect(trigger).toHaveBeenCalledWith("owlbear-auth-channel-1", "owlbear-auth-completed", {
+                nonce: "nonce-123",
+                ok: true,
+            })
         } finally {
             if (previousSecret === undefined) {
                 delete process.env.AUTH_SECRET

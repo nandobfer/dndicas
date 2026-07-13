@@ -1,7 +1,9 @@
 import { auth } from "@/core/auth/server"
+import { PusherService } from "@/core/realtime/pusher-service"
 import { NextRequest, NextResponse } from "next/server"
 import { z } from "zod"
-import { verifyOwlbearAuthHandoffToken } from "@/features/owlbear/server/auth-handoff-token"
+import { OWLBEAR_AUTH_COMPLETED_EVENT } from "@/features/owlbear/config"
+import { getOwlbearAuthHandoffChannel, verifyOwlbearAuthHandoffToken } from "@/features/owlbear/server/auth-handoff-token"
 import { buildAnonymousGmSessionUserId, buildAnonymousPlayerSessionUserId, createOwlbearSession } from "@/features/owlbear/server/session-service"
 
 const OwlbearSessionRequestSchema = z.object({
@@ -48,6 +50,18 @@ export async function POST(req: NextRequest) {
             owlbearPlayerId: parsed.data.owlbearPlayerId,
             owlbearRole: parsed.data.owlbearRole,
         })
+
+        if (handoff && isAuthenticated) {
+            const channel = getOwlbearAuthHandoffChannel(handoff.channelId)
+            try {
+                await PusherService.getInstance().trigger(channel, OWLBEAR_AUTH_COMPLETED_EVENT, {
+                    nonce: handoff.nonce,
+                    ok: true,
+                })
+            } catch (error) {
+                console.error("[API] POST /api/owlbear/session completed ack failed:", error)
+            }
+        }
 
         return NextResponse.json({
             token: session.token,
