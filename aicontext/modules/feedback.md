@@ -77,7 +77,7 @@ Campos principais:
 - `PATCH /api/feedback/[id]`: edição do feedback conforme permissão.
 - `GET /api/feedback/[id]/timeline`: timeline do feedback.
 - `POST /api/feedback/[id]/comments`: cria comentário na timeline.
-- `GET /api/feedback/opencode/models`: lista modelos reais via `opencode models`.
+- `GET /api/feedback/opencode/models`: lista modelos OpenCode cacheados no MongoDB para uso administrativo.
 - `POST /api/feedback/[id]/plan`: cria job de planejamento.
 
 ## OpenCode
@@ -88,7 +88,9 @@ Campos principais:
 - Continuar contexto com `--session <opencodeSessionId>` quando existir.
 - Salvar apenas `opencodeSessionId` no MongoDB por padrão.
 - Não exportar transcript completo para MongoDB por padrão.
-- A lista de modelos da UI vem de `opencode models`.
+- A lista de modelos da UI vem do cache MongoDB populado pelo worker; a API web não executa o CLI OpenCode em produção Docker.
+- O worker é responsável por executar `opencode models` e atualizar o cache ao iniciar e em intervalo periódico.
+- Para sincronizar apenas os modelos, execute `pnpm tsx scripts/feedback-agent-worker.ts --refresh-models-only` em um ambiente com CLI OpenCode disponível.
 - Cada run persiste o modelo usado em `FeedbackAgentRun.modelName`.
 - O planejamento também deve rodar com `--dir`, usando `FEEDBACK_AGENT_PROJECT_DIR`, para evitar exploração acidental de diretórios amplos como `/home/burgos/code`.
 - O streaming do OpenCode deve ser interpretado antes de virar timeline: `part.text` vira progresso humano, `tool_use` vira resumo sem output bruto e páginas HTML/Cloudflare viram erro resumido.
@@ -132,6 +134,7 @@ Campos principais:
 - `FEEDBACK_OPENCODE_CODE_RECOVERY_ATTEMPTS`: número máximo de tentativas de recuperar `implement`/`iterate` via export + worktree estável. Padrão: `60`.
 - `FEEDBACK_OPENCODE_CODE_RECOVERY_DELAY_MS`: delay entre checagens do worktree durante recuperação de código. Padrão: `10000`.
 - `FEEDBACK_OPENCODE_CODE_RECOVERY_STABLE_CHECKS`: quantidade de snapshots iguais de `git status --porcelain` antes de considerar o worktree estável. Padrão: `3`.
+- `FEEDBACK_OPENCODE_MODELS_REFRESH_INTERVAL_MS`: intervalo de sincronização do cache de modelos OpenCode pelo worker. Padrão: `900000`.
 
 ## Git e PRs
 

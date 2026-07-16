@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server"
 import { currentUser } from "@/core/auth/server"
 import type { ApiResponse } from "@/core/types/common"
-import { listOpenCodeModels } from "@/features/feedback/services/opencode/opencode-cli-service"
+import { getCachedOpenCodeModels } from "@/features/feedback/services/opencode/opencode-model-cache-service"
 import type { OpenCodeModelOption } from "@/features/feedback/types/feedback.types"
 
 export async function GET() {
@@ -17,10 +17,20 @@ export async function GET() {
             return NextResponse.json(response, { status: user ? 403 : 401 })
         }
 
-        const models = await listOpenCodeModels()
+        const cache = await getCachedOpenCodeModels()
+        if (!cache || cache.models.length === 0) {
+            const response: ApiResponse<null> = {
+                success: false,
+                error: "Modelos OpenCode ainda não foram sincronizados pelo worker.",
+                code: "OPENCODE_MODELS_NOT_SYNCED",
+            }
+
+            return NextResponse.json(response, { status: 503 })
+        }
+
         const response: ApiResponse<OpenCodeModelOption[]> = {
             success: true,
-            data: models,
+            data: cache.models,
         }
 
         return NextResponse.json(response)

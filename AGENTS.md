@@ -89,3 +89,12 @@ Antes de implementar, leia nesta ordem:
 3. Mantive tipos, autenticação, validação e auditoria quando aplicável.
 4. Atualizei testes ou confirmei por que não eram necessários.
 5. Atualizei a documentação contextual se a mudança alterou comportamento, fluxo ou contrato.
+
+## 7. Versionamento em cada commit
+
+- **Sempre que for fazer um `git commit`, incremente a versão em `src/lib/config/version.ts`** seguindo versionamento semântico (`major.minor.patch`):
+  - **major** (`X.0.0`): mudanças incompatíveis / breaking changes.
+  - **minor** (`x.Y.0`): nova funcionalidade compatível com versões anteriores.
+  - **hotfix/patch** (`x.y.Z`): correção de bug compatível com versões anteriores.
+- Faça o bump da versão no mesmo commit da alteração correspondente.
+

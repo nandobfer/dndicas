@@ -124,7 +124,7 @@ Campos sugeridos:
 
 ## Modelo `FeedbackOpenCodeModelCache`
 
-Opcional, para cache da lista de modelos retornada por `opencode models`.
+Cache obrigatório da lista de modelos retornada por `opencode models`. Em produção Docker, a aplicação web não executa o CLI OpenCode; apenas o worker externo atualiza esse cache.
 
 Campos sugeridos:
 
@@ -133,7 +133,7 @@ Campos sugeridos:
 - `refreshedAt`
 - `errorMessage`
 
-O cache evita executar `opencode models` em toda renderizacao da UI. A API pode atualizar sob demanda ou por TTL curto.
+O cache evita executar `opencode models` no container web. A API lê apenas o MongoDB e retorna erro acionável se os modelos ainda não foram sincronizados pelo worker.
 
 ## APIs propostas
 
@@ -151,8 +151,7 @@ O cache evita executar `opencode models` em toda renderizacao da UI. A API pode 
 
 ### Modelos OpenCode
 
-- `GET /api/feedback/opencode/models`: retorna modelos disponiveis para select administrativo.
-- `POST /api/feedback/opencode/models/refresh`: admin força refresh da lista.
+- `GET /api/feedback/opencode/models`: retorna modelos disponiveis para select administrativo a partir do cache MongoDB.
 
 Contrato sugerido:
 

@@ -37,7 +37,7 @@ export function FeedbackOpenCodeModelSelect({ value, changeAction, disabled }: {
                 emptyMessage="Nenhum modelo encontrado"
                 className={disabled || modelsQuery.isLoading || models.length === 0 ? "pointer-events-none opacity-60" : undefined}
             />
-            {modelsQuery.error && <p className="text-xs text-red-300">Não foi possível carregar os modelos disponíveis.</p>}
+            {modelsQuery.error && <p className="text-xs text-red-300">{modelsQuery.error.message || "Não foi possível carregar os modelos disponíveis."}</p>}
         </div>
     )
 }

@@ -44,18 +44,18 @@ Snapshot/export pode ser uma acao futura:
 
 A UI administrativa deve permitir escolher o modelo a cada iteracao.
 
-A lista deve vir do proprio OpenCode:
+A lista deve vir do proprio OpenCode, mas a execução do CLI fica no worker externo:
 
 ```bash
 opencode models
 ```
 
-O worker ou uma API administrativa deve executar esse comando, normalizar a saida e opcionalmente cachear os resultados.
+O worker executa esse comando, normaliza a saida e salva o cache no MongoDB. A API web lê apenas esse cache, pois o ambiente de produção roda em Docker sem acesso ao CLI OpenCode.
 
 Requisitos:
 
 - Nao hardcodar modelos na UI.
-- Permitir refresh manual por admin.
+- Permitir refresh manual executando `pnpm tsx scripts/feedback-agent-worker.ts --refresh-models-only` no ambiente do worker.
 - Guardar no `FeedbackAgentRun.model` qual modelo foi usado.
 - Se a lista falhar, mostrar erro acionavel em pt-BR.
 - O modelo escolhido deve ser enviado para `opencode run --model <provider/model>`.
