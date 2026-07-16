@@ -167,9 +167,9 @@ export function parseOpenCodeModels(output: string): OpenCodeModelOption[] {
     return models
 }
 
-export async function listOpenCodeModels(): Promise<OpenCodeModelOption[]> {
+export async function listOpenCodeModelsWithRawOutput(): Promise<{ models: OpenCodeModelOption[]; rawOutput: string }> {
     const { stdout } = await runWithZsh("opencode models")
-    return parseOpenCodeModels(stdout)
+    return { models: parseOpenCodeModels(stdout), rawOutput: stdout }
 }
 
 export function parseOpenCodeRunOutput(stdout: string): { sessionId?: string; text: string } {

@@ -8,13 +8,16 @@ import { createPullRequest, mergePullRequest } from "../src/features/feedback/se
 import { createFeedbackTimelineEvent } from "../src/features/feedback/services/feedback-timeline-service"
 import { exportOpenCodeSession, isRecoverableOpenCodeTransportError, parseOpenCodeStreamLine, runOpenCode } from "../src/features/feedback/services/opencode/opencode-cli-service"
 import { bumpAppPatchVersion } from "../src/features/feedback/services/feedback-version-service"
+import { refreshOpenCodeModelCache } from "../src/features/feedback/services/opencode/opencode-model-cache-service"
 
 const POLL_ONCE = process.argv.includes("--once")
 const RECOVER_ONLY = process.argv.includes("--recover-only")
+const REFRESH_MODELS_ONLY = process.argv.includes("--refresh-models-only")
 const POLL_INTERVAL_MS = 5000
 const STALE_RUNNING_MS = Number(process.env.FEEDBACK_AGENT_STALE_RUNNING_MS ?? 2 * 60 * 1000)
 const PROJECT_DIR = process.env.FEEDBACK_AGENT_PROJECT_DIR ?? process.cwd()
 const MAX_WORKER_ERROR_LENGTH = Number(process.env.FEEDBACK_AGENT_ERROR_MAX_LENGTH ?? 12000)
+const MODELS_REFRESH_INTERVAL_MS = Number(process.env.FEEDBACK_OPENCODE_MODELS_REFRESH_INTERVAL_MS ?? 15 * 60 * 1000)
 const EXPORT_RECOVERY_ATTEMPTS = Number(process.env.FEEDBACK_OPENCODE_EXPORT_RECOVERY_ATTEMPTS ?? 6)
 const EXPORT_RECOVERY_DELAY_MS = Number(process.env.FEEDBACK_OPENCODE_EXPORT_RECOVERY_DELAY_MS ?? 10000)
 const EXPORT_RECOVERY_MAX_DELAY_MS = Number(process.env.FEEDBACK_OPENCODE_EXPORT_RECOVERY_MAX_DELAY_MS ?? 60000)
@@ -784,6 +787,15 @@ async function recoverFailedCodeRuns() {
     log("finished failed code run recovery", { recoveredCount, inspected: runs.length })
 }
 
+async function refreshOpenCodeModelsForWorker() {
+    try {
+        const cache = await refreshOpenCodeModelCache()
+        log("refreshed opencode models", { count: cache.models.length, refreshedAt: cache.refreshedAt?.toISOString() })
+    } catch (error) {
+        log("failed to refresh opencode models", { error: error instanceof Error ? error.message : String(error) })
+    }
+}
+
 async function processNextQueuedRun() {
     await dbConnect()
 
@@ -797,8 +809,16 @@ async function processNextQueuedRun() {
 }
 
 async function main() {
-    log("started", { pollOnce: POLL_ONCE, recoverOnly: RECOVER_ONLY, staleRunningMs: STALE_RUNNING_MS })
+    log("started", { pollOnce: POLL_ONCE, recoverOnly: RECOVER_ONLY, refreshModelsOnly: REFRESH_MODELS_ONLY, staleRunningMs: STALE_RUNNING_MS })
     await dbConnect()
+
+    if (REFRESH_MODELS_ONLY) {
+        await refreshOpenCodeModelCache()
+        await mongoose.disconnect()
+        return
+    }
+
+    await refreshOpenCodeModelsForWorker()
     await recoverStaleRunningRuns()
 
     if (RECOVER_ONLY) {
@@ -807,7 +827,14 @@ async function main() {
         return
     }
 
+    let lastModelsRefreshAt = Date.now()
+
     do {
+        if (Date.now() - lastModelsRefreshAt >= MODELS_REFRESH_INTERVAL_MS) {
+            lastModelsRefreshAt = Date.now()
+            await refreshOpenCodeModelsForWorker()
+        }
+
         const processed = await processNextQueuedRun()
         if (POLL_ONCE) break
         if (!processed) await new Promise((resolve) => setTimeout(resolve, POLL_INTERVAL_MS))
