@@ -131,9 +131,13 @@ export function useSpellList({ sheet, form, isReadOnly = false }: UseSpellListOp
         (level: string, field: "total" | "used", value: number) => {
             if (isReadOnly) return
             const current = spellSlots[level] ?? { total: 0, used: 0 }
+            const nextValue = Math.max(0, value)
+            const nextSlot = field === "total"
+                ? { total: nextValue, used: Math.min(current.used, nextValue) }
+                : { ...current, used: Math.min(nextValue, current.total) }
             patchField("spellSlots", {
                 ...spellSlots,
-                [level]: { ...current, [field]: Math.max(0, value) },
+                [level]: nextSlot,
             })
         },
         [isReadOnly, patchField, spellSlots]

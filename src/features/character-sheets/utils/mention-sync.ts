@@ -158,6 +158,7 @@ export function mapSpellSlotsForLevel(
     for (let slotLevel = 1; slotLevel <= 9; slotLevel += 1) {
         const key = String(slotLevel)
         const total = levelData?.slots?.[slotLevel as 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9] ?? 0
+        if (total <= 0) continue
         const used = Math.min(currentSlots?.[key]?.used ?? 0, total)
         mapped[key] = { total, used }
     }

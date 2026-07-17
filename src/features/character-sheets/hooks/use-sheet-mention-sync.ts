@@ -31,6 +31,7 @@ import {
     resolveSubclassFromClasses,
     type ParsedMention,
     type ResolvedSubclass,
+    type SpellcastingSource,
 } from "../utils/mention-sync"
 import { useCharacterCalculations } from "./use-character-calculations"
 import { buildBoundResourceCharge, syncResourceChargeRows } from "../utils/resource-charges"
@@ -260,11 +261,10 @@ export function useSheetMentionSync({ sheet, form, isReadOnly = false }: UseShee
                 featDiff.added
             )
 
-            const winningSubclass = resolved.activeSubclasses.find(isSpellcastingSubclass)
-            const winningClass = resolved.activeClasses.find(isSpellcastingClass)
-            const winningSpellSource = winningSubclass?.entity ?? winningClass ?? null
-            const nextSpellcastingAttribute = mapCatalogAttributeToSheetAttribute(winningSpellSource?.spellcastingAttribute)
-            const nextSpellSlots = mapSpellSlotsForLevel(level, winningSpellSource, currentSpellSlots)
+            const spellcastingAttributeSource = selectSpellcastingAttributeSource(resolved.activeSubclasses, resolved.activeClasses)
+            const spellSlotSource = selectSpellSlotSource(resolved.activeSubclasses, resolved.activeClasses)
+            const nextSpellcastingAttribute = mapCatalogAttributeToSheetAttribute(spellcastingAttributeSource?.spellcastingAttribute)
+            const nextSpellSlots = mapSpellSlotsForLevel(level, spellSlotSource, currentSpellSlots)
             const nextHitDice = mapHitDiceToSheetHitDice(resolved.activeClasses[0]?.hitDice)
             const nextLevelOneHpMax = level === 1 && resolved.activeClasses[0]?.hitDice
                 ? getLevelOneHpMax(resolved.activeClasses[0].hitDice, calc.attrMods.constitution.value)
@@ -547,6 +547,22 @@ function isSpellcastingClass(characterClass: CharacterClass) {
 
 function isSpellcastingSubclass(subclass: ResolvedSubclass) {
     return !!(subclass.entity.spellcasting || subclass.entity.spellcastingAttribute || subclass.entity.progressionTable?.spellSlots)
+}
+
+export function hasSpellSlotProgression(source?: SpellcastingSource | null): boolean {
+    return Object.keys(source?.progressionTable?.spellSlots ?? {}).length > 0
+}
+
+export function selectSpellcastingAttributeSource(activeSubclasses: ResolvedSubclass[], activeClasses: CharacterClass[]): SpellcastingSource | null {
+    const winningSubclass = activeSubclasses.find(isSpellcastingSubclass)
+    const winningClass = activeClasses.find(isSpellcastingClass)
+    return winningSubclass?.entity ?? winningClass ?? null
+}
+
+export function selectSpellSlotSource(activeSubclasses: ResolvedSubclass[], activeClasses: CharacterClass[]): SpellcastingSource | null {
+    const subclassWithSlots = activeSubclasses.find((subclass) => hasSpellSlotProgression(subclass.entity))
+    const classWithSlots = activeClasses.find(hasSpellSlotProgression)
+    return subclassWithSlots?.entity ?? classWithSlots ?? null
 }
 
 function dedupeStrings(items: string[]): string[] {
