@@ -1,354 +1,167 @@
 # Dungeons & Dicas
 
-Template starter para o projeto Dungeons & Dicas, com autenticação, banco de dados, IA, storage e mais.
+Dungeons & Dicas é uma plataforma web para mestres e jogadores de Dungeons & Dragons 5e. O projeto reúne catálogo, fichas de personagem, NPCs, rolagem de dados, integração com Owlbear Rodeo e recursos de IA em uma experiência pensada para campanhas em português.
 
-## Características
+A ideia é simples: reduzir atrito na mesa. Consultar uma magia, entender uma regra, preparar um NPC, rolar dados, acompanhar iniciativa ou vincular uma ficha a um token no VTT não deveria quebrar o ritmo do jogo.
 
-- **Next.js 16+** com App Router e Server Components
-- **TypeScript** em modo strict
-- **Clerk** para autenticação
-- **MongoDB + Mongoose** para banco de dados
-- **Google Gemini** (GenAI) para IA
-- **Nodemailer** para envio de emails
-- **S3/Minio** para storage de arquivos
-- **ShadCN UI** para componentes visuais
-- **Tailwind CSS v4** para estilização
-- **Vitest** para testes
-- **PM2** configurado para produção
+## Para Quem É
 
-## Conceito do Core
+- Mestres que querem preparar e conduzir sessões com menos abas abertas.
+- Jogadores que querem criar, evoluir e consultar fichas com mais fluidez.
+- Grupos que jogam online e usam Owlbear Rodeo como mesa virtual.
+- Pessoas que estão aprendendo D&D 5e e precisam de explicações mais acessíveis.
+- Devs e entusiastas interessados em ferramentas digitais para RPG de mesa.
 
-Este template segue o conceito de **Core Imutável**:
+## O Que Você Pode Fazer
 
-- **`src/core/`**: Código base que NÃO deve ser modificado nos projetos derivados
-- **`src/features/`**: Módulos específicos do projeto
-- **`src/app/`**: Rotas e páginas Next.js
+- Consultar catálogos de regras, magias, itens, raças, classes, subclasses, origens, talentos, habilidades e monstros.
+- Criar fichas em branco ou com um assistente guiado para nome, raça, origem, classe e atributos.
+- Evoluir personagens com apoio visual para ganho de nível, pontos de vida, subclasses e talentos.
+- Criar NPCs próprios ou copiar monstros do catálogo para adaptar a sua campanha.
+- Rolar dados com resultado oficial calculado no servidor e visualização 3D no navegador.
+- Usar busca global, menções e previews ricos para navegar entre entidades relacionadas.
+- Gerar artes com IA para personagens, monstros, itens, raças, classes, origens e magias.
+- Conversar com IA para entender entidades do catálogo em linguagem natural.
+- Integrar a experiência ao Owlbear Rodeo com painéis separados para compêndio, fichas, NPCs, iniciativa e dados.
+- Enviar feedbacks, acompanhar discussões e participar da evolução do produto.
 
-O core é atualizado via `git pull` do template, permitindo que melhorias sejam distribuídas para todos os projetos.
+## Catálogo Vivo De D&D
 
-## Instalação
+O catálogo é o centro de consulta do Dungeons & Dicas. Entidades como magias, talentos, monstros e regras não aparecem isoladas: descrições podem mencionar outras entidades, abrir previews, navegar para páginas de detalhe e manter contexto durante a leitura.
 
-### 1. Clone o template
+A busca foi pensada para bases grandes. Ela combina filtros, ranking fuzzy, carregamento progressivo e caches para manter a interface responsiva mesmo quando o catálogo cresce.
 
-```bash
-git clone <repository-url> my-project
-cd my-project
-npm install
+## Fichas De Personagem
+
+A área de fichas permite criar personagens rapidamente e depois refiná-los ao longo da campanha. O assistente de criação ajuda nas primeiras escolhas, enquanto a ficha completa guarda informações mecânicas e narrativas como aparência, história, notas, classe, raça, origem, magias, ataques, itens e recursos.
+
+O fluxo de subir de nível mostra o impacto antes de confirmar: novo nível, pontos de vida, habilidades desbloqueadas, escolhas obrigatórias e alterações de recursos. A ficha também usa menções e preenchimentos contextuais para reduzir digitação repetitiva.
+
+## NPCs, Monstros E Iniciativa
+
+Mestres podem consultar monstros do catálogo, criar NPCs próprios e copiar criaturas existentes para adaptar nomes, imagens, ações, PV, CA e descrições. Os NPCs pessoais ficam vinculados ao usuário e podem ser usados em preparação de campanha ou dentro do Owlbear Rodeo.
+
+Na integração com Owlbear, NPCs podem ser vinculados a uma sala, receber pontos de vida iniciais, entrar na iniciativa e ter seus PVs ajustados durante o combate. A iniciativa combina NPCs e personagens vinculados, preservando uma visão única da cena.
+
+## Dados 3D
+
+O rolador de dados calcula o resultado oficial no backend e usa a visualização 3D como representação visual desse resultado. Isso permite suportar vantagem, desvantagem, modificadores, d100, críticos e falhas sem depender da física visual como fonte da verdade.
+
+No Owlbear Rodeo, a action de dados compartilha rolagens com a sala. Outros jogadores veem a animação e o histórico compacto da mesa, mantendo o jogo sincronizado sem transformar o dado em uma janela isolada.
+
+## Integração Com Owlbear Rodeo
+
+Dungeons & Dicas oferece actions independentes para o Owlbear Rodeo:
+
+- `Dndicas: Compendium`: catálogo embutido para consulta rápida.
+- `Dndicas: Ficha`: fichas de jogadores e gerenciamento de fichas pelo mestre.
+- `Dndicas: NPC & Iniciativa`: NPCs da sala, controle de PV e ordem de iniciativa.
+- `Dndicas: Dados`: rolador compartilhado com histórico da sala.
+
+A integração também permite vincular tokens a personagens ou NPCs, exibir barras de vida sobre tokens e manter painéis diferentes abertos ao mesmo tempo. O fluxo de login foi desenhado para funcionar mesmo dentro de iframes, onde cookies podem ser bloqueados pelo navegador.
+
+## IA No Projeto
+
+A IA aparece como apoio, não como substituta da mesa.
+
+- `Entender com IA` abre um chat contextual para explicar regras, magias, monstros, itens e outras entidades em pt-BR.
+- Geração de arte cria imagens no estilo de fantasia para fichas e catálogos, salvando o resultado no storage do projeto.
+- Fluxos administrativos podem usar IA para revisar, traduzir ou gerar candidatos de entidades a partir de fontes estruturadas.
+- A central de feedback usa automação agêntica para transformar sugestões em planos, iterações e, futuramente, pull requests revisáveis.
+
+Todo conteúdo HTML vindo de IA passa por sanitização antes de ser renderizado na interface.
+
+## Feedback E Evolução
+
+O projeto possui uma central de feedback onde usuários autenticados podem registrar sugestões, bugs e comentários. A proposta é aproximar o ciclo de desenvolvimento do uso real: uma ideia pode virar discussão, plano, execução assistida por agente, preview e aprovação.
+
+Esse fluxo ainda está em evolução, mas já reflete uma direção importante do Dungeons & Dicas: construir ferramentas de RPG com feedback direto de quem joga.
+
+## Seção Técnica
+
+O Dungeons & Dicas é uma aplicação full-stack em TypeScript, construída com:
+
+- Next.js 16, React 19 e App Router.
+- TypeScript em modo strict.
+- MongoDB com Mongoose para persistência.
+- Auth.js para autenticação e sessões.
+- Tailwind CSS 4, Radix UI, Shadcn/ui e componentes Glass customizados.
+- TanStack Query para estado assíncrono no cliente.
+- Google Gemini via `@google/genai` para texto, ferramentas e imagens.
+- S3/MinIO para uploads, imagens e arquivos gerados.
+- Pusher/Soketi para realtime em feedbacks, geração de entidades e Owlbear.
+- Owlbear Rodeo SDK para actions, metadata de sala, tokens e menus de contexto.
+- Tiptap para rich text, tabelas, imagens e menções.
+- Fuse.js, Web Workers e busca server-side para catálogos e menções.
+- `@3d-dice/dice-box-threejs` para visualização 3D dos dados.
+- Vitest e Testing Library para testes automatizados.
+- Docker, PM2 e workers externos para cenários de produção e automação.
+
+A estrutura do código separa base compartilhada, features de produto e rotas da aplicação:
+
+```text
+src/
+├── core/      # serviços, componentes e utilitários compartilhados
+├── features/  # módulos de negócio do Dungeons & Dicas
+└── app/       # rotas, páginas e handlers do Next.js
 ```
 
-### 2. Configure variáveis de ambiente
+## Rodando Localmente
 
-Copie `.env.local.example` para `.env.local` e preencha:
+Este projeto usa exclusivamente `pnpm`.
 
 ```bash
-cp .env.local.example .env.local
+pnpm install
+pnpm dev
 ```
+
+O servidor local fica disponível em `http://localhost:3000`.
+
+Variáveis de ambiente comuns para desenvolvimento incluem:
 
 ```env
-# Database
-MONGODB_URI=mongodb://localhost:27017/my_database
-
-# Auth.js - OBRIGATÓRIO
-AUTH_SECRET=gere_um_secret_forte
+MONGODB_URI=
+AUTH_SECRET=
 AUTH_URL=http://localhost:3000
-
-# AI (Google Gemini)
-GOOGLE_API_KEY=AIza...
-
-# Email (Nodemailer)
-SMTP_HOST=smtp.example.com
-SMTP_PORT=587
-SMTP_USER=user@example.com
-SMTP_PASS=password
-SMTP_FROM=noreply@example.com
-
-# Storage (S3/Minio)
-S3_ENDPOINT=https://s3.amazonaws.com
-S3_ACCESS_KEY=your_access_key
-S3_SECRET_KEY=your_secret_key
-S3_BUCKET=my-bucket
-S3_REGION=us-east-1
+GOOGLE_API_KEY=
+S3_ENDPOINT=
+S3_ACCESS_KEY=
+S3_SECRET_KEY=
+S3_BUCKET=
+S3_REGION=
+PUSHER_APP_ID=
+PUSHER_KEY=
+PUSHER_SECRET=
+PUSHER_CLUSTER=
 ```
 
-### 3. Configurar Clerk (Autenticação)
-
-1. Crie uma conta em https://clerk.com
-2. Crie uma nova aplicação
-3. Copie as chaves API e adicione no `.env.local`
-4. Configure as URLs conforme acima
-
-**Documentação completa**: `aicontext/configuracao-clerk.md`
-
-### 4. Execute o projeto
+Scripts principais:
 
 ```bash
-npm run dev
+pnpm dev          # inicia o ambiente de desenvolvimento
+pnpm test         # executa a suíte de testes
+pnpm lint         # executa o lint
+pnpm seed         # importa dados de catálogo
+pnpm search       # abre a CLI de busca local
 ```
 
-Acesse http://localhost:3000
+## Documentação Do Projeto
 
-**Primeira execução**: Você será redirecionado para `/sign-in`. Crie uma conta para acessar o dashboard.
+A documentação de desenvolvimento fica em `aicontext/`. Ela descreve padrões de API, UI, autenticação, arquitetura, módulos de negócio e decisões técnicas usadas por humanos e agentes de IA ao evoluir o projeto.
 
-## Estrutura do Projeto
+Para entender os módulos principais, veja especialmente:
 
-```
-sipal-nextjs-starter/
-├── aicontext/                      # Documentação para IA
-│   ├── use-sempre-que-desenvolver.md
-│   ├── use-quando-desenvolver-api.md
-│   ├── use-para-atualizar-tema-e-componentes-ui.md
-│   └── modules/                    # Docs de módulos
-├── src/
-│   ├── core/                       # NÃO MODIFICAR
-│   │   ├── ai/                     # Serviços de IA
-│   │   ├── auth/                   # Helpers de autenticação
-│   │   ├── context/                # React Contexts
-│   │   ├── database/               # MongoDB e auditoria
-│   │   ├── email/                  # Envio de emails
-│   │   ├── hooks/                  # React Hooks
-│   │   ├── storage/                # S3/Minio
-│   │   ├── types/                  # TypeScript types
-│   │   ├── ui/                     # Componentes UI (ShadCN)
-│   │   └── utils/                  # Utilitários
-│   ├── features/                   # Seus módulos
-│   │   └── organizations/          # Exemplo: CRUD de empresas
-│   └── app/                        # Rotas Next.js
-│       ├── (auth)/                 # Páginas de autenticação
-│       ├── (dashboard)/            # Páginas autenticadas
-│       └── api/                    # API Routes
-├── public/                         # Assets estáticos
-├── ecosystem.config.js             # Configuração PM2
-├── vitest.config.ts                # Configuração de testes
-└── package.json
-```
+- `aicontext/modules/character-sheets.md`
+- `aicontext/modules/owlbear.md`
+- `aicontext/modules/dice-roller.md`
+- `aicontext/modules/monsters.md`
+- `aicontext/modules/entity-understanding.md`
+- `aicontext/modules/feedback.md`
 
-## Serviços do Core
+## Status
 
-### Banco de Dados
-
-```typescript
-import dbConnect from '@/core/database/db';
-import { logAction } from '@/core/database/audit-log';
-
-await dbConnect();
-await logAction('CREATE', 'User', userId, currentUserId);
-```
-
-### Autenticação
-
-```typescript
-import { requireAuth, getCurrentUser } from '@/core/auth';
-
-const userId = await requireAuth(); // Lança erro se não autenticado
-const user = await getCurrentUser(); // Retorna dados do usuário
-```
-
-### IA (Gemini)
-
-```typescript
-import { generateText } from '@/core/ai/genai';
-
-const response = await generateText('Explique Next.js', undefined, userId);
-// Uso é automaticamente registrado
-```
-
-### Email
-
-```typescript
-import { sendEmail } from '@/core/email/mailer';
-
-await sendEmail('user@example.com', 'Assunto', '<p>Conteúdo HTML</p>');
-```
-
-### Storage (S3/Minio)
-
-```typescript
-import { uploadFile, getFileUrl } from '@/core/storage/s3';
-
-await uploadFile('path/file.pdf', buffer, 'application/pdf');
-const url = await getFileUrl('path/file.pdf');
-```
-
-### Hooks
-
-```typescript
-import { useAuth, useStorage, useApi } from '@/core/hooks';
-
-const { user, isSignedIn } = useAuth();
-const [theme, setTheme] = useStorage('theme', 'light');
-const { data, loading, execute } = useApi(() => api.get('/api/data'));
-```
-
-## Criando um Novo Módulo
-
-1. Crie a estrutura em `src/features/my-module/`:
-
-```
-src/features/my-module/
-├── models/          # Schemas Mongoose
-├── components/      # Componentes React
-├── services/        # Lógica de negócio
-└── types/           # Tipos TypeScript
-```
-
-2. Crie as APIs em `src/app/api/my-module/`
-
-3. Documente em `aicontext/modules/my-module.md`
-
-## Desenvolvendo com IA
-
-Este template foi projetado para desenvolvimento assistido por IA. Consulte a documentação em `aicontext/`:
-
-### Arquivos de Contexto
-
-- **[README.md](./aicontext/README.md)** - Índice completo da documentação
-- **[use-sempre-que-desenvolver.md](./aicontext/use-sempre-que-desenvolver.md)** - Regras gerais do projeto
-- **[use-quando-desenvolver-api.md](./aicontext/use-quando-desenvolver-api.md)** - Padrões de API REST
-- **[use-para-atualizar-tema-e-componentes-ui.md](./aicontext/use-para-atualizar-tema-e-componentes-ui.md)** - Customização de UI e tema
-- **[use-para-estender-o-core.md](./aicontext/use-para-estender-o-core.md)** - Como estender funcionalidades do core
-- **[use-para-configurar-clerk.md](./aicontext/use-para-configurar-clerk.md)** - Configuração completa do Clerk
-- **[use-diretrizes-do-projeto.md](./aicontext/use-diretrizes-do-projeto.md)** - Decisões arquiteturais e lições aprendidas
-
-**Para IA**: Sempre carregue o arquivo `use-*` relevante antes de gerar código
-
-## Testes
-
-```bash
-npm test              # Executa todos os testes
-npm test -- --watch   # Modo watch
-```
-
-## Build e Deploy
-
-### Desenvolvimento
-
-```bash
-npm run dev
-```
-
-### Produção
-
-```bash
-npm run build
-npm start
-```
-
-### Com PM2
-
-```bash
-pm2 start ecosystem.config.js
-pm2 logs
-pm2 stop all
-```
-
-## Atualização do Core
-
-Para receber atualizações do template:
-
-```bash
-# Adicione o remote do template (apenas uma vez)
-git remote add template <template-repository-url>
-
-# Atualize o core
-git fetch template
-git merge template/main
-
-# Resolva conflitos se houver
-# Arquivos em src/core devem vir do template
-# Seus arquivos em src/features e src/app devem ser preservados
-```
-
-## Customização
-
-### Tema
-
-Edite `src/app/globals.css` para alterar cores:
-
-```css
-:root {
-  --primary: 142.1 76.2% 36.3%; /* Verde D&D */
-  --radius: 0.5rem;
-}
-```
-
-Veja `aicontext/use-para-atualizar-tema-e-componentes-ui.md` para mais detalhes.
-
-### Componentes UI
-
-Para adicionar novos componentes do ShadCN:
-
-```bash
-npx shadcn@latest add [component-name]
-```
-
-### Extensão do Core
-
-**NÃO modifique arquivos em `src/core`**. Para customizar:
-
-```typescript
-// ❌ ERRADO: editar src/core/ui/button.tsx
-
-// ✅ CORRETO: criar wrapper
-import { Button } from '@/core/ui/button';
-
-export function MyButton(props) {
-  return <Button {...props} className="my-custom-class" />;
-}
-```
-
-## Troubleshooting
-
-### MongoDB não conecta
-
-- Verifique se o MongoDB está rodando
-- Verifique `MONGODB_URI` no `.env.local`
-
-### Auth.js não autentica / Redirecionamento não funciona
-
-**Sintomas**:
-- Erro: "User is not signed in"
-- Acesso direto a rotas protegidas sem login
-- Login retorna para a tela inicial sem sessão
-
-**Solução**:
-1. Verifique se as variáveis de autenticação estão no `.env.local`:
-   ```env
-   AUTH_SECRET=...
-   AUTH_URL=http://localhost:3000
-   NEXTAUTH_SECRET=...
-   NEXTAUTH_URL=http://localhost:3000
-   GOOGLE_CLIENT_ID=...
-   GOOGLE_CLIENT_SECRET=...
-   ```
-2. **Reinicie o servidor** após alterar `.env.local`
-3. Limpe cookies do navegador ou use modo anônimo
-4. Para Google, confirme o redirect URI `/api/auth/callback/google` no Google Cloud Console
-
-**Documentação completa**: `aicontext/use-para-configurar-authjs.md`
-
-### Storage não funciona
-
-- Verifique credenciais do S3/Minio
-- Teste o endpoint manualmente
-- Storage funciona apenas se todas as variáveis estiverem configuradas
-
-### Email não envia
-
-- Se SMTP não configurado, emails são "mockados" (apenas log)
-- Verifique credenciais do provedor de email
-
-## Suporte
-
-Para dúvidas ou problemas:
-
-1. Consulte a documentação em `aicontext/`
-2. Verifique exemplos em `src/app/(dashboard)/examples/`
-3. Consulte o módulo exemplo em `src/features/organizations/`
+Dungeons & Dicas está em desenvolvimento ativo. Algumas áreas já estão maduras para uso diário, enquanto outras seguem recebendo melhorias de UX, performance, conteúdo e automação.
 
 ## Licença
 
-[Sua licença aqui]
-
----
-
-**Desenvolvido pela equipe Dungeons & Dicas**
+Licença ainda não definida.
