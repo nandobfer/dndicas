@@ -33,14 +33,32 @@ export async function GET(req: NextRequest) {
         const url = new URL(req.url)
         const entity = url.searchParams.get("entity")
 
-        if (!entity || !ENTITY_MODEL_MAP[entity]) {
+        if (!entity || (!ENTITY_MODEL_MAP[entity] && entity !== "npcs")) {
             return NextResponse.json(
-                { error: "Parâmetro 'entity' inválido ou ausente. Use: spells, classes, races, backgrounds, feats, rules, traits, items, monsters" },
+                { error: "Parâmetro 'entity' inválido ou ausente. Use: spells, classes, races, backgrounds, feats, rules, traits, items, monsters, npcs" },
                 { status: 400 }
             )
         }
 
         await dbConnect()
+
+        if (entity === "npcs") {
+            const { auth } = await import("@/core/auth/server")
+            const session = await auth()
+            if (!session?.userId) return NextResponse.json({ error: "Não autenticado" }, { status: 401 })
+
+            const { UserNpcModel } = await import("@/features/monsters/models/user-npc")
+            const rawSources = (await UserNpcModel.distinct("source", { userId: session.userId })) as string[]
+            const bookNames = Array.from(
+                new Set(
+                    rawSources
+                        .filter((s) => typeof s === "string" && s.trim().length > 0)
+                        .map((source) => getBookDisplayName(source))
+                )
+            ).sort((a, b) => a.localeCompare(b, "pt-BR"))
+
+            return NextResponse.json({ sources: bookNames })
+        }
 
         const model = ENTITY_MODEL_MAP[entity]
         const rawSources =

@@ -241,6 +241,32 @@ describe('monsters backend routes', () => {
         expect(payload.items.map((npc) => npc.name)).toEqual(['Merrow', 'Extorsionista Merrow'])
     })
 
+    it('GET /api/npcs filters sources only within the authenticated user NPCs', async () => {
+        const npcs = [{ _id: 'npc-1', name: 'Mercador', source: 'Homebrew', userId: 'user-1', status: 'active' }]
+        const sort = vi.fn().mockResolvedValue(npcs)
+        const find = vi.fn(() => ({ sort }))
+        const applyFuzzySearch = vi.fn()
+
+        vi.doMock('@/core/auth/server', () => ({ auth: vi.fn().mockResolvedValue({ userId: 'user-1' }) }))
+        vi.doMock('@/core/database/db', () => ({ default: vi.fn().mockResolvedValue(undefined) }))
+        vi.doMock('@/features/monsters/models/user-npc', () => ({ UserNpcModel: { find } }))
+        vi.doMock('@/core/utils/search-engine', () => ({ applyFuzzySearch }))
+
+        const mod = await importFresh<typeof import('@/app/api/npcs/route')>('@/app/api/npcs/route')
+        const response = await mod.GET(new Request('http://localhost/api/npcs?sources=Homebrew') as any)
+
+        expect(response.status).toBe(200)
+        expect(find).toHaveBeenCalledWith(expect.objectContaining({
+            userId: 'user-1',
+            source: { $in: expect.arrayContaining([expect.any(RegExp)]) },
+        }))
+
+        const findCalls = find.mock.calls as unknown as Array<[{ source: { $in: RegExp[] } }]>
+        const sourceMatchers = findCalls[0][0].source.$in
+        expect(sourceMatchers.some((regex) => regex.test('Homebrew pág. 1'))).toBe(true)
+        expect(applyFuzzySearch).not.toHaveBeenCalled()
+    })
+
     it('POST /api/npcs/copy rejects anonymous users', async () => {
         vi.doMock('@/core/auth/server', () => ({ auth: vi.fn().mockResolvedValue({ userId: null }) }))
         vi.doMock('@/core/database/db', () => ({ default: vi.fn().mockResolvedValue(undefined) }))

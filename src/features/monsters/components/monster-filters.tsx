@@ -20,6 +20,7 @@ export function MonsterFilters({
     onStatusChange,
     onSourcesChange,
     isSearching = false,
+    sourceEntityType = "monsters",
     className,
 }: {
     filters: {
@@ -37,6 +38,7 @@ export function MonsterFilters({
     onStatusChange: (value: "active" | "inactive" | "all") => void
     onSourcesChange: (value: string[]) => void
     isSearching?: boolean
+    sourceEntityType?: string
     className?: string
 }) {
     const { isAdmin } = useAuth()
@@ -53,7 +55,7 @@ export function MonsterFilters({
                     <SearchInput value={filters.search || ""} onChange={onSearchChange} isLoading={isSearching} placeholder="Buscar monstros por nome, descrição ou fonte..." />
                 </div>
                 <div className="flex flex-col sm:flex-row sm:items-center gap-3 w-full lg:w-auto">
-                    <SourceFilter value={filters.sources || []} onChange={onSourcesChange} entityType="monsters" />
+                    <SourceFilter value={filters.sources || []} onChange={onSourcesChange} entityType={sourceEntityType} />
                     {isAdmin && (
                         <div className="flex flex-col sm:flex-row sm:items-center gap-3 w-full sm:w-auto">
                             <span className="text-[10px] sm:text-xs font-semibold text-white/40 uppercase tracking-wider whitespace-nowrap hidden sm:inline">Status:</span>

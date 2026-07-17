@@ -5,6 +5,7 @@ import { applyFuzzySearch } from "@/core/utils/search-engine"
 import { UserNpcModel } from "@/features/monsters/models/user-npc"
 import { createMonsterSchema } from "@/features/monsters/api/validation"
 import { getMonsterXp } from "@/features/monsters/utils/monster-calculations"
+import { buildSourcePrefixRegexes } from "@/core/utils/source-utils"
 
 function serializeNpc(npc: { toObject?: () => Record<string, unknown> } | Record<string, unknown>) {
     const base = typeof npc.toObject === "function" ? npc.toObject() : npc
@@ -31,12 +32,17 @@ export async function GET(req: NextRequest) {
         const type = url.searchParams.get("type")
         const size = url.searchParams.get("size")
         const challengeRating = url.searchParams.get("challengeRating")
+        const sourcesParam = url.searchParams.get("sources")
 
         const query: Record<string, unknown> = { userId: session.userId }
         if (status && status !== "all") query.status = status
         if (type && type !== "all") query.type = { $in: type.split(",").map((item) => item.trim()).filter(Boolean) }
         if (size && size !== "all") query.size = { $in: size.split(",").map((item) => item.trim()).filter(Boolean) }
         if (challengeRating && challengeRating !== "all") query.challengeRating = challengeRating
+        if (sourcesParam) {
+            const sources = sourcesParam.split(",").map((source) => source.trim()).filter(Boolean)
+            if (sources.length > 0) query.source = { $in: buildSourcePrefixRegexes(sources) }
+        }
 
         const npcs = (await UserNpcModel.find(query).sort({ name: 1 })).map(serializeNpc)
         const searched = search ? applyFuzzySearch(npcs, search) : npcs

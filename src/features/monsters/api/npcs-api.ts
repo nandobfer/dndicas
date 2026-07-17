@@ -11,6 +11,7 @@ export async function fetchNpcs(params: MonsterFilterParams = {}): Promise<Monst
     if (params.size && params.size.length > 0) query.append("size", params.size.join(","))
     if (params.challengeRating) query.append("challengeRating", params.challengeRating)
     if (params.status && params.status !== "all") query.append("status", params.status)
+    if (params.sources && params.sources.length > 0) query.append("sources", params.sources.join(","))
 
     const res = await fetch(`${API_URL}?${query.toString()}`)
     if (!res.ok) {
