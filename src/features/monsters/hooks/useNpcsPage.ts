@@ -17,8 +17,9 @@ export function useNpcsPage() {
     const [size, setSize] = React.useState<MonsterSize[]>([])
     const [challengeRating, setChallengeRating] = React.useState("")
     const [status, setStatus] = React.useState<"active" | "inactive" | "all">("all")
+    const [sources, setSources] = React.useState<string[]>([])
 
-    const filters: MonsterFilterParams = { search, type: type.length > 0 ? type : undefined, size: size.length > 0 ? size : undefined, challengeRating: challengeRating || undefined, status }
+    const filters: MonsterFilterParams = { search, type: type.length > 0 ? type : undefined, size: size.length > 0 ? size : undefined, challengeRating: challengeRating || undefined, status, sources: sources.length > 0 ? sources : undefined }
     const infiniteData = useInfiniteNpcs(filters)
 
     const [isFormOpen, setIsFormOpen] = React.useState(false)
@@ -52,7 +53,7 @@ export function useNpcsPage() {
         isMobile,
         viewMode,
         setViewMode,
-        filters: { search, type, size, challengeRating, status },
+            filters: { search, type, size, challengeRating, status, sources },
         data: {
             items: infiniteData.data?.pages.flatMap((page) => page.items) || [],
             isLoading: infiniteData.isLoading,
@@ -67,6 +68,7 @@ export function useNpcsPage() {
             handleSizeChange: setSize,
             handleChallengeRatingChange: setChallengeRating,
             handleStatusChange: setStatus,
+            handleSourcesChange: setSources,
             handleCreateClick,
             handleEditClick,
             handleDeleteClick,

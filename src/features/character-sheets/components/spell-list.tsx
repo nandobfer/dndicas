@@ -11,6 +11,7 @@ import { useSpellList } from "./hooks/use-spell-list"
 import { GlassSelector } from "@/components/ui/glass-selector"
 import { PointerTooltip } from "./pointer-tooltip"
 import { attributeColors } from "@/lib/config/colors"
+import { getAvailableSpellSlotLevels } from "../utils/spell-slots"
 import type { CharacterSheet, PatchSheetBody } from "../types/character-sheet.types"
 
 interface SpellListProps {
@@ -30,8 +31,6 @@ const SPELL_CASTING_OPTIONS = [
     { value: "dexterity", label: "Destreza", activeColor: attributeColors["Destreza"].hex, textColor: attributeColors["Destreza"].hex },
     { value: "constitution", label: "Constituição", activeColor: attributeColors["Constituição"].hex, textColor: attributeColors["Constituição"].hex },
 ]
-
-const SLOT_LEVELS = ["1", "2", "3", "4", "5", "6", "7", "8", "9"]
 
 const formatMod = (v: number) => (v >= 0 ? `+${v}` : `${v}`)
 
@@ -102,6 +101,7 @@ export function SpellList({ sheet, form, isReadOnly = false }: SpellListProps) {
         focusSpellId,
         clearFocusSpellId,
     } = useSpellList({ sheet, form, isReadOnly })
+    const availableSlotLevels = getAvailableSpellSlotLevels(spellSlots)
 
     return (
         <div className="rounded-lg border border-white/10 bg-white/[0.03] overflow-hidden flex flex-col">
@@ -161,25 +161,31 @@ export function SpellList({ sheet, form, isReadOnly = false }: SpellListProps) {
                 </div>
             </div>
 
-            {/* Spell Slots — horizontal row of 9 */}
+            {/* Spell Slots */}
             <div className="px-3 py-2 border-b border-white/10">
                 <span className="text-[8px] font-black uppercase tracking-widest text-white/30 mb-2 block">Espaços de Magia</span>
-                <div className="flex gap-1.5 overflow-x-auto pb-1 scrollbar-thin">
-                    {SLOT_LEVELS.map((level) => {
-                        const slot = spellSlots[level] ?? { total: 0, used: 0 }
-                        return (
-                            <SpellSlotCard
-                                key={level}
-                                level={level}
-                                total={slot.total}
-                                used={slot.used}
-                                onPatchTotal={(v) => handlePatchSpellSlot(level, "total", v)}
-                                onPatchUsed={(v) => handlePatchSpellSlot(level, "used", v)}
-                                isReadOnly={isReadOnly}
-                            />
-                        )
-                    })}
-                </div>
+                {availableSlotLevels.length > 0 ? (
+                    <div className="flex gap-1.5 overflow-x-auto pb-1 glass-scrollbar">
+                        {availableSlotLevels.map((level) => {
+                            const slot = spellSlots[level] ?? { total: 0, used: 0 }
+                            return (
+                                <SpellSlotCard
+                                    key={level}
+                                    level={level}
+                                    total={slot.total}
+                                    used={slot.used}
+                                    onPatchTotal={(v) => handlePatchSpellSlot(level, "total", v)}
+                                    onPatchUsed={(v) => handlePatchSpellSlot(level, "used", v)}
+                                    isReadOnly={isReadOnly}
+                                />
+                            )
+                        })}
+                    </div>
+                ) : (
+                    <div className="rounded-lg border border-dashed border-white/10 bg-white/[0.02] px-3 py-3 text-center text-[9px] font-semibold text-white/25">
+                        Sem espaços de magia disponíveis neste nível
+                    </div>
+                )}
             </div>
 
             {/* Table header */}

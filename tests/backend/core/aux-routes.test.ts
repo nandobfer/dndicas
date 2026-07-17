@@ -72,6 +72,57 @@ describe('auxiliary backend routes', () => {
         expect(payload.sources).toEqual(['Monster Manual', 'Monster Manual 2024']);
     });
 
+    it('GET /api/sources rejects anonymous user NPC sources', async () => {
+        vi.doMock('@/core/database/db', () => ({
+            default: vi.fn().mockResolvedValue(undefined),
+        }));
+        vi.doMock('@/features/spells/models/spell', () => ({ Spell: {} }));
+        vi.doMock('@/features/classes/models/character-class', () => ({ CharacterClass: {} }));
+        vi.doMock('@/features/races/models/race', () => ({ RaceModel: {} }));
+        vi.doMock('@/features/backgrounds/models/background', () => ({ BackgroundModel: {} }));
+        vi.doMock('@/features/feats/models/feat', () => ({ Feat: {} }));
+        vi.doMock('@/core/database/models/reference', () => ({ Reference: {} }));
+        vi.doMock('@/features/traits/database/trait', () => ({ Trait: {} }));
+        vi.doMock('@/features/items/database/item', () => ({ ItemModel: {} }));
+        vi.doMock('@/features/monsters/models/monster', () => ({ MonsterModel: {} }));
+        vi.doMock('@/core/auth/server', () => ({ auth: vi.fn().mockResolvedValue({ userId: null }) }));
+        vi.doMock('@/features/monsters/models/user-npc', () => ({ UserNpcModel: { distinct: vi.fn() } }));
+
+        const mod = await importFresh<typeof import('@/app/api/sources/route')>('@/app/api/sources/route');
+        const response = await mod.GET(makeRequest('http://localhost/api/sources?entity=npcs'));
+
+        expect(response.status).toBe(401);
+    });
+
+    it('GET /api/sources returns only authenticated user NPC sources', async () => {
+        const distinct = vi.fn().mockResolvedValue(['Homebrew', 'Guilda pág. 12', 'Guilda pág. 99']);
+
+        vi.doMock('@/core/database/db', () => ({
+            default: vi.fn().mockResolvedValue(undefined),
+        }));
+        vi.doMock('@/features/spells/models/spell', () => ({ Spell: {} }));
+        vi.doMock('@/features/classes/models/character-class', () => ({ CharacterClass: {} }));
+        vi.doMock('@/features/races/models/race', () => ({ RaceModel: {} }));
+        vi.doMock('@/features/backgrounds/models/background', () => ({ BackgroundModel: {} }));
+        vi.doMock('@/features/feats/models/feat', () => ({ Feat: {} }));
+        vi.doMock('@/core/database/models/reference', () => ({ Reference: {} }));
+        vi.doMock('@/features/traits/database/trait', () => ({ Trait: {} }));
+        vi.doMock('@/features/items/database/item', () => ({ ItemModel: {} }));
+        vi.doMock('@/features/monsters/models/monster', () => ({ MonsterModel: {} }));
+        vi.doMock('@/core/auth/server', () => ({ auth: vi.fn().mockResolvedValue({ userId: 'user-1' }) }));
+        vi.doMock('@/features/monsters/models/user-npc', () => ({ UserNpcModel: { distinct } }));
+
+        const mod = await importFresh<typeof import('@/app/api/sources/route')>('@/app/api/sources/route');
+        const response = await mod.GET(makeRequest('http://localhost/api/sources?entity=npcs'));
+        const payload = await readJson<{
+            sources: string[];
+        }>(response);
+
+        expect(response.status).toBe(200);
+        expect(distinct).toHaveBeenCalledWith('source', { userId: 'user-1' });
+        expect(payload.sources).toEqual(['Guilda', 'Homebrew']);
+    });
+
     it('GET /api/sources includes subclass sources for classes', async () => {
         const distinct = vi.fn((path: string) => {
             if (path === 'source') return Promise.resolve(['LDJ p. 70', 'XPHB p. 50']);
@@ -234,6 +285,12 @@ describe('auxiliary backend routes', () => {
         }));
         vi.doMock('@/core/database/db', () => ({
             default: vi.fn().mockResolvedValue(undefined),
+        }));
+        vi.doMock('@/core/database/audit-log', () => ({
+            logAction: vi.fn().mockResolvedValue(undefined),
+        }));
+        vi.doMock('@/features/feedback/services/feedback-timeline-service', () => ({
+            createFeedbackTimelineEvent: vi.fn().mockResolvedValue(undefined),
         }));
 
         const mod = await importFresh<typeof import('@/app/api/feedback/route')>('@/app/api/feedback/route');

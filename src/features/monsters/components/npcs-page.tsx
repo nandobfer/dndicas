@@ -51,14 +51,15 @@ export function NpcsPage() {
             <GlassCard>
                 <GlassCardContent className="py-4">
                     <MonsterFilters
-                        filters={{ ...filters, sources: [] }}
+                        filters={filters}
                         onSearchChange={actions.handleSearchChange}
                         onTypeChange={actions.handleTypeChange}
                         onSizeChange={actions.handleSizeChange}
                         onChallengeRatingChange={actions.handleChallengeRatingChange}
                         onStatusChange={actions.handleStatusChange}
-                        onSourcesChange={() => {}}
+                        onSourcesChange={actions.handleSourcesChange}
                         isSearching={data.isLoading}
+                        sourceEntityType="npcs"
                     />
                 </GlassCardContent>
             </GlassCard>
