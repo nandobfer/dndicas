@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server"
 import { z } from "zod"
 import dbConnect from "@/core/database/db"
+import { applyFuzzySearch } from "@/core/utils/search-engine"
+import { buildSourcePrefixRegexes } from "@/core/utils/source-utils"
 import { createMonsterSchema } from "@/features/monsters/api/validation"
 import { MonsterModel } from "@/features/monsters/models/monster"
 import { UserNpcModel } from "@/features/monsters/models/user-npc"
@@ -156,6 +158,43 @@ export async function postOwlbearRoomUserNpc(req: NextRequest, roomId: string) {
         return NextResponse.json(serializeMonsterLike(npc), { status: 201 })
     } catch (error) {
         return owlbearErrorResponse(error, "[API] POST /api/owlbear/rooms/[roomId]/npcs/user-npcs error:")
+    }
+}
+
+export async function getOwlbearRoomUserNpcs(req: NextRequest, roomId: string) {
+    try {
+        const session = await requireRoomNpcGm(req, roomId)
+        await dbConnect()
+
+        const url = new URL(req.url)
+        const page = Number.parseInt(url.searchParams.get("page") || "1", 10)
+        const limit = Number.parseInt(url.searchParams.get("limit") || "10", 10)
+        const search = url.searchParams.get("search") || ""
+        const status = url.searchParams.get("status")
+        const type = url.searchParams.get("type")
+        const size = url.searchParams.get("size")
+        const challengeRating = url.searchParams.get("challengeRating")
+        const sourcesParam = url.searchParams.get("sources")
+
+        const query: Record<string, unknown> = { userId: session.userId }
+        if (status && status !== "all") query.status = status
+        if (type && type !== "all") query.type = { $in: type.split(",").map((item) => item.trim()).filter(Boolean) }
+        if (size && size !== "all") query.size = { $in: size.split(",").map((item) => item.trim()).filter(Boolean) }
+        if (challengeRating && challengeRating !== "all") query.challengeRating = challengeRating
+        if (sourcesParam) {
+            const sources = sourcesParam.split(",").map((source) => source.trim()).filter(Boolean)
+            if (sources.length > 0) query.source = { $in: buildSourcePrefixRegexes(sources) }
+        }
+
+        const npcs = (await UserNpcModel.find(query).sort({ name: 1 })).map(serializeMonsterLike)
+        const searched = search ? applyFuzzySearch(npcs, search) : npcs
+        const total = searched.length
+        const offset = (page - 1) * limit
+        const items = limit ? searched.slice(offset, offset + limit) : searched
+
+        return NextResponse.json({ items, total, page, limit })
+    } catch (error) {
+        return owlbearErrorResponse(error, "[API] GET /api/owlbear/rooms/[roomId]/npcs/user-npcs error:")
     }
 }
 

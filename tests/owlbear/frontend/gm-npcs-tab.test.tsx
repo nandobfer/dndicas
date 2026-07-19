@@ -8,7 +8,7 @@ import type { Monster } from "@/features/monsters/types/monsters.types"
 
 const useRoomNpcsMock = vi.hoisted(() => vi.fn())
 const useRoomInitiativeMock = vi.hoisted(() => vi.fn())
-const useInfiniteNpcsMock = vi.hoisted(() => vi.fn())
+const useInfiniteOwlbearUserNpcsMock = vi.hoisted(() => vi.fn())
 const useInfiniteMonstersMock = vi.hoisted(() => vi.fn())
 
 vi.mock("@/features/owlbear/use-room-npcs", () => ({
@@ -19,8 +19,8 @@ vi.mock("@/features/owlbear/use-room-initiative", () => ({
     useRoomInitiative: (...args: unknown[]) => useRoomInitiativeMock(...args),
 }))
 
-vi.mock("@/features/monsters/api/npcs-queries", () => ({
-    useInfiniteNpcs: (...args: unknown[]) => useInfiniteNpcsMock(...args),
+vi.mock("@/features/owlbear/use-owlbear-user-npcs", () => ({
+    useInfiniteOwlbearUserNpcs: (...args: unknown[]) => useInfiniteOwlbearUserNpcsMock(...args),
 }))
 
 vi.mock("@/features/monsters/api/monsters-queries", () => ({
@@ -206,7 +206,7 @@ function renderTab(props: {
 describe("OwlbearGmNpcsTab", () => {
     beforeEach(() => {
         vi.clearAllMocks()
-        useInfiniteNpcsMock.mockReturnValue({ data: { pages: [{ items: [] }] }, isLoading: false, isFetching: false, hasNextPage: false, isFetchingNextPage: false, fetchNextPage: vi.fn() })
+        useInfiniteOwlbearUserNpcsMock.mockReturnValue({ data: { pages: [{ items: [] }] }, isLoading: false, isFetching: false, hasNextPage: false, isFetchingNextPage: false, fetchNextPage: vi.fn() })
         useInfiniteMonstersMock.mockReturnValue({ data: { pages: [{ items: [] }] }, isLoading: false, isFetching: false, hasNextPage: false, isFetchingNextPage: false, fetchNextPage: vi.fn() })
     })
 
@@ -307,6 +307,20 @@ describe("OwlbearGmNpcsTab", () => {
 
         expect(screen.getByText("Bandido")).toBeInTheDocument()
         expect(screen.queryByText("Lobo")).not.toBeInTheDocument()
+    })
+
+    it("loads user NPCs through the Owlbear session token inside the iframe", () => {
+        renderTab()
+
+        fireEvent.click(screen.getByRole("button", { name: "Adicionar NPC" }))
+        fireEvent.click(screen.getByText("Meus NPCs"))
+
+        expect(useInfiniteOwlbearUserNpcsMock).toHaveBeenLastCalledWith(
+            "room-1",
+            "token-1",
+            { search: "", status: "active" },
+            { enabled: true, limit: 12 },
+        )
     })
 
     it("applies positive and negative HP deltas with clamping", async () => {
