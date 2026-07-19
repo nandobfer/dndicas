@@ -1,4 +1,4 @@
-import type { CreateMonsterInput, Monster } from "@/features/monsters/types/monsters.types"
+import type { CreateMonsterInput, Monster, MonsterFilterParams, MonstersResponse } from "@/features/monsters/types/monsters.types"
 import { notifyOwlbearSessionInvalid } from "./sdk"
 
 export type OwlbearRoomNpcSourceKind = "userNpc" | "monster"
@@ -69,6 +69,24 @@ export async function createOwlbearUserNpc(roomId: string, sessionToken: string,
         body: JSON.stringify(input),
     })
     if (!response.ok) throw await parseJsonError(response, "Erro ao criar NPC")
+    return response.json()
+}
+
+export async function fetchOwlbearUserNpcs(roomId: string, sessionToken: string, params: MonsterFilterParams = {}): Promise<MonstersResponse> {
+    const query = new URLSearchParams()
+    if (params.page) query.append("page", params.page.toString())
+    if (params.limit) query.append("limit", params.limit.toString())
+    if (params.search) query.append("search", params.search)
+    if (params.type && params.type.length > 0) query.append("type", params.type.join(","))
+    if (params.size && params.size.length > 0) query.append("size", params.size.join(","))
+    if (params.challengeRating) query.append("challengeRating", params.challengeRating)
+    if (params.status && params.status !== "all") query.append("status", params.status)
+    if (params.sources && params.sources.length > 0) query.append("sources", params.sources.join(","))
+
+    const response = await fetch(`/api/owlbear/rooms/${encodeURIComponent(roomId)}/npcs/user-npcs?${query.toString()}`, {
+        headers: authHeaders(sessionToken),
+    })
+    if (!response.ok) throw await parseJsonError(response, "Erro ao buscar NPCs")
     return response.json()
 }
 

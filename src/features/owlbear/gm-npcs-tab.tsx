@@ -22,7 +22,6 @@ import { SearchInput } from "@/components/ui/search-input"
 import { HpDicePanel } from "@/features/dice-roller/components/hp-dice-panel"
 import { parseHpDiceFormula, parseStaticHpValue } from "@/features/dice-roller/utils/hp-dice"
 import { useInfiniteMonsters } from "@/features/monsters/api/monsters-queries"
-import { useInfiniteNpcs } from "@/features/monsters/api/npcs-queries"
 import { NpcFormModal } from "@/features/monsters/components/npc-form-modal"
 import { NpcPreview } from "@/features/monsters/components/npc-preview"
 import type { CreateMonsterSchema } from "@/features/monsters/api/validation"
@@ -33,6 +32,7 @@ import { notifyOwlbearOverlaySync } from "./overlay-sync-events"
 import { OwlbearSignInPrompt } from "./owlbear-sign-in-prompt"
 import { createOwlbearUserNpc, type OwlbearRoomNpc, type OwlbearRoomNpcSourceKind } from "./room-npcs-api"
 import type { OwlbearRuntimeState, OwlbearSessionState } from "./types"
+import { useInfiniteOwlbearUserNpcs } from "./use-owlbear-user-npcs"
 import { useRoomInitiative } from "./use-room-initiative"
 import { useRoomNpcs } from "./use-room-npcs"
 
@@ -240,11 +240,15 @@ function RoomNpcRow({
 
 function MonsterPickerModal({
     mode,
+    roomId,
+    sessionToken,
     isOpen,
     onClose,
     onSelect,
 }: {
     mode: PickerMode | null
+    roomId: string | null
+    sessionToken: string | null
     isOpen: boolean
     onClose: () => void
     onSelect: (monster: Monster, sourceKind: OwlbearRoomNpcSourceKind) => void
@@ -256,7 +260,7 @@ function MonsterPickerModal({
         ? "Selecione um monstro do catálogo para adicioná-lo à sala."
         : "Selecione um NPC da sua conta para adicioná-lo à sala."
     const filters = React.useMemo(() => ({ search, status: "active" as const }), [search])
-    const npcsQuery = useInfiniteNpcs(filters, { enabled: isOpen && mode === "userNpc", limit: 12 })
+    const npcsQuery = useInfiniteOwlbearUserNpcs(roomId, sessionToken, filters, { enabled: isOpen && mode === "userNpc", limit: 12 })
     const monstersQuery = useInfiniteMonsters(filters, { enabled: isOpen && mode === "monster", limit: 12 })
     const query = mode === "monster" ? monstersQuery : npcsQuery
     const items = query.data?.pages.flatMap((page) => page.items) ?? []
@@ -763,6 +767,8 @@ export function OwlbearGmNpcsTab({
 
             <MonsterPickerModal
                 mode={pickerMode}
+                roomId={roomId}
+                sessionToken={session.sessionToken}
                 isOpen={pickerMode !== null}
                 onClose={() => setPickerMode(null)}
                 onSelect={handleSelectMonster}

@@ -382,6 +382,7 @@ function PlayerSheetTabContent({
                 <SheetForm
                     sheet={sheetQuery.data}
                     layoutMode="desktop"
+                    editMode="editable"
                     isOwlbear
                     navigateOnSlugChange={false}
                     onSlugChange={() => undefined}

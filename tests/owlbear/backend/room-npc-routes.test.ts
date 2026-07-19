@@ -111,6 +111,30 @@ describe("Owlbear room NPC routes", () => {
         expect(payload.source.name).toBe("Lobo")
     })
 
+    it("lists user NPCs using the authenticated Owlbear session user", async () => {
+        sessionMock.value = { ...sessionMock.value, owlbearRole: "GM", roomId: "room-1", userId: "user-1" }
+        const sort = vi.fn().mockResolvedValue([
+            { _id: "npc-1", name: "Bandido", savingThrows: {}, skills: {}, toObject: () => ({ _id: "npc-1", name: "Bandido", savingThrows: {}, skills: {} }) },
+        ])
+        const find = vi.fn().mockReturnValue({ sort })
+
+        mockDb()
+        mockSessionService()
+        vi.doMock("@/features/monsters/models/monster", () => ({ MonsterModel: { findById: vi.fn(), find: vi.fn() } }))
+        vi.doMock("@/features/monsters/models/user-npc", () => ({ UserNpcModel: { find, findOne: vi.fn(), create: vi.fn() } }))
+        vi.doMock("@/features/owlbear/models/owlbear-room-npc", () => ({ OwlbearRoomNpc: { create: vi.fn() } }))
+
+        const mod = await importFresh<typeof import("@/app/api/owlbear/rooms/[roomId]/npcs/user-npcs/route")>("@/app/api/owlbear/rooms/[roomId]/npcs/user-npcs/route")
+        const response = await mod.GET(new Request("http://localhost/api/owlbear/rooms/room-1/npcs/user-npcs?status=active&limit=12") as any, { params: Promise.resolve({ roomId: "room-1" }) })
+        const payload = await readJson<{ items: Array<{ _id: string; name: string }>; total: number }>(response)
+
+        expect(response.status).toBe(200)
+        expect(find).toHaveBeenCalledWith({ userId: "user-1", status: "active" })
+        expect(sort).toHaveBeenCalledWith({ name: 1 })
+        expect(payload.items).toEqual([expect.objectContaining({ _id: "npc-1", name: "Bandido" })])
+        expect(payload.total).toBe(1)
+    })
+
     it("patches HP with server-side clamping", async () => {
         sessionMock.value = { ...sessionMock.value, owlbearRole: "GM", roomId: "room-1", userId: "user-1" }
         const current = {

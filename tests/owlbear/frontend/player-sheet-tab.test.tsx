@@ -7,6 +7,7 @@ import type { OwlbearRuntimeState, OwlbearSessionState } from "@/features/owlbea
 const getRoomMetadataStateMock = vi.hoisted(() => vi.fn())
 const subscribeToRoomMetadataMock = vi.hoisted(() => vi.fn())
 const mySheetsContentMock = vi.hoisted(() => vi.fn())
+const sheetFormMock = vi.hoisted(() => vi.fn())
 const useSheetMock = vi.hoisted(() => vi.fn())
 
 vi.mock("@/features/owlbear/sdk", () => ({
@@ -25,7 +26,10 @@ vi.mock("@/features/character-sheets/api/character-sheet-client-config", () => (
 }))
 
 vi.mock("@/features/character-sheets/components/sheet-form", () => ({
-    SheetForm: () => <div data-testid="sheet-form" />,
+    SheetForm: (props: Record<string, unknown>) => {
+        sheetFormMock(props)
+        return <div data-testid="sheet-form" />
+    },
 }))
 
 vi.mock("@/app/(dashboard)/my-sheets/_components/my-sheets-content", () => ({
@@ -95,5 +99,29 @@ describe("OwlbearPlayerSheetTab", () => {
 
         expect(screen.getByTestId("owlbear-sign-in-prompt")).toBeInTheDocument()
         expect(mySheetsContentMock).not.toHaveBeenCalled()
+    })
+
+    it("opens the linked player sheet as editable inside the Owlbear iframe", async () => {
+        getRoomMetadataStateMock.mockResolvedValue({ playerLinks: { "player-1": "sheet-1" } })
+        useSheetMock.mockReturnValue({
+            isLoading: false,
+            isError: false,
+            data: { _id: "sheet-1", userId: "user-1", slug: "hero" },
+        })
+
+        render(
+            <OwlbearPlayerSheetTab
+                runtime={runtime}
+                session={session}
+                isAuthenticated
+                isAuthLoaded
+            />
+        )
+
+        expect(await screen.findByTestId("sheet-form")).toBeInTheDocument()
+        expect(sheetFormMock).toHaveBeenLastCalledWith(expect.objectContaining({
+            editMode: "editable",
+            runtimeContext: "owlbear",
+        }))
     })
 })
