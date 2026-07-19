@@ -509,7 +509,7 @@ export function OwlbearGmSceneController({
     const needsPlayerBackend = canOpenPlayerDialog || shouldSyncPlayerOverlays
     const needsNpcBackend = (canOpenNpcDialog || shouldSyncNpcOverlays) && canUseNpcBackend
     const { sheets } = useRoomLinkedSheets(session.sessionToken, canManageScene && needsPlayerBackend)
-    const { items: npcs, isLoading: isLoadingNpcs } = useRoomNpcs(
+    const { items: npcs, isLoading: isLoadingNpcs, reload: reloadNpcs } = useRoomNpcs(
         runtime.roomId,
         session.sessionToken,
         canManageScene && needsNpcBackend,
@@ -653,6 +653,11 @@ export function OwlbearGmSceneController({
         })
         requestSyncScene(0)
     }), [requestSyncScene])
+
+    React.useEffect(() => {
+        if (pendingLink?.kind !== "npc") return
+        void reloadNpcs()
+    }, [pendingLink, reloadNpcs])
 
     // Registra o listener de cena e o polling de sincronização
     React.useEffect(() => {
