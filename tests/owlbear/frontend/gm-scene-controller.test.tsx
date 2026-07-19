@@ -636,6 +636,36 @@ describe("OwlbearGmSceneController — dialog de NPC", () => {
         expect(screen.getByText("7/7 PV")).toBeInTheDocument()
     })
 
+    it("recarrega os NPCs da sala ao abrir o dialog de vínculo", async () => {
+        const reload = vi.fn().mockResolvedValue(undefined)
+        useRoomNpcsMock.mockReturnValue({
+            items: [goblinNpc],
+            isLoading: false,
+            errorMessage: null,
+            reload,
+            linkNpc: vi.fn(),
+            updateNpc: vi.fn(),
+            removeNpc: vi.fn(),
+        })
+
+        render(<OwlbearGmSceneController runtime={readyGmRuntime} session={readySession} />)
+
+        await waitFor(() => expect(sdkMock.contextMenu.create).toHaveBeenCalledTimes(3))
+
+        const npcMenu = getRegisteredContextMenu("com.dndicas.owlbear.link-npc")
+        npcMenu?.onClick?.({
+            items: [{
+                id: "token-2", name: "Token Goblin", layer: "CHARACTER", type: "IMAGE",
+                visible: true, locked: false, createdUserId: "u1", zIndex: 1,
+                lastModified: "", lastModifiedUserId: "u1",
+                position: { x: 0, y: 0 }, rotation: 0, scale: { x: 1, y: 1 }, metadata: {},
+            }],
+        })
+
+        expect(await screen.findByRole("heading", { name: "Vincular a NPC" })).toBeInTheDocument()
+        await waitFor(() => expect(reload).toHaveBeenCalled())
+    })
+
     it("exibe estado vazio quando não há NPCs na sala", async () => {
         useRoomNpcsMock.mockReturnValue({
             items: [],
