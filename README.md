@@ -142,7 +142,26 @@ pnpm dev          # inicia o ambiente de desenvolvimento
 pnpm test         # executa a suíte de testes
 pnpm lint         # executa o lint
 pnpm seed         # importa dados de catálogo
-pnpm search       # abre a CLI de busca local
+pnpm search       # abre a CLI de busca local (TUI interativa)
+pnpm query-db     # consulta o banco via CLI não-interativa (útil para scripts e agentes de IA)
+```
+
+### query-db
+
+CLI não-interativa para consultar entidades do banco diretamente. Ideal para automação, agentes de IA e scripts. Saída em JSON puro no stdout.
+
+```bash
+# Listar todas as classes
+pnpm query-db -- --type Classe --list
+
+# Buscar por nome (case-insensitive, parcial)
+pnpm query-db -- --type Classe --search "Lâmina"
+
+# Buscar por ID com campos específicos
+pnpm query-db -- --type Classe --id <objectId> --fields name,traits,subclasses
+
+# Tipos disponíveis: Regra, Habilidade, Talento, Magia, Classe, Origem, Raça, Item
+# Flags: --type --search --id --list --fields --limit --status --help
 ```
 
 ## Documentação Do Projeto
