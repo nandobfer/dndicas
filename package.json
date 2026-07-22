@@ -16,7 +16,8 @@
         "auth:migrate:apply": "tsx scripts/migrate-clerk-to-authjs.ts --apply --confirm-backup",
         "search": "tsx scripts/search-cli.ts",
         "search-cli": "tsx scripts/search-cli.ts",
-        "dice-override-cli": "tsx scripts/dice-override-cli.ts"
+        "dice-override-cli": "tsx scripts/dice-override-cli.ts",
+        "query-db": "tsx scripts/query-db.ts"
     },
     "dependencies": {
         "@3d-dice/dice-box-threejs": "^0.0.12",
