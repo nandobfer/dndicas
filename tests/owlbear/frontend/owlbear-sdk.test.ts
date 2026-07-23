@@ -32,6 +32,7 @@ describe("Owlbear SDK - Dice History Limit", () => {
         playerName: "Player " + id,
         playerId: "player-id-" + id,
         playerRole: "PLAYER",
+        status: "resolved",
         createdAt,
         result: {
             rollId: id,
@@ -86,5 +87,38 @@ describe("Owlbear SDK - Dice History Limit", () => {
         expect(state.diceHistory[0].id).toBe("entry-new")
         expect(state.diceHistory[12].id).toBe("roll-11")
         expect(state.diceHistory.find(e => e.id === "roll-12")).toBeUndefined()
+    })
+
+    it("should update an existing history entry without changing its position", async () => {
+        let currentMetadata: any = {
+            "com.dndicas.owlbear/room": {
+                version: 1,
+                playerLinks: {},
+                diceHistory: [
+                    createDummyEntry("roll-newer", "2026-01-01T00:00:02.000Z"),
+                    { ...createDummyEntry("roll-target", "2026-01-01T00:00:01.000Z"), status: "rolling" },
+                    createDummyEntry("roll-older", "2026-01-01T00:00:00.000Z"),
+                ],
+            },
+        }
+
+        sdkMock.room.getMetadata.mockImplementation(async () => currentMetadata)
+        sdkMock.room.setMetadata.mockImplementation(async (metadata) => {
+            currentMetadata = metadata
+        })
+
+        await appendRoomDiceHistoryEntry({
+            ...createDummyEntry("roll-target", "2026-01-01T00:00:01.000Z"),
+            status: "resolved",
+            result: {
+                ...createDummyEntry("roll-target", "2026-01-01T00:00:01.000Z").result,
+                total: 18,
+            },
+        })
+
+        const state = await getRoomMetadataState()
+        expect(state.diceHistory.map((entry) => entry.id)).toEqual(["roll-newer", "roll-target", "roll-older"])
+        expect(state.diceHistory[1].status).toBe("resolved")
+        expect(state.diceHistory[1].result.total).toBe(18)
     })
 })

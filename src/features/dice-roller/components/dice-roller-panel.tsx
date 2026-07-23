@@ -37,6 +37,7 @@ interface DiceRollerPanelProps {
     preset?: DiceRollPreset | null
     className?: string
     requestContext?: Pick<DiceRollRequest, "source" | "playerName" | "owlbearRoomId" | "owlbearPlayerId">
+    onRollAnimationStarted?: (result: DiceRollResponse) => void
     onRollResolved?: (result: DiceRollResponse) => void
     externalResult?: DiceRollResponse | null
     disableRolling?: boolean
@@ -49,6 +50,7 @@ export function DiceRollerPanel({
     preset,
     className,
     requestContext,
+    onRollAnimationStarted,
     onRollResolved,
     externalResult,
     disableRolling = false,
@@ -110,6 +112,11 @@ export function DiceRollerPanel({
     React.useEffect(() => {
         onRollResolvedRef.current = onRollResolved
     }, [onRollResolved])
+
+    const onRollAnimationStartedRef = React.useRef(onRollAnimationStarted)
+    React.useEffect(() => {
+        onRollAnimationStartedRef.current = onRollAnimationStarted
+    }, [onRollAnimationStarted])
 
     React.useEffect(() => {
         if (animationTimeoutRef.current) {
@@ -256,6 +263,7 @@ export function DiceRollerPanel({
                 owlbearPlayerId: requestContext?.owlbearPlayerId,
             })
             isLocalRollRef.current = true
+            onRollAnimationStartedRef.current?.(nextResult)
             setResult(nextResult)
         } catch (error) {
             console.error("Failed to roll dice", error)

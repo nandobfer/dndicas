@@ -10,6 +10,7 @@ interface HistoryEntryOverrides {
     playerId?: string
     playerRole?: "GM" | "PLAYER"
     characterName?: string
+    status?: OwlbearDiceHistoryEntry["status"]
     createdAt?: string
     result?: Partial<DiceRollResponse>
 }
@@ -40,8 +41,21 @@ const rollResult = {
 } as DiceRollResponse
 
 vi.mock("@/features/dice-roller/components/dice-roller-panel", () => ({
-    DiceRollerPanel: ({ onRollResolved }: { onRollResolved?: (result: DiceRollResponse) => void }) => (
-        <button type="button" data-testid="dice-roller-panel" onClick={() => onRollResolved?.(rollResult)}>
+    DiceRollerPanel: ({
+        onRollAnimationStarted,
+        onRollResolved,
+    }: {
+        onRollAnimationStarted?: (result: DiceRollResponse) => void
+        onRollResolved?: (result: DiceRollResponse) => void
+    }) => (
+        <button
+            type="button"
+            data-testid="dice-roller-panel"
+            onClick={() => {
+                onRollAnimationStarted?.(rollResult)
+                onRollResolved?.(rollResult)
+            }}
+        >
             Dice Roller Panel
         </button>
     ),
@@ -69,10 +83,6 @@ vi.mock("@/features/owlbear/hooks/use-owlbear-dice-history", () => ({
     }),
 }))
 
-vi.mock("@/features/owlbear/hooks/use-owlbear-dice-realtime", () => ({
-    useOwlbearDiceRealtime: () => undefined,
-}))
-
 function createHistoryEntry(overrides: HistoryEntryOverrides = {}): OwlbearDiceHistoryEntry {
     const result = {
         rollId: overrides.id ?? "roll-1",
@@ -92,6 +102,7 @@ function createHistoryEntry(overrides: HistoryEntryOverrides = {}): OwlbearDiceH
         playerId: overrides.playerId,
         playerRole: overrides.playerRole,
         characterName: overrides.characterName,
+        status: overrides.status ?? "resolved",
         createdAt: overrides.createdAt ?? "2026-01-01T00:00:00.000Z",
         result,
     }
@@ -202,6 +213,18 @@ describe("OwlbearDiceTab", () => {
         expect(within(playerFormulaRow).getByTestId("history-formula-chip")).toHaveTextContent("1d20+2")
     })
 
+    it("renders rolling history entries with the same card and a loading result", () => {
+        owlbearDiceHistoryMock.history = [createHistoryEntry({ status: "rolling" })]
+
+        renderDiceTab()
+
+        expect(screen.getByText("Nando")).toBeInTheDocument()
+        expect(screen.getByTestId("history-formula-chip")).toHaveTextContent("1d20+2")
+        expect(screen.getByLabelText("Resultado rolando")).toBeInTheDocument()
+        expect(screen.getByText("1d20: rolando...")).toBeInTheDocument()
+        expect(screen.queryByText("22")).not.toBeInTheDocument()
+    })
+
     it("renders the linked character name instead of the Owlbear player name", () => {
         owlbearDiceHistoryMock.history = [
             createHistoryEntry({
@@ -249,6 +272,7 @@ describe("OwlbearDiceTab", () => {
                 playerId: "player-kael",
                 playerRole: "PLAYER",
                 characterName: "Kael Thorne",
+                status: "rolling",
             }))
         })
         expect(owlbearSdkMock.fetchOwlbearSheetById).toHaveBeenCalledWith("sheet-1", "token-1")
@@ -266,6 +290,7 @@ describe("OwlbearDiceTab", () => {
                 playerId: "player-kael",
                 playerRole: "PLAYER",
                 characterName: undefined,
+                status: "rolling",
             }))
         })
         expect(owlbearSdkMock.fetchOwlbearSheetById).not.toHaveBeenCalled()
