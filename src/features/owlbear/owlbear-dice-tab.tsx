@@ -9,7 +9,6 @@ import { cn } from "@/core/utils"
 import { diceColors } from "@/lib/config/colors"
 import { fetchOwlbearSheetById, getRoomMetadataState } from "./sdk"
 import { useOwlbearDiceHistory } from "./hooks/use-owlbear-dice-history"
-import { useOwlbearDiceRealtime } from "./hooks/use-owlbear-dice-realtime"
 import type { OwlbearDiceHistoryEntry, OwlbearRuntimeState, OwlbearSessionState } from "./types"
 
 interface OwlbearDiceTabProps {
@@ -24,6 +23,10 @@ function buildDiceFormula(result: DiceRollResponse) {
 }
 
 function getHistoryTone(entry: OwlbearDiceHistoryEntry) {
+    if (entry.status === "rolling") {
+        return "border-blue-300/25 bg-blue-500/10 text-blue-50 shadow-[0_0_24px_rgba(59,130,246,0.12)]"
+    }
+
     const criticalState = getDiceCriticalState(entry.result)
     if (criticalState === "critical-success") {
         return "border-emerald-300/40 bg-emerald-500/12 text-emerald-50 shadow-[0_0_24px_rgba(16,185,129,0.2)]"
@@ -66,6 +69,10 @@ function formatRollTime(createdAt: string) {
     }).format(new Date(value))
 }
 
+function wait(ms: number) {
+    return new Promise((resolve) => window.setTimeout(resolve, ms))
+}
+
 function OwlbearDiceHistoryList({ history, isLoading }: { history: OwlbearDiceHistoryEntry[]; isLoading: boolean }) {
     if (isLoading) {
         return (
@@ -86,10 +93,12 @@ function OwlbearDiceHistoryList({ history, isLoading }: { history: OwlbearDiceHi
     return (
         <div className="space-y-2">
             {history.map((entry) => {
-                const criticalState = getDiceCriticalState(entry.result)
+                const isRolling = entry.status === "rolling"
+                const criticalState = isRolling ? null : getDiceCriticalState(entry.result)
                 const displayName = getHistoryDisplayName(entry)
                 const metadata = [
                     getHistoryModeLabel(entry.result.mode),
+                    isRolling ? "Rolando" : null,
                     criticalState === "critical-success" ? "Crítico" : null,
                     criticalState === "critical-failure" ? "Falha crítica" : null,
                 ].filter(Boolean).join(" • ")
@@ -128,7 +137,20 @@ function OwlbearDiceHistoryList({ history, isLoading }: { history: OwlbearDiceHi
                                 )}
                             </div>
                             <div className="text-right">
-                                <p className="text-2xl font-black">{entry.result.total}</p>
+                                <div
+                                    className="flex min-h-8 min-w-12 items-center justify-end transition-all duration-300"
+                                    data-testid={`history-total-${entry.id}`}
+                                >
+                                    {isRolling ? (
+                                        <span className="inline-flex items-center gap-1" aria-label="Resultado rolando">
+                                            <span className="h-2 w-2 animate-pulse rounded-full bg-white/45 [animation-delay:0ms]" />
+                                            <span className="h-2 w-2 animate-pulse rounded-full bg-white/45 [animation-delay:120ms]" />
+                                            <span className="h-2 w-2 animate-pulse rounded-full bg-white/45 [animation-delay:240ms]" />
+                                        </span>
+                                    ) : (
+                                        <p className="text-2xl font-black animate-in fade-in zoom-in-95 duration-300">{entry.result.total}</p>
+                                    )}
+                                </div>
                                 <p className="text-[11px] text-white/45">{formatRollTime(entry.createdAt)}</p>
                             </div>
                         </div>
@@ -140,10 +162,10 @@ function OwlbearDiceHistoryList({ history, isLoading }: { history: OwlbearDiceHi
                                     className={getDiceResultChipClass(term.dice)}
                                     data-testid={`history-dice-result-chip-${entry.id}-${term.dice}-${index}`}
                                 >
-                                    {term.quantity}{term.dice}: {term.results.join(", ")}
+                                    {term.quantity}{term.dice}: {isRolling ? "rolando..." : term.results.join(", ")}
                                 </span>
                             ))}
-                            {entry.result.selectedD20?.discarded !== undefined && (
+                            {!isRolling && entry.result.selectedD20?.discarded !== undefined && (
                                 <span className="rounded-full border border-white/10 bg-white/5 px-2 py-1">
                                     descartado: {entry.result.selectedD20.discarded}
                                 </span>
@@ -164,23 +186,10 @@ export function OwlbearDiceTab({ runtime, session }: OwlbearDiceTabProps) {
         enabled: runtime.status === "ready",
         roomId: runtime.roomId,
     })
-    const [liveRoll, setLiveRoll] = React.useState<{ playerName: string; result: DiceRollResponse } | null>(null)
+    const pendingHistoryWritesRef = React.useRef(new Map<string, Promise<void>>())
+    const pendingHistoryEntriesRef = React.useRef(new Map<string, OwlbearDiceHistoryEntry>())
 
-    const handleLiveRoll = React.useCallback((playerName: string, result: DiceRollResponse) => {
-        setLiveRoll({ playerName, result })
-    }, [])
-
-    useOwlbearDiceRealtime({
-        roomId: runtime.roomId,
-        onRollResolved: React.useCallback((payload) => {
-            handleLiveRoll(payload.playerName, payload.result)
-        }, [handleLiveRoll]),
-    })
-
-    const handleRollResolved = React.useCallback(async (result: DiceRollResponse) => {
-        if (!currentPlayerName) return
-
-        handleLiveRoll(currentPlayerName, result)
+    const resolveCharacterName = React.useCallback(async () => {
         let characterName: string | undefined
 
         if (runtime.role !== "GM" && activePlayerId && session.sessionToken) {
@@ -196,16 +205,56 @@ export function OwlbearDiceTab({ runtime, session }: OwlbearDiceTabProps) {
             }
         }
 
-        await appendHistoryEntry({
+        return characterName
+    }, [activePlayerId, runtime.role, session.sessionToken])
+
+    const buildHistoryEntry = React.useCallback(async (result: DiceRollResponse, status: OwlbearDiceHistoryEntry["status"]) => {
+        if (!currentPlayerName) return null
+
+        const existingEntry = pendingHistoryEntriesRef.current.get(result.rollId)
+        const characterName = existingEntry?.characterName ?? await resolveCharacterName()
+
+        return {
             id: result.rollId,
             playerName: currentPlayerName,
             playerId: activePlayerId ?? undefined,
             playerRole: runtime.role ?? undefined,
             characterName,
+            status,
             result,
             createdAt: result.createdAt,
+        } satisfies OwlbearDiceHistoryEntry
+    }, [activePlayerId, currentPlayerName, resolveCharacterName, runtime.role])
+
+    const handleRollAnimationStarted = React.useCallback((result: DiceRollResponse) => {
+        const writePromise = (async () => {
+            const entry = await buildHistoryEntry(result, "rolling")
+            if (!entry) return
+
+            pendingHistoryEntriesRef.current.set(result.rollId, entry)
+            await appendHistoryEntry(entry)
+        })()
+
+        pendingHistoryWritesRef.current.set(result.rollId, writePromise)
+        void writePromise.finally(() => {
+            pendingHistoryWritesRef.current.delete(result.rollId)
         })
-    }, [activePlayerId, appendHistoryEntry, currentPlayerName, handleLiveRoll, runtime.role, session.sessionToken])
+    }, [appendHistoryEntry, buildHistoryEntry])
+
+    const handleRollResolved = React.useCallback(async (result: DiceRollResponse) => {
+        const pendingWrite = pendingHistoryWritesRef.current.get(result.rollId)
+        if (pendingWrite) {
+            await pendingWrite.catch(() => undefined)
+        }
+
+        await wait(500)
+
+        const entry = await buildHistoryEntry(result, "resolved")
+        if (!entry) return
+
+        pendingHistoryEntriesRef.current.delete(result.rollId)
+        await appendHistoryEntry(entry)
+    }, [appendHistoryEntry, buildHistoryEntry])
 
     const rollingBlockedMessage = runtime.status !== "ready"
         ? "A action do Owlbear ainda está inicializando."
@@ -225,8 +274,8 @@ export function OwlbearDiceTab({ runtime, session }: OwlbearDiceTabProps) {
                                 owlbearRoomId: activeRoomId ?? undefined,
                                 owlbearPlayerId: activePlayerId ?? undefined,
                             }}
+                            onRollAnimationStarted={handleRollAnimationStarted}
                             onRollResolved={handleRollResolved}
-                            externalResult={liveRoll?.result ?? null}
                             disableRolling={Boolean(rollingBlockedMessage)}
                             disabledRollingMessage={rollingBlockedMessage}
                             forceCombinationModifierInline

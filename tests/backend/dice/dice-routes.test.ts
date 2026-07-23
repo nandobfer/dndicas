@@ -59,7 +59,7 @@ describe("dice routes", () => {
         })
     })
 
-    it("POST /api/dice/rolls publishes Owlbear live events and resolves target by player id", async () => {
+    it("POST /api/dice/rolls resolves Owlbear target by player id without publishing a live visual event", async () => {
         const rollGeneralDice = vi.fn(async () => ({
             rollId: "roll-1",
             terms: [{ dice: "d20", quantity: 1, results: [19] }],
@@ -70,17 +70,8 @@ describe("dice routes", () => {
             total: 20,
             createdAt: "2026-01-01T00:00:00.000Z",
         }))
-        const publishRollResolved = vi.fn(async () => undefined)
-
         vi.doMock("@/features/dice-roller/server/dice-roll-service", () => ({
             rollGeneralDice,
-        }))
-        vi.doMock("@/features/owlbear/realtime/owlbear-dice-pusher-service", () => ({
-            OwlbearDicePusherService: {
-                getInstance: () => ({
-                    publishRollResolved,
-                }),
-            },
         }))
 
         const mod = await importFresh<typeof import("@/app/api/dice/rolls/route")>("@/app/api/dice/rolls/route")
@@ -113,11 +104,6 @@ describe("dice routes", () => {
                 targetId: "player:player-nando",
             }
         )
-        expect(publishRollResolved).toHaveBeenCalledWith(expect.objectContaining({
-            roomId: "room-1",
-            playerName: "Nando",
-            originId: "origin-1",
-        }))
     })
 
     it("POST /api/dice/overrides creates a range override", async () => {

@@ -136,6 +136,7 @@ function parseDiceHistoryEntry(value: unknown): OwlbearDiceHistoryEntry | null {
         playerId: typeof parsed.playerId === "string" ? parsed.playerId : undefined,
         playerRole: parsed.playerRole === "GM" || parsed.playerRole === "PLAYER" ? parsed.playerRole : undefined,
         characterName: typeof parsed.characterName === "string" && parsed.characterName.trim() ? parsed.characterName : undefined,
+        status: parsed.status === "rolling" ? "rolling" : "resolved",
         result,
         createdAt: parsed.createdAt,
     }
@@ -417,12 +418,19 @@ export async function subscribeToRoomMetadata(callback: (state: OwlbearRoomMetad
 }
 
 export async function appendRoomDiceHistoryEntry(entry: OwlbearDiceHistoryEntry) {
-    return updateRoomMetadata((current) => ({
-        ...current,
-        version: OWLBEAR_ROOM_METADATA_VERSION,
-        diceHistory: [entry, ...current.diceHistory.filter((currentEntry) => currentEntry.id !== entry.id)].slice(0, OWLBEAR_DICE_HISTORY_LIMIT),
-        lastSyncAt: new Date().toISOString(),
-    }))
+    return updateRoomMetadata((current) => {
+        const existingIndex = current.diceHistory.findIndex((currentEntry) => currentEntry.id === entry.id)
+        const nextDiceHistory = existingIndex >= 0
+            ? current.diceHistory.map((currentEntry, index) => index === existingIndex ? entry : currentEntry)
+            : [entry, ...current.diceHistory].slice(0, OWLBEAR_DICE_HISTORY_LIMIT)
+
+        return {
+            ...current,
+            version: OWLBEAR_ROOM_METADATA_VERSION,
+            diceHistory: nextDiceHistory,
+            lastSyncAt: new Date().toISOString(),
+        }
+    })
 }
 
 export function parseTokenLinkMetadata(metadata: Record<string, unknown> | null | undefined): OwlbearTokenLinkMetadata | null {

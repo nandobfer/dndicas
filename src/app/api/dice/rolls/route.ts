@@ -1,7 +1,6 @@
 import { auth } from "@/core/auth/server"
 import { NextRequest, NextResponse } from "next/server"
 import { z } from "zod"
-import { PUSHER_ORIGIN_HEADER } from "@/core/realtime/pusher-origin"
 import type { ApiResponse } from "@/core/types/common"
 import { DiceRollRequestSchema, type DiceRollRequestInput } from "@/features/dice-roller/schemas"
 import { resolveGeneralDiceTarget } from "@/features/dice-roller/server/dice-target"
@@ -100,20 +99,6 @@ export async function POST(req: NextRequest) {
         }
 
         const result = await rollGeneralDice(rollRequest, target)
-
-        if (rollRequest.source === "owlbear" && rollRequest.playerName && rollRequest.owlbearRoomId) {
-            try {
-                const { OwlbearDicePusherService } = await import("@/features/owlbear/realtime/owlbear-dice-pusher-service")
-                await OwlbearDicePusherService.getInstance().publishRollResolved({
-                    roomId: rollRequest.owlbearRoomId,
-                    playerName: rollRequest.playerName,
-                    result,
-                    originId: req.headers.get(PUSHER_ORIGIN_HEADER) ?? undefined,
-                })
-            } catch (publishError) {
-                console.error("[API] Failed to publish Owlbear dice roll event:", publishError)
-            }
-        }
 
         const response: ApiResponse<DiceRollResponse> = {
             success: true,

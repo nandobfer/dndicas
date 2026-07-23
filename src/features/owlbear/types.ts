@@ -17,6 +17,7 @@ export interface OwlbearDiceHistoryEntry {
     playerId?: string
     playerRole?: OwlbearRole
     characterName?: string
+    status: "rolling" | "resolved"
     result: DiceRollResponse
     createdAt: string
 }
