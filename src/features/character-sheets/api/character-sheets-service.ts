@@ -743,6 +743,7 @@ function toPlainSheet(doc: any) {
     if (obj.spellSlots instanceof Map) {
         obj.spellSlots = Object.fromEntries(obj.spellSlots)
     }
+    obj.notePages = Array.isArray(obj.notePages) ? obj.notePages : []
     // lean() returns plain objects but savingThrows/skills/spellSlots may be plain already
     return obj
 }

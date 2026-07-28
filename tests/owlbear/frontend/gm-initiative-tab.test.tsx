@@ -164,6 +164,7 @@ function sheet(overrides: Partial<CharacterSheetFull> = {}): CharacterSheetFull 
         flaws: "",
         history: "",
         notes: "",
+        notePages: [],
         classFeatures: "",
         speciesTraits: "",
         featuresNotes: "",

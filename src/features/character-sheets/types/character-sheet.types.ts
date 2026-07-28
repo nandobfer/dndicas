@@ -33,6 +33,13 @@ export type TraitOrigin = "class" | "race" | "background" | "manual"
 
 // ─── Core entity interfaces ───────────────────────────────────────────────────
 
+export interface CharacterSheetNotePage {
+    id: string
+    content: string
+    createdAt: string
+    updatedAt: string
+}
+
 export interface CharacterSheet {
     _id: string
     slug: string
@@ -100,6 +107,7 @@ export interface CharacterSheet {
     flaws: string
     history: string
     notes: string
+    notePages: CharacterSheetNotePage[]
     // 2024 sheet fields
     classFeatures: string
     speciesTraits: string
@@ -403,6 +411,12 @@ export const PatchSheetSchema = z.object({
     flaws: z.string().optional(),
     history: z.string().optional(),
     notes: z.string().optional(),
+    notePages: z.array(z.object({
+        id: z.string().min(1),
+        content: z.string(),
+        createdAt: z.string().min(1),
+        updatedAt: z.string().min(1),
+    })).optional(),
     classFeatures: z.string().optional(),
     speciesTraits: z.string().optional(),
     featuresNotes: z.string().optional(),

@@ -104,6 +104,7 @@ function buildSheet(overrides: Partial<CharacterSheet> = {}): CharacterSheet {
         flaws: "",
         history: "",
         notes: "",
+        notePages: [],
         classFeatures: "",
         speciesTraits: "",
         featuresNotes: "",

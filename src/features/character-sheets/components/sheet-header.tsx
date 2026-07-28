@@ -214,7 +214,7 @@ function buildResourceChargeChanges(
     .sort((left, right) => left.name.localeCompare(right.name, "pt-BR"))
 }
 
-function buildCharacterPortraitAIPayload(sheet: CharacterSheet, items: CharacterItem[]) {
+export function buildCharacterPortraitAIPayload(sheet: CharacterSheet, items: CharacterItem[]) {
   const equippedItems = items
     .filter((item) => item.equipped)
     .map((item) => ({
@@ -234,7 +234,8 @@ function buildCharacterPortraitAIPayload(sheet: CharacterSheet, items: Character
     size: normalizeCharacterText(sheet.size),
     appearance: normalizeCharacterText(sheet.appearance),
     history: normalizeCharacterText(sheet.history),
-    notes: normalizeCharacterText(sheet.notes),
+    notes: undefined,
+    notePages: undefined,
     equippedItems,
   }
 }

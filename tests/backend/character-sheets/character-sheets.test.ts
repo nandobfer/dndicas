@@ -20,6 +20,21 @@ describe('character sheets backend', () => {
         expect(PatchSheetSchema.safeParse({ photo: 'not-a-url' }).success).toBe(false);
     });
 
+    it('PatchSheetSchema accepts additional note pages and rejects invalid page payloads', () => {
+        expect(PatchSheetSchema.safeParse({
+            notePages: [{
+                id: 'page-2',
+                content: '<p>Segunda página</p>',
+                createdAt: '2026-01-01T00:00:00.000Z',
+                updatedAt: '2026-01-01T00:00:00.000Z',
+            }],
+        }).success).toBe(true);
+
+        expect(PatchSheetSchema.safeParse({
+            notePages: [{ content: '<p>Sem id</p>' }],
+        }).success).toBe(false);
+    });
+
     it('getAllUserSheets performs Fuse search, paginates, and computes hasNextPage', async () => {
         const sheetDocs = [
             { _id: 'sheet-1', name: 'Aragorn', class: 'Ranger', race: 'Humano', subclass: 'Hunter', updatedAt: new Date('2024-01-03T00:00:00.000Z') },

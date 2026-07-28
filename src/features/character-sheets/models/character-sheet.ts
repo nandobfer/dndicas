@@ -71,6 +71,12 @@ export interface ICharacterSheet extends Document {
     flaws: string
     history: string
     notes: string
+    notePages: Array<{
+        id: string
+        content: string
+        createdAt: string
+        updatedAt: string
+    }>
     // 2024 sheet fields
     classFeatures: string
     speciesTraits: string
@@ -185,6 +191,20 @@ const CharacterSheetSchema = new Schema<ICharacterSheet>(
         flaws: { type: String, default: "" },
         history: { type: String, default: "" },
         notes: { type: String, default: "" },
+        notePages: {
+            type: [
+                new Schema(
+                    {
+                        id: { type: String, required: true, trim: true },
+                        content: { type: String, default: "" },
+                        createdAt: { type: String, required: true },
+                        updatedAt: { type: String, required: true },
+                    },
+                    { _id: false }
+                ),
+            ],
+            default: () => [],
+        },
         classFeatures: { type: String, default: "" },
         speciesTraits: { type: String, default: "" },
         featuresNotes: { type: String, default: "" },

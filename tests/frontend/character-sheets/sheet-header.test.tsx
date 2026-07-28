@@ -294,6 +294,7 @@ const baseSheet: CharacterSheet = {
     flaws: "",
     history: "",
     notes: "",
+    notePages: [],
     classFeatures: "",
     speciesTraits: "",
     featuresNotes: "",
@@ -412,7 +413,8 @@ describe("SheetHeader", () => {
             level: 2,
             appearance: "Armadura dourada e olhos azuis.",
             history: "Veterano da guarda real.",
-            notes: null,
+            notes: undefined,
+            notePages: undefined,
             equippedItems: [
                 {
                     name: "Armadura de placas",
