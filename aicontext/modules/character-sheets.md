@@ -24,6 +24,8 @@ As menções da ficha respeitam filtros por contexto: itens aceitam apenas entid
 
 Na lista de magias, os containers de espaços de magia são derivados da `progressionTable.spellSlots` da classe ou subclasse conjuradora ativa no nível atual. Círculos sem slots garantidos pela progressão não são renderizados, incluindo dados legados com total `0`; quando não há espaços disponíveis, a ficha mostra um estado vazio discreto em pt-BR. A rolagem horizontal dessa lista deve usar a scrollbar glass padronizada do projeto. A ficha resolve separadamente a fonte do atributo de conjuração e a fonte dos slots: uma subclasse pode fornecer o atributo conjurador sem apagar a progressão de slots da classe, como ocorre com Bruxo e Magia do Pacto.
 
+Cada linha de magia exibe uma bolinha compacta `GlassCheckbox` sem cabeçalho para alternar `CharacterSpell.prepared`, com tooltip `Preparada`. As flags de concentração, ritual e material são botões/letras compactas `C`, `R` e `M`: apagadas quando falsas, coloridas quando ativas, e continuam persistindo os campos booleanos `concentration`, `ritual` e `material`. Alterações de magia usam patch otimista no cache local e continuam sincronizadas em outras abas/sessões via eventos realtime da coleção `spells`.
+
 ### Sincronização de PV nível 1
 Quando a ficha está no nível 1 e possui uma classe mencionada, a vida máxima é sincronizada com o dado de vida máximo da classe mais o modificador de Constituição. Níveis acima de 1 permanecem manuais.
 
