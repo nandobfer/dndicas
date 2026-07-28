@@ -5,7 +5,7 @@ export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
 
 async function handleMcpRequest(request: Request) {
-    const server = createDndicasMcpServer()
+    const server = createDndicasMcpServer({ headers: request.headers })
     const transport = new WebStandardStreamableHTTPServerTransport({
         sessionIdGenerator: undefined,
     })

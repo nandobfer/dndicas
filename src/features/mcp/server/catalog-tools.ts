@@ -1,18 +1,7 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js"
 import { catalogEntityTypes, getCatalogEntitySchema, searchCatalogEntitiesSchema } from "./catalog-schemas"
 import { getCatalogEntity, searchCatalogEntities } from "./catalog-entity-service"
-
-function jsonContent(data: Record<string, unknown>) {
-    return {
-        content: [
-            {
-                type: "text" as const,
-                text: JSON.stringify(data, null, 2),
-            },
-        ],
-        structuredContent: data,
-    }
-}
+import { jsonContent } from "./mcp-response"
 
 export function registerCatalogTools(server: McpServer) {
     server.registerTool(
