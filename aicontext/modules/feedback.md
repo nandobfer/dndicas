@@ -80,6 +80,37 @@ Campos principais:
 - `GET /api/feedback/opencode/models`: lista modelos OpenCode cacheados no MongoDB para uso administrativo.
 - `POST /api/feedback/[id]/plan`: cria job de planejamento.
 
+## MCP
+
+O servidor MCP também expõe operações de feedback para agentes externos.
+
+Ferramentas públicas:
+
+- `list_feedbacks`
+- `get_feedback`
+- `get_feedback_timeline`
+
+Ferramentas com token MCP de usuário:
+
+- `create_feedback`
+- `update_feedback`
+- `comment_feedback`
+
+Ferramentas com token MCP de admin:
+
+- `request_feedback_plan`
+- `request_feedback_implementation`
+- `request_feedback_iteration`
+- `approve_feedback_merge`
+
+Regras:
+
+- Consultas públicas não expõem `creatorEmail`, `worktreePath`, `opencodeSessionId` ou prompts completos de runs.
+- Token MCP autentica o usuário local por `User._id.toString()` e preserva as permissões existentes.
+- Usuário comum pode criar, comentar e editar apenas o que já é permitido; não pode solicitar ações agênticas.
+- Admin pode enfileirar plano, implementação, iteração e aprovação.
+- O MCP não executa OpenCode diretamente; apenas cria jobs para o worker externo.
+
 ## OpenCode
 
 - Automação deve usar `opencode run --attach`, não `opencode attach` interativo.

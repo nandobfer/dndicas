@@ -26,6 +26,7 @@
         "@google-cloud/translate": "^9.3.0",
         "@google/genai": "^1.38.0",
         "@hookform/resolvers": "^5.2.2",
+        "@modelcontextprotocol/sdk": "^1.29.0",
         "@owlbear-rodeo/sdk": "^3.1.0",
         "@radix-ui/react-accordion": "^1.2.12",
         "@radix-ui/react-alert-dialog": "^1.1.15",
