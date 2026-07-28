@@ -4,7 +4,8 @@ import * as React from "react"
 import Link from "next/link"
 import { useRouter, useSearchParams } from "next/navigation"
 import { signIn } from "next-auth/react"
-import { LogOut, User, UserCircle } from "lucide-react"
+import { AnimatePresence, motion } from "framer-motion"
+import { Check, Copy, KeyRound, Loader2, LogOut, Trash2, User, UserCircle } from "lucide-react"
 import { Button } from "@/core/ui/button"
 import { Input } from "@/core/ui/input"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/core/ui/card"
@@ -235,20 +236,101 @@ export function SignUp() {
     )
 }
 
+type McpTokenState =
+    | { exists: false }
+    | {
+          exists: true
+          prefix: string
+          suffix: string
+          createdAt: string
+          lastUsedAt: string | null
+      }
+
+type ProfileResponse = {
+    id: string
+    name: string
+    username: string
+    email: string
+    avatarUrl: string
+    role: "admin" | "user"
+    mcpToken: McpTokenState
+}
+
+type GenerateMcpTokenResponse = {
+    token: string
+    mcpToken: McpTokenState
+}
+
+function formatTokenDate(value: string | null) {
+    if (!value) return "Nunca usado"
+    return new Intl.DateTimeFormat("pt-BR", { dateStyle: "short", timeStyle: "short" }).format(new Date(value))
+}
+
+function maskMcpToken(token: McpTokenState) {
+    if (!token.exists) return ""
+    return `${token.prefix}...${token.suffix}`
+}
+
+const tokenStateMotion = {
+    initial: { opacity: 0, y: 8, height: 0 },
+    animate: { opacity: 1, y: 0, height: "auto" },
+    exit: { opacity: 0, y: -8, height: 0 },
+    transition: { duration: 0.18 },
+}
+
 export function UserProfile({ path = "/profile" }: { path?: string }) {
     const { user, isLoaded } = useAuth()
     const [name, setName] = React.useState("")
     const [username, setUsername] = React.useState("")
     const [avatarUrl, setAvatarUrl] = React.useState("")
+    const [mcpToken, setMcpToken] = React.useState<McpTokenState>({ exists: false })
+    const [generatedMcpToken, setGeneratedMcpToken] = React.useState<string | null>(null)
     const [message, setMessage] = React.useState<string | null>(null)
     const [error, setError] = React.useState<string | null>(null)
+    const [mcpMessage, setMcpMessage] = React.useState<string | null>(null)
+    const [mcpError, setMcpError] = React.useState<string | null>(null)
+    const [copiedToken, setCopiedToken] = React.useState(false)
     const [isSubmitting, setIsSubmitting] = React.useState(false)
+    const [isProfileLoading, setIsProfileLoading] = React.useState(true)
+    const [isGeneratingToken, setIsGeneratingToken] = React.useState(false)
+    const [isDeletingToken, setIsDeletingToken] = React.useState(false)
 
     React.useEffect(() => {
         if (!user) return
-        setName(user.name || "")
-        setUsername(user.username || "")
-        setAvatarUrl(user.image || "")
+
+        const controller = new AbortController()
+        let cancelled = false
+
+        async function loadProfile() {
+            await Promise.resolve()
+            if (cancelled) return
+            setIsProfileLoading(true)
+            setMcpError(null)
+
+            try {
+                const response = await fetch("/api/auth/profile", { cache: "no-store", credentials: "same-origin", signal: controller.signal })
+                if (!response.ok) throw new Error("Não foi possível carregar seu perfil.")
+                const profile = await response.json() as ProfileResponse
+                if (cancelled) return
+                setName(profile.name || "")
+                setUsername(profile.username)
+                setAvatarUrl(profile.avatarUrl || "")
+                setMcpToken(profile.mcpToken)
+                setGeneratedMcpToken(null)
+            } catch (loadError) {
+                if (loadError instanceof DOMException && loadError.name === "AbortError") return
+                if (!cancelled) setMcpError(loadError instanceof Error ? loadError.message : "Não foi possível carregar seu token MCP.")
+            } finally {
+                if (!cancelled) setIsProfileLoading(false)
+            }
+        }
+
+        void loadProfile()
+
+        return () => {
+            cancelled = true
+            controller.abort()
+        }
     }, [user])
 
     async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
@@ -273,6 +355,71 @@ export function UserProfile({ path = "/profile" }: { path?: string }) {
 
         setMessage("Perfil atualizado com sucesso.")
         notifyAuthSessionChanged("signed-in")
+    }
+
+    async function handleGenerateMcpToken() {
+        if (isGeneratingToken) return
+        setMcpMessage(null)
+        setMcpError(null)
+        setCopiedToken(false)
+        setIsGeneratingToken(true)
+
+        const response = await fetch("/api/auth/profile/mcp-token", {
+            method: "POST",
+            credentials: "same-origin",
+        })
+
+        setIsGeneratingToken(false)
+
+        if (!response.ok) {
+            const payload = await response.json().catch(() => null) as { error?: string } | null
+            setMcpError(payload?.error || "Não foi possível gerar o token MCP.")
+            return
+        }
+
+        const payload = await response.json() as GenerateMcpTokenResponse
+        setMcpToken(payload.mcpToken)
+        setGeneratedMcpToken(payload.token)
+        setMcpMessage("Token MCP gerado. Copie agora, ele não será exibido novamente.")
+    }
+
+    async function handleDeleteMcpToken() {
+        if (isDeletingToken) return
+        if (!window.confirm("Excluir o token MCP? Clientes configurados com este token deixarão de funcionar.")) return
+
+        setMcpMessage(null)
+        setMcpError(null)
+        setCopiedToken(false)
+        setIsDeletingToken(true)
+
+        const response = await fetch("/api/auth/profile/mcp-token", {
+            method: "DELETE",
+            credentials: "same-origin",
+        })
+
+        setIsDeletingToken(false)
+
+        if (!response.ok) {
+            const payload = await response.json().catch(() => null) as { error?: string } | null
+            setMcpError(payload?.error || "Não foi possível excluir o token MCP.")
+            return
+        }
+
+        setMcpToken({ exists: false })
+        setGeneratedMcpToken(null)
+        setMcpMessage("Token MCP excluído com sucesso.")
+    }
+
+    async function handleCopyMcpToken() {
+        if (!generatedMcpToken) return
+        try {
+            await navigator.clipboard.writeText(generatedMcpToken)
+            setCopiedToken(true)
+            setMcpMessage("Token MCP copiado.")
+            window.setTimeout(() => setCopiedToken(false), 2500)
+        } catch {
+            setMcpError("Não foi possível copiar o token. Copie manualmente.")
+        }
     }
 
     if (!isLoaded) return <p className="text-white/60">Carregando perfil...</p>
@@ -316,6 +463,72 @@ export function UserProfile({ path = "/profile" }: { path?: string }) {
                     {error && <p className="text-sm text-red-300">{error}</p>}
                     <Button type="submit" className="w-full bg-blue-500 text-white hover:bg-blue-600" disabled={isSubmitting}>{isSubmitting ? "Salvando..." : "Salvar perfil"}</Button>
                 </form>
+                <div className="mt-8 border-t border-white/10 pt-6">
+                    <div className="mb-4 flex items-start gap-3">
+                        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-blue-300/20 bg-blue-500/10 text-blue-200">
+                            <KeyRound className="h-5 w-5" />
+                        </div>
+                        <div>
+                            <h2 className="text-lg font-semibold text-white">Token MCP</h2>
+                            <p className="text-sm text-white/60">Use este token nas configurações do seu cliente MCP para operar a central de feedback.</p>
+                        </div>
+                    </div>
+
+                    <AnimatePresence mode="wait" initial={false}>
+                        {isProfileLoading ? (
+                            <motion.div key="mcp-loading" {...tokenStateMotion} className="overflow-hidden rounded-xl border border-white/10 bg-white/5 p-4">
+                                <div className="flex items-center gap-3 text-sm text-white/70">
+                                    <Loader2 className="h-4 w-4 animate-spin" />
+                                    Carregando token MCP...
+                                </div>
+                            </motion.div>
+                        ) : generatedMcpToken ? (
+                            <motion.div key="mcp-generated" {...tokenStateMotion} className="overflow-hidden rounded-xl border border-emerald-300/20 bg-emerald-500/10 p-4">
+                                <p className="text-sm font-medium text-emerald-100">Copie agora. Depois este token não será exibido novamente.</p>
+                                <code className="mt-3 block break-all rounded-lg border border-white/10 bg-black/30 p-3 text-xs text-emerald-50">{generatedMcpToken}</code>
+                                <div className="mt-4 flex flex-col gap-2 sm:flex-row">
+                                    <Button type="button" size="sm" className="bg-emerald-500 text-white hover:bg-emerald-600" onClick={() => void handleCopyMcpToken()}>
+                                        {copiedToken ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
+                                        {copiedToken ? "Copiado" : "Copiar token"}
+                                    </Button>
+                                    <Button type="button" size="sm" variant="outline" className="border-white/15 bg-white/5 text-white hover:bg-white/10 hover:text-white" onClick={() => void handleGenerateMcpToken()} disabled={isGeneratingToken}>
+                                        {isGeneratingToken ? <Loader2 className="h-4 w-4 animate-spin" /> : <KeyRound className="h-4 w-4" />}
+                                        Gerar outro
+                                    </Button>
+                                </div>
+                            </motion.div>
+                        ) : mcpToken.exists ? (
+                            <motion.div key="mcp-existing" {...tokenStateMotion} className="overflow-hidden rounded-xl border border-white/10 bg-white/5 p-4">
+                                <div className="rounded-lg border border-white/10 bg-black/20 p-3 font-mono text-sm text-white/85">{maskMcpToken(mcpToken)}</div>
+                                <div className="mt-3 space-y-1 text-xs text-white/55">
+                                    <p>Criado em {formatTokenDate(mcpToken.createdAt)}</p>
+                                    <p>Último uso: {formatTokenDate(mcpToken.lastUsedAt)}</p>
+                                    <p>Por segurança, o token completo só aparece ao gerar. Se perdeu o token, exclua e gere outro.</p>
+                                </div>
+                                <div className="mt-4 flex flex-col gap-2 sm:flex-row">
+                                    <Button type="button" size="sm" variant="outline" className="border-white/15 bg-white/5 text-white hover:bg-white/10 hover:text-white" onClick={() => void handleGenerateMcpToken()} disabled={isGeneratingToken || isDeletingToken}>
+                                        {isGeneratingToken ? <Loader2 className="h-4 w-4 animate-spin" /> : <KeyRound className="h-4 w-4" />}
+                                        Gerar novo token
+                                    </Button>
+                                    <Button type="button" size="sm" variant="destructive" onClick={() => void handleDeleteMcpToken()} disabled={isDeletingToken || isGeneratingToken}>
+                                        {isDeletingToken ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+                                        Excluir
+                                    </Button>
+                                </div>
+                            </motion.div>
+                        ) : (
+                            <motion.div key="mcp-empty" {...tokenStateMotion} className="overflow-hidden rounded-xl border border-dashed border-white/15 bg-white/[0.03] p-4">
+                                <p className="text-sm text-white/70">Você ainda não tem um token MCP. Gere um token permanente para configurar clientes MCP autorizados.</p>
+                                <Button type="button" className="mt-4 bg-blue-500 text-white hover:bg-blue-600" onClick={() => void handleGenerateMcpToken()} disabled={isGeneratingToken}>
+                                    {isGeneratingToken ? <Loader2 className="h-4 w-4 animate-spin" /> : <KeyRound className="h-4 w-4" />}
+                                    {isGeneratingToken ? "Gerando..." : "Gerar token"}
+                                </Button>
+                            </motion.div>
+                        )}
+                    </AnimatePresence>
+                    {mcpMessage && <p className="mt-3 text-sm text-emerald-300">{mcpMessage}</p>}
+                    {mcpError && <p className="mt-3 text-sm text-red-300">{mcpError}</p>}
+                </div>
             </CardContent>
         </Card>
     )

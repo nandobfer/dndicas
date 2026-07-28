@@ -3,6 +3,7 @@ import { z } from "zod"
 import dbConnect from "@/core/database/db"
 import { User } from "@/features/users/models/user"
 import { requireAuth } from "@/core/auth/helpers"
+import { serializeMcpTokenState } from "@/features/mcp/server/mcp-token-service"
 
 const updateProfileSchema = z.object({
     name: z.string().trim().max(100, "Nome muito longo").optional().or(z.literal("")),
@@ -25,6 +26,7 @@ export async function GET() {
             email: user.email,
             avatarUrl: user.avatarUrl || "",
             role: user.role,
+            mcpToken: serializeMcpTokenState(user),
         })
     } catch (error) {
         const message = error instanceof Error ? error.message : "Erro desconhecido"
@@ -65,6 +67,7 @@ export async function PATCH(request: NextRequest) {
             email: user.email,
             avatarUrl: user.avatarUrl || "",
             role: user.role,
+            mcpToken: serializeMcpTokenState(user),
         })
     } catch (error) {
         const message = error instanceof Error ? error.message : "Erro desconhecido"

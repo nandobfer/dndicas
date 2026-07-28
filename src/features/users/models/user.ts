@@ -33,6 +33,16 @@ export interface IUser extends Document {
     role: UserRole
     /** User status (active/inactive for soft delete) */
     status: UserStatus
+    /** SHA-256 hash of the permanent MCP token */
+    mcpTokenHash?: string
+    /** Visible prefix shown in the profile after token generation */
+    mcpTokenPrefix?: string
+    /** Visible suffix shown in the profile after token generation */
+    mcpTokenSuffix?: string
+    /** Token creation timestamp */
+    mcpTokenCreatedAt?: Date
+    /** Last time the token authenticated a protected MCP request */
+    mcpTokenLastUsedAt?: Date
     /** Whether the user is soft-deleted */
     deleted: boolean
     /** Creation timestamp */
@@ -116,6 +126,22 @@ const UserSchema = new Schema<IUser>(
             default: "active",
             index: true,
         },
+        mcpTokenHash: {
+            type: String,
+            select: false,
+        },
+        mcpTokenPrefix: {
+            type: String,
+        },
+        mcpTokenSuffix: {
+            type: String,
+        },
+        mcpTokenCreatedAt: {
+            type: Date,
+        },
+        mcpTokenLastUsedAt: {
+            type: Date,
+        },
         deleted: {
             type: Boolean,
             default: false,
@@ -143,6 +169,7 @@ UserSchema.index({ status: 1, createdAt: -1 })
 UserSchema.index({ username: "text", email: "text", name: "text" }, { weights: { name: 3, username: 2, email: 1 } })
 
 UserSchema.index({ legacyClerkId: 1 }, { unique: true, sparse: true })
+UserSchema.index({ mcpTokenHash: 1 }, { unique: true, sparse: true })
 
 // Static methods
 UserSchema.statics.findByLegacyClerkId = function (legacyClerkId: string) {

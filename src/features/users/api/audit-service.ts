@@ -29,7 +29,7 @@ export interface CreateAuditLogOptions {
 /**
  * Fields to exclude from audit log data.
  */
-const EXCLUDED_FIELDS = ['__v', 'legacyClerkId', 'passwordHash'];
+const EXCLUDED_FIELDS = ['__v', 'legacyClerkId', 'passwordHash', 'mcpTokenHash'];
 
 /**
  * Sanitize data for audit logging (remove sensitive/technical fields).

@@ -46,6 +46,11 @@ src/features/users/
 | `avatarUrl` | String | Não | URL do avatar |
 | `role` | Enum | Sim | `'admin'` ou `'user'` |
 | `status` | Enum | Sim | `'active'` ou `'inactive'` |
+| `mcpTokenHash` | String | Não | Hash SHA-256 do token MCP permanente |
+| `mcpTokenPrefix` | String | Não | Prefixo mascarado exibido no perfil |
+| `mcpTokenSuffix` | String | Não | Sufixo mascarado exibido no perfil |
+| `mcpTokenCreatedAt` | Date | Não | Data de geração do token MCP |
+| `mcpTokenLastUsedAt` | Date | Não | Último uso autenticado do token MCP |
 
 ---
 
@@ -73,6 +78,18 @@ Atualiza usuário (admin only).
 ### DELETE /api/users/:id
 
 Soft delete - marca como `inactive` (admin only).
+
+### GET /api/auth/profile
+
+Retorna o perfil do usuário autenticado e o estado mascarado do token MCP, sem expor segredo completo nem hash.
+
+### POST /api/auth/profile/mcp-token
+
+Gera ou rotaciona o token MCP permanente do usuário autenticado. O token completo é retornado apenas nesta resposta.
+
+### DELETE /api/auth/profile/mcp-token
+
+Revoga o token MCP removendo hash e metadados persistidos do usuário autenticado.
 
 ---
 
@@ -162,6 +179,7 @@ import { createUserSchema, updateUserSchema } from '@/features/users/api/validat
 4. **Roles**: Apenas `admin` pode gerenciar usuários
 5. **Auditoria**: Todas operações CRUD são registradas em AuditLog
 6. **Status local**: `inactive` bloqueia acesso no backend local
+7. **Token MCP**: O token permanente é salvo apenas como hash SHA-256 e usa `User._id.toString()` como usuário canônico nas chamadas MCP protegidas.
 
 ---
 
