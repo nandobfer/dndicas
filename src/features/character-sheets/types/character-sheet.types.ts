@@ -9,6 +9,12 @@ export type AttributeType = "strength" | "dexterity" | "constitution" | "intelli
 
 export type ArmorTraining = { light: boolean; medium: boolean; heavy: boolean; shields: boolean }
 
+export type UnarmoredDefenseConfig = {
+    enabled: boolean
+    base: number
+    attributes: AttributeType[]
+}
+
 export type SkillName =
     | "Acrobacia"
     | "Arcanismo"
@@ -89,6 +95,7 @@ export interface CharacterSheet {
     deathSavesFailure: number
     armorClassOverride: number | null
     armorClassBonus: number | null
+    unarmoredDefense: UnarmoredDefenseConfig
     initiativeOverride: number | null
     initiativeProficiency: boolean
     passivePerceptionOverride: number | null
@@ -384,6 +391,11 @@ export const PatchSheetSchema = z.object({
     deathSavesFailure: z.number().int().min(0).max(3).optional(),
     armorClassOverride: z.number().int().nullable().optional(),
     armorClassBonus: z.number().int().nullable().optional(),
+    unarmoredDefense: z.object({
+        enabled: z.boolean(),
+        base: z.number().int().min(1).max(30),
+        attributes: z.array(z.enum(["strength", "dexterity", "constitution", "intelligence", "wisdom", "charisma"])),
+    }).optional(),
     initiativeOverride: z.number().int().nullable().optional(),
     initiativeProficiency: z.boolean().optional(),
     passivePerceptionOverride: z.number().int().nullable().optional(),

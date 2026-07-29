@@ -16,8 +16,15 @@ describe('character sheets backend', () => {
         expect(PatchSheetSchema.safeParse({
             photo: '/api/upload?key=ai%2Fgenerated%2Fclerk-1%2F1700000000000.png',
         }).success).toBe(true);
+        expect(PatchSheetSchema.safeParse({
+            armorClassBonus: 1,
+            unarmoredDefense: { enabled: true, base: 10, attributes: ['constitution', 'wisdom'] },
+        }).success).toBe(true);
 
         expect(PatchSheetSchema.safeParse({ photo: 'not-a-url' }).success).toBe(false);
+        expect(PatchSheetSchema.safeParse({
+            unarmoredDefense: { enabled: true, base: 31, attributes: ['luck'] },
+        }).success).toBe(false);
     });
 
     it('PatchSheetSchema accepts additional note pages and rejects invalid page payloads', () => {

@@ -32,6 +32,11 @@ Quando a ficha está no nível 1 e possui uma classe mencionada, a vida máxima 
 ### Fluxo de subir nível no cabeçalho
 A ficha mostra a tabela de progressão da classe abaixo do escudo de Classe de Armadura, preservando o mesmo popover com `ClassProgressionTable`. Em modo editável, abaixo de XP aparece o botão `Subir de nível`, destacado com a cor `colors.rarity.uncommon`; no nível 20 ele fica indisponível.
 
+### Configuração de Classe de Armadura
+O escudo de Classe de Armadura no cabeçalho exibe uma engrenagem no lugar do antigo input direto de bônus. A engrenagem abre um modal glass com o campo `Bônus de CA`, que continua persistindo em `armorClassBonus` e somando ao cálculo em todos os cenários, além das opções de `Defesa sem Armadura`.
+
+`unarmoredDefense` guarda `{ enabled, base, attributes }`, com base padrão `10` e lista de atributos opcionais. Quando ativo e nenhuma armadura base está equipada, o cálculo usa a base configurada, mantém o modificador de Destreza normal e soma o modificador de todos os atributos escolhidos. Quando uma armadura base está equipada, a Defesa sem Armadura é ignorada e a armadura prevalece, mas `armorClassBonus` e bônus de itens continuam sendo aplicados.
+
 Ao abrir o modal glass de subir nível, o cabeçalho faz preview de `nível atual -> próximo nível`, `PV máximo atual -> novo PV máximo` e das traits novas da classe, subclasse e raça que entram exatamente no novo nível usando cards de preview de trait consistentes com o restante da interface. O ganho padrão de PV usa `ceil(dado de vida / 2) + modificador de Constituição`, mas o usuário pode clicar em um botão dedicado com `GlassDiceValue` para abrir um `DiceRollerPanel` fixo em `1dX + CON`; a abertura/fechamento é animada e, após a rolagem, o painel fecha mantendo o resultado aplicado ao preview.
 
 O modal também lista mudanças de totais em `resourceCharges`, quando houver, e exige escolhas obrigatórias de progressão: no nível 3, uma `Subclasse` filtrada pela classe atual; no nível 4, um `Talento`. Ao confirmar, o fluxo persiste `level` e `hpMax`; se subir para o nível 3, também salva a subclasse escolhida, e se subir para o nível 4, anexa o talento selecionado em `featuresNotes`. O sincronizador existente continua responsável por inserir traits, recalcular derivados e refletir recursos após a mudança de nível.

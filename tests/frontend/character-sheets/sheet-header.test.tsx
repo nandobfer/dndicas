@@ -186,7 +186,38 @@ vi.mock("@/components/ui/glass-image", () => ({
 }))
 
 vi.mock("@/components/ui/glass-selector", () => ({
-    GlassSelector: ({ value }: { value: string }) => <div>{value}</div>,
+    GlassSelector: ({
+        value,
+        options,
+        onChange,
+        mode,
+    }: {
+        value: string | string[]
+        options?: Array<{ value: string; label: React.ReactNode }>
+        onChange?: (value: string | string[]) => void
+        mode?: "single" | "multi"
+    }) => options?.length ? (
+        <div>
+            {options.map((option) => (
+                <button
+                    key={option.value}
+                    type="button"
+                    onClick={() => {
+                        if (mode === "multi") {
+                            const current = Array.isArray(value) ? value : value ? [value] : []
+                            onChange?.(current.includes(option.value)
+                                ? current.filter((item) => item !== option.value)
+                                : [...current, option.value])
+                            return
+                        }
+                        onChange?.(option.value)
+                    }}
+                >
+                    {option.label}
+                </button>
+            ))}
+        </div>
+    ) : <div>{value}</div>,
 }))
 
 vi.mock("@/features/character-sheets/components/calc-tooltip", () => ({
@@ -279,6 +310,7 @@ const baseSheet: CharacterSheet = {
     deathSavesFailure: 0,
     armorClassOverride: null,
     armorClassBonus: null,
+    unarmoredDefense: { enabled: false, base: 10, attributes: [] },
     initiativeOverride: null,
     initiativeProficiency: false,
     passivePerceptionOverride: null,
@@ -459,15 +491,15 @@ describe("SheetHeader", () => {
         expect(screen.queryByTestId("glass-image-uploader")).not.toBeInTheDocument()
     })
 
-    it("shows the progression table trigger below the armor class shield and still opens the table", async () => {
+    it("shows the armor class config trigger above the progression table trigger and still opens the table", async () => {
         const { sheet, form } = createHarness()
 
         render(<SheetHeader sheet={sheet} form={form} />)
 
-        const bonusInput = screen.getByLabelText("Bônus")
+        const configButton = screen.getByRole("button", { name: "Configurar Classe de Armadura" })
         const progressionButton = screen.getByTestId("class-progression-button")
 
-        expect(bonusInput.compareDocumentPosition(progressionButton) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+        expect(configButton.compareDocumentPosition(progressionButton) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
         expect(progressionButton).toHaveClass("whitespace-nowrap")
         expect(progressionButton).toHaveTextContent("progressão")
         expect(progressionButton.closest(".px-4.pt-4.pb-0")).toBeInTheDocument()
@@ -475,6 +507,67 @@ describe("SheetHeader", () => {
         fireEvent.click(progressionButton)
 
         expect(await screen.findByTestId("class-progression-table")).toBeInTheDocument()
+    })
+
+    it("opens armor class settings and persists manual bonus and unarmored defense options", async () => {
+        const { sheet, form } = createHarness()
+
+        render(<SheetHeader sheet={sheet} form={form} />)
+
+        fireEvent.click(screen.getByRole("button", { name: "Configurar Classe de Armadura" }))
+
+        expect(await screen.findByText("Configurar Classe de Armadura")).toBeInTheDocument()
+        fireEvent.change(screen.getByLabelText("Bônus de CA"), { target: { value: "2" } })
+        expect(form.patchField).toHaveBeenCalledWith("armorClassBonus", 2)
+
+        const unarmoredDefenseSwitch = screen.getByLabelText("Ativar Defesa sem Armadura")
+        expect(unarmoredDefenseSwitch).toHaveAttribute("type", "checkbox")
+        fireEvent.click(unarmoredDefenseSwitch)
+        expect(form.patchField).toHaveBeenCalledWith("unarmoredDefense", {
+            enabled: true,
+            base: 10,
+            attributes: [],
+        })
+
+        fireEvent.change(screen.getByLabelText("CA base"), { target: { value: "14" } })
+        expect(form.patchField).toHaveBeenCalledWith("unarmoredDefense", {
+            enabled: false,
+            base: 14,
+            attributes: [],
+        })
+
+        expect(screen.queryByText("Nenhum")).not.toBeInTheDocument()
+        await waitFor(() => expect(screen.getByText("Constituição")).toBeInTheDocument())
+        expect(screen.getByText("Força")).toBeInTheDocument()
+        expect(screen.getByText("Destreza")).toBeInTheDocument()
+        expect(screen.getByText("Inteligência")).toBeInTheDocument()
+        expect(screen.getByText("Sabedoria")).toBeInTheDocument()
+        expect(screen.getByText("Carisma")).toBeInTheDocument()
+
+        fireEvent.click(screen.getByText("Constituição"))
+        expect(form.patchField).toHaveBeenCalledWith("unarmoredDefense", {
+            enabled: false,
+            base: 10,
+            attributes: ["constitution"],
+        })
+    })
+
+    it("adds another unarmored defense attribute to the existing selection", async () => {
+        const { sheet, form } = createHarness({
+            unarmoredDefense: { enabled: true, base: 10, attributes: ["constitution"] },
+        })
+
+        render(<SheetHeader sheet={sheet} form={form} />)
+
+        fireEvent.click(screen.getByRole("button", { name: "Configurar Classe de Armadura" }))
+        await waitFor(() => expect(screen.getByText("Sabedoria")).toBeInTheDocument())
+        fireEvent.click(screen.getByText("Sabedoria"))
+
+        expect(form.patchField).toHaveBeenCalledWith("unarmoredDefense", {
+            enabled: true,
+            base: 10,
+            attributes: ["constitution", "wisdom"],
+        })
     })
 
     it("shows the level-up button below XP in editable mode", () => {

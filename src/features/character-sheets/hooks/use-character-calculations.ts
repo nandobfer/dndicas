@@ -66,6 +66,8 @@ export function useCharacterCalculations(sheet: CharacterSheet, opts?: UseCharac
             opts?.equippedArmor,
             opts?.armorClassBonusSources,
             sheet.armorClassBonus,
+            sheet.unarmoredDefense,
+            attributes,
         )
         const initiative = getInitiative(
             sheet.dexterity,

@@ -89,6 +89,7 @@ function buildSheet(overrides: Partial<CharacterSheet> = {}): CharacterSheet {
         deathSavesFailure: 0,
         armorClassOverride: null,
         armorClassBonus: null,
+        unarmoredDefense: { enabled: false, base: 10, attributes: [] },
         initiativeOverride: null,
         initiativeProficiency: false,
         passivePerceptionOverride: null,

@@ -3,6 +3,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react"
 import { AnimatePresence, motion } from "framer-motion"
+import { Settings } from "lucide-react"
 
 import { SheetInput } from "./sheet-input"
 import { CompactRichInput } from "./compact-rich-input"
@@ -34,6 +35,7 @@ import type { Trait } from "@/features/traits/types/traits.types"
 import { useCharacterCalculations } from "../hooks/use-character-calculations"
 import { syncMentionBoundResourceCharges } from "../hooks/use-sheet-mention-sync"
 import { CalcTooltip } from "./calc-tooltip"
+import { ArmorClassConfigModal } from "./armor-class-config-modal"
 import {
   appendMentionsToHtml,
   extractMentionsFromHtml,
@@ -276,6 +278,7 @@ export function useSheetHeaderSections({ sheet, form, items = [], isReadOnly = f
   const { data: currentClass } = useClass(subclassParentClassId ?? null)
   const { data: currentRace } = useRace(raceRef ?? activeRaceMentionId)
   const [isProgressionOpen, setIsProgressionOpen] = useState(false)
+  const [isArmorClassConfigOpen, setIsArmorClassConfigOpen] = useState(false)
   const [isLevelUpOpen, setIsLevelUpOpen] = useState(false)
   const [levelUpSubclassValue, setLevelUpSubclassValue] = useState(subclassValue)
   const [levelUpFeatValue, setLevelUpFeatValue] = useState("")
@@ -311,6 +314,8 @@ export function useSheetHeaderSections({ sheet, form, items = [], isReadOnly = f
       traits: subclass.traits ?? [],
       progressionData: subclass.progressionTable,
     }))
+
+  const unarmoredDefense = watch("unarmoredDefense") ?? sheet.unarmoredDefense
 
   const equippedBaseArmor = items.find(
     (item) => item.equipped && item.catalogItemType === "armadura" && item.catalogAcType === "base" && item.catalogAc != null
@@ -729,17 +734,23 @@ export function useSheetHeaderSections({ sheet, form, items = [], isReadOnly = f
             </CalcTooltip>
           </div>
           <div className="z-10 w-full mt-1">
-            <SheetInput
-              compact
-              type="number"
-              label="Bônus"
-              value={armorClassBonus ?? 0}
-              onChangeValue={(val) => patchField("armorClassBonus", parseInt(val) || 0)}
-              showControls
-              inputClassName="text-center text-xs h-5"
-              className="items-center"
-              readOnlyMode={isReadOnly}
-            />
+            <motion.button
+              type="button"
+              whileHover={!isReadOnly ? { scale: 1.03 } : undefined}
+              whileTap={!isReadOnly ? { scale: 0.97 } : undefined}
+              disabled={isReadOnly}
+              onClick={() => setIsArmorClassConfigOpen(true)}
+              aria-label="Configurar Classe de Armadura"
+              className={cn(
+                "mx-auto flex h-8 w-8 items-center justify-center rounded-full border transition-colors",
+                unarmoredDefense?.enabled
+                  ? "border-amber-300/40 bg-amber-500/15 text-amber-200 shadow-[0_0_16px_rgba(245,158,11,0.16)]"
+                  : "border-white/15 bg-white/[0.06] text-white/65 hover:border-white/25 hover:bg-white/[0.1] hover:text-white",
+                isReadOnly && "cursor-not-allowed opacity-60"
+              )}
+            >
+              <Settings className="h-3.5 w-3.5" />
+            </motion.button>
           </div>
         </div>
         {currentClass && (
@@ -791,6 +802,18 @@ export function useSheetHeaderSections({ sheet, form, items = [], isReadOnly = f
         )}
       </GlassCardContent>
     </GlassCard>
+  )
+
+  const armorClassConfigModal = (
+    <ArmorClassConfigModal
+      open={isArmorClassConfigOpen}
+      onOpenChange={setIsArmorClassConfigOpen}
+      armorClassBonus={armorClassBonus}
+      unarmoredDefense={unarmoredDefense}
+      isReadOnly={isReadOnly}
+      onArmorClassBonusChange={(value) => patchField("armorClassBonus", value)}
+      onUnarmoredDefenseChange={(value) => patchField("unarmoredDefense", value)}
+    />
   )
 
   const hitPointsCard = (
@@ -1210,8 +1233,9 @@ export function useSheetHeaderSections({ sheet, form, items = [], isReadOnly = f
   return {
    identityCard,
    levelCard,
-   armorClassCard,
-   hitPointsCard,
+    armorClassCard,
+    armorClassConfigModal,
+    hitPointsCard,
    hitDiceAndDeathSavesCard,
    levelUpModal,
   }
@@ -1233,6 +1257,7 @@ export function SheetHeader({ sheet, form, items = [], isReadOnly = false, isOwl
           </div>
         </div>
         {sections.levelUpModal}
+        {sections.armorClassConfigModal}
       </>
     )
   }
@@ -1247,6 +1272,7 @@ export function SheetHeader({ sheet, form, items = [], isReadOnly = false, isOwl
         <div className="flex-[2]">{sections.hitDiceAndDeathSavesCard}</div>
       </div>
       {sections.levelUpModal}
+      {sections.armorClassConfigModal}
     </>
   )
 }
