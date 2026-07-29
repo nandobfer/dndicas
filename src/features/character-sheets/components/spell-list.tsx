@@ -13,6 +13,7 @@ import { PointerTooltip } from "./pointer-tooltip"
 import { attributeColors } from "@/lib/config/colors"
 import { getAvailableSpellSlotLevels } from "../utils/spell-slots"
 import type { CharacterSheet, PatchSheetBody } from "../types/character-sheet.types"
+import { cn } from "@/core/utils"
 
 interface SpellListProps {
     sheet: CharacterSheet
@@ -33,6 +34,43 @@ const SPELL_CASTING_OPTIONS = [
 ]
 
 const formatMod = (v: number) => (v >= 0 ? `+${v}` : `${v}`)
+
+interface SpellFlagButtonProps {
+    label: "C" | "R" | "M"
+    title: string
+    checked: boolean
+    color: string
+    disabled?: boolean
+    onToggle: () => void
+}
+
+function SpellFlagButton({ label, title, checked, color, disabled = false, onToggle }: SpellFlagButtonProps) {
+    return (
+        <PointerTooltip content={title}>
+            <button
+                type="button"
+                aria-label={title}
+                aria-pressed={checked}
+                disabled={disabled}
+                onClick={() => {
+                    if (!disabled) onToggle()
+                }}
+                className={cn(
+                    "flex h-5 w-5 items-center justify-center rounded-full border text-[10px] font-black leading-none",
+                    "transition-all duration-150 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-white/60 focus-visible:ring-offset-1 focus-visible:ring-offset-transparent",
+                    "active:scale-95",
+                    checked
+                        ? "border-transparent bg-white/10 shadow-[0_0_10px_rgba(255,255,255,0.08)]"
+                        : "border-white/10 bg-white/[0.03] text-white/25 hover:border-white/25 hover:bg-white/[0.06] hover:text-white/45",
+                    disabled && "cursor-not-allowed opacity-50 hover:border-white/10 hover:bg-white/[0.03] hover:text-white/25",
+                )}
+                style={checked ? { color, borderColor: `${color}99`, backgroundColor: `${color}22` } : undefined}
+            >
+                {label}
+            </button>
+        </PointerTooltip>
+    )
+}
 
 // ─── SpellSlotCard ────────────────────────────────────────────────────────────
 interface SpellSlotCardProps {
@@ -190,7 +228,8 @@ export function SpellList({ sheet, form, isReadOnly = false }: SpellListProps) {
 
             {/* Table header */}
             {spells.length > 0 && (
-                <div className="grid grid-cols-[auto_2fr_1fr_1fr_auto_auto_auto_auto] gap-1 px-3 py-1 border-b border-white/5">
+                <div className="grid grid-cols-[auto_auto_2fr_1fr_1fr_auto_auto_auto_auto] gap-1 px-3 py-1 border-b border-white/5">
+                    <span aria-hidden="true" />
                     {["Círc", "Nome", "Tempo", "Alcance", "C", "R", "M", ""].map((h) => (
                         <span key={h} className="text-[8px] font-black uppercase tracking-widest text-white/20 text-center">
                             {h}
@@ -205,104 +244,115 @@ export function SpellList({ sheet, form, isReadOnly = false }: SpellListProps) {
                     {spells.map((spell) => {
                         const rowKey = spell.clientKey ?? spell._id
                         return (
-                        <motion.div
-                            key={rowKey}
-                            initial={{ opacity: 0, height: 0 }}
-                            animate={{ opacity: 1, height: "auto" }}
-                            exit={{ opacity: 0, height: 0 }}
-                            transition={{ duration: 0.2 }}
-                            className="grid grid-cols-[auto_2fr_1fr_1fr_auto_auto_auto_auto] gap-1 px-3 py-1 items-center"
-                        >
-                            {/* Circle */}
-                            <SheetInput
-                                compact
-                                type="number"
-                                min={0}
-                                max={9}
-                                value={spell.circle ?? ""}
-                                onChangeValue={(v) => handlePatchSpell(spell._id, { circle: v === "" ? null : parseInt(v) || 0 })}
-                                inputClassName="text-center text-xs w-7"
-                                className="w-8"
-                                readOnlyMode={isReadOnly}
-                                allowEmptyNumber
-                            />
+                            <motion.div
+                                key={rowKey}
+                                initial={{ opacity: 0, height: 0 }}
+                                animate={{ opacity: 1, height: "auto" }}
+                                exit={{ opacity: 0, height: 0 }}
+                                transition={{ duration: 0.2 }}
+                                className="grid grid-cols-[auto_auto_2fr_1fr_1fr_auto_auto_auto_auto] gap-1 px-3 py-1 items-center"
+                            >
+                                {/* Prepared */}
+                                <PointerTooltip content="Preparada">
+                                    <GlassCheckbox
+                                        checked={!!spell.prepared}
+                                        onChange={(v) => handlePatchSpell(spell._id, { prepared: v })}
+                                        accentColor="#10b981"
+                                        disabled={isReadOnly}
+                                    />
+                                </PointerTooltip>
 
-                            {/* Name */}
-                            <CompactRichInput
-                                value={spell.name}
-                                onChange={() => {}}
-                                onBlur={(v) => handleSpellNameChange(spell._id, v)}
-                                placeholder="Nome da magia"
-                                excludeId={sheet._id}
-                                disabled={isReadOnly}
-                                specificEntityMention="Magia"
-                                openMentionsOnFocus
-                                focusToken={!isReadOnly && focusSpellId === rowKey ? rowKey : null}
-                                onAutoFocusApplied={clearFocusSpellId}
-                            />
+                                {/* Circle */}
+                                <SheetInput
+                                    compact
+                                    type="number"
+                                    min={0}
+                                    max={9}
+                                    value={spell.circle ?? ""}
+                                    onChangeValue={(v) => handlePatchSpell(spell._id, { circle: v === "" ? null : parseInt(v) || 0 })}
+                                    inputClassName="text-center text-xs w-7"
+                                    className="w-8"
+                                    readOnlyMode={isReadOnly}
+                                    allowEmptyNumber
+                                />
 
-                            {/* Casting time */}
-                            <CompactRichInput
-                                value={spell.castingTime ?? ""}
-                                onChange={() => {}}
-                                onBlur={(v) => handlePatchSpell(spell._id, { castingTime: v })}
-                                placeholder="ação"
-                                excludeId={sheet._id}
-                                disabled={isReadOnly}
-                            />
+                                {/* Name */}
+                                <CompactRichInput
+                                    value={spell.name}
+                                    onChange={() => {}}
+                                    onBlur={(v) => handleSpellNameChange(spell._id, v)}
+                                    placeholder="Nome da magia"
+                                    excludeId={sheet._id}
+                                    disabled={isReadOnly}
+                                    specificEntityMention="Magia"
+                                    openMentionsOnFocus
+                                    focusToken={!isReadOnly && focusSpellId === rowKey ? rowKey : null}
+                                    onAutoFocusApplied={clearFocusSpellId}
+                                />
 
-                            {/* Range */}
-                            <CompactRichInput
-                                value={spell.range ?? ""}
-                                onChange={() => {}}
-                                onBlur={(v) => handlePatchSpell(spell._id, { range: v })}
-                                placeholder="18 m"
-                                excludeId={sheet._id}
-                                disabled={isReadOnly}
-                            />
+                                {/* Casting time */}
+                                <CompactRichInput
+                                    value={spell.castingTime ?? ""}
+                                    onChange={() => {}}
+                                    onBlur={(v) => handlePatchSpell(spell._id, { castingTime: v })}
+                                    placeholder="ação"
+                                    excludeId={sheet._id}
+                                    disabled={isReadOnly}
+                                />
 
-                            {/* Concentration */}
-                            <PointerTooltip content="Concentração">
-                                <GlassCheckbox
+                                {/* Range */}
+                                <CompactRichInput
+                                    value={spell.range ?? ""}
+                                    onChange={() => {}}
+                                    onBlur={(v) => handlePatchSpell(spell._id, { range: v })}
+                                    placeholder="18 m"
+                                    excludeId={sheet._id}
+                                    disabled={isReadOnly}
+                                />
+
+                                {/* Concentration */}
+                                <SpellFlagButton
+                                    label="C"
+                                    title="Concentração"
                                     checked={!!spell.concentration}
-                                    onChange={(v) => handlePatchSpell(spell._id, { concentration: v })}
-                                    accentColor="#7c3aed"
+                                    color="#7c3aed"
                                     disabled={isReadOnly}
+                                    onToggle={() => handlePatchSpell(spell._id, { concentration: !spell.concentration })}
                                 />
-                            </PointerTooltip>
 
-                            {/* Ritual */}
-                            <PointerTooltip content="Ritual">
-                                <GlassCheckbox
+                                {/* Ritual */}
+                                <SpellFlagButton
+                                    label="R"
+                                    title="Ritual"
                                     checked={!!spell.ritual}
-                                    onChange={(v) => handlePatchSpell(spell._id, { ritual: v })}
-                                    accentColor="#0369a1"
+                                    color="#0369a1"
                                     disabled={isReadOnly}
+                                    onToggle={() => handlePatchSpell(spell._id, { ritual: !spell.ritual })}
                                 />
-                            </PointerTooltip>
 
-                            {/* Material */}
-                            <PointerTooltip content="Material">
-                                <GlassCheckbox
+                                {/* Material */}
+                                <SpellFlagButton
+                                    label="M"
+                                    title="Material"
                                     checked={!!spell.material}
-                                    onChange={(v) => handlePatchSpell(spell._id, { material: v })}
-                                    accentColor="#b45309"
+                                    color="#b45309"
                                     disabled={isReadOnly}
+                                    onToggle={() => handlePatchSpell(spell._id, { material: !spell.material })}
                                 />
-                            </PointerTooltip>
 
-                            {/* Delete */}
-                            {!isReadOnly && (
-                                <button
-                                    type="button"
-                                    onClick={() => handleRemoveSpell(spell._id)}
-                                    className="text-red-400/20 hover:text-red-400 transition-colors flex-shrink-0 flex items-center justify-center"
-                                >
-                                    <Trash2 className="w-3.5 h-3.5" />
-                                </button>
-                            )}
-                        </motion.div>
-                    )})}
+                                {/* Delete */}
+                                {!isReadOnly && (
+                                    <button
+                                        type="button"
+                                        onClick={() => handleRemoveSpell(spell._id)}
+                                        className="text-red-400/20 hover:text-red-400 transition-colors flex-shrink-0 flex items-center justify-center"
+                                    >
+                                        <Trash2 className="w-3.5 h-3.5" />
+                                    </button>
+                                )}
+                            </motion.div>
+                        )
+                    })}
                 </AnimatePresence>
             </div>
 

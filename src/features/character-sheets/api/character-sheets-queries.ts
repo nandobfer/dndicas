@@ -366,7 +366,25 @@ export function usePatchSpell(sheetId: string) {
     return useMutation({
         mutationFn: ({ spellId, data }: { spellId: string; data: PatchSpellBody }) =>
             patchSpell(sheetId, spellId, data),
-        onSuccess: () => qc.invalidateQueries({ queryKey: sheetsKeys.spells(sheetId) }),
+        onMutate: async ({ spellId, data }) => {
+            await qc.cancelQueries({ queryKey: sheetsKeys.spells(sheetId) })
+            const previousSpells = qc.getQueryData<CharacterSpell[]>(sheetsKeys.spells(sheetId)) ?? []
+            qc.setQueryData<CharacterSpell[]>(sheetsKeys.spells(sheetId), (current = []) =>
+                current.map((spell) => spell._id === spellId ? { ...spell, ...data } : spell)
+            )
+            return { previousSpells }
+        },
+        onError: (_error, _vars, context) => {
+            if (context?.previousSpells) qc.setQueryData(sheetsKeys.spells(sheetId), context.previousSpells)
+        },
+        onSuccess: (updated, variables) => {
+            if (updated) {
+                qc.setQueryData<CharacterSpell[]>(sheetsKeys.spells(sheetId), (current = []) =>
+                    current.map((spell) => spell._id === variables.spellId ? { ...updated, _id: variables.spellId } : spell)
+                )
+            }
+        },
+        onSettled: () => qc.invalidateQueries({ queryKey: sheetsKeys.spells(sheetId) }),
     })
 }
 

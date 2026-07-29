@@ -28,6 +28,15 @@ const ATTR_LABEL: Record<AttributeType, string> = {
     charisma: "Carisma",
 }
 
+const ATTR_ABBR: Record<AttributeType, string> = {
+    strength: "FOR",
+    dexterity: "DEX",
+    constitution: "CON",
+    intelligence: "INT",
+    wisdom: "SAB",
+    charisma: "CAR",
+}
+
 function fmt(n: number): string {
     return (n >= 0 ? "+" : "") + n
 }
@@ -132,18 +141,28 @@ export interface ArmorClassBonusSource {
     acBonus: number
 }
 
+export interface UnarmoredDefenseData {
+    enabled: boolean
+    base: number
+    attributes?: AttributeType[]
+    attribute?: AttributeType | null
+}
+
 export const getArmorClass = (
     dexterity: number,
     _override: number | null,
     equippedArmor?: EquippedArmorData | null,
     equippedBonuses: ArmorClassBonusSource[] = [],
     manualBonus?: number | null,
+    unarmoredDefense?: UnarmoredDefenseData | null,
+    attributes?: Partial<Record<AttributeType, number>>,
 ): CalcResult => {
     const dexMod = Math.floor((dexterity - 10) / 2)
 
     let base = 10
     let baseLabel = "Base"
     let dexContrib = dexMod
+    const unarmoredAttributeContribs: Array<{ attribute: AttributeType; value: number }> = []
 
     if (equippedArmor?.ac != null) {
         base = equippedArmor.ac
@@ -154,14 +173,30 @@ export const getArmorClass = (
         } else if (equippedArmor.armorType === "média") {
             dexContrib = Math.min(dexMod, 2)
         }
+    } else if (unarmoredDefense?.enabled) {
+        base = unarmoredDefense.base
+        baseLabel = "Defesa sem Armadura"
+        const selectedAttributes = Array.isArray(unarmoredDefense.attributes)
+            ? unarmoredDefense.attributes
+            : unarmoredDefense.attribute
+                ? [unarmoredDefense.attribute]
+                : []
+        selectedAttributes.forEach((attribute) => {
+            const score = attributes?.[attribute] ?? 10
+            unarmoredAttributeContribs.push({ attribute, value: Math.floor((score - 10) / 2) })
+        })
     }
 
     const totalItemBonus = equippedBonuses.reduce((sum, source) => sum + source.acBonus, 0)
     const bonus = manualBonus ?? 0
-    const calculated = base + dexContrib + totalItemBonus + bonus
+    const totalUnarmoredAttributeBonus = unarmoredAttributeContribs.reduce((sum, part) => sum + part.value, 0)
+    const calculated = base + dexContrib + totalUnarmoredAttributeBonus + totalItemBonus + bonus
 
     const parts: CalcPart[] = [{ label: baseLabel, value: base, color: "base" }]
     if (dexContrib !== 0) parts.push({ label: "Destreza", value: fmt(dexContrib), color: "dexterity" })
+    unarmoredAttributeContribs.forEach(({ attribute, value }) => {
+        if (value !== 0) parts.push({ label: ATTR_LABEL[attribute], value: fmt(value), color: attribute })
+    })
     equippedBonuses.forEach((source) => {
         if (source.acBonus !== 0) {
             parts.push({ label: source.name, value: fmt(source.acBonus), color: "bonus" })
@@ -171,6 +206,9 @@ export const getArmorClass = (
 
     let formula = `${baseLabel}(${base})`
     if (dexContrib !== 0) formula += ` + DEX(${dexContrib})`
+    unarmoredAttributeContribs.forEach(({ attribute, value }) => {
+        if (value !== 0) formula += ` + ${ATTR_ABBR[attribute]}(${value})`
+    })
     equippedBonuses.forEach((source) => {
         if (source.acBonus !== 0) {
             formula += ` + ${source.name}(${source.acBonus})`

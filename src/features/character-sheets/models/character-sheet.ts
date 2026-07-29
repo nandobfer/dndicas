@@ -46,6 +46,7 @@ export interface ICharacterSheet extends Document {
     deathSavesFailure: number
     armorClassOverride: number | null
     armorClassBonus: number | null
+    unarmoredDefense: { enabled: boolean; base: number; attributes: AttributeType[] }
     initiativeOverride: number | null
     initiativeProficiency: boolean
     passivePerceptionOverride: number | null
@@ -71,6 +72,12 @@ export interface ICharacterSheet extends Document {
     flaws: string
     history: string
     notes: string
+    notePages: Array<{
+        id: string
+        content: string
+        createdAt: string
+        updatedAt: string
+    }>
     // 2024 sheet fields
     classFeatures: string
     speciesTraits: string
@@ -143,6 +150,17 @@ const CharacterSheetSchema = new Schema<ICharacterSheet>(
         deathSavesFailure: { type: Number, default: 0, min: 0, max: 3 },
         armorClassOverride: { type: Number, default: null },
         armorClassBonus: { type: Number, default: null },
+        unarmoredDefense: {
+            type: new Schema(
+                {
+                    enabled: { type: Boolean, default: false },
+                    base: { type: Number, default: 10, min: 1, max: 30 },
+                    attributes: { type: [String], enum: ["strength", "dexterity", "constitution", "intelligence", "wisdom", "charisma"], default: [] },
+                },
+                { _id: false }
+            ),
+            default: () => ({ enabled: false, base: 10, attributes: [] }),
+        },
         initiativeOverride: { type: Number, default: null },
         initiativeProficiency: { type: Boolean, default: false },
         passivePerceptionOverride: { type: Number, default: null },
@@ -185,6 +203,20 @@ const CharacterSheetSchema = new Schema<ICharacterSheet>(
         flaws: { type: String, default: "" },
         history: { type: String, default: "" },
         notes: { type: String, default: "" },
+        notePages: {
+            type: [
+                new Schema(
+                    {
+                        id: { type: String, required: true, trim: true },
+                        content: { type: String, default: "" },
+                        createdAt: { type: String, required: true },
+                        updatedAt: { type: String, required: true },
+                    },
+                    { _id: false }
+                ),
+            ],
+            default: () => [],
+        },
         classFeatures: { type: String, default: "" },
         speciesTraits: { type: String, default: "" },
         featuresNotes: { type: String, default: "" },

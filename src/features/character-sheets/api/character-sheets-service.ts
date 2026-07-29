@@ -743,6 +743,7 @@ function toPlainSheet(doc: any) {
     if (obj.spellSlots instanceof Map) {
         obj.spellSlots = Object.fromEntries(obj.spellSlots)
     }
+    obj.notePages = Array.isArray(obj.notePages) ? obj.notePages : []
     // lean() returns plain objects but savingThrows/skills/spellSlots may be plain already
     return obj
 }
@@ -792,6 +793,15 @@ function withComputedArmorClass(sheet: CharacterSheetType, items: CharacterItemT
             } : null,
             armorClassBonusSources,
             sheet.armorClassBonus ?? null,
+            sheet.unarmoredDefense ?? null,
+            {
+                strength: sheet.strength,
+                dexterity: sheet.dexterity,
+                constitution: sheet.constitution,
+                intelligence: sheet.intelligence,
+                wisdom: sheet.wisdom,
+                charisma: sheet.charisma,
+            },
         ).value,
     }
 }

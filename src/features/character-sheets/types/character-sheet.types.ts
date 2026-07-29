@@ -9,6 +9,12 @@ export type AttributeType = "strength" | "dexterity" | "constitution" | "intelli
 
 export type ArmorTraining = { light: boolean; medium: boolean; heavy: boolean; shields: boolean }
 
+export type UnarmoredDefenseConfig = {
+    enabled: boolean
+    base: number
+    attributes: AttributeType[]
+}
+
 export type SkillName =
     | "Acrobacia"
     | "Arcanismo"
@@ -32,6 +38,13 @@ export type SkillName =
 export type TraitOrigin = "class" | "race" | "background" | "manual"
 
 // ─── Core entity interfaces ───────────────────────────────────────────────────
+
+export interface CharacterSheetNotePage {
+    id: string
+    content: string
+    createdAt: string
+    updatedAt: string
+}
 
 export interface CharacterSheet {
     _id: string
@@ -82,6 +95,7 @@ export interface CharacterSheet {
     deathSavesFailure: number
     armorClassOverride: number | null
     armorClassBonus: number | null
+    unarmoredDefense: UnarmoredDefenseConfig
     initiativeOverride: number | null
     initiativeProficiency: boolean
     passivePerceptionOverride: number | null
@@ -100,6 +114,7 @@ export interface CharacterSheet {
     flaws: string
     history: string
     notes: string
+    notePages: CharacterSheetNotePage[]
     // 2024 sheet fields
     classFeatures: string
     speciesTraits: string
@@ -376,6 +391,11 @@ export const PatchSheetSchema = z.object({
     deathSavesFailure: z.number().int().min(0).max(3).optional(),
     armorClassOverride: z.number().int().nullable().optional(),
     armorClassBonus: z.number().int().nullable().optional(),
+    unarmoredDefense: z.object({
+        enabled: z.boolean(),
+        base: z.number().int().min(1).max(30),
+        attributes: z.array(z.enum(["strength", "dexterity", "constitution", "intelligence", "wisdom", "charisma"])),
+    }).optional(),
     initiativeOverride: z.number().int().nullable().optional(),
     initiativeProficiency: z.boolean().optional(),
     passivePerceptionOverride: z.number().int().nullable().optional(),
@@ -403,6 +423,12 @@ export const PatchSheetSchema = z.object({
     flaws: z.string().optional(),
     history: z.string().optional(),
     notes: z.string().optional(),
+    notePages: z.array(z.object({
+        id: z.string().min(1),
+        content: z.string(),
+        createdAt: z.string().min(1),
+        updatedAt: z.string().min(1),
+    })).optional(),
     classFeatures: z.string().optional(),
     speciesTraits: z.string().optional(),
     featuresNotes: z.string().optional(),
