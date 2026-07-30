@@ -137,6 +137,17 @@ export async function getAllSheetsForAdmin(search?: string, page = 1, limit = 10
                             subclass: 1,
                             race: 1,
                             origin: 1,
+                            strength: 1,
+                            dexterity: 1,
+                            constitution: 1,
+                            intelligence: 1,
+                            wisdom: 1,
+                            charisma: 1,
+                            hpCurrent: 1,
+                            hpMax: 1,
+                            armorClassOverride: 1,
+                            armorClassBonus: 1,
+                            unarmoredDefense: 1,
                             createdAt: 1,
                             updatedAt: 1,
                             userId: 1,
@@ -157,7 +168,7 @@ export async function getAllSheetsForAdmin(search?: string, page = 1, limit = 10
 
     const total = result?.meta?.[0]?.total ?? 0
     const totalPages = Math.max(1, Math.ceil(total / safeLimit))
-    const items = (result?.items ?? []).map((item: {
+    const rawItems = (result?.items ?? []) as Array<{
         _id: Types.ObjectId | string
         slug: string
         name?: string
@@ -167,6 +178,17 @@ export async function getAllSheetsForAdmin(search?: string, page = 1, limit = 10
         subclass?: string
         race?: string
         origin?: string
+        strength?: number
+        dexterity?: number
+        constitution?: number
+        intelligence?: number
+        wisdom?: number
+        charisma?: number
+        hpCurrent?: number | null
+        hpMax?: number | null
+        armorClassOverride?: number | null
+        armorClassBonus?: number | null
+        unarmoredDefense?: CharacterSheetType["unarmoredDefense"] | null
         createdAt: Date | string
         updatedAt: Date | string
         owner?: {
@@ -176,25 +198,54 @@ export async function getAllSheetsForAdmin(search?: string, page = 1, limit = 10
             avatarUrl?: string | null
         }
         username?: string
-    }) => ({
-        id: String(item._id),
-        slug: item.slug,
-        name: item.name || "Ficha sem nome",
-        photo: item.photo ?? null,
-        level: item.level ?? null,
-        class: item.class || "—",
-        subclass: item.subclass || "—",
-        race: item.race || "—",
-        origin: item.origin || "—",
-        createdAt: item.createdAt instanceof Date ? item.createdAt.toISOString() : new Date(item.createdAt).toISOString(),
-        updatedAt: item.updatedAt instanceof Date ? item.updatedAt.toISOString() : new Date(item.updatedAt).toISOString(),
-        owner: {
-            id: item.owner?._id ? String(item.owner._id) : null,
-            name: item.owner?.name || item.username || "Usuário desconhecido",
-            username: item.owner?.username || item.username || "sem-username",
-            avatarUrl: item.owner?.avatarUrl ?? null,
-        },
-    }))
+    }>
+    const sheetIds = rawItems.map((item) => String(item._id))
+    const equippedItems = sheetIds.length > 0
+        ? (await CharacterItem.find({ sheetId: { $in: sheetIds }, equipped: true }).lean()).map(toPlain) as CharacterItemType[]
+        : []
+    const items = rawItems.map((item) => {
+        const sheetWithArmorClass = withComputedArmorClass({
+            _id: String(item._id),
+            dexterity: item.dexterity ?? 10,
+            strength: item.strength ?? 10,
+            constitution: item.constitution ?? 10,
+            intelligence: item.intelligence ?? 10,
+            wisdom: item.wisdom ?? 10,
+            charisma: item.charisma ?? 10,
+            armorClassOverride: item.armorClassOverride ?? null,
+            armorClassBonus: item.armorClassBonus ?? null,
+            unarmoredDefense: item.unarmoredDefense ?? null,
+        } as CharacterSheetType, equippedItems)
+
+        return {
+            id: String(item._id),
+            slug: item.slug,
+            name: item.name || "Ficha sem nome",
+            photo: item.photo ?? null,
+            level: item.level ?? null,
+            class: item.class || "—",
+            subclass: item.subclass || "—",
+            race: item.race || "—",
+            origin: item.origin || "—",
+            strength: item.strength ?? 10,
+            dexterity: item.dexterity ?? 10,
+            constitution: item.constitution ?? 10,
+            intelligence: item.intelligence ?? 10,
+            wisdom: item.wisdom ?? 10,
+            charisma: item.charisma ?? 10,
+            hpCurrent: item.hpCurrent ?? null,
+            hpMax: item.hpMax ?? null,
+            computedArmorClass: sheetWithArmorClass.computedArmorClass ?? 10,
+            createdAt: item.createdAt instanceof Date ? item.createdAt.toISOString() : new Date(item.createdAt).toISOString(),
+            updatedAt: item.updatedAt instanceof Date ? item.updatedAt.toISOString() : new Date(item.updatedAt).toISOString(),
+            owner: {
+                id: item.owner?._id ? String(item.owner._id) : null,
+                name: item.owner?.name || item.username || "Usuário desconhecido",
+                username: item.owner?.username || item.username || "sem-username",
+                avatarUrl: item.owner?.avatarUrl ?? null,
+            },
+        }
+    })
 
     return {
         items,

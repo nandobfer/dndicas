@@ -1,17 +1,23 @@
 "use client"
 
-import { motion, AnimatePresence } from "framer-motion"
+import * as React from "react"
+import { motion } from "framer-motion"
 import { ScrollText } from "lucide-react"
 import { GlassCard, GlassCardContent } from "@/components/ui/glass-card"
 import { motionConfig } from "@/lib/config/motion-configs"
 import { AdminSheetsFilters } from "./admin-sheets-filters"
-import { AdminSheetsTable } from "./admin-sheets-table"
 import { AdminSheetsList } from "./admin-sheets-list"
 import { useAdminSheetsPage } from "../hooks/useAdminSheetsPage"
 
 export function AdminSheetsPage() {
-    const { isMobile, filters, data, actions } = useAdminSheetsPage(true)
-    const isSearching = isMobile ? data.mobile.isFetching : data.desktop.isFetching
+    const { filters, data, actions } = useAdminSheetsPage(true)
+    const { fetchNextPage, refetch } = data
+    const handleLoadMore = React.useCallback(() => {
+        void fetchNextPage()
+    }, [fetchNextPage])
+    const handleRetry = React.useCallback(() => {
+        void refetch()
+    }, [refetch])
 
     return (
         <motion.div variants={motionConfig.variants.fadeInUp} initial="initial" animate="animate" className="space-y-6">
@@ -27,45 +33,19 @@ export function AdminSheetsPage() {
 
             <GlassCard>
                 <GlassCardContent className="py-4">
-                    <AdminSheetsFilters search={filters.search} onSearchChange={actions.handleSearchChange} isSearching={isSearching} />
+                    <AdminSheetsFilters search={filters.search} onSearchChange={actions.handleSearchChange} isSearching={data.isFetching} />
                 </GlassCardContent>
             </GlassCard>
 
-            <AnimatePresence mode="wait" initial={false}>
-                {isMobile ? (
-                    <motion.div key="mobile-list" layout>
-                        <AdminSheetsList
-                            items={data.mobile.items}
-                            isLoading={data.mobile.isLoading}
-                            hasNextPage={data.mobile.hasNextPage}
-                            isFetchingNextPage={data.mobile.isFetchingNextPage}
-                            error={data.mobile.error}
-                            onLoadMore={() => {
-                                void data.mobile.fetchNextPage()
-                            }}
-                            onRetry={() => {
-                                void data.mobile.refetch()
-                            }}
-                        />
-                    </motion.div>
-                ) : (
-                    <motion.div key="desktop-table" layout>
-                        <AdminSheetsTable
-                            items={data.desktop.items}
-                            isLoading={data.desktop.isLoading}
-                            hasNextPage={data.desktop.hasNextPage}
-                            isFetchingNextPage={data.desktop.isFetchingNextPage}
-                            error={data.desktop.error}
-                            onLoadMore={() => {
-                                void data.desktop.fetchNextPage()
-                            }}
-                            onRetry={() => {
-                                void data.desktop.refetch()
-                            }}
-                        />
-                    </motion.div>
-                )}
-            </AnimatePresence>
+            <AdminSheetsList
+                items={data.items}
+                isLoading={data.isLoading}
+                hasNextPage={data.hasNextPage}
+                isFetchingNextPage={data.isFetchingNextPage}
+                error={data.error}
+                onLoadMore={handleLoadMore}
+                onRetry={handleRetry}
+            />
         </motion.div>
     )
 }
