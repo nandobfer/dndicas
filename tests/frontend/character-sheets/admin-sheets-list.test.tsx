@@ -90,6 +90,12 @@ vi.mock("@/components/ui/error-state", () => ({
     ErrorState: ({ title }: { title: string }) => <div>{title}</div>,
 }))
 
+vi.mock("@/components/ui/infinite-scroll-sentinel", () => ({
+    InfiniteScrollSentinel: ({ onLoadMore, hasNextPage }: { onLoadMore?: () => void; hasNextPage?: boolean }) => (
+        <button type="button" data-has-next-page={String(hasNextPage)} onClick={onLoadMore}>Carregar mais</button>
+    ),
+}))
+
 vi.mock("@/components/ui/user-mini", () => ({
     UserMini: ({ name, username }: { name: string; username: string }) => <div>{`${name} (${username})`}</div>,
 }))
@@ -108,6 +114,15 @@ const item: AdminSheetListItem = {
     subclass: "Campeão",
     race: "Humano",
     origin: "Soldado",
+    strength: 16,
+    dexterity: 14,
+    constitution: 15,
+    intelligence: 10,
+    wisdom: 12,
+    charisma: 8,
+    hpCurrent: 42,
+    hpMax: 55,
+    computedArmorClass: 17,
     createdAt: "2026-01-01T00:00:00.000Z",
     updatedAt: "2026-01-02T00:00:00.000Z",
     owner: {
@@ -142,8 +157,25 @@ describe("AdminSheetsList", () => {
         )
 
         expect(screen.getByTestId("admin-sheet-photo")).toHaveAttribute("data-src", "/api/upload?key=kael.webp")
-        expect(screen.getByText("Nível 7")).toBeInTheDocument()
+        expect(screen.getByText("Kael")).toBeInTheDocument()
+        expect(screen.getByText("17")).toBeInTheDocument()
         expect(screen.queryByText(/avatar ausente|avatar pendente/i)).not.toBeInTheDocument()
+    })
+
+    it("renders the admin owner and hides delete actions", () => {
+        render(
+            <AdminSheetsList
+                items={[item]}
+                isLoading={false}
+                hasNextPage={false}
+                isFetchingNextPage={false}
+                onLoadMore={vi.fn()}
+                onRetry={vi.fn()}
+            />
+        )
+
+        expect(screen.getByText("Nando (@nandobfer)")).toBeInTheDocument()
+        expect(screen.queryByRole("button", { name: "Excluir ficha" })).not.toBeInTheDocument()
     })
 
     it("does not navigate when clicking the character image", () => {
@@ -158,13 +190,13 @@ describe("AdminSheetsList", () => {
             />
         )
 
-        fireEvent.click(screen.getByRole("button", { name: "Abrir foto ampliada de Kael" }))
+        fireEvent.click(screen.getByRole("button", { name: "Abrir imagem ampliada de Kael" }))
 
         expect(routerPush).not.toHaveBeenCalled()
     })
 
     it("navigates to the sheet when clicking the row card", () => {
-        const { container } = render(
+        render(
             <AdminSheetsList
                 items={[item]}
                 isLoading={false}
@@ -175,8 +207,30 @@ describe("AdminSheetsList", () => {
             />
         )
 
-        fireEvent.click(container.querySelector(".cursor-pointer.overflow-hidden.transition-colors.hover\\:bg-white\\/\\[0\\.03\\]") as HTMLElement)
+        fireEvent.click(screen.getByText("Kael").closest("[role='button']") as HTMLElement)
 
         expect(routerPush).toHaveBeenCalledWith("/sheets/kael")
+    })
+
+    it("loads more sheets through the shared infinite scroll sentinel", () => {
+        const onLoadMore = vi.fn()
+
+        render(
+            <AdminSheetsList
+                items={[item]}
+                isLoading={false}
+                hasNextPage
+                isFetchingNextPage={false}
+                onLoadMore={onLoadMore}
+                onRetry={vi.fn()}
+            />
+        )
+
+        const loadMore = screen.getByRole("button", { name: "Carregar mais" })
+        expect(loadMore).toHaveAttribute("data-has-next-page", "true")
+
+        fireEvent.click(loadMore)
+
+        expect(onLoadMore).toHaveBeenCalledTimes(1)
     })
 })

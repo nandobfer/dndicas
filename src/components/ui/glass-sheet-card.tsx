@@ -44,6 +44,12 @@ const formatMod = (score: number): string => {
 
 interface GlassSheetCardProps {
     sheet: CharacterSheet
+    variant?: "user" | "admin"
+    owner?: {
+        name: string
+        username: string
+        avatarUrl?: string | null
+    }
     onRequestDelete?: (sheet: CharacterSheet) => void
     onOpen?: (sheet: CharacterSheet) => void
     showDelete?: boolean
@@ -58,6 +64,8 @@ interface GlassSheetCardProps {
 
 export function GlassSheetCard({
     sheet,
+    variant = "user",
+    owner,
     onRequestDelete,
     onOpen,
     showDelete = true,
@@ -84,7 +92,7 @@ export function GlassSheetCard({
 
     const ca = sheet.computedArmorClass ?? 10
     const fallbackInitial = (sheet.name || "?").trim().charAt(0).toUpperCase() || "?"
-    const shouldShowAction = showDelete && (onAction || onRequestDelete)
+    const shouldShowAction = variant !== "admin" && showDelete && (onAction || onRequestDelete)
     const actionDisabled = isDeleting || isActionPending
     const sheetDetails = [sheet.class, sheet.subclass, sheet.race, sheet.origin]
         .map((value) => value ? extractPlainText(value) : "")
@@ -114,7 +122,10 @@ export function GlassSheetCard({
             <div className="h-0.5 w-full bg-gradient-to-r from-violet-500/40 via-blue-400/40 to-transparent" />
 
             <div className="flex gap-3 p-4">
-                <div className="h-[128px] w-[88px] shrink-0 overflow-hidden rounded-lg border border-white/10 bg-white/[0.04]">
+                <div
+                    className="h-[128px] w-[88px] shrink-0 overflow-hidden rounded-lg border border-white/10 bg-white/[0.04]"
+                    onClick={sheet.photo ? (event) => event.stopPropagation() : undefined}
+                >
                     {sheet.photo ? (
                         <GlassImage
                             src={sheet.photo}
@@ -157,6 +168,11 @@ export function GlassSheetCard({
                             {sheetDetails.length > 0 && (
                                 <p className="text-[10px] text-white/50 font-semibold tracking-wider truncate mt-0.5">
                                     {sheetDetails.join(" · ")}
+                                </p>
+                            )}
+                            {variant === "admin" && owner && (
+                                <p className="text-[10px] text-white/35 font-semibold tracking-wider truncate mt-1">
+                                    {owner.name} (@{owner.username})
                                 </p>
                             )}
                         </div>

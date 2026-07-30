@@ -250,6 +250,15 @@ export interface AdminSheetListItem {
     subclass: string
     race: string
     origin: string
+    strength: number
+    dexterity: number
+    constitution: number
+    intelligence: number
+    wisdom: number
+    charisma: number
+    hpCurrent: number | null
+    hpMax: number | null
+    computedArmorClass: number
     createdAt: string
     updatedAt: string
     owner: AdminSheetOwnerSummary
