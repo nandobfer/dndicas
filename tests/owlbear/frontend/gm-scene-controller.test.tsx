@@ -840,6 +840,82 @@ describe("OwlbearGmSceneController — SDK parse de metadata", () => {
 })
 
 describe("OwlbearGmSceneController — HP overlay", () => {
+    it("waits for queued overlay sync before closing the action after linking an NPC", async () => {
+        const { updateTokenOverlayIds } = await import("@/features/owlbear/sdk")
+        const token = {
+            id: "token-queued-sync",
+            name: "Token Goblin",
+            layer: "CHARACTER",
+            type: "IMAGE",
+            visible: true,
+            locked: false,
+            createdUserId: "u1",
+            zIndex: 1,
+            lastModified: "",
+            lastModifiedUserId: "u1",
+            position: { x: 100, y: 100 },
+            rotation: 0,
+            scale: { x: 1, y: 1 },
+            metadata: {},
+        }
+        const sceneItems: Array<typeof token & { metadata: Record<string, unknown> }> = [{ ...token, metadata: {} }]
+        let resolveInitialSyncItems: () => void = () => {
+            throw new Error("Initial sync resolver was not registered")
+        }
+
+        useRoomNpcsMock.mockReturnValue({
+            items: [{ ...goblinNpc, hpCurrent: 6, hpMax: 12, hpTemp: 3 }],
+            isLoading: false,
+            errorMessage: null,
+            reload: vi.fn(),
+            linkNpc: vi.fn(),
+            updateNpc: vi.fn(),
+            removeNpc: vi.fn(),
+        })
+        sdkMock.scene.items.getItems
+            .mockImplementationOnce(() => new Promise<Array<typeof token>>((resolve) => {
+                resolveInitialSyncItems = () => resolve([{ ...token, metadata: {} }])
+            }))
+            .mockImplementation(() => Promise.resolve(sceneItems))
+        sdkMock.scene.items.updateItems.mockImplementation(async (ids: string[], updater: (draft: Array<typeof token & { metadata: Record<string, unknown> }>) => void) => {
+            const draft = sceneItems.filter((item) => ids.includes(item.id))
+            updater(draft)
+        })
+
+        render(<OwlbearGmSceneController runtime={readyGmRuntime} session={readySession} />)
+
+        await waitFor(() => expect(sdkMock.scene.items.getItems).toHaveBeenCalledTimes(1))
+        await waitFor(() => expect(sdkMock.contextMenu.create).toHaveBeenCalledTimes(3))
+
+        const npcMenu = getRegisteredContextMenu("com.dndicas.owlbear.link-npc")
+        npcMenu?.onClick?.({ items: [token] })
+
+        await screen.findByRole("heading", { name: "Vincular a NPC" })
+        fireEvent.click(screen.getByText("Goblin"))
+
+        await waitFor(() => {
+            expect(sceneItems[0].metadata["com.dndicas.owlbear/token"]).toMatchObject({
+                kind: "npc",
+                refId: "npc-1",
+                tokenId: "token-queued-sync",
+            })
+        })
+        expect(sdkMock.action.close).not.toHaveBeenCalled()
+
+        resolveInitialSyncItems()
+
+        await waitFor(() => expect(sdkMock.scene.items.addItems).toHaveBeenCalled())
+        await waitFor(() => expect(updateTokenOverlayIds).toHaveBeenCalledWith(
+            "token-queued-sync",
+            expect.arrayContaining([expect.any(String)]),
+        ))
+        expect(sdkMock.action.close).toHaveBeenCalled()
+
+        const addItemsOrder = sdkMock.scene.items.addItems.mock.invocationCallOrder[0]
+        const closeOrder = sdkMock.action.close.mock.invocationCallOrder[0]
+        expect(addItemsOrder).toBeLessThan(closeOrder)
+    })
+
     it("renders temporary HP over the lower half of the main HP bar", async () => {
         const { fetchOwlbearSheetById } = await import("@/features/owlbear/sdk")
         const token = {

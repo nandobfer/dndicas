@@ -710,33 +710,36 @@ export function OwlbearGmSceneController({
     const syncTimerRef = React.useRef<number | null>(null)
     const isSyncingRef = React.useRef(false)
     const hasPendingSyncRef = React.useRef(false)
+    const syncPromiseRef = React.useRef<Promise<void> | null>(null)
 
     React.useEffect(() => {
         syncSceneRef.current = syncScene
     }, [syncScene])
 
-    const runQueuedSync = React.useCallback(async () => {
+    const runQueuedSync = React.useCallback((): Promise<void> => {
         if (isSyncingRef.current) {
             hasPendingSyncRef.current = true
-            return
+            return syncPromiseRef.current ?? Promise.resolve()
         }
 
         isSyncingRef.current = true
-        try {
-            await syncSceneRef.current()
-        } finally {
-            isSyncingRef.current = false
-            if (hasPendingSyncRef.current) {
-                hasPendingSyncRef.current = false
-                if (syncTimerRef.current !== null) {
-                    window.clearTimeout(syncTimerRef.current)
-                }
-                syncTimerRef.current = window.setTimeout(() => {
-                    syncTimerRef.current = null
-                    void runQueuedSync()
-                }, SYNC_DEBOUNCE_MS)
+        const syncPromise = (async () => {
+            try {
+                do {
+                    hasPendingSyncRef.current = false
+                    if (syncTimerRef.current !== null) {
+                        window.clearTimeout(syncTimerRef.current)
+                        syncTimerRef.current = null
+                    }
+                    await syncSceneRef.current()
+                } while (hasPendingSyncRef.current)
+            } finally {
+                isSyncingRef.current = false
+                syncPromiseRef.current = null
             }
-        }
+        })()
+        syncPromiseRef.current = syncPromise
+        return syncPromise
     }, [])
 
     const requestSyncScene = React.useCallback((delayMs = SYNC_DEBOUNCE_MS) => {
