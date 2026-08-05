@@ -49,6 +49,15 @@ type OverlayLayout = {
     width: number
 }
 
+type OverlayLinkMetadata = {
+    version: number
+    tokenId: string
+    role: "backdrop" | "bar" | "tempBar" | "label"
+    barWidth?: number
+    overlayWidth?: number
+    barColor?: string
+}
+
 type LinkKind = "player" | "npc"
 type ControllerScope = LinkKind | "both" | "none"
 
@@ -169,6 +178,18 @@ function getShapeFillColor(item: OwlbearSceneItem) {
     return candidate.style?.fillColor ?? candidate.fillColor
 }
 
+function getShapeFillOpacity(item: OwlbearSceneItem) {
+    const candidate = item as OwlbearSceneItem & {
+        style?: { fillOpacity?: number }
+        fillOpacity?: number
+    }
+    return candidate.style?.fillOpacity ?? candidate.fillOpacity
+}
+
+function getOverlayMetadata(item: OwlbearSceneItem) {
+    return getOverlayLinkFromItem(item) as OverlayLinkMetadata | null
+}
+
 function isHtmlContent(value: string) {
     return value.includes("<")
 }
@@ -276,6 +297,25 @@ async function buildOverlayItems(
     return [backdrop, bar, tempBar]
 }
 
+async function recreateTokenOverlay(
+    sdk: Awaited<ReturnType<typeof loadOwlbearSdk>>,
+    token: OwlbearSceneItem,
+    overlayItems: OwlbearSceneItem[],
+    layout: OverlayLayout,
+    hpCurrent: number,
+    hpMax: number,
+    hpTemp: number,
+    name: string,
+) {
+    if (!sdk || !sdk.isAvailable || !sdk.isReady) return
+    if (overlayItems.length > 0) {
+        await sdk.scene.items.deleteItems(overlayItems.map((item) => item.id))
+    }
+    const createdOverlays = await buildOverlayItems(token, layout, hpCurrent, hpMax, hpTemp, name)
+    await sdk.scene.items.addItems(createdOverlays)
+    await updateTokenOverlayIds(token.id, createdOverlays.map((item) => item.id))
+}
+
 async function syncTokenOverlay(
     sdk: Awaited<ReturnType<typeof loadOwlbearSdk>>,
     itemsById: Map<string, OwlbearSceneItem>,
@@ -293,17 +333,15 @@ async function syncTokenOverlay(
     const linkedOverlayItems = tokenLink.overlayIds
         .map((overlayId) => itemsById.get(overlayId))
         .filter((item): item is OwlbearSceneItem => Boolean(item))
-    const overlayRoles = new Set(linkedOverlayItems.map((item) => getOverlayLinkFromItem(item)?.role))
+    const overlayRoles = new Set<string>(linkedOverlayItems.flatMap((item) => {
+        const role = getOverlayMetadata(item)?.role
+        return role ? [role] : []
+    }))
     const hasRequiredOverlayShape = overlayRoles.has("backdrop") && overlayRoles.has("bar") && overlayRoles.has("tempBar") && linkedOverlayItems.length === 3
     const layout = await getOverlayLayout(sdk, token)
 
     if (!hasRequiredOverlayShape) {
-        if (linkedOverlayItems.length > 0) {
-            await sdk.scene.items.deleteItems(linkedOverlayItems.map((item) => item.id))
-        }
-        const createdOverlays = await buildOverlayItems(token, layout, hpCurrent, hpMax, hpTemp, name)
-        await sdk.scene.items.addItems(createdOverlays)
-        await updateTokenOverlayIds(token.id, createdOverlays.map((item) => item.id))
+        await recreateTokenOverlay(sdk, token, linkedOverlayItems, layout, hpCurrent, hpMax, hpTemp, name)
         return
     }
 
@@ -315,7 +353,7 @@ async function syncTokenOverlay(
     const tempBarWidth = Math.max(1, Math.round((hpPercent(hpTemp, hpMax) / 100) * overlayWidth))
     const barColor = getHpBarColor(hpCurrent, hpMax)
     const needsUpdate = linkedOverlayItems.some((item) => {
-        const overlayMeta = getOverlayLinkFromItem(item)
+        const overlayMeta = getOverlayMetadata(item)
         if (!overlayMeta) return false
         const expectedPosition = overlayMeta.role === "tempBar" ? tempPosition : position
         if (item.attachedTo !== token.id || !samePosition(item.position, expectedPosition)) return true
@@ -328,7 +366,7 @@ async function syncTokenOverlay(
             if (overlayMeta.barWidth !== tempBarWidth || overlayMeta.barColor !== rarityColors.divine) return true
             if ((item as OwlbearSceneItem & { width?: number }).width !== tempBarWidth) return true
             if ((item as OwlbearSceneItem & { height?: number }).height !== OVERLAY_TEMP_BAR_HEIGHT) return true
-            return (item as OwlbearSceneItem & { fillOpacity?: number }).fillOpacity !== (hpTemp > 0 ? 1 : 0)
+            return getShapeFillOpacity(item) !== (hpTemp > 0 ? 1 : 0)
         }
         if (overlayMeta.role !== "bar") return false
         if (overlayMeta.barWidth !== barWidth || overlayMeta.barColor !== barColor) return true
@@ -339,71 +377,76 @@ async function syncTokenOverlay(
 
     if (!needsUpdate) return
 
-    await sdk.scene.items.updateItems(linkedOverlayItems, (draft) => {
-        for (const item of draft) {
-            item.attachedTo = token.id
+    try {
+        await sdk.scene.items.updateItems(linkedOverlayItems, (draft) => {
+            for (const item of draft) {
+                item.attachedTo = token.id
 
-            const overlayMeta = (item.metadata["com.dndicas.owlbear/overlay"] as { role?: string } | undefined)
-            item.position = overlayMeta?.role === "tempBar" ? tempPosition : position
+                const overlayMeta = (item.metadata["com.dndicas.owlbear/overlay"] as { role?: string } | undefined)
+                item.position = overlayMeta?.role === "tempBar" ? tempPosition : position
 
-            if (overlayMeta?.role === "backdrop") {
-                ;(item as OwlbearSceneItem & { width?: number }).width = overlayWidth
-                ;(item as OwlbearSceneItem & { height?: number }).height = OVERLAY_BAR_HEIGHT
-                item.metadata = {
-                    ...item.metadata,
-                    "com.dndicas.owlbear/overlay": {
-                        ...overlayMeta,
-                        tokenId: token.id,
-                        version: 1,
-                        role: "backdrop",
-                        overlayWidth,
-                    },
+                if (overlayMeta?.role === "backdrop") {
+                    ;(item as OwlbearSceneItem & { width?: number }).width = overlayWidth
+                    ;(item as OwlbearSceneItem & { height?: number }).height = OVERLAY_BAR_HEIGHT
+                    item.metadata = {
+                        ...item.metadata,
+                        "com.dndicas.owlbear/overlay": {
+                            ...overlayMeta,
+                            tokenId: token.id,
+                            version: 1,
+                            role: "backdrop",
+                            overlayWidth,
+                        },
+                    }
+                }
+
+                if (overlayMeta?.role === "bar") {
+                    ;(item as OwlbearSceneItem & { width?: number }).width = barWidth
+                    ;(item as OwlbearSceneItem & { style?: Record<string, unknown> }).style = {
+                        ...(item as OwlbearSceneItem & { style?: Record<string, unknown> }).style,
+                        fillColor: barColor,
+                    }
+                    item.metadata = {
+                        ...item.metadata,
+                        "com.dndicas.owlbear/overlay": {
+                            ...overlayMeta,
+                            tokenId: token.id,
+                            version: 1,
+                            role: "bar",
+                            barWidth,
+                            overlayWidth,
+                            barColor,
+                        },
+                    }
+                }
+
+                if (overlayMeta?.role === "tempBar") {
+                    ;(item as OwlbearSceneItem & { width?: number }).width = tempBarWidth
+                    ;(item as OwlbearSceneItem & { height?: number }).height = OVERLAY_TEMP_BAR_HEIGHT
+                    ;(item as OwlbearSceneItem & { style?: Record<string, unknown> }).style = {
+                        ...(item as OwlbearSceneItem & { style?: Record<string, unknown> }).style,
+                        fillColor: rarityColors.divine,
+                        fillOpacity: hpTemp > 0 ? 1 : 0,
+                    }
+                    item.metadata = {
+                        ...item.metadata,
+                        "com.dndicas.owlbear/overlay": {
+                            ...overlayMeta,
+                            tokenId: token.id,
+                            version: 1,
+                            role: "tempBar",
+                            barWidth: tempBarWidth,
+                            overlayWidth,
+                            barColor: rarityColors.divine,
+                        },
+                    }
                 }
             }
-
-            if (overlayMeta?.role === "bar") {
-                ;(item as OwlbearSceneItem & { width?: number }).width = barWidth
-                ;(item as OwlbearSceneItem & { style?: Record<string, unknown> }).style = {
-                    ...(item as OwlbearSceneItem & { style?: Record<string, unknown> }).style,
-                    fillColor: barColor,
-                }
-                item.metadata = {
-                    ...item.metadata,
-                    "com.dndicas.owlbear/overlay": {
-                        ...overlayMeta,
-                        tokenId: token.id,
-                        version: 1,
-                        role: "bar",
-                        barWidth,
-                        overlayWidth,
-                        barColor,
-                    },
-                }
-            }
-
-            if (overlayMeta?.role === "tempBar") {
-                ;(item as OwlbearSceneItem & { width?: number }).width = tempBarWidth
-                ;(item as OwlbearSceneItem & { height?: number }).height = OVERLAY_TEMP_BAR_HEIGHT
-                ;(item as OwlbearSceneItem & { fillOpacity?: number }).fillOpacity = hpTemp > 0 ? 1 : 0
-                ;(item as OwlbearSceneItem & { style?: Record<string, unknown> }).style = {
-                    ...(item as OwlbearSceneItem & { style?: Record<string, unknown> }).style,
-                    fillColor: rarityColors.divine,
-                }
-                item.metadata = {
-                    ...item.metadata,
-                    "com.dndicas.owlbear/overlay": {
-                        ...overlayMeta,
-                        tokenId: token.id,
-                        version: 1,
-                        role: "tempBar",
-                        barWidth: tempBarWidth,
-                        overlayWidth,
-                        barColor: rarityColors.divine,
-                    },
-                }
-            }
-        }
-    })
+        })
+    } catch (error) {
+        console.error("Failed to update Owlbear token overlay; recreating overlay items", { tokenId: token.id, error })
+        await recreateTokenOverlay(sdk, token, linkedOverlayItems, layout, hpCurrent, hpMax, hpTemp, name)
+    }
 }
 
 async function cleanupOrphanOverlays(items: OwlbearSceneItem[]) {
@@ -676,30 +719,38 @@ export function OwlbearGmSceneController({
 
             // Sincroniza overlays de personagem
             for (const token of playerTokens) {
-                const tokenLink = getTokenLinkFromItem(token)
-                if (!tokenLink) continue
-                const cached = overlayHpCacheRef.current.get(getOverlaySyncCacheKey("player", tokenLink.refId))
-                if (cached) {
-                    await syncTokenOverlay(sdk, itemsById, token, cached.hpCurrent, cached.hpMax, cached.hpTemp, cached.name)
-                    continue
+                try {
+                    const tokenLink = getTokenLinkFromItem(token)
+                    if (!tokenLink) continue
+                    const cached = overlayHpCacheRef.current.get(getOverlaySyncCacheKey("player", tokenLink.refId))
+                    if (cached) {
+                        await syncTokenOverlay(sdk, itemsById, token, cached.hpCurrent, cached.hpMax, cached.hpTemp, cached.name)
+                        continue
+                    }
+                    const sheet = sheetMap.get(tokenLink.refId)
+                    if (!sheet) continue
+                    await syncTokenOverlay(sdk, itemsById, token, sheet.hpCurrent ?? 0, sheet.hpMax ?? 0, sheet.hpTemp ?? 0, sheet.name)
+                } catch (error) {
+                    console.error("Failed to sync Owlbear player token overlay", { tokenId: token.id, error })
                 }
-                const sheet = sheetMap.get(tokenLink.refId)
-                if (!sheet) continue
-                await syncTokenOverlay(sdk, itemsById, token, sheet.hpCurrent ?? 0, sheet.hpMax ?? 0, sheet.hpTemp ?? 0, sheet.name)
             }
 
             // Sincroniza overlays de NPC
             for (const token of npcTokens) {
-                const tokenLink = getTokenLinkFromItem(token)
-                if (!tokenLink) continue
-                const cached = overlayHpCacheRef.current.get(getOverlaySyncCacheKey("npc", tokenLink.refId))
-                if (cached) {
-                    await syncTokenOverlay(sdk, itemsById, token, cached.hpCurrent, cached.hpMax, cached.hpTemp, cached.name)
-                    continue
+                try {
+                    const tokenLink = getTokenLinkFromItem(token)
+                    if (!tokenLink) continue
+                    const cached = overlayHpCacheRef.current.get(getOverlaySyncCacheKey("npc", tokenLink.refId))
+                    if (cached) {
+                        await syncTokenOverlay(sdk, itemsById, token, cached.hpCurrent, cached.hpMax, cached.hpTemp, cached.name)
+                        continue
+                    }
+                    const npc = npcMap.get(tokenLink.refId)
+                    if (!npc) continue
+                    await syncTokenOverlay(sdk, itemsById, token, npc.hpCurrent, npc.hpMax, npc.hpTemp, npc.name)
+                } catch (error) {
+                    console.error("Failed to sync Owlbear NPC token overlay", { tokenId: token.id, error })
                 }
-                const npc = npcMap.get(tokenLink.refId)
-                if (!npc) continue
-                await syncTokenOverlay(sdk, itemsById, token, npc.hpCurrent, npc.hpMax, npc.hpTemp, npc.name)
             }
         } catch (error) {
             console.error("Failed to sync Owlbear token overlays", error)

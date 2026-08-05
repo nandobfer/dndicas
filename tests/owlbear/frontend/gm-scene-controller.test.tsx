@@ -823,7 +823,7 @@ describe("OwlbearGmSceneController — SDK parse de metadata", () => {
             },
         })
         expect(result?.role).toBe("tempBar")
-        expect(result?.overlayWidth).toBe(140)
+        expect((result as { overlayWidth?: number } | null)?.overlayWidth).toBe(140)
     })
 
     it("parseOverlayMetadata aceita role='label' como overlay legado removível", async () => {
@@ -982,5 +982,124 @@ describe("OwlbearGmSceneController — HP overlay", () => {
             position: { x: 30, y: 19 },
             width: 35,
         })
+    })
+
+    it("updates temporary HP opacity through style instead of top-level fillOpacity", async () => {
+        const { fetchOwlbearSheetById } = await import("@/features/owlbear/sdk")
+        const token = {
+            id: "token-existing-overlay",
+            name: "Herói",
+            layer: "CHARACTER",
+            type: "IMAGE",
+            visible: true,
+            locked: false,
+            createdUserId: "u1",
+            zIndex: 1,
+            lastModified: "",
+            lastModifiedUserId: "u1",
+            position: { x: 100, y: 100 },
+            rotation: 0,
+            scale: { x: 1, y: 1 },
+            metadata: {
+                "com.dndicas.owlbear/token": {
+                    version: 1,
+                    kind: "player",
+                    refId: "sheet-1",
+                    tokenId: "token-existing-overlay",
+                    overlayIds: ["overlay-backdrop", "overlay-bar", "overlay-temp"],
+                    linkedAt: "2026-01-01T00:00:00.000Z",
+                },
+            },
+        }
+        const overlays = [
+            {
+                id: "overlay-backdrop", name: "Backdrop", type: "SHAPE", layer: "TEXT", visible: true, locked: false,
+                createdUserId: "u1", zIndex: 1, lastModified: "", lastModifiedUserId: "u1", position: { x: 30, y: 12 }, rotation: 0, scale: { x: 1, y: 1 }, attachedTo: token.id,
+                width: 140, height: 26, metadata: { "com.dndicas.owlbear/overlay": { version: 1, tokenId: token.id, role: "backdrop", overlayWidth: 140 } },
+            },
+            {
+                id: "overlay-bar", name: "Bar", type: "SHAPE", layer: "TEXT", visible: true, locked: false,
+                createdUserId: "u1", zIndex: 2, lastModified: "", lastModifiedUserId: "u1", position: { x: 30, y: 12 }, rotation: 0, scale: { x: 1, y: 1 }, attachedTo: token.id,
+                width: 70, height: 14, style: { fillColor: "#00ff00" }, metadata: { "com.dndicas.owlbear/overlay": { version: 1, tokenId: token.id, role: "bar", barWidth: 70, overlayWidth: 140, barColor: "#00ff00" } },
+            },
+            {
+                id: "overlay-temp", name: "Temp", type: "SHAPE", layer: "TEXT", visible: true, locked: false,
+                createdUserId: "u1", zIndex: 3, lastModified: "", lastModifiedUserId: "u1", position: { x: 30, y: 30 }, rotation: 0, scale: { x: 1, y: 1 }, attachedTo: token.id,
+                width: 35, height: 8, fillOpacity: 1, style: { fillColor: rarityColors.divine }, metadata: { "com.dndicas.owlbear/overlay": { version: 1, tokenId: token.id, role: "tempBar", barWidth: 35, overlayWidth: 140, barColor: rarityColors.divine } },
+            },
+        ]
+
+        vi.mocked(fetchOwlbearSheetById).mockResolvedValueOnce({
+            _id: "sheet-1",
+            name: "Kael",
+            hpCurrent: 20,
+            hpMax: 40,
+            hpTemp: 0,
+        } as never)
+        sdkMock.scene.items.getItems.mockResolvedValue([token, ...overlays])
+        sdkMock.scene.items.getItemBounds.mockResolvedValue({ width: 140, height: 140, center: { x: 100, y: 100 } })
+        sdkMock.scene.items.updateItems.mockImplementation(async (items: Array<Record<string, unknown>>, updater: (draft: Array<Record<string, unknown>>) => void) => {
+            updater(items)
+        })
+
+        render(<OwlbearGmSceneController runtime={readyGmRuntime} session={readySession} />)
+
+        await waitFor(() => expect(sdkMock.scene.items.updateItems).toHaveBeenCalledWith(overlays, expect.any(Function)))
+        const tempBar = overlays[2] as Record<string, unknown> & { style?: Record<string, unknown> }
+        expect(tempBar.fillOpacity).toBe(1)
+        expect(tempBar.style?.fillOpacity).toBe(0)
+        expect(tempBar.height).toBe(7)
+        expect(tempBar.position).toEqual({ x: 30, y: 19 })
+    })
+
+    it("recreates linked overlays when Owlbear rejects an overlay update", async () => {
+        const { fetchOwlbearSheetById, updateTokenOverlayIds } = await import("@/features/owlbear/sdk")
+        const token = {
+            id: "token-recreate-overlay",
+            name: "Herói",
+            layer: "CHARACTER",
+            type: "IMAGE",
+            visible: true,
+            locked: false,
+            createdUserId: "u1",
+            zIndex: 1,
+            lastModified: "",
+            lastModifiedUserId: "u1",
+            position: { x: 100, y: 100 },
+            rotation: 0,
+            scale: { x: 1, y: 1 },
+            metadata: {
+                "com.dndicas.owlbear/token": {
+                    version: 1,
+                    kind: "player",
+                    refId: "sheet-1",
+                    tokenId: "token-recreate-overlay",
+                    overlayIds: ["overlay-backdrop", "overlay-bar", "overlay-temp"],
+                    linkedAt: "2026-01-01T00:00:00.000Z",
+                },
+            },
+        }
+        const overlays = [
+            { id: "overlay-backdrop", name: "Backdrop", type: "SHAPE", layer: "TEXT", visible: true, locked: false, createdUserId: "u1", zIndex: 1, lastModified: "", lastModifiedUserId: "u1", position: { x: 30, y: 12 }, rotation: 0, scale: { x: 1, y: 1 }, attachedTo: token.id, width: 140, height: 26, metadata: { "com.dndicas.owlbear/overlay": { version: 1, tokenId: token.id, role: "backdrop", overlayWidth: 140 } } },
+            { id: "overlay-bar", name: "Bar", type: "SHAPE", layer: "TEXT", visible: true, locked: false, createdUserId: "u1", zIndex: 2, lastModified: "", lastModifiedUserId: "u1", position: { x: 30, y: 12 }, rotation: 0, scale: { x: 1, y: 1 }, attachedTo: token.id, width: 70, height: 14, style: { fillColor: "#00ff00" }, metadata: { "com.dndicas.owlbear/overlay": { version: 1, tokenId: token.id, role: "bar", barWidth: 70, overlayWidth: 140, barColor: "#00ff00" } } },
+            { id: "overlay-temp", name: "Temp", type: "SHAPE", layer: "TEXT", visible: true, locked: false, createdUserId: "u1", zIndex: 3, lastModified: "", lastModifiedUserId: "u1", position: { x: 30, y: 30 }, rotation: 0, scale: { x: 1, y: 1 }, attachedTo: token.id, width: 35, height: 8, fillOpacity: 1, style: { fillColor: rarityColors.divine }, metadata: { "com.dndicas.owlbear/overlay": { version: 1, tokenId: token.id, role: "tempBar", barWidth: 35, overlayWidth: 140, barColor: rarityColors.divine } } },
+        ]
+
+        vi.mocked(fetchOwlbearSheetById).mockResolvedValueOnce({
+            _id: "sheet-1",
+            name: "Kael",
+            hpCurrent: 20,
+            hpMax: 40,
+            hpTemp: 0,
+        } as never)
+        sdkMock.scene.items.getItems.mockResolvedValue([token, ...overlays])
+        sdkMock.scene.items.getItemBounds.mockResolvedValue({ width: 140, height: 140, center: { x: 100, y: 100 } })
+        sdkMock.scene.items.updateItems.mockRejectedValueOnce({ error: { message: "\"updates[2]\" does not match any of the allowed types" } })
+
+        render(<OwlbearGmSceneController runtime={readyGmRuntime} session={readySession} />)
+
+        await waitFor(() => expect(sdkMock.scene.items.deleteItems).toHaveBeenCalledWith(["overlay-backdrop", "overlay-bar", "overlay-temp"]))
+        expect(sdkMock.scene.items.addItems).toHaveBeenCalled()
+        expect(updateTokenOverlayIds).toHaveBeenCalledWith("token-recreate-overlay", expect.arrayContaining([expect.any(String)]))
     })
 })
