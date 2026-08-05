@@ -2,6 +2,7 @@ import * as React from "react"
 import { fireEvent, render, screen, waitFor } from "@testing-library/react"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import { canManageGmScene, OwlbearGmSceneController } from "@/features/owlbear/gm-scene-controller"
+import { rarityColors } from "@/lib/config/colors"
 
 // ─────────────────────────────────────────────
 // Hoisted mocks
@@ -63,25 +64,34 @@ const sdkMock = vi.hoisted(() => {
     }
 })
 
+const createShapeBuilder = vi.hoisted(() => {
+    let counter = 0
+    return () => {
+        const shape: Record<string, unknown> = { id: `overlay-mock-${++counter}`, type: "SHAPE" }
+        const builder = {
+            name: vi.fn((value: string) => { shape.name = value; return builder }),
+            attachedTo: vi.fn((value: string) => { shape.attachedTo = value; return builder }),
+            layer: vi.fn((value: string) => { shape.layer = value; return builder }),
+            disableHit: vi.fn((value: boolean) => { shape.disableHit = value; return builder }),
+            position: vi.fn((value: { x: number; y: number }) => { shape.position = value; return builder }),
+            width: vi.fn((value: number) => { shape.width = value; return builder }),
+            height: vi.fn((value: number) => { shape.height = value; return builder }),
+            shapeType: vi.fn((value: string) => { shape.shapeType = value; return builder }),
+            fillColor: vi.fn((value: string) => { shape.fillColor = value; return builder }),
+            fillOpacity: vi.fn((value: number) => { shape.fillOpacity = value; return builder }),
+            strokeColor: vi.fn((value: string) => { shape.strokeColor = value; return builder }),
+            strokeOpacity: vi.fn((value: number) => { shape.strokeOpacity = value; return builder }),
+            strokeWidth: vi.fn((value: number) => { shape.strokeWidth = value; return builder }),
+            metadata: vi.fn((value: Record<string, unknown>) => { shape.metadata = value; return builder }),
+            build: vi.fn(() => ({ ...shape })),
+        }
+        return builder
+    }
+})
+
 vi.mock("@owlbear-rodeo/sdk", () => ({
     default: sdkMock,
-    buildShape: vi.fn(() => ({
-        name: vi.fn().mockReturnThis(),
-        attachedTo: vi.fn().mockReturnThis(),
-        layer: vi.fn().mockReturnThis(),
-        disableHit: vi.fn().mockReturnThis(),
-        position: vi.fn().mockReturnThis(),
-        width: vi.fn().mockReturnThis(),
-        height: vi.fn().mockReturnThis(),
-        shapeType: vi.fn().mockReturnThis(),
-        fillColor: vi.fn().mockReturnThis(),
-        fillOpacity: vi.fn().mockReturnThis(),
-        strokeColor: vi.fn().mockReturnThis(),
-        strokeOpacity: vi.fn().mockReturnThis(),
-        strokeWidth: vi.fn().mockReturnThis(),
-        metadata: vi.fn().mockReturnThis(),
-        build: vi.fn().mockReturnValue({ id: "overlay-mock-" + Math.random(), type: "SHAPE", metadata: {} }),
-    })),
+    buildShape: vi.fn(createShapeBuilder),
 }))
 
 vi.mock("@/features/owlbear/sdk", async () => {
@@ -90,23 +100,7 @@ vi.mock("@/features/owlbear/sdk", async () => {
         ...actual,
         loadOwlbearSdk: vi.fn(async () => sdkMock),
         loadOwlbearSdkModule: vi.fn(async () => ({
-            buildShape: vi.fn(() => ({
-                name: vi.fn().mockReturnThis(),
-                attachedTo: vi.fn().mockReturnThis(),
-                layer: vi.fn().mockReturnThis(),
-                disableHit: vi.fn().mockReturnThis(),
-                position: vi.fn().mockReturnThis(),
-                width: vi.fn().mockReturnThis(),
-                height: vi.fn().mockReturnThis(),
-                shapeType: vi.fn().mockReturnThis(),
-                fillColor: vi.fn().mockReturnThis(),
-                fillOpacity: vi.fn().mockReturnThis(),
-                strokeColor: vi.fn().mockReturnThis(),
-                strokeOpacity: vi.fn().mockReturnThis(),
-                strokeWidth: vi.fn().mockReturnThis(),
-                metadata: vi.fn().mockReturnThis(),
-                build: vi.fn().mockReturnValue({ id: "overlay-mock", type: "SHAPE", metadata: {} }),
-            })),
+            buildShape: vi.fn(createShapeBuilder),
         })),
         fetchOwlbearSheetById: vi.fn(async () => ({
             _id: "sheet-1",
@@ -842,5 +836,151 @@ describe("OwlbearGmSceneController — SDK parse de metadata", () => {
             },
         })
         expect(result?.role).toBe("label")
+    })
+})
+
+describe("OwlbearGmSceneController — HP overlay", () => {
+    it("waits for queued overlay sync before closing the action after linking an NPC", async () => {
+        const { updateTokenOverlayIds } = await import("@/features/owlbear/sdk")
+        const token = {
+            id: "token-queued-sync",
+            name: "Token Goblin",
+            layer: "CHARACTER",
+            type: "IMAGE",
+            visible: true,
+            locked: false,
+            createdUserId: "u1",
+            zIndex: 1,
+            lastModified: "",
+            lastModifiedUserId: "u1",
+            position: { x: 100, y: 100 },
+            rotation: 0,
+            scale: { x: 1, y: 1 },
+            metadata: {},
+        }
+        const sceneItems: Array<typeof token & { metadata: Record<string, unknown> }> = [{ ...token, metadata: {} }]
+        let resolveInitialSyncItems: () => void = () => {
+            throw new Error("Initial sync resolver was not registered")
+        }
+
+        useRoomNpcsMock.mockReturnValue({
+            items: [{ ...goblinNpc, hpCurrent: 6, hpMax: 12, hpTemp: 3 }],
+            isLoading: false,
+            errorMessage: null,
+            reload: vi.fn(),
+            linkNpc: vi.fn(),
+            updateNpc: vi.fn(),
+            removeNpc: vi.fn(),
+        })
+        sdkMock.scene.items.getItems
+            .mockImplementationOnce(() => new Promise<Array<typeof token>>((resolve) => {
+                resolveInitialSyncItems = () => resolve([{ ...token, metadata: {} }])
+            }))
+            .mockImplementation(() => Promise.resolve(sceneItems))
+        sdkMock.scene.items.updateItems.mockImplementation(async (ids: string[], updater: (draft: Array<typeof token & { metadata: Record<string, unknown> }>) => void) => {
+            const draft = sceneItems.filter((item) => ids.includes(item.id))
+            updater(draft)
+        })
+
+        render(<OwlbearGmSceneController runtime={readyGmRuntime} session={readySession} />)
+
+        await waitFor(() => expect(sdkMock.scene.items.getItems).toHaveBeenCalledTimes(1))
+        await waitFor(() => expect(sdkMock.contextMenu.create).toHaveBeenCalledTimes(3))
+
+        const npcMenu = getRegisteredContextMenu("com.dndicas.owlbear.link-npc")
+        npcMenu?.onClick?.({ items: [token] })
+
+        await screen.findByRole("heading", { name: "Vincular a NPC" })
+        fireEvent.click(screen.getByText("Goblin"))
+
+        await waitFor(() => {
+            expect(sceneItems[0].metadata["com.dndicas.owlbear/token"]).toMatchObject({
+                kind: "npc",
+                refId: "npc-1",
+                tokenId: "token-queued-sync",
+            })
+        })
+        expect(sdkMock.action.close).not.toHaveBeenCalled()
+
+        resolveInitialSyncItems()
+
+        await waitFor(() => expect(sdkMock.scene.items.addItems).toHaveBeenCalled())
+        await waitFor(() => expect(updateTokenOverlayIds).toHaveBeenCalledWith(
+            "token-queued-sync",
+            expect.arrayContaining([expect.any(String)]),
+        ))
+        expect(sdkMock.action.close).toHaveBeenCalled()
+
+        const addItemsOrder = sdkMock.scene.items.addItems.mock.invocationCallOrder[0]
+        const closeOrder = sdkMock.action.close.mock.invocationCallOrder[0]
+        expect(addItemsOrder).toBeLessThan(closeOrder)
+    })
+
+    it("renders temporary HP over the lower half of the main HP bar", async () => {
+        const { fetchOwlbearSheetById } = await import("@/features/owlbear/sdk")
+        const token = {
+            id: "token-1",
+            name: "Herói",
+            layer: "CHARACTER",
+            type: "IMAGE",
+            visible: true,
+            locked: false,
+            createdUserId: "u1",
+            zIndex: 1,
+            lastModified: "",
+            lastModifiedUserId: "u1",
+            position: { x: 100, y: 100 },
+            rotation: 0,
+            scale: { x: 1, y: 1 },
+            attachedTo: undefined,
+            metadata: {
+                "com.dndicas.owlbear/token": {
+                    version: 1,
+                    kind: "player",
+                    refId: "sheet-1",
+                    tokenId: "token-1",
+                    overlayIds: [],
+                    linkedAt: "2026-01-01T00:00:00.000Z",
+                },
+            },
+        }
+
+        useRoomLinkedSheetsMock.mockReturnValue({
+            entries: [{ playerId: "p1", sheetId: "sheet-1" }],
+            sheets: [{ ...kaelSheet, hpCurrent: 20, hpMax: 40, hpTemp: 10 }],
+            isLoading: false,
+            errorMessage: null,
+            reload: vi.fn(),
+            unlinkSheet: vi.fn(),
+        })
+        sdkMock.scene.items.getItems.mockResolvedValue([token])
+        sdkMock.scene.items.getItemBounds.mockResolvedValue({ width: 140, height: 140, center: { x: 100, y: 100 } })
+        vi.mocked(fetchOwlbearSheetById).mockResolvedValueOnce({
+            _id: "sheet-1",
+            name: "Kael",
+            hpCurrent: 20,
+            hpMax: 40,
+            hpTemp: 10,
+        } as never)
+
+        render(<OwlbearGmSceneController runtime={readyGmRuntime} session={readySession} />)
+
+        await waitFor(() => expect(sdkMock.scene.items.addItems).toHaveBeenCalled())
+
+        const createdItems = sdkMock.scene.items.addItems.mock.calls.at(-1)?.[0] as Array<Record<string, unknown>>
+        const byRole = new Map(createdItems.map((item) => [
+            ((item.metadata as Record<string, Record<string, unknown>>)["com.dndicas.owlbear/overlay"].role),
+            item,
+        ]))
+
+        expect(byRole.get("backdrop")).toMatchObject({ height: 14, position: { x: 30, y: 12 }, width: 140 })
+        expect(byRole.get("bar")).toMatchObject({ height: 14, position: { x: 30, y: 12 }, width: 70 })
+        expect(byRole.get("tempBar")).toMatchObject({
+            fillColor: rarityColors.divine,
+            fillOpacity: 1,
+            height: 7,
+            position: { x: 30, y: 19 },
+            width: 35,
+        })
     })
 })

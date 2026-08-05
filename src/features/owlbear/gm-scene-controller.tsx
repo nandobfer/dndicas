@@ -32,8 +32,8 @@ const UNLINK_CONTEXT_MENU_ID = "com.dndicas.owlbear.unlink-sheet"
 const CONTEXT_MENU_ICON = "/owlbear/icons/context-menu.svg"
 
 const OVERLAY_BAR_HEIGHT = 14
-const OVERLAY_TEMP_BAR_HEIGHT = 8
-const OVERLAY_GAP = 4
+const OVERLAY_TEMP_BAR_HEIGHT = OVERLAY_BAR_HEIGHT / 2
+const OVERLAY_TOKEN_OFFSET = 4
 const SYNC_DEBOUNCE_MS = 400
 const SYNC_FALLBACK_INTERVAL_MS = 15000
 
@@ -146,10 +146,14 @@ async function getOverlayLayout(sdk: Awaited<ReturnType<typeof loadOwlbearSdk>>,
     return {
         position: {
             x: bounds.center.x - width / 2,
-            y: Math.round(topY - OVERLAY_BAR_HEIGHT - OVERLAY_GAP),
+            y: Math.round(topY - OVERLAY_BAR_HEIGHT - OVERLAY_TOKEN_OFFSET),
         },
         width,
     }
+}
+
+function getTempBarPosition(position: { x: number; y: number }) {
+    return { x: position.x, y: position.y + OVERLAY_TEMP_BAR_HEIGHT }
 }
 
 function samePosition(a: { x: number; y: number } | undefined, b: { x: number; y: number }) {
@@ -205,7 +209,7 @@ async function buildOverlayItems(
         .disableHit(true)
         .position(position)
         .width(overlayWidth)
-        .height(OVERLAY_BAR_HEIGHT + OVERLAY_GAP + OVERLAY_TEMP_BAR_HEIGHT)
+        .height(OVERLAY_BAR_HEIGHT)
         .shapeType("RECTANGLE")
         .fillColor("#040712")
         .fillOpacity(0.85)
@@ -250,7 +254,7 @@ async function buildOverlayItems(
         .attachedTo(token.id)
         .layer("TEXT")
         .disableHit(true)
-        .position({ x: position.x, y: position.y + OVERLAY_BAR_HEIGHT + OVERLAY_GAP })
+        .position(getTempBarPosition(position))
         .width(tempBarWidth)
         .height(OVERLAY_TEMP_BAR_HEIGHT)
         .shapeType("RECTANGLE")
@@ -304,7 +308,7 @@ async function syncTokenOverlay(
     }
 
     const position = layout.position
-    const tempPosition = { x: position.x, y: position.y + OVERLAY_BAR_HEIGHT + OVERLAY_GAP }
+    const tempPosition = getTempBarPosition(position)
     const percent = hpPercent(hpCurrent, hpMax)
     const overlayWidth = layout.width
     const barWidth = Math.max(1, Math.round((percent / 100) * overlayWidth))
@@ -318,11 +322,12 @@ async function syncTokenOverlay(
         if (overlayMeta.overlayWidth !== overlayWidth) return true
         if (overlayMeta.role === "backdrop") {
             if ((item as OwlbearSceneItem & { width?: number }).width !== overlayWidth) return true
-            return (item as OwlbearSceneItem & { height?: number }).height !== OVERLAY_BAR_HEIGHT + OVERLAY_GAP + OVERLAY_TEMP_BAR_HEIGHT
+            return (item as OwlbearSceneItem & { height?: number }).height !== OVERLAY_BAR_HEIGHT
         }
         if (overlayMeta.role === "tempBar") {
             if (overlayMeta.barWidth !== tempBarWidth || overlayMeta.barColor !== rarityColors.divine) return true
             if ((item as OwlbearSceneItem & { width?: number }).width !== tempBarWidth) return true
+            if ((item as OwlbearSceneItem & { height?: number }).height !== OVERLAY_TEMP_BAR_HEIGHT) return true
             return (item as OwlbearSceneItem & { fillOpacity?: number }).fillOpacity !== (hpTemp > 0 ? 1 : 0)
         }
         if (overlayMeta.role !== "bar") return false
@@ -343,7 +348,7 @@ async function syncTokenOverlay(
 
             if (overlayMeta?.role === "backdrop") {
                 ;(item as OwlbearSceneItem & { width?: number }).width = overlayWidth
-                ;(item as OwlbearSceneItem & { height?: number }).height = OVERLAY_BAR_HEIGHT + OVERLAY_GAP + OVERLAY_TEMP_BAR_HEIGHT
+                ;(item as OwlbearSceneItem & { height?: number }).height = OVERLAY_BAR_HEIGHT
                 item.metadata = {
                     ...item.metadata,
                     "com.dndicas.owlbear/overlay": {
@@ -378,6 +383,7 @@ async function syncTokenOverlay(
 
             if (overlayMeta?.role === "tempBar") {
                 ;(item as OwlbearSceneItem & { width?: number }).width = tempBarWidth
+                ;(item as OwlbearSceneItem & { height?: number }).height = OVERLAY_TEMP_BAR_HEIGHT
                 ;(item as OwlbearSceneItem & { fillOpacity?: number }).fillOpacity = hpTemp > 0 ? 1 : 0
                 ;(item as OwlbearSceneItem & { style?: Record<string, unknown> }).style = {
                     ...(item as OwlbearSceneItem & { style?: Record<string, unknown> }).style,
@@ -704,33 +710,36 @@ export function OwlbearGmSceneController({
     const syncTimerRef = React.useRef<number | null>(null)
     const isSyncingRef = React.useRef(false)
     const hasPendingSyncRef = React.useRef(false)
+    const syncPromiseRef = React.useRef<Promise<void> | null>(null)
 
     React.useEffect(() => {
         syncSceneRef.current = syncScene
     }, [syncScene])
 
-    const runQueuedSync = React.useCallback(async () => {
+    const runQueuedSync = React.useCallback((): Promise<void> => {
         if (isSyncingRef.current) {
             hasPendingSyncRef.current = true
-            return
+            return syncPromiseRef.current ?? Promise.resolve()
         }
 
         isSyncingRef.current = true
-        try {
-            await syncSceneRef.current()
-        } finally {
-            isSyncingRef.current = false
-            if (hasPendingSyncRef.current) {
-                hasPendingSyncRef.current = false
-                if (syncTimerRef.current !== null) {
-                    window.clearTimeout(syncTimerRef.current)
-                }
-                syncTimerRef.current = window.setTimeout(() => {
-                    syncTimerRef.current = null
-                    void runQueuedSync()
-                }, SYNC_DEBOUNCE_MS)
+        const syncPromise = (async () => {
+            try {
+                do {
+                    hasPendingSyncRef.current = false
+                    if (syncTimerRef.current !== null) {
+                        window.clearTimeout(syncTimerRef.current)
+                        syncTimerRef.current = null
+                    }
+                    await syncSceneRef.current()
+                } while (hasPendingSyncRef.current)
+            } finally {
+                isSyncingRef.current = false
+                syncPromiseRef.current = null
             }
-        }
+        })()
+        syncPromiseRef.current = syncPromise
+        return syncPromise
     }, [])
 
     const requestSyncScene = React.useCallback((delayMs = SYNC_DEBOUNCE_MS) => {
