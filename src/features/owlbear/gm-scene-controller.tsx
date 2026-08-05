@@ -5,7 +5,6 @@ import { Link2, Loader2, Skull } from "lucide-react"
 import { GlassModal, GlassModalContent, GlassModalDescription, GlassModalHeader, GlassModalTitle } from "@/components/ui/glass-modal"
 import type { CharacterSheetFull } from "@/features/character-sheets/types/character-sheet.types"
 import { MentionContent } from "@/features/rules/components/mention-badge"
-import { rarityColors } from "@/lib/config/colors"
 import { OWLBEAR_PENDING_TOKEN_LINK_METADATA_KEY, OWLBEAR_TOKEN_METADATA_KEY } from "./config"
 import { getHpBarColor, hpPercent } from "./hp-bar-utils"
 import { subscribeOwlbearOverlaySync, type OwlbearOverlaySyncEvent } from "./overlay-sync-events"
@@ -34,6 +33,7 @@ const CONTEXT_MENU_ICON = "/owlbear/icons/context-menu.svg"
 const OVERLAY_BAR_HEIGHT = 14
 const OVERLAY_TEMP_BAR_HEIGHT = OVERLAY_BAR_HEIGHT / 2
 const OVERLAY_TOKEN_OFFSET = 4
+const OVERLAY_TEMP_BAR_COLOR = "#eaf8ff"
 const SYNC_DEBOUNCE_MS = 400
 const SYNC_FALLBACK_INTERVAL_MS = 15000
 
@@ -279,7 +279,7 @@ async function buildOverlayItems(
         .width(tempBarWidth)
         .height(OVERLAY_TEMP_BAR_HEIGHT)
         .shapeType("RECTANGLE")
-        .fillColor(rarityColors.divine)
+        .fillColor(OVERLAY_TEMP_BAR_COLOR)
         .fillOpacity(hpTemp > 0 ? 1 : 0)
         .strokeWidth(0)
         .strokeOpacity(0)
@@ -289,7 +289,7 @@ async function buildOverlayItems(
                 role: "tempBar",
                 barWidth: tempBarWidth,
                 overlayWidth,
-                barColor: rarityColors.divine,
+                barColor: OVERLAY_TEMP_BAR_COLOR,
             },
         })
         .build()
@@ -363,7 +363,7 @@ async function syncTokenOverlay(
             return (item as OwlbearSceneItem & { height?: number }).height !== OVERLAY_BAR_HEIGHT
         }
         if (overlayMeta.role === "tempBar") {
-            if (overlayMeta.barWidth !== tempBarWidth || overlayMeta.barColor !== rarityColors.divine) return true
+            if (overlayMeta.barWidth !== tempBarWidth || overlayMeta.barColor !== OVERLAY_TEMP_BAR_COLOR) return true
             if ((item as OwlbearSceneItem & { width?: number }).width !== tempBarWidth) return true
             if ((item as OwlbearSceneItem & { height?: number }).height !== OVERLAY_TEMP_BAR_HEIGHT) return true
             return getShapeFillOpacity(item) !== (hpTemp > 0 ? 1 : 0)
@@ -425,7 +425,7 @@ async function syncTokenOverlay(
                     ;(item as OwlbearSceneItem & { height?: number }).height = OVERLAY_TEMP_BAR_HEIGHT
                     ;(item as OwlbearSceneItem & { style?: Record<string, unknown> }).style = {
                         ...(item as OwlbearSceneItem & { style?: Record<string, unknown> }).style,
-                        fillColor: rarityColors.divine,
+                        fillColor: OVERLAY_TEMP_BAR_COLOR,
                         fillOpacity: hpTemp > 0 ? 1 : 0,
                     }
                     item.metadata = {
@@ -437,7 +437,7 @@ async function syncTokenOverlay(
                             role: "tempBar",
                             barWidth: tempBarWidth,
                             overlayWidth,
-                            barColor: rarityColors.divine,
+                            barColor: OVERLAY_TEMP_BAR_COLOR,
                         },
                     }
                 }
