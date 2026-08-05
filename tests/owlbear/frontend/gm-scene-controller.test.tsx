@@ -2,7 +2,9 @@ import * as React from "react"
 import { fireEvent, render, screen, waitFor } from "@testing-library/react"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import { canManageGmScene, OwlbearGmSceneController } from "@/features/owlbear/gm-scene-controller"
-import { rarityColors } from "@/lib/config/colors"
+
+const OVERLAY_TEMP_BAR_COLOR = "#eaf8ff"
+const LEGACY_TEMP_BAR_COLOR = "#7dd3fc"
 
 // ─────────────────────────────────────────────
 // Hoisted mocks
@@ -976,7 +978,7 @@ describe("OwlbearGmSceneController — HP overlay", () => {
         expect(byRole.get("backdrop")).toMatchObject({ height: 14, position: { x: 30, y: 12 }, width: 140 })
         expect(byRole.get("bar")).toMatchObject({ height: 14, position: { x: 30, y: 12 }, width: 70 })
         expect(byRole.get("tempBar")).toMatchObject({
-            fillColor: rarityColors.divine,
+            fillColor: OVERLAY_TEMP_BAR_COLOR,
             fillOpacity: 1,
             height: 7,
             position: { x: 30, y: 19 },
@@ -1025,7 +1027,7 @@ describe("OwlbearGmSceneController — HP overlay", () => {
             {
                 id: "overlay-temp", name: "Temp", type: "SHAPE", layer: "TEXT", visible: true, locked: false,
                 createdUserId: "u1", zIndex: 3, lastModified: "", lastModifiedUserId: "u1", position: { x: 30, y: 30 }, rotation: 0, scale: { x: 1, y: 1 }, attachedTo: token.id,
-                width: 35, height: 8, fillOpacity: 1, style: { fillColor: rarityColors.divine }, metadata: { "com.dndicas.owlbear/overlay": { version: 1, tokenId: token.id, role: "tempBar", barWidth: 35, overlayWidth: 140, barColor: rarityColors.divine } },
+                width: 35, height: 8, fillOpacity: 1, style: { fillColor: LEGACY_TEMP_BAR_COLOR }, metadata: { "com.dndicas.owlbear/overlay": { version: 1, tokenId: token.id, role: "tempBar", barWidth: 35, overlayWidth: 140, barColor: LEGACY_TEMP_BAR_COLOR } },
             },
         ]
 
@@ -1048,6 +1050,7 @@ describe("OwlbearGmSceneController — HP overlay", () => {
         const tempBar = overlays[2] as Record<string, unknown> & { style?: Record<string, unknown> }
         expect(tempBar.fillOpacity).toBe(1)
         expect(tempBar.style?.fillOpacity).toBe(0)
+        expect(tempBar.style?.fillColor).toBe(OVERLAY_TEMP_BAR_COLOR)
         expect(tempBar.height).toBe(7)
         expect(tempBar.position).toEqual({ x: 30, y: 19 })
     })
@@ -1082,7 +1085,7 @@ describe("OwlbearGmSceneController — HP overlay", () => {
         const overlays = [
             { id: "overlay-backdrop", name: "Backdrop", type: "SHAPE", layer: "TEXT", visible: true, locked: false, createdUserId: "u1", zIndex: 1, lastModified: "", lastModifiedUserId: "u1", position: { x: 30, y: 12 }, rotation: 0, scale: { x: 1, y: 1 }, attachedTo: token.id, width: 140, height: 26, metadata: { "com.dndicas.owlbear/overlay": { version: 1, tokenId: token.id, role: "backdrop", overlayWidth: 140 } } },
             { id: "overlay-bar", name: "Bar", type: "SHAPE", layer: "TEXT", visible: true, locked: false, createdUserId: "u1", zIndex: 2, lastModified: "", lastModifiedUserId: "u1", position: { x: 30, y: 12 }, rotation: 0, scale: { x: 1, y: 1 }, attachedTo: token.id, width: 70, height: 14, style: { fillColor: "#00ff00" }, metadata: { "com.dndicas.owlbear/overlay": { version: 1, tokenId: token.id, role: "bar", barWidth: 70, overlayWidth: 140, barColor: "#00ff00" } } },
-            { id: "overlay-temp", name: "Temp", type: "SHAPE", layer: "TEXT", visible: true, locked: false, createdUserId: "u1", zIndex: 3, lastModified: "", lastModifiedUserId: "u1", position: { x: 30, y: 30 }, rotation: 0, scale: { x: 1, y: 1 }, attachedTo: token.id, width: 35, height: 8, fillOpacity: 1, style: { fillColor: rarityColors.divine }, metadata: { "com.dndicas.owlbear/overlay": { version: 1, tokenId: token.id, role: "tempBar", barWidth: 35, overlayWidth: 140, barColor: rarityColors.divine } } },
+            { id: "overlay-temp", name: "Temp", type: "SHAPE", layer: "TEXT", visible: true, locked: false, createdUserId: "u1", zIndex: 3, lastModified: "", lastModifiedUserId: "u1", position: { x: 30, y: 30 }, rotation: 0, scale: { x: 1, y: 1 }, attachedTo: token.id, width: 35, height: 8, fillOpacity: 1, style: { fillColor: LEGACY_TEMP_BAR_COLOR }, metadata: { "com.dndicas.owlbear/overlay": { version: 1, tokenId: token.id, role: "tempBar", barWidth: 35, overlayWidth: 140, barColor: LEGACY_TEMP_BAR_COLOR } } },
         ]
 
         vi.mocked(fetchOwlbearSheetById).mockResolvedValueOnce({
