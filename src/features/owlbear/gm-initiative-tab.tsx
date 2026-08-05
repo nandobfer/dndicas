@@ -8,6 +8,7 @@ import { cn } from "@/core/utils"
 import { GlassImage } from "@/components/ui/glass-image"
 import type { CharacterSheetFull } from "@/features/character-sheets/types/character-sheet.types"
 import { NpcPreview } from "@/features/monsters/components/npc-preview"
+import { rarityColors } from "@/lib/config/colors"
 import { getHpBarColor, hpPercent } from "./hp-bar-utils"
 import { notifyOwlbearOverlaySync } from "./overlay-sync-events"
 import type { OwlbearRoomNpc } from "./room-npcs-api"
@@ -32,8 +33,9 @@ function InlineStatus({ tone = "neutral", message }: { tone?: "neutral" | "error
     )
 }
 
-function HpSummary({ current, max, testId }: { current: number; max: number; testId: string }) {
+function HpSummary({ current, max, temp = 0, testId }: { current: number; max: number; temp?: number; testId: string }) {
     const percent = hpPercent(current, max)
+    const tempPercent = hpPercent(temp, max)
     return (
         <div className="w-56 shrink-0" data-testid={`${testId}-track`}>
             <div className="mb-1 text-xs font-medium text-white/60">
@@ -46,6 +48,15 @@ function HpSummary({ current, max, testId }: { current: number; max: number; tes
                     style={{ width: `${percent}%`, backgroundColor: getHpBarColor(current, max) }}
                 />
             </div>
+            {temp > 0 && (
+                <div className="mt-1 h-1 overflow-hidden rounded-full bg-cyan-950/40">
+                    <div
+                        data-testid={`${testId}-temp`}
+                        className="h-full rounded-full transition-all"
+                        style={{ width: `${tempPercent}%`, backgroundColor: rarityColors.divine }}
+                    />
+                </div>
+            )}
         </div>
     )
 }
@@ -125,6 +136,43 @@ function HpAdjustmentInput({ npc, onApply }: { npc: OwlbearRoomNpc; onApply: (np
     )
 }
 
+function TempHpInput({ npc, isPending, onCommit }: { npc: OwlbearRoomNpc; isPending: boolean; onCommit: (npc: OwlbearRoomNpc, hpTemp: number) => void }) {
+    const hpTemp = npc.hpTemp ?? 0
+    const [draft, setDraft] = React.useState(String(hpTemp))
+
+    React.useEffect(() => {
+        setDraft(String(hpTemp))
+    }, [hpTemp])
+
+    const commit = React.useCallback(() => {
+        if (!/^\d+$/.test(draft)) return
+        const next = Number(draft)
+        if (next === hpTemp) return
+        onCommit(npc, next)
+    }, [draft, hpTemp, npc, onCommit])
+
+    return (
+        <input
+            aria-label={`Vida temporária de ${npc.source?.name ?? "NPC"}`}
+            type="text"
+            inputMode="numeric"
+            disabled={isPending}
+            value={draft}
+            placeholder="Temp"
+            onClick={(event) => event.stopPropagation()}
+            onChange={(event) => setDraft(event.target.value.replace(/\D/g, ""))}
+            onBlur={commit}
+            onKeyDown={(event) => {
+                if (event.key !== "Enter") return
+                event.preventDefault()
+                event.stopPropagation()
+                commit()
+            }}
+            className="h-9 w-20 rounded-lg border border-cyan-300/20 bg-cyan-500/10 px-2 text-center text-sm font-semibold text-cyan-50 outline-none [appearance:textfield] placeholder:text-cyan-100/35 focus:border-cyan-200/50 disabled:opacity-50"
+        />
+    )
+}
+
 function PlayerInitiativeInput({
     sheet,
     value,
@@ -177,6 +225,7 @@ function NpcInitiativeRow({
     isPending,
     onToggle,
     onApplyHpDelta,
+    onCommitTempHp,
     onRemove,
     onHighlightToken,
     onClearTokenHighlight,
@@ -187,6 +236,7 @@ function NpcInitiativeRow({
     isPending: boolean
     onToggle: () => void
     onApplyHpDelta: (npc: OwlbearRoomNpc, delta: number) => void
+    onCommitTempHp: (npc: OwlbearRoomNpc, hpTemp: number) => void
     onRemove: (npcId: string) => void
     onHighlightToken: (npcId: string) => void
     onClearTokenHighlight: () => void
@@ -215,7 +265,7 @@ function NpcInitiativeRow({
                     event.preventDefault()
                     onToggle()
                 }}
-                className="grid w-full grid-cols-[minmax(0,1fr)_auto_auto_auto] items-center gap-3 rounded-2xl p-3 text-left transition-colors hover:bg-white/[0.03] focus:outline-none focus:ring-2 focus:ring-white/20"
+                className="grid w-full grid-cols-[minmax(0,1fr)_auto_auto_auto_auto] items-center gap-3 rounded-2xl p-3 text-left transition-colors hover:bg-white/[0.03] focus:outline-none focus:ring-2 focus:ring-white/20"
             >
                 <div className="flex min-w-0 items-center gap-3">
                     <NpcAvatar npc={npc} />
@@ -233,11 +283,12 @@ function NpcInitiativeRow({
                             <span className="rounded-full border border-white/10 bg-white/[0.04] px-2 py-0.5 text-[10px] font-bold uppercase tracking-widest text-white/35">NPC</span>
                         </div>
                         <div className="mt-2">
-                            <HpSummary current={npc.hpCurrent} max={npc.hpMax} testId={`initiative-npc-hp-bar-${npc.id}`} />
+                            <HpSummary current={npc.hpCurrent} max={npc.hpMax} temp={npc.hpTemp ?? 0} testId={`initiative-npc-hp-bar-${npc.id}`} />
                         </div>
                     </div>
                 </div>
                 <HpAdjustmentInput npc={npc} onApply={onApplyHpDelta} />
+                <TempHpInput npc={npc} isPending={isPending} onCommit={onCommitTempHp} />
                 <InitiativeBadge value={initiative} />
                 <button
                     type="button"
@@ -374,6 +425,7 @@ export function OwlbearGmInitiativeTab({
             refId: npc.id,
             hpCurrent: nextHp,
             hpMax: npc.hpMax,
+            hpTemp: npc.hpTemp ?? 0,
             name: npc.source?.name ?? "NPC",
         })
         void updateNpc(npc.id, { hpCurrent: nextHp })
@@ -383,11 +435,40 @@ export function OwlbearGmInitiativeTab({
                     refId: updated.id,
                     hpCurrent: updated.hpCurrent,
                     hpMax: updated.hpMax,
+                    hpTemp: updated.hpTemp ?? 0,
                     name: updated.source?.name ?? npc.source?.name ?? "NPC",
                 })
             })
             .catch((error) => {
                 toast.error(error instanceof Error ? error.message : "Não foi possível atualizar PV.")
+            })
+            .finally(() => setPendingNpcId(null))
+    }, [updateNpc])
+
+    const handleCommitTempHp = React.useCallback((npc: OwlbearRoomNpc, hpTemp: number) => {
+        const nextHpTemp = Math.max(0, hpTemp)
+        setPendingNpcId(npc.id)
+        notifyOwlbearOverlaySync({
+            kind: "npc",
+            refId: npc.id,
+            hpCurrent: npc.hpCurrent,
+            hpMax: npc.hpMax,
+            hpTemp: nextHpTemp,
+            name: npc.source?.name ?? "NPC",
+        })
+        void updateNpc(npc.id, { hpTemp: nextHpTemp })
+            .then((updated) => {
+                notifyOwlbearOverlaySync({
+                    kind: "npc",
+                    refId: updated.id,
+                    hpCurrent: updated.hpCurrent,
+                    hpMax: updated.hpMax,
+                    hpTemp: updated.hpTemp ?? 0,
+                    name: updated.source?.name ?? npc.source?.name ?? "NPC",
+                })
+            })
+            .catch((error) => {
+                toast.error(error instanceof Error ? error.message : "Não foi possível atualizar PV temporário.")
             })
             .finally(() => setPendingNpcId(null))
     }, [updateNpc])
@@ -486,6 +567,7 @@ export function OwlbearGmInitiativeTab({
                                 isPending={pendingNpcId === item.npc.id}
                                 onToggle={() => setExpandedNpcId((current) => current === item.npc.id ? null : item.npc.id)}
                                 onApplyHpDelta={handleApplyHpDelta}
+                                onCommitTempHp={handleCommitTempHp}
                                 onRemove={handleRemoveNpc}
                                 onHighlightToken={handleHighlightNpcToken}
                                 onClearTokenHighlight={handleClearNpcTokenHighlight}

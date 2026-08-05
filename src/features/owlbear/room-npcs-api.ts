@@ -11,6 +11,7 @@ export interface OwlbearRoomNpc {
     sourceId: string
     hpCurrent: number
     hpMax: number
+    hpTemp: number
     createdAt: string
     updatedAt: string
     source: Monster | null
@@ -46,6 +47,7 @@ export async function linkOwlbearRoomNpc(roomId: string, sessionToken: string, i
     sourceId: string
     hpCurrent: number
     hpMax: number
+    hpTemp?: number
 }): Promise<OwlbearRoomNpc> {
     const response = await fetch(`/api/owlbear/rooms/${encodeURIComponent(roomId)}/npcs`, {
         method: "POST",
@@ -93,6 +95,7 @@ export async function fetchOwlbearUserNpcs(roomId: string, sessionToken: string,
 export async function patchOwlbearRoomNpc(roomId: string, sessionToken: string, npcId: string, input: {
     hpCurrent?: number
     hpMax?: number
+    hpTemp?: number
 }): Promise<OwlbearRoomNpc> {
     const response = await fetch(`/api/owlbear/rooms/${encodeURIComponent(roomId)}/npcs/${encodeURIComponent(npcId)}`, {
         method: "PATCH",

@@ -461,7 +461,7 @@ export function parseOverlayMetadata(metadata: Record<string, unknown> | null | 
     }
 
     const parsed = value as Partial<OwlbearOverlayMetadata>
-    if (typeof parsed.tokenId !== "string" || (parsed.role !== "backdrop" && parsed.role !== "bar" && parsed.role !== "label")) {
+    if (typeof parsed.tokenId !== "string" || (parsed.role !== "backdrop" && parsed.role !== "bar" && parsed.role !== "tempBar" && parsed.role !== "label")) {
         return null
     }
 
@@ -470,6 +470,7 @@ export function parseOverlayMetadata(metadata: Record<string, unknown> | null | 
         tokenId: parsed.tokenId,
         role: parsed.role,
         barWidth: typeof parsed.barWidth === "number" ? parsed.barWidth : undefined,
+        overlayWidth: typeof parsed.overlayWidth === "number" ? parsed.overlayWidth : undefined,
         barColor: typeof parsed.barColor === "string" ? parsed.barColor : undefined,
     }
 }
@@ -638,18 +639,19 @@ export async function fetchOwlbearRoomNpcById(
     roomId: string,
     npcId: string,
     sessionToken: string,
-): Promise<{ hpCurrent: number; hpMax: number; name: string } | null> {
+): Promise<{ hpCurrent: number; hpMax: number; hpTemp: number; name: string } | null> {
     const response = await fetch(`/api/owlbear/rooms/${encodeURIComponent(roomId)}/npcs`, {
         headers: { Authorization: `Bearer ${sessionToken}` },
     })
     if (!response.ok) return null
     const data = await response.json()
-    const items: Array<{ id: string; hpCurrent: number; hpMax: number; source: { name: string } | null }> = data.items ?? []
+    const items: Array<{ id: string; hpCurrent: number; hpMax: number; hpTemp?: number; source: { name: string } | null }> = data.items ?? []
     const found = items.find((item) => item.id === npcId)
     if (!found) return null
     return {
         hpCurrent: found.hpCurrent,
         hpMax: found.hpMax,
+        hpTemp: found.hpTemp ?? 0,
         name: found.source?.name ?? "NPC",
     }
 }

@@ -16,11 +16,13 @@ const LinkRoomNpcSchema = z.object({
     sourceId: z.string().trim().min(1),
     hpCurrent: z.coerce.number().int().min(0),
     hpMax: z.coerce.number().int().min(0),
+    hpTemp: z.coerce.number().int().min(0).optional().default(0),
 })
 
 const PatchRoomNpcSchema = z.object({
     hpCurrent: z.coerce.number().int().min(0).optional(),
     hpMax: z.coerce.number().int().min(0).optional(),
+    hpTemp: z.coerce.number().int().min(0).optional(),
 })
 
 function serializeMonsterLike(value: { toObject?: () => Record<string, unknown> } | Record<string, unknown>) {
@@ -44,6 +46,7 @@ function serializeRoomNpc(entry: { toObject?: () => Record<string, unknown> } | 
         sourceId: String(base.sourceId),
         hpCurrent: Number(base.hpCurrent ?? 0),
         hpMax: Number(base.hpMax ?? 0),
+        hpTemp: Number(base.hpTemp ?? 0),
         createdAt: base.createdAt instanceof Date ? base.createdAt.toISOString() : String(base.createdAt ?? ""),
         updatedAt: base.updatedAt instanceof Date ? base.updatedAt.toISOString() : String(base.updatedAt ?? ""),
         source,
@@ -128,6 +131,7 @@ export async function postOwlbearRoomNpc(req: NextRequest, roomId: string) {
             sourceId: parsed.data.sourceId,
             hpCurrent,
             hpMax,
+            hpTemp: parsed.data.hpTemp,
         })
 
         return NextResponse.json(serializeRoomNpc(entry, serializeMonsterLike(source)), { status: 201 })
@@ -215,6 +219,9 @@ export async function patchOwlbearRoomNpc(req: NextRequest, roomId: string, npcI
         const hpCurrentInput = parsed.data.hpCurrent ?? current.hpCurrent
         current.hpMax = Math.max(0, hpMax)
         current.hpCurrent = Math.max(0, Math.min(current.hpMax, hpCurrentInput))
+        if (parsed.data.hpTemp !== undefined) {
+            current.hpTemp = parsed.data.hpTemp
+        }
         await current.save()
 
         const source = await findSource(current.sourceKind, current.sourceId, session.userId)

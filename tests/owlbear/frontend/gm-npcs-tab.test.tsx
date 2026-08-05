@@ -156,6 +156,7 @@ function roomNpc(overrides: Partial<OwlbearRoomNpc> = {}): OwlbearRoomNpc {
         sourceId: "monster-1",
         hpCurrent: 12,
         hpMax: 20,
+        hpTemp: 0,
         createdAt: "2026-01-01T00:00:00.000Z",
         updatedAt: "2026-01-01T00:00:00.000Z",
         source: monster,
@@ -337,6 +338,23 @@ describe("OwlbearGmNpcsTab", () => {
         fireEvent.keyDown(input, { key: "Enter" })
 
         await waitFor(() => expect(updateNpc).toHaveBeenCalledWith("room-npc-1", { hpCurrent: 0 }))
+    })
+
+    it("updates temporary HP from the room NPC row", async () => {
+        const updateNpc = vi.fn().mockResolvedValue(roomNpc({ hpTemp: 6 }))
+        renderTab({ items: [roomNpc()], updateNpc })
+
+        const input = screen.getByLabelText("Vida temporária de Lobo")
+        fireEvent.change(input, { target: { value: "6" } })
+        fireEvent.keyDown(input, { key: "Enter" })
+
+        await waitFor(() => expect(updateNpc).toHaveBeenCalledWith("room-npc-1", { hpTemp: 6 }))
+    })
+
+    it("renders the temporary HP bar when present", () => {
+        renderTab({ items: [roomNpc({ hpTemp: 5 })] })
+
+        expect(screen.getByTestId("npc-temp-hp-bar-room-npc-1")).toHaveStyle({ width: "25%" })
     })
 
     it("confirms before removing the NPC from the room", async () => {

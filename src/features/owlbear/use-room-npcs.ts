@@ -15,8 +15,8 @@ interface RoomNpcsState {
     isLoading: boolean
     errorMessage: string | null
     reload: () => Promise<void>
-    linkNpc: (input: { sourceKind: OwlbearRoomNpcSourceKind; sourceId: string; hpCurrent: number; hpMax: number }) => Promise<OwlbearRoomNpc>
-    updateNpc: (npcId: string, input: { hpCurrent?: number; hpMax?: number }) => Promise<OwlbearRoomNpc>
+    linkNpc: (input: { sourceKind: OwlbearRoomNpcSourceKind; sourceId: string; hpCurrent: number; hpMax: number; hpTemp?: number }) => Promise<OwlbearRoomNpc>
+    updateNpc: (npcId: string, input: { hpCurrent?: number; hpMax?: number; hpTemp?: number }) => Promise<OwlbearRoomNpc>
     removeNpc: (npcId: string) => Promise<void>
 }
 
@@ -49,14 +49,14 @@ export function useRoomNpcs(roomId: string | null, sessionToken: string | null, 
         void load()
     }, [load])
 
-    const linkNpc = React.useCallback(async (input: { sourceKind: OwlbearRoomNpcSourceKind; sourceId: string; hpCurrent: number; hpMax: number }) => {
+    const linkNpc = React.useCallback(async (input: { sourceKind: OwlbearRoomNpcSourceKind; sourceId: string; hpCurrent: number; hpMax: number; hpTemp?: number }) => {
         if (!roomId || !sessionToken) throw new Error("Sessão Owlbear indisponível")
         const created = await linkOwlbearRoomNpc(roomId, sessionToken, input)
         setItems((current) => [created, ...current])
         return created
     }, [roomId, sessionToken])
 
-    const updateNpc = React.useCallback(async (npcId: string, input: { hpCurrent?: number; hpMax?: number }) => {
+    const updateNpc = React.useCallback(async (npcId: string, input: { hpCurrent?: number; hpMax?: number; hpTemp?: number }) => {
         if (!roomId || !sessionToken) throw new Error("Sessão Owlbear indisponível")
         const updated = await patchOwlbearRoomNpc(roomId, sessionToken, npcId, input)
         setItems((current) => current.map((item) => item.id === npcId ? updated : item))
