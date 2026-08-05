@@ -3,6 +3,7 @@ export type OwlbearOverlaySyncEvent = {
     refId: string
     hpCurrent: number
     hpMax: number
+    hpTemp?: number
     name?: string
 }
 

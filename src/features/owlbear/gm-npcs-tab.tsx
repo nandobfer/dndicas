@@ -27,6 +27,7 @@ import { NpcPreview } from "@/features/monsters/components/npc-preview"
 import type { CreateMonsterSchema } from "@/features/monsters/api/validation"
 import type { Monster } from "@/features/monsters/types/monsters.types"
 import { getMonsterHitPointAverage } from "@/features/monsters/utils/monster-calculations"
+import { rarityColors } from "@/lib/config/colors"
 import { getHpBarColor, hpPercent } from "./hp-bar-utils"
 import { notifyOwlbearOverlaySync } from "./overlay-sync-events"
 import { OwlbearSignInPrompt } from "./owlbear-sign-in-prompt"
@@ -110,6 +111,51 @@ function HpAdjustmentInput({
     )
 }
 
+function TempHpInput({
+    npc,
+    isPending,
+    onCommit,
+}: {
+    npc: OwlbearRoomNpc
+    isPending: boolean
+    onCommit: (npc: OwlbearRoomNpc, hpTemp: number) => void
+}) {
+    const hpTemp = npc.hpTemp ?? 0
+    const [draft, setDraft] = React.useState(String(hpTemp))
+
+    React.useEffect(() => {
+        setDraft(String(hpTemp))
+    }, [hpTemp])
+
+    const commit = React.useCallback(() => {
+        if (!/^\d+$/.test(draft)) return
+        const next = Number(draft)
+        if (next === hpTemp) return
+        onCommit(npc, next)
+    }, [draft, hpTemp, npc, onCommit])
+
+    return (
+        <input
+            aria-label={`Vida temporária de ${npc.source?.name ?? "NPC"}`}
+            type="text"
+            inputMode="numeric"
+            disabled={isPending}
+            value={draft}
+            placeholder="Temp"
+            onClick={(event) => event.stopPropagation()}
+            onChange={(event) => setDraft(event.target.value.replace(/\D/g, ""))}
+            onBlur={commit}
+            onKeyDown={(event) => {
+                if (event.key !== "Enter") return
+                event.preventDefault()
+                event.stopPropagation()
+                commit()
+            }}
+            className="h-9 w-20 rounded-lg border border-cyan-300/20 bg-cyan-500/10 px-2 text-center text-sm font-semibold text-cyan-50 outline-none [appearance:textfield] placeholder:text-cyan-100/35 focus:border-cyan-200/50 disabled:opacity-50"
+        />
+    )
+}
+
 function RoomNpcRow({
     npc,
     duplicateIndex,
@@ -117,6 +163,7 @@ function RoomNpcRow({
     isPending,
     onToggle,
     onApplyHpDelta,
+    onCommitTempHp,
     onAddToInitiative,
     onRequestRemove,
 }: {
@@ -126,6 +173,7 @@ function RoomNpcRow({
     isPending: boolean
     onToggle: () => void
     onApplyHpDelta: (npc: OwlbearRoomNpc, delta: number) => void
+    onCommitTempHp: (npc: OwlbearRoomNpc, hpTemp: number) => void
     onAddToInitiative: (npc: OwlbearRoomNpc) => void
     onRequestRemove: (npc: OwlbearRoomNpc) => void
 }) {
@@ -133,13 +181,14 @@ function RoomNpcRow({
     const percent = hpPercent(npc.hpCurrent, npc.hpMax)
     const width = `${percent}%`
     const hpColor = getNpcHpBarColor(npc.hpCurrent, npc.hpMax)
+    const tempPercent = hpPercent(npc.hpTemp ?? 0, npc.hpMax)
 
     return (
         <div className="rounded-2xl border border-white/10 bg-black/20">
             <button
                 type="button"
                 onClick={onToggle}
-                className="grid w-full grid-cols-[minmax(0,1fr)_auto_auto_auto] items-center gap-3 p-3 text-left transition-colors hover:bg-white/[0.03]"
+                className="grid w-full grid-cols-[minmax(0,1fr)_auto_auto_auto_auto] items-center gap-3 p-3 text-left transition-colors hover:bg-white/[0.03]"
             >
                 <div className="flex min-w-0 items-center gap-3">
                     <NpcAvatar monster={source} />
@@ -175,11 +224,21 @@ function RoomNpcRow({
                                     style={{ width, backgroundColor: hpColor }}
                                 />
                             </div>
+                            {(npc.hpTemp ?? 0) > 0 && (
+                                <div className="mt-1 h-1 overflow-hidden rounded-full bg-cyan-950/40">
+                                    <div
+                                        data-testid={`npc-temp-hp-bar-${npc.id}`}
+                                        className="h-full rounded-full transition-all"
+                                        style={{ width: `${tempPercent}%`, backgroundColor: rarityColors.divine }}
+                                    />
+                                </div>
+                            )}
                         </div>
                     </div>
                 </div>
 
                 <HpAdjustmentInput npc={npc} onApply={onApplyHpDelta} />
+                <TempHpInput npc={npc} isPending={isPending} onCommit={onCommitTempHp} />
 
                 <SimpleGlassTooltip content="Adicionar a iniciativa" side="top">
                     <button
@@ -574,7 +633,7 @@ export function OwlbearGmNpcsTab({
     const handleConfirmInitialHp = React.useCallback(async (sourceKind: OwlbearRoomNpcSourceKind, monster: Monster, hp: number) => {
         setIsLinking(true)
         try {
-            await linkNpc({ sourceKind, sourceId: monster._id, hpCurrent: hp, hpMax: hp })
+            await linkNpc({ sourceKind, sourceId: monster._id, hpCurrent: hp, hpMax: hp, hpTemp: 0 })
             setInitialHpTarget(null)
             toast.success(`${monster.name} adicionado à sala.`)
         } catch (error) {
@@ -605,6 +664,7 @@ export function OwlbearGmNpcsTab({
             refId: npc.id,
             hpCurrent: nextHp,
             hpMax: npc.hpMax,
+            hpTemp: npc.hpTemp ?? 0,
             name: npc.source?.name ?? "NPC",
         })
         void updateNpc(npc.id, { hpCurrent: nextHp })
@@ -614,11 +674,40 @@ export function OwlbearGmNpcsTab({
                     refId: updated.id,
                     hpCurrent: updated.hpCurrent,
                     hpMax: updated.hpMax,
+                    hpTemp: updated.hpTemp ?? 0,
                     name: updated.source?.name ?? npc.source?.name ?? "NPC",
                 })
             })
             .catch((error) => {
                 toast.error(error instanceof Error ? error.message : "Não foi possível atualizar PV.")
+            })
+            .finally(() => setPendingId(null))
+    }, [updateNpc])
+
+    const handleCommitTempHp = React.useCallback((npc: OwlbearRoomNpc, hpTemp: number) => {
+        const nextHpTemp = Math.max(0, hpTemp)
+        setPendingId(npc.id)
+        notifyOwlbearOverlaySync({
+            kind: "npc",
+            refId: npc.id,
+            hpCurrent: npc.hpCurrent,
+            hpMax: npc.hpMax,
+            hpTemp: nextHpTemp,
+            name: npc.source?.name ?? "NPC",
+        })
+        void updateNpc(npc.id, { hpTemp: nextHpTemp })
+            .then((updated) => {
+                notifyOwlbearOverlaySync({
+                    kind: "npc",
+                    refId: updated.id,
+                    hpCurrent: updated.hpCurrent,
+                    hpMax: updated.hpMax,
+                    hpTemp: updated.hpTemp ?? 0,
+                    name: updated.source?.name ?? npc.source?.name ?? "NPC",
+                })
+            })
+            .catch((error) => {
+                toast.error(error instanceof Error ? error.message : "Não foi possível atualizar PV temporário.")
             })
             .finally(() => setPendingId(null))
     }, [updateNpc])
@@ -743,6 +832,7 @@ export function OwlbearGmNpcsTab({
                                 isPending={pendingId === npc.id}
                                 onToggle={() => setExpandedId((current) => current === npc.id ? null : npc.id)}
                                 onApplyHpDelta={handleApplyHpDelta}
+                                onCommitTempHp={handleCommitTempHp}
                                 onAddToInitiative={handleAddToInitiative}
                                 onRequestRemove={setNpcToRemove}
                             />

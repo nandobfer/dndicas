@@ -84,9 +84,10 @@ function RealtimeLinkedSheetCard({
             refId: sheetId,
             hpCurrent: liveSheet.hpCurrent ?? 0,
             hpMax: liveSheet.hpMax ?? 0,
+            hpTemp: liveSheet.hpTemp ?? 0,
             name: liveSheet.name,
         })
-    }, [liveSheet?.hpCurrent, liveSheet?.hpMax, liveSheet?.name, sheetId])
+    }, [liveSheet?.hpCurrent, liveSheet?.hpMax, liveSheet?.hpTemp, liveSheet?.name, sheetId])
 
     if (!liveSheet) {
         return (
@@ -257,19 +258,23 @@ function GmSheetsTabContent({
     }, [sheetToUnlink, unlinkSheet])
 
     const handleSelectedSheetFieldPatch = React.useCallback((field: string, value: unknown, updated?: CharacterSheet) => {
-        if (!selectedSheet || (field !== "hpCurrent" && field !== "hpMax")) return
+        if (!selectedSheet || (field !== "hpCurrent" && field !== "hpMax" && field !== "hpTemp")) return
         const nextHpCurrent = field === "hpCurrent"
             ? Number(value) || 0
             : updated?.hpCurrent ?? selectedSheet.hpCurrent ?? 0
         const nextHpMax = field === "hpMax"
             ? Number(value) || 0
             : updated?.hpMax ?? selectedSheet.hpMax ?? 0
+        const nextHpTemp = field === "hpTemp"
+            ? Number(value) || 0
+            : updated?.hpTemp ?? selectedSheet.hpTemp ?? 0
 
         notifyOwlbearOverlaySync({
             kind: "player",
             refId: selectedSheet._id,
             hpCurrent: nextHpCurrent,
             hpMax: nextHpMax,
+            hpTemp: nextHpTemp,
             name: updated?.name ?? selectedSheet.name,
         })
     }, [selectedSheet])

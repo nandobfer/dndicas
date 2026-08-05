@@ -87,6 +87,7 @@ describe("Owlbear room NPC routes", () => {
             sourceId: "monster-1",
             hpCurrent: 10,
             hpMax: 10,
+            hpTemp: 0,
             createdAt: new Date("2026-01-01T00:00:00.000Z"),
             updatedAt: new Date("2026-01-01T00:00:00.000Z"),
         }
@@ -103,11 +104,12 @@ describe("Owlbear room NPC routes", () => {
             method: "POST",
             body: JSON.stringify({ sourceKind: "monster", sourceId: "monster-1", hpCurrent: 99, hpMax: 10 }),
         }) as any, { params: Promise.resolve({ roomId: "room-1" }) })
-        const payload = await readJson<{ hpCurrent: number; hpMax: number; source: { name: string } }>(response)
+        const payload = await readJson<{ hpCurrent: number; hpMax: number; hpTemp: number; source: { name: string } }>(response)
 
         expect(response.status).toBe(201)
-        expect(create).toHaveBeenCalledWith(expect.objectContaining({ hpCurrent: 10, hpMax: 10 }))
+        expect(create).toHaveBeenCalledWith(expect.objectContaining({ hpCurrent: 10, hpMax: 10, hpTemp: 0 }))
         expect(payload.hpCurrent).toBe(10)
+        expect(payload.hpTemp).toBe(0)
         expect(payload.source.name).toBe("Lobo")
     })
 
@@ -144,6 +146,7 @@ describe("Owlbear room NPC routes", () => {
             sourceId: "monster-1",
             hpCurrent: 8,
             hpMax: 12,
+            hpTemp: 0,
             createdAt: new Date("2026-01-01T00:00:00.000Z"),
             updatedAt: new Date("2026-01-01T00:00:00.000Z"),
             save: vi.fn().mockResolvedValue(undefined),
@@ -166,6 +169,40 @@ describe("Owlbear room NPC routes", () => {
         expect(current.save).toHaveBeenCalled()
         expect(payload.hpCurrent).toBe(12)
         expect(payload.hpMax).toBe(12)
+    })
+
+    it("patches temporary HP independently", async () => {
+        sessionMock.value = { ...sessionMock.value, owlbearRole: "GM", roomId: "room-1", userId: "user-1" }
+        const current = {
+            _id: "room-npc-1",
+            roomId: "room-1",
+            sourceKind: "monster",
+            sourceId: "monster-1",
+            hpCurrent: 8,
+            hpMax: 12,
+            hpTemp: 0,
+            createdAt: new Date("2026-01-01T00:00:00.000Z"),
+            updatedAt: new Date("2026-01-01T00:00:00.000Z"),
+            save: vi.fn().mockResolvedValue(undefined),
+        }
+
+        mockDb()
+        mockSessionService()
+        vi.doMock("@/features/monsters/models/monster", () => ({ MonsterModel: { findById: vi.fn().mockResolvedValue({ _id: "monster-1", name: "Lobo" }), find: vi.fn() } }))
+        vi.doMock("@/features/monsters/models/user-npc", () => ({ UserNpcModel: { findOne: vi.fn(), find: vi.fn(), create: vi.fn() } }))
+        vi.doMock("@/features/owlbear/models/owlbear-room-npc", () => ({ OwlbearRoomNpc: { findOne: vi.fn().mockResolvedValue(current) } }))
+
+        const mod = await importFresh<typeof import("@/app/api/owlbear/rooms/[roomId]/npcs/[npcId]/route")>("@/app/api/owlbear/rooms/[roomId]/npcs/[npcId]/route")
+        const response = await mod.PATCH(makeJsonRequest("http://localhost/api/owlbear/rooms/room-1/npcs/room-npc-1", {
+            method: "PATCH",
+            body: JSON.stringify({ hpTemp: 9 }),
+        }) as any, { params: Promise.resolve({ roomId: "room-1", npcId: "room-npc-1" }) })
+        const payload = await readJson<{ hpCurrent: number; hpMax: number; hpTemp: number }>(response)
+
+        expect(response.status).toBe(200)
+        expect(current.hpCurrent).toBe(8)
+        expect(current.hpTemp).toBe(9)
+        expect(payload.hpTemp).toBe(9)
     })
 
     it("deletes only the room link", async () => {

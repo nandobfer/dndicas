@@ -74,8 +74,9 @@ export interface OwlbearOverlayMetadata {
     version: number
     tokenId: string
     /** "label" é legado do overlay textual antigo e deve ser removido no próximo sync. */
-    role: "backdrop" | "bar" | "label"
+    role: "backdrop" | "bar" | "tempBar" | "label"
     barWidth?: number
+    overlayWidth?: number
     barColor?: string
 }
 

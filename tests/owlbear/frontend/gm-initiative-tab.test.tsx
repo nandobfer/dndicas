@@ -60,6 +60,7 @@ function roomNpc(overrides: Partial<OwlbearRoomNpc> = {}): OwlbearRoomNpc {
         sourceId: "monster-1",
         hpCurrent: 12,
         hpMax: 20,
+        hpTemp: 0,
         createdAt: "2026-01-01T00:00:00.000Z",
         updatedAt: "2026-01-01T00:00:00.000Z",
         source: {
@@ -323,6 +324,24 @@ describe("OwlbearGmInitiativeTab", () => {
 
         await waitFor(() => expect(updateNpc).toHaveBeenCalledWith("npc-1", { hpCurrent: 8 }))
         expect(screen.queryByText("Preview completo de Lobo")).not.toBeInTheDocument()
+    })
+
+    it("updates NPC temporary HP through the shared room NPC endpoint", async () => {
+        const updateNpc = vi.fn().mockResolvedValue(roomNpc({ hpTemp: 4 }))
+        renderTab({ updateNpc })
+
+        const input = screen.getByLabelText("Vida temporária de Lobo")
+        fireEvent.click(input)
+        fireEvent.change(input, { target: { value: "4" } })
+        fireEvent.keyDown(input, { key: "Enter" })
+
+        await waitFor(() => expect(updateNpc).toHaveBeenCalledWith("npc-1", { hpTemp: 4 }))
+    })
+
+    it("renders NPC temporary HP in initiative", () => {
+        renderTab({ npcs: [roomNpc({ hpTemp: 5 })] })
+
+        expect(screen.getByTestId("initiative-npc-hp-bar-npc-1-temp")).toHaveStyle({ width: "25%" })
     })
 
     it("persists player initiative from the PC input", async () => {

@@ -47,6 +47,7 @@ const sdkMock = vi.hoisted(() => {
             onReadyChange: vi.fn(() => () => undefined),
             items: {
                 getItems: vi.fn().mockResolvedValue([]),
+                getItemBounds: vi.fn().mockResolvedValue({ width: 140, height: 140, center: { x: 100, y: 100 } }),
                 updateItems: vi.fn().mockResolvedValue(undefined),
                 addItems: vi.fn().mockResolvedValue(undefined),
                 deleteItems: vi.fn().mockResolvedValue(undefined),
@@ -112,11 +113,13 @@ vi.mock("@/features/owlbear/sdk", async () => {
             name: "Kael",
             hpCurrent: 38,
             hpMax: 45,
+            hpTemp: 0,
         })),
         fetchOwlbearRoomNpcById: vi.fn(async () => ({
             name: "Goblin",
             hpCurrent: 7,
             hpMax: 7,
+            hpTemp: 0,
         })),
         setTokenSheetLink: vi.fn(async (tokenId: string, sheetId: string, overlayIds: string[] = []) => {
             await sdkMock.scene.items.updateItems([tokenId], (draft: Array<{ metadata: Record<string, unknown> }>) => {
@@ -222,6 +225,7 @@ const goblinNpc = {
     sourceId: "monster-goblin",
     hpCurrent: 7,
     hpMax: 7,
+    hpTemp: 0,
     createdAt: "2026-01-01T00:00:00Z",
     updatedAt: "2026-01-01T00:00:00Z",
     source: { name: "Goblin" } as never,
@@ -252,6 +256,7 @@ beforeEach(() => {
     sdkMock.room.id = "room-1"
     sdkMock.room.getMetadata.mockResolvedValue({})
     sdkMock.scene.items.getItems.mockResolvedValue([])
+    sdkMock.scene.items.getItemBounds.mockResolvedValue({ width: 140, height: 140, center: { x: 100, y: 100 } })
     sdkMock.scene.items.updateItems.mockResolvedValue(undefined)
     sdkMock.scene.items.addItems.mockResolvedValue(undefined)
     sdkMock.scene.items.deleteItems.mockResolvedValue(undefined)
@@ -811,6 +816,20 @@ describe("OwlbearGmSceneController — SDK parse de metadata", () => {
             },
         })
         expect(result?.role).toBe("backdrop")
+    })
+
+    it("parseOverlayMetadata aceita role='tempBar'", async () => {
+        const { parseOverlayMetadata } = await import("@/features/owlbear/sdk")
+        const result = parseOverlayMetadata({
+            "com.dndicas.owlbear/overlay": {
+                version: 1,
+                tokenId: "token-1",
+                role: "tempBar",
+                overlayWidth: 140,
+            },
+        })
+        expect(result?.role).toBe("tempBar")
+        expect(result?.overlayWidth).toBe(140)
     })
 
     it("parseOverlayMetadata aceita role='label' como overlay legado removível", async () => {

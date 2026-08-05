@@ -10,6 +10,7 @@ export interface IOwlbearRoomNpc extends Document {
     sourceId: string
     hpCurrent: number
     hpMax: number
+    hpTemp: number
     createdAt: Date
     updatedAt: Date
 }
@@ -22,6 +23,7 @@ const OwlbearRoomNpcSchema = new Schema<IOwlbearRoomNpc>(
         sourceId: { type: String, required: true, trim: true },
         hpCurrent: { type: Number, required: true, min: 0, default: 0 },
         hpMax: { type: Number, required: true, min: 0, default: 0 },
+        hpTemp: { type: Number, required: true, min: 0, default: 0 },
     },
     {
         timestamps: true,
