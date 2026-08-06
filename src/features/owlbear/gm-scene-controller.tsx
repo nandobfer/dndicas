@@ -3,6 +3,13 @@
 import * as React from "react"
 import { Link2, Loader2, Skull } from "lucide-react"
 import { GlassModal, GlassModalContent, GlassModalDescription, GlassModalHeader, GlassModalTitle } from "@/components/ui/glass-modal"
+import { getPusherBrowserConfig } from "@/core/realtime/pusher-browser-config"
+import { PusherBrowserService } from "@/core/realtime/pusher-browser-service"
+import {
+    CHARACTER_SHEET_PUSHER_EVENTS,
+    getCharacterSheetChannelName,
+    type CharacterSheetPatchedEventPayload,
+} from "@/features/character-sheets/realtime/character-sheet-pusher"
 import type { CharacterSheetFull } from "@/features/character-sheets/types/character-sheet.types"
 import { MentionContent } from "@/features/rules/components/mention-badge"
 import { OWLBEAR_PENDING_TOKEN_LINK_METADATA_KEY, OWLBEAR_TOKEN_METADATA_KEY } from "./config"
@@ -657,7 +664,7 @@ export function OwlbearGmSceneController({
     const shouldSyncNpcOverlays = overlayKinds.includes("npc") && canUseNpcBackend
     const needsPlayerBackend = canOpenPlayerDialog || shouldSyncPlayerOverlays
     const needsNpcBackend = (canOpenNpcDialog || shouldSyncNpcOverlays) && canUseNpcBackend
-    const { sheets } = useRoomLinkedSheets(session.sessionToken, canManageScene && needsPlayerBackend)
+    const { entries, sheets } = useRoomLinkedSheets(session.sessionToken, canManageScene && needsPlayerBackend)
     const { items: npcs, isLoading: isLoadingNpcs, reload: reloadNpcs } = useRoomNpcs(
         runtime.roomId,
         session.sessionToken,
@@ -667,6 +674,11 @@ export function OwlbearGmSceneController({
     const [pendingLink, setPendingLink] = React.useState<PendingLink | null>(null)
     const [linkingId, setLinkingId] = React.useState<string | null>(null)
     const overlayHpCacheRef = React.useRef(new Map<string, OverlayHpSnapshot>())
+    const linkedSheetIds = React.useMemo(
+        () => Array.from(new Set(entries.map((entry) => entry.sheetId))),
+        [entries]
+    )
+    const linkedSheetIdsKey = React.useMemo(() => linkedSheetIds.join("\u0000"), [linkedSheetIds])
 
     const syncScene = React.useCallback(async () => {
         if (runtime.role !== "GM" || session.sessionStatus !== "ready" || !session.sessionToken || !runtime.roomId) return
@@ -814,6 +826,61 @@ export function OwlbearGmSceneController({
         })
         requestSyncScene(0)
     }), [requestSyncScene])
+
+    React.useEffect(() => {
+        if (!canManageScene || !shouldSyncPlayerOverlays || !linkedSheetIdsKey) return
+
+        const sheetIds = linkedSheetIdsKey.split("\u0000")
+
+        let disposed = false
+        const subscriptions: Array<{
+            channel: ReturnType<PusherBrowserService["subscribe"]>
+            handler: (payload: CharacterSheetPatchedEventPayload) => void
+        }> = []
+
+        void (async () => {
+            const browserConfig = await getPusherBrowserConfig()
+            if (disposed) return
+
+            if (!browserConfig?.key || !browserConfig.wsHost || !Number.isFinite(browserConfig.wsPort) || browserConfig.wsPort <= 0) {
+                console.error("[realtime] Missing or invalid Pusher browser config for Owlbear overlay sync.", {
+                    sheetIds,
+                    config: browserConfig,
+                })
+                return
+            }
+
+            const pusher = PusherBrowserService.getInstance()
+            for (const sheetId of sheetIds) {
+                const channelName = getCharacterSheetChannelName(sheetId)
+                const channel = pusher.subscribe(browserConfig, channelName)
+                const handler = (payload: CharacterSheetPatchedEventPayload) => {
+                    if (payload.sheetId !== sheetId) return
+
+                    const previous = overlayHpCacheRef.current.get(getOverlaySyncCacheKey("player", sheetId))
+                    overlayHpCacheRef.current.set(getOverlaySyncCacheKey("player", sheetId), {
+                        hpCurrent: payload.sheet.hpCurrent ?? 0,
+                        hpMax: payload.sheet.hpMax ?? 0,
+                        hpTemp: payload.sheet.hpTemp ?? previous?.hpTemp ?? 0,
+                        name: payload.sheet.name ?? previous?.name ?? "Personagem",
+                    })
+                    requestSyncScene(0)
+                }
+
+                channel.bind(CHARACTER_SHEET_PUSHER_EVENTS.sheetPatched, handler)
+                subscriptions.push({ channel, handler })
+            }
+        })().catch((error) => {
+            console.error("Failed to subscribe Owlbear player overlay realtime", error)
+        })
+
+        return () => {
+            disposed = true
+            for (const { channel, handler } of subscriptions) {
+                channel.unbind(CHARACTER_SHEET_PUSHER_EVENTS.sheetPatched, handler)
+            }
+        }
+    }, [canManageScene, linkedSheetIdsKey, requestSyncScene, shouldSyncPlayerOverlays])
 
     React.useEffect(() => {
         if (pendingLink?.kind !== "npc") return
