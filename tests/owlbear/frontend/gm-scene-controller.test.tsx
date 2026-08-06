@@ -13,6 +13,44 @@ const LEGACY_TEMP_BAR_COLOR = "#7dd3fc"
 const useRoomLinkedSheetsMock = vi.hoisted(() => vi.fn())
 const useRoomNpcsMock = vi.hoisted(() => vi.fn())
 
+const pusherMock = vi.hoisted(() => {
+    type Handler = (payload: unknown) => void
+    type TestChannel = {
+        name: string
+        handlers: Map<string, Handler>
+        bind: ReturnType<typeof vi.fn>
+        unbind: ReturnType<typeof vi.fn>
+    }
+
+    const channels = new Map<string, TestChannel>()
+    const getChannel = (channelName: string) => {
+        const existing = channels.get(channelName)
+        if (existing) return existing
+
+        const channel: TestChannel = {
+            name: channelName,
+            handlers: new Map(),
+            bind: vi.fn((eventName: string, handler: Handler) => {
+                channel.handlers.set(eventName, handler)
+            }),
+            unbind: vi.fn((eventName: string) => {
+                channel.handlers.delete(eventName)
+            }),
+        }
+        channels.set(channelName, channel)
+        return channel
+    }
+
+    return {
+        channels,
+        getChannel,
+        subscribe: vi.fn((_config: unknown, channelName: string) => getChannel(channelName)),
+        unsubscribe: vi.fn((channelName: string) => {
+            channels.delete(channelName)
+        }),
+    }
+})
+
 const sdkMock = vi.hoisted(() => {
     const callbacks: Array<() => void> = []
     return {
@@ -94,6 +132,24 @@ const createShapeBuilder = vi.hoisted(() => {
 vi.mock("@owlbear-rodeo/sdk", () => ({
     default: sdkMock,
     buildShape: vi.fn(createShapeBuilder),
+}))
+
+vi.mock("@/core/realtime/pusher-browser-config", () => ({
+    getPusherBrowserConfig: vi.fn(async () => ({
+        key: "pusher-key",
+        cluster: "mt1",
+        wsHost: "localhost",
+        wsPort: 6001,
+        wssPort: 6001,
+        forceTLS: false,
+        enabledTransports: ["ws"],
+    })),
+}))
+
+vi.mock("@/core/realtime/pusher-browser-service", () => ({
+    PusherBrowserService: {
+        getInstance: vi.fn(() => pusherMock),
+    },
 }))
 
 vi.mock("@/features/owlbear/sdk", async () => {
@@ -262,6 +318,9 @@ beforeEach(() => {
     sdkMock.action.open.mockResolvedValue(undefined)
     sdkMock.action.close.mockResolvedValue(undefined)
     sdkMock.player.deselect.mockResolvedValue(undefined)
+    pusherMock.channels.clear()
+    pusherMock.subscribe.mockClear()
+    pusherMock.unsubscribe.mockClear()
 
     useRoomLinkedSheetsMock.mockReturnValue({
         entries: [],
@@ -842,6 +901,84 @@ describe("OwlbearGmSceneController — SDK parse de metadata", () => {
 })
 
 describe("OwlbearGmSceneController — HP overlay", () => {
+    it("syncs player token overlay from sheet.patched without opening the GM sheets tab", async () => {
+        const { fetchOwlbearSheetById } = await import("@/features/owlbear/sdk")
+        const token = {
+            id: "token-realtime-player",
+            name: "Herói",
+            layer: "CHARACTER",
+            type: "IMAGE",
+            visible: true,
+            locked: false,
+            createdUserId: "u1",
+            zIndex: 1,
+            lastModified: "",
+            lastModifiedUserId: "u1",
+            position: { x: 100, y: 100 },
+            rotation: 0,
+            scale: { x: 1, y: 1 },
+            attachedTo: undefined,
+            metadata: {
+                "com.dndicas.owlbear/token": {
+                    version: 1,
+                    kind: "player",
+                    refId: "sheet-1",
+                    tokenId: "token-realtime-player",
+                    overlayIds: [],
+                    linkedAt: "2026-01-01T00:00:00.000Z",
+                },
+            },
+        }
+
+        useRoomLinkedSheetsMock.mockReturnValue({
+            entries: [{ playerId: "p1", sheetId: "sheet-1" }],
+            sheets: [{ ...kaelSheet, hpCurrent: 38, hpMax: 45, hpTemp: 0 }],
+            isLoading: false,
+            errorMessage: null,
+            reload: vi.fn(),
+            unlinkSheet: vi.fn(),
+        })
+        sdkMock.scene.items.getItems
+            .mockResolvedValueOnce([])
+            .mockResolvedValue([token])
+        sdkMock.scene.items.getItemBounds.mockResolvedValue({ width: 140, height: 140, center: { x: 100, y: 100 } })
+
+        render(<OwlbearGmSceneController runtime={readyGmRuntime} session={readySession} />)
+
+        await waitFor(() => expect(pusherMock.subscribe).toHaveBeenCalledWith(expect.any(Object), "sheet.sheet-1"))
+        await waitFor(() => expect(sdkMock.scene.items.getItems).toHaveBeenCalledTimes(1))
+        const channel = pusherMock.getChannel("sheet.sheet-1")
+        const handler = channel.handlers.get("sheet.patched")
+        expect(handler).toBeDefined()
+
+        handler?.({
+            sheetId: "sheet-1",
+            action: "patched",
+            sheet: {
+                _id: "sheet-1",
+                name: "Kael Ferido",
+                slug: "kael",
+                userId: "user-1",
+                hpCurrent: 10,
+                hpMax: 40,
+                hpTemp: 5,
+            },
+            serverTimestamp: "2026-01-01T00:00:00.000Z",
+        })
+
+        await waitFor(() => expect(sdkMock.scene.items.addItems).toHaveBeenCalled())
+        expect(fetchOwlbearSheetById).not.toHaveBeenCalled()
+
+        const createdItems = sdkMock.scene.items.addItems.mock.calls.at(-1)?.[0] as Array<Record<string, unknown>>
+        const byRole = new Map(createdItems.map((item) => [
+            ((item.metadata as Record<string, Record<string, unknown>>)["com.dndicas.owlbear/overlay"].role),
+            item,
+        ]))
+
+        expect(byRole.get("bar")).toMatchObject({ width: 35 })
+        expect(byRole.get("tempBar")).toMatchObject({ fillOpacity: 1, width: 18 })
+    })
+
     it("waits for queued overlay sync before closing the action after linking an NPC", async () => {
         const { updateTokenOverlayIds } = await import("@/features/owlbear/sdk")
         const token = {
