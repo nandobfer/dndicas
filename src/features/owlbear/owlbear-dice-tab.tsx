@@ -69,8 +69,118 @@ function formatRollTime(createdAt: string) {
     }).format(new Date(value))
 }
 
-function wait(ms: number) {
-    return new Promise((resolve) => window.setTimeout(resolve, ms))
+const OWLBEAR_DICE_HISTORY_REVEAL_INTERVAL_MS = 2_000
+
+function getHistoryRevealAt(entry: OwlbearDiceHistoryEntry) {
+    if (entry.revealAt) {
+        const revealAt = Date.parse(entry.revealAt)
+        if (!Number.isNaN(revealAt)) return revealAt
+    }
+
+    if (entry.status === "rolling") {
+        const createdAt = Date.parse(entry.createdAt)
+        if (!Number.isNaN(createdAt)) return createdAt + OWLBEAR_DICE_HISTORY_REVEAL_INTERVAL_MS
+    }
+
+    return null
+}
+
+function OwlbearDiceHistoryCard({ entry }: { entry: OwlbearDiceHistoryEntry }) {
+    const revealAt = getHistoryRevealAt(entry)
+    const [isRevealed, setIsRevealed] = React.useState(() => revealAt === null || Date.now() >= revealAt)
+
+    React.useEffect(() => {
+        if (isRevealed || revealAt === null) return
+
+        const timeoutId = window.setTimeout(
+            () => setIsRevealed(true),
+            Math.max(0, revealAt - Date.now())
+        )
+        return () => window.clearTimeout(timeoutId)
+    }, [isRevealed, revealAt])
+
+    const isRolling = !isRevealed
+    const criticalState = isRolling ? null : getDiceCriticalState(entry.result)
+    const displayName = getHistoryDisplayName(entry)
+    const metadata = [
+        getHistoryModeLabel(entry.result.mode),
+        isRolling ? "Rolando" : null,
+        criticalState === "critical-success" ? "Crítico" : null,
+        criticalState === "critical-failure" ? "Falha crítica" : null,
+    ].filter(Boolean).join(" • ")
+
+    return (
+        <div
+            className={cn("rounded-2xl border p-3 transition-colors", getHistoryTone({
+                ...entry,
+                status: isRolling ? "rolling" : "resolved",
+            }))}
+        >
+            <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                    <div
+                        className="flex min-w-0 flex-wrap items-center gap-2"
+                        data-testid="history-player-formula-row"
+                    >
+                        <p
+                            className={cn(
+                                "truncate text-sm font-semibold",
+                                entry.playerRole === "GM" && "rounded-full border border-amber-300/30 bg-amber-400/10 px-2 py-0.5 text-xs font-black uppercase tracking-[0.22em] text-amber-200"
+                            )}
+                            data-testid={entry.playerRole === "GM" ? "history-gm-display-name" : undefined}
+                        >
+                            {displayName}
+                        </p>
+                        <span
+                            className="rounded-full border border-white/10 bg-white/5 px-2 py-1 text-xs text-white/75"
+                            data-testid="history-formula-chip"
+                        >
+                            {buildDiceFormula(entry.result)}
+                        </span>
+                    </div>
+                    {metadata && (
+                        <p className="mt-1 text-[11px] uppercase tracking-[0.24em] text-white/45">
+                            {metadata}
+                        </p>
+                    )}
+                </div>
+                <div className="text-right">
+                    <div
+                        className="flex min-h-8 min-w-12 items-center justify-end transition-all duration-300"
+                        data-testid={`history-total-${entry.id}`}
+                    >
+                        {isRolling ? (
+                            <span className="inline-flex items-center gap-1" aria-label="Resultado rolando">
+                                <span className="h-2 w-2 animate-pulse rounded-full bg-white/45 [animation-delay:0ms]" />
+                                <span className="h-2 w-2 animate-pulse rounded-full bg-white/45 [animation-delay:120ms]" />
+                                <span className="h-2 w-2 animate-pulse rounded-full bg-white/45 [animation-delay:240ms]" />
+                            </span>
+                        ) : (
+                            <p className="text-2xl font-black animate-in fade-in zoom-in-95 duration-300">{entry.result.total}</p>
+                        )}
+                    </div>
+                    <p className="text-[11px] text-white/45">{formatRollTime(entry.createdAt)}</p>
+                </div>
+            </div>
+
+            <div className="mt-2 flex flex-wrap gap-2 text-xs text-white/75">
+                {entry.result.terms.map((term, index) => (
+                    <span
+                        key={`${entry.id}-${term.dice}-${index}`}
+                        className={getDiceResultChipClass(term.dice)}
+                        data-testid={`history-dice-result-chip-${entry.id}-${term.dice}-${index}`}
+                    >
+                        {term.quantity}{term.dice}: {isRolling ? "rolando..." : term.results.join(", ")}
+                    </span>
+                ))}
+                {!isRolling && entry.result.selectedD20?.discarded !== undefined && (
+                    <span className="rounded-full border border-white/10 bg-white/5 px-2 py-1">
+                        descartado: {entry.result.selectedD20.discarded}
+                    </span>
+                )}
+            </div>
+        </div>
+    )
 }
 
 function OwlbearDiceHistoryList({ history, isLoading }: { history: OwlbearDiceHistoryEntry[]; isLoading: boolean }) {
@@ -92,88 +202,7 @@ function OwlbearDiceHistoryList({ history, isLoading }: { history: OwlbearDiceHi
 
     return (
         <div className="space-y-2">
-            {history.map((entry) => {
-                const isRolling = entry.status === "rolling"
-                const criticalState = isRolling ? null : getDiceCriticalState(entry.result)
-                const displayName = getHistoryDisplayName(entry)
-                const metadata = [
-                    getHistoryModeLabel(entry.result.mode),
-                    isRolling ? "Rolando" : null,
-                    criticalState === "critical-success" ? "Crítico" : null,
-                    criticalState === "critical-failure" ? "Falha crítica" : null,
-                ].filter(Boolean).join(" • ")
-
-                return (
-                    <div
-                        key={entry.id}
-                        className={cn("rounded-2xl border p-3 transition-colors", getHistoryTone(entry))}
-                    >
-                        <div className="flex items-start justify-between gap-3">
-                            <div className="min-w-0">
-                                <div
-                                    className="flex min-w-0 flex-wrap items-center gap-2"
-                                    data-testid="history-player-formula-row"
-                                >
-                                    <p
-                                        className={cn(
-                                            "truncate text-sm font-semibold",
-                                            entry.playerRole === "GM" && "rounded-full border border-amber-300/30 bg-amber-400/10 px-2 py-0.5 text-xs font-black uppercase tracking-[0.22em] text-amber-200"
-                                        )}
-                                        data-testid={entry.playerRole === "GM" ? "history-gm-display-name" : undefined}
-                                    >
-                                        {displayName}
-                                    </p>
-                                    <span
-                                        className="rounded-full border border-white/10 bg-white/5 px-2 py-1 text-xs text-white/75"
-                                        data-testid="history-formula-chip"
-                                    >
-                                        {buildDiceFormula(entry.result)}
-                                    </span>
-                                </div>
-                                {metadata && (
-                                    <p className="mt-1 text-[11px] uppercase tracking-[0.24em] text-white/45">
-                                        {metadata}
-                                    </p>
-                                )}
-                            </div>
-                            <div className="text-right">
-                                <div
-                                    className="flex min-h-8 min-w-12 items-center justify-end transition-all duration-300"
-                                    data-testid={`history-total-${entry.id}`}
-                                >
-                                    {isRolling ? (
-                                        <span className="inline-flex items-center gap-1" aria-label="Resultado rolando">
-                                            <span className="h-2 w-2 animate-pulse rounded-full bg-white/45 [animation-delay:0ms]" />
-                                            <span className="h-2 w-2 animate-pulse rounded-full bg-white/45 [animation-delay:120ms]" />
-                                            <span className="h-2 w-2 animate-pulse rounded-full bg-white/45 [animation-delay:240ms]" />
-                                        </span>
-                                    ) : (
-                                        <p className="text-2xl font-black animate-in fade-in zoom-in-95 duration-300">{entry.result.total}</p>
-                                    )}
-                                </div>
-                                <p className="text-[11px] text-white/45">{formatRollTime(entry.createdAt)}</p>
-                            </div>
-                        </div>
-
-                        <div className="mt-2 flex flex-wrap gap-2 text-xs text-white/75">
-                            {entry.result.terms.map((term, index) => (
-                                <span
-                                    key={`${entry.id}-${term.dice}-${index}`}
-                                    className={getDiceResultChipClass(term.dice)}
-                                    data-testid={`history-dice-result-chip-${entry.id}-${term.dice}-${index}`}
-                                >
-                                    {term.quantity}{term.dice}: {isRolling ? "rolando..." : term.results.join(", ")}
-                                </span>
-                            ))}
-                            {!isRolling && entry.result.selectedD20?.discarded !== undefined && (
-                                <span className="rounded-full border border-white/10 bg-white/5 px-2 py-1">
-                                    descartado: {entry.result.selectedD20.discarded}
-                                </span>
-                            )}
-                        </div>
-                    </div>
-                )
-            })}
+            {history.map((entry) => <OwlbearDiceHistoryCard key={entry.id} entry={entry} />)}
         </div>
     )
 }
@@ -186,9 +215,6 @@ export function OwlbearDiceTab({ runtime, session }: OwlbearDiceTabProps) {
         enabled: runtime.status === "ready",
         roomId: runtime.roomId,
     })
-    const pendingHistoryWritesRef = React.useRef(new Map<string, Promise<void>>())
-    const pendingHistoryEntriesRef = React.useRef(new Map<string, OwlbearDiceHistoryEntry>())
-
     const resolveCharacterName = React.useCallback(async () => {
         let characterName: string | undefined
 
@@ -208,11 +234,10 @@ export function OwlbearDiceTab({ runtime, session }: OwlbearDiceTabProps) {
         return characterName
     }, [activePlayerId, runtime.role, session.sessionToken])
 
-    const buildHistoryEntry = React.useCallback(async (result: DiceRollResponse, status: OwlbearDiceHistoryEntry["status"]) => {
+    const buildHistoryEntry = React.useCallback(async (result: DiceRollResponse, revealAt: string) => {
         if (!currentPlayerName) return null
 
-        const existingEntry = pendingHistoryEntriesRef.current.get(result.rollId)
-        const characterName = existingEntry?.characterName ?? await resolveCharacterName()
+        const characterName = await resolveCharacterName()
 
         return {
             id: result.rollId,
@@ -220,41 +245,23 @@ export function OwlbearDiceTab({ runtime, session }: OwlbearDiceTabProps) {
             playerId: activePlayerId ?? undefined,
             playerRole: runtime.role ?? undefined,
             characterName,
-            status,
+            status: "resolved",
             result,
             createdAt: result.createdAt,
+            revealAt,
         } satisfies OwlbearDiceHistoryEntry
     }, [activePlayerId, currentPlayerName, resolveCharacterName, runtime.role])
 
-    const handleRollAnimationStarted = React.useCallback((result: DiceRollResponse) => {
-        const writePromise = (async () => {
-            const entry = await buildHistoryEntry(result, "rolling")
+    const handleRollCreated = (result: DiceRollResponse) => {
+        const revealAt = new Date(Date.now() + OWLBEAR_DICE_HISTORY_REVEAL_INTERVAL_MS).toISOString()
+        void (async () => {
+            const entry = await buildHistoryEntry(result, revealAt)
             if (!entry) return
-
-            pendingHistoryEntriesRef.current.set(result.rollId, entry)
             await appendHistoryEntry(entry)
-        })()
-
-        pendingHistoryWritesRef.current.set(result.rollId, writePromise)
-        void writePromise.finally(() => {
-            pendingHistoryWritesRef.current.delete(result.rollId)
+        })().catch((error) => {
+            console.error("Failed to append Owlbear dice history entry", error)
         })
-    }, [appendHistoryEntry, buildHistoryEntry])
-
-    const handleRollResolved = React.useCallback(async (result: DiceRollResponse) => {
-        const pendingWrite = pendingHistoryWritesRef.current.get(result.rollId)
-        if (pendingWrite) {
-            await pendingWrite.catch(() => undefined)
-        }
-
-        await wait(500)
-
-        const entry = await buildHistoryEntry(result, "resolved")
-        if (!entry) return
-
-        pendingHistoryEntriesRef.current.delete(result.rollId)
-        await appendHistoryEntry(entry)
-    }, [appendHistoryEntry, buildHistoryEntry])
+    }
 
     const rollingBlockedMessage = runtime.status !== "ready"
         ? "A action do Owlbear ainda está inicializando."
@@ -274,8 +281,7 @@ export function OwlbearDiceTab({ runtime, session }: OwlbearDiceTabProps) {
                                 owlbearRoomId: activeRoomId ?? undefined,
                                 owlbearPlayerId: activePlayerId ?? undefined,
                             }}
-                            onRollAnimationStarted={handleRollAnimationStarted}
-                            onRollResolved={handleRollResolved}
+                            onRollCreated={handleRollCreated}
                             disableRolling={Boolean(rollingBlockedMessage)}
                             disabledRollingMessage={rollingBlockedMessage}
                             forceCombinationModifierInline

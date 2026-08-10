@@ -4,14 +4,14 @@ import type { OwlbearDiceHistoryEntry } from "@/features/owlbear/types"
 import type { DiceRollResponse } from "@/features/dice-roller/types"
 
 const sdkMock = vi.hoisted(() => {
-    let mockMetadata: Record<string, any> = {}
+    let mockMetadata: Record<string, unknown> = {}
     return {
         isAvailable: true,
         isReady: true,
         room: {
             id: "room-1",
             getMetadata: vi.fn(async () => mockMetadata),
-            setMetadata: vi.fn(async (metadata) => {
+            setMetadata: vi.fn(async (metadata: Record<string, unknown>) => {
                 mockMetadata = metadata
             }),
         },
@@ -46,10 +46,10 @@ describe("Owlbear SDK - Dice History Limit", () => {
     })
 
     it("should append a new history entry when empty", async () => {
-        let currentMetadata: any = {}
+        let currentMetadata: Record<string, unknown> = {}
         sdkMock.room.getMetadata.mockImplementation(async () => currentMetadata)
         sdkMock.room.setMetadata.mockImplementation(async (metadata) => {
-            currentMetadata = metadata
+            currentMetadata = { ...currentMetadata, ...metadata }
         })
 
         const entry = createDummyEntry("1", "2026-01-01T00:00:00.000Z")
@@ -61,19 +61,19 @@ describe("Owlbear SDK - Dice History Limit", () => {
     })
 
     it("should discard the oldest entry and keep exactly 13 entries when limit is reached", async () => {
-        let currentMetadata: any = {
+        let currentMetadata: Record<string, unknown> = {
             "com.dndicas.owlbear/room": {
                 version: 1,
                 playerLinks: {},
                 diceHistory: Array.from({ length: 13 }, (_, i) => 
-                    createDummyEntry(`roll-${i}`, `2026-01-01T00:00:0${i < 10 ? '0' + i : i}.000Z`)
+                    createDummyEntry(`roll-${i}`, new Date(Date.UTC(2026, 0, 1, 0, 0, 13 - i)).toISOString())
                 )
             }
         }
 
         sdkMock.room.getMetadata.mockImplementation(async () => currentMetadata)
         sdkMock.room.setMetadata.mockImplementation(async (metadata) => {
-            currentMetadata = metadata
+            currentMetadata = { ...currentMetadata, ...metadata }
         })
 
         const initialState = await getRoomMetadataState()
@@ -90,7 +90,7 @@ describe("Owlbear SDK - Dice History Limit", () => {
     })
 
     it("should update an existing history entry without changing its position", async () => {
-        let currentMetadata: any = {
+        let currentMetadata: Record<string, unknown> = {
             "com.dndicas.owlbear/room": {
                 version: 1,
                 playerLinks: {},
@@ -104,7 +104,7 @@ describe("Owlbear SDK - Dice History Limit", () => {
 
         sdkMock.room.getMetadata.mockImplementation(async () => currentMetadata)
         sdkMock.room.setMetadata.mockImplementation(async (metadata) => {
-            currentMetadata = metadata
+            currentMetadata = { ...currentMetadata, ...metadata }
         })
 
         await appendRoomDiceHistoryEntry({
@@ -120,5 +120,35 @@ describe("Owlbear SDK - Dice History Limit", () => {
         expect(state.diceHistory.map((entry) => entry.id)).toEqual(["roll-newer", "roll-target", "roll-older"])
         expect(state.diceHistory[1].status).toBe("resolved")
         expect(state.diceHistory[1].result.total).toBe(18)
+    })
+
+    it("keeps simultaneous rolls in independent keys and prunes only entries beyond the limit", async () => {
+        const currentMetadata: Record<string, unknown> = {}
+        expect(sdkMock.isAvailable).toBe(true)
+        expect(sdkMock.isReady).toBe(true)
+        sdkMock.room.getMetadata.mockImplementation(async () => currentMetadata)
+        sdkMock.room.setMetadata.mockImplementation(async (metadata) => {
+            for (const [key, value] of Object.entries(metadata)) {
+                if (value === null) {
+                    delete currentMetadata[key]
+                } else {
+                    currentMetadata[key] = value
+                }
+            }
+        })
+
+        const entries = Array.from({ length: 15 }, (_, index) => createDummyEntry(
+            `simultaneous-${index}`,
+            new Date(Date.UTC(2026, 0, 1, 0, 0, index)).toISOString()
+        ))
+
+        await Promise.all(entries.map((entry) => appendRoomDiceHistoryEntry(entry)))
+
+        const state = await getRoomMetadataState()
+        expect(state.diceHistory).toHaveLength(13)
+        expect(new Set(state.diceHistory.map((entry) => entry.id))).toEqual(
+            new Set(entries.slice(2).map((entry) => entry.id))
+        )
+        expect(Object.keys(currentMetadata).filter((key) => key.includes("/dice-history-"))).toHaveLength(13)
     })
 })
