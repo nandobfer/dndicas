@@ -541,21 +541,13 @@ function dedupeResolvedSubclasses(items: ResolvedSubclass[]): ResolvedSubclass[]
     return Array.from(map.values())
 }
 
-function isSpellcastingClass(characterClass: CharacterClass) {
-    return !!(characterClass.spellcasting || characterClass.spellcastingAttribute || characterClass.progressionTable?.spellSlots)
-}
-
-function isSpellcastingSubclass(subclass: ResolvedSubclass) {
-    return !!(subclass.entity.spellcasting || subclass.entity.spellcastingAttribute || subclass.entity.progressionTable?.spellSlots)
-}
-
 export function hasSpellSlotProgression(source?: SpellcastingSource | null): boolean {
     return Object.keys(source?.progressionTable?.spellSlots ?? {}).length > 0
 }
 
 export function selectSpellcastingAttributeSource(activeSubclasses: ResolvedSubclass[], activeClasses: CharacterClass[]): SpellcastingSource | null {
-    const winningSubclass = activeSubclasses.find(isSpellcastingSubclass)
-    const winningClass = activeClasses.find(isSpellcastingClass)
+    const winningSubclass = activeSubclasses.find((subclass) => !!subclass.entity.spellcastingAttribute)
+    const winningClass = activeClasses.find((characterClass) => !!characterClass.spellcastingAttribute)
     return winningSubclass?.entity ?? winningClass ?? null
 }
 

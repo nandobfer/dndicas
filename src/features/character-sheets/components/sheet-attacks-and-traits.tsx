@@ -1,6 +1,6 @@
 "use client"
 
-import { useCallback, useEffect, useState } from "react"
+import { useCallback, useState } from "react"
 import { Plus, Trash2 } from "lucide-react"
 import { motion, AnimatePresence } from "framer-motion"
 import type { UseFormWatch } from "react-hook-form"
@@ -11,14 +11,10 @@ import { CharacterSheet } from "../types/character-sheet.types"
 import { CalcTooltip } from "./calc-tooltip"
 import { SheetInput } from "./sheet-input"
 import { CompactRichInput } from "./compact-rich-input"
-import { GlassCheckbox } from "./glass-checkbox"
 import { GlassProficiencyCheckbox } from "@/components/ui/glass-proficiency-checkbox"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/core/ui/tooltip"
 import { useAttackNameSync } from "./hooks/use-attack-name-sync"
 import { ResourceChargeList } from "./resource-charge-list"
-import { extractMentionsFromHtml } from "../utils/mention-sync"
-import { buildSpellAttackAutofill } from "../utils/attack-autofill"
-import { fetchSpell } from "@/features/spells/api/spells-api"
 
 interface SheetAttacksAndTraitsProps {
     sheet: CharacterSheet
@@ -59,35 +55,6 @@ export function useSheetAttacksAndTraitsSections({ sheet, form, isReadOnly = fal
         isReadOnly,
         onPatch: (attackId, data) => patchAttack.mutate({ attackId, data }),
     })
-
-    useEffect(() => {
-        if (isReadOnly || attacks.length === 0) return
-        let cancelled = false
-
-        void (async () => {
-            await Promise.all(attacks.map(async (attack) => {
-                const spellMention = extractMentionsFromHtml(attack.name).find((mention) => mention.entityType === "Magia")
-                if (!spellMention) return
-
-                try {
-                    const catalogSpell = await fetchSpell(spellMention.id)
-                    if (catalogSpell.circle !== 0 || !catalogSpell.baseDice) return
-
-                    const nextAttack = buildSpellAttackAutofill(catalogSpell, calc, currentSheet.level)
-                    if (cancelled) return
-                    if (attack.damageType !== nextAttack.damageType || attack.attackBonus !== nextAttack.attackBonus) {
-                        patchAttack.mutate({ attackId: attack._id, data: nextAttack })
-                    }
-                } catch {
-                    // Ignore catalog fetch failures; manual attack rows should remain editable.
-                }
-            }))
-        })()
-
-        return () => {
-            cancelled = true
-        }
-    }, [attacks, calc, currentSheet.level, isReadOnly, patchAttack])
 
     const combatStatsCard = (
         <div className="grid grid-cols-4 gap-2">
@@ -177,7 +144,7 @@ export function useSheetAttacksAndTraitsSections({ sheet, form, isReadOnly = fal
                             <CompactRichInput
                                 value={attack.name}
                                 onChange={() => {}}
-                                onBlur={(v) => handleAttackNameChange(attack._id, v)}
+                                onBlur={(v) => handleAttackNameChange(attack._id, attack.name, v)}
                                 placeholder="Nome"
                                 disabled={isReadOnly}
                                 specificEntityMentions={["Item", "Magia"]}

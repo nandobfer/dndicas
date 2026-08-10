@@ -63,4 +63,31 @@ describe("useSpellNameSync", () => {
             notes: "auto:spell:spell-1",
         }))
     })
+
+    it("preserva bônus e dano editados em um ataque automático existente", async () => {
+        const onPatchAttack = vi.fn()
+        const { result } = renderHook(() => useSpellNameSync({
+            calc,
+            level: 5,
+            attacks: [{
+                _id: "attack-1",
+                sheetId: "sheet-1",
+                name: spellMentionHtml,
+                attackBonus: "+10",
+                damageType: "<p>1d10 + 4</p>",
+                notes: "auto:spell:spell-1",
+                createdAt: "2026-01-01T00:00:00.000Z",
+            }],
+            onPatch: vi.fn(),
+            onAddAttack: vi.fn(),
+            onPatchAttack,
+            onRemoveAttack: vi.fn(),
+        }))
+
+        await act(async () => {
+            await result.current.syncCantripAttack(spellMentionHtml, "spell-1")
+        })
+
+        expect(onPatchAttack).not.toHaveBeenCalled()
+    })
 })
