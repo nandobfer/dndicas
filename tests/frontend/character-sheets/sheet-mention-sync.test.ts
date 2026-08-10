@@ -75,6 +75,24 @@ describe("mapSpellSlotsForLevel", () => {
 })
 
 describe("fontes de conjuração da ficha", () => {
+    it("usa o atributo da classe quando a subclasse conjuradora não define um atributo", () => {
+        const wizard = {
+            spellcasting: true,
+            spellcastingAttribute: "Inteligência",
+        } as CharacterClass
+        const subclass = {
+            id: "subclass-1",
+            parentClassId: "class-1",
+            entity: {
+                name: "Tradição Arcana",
+                spellcasting: true,
+                traits: [],
+            },
+        } as ResolvedSubclass
+
+        expect(selectSpellcastingAttributeSource([subclass], [wizard])).toBe(wizard)
+    })
+
     it("usa atributo da subclasse conjuradora, mas mantém slots da classe quando a subclasse não tem progressão", () => {
         const warlock = {
             _id: "class-1",

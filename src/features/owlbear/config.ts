@@ -38,6 +38,7 @@ export const OWLBEAR_ACTIONS = {
 export const OWLBEAR_ROOM_METADATA_KEY = "com.dndicas.owlbear/room"
 export const OWLBEAR_ROOM_METADATA_VERSION = 1
 export const OWLBEAR_DICE_HISTORY_LIMIT = 13
+export const OWLBEAR_DICE_HISTORY_ENTRY_METADATA_PREFIX = "com.dndicas.owlbear/dice-history-"
 export const OWLBEAR_TOKEN_METADATA_KEY = "com.dndicas.owlbear/token"
 export const OWLBEAR_OVERLAY_METADATA_KEY = "com.dndicas.owlbear/overlay"
 export const OWLBEAR_PENDING_TOKEN_LINK_METADATA_KEY = "com.dndicas.owlbear/pending-token-link"

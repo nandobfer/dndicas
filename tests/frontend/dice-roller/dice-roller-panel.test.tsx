@@ -225,8 +225,9 @@ describe("DiceRollerPanel", () => {
         expect(diceBoxMocks.roll).not.toHaveBeenCalled()
     })
 
-    it("sends Owlbear player context with shared rolls", async () => {
-        const onRollAnimationStarted = vi.fn()
+    it("sends Owlbear player context and publishes the result independently from animation", async () => {
+        const onRollCreated = vi.fn()
+        diceBoxMocks.roll.mockReturnValue(new Promise<never[]>(() => undefined))
         render(
             <DiceRollerPanel
                 requestContext={{
@@ -235,7 +236,7 @@ describe("DiceRollerPanel", () => {
                     owlbearRoomId: "room-1",
                     owlbearPlayerId: "player-nando",
                 }}
-                onRollAnimationStarted={onRollAnimationStarted}
+                onRollCreated={onRollCreated}
             />
         )
 
@@ -249,7 +250,7 @@ describe("DiceRollerPanel", () => {
                 owlbearPlayerId: "player-nando",
             }))
         })
-        expect(onRollAnimationStarted).toHaveBeenCalledWith(expect.objectContaining({
+        expect(onRollCreated).toHaveBeenCalledWith(expect.objectContaining({
             rollId: "roll-1",
             total: 16,
         }))

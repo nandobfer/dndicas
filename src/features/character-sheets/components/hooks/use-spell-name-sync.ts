@@ -62,7 +62,6 @@ export function useSpellNameSync({
                 return
             }
 
-            const attackAutofill = buildSpellAttackAutofill(catalogSpell, calc, level)
             const autoAttackNotes = getAutoSpellAttackNotes(catalogSpellId)
             const matchingAttacks = attacks.filter((attack) =>
                 extractMentionsFromHtml(attack.name).some((mention) => mention.entityType === "Magia" && mention.id === catalogSpellId)
@@ -71,8 +70,8 @@ export function useSpellNameSync({
 
             if (autoAttack) {
                 pendingAutoAttackNotesRef.current.add(autoAttackNotes)
-                if (autoAttack.name !== nameHtml || autoAttack.damageType !== attackAutofill.damageType || autoAttack.attackBonus !== attackAutofill.attackBonus) {
-                    onPatchAttack(autoAttack._id, { name: nameHtml, ...attackAutofill, notes: autoAttackNotes })
+                if (autoAttack.name !== nameHtml) {
+                    onPatchAttack(autoAttack._id, { name: nameHtml })
                 }
                 return
             }
@@ -82,6 +81,7 @@ export function useSpellNameSync({
 
             pendingAutoAttackNotesRef.current.add(autoAttackNotes)
 
+            const attackAutofill = buildSpellAttackAutofill(catalogSpell, calc, level)
             onAddAttack({
                 name: nameHtml,
                 ...attackAutofill,

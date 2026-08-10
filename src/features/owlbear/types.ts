@@ -20,6 +20,7 @@ export interface OwlbearDiceHistoryEntry {
     status: "rolling" | "resolved"
     result: DiceRollResponse
     createdAt: string
+    revealAt?: string
 }
 
 export interface OwlbearNpcInitiativeEntry {

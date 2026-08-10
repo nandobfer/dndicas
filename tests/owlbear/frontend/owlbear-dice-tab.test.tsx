@@ -1,5 +1,5 @@
-import { fireEvent, render, screen, waitFor, within } from "@testing-library/react"
-import { beforeEach, describe, expect, it, vi } from "vitest"
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react"
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { OwlbearDiceTab } from "@/features/owlbear/owlbear-dice-tab"
 import type { DiceRollResponse } from "@/features/dice-roller/types"
 import type { OwlbearDiceHistoryEntry, OwlbearRuntimeState } from "@/features/owlbear/types"
@@ -42,18 +42,15 @@ const rollResult = {
 
 vi.mock("@/features/dice-roller/components/dice-roller-panel", () => ({
     DiceRollerPanel: ({
-        onRollAnimationStarted,
-        onRollResolved,
+        onRollCreated,
     }: {
-        onRollAnimationStarted?: (result: DiceRollResponse) => void
-        onRollResolved?: (result: DiceRollResponse) => void
+        onRollCreated?: (result: DiceRollResponse) => void
     }) => (
         <button
             type="button"
             data-testid="dice-roller-panel"
             onClick={() => {
-                onRollAnimationStarted?.(rollResult)
-                onRollResolved?.(rollResult)
+                onRollCreated?.(rollResult)
             }}
         >
             Dice Roller Panel
@@ -131,6 +128,10 @@ function renderDiceTab(runtimeOverrides: Partial<OwlbearRuntimeState> = {}) {
 }
 
 describe("OwlbearDiceTab", () => {
+    afterEach(() => {
+        vi.useRealTimers()
+    })
+
     beforeEach(() => {
         owlbearDiceHistoryMock.history = [createHistoryEntry()]
         owlbearDiceHistoryMock.appendHistoryEntry.mockReset()
@@ -213,8 +214,11 @@ describe("OwlbearDiceTab", () => {
         expect(within(playerFormulaRow).getByTestId("history-formula-chip")).toHaveTextContent("1d20+2")
     })
 
-    it("renders rolling history entries with the same card and a loading result", () => {
-        owlbearDiceHistoryMock.history = [createHistoryEntry({ status: "rolling" })]
+    it("renders recent legacy rolling entries with the same card and a loading result", () => {
+        owlbearDiceHistoryMock.history = [createHistoryEntry({
+            status: "rolling",
+            createdAt: new Date().toISOString(),
+        })]
 
         renderDiceTab()
 
@@ -223,6 +227,38 @@ describe("OwlbearDiceTab", () => {
         expect(screen.getByLabelText("Resultado rolando")).toBeInTheDocument()
         expect(screen.getByText("1d20: rolando...")).toBeInTheDocument()
         expect(screen.queryByText("22")).not.toBeInTheDocument()
+    })
+
+    it("reveals a complete history entry after its two-second presentation interval", () => {
+        vi.useFakeTimers()
+        vi.setSystemTime(new Date("2026-08-10T12:00:00.000Z"))
+        owlbearDiceHistoryMock.history = [createHistoryEntry({
+            createdAt: "2026-08-10T12:00:00.000Z",
+            result: { createdAt: "2026-08-10T12:00:00.000Z" },
+        })]
+        owlbearDiceHistoryMock.history[0].revealAt = "2026-08-10T12:00:02.000Z"
+
+        renderDiceTab()
+
+        expect(screen.getByLabelText("Resultado rolando")).toBeInTheDocument()
+        expect(screen.queryByText("22")).not.toBeInTheDocument()
+
+        act(() => vi.advanceTimersByTime(2_000))
+
+        expect(screen.queryByLabelText("Resultado rolando")).not.toBeInTheDocument()
+        expect(screen.getByText("22")).toBeInTheDocument()
+    })
+
+    it("immediately reveals a legacy rolling entry whose interval already elapsed", () => {
+        owlbearDiceHistoryMock.history = [createHistoryEntry({
+            status: "rolling",
+            createdAt: new Date(Date.now() - 2_001).toISOString(),
+        })]
+
+        renderDiceTab()
+
+        expect(screen.queryByLabelText("Resultado rolando")).not.toBeInTheDocument()
+        expect(screen.getByText("22")).toBeInTheDocument()
     })
 
     it("renders the linked character name instead of the Owlbear player name", () => {
@@ -272,9 +308,11 @@ describe("OwlbearDiceTab", () => {
                 playerId: "player-kael",
                 playerRole: "PLAYER",
                 characterName: "Kael Thorne",
-                status: "rolling",
+                status: "resolved",
+                revealAt: expect.any(String),
             }))
         })
+        expect(owlbearDiceHistoryMock.appendHistoryEntry).toHaveBeenCalledTimes(1)
         expect(owlbearSdkMock.fetchOwlbearSheetById).toHaveBeenCalledWith("sheet-1", "token-1")
     })
 
@@ -290,7 +328,8 @@ describe("OwlbearDiceTab", () => {
                 playerId: "player-kael",
                 playerRole: "PLAYER",
                 characterName: undefined,
-                status: "rolling",
+                status: "resolved",
+                revealAt: expect.any(String),
             }))
         })
         expect(owlbearSdkMock.fetchOwlbearSheetById).not.toHaveBeenCalled()

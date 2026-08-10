@@ -1,4 +1,5 @@
 import {
+    OWLBEAR_DICE_HISTORY_ENTRY_METADATA_PREFIX,
     OWLBEAR_DICE_HISTORY_LIMIT,
     OWLBEAR_OVERLAY_METADATA_KEY,
     OWLBEAR_OVERLAY_METADATA_VERSION,
@@ -26,6 +27,7 @@ const NPC_TOKEN_HIGHLIGHT_COLOR = "#f59e0b"
 
 let currentNpcTokenHighlightId: string | null = null
 let npcTokenHighlightRequestId = 0
+let owlbearSdkPromise: Promise<OwlbearSdkLike> | null = null
 
 export function notifyOwlbearSessionInvalid() {
     if (typeof window === "undefined") return
@@ -139,14 +141,49 @@ function parseDiceHistoryEntry(value: unknown): OwlbearDiceHistoryEntry | null {
         status: parsed.status === "rolling" ? "rolling" : "resolved",
         result,
         createdAt: parsed.createdAt,
+        revealAt: typeof parsed.revealAt === "string" ? parsed.revealAt : undefined,
     }
+}
+
+function getDiceHistoryEntryMetadataKey(rollId: string) {
+    return `${OWLBEAR_DICE_HISTORY_ENTRY_METADATA_PREFIX}${encodeURIComponent(rollId)}`
+}
+
+function getDiceHistoryEntries(metadata: Record<string, unknown> | null | undefined) {
+    const value = metadata?.[OWLBEAR_ROOM_METADATA_KEY]
+    const legacyHistory = value && typeof value === "object" && Array.isArray((value as Partial<OwlbearRoomMetadataState>).diceHistory)
+        ? (value as Partial<OwlbearRoomMetadataState>).diceHistory ?? []
+        : []
+    const entriesById = new Map<string, OwlbearDiceHistoryEntry>()
+
+    for (const value of legacyHistory) {
+        const entry = parseDiceHistoryEntry(value)
+        if (entry) entriesById.set(entry.id, entry)
+    }
+
+    for (const [key, value] of Object.entries(metadata ?? {})) {
+        if (!key.startsWith(OWLBEAR_DICE_HISTORY_ENTRY_METADATA_PREFIX)) continue
+        const entry = parseDiceHistoryEntry(value)
+        if (entry) entriesById.set(entry.id, entry)
+    }
+
+    return [...entriesById.values()]
+        .sort((left, right) => {
+            const leftTime = Date.parse(left.createdAt)
+            const rightTime = Date.parse(right.createdAt)
+            if (!Number.isNaN(leftTime) && !Number.isNaN(rightTime) && leftTime !== rightTime) {
+                return rightTime - leftTime
+            }
+            return right.id.localeCompare(left.id)
+        })
+        .slice(0, OWLBEAR_DICE_HISTORY_LIMIT)
 }
 
 export async function loadOwlbearSdk(): Promise<OwlbearSdkLike | null> {
     if (typeof window === "undefined") return null
 
-    const sdkModule = await import("@owlbear-rodeo/sdk")
-    return sdkModule.default as OwlbearSdkLike
+    owlbearSdkPromise ??= import("@owlbear-rodeo/sdk").then((sdkModule) => sdkModule.default as OwlbearSdkLike)
+    return owlbearSdkPromise
 }
 
 export async function loadOwlbearSdkModule() {
@@ -266,20 +303,14 @@ export async function getOwlbearPlayerName() {
 
 export function parseRoomMetadata(metadata: Record<string, unknown> | null | undefined): OwlbearRoomMetadataState {
     const value = metadata?.[OWLBEAR_ROOM_METADATA_KEY]
-    if (!value || typeof value !== "object") {
-        return getEmptyRoomMetadata()
-    }
-
-    const parsed = value as Partial<OwlbearRoomMetadataState>
+    const parsed = value && typeof value === "object"
+        ? value as Partial<OwlbearRoomMetadataState>
+        : getEmptyRoomMetadata()
     const initiative = parsed.initiative && typeof parsed.initiative === "object" ? parsed.initiative : undefined
     return {
         version: typeof parsed.version === "number" ? parsed.version : OWLBEAR_ROOM_METADATA_VERSION,
         playerLinks: parsed.playerLinks && typeof parsed.playerLinks === "object" ? parsed.playerLinks : {},
-        diceHistory: Array.isArray(parsed.diceHistory)
-            ? parsed.diceHistory
-                .map(parseDiceHistoryEntry)
-                .filter((entry): entry is OwlbearDiceHistoryEntry => Boolean(entry))
-            : [],
+        diceHistory: getDiceHistoryEntries(metadata),
         initiative: {
             npcs: initiative?.npcs && typeof initiative.npcs === "object" ? initiative.npcs : {},
             players: initiative?.players && typeof initiative.players === "object" ? initiative.players : {},
@@ -418,19 +449,30 @@ export async function subscribeToRoomMetadata(callback: (state: OwlbearRoomMetad
 }
 
 export async function appendRoomDiceHistoryEntry(entry: OwlbearDiceHistoryEntry) {
-    return updateRoomMetadata((current) => {
-        const existingIndex = current.diceHistory.findIndex((currentEntry) => currentEntry.id === entry.id)
-        const nextDiceHistory = existingIndex >= 0
-            ? current.diceHistory.map((currentEntry, index) => index === existingIndex ? entry : currentEntry)
-            : [entry, ...current.diceHistory].slice(0, OWLBEAR_DICE_HISTORY_LIMIT)
+    const sdk = await loadOwlbearSdk()
+    if (!sdk || !sdk.isAvailable || !sdk.isReady) {
+        throw new Error("Owlbear SDK indisponível para atualizar o histórico de dados")
+    }
 
-        return {
-            ...current,
-            version: OWLBEAR_ROOM_METADATA_VERSION,
-            diceHistory: nextDiceHistory,
-            lastSyncAt: new Date().toISOString(),
-        }
+    await sdk.room.setMetadata({
+        [getDiceHistoryEntryMetadataKey(entry.id)]: entry,
     })
+
+    const metadata = await sdk.room.getMetadata()
+    const dynamicEntries = Object.entries(metadata)
+        .filter(([key]) => key.startsWith(OWLBEAR_DICE_HISTORY_ENTRY_METADATA_PREFIX))
+        .map(([key, value]) => ({ key, entry: parseDiceHistoryEntry(value) }))
+        .filter((value): value is { key: string; entry: OwlbearDiceHistoryEntry } => Boolean(value.entry))
+        .sort((left, right) => Date.parse(right.entry.createdAt) - Date.parse(left.entry.createdAt))
+
+    if (dynamicEntries.length > OWLBEAR_DICE_HISTORY_LIMIT) {
+        const cleanup = Object.fromEntries(
+            dynamicEntries.slice(OWLBEAR_DICE_HISTORY_LIMIT).map(({ key }) => [key, null])
+        )
+        await sdk.room.setMetadata(cleanup)
+    }
+
+    return parseRoomMetadata(metadata)
 }
 
 export function parseTokenLinkMetadata(metadata: Record<string, unknown> | null | undefined): OwlbearTokenLinkMetadata | null {
