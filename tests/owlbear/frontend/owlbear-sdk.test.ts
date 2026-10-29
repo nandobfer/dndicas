@@ -1,3 +1,4 @@
+/** @vitest-environment happy-dom */
 import { describe, expect, it, vi, beforeEach } from "vitest"
 import { appendRoomDiceHistoryEntry, getRoomMetadataState } from "@/features/owlbear/sdk"
 import type { OwlbearDiceHistoryEntry } from "@/features/owlbear/types"

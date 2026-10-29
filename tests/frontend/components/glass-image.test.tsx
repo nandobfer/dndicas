@@ -1,3 +1,4 @@
+/** @vitest-environment happy-dom */
 /**
  * @fileoverview Tests for GlassImage lightbox interactions.
  */

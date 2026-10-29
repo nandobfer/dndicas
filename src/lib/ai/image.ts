@@ -1,9 +1,7 @@
-import { generateImage } from "ai"
+import type { generateImage } from "ai"
 import { randomUUID } from "node:crypto"
 import { getIntegrationConfig } from "@/lib/integrations/config"
 import { debugFetch, integrationDebug } from "@/lib/integrations/debug"
-import { createGeminiProvider, GEMINI_API_URL } from "./gemini"
-import { createOpenaiProvider, OPENAI_API_URL } from "./openai"
 import { recordAiConsumption } from "./consumption"
 import { AiProviderError } from "./errors"
 import type { AiImageProviderId, AiModelDto } from "./providers"
@@ -13,6 +11,7 @@ import type { AiImageProviderId, AiModelDto } from "./providers"
  * sobre a camada de IA copiada do Opex (que só gera texto): usada pelo agente "Gerador de imagens".
  *
  * Provedores com modelos de imagem: Gemini (`*-image*` e Imagen) e OpenAI (`gpt-image-*`, `dall-e-*`).
+ * A SDK `ai` e os clientes dos provedores entram sob demanda (`await import`), como em `stream.ts`.
  */
 
 export { AI_IMAGE_PROVIDER_IDS, isAiImageProviderId, type AiImageProviderId } from "./providers"
@@ -32,6 +31,7 @@ const toModel = (id: string, name?: string): AiModelDto => ({ id, name: name ?? 
 async function listGeminiImageModels(signal?: AbortSignal): Promise<AiModelDto[]> {
     const { apiKey } = await getIntegrationConfig("ai_gemini")
     if (!apiKey) throw new AiProviderError("Gemini sem API key: configure em Integrações › Provedores de IA › Gemini")
+    const { GEMINI_API_URL } = await import("./gemini")
     const models: { name: string; displayName?: string }[] = []
     let pageToken: string | undefined
     do {
@@ -58,6 +58,7 @@ async function listGeminiImageModels(signal?: AbortSignal): Promise<AiModelDto[]
 async function listOpenaiImageModels(signal?: AbortSignal): Promise<AiModelDto[]> {
     const { apiKey } = await getIntegrationConfig("ai_openai")
     if (!apiKey) throw new AiProviderError("OpenAI sem API key: configure em Integrações › Provedores de IA › OpenAI")
+    const { OPENAI_API_URL } = await import("./openai")
     let res: Response
     try {
         res = await debugFetch(integrationDebug("ai_openai"), "OpenAI", `${OPENAI_API_URL}/models`, { headers: { Authorization: `Bearer ${apiKey}` }, cache: "no-store", signal })
@@ -96,8 +97,8 @@ export interface AiImageResult {
 }
 
 async function imageModelFor(request: AiImageRequest) {
-    if (request.provider === "gemini") return (await createGeminiProvider()).image(request.model)
-    return (await createOpenaiProvider()).image(request.model)
+    if (request.provider === "gemini") return (await (await import("./gemini")).createGeminiProvider()).image(request.model)
+    return (await (await import("./openai")).createOpenaiProvider()).image(request.model)
 }
 
 /** Gera UMA imagem. Lança `AiProviderError` com mensagem pt-BR quando o provedor falha. */
@@ -105,6 +106,7 @@ export async function generateAiImage(request: AiImageRequest): Promise<AiImageR
     const startedAt = Date.now()
     let result: Awaited<ReturnType<typeof generateImage>>
     try {
+        const { generateImage } = await import("ai")
         result = await generateImage({
             model: await imageModelFor(request),
             prompt: request.prompt,

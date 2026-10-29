@@ -1,3 +1,4 @@
+/** @vitest-environment happy-dom */
 /**
  * Teste exemplo para o storage utility
  */

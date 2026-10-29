@@ -1,3 +1,4 @@
+/** @vitest-environment happy-dom */
 import { render, waitFor } from "@testing-library/react"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { useDiceResultConsoleApi } from "@/features/dice-roller/hooks/use-dice-result-console-api"

@@ -1,3 +1,4 @@
+/** @vitest-environment happy-dom */
 import { act, render, screen, waitFor } from "@testing-library/react"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import { OwlbearAuthBridgePage } from "@/features/owlbear/owlbear-auth-bridge-page"
