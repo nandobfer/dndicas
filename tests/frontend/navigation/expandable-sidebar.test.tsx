@@ -8,6 +8,10 @@ const replace = vi.fn()
 const refresh = vi.fn()
 const signOut = vi.fn()
 
+vi.mock('@/features/opex-agent/components/OpexNavItem', () => ({
+    OpexNavItem: () => null,
+}));
+
 vi.mock('next/navigation', () => ({
     usePathname: () => pathname,
     useRouter: () => ({ replace, refresh }),

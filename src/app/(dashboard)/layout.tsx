@@ -13,6 +13,7 @@ import { GlassFooter } from "@/components/ui/glass-footer"
 import { useWarmSearchCache } from "@/core/hooks/useWarmSearchCache"
 import { DiceRollerProvider } from "@/features/dice-roller/components/dice-roll-context"
 import { GlobalFabGroup } from "@/features/dice-roller/components/global-fab-group"
+import { OpexScopeProvider } from "@/features/opex-agent/components/OpexScopeProvider"
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
     useWarmSearchCache()
@@ -38,6 +39,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           : `${themeConfig.spacing.sidebar.collapsed}px`
 
     return (
+        <OpexScopeProvider>
         <DiceRollerProvider>
         <div className="relative flex min-h-screen w-full bg-background overflow-hidden">
             {/* Liquid Glass Background */}
@@ -75,5 +77,6 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             <GlobalFabGroup />
         </div>
         </DiceRollerProvider>
+        </OpexScopeProvider>
     )
 }
