@@ -7,7 +7,7 @@
  */
 
 import { SearchInput } from '@/components/ui/search-input';
-import { RoleTabs, type RoleFilter } from '@/components/ui/role-tabs';
+import { useRoles } from '@/features/perfix/hooks/usePerfixAdmin';
 import { StatusChips, type StatusFilter } from '@/components/ui/status-chips';
 import { useAuth } from "@/core/hooks/useAuth"
 import { cn } from '@/core/utils';
@@ -19,7 +19,7 @@ export interface UserFiltersProps {
   /** Search change handler */
   onSearchChange: (search: string) => void;
   /** Role change handler */
-  onRoleChange: (role: RoleFilter) => void;
+  onRoleChange: (roleId: string) => void;
   /** Status change handler */
   onStatusChange: (status: UserFilters['status']) => void;
   /** Whether search is loading */
@@ -50,7 +50,8 @@ export function UserFilters({
   isSearching = false,
   className,
 }: UserFiltersProps) {
-  const { isAdmin } = useAuth()
+  const isAdmin = useAuth().can("users.view")
+  const roles = useRoles()
 
   return (
       <div className={cn("flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between", className)}>
@@ -67,7 +68,7 @@ export function UserFilters({
           {/* Right side: Filters */}
           <div className="flex flex-wrap items-center gap-3">
               {/* Role tabs */}
-              <RoleTabs value={filters.role || "all"} onChange={onRoleChange} />
+              <select aria-label="Filtrar por perfil" className="rounded border bg-background p-2 text-sm" value={filters.roleId || ""} onChange={event => onRoleChange(event.target.value)}><option value="">Todos os perfis</option>{roles.data?.roles.map(role => <option key={role.id} value={role.id}>{role.nome}</option>)}</select>
 
               {/* Status chips */}
               <StatusChips value={filters.status || "all"} onChange={onStatusChange as (status: StatusFilter) => void} />

@@ -20,7 +20,7 @@ import { motionConfig } from "@/lib/config/motion-configs"
 import { useClassesPage } from "../hooks/useClassesPage"
 
 export function ClassesPage() {
-    const { isAdmin } = useAuth()
+    const isAdmin = useAuth().can("catalog.edit")
 
     const { filters, data, actions, modals, viewMode, setViewMode, isDefault } = useClassesPage()
 

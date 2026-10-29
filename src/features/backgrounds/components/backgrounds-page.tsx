@@ -20,7 +20,7 @@ import { useBackgroundsPage } from "../hooks/useBackgroundsPage"
 import { cn } from "@/core/utils/index"
 
 export function BackgroundsPage() {
-    const { isAdmin } = useAuth()
+    const isAdmin = useAuth().can("catalog.edit")
 
     const { isMobile, filters, data, modals, viewMode, setViewMode, actions } = useBackgroundsPage()
 

@@ -10,7 +10,7 @@ describe("fluxo agêntico dos feedbacks bloqueado pela integração Opex", () =>
     })
 
     it.each(["plan", "implement", "iterate", "approve"])("POST /api/feedback/[id]/%s responde 409 para administradores", async (action) => {
-        vi.doMock("@/core/auth/server", () => ({ currentUser: vi.fn().mockResolvedValue({ id: "admin-1", publicMetadata: { role: "admin" } }) }))
+        vi.doMock("@/core/auth/server", () => ({ currentUser: vi.fn().mockResolvedValue({ id: "admin-1", can: (permission: string) => ["catalog.generate", "feedback.agent"].includes(permission) }) }))
         const mod = await importFresh<{ POST: (req: Request, ctx: { params: Promise<{ id: string }> }) => Promise<Response> }>(`@/app/api/feedback/[id]/${action}/route`)
         const response = await mod.POST(makeJsonRequest(`http://localhost/api/feedback/abc/${action}`, { method: "POST", body: JSON.stringify({ model: "x", message: "y" }) }), { params: Promise.resolve({ id: "abc" }) })
         const payload = await readJson<{ code: string }>(response)

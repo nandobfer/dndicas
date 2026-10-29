@@ -140,7 +140,7 @@ export function useDeleteUser() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: (id: string) => deleteUser(id),
+    mutationFn: ({ id, version }: { id: string; version: number }) => deleteUser(id, version),
     onSuccess: () => {
       // Invalidate all user lists
       queryClient.invalidateQueries({ queryKey: usersKeys.lists() });

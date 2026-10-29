@@ -1,4 +1,4 @@
-import { logAction } from "@/core/database/audit-log"
+import { logAction } from "@/features/perfix/server/audit"
 import { loggerFor } from "@/lib/logger"
 
 export type AcaoAuditoriaTipo =

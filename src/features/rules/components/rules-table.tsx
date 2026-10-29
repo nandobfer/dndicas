@@ -47,7 +47,7 @@ export function RulesTable({
     onDelete, 
     onPageChange 
 }: RulesTableProps) {
-    const { isAdmin } = useAuth()
+    const isAdmin = useAuth().can("catalog.edit")
     const totalPages = Math.ceil(total / limit)
 
     if (isLoading && rules.length === 0) {

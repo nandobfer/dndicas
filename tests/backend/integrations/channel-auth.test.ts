@@ -2,8 +2,8 @@ import { describe, expect, it } from "vitest"
 import { isChannelAuthorized, parseChannel } from "@/lib/pusher/channel-auth"
 import { opexChannel, opexOwnerKey } from "@/lib/pusher/channel-names"
 
-const admin = { user: { id: "admin-1", role: "admin" as const }, anonymousId: null }
-const user = { user: { id: "user-1", role: "user" as const }, anonymousId: null }
+const admin = { user: { id: "admin-1", permissions: ["admin.access"] }, anonymousId: null }
+const user = { user: { id: "user-1", permissions: [] }, anonymousId: null }
 const visitor = { user: null, anonymousId: "11111111-1111-4111-8111-111111111111" }
 
 describe("autorização dos canais privados do Pusher", () => {

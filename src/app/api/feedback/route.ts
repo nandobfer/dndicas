@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { currentUser } from "@/core/auth/server"
 import { FeedbackModel } from "@/features/feedback/api/feedback.model"
 import dbConnect from "@/core/database/db"
-import { logAction } from "@/core/database/audit-log"
+import { logAction } from "@/features/perfix/server/audit"
 import { createFeedbackTimelineEvent } from "@/features/feedback/services/feedback-timeline-service"
 import { z } from "zod"
 
@@ -65,7 +65,7 @@ export async function POST(req: NextRequest) {
     const body = await req.json()
     const validated = createFeedbackSchema.parse(body)
 
-    const isAdmin = user.publicMetadata?.role === "admin"
+    const isAdmin = user.can("feedback.moderate")
     
     // Non-admins can't set status or priority on creation
     if (!isAdmin) {

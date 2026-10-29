@@ -1,15 +1,15 @@
 import { redirect } from "next/navigation"
 import { ShieldAlert } from "lucide-react"
 import { getActor } from "@/features/auth/server/actor"
+import { pageAccess } from "@/features/perfix/server/page-access"
 
 /** Integrações lêem o banco a cada acesso (nada congelado no build). */
 export const dynamic = "force-dynamic"
 
 /** Central de integrações: só administradores (visitante vai para o login). */
 export default async function IntegracoesLayout({ children }: { children: React.ReactNode }) {
-    const actor = await getActor()
-    if (!actor) redirect("/sign-in?callbackUrl=%2Fintegracoes")
-    if (actor.role !== "admin") {
+    const access = await pageAccess("integrations.access")
+    if (!access) {
         return (
             <div className="flex min-h-[50vh] flex-col items-center justify-center gap-3 text-center">
                 <ShieldAlert className="h-10 w-10 text-amber-400" aria-hidden />

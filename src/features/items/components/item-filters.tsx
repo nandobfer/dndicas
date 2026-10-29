@@ -52,7 +52,7 @@ const ITEM_RARITIES: { value: ItemRarity | "all"; label: string }[] = [
 ]
 
 export function ItemFilters({ filters, onSearchChange, onStatusChange, onTypeChange, onRarityChange, onSourcesChange, isSearching = false, className }: ItemFiltersProps) {
-    const { isAdmin } = useAuth()
+    const isAdmin = useAuth().can("catalog.edit")
     const isMobile = useIsMobile()
 
     return (

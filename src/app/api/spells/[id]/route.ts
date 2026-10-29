@@ -26,7 +26,7 @@ export async function GET(
     // Check if user is admin to allow viewing inactive spells
     const { userId } = await auth();
     const user = userId ? await currentUser() : null;
-    const isAdmin = user?.publicMetadata?.role === 'admin';
+    const isAdmin = user?.can('catalog.edit') ?? false;
 
     // Call service layer
     const spell = await getSpellById(id, isAdmin);
@@ -83,7 +83,7 @@ export async function PUT(
     }
 
     // Admin check
-    const isAdmin = user.publicMetadata?.role === 'admin';
+    const isAdmin = user.can('catalog.edit');
 
     if (!isAdmin) {
       return NextResponse.json({ error: 'Acesso negado. Apenas administradores podem editar magias.' }, { status: 403 });
@@ -174,7 +174,7 @@ export async function DELETE(
     }
 
     // Admin check
-    const isAdmin = user.publicMetadata?.role === 'admin';
+    const isAdmin = user.can('catalog.edit');
 
     if (!isAdmin) {
       return NextResponse.json({ error: 'Acesso negado. Apenas administradores podem excluir magias.' }, { status: 403 });

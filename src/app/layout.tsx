@@ -39,16 +39,16 @@ export default async function RootLayout({
                 <PusherConfigBridge config={pusherConfig} />
                 <ChunkLoadRecovery />
                 <ScrollToTop />
-                <AuthSessionProvider>
-                    <AppProvider>
+                <AppProvider>
+                    <AuthSessionProvider>
                         <GlassTooltipProvider>
                             <WindowProvider>
                                 {children}
                                 <Toaster />
                             </WindowProvider>
                         </GlassTooltipProvider>
-                    </AppProvider>
-                </AuthSessionProvider>
+                    </AuthSessionProvider>
+                </AppProvider>
             </body>
         </html>
     )

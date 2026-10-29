@@ -46,7 +46,8 @@ async function fetchApi<T>(
     throw new Error([error.error, error.details].filter(Boolean).join(': ') || `HTTP ${response.status}`);
   }
 
-  return response.json();
+  const result = await response.json() as { data: T };
+  return result.data;
 }
 
 /**
@@ -58,8 +59,8 @@ function buildQueryString(filters: UserFilters): string {
   if (filters.search) {
     params.set('search', filters.search);
   }
-  if (filters.role && filters.role !== 'all') {
-    params.set('role', filters.role);
+  if (filters.roleId) {
+    params.set('roleId', filters.roleId);
   }
   if (filters.status) {
     params.set('status', filters.status);
@@ -116,9 +117,10 @@ export async function updateUser(
 /**
  * Delete a user (soft delete).
  */
-export async function deleteUser(id: string): Promise<void> {
+export async function deleteUser(id: string, version: number): Promise<void> {
   await fetchApi<{ success: boolean }>(`${API_BASE}/${id}`, {
     method: 'DELETE',
+    body: JSON.stringify({ version }),
   });
 }
 

@@ -18,9 +18,9 @@ const notFound = () => NextResponse.json({ success: false, error: "Integração 
 
 /** GET /api/integrations/[id] — configuração da integração; segredos só como "configurado". */
 export async function GET(_request: NextRequest, { params }: Params) {
-    const denied = await denyUnlessAdmin()
-    if (denied) return denied
     const { id } = await params
+    const denied = await denyUnlessAdmin(`integrations.${id}.view`)
+    if (denied) return denied
     if (!isIntegrationId(id)) return notFound()
     try {
         const data = await getIntegrationDetail(id)
@@ -33,9 +33,9 @@ export async function GET(_request: NextRequest, { params }: Params) {
 
 /** PATCH /api/integrations/[id] — salva campos, ambiente, modo debug e documentação Swagger. */
 export async function PATCH(request: NextRequest, { params }: Params) {
-    const denied = await denyUnlessAdmin()
-    if (denied) return denied
     const { id } = await params
+    const denied = await denyUnlessAdmin(`integrations.${id}.edit`)
+    if (denied) return denied
     if (!isIntegrationId(id)) return notFound()
     try {
         const def = getIntegrationDef(id)
@@ -54,7 +54,7 @@ export async function PATCH(request: NextRequest, { params }: Params) {
             )
         }
 
-        const data = await updateIntegration(id, parsed.data as IntegrationUpdateInput, (await requireAdminActor()).id)
+        const data = await updateIntegration(id, parsed.data as IntegrationUpdateInput, (await requireAdminActor(`integrations.${id}.edit`)).id)
         return NextResponse.json({ success: true, data, message: "Integração salva" })
     } catch (error) {
         if (error instanceof IntegrationUpdateError) {

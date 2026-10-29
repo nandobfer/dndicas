@@ -212,7 +212,7 @@ async function migrateUsers(options: MigrationOptions, rows: CsvRow[]): Promise<
             oldClerkId: row.id,
             remapSourceIds,
             localUserId: user._id.toString(),
-            role: user.role,
+            role: user.roles.join("|"),
             status: user.status,
             action: "updated",
             passwordImported,

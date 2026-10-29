@@ -13,7 +13,7 @@ import { appChannel, OPEX_CHANNEL_PREFIX } from "./channel-names"
 
 export interface ChannelViewer {
     /** Usuário logado (com o papel), ou `null` para visitante. */
-    user: { id: string; role: "admin" | "user" } | null
+    user: { id: string; permissions: readonly string[] } | null
     /** Identificador anônimo validado pelo cookie assinado do Agente Opex, quando houver. */
     anonymousId: string | null
 }
@@ -41,11 +41,12 @@ export function parseChannel(channel: string): ParsedChannel {
 /** Autoriza a assinatura do canal conforme quem está vendo (sessão validada pelo servidor). */
 export function isChannelAuthorized(channel: string, viewer: ChannelViewer): boolean {
     const parsed = parseChannel(channel)
+    const canAdmin = viewer.user?.permissions.some(key => key === "*" || key === "admin.access") ?? false
     switch (parsed.kind) {
         case "app":
-            return viewer.user?.role === "admin"
+            return canAdmin
         case "integration":
-            return viewer.user?.role === "admin" && isIntegrationId(parsed.integrationId)
+            return canAdmin && isIntegrationId(parsed.integrationId)
         case "opex-user":
             return viewer.user?.id === parsed.userId
         case "opex-anonymous":

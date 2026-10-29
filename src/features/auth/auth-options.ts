@@ -2,7 +2,7 @@ import type { NextAuthOptions } from "next-auth"
 import CredentialsProvider from "next-auth/providers/credentials"
 import GoogleProvider from "next-auth/providers/google"
 import { compare } from "bcryptjs"
-import dbConnect from "@/core/database/db"
+import { dbConnect } from "@/lib/db"
 import { User } from "@/features/users/models/user"
 
 const PERSISTENT_SESSION_MAX_AGE_SECONDS = 60 * 60 * 24 * 365 * 20
@@ -40,7 +40,6 @@ export async function authorizeCredentials(credentials: { identifier?: string | 
         name: user.name || user.username,
         image: user.avatarUrl,
         username: user.username,
-        role: user.role,
         status: user.status,
     }
 }
@@ -126,7 +125,7 @@ async function findOrCreateGoogleUser(profile: { email?: string | null; name?: s
         name: profile.name || undefined,
         avatarUrl: profile.image || undefined,
         passwordSetupRequired: true,
-        role: "user",
+        roles: await (await import("@/features/perfix/server/settings")).signupRoleIds(),
         status: "active",
         deleted: false,
         lastLoginAt: new Date(),
@@ -167,16 +166,15 @@ export const authOptions: NextAuthOptions = {
             user.name = localUser.name || localUser.username
             user.image = localUser.avatarUrl
             user.username = localUser.username
-            user.role = localUser.role
             user.status = localUser.status
 
             return true
         },
         async jwt({ token, user }) {
+            delete token.role
             if (user) {
                 token.id = user.id
                 token.username = user.username
-                token.role = user.role
                 token.status = user.status
             }
             return token
@@ -186,7 +184,6 @@ export const authOptions: NextAuthOptions = {
                 const userId = typeof token.id === "string" ? token.id : null
                 session.user.id = String(token.id)
                 session.user.username = typeof token.username === "string" ? token.username : null
-                session.user.role = token.role === "admin" ? "admin" : "user"
                 session.user.status = token.status === "inactive" ? "inactive" : "active"
 
                 if (userId) {
@@ -197,7 +194,6 @@ export const authOptions: NextAuthOptions = {
                         session.user.email = user.email
                         session.user.image = user.avatarUrl || null
                         session.user.username = user.username
-                        session.user.role = user.role
                         session.user.status = user.status
                     }
                 }

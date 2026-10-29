@@ -25,7 +25,7 @@ export async function GET() {
             username: user.username,
             email: user.email,
             avatarUrl: user.avatarUrl || "",
-            role: user.role,
+            roleIds: user.roles,
             mcpToken: serializeMcpTokenState(user),
         })
     } catch (error) {
@@ -66,7 +66,7 @@ export async function PATCH(request: NextRequest) {
             username: user.username,
             email: user.email,
             avatarUrl: user.avatarUrl || "",
-            role: user.role,
+            roleIds: user.roles,
             mcpToken: serializeMcpTokenState(user),
         })
     } catch (error) {

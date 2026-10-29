@@ -20,6 +20,7 @@ import { PUBLIC_API_SPEC_PATH } from "@/lib/public-api/paths"
 import type { Schedule } from "./schedule"
 
 export const INTEGRATION_IDS = [
+    "perfix",
     "google_auth",
     "pusher",
     "internal_api",
@@ -321,6 +322,7 @@ export const TRANSLATION_PROVIDER_OPTIONS = [
 // ---------------------------------------------------------------------------
 
 export const INTEGRATIONS: readonly IntegrationDef[] = [
+    { id: "perfix", name: "Perfix", description: "Perfis, permissões e perfil padrão dos novos usuários", defaultEnvironment: "interno", streamsDebugOverPusher: true, publicFields: [], secretFields: [] },
     {
         id: "google_auth",
         name: "Autenticação Google",
@@ -635,6 +637,7 @@ export const INTEGRATIONS_BASE_PATH = "/integracoes"
 
 /** Rotas próprias (fora de `/integracoes/[id]`). */
 const CUSTOM_PATHS: Partial<Record<IntegrationId, string>> = {
+    perfix: `${INTEGRATIONS_BASE_PATH}/perfix`,
     ai: `${INTEGRATIONS_BASE_PATH}/ia`,
     ai_opencode: `${INTEGRATIONS_BASE_PATH}/ia/opencode`,
     ai_gemini: `${INTEGRATIONS_BASE_PATH}/ia/gemini`,

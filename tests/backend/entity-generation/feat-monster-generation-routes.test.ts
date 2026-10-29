@@ -12,7 +12,7 @@ describe("entity generation feat and monster routes", () => {
         })
 
         vi.doMock("@/core/auth/server", () => ({
-            currentUser: vi.fn().mockResolvedValue({ id: "user-1", publicMetadata: { role: "admin" } }),
+            currentUser: vi.fn().mockResolvedValue({ id: "user-1", can: (permission: string) => ["catalog.generate", "feedback.agent"].includes(permission) }),
         }))
         vi.doMock("@/features/entity-generation/server/feat-ai-generation-service", () => ({ generateFeatCandidates }))
         vi.doMock("@/features/entity-generation/realtime/entity-generation-pusher-service", () => ({
@@ -44,7 +44,7 @@ describe("entity generation feat and monster routes", () => {
         })
 
         vi.doMock("@/core/auth/server", () => ({
-            currentUser: vi.fn().mockResolvedValue({ id: "user-1", publicMetadata: { role: "admin" } }),
+            currentUser: vi.fn().mockResolvedValue({ id: "user-1", can: (permission: string) => ["catalog.generate", "feedback.agent"].includes(permission) }),
         }))
         vi.doMock("@/features/entity-generation/server/monster-ai-generation-service", () => ({ generateMonsterCandidates }))
         vi.doMock("@/features/entity-generation/realtime/entity-generation-pusher-service", () => ({

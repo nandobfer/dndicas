@@ -13,7 +13,7 @@ const schema = z.object({ model: z.string().min(1), message: z.string().max(2000
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
     try {
         const user = await currentUser()
-        if (!user || user.publicMetadata?.role !== "admin") return NextResponse.json({ success: false, error: "Você não tem permissão para implementar feedbacks", code: "FORBIDDEN" } satisfies ApiResponse<null>, { status: user ? 403 : 401 })
+        if (!user || !user.can("feedback.agent")) return NextResponse.json({ success: false, error: "Você não tem permissão para implementar feedbacks", code: "FORBIDDEN" } satisfies ApiResponse<null>, { status: user ? 403 : 401 })
 
         // Fluxo agêntico bloqueado enquanto a integração Opex estiver em desenvolvimento.
         const unavailable = opexIntegrationUnavailableResponse()

@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { currentUser } from "@/core/auth/server"
 import { z } from "zod"
 import dbConnect from "@/core/database/db"
-import { logAction } from "@/core/database/audit-log"
+import { logAction } from "@/features/perfix/server/audit"
 import type { ApiResponse } from "@/core/types/common"
 import { FeedbackModel } from "@/features/feedback/api/feedback.model"
 import { hasActiveFeedbackAgentRun, queueFeedbackPlan } from "@/features/feedback/services/feedback-agent-run-service"
@@ -20,7 +20,7 @@ export async function POST(
 ) {
     try {
         const user = await currentUser()
-        if (!user || user.publicMetadata?.role !== "admin") {
+        if (!user || !user.can("feedback.agent")) {
             const response: ApiResponse<null> = {
                 success: false,
                 error: "Você não tem permissão para solicitar plano de implementação",

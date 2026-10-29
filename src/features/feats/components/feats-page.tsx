@@ -17,7 +17,7 @@ import { EntityGenerationAIModal } from "@/features/entity-generation/components
 import { featGenerationAdapter } from "@/features/entity-generation/adapters/feat-generation-adapter"
 
 export function FeatsPage() {
-    const { isAdmin } = useAuth()
+    const isAdmin = useAuth().can("catalog.edit")
 
     // Logic moved to custom hook for better maintainability (T044)
     const { filters, data, actions, modals, viewMode, setViewMode, isDefault } = useFeatsPage()

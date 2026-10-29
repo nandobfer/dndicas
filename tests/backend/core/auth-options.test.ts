@@ -8,8 +8,8 @@ const compare = vi.fn();
 const save = vi.fn();
 const findOne = vi.fn();
 
-vi.mock('@/core/database/db', () => ({
-    default: dbConnect,
+vi.mock('@/lib/db', () => ({
+    dbConnect,
 }));
 
 vi.mock('bcryptjs', () => ({
@@ -39,7 +39,7 @@ describe('Auth.js options', () => {
             username: 'hero',
             name: 'Hero',
             avatarUrl: 'https://example.com/avatar.png',
-            role: 'admin',
+            roles: ['role-admin'],
             status: 'active',
             passwordSetupRequired: false,
             passwordHash: '$2a$10$imported',
@@ -63,7 +63,6 @@ describe('Auth.js options', () => {
             id: 'local-user-1',
             email: 'hero@example.com',
             username: 'hero',
-            role: 'admin',
             status: 'active',
         }));
     });
@@ -75,7 +74,7 @@ describe('Auth.js options', () => {
             username: 'hero',
             name: 'Hero',
             avatarUrl: undefined,
-            role: 'user',
+            roles: ['role-user'],
             status: 'active',
             save,
         };
@@ -97,7 +96,6 @@ describe('Auth.js options', () => {
             id: 'local-google-user',
             email: 'hero@example.com',
             username: 'hero',
-            role: 'user',
             status: 'active',
             image: 'https://example.com/google.png',
         }));

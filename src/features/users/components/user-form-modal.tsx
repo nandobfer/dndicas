@@ -17,7 +17,7 @@ import { GlassModal, GlassModalContent, GlassModalHeader, GlassModalTitle, Glass
 import { GlassInput } from "@/components/ui/glass-input"
 import { GlassSwitch } from "@/components/ui/glass-switch"
 import { glassConfig } from "@/lib/config/glass-config"
-import { RoleTabs } from "@/components/ui/role-tabs"
+import { RoleAssignment } from "@/features/perfix/components/RoleAssignment"
 import { createUserSchema, updateUserSchema, type CreateUserSchema, type UpdateUserSchema } from "../api/validation"
 import type { User, UserResponse, CreateUserInput, UpdateUserInput } from "../types/user.types"
 
@@ -60,17 +60,21 @@ export function UserFormModal({ isOpen, onClose, onSubmit, user, isSubmitting = 
         reset,
         formState: { errors },
     } = useForm<CreateUserSchema | UpdateUserSchema>({
-        resolver: zodResolver(isEditMode ? updateUserSchema : createUserSchema),
+        resolver: async values => {
+            const parsed = (isEditMode ? updateUserSchema : createUserSchema).safeParse(values)
+            return parsed.success ? { values: parsed.data, errors: {} } : { values: {}, errors: Object.fromEntries(parsed.error.issues.map(issue => [String(issue.path[0]), { type: "validation", message: issue.message }])) }
+        },
         defaultValues: {
             username: user?.username || "",
             email: user?.email || "",
             name: user?.name || "",
-            role: user?.role || "user",
+            roleIds: user?.roleIds,
+            version: user?.version,
             status: user?.status || "active",
         },
     })
 
-    const role = watch("role")
+    const roleIds = watch("roleIds")
 
     // Reset form when modal opens/closes or user changes
     React.useEffect(() => {
@@ -79,7 +83,8 @@ export function UserFormModal({ isOpen, onClose, onSubmit, user, isSubmitting = 
                 username: user?.username || "",
                 email: user?.email || "",
                 name: user?.name || "",
-                role: user?.role || "user",
+                roleIds: user?.roleIds,
+                version: user?.version,
                 status: user?.status || "active",
             })
         }
@@ -106,7 +111,7 @@ export function UserFormModal({ isOpen, onClose, onSubmit, user, isSubmitting = 
                                 description="Usuários inativos não podem acessar o sistema"
                                 checked={watch("status") === "active"}
                                 onCheckedChange={(checked) => setValue("status", checked ? "active" : "inactive")}
-                                disabled={isSubmitting}
+                                disabled={isSubmitting || isSelfEdit}
                             />
                         </div>
                     )}
@@ -124,22 +129,12 @@ export function UserFormModal({ isOpen, onClose, onSubmit, user, isSubmitting = 
                     <div className="space-y-2">
                         <label className="text-sm font-medium text-white/80 flex items-center gap-2">
                             <Shield className="h-4 w-4" />
-                            Função <span className="text-rose-400">*</span>
+                            Perfis
                         </label>
                         <div className="w-full">
-                            <RoleTabs
-                                value={role === "admin" || role === "user" ? role : "user"}
-                                onChange={(newRole) => {
-                                    if (newRole !== "all") {
-                                        setValue("role", newRole)
-                                    }
-                                }}
-                                showAll={false}
-                                fullWidth
-                                disabled={isSelfEdit}
-                            />
+                            <RoleAssignment value={roleIds} onChange={ids => setValue("roleIds", ids)} disabled={isSelfEdit || isSubmitting} />
                         </div>
-                        {isSelfEdit && <p className="text-xs text-blue-400/80 mt-1">Você não pode alterar sua própria função administrativa.</p>}
+                        {isSelfEdit && <p className="text-xs text-blue-400/80 mt-1">Você não pode alterar seus próprios perfis.</p>}
                     </div>
 
                     {/* Actions */}

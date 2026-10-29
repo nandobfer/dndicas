@@ -439,7 +439,7 @@ interface EntityPreviewPanelProps {
 }
 
 export const EntityPreviewPanel = ({ entityId, entityType, enabled = true }: EntityPreviewPanelProps) => {
-    const { isAdmin } = useAuth()
+    const isAdmin = useAuth().can("catalog.edit")
     const [generationOpen, setGenerationOpen] = React.useState(false)
     const { data, loading, invalidate } = useEntityPreviewData({ entityId, entityType, enabled })
     const canGenerateAI = isAdmin && (entityType === "Magia" || entityType === "Talento" || entityType === "Monstro")

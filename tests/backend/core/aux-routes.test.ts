@@ -256,7 +256,7 @@ describe('auxiliary backend routes', () => {
                 fullName: 'Hero Player',
                 username: 'hero',
                 emailAddresses: [{ emailAddress: 'hero@example.com' }],
-                publicMetadata: { role: 'user' },
+                can: () => false,
             }),
         }));
         vi.doMock('@/features/feedback/api/feedback.model', () => ({
@@ -299,7 +299,7 @@ describe('auxiliary backend routes', () => {
         vi.doMock('@/core/auth/server', () => ({
             auth: vi.fn().mockResolvedValue({ userId: 'clerk-2' }),
             currentUser: vi.fn().mockResolvedValue({
-                publicMetadata: { role: 'user' },
+                can: () => false,
             }),
         }));
         vi.doMock('@/features/feedback/api/feedback.model', () => ({
@@ -325,7 +325,7 @@ describe('auxiliary backend routes', () => {
         vi.doMock('@/core/auth/server', () => ({
             auth: vi.fn().mockResolvedValue({ userId: 'clerk-1' }),
             currentUser: vi.fn().mockResolvedValue({
-                publicMetadata: { role: 'user' },
+                can: () => false,
             }),
         }));
         vi.doMock('@/core/database/db', () => ({

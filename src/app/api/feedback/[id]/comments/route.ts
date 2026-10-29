@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { currentUser } from "@/core/auth/server"
 import { z } from "zod"
 import dbConnect from "@/core/database/db"
-import { logAction } from "@/core/database/audit-log"
+import { logAction } from "@/features/perfix/server/audit"
 import type { ApiResponse } from "@/core/types/common"
 import { FeedbackModel } from "@/features/feedback/api/feedback.model"
 import { createFeedbackTimelineEvent } from "@/features/feedback/services/feedback-timeline-service"
@@ -44,7 +44,7 @@ export async function POST(
             return NextResponse.json(response, { status: 404 })
         }
 
-        const isAdmin = user.publicMetadata?.role === "admin"
+        const isAdmin = user.can("feedback.moderate")
         const event = await createFeedbackTimelineEvent({
             feedbackId: id,
             type: "comment_created",

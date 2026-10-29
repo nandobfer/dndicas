@@ -9,7 +9,7 @@ import { opexIntegrationUnavailableResponse } from "@/features/feedback/services
 export async function POST(_req: Request, { params }: { params: Promise<{ id: string }> }) {
     try {
         const user = await currentUser()
-        if (!user || user.publicMetadata?.role !== "admin") return NextResponse.json({ success: false, error: "Você não tem permissão para aprovar merge", code: "FORBIDDEN" } satisfies ApiResponse<null>, { status: user ? 403 : 401 })
+        if (!user || !user.can("feedback.agent")) return NextResponse.json({ success: false, error: "Você não tem permissão para aprovar merge", code: "FORBIDDEN" } satisfies ApiResponse<null>, { status: user ? 403 : 401 })
 
         // Fluxo agêntico bloqueado enquanto a integração Opex estiver em desenvolvimento.
         const unavailable = opexIntegrationUnavailableResponse()

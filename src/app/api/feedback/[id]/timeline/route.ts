@@ -35,7 +35,7 @@ export async function GET(
             return NextResponse.json(response, { status: 404 })
         }
 
-        const isAdmin = user.publicMetadata?.role === "admin"
+        const isAdmin = user.can("feedback.moderate")
         const events = await listFeedbackTimelineEvents(id, { includeAdminEvents: isAdmin })
 
         const response: ApiResponse<typeof events> = {

@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { auth, currentUser } from "@/core/auth/server"
 import { FeedbackModel } from "@/features/feedback/api/feedback.model"
 import dbConnect from "@/core/database/db"
-import { logAction } from "@/core/database/audit-log"
+import { logAction } from "@/features/perfix/server/audit"
 import type { ApiResponse } from "@/core/types/common"
 import { createFeedbackTimelineEvent } from "@/features/feedback/services/feedback-timeline-service"
 import { z } from "zod"
@@ -83,7 +83,7 @@ export async function PATCH(
     }
 
     // Access control: creator or admin
-    const isAdmin = user.publicMetadata?.role === "admin"
+    const isAdmin = user.can("feedback.moderate")
     const isOwner = feedback.createdBy === session.userId
 
     if (!isAdmin && !isOwner) {

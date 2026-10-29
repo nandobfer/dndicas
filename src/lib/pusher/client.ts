@@ -4,6 +4,11 @@ import { withBasePath } from "@/lib/base-path"
 import { parsePusherClientUrls, pickPusherClientEndpoint } from "./url"
 
 let _client: Pusher | null = null
+export function resetPusherClient() {
+    _client?.disconnect()
+    _client = null
+    _channelRefCounts.clear()
+}
 
 export interface PusherClientConfig {
     key?: string

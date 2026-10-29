@@ -8,7 +8,7 @@ import { opexIntegrationUnavailableResponse } from "@/features/feedback/services
 export async function GET() {
     try {
         const user = await currentUser()
-        if (!user || user.publicMetadata?.role !== "admin") {
+        if (!user || !user.can("feedback.agent")) {
             const response: ApiResponse<null> = {
                 success: false,
                 error: "Você não tem permissão para consultar modelos do OpenCode",

@@ -18,7 +18,7 @@ async function authOf(scope: OpexServerScope): Promise<McpAuthContext | null> {
     await dbConnect()
     const user = await User.findById(scope.actor.id).select("username name email").lean<{ username: string; name?: string; email: string }>()
     if (!user) return null
-    return { userId: scope.actor.id, username: user.username, name: user.name ?? null, email: user.email, role: scope.actor.role }
+    return { userId: scope.actor.id, username: user.username, name: user.name ?? null, email: user.email, role: scope.actor.role, permissions: scope.actor.permissions ?? [] }
 }
 
 async function requireAuth(scope: OpexServerScope): Promise<McpAuthContext> {

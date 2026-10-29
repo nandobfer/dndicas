@@ -3,6 +3,7 @@
  * `runMigrations()` para evitar ciclos de import com os modelos.
  */
 import { registerMigrations } from "./index"
+import { migratePerfix } from "./migrate-perfix"
 import { seedIntegrationsFromEnv } from "./seed-integrations-from-env"
 import { repairIntegrationIndexes } from "./repair-integration-indexes"
 import { ensureAiUsageIndexes } from "./ensure-ai-usage-indexes"
@@ -10,6 +11,7 @@ import { ensureAiConsumptionIndexes } from "./ensure-ai-consumption-indexes"
 import { ensureOpexIndexes } from "./ensure-opex-indexes"
 
 registerMigrations(
+    { name: "migrate-perfix", run: migratePerfix },
     { name: "seed-integrations-from-env", run: () => seedIntegrationsFromEnv() },
     { name: "repair-integration-indexes", run: () => repairIntegrationIndexes() },
     { name: "ensure-ai-usage-indexes", run: () => ensureAiUsageIndexes() },

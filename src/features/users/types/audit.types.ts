@@ -34,7 +34,7 @@ export interface AuditLog {
         username: string
         email: string
         avatarUrl?: string
-        role: "admin" | "user"
+        roleIds: string[]
         status?: "active" | "inactive"
     }
     /** Previous data (for UPDATE and DELETE) */
@@ -63,7 +63,7 @@ export interface UserAuditLog extends AuditLog {
     username: string;
     email: string;
     avatarUrl?: string;
-    role: 'admin' | 'user';
+    roleIds: string[];
   };
 }
 

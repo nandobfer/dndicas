@@ -63,7 +63,7 @@ interface BackgroundsTableProps {
 }
 
 export function BackgroundsTable({ data, isLoading, hasNextPage = false, isFetchingNextPage = false, onLoadMore, onEdit, onDelete, selectedId, onSelect, hideActions = false }: BackgroundsTableProps) {
-    const { isAdmin } = useAuth()
+    const isAdmin = useAuth().can("catalog.edit")
 
     if (isLoading) return <LoadingState message="Carregando origens..." />
     if (!data.length) return <EmptyState title="Nenhuma origem encontrada" description="Tente ajustar seus filtros ou crie uma nova origem." />

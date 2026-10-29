@@ -6,7 +6,7 @@
  */
 
 import mongoose, { Schema, Document, Model } from 'mongoose';
-import type { UserRole, UserStatus } from '../types/user.types';
+import type { UserStatus } from '../types/user.types';
 
 /**
  * User document interface extending Mongoose Document.
@@ -30,7 +30,8 @@ export interface IUser extends Document {
     /** Avatar URL */
     avatarUrl?: string
     /** User role for authorization */
-    role: UserRole
+    roles: string[]
+    accessVersion: number
     /** User status (active/inactive for soft delete) */
     status: UserStatus
     /** SHA-256 hash of the permanent MCP token */
@@ -108,15 +109,8 @@ const UserSchema = new Schema<IUser>(
                 message: "URL do avatar inválida",
             },
         },
-        role: {
-            type: String,
-            enum: {
-                values: ["admin", "user"],
-                message: "Função inválida: {VALUE}",
-            },
-            default: "user",
-            index: true,
-        },
+        roles: { type: [String], default: [], index: true },
+        accessVersion: { type: Number, default: 0 },
         status: {
             type: String,
             enum: {
@@ -162,7 +156,7 @@ const UserSchema = new Schema<IUser>(
 )
 
 // Compound indexes for common queries
-UserSchema.index({ status: 1, role: 1 })
+UserSchema.index({ status: 1, roles: 1 })
 UserSchema.index({ status: 1, createdAt: -1 })
 
 // Text index for search

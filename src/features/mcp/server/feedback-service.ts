@@ -1,5 +1,5 @@
 import dbConnect from "@/core/database/db"
-import { logAction } from "@/core/database/audit-log"
+import { logAction } from "@/features/perfix/server/audit"
 import { FeedbackModel } from "@/features/feedback/api/feedback.model"
 import { buildFeedbackImplementationPrompt, buildFeedbackIterationPrompt, buildFeedbackPlanPrompt } from "@/features/feedback/services/feedback-agent-prompt-service"
 import { hasActiveFeedbackAgentRun, queueFeedbackAgentRun, queueFeedbackPlan } from "@/features/feedback/services/feedback-agent-run-service"
@@ -14,6 +14,7 @@ const statusLabels = {
     concluido: "Concluído",
     cancelado: "Cancelado",
 } as const
+const canModerate = (auth: McpAuthContext | null) => Boolean(auth?.permissions.some(key => key === "*" || key === "feedback.moderate"))
 
 export class McpFeedbackError extends Error {
     constructor(message: string, readonly code: string) {
@@ -22,7 +23,7 @@ export class McpFeedbackError extends Error {
 }
 
 function actorName(auth: McpAuthContext) {
-    return auth.name || auth.username || (auth.role === "admin" ? "Admin" : "Usuário")
+    return auth.name || auth.username || (canModerate(auth) ? "Admin" : "Usuário")
 }
 
 function isOwner(feedback: { createdBy?: string }, auth: McpAuthContext) {
@@ -30,7 +31,7 @@ function isOwner(feedback: { createdBy?: string }, auth: McpAuthContext) {
 }
 
 function requireFeedbackPermission(feedback: { createdBy?: string }, auth: McpAuthContext) {
-    if (auth.role === "admin" || isOwner(feedback, auth)) return
+    if (canModerate(auth) || isOwner(feedback, auth)) return
     throw new McpFeedbackError("Você não tem permissão para executar esta ação.", "FORBIDDEN")
 }
 
@@ -79,8 +80,8 @@ export async function getFeedback(input: FeedbackIdInput, auth: McpAuthContext |
     const feedback = await FeedbackModel.findById(input.id)
     if (!feedback) throw new McpFeedbackError("Feedback não encontrado.", "FEEDBACK_NOT_FOUND")
 
-    if (auth && (auth.role === "admin" || isOwner(feedback, auth))) {
-        return serializeAuthenticatedFeedback(feedback, { includeAdminFields: auth.role === "admin" })
+    if (auth && (canModerate(auth) || isOwner(feedback, auth))) {
+        return serializeAuthenticatedFeedback(feedback, { includeAdminFields: canModerate(auth) })
     }
 
     return serializePublicFeedback(feedback)
@@ -92,7 +93,7 @@ export async function getFeedbackTimeline(input: FeedbackIdInput, auth: McpAuthC
     const feedback = await FeedbackModel.findById(input.id).select("_id")
     if (!feedback) throw new McpFeedbackError("Feedback não encontrado.", "FEEDBACK_NOT_FOUND")
 
-    const events = await listFeedbackTimelineEvents(input.id, { includeAdminEvents: auth?.role === "admin" })
+    const events = await listFeedbackTimelineEvents(input.id, { includeAdminEvents: canModerate(auth) })
     return { events: events.map((event) => serializeTimelineEvent(event)) }
 }
 
@@ -100,7 +101,7 @@ export async function createFeedback(input: CreateFeedbackInput, auth: McpAuthCo
     await dbConnect()
 
     const payload = { ...input }
-    if (auth.role !== "admin") {
+    if (!canModerate(auth)) {
         delete payload.status
         delete payload.priority
     }
@@ -115,7 +116,7 @@ export async function createFeedback(input: CreateFeedbackInput, auth: McpAuthCo
     await createFeedbackTimelineEvent({
         feedbackId: feedback._id,
         type: "feedback_created",
-        actorType: auth.role === "admin" ? "admin" : "user",
+        actorType: canModerate(auth) ? "admin" : "user",
         actorId: auth.userId,
         actorName: actorName(auth),
         message: "Feedback criado.",
@@ -131,7 +132,7 @@ export async function createFeedback(input: CreateFeedbackInput, auth: McpAuthCo
         source: "mcp",
     })
 
-    return serializeAuthenticatedFeedback(feedback, { includeAdminFields: auth.role === "admin" })
+    return serializeAuthenticatedFeedback(feedback, { includeAdminFields: canModerate(auth) })
 }
 
 export async function updateFeedback(input: UpdateFeedbackInput, auth: McpAuthContext) {
@@ -141,7 +142,7 @@ export async function updateFeedback(input: UpdateFeedbackInput, auth: McpAuthCo
     const feedback = await findFeedbackOrThrow(id)
     requireFeedbackPermission(feedback, auth)
 
-    if (auth.role !== "admin") {
+    if (!canModerate(auth)) {
         delete payload.status
         delete payload.priority
     }
@@ -156,7 +157,7 @@ export async function updateFeedback(input: UpdateFeedbackInput, auth: McpAuthCo
         await createFeedbackTimelineEvent({
             feedbackId: updated._id,
             type: "status_changed",
-            actorType: auth.role === "admin" ? "admin" : "user",
+            actorType: canModerate(auth) ? "admin" : "user",
             actorId: auth.userId,
             actorName: actorName(auth),
             message: `Status alterado manualmente para ${statusLabels[payload.status]}.`,
@@ -167,7 +168,7 @@ export async function updateFeedback(input: UpdateFeedbackInput, auth: McpAuthCo
         })
     }
 
-    return serializeAuthenticatedFeedback(updated, { includeAdminFields: auth.role === "admin" })
+    return serializeAuthenticatedFeedback(updated, { includeAdminFields: canModerate(auth) })
 }
 
 export async function commentFeedback(input: CommentFeedbackInput, auth: McpAuthContext) {
@@ -177,7 +178,7 @@ export async function commentFeedback(input: CommentFeedbackInput, auth: McpAuth
     const event = await createFeedbackTimelineEvent({
         feedbackId: input.id,
         type: "comment_created",
-        actorType: auth.role === "admin" ? "admin" : "user",
+        actorType: canModerate(auth) ? "admin" : "user",
         actorId: auth.userId,
         actorName: actorName(auth),
         message: input.message,

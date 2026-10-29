@@ -4,7 +4,7 @@ import type { RaceGenerationApplyRequest } from "@/features/entity-generation/ty
 
 async function requireAdmin() {
     const user = await currentUser()
-    if (!user || user.publicMetadata?.role !== "admin") {
+    if (!user || !user.can("catalog.generate")) {
         throw new Error("Acesso negado.")
     }
     return user

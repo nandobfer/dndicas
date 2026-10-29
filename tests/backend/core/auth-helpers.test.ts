@@ -31,11 +31,11 @@ describe('core/auth helpers', () => {
         await expect(mod.requireAuth()).rejects.toThrow('UNAUTHORIZED');
     });
 
-    it('hasAnyRole returns false when the user has no role', async () => {
+    it('hasAnyPermission returns false when the user has no permissions', async () => {
         vi.doMock('@/core/auth/server', () => ({
             auth: vi.fn(),
             currentUser: vi.fn().mockResolvedValue({
-                publicMetadata: {},
+                can: () => false,
             }),
         }));
         vi.doMock('@/core/database/audit-log', () => ({
@@ -44,14 +44,14 @@ describe('core/auth helpers', () => {
 
         const mod = await importFresh<typeof import('@/core/auth/helpers')>('@/core/auth/helpers');
 
-        await expect(mod.hasAnyRole(['admin', 'user'])).resolves.toBe(false);
+        await expect(mod.hasAnyPermission(['users.view', 'users.edit'])).resolves.toBe(false);
     });
 
-    it('hasAllRoles only returns true for the single assigned role', async () => {
+    it('hasAllPermissions requires every requested permission', async () => {
         vi.doMock('@/core/auth/server', () => ({
             auth: vi.fn(),
             currentUser: vi.fn().mockResolvedValue({
-                publicMetadata: { role: 'admin' },
+                can: (key: string) => key === 'users.view',
             }),
         }));
         vi.doMock('@/core/database/audit-log', () => ({
@@ -60,8 +60,8 @@ describe('core/auth helpers', () => {
 
         const mod = await importFresh<typeof import('@/core/auth/helpers')>('@/core/auth/helpers');
 
-        await expect(mod.hasAllRoles(['admin'])).resolves.toBe(true);
-        await expect(mod.hasAllRoles(['admin', 'user'])).resolves.toBe(false);
+        await expect(mod.hasAllPermissions(['users.view'])).resolves.toBe(true);
+        await expect(mod.hasAllPermissions(['users.view', 'users.edit'])).resolves.toBe(false);
     });
 
     it('getUserInfo derives the primary email and name payload', async () => {

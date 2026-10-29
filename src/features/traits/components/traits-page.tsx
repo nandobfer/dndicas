@@ -16,7 +16,7 @@ import { motionConfig } from "@/lib/config/motion-configs"
 import { useTraitsPage } from "../hooks/useTraitsPage"
 
 export function TraitsPage() {
-    const { isAdmin } = useAuth()
+    const isAdmin = useAuth().can("catalog.edit")
 
     // Logic moved to custom hook for better maintainability (T044)
     const { filters, data, actions, modals, viewMode, setViewMode, isDefault } = useTraitsPage()

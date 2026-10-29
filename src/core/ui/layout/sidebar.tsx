@@ -2,6 +2,7 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useAuth } from "@/core/hooks/useAuth"
+import { canNavigate } from "@/features/perfix/navigation"
 import { cn } from '@/core/utils';
 import { Button } from '@/core/ui/button';
 import { Home, User, Sparkles, Palette, FileText, Users, Ruler, Zap, Wand } from "lucide-react"
@@ -31,12 +32,12 @@ export const AdminItems = [
 
 export function Sidebar({ className }: { className?: string }) {
     const pathname = usePathname();
-    const { isSignedIn, isAdmin } = useAuth()
+    const { isSignedIn, isAdmin, can } = useAuth()
 
     const renderItems = (items: any[]) => {
         return items
             .filter((item) => {
-                if (item.admin && !isAdmin) return false
+                if (!canNavigate(item.href ?? "", can)) return false
                 if (item.authenticated && !isSignedIn) return false
                 return true
             })

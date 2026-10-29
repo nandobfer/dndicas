@@ -68,7 +68,7 @@ vi.mock('@/features/feats/components/feat-preview', () => ({
 }))
 
 vi.mock('@/core/hooks/useAuth', () => ({
-    useAuth: () => ({ isAdmin: authMocks.isAdmin }),
+    useAuth: () => ({ isAdmin: authMocks.isAdmin, can: () => authMocks.isAdmin }),
 }))
 
 vi.mock('@/features/entity-generation/components/entity-generation-ai-modal', () => ({

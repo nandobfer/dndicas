@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest"
 import { hashMcpToken } from "@/features/mcp/server/mcp-token-service"
 import { importFresh } from "../helpers/module"
+vi.mock("@/features/perfix/server/access", () => ({ resolveAccess: vi.fn().mockResolvedValue({ effective: new Set(["*"]) }) }))
 
 function headers(token?: string) {
     const headers = new Headers()
@@ -39,6 +40,7 @@ describe("MCP auth service", () => {
             name: "Hero",
             email: "hero@example.com",
             role: "admin",
+            permissions: ["*"],
             mcpTokenLastUsedAt: new Date("2026-07-28T00:00:00.000Z"),
             save,
         })
@@ -63,6 +65,7 @@ describe("MCP auth service", () => {
             name: "Hero",
             email: "hero@example.com",
             role: "admin",
+            permissions: ["*"],
         })
     })
 

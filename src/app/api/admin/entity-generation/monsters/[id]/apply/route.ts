@@ -4,7 +4,7 @@ import type { MonsterGenerationApplyRequest } from "@/features/entity-generation
 
 async function requireAdmin() {
     const user = await currentUser()
-    if (!user || user.publicMetadata?.role !== "admin") {
+    if (!user || !user.can("catalog.generate")) {
         throw new Error("Acesso negado.")
     }
     return user

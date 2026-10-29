@@ -7,6 +7,7 @@ const userAuth = {
     name: "Hero",
     email: "hero@example.com",
     role: "user" as const,
+    permissions: [],
 }
 
 const adminAuth = {
@@ -15,6 +16,7 @@ const adminAuth = {
     name: "Admin",
     email: "admin@example.com",
     role: "admin" as const,
+    permissions: ["*"],
 }
 
 function feedback(overrides: Record<string, unknown> = {}) {

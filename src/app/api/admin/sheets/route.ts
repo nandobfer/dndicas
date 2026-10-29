@@ -1,11 +1,11 @@
 import { NextRequest, NextResponse } from "next/server"
-import { requireAdmin } from "@/features/users/api/get-current-user"
+import { requireAccess } from "@/features/perfix/server/access"
 import { getAllSheetsForAdmin } from "@/features/character-sheets/api/character-sheets-service"
 
 export async function GET(request: NextRequest) {
     try {
         try {
-            await requireAdmin()
+            await requireAccess("sheets.view_all")
         } catch {
             return NextResponse.json({ error: "Acesso negado. Apenas administradores podem listar fichas." }, { status: 403 })
         }

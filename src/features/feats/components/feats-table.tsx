@@ -50,7 +50,7 @@ interface FeatsTableProps {
 }
 
 export function FeatsTable({ feats, isLoading = false, hasNextPage = false, isFetchingNextPage = false, onEdit, onGenerateAI, onDelete, onLoadMore }: FeatsTableProps) {
-    const { isAdmin } = useAuth()
+    const isAdmin = useAuth().can("catalog.edit")
 
     if (isLoading && feats.length === 0) {
         return (

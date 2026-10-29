@@ -15,7 +15,7 @@ vi.mock('next/link', () => ({
 }))
 
 vi.mock('@/core/hooks/useAuth', () => ({
-    useAuth: () => ({ isAdmin: authMocks.isAdmin }),
+    useAuth: () => ({ isAdmin: authMocks.isAdmin, can: () => authMocks.isAdmin }),
 }))
 
 vi.mock('@/components/ui/glass-image', () => ({

@@ -85,14 +85,15 @@ export async function requireCurrentUser(): Promise<IUser> {
 }
 
 export async function isCurrentUserAdmin(): Promise<boolean> {
-    const result = await getCurrentUserFromDb()
-    return result.user?.role === "admin"
+    const { requestAccess } = await import("@/features/perfix/server/access")
+    const context = await requestAccess()
+    return Boolean(context && (context.effective.has("*") || context.effective.has("admin.access")))
 }
 
 export async function requireAdmin(): Promise<IUser> {
     const user = await requireCurrentUser()
 
-    if (user.role !== "admin") {
+    if (!await isCurrentUserAdmin()) {
         throw new Error("Admin access required")
     }
 

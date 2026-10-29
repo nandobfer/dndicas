@@ -27,6 +27,14 @@ describe("catálogo das integrações do DnDicas", () => {
         expect(getIntegrationDef("opex")).toBeUndefined()
     })
 
+    it("a integração Perfix é interna, sem campos e com página própria", () => {
+        const perfix = getIntegrationDef("perfix")
+        expect(perfix.name).toBe("Perfix")
+        expect(perfix.publicFields).toEqual([])
+        expect(perfix.secretFields).toEqual([])
+        expect(integrationPath("perfix")).toBe("/integracoes/perfix")
+    })
+
     it("os provedores de IA ficam dentro do hub e têm a página própria", () => {
         for (const id of ["ai_opencode", "ai_gemini", "ai_anthropic", "ai_openai", "ai_deepseek", "ai_jev"] as const) {
             expect(getIntegrationDef(id).parent).toBe("ai")

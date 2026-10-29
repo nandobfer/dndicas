@@ -1,5 +1,5 @@
 import { auth, currentUser } from "@/core/auth/server"
-import { logAction } from "@/core/database/audit-log"
+import { logAction } from "@/features/perfix/server/audit"
 
 export async function getCurrentUserId(): Promise<string | null> {
     const { userId } = await auth()
@@ -20,22 +20,21 @@ export async function requireAuth(): Promise<string> {
     return userId
 }
 
-export async function hasRole(role: string): Promise<boolean> {
+export async function hasPermission(permission: string): Promise<boolean> {
     const user = await currentUser()
-    return user?.publicMetadata.role === role
+    return user?.can(permission) ?? false
 }
 
-export async function hasAnyRole(roles: string[]): Promise<boolean> {
+export async function hasAnyPermission(permissions: string[]): Promise<boolean> {
     const user = await currentUser()
-    const userRole = user?.publicMetadata.role
-    return Boolean(userRole && roles.includes(userRole))
+    return Boolean(user && permissions.some(permission => user.can(permission)))
 }
 
-export async function hasAllRoles(roles: string[]): Promise<boolean> {
+export async function hasAllPermissions(permissions: string[]): Promise<boolean> {
     const user = await currentUser()
-    const userRole = user?.publicMetadata.role
-    return Boolean(userRole && roles.length === 1 && roles[0] === userRole)
+    return Boolean(user && permissions.every(permission => user.can(permission)))
 }
+export async function isAdmin() { return hasPermission("admin.access") }
 
 export async function logAuthAction(
     action: "LOGIN" | "LOGOUT" | "SIGNUP" | "PASSWORD_RESET" | "SESSION_EXPIRED",

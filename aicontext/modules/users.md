@@ -1,12 +1,12 @@
 # Módulo: Users
 
-**Criado**: 2026-02-19 | **Feature**: spec/000 | **Status**: Planejado
+**Criado**: 2026-02-19 | **Atualizado**: DND-4 | **Status**: Implementado
 
 ---
 
 ## Visão Geral
 
-O módulo de Users gerencia usuários locais do sistema Dungeons & Dicas, incluindo autenticação Auth.js, CRUD administrativo e controle de roles.
+O módulo de Users gerencia usuários locais do sistema Dungeons & Dicas, incluindo autenticação Auth.js e CRUD protegido por permissões do [Perfix](./perfix.md).
 
 ---
 
@@ -44,7 +44,8 @@ src/features/users/
 | `email` | String | Sim | Email (único) |
 | `name` | String | Não | Nome completo |
 | `avatarUrl` | String | Não | URL do avatar |
-| `role` | Enum | Sim | `'admin'` ou `'user'` |
+| `roles` | String[] | Sim | IDs dos perfis Perfix |
+| `accessVersion` | Number | Sim | Versão otimista das alterações administrativas |
 | `status` | Enum | Sim | `'active'` ou `'inactive'` |
 | `mcpTokenHash` | String | Não | Hash SHA-256 do token MCP permanente |
 | `mcpTokenPrefix` | String | Não | Prefixo mascarado exibido no perfil |
@@ -62,22 +63,24 @@ Lista usuários com paginação e filtros.
 
 **Query Parameters**:
 - `search` - Busca textual
-- `role` - `all`, `admin`, `user`
+- `roleId` - ID de um perfil (opcional)
 - `status` - `all`, `active`, `inactive`
 - `page` - Número da página
 - `limit` - Registros por página (default: 10)
 
 ### POST /api/users
 
-Cria novo usuário (admin only).
+Cria novo usuário (`users.create`); recebe `roleIds` ou usa o padrão da integração Perfix.
 
 ### PUT /api/users/:id
 
-Atualiza usuário (admin only).
+Atualiza usuário (`users.edit`), com `roleIds` e `version`. Atribuição respeita hierarquia e não permite alterar os próprios perfis. Versão obsoleta retorna 409.
 
 ### DELETE /api/users/:id
 
-Soft delete - marca como `inactive` (admin only).
+Soft delete - marca como `inactive` e `deleted` (`users.delete`), exige `{ version }`. Autoexclusão e remoção do último admin são bloqueadas. Mutações são transacionais/auditadas; exigem replica set.
+
+Respostas incluem `roleIds`, `roles: RoleDto[]` e `version`, sem `role` legado, dentro de `{ success, data }`. Listagem exige `users.view`. Durante impersonação, ownership usa o usuário efetivo e auditoria preserva o administrador real.
 
 ### GET /api/auth/profile
 
