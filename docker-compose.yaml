@@ -8,17 +8,12 @@ services:
         - AUTH_URL=${AUTH_URL}
         - NEXT_PUBLIC_APP_URL=${NEXT_PUBLIC_APP_URL}
     image: nandoburgos/dndicas
-    # O nome acompanha o projeto Compose: produção mantém "dndicas" e as prévias
-    # (ex.: -p dndicas-dnd-6) não colidem com o container em execução.
-    container_name: ${COMPOSE_PROJECT_NAME:-dndicas}
+    container_name: dndicas
     restart: always
     ports:
       - "${PORT:-4005}:4005"
-    # Opcional: worktrees de prévia (ex.: Opex) não têm `.env`; o build injeta valores dummy
-    # e o runtime recebe as variáveis pelo ambiente quando o arquivo não existe.
     env_file:
-      - path: .env
-        required: false
+      - .env
     environment:
       - PUSHER_HOST=soketi
       - PUSHER_PORT=6001
