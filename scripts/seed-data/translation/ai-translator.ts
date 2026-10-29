@@ -1,14 +1,19 @@
 /**
- * @fileoverview GenAI translator — uses the configured AI model (Gemini) to
- * translate D&D items from English to Brazilian Portuguese.
+ * @fileoverview AI translator — uses the "Importador 5etools" agent (provider and
+ * model configured in Integrações › Provedores de IA) to translate D&D items from
+ * English to Brazilian Portuguese.
  *
  * Extracted from base-provider.ts. Handles RPM/RPD rate limits and retries
  * automatically on 429 errors.
  *
- * Requires: GOOGLE_API_KEY in environment.
+ * Requires: the "Importador 5etools" agent enabled in /integracoes/ia.
  */
 
-import { generateText, defaultModel } from '../../../src/core/ai/genai';
+/** Import tardio: a camada de IA (SDKs dos provedores) só carrega quando a primeira tradução roda. */
+async function generateEntityImportText(prompt: string, options: { subject?: string | null }): Promise<string> {
+    const service = await import('../../../src/features/ai/server/entity-import');
+    return service.generateEntityImportText(prompt, options);
+}
 import { BaseTranslator } from './base-translator';
 
 const term = {
@@ -37,18 +42,15 @@ function convertFeetToMeters(text: string): string {
 }
 
 export interface RateLimitConfig {
-    /** AI model name — empty string means use defaultModel */
-    model: string;
     /** Max requests per minute (0 = no limit) */
     rpm: number;
     /** Max requests per day (0 = no limit) */
     rpd: number;
 }
 
-export class GenAITranslator extends BaseTranslator {
-    readonly name = 'GenAI (Gemini)';
+export class AiTranslator extends BaseTranslator {
+    readonly name = 'IA (Importador 5etools)';
 
-    private aiModel: string = defaultModel;
     private rateLimitRpm = 0;
     private rateLimitRpd = 0;
 
@@ -58,7 +60,6 @@ export class GenAITranslator extends BaseTranslator {
     private dailyRequestCount = 0;
 
     configure(config: RateLimitConfig): void {
-        this.aiModel = config.model || defaultModel;
         this.rateLimitRpm = config.rpm;
         this.rateLimitRpd = config.rpd;
     }
@@ -142,7 +143,7 @@ ${descriptionHtml}`;
 
         try {
             this.recordRequest();
-            return await generateText(prompt, this.aiModel, 'seed-script');
+            return await generateEntityImportText(prompt, { subject: 'seed-script' });
         } catch (err) {
             const isRateLimit =
                 err instanceof Error &&
@@ -157,7 +158,7 @@ ${descriptionHtml}`;
                 const retrySeconds = retryMatch ? parseInt(retryMatch[1], 10) + 5 : 65;
                 await this.sleep(retrySeconds * 1000, `429 from API — retry in ${retrySeconds}s`);
                 this.recordRequest();
-                return await generateText(prompt, this.aiModel, 'seed-script');
+                return await generateEntityImportText(prompt, { subject: 'seed-script' });
             }
 
             throw err;

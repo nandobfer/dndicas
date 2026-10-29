@@ -9,11 +9,11 @@ Oferecer o chat `Entender com IA` em previews de entidades do catálogo, inician
 - `src/features/entity-understanding/components/entity-ai-understand-button.tsx`: botão premium e tooltip que abrem uma `GlassWindow` pelo `WindowProvider`.
 - `src/features/entity-understanding/components/entity-ai-chat-window-content.tsx`: conteúdo client-side do chat exibido dentro da janela.
 - `src/app/api/entity-understanding/chat/route.ts`: rota SSE pública para conversar com a IA.
-- `src/features/entity-understanding/services/entity-understanding-prompt.ts`: prompt e histórico enviados ao Gemini.
+- `src/features/entity-understanding/services/entity-understanding-prompt.ts`: instruções de sistema (as configuradas no agente + memórias + regras fixas de formato HTML/menção) e histórico.
 - `src/features/entity-understanding/services/entity-understanding-html.ts`: sanitização e validação de HTML/mensagens.
 - `src/features/entity-understanding/services/entity-understanding-storage.ts`: persistência client-side da sessão no `localStorage` por entidade.
-- `src/features/entity-understanding/services/entity-understanding-tools.ts`: tools server-side de catálogo para function-calling.
-- `src/core/ai/genai.ts`: expõe `chatWithToolsStream` como wrapper genérico de function-calling Gemini.
+- `src/features/entity-understanding/services/entity-understanding-tools.ts`: ferramentas server-side de catálogo (`searchCatalogEntities`, `getCatalogEntity`) no formato da Vercel AI SDK.
+- `src/features/ai/server/entity-understanding.ts`: agente **Entender com IA** — provedor, modelo, instruções, rodadas de ferramenta e memórias configurados em Integrações › Provedores de IA › Entender com IA (`ai_feature_settings`, feature `entity-understanding`).
 
 ## Fluxo
 
@@ -26,6 +26,9 @@ Oferecer o chat `Entender com IA` em previews de entidades do catálogo, inician
 7. A sessão local expira por inatividade.
 
 ## Regras
+
+- Sem o agente ativo (ou com o provedor desconectado), a rota responde **409 em pt-BR** com o motivo e o chat mostra a mensagem; não há fallback para outro provedor.
+- O consumo é registrado na origem `entity-understanding`.
 
 - O input envia com `Enter` e insere nova linha com `Shift+Enter`.
 - O `RichTextEditor` usado no chat deve validar `editor && !editor.isDestroyed` antes de acessar `getHTML`, `getText` ou `commands.setContent` em effects assíncronos.

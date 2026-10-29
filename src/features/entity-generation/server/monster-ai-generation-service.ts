@@ -8,8 +8,7 @@ import type { AttributeType, SkillName } from "@/features/character-sheets/types
 import type { DamageTypeKey } from "@/lib/config/damage-types-hex"
 import { getMonsterXp } from "@/features/monsters/utils/monster-calculations"
 import { createAuditLog } from "@/features/users/api/audit-service"
-import { GenAITranslator } from "../../../../scripts/seed-data/translation/genai-translator"
-import { ENTITY_GENERATION_MODEL } from "./entity-generation-model"
+import { AiTranslator } from "../../../../scripts/seed-data/translation/ai-translator"
 import { resolveCandidateImage } from "./entity-generation-image-service"
 import type { EntityGenerationProgress, GeneratedMonsterCandidate } from "../types/entity-generation.types"
 
@@ -187,9 +186,9 @@ const TAG_REPLACEMENTS: Array<[RegExp, string]> = [
     [/\{@actSave\s+cha\}/g, "Salvaguarda de Carisma"],
 ]
 
-function createTranslator(): GenAITranslator {
-    const translator = new GenAITranslator()
-    translator.configure({ model: ENTITY_GENERATION_MODEL, rpm: 0, rpd: 0 })
+function createTranslator(): AiTranslator {
+    const translator = new AiTranslator()
+    translator.configure({ rpm: 0, rpd: 0 })
     return translator
 }
 
@@ -495,14 +494,14 @@ function shouldTranslateSpecialStatText(value: string): boolean {
     return leftover.length > 0
 }
 
-async function translateSpecialStatValue(translator: GenAITranslator, value: string): Promise<string> {
+async function translateSpecialStatValue(translator: AiTranslator, value: string): Promise<string> {
     const normalized = cleanText(value)
     if (!shouldTranslateSpecialStatText(normalized)) return normalized
     const { name } = await translator.translateItem(normalized, `<p>${normalized}</p>`)
     return name.trim()
 }
 
-async function mapArmorClass(monster: FiveEToolsMonster, translator: GenAITranslator): Promise<string> {
+async function mapArmorClass(monster: FiveEToolsMonster, translator: AiTranslator): Promise<string> {
     const first = monster.ac?.[0]
     if (typeof first === "number") return String(first)
     if (first?.ac !== undefined) return String(first.ac)
@@ -510,14 +509,14 @@ async function mapArmorClass(monster: FiveEToolsMonster, translator: GenAITransl
     return "10"
 }
 
-async function mapHitPoints(monster: FiveEToolsMonster, translator: GenAITranslator): Promise<string> {
+async function mapHitPoints(monster: FiveEToolsMonster, translator: AiTranslator): Promise<string> {
     if (monster.hp?.formula) return monster.hp.formula
     if (monster.hp?.special) return translateSpecialStatValue(translator, monster.hp.special)
     if (monster.hp?.average !== undefined) return String(monster.hp.average)
     return "1"
 }
 
-async function translateParams(params: NpcParam[], translator: GenAITranslator, counter: TranslationCounter, message: string): Promise<NpcParam[]> {
+async function translateParams(params: NpcParam[], translator: AiTranslator, counter: TranslationCounter, message: string): Promise<NpcParam[]> {
     const translated: NpcParam[] = []
     for (const param of params) {
         const result = await translator.translateItem(param.label, param.description)
@@ -544,7 +543,7 @@ function countParams(monster: FiveEToolsMonster, legendaryGroup?: LegendaryGroup
     )
 }
 
-async function buildCandidate(monster: FiveEToolsMonster, data: LoadedMonsterData, translator: GenAITranslator, counter: TranslationCounter, userId: string): Promise<GeneratedMonsterCandidate> {
+async function buildCandidate(monster: FiveEToolsMonster, data: LoadedMonsterData, translator: AiTranslator, counter: TranslationCounter, userId: string): Promise<GeneratedMonsterCandidate> {
     const fluff = resolveFluff(monster, data.fluff)
     const descriptionHtml = buildEntriesHtml(fluff?.entries) || `<p>${monster.name}</p>`
     const translated = await translator.translateItem(monster.name, descriptionHtml)

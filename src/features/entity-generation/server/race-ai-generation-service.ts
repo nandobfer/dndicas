@@ -9,8 +9,7 @@ import { createSpell } from "@/features/spells/api/spells-service"
 import { logUpdate } from "@/features/users/api/audit-service"
 import type { CreateSpellInput, SpellSchool, SpellComponent, AttributeType, CastingTime } from "@/features/spells/types/spells.types"
 import type { Race, RaceTrait, RaceVariation, SizeCategory } from "@/features/races/types/races.types"
-import { GenAITranslator } from "../../../../scripts/seed-data/translation/genai-translator"
-import { ENTITY_GENERATION_MODEL } from "./entity-generation-model"
+import { AiTranslator } from "../../../../scripts/seed-data/translation/ai-translator"
 import { resolveCandidateImage } from "./entity-generation-image-service"
 import type {
     AdditionalSpellGroup,
@@ -213,14 +212,14 @@ function getRaceImage(fluff: FluffGenerationRaceEntry | undefined): string {
     return ""
 }
 
-function createTranslator(): GenAITranslator {
-    const translator = new GenAITranslator()
-    translator.configure({ model: ENTITY_GENERATION_MODEL, rpm: 0, rpd: 0 })
+function createTranslator(): AiTranslator {
+    const translator = new AiTranslator()
+    translator.configure({ rpm: 0, rpd: 0 })
     return translator
 }
 
 async function translateItem(
-    translator: GenAITranslator,
+    translator: AiTranslator,
     counter: TranslationCounter,
     name: string,
     description: string,
@@ -359,7 +358,7 @@ function findMatchingRaces(current: Race, races: FiveEToolsGenerationRace[]): Fi
 }
 
 async function translateTraits(
-    translator: GenAITranslator,
+    translator: AiTranslator,
     counter: TranslationCounter,
     rawTraits: RaceTrait[],
 ): Promise<GeneratedRaceTrait[]> {
@@ -372,7 +371,7 @@ async function translateTraits(
 }
 
 async function translateSpells(
-    translator: GenAITranslator,
+    translator: AiTranslator,
     counter: TranslationCounter,
     rawSpells: SpellGrant[],
     spellSources: FiveEToolsGenerationSpell[],
@@ -401,7 +400,7 @@ async function buildCandidate(
     allSubraces: FiveEToolsGenerationSubrace[],
     fluffEntries: FluffGenerationRaceEntry[],
     spellSources: FiveEToolsGenerationSpell[],
-    translator: GenAITranslator,
+    translator: AiTranslator,
     counter: TranslationCounter,
     userId: string,
 ): Promise<GeneratedRaceCandidate> {

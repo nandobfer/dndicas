@@ -45,7 +45,9 @@ const streamEntityUnderstanding = async ({
     })
 
     if (!response.ok || !response.body) {
-        throw new Error("Não foi possível conversar com a IA agora.")
+        // 409: agente desativado/não configurado em Integrações (a mensagem pt-BR vem do servidor).
+        const body = (await response.json().catch(() => null)) as { error?: { message?: string } } | null
+        throw new Error(body?.error?.message || "Não foi possível conversar com a IA agora.")
     }
 
     const reader = response.body.getReader()

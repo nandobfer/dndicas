@@ -5,14 +5,13 @@ const mocks = vi.hoisted(() => ({
     stderrWrite: vi.fn(() => true),
 }));
 
-vi.mock('../../../../src/core/ai/genai', () => ({
-    defaultModel: 'gemini-test',
-    generateText: (...args: unknown[]) => mocks.generateText(...args),
+vi.mock('../../../../src/features/ai/server/entity-import', () => ({
+    generateEntityImportText: (...args: unknown[]) => mocks.generateText(...args),
 }));
 
-import { GenAITranslator } from '../../../../scripts/seed-data/translation/genai-translator';
+import { AiTranslator } from '../../../../scripts/seed-data/translation/ai-translator';
 
-describe('GenAITranslator invalid JSON recovery', () => {
+describe('AiTranslator invalid JSON recovery', () => {
     beforeEach(() => {
         mocks.generateText.mockReset();
         mocks.stderrWrite.mockClear();
@@ -24,7 +23,7 @@ describe('GenAITranslator invalid JSON recovery', () => {
             .mockResolvedValueOnce('```json\n{ "name": "Dragão", "description": "<p>texto truncado"')
             .mockResolvedValueOnce('{ "name": "Dragão Prateado Adulto", "description": "<p>Descrição válida.</p>" }');
 
-        const translator = new GenAITranslator();
+        const translator = new AiTranslator();
         const result = await translator.translateItem('Adult Silver Dragon', '<p>Adult silver dragon.</p>');
 
         expect(result).toEqual({
@@ -38,7 +37,7 @@ describe('GenAITranslator invalid JSON recovery', () => {
     it('parses JSON inside markdown fences', async () => {
         mocks.generateText.mockResolvedValueOnce('```json\n{ "name": "Lobo", "description": "<p>Um lobo.</p>" }\n```');
 
-        const translator = new GenAITranslator();
+        const translator = new AiTranslator();
         const result = await translator.translateItem('Wolf', '<p>A wolf.</p>');
 
         expect(result.name).toBe('Lobo');
@@ -48,7 +47,7 @@ describe('GenAITranslator invalid JSON recovery', () => {
     it('extracts a JSON object surrounded by extra text', async () => {
         mocks.generateText.mockResolvedValueOnce('Here is the JSON:\n{ "name": "Urso", "description": "<p>Um urso.</p>" }\nDone.');
 
-        const translator = new GenAITranslator();
+        const translator = new AiTranslator();
         const result = await translator.translateItem('Bear', '<p>A bear.</p>');
 
         expect(result.name).toBe('Urso');
@@ -62,7 +61,7 @@ describe('GenAITranslator invalid JSON recovery', () => {
             .mockResolvedValueOnce('{ "name": "C"')
             .mockResolvedValueOnce('{ "name": "Ancião", "description": "<p>Texto válido.</p>" }');
 
-        const translator = new GenAITranslator();
+        const translator = new AiTranslator();
         const result = await translator.translateItem('Broken', '<p>Broken.</p>');
 
         expect(result).toEqual({

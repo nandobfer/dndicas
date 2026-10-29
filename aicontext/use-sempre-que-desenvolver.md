@@ -176,12 +176,14 @@ import { logAction } from '@/core/database/audit-log';
 await dbConnect(); // Sempre antes de operações no DB
 ```
 
-### IA (Gemini)
+### IA (agentes configuráveis)
 ```typescript
-import { generateText } from '@/core/ai/genai';
+// Cada uso de IA é um agente com provedor, modelo, instruções e memórias em /integracoes/ia.
+import { generateEntityImportText } from '@/features/ai/server/entity-import';
 
-const response = await generateText('Seu prompt aqui');
-// Logs de uso são automáticos
+const traducao = await generateEntityImportText('Traduza: Fireball');
+// Sem o agente configurado, lança erro pt-BR (as rotas respondem 409): não há fallback.
+// O consumo é registrado automaticamente por origem.
 ```
 
 ### Email

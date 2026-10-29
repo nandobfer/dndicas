@@ -34,16 +34,25 @@ const term = terminal.terminal;
 export class LibreTranslateTranslator extends BaseTranslator {
     readonly name = 'LibreTranslate (self-hosted)';
 
-    private readonly baseUrl: string;
-    private readonly port: number;
-    private readonly apiKey: string | undefined;
+    private baseUrl: string;
+    private port: number;
+    private apiKey: string | undefined;
     private server: LibreTranslateServer | null = null;
 
     constructor() {
         super();
-        this.port = parseInt(process.env.LIBRETRANSLATE_PORT ?? '5000', 10);
-        this.baseUrl = (process.env.LIBRETRANSLATE_URL ?? `http://localhost:${this.port}`).replace(/\/$/, '');
-        this.apiKey = process.env.LIBRETRANSLATE_API_KEY;
+        this.port = 5000;
+        this.baseUrl = `http://localhost:${this.port}`;
+        this.apiKey = undefined;
+    }
+
+    /** URL, porta e API key da integração "Tradução" (Integrações; banco → `.env` legado). */
+    private async loadConfig(): Promise<void> {
+        const { getIntegrationConfig } = await import('../../../src/lib/integrations/config');
+        const config = await getIntegrationConfig('translation');
+        this.port = config.libretranslatePort;
+        this.baseUrl = (config.libretranslateUrl || `http://localhost:${this.port}`).replace(/\/$/, '');
+        this.apiKey = config.libretranslateApiKey;
     }
 
     // ─── Server lifecycle ─────────────────────────────────────────────────────
@@ -53,6 +62,7 @@ export class LibreTranslateTranslator extends BaseTranslator {
      * server. Must be called before translateItem().
      */
     async ensureServerRunning(): Promise<void> {
+        await this.loadConfig();
         this.server = new LibreTranslateServer(this.port);
 
         term.cyan('\n🐍 Verificando LibreTranslate...\n');

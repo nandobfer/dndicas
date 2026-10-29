@@ -37,8 +37,8 @@ vi.mock("../../../src/features/users/api/audit-service", () => ({
     logUpdate: vi.fn().mockResolvedValue(null),
 }))
 
-vi.mock("../../../scripts/seed-data/translation/genai-translator", () => ({
-    GenAITranslator: class {
+vi.mock("../../../scripts/seed-data/translation/ai-translator", () => ({
+    AiTranslator: class {
         configure() {}
         translateItem(name: string, description: string) {
             return Promise.resolve({ name, description })

@@ -23,18 +23,17 @@ const TRANSLATE_URL = 'https://translation.googleapis.com/language/translate/v2'
 export class GoogleCloudTranslator extends BaseTranslator {
     readonly name = 'Google Cloud Translation';
 
-    private readonly apiKey: string;
+    private apiKey = '';
 
-    constructor() {
-        super();
-        this.apiKey = process.env.GOOGLE_CLOUD_TRANSLATION_API_KEY ?? '';
-    }
-
-    private assertConfigured(): void {
+    /** API key da integração "Tradução" (Integrações; banco → `.env` legado), resolvida no primeiro uso. */
+    private async assertConfigured(): Promise<void> {
+        if (!this.apiKey) {
+            const { getIntegrationConfig } = await import('../../../src/lib/integrations/config');
+            this.apiKey = (await getIntegrationConfig('translation')).googleApiKey ?? '';
+        }
         if (!this.apiKey) {
             throw new Error(
-                'GOOGLE_CLOUD_TRANSLATION_API_KEY is not set in environment. ' +
-                'Add it to your .env file.',
+                'API key do Google Cloud Translation não configurada: informe em Integrações › Tradução.',
             );
         }
     }
@@ -42,7 +41,7 @@ export class GoogleCloudTranslator extends BaseTranslator {
     private async translateHtml(html: string): Promise<string> {
         if (!html.trim()) return html;
 
-        this.assertConfigured();
+        await this.assertConfigured();
         const response = await axios.post<{
             data: { translations: Array<{ translatedText: string }> };
         }>(

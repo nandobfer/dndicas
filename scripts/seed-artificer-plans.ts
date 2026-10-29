@@ -3,7 +3,7 @@
  *
  * Reads class-artificer.json, extracts all four "Magic Item Plans" tables from
  * the "Replicate Magic Item" feature, translates them to Brazilian Portuguese
- * using GenAI, and creates or updates a single Trait in MongoDB.
+ * using the "Importador 5etools" AI agent, and creates or updates a single Trait in MongoDB.
  *
  * The Trait is a reference card for players showing every available plan
  * grouped by minimum Artificer level (2+, 6+, 10+, 14+).
@@ -11,7 +11,7 @@
  * Usage:
  *   tsx scripts/seed-artificer-plans.ts
  *
- * Requires: MONGODB_URI and GOOGLE_API_KEY in .env
+ * Requires: MONGODB_URI in .env and the "Importador 5etools" agent enabled in /integracoes/ia
  */
 
 import dotenv from 'dotenv';
@@ -24,7 +24,7 @@ dotenv.config({ path: path.resolve(__dirname, '../.env') });
 
 // Dynamic requires ensure dotenv has run before these modules initialize
 // eslint-disable-next-line @typescript-eslint/no-require-imports
-const { GenAITranslator } = require('./seed-data/translation/genai-translator') as typeof import('./seed-data/translation/genai-translator');
+const { AiTranslator } = require('./seed-data/translation/ai-translator') as typeof import('./seed-data/translation/ai-translator');
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const { Trait } = require('../src/features/traits/database/trait') as typeof import('../src/features/traits/database/trait');
 
@@ -232,10 +232,10 @@ async function main(): Promise<void> {
     const englishHtml = buildEnglishHtml(tables);
     console.log(`   Built ${englishHtml.length} chars of HTML`);
 
-    // 3. Translate with GenAI
-    console.log('\n🤖 Translating with GenAI...');
-    const translator = new GenAITranslator();
-    translator.configure({ model: 'gemini-3.1-flash-lite', rpm: 15, rpd: 0 });
+    // 3. Translate with the AI agent
+    console.log('\n🤖 Translating with the AI agent...');
+    const translator = new AiTranslator();
+    translator.configure({ rpm: 15, rpd: 0 });
 
     const { name: translatedName, description: translatedDescription } =
         await translator.translateItem('Artificer Plans', englishHtml);

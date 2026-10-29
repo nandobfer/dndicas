@@ -1,3 +1,6 @@
+import type { ModelMessage } from "ai"
+import { DEFAULT_ENTITY_UNDERSTANDING_INSTRUCTIONS } from "@/features/ai/constants"
+import { memoriesSection } from "@/features/ai/memories-prompt"
 import { sanitizeEntityUnderstandingHtml } from "./entity-understanding-html"
 import type { EntityUnderstandingChatRequest } from "../types/entity-understanding.types"
 
@@ -17,18 +20,24 @@ function truncate(value: string, maxChars: number): string {
     return `${value.slice(0, maxChars)}\n...[conteudo truncado]`
 }
 
-export function buildEntityUnderstandingSystemInstruction(): string {
-    return [
-        "Você é o assistente de IA do DnDicas, especializado em D&D 5e e no catálogo interno do produto.",
-        "Responda sempre em pt-BR para usuário final, de forma breve, prática e clara.",
-        "Não mencione JSON, campos internos, IDs, banco de dados, schemas, código ou detalhes técnicos.",
-        "Use somente as informações recebidas ou consultadas pelas ferramentas. Não invente regras.",
-        "Se faltar contexto, peça uma pergunta mais específica.",
-        "Quando fizer sentido, explique como usar a entidade em mesa, criação de personagem, preparação de campanha ou consulta de regras.",
-        "Responda com HTML simples usando apenas p, strong, em, ul, ol, li, br e spans de menção.",
-        "Quando referenciar uma entidade existente retornada pelas ferramentas, use exatamente este formato:",
-        '<span data-type="mention" data-id="ENTITY_ID" data-label="Nome" data-entity-type="Tipo">Nome</span>',
-    ].join("\n")
+/** Formato de resposta fixo (o cliente renderiza HTML sanitizado e badges de menção). */
+const RESPONSE_FORMAT_RULES = [
+    "Responda com HTML simples usando apenas p, strong, em, ul, ol, li, br e spans de menção.",
+    "Quando referenciar uma entidade existente retornada pelas ferramentas, use exatamente este formato:",
+    '<span data-type="mention" data-id="ENTITY_ID" data-label="Nome" data-entity-type="Tipo">Nome</span>',
+]
+
+/**
+ * Instruções de sistema do "Entender com IA": as instruções configuradas no agente (Integrações ›
+ * Provedores de IA › Entender com IA), as memórias dele e as regras fixas de formato.
+ */
+export function buildEntityUnderstandingSystemInstruction(instructions: string = DEFAULT_ENTITY_UNDERSTANDING_INSTRUCTIONS, memories: readonly string[] = []): string {
+    return [instructions.trim() + memoriesSection(memories), ...RESPONSE_FORMAT_RULES].join("\n")
+}
+
+/** Histórico no formato da Vercel AI SDK (`model` → `assistant`). */
+export function toEntityUnderstandingModelMessages(history: Array<{ role: "user" | "model"; parts: string }>): ModelMessage[] {
+    return history.map((message) => (message.role === "user" ? { role: "user" as const, content: message.parts } : { role: "assistant" as const, content: message.parts }))
 }
 
 export function buildEntityUnderstandingHistory(input: EntityUnderstandingChatRequest): Array<{ role: "user" | "model"; parts: string }> {

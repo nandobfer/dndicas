@@ -24,3 +24,9 @@ Os scripts em `scripts/seed-data/` importam datasets externos, traduzem conteudo
 - Sempre cubra casos reais do dataset quando um provider precisar normalizar formatos inconsistentes.
 - Para `MonstersProvider`, inclua testes para fluff direto e para `_copy._mod` com item unico e com array.
 - Para saves/skills de monstros, inclua regressao para payloads estruturados que nao mapeiam override simples.
+
+## Tradução
+
+- `AiTranslator` (`scripts/seed-data/translation/ai-translator.ts`) usa o agente **Importador 5etools** (provedor, modelo, instruções e memórias em Integrações › Provedores de IA); sem ele ativo, a tradução falha com a mensagem pt-BR — não há fallback.
+- Google Cloud Translation e LibreTranslate leem a API key, a URL e a porta da integração **Tradução** (banco → `.env` legado). O tradutor padrão do menu também vem dela.
+- `--list-models` lista os modelos do provedor configurado no Importador 5etools.

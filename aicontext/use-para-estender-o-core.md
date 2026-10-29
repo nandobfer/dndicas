@@ -128,37 +128,16 @@ export async function sendTemplatedEmail(
 Crie serviços que usam o core mas adicionam funcionalidades:
 
 ```typescript
-// ✅ src/features/my-feature/services/ai-assistant.ts
-import { generateText } from '@/core/ai/genai';
+// ✅ src/features/my-feature/services/glossary.ts
+// Serviço complementar que reusa o core (banco, auditoria) e o agente de IA da feature.
+// Uso de IA novo: crie um agente (feature em `ai_feature_settings`, aba em /integracoes/ia e
+// lista de memórias em `src/features/ai/agents.ts`) em vez de chamar um provedor fixo.
+import { generateEntityImportText } from '@/features/ai/server/entity-import';
 
-export class AIAssistant {
-  /**
-   * Gera resumo de texto longo
-   */
-  async summarize(text: string, maxLength: number = 100): Promise<string> {
-    const prompt = `Resuma o seguinte texto em no máximo ${maxLength} palavras:\n\n${text}`;
-    return generateText(prompt);
-  }
-
-  /**
-   * Traduz texto
-   */
-  async translate(text: string, targetLanguage: string): Promise<string> {
-    const prompt = `Traduza o seguinte texto para ${targetLanguage}:\n\n${text}`;
-    return generateText(prompt);
-  }
-
-  /**
-   * Gera sugestões
-   */
-  async suggest(context: string, count: number = 3): Promise<string[]> {
-    const prompt = `Dado o contexto: "${context}", sugira ${count} ideias relacionadas.`;
-    const response = await generateText(prompt);
-    return response.split('\n').filter(Boolean).slice(0, count);
-  }
+export async function translateGlossaryTerm(term: string): Promise<string> {
+  // Sem o agente "Importador 5etools" configurado, lança erro pt-BR — sem fallback.
+  return generateEntityImportText(`Traduza o termo de D&D 5e "${term}" e devolva só a tradução.`, { subject: 'glossario' });
 }
-
-export const aiAssistant = new AIAssistant();
 ```
 
 ## Estendendo Types

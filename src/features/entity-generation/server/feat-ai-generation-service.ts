@@ -6,8 +6,7 @@ import { updateFeat } from "@/features/feats/api/feats-service"
 import { Feat } from "@/features/feats/models/feat"
 import type { CreateFeatInput, Feat as FeatType } from "@/features/feats/types/feats.types"
 import type { FeatCategory } from "@/features/feats/lib/feat-categories"
-import { GenAITranslator } from "../../../../scripts/seed-data/translation/genai-translator"
-import { ENTITY_GENERATION_MODEL } from "./entity-generation-model"
+import { AiTranslator } from "../../../../scripts/seed-data/translation/ai-translator"
 import type { EntityGenerationProgress, GeneratedFeatCandidate } from "../types/entity-generation.types"
 
 interface FiveEToolsAbilityChoice {
@@ -105,9 +104,9 @@ function normalize(value: string | undefined): string {
     return (value ?? "").trim().toLowerCase()
 }
 
-function createTranslator(): GenAITranslator {
-    const translator = new GenAITranslator()
-    translator.configure({ model: ENTITY_GENERATION_MODEL, rpm: 0, rpd: 0 })
+function createTranslator(): AiTranslator {
+    const translator = new AiTranslator()
+    translator.configure({ rpm: 0, rpd: 0 })
     return translator
 }
 
@@ -234,7 +233,7 @@ function serializeFeat<T extends { _id: unknown; createdAt?: Date | string; upda
     } as unknown as FeatType
 }
 
-async function buildCandidate(feat: FiveEToolsFeat, translator: GenAITranslator, counter: TranslationCounter): Promise<GeneratedFeatCandidate | null> {
+async function buildCandidate(feat: FiveEToolsFeat, translator: AiTranslator, counter: TranslationCounter): Promise<GeneratedFeatCandidate | null> {
     const category = feat.category ? CATEGORY_MAP[feat.category] : undefined
     if (!category) return null
 
