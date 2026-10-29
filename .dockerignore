@@ -3,6 +3,7 @@ out
 build
 dist
 .git
+.env*
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
