@@ -1,6 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import { generateSpellCandidates, applySpellGenerationCandidate } from "../../../src/features/entity-generation/server/spell-ai-generation-service"
-import { ENTITY_GENERATION_MODEL } from "../../../src/features/entity-generation/server/entity-generation-model"
 import { Spell } from "../../../src/features/spells/models/spell"
 import { updateSpell } from "../../../src/features/spells/api/spells-service"
 import type { GeneratedSpellCandidate } from "../../../src/features/entity-generation/types/entity-generation.types"
@@ -63,8 +62,8 @@ vi.mock("../../../src/features/entity-generation/server/entity-generation-image-
     resolveCandidateImage: vi.fn().mockResolvedValue("/generated-spell.png"),
 }))
 
-vi.mock("../../../scripts/seed-data/translation/genai-translator", () => ({
-    GenAITranslator: class {
+vi.mock("../../../scripts/seed-data/translation/ai-translator", () => ({
+    AiTranslator: class {
         configure(config: unknown) {
             translatorMocks.configure(config)
         }
@@ -122,7 +121,7 @@ describe("spell AI generation service", () => {
 
         const result = await generateSpellCandidates("spell-1", "user-1", onProgress)
 
-        expect(translatorMocks.configure).toHaveBeenCalledWith({ model: ENTITY_GENERATION_MODEL, rpm: 0, rpd: 0 })
+        expect(translatorMocks.configure).toHaveBeenCalledWith({ rpm: 0, rpd: 0 })
         expect(result.candidates[0]).toEqual(expect.objectContaining({
             originalName: "magic missile",
             circle: 1,

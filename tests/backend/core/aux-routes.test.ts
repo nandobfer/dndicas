@@ -186,7 +186,7 @@ describe('auxiliary backend routes', () => {
         }));
 
         const mod = await importFresh<typeof import('@/app/api/realtime/pusher-config/route')>('@/app/api/realtime/pusher-config/route');
-        const response = await mod.GET();
+        const response = await mod.GET(makeJsonRequest('http://localhost/api/realtime/pusher-config'));
 
         expect(response.status).toBe(503);
     });
@@ -220,23 +220,6 @@ describe('auxiliary backend routes', () => {
         const response = await mod.POST(makeJsonRequest('http://localhost/api/core/email', {
             method: 'POST',
             body: JSON.stringify({ to: 'bad-email', subject: '', html: '' }),
-        }));
-
-        expect(response.status).toBe(400);
-    });
-
-    it('POST /api/core/ai validates request payloads', async () => {
-        vi.doMock('@/core/auth', () => ({
-            requireAuth: vi.fn(),
-        }));
-        vi.doMock('@/core/ai/genai', () => ({
-            generateText: vi.fn(),
-        }));
-
-        const mod = await importFresh<typeof import('@/app/api/core/ai/route')>('@/app/api/core/ai/route');
-        const response = await mod.POST(makeJsonRequest('http://localhost/api/core/ai', {
-            method: 'POST',
-            body: JSON.stringify({ prompt: '' }),
         }));
 
         expect(response.status).toBe(400);

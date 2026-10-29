@@ -1,4 +1,3 @@
-import { generateAndStoreDndImage } from "@/core/ai/dnd-image-generation-service"
 import type { EntityGenerationProgress } from "../types/entity-generation.types"
 
 interface ProgressCounter {
@@ -25,6 +24,8 @@ export async function resolveCandidateImage({
     counter.total += 1
     await counter.onProgress?.({ current: counter.current, total: counter.total, message: "Gerando imagem..." })
 
+    // Import tardio: a camada de IA (SDKs dos provedores) só carrega quando uma imagem é gerada.
+    const { generateAndStoreDndImage } = await import("@/features/ai/server/image-generator")
     const image = await generateAndStoreDndImage({
         entityLabel,
         formData,

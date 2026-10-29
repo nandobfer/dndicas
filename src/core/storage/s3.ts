@@ -1,11 +1,11 @@
-import { S3Client, PutObjectCommand, GetObjectCommand } from '@aws-sdk/client-s3';
-import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
+/**
+ * Storage S3 do core. A configuração não vem mais do `.env`: é a integração "Storage S3"
+ * (Integrações › Storage S3, banco → `.env` legado), resolvida a cada operação pelo serviço
+ * copiado do Opex (`src/lib/storage/s3.ts`), que recria o cliente quando a configuração muda.
+ * As assinaturas exportadas continuam as mesmas para os consumidores.
+ */
+import { getFileObject, getFileUrl as getSignedFileUrl, uploadFile as uploadToStorage } from "@/lib/storage/s3"
 
-const REGION = process.env.S3_REGION || 'us-east-1';
-const ENDPOINT = process.env.S3_ENDPOINT;
-const ACCESS_KEY = process.env.S3_ACCESS_KEY;
-const SECRET_KEY = process.env.S3_SECRET_KEY;
-const BUCKET = process.env.S3_BUCKET || 'default';
 const IMAGE_EXTENSION_BY_MIME_TYPE: Record<string, string> = {
     'image/gif': 'gif',
     'image/jpeg': 'jpg',
@@ -13,32 +13,8 @@ const IMAGE_EXTENSION_BY_MIME_TYPE: Record<string, string> = {
     'image/webp': 'webp',
 };
 
-let s3Client: S3Client | null = null;
-
-if (ACCESS_KEY && SECRET_KEY && ENDPOINT) {
-    s3Client = new S3Client({
-        region: REGION,
-        endpoint: ENDPOINT,
-        credentials: {
-            accessKeyId: ACCESS_KEY,
-            secretAccessKey: SECRET_KEY,
-        },
-        forcePathStyle: true, // Required for Minio
-    });
-} else {
-    console.warn("S3 Credentials missing, storage service disabled.");
-}
-
 export const uploadFile = async (key: string, body: Buffer | Uint8Array | Blob | string, mimeType?: string) => {
-    if (!s3Client) throw new Error("S3 Client not initialized");
-
-    const command = new PutObjectCommand({
-        Bucket: BUCKET,
-        Key: key,
-        Body: body,
-        ContentType: mimeType,
-    });
-    return s3Client.send(command);
+    return uploadToStorage(key, body, mimeType)
 }
 
 export const buildFileProxyUrl = (key: string): string => `/api/upload?key=${encodeURIComponent(key)}`;
@@ -53,21 +29,13 @@ export const getImageExtensionFromMimeType = (mimeType: string): string => {
     return extension;
 }
 
+/** URL assinada de leitura (servidor), como antes. */
 export const getFileUrl = async (key: string) => {
-    if (!s3Client) throw new Error("S3 Client not initialized");
-    // Generate public URL if bucket is public, or signed URL
-    const command = new GetObjectCommand({
-        Bucket: BUCKET,
-        Key: key
-    });
-    return getSignedUrl(s3Client, command, { expiresIn: 3600 });
+    return getSignedFileUrl(key, { audience: "server" })
 }
 
+/** Objeto do storage no formato usado pela rota de proxy (`Body` em stream e `ContentType`). */
 export const getFile = async (key: string) => {
-    if (!s3Client) throw new Error("S3 Client not initialized");
-    const command = new GetObjectCommand({
-        Bucket: BUCKET,
-        Key: key
-    });
-    return s3Client.send(command);
+    const file = await getFileObject(key)
+    return { Body: file.body, ContentType: file.contentType }
 }

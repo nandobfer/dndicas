@@ -17,7 +17,7 @@ import { motion } from "framer-motion"
 import Link from "next/link"
 import Image from "next/image"
 import { usePathname, useRouter } from "next/navigation"
-import { Home, User, Sparkles, FileText, Users, Scroll, Zap, Wand, AtSign, MessageSquare, Sword, ShieldCheck, Fingerprint, Backpack, ScrollText, Skull, LogOut, type LucideIcon } from "lucide-react"
+import { Home, User, Sparkles, FileText, Users, Scroll, Zap, Wand, AtSign, MessageSquare, Sword, ShieldCheck, Fingerprint, Backpack, ScrollText, Skull, LogOut, PlugZap, type LucideIcon } from "lucide-react"
 import { cn } from "@/core/utils"
 import { glassConfig } from "@/lib/config/glass-config"
 import { motionConfig } from "@/lib/config/motion-configs"
@@ -25,6 +25,7 @@ import { SidebarItem, SidebarSection } from "./sidebar-item"
 import { TooltipProvider } from "@/core/ui/tooltip"
 import { useAuth } from "@/core/hooks/useAuth"
 import { APP_VERSION } from "@/lib/config/version"
+import { OpexNavItem } from "@/features/opex-agent/components/OpexNavItem"
 
 export interface ExpandableSidebarProps {
     /** Whether sidebar is expanded */
@@ -70,7 +71,8 @@ const adminItems = [
     { label: "Usuários", href: "/users", icon: Users, admin: true },
     { label: "Fichas", href: "/sheets", icon: ScrollText, admin: true },
     { label: "Logs", href: "/audit-logs", icon: FileText, admin: true },
-    { label: "Referências Pendentes", href: "/admin/mentions", icon: AtSign, admin: true }
+    { label: "Referências Pendentes", href: "/admin/mentions", icon: AtSign, admin: true },
+    { label: "Integrações", href: "/integracoes", icon: PlugZap, admin: true }
 ]
 
 /**
@@ -235,6 +237,11 @@ export const ExpandableSidebar: React.FC<ExpandableSidebarProps> = ({ isExpanded
                         )}
                     </div>
                 </nav>
+
+                {/* Agente Opex (para todos, inclusive visitantes) */}
+                <div className="border-t border-white/5 px-2 py-2">
+                    <OpexNavItem collapsed={!isExpanded} onOpen={isMobile ? onCollapse : undefined} />
+                </div>
 
                 {/* User Area Footer */}
                 <div className={cn("border-t border-white/5 mt-auto py-4 px-2")}>

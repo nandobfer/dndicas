@@ -4,6 +4,7 @@ import { FeedbackModel } from "@/features/feedback/api/feedback.model"
 import { buildFeedbackImplementationPrompt, buildFeedbackIterationPrompt, buildFeedbackPlanPrompt } from "@/features/feedback/services/feedback-agent-prompt-service"
 import { hasActiveFeedbackAgentRun, queueFeedbackAgentRun, queueFeedbackPlan } from "@/features/feedback/services/feedback-agent-run-service"
 import { createFeedbackTimelineEvent, listFeedbackTimelineEvents } from "@/features/feedback/services/feedback-timeline-service"
+import { isOpexIntegrationAvailable, OPEX_INTEGRATION_UNAVAILABLE_CODE, OPEX_INTEGRATION_UNAVAILABLE_MESSAGE } from "@/features/feedback/services/opex-integration-gate"
 import type { McpAuthContext } from "./mcp-auth-service"
 import type { CommentFeedbackInput, CreateFeedbackInput, FeedbackIdInput, ListFeedbacksInput, RequestFeedbackAgentInput, RequestFeedbackIterationInput, UpdateFeedbackInput } from "./feedback-schemas"
 import { serializeAgentRun, serializeAuthenticatedFeedback, serializePublicFeedback, serializeTimelineEvent } from "./feedback-serializers"
@@ -31,6 +32,11 @@ function isOwner(feedback: { createdBy?: string }, auth: McpAuthContext) {
 function requireFeedbackPermission(feedback: { createdBy?: string }, auth: McpAuthContext) {
     if (auth.role === "admin" || isOwner(feedback, auth)) return
     throw new McpFeedbackError("Você não tem permissão para executar esta ação.", "FORBIDDEN")
+}
+
+/** Plano/implementação/iteração/merge dependem da integração "Opex" (ainda em desenvolvimento). */
+function assertAgenticFlowAvailable() {
+    if (!isOpexIntegrationAvailable()) throw new McpFeedbackError(OPEX_INTEGRATION_UNAVAILABLE_MESSAGE, OPEX_INTEGRATION_UNAVAILABLE_CODE)
 }
 
 async function findFeedbackOrThrow(id: string) {
@@ -201,6 +207,7 @@ export async function commentFeedback(input: CommentFeedbackInput, auth: McpAuth
 }
 
 export async function requestFeedbackPlan(input: RequestFeedbackAgentInput, auth: McpAuthContext) {
+    assertAgenticFlowAvailable()
     await dbConnect()
 
     const feedback = await findFeedbackOrThrow(input.id)
@@ -231,6 +238,7 @@ export async function requestFeedbackPlan(input: RequestFeedbackAgentInput, auth
 }
 
 export async function requestFeedbackImplementation(input: RequestFeedbackAgentInput, auth: McpAuthContext) {
+    assertAgenticFlowAvailable()
     await dbConnect()
 
     const feedback = await findFeedbackOrThrow(input.id)
@@ -260,6 +268,7 @@ export async function requestFeedbackImplementation(input: RequestFeedbackAgentI
 }
 
 export async function requestFeedbackIteration(input: RequestFeedbackIterationInput, auth: McpAuthContext) {
+    assertAgenticFlowAvailable()
     await dbConnect()
 
     const feedback = await findFeedbackOrThrow(input.id)
@@ -289,6 +298,7 @@ export async function requestFeedbackIteration(input: RequestFeedbackIterationIn
 }
 
 export async function approveFeedbackMerge(input: FeedbackIdInput, auth: McpAuthContext) {
+    assertAgenticFlowAvailable()
     await dbConnect()
 
     const feedback = await findFeedbackOrThrow(input.id)

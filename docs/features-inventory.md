@@ -163,7 +163,7 @@ Estados testáveis:
 
 APIs relacionadas:
 
-- `POST /api/core/ai`
+- `POST /api/core/ai/image` (agente Gerador de imagens)
 - `POST /api/core/email`
 - `GET /api/core/health`
 - `GET /api/realtime/pusher-config`
@@ -816,7 +816,7 @@ Scripts e estrutura:
 
 - `scripts/seed-data/index.ts`
 - providers para magias, raças, talentos e itens
-- tradução via GenAI, Google Cloud e LibreTranslate
+- tradução via agente Importador 5etools (IA), Google Cloud e LibreTranslate
 - armazenamento de progresso e glossário
 - testes já existentes para base provider e races provider
 

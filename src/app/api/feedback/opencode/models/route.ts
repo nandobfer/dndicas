@@ -3,6 +3,7 @@ import { currentUser } from "@/core/auth/server"
 import type { ApiResponse } from "@/core/types/common"
 import { getCachedOpenCodeModels } from "@/features/feedback/services/opencode/opencode-model-cache-service"
 import type { OpenCodeModelOption } from "@/features/feedback/types/feedback.types"
+import { opexIntegrationUnavailableResponse } from "@/features/feedback/services/opex-integration-gate"
 
 export async function GET() {
     try {
@@ -16,6 +17,10 @@ export async function GET() {
 
             return NextResponse.json(response, { status: user ? 403 : 401 })
         }
+
+        // Fluxo agêntico bloqueado enquanto a integração Opex estiver em desenvolvimento.
+        const unavailable = opexIntegrationUnavailableResponse()
+        if (unavailable) return unavailable
 
         const cache = await getCachedOpenCodeModels()
         if (!cache || cache.models.length === 0) {

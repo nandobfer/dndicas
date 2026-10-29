@@ -28,6 +28,15 @@
   --color-card: hsl(var(--card));
   --color-card-foreground: hsl(var(--card-foreground));
 
+  /* Estados usados pelos componentes da central de integrações e do Agente Opex. */
+  --color-success: #22c55e;
+  --color-warning: #fbbf24;
+  /* Markdown do Agente Opex (títulos, destaques, código e citações). */
+  --color-md-heading: #b366ff;
+  --color-md-strong: #fbbf24;
+  --color-md-code: #34d399;
+  --color-md-quote: #22d3ee;
+
   --radius-lg: var(--radius);
   --radius-md: calc(var(--radius) - 2px);
   --radius-sm: calc(var(--radius) - 4px);

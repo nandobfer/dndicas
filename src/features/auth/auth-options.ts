@@ -45,7 +45,16 @@ export async function authorizeCredentials(credentials: { identifier?: string | 
     }
 }
 
-function buildAuthProviders() {
+export interface GoogleOAuthCredentials {
+    clientId: string
+    clientSecret: string
+}
+
+/**
+ * Providers do login. O Google só entra com as credenciais da integração "Autenticação Google"
+ * (Integrações, banco → `.env` legado), resolvidas a cada requisição da rota do NextAuth.
+ */
+export function buildAuthProviders(google: GoogleOAuthCredentials | null = null) {
     const providers: NextAuthOptions["providers"] = [
         CredentialsProvider({
             name: "Email e senha",
@@ -57,10 +66,10 @@ function buildAuthProviders() {
         }),
     ]
 
-    if (process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET) {
+    if (google?.clientId && google.clientSecret) {
         providers.push(GoogleProvider({
-            clientId: process.env.GOOGLE_CLIENT_ID,
-            clientSecret: process.env.GOOGLE_CLIENT_SECRET,
+            clientId: google.clientId,
+            clientSecret: google.clientSecret,
         }))
     }
 
@@ -124,6 +133,10 @@ async function findOrCreateGoogleUser(profile: { email?: string | null; name?: s
     })
 }
 
+/**
+ * Opções estáticas (sessão JWT, callbacks e login por senha) — suficientes para `getServerSession`.
+ * A rota `/api/auth/[...nextauth]` usa `buildAuthOptions()`, que acrescenta o Google configurado.
+ */
 export const authOptions: NextAuthOptions = {
     secret: process.env.AUTH_SECRET ?? process.env.NEXTAUTH_SECRET,
     session: {
@@ -192,4 +205,21 @@ export const authOptions: NextAuthOptions = {
             return session
         },
     },
+}
+
+/** Credenciais do Google da integração; `null` quando incompletas ou indisponíveis. SOMENTE servidor. */
+export async function getGoogleOAuthCredentials(): Promise<GoogleOAuthCredentials | null> {
+    try {
+        const { getIntegrationConfig } = await import("@/lib/integrations/config")
+        const config = await getIntegrationConfig("google_auth")
+        return config.clientId && config.clientSecret ? { clientId: config.clientId, clientSecret: config.clientSecret } : null
+    } catch (error) {
+        console.error("[auth] Configuração do login com Google indisponível", error)
+        return null
+    }
+}
+
+/** Opções completas da rota do NextAuth, com os providers resolvidos na hora. */
+export async function buildAuthOptions(): Promise<NextAuthOptions> {
+    return { ...authOptions, providers: buildAuthProviders(await getGoogleOAuthCredentials()) }
 }

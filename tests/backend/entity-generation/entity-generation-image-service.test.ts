@@ -1,8 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import { resolveCandidateImage } from "@/features/entity-generation/server/entity-generation-image-service"
-import { generateAndStoreDndImage } from "@/core/ai/dnd-image-generation-service"
+import { generateAndStoreDndImage } from "@/features/ai/server/image-generator"
 
-vi.mock("@/core/ai/dnd-image-generation-service", () => ({
+vi.mock("@/features/ai/server/image-generator", () => ({
     generateAndStoreDndImage: vi.fn(),
 }))
 

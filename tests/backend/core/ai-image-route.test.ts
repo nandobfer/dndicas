@@ -1,202 +1,94 @@
 import { describe, expect, it, vi } from 'vitest';
 
 import { makeJsonRequest, readJson } from '../helpers/http';
-import { importFresh } from '../helpers/module';
+
+const actor = { id: 'user-1', name: 'Heroína', role: 'user' as const };
+
+type DomainErrorArgs = [status: number, message: string, code: string];
+
+/** Erro de domínio criado na mesma instância do módulo que a rota usa (o import é refeito a cada teste). */
+const domainError = (...args: DomainErrorArgs) => ({ domainError: args });
+
+type Outcome = { value: unknown } | { domainError: DomainErrorArgs };
+
+function mockRoute({ actorOutcome, imageOutcome }: { actorOutcome: Outcome; imageOutcome?: Outcome }) {
+    const generateAndStoreDndImage = vi.fn();
+    vi.doMock('@/features/auth/server/actor', async () => {
+        const { DomainError } = await import('@/lib/api/route');
+        return {
+            requireActor: vi.fn(async () => {
+                if ('domainError' in actorOutcome) throw new DomainError(...actorOutcome.domainError);
+                return actorOutcome.value;
+            }),
+        };
+    });
+    vi.doMock('@/features/ai/server/image-generator', async () => {
+        const { DomainError } = await import('@/lib/api/route');
+        generateAndStoreDndImage.mockImplementation(async () => {
+            if (imageOutcome && 'domainError' in imageOutcome) throw new DomainError(...imageOutcome.domainError);
+            return imageOutcome?.value;
+        });
+        return { generateAndStoreDndImage };
+    });
+    return generateAndStoreDndImage;
+}
+
+async function post(body: unknown) {
+    vi.resetModules();
+    const mod = await import('@/app/api/core/ai/image/route');
+    return mod.POST(makeJsonRequest('http://localhost/api/core/ai/image', { method: 'POST', body: JSON.stringify(body) }), { params: Promise.resolve({}) });
+}
 
 describe('POST /api/core/ai/image', () => {
-    it('requires an authenticated user', async () => {
-        vi.doMock('@/core/auth', () => ({
-            requireAuth: vi.fn().mockRejectedValue(new Error('UNAUTHORIZED')),
-        }));
-        vi.doMock('@/core/ai/genai', () => ({
-            generateImage: vi.fn(),
-        }));
-        vi.doMock('@/core/storage/s3', () => ({
-            uploadFile: vi.fn(),
-            buildFileProxyUrl: vi.fn(),
-            getImageExtensionFromMimeType: vi.fn(),
-        }));
+    it('exige usuário logado', async () => {
+        const generateAndStoreDndImage = mockRoute({ actorOutcome: domainError(401, 'Faça login para continuar.', 'UNAUTHENTICATED') });
 
-        const mod = await importFresh<typeof import('@/app/api/core/ai/image/route')>('@/app/api/core/ai/image/route');
-        const response = await mod.POST(makeJsonRequest('http://localhost/api/core/ai/image', {
-            method: 'POST',
-            body: JSON.stringify({ prompt: 'draw a dragon' }),
-        }));
+        const response = await post({ prompt: 'draw a dragon' });
 
         expect(response.status).toBe(401);
+        expect(generateAndStoreDndImage).not.toHaveBeenCalled();
     });
 
-    it('validates request payloads', async () => {
-        vi.doMock('@/core/auth', () => ({
-            requireAuth: vi.fn().mockResolvedValue('clerk-1'),
-        }));
-        vi.doMock('@/core/ai/genai', () => ({
-            generateImage: vi.fn(),
-        }));
-        vi.doMock('@/core/storage/s3', () => ({
-            uploadFile: vi.fn(),
-            buildFileProxyUrl: vi.fn(),
-            getImageExtensionFromMimeType: vi.fn(),
-        }));
+    it('valida o payload (prompt ou dados do formulário)', async () => {
+        const generateAndStoreDndImage = mockRoute({ actorOutcome: { value: actor } });
 
-        const mod = await importFresh<typeof import('@/app/api/core/ai/image/route')>('@/app/api/core/ai/image/route');
-        const response = await mod.POST(makeJsonRequest('http://localhost/api/core/ai/image', {
-            method: 'POST',
-            body: JSON.stringify({ prompt: '' }),
-        }));
-        const payload = await readJson<{ code: string }>(response);
+        const response = await post({ prompt: '' });
 
         expect(response.status).toBe(400);
-        expect(payload.code).toBe('VALIDATION_ERROR');
+        expect(generateAndStoreDndImage).not.toHaveBeenCalled();
     });
 
-    it('generates an image from full form JSON, uploads it to storage, and returns the saved asset metadata', async () => {
-        const requireAuth = vi.fn().mockResolvedValue('clerk-1');
-        const generateImage = vi.fn().mockResolvedValue({
-            buffer: Buffer.from('generated-image'),
-            mimeType: 'image/png',
+    it('gera pelo agente "Gerador de imagens" com o JSON do formulário e devolve a imagem gravada', async () => {
+        const generateAndStoreDndImage = mockRoute({
+            actorOutcome: { value: actor },
+            imageOutcome: { value: { key: 'ai/generated/user-1/1.png', url: '/api/upload?key=ai%2Fgenerated%2Fuser-1%2F1.png', mimeType: 'image/png' } },
         });
-        const uploadFile = vi.fn().mockResolvedValue(undefined);
-        const buildFileProxyUrl = vi.fn((key: string) => `/api/upload?key=${encodeURIComponent(key)}`);
-        const getImageExtensionFromMimeType = vi.fn().mockReturnValue('png');
 
-        vi.spyOn(Date, 'now').mockReturnValue(1700000000000);
-
-        vi.doMock('@/core/auth', () => ({
-            requireAuth,
-        }));
-        vi.doMock('@/core/ai/genai', () => ({
-            generateImage,
-        }));
-        vi.doMock('@/core/storage/s3', () => ({
-            uploadFile,
-            buildFileProxyUrl,
-            getImageExtensionFromMimeType,
-        }));
-
-        const mod = await importFresh<typeof import('@/app/api/core/ai/image/route')>('@/app/api/core/ai/image/route');
-        const response = await mod.POST(makeJsonRequest('http://localhost/api/core/ai/image', {
-            method: 'POST',
-            body: JSON.stringify({
-                entityLabel: 'Classe',
-                formData: {
-                    name: 'Guerreiro',
-                    description: 'Combatente marcial veterano.',
-                    hitDice: 'd10',
-                },
-                preferredAspectRatio: '1:1',
-                model: 'gemini-image-test',
-            }),
-        }));
-        const payload = await readJson<{
-            success: boolean;
-            data: {
-                key: string;
-                url: string;
-                mimeType: string;
-            };
-        }>(response);
+        const formData = { name: 'Bola de Fogo', circle: 3 };
+        const response = await post({ entityLabel: 'Magia', preferredAspectRatio: '1:1', formData });
+        const payload = await readJson<{ success: boolean; data: { key: string; url: string; mimeType: string } }>(response);
 
         expect(response.status).toBe(201);
-        expect(requireAuth).toHaveBeenCalledTimes(1);
-        expect(generateImage).toHaveBeenCalledWith(expect.stringContaining('Dungeons & Dragons 5e'), 'gemini-image-test', 'clerk-1');
-        expect(generateImage).toHaveBeenCalledWith(expect.stringContaining('realismo clássico'), 'gemini-image-test', 'clerk-1');
-        expect(generateImage).toHaveBeenCalledWith(expect.stringContaining('"name": "Guerreiro"'), 'gemini-image-test', 'clerk-1');
-        expect(generateImage).toHaveBeenCalledWith(expect.stringContaining('Contexto principal da entidade: Classe.'), 'gemini-image-test', 'clerk-1');
-        expect(getImageExtensionFromMimeType).toHaveBeenCalledWith('image/png');
-        expect(uploadFile).toHaveBeenCalledWith('ai/generated/clerk-1/1700000000000.png', Buffer.from('generated-image'), 'image/png');
-        expect(payload.success).toBe(true);
-        expect(payload.data).toEqual({
-            key: 'ai/generated/clerk-1/1700000000000.png',
-            url: '/api/upload?key=ai%2Fgenerated%2Fclerk-1%2F1700000000000.png',
-            mimeType: 'image/png',
-        });
+        expect(payload.data).toEqual({ key: 'ai/generated/user-1/1.png', url: '/api/upload?key=ai%2Fgenerated%2Fuser-1%2F1.png', mimeType: 'image/png' });
+        expect(generateAndStoreDndImage).toHaveBeenCalledWith({ entityLabel: 'Magia', preferredAspectRatio: '1:1', formData, userId: 'user-1' });
     });
 
-    it('logs the parsed AI image payload received by the server', async () => {
-        const requireAuth = vi.fn().mockResolvedValue('clerk-1');
-        const generateImage = vi.fn().mockResolvedValue({
-            buffer: Buffer.from('generated-image'),
-            mimeType: 'image/png',
-        });
-        const uploadFile = vi.fn().mockResolvedValue(undefined);
-        const buildFileProxyUrl = vi.fn((key: string) => `/api/upload?key=${encodeURIComponent(key)}`);
-        const getImageExtensionFromMimeType = vi.fn().mockReturnValue('png');
-        const consoleLogSpy = vi.spyOn(console, 'log').mockImplementation(() => undefined);
+    it('responde 409 em pt-BR quando o agente não está configurado (sem fallback)', async () => {
+        mockRoute({ actorOutcome: { value: actor }, imageOutcome: domainError(409, 'O agente "Gerador de imagens" está desativado.', 'AI_IMAGE_UNAVAILABLE') });
 
-        vi.spyOn(Date, 'now').mockReturnValue(1700000000001);
+        const response = await post({ prompt: 'um dragão vermelho' });
+        const payload = await readJson<{ success: boolean; error: string; code: string }>(response);
 
-        vi.doMock('@/core/auth', () => ({
-            requireAuth,
-        }));
-        vi.doMock('@/core/ai/genai', () => ({
-            generateImage,
-        }));
-        vi.doMock('@/core/storage/s3', () => ({
-            uploadFile,
-            buildFileProxyUrl,
-            getImageExtensionFromMimeType,
-        }));
-
-        const formData = {
-            name: 'Kael',
-            equippedItems: [{ name: 'Armadura de placas', quantity: 1, type: 'armadura' }],
-        };
-
-        const mod = await importFresh<typeof import('@/app/api/core/ai/image/route')>('@/app/api/core/ai/image/route');
-        const response = await mod.POST(makeJsonRequest('http://localhost/api/core/ai/image', {
-            method: 'POST',
-            body: JSON.stringify({
-                entityLabel: 'Personagem',
-                formData,
-                preferredAspectRatio: '3:4',
-            }),
-        }));
-
-        expect(response.status).toBe(201);
-        expect(consoleLogSpy).toHaveBeenCalledWith('[AI image] Received payload', {
-            prompt: undefined,
-            model: undefined,
-            entityLabel: 'Personagem',
-            preferredAspectRatio: '3:4',
-            formData,
-        });
-
-        consoleLogSpy.mockRestore();
+        expect(response.status).toBe(409);
+        expect(payload.code).toBe('AI_IMAGE_UNAVAILABLE');
+        expect(payload.error).toContain('Gerador de imagens');
     });
 
-    it('rejects generated images larger than 5MB before upload', async () => {
-        const requireAuth = vi.fn().mockResolvedValue('clerk-1');
-        const generateImage = vi.fn().mockResolvedValue({
-            buffer: Buffer.alloc((5 * 1024 * 1024) + 1),
-            mimeType: 'image/png',
-        });
-        const uploadFile = vi.fn().mockResolvedValue(undefined);
+    it('responde 422 quando a imagem gerada excede 5MB', async () => {
+        mockRoute({ actorOutcome: { value: actor }, imageOutcome: domainError(422, 'A imagem gerada excedeu o limite de 5MB.', 'AI_IMAGE_TOO_LARGE') });
 
-        vi.doMock('@/core/auth', () => ({
-            requireAuth,
-        }));
-        vi.doMock('@/core/ai/genai', () => ({
-            generateImage,
-        }));
-        vi.doMock('@/core/storage/s3', () => ({
-            uploadFile,
-            buildFileProxyUrl: vi.fn(),
-            getImageExtensionFromMimeType: vi.fn(),
-        }));
-
-        const mod = await importFresh<typeof import('@/app/api/core/ai/image/route')>('@/app/api/core/ai/image/route');
-        const response = await mod.POST(makeJsonRequest('http://localhost/api/core/ai/image', {
-            method: 'POST',
-            body: JSON.stringify({
-                entityLabel: 'Monstro',
-                formData: { name: 'Dragão Vermelho Adulto' },
-            }),
-        }));
-        const payload = await readJson<{ code: string }>(response);
+        const response = await post({ prompt: 'um dragão vermelho' });
 
         expect(response.status).toBe(422);
-        expect(payload.code).toBe('AI_IMAGE_TOO_LARGE');
-        expect(uploadFile).not.toHaveBeenCalled();
     });
 });

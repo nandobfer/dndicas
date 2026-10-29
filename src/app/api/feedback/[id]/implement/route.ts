@@ -6,6 +6,7 @@ import type { ApiResponse } from "@/core/types/common"
 import { FeedbackModel } from "@/features/feedback/api/feedback.model"
 import { buildFeedbackImplementationPrompt } from "@/features/feedback/services/feedback-agent-prompt-service"
 import { hasActiveFeedbackAgentRun, queueFeedbackAgentRun } from "@/features/feedback/services/feedback-agent-run-service"
+import { opexIntegrationUnavailableResponse } from "@/features/feedback/services/opex-integration-gate"
 
 const schema = z.object({ model: z.string().min(1), message: z.string().max(20000).optional() })
 
@@ -13,6 +14,10 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     try {
         const user = await currentUser()
         if (!user || user.publicMetadata?.role !== "admin") return NextResponse.json({ success: false, error: "Você não tem permissão para implementar feedbacks", code: "FORBIDDEN" } satisfies ApiResponse<null>, { status: user ? 403 : 401 })
+
+        // Fluxo agêntico bloqueado enquanto a integração Opex estiver em desenvolvimento.
+        const unavailable = opexIntegrationUnavailableResponse()
+        if (unavailable) return unavailable
 
         const { id } = await params
         const input = schema.parse(await req.json())

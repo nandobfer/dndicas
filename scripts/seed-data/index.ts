@@ -22,7 +22,7 @@ import { countEntries, clearAllEntries, backupGlossary, restoreGlossary } from '
 import { listAllProgress, resetProgress } from './progress/progress-store';
 
 // Load .env FIRST — must happen before requiring any module that reads env vars
-// at load time (e.g. src/core/ai/genai.ts reads GOOGLE_API_KEY at module level).
+// at load time.
 dotenv.config({ path: path.resolve(__dirname, '../../.env') });
 
 // eslint-disable-next-line @typescript-eslint/no-require-imports
@@ -38,7 +38,7 @@ const { ClassesProvider } = require('./providers/classes-provider') as typeof im
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const { MonstersProvider } = require('./providers/monsters-provider') as typeof import('./providers/monsters-provider');
 // eslint-disable-next-line @typescript-eslint/no-require-imports
-const { ALL_TRANSLATORS, GenAITranslator, LibreTranslateTranslator } = require('./translation') as typeof import('./translation');
+const { ALL_TRANSLATORS, AiTranslator, LibreTranslateTranslator } = require('./translation') as typeof import('./translation');
 
 const term = terminal.terminal;
 
@@ -89,7 +89,7 @@ function printHelp(): void {
     term.green('  --help             ');
     term('Exibe esta ajuda e encerra\n');
     term.green('  --list-models      ');
-    term('Lista modelos GenAI disponíveis e encerra\n');
+    term('Lista os modelos do provedor do agente Importador 5etools e encerra\n');
     term.green('  --clear-glossary   ');
     term('Backup + limpa o glossário no MongoDB e encerra\n');
     term.green('  --dump-glossary    ');
@@ -391,53 +391,41 @@ async function runRestoreGlossary(filePath?: string): Promise<void> {
 
 async function listAvailableModels(): Promise<void> {
     // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const { getGenAIClient } = require('../../src/core/ai/genai') as typeof import('../../src/core/ai/genai');
+    const { loadEntityImportSettings } = require('../../src/features/ai/server/settings') as typeof import('../../src/features/ai/server/settings');
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { listAiModels } = require('../../src/lib/ai/catalog') as typeof import('../../src/lib/ai/catalog');
 
-    term.cyan('Fetching available models from Gemini API...\n\n');
-
-    const ai = getGenAIClient();
-    const models: string[] = [];
-
-    // The Pager has a Symbol.asyncIterator at runtime but TS types don't expose it;
-    // cast to any to iterate safely.
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const pager = await ai.models.list() as any;
-    for await (const model of pager) {
-        if (model?.name && model.supportedActions?.includes('generateContent')) {
-            models.push((model.name as string).replace('models/', ''));
-        }
-    }
-
-    if (models.length === 0) {
-        term.yellow('No models supporting generateContent found.\n');
+    const { settings } = await loadEntityImportSettings();
+    if (!settings.provider) {
+        term.yellow('O agente "Importador 5etools" não tem provedor configurado (Integrações › Provedores de IA).\n');
         return;
     }
 
-    term.bold('Available models (supports generateContent):\n');
-    for (const m of models.sort()) {
-        term.green(`  ${m}\n`);
+    term.cyan(`Buscando os modelos do provedor ${settings.provider} configurado no Importador 5etools...\n\n`);
+    const models = await listAiModels(settings.provider, { fresh: true });
+
+    if (models.length === 0) {
+        term.yellow('Nenhum modelo de texto disponível.\n');
+        return;
+    }
+
+    term.bold('Modelos disponíveis (troque em /integracoes/ia?aba=importador-5etools):\n');
+    for (const m of models) {
+        term.green(`  ${m.id}${m.id === settings.model ? '  ← em uso' : ''}\n`);
     }
     term('\n');
 }
 
-// ─── GenAI / Rate limit config ────────────────────────────────────────────────
+// ─── IA (Importador 5etools) / Rate limit config ─────────────────────────────
 
 async function askRateLimitConfig(): Promise<RateLimitConfig> {
     // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const { defaultModel } = require('../../src/core/ai/genai') as typeof import('../../src/core/ai/genai');
+    const { loadEntityImportSettings } = require('../../src/features/ai/server/settings') as typeof import('../../src/features/ai/server/settings');
+    const { settings } = await loadEntityImportSettings();
 
     term('\n');
-    term.gray('  Tip: run with --list-models to see all available model IDs\n\n');
-
-    const model = await new Promise<string>((resolve) => {
-        term.cyan(`AI model `);
-        term.gray(`(leave empty for default: ${defaultModel})`);
-        term.cyan(`: `);
-        term.inputField({}, (_, input) => {
-            term('\n');
-            resolve((input ?? '').trim());
-        });
-    });
+    term.gray(`  Provedor e modelo vêm do agente "Importador 5etools" (/integracoes/ia): ${settings.provider ?? 'não configurado'} / ${settings.model ?? '—'}\n`);
+    term.gray('  Tip: run with --list-models to see the models of the configured provider\n\n');
 
     const rpmStr = await new Promise<string>((resolve) => {
         term.cyan('Requests per minute (RPM) ');
@@ -460,20 +448,36 @@ async function askRateLimitConfig(): Promise<RateLimitConfig> {
     const rpm = Math.max(0, parseInt(rpmStr || '0', 10) || 0);
     const rpd = Math.max(0, parseInt(rpdStr || '0', 10) || 0);
 
-    term.dim(`  Model: ${model || defaultModel}  |  RPM: ${rpm || 'unlimited'}  |  RPD: ${rpd || 'unlimited'}\n`);
+    term.dim(`  RPM: ${rpm || 'unlimited'}  |  RPD: ${rpd || 'unlimited'}\n`);
 
-    return { model, rpm, rpd };
+    return { rpm, rpd };
 }
 
 // ─── Translator selector ──────────────────────────────────────────────────────
+
+async function defaultTranslatorIndex(): Promise<number> {
+    try {
+        // eslint-disable-next-line @typescript-eslint/no-require-imports
+        const { getIntegrationConfig } = require('../../src/lib/integrations/config') as typeof import('../../src/lib/integrations/config');
+        const { provider } = await getIntegrationConfig('translation');
+        const index = ALL_TRANSLATORS.findIndex((t) =>
+            provider === 'ai' ? t instanceof AiTranslator : provider === 'libretranslate' ? t instanceof LibreTranslateTranslator : t.name.toLowerCase().includes('google'),
+        );
+        return Math.max(0, index);
+    } catch {
+        return 0;
+    }
+}
 
 async function selectTranslator(): Promise<BaseTranslator> {
     term('\nSelect a translation provider:\n\n');
 
     const menuItems = ALL_TRANSLATORS.map((t) => t.name);
+    // Tradutor padrão: integração "Tradução" (Integrações), pré-selecionado no menu.
+    const selectedIndex = await defaultTranslatorIndex();
 
     const translator = await new Promise<BaseTranslator>((resolve, reject) => {
-        term.singleColumnMenu(menuItems, { cancelable: true }, (error, response) => {
+        term.singleColumnMenu(menuItems, { cancelable: true, selectedIndex }, (error, response) => {
             if (error || response.canceled) {
                 reject(new Error('Selection cancelled.'));
                 return;
@@ -484,7 +488,7 @@ async function selectTranslator(): Promise<BaseTranslator> {
 
     term('\n');
 
-    if (translator instanceof GenAITranslator) {
+    if (translator instanceof AiTranslator) {
         const rateLimitConfig = await askRateLimitConfig();
         translator.configure(rateLimitConfig);
     }

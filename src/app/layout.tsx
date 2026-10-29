@@ -9,27 +9,34 @@ import { ScrollToTop } from "@/core/ui/scroll-to-top"
 import { WindowProvider } from "@/core/context/window-context"
 import { ChunkLoadRecovery } from "@/core/ui/chunk-load-recovery"
 import { AuthSessionProvider } from "@/features/auth/auth-session-provider"
+import { PusherConfigBridge } from "@/lib/pusher/PusherConfigBridge"
+import { getPusherPublicConfig } from "@/lib/pusher/public-config"
+import { getAnalyticsConfig } from "@/lib/integrations/analytics"
+
+/**
+ * Sempre renderizado por requisição: Pusher e Analytics vêm das integrações (banco → .env legado).
+ * Estático, o `next build` (que roda no Docker sem o banco) congelaria os valores do build.
+ */
+export const dynamic = "force-dynamic"
+
 export const metadata: Metadata = {
     title: "Dungeons & Dicas",
     description: "Dungeons & Dragons em Português",
 }
 
-export default function RootLayout({
+export default async function RootLayout({
     children,
 }: Readonly<{
     children: React.ReactNode
 }>) {
+    const [pusherConfig, analytics] = await Promise.all([getPusherPublicConfig(), getAnalyticsConfig()])
     return (
         <html lang="pt-BR" className="dark">
             <head>
-                <Script
-                    id="umami-analytics"
-                    src="https://analytics.nandoburgos.dev/script.js"
-                    data-website-id="6914445b-f309-4d5a-85b3-ef9c5fc30866"
-                    strategy="afterInteractive"
-                />
+                {analytics && <Script id="umami-analytics" src={analytics.scriptUrl} data-website-id={analytics.websiteId} strategy="afterInteractive" />}
             </head>
             <body className={cn("min-h-screen bg-background font-sans antialiased")}>
+                <PusherConfigBridge config={pusherConfig} />
                 <ChunkLoadRecovery />
                 <ScrollToTop />
                 <AuthSessionProvider>

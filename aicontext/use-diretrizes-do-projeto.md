@@ -93,23 +93,23 @@ src/
 - `logAction()` para auditoria automática
 - Schemas com timestamps automáticos
 
-### 3. IA: Google Gemini via @google/genai
+### 3. IA: provedores configuráveis via Vercel AI SDK
 
-**Decisão**: Google Gemini em vez de OpenAI
+**Decisão**: camada de IA copiada do Opex (`ai` + `@ai-sdk/*`), com os provedores OpenCode, Gemini,
+Anthropic, OpenAI, DeepSeek e JEV configurados em `/integracoes/ia`. O antigo
+`src/core/ai/genai.ts` (`@google/genai`) e o fallback `GENAI_*` foram removidos.
 
 **Razão**:
-- Modelo flash gratuito e rápido
-- API simples
-- Suporte a streaming
-- Multimodal (texto, imagem)
+- Trocar de provedor ou modelo sem deploy
+- Um agente por uso (Gerador de imagens, Entender com IA, Importador 5etools, Agente Opex,
+  Resumo de memórias), cada um com instruções e memórias próprias
+- Consumo registrado por origem
 
 **Implementação**:
-- Serviço centralizado em `src/core/ai/genai.ts`
-- Logging automático de tokens
-- Funções: `generateText`, `generateTextStream`, `chat`, `countTokens`
-- `generateText` usa o microserviço interno `genai` como fallback HTTP quando o Gemini falha por quota, rate limit ou indisponibilidade temporária
-- Fallback configurado por `GENAI_BASE_URL`, `GENAI_API_KEY`, `GENAI_TIMEOUT_MS` e, opcionalmente, `GENAI_FALLBACK_MODEL`
-- Desenvolvedores **NÃO** devem usar `@google/genai` diretamente
+- Provedores e geração em `src/lib/ai/*` (`generateAiText`, `prepareModel`, `generateAiImage`)
+- Configuração de cada agente em `ai_feature_settings` (`src/features/ai/server/settings.ts`)
+- Sem configuração ativa: **409 em pt-BR** com o motivo — nunca há fallback para outro provedor
+- Desenvolvedores **NÃO** devem chamar SDKs de IA diretamente: usem o agente da feature (ver `aicontext/modules/ai.md`)
 
 ### 4. Storage: S3/Minio
 
@@ -441,11 +441,15 @@ aicontext/
 
 **Produção**: Variáveis no servidor (Vercel, Railway, etc.)
 
-**Críticas**:
+**Bootstrap** (as únicas que ficam no `.env`; ver `.env.example` e `aicontext/modules/integrations.md`):
 - `MONGODB_URI`
-- `AUTH_SECRET`
-- `GOOGLE_API_KEY`
-- `GENAI_API_KEY` quando o fallback de IA estiver habilitado
+- `AUTH_SECRET` / `NEXTAUTH_SECRET`
+- `AUTH_URL` / `NEXTAUTH_URL`
+- `NEXT_PUBLIC_APP_URL`
+- `INTEGRATIONS_ENCRYPTION_KEY`
+
+Google, Pusher, S3, SMTP, Crons, IA, Analytics e Tradução são configurados em `/integracoes`
+(banco → `.env` legado → padrão do código).
 
 ## 🐛 Problemas Comuns e Soluções
 
@@ -469,9 +473,9 @@ aicontext/
 
 **Sintoma**: Erro ao gerar texto
 
-**Causa**: `GOOGLE_API_KEY` inválida
+**Causa**: o agente da feature está desativado ou o provedor não está conectado (a API responde 409)
 
-**Solução**: Obter nova chave em https://aistudio.google.com
+**Solução**: Configurar e testar o provedor em Integrações › Provedores de IA e ativar o agente na aba dele
 
 ### 4. Storage Não Funciona
 
@@ -479,13 +483,13 @@ aicontext/
 
 **Causa**: Credenciais S3 não configuradas
 
-**Solução**: Todas variáveis `S3_*` devem estar no `.env.local`
+**Solução**: Configurar e testar a integração Integrações › Storage S3
 
 ### 5. Email Não Envia
 
 **Sintoma**: Erro ao enviar email
 
-**Solução**: Se `SMTP_HOST` não configurado, emails são mockados (apenas log)
+**Solução**: Sem host na integração Integrações › SMTP, os emails são mockados (apenas log)
 
 ## ✅ Checklist de Qualidade
 
@@ -521,7 +525,7 @@ aicontext/
 
 ### 3. Core Deve Ser Transparente
 
-**Aprendizado**: Desenvolvedores não devem interagir com libs diretamente (ex: não usar `@google/genai`, usar `generateText()`)
+**Aprendizado**: Desenvolvedores não devem interagir com libs diretamente (ex: não chamar SDKs de IA diretamente, usar o agente configurado da feature)
 
 ### 4. Documentação É Crítica
 

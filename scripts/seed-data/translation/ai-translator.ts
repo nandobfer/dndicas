@@ -1,0 +1,221 @@
+/**
+ * @fileoverview AI translator — uses the "Importador 5etools" agent (provider and
+ * model configured in Integrações › Provedores de IA) to translate D&D items from
+ * English to Brazilian Portuguese.
+ *
+ * Extracted from base-provider.ts. Handles RPM/RPD rate limits and retries
+ * automatically on 429 errors.
+ *
+ * Requires: the "Importador 5etools" agent enabled in /integracoes/ia.
+ */
+
+/** Import tardio: a camada de IA (SDKs dos provedores) só carrega quando a primeira tradução roda. */
+async function generateEntityImportText(prompt: string, options: { subject?: string | null }): Promise<string> {
+    const service = await import('../../../src/features/ai/server/entity-import');
+    return service.generateEntityImportText(prompt, options);
+}
+import { BaseTranslator } from './base-translator';
+
+const term = {
+    yellow: (message: string) => process.stderr.write(message),
+    gray: (message: string) => process.stderr.write(message),
+};
+
+function convertFeetToMeters(text: string): string {
+    return text
+        .replace(/(\d+(?:[.,]\d+)?)\s*(?:pés?|feet|foot|ft\.?)/gi, (_, numStr: string) => {
+            const feet = parseFloat(numStr.replace(',', '.'));
+            const meters = feet * 0.3;
+            const formatted = Number.isInteger(meters)
+                ? String(meters)
+                : meters.toFixed(1).replace('.', ',');
+            return `${formatted} metros`;
+        })
+        .replace(/(\d+(?:[.,]\d+)?)\s*(?:milhas?|miles?)/gi, (_, numStr: string) => {
+            const miles = parseFloat(numStr.replace(',', '.'));
+            const km = miles * 1.5;
+            const formatted = Number.isInteger(km)
+                ? String(km)
+                : km.toFixed(1).replace('.', ',');
+            return `${formatted} km`;
+        });
+}
+
+export interface RateLimitConfig {
+    /** Max requests per minute (0 = no limit) */
+    rpm: number;
+    /** Max requests per day (0 = no limit) */
+    rpd: number;
+}
+
+export class AiTranslator extends BaseTranslator {
+    readonly name = 'IA (Importador 5etools)';
+
+    private rateLimitRpm = 0;
+    private rateLimitRpd = 0;
+
+    /** Timestamps (ms) of each AI request made this session, for RPM tracking */
+    private requestTimestamps: number[] = [];
+    /** Total AI requests made this session, for RPD tracking */
+    private dailyRequestCount = 0;
+
+    configure(config: RateLimitConfig): void {
+        this.rateLimitRpm = config.rpm;
+        this.rateLimitRpd = config.rpd;
+    }
+
+    // ─── Sleep / rate limit ───────────────────────────────────────────────────
+
+    async sleep(ms: number, reason: string): Promise<void> {
+        const seconds = Math.ceil(ms / 1000);
+        term.yellow(`⚠ Rate limit reached (${reason}). Waiting ${seconds}s...\n`);
+
+        const end = Date.now() + ms;
+        while (Date.now() < end) {
+            const remaining = Math.ceil((end - Date.now()) / 1000);
+            process.stdout.write(`\r  ⏳ Resuming in ${remaining}s...   `);
+            await new Promise((resolve) => setTimeout(resolve, 1000));
+        }
+        process.stdout.write('\r' + ' '.repeat(40) + '\r');
+        term.gray(`  Resuming...\n`);
+    }
+
+    private async enforceRateLimits(): Promise<void> {
+        if (this.rateLimitRpd > 0 && this.dailyRequestCount >= this.rateLimitRpd) {
+            await this.sleep(60 * 60 * 1000, `daily limit of ${this.rateLimitRpd} req/day reached`);
+            this.dailyRequestCount = 0;
+        }
+
+        if (this.rateLimitRpm > 0) {
+            const now = Date.now();
+            const windowStart = now - 60_000;
+            this.requestTimestamps = this.requestTimestamps.filter((t) => t > windowStart);
+
+            if (this.requestTimestamps.length >= this.rateLimitRpm) {
+                const oldestInWindow = this.requestTimestamps[0];
+                const waitMs = oldestInWindow + 60_000 - now + 500;
+                await this.sleep(waitMs, `RPM limit of ${this.rateLimitRpm} req/min reached`);
+                const after = Date.now();
+                this.requestTimestamps = this.requestTimestamps.filter((t) => t > after - 60_000);
+            }
+        }
+    }
+
+    private recordRequest(): void {
+        this.requestTimestamps.push(Date.now());
+        this.dailyRequestCount++;
+    }
+
+    // ─── Translation ──────────────────────────────────────────────────────────
+
+    private buildPrompt(name: string, descriptionHtml: string, retryInvalidJson = false): string {
+        const retryInstruction = retryInvalidJson
+            ? '\nIMPORTANT: Your previous response was invalid JSON. Return a single complete JSON object only, with properly escaped string values. Do not use markdown fences.\n'
+            : '';
+
+        return `You are a D&D 5e expert and Brazilian Portuguese translator.
+Translate the following D&D 5e item from English to Brazilian Portuguese (pt-BR).
+${retryInstruction}
+
+═══ OUTPUT FORMAT ═══
+Return ONLY a valid JSON object — no markdown, no backticks, no extra text:
+{
+  "name": "<translated name in pt-BR>",
+  "description": "<translated HTML in pt-BR>"
+}
+
+For the description:
+- Preserve ALL HTML tags exactly as-is (<p>, <strong>, etc.).
+- Only translate the text content between the tags.
+- "At Higher Levels." → "Em Níveis Superiores."
+- Keep dice notation as plain text (e.g. 8d6, 1d4+1).
+- Do NOT convert distances — keep the original feet/miles values. They will be converted separately.
+
+═══ INPUT ═══
+Name (English): ${name}
+
+Description (HTML, English):
+${descriptionHtml}`;
+    }
+
+    private async generateTranslationText(prompt: string): Promise<string> {
+        await this.enforceRateLimits();
+
+        try {
+            this.recordRequest();
+            return await generateEntityImportText(prompt, { subject: 'seed-script' });
+        } catch (err) {
+            const isRateLimit =
+                err instanceof Error &&
+                (err.message.includes('429') ||
+                    err.message.toLowerCase().includes('resource_exhausted') ||
+                    err.message.toLowerCase().includes('quota'));
+
+            if (isRateLimit) {
+                const retryMatch = err instanceof Error
+                    ? err.message.match(/"retryDelay"\s*:\s*"(\d+)s"/)
+                    : null;
+                const retrySeconds = retryMatch ? parseInt(retryMatch[1], 10) + 5 : 65;
+                await this.sleep(retrySeconds * 1000, `429 from API — retry in ${retrySeconds}s`);
+                this.recordRequest();
+                return await generateEntityImportText(prompt, { subject: 'seed-script' });
+            }
+
+            throw err;
+        }
+    }
+
+    private cleanJsonResponse(aiResponse: string): string {
+        const clean = aiResponse
+            .replace(/^```(?:json)?\s*/i, '')
+            .replace(/```\s*$/, '')
+            .trim();
+
+        if (clean.startsWith('{') && clean.endsWith('}')) return clean;
+
+        const firstBrace = clean.indexOf('{');
+        const lastBrace = clean.lastIndexOf('}');
+        if (firstBrace >= 0 && lastBrace > firstBrace) {
+            return clean.slice(firstBrace, lastBrace + 1);
+        }
+
+        return clean;
+    }
+
+    private parseTranslation(aiResponse: string): { name: string; description: string } {
+        const parsed = JSON.parse(this.cleanJsonResponse(aiResponse)) as unknown;
+        if (
+            !parsed ||
+            typeof parsed !== 'object' ||
+            typeof (parsed as { name?: unknown }).name !== 'string' ||
+            typeof (parsed as { description?: unknown }).description !== 'string'
+        ) {
+            throw new Error('AI response missing name or description');
+        }
+        return parsed as { name: string; description: string };
+    }
+
+    async translateItem(
+        name: string,
+        descriptionHtml: string,
+    ): Promise<{ name: string; description: string }> {
+        let attempt = 1;
+
+        while (true) {
+            const prompt = this.buildPrompt(name, descriptionHtml, attempt > 1);
+            const aiResponse = await this.generateTranslationText(prompt);
+
+            try {
+                const translated = this.parseTranslation(aiResponse);
+                return {
+                    name: translated.name,
+                    description: convertFeetToMeters(translated.description),
+                };
+            } catch (error) {
+                const detail = error instanceof Error ? ` (${error.message})` : '';
+                term.yellow(`⚠ AI returned invalid JSON for "${name}" (attempt ${attempt}). Retrying...${detail}\n`);
+                attempt += 1;
+            }
+        }
+    }
+}

@@ -5,8 +5,7 @@ import { formatSourceDisplay } from "@/core/utils/source-utils"
 import { Spell } from "@/features/spells/models/spell"
 import { updateSpell } from "@/features/spells/api/spells-service"
 import type { AttributeType, CastingTime, CreateSpellInput, DiceType, Spell as SpellType, SpellComponent, SpellSchool } from "@/features/spells/types/spells.types"
-import { GenAITranslator } from "../../../../scripts/seed-data/translation/genai-translator"
-import { ENTITY_GENERATION_MODEL } from "./entity-generation-model"
+import { AiTranslator } from "../../../../scripts/seed-data/translation/ai-translator"
 import { resolveCandidateImage } from "./entity-generation-image-service"
 import type {
     EntityGenerationProgress,
@@ -85,9 +84,9 @@ async function loadSpellsData(): Promise<FiveEToolsGenerationSpell[]> {
     return data.spell ?? []
 }
 
-function createTranslator(): GenAITranslator {
-    const translator = new GenAITranslator()
-    translator.configure({ model: ENTITY_GENERATION_MODEL, rpm: 0, rpd: 0 })
+function createTranslator(): AiTranslator {
+    const translator = new AiTranslator()
+    translator.configure({ rpm: 0, rpd: 0 })
     return translator
 }
 
@@ -219,7 +218,7 @@ function serializeSpell<T extends { _id: unknown; createdAt?: Date; updatedAt?: 
 
 async function buildCandidate(
     spell: FiveEToolsGenerationSpell,
-    translator: GenAITranslator,
+    translator: AiTranslator,
     counter: TranslationCounter,
     userId: string,
 ): Promise<GeneratedSpellCandidate> {

@@ -118,6 +118,11 @@ describe("MCP feedback service", () => {
         vi.doMock("@/features/feedback/api/feedback.model", () => ({ FeedbackModel: { findById: vi.fn().mockResolvedValue(feedback()) } }))
         vi.doMock("@/features/feedback/services/feedback-timeline-service", () => ({ createFeedbackTimelineEvent: vi.fn(), listFeedbackTimelineEvents: vi.fn() }))
         vi.doMock("@/features/feedback/services/feedback-agent-run-service", () => ({ hasActiveFeedbackAgentRun, queueFeedbackPlan, queueFeedbackAgentRun: vi.fn() }))
+        // Fluxo agêntico liberado (como ficará quando a integração Opex sair de "Em desenvolvimento").
+        vi.doMock("@/features/feedback/services/opex-integration-gate", async (importOriginal) => ({
+            ...(await importOriginal<typeof import("@/features/feedback/services/opex-integration-gate")>()),
+            isOpexIntegrationAvailable: () => true,
+        }))
 
         const mod = await importFresh<typeof import("@/features/mcp/server/feedback-service")>("@/features/mcp/server/feedback-service")
         const result = await mod.requestFeedbackPlan({ id: "feedback-1", model: "model-a" }, adminAuth)
@@ -125,5 +130,22 @@ describe("MCP feedback service", () => {
         expect(result).toMatchObject({ id: "run-1", kind: "plan", status: "queued" })
         expect(queueFeedbackPlan).toHaveBeenCalledWith(expect.objectContaining({ feedbackId: "feedback-1", actorId: "admin-1", model: "model-a" }))
         await expect(mod.requestFeedbackPlan({ id: "feedback-1", model: "model-a" }, adminAuth)).rejects.toMatchObject({ code: "ACTIVE_AGENT_RUN" })
+    })
+
+    it("bloqueia plano, implementação, iteração e merge enquanto a integração Opex está em desenvolvimento", async () => {
+        const queueFeedbackPlan = vi.fn()
+        vi.doUnmock("@/features/feedback/services/opex-integration-gate")
+        vi.doMock("@/core/database/db", () => ({ default: vi.fn() }))
+        vi.doMock("@/core/database/audit-log", () => ({ logAction: vi.fn() }))
+        vi.doMock("@/features/feedback/api/feedback.model", () => ({ FeedbackModel: { findById: vi.fn().mockResolvedValue(feedback()) } }))
+        vi.doMock("@/features/feedback/services/feedback-agent-run-service", () => ({ hasActiveFeedbackAgentRun: vi.fn(), queueFeedbackPlan, queueFeedbackAgentRun: vi.fn() }))
+
+        const mod = await importFresh<typeof import("@/features/mcp/server/feedback-service")>("@/features/mcp/server/feedback-service")
+
+        await expect(mod.requestFeedbackPlan({ id: "feedback-1", model: "model-a" }, adminAuth)).rejects.toMatchObject({ code: "OPEX_INTEGRATION_UNAVAILABLE" })
+        await expect(mod.requestFeedbackImplementation({ id: "feedback-1", model: "model-a" }, adminAuth)).rejects.toMatchObject({ code: "OPEX_INTEGRATION_UNAVAILABLE" })
+        await expect(mod.requestFeedbackIteration({ id: "feedback-1", model: "model-a", message: "ajuste" }, adminAuth)).rejects.toMatchObject({ code: "OPEX_INTEGRATION_UNAVAILABLE" })
+        await expect(mod.approveFeedbackMerge({ id: "feedback-1" }, adminAuth)).rejects.toMatchObject({ code: "OPEX_INTEGRATION_UNAVAILABLE" })
+        expect(queueFeedbackPlan).not.toHaveBeenCalled()
     })
 })

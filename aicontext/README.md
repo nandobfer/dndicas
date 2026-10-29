@@ -88,6 +88,9 @@ Arquivos:
 - **[organizations.md](./modules/organizations.md)**: CRUD de empresas, filiais e clientes (módulo exemplo)
 - **[dice-roller.md](./modules/dice-roller.md)**: rolagens autoritativas, overrides e visualização 3D dos dados
 - **[search.md](./modules/search.md)**: busca unificada server-side para entidades e menções
+- **[integrations.md](./modules/integrations.md)**: central de integrações (`/integracoes`, só administradores) — configuração no banco em vez do `.env`
+- **[ai.md](./modules/ai.md)**: provedores de IA, agentes (Gerador de imagens, Entender com IA, Importador 5etools, Resumo de memórias) e memórias
+- **[opex-agent.md](./modules/opex-agent.md)**: Agente Opex, o assistente por chat para todos (visitantes, usuários e administradores)
 
 Para cada novo módulo em `src/features/`, crie documentação aqui.
 
