@@ -7,6 +7,7 @@ import type { ApiResponse } from "@/core/types/common"
 import { FeedbackModel } from "@/features/feedback/api/feedback.model"
 import { hasActiveFeedbackAgentRun, queueFeedbackPlan } from "@/features/feedback/services/feedback-agent-run-service"
 import { buildFeedbackPlanPrompt } from "@/features/feedback/services/feedback-agent-prompt-service"
+import { opexIntegrationUnavailableResponse } from "@/features/feedback/services/opex-integration-gate"
 
 const queuePlanSchema = z.object({
     model: z.string().min(1, "Modelo é obrigatório"),
@@ -28,6 +29,10 @@ export async function POST(
 
             return NextResponse.json(response, { status: user ? 403 : 401 })
         }
+
+        // Fluxo agêntico bloqueado enquanto a integração Opex estiver em desenvolvimento.
+        const unavailable = opexIntegrationUnavailableResponse()
+        if (unavailable) return unavailable
 
         const { id } = await params
         const body = await req.json()

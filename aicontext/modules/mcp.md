@@ -63,7 +63,7 @@ Regras operacionais:
 
 - Chamadas protegidas usam `Authorization: Bearer dndicas_mcp_...`; token por query string não é aceito.
 - Consultas públicas não retornam `creatorEmail`, `worktreePath`, `opencodeSessionId` ou prompts de runs.
-- Ferramentas agênticas apenas enfileiram jobs; o worker externo continua executando OpenCode fora do web container.
+- Ferramentas agênticas (`request_feedback_*`, `approve_feedback_merge`) respondem `OPEX_INTEGRATION_UNAVAILABLE` enquanto a integração Opex estiver "Em desenvolvimento" em `/integracoes` (o worker externo foi removido; ver `feedback.md`).
 - Usuário comum com token não pode solicitar plano, implementação, iteração ou aprovação.
 
 ## Estrutura

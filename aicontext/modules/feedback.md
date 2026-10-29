@@ -4,7 +4,19 @@
 
 O módulo de feedback evolui de uma central simples de sugestões e bugs para uma central de desenvolvimento agêntico.
 
-O fluxo-alvo conecta feedbacks de usuários a planejamento com OpenCode, timeline estilo GitHub Issues/PRs, comentários, execução por worker, pull requests para `main`, deploy preview, iterações e aprovação final.
+O fluxo-alvo conecta feedbacks de usuários a planejamento com OpenCode, timeline estilo GitHub Issues/PRs, comentários, execução agêntica, pull requests para `main`, deploy preview, iterações e aprovação final.
+
+> **Situação atual (DND-1):** o fluxo agêntico (plano, implementação, iteração, aprovação e lista
+> de modelos do OpenCode) passa a ser responsabilidade da integração **Opex**, que está "Em
+> desenvolvimento" em `/integracoes`. Enquanto isso, `assertOpexIntegrationAvailable()`
+> (`src/features/feedback/services/opex-integration-gate.ts`) bloqueia essas ações: as rotas
+> `POST /api/feedback/[id]/{plan,implement,iterate,approve}` e `GET /api/feedback/opencode/models`
+> respondem **409 `OPEX_INTEGRATION_UNAVAILABLE`** (depois do 401/403 de permissão), as ferramentas
+> MCP `request_feedback_*`/`approve_feedback_merge` devolvem o mesmo código, e o painel
+> "Desenvolvimento agêntico" mostra os botões desativados com o motivo. O worker externo
+> `scripts/feedback-agent-worker.ts` foi **removido**. O restante da central (lista, detalhe,
+> timeline, comentários, status manual) continua igual. As seções abaixo sobre o worker descrevem o
+> comportamento anterior e servem de referência para a integração Opex.
 
 ## Estrutura
 
@@ -15,7 +27,8 @@ O fluxo-alvo conecta feedbacks de usuários a planejamento com OpenCode, timelin
 - `src/features/feedback/components/**`: componentes de lista, detalhe, timeline e ações.
 - `src/features/feedback/hooks/**`: hooks TanStack Query.
 - `src/features/feedback/services/**`: serviços server-side de timeline, runs e OpenCode.
-- `scripts/feedback-agent-worker.ts`: worker manual inicial para processar jobs agênticos.
+- `src/features/feedback/services/opex-integration-gate.ts`: bloqueio do fluxo agêntico enquanto a integração Opex estiver em desenvolvimento.
+- (removido) `scripts/feedback-agent-worker.ts`: worker manual que processava os jobs agênticos.
 
 ## Modelos
 
@@ -133,7 +146,7 @@ Regras:
 
 ## Realtime
 
-- A timeline do feedback publica eventos via Pusher em canal público por feedback.
+- A timeline do feedback publica eventos via Pusher em canal público por feedback, pela conexão da integração "Pusher" (Integrações).
 - O canal segue o formato `feedback.{feedbackId}`.
 - O evento publicado é `feedback.timeline.changed`.
 - A publicação é centralizada em `createFeedbackTimelineEvent()`, então APIs e worker não devem chamar Pusher diretamente para eventos de timeline.
@@ -150,7 +163,7 @@ Regras:
 - A coluna lateral de desenvolvimento no detalhe permanece no fluxo normal da página, sem comportamento fixo ou sticky.
 - Timeline e Markdown do feedback devem usar `min-w-0`, `max-w-full` e overflow local em tabelas/blocos de código para evitar scroll horizontal em mobile.
 
-## Variáveis Do Worker
+## Variáveis Do Worker (referência; o worker foi removido)
 
 - `FEEDBACK_AGENT_PROJECT_DIR`: diretório do projeto usado em runs de planejamento do OpenCode. Valor local atual: `/home/burgos/code/dndicas/dev`.
 - `FEEDBACK_AGENT_PROGRESS_THROTTLE_MS`: intervalo mínimo entre eventos persistidos de progresso.
