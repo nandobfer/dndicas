@@ -1,3 +1,4 @@
+/** @vitest-environment happy-dom */
 import { render, screen, waitFor } from '@testing-library/react'
 import { describe, expect, it, vi, beforeEach } from 'vitest'
 import { renderEntity } from '@/features/rules/components/entity-renderers'

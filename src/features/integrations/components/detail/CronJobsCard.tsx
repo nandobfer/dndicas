@@ -1,7 +1,7 @@
 "use client"
 
 import { motion } from "framer-motion"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/opex/card"
+import { GlassCard as Card, GlassCardContent as CardContent, GlassCardDescription as CardDescription, GlassCardHeader as CardHeader, GlassCardTitle as CardTitle } from "@/components/ui/glass-card"
 import type { CronJobConfig, PublicFieldDef, PublicFieldValue } from "@/lib/integrations/catalog"
 import type { IntegrationDetailDto } from "../../types"
 import { CronJobsEditor } from "../CronJobsEditor"
@@ -22,12 +22,12 @@ interface CronJobsCardProps {
 export function CronJobsCard({ field, data, publicValues, setPublic, readOnly, canRun, hiddenJobIds }: CronJobsCardProps) {
     return (
         <motion.div {...cardMotion} transition={{ ...cardMotion.transition, delay: 0.15 }}>
-            <Card>
+            <Card animate={false}>
                 <CardHeader>
                     <CardTitle className="text-base">{field.label}</CardTitle>
                     <CardDescription>Executadas por uma única instância do servidor por vez. Horários de Brasília.</CardDescription>
                 </CardHeader>
-                <CardContent>
+                <CardContent className="p-6 pt-0">
                     <CronJobsEditor
                         value={(publicValues[field.key] as CronJobConfig[] | "") || []}
                         onChange={(jobs) => setPublic(field.key, jobs)}

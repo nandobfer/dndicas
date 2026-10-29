@@ -78,7 +78,7 @@ export function GlassConfirmClosing({
                             disabled={isSaving}
                             className={cn(
                                 "w-full px-4 py-3 rounded-xl text-sm font-bold transition-all",
-                                "bg-blue-500 text-white hover:bg-blue-600 active:scale-[0.98]",
+                                "bg-primary text-primary-foreground hover:bg-primary/90 active:scale-[0.98]",
                                 "shadow-lg shadow-blue-500/20",
                                 "disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                             )}

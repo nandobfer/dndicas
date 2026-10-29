@@ -2,7 +2,7 @@
 
 import { AnimatePresence, motion } from "framer-motion"
 import { Controller, useWatch, type UseFormReturn } from "react-hook-form"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/opex/card"
+import { GlassCard as Card, GlassCardContent as CardContent, GlassCardDescription as CardDescription, GlassCardHeader as CardHeader, GlassCardTitle as CardTitle } from "@/components/ui/glass-card"
 import { Field } from "@/components/ui/opex/field"
 import { FieldTrigger } from "@/components/ui/opex/field-trigger"
 import { FORM_GRID_WIDE } from "@/components/ui/opex/form-grid"
@@ -54,7 +54,7 @@ export function OpexModelCard({ form, target, providers, title, description }: O
                 <CardTitle className="text-base">{title}</CardTitle>
                 <CardDescription>{description}</CardDescription>
             </CardHeader>
-            <CardContent className="space-y-5">
+            <CardContent className="space-y-5 p-6 pt-0">
                 <Field id={id("provider")} label="Provedor" error={errors?.provider?.message}>
                     {!anyConnected && target === "main" ? (
                         <p className="rounded-md border border-dashed p-3 text-sm text-muted-foreground">Nenhum provedor conectado: configure e teste Gemini, Anthropic, OpenAI ou DeepSeek na aba Provedores.</p>

@@ -5,7 +5,7 @@ import Fuse from "fuse.js"
 import { motion } from "framer-motion"
 import { Cpu, RefreshCw, Search } from "lucide-react"
 import { Button } from "@/components/ui/opex/button"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/opex/card"
+import { GlassCard as Card, GlassCardContent as CardContent, GlassCardDescription as CardDescription, GlassCardHeader as CardHeader, GlassCardTitle as CardTitle } from "@/components/ui/glass-card"
 import { Input } from "@/components/ui/opex/input"
 import { Skeleton } from "@/components/ui/opex/skeleton"
 import { EmptyState } from "@/components/feedback/EmptyState"
@@ -40,7 +40,7 @@ export function AiModelsCard({ provider, dirty }: { provider: AiProviderId; dirt
                     Atualizar
                 </Button>
             </CardHeader>
-            <CardContent className="space-y-3">
+            <CardContent className="space-y-3 p-6 pt-0">
                 {dirty ? (
                     <p className="text-sm text-muted-foreground">Salve as alterações para listar os modelos com a nova configuração.</p>
                 ) : models.isLoading ? (

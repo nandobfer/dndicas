@@ -1,7 +1,7 @@
 "use client"
 
 import { Controller, useWatch, type UseFormReturn } from "react-hook-form"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/opex/card"
+import { GlassCard as Card, GlassCardContent as CardContent, GlassCardDescription as CardDescription, GlassCardHeader as CardHeader, GlassCardTitle as CardTitle } from "@/components/ui/glass-card"
 import { Field } from "@/components/ui/opex/field"
 import { FieldTrigger } from "@/components/ui/opex/field-trigger"
 import { OptionTabs } from "@/components/ui/opex/option-tabs"
@@ -50,7 +50,7 @@ export function ProviderModelCard<T extends ProviderModelFields>({ form, provide
                 <CardTitle className="text-base">Provedor e modelo</CardTitle>
                 <CardDescription>Só os provedores conectados podem ser escolhidos. Configure e teste-os na aba Provedores.</CardDescription>
             </CardHeader>
-            <CardContent className="space-y-5">
+            <CardContent className="space-y-5 p-6 pt-0">
                 {!fixedProvider && (
                     <Field id="ai-provider" label="Provedor" error={errors.provider?.message}>
                         {connected.length === 0 ? (

@@ -8,6 +8,22 @@ que antes vivia no `.env` passa a ser lida e gravada no MongoDB e editada pelos 
 > "Acesso restrito" para usuários comuns. As rotas `/api/integrations/**`, `/api/ai/**` e o canal
 > `private-integration-{id}` exigem administrador.
 
+## Interface (DND-6)
+
+- `/integracoes/**` ocupa a largura disponível do dashboard. O `<main>` já aplica
+  `p-4 lg:p-6`; o layout das integrações não deve duplicar esse padding nem impor
+  `max-w-*`/centralização próprios. O antigo `mx-auto max-w-7xl` causava as faixas laterais extras.
+- Lista, detalhes, explorador, logs e abas de IA/Agente Opex/Jobs reutilizam
+  `@/components/ui/glass-card`, como as demais páginas. O antigo `opex/card` usava
+  `bg-card`, quase preto no tema dark, porque a central havia sido copiada do Opex.
+  Preservar o padding interno dos formulários e evitar animação dupla nos cards já animados pelo pai.
+- A cor primária **global** referencia `--color-blue-500` do Tailwind, o azul original
+  de "Nova classe"; antes, os controles Opex herdavam `--primary` verde enquanto os
+  botões dos cadastros tinham azul hardcoded. Botões primários usam `bg-primary`,
+  `text-primary-foreground` e `hover:bg-primary/90`, incluindo os cadastros e autenticação.
+  Verde de sucesso/conectado e cores semânticas de HTTP/console permanecem independentes.
+- Regressões de layout, autenticação, glass e controles: `tests/frontend/integrations/integrations-visual-standard.test.tsx`.
+
 ## Bootstrap: o que continua no `.env`
 
 Só o necessário para o processo subir e chegar no banco (ver `.env.example`):

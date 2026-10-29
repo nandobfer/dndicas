@@ -4,7 +4,7 @@ import type { ReactNode } from "react"
 import { RotateCcw } from "lucide-react"
 import type { FieldValues, Path, PathValue, UseFormReturn } from "react-hook-form"
 import { Button } from "@/components/ui/opex/button"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/opex/card"
+import { GlassCard as Card, GlassCardContent as CardContent, GlassCardDescription as CardDescription, GlassCardHeader as CardHeader, GlassCardTitle as CardTitle } from "@/components/ui/glass-card"
 import { FORM_GRID } from "@/components/ui/opex/form-grid"
 import { Label } from "@/components/ui/opex/label"
 import { Textarea } from "@/components/ui/opex/textarea"
@@ -40,7 +40,7 @@ export function InstructionsCard<T extends FieldValues & { instructions: string 
                     <RotateCcw className="h-3.5 w-3.5" aria-hidden /> Restaurar padrão
                 </Button>
             </CardHeader>
-            <CardContent className={FORM_GRID}>
+            <CardContent className={`${FORM_GRID} p-6 pt-0`}>
                 <div className="space-y-1.5 sm:col-span-2">
                     <Label htmlFor={id}>{label}</Label>
                     <Textarea id={id} rows={8} {...form.register(name)} />

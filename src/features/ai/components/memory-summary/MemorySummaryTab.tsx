@@ -3,7 +3,7 @@
 import { useEffect } from "react"
 import { useForm, useWatch, type UseFormReturn } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/opex/card"
+import { GlassCard as Card, GlassCardContent as CardContent, GlassCardDescription as CardDescription, GlassCardHeader as CardHeader, GlassCardTitle as CardTitle } from "@/components/ui/glass-card"
 import { Input } from "@/components/ui/opex/input"
 import { Label } from "@/components/ui/opex/label"
 import { Skeleton } from "@/components/ui/opex/skeleton"
@@ -69,7 +69,7 @@ export function MemorySummaryTab({ onDirtyChange }: { onDirtyChange: (dirty: boo
                     <CardTitle className="text-base">Instruções</CardTitle>
                     <CardDescription>O formato da resposta (texto revisado + resumo) é acrescentado pelo Opex.</CardDescription>
                 </CardHeader>
-                <CardContent className={FORM_GRID}>
+                <CardContent className={`${FORM_GRID} p-6 pt-0`}>
                     <div className="space-y-1.5 sm:col-span-2">
                         <Label htmlFor="memory-summary-instructions">Instruções do Resumo de memórias</Label>
                         <Textarea id="memory-summary-instructions" rows={6} {...form.register("instructions")} />

@@ -1,3 +1,4 @@
+/** @vitest-environment happy-dom */
 /**
  * Regression tests: MentionContent renders <table> HTML with styled elements.
  *

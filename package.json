@@ -2,6 +2,7 @@
     "name": "dndicas",
     "version": "0.1.0",
     "private": true,
+    "packageManager": "pnpm@11.4.0",
     "scripts": {
         "export:feedbacks": "tsx scripts/export-pending-feedbacks.ts",
         "dev": "next dev --turbo",
@@ -106,14 +107,16 @@
         "@types/nodemailer": "^7.0.5",
         "@types/react": "^19",
         "@types/react-dom": "^19",
-        "@vitest/coverage-v8": "^4.1.8",
+        "@vitest/coverage-v8": "^5.0.5",
         "cross-env": "^10.1.0",
         "eslint": "^9",
         "eslint-config-next": "16.1.4",
+        "happy-dom": "^21.0.4",
         "jsdom": "^29.0.2",
         "tailwindcss": "^4",
         "ts-node": "^10.9.2",
         "typescript": "^5",
-        "vitest": "^4.1.2"
+        "vite": "^7.3.7",
+        "vitest": "^5.0.5"
     }
 }

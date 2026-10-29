@@ -1,3 +1,4 @@
+/** @vitest-environment happy-dom */
 import { act, render, screen } from '@testing-library/react'
 import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import { InfiniteScrollSentinel } from '@/components/ui/infinite-scroll-sentinel'
