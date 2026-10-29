@@ -8,7 +8,7 @@ services:
         - AUTH_URL=${AUTH_URL}
         - NEXT_PUBLIC_APP_URL=${NEXT_PUBLIC_APP_URL}
     image: nandoburgos/dndicas
-    container_name: dndicas
+    container_name: ${COMPOSE_PROJECT_NAME:-dndicas}
     restart: always
     ports:
       - "${PORT:-4005}:4005"
