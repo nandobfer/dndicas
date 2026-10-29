@@ -1,3 +1,4 @@
+/** @vitest-environment happy-dom */
 import type { ComponentPropsWithoutRef, ReactNode } from "react"
 import { fireEvent, render, screen, waitFor } from "@testing-library/react"
 import { afterEach, describe, expect, it, vi } from "vitest"
