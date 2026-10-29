@@ -11,7 +11,7 @@ services:
     container_name: dndicas
     restart: always
     ports:
-      - "4005:4005"
+      - "${PORT:-4005}:4005"
     env_file:
       - .env
     environment:
