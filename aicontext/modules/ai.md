@@ -22,6 +22,11 @@ Código: `src/lib/ai/*` (`providers`, `catalog`, `stream` com `generateAiText`/`
 `consumption`, `image.ts` — extensão do DnDicas com `generateAiImage` e a listagem dos modelos de
 imagem). Rotas: `/api/ai/providers/**` (inclui `/[provider]/image-models`), consumo e uso do JEV.
 
+`stream.ts`, `image.ts` e `catalog.ts` carregam a SDK `ai` e os módulos de cada provedor sob demanda
+(`await import()` no momento do uso), nunca no topo: quem só lê a configuração (ex.: `ai/server/settings`)
+não paga as SDKs. Os testes mockam esses módulos pelo caminho (`vi.mock('@/lib/ai/gemini')`), que vale
+também para o import dinâmico.
+
 ## Agentes (abas de `/integracoes/ia`)
 
 Cada agente é uma configuração em `ai_feature_settings` (provedor, modelo, instruções…). Sem

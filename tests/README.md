@@ -5,28 +5,53 @@ Guia para escrever e executar testes no Dungeons & Dicas.
 ## Executando Testes
 
 ```bash
-# Executar todos os testes
-npm test
+# Arquivos específicos (o modo do dia a dia)
+pnpm exec vitest run tests/frontend/core/ui/button.test.tsx
 
-# Modo watch (re-executa ao salvar)
-npm test -- --watch
+# Testes que dependem dos arquivos de src alterados
+pnpm exec vitest related --run src/lib/ai/stream.ts
+
+# Pelo grafo de imports do que mudou no git
+pnpm exec vitest run --changed origin/main
+
+# Suíte completa — só com pedido explícito (roda no CI em todo PR e push na main)
+pnpm test
+
+# Um shard da suíte, como no CI
+pnpm test --shard=1/4
 
 # Com cobertura
-npm test -- --coverage
-
-# Teste específico
-npm test -- button.test.tsx
+pnpm test --coverage
 ```
+
+Há uma única config (`vitest.config.ts`, ambiente `node`, `maxWorkers: "100%"`) e um único setup
+(`tests/setup.ts`). O DOM entra por arquivo; veja "Ambiente dos testes de UI" abaixo e a seção 5 do
+`AGENTS.md`.
 
 ## Estrutura de Testes
 
 ```
 tests/
-├── backend/             # Rotas, serviços e regras server-side (env: node)
-├── frontend/            # Componentes, hooks e utilitários de UI (env: jsdom)
-├── scripts/             # Testes de scripts e seed-data (env: node)
+├── backend/             # Rotas, serviços e regras server-side (node)
+├── frontend/            # Componentes, hooks e utilitários de UI (happy-dom por arquivo)
+├── owlbear/             # Extensões do Owlbear: backend (node) e frontend (happy-dom por arquivo)
+├── scripts/             # Testes de scripts e seed-data (node)
+├── setup.ts             # Setup único (mocks globais; jest-dom, cleanup e polyfills só no DOM)
 └── README.md            # Este arquivo
 ```
+
+## Ambiente dos testes de UI
+
+Todo teste que renderiza componente, usa hook com `renderHook` ou toca em `window`/`document`/`self`
+começa com o docblock:
+
+```typescript
+/** @vitest-environment happy-dom */
+```
+
+Arquivos sem o docblock rodam em `node` e não pagam o custo de montar um DOM. `jsdom` é exceção,
+com o motivo no docblock; hoje nenhum arquivo precisa dele. As diferenças conhecidas do happy-dom e
+as regras de mock (construtor como `function`, nada de rede real) estão na seção 5 do `AGENTS.md`.
 
 ## Tipos de Testes
 
@@ -161,13 +186,10 @@ Veja os testes exemplo em:
 
 ## Continuous Integration
 
-Os testes devem rodar automaticamente no CI/CD antes de merge.
-
-```yaml
-# .github/workflows/test.yml
-- name: Run tests
-  run: npm test -- --ci --coverage
-```
+`.github/workflows/ci-cd.yml` roda a suíte em 4 shards paralelos (`pnpm test --shard=i/4`) e o
+`tsc --noEmit` em todo pull request e push na `main`; o build e o deploy só acontecem na `main`,
+depois de todos os shards e do TypeScript. Os checks aparecem como "Vitest (1/4)"…"Vitest (4/4)" e
+"TypeScript".
 
 ## Troubleshooting
 
@@ -185,7 +207,7 @@ resolve: {
 
 ### Erro: TextEncoder is not defined
 
-Adicione ao setup do Vitest adequado (`tests/backend/setup.ts` ou `tests/frontend/setup.ts`):
+Adicione ao setup único (`tests/setup.ts`):
 
 ```typescript
 global.TextEncoder = TextEncoder;
@@ -194,7 +216,7 @@ global.TextDecoder = TextDecoder;
 
 ### Erro ao testar componentes com Next.js
 
-Garanta que o teste esteja em `tests/frontend/**` para rodar com `jsdom`.
+Garanta que o arquivo declare `/** @vitest-environment happy-dom */` na primeira linha.
 
 ---
 

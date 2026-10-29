@@ -1,3 +1,4 @@
+/** @vitest-environment happy-dom */
 import * as React from "react"
 import { readFileSync } from "node:fs"
 import { resolve } from "node:path"

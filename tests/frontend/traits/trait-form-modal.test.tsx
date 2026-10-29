@@ -1,3 +1,4 @@
+/** @vitest-environment happy-dom */
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import { vi } from 'vitest'
 import { TraitFormModal } from '@/features/traits/components/trait-form-modal'

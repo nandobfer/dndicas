@@ -1,73 +1,38 @@
-import { defineConfig, defineProject } from 'vitest/config';
+import { defineConfig } from 'vitest/config';
 import path from 'path';
-
-const alias = {
-    '@': path.resolve(__dirname, './src'),
-};
 
 export default defineConfig({
     test: {
+        include: ['tests/**/*.test.ts', 'tests/**/*.test.tsx'],
+        exclude: ['**/node_modules/**'],
+        environment: 'node',
+        globals: true,
+        clearMocks: true,
+        restoreMocks: true,
+        unstubEnvs: true,
+        hookTimeout: 30000,
+        setupFiles: ['./tests/setup.ts'],
+        // Explícito de propósito: o default antigo era `numCPUs - 1`, o que vira 1 worker no runner
+        // de 2 vCPU do GitHub (suíte em série). `100%` usa todos os núcleos — 2 no CI, todos na
+        // máquina do dev.
+        maxWorkers: '100%',
+        // `isolate: false` foi medido e recusado no Opex/CRM: reusa o worker entre arquivos, mas o
+        // estado de módulo vaza (mocks, caches, singleton do Pusher, `process.env`) e boa parte dos
+        // arquivos falha. Não religue sem antes tornar a suíte inteira livre de estado compartilhado.
+        //
+        // Ambiente de DOM: declare `@vitest-environment happy-dom` por arquivo (monta em ~metade do
+        // tempo do jsdom). `jsdom` só como exceção, com o motivo no docblock (AGENTS.md, seção 5).
+        // Sem package.json: todo commit sobe a versão, e o gatilho padrão faria `vitest --changed`
+        // rodar a suíte inteira (AGENTS.md, seção 5, "Rodando os testes").
+        forceRerunTriggers: ['**/{vitest,vite}.config.*/**'],
         coverage: {
             provider: 'v8',
             reporter: ['text', 'json', 'html'],
         },
-        projects: [
-            defineProject({
-                resolve: {
-                    alias,
-                },
-                test: {
-                    name: 'backend',
-                    environment: 'node',
-                    globals: true,
-                    clearMocks: true,
-                    restoreMocks: true,
-                    unstubEnvs: true,
-                    setupFiles: ['./tests/backend/setup.ts'],
-                    include: ['tests/backend/**/*.test.ts'],
-                    exclude: ['**/node_modules/**'],
-                },
-            }),
-            defineProject({
-                resolve: {
-                    alias,
-                },
-                test: {
-                    name: 'frontend',
-                    environment: 'jsdom',
-                    globals: true,
-                    clearMocks: true,
-                    restoreMocks: true,
-                    unstubEnvs: true,
-                    setupFiles: ['./tests/backend/setup.ts', './tests/frontend/setup.ts'],
-                    include: [
-                        'tests/frontend/**/*.test.ts',
-                        'tests/frontend/**/*.test.tsx',
-                        'tests/owlbear/**/*.test.ts',
-                        'tests/owlbear/**/*.test.tsx',
-                    ],
-                    exclude: ['**/node_modules/**'],
-                },
-            }),
-            defineProject({
-                resolve: {
-                    alias,
-                },
-                test: {
-                    name: 'scripts',
-                    environment: 'node',
-                    globals: true,
-                    clearMocks: true,
-                    restoreMocks: true,
-                    unstubEnvs: true,
-                    setupFiles: ['./tests/backend/setup.ts'],
-                    include: ['tests/scripts/**/*.test.ts'],
-                    exclude: ['**/node_modules/**'],
-                },
-            }),
-        ],
     },
     resolve: {
-        alias,
+        alias: {
+            '@': path.resolve(__dirname, './src'),
+        },
     },
 });
