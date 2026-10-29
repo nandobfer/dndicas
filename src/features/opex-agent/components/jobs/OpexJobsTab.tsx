@@ -17,7 +17,7 @@ import {
     AlertDialogTitle,
 } from "@/components/ui/opex/alert-dialog"
 import { Button } from "@/components/ui/opex/button"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/opex/card"
+import { GlassCard as Card, GlassCardContent as CardContent, GlassCardDescription as CardDescription, GlassCardHeader as CardHeader, GlassCardTitle as CardTitle } from "@/components/ui/glass-card"
 import { Skeleton } from "@/components/ui/opex/skeleton"
 import { useCancelOpexJob, useOpexJobs, useOpexJobsRealtime, useSaveOpexJob } from "../../hooks/useOpexJobs"
 import { useOpexRealtime, useOpexSessions } from "../../hooks/useOpexSessions"
@@ -83,7 +83,7 @@ export function OpexJobsTab() {
                         <Play className="h-4 w-4" aria-hidden /> Executar job
                     </Button>
                 </CardHeader>
-                <CardContent className="space-y-4">
+                <CardContent className="space-y-4 p-6 pt-0">
                     <AnimatePresence initial={false}>
                         {unavailable && (
                             <motion.p

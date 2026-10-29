@@ -5,6 +5,10 @@ do Ciliar). Na interface o nome é **"Agente Opex"**; no código, o namespace é
 
 ## Quem usa
 
+Os cards de configuração do agente em `/integracoes/ia` e de Jobs em `/integracoes/crons`
+reutilizam `GlassCard`; os controles herdam a primária global azul. Ver
+[Integrações — Interface](./integrations.md#interface-dnd-6) para as causas e regras visuais da DND-6.
+
 Está disponível para **todos**, inclusive visitantes sem login: item "Agente Opex" no rodapé da
 barra lateral (`OpexNavItem`, atalho **Ctrl+Shift+O**). Abre o chat num popover ancorado no item
 (no celular, em tela cheia), com abas de sessões, envio de arquivos, confirmações e resposta ao vivo.
