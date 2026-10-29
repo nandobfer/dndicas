@@ -1,7 +1,7 @@
 "use client"
 
 import { AnimatePresence, motion } from "framer-motion"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/opex/card"
+import { GlassCard as Card, GlassCardContent as CardContent, GlassCardDescription as CardDescription, GlassCardHeader as CardHeader, GlassCardTitle as CardTitle } from "@/components/ui/glass-card"
 import { isPublicFieldVisible, type PublicFieldDef, type PublicFieldValue } from "@/lib/integrations/catalog"
 import type { IntegrationDetailDto } from "../../types"
 import { PublicField } from "../PublicField"
@@ -32,12 +32,12 @@ export function PublicFieldsCard({ fields, data, publicValues, setPublic, readOn
     const visibleFields = fields.filter((field) => isPublicFieldVisible(field, fields, publicValues))
     return (
         <motion.div {...cardMotion} transition={{ ...cardMotion.transition, delay: 0.05 }}>
-            <Card>
+            <Card animate={false}>
                 <CardHeader>
                     <CardTitle className="text-base">Campos públicos</CardTitle>
                     <CardDescription>Salvos em texto simples; visíveis para quem acessa esta integração.</CardDescription>
                 </CardHeader>
-                <CardContent className={FIELD_GRID}>
+                <CardContent className={`${FIELD_GRID} p-6 pt-0`}>
                     <AnimatePresence initial={false}>
                     {visibleFields.map((field) => (
                         <motion.div key={field.key} {...conditionalFieldMotion}>

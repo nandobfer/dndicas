@@ -3,7 +3,7 @@
 import { useMemo } from "react"
 import { useWatch, type UseFormReturn } from "react-hook-form"
 import { AlertTriangle } from "lucide-react"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/opex/card"
+import { GlassCard as Card, GlassCardContent as CardContent, GlassCardDescription as CardDescription, GlassCardHeader as CardHeader, GlassCardTitle as CardTitle } from "@/components/ui/glass-card"
 import { CheckTree } from "@/components/ui/opex/check-tree/CheckTree"
 import { Switch } from "@/components/ui/opex/switch"
 import { cn } from "@/lib/utils"
@@ -97,7 +97,7 @@ export function OpexToolsCard({ form, tools }: { form: UseFormReturn<OpexAgentSe
                     executar: vem ligado nas destrutivas (excluir, cancelar, gravar integração…) e nas sensíveis, desligado nas demais. Além disso, cada ferramenta só entra no turno de quem tem o papel dela (visitante, usuário ou administrador).
                 </CardDescription>
             </CardHeader>
-            <CardContent>
+            <CardContent className="p-6 pt-0">
                 <CheckTree
                     tree={tree}
                     selected={selected}

@@ -5,7 +5,7 @@ import { AnimatePresence, motion } from "framer-motion"
 import { ArrowLeft, ChevronRight, KeyRound, Lock, RefreshCw, Search, ShieldAlert } from "lucide-react"
 import { toast } from "sonner"
 import { Button } from "@/components/ui/opex/button"
-import { Card, CardContent, CardHeader } from "@/components/ui/opex/card"
+import { GlassCard as Card, GlassCardContent as CardContent, GlassCardHeader as CardHeader } from "@/components/ui/glass-card"
 import { Input } from "@/components/ui/opex/input"
 import { Skeleton } from "@/components/ui/opex/skeleton"
 import { cn } from "@/lib/utils"
@@ -341,7 +341,7 @@ export function IntegrationExplorer({ id, integrationName, swaggerUrl, onBack }:
                     </div>
                 )}
             </CardHeader>
-            <CardContent>
+            <CardContent className="p-6 pt-0">
                 {spec.isLoading && <ExplorerSkeleton />}
                 {spec.isError && (
                     <motion.div

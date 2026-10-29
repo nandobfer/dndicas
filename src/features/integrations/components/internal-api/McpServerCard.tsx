@@ -8,7 +8,7 @@ import { ptBR } from "date-fns/locale"
 import { Copy, ExternalLink, Server } from "lucide-react"
 import { toast } from "sonner"
 import { Button } from "@/components/ui/opex/button"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/opex/card"
+import { GlassCard as Card, GlassCardContent as CardContent, GlassCardDescription as CardDescription, GlassCardHeader as CardHeader, GlassCardTitle as CardTitle } from "@/components/ui/glass-card"
 import { Skeleton } from "@/components/ui/opex/skeleton"
 import { ErrorState } from "@/components/feedback/ErrorState"
 import { api, apiErrorMessage, unwrapApi } from "@/lib/api"
@@ -41,7 +41,7 @@ export function McpServerCard() {
 
     return (
         <motion.div {...cardMotion} transition={{ ...cardMotion.transition, delay: 0.05 }}>
-            <Card>
+            <Card animate={false}>
                 <CardHeader className="space-y-1.5">
                     <CardTitle className="flex items-center gap-2 text-base">
                         <Server className="h-4 w-4 text-primary" aria-hidden /> Servidor MCP
@@ -51,7 +51,7 @@ export function McpServerCard() {
                         permanente gerado em Perfil.
                     </CardDescription>
                 </CardHeader>
-                <CardContent>
+                <CardContent className="p-6 pt-0">
                     <AnimatePresence mode="wait" initial={false}>
                         {query.isLoading ? (
                             <motion.div key="loading" className="space-y-2">

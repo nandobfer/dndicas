@@ -3,7 +3,7 @@
 import { useEffect } from "react"
 import { useForm, useWatch, Controller } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/opex/card"
+import { GlassCard as Card, GlassCardContent as CardContent, GlassCardDescription as CardDescription, GlassCardHeader as CardHeader, GlassCardTitle as CardTitle } from "@/components/ui/glass-card"
 import { Field } from "@/components/ui/opex/field"
 import { FieldTrigger } from "@/components/ui/opex/field-trigger"
 import { FORM_GRID_WIDE } from "@/components/ui/opex/form-grid"
@@ -93,7 +93,7 @@ export function ImageGeneratorTab({ onDirtyChange }: { onDirtyChange: (dirty: bo
                         <CardTitle className="text-base">Provedor e modelo de imagem</CardTitle>
                         <CardDescription>Só os provedores conectados com modelos de imagem (Gemini e OpenAI) podem ser escolhidos.</CardDescription>
                     </CardHeader>
-                    <CardContent className="space-y-5">
+                    <CardContent className="space-y-5 p-6 pt-0">
                         <Field id="ai-image-provider" label="Provedor" error={errors.provider?.message}>
                             {connected.length === 0 ? (
                                 <p className="rounded-md border border-dashed p-3 text-sm text-muted-foreground">Nenhum provedor de imagem conectado: configure e teste o Gemini ou a OpenAI na aba Provedores.</p>

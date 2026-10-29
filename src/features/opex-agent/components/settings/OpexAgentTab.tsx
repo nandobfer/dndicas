@@ -6,7 +6,7 @@ import { useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { Brain, Info, Loader2, RotateCcw, Save, Settings2, Undo2, Wrench } from "lucide-react"
 import { Button } from "@/components/ui/opex/button"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/opex/card"
+import { GlassCard as Card, GlassCardContent as CardContent, GlassCardDescription as CardDescription, GlassCardHeader as CardHeader, GlassCardTitle as CardTitle } from "@/components/ui/glass-card"
 import { Field } from "@/components/ui/opex/field"
 import { Skeleton } from "@/components/ui/opex/skeleton"
 import { Textarea } from "@/components/ui/opex/textarea"
@@ -91,7 +91,7 @@ export function OpexAgentTab({ onDirtyChange }: { onDirtyChange: (dirty: boolean
                     {section === "geral" && (
                         <>
                             <Card>
-                                <CardContent className="space-y-3 pt-6">
+                                <CardContent className="space-y-3 p-6">
                                     <FormToggleCard<OpexAgentSettings>
                                         control={form.control}
                                         name="enabled"
@@ -117,7 +117,7 @@ export function OpexAgentTab({ onDirtyChange }: { onDirtyChange: (dirty: boolean
                                     <CardTitle className="text-base">Instruções</CardTitle>
                                     <CardDescription>Prompt de sistema do agente e do subagente. A data/hora atual, quem conversa (e o papel), as regras da documentação e as memórias entram sozinhos a cada turno.</CardDescription>
                                 </CardHeader>
-                                <CardContent className="space-y-5">
+                                <CardContent className="space-y-5 p-6 pt-0">
                                     <Field id="opex-instructions" label="Agente principal" error={errors.instructions?.message}>
                                         <Textarea id="opex-instructions" rows={10} className="font-mono text-xs" {...form.register("instructions")} />
                                         <div className="flex justify-end">

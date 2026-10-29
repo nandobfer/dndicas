@@ -1,5 +1,5 @@
 import { ReactNode } from "react"
-import { Card, CardContent } from "@/components/ui/opex/card"
+import { GlassCard, GlassCardContent } from "@/components/ui/glass-card"
 
 interface CadastroTableCardProps {
     children: ReactNode
@@ -7,8 +7,8 @@ interface CadastroTableCardProps {
 
 export const CadastroTableCard = ({ children }: CadastroTableCardProps) => {
     return (
-        <Card>
-            <CardContent className="pt-6">{children}</CardContent>
-        </Card>
+        <GlassCard>
+            <GlassCardContent className="p-6">{children}</GlassCardContent>
+        </GlassCard>
     )
 }
