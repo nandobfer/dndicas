@@ -1,6 +1,6 @@
 import { config } from "dotenv"
 import mongoose from "mongoose"
-import { mkdir, writeFile } from "node:fs/promises"
+import { mkdir, open } from "node:fs/promises"
 import { dirname, resolve } from "node:path"
 import { pathToFileURL } from "node:url"
 
@@ -48,7 +48,15 @@ export async function exportFeedbacks(args = process.argv.slice(2)) {
         const data = buildFeedbackExport(feedbacks, timeline, runs)
         if (!args.includes("--dry-run")) {
             await mkdir(dirname(resolve(output!)), { recursive: true })
-            await writeFile(resolve(output!), JSON.stringify(data, null, 2), { mode: 0o600, flag: args.includes("--force") ? "w" : "wx" })
+            const file = await open(resolve(output!), args.includes("--force") ? "w" : "wx", 0o600)
+            try {
+                // Creation mode does not restrict an existing file opened with --force.
+                // Apply permissions to the opened inode before writing any private data.
+                await file.chmod(0o600)
+                await file.writeFile(JSON.stringify(data, null, 2))
+            } finally {
+                await file.close()
+            }
         }
         console.log(JSON.stringify({ database: db.databaseName, count: data.count, timeline: timeline.length, runs: runs.length, output: args.includes("--dry-run") ? null : resolve(output!) }))
     } finally {

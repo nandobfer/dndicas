@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest"
-import { mkdtemp, readFile, stat } from "node:fs/promises"
+import { chmod, mkdtemp, readFile, stat, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 const mocks = vi.hoisted(() => ({ find: vi.fn(), connect: vi.fn(), disconnect: vi.fn() }))
@@ -28,5 +28,15 @@ describe("exportação de feedbacks", () => {
         process.env.MONGODB_URI = "mongodb://example/test"
         await exportFeedbacks(["--all", "--dry-run"])
         expect(mocks.find).toHaveBeenCalledWith("feedbacks", {})
+    })
+    it("--force restringe arquivo 0644 a 0600 antes de exportar", async () => {
+        process.env.MONGODB_URI = "mongodb://example/test"
+        const path = join(await mkdtemp(join(tmpdir(), "dnd5-export-")), "export.json")
+        await writeFile(path, "conteúdo anterior")
+        await chmod(path, 0o644)
+        expect((await stat(path)).mode & 0o777).toBe(0o644)
+        await exportFeedbacks(["--out", path, "--force"])
+        expect((await stat(path)).mode & 0o777).toBe(0o600)
+        expect(JSON.parse(await readFile(path, "utf8"))).toMatchObject({ schemaVersion: 1, count: 0 })
     })
 })

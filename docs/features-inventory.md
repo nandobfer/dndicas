@@ -683,7 +683,7 @@ APIs:
 Capacidades implementadas:
 
 - Usuários autenticados recebem acesso individual no cliente configurado em Tarefas Opex.
-- Usuários existentes são reutilizados; novos usuários não são administradores do cliente.
+- Apenas acessos previamente vinculados no servidor são reutilizados; novos usuários têm identificador exclusivo, sem email e sem administração do cliente.
 - Dashboard reproduz os gráficos do portal Opex e o link individual para a central externa.
 - Módulo interno e ferramentas MCP removidos; histórico preservado e exportável no host.
 

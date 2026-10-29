@@ -27,9 +27,11 @@ sessão administrativa e acesso à listagem de usuários, sem criar um usuário 
 - Vínculo na coleção `opex_feedback_users`, escopado por URL pública + cliente + usuário local.
   Dois índices únicos impedem vínculo duplicado e compartilhamento de usuário Opex entre contas.
   Tokens de portal não são persistidos. Chamadas concorrentes do mesmo ator são coalescidas.
-- Reutiliza vínculo, email normalizado ou username compatível; rejeita acesso desativado, default
-  ou já vinculado a outra conta. Novos usuários sempre `admin: false`. Conflitos tentam sufixo
-  (até 3 vezes); conflito de email global tenta sem email. Auditoria sem credenciais.
+- Reutiliza exclusivamente vínculo persistido no servidor; email e username locais são
+  autodeclarados e nunca autorizam associação a uma conta Opex existente. Rejeita acesso
+  desativado, default ou já vinculado a outra conta. Novos usuários sempre `admin: false`,
+  sem email e com username `dndicas-` + 96 bits aleatórios. Colisões tentam novo identificador
+  (até 3 vezes), sem recuperar tokens de terceiros. Auditoria sem credenciais.
 - Erros: 401 `UNAUTHENTICATED`, 409 `OPEX_NOT_CONFIGURED`, `OPEX_CLIENT_TOKEN_NOT_ADMIN`,
   `OPEX_USER_CONFLICT`, 502 `OPEX_CLIENT_TOKEN_INVALID`/`OPEX_UNAVAILABLE`, 400 `INVALID_RANGE`.
 
@@ -49,6 +51,7 @@ Padrão `status: pendente`, `--all` inclui todos, `--dry-run` só conta, `--forc
 `--direct` evita descoberta de hostname interno em replica set local.
 `DNDICAS_ENV_FILE` permite selecionar o `.env`. Não imprime credenciais nem altera o banco.
 Saída JSON `0600` com dados brutos, timeline, runs e sugestão de tarefa (tipo/prioridade).
+O descritor aberto recebe `chmod(0600)` antes da escrita, inclusive ao sobrescrever com `--force`.
 Definir projeto, coluna e cliente posteriormente na importação; este módulo não importa tarefas.
 O diretório `backups` é excluído do contexto Docker; exports são ignorados pelo Git.
 

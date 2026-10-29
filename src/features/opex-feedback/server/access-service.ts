@@ -20,7 +20,7 @@ export async function ensureOpexAccess(actor: Actor) {
 
 async function provision(actor: Actor) {
     await dbConnect()
-    const local = await User.findById(actor.id).select("username email").lean<{ username: string; email?: string }>()
+    const local = await User.findById(actor.id).select("_id").lean()
     if (!local) throw new DomainError(401, "Faça login para continuar.", "UNAUTHENTICATED")
     const connection = await opexConnection()
     const { cookie, session } = await opexAdminSession(connection)
@@ -28,26 +28,22 @@ async function provision(actor: Actor) {
     const filter = { ...scope, dndicasUserId: actor.id }
     const binding = await OpexFeedbackUserModel.findOne(filter).lean()
     const users = await connection.client.users(cookie)
-    const email = local.email?.trim().toLowerCase()
-    const username = local.username.replace(/[^a-zA-Z0-9._-]/g, "-").slice(0, 30).padEnd(3, "_")
+    // Email and username are self-declared locally: neither proves ownership of a global Opex account.
+    // Only the server-side binding may authorize reuse of an existing account/token.
     let user = binding ? users.find((item) => item.id === binding.opexUserId) : undefined
-    if (!user) user = users.find((item) => !item.isDefault && item.email?.toLowerCase() === email && Boolean(email))
-    if (!user) user = users.find((item) => !item.isDefault && item.username.toLowerCase() === username.toLowerCase() && (!item.email || item.email.toLowerCase() === email))
     let created = false
     if (user) {
         if (!user.active || user.isDefault) throw new DomainError(409, "O acesso individual no Opex está desativado. Peça ao administrador para revisá-lo.", "OPEX_USER_CONFLICT")
         const claimed = await OpexFeedbackUserModel.findOne({ ...scope, opexUserId: user.id }).lean()
         if (claimed && claimed.dndicasUserId !== actor.id) throw new DomainError(409, "Esse acesso do Opex já está vinculado a outro usuário.", "OPEX_USER_CONFLICT")
     } else {
-        let useEmail = email
         for (let attempt = 0; attempt < 3; attempt++) {
             try {
-                user = await connection.client.createUser(cookie, { username: attempt ? `${username}-${randomBytes(3).toString("hex")}` : username, ...(useEmail ? { email: useEmail } : {}), admin: false })
+                user = await connection.client.createUser(cookie, { username: `dndicas-${randomBytes(12).toString("hex")}`, admin: false })
                 created = true
                 break
             } catch (error) {
                 if (!(error instanceof DomainError) || !["USERNAME_IN_USE", "EMAIL_IN_USE", "USER_EXISTS"].includes(error.code ?? "")) throw error
-                if (["EMAIL_IN_USE", "USER_EXISTS"].includes(error.code ?? "")) useEmail = undefined
             }
         }
     }
