@@ -20,6 +20,18 @@ import { loadSession, opexDb, toFileDto } from "./sessions"
  */
 
 const FALLBACK_MIME = "application/octet-stream"
+const MIME_PATTERN = /^[a-z0-9][a-z0-9.+-]*\/[a-z0-9][a-z0-9.+-]*$/
+
+/**
+ * Tipo declarado pelo navegador, normalizado: sem parâmetros, só `tipo/subtipo` válido. Tipos ativos
+ * (HTML, SVG, XML, JavaScript) viram `application/octet-stream`: nunca são servidos como página.
+ */
+export function normalizeOpexMediaType(raw: string | null | undefined): string {
+    const mime = (raw ?? "").split(";")[0]!.trim().toLowerCase()
+    if (!MIME_PATTERN.test(mime)) return FALLBACK_MIME
+    if (/(html|svg|xml|javascript|ecmascript)/.test(mime)) return FALLBACK_MIME
+    return mime
+}
 const log = loggerFor({ module: "opex-agent", feature: "files" })
 
 export type OpexFileDoc = IOpexFile & { _id: Types.ObjectId }
@@ -72,7 +84,7 @@ function tooLarge(size: number, limits: OpexFilesSettings): DomainError {
 export async function reserveOpexFile(sessionId: string, input: ReserveOpexFileInput, limits: OpexFilesSettings, scope: OpexServerScope): Promise<OpexFileReservationDto> {
     await loadSession(sessionId, scope)
     if (input.size > opexMaxBytes(limits.maxSizeMb)) throw tooLarge(input.size, limits)
-    const mediaType = (input.mediaType?.trim() || FALLBACK_MIME).toLowerCase()
+    const mediaType = normalizeOpexMediaType(input.mediaType)
     const name = safeAttachmentName(input.name.trim() || fallbackAttachmentName(mediaType))
     const _id = new Types.ObjectId()
     const id = _id.toString()
@@ -105,6 +117,12 @@ export async function completeOpexFile(id: string, limits: OpexFilesSettings, sc
         await discard(doc)
         throw new DomainError(400, "O arquivo não chegou ao storage. Envie de novo.", "OPEX_FILE_NOT_UPLOADED")
     }
+    // A URL assinada fixa o Content-Type; um objeto com outro tipo não veio por ela.
+    const storedType = head.contentType?.split(";")[0]?.trim().toLowerCase()
+    if (storedType && storedType !== doc.mediaType) {
+        await discard(doc)
+        throw new DomainError(400, "O tipo do arquivo enviado não confere com o reservado. Envie de novo.", "OPEX_FILE_TYPE_MISMATCH")
+    }
     const size = head.contentLength ?? 0
     if (size <= 0) {
         await discard(doc)
@@ -121,7 +139,7 @@ export async function completeOpexFile(id: string, limits: OpexFilesSettings, sc
         throw new DomainError(502, "Não foi possível finalizar o arquivo no storage. Tente novamente em instantes.", "OPEX_FILE_STORAGE_UNAVAILABLE")
     }
     await removeObjectQuietly(doc.uploadKey)
-    const mediaType = (doc.mediaType === FALLBACK_MIME && head.contentType?.trim() ? head.contentType.trim() : doc.mediaType).toLowerCase()
+    const mediaType = doc.mediaType
     await OpexFile.updateOne({ _id: doc._id }, { $set: { ready: true, size, mediaType } })
     return toFileDto(refOf({ ...doc, size, mediaType }))
 }

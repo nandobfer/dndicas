@@ -27,7 +27,7 @@ revalidado no banco (`loadActor`). Cada ferramenta declara `minRole` (ou herda d
   Sessões com `anonymousId` e `expiresAt` (TTL configurável, padrão **7 dias** desde a última
   mensagem); a rotina `opex-files-cleanup` apaga as vencidas. Visitantes não enviam arquivos nem
   agendam jobs.
-- Limite de mensagens dos visitantes por hora, por visitante e por IP (configurável; 429 em pt-BR).
+- Limite de mensagens dos visitantes por hora, por visitante, por IP e um teto somando todos os visitantes (configuráveis; 429 em pt-BR). O IP é o `x-real-ip` do proxy ou o último item do `x-forwarded-for` (o primeiro é forjável); sem IP, os pedidos dividem um balde único.
   Contadores em memória do processo (`server/rate-limit.ts`): o DnDicas roda numa única instância.
 - O hub dos turnos ao vivo fica em `globalThis` pelo mesmo motivo (`server/hub.ts`).
 
@@ -75,7 +75,7 @@ Memórias (`opex-global`, `opex-admin`, `opex-user`). Salva em `ai_feature_setti
 ## Persistência
 
 `opex_sessions`, `opex_messages`, `opex_pending_actions`, `opex_files` (binário no Storage S3),
-`opex_jobs` (TTL de `purgeAt` depois de terminar). Índices pela migração `ensure-opex-indexes`.
+`opex_jobs` (TTL de `purgeAt` depois de terminar). Arquivos do chat: o tipo declarado é normalizado (HTML/SVG/XML/JS viram `application/octet-stream`), conferido na confirmação e servido só pela rota autenticada, com `nosniff`. Ações pendentes com segredo exigem `INTEGRATIONS_ENCRYPTION_KEY` (sem ela, a confirmação é recusada). Índices pela migração `ensure-opex-indexes`.
 
 ## Testes
 

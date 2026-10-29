@@ -9,7 +9,7 @@ import { OpexMessage, OpexPendingAction, type IOpexPendingAction } from "@/lib/d
 import { loadSession, opexDb, publishSessionUpdated } from "./sessions"
 import { loadActor, roleOf, userOpexScope, type OpexServerScope } from "./scope"
 import { compactToolOutput, stringifyForDisplay } from "./tool-runtime"
-import { toolErrorMessage, type OpexTool } from "./tools/define"
+import { OpexToolError, toolErrorMessage, type OpexTool } from "./tools/define"
 import { findOpexTool, toolAllowedFor } from "./tools/registry"
 
 /** Ação pendente expira depois disso (o card some como "Expirada"). */
@@ -19,10 +19,24 @@ const log = loggerFor({ module: "opex-agent" })
 
 type ActionDoc = IOpexPendingAction & { _id: Types.ObjectId }
 
-/** A entrada pode carregar segredos (ex.: credencial de integração): fica cifrada no banco. */
-function sealInput(input: unknown): unknown {
+/** A entrada carrega segredos? (a ferramenta mascara algum campo ao exibir/registrar). */
+function carriesSecrets(tool: OpexTool, input: unknown): boolean {
+    if (!tool.redact) return false
+    return JSON.stringify(tool.redact(input as never)) !== JSON.stringify(input)
+}
+
+/**
+ * Entrada da ação pendente: sempre cifrada quando há chave. Sem `INTEGRATIONS_ENCRYPTION_KEY`, só
+ * entradas sem segredo ficam em texto puro; com segredo, a confirmação é recusada (fail-closed, como
+ * o restante das integrações).
+ */
+function sealInput(tool: OpexTool, input: unknown): unknown {
     const json = JSON.stringify(input ?? null)
-    return isSecretBoxConfigured() ? { sealed: encryptSecret(json) } : { plain: json }
+    if (isSecretBoxConfigured()) return { sealed: encryptSecret(json) }
+    if (carriesSecrets(tool, input)) {
+        throw new OpexToolError("Não é possível guardar segredos sem a chave de criptografia (INTEGRATIONS_ENCRYPTION_KEY). Configure a chave no servidor ou informe o segredo direto na tela da integração.")
+    }
+    return { plain: json }
 }
 
 function openInput(stored: unknown): unknown {
@@ -46,7 +60,7 @@ export async function requestConfirmation(sessionId: string, messageId: string, 
         messageId: new Types.ObjectId(messageId),
         toolCallId,
         toolName: tool.name,
-        input: sealInput(parsed),
+        input: sealInput(tool, parsed),
         summary,
         status: "pending",
         expiresAt: new Date(Date.now() + OPEX_ACTION_TTL_MS),

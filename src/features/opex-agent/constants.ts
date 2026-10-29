@@ -75,6 +75,9 @@ export const OPEX_ANONYMOUS_CONSUMPTION_ORIGIN = "opex-anonymous-agent"
 /** Visitantes anônimos: limites padrão (configuráveis na aba do agente). */
 export const OPEX_ANONYMOUS_TURNS_PER_HOUR_DEFAULT = 20
 export const OPEX_ANONYMOUS_TURNS_PER_HOUR_MAX = 500
+/** Teto de mensagens por hora somando todos os visitantes (independe de cookie e IP). */
+export const OPEX_ANONYMOUS_TOTAL_TURNS_PER_HOUR_DEFAULT = 200
+export const OPEX_ANONYMOUS_TOTAL_TURNS_PER_HOUR_MAX = 10_000
 export const OPEX_ANONYMOUS_SESSION_TTL_DAYS_DEFAULT = 7
 export const OPEX_ANONYMOUS_SESSION_TTL_DAYS_MAX = 90
 

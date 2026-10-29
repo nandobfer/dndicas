@@ -66,7 +66,9 @@ campos nem ações. Enquanto estiver ali, o fluxo agêntico dos feedbacks fica b
 
 O agendador inicia em `src/instrumentation.ts` (um único processo: PM2 com uma instância / um
 processo no Docker). `/api/routines/scheduler-tick` executa o mesmo motor sob demanda (Bearer do
-`cronSecret` ou do `CRON_SECRET` legado). Os jobs agendados do Agente Opex rodam no mesmo tick.
+`cronSecret` ou do `CRON_SECRET` legado). Os jobs agendados do Agente Opex rodam no mesmo tick **mesmo com o agendador desligado** (o interruptor pausa só as rotinas, inclusive `opex-files-cleanup`).
+
+`GET /api/upload?key=` (proxy público das imagens) recusa chaves privadas (`opex/`, com 404) e só serve inline imagens raster; qualquer outro tipo sai como download binário com `X-Content-Type-Options: nosniff` (`src/lib/storage/public-proxy.ts`).
 
 ## Persistência
 

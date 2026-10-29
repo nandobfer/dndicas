@@ -234,9 +234,25 @@ export interface TickResult {
     executed: string[]
 }
 
+/**
+ * Jobs do Agente Opex (prompts agendados pelos usuários) vencidos. Rodam a cada tick **mesmo com o
+ * agendador desligado**: o interruptor pausa as rotinas de manutenção, não os lembretes dos usuários.
+ */
+async function runOpexJobsTick(now: Date): Promise<void> {
+    try {
+        const { runDueOpexJobs } = await import("@/features/opex-agent/server/jobs")
+        await runDueOpexJobs(now)
+    } catch (error) {
+        logger.error({ err: error }, "[scheduler] Falha nos jobs do Agente Opex")
+    }
+}
+
 export async function runSchedulerTick(now: Date = new Date()): Promise<TickResult> {
     const config = await getIntegrationConfig("crons")
-    if (!config.schedulerEnabled) return { skipped: "disabled", executed: [] }
+    if (!config.schedulerEnabled) {
+        await runOpexJobsTick(now)
+        return { skipped: "disabled", executed: [] }
+    }
 
     await dbConnect()
     const executed: string[] = []
@@ -262,12 +278,7 @@ export async function runSchedulerTick(now: Date = new Date()): Promise<TickResu
     }
 
     // Agente Opex: jobs (prompts agendados) vencidos — ver aicontext/modules/opex-agent.md.
-    try {
-        const { runDueOpexJobs } = await import("@/features/opex-agent/server/jobs")
-        await runDueOpexJobs(now)
-    } catch (error) {
-        logger.error({ err: error }, "[scheduler] Falha nos jobs do Agente Opex")
-    }
+    await runOpexJobsTick(now)
 
     return { executed }
 }

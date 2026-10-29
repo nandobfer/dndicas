@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from "vitest"
 import { assertAnonymousTurnAllowed, clientIpOf, resetAnonymousRateLimit } from "@/features/opex-agent/server/rate-limit"
 
-const limits = { turnsPerHourPerVisitor: 2, turnsPerHourPerIp: 3 }
+const limits = { turnsPerHourPerVisitor: 2, turnsPerHourPerIp: 3, turnsPerHourTotal: 100 }
 
 describe("limite de mensagens dos visitantes do Agente Opex", () => {
     beforeEach(() => resetAnonymousRateLimit())
@@ -34,9 +34,33 @@ describe("limite de mensagens dos visitantes do Agente Opex", () => {
         expect(() => assertAnonymousTurnAllowed("d", "3.3.3.3", limits, now)).not.toThrow()
     })
 
-    it("lê o IP do primeiro x-forwarded-for ou do x-real-ip", () => {
-        expect(clientIpOf(new Headers({ "x-forwarded-for": "9.9.9.9, 10.0.0.1" }))).toBe("9.9.9.9")
-        expect(clientIpOf(new Headers({ "x-real-ip": "8.8.8.8" }))).toBe("8.8.8.8")
+    it("usa o IP confiável: x-real-ip do proxy ou o último salto do x-forwarded-for (o primeiro é forjável)", () => {
+        expect(clientIpOf(new Headers({ "x-forwarded-for": "1.2.3.4, 9.9.9.9" }))).toBe("9.9.9.9")
+        expect(clientIpOf(new Headers({ "x-real-ip": "8.8.8.8", "x-forwarded-for": "1.2.3.4" }))).toBe("8.8.8.8")
         expect(clientIpOf(new Headers())).toBeNull()
+    })
+
+    it("contorno: cookie novo e x-forwarded-for forjado a cada pedido não escapam do limite por IP", () => {
+        const now = Date.UTC(2026, 9, 29, 12)
+        const turn = (index: number) =>
+            assertAnonymousTurnAllowed(`visitante-${index}`, clientIpOf(new Headers({ "x-forwarded-for": `10.0.0.${index}, 7.7.7.7` })), limits, now)
+        turn(1)
+        turn(2)
+        turn(3)
+        expect(() => turn(4)).toThrow(/Limite de mensagens/)
+    })
+
+    it("contorno: sem IP, os pedidos dividem um balde único", () => {
+        const now = Date.UTC(2026, 9, 29, 12)
+        for (const id of ["a", "b", "c"]) assertAnonymousTurnAllowed(id, null, limits, now)
+        expect(() => assertAnonymousTurnAllowed("d", null, limits, now)).toThrow()
+    })
+
+    it("teto global: trocar de cookie e de IP não passa do total por hora", () => {
+        const now = Date.UTC(2026, 9, 29, 12)
+        const total = { ...limits, turnsPerHourTotal: 5 }
+        for (let index = 0; index < 5; index++) assertAnonymousTurnAllowed(`v${index}`, `20.0.0.${index}`, total, now)
+        expect(() => assertAnonymousTurnAllowed("v-novo", "30.0.0.1", total, now)).toThrow(/Limite de mensagens/)
+        expect(() => assertAnonymousTurnAllowed("v-novo", "30.0.0.1", total, now + 60 * 60 * 1000 + 1)).not.toThrow()
     })
 })

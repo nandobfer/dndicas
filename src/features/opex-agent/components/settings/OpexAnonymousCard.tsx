@@ -6,12 +6,12 @@ import { Field } from "@/components/ui/opex/field"
 import { FORM_GRID_WIDE } from "@/components/ui/opex/form-grid"
 import { FormToggleCard } from "@/components/ui/opex/toggle-card"
 import { Input } from "@/components/ui/opex/input"
-import { OPEX_ANONYMOUS_SESSION_TTL_DAYS_MAX, OPEX_ANONYMOUS_TURNS_PER_HOUR_MAX } from "../../constants"
+import { OPEX_ANONYMOUS_SESSION_TTL_DAYS_MAX, OPEX_ANONYMOUS_TOTAL_TURNS_PER_HOUR_MAX, OPEX_ANONYMOUS_TURNS_PER_HOUR_MAX } from "../../constants"
 import type { OpexAgentSettings } from "../../schemas"
 
 const toNumber = (value: string) => (value.trim() === "" ? Number.NaN : Number(value))
 
-type NumberField = "anonymous.turnsPerHourPerVisitor" | "anonymous.turnsPerHourPerIp" | "anonymous.sessionTtlDays"
+type NumberField = "anonymous.turnsPerHourPerVisitor" | "anonymous.turnsPerHourPerIp" | "anonymous.turnsPerHourTotal" | "anonymous.sessionTtlDays"
 
 /**
  * Visitantes sem login: liga/desliga o agente para eles, limita as mensagens por hora (por visitante e
@@ -51,6 +51,10 @@ export function OpexAnonymousCard({ form }: { form: UseFormReturn<OpexAgentSetti
                     </Field>
                     <Field id="opex-anonymous-ip" label="Mensagens por hora, por IP" error={errors?.turnsPerHourPerIp?.message}>
                         {numberInput("anonymous.turnsPerHourPerIp", "opex-anonymous-ip", OPEX_ANONYMOUS_TURNS_PER_HOUR_MAX)}
+                    </Field>
+                    <Field id="opex-anonymous-total" label="Mensagens por hora, todos os visitantes" error={errors?.turnsPerHourTotal?.message}>
+                        {numberInput("anonymous.turnsPerHourTotal", "opex-anonymous-total", OPEX_ANONYMOUS_TOTAL_TURNS_PER_HOUR_MAX)}
+                        <p className="text-xs text-muted-foreground">Teto do orçamento de IA para quem não está logado.</p>
                     </Field>
                     <Field id="opex-anonymous-ttl" label="Validade das sessões (dias)" error={errors?.sessionTtlDays?.message}>
                         {numberInput("anonymous.sessionTtlDays", "opex-anonymous-ttl", OPEX_ANONYMOUS_SESSION_TTL_DAYS_MAX)}

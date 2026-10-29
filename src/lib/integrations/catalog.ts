@@ -425,7 +425,7 @@ export const INTEGRATIONS: readonly IntegrationDef[] = [
         defaultEnvironment: "interno",
         streamsDebugOverPusher: true,
         publicFields: [
-            { key: "schedulerEnabled", label: "Agendador ativo", description: "Desligado, nenhuma rotina é disparada", kind: "boolean", defaultValue: true },
+            { key: "schedulerEnabled", label: "Agendador ativo", description: "Desligado, nenhuma rotina é disparada (inclusive a limpeza do Agente Opex); os jobs agendados pelos usuários no Agente Opex continuam rodando", kind: "boolean", defaultValue: true },
             {
                 key: "internalBaseUrl",
                 label: "URL base interna",

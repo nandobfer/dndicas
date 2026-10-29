@@ -8,6 +8,8 @@ import {
     OPEX_FILES_PER_MESSAGE_MAX,
     OPEX_ANONYMOUS_SESSION_TTL_DAYS_DEFAULT,
     OPEX_ANONYMOUS_SESSION_TTL_DAYS_MAX,
+    OPEX_ANONYMOUS_TOTAL_TURNS_PER_HOUR_DEFAULT,
+    OPEX_ANONYMOUS_TOTAL_TURNS_PER_HOUR_MAX,
     OPEX_ANONYMOUS_TURNS_PER_HOUR_DEFAULT,
     OPEX_ANONYMOUS_TURNS_PER_HOUR_MAX,
     OPEX_MESSAGE_MAX,
@@ -59,6 +61,12 @@ export const opexAnonymousSettingsSchema = z.object({
     enabled: z.boolean(),
     turnsPerHourPerVisitor: turnsPerHour,
     turnsPerHourPerIp: turnsPerHour,
+    /** Teto global (todos os visitantes juntos): limpar o cookie ou trocar de IP não passa dele. */
+    turnsPerHourTotal: z
+        .number({ error: "Informe um número" })
+        .int("Use um número inteiro")
+        .min(1, "Mínimo 1")
+        .max(OPEX_ANONYMOUS_TOTAL_TURNS_PER_HOUR_MAX, `Máximo ${OPEX_ANONYMOUS_TOTAL_TURNS_PER_HOUR_MAX.toLocaleString("pt-BR")}`),
     sessionTtlDays: z
         .number({ error: "Informe um número" })
         .int("Use um número inteiro")
@@ -71,6 +79,7 @@ export const DEFAULT_OPEX_ANONYMOUS_SETTINGS: OpexAnonymousSettings = {
     enabled: true,
     turnsPerHourPerVisitor: OPEX_ANONYMOUS_TURNS_PER_HOUR_DEFAULT,
     turnsPerHourPerIp: OPEX_ANONYMOUS_TURNS_PER_HOUR_DEFAULT * 3,
+    turnsPerHourTotal: OPEX_ANONYMOUS_TOTAL_TURNS_PER_HOUR_DEFAULT,
     sessionTtlDays: OPEX_ANONYMOUS_SESSION_TTL_DAYS_DEFAULT,
 }
 

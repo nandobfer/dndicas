@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { uploadFile, getFileUrl, getFile } from "@/core/storage/s3"
 import { auth } from "@/core/auth/server"
+import { isPrivateUploadKey, publicProxyContentType } from "@/lib/storage/public-proxy"
 
 // Max file size: 5MB
 const MAX_FILE_SIZE = 5 * 1024 * 1024
@@ -18,12 +19,19 @@ export async function GET(req: NextRequest) {
         if (!key) {
             return NextResponse.json({ error: "Missing key" }, { status: 400 })
         }
+        // Chaves privadas respondem como inexistentes (não revela que o objeto existe).
+        if (isPrivateUploadKey(key)) {
+            return NextResponse.json({ error: "File not found" }, { status: 404 })
+        }
 
         const response = await getFile(key)
+        const { contentType, inline } = publicProxyContentType(response.ContentType)
 
-        return new NextResponse(response.Body as any, {
+        return new NextResponse(response.Body as unknown as BodyInit, {
             headers: {
-                "Content-Type": response.ContentType || "application/octet-stream",
+                "Content-Type": contentType,
+                "Content-Disposition": inline ? "inline" : "attachment",
+                "X-Content-Type-Options": "nosniff",
                 "Cache-Control": "public, max-age=31536000, immutable",
             },
         })

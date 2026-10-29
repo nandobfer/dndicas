@@ -8,15 +8,16 @@ import type { OpexAnonymousSettings } from "../schemas"
  */
 
 const WINDOW_MS = 60 * 60 * 1000
+const UNKNOWN_IP = "desconhecido"
 
 interface Bucket {
     hits: number[]
 }
 
-type RateLimitStore = { visitors: Map<string, Bucket>; ips: Map<string, Bucket> }
+type RateLimitStore = { visitors: Map<string, Bucket>; ips: Map<string, Bucket>; total: Bucket }
 
 const globalForRateLimit = globalThis as typeof globalThis & { __opexAnonymousRateLimit?: RateLimitStore }
-const store: RateLimitStore = (globalForRateLimit.__opexAnonymousRateLimit ??= { visitors: new Map(), ips: new Map() })
+const store: RateLimitStore = (globalForRateLimit.__opexAnonymousRateLimit ??= { visitors: new Map(), ips: new Map(), total: { hits: [] } })
 
 function prune(bucket: Bucket, now: number): void {
     const since = now - WINDOW_MS
@@ -40,10 +41,25 @@ function minutesUntilFree(bucket: Bucket, now: number): number {
  * Conta um turno do visitante; acima do limite responde 429 em pt-BR com o tempo de espera.
  * Módulo testável: `now` injetável.
  */
-export function assertAnonymousTurnAllowed(anonymousId: string, ip: string | null, limits: Pick<OpexAnonymousSettings, "turnsPerHourPerVisitor" | "turnsPerHourPerIp">, now = Date.now()): void {
+export function assertAnonymousTurnAllowed(
+    anonymousId: string,
+    ip: string | null,
+    limits: Pick<OpexAnonymousSettings, "turnsPerHourPerVisitor" | "turnsPerHourPerIp" | "turnsPerHourTotal">,
+    now = Date.now(),
+): void {
     const visitor = bucketOf(store.visitors, anonymousId, now)
-    const byIp = ip ? bucketOf(store.ips, ip, now) : null
-    const blocked = visitor.hits.length >= limits.turnsPerHourPerVisitor ? visitor : byIp && byIp.hits.length >= limits.turnsPerHourPerIp ? byIp : null
+    // Sem IP conhecido, os pedidos dividem um balde único (não escapam do limite por IP).
+    const byIp = bucketOf(store.ips, ip ?? UNKNOWN_IP, now)
+    prune(store.total, now)
+    // O teto global vem primeiro: renovar o cookie e variar o IP não passa dele.
+    const blocked =
+        store.total.hits.length >= limits.turnsPerHourTotal
+            ? store.total
+            : visitor.hits.length >= limits.turnsPerHourPerVisitor
+              ? visitor
+              : byIp.hits.length >= limits.turnsPerHourPerIp
+                ? byIp
+                : null
     if (blocked) {
         throw new DomainError(
             429,
@@ -52,17 +68,25 @@ export function assertAnonymousTurnAllowed(anonymousId: string, ip: string | nul
         )
     }
     visitor.hits.push(now)
-    byIp?.hits.push(now)
+    byIp.hits.push(now)
+    store.total.hits.push(now)
 }
 
 /** Zera os contadores (testes). */
 export function resetAnonymousRateLimit(): void {
     store.visitors.clear()
     store.ips.clear()
+    store.total.hits = []
 }
 
-/** IP do cliente a partir dos cabeçalhos do proxy (primeiro de `x-forwarded-for`) ou `x-real-ip`. */
+/**
+ * IP do cliente confiável. O `x-real-ip` é definido pelo proxy reverso (não vem do cliente); sem ele,
+ * vale o **último** item do `x-forwarded-for` — o que o proxy acrescentou —, nunca o primeiro, que o
+ * cliente pode forjar.
+ */
 export function clientIpOf(headers: Headers): string | null {
-    const forwarded = headers.get("x-forwarded-for")?.split(",")[0]?.trim()
-    return forwarded || headers.get("x-real-ip")?.trim() || null
+    const realIp = headers.get("x-real-ip")?.trim()
+    if (realIp) return realIp
+    const forwarded = headers.get("x-forwarded-for")?.split(",").map((item) => item.trim()).filter(Boolean)
+    return forwarded?.at(-1) || null
 }
