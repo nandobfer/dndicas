@@ -25,7 +25,7 @@ import { assertAnonymousTurnAllowed } from "./rate-limit"
 import { actorIdOf, actorNameOf, loadActor, roleOf, sessionScopeOf, userOpexScope, type OpexServerScope } from "./scope"
 import { anonymousExpiry } from "./sessions"
 import { nowContext } from "./tools/context"
-import { enabledOpexTools, findOpexTool, toolAllowedFor } from "./tools/registry"
+import { enabledOpexTools, findOpexTool, toolPermittedFor } from "./tools/registry"
 import { OpexToolError } from "./tools/define"
 
 const log = loggerFor({ module: "opex-agent" })
@@ -54,7 +54,7 @@ export function instructionsFor(settings: OpexAgentSettings, scope: OpexServerSc
 
 /** Ferramentas e política do turno, conforme o papel. */
 function toolsForTurn(scope: OpexServerScope, settings: OpexAgentSettings): { tools: OpexTool[]; overrides: Record<string, boolean> } {
-    return { tools: enabledOpexTools(settings.disabledTools, roleOf(scope)), overrides: settings.confirmationOverrides }
+    return { tools: enabledOpexTools(settings.disabledTools, roleOf(scope), scope), overrides: settings.confirmationOverrides }
 }
 
 function findTool(name: string): OpexTool | undefined {
@@ -252,10 +252,10 @@ async function executeTurn(args: TurnArgs): Promise<void> {
         const toolContext: OpexToolContext = { sessionId, actorId: args.actorId, signal: controller.signal, scope }
         const runtime = buildToolRuntime(tools, toolContext, overrides, {
             requestConfirmation: (tool, input, toolCallId) => requestConfirmation(sessionId, assistantId.toString(), tool, input, toolCallId),
-            authorize: async (tool: OpexTool) => {
+            authorize: async (tool: OpexTool, input: unknown) => {
                 const current = toolContext.scope
                 if (current.kind === "user") toolContext.scope = userOpexScope(await loadActor(current.actor.id))
-                if (!toolAllowedFor(tool, roleOf(toolContext.scope))) throw new OpexToolError("Esta ação não está disponível para o seu perfil.")
+                if (!toolPermittedFor(tool, toolContext.scope, input)) throw new OpexToolError("Esta ação não está disponível para o seu perfil.")
             },
         })
         prepared = await prepareModel({ provider: main.provider!, model: main.model!, variant: main.variant })

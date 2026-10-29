@@ -29,6 +29,14 @@ desconhecidas. Edição depende da visualização correspondente. Ramos: `admin.
 - `requestAccess()` revalida identidade ativa, perfis ativos e permissões no banco em cada
   requisição. Cabeçalho `x-perfix-view-as` tem precedência sobre o mapa de cookies por aba.
 - `requireAccess(...keys)` e `requirePermissions(context, ...keys)` negam por padrão.
+- `auth()`/`currentUser()` (via `optionalAccess()`) tratam sessão de usuário inativo/excluído e
+  simulação inválida como visitante: rotas públicas seguem respondendo; quem exige acesso usa
+  `requireAccess`/`protectedRoute`, que lançam.
+- Agente Opex: cada ferramenta administrativa declara `permission` ou `permissionFor(input)` (a
+  mesma chave da rota REST equivalente, ex.: `integrations.<id>.edit`, `catalog.edit`,
+  `integrations.ai.edit`), conferida na montagem do turno, antes de cada chamada e na confirmação;
+  `admin.access` sozinho não libera essas ferramentas.
+- Canal Pusher `private-integration-<id>` (stream de depuração) exige `integrations.<id>.logs`.
 - `authorityTransaction()` exige replica set, escreve o fence global e revalida acesso dentro
   da transação para evitar TOCTOU e alterações concorrentes da última autoridade.
 - Criação/edição de definições e reordenação exigem coringa efetivo. Mutações de usuários
@@ -44,7 +52,9 @@ de integridade do padrão/contagem de perfis ativos. Não possui secrets nem con
 O padrão deve existir, estar ativo e não ser admin nem ter `*`. Cadastro local, primeiro login
 Google e criação administrativa sem `roleIds` usam esse padrão. Sem padrão válido, cadastros
 falham fechados (`503 SIGNUP_UNAVAILABLE`); login de usuários existentes continua disponível.
-Configurações usam versão otimista; escolher nenhum padrão desabilita novos cadastros.
+Configurações usam versão otimista; escolher nenhum padrão desabilita novos cadastros. Só é possível escolher
+como padrão um perfil que o chamador poderia atribuir (hierarquia e todas as permissões concedíveis);
+caso contrário, 403.
 
 ## Visualizar como e impersonação
 

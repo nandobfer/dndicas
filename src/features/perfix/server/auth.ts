@@ -1,13 +1,28 @@
 import { User } from "@/features/users/models/user"
+import { DomainError } from "@/lib/api/route"
 import { requestAccess } from "./access"
+
+const VISITOR_CODES = new Set(["UNAUTHORIZED", "VIEW_AS_INVALID", "VIEW_AS_FORBIDDEN"])
+/**
+ * Sessão de usuário inativo/excluído ou simulação inválida viram visitante aqui (rotas públicas
+ * continuam respondendo); quem exige acesso usa `requireAccess`/`protectedRoute`, que lançam.
+ */
+export async function optionalAccess() {
+    try {
+        return await requestAccess()
+    } catch (error) {
+        if (error instanceof DomainError && VISITOR_CODES.has(error.code ?? "")) return null
+        throw error
+    }
+}
 
 /** A identidade exposta a ownership é a efetiva; o ator real fica no contexto de auditoria. */
 export async function auth() {
-    const context = await requestAccess()
+    const context = await optionalAccess()
     return { userId: context?.userId ?? null }
 }
 export async function currentUser() {
-    const context = await requestAccess()
+    const context = await optionalAccess()
     if (!context) return null
     const user = await User.findById(context.userId).lean()
     if (!user) return null

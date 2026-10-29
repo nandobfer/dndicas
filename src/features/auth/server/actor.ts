@@ -1,7 +1,7 @@
 import { getCurrentUserFromDb } from "@/features/users/api/get-current-user"
 import { DomainError } from "@/lib/api/route"
 import { fail } from "@/lib/api/responses"
-import { requestAccess } from "@/features/perfix/server/access"
+import { optionalAccess } from "@/features/perfix/server/auth"
 
 /**
  * Ator das rotas copiadas do Opex. No Opex há um único dono (`getLocalUser`); no DnDicas o ator é
@@ -24,7 +24,7 @@ export async function getActor(): Promise<Actor | null> {
     const result = await getCurrentUserFromDb()
     if (!result.success || !result.user) return null
     const user = result.user
-    const access = await requestAccess()
+    const access = await optionalAccess()
     return {
         id: String(user._id),
         name: user.name?.trim() || user.username,

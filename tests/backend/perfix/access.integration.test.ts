@@ -59,6 +59,16 @@ describe("Migração e configurações", () => {
         await AccessRole.updateOne({ _id: userRole }, { ativo: false })
         await expect(getDefaultRoleId()).rejects.toMatchObject({ status: 503 })
     })
+    it("não deixa definir como padrão um perfil que o chamador não poderia conceder", async () => {
+        const gestor = await AccessRole.create({ slug: "gestor", nome: "Gestor", cor: "azul", permissoes: ["integrations.perfix.edit"], ativo: true })
+        const poderoso = await AccessRole.create({ slug: "poderoso", nome: "Poderoso", cor: "verde", permissoes: ["users.edit", "roles.edit"], ativo: true })
+        await reorderRoles(await resolveAccess(adminId), { ordem: [String(gestor._id), String(poderoso._id), userRole], version: 0 })
+        await User.updateOne({ _id: userId }, { roles: [String(gestor._id)] })
+        const context = await resolveAccess(userId)
+        await expect(updateSettings(context, { defaultRoleId: String(poderoso._id), version: 0 })).rejects.toMatchObject({ status: 403 })
+        expect(await getDefaultRoleId()).toBe(userRole)
+        await expect(updateSettings(context, { defaultRoleId: userRole, version: 0 })).resolves.toMatchObject({ defaultRoleId: userRole, version: 1 })
+    })
 })
 describe("Identidade efetiva e simulação", () => {
     it("impersona o alvo e audita o administrador real nas mutações", async () => {

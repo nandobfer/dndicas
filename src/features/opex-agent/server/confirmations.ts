@@ -10,7 +10,7 @@ import { loadSession, opexDb, publishSessionUpdated } from "./sessions"
 import { loadActor, roleOf, userOpexScope, type OpexServerScope } from "./scope"
 import { compactToolOutput, stringifyForDisplay } from "./tool-runtime"
 import { OpexToolError, toolErrorMessage, type OpexTool } from "./tools/define"
-import { findOpexTool, toolAllowedFor } from "./tools/registry"
+import { findOpexTool, toolPermittedFor } from "./tools/registry"
 
 /** Ação pendente expira depois disso (o card some como "Expirada"). */
 export const OPEX_ACTION_TTL_MS = 24 * 60 * 60 * 1000
@@ -126,8 +126,9 @@ export async function decideAction(actionId: string, decision: "confirm" | "canc
             // Revalida o usuário (ativo, papel atual) e a ferramenta para o papel na hora de executar —
             // o papel pode ter mudado depois do card.
             const executionScope = scope.kind === "user" ? userOpexScope(await loadActor(scope.actor.id)) : scope
-            if (!toolAllowedFor(tool, roleOf(executionScope))) throw new Error("Esta ação não está disponível para o seu perfil.")
-            output = compactToolOutput(await tool.execute(tool.input.parse(openInput(claimed.input)), { sessionId, actorId, scope: executionScope }))
+            const parsedInput = tool.input.parse(openInput(claimed.input))
+            if (!toolPermittedFor(tool, executionScope, parsedInput)) throw new Error("Esta ação não está disponível para o seu perfil.")
+            output = compactToolOutput(await tool.execute(parsedInput, { sessionId, actorId, scope: executionScope }))
             final = (await OpexPendingAction.findByIdAndUpdate(claimed._id, { $set: { result: JSON.stringify(output ?? null), input: null } }, { new: true }).lean<ActionDoc>())!
             followUp = `O usuário CONFIRMOU a ação "${claimed.summary}" (actionId ${actionId}) e ela foi executada. Resultado: ${JSON.stringify(output)}`
         } catch (error) {

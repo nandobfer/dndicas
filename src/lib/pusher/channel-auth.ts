@@ -46,7 +46,8 @@ export function isChannelAuthorized(channel: string, viewer: ChannelViewer): boo
         case "app":
             return canAdmin
         case "integration":
-            return canAdmin && isIntegrationId(parsed.integrationId)
+            // Stream de depuração: mesma permissão da rota de logs da integração.
+            return isIntegrationId(parsed.integrationId) && (viewer.user?.permissions.some(key => key === "*" || key === `integrations.${parsed.integrationId}.logs`) ?? false)
         case "opex-user":
             return viewer.user?.id === parsed.userId
         case "opex-anonymous":

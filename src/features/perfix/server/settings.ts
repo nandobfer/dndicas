@@ -2,7 +2,9 @@ import type { ClientSession } from "mongoose"
 import { dbConnect } from "@/lib/db"
 import { DomainError } from "@/lib/api/route"
 import { PerfixSettings } from "./models"
-import { authorityTransaction, auditAccess, conflict, roleRows, type AccessContext } from "./access"
+import { evaluateRoleAssignment, getUngrantableKeys } from "@nandobfer/perfix"
+import { catalog } from "../catalog"
+import { authorityTransaction, auditAccess, conflict, denied, roleRows, type AccessContext } from "./access"
 import { settingsSchema } from "../schemas"
 import { logger } from "@/lib/logger"
 
@@ -30,6 +32,8 @@ export async function updateSettings(context: AccessContext, raw: unknown) {
         const roles = await roleRows(session)
         const role = roles.find(role => role.id === data.defaultRoleId)
         if (data.defaultRoleId && (!role?.ativo || role.slug === "admin" || role.permissoes.includes("*"))) throw new DomainError(400, "Selecione um perfil ativo que não seja administrador.")
+        // O padrão é concedido a toda conta nova: o chamador só escolhe perfis que ele próprio poderia atribuir.
+        if (role && (evaluateRoleAssignment({ catalog, callerCargos: current.roles, requested: [role.id], current: [], loaded: roles }).status !== "ok" || getUngrantableKeys(current.effective, role.permissoes).length)) throw denied("Você não pode definir como padrão um perfil com permissões que não pode conceder.")
         const before = await PerfixSettings.findById("global").session(session)
         const result = await PerfixSettings.updateOne({ _id: "global", version: data.version }, { $set: { defaultRoleId: data.defaultRoleId, updatedBy: current.realUserId }, $inc: { version: 1 } }, { session })
         if (!result.matchedCount) throw conflict()

@@ -33,6 +33,13 @@ export interface OpexToolDef<I = unknown> {
      * cada chamada). Ausente: vale o do grupo (`OPEX_GROUP_MIN_ROLE`); sem nenhum, inclusive visitantes.
      */
     minRole?: "user" | "admin"
+    /**
+     * Permissão Perfix exigida além do papel (a mesma da rota REST equivalente). Conferida na montagem
+     * do turno, antes de cada chamada e na confirmação.
+     */
+    permission?: string
+    /** Permissão que depende da entrada (ex.: `integrations.<id>.edit`); conferida antes de cada chamada e na confirmação. */
+    permissionFor?(input: I): string
     input: ZodType<I>
     /** Frase do card de confirmação ("Excluir o apontamento de 2 h da GO-DEV-12"). */
     // Sintaxe de método: permite guardar ferramentas de entradas diferentes numa lista `OpexTool`.
