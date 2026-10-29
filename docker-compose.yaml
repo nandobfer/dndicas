@@ -12,8 +12,11 @@ services:
     restart: always
     ports:
       - "${PORT:-4005}:4005"
+    # Opcional: worktrees de prévia (ex.: Opex) não têm `.env`; o build injeta valores dummy
+    # e o runtime recebe as variáveis pelo ambiente quando o arquivo não existe.
     env_file:
-      - .env
+      - path: .env
+        required: false
     environment:
       - PUSHER_HOST=soketi
       - PUSHER_PORT=6001
