@@ -11,7 +11,7 @@ function headers(token?: string) {
 
 describe("MCP auth service", () => {
     it("returns null when no bearer token is present", async () => {
-        vi.doMock("@/core/database/db", () => ({ default: vi.fn() }))
+        vi.doMock("@/lib/db", () => ({ dbConnect: vi.fn() }))
         vi.doMock("@/features/users/models/user", () => ({ User: { findOne: vi.fn() } }))
 
         const mod = await importFresh<typeof import("@/features/mcp/server/mcp-auth-service")>("@/features/mcp/server/mcp-auth-service")
@@ -20,7 +20,7 @@ describe("MCP auth service", () => {
     })
 
     it("rejects tokens with an invalid prefix", async () => {
-        vi.doMock("@/core/database/db", () => ({ default: vi.fn() }))
+        vi.doMock("@/lib/db", () => ({ dbConnect: vi.fn() }))
         vi.doMock("@/features/users/models/user", () => ({ User: { findOne: vi.fn() } }))
 
         const mod = await importFresh<typeof import("@/features/mcp/server/mcp-auth-service")>("@/features/mcp/server/mcp-auth-service")
@@ -46,7 +46,7 @@ describe("MCP auth service", () => {
         })
         const findOne = vi.fn().mockReturnValue({ select })
 
-        vi.doMock("@/core/database/db", () => ({ default: vi.fn() }))
+        vi.doMock("@/lib/db", () => ({ dbConnect: vi.fn() }))
         vi.doMock("@/features/users/models/user", () => ({ User: { findOne } }))
 
         const mod = await importFresh<typeof import("@/features/mcp/server/mcp-auth-service")>("@/features/mcp/server/mcp-auth-service")
@@ -70,7 +70,7 @@ describe("MCP auth service", () => {
     })
 
     it("rejects revoked or unknown tokens", async () => {
-        vi.doMock("@/core/database/db", () => ({ default: vi.fn() }))
+        vi.doMock("@/lib/db", () => ({ dbConnect: vi.fn() }))
         vi.doMock("@/features/users/models/user", () => ({
             User: { findOne: vi.fn().mockReturnValue({ select: vi.fn().mockResolvedValue(null) }) },
         }))

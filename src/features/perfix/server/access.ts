@@ -88,9 +88,7 @@ export async function requireAccess(...keys: string[]) {
 /** Fence global evita remoções concorrentes do último admin e TOCTOU de autoridade. */
 export async function authorityTransaction<T>(initial: AccessContext, keys: string[], action: (context: AccessContext, session: ClientSession) => Promise<T>): Promise<T> {
     requirePermissions(initial, ...keys)
-    await dbConnect()
-    const hello = await mongoose.connection.db!.command({ hello: 1 })
-    if (!hello.setName && hello.msg !== "isdbgrid") throw new DomainError(503, "A administração de acessos exige MongoDB com replica set.", "REPLICA_SET_REQUIRED")
+    await assertTransactionsSupported()
     return mongoose.connection.transaction(async session => {
         const fence = await RoleHierarchy.updateOne({ _id: "global" }, { $inc: { fence: 1 } }, { session })
         if (!fence.matchedCount) throw new DomainError(503, "Hierarquia de acesso indisponível. Execute a migração do Perfix.", "PERFIX_UNAVAILABLE")
@@ -98,6 +96,13 @@ export async function authorityTransaction<T>(initial: AccessContext, keys: stri
         requirePermissions(current, ...keys)
         return action(current, session)
     })
+}
+export const REPLICA_SET_REQUIRED_MESSAGE = "A administração de acessos exige MongoDB com replica set (transações). Inicie o mongod com --replSet e execute rs.initiate() antes de usar o Perfix."
+/** Mutações de autoridade usam transações, disponíveis só em replica set ou cluster shardeado. */
+export async function assertTransactionsSupported() {
+    await dbConnect()
+    const hello = await mongoose.connection.db!.command({ hello: 1 })
+    if (!hello.setName && hello.msg !== "isdbgrid") throw new DomainError(503, REPLICA_SET_REQUIRED_MESSAGE, "REPLICA_SET_REQUIRED")
 }
 export async function auditAccess(context: AccessContext, action: string, targetId: string, before: unknown, after: unknown, session?: ClientSession) {
     await AccessAudit.create([{ actorId: context.realUserId, userId: context.userId, action, targetId, before, after, simulation: context.dto.simulation }], { session })

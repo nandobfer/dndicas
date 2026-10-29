@@ -40,6 +40,15 @@ describe("Migração e configurações", () => {
         expect((await User.findById(userId))!.roles).toEqual([])
         expect(await getDefaultRoleId()).toBe(userRole)
     })
+    it("repara legados que receberam roles vazio antes da migração sem apagar o role", async () => {
+        const id = new mongoose.Types.ObjectId()
+        await mongoose.connection.collection("users").insertOne({ _id: id, username: "legado", email: "legado@example.com", role: "admin", roles: [], status: "active", deleted: false, createdAt: new Date(), updatedAt: new Date() })
+        await migratePerfix()
+        const raw = await mongoose.connection.collection("users").findOne({ _id: id })
+        expect(raw!.roles).toEqual([adminRole])
+        expect(raw).not.toHaveProperty("role")
+        expect([...(await resolveAccess(String(id))).effective]).toContain("*")
+    })
     it("configura o padrão com versão e rejeita admin/inativo", async () => {
         const context = await resolveAccess(adminId)
         await expect(updateSettings(context, { defaultRoleId: adminRole, version: 0 })).rejects.toMatchObject({ status: 400 })

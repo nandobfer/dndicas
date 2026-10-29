@@ -82,9 +82,21 @@ usa `roleIds`, filtro `roleId` e `version` em PUT/DELETE. `role` não faz parte 
 ## Migração e operação
 
 Migração `migrate-perfix` registrada no bootstrap, idempotente: cria admin/user/hierarquia/padrão,
-copia o legado para IDs, audita e só depois remove `role` e o índice legado. Não sobrescreve
-atribuições já migradas nem um padrão já configurado. Auth.js executa o bootstrap antes de salvar
-usuários para não introduzir arrays vazios no legado antes da migração.
+copia o legado para IDs, audita e só depois remove `role` e o índice legado. Também repara
+legados que um `save()` anterior à migração gravou com `roles: []` (ainda com `role`), e só remove
+`role` de quem já tem ao menos um perfil. Não sobrescreve atribuições já migradas nem um padrão já
+configurado. Auth.js, o perfil (`/api/auth/profile`) e a autenticação MCP conectam via
+`dbConnect` de `@/lib/db`, que executa as migrações antes de salvar usuários.
+
+### Pré-requisitos de deploy
+
+1. **Backup do MongoDB** (ver abaixo).
+2. **MongoDB em replica set.** Atribuição de perfis, CRUD de usuários/perfis e configurações do
+   Perfix usam transações; em servidor standalone respondem 503 `REPLICA_SET_REQUIRED`. Para
+   habilitar num nó único: iniciar o `mongod` com `--replSet rs0` (ou `replication.replSetName`)
+   e executar uma vez `rs.initiate()` no `mongosh`; a `MONGODB_URI` pode incluir `?replicaSet=rs0`.
+   O teste da integração Perfix (`/integracoes/perfix`) verifica o suporte a transações e o perfil
+   padrão, com erro em pt-BR quando algum falhar.
 
 **Faça backup do MongoDB antes do primeiro deploy.** Não reverta somente o código após remover
 `role`; versões antigas não entendem o novo contrato. Nenhum teste usa o banco da aplicação:

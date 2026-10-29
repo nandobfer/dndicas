@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { z } from "zod"
-import dbConnect from "@/core/database/db"
+import { dbConnect } from "@/lib/db"
 import { User } from "@/features/users/models/user"
 import { requireAuth } from "@/core/auth/helpers"
 import { serializeMcpTokenState } from "@/features/mcp/server/mcp-token-service"

@@ -11,10 +11,11 @@ export async function migratePerfix() {
     const users = mongoose.connection.collection("users")
     const legacyIndex = (await users.indexes().catch(() => [])).find(index => index.key.status === 1 && index.key.role === 1)
     if (legacyIndex?.name) await users.dropIndex(legacyIndex.name)
-    await users.updateMany({ roles: { $exists: false } }, [{ $set: { roles: { $cond: [{ $eq: ["$role", "admin"] }, [String(admin!._id)], [String(common!._id)]] }, accessVersion: 0 } }])
+    // Inclui legados que um save() do Mongoose antes da migração gravou com `roles: []`.
+    await users.updateMany({ $or: [{ roles: { $exists: false } }, { roles: { $size: 0 }, role: { $exists: true } }] }, [{ $set: { roles: { $cond: [{ $eq: ["$role", "admin"] }, [String(admin!._id)], [String(common!._id)]] }, accessVersion: { $ifNull: ["$accessVersion", 0] } } }])
     // O registro de auditoria é persistido antes do unset para permitir retomar após falhas.
     if (await users.countDocuments({ role: { $exists: true } })) {
         await AccessAudit.create({ actorId: "system:migration", userId: "system", action: "migration.perfix", targetId: "users", after: { admin: String(admin!._id), user: String(common!._id) } })
-        await users.updateMany({ roles: { $exists: true }, role: { $exists: true } }, { $unset: { role: "" } })
+        await users.updateMany({ "roles.0": { $exists: true }, role: { $exists: true } }, { $unset: { role: "" } })
     }
 }

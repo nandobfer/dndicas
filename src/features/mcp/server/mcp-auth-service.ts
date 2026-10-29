@@ -1,4 +1,4 @@
-import dbConnect from "@/core/database/db"
+import { dbConnect } from "@/lib/db"
 import { User } from "@/features/users/models/user"
 import { hashMcpToken, MCP_TOKEN_PREFIX } from "./mcp-token-service"
 import { resolveAccess } from "@/features/perfix/server/access"

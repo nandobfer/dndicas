@@ -1,14 +1,12 @@
-import { redirect } from "next/navigation"
 import { ShieldAlert } from "lucide-react"
-import { getActor } from "@/features/auth/server/actor"
-import { pageAccess } from "@/features/perfix/server/page-access"
+import { pageAccessOrDenied } from "@/features/perfix/server/page-access"
 
 /** Integrações lêem o banco a cada acesso (nada congelado no build). */
 export const dynamic = "force-dynamic"
 
 /** Central de integrações: só administradores (visitante vai para o login). */
 export default async function IntegracoesLayout({ children }: { children: React.ReactNode }) {
-    const access = await pageAccess("integrations.access")
+    const access = await pageAccessOrDenied("/integracoes", "integrations.access")
     if (!access) {
         return (
             <div className="flex min-h-[50vh] flex-col items-center justify-center gap-3 text-center">

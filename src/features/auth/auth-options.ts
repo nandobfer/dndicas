@@ -4,9 +4,12 @@ import GoogleProvider from "next-auth/providers/google"
 import { compare } from "bcryptjs"
 import { dbConnect } from "@/lib/db"
 import { User } from "@/features/users/models/user"
+import { logger } from "@/lib/logger"
 
 const PERSISTENT_SESSION_MAX_AGE_SECONDS = 60 * 60 * 24 * 365 * 20
 const USERNAME_SUFFIX_MAX_ATTEMPTS = 50
+/** Código de erro da tela de login quando o cadastro está bloqueado por falta de perfil padrão. */
+export const SIGNUP_UNAVAILABLE_ERROR = "SignupUnavailable"
 
 function normalizeIdentifier(identifier: string) {
     return identifier.trim().toLowerCase()
@@ -152,11 +155,20 @@ export const authOptions: NextAuthOptions = {
             if (account?.provider !== "google") return true
 
             const googleProfile = profile as { email?: string | null; name?: string | null; picture?: string | null } | undefined
-            const localUser = await findOrCreateGoogleUser({
-                email: googleProfile?.email ?? user.email,
-                name: googleProfile?.name ?? user.name,
-                image: googleProfile?.picture ?? user.image,
-            })
+            let localUser: Awaited<ReturnType<typeof findOrCreateGoogleUser>>
+            try {
+                localUser = await findOrCreateGoogleUser({
+                    email: googleProfile?.email ?? user.email,
+                    name: googleProfile?.name ?? user.name,
+                    image: googleProfile?.picture ?? user.image,
+                })
+            } catch (error) {
+                if ((error as { code?: unknown } | null)?.code === "SIGNUP_UNAVAILABLE") {
+                    logger.warn({ code: "SIGNUP_UNAVAILABLE", provider: "google" }, "Primeiro login Google bloqueado: perfil padrão Perfix indisponível")
+                    return `/sign-in?error=${SIGNUP_UNAVAILABLE_ERROR}`
+                }
+                throw error
+            }
 
             if (!localUser) return false
 
