@@ -79,6 +79,13 @@ servidor. A sessão não reutiliza dados da identidade anterior durante carregam
 APIs usam Zod e envelopes `{ success, data }`; erros e conflitos são pt-BR. O CRUD em `/users`
 usa `roleIds`, filtro `roleId` e `version` em PUT/DELETE. `role` não faz parte do contrato.
 
+Enquanto `/api/me` valida a sessão, o `SessionBoundary` do `PerfixProvider` mostra o
+`AccessLoadingScreen` (`src/features/perfix/components/AccessLoadingScreen.tsx`), adaptado do
+ciliar: fundo com os feixes de luz do `LiquidGlassBackground`, logo `dndicas-logo.webp`, anel
+azul/roxo girando e "Carregando acesso" com reticências animadas. É um `role="status"` acessível e,
+com `prefers-reduced-motion`, fica estático (o `LiquidGlassBackground` também para os feixes). Sem
+dependências de partículas.
+
 ## Migração e operação
 
 Migração `migrate-perfix` registrada no bootstrap, idempotente: cria admin/user/hierarquia/padrão,

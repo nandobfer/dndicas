@@ -11,6 +11,7 @@ import { ViewAsBanner } from "./view-as/ViewAsBanner"
 import type { AccessDto } from "../types"
 import { toast } from "sonner"
 import { installViewAsTransport } from "../transport"
+import { AccessLoadingScreen } from "./AccessLoadingScreen"
 export interface AppSession { user: { id: string; name: string; username: string; email: string; image?: string }; access: AccessDto }
 const SessionContext = createContext<{ session: AppSession | null; isLoaded: boolean }>({ session: null, isLoaded: false })
 export const useAppSession = () => useContext(SessionContext)
@@ -51,6 +52,6 @@ function SessionBoundary({ children }: { children: ReactNode }) {
     return <SessionContext.Provider value={{ session, isLoaded }}><PermissionsProvider permissions={session?.access.permissions ?? []} roles={session?.access.roles ?? []} realIsAdmin={session?.access.realIsAdministrator ?? false}>
         {session?.access.realIsAdministrator && <div className="flex justify-end px-4 py-2"><ViewAsSelector /></div>}
         <ViewAsBanner />
-        {isLoaded ? <div key={`${session?.user.id ?? "anonymous"}:${header}:${session?.access.permissions.join(",") ?? ""}`}>{children}</div> : <div role="status" className="p-8 text-center">Carregando acesso...</div>}
+        {isLoaded ? <div key={`${session?.user.id ?? "anonymous"}:${header}:${session?.access.permissions.join(",") ?? ""}`}>{children}</div> : <AccessLoadingScreen />}
     </PermissionsProvider></SessionContext.Provider>
 }
