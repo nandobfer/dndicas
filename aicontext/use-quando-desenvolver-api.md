@@ -31,12 +31,12 @@ import api from '@/core/utils/api';
 
 // ✅ CORRETO
 await api.get('/users');                  // → GET /api/users
-await api.post('/core/ai', { prompt });   // → POST /api/core/ai
+await api.post('/core/ai/image', { prompt });   // → POST /api/core/ai/image
 await api.get('/users/123');              // → GET /api/users/123
 
 // ❌ ERRADO (resulta em /api/api/...)
 await api.get('/api/users');              // → GET /api/api/users (404)
-await api.post('/api/core/ai', data);     // → GET /api/api/core/ai (404)
+await api.post('/api/core/ai/image', data);     // → POST /api/api/core/ai/image (404)
 ```
 
 ### Usando hooks customizados
@@ -48,11 +48,11 @@ import { useQuery, useMutation } from '@/core/hooks/useApi';
 
 // ✅ CORRETO
 const { data } = useQuery<UserResponse[]>('/users');
-const { mutate } = useMutation('POST', '/core/ai');
+const { mutate } = useMutation('POST', '/core/ai/image');
 
 // ❌ ERRADO
 const { data } = useQuery<UserResponse[]>('/api/users');
-const { mutate } = useMutation('POST', '/api/core/ai');
+const { mutate } = useMutation('POST', '/api/core/ai/image');
 ```
 
 ### Regra prática

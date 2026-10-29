@@ -87,7 +87,7 @@ O Dungeons & Dicas é uma aplicação full-stack em TypeScript, construída com:
 - Auth.js para autenticação e sessões.
 - Tailwind CSS 4, Radix UI, Shadcn/ui e componentes Glass customizados.
 - TanStack Query para estado assíncrono no cliente.
-- Google Gemini via `@google/genai` para texto, ferramentas e imagens.
+- Vercel AI SDK com provedores configuráveis (OpenCode, Gemini, Anthropic, OpenAI, DeepSeek, JEV) para os agentes de texto, ferramentas e imagens, incluindo o Agente Opex.
 - S3/MinIO para uploads, imagens e arquivos gerados.
 - Pusher/Soketi para realtime em feedbacks, geração de entidades e Owlbear.
 - Owlbear Rodeo SDK para actions, metadata de sala, tokens e menus de contexto.
@@ -95,7 +95,7 @@ O Dungeons & Dicas é uma aplicação full-stack em TypeScript, construída com:
 - Fuse.js, Web Workers e busca server-side para catálogos e menções.
 - `@3d-dice/dice-box-threejs` para visualização 3D dos dados.
 - Vitest e Testing Library para testes automatizados.
-- Docker, PM2 e workers externos para cenários de produção e automação.
+- Docker e PM2 (uma instância) para produção, com agendador interno de rotinas.
 
 A estrutura do código separa base compartilhada, features de produto e rotas da aplicação:
 
@@ -117,23 +117,19 @@ pnpm dev
 
 O servidor local fica disponível em `http://localhost:3000`.
 
-Variáveis de ambiente comuns para desenvolvimento incluem:
+O `.env` guarda só as variáveis de bootstrap (veja `.env.example`):
 
 ```env
 MONGODB_URI=
 AUTH_SECRET=
 AUTH_URL=http://localhost:3000
-GOOGLE_API_KEY=
-S3_ENDPOINT=
-S3_ACCESS_KEY=
-S3_SECRET_KEY=
-S3_BUCKET=
-S3_REGION=
-PUSHER_APP_ID=
-PUSHER_KEY=
-PUSHER_SECRET=
-PUSHER_CLUSTER=
+NEXT_PUBLIC_APP_URL=http://localhost:3000
+INTEGRATIONS_ENCRYPTION_KEY=   # openssl rand -base64 32
 ```
+
+Google, Pusher/Soketi, Storage S3, SMTP, Crons, Provedores de IA, Analytics e Tradução são
+configurados por administradores em `/integracoes` e gravados no MongoDB. Na primeira subida, os
+valores antigos ainda presentes no `.env` são copiados uma única vez para o banco.
 
 Scripts principais:
 

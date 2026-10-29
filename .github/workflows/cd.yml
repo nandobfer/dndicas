@@ -41,11 +41,6 @@ jobs:
           build-args: |
             AUTH_URL=${{ secrets.AUTH_URL }}
             NEXT_PUBLIC_APP_URL=${{ secrets.NEXT_PUBLIC_APP_URL }}
-            NEXT_PUBLIC_PUSHER_HOST=${{ secrets.NEXT_PUBLIC_PUSHER_HOST }}
-            NEXT_PUBLIC_PUSHER_PORT=${{ secrets.NEXT_PUBLIC_PUSHER_PORT }}
-            NEXT_PUBLIC_PUSHER_SCHEME=${{ secrets.NEXT_PUBLIC_PUSHER_SCHEME }}
-            NEXT_PUBLIC_PUSHER_CLUSTER=${{ secrets.NEXT_PUBLIC_PUSHER_CLUSTER }}
-            NEXT_PUBLIC_PUSHER_APP_KEY=${{ secrets.NEXT_PUBLIC_PUSHER_APP_KEY }}
 
       - name: Validate SSH secrets
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'

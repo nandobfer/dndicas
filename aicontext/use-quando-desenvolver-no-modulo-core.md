@@ -21,11 +21,12 @@ Não modifique o core para:
 
 ## Estrutura do Core
 
+> IA não mora mais no core: provedores e agentes ficam em `src/lib/ai` e `src/features/ai`
+> (ver `aicontext/modules/ai.md`). Storage, e-mail e realtime do core são fachadas sobre as
+> integrações configuradas em `/integracoes` (ver `aicontext/modules/integrations.md`).
+
 ```
 src/core/
-├── ai/                 # Serviços de IA (GenAI)
-│   ├── genai.ts       # Cliente e funções principais
-│   └── usage-log.ts   # Schema e logging de uso
 ├── auth/              # Helpers de autenticação
 │   └── helpers.ts     # Funções auxiliares para Auth.js
 ├── context/           # React Contexts globais
@@ -125,7 +126,8 @@ Log operações importantes:
 
 ```typescript
 export async function sendEmail(to: string, subject: string, html: string) {
-  if (!SMTP_HOST) {
+  const { host } = await getIntegrationConfig('smtp'); // Integrações › SMTP (nada lido no carregamento do módulo)
+  if (!host) {
     console.log('SMTP not configured. Mock email sent:', { to, subject });
     return;
   }

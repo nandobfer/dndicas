@@ -3,7 +3,7 @@
 import * as React from "react"
 import Link from "next/link"
 import { useRouter, useSearchParams } from "next/navigation"
-import { signIn } from "next-auth/react"
+import { getProviders, signIn } from "next-auth/react"
 import { AnimatePresence, motion } from "framer-motion"
 import { Check, Copy, KeyRound, Loader2, LogOut, Trash2, User, UserCircle } from "lucide-react"
 import { Button } from "@/core/ui/button"
@@ -116,6 +116,9 @@ export function SignIn({ fallbackRedirectUrl, forceRedirectUrl }: { routing?: st
         void signIn("google", { callbackUrl })
     }
 
+    // O login com Google depende da integração "Autenticação Google" (Integrações).
+    const googleEnabled = useGoogleProviderEnabled()
+
     return (
         <Card className="w-full max-w-md border-white/10 bg-black/40 text-white shadow-2xl backdrop-blur-xl">
             <CardHeader>
@@ -134,18 +137,22 @@ export function SignIn({ fallbackRedirectUrl, forceRedirectUrl }: { routing?: st
                     </div>
                     {error && <p className="text-sm text-red-300">{error}</p>}
                     <Button type="submit" className="w-full bg-blue-500 text-white hover:bg-blue-600" disabled={isSubmitting}>{isSubmitting ? "Entrando..." : "Entrar"}</Button>
-                    <div className="relative py-1">
-                        <div className="absolute inset-0 flex items-center" aria-hidden="true">
-                            <span className="w-full border-t border-white/10" />
-                        </div>
-                        <div className="relative flex justify-center text-xs uppercase">
-                            <span className="bg-black px-2 text-white/40">ou</span>
-                        </div>
-                    </div>
-                    <Button type="button" variant="outline" className="h-10 w-full border-[#dadce0] bg-white text-sm font-medium text-[#3c4043] shadow-sm hover:bg-[#f8fafd] hover:text-[#202124] disabled:opacity-70" onClick={handleGoogleSignIn} disabled={isSubmitting}>
-                        <GoogleIcon />
-                        Entrar com Google
-                    </Button>
+                    {googleEnabled && (
+                        <>
+                            <div className="relative py-1">
+                                <div className="absolute inset-0 flex items-center" aria-hidden="true">
+                                    <span className="w-full border-t border-white/10" />
+                                </div>
+                                <div className="relative flex justify-center text-xs uppercase">
+                                    <span className="bg-black px-2 text-white/40">ou</span>
+                                </div>
+                            </div>
+                            <Button type="button" variant="outline" className="h-10 w-full border-[#dadce0] bg-white text-sm font-medium text-[#3c4043] shadow-sm hover:bg-[#f8fafd] hover:text-[#202124] disabled:opacity-70" onClick={handleGoogleSignIn} disabled={isSubmitting}>
+                                <GoogleIcon />
+                                Entrar com Google
+                            </Button>
+                        </>
+                    )}
                     <p className="text-center text-sm text-white/50">
                         Ainda nao tem conta? <Link href="/sign-up" className="text-blue-300 hover:text-blue-200">Criar conta</Link>
                     </p>
@@ -153,6 +160,23 @@ export function SignIn({ fallbackRedirectUrl, forceRedirectUrl }: { routing?: st
             </CardContent>
         </Card>
     )
+}
+
+/** `true` quando o NextAuth expõe o provider do Google (integração configurada). */
+function useGoogleProviderEnabled(): boolean {
+    const [enabled, setEnabled] = React.useState(false)
+    React.useEffect(() => {
+        let active = true
+        getProviders()
+            .then((providers) => {
+                if (active) setEnabled(Boolean(providers?.google))
+            })
+            .catch(() => undefined)
+        return () => {
+            active = false
+        }
+    }, [])
+    return enabled
 }
 
 export function SignUp() {

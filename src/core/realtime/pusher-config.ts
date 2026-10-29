@@ -6,6 +6,10 @@ export interface PusherBrowserConfig {
     forceTLS: boolean
     enabledTransports: Array<"ws" | "wss">
     cluster: string
+    /** Caminho do proxy (`wsPath` do pusher-js), quando a URL pública do cliente tem prefixo. */
+    wsPath?: string
+    /** Rota que autoriza canais privados (`/api/pusher/auth`). */
+    authEndpoint?: string
 }
 
 export interface PusherPublicConfig {

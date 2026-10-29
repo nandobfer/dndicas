@@ -7,11 +7,6 @@ services:
       args:
         - AUTH_URL=${AUTH_URL}
         - NEXT_PUBLIC_APP_URL=${NEXT_PUBLIC_APP_URL}
-        - NEXT_PUBLIC_PUSHER_HOST=${NEXT_PUBLIC_PUSHER_HOST}
-        - NEXT_PUBLIC_PUSHER_PORT=${NEXT_PUBLIC_PUSHER_PORT}
-        - NEXT_PUBLIC_PUSHER_SCHEME=${NEXT_PUBLIC_PUSHER_SCHEME}
-        - NEXT_PUBLIC_PUSHER_CLUSTER=${NEXT_PUBLIC_PUSHER_CLUSTER}
-        - NEXT_PUBLIC_PUSHER_APP_KEY=${NEXT_PUBLIC_PUSHER_APP_KEY}
     image: nandoburgos/dndicas
     container_name: dndicas
     restart: always

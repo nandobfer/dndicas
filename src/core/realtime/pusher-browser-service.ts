@@ -37,6 +37,8 @@ export class PusherBrowserService {
                 wssPort: config.wssPort,
                 forceTLS: config.forceTLS,
                 enabledTransports: config.enabledTransports,
+                ...(config.wsPath ? { wsPath: config.wsPath } : {}),
+                ...(config.authEndpoint ? { authEndpoint: config.authEndpoint } : {}),
                 disableStats: true,
             })
             this.attachConnectionLogging(this.client, config)

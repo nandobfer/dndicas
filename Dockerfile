@@ -27,21 +27,11 @@ COPY . .
 # ARGS necessárias para o Next.js "injetar" no bundle do cliente durante o 'next build'
 ARG AUTH_URL
 ARG NEXT_PUBLIC_APP_URL
-ARG NEXT_PUBLIC_PUSHER_HOST
-ARG NEXT_PUBLIC_PUSHER_PORT
-ARG NEXT_PUBLIC_PUSHER_SCHEME
-ARG NEXT_PUBLIC_PUSHER_CLUSTER
-ARG NEXT_PUBLIC_PUSHER_APP_KEY
 
 # Transforma ARGS em ENV para o processo de build
 ENV AUTH_URL=$AUTH_URL
 ENV NEXTAUTH_URL=$AUTH_URL
 ENV NEXT_PUBLIC_APP_URL=$NEXT_PUBLIC_APP_URL
-ENV NEXT_PUBLIC_PUSHER_HOST=$NEXT_PUBLIC_PUSHER_HOST
-ENV NEXT_PUBLIC_PUSHER_PORT=$NEXT_PUBLIC_PUSHER_PORT
-ENV NEXT_PUBLIC_PUSHER_SCHEME=$NEXT_PUBLIC_PUSHER_SCHEME
-ENV NEXT_PUBLIC_PUSHER_CLUSTER=$NEXT_PUBLIC_PUSHER_CLUSTER
-ENV NEXT_PUBLIC_PUSHER_APP_KEY=$NEXT_PUBLIC_PUSHER_APP_KEY
 
 # Variáveis dummy para evitar erro de validação do Prisma/Zod no build
 ENV MONGODB_URI="mongodb://localhost:27017/dummy"
@@ -66,6 +56,8 @@ COPY --from=builder /app/.next ./.next
 COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/package.json ./package.json
 COPY --from=builder /app/src/lib/5etools-data ./src/lib/5etools-data
+# Documentação viva lida pelo Agente Opex em runtime (list/read/search_app_docs).
+COPY --from=builder /app/aicontext ./aicontext
 
 USER nextjs
 
