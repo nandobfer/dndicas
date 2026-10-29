@@ -39,4 +39,16 @@ describe("Editor de perfis", () => {
         fireEvent.click(screen.getByRole("button", { name: "Salvar" }))
         await waitFor(() => expect(mocks.save).toHaveBeenCalledWith({ path: "/roles/role-1", method: "patch", data: { nome: "Admin", descricao: "", cor: "vermelho", version: 3 } }))
     })
+    it("abas do editor usam a cor primária do tema e trocam de seção", async () => {
+        mocks.role = { id: "role-1", slug: "mod", nome: "Moderador", descricao: "", cor: "roxo", ativo: true, permissoes: [], version: 0, membros: [], audit: [], createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() }
+        show()
+        expect(screen.getAllByRole("tab").map((tab) => tab.textContent)).toEqual(["Geral", "Permissões", "Membros", "Log de Auditoria"])
+        const geral = screen.getByRole("tab", { name: "Geral" })
+        expect(geral).toHaveAttribute("aria-selected", "true")
+        expect(geral.className).toContain("aria-selected:bg-primary")
+        fireEvent.click(screen.getByRole("tab", { name: "Log de Auditoria" }))
+        expect(screen.getByRole("tab", { name: "Log de Auditoria" })).toHaveAttribute("aria-selected", "true")
+        // A troca é animada (AnimatePresence "wait"): o painel novo entra após a saída do anterior.
+        expect(await screen.findByText(/Criado em/)).toBeInTheDocument()
+    })
 })

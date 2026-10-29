@@ -127,3 +127,11 @@ teste é baixado na primeira execução; o build script da dependência está ap
 
 Validação focada: `pnpm exec vitest run tests/backend/perfix tests/frontend/perfix
 tests/backend/users tests/frontend/auth`. Não executar build completo automaticamente.
+
+## Interface
+
+As abas da integração (Geral/Perfis) e do editor de perfil (Geral/Permissões/Membros/Log de
+Auditoria) usam `IntegrationTabs`, com a aba ativa na cor primária. O perfil padrão e o filtro por
+perfil de `/users` usam o `Select` Glass (`@/core/ui/select`; sentinelas `"none"`/`"all"` convertidos
+para `null`/`""`), o filtro de status dos perfis usa `StatusChips` e a atribuição de perfis usa o
+`Checkbox` do core.

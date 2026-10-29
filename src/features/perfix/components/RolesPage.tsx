@@ -8,6 +8,7 @@ import { CSS } from "@dnd-kit/utilities"
 import { GripVertical, Plus, Trash2 } from "lucide-react"
 import { Button } from "@/core/ui/button"
 import { Input } from "@/core/ui/input"
+import { StatusChips, type StatusFilter } from "@/components/ui/status-chips"
 import { useAccessMutation, useRoles } from "../hooks/usePerfixAdmin"
 import type { RoleDto } from "../types"
 import { RoleChip } from "./permissions/RoleChip"
@@ -25,7 +26,7 @@ export function RolesPage() {
     const mutation = useAccessMutation()
     const access = usePermissions()
     const [search, setSearch] = useState("")
-    const [status, setStatus] = useState("all")
+    const [status, setStatus] = useState<StatusFilter>("all")
     const roles = query.data?.roles ?? []
     const rows = roles.filter(role => `${role.nome} ${role.descricao}`.toLocaleLowerCase("pt-BR").includes(search.toLocaleLowerCase("pt-BR")) && (status === "all" || role.ativo === (status === "active")))
     const editable = access.can("roles.edit") && access.isAdmin
@@ -38,7 +39,7 @@ export function RolesPage() {
         mutation.mutate({ path: "/roles/reorder", method: "post", data: { ordem: arrayMove(movable, from, to).map(role => role.id), version: query.data!.hierarchyVersion } })
     }
     return <section className="space-y-4"><header className="flex justify-between"><div><h2 className="text-lg font-semibold">Perfis</h2><p className="text-sm text-muted-foreground">Permissões, hierarquia e membros</p></div>{editable && <Button asChild><Link href="/integracoes/perfix/perfis/novo"><Plus className="h-4 w-4" />Novo Perfil</Link></Button>}</header>
-        <div className="flex gap-3"><Input aria-label="Buscar perfil" placeholder="Buscar por nome ou descrição" value={search} onChange={event => setSearch(event.target.value)} /><select aria-label="Status dos perfis" className="rounded border bg-background p-2" value={status} onChange={event => setStatus(event.target.value)}><option value="all">Todos</option><option value="active">Ativos</option><option value="inactive">Inativos</option></select></div>
+        <div className="flex gap-3"><Input aria-label="Buscar perfil" placeholder="Buscar por nome ou descrição" value={search} onChange={event => setSearch(event.target.value)} /><StatusChips value={status} onChange={setStatus} /></div>
         {query.isPending ? <p role="status">Carregando perfis...</p> : query.isError ? <div role="alert">Não foi possível carregar os perfis. <Button onClick={() => void query.refetch()}>Tentar novamente</Button></div> : !rows.length ? <p>Nenhum perfil encontrado.</p> : <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={reorder}><SortableContext items={rows.map(role => role.id)} strategy={verticalListSortingStrategy}><ul className="divide-y">{rows.map(role => <SortableRole key={role.id} role={role} disabled={!editable || role.slug === "admin" || !!search || status !== "all" || mutation.isPending} onDelete={() => { if (window.confirm(`Excluir o perfil ${role.nome}?`)) mutation.mutate({ path: `/roles/${role.id}`, method: "delete", data: { version: role.version } }) }} />)}</ul></SortableContext></DndContext>}
         <p className="text-xs text-muted-foreground">O topo tem maior hierarquia. Administrador é reservado. Arraste ou use o teclado para ordenar.</p>
     </section>
