@@ -132,6 +132,9 @@ tests/backend/users tests/frontend/auth`. Não executar build completo automatic
 
 As abas da integração (Geral/Perfis) e do editor de perfil (Geral/Permissões/Membros/Log de
 Auditoria) usam `IntegrationTabs`, com a aba ativa na cor primária. O perfil padrão e o filtro por
-perfil de `/users` usam o `Select` Glass (`@/core/ui/select`; sentinelas `"none"`/`"all"` convertidos
+perfil de `/users` (só aparece com `roles.view`, pois consulta `/perfix/roles`) usam o `Select` Glass (`@/core/ui/select`; sentinelas `"none"`/`"all"` convertidos
 para `null`/`""`), o filtro de status dos perfis usa `StatusChips` e a atribuição de perfis usa o
 `Checkbox` do core.
+
+Páginas protegidas usam `pageAccess(...keys)` (sem permissão → `/`) ou `pageAccessOr(destino, ...keys)`
+quando há um destino melhor: `/sheets` sem `sheets.view_all` manda para `/my-sheets`.

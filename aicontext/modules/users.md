@@ -18,7 +18,7 @@ src/features/users/
 │   ├── users-table.tsx           # Tabela de usuários com filtros
 │   ├── user-form-modal.tsx       # Modal de criação/edição
 │   ├── user-delete-dialog.tsx    # Modal de confirmação de exclusão
-│   └── user-filters.tsx          # Filtros de função e status
+│   └── user-filters.tsx          # Filtros de perfil (exige roles.view) e status
 ├── hooks/
 │   ├── useUsers.ts               # Hook de CRUD de usuários
 │   └── useUsersFilters.ts        # Hook de filtros e busca
@@ -223,3 +223,9 @@ await deleteUser(userId); // Marca como inactive
 - `zod` - Validação
 - `framer-motion` - Animações
 - `next-auth` - Autenticação Auth.js
+
+## Formulário de usuário
+
+`UserFormModal` valida por modo: na criação envia só `username`, `email`, `name` e `roleIds`
+(`createUserSchema` é estrito; `status`/`version` existem só na edição). Erros sem campo aparecem como
+erro geral do formulário (`role="alert"`), nunca são descartados.

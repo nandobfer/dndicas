@@ -8,7 +8,6 @@
 
 import * as React from "react"
 import { useForm } from "react-hook-form"
-import { zodResolver } from "@hookform/resolvers/zod"
 import { motion, AnimatePresence } from "framer-motion"
 import { User as UserIcon, Mail, AtSign, Shield, Loader2 } from "lucide-react"
 import { cn } from "@/core/utils"
@@ -20,6 +19,12 @@ import { glassConfig } from "@/lib/config/glass-config"
 import { RoleAssignment } from "@/features/perfix/components/RoleAssignment"
 import { createUserSchema, updateUserSchema, type CreateUserSchema, type UpdateUserSchema } from "../api/validation"
 import type { User, UserResponse, CreateUserInput, UpdateUserInput } from "../types/user.types"
+
+/** Criação aceita só os campos de cadastro: `status`/`version` existem apenas na edição (o schema é estrito). */
+function createPayload(values: CreateUserSchema | UpdateUserSchema): Record<string, unknown> {
+    const { username, email, name, roleIds } = values
+    return { username, email, ...(name ? { name } : {}), ...(roleIds !== undefined ? { roleIds } : {}) }
+}
 
 export interface UserFormModalProps {
     /** Whether the modal is open */
@@ -61,8 +66,11 @@ export function UserFormModal({ isOpen, onClose, onSubmit, user, isSubmitting = 
         formState: { errors },
     } = useForm<CreateUserSchema | UpdateUserSchema>({
         resolver: async values => {
-            const parsed = (isEditMode ? updateUserSchema : createUserSchema).safeParse(values)
-            return parsed.success ? { values: parsed.data, errors: {} } : { values: {}, errors: Object.fromEntries(parsed.error.issues.map(issue => [String(issue.path[0]), { type: "validation", message: issue.message }])) }
+            const parsed = isEditMode ? updateUserSchema.safeParse(values) : createUserSchema.safeParse(createPayload(values))
+            if (parsed.success) return { values: parsed.data, errors: {} }
+            // Erros sem campo (ex.: chaves não reconhecidas) viram erro geral do formulário, nunca somem.
+            const errors = Object.fromEntries(parsed.error.issues.map(issue => [issue.path.length ? String(issue.path[0]) : "root", { type: "validation", message: issue.message }]))
+            return { values: {}, errors }
         },
         defaultValues: {
             username: user?.username || "",
@@ -136,6 +144,8 @@ export function UserFormModal({ isOpen, onClose, onSubmit, user, isSubmitting = 
                         </div>
                         {isSelfEdit && <p className="text-xs text-blue-400/80 mt-1">Você não pode alterar seus próprios perfis.</p>}
                     </div>
+
+                    {errors.root?.message && <p role="alert" className="text-sm text-red-400">{errors.root.message}</p>}
 
                     {/* Actions */}
                     <div className="flex justify-end gap-3 pt-4 border-t border-white/10">

@@ -54,8 +54,9 @@ export function UserFilters({
   isSearching = false,
   className,
 }: UserFiltersProps) {
-  const isAdmin = useAuth().can("users.view")
-  const roles = useRoles()
+  // A lista de perfis vem de /perfix/roles (exige roles.view); sem ela o filtro por perfil não aparece.
+  const canFilterByRole = useAuth().can("roles.view")
+  const roles = useRoles(canFilterByRole)
 
   return (
       <div className={cn("flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between", className)}>
@@ -72,13 +73,13 @@ export function UserFilters({
           {/* Right side: Filters */}
           <div className="flex flex-wrap items-center gap-3">
               {/* Perfil */}
-              <Select value={filters.roleId || ALL_ROLES} onValueChange={value => onRoleChange(value === ALL_ROLES ? "" : value)}>
+              {canFilterByRole && <Select value={filters.roleId || ALL_ROLES} onValueChange={value => onRoleChange(value === ALL_ROLES ? "" : value)}>
                   <SelectTrigger aria-label="Filtrar por perfil" className="w-48"><SelectValue /></SelectTrigger>
                   <SelectContent>
                       <SelectItem value={ALL_ROLES}>Todos os perfis</SelectItem>
                       {roles.data?.roles.map(role => <SelectItem key={role.id} value={role.id}>{role.nome}</SelectItem>)}
                   </SelectContent>
-              </Select>
+              </Select>}
 
               {/* Status chips */}
               <StatusChips value={filters.status || "all"} onChange={onStatusChange as (status: StatusFilter) => void} />

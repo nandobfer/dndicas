@@ -7,7 +7,7 @@ import { toast } from "sonner"
 import type { RoleDto } from "../types"
 import type { UserResponse } from "@/features/users/types/user.types"
 export type RoleDetail = RoleDto & { membros: string[]; audit: { id: string; action: string; actorId: string; createdAt: string; simulation: unknown }[] }
-export const useRoles = () => useQuery({ queryKey: ["perfix", "roles"], queryFn: async () => (await api.get<{ data: { roles: (RoleDto & { usuariosCount: number })[]; hierarchyVersion: number } }>("/perfix/roles")).data.data })
+export const useRoles = (enabled = true) => useQuery({ queryKey: ["perfix", "roles"], enabled, queryFn: async () => (await api.get<{ data: { roles: (RoleDto & { usuariosCount: number })[]; hierarchyVersion: number } }>("/perfix/roles")).data.data })
 export const useRole = (id?: string) => useQuery({ queryKey: ["perfix", "role", id], enabled: !!id, queryFn: async () => (await api.get<{ data: RoleDetail }>(`/perfix/roles/${id}`)).data.data })
 export function useUsers(enabled: boolean) {
     const access = usePermissions()
