@@ -16,7 +16,7 @@ export function AccessLoadingScreen() {
     const reducedMotion = useReducedMotion()
     const pulse = { duration: 2, repeat: Infinity, repeatType: "reverse" as const, ease: "easeInOut" as const }
     return (
-        <main className="relative isolate flex min-h-dvh items-center justify-center overflow-hidden bg-background px-4">
+        <div className="relative isolate flex min-h-dvh items-center justify-center overflow-hidden bg-background px-4">
             <LiquidGlassBackground />
             <motion.div
                 role="status"
@@ -63,6 +63,6 @@ export function AccessLoadingScreen() {
                     </span>
                 </p>
             </motion.div>
-        </main>
+        </div>
     )
 }

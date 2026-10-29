@@ -109,6 +109,15 @@ describe("Comandos transacionais", () => {
         await expect(updateRole(context, userRole, { ativo: false, version: 0 })).rejects.toMatchObject({ status: 409 })
         await expect(deleteRole(context, userRole, 0)).rejects.toMatchObject({ status: 409 })
     })
+    it("exclui perfil cujos únicos membros foram excluídos (soft delete), mas não com membro ativo", async () => {
+        const context = await resolveAccess(adminId)
+        const { id } = await createRole(context, { nome: "Moderador", descricao: "", cor: "azul", ativo: true, permissoes: ["users.view"] })
+        await User.updateOne({ _id: userId }, { roles: [id] })
+        await expect(deleteRole(context, id, 0)).rejects.toMatchObject({ status: 409 })
+        await User.updateOne({ _id: userId }, { deleted: true })
+        await deleteRole(context, id, 0)
+        expect(await AccessRole.findById(id)).toBeNull()
+    })
     it("valida membros, autoalteração e exclusão do último administrador", async () => {
         const context = await resolveAccess(adminId)
         await expect(updateAssignment(context, adminId, [userRole], 0, "active")).rejects.toMatchObject({ status: 403 })

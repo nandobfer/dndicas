@@ -42,7 +42,7 @@ desconhecidas. Edição depende da visualização correspondente. Ramos: `admin.
 - Criação/edição de definições e reordenação exigem coringa efetivo. Mutações de usuários
   respeitam hierarquia, delta de atribuição, versão, perfis ativos e proteção do último admin.
 - Ninguém altera seus próprios perfis/desativa sua conta (também verifica o ator real durante
-  impersonação). Perfis em uso não podem ser excluídos. O padrão não pode ser desativado/excluído.
+  impersonação). Perfis em uso não podem ser excluídos (membros com soft delete, `deleted: true`, não contam). O padrão não pode ser desativado/excluído.
 
 ## Cadastro e integração
 
@@ -89,12 +89,17 @@ servidor. A sessão não reutiliza dados da identidade anterior durante carregam
 APIs usam Zod e envelopes `{ success, data }`; erros e conflitos são pt-BR. O CRUD em `/users`
 usa `roleIds`, filtro `roleId` e `version` em PUT/DELETE. `role` não faz parte do contrato.
 
-Enquanto `/api/me` valida a sessão, o `SessionBoundary` do `PerfixProvider` mostra o
-`AccessLoadingScreen` (`src/features/perfix/components/AccessLoadingScreen.tsx`), adaptado do
-ciliar: fundo com os feixes de luz do `LiquidGlassBackground`, logo `dndicas-logo.webp`, anel
-azul/roxo girando e "Carregando acesso" com reticências animadas. É um `role="status"` acessível e,
-com `prefers-reduced-motion`, fica estático (o `LiquidGlassBackground` também para os feixes). Sem
-dependências de partículas.
+Enquanto `/api/me` valida a sessão, o `SessionBoundary` do `PerfixProvider` **continua renderizando
+os filhos** (SSR e hidratação trazem o conteúdo da página). Se a validação passar de
+`ACCESS_LOADING_DELAY_MS` (400 ms), o `AccessLoadingScreen`
+(`src/features/perfix/components/AccessLoadingScreen.tsx`, adaptado do ciliar: feixes de luz do
+`LiquidGlassBackground`, logo `dndicas-logo.webp`, anel azul/roxo e "Carregando acesso" com
+reticências) aparece como overlay fixo por cima da página, só no cliente; nunca entra no HTML do
+servidor. É um `role="status"` acessível e, com `prefers-reduced-motion`, fica estático. Os filhos só
+remontam quando a identidade muda depois de já carregada (login/logout, troca de simulação,
+permissões alteradas), não na primeira carga. Na montagem, `router.refresh()` só roda quando a aba
+está simulando (o SSR não conhece a simulação da aba). Quem depende do acesso usa `isLoaded` de
+`useAuth()`.
 
 ## Migração e operação
 
