@@ -6,7 +6,6 @@ import { catalogAdminTools, catalogTools } from "./catalog"
 import { characterTools } from "./characters"
 import { contextTools } from "./context"
 import { docTools } from "./docs"
-import { feedbackTools } from "./feedback"
 import { fileTools } from "./files"
 import { integrationTools } from "./integrations"
 import { jobTools } from "./jobs"
@@ -25,7 +24,6 @@ export const OPEX_TOOLS: readonly OpexTool[] = [
     ...memoryTools,
     ...integrationTools,
     ...aiSettingsTools,
-    ...feedbackTools,
 ] as readonly OpexTool[]
 
 export function findOpexTool(name: string): OpexTool | undefined {

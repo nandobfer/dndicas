@@ -1,4 +1,4 @@
-import { AlarmClock, BookOpen, Brain, BrainCircuit, CalendarClock, Compass, LibraryBig, MessageSquareWarning, Paperclip, Plug, ScrollText, ShieldCheck, Wrench, type LucideIcon } from "lucide-react"
+import { AlarmClock, BookOpen, Brain, BrainCircuit, CalendarClock, Compass, LibraryBig, Paperclip, Plug, ScrollText, ShieldCheck, Wrench, type LucideIcon } from "lucide-react"
 import type { OpexToolGroup } from "../constants"
 
 export const OPEX_TOOL_GROUP_ICONS: Record<OpexToolGroup, LucideIcon> = {
@@ -13,7 +13,6 @@ export const OPEX_TOOL_GROUP_ICONS: Record<OpexToolGroup, LucideIcon> = {
     integrations: Plug,
     routines: CalendarClock,
     "ai-settings": BrainCircuit,
-    feedback: MessageSquareWarning,
 }
 
 export const toolIcon = (group: OpexToolGroup | null): LucideIcon => {

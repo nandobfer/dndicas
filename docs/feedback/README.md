@@ -1,5 +1,10 @@
 # Centro de Desenvolvimento Agentico de Feedback
 
+> **Arquivo histórico — módulo removido na v4 (DND-5).** Todos os documentos nesta pasta
+> descrevem a central antiga e não são contratos atuais. APIs, telas e ferramentas referenciadas
+> foram retiradas; dados no MongoDB foram preservados. A documentação vigente é
+> [`aicontext/modules/opex-feedback.md`](../../aicontext/modules/opex-feedback.md).
+
 ## Objetivo
 
 Transformar a Central de Feedback em um fluxo de desenvolvimento assistido por agente, com experiencia parecida com issues e pull requests do GitHub.

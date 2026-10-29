@@ -45,3 +45,6 @@ next-env.d.ts
 
 # local OpenCode project config can include MCP tokens
 /opencode.json
+
+# Exports contain private user data
+/backups/feedback-*.json

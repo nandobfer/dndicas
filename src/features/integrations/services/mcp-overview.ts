@@ -7,7 +7,7 @@ export interface McpServerOverviewDto {
     endpoint: string
     /** Usuários com token MCP permanente ativo (gerado em /profile). */
     activeTokens: number
-    /** Desses, quantos são administradores (liberam as ferramentas agênticas de feedback). */
+    /** Desses, quantos são administradores. */
     adminTokens: number
     /** Último uso de um token MCP (ISO), ou `null`. */
     lastUsedAt: string | null
