@@ -25,6 +25,7 @@ import { loadStoredIntegration, type StoredIntegration } from "./store"
  */
 
 export interface IntegrationConfigMap {
+    opex: { baseUrl?: string; internalUrl?: string; clientToken?: string }
     google_auth: { clientId?: string; clientSecret?: string }
     pusher: {
         /** `cluster` (Pusher na nuvem) ou `host` (servidor próprio, ex.: Soketi). */

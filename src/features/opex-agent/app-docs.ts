@@ -21,7 +21,7 @@ export const APP_DOC_AUDIENCE: Readonly<Record<string, AppDocAudience>> = {
     "modules/dice-roller.md": "all",
     "modules/entity-understanding.md": "all",
     "modules/feats.md": "all",
-    "modules/feedback.md": "all",
+    "modules/opex-feedback.md": "all",
     "modules/items.md": "all",
     "modules/mcp.md": "all",
     "modules/monsters.md": "all",

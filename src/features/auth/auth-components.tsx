@@ -494,7 +494,7 @@ export function UserProfile({ path = "/profile" }: { path?: string }) {
                         </div>
                         <div>
                             <h2 className="text-lg font-semibold text-white">Token MCP</h2>
-                            <p className="text-sm text-white/60">Use este token nas configurações do seu cliente MCP para operar a central de feedback.</p>
+                            <p className="text-sm text-white/60">Use este token nas configurações do seu cliente MCP quando uma ferramenta exigir autenticação.</p>
                         </div>
                     </div>
 

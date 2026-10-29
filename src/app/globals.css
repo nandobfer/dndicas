@@ -1,5 +1,14 @@
 @import "tailwindcss";
 
+:root {
+  --chart-1: #8000ff;
+  --chart-2: #b366ff;
+  --chart-3: #22d3ee;
+  --chart-4: #f472b6;
+  --chart-5: #34d399;
+  --chart-6: #fbbf24;
+}
+
 @theme {
   --color-border: hsl(var(--border));
   --color-input: hsl(var(--input));

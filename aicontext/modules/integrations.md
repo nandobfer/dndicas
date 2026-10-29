@@ -69,9 +69,10 @@ Módulo puro (tela e servidor). Integrações ativas:
 | `analytics_umami` | Analytics (Umami) | Script carregado pelo layout raiz; desativado, o script não entra |
 | `translation` | Tradução | Tradutor padrão dos scripts de seed, LibreTranslate e Google Cloud Translation |
 
-`IN_DEVELOPMENT_INTEGRATIONS`: **`opex`** — aparece na lista como "Em desenvolvimento", sem
-campos nem ações. Enquanto estiver ali, o fluxo agêntico dos feedbacks fica bloqueado
-(`assertOpexIntegrationAvailable()`, ver `feedback.md`).
+| `opex` | Tarefas Opex | URL pública, URL interna opcional e segredo `clientToken`; acesso automático e dashboard em `/feedback` (ver `opex-feedback.md`) |
+
+`IN_DEVELOPMENT_INTEGRATIONS` está vazio. O testador Opex verifica sessão administrativa e
+listagem de usuários sem provisionar usuários de teste. A central antiga foi removida.
 
 ## Rotinas (Crons)
 

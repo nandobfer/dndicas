@@ -1,4 +1,5 @@
 import { getIntegrationConfig, getInternalBaseUrl } from "@/lib/integrations/config"
+import { testOpex } from "@/features/opex-feedback/server/tester"
 import type { IntegrationId } from "@/lib/integrations/catalog"
 import { describeSchedule } from "@/lib/integrations/schedule"
 import { CronJobState } from "@/lib/db/models/CronJobState"
@@ -260,6 +261,7 @@ const testTranslation: IntegrationTester = async ({ emit, signal }) => {
 }
 
 export const INTEGRATION_TESTERS: Record<IntegrationId, IntegrationTester> = {
+    opex: testOpex,
     google_auth: testGoogleAuth,
     pusher: testPusher,
     internal_api: testInternalApi,

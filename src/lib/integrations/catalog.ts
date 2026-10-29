@@ -4,7 +4,7 @@
  * Integrações ativas: Autenticação Google, Pusher, API dndicas, Crons, Provedores de IA (hub `ai`
  * com os provedores `ai_opencode`, `ai_gemini`, `ai_anthropic`, `ai_openai`, `ai_deepseek` e
  * `ai_jev`, que só aparecem dentro do hub), SMTP, Storage S3, Analytics (Umami) e Tradução.
- * `opex` aparece como "Em desenvolvimento" (sem campos, teste, debug nem ações).
+ * `opex` conecta os usuários à central de feedback externa.
  *
  * Fonte única dos metadados: nome, descrição, ambiente padrão e campos. É módulo PURO (sem
  * dependência de servidor) — a tela usa o mesmo catálogo para desenhar o formulário e o servidor o
@@ -20,6 +20,7 @@ import { PUBLIC_API_SPEC_PATH } from "@/lib/public-api/paths"
 import type { Schedule } from "./schedule"
 
 export const INTEGRATION_IDS = [
+    "opex",
     "google_auth",
     "pusher",
     "internal_api",
@@ -40,13 +41,7 @@ export const INTEGRATION_IDS = [
 export type IntegrationId = (typeof INTEGRATION_IDS)[number]
 
 /** Integrações exibidas na lista como "Em desenvolvimento" (sem configuração nem ações). */
-export const IN_DEVELOPMENT_INTEGRATIONS = [
-    {
-        id: "opex",
-        name: "Opex",
-        description: "Envia as tarefas da central de feedback para o Opex",
-    },
-] as const satisfies readonly { id: string; name: string; description: string }[]
+export const IN_DEVELOPMENT_INTEGRATIONS: readonly { id: string; name: string; description: string }[] = []
 
 export type InDevelopmentIntegrationId = (typeof IN_DEVELOPMENT_INTEGRATIONS)[number]["id"]
 
@@ -321,6 +316,18 @@ export const TRANSLATION_PROVIDER_OPTIONS = [
 // ---------------------------------------------------------------------------
 
 export const INTEGRATIONS: readonly IntegrationDef[] = [
+    {
+        id: "opex",
+        name: "Tarefas Opex",
+        description: "Cria o acesso do usuário e mostra o dashboard da central de feedback no Opex",
+        defaultEnvironment: "externo",
+        streamsDebugOverPusher: true,
+        publicFields: [
+            { key: "baseUrl", label: "URL pública do Opex", kind: "url", required: true, description: "Inclua o subcaminho público, quando houver." },
+            { key: "internalUrl", label: "URL interna do Opex", kind: "url", description: "Opcional. Endereço acessível pelo servidor; vazio usa a URL pública." },
+        ],
+        secretFields: [{ key: "clientToken", label: "Token do cliente", required: true, description: "Token cli_… do cliente no Opex. Nunca use um token de usuário." }],
+    },
     {
         id: "google_auth",
         name: "Autenticação Google",
