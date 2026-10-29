@@ -34,7 +34,8 @@ const MaddoxOpencodeSessionSchema = new Schema<IMaddoxOpencodeSession>(
     { collection: "maddox_opencode_sessions", timestamps: true, versionKey: false },
 )
 
-MaddoxOpencodeSessionSchema.index({ campaignId: 1, purpose: 1, memberId: 1, status: 1 })
+// No máximo uma sessão ativa por campanha, finalidade e membro (chamadas concorrentes não duplicam).
+MaddoxOpencodeSessionSchema.index({ campaignId: 1, purpose: 1, memberId: 1 }, { unique: true, partialFilterExpression: { status: "active" } })
 MaddoxOpencodeSessionSchema.index({ status: 1, updatedAt: 1 })
 MaddoxOpencodeSessionSchema.index({ sessionId: 1 }, { unique: true })
 

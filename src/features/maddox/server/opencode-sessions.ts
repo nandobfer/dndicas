@@ -26,8 +26,12 @@ const DELETE_TIMEOUT_MS = 15_000
 
 type SessionRow = Pick<IMaddoxOpencodeSession, "_id" | "campaignId" | "purpose" | "memberId" | "sessionId" | "directory" | "status" | "lastError" | "lastUsedAt" | "createdAt">
 
+/** Módulo do cliente carregado sob demanda, uma vez (chamadas concorrentes compartilham o mesmo `import()`). */
+let clientModule: Promise<typeof import("@/lib/ai/opencode-client")> | null = null
+const opencodeClientModule = () => (clientModule ??= import("@/lib/ai/opencode-client"))
+
 async function client(): Promise<OpencodeClient> {
-    const { getOpencodeClient } = await import("@/lib/ai/opencode-client")
+    const { getOpencodeClient } = await opencodeClientModule()
     return getOpencodeClient()
 }
 
@@ -39,7 +43,7 @@ async function removeSession(opencode: OpencodeClient, sessionId: string): Promi
         await opencode.session.remove({ sessionID: sessionId }, { signal: AbortSignal.timeout(DELETE_TIMEOUT_MS) })
         return { ok: true, error: null }
     } catch (error) {
-        const { isOpencodeSessionNotFound } = await import("@/lib/ai/opencode-client")
+        const { isOpencodeSessionNotFound } = await opencodeClientModule()
         if (await isOpencodeSessionNotFound(error)) return { ok: true, error: null }
         log.warn({ err: errorText(error), sessionId }, "[maddox] falha ao excluir a sessão do OpenCode")
         return { ok: false, error: errorText(error) }
@@ -62,7 +66,20 @@ export interface EnsureMaddoxSessionInput {
     title: string
 }
 
-/** Sessão ativa da campanha/finalidade: a gravada (se ainda existir no OpenCode) ou uma nova. */
+const isDuplicateKey = (error: unknown) => typeof error === "object" && error !== null && "code" in error && (error as { code: unknown }).code === 11000
+
+/** Melhor esforço: exclui a sessão recém-criada que perdeu a corrida (nunca lança). */
+async function discardCreated(opencode: OpencodeClient, sessionId: string): Promise<void> {
+    const result = await removeSession(opencode, sessionId).catch(() => ({ ok: false }))
+    if (!result.ok) log.warn({ sessionId }, "[maddox] sessão duplicada criada numa corrida não pôde ser excluída")
+}
+
+/**
+ * Sessão ativa da campanha/finalidade: a gravada (se ainda existir no OpenCode) ou uma nova. Só uma
+ * sessão comprovadamente inexistente no OpenCode é substituída; qualquer outra falha (timeout, 401,
+ * rede) é propagada sem tocar no registro. A nova sessão é criada antes de trocar o registro, e o
+ * índice único parcial (uma ativa por campanha/finalidade/membro) resolve chamadas concorrentes.
+ */
 export async function ensureMaddoxSession(input: EnsureMaddoxSessionInput): Promise<string> {
     await dbConnect()
     const { settings } = await loadMaddoxSettings()
@@ -73,13 +90,18 @@ export async function ensureMaddoxSession(input: EnsureMaddoxSessionInput): Prom
 
     const existing = await MaddoxOpencodeSessionModel.findOne(filter).lean<SessionRow>()
     if (existing) {
-        const info = await opencode.session.get({ sessionID: existing.sessionId }).catch(() => null)
-        if (info) {
+        try {
+            await opencode.session.get({ sessionID: existing.sessionId })
             await MaddoxOpencodeSessionModel.updateOne({ _id: existing._id }, { $set: { lastUsedAt: new Date(), lastError: null } })
             return existing.sessionId
+        } catch (error) {
+            const { isOpencodeSessionNotFound } = await opencodeClientModule()
+            if (!(await isOpencodeSessionNotFound(error))) {
+                log.warn({ err: errorText(error), sessionId: existing.sessionId }, "[maddox] falha ao consultar a sessão do OpenCode")
+                throw new DomainError(502, `Não foi possível consultar a sessão do OpenCode: ${errorText(error)}`, "OPENCODE_SESSION_UNAVAILABLE")
+            }
+            // Sumiu do OpenCode (excluída por fora): o registro é reaproveitado para a nova sessão.
         }
-        // Sumiu do OpenCode (excluída por fora): o registro some e uma nova é criada.
-        await MaddoxOpencodeSessionModel.deleteOne({ _id: existing._id })
     }
 
     const directory = settings.opencode.directory || (await getOpencodeConnection()).directory || null
@@ -88,7 +110,31 @@ export async function ensureMaddoxSession(input: EnsureMaddoxSessionInput): Prom
         ...(directory ? { location: { directory } } : {}),
         metadata: { app: "dndicas", kind: "maddox", purpose, campaignId: input.campaignId },
     })
-    await MaddoxOpencodeSessionModel.create({ ...filter, sessionId: session.id, directory, lastUsedAt: new Date() })
+
+    if (existing) {
+        // Troca condicional: se outra chamada já trocou a sessão sumida, vale a dela.
+        const swapped = await MaddoxOpencodeSessionModel.updateOne(
+            { _id: existing._id, sessionId: existing.sessionId, status: "active" },
+            { $set: { sessionId: session.id, directory, lastUsedAt: new Date(), lastError: null } },
+        )
+        if (swapped.modifiedCount === 0) {
+            await discardCreated(opencode, session.id)
+            const winner = await MaddoxOpencodeSessionModel.findOne(filter).lean<SessionRow>()
+            if (!winner) throw new DomainError(409, "A sessão do OpenCode da campanha mudou durante a operação. Tente novamente.", "OPENCODE_SESSION_CONFLICT")
+            return winner.sessionId
+        }
+    } else {
+        try {
+            await MaddoxOpencodeSessionModel.create({ ...filter, sessionId: session.id, directory, lastUsedAt: new Date() })
+        } catch (error) {
+            if (!isDuplicateKey(error)) throw error
+            // Outra chamada criou a sessão ativa primeiro: descarta a nossa e usa a dela.
+            await discardCreated(opencode, session.id)
+            const winner = await MaddoxOpencodeSessionModel.findOne(filter).lean<SessionRow>()
+            if (!winner) throw error
+            return winner.sessionId
+        }
+    }
     log.info({ campaignId: input.campaignId, purpose, sessionId: session.id }, "[maddox] sessão do OpenCode criada")
     return session.id
 }

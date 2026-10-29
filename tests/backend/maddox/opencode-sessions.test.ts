@@ -3,6 +3,7 @@ import { Types } from "mongoose"
 
 type Row = { _id: Types.ObjectId; campaignId: Types.ObjectId; purpose: string; memberId: Types.ObjectId | null; sessionId: string; directory: string | null; status: string; lastError: string | null; lastUsedAt: Date | null; createdAt: Date; updatedAt: Date }
 const rows: Row[] = []
+let created = 0
 const recordAudit = vi.fn(async () => undefined)
 const policy = { sessionScope: "campaign-and-interviews", deleteOnCampaignEnd: true, directory: null as string | null }
 
@@ -23,12 +24,14 @@ vi.mock("@/features/maddox/models/maddox-opencode-session", () => ({
             return chain
         },
         create: async (doc: Partial<Row>) => {
+            if (rows.some((row) => row.status === "active" && same(row.campaignId, doc.campaignId) && row.purpose === doc.purpose && same(row.memberId, doc.memberId))) throw Object.assign(new Error("E11000"), { code: 11000 })
             const now = new Date()
             rows.push({ _id: new Types.ObjectId(), memberId: null, directory: null, status: "active", lastError: null, lastUsedAt: null, createdAt: now, updatedAt: now, ...doc } as Row)
         },
-        updateOne: async ({ _id }: { _id: Types.ObjectId }, update: { $set: Partial<Row> }) => {
-            const row = rows.find((item) => String(item._id) === String(_id))
+        updateOne: async (filter: Record<string, unknown>, update: { $set: Partial<Row> }) => {
+            const row = rows.find((item) => matches(item, filter))
             if (row) Object.assign(row, update.$set)
+            return { modifiedCount: row ? 1 : 0 }
         },
         deleteOne: async ({ _id }: { _id: Types.ObjectId }) => {
             const index = rows.findIndex((item) => String(item._id) === String(_id))
@@ -40,8 +43,8 @@ vi.mock("@/features/maddox/models/maddox-opencode-session", () => ({
 const client = {
     session: {
         get: vi.fn(async ({ sessionID }: { sessionID: string }) => ({ id: sessionID })),
-        create: vi.fn(async () => ({ id: `ses_${rows.length + 1}` })),
-        remove: vi.fn(async () => undefined),
+        create: vi.fn(async () => ({ id: `ses_${++created}` })),
+        remove: vi.fn<(input: { sessionID: string }, options?: unknown) => Promise<void>>(async () => undefined),
     },
 }
 const getOpencodeClient = vi.fn(async () => client)
@@ -77,6 +80,34 @@ describe("sessões do OpenCode do Maddox", () => {
         expect(client.session.create).toHaveBeenCalledTimes(2)
         expect(rows).toHaveLength(1)
         expect(rows[0]!.sessionId).toBe(next)
+    })
+
+    it("falha transitória do OpenCode não apaga o registro nem cria outra sessão (502)", async () => {
+        const first = await ensureMaddoxSession({ campaignId: String(CAMPAIGN), purpose: "narrator", title: "A Torre" })
+        client.session.get.mockRejectedValueOnce(new Error("timeout"))
+        await expect(ensureMaddoxSession({ campaignId: String(CAMPAIGN), purpose: "narrator", title: "A Torre" })).rejects.toMatchObject({ status: 502, code: "OPENCODE_SESSION_UNAVAILABLE" })
+        expect(client.session.create).toHaveBeenCalledTimes(1)
+        expect(rows).toEqual([expect.objectContaining({ sessionId: first, status: "active" })])
+    })
+
+    it("se a criação da nova sessão falha, o registro antigo continua", async () => {
+        const first = await ensureMaddoxSession({ campaignId: String(CAMPAIGN), purpose: "narrator", title: "A Torre" })
+        client.session.get.mockRejectedValueOnce(new Error("not-found"))
+        client.session.create.mockRejectedValueOnce(new Error("ECONNRESET"))
+        await expect(ensureMaddoxSession({ campaignId: String(CAMPAIGN), purpose: "narrator", title: "A Torre" })).rejects.toThrow("ECONNRESET")
+        expect(rows).toEqual([expect.objectContaining({ sessionId: first })])
+    })
+
+    it("chamadas concorrentes não deixam duas sessões ativas: a perdedora é excluída", async () => {
+        const [a, b] = await Promise.all([
+            ensureMaddoxSession({ campaignId: String(CAMPAIGN), purpose: "narrator", title: "x" }),
+            ensureMaddoxSession({ campaignId: String(CAMPAIGN), purpose: "narrator", title: "x" }),
+        ])
+        expect(a).toBe(b)
+        expect(rows.filter((row) => row.status === "active")).toHaveLength(1)
+        expect(client.session.create).toHaveBeenCalledTimes(2)
+        expect(client.session.remove).toHaveBeenCalledTimes(1)
+        expect(client.session.remove.mock.calls[0]![0]).not.toEqual({ sessionID: a })
     })
 
     it("com 'uma sessão por campanha', as entrevistas usam a do narrador", async () => {

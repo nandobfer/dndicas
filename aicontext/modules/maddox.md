@@ -53,6 +53,10 @@ entrevista (Maddox 2) usa a versão com que começou (`campaign.scriptVersions`,
 - `ensureMaddoxSession` reaproveita a sessão ativa da campanha/finalidade se ela ainda existir no
   OpenCode, senão cria (diretório da política ou o da integração). Com `sessionScope = "campaign"`, as
   entrevistas usam a sessão do narrador; com `campaign-and-interviews`, cada entrevista tem a sua.
+  Só uma sessão **comprovadamente inexistente** no OpenCode é substituída: outras falhas (timeout, 401,
+  rede) respondem 502 sem tocar no registro. A nova sessão é criada antes de trocar o registro, e o
+  índice único parcial (uma `active` por campanha/finalidade/membro) resolve chamadas concorrentes — a
+  sessão criada pela chamada perdedora é excluída.
 - `releaseCampaignSessions` (fim/arquivamento, se `deleteOnCampaignEnd`) e o "Excluir" do painel marcam
   `pending-deletion` e tentam excluir na hora; sessão inexistente conta como excluída.
 - Rotina interna **`maddox-opencode-sessions-cleanup`** (a cada 60 min) retoma as exclusões pendentes.
