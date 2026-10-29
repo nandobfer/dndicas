@@ -91,6 +91,7 @@ Arquivos:
 - **[integrations.md](./modules/integrations.md)**: central de integrações (`/integracoes`, só administradores) — configuração no banco em vez do `.env`
 - **[ai.md](./modules/ai.md)**: provedores de IA, agentes (Gerador de imagens, Entender com IA, Importador 5etools, Resumo de memórias) e memórias
 - **[opex-agent.md](./modules/opex-agent.md)**: Agente Opex, o assistente por chat para todos (visitantes, usuários e administradores)
+- **[maddox.md](./modules/maddox.md)**: Agente Maddox e a fundação das Campanhas Maddox (modelos, configuração, roteiros de entrevista, sessões do OpenCode)
 
 Para cada novo módulo em `src/features/`, crie documentação aqui.
 

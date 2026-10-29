@@ -1,0 +1,126 @@
+/** @vitest-environment happy-dom */
+import { beforeEach, describe, expect, it, vi } from "vitest"
+import { fireEvent, screen, waitFor, within } from "@testing-library/react"
+import { renderWithQueryClient } from "../test-utils"
+import { DEFAULT_MADDOX_SETTINGS } from "@/features/maddox/schemas"
+import { defaultMaddoxScript } from "@/features/maddox/script-draft"
+import type { MaddoxSettingsDto } from "@/features/maddox/types"
+
+const saveSettings = vi.fn()
+const saveScript = vi.fn()
+const generateAvatar = vi.fn()
+
+const dto = (): MaddoxSettingsDto => ({
+    settings: structuredClone(DEFAULT_MADDOX_SETTINGS),
+    isDefault: false,
+    availability: { available: false, reason: '"Agente Maddox" está desativada em Integrações › Provedores de IA' },
+    updatedAt: null,
+    scripts: {
+        scenario: { current: defaultMaddoxScript("scenario"), history: [{ kind: "scenario", version: 0, notes: "Roteiro padrão", createdBy: null, createdByName: null, createdAt: null }] },
+        character: { current: defaultMaddoxScript("character"), history: [{ kind: "character", version: 0, notes: "Roteiro padrão", createdBy: null, createdByName: null, createdAt: null }] },
+    },
+})
+
+vi.mock("@/features/maddox/hooks/useMaddoxSettings", () => ({
+    useMaddoxSettings: () => ({ data: current, isLoading: false, isError: false, refetch: vi.fn() }),
+    useSaveMaddoxSettings: () => ({ mutateAsync: saveSettings, isPending: false }),
+    useSaveMaddoxScript: () => ({ mutateAsync: saveScript, isPending: false }),
+    useMaddoxScriptVersion: () => ({ data: undefined, isLoading: false }),
+    useGenerateMaddoxAvatar: () => ({ mutateAsync: generateAvatar, isPending: false }),
+    useMaddoxSessions: () => ({ data: [], isLoading: false, isError: false, isFetching: false, refetch: vi.fn() }),
+    useDeleteMaddoxSession: () => ({ mutate: vi.fn(), isPending: false }),
+}))
+
+vi.mock("@/features/ai/hooks/useAi", () => ({
+    AI_QUERY_KEY: "ai",
+    useAiProviderStatuses: () => ({
+        providers: [
+            { id: "opencode", name: "OpenCode", configured: true, connected: true },
+            { id: "gemini", name: "Gemini", configured: true, connected: true },
+            { id: "jev", name: "JEV", configured: false, connected: false },
+        ],
+    }),
+    useImageGeneratorSettings: () => ({ data: { availability: { available: true, reason: null } } }),
+    useAiModels: () => ({ data: [], isLoading: false, isError: false }),
+    useAiAgents: () => ({ data: [], isLoading: false, isError: false }),
+}))
+
+let current: MaddoxSettingsDto = dto()
+const { MaddoxTab } = await import("@/features/maddox/components/settings/MaddoxTab")
+
+function renderTab() {
+    return renderWithQueryClient(<MaddoxTab onDirtyChange={vi.fn()} />)
+}
+
+const lastSaved = () => saveSettings.mock.calls.at(-1)![0] as typeof DEFAULT_MADDOX_SETTINGS
+
+describe("aba Agente Maddox", () => {
+    beforeEach(() => {
+        current = dto()
+        window.history.replaceState(null, "", "/integracoes/ia?aba=agente-maddox")
+        saveSettings.mockReset().mockImplementation(async (values) => ({ ...current, settings: values }))
+        saveScript.mockReset()
+        generateAvatar.mockReset()
+    })
+
+    it("mostra as seções e o aviso de disponibilidade", () => {
+        renderTab()
+        const tabs = screen.getByRole("tablist", { name: "Seções do Agente Maddox" })
+        expect(within(tabs).getAllByRole("tab").map((tab) => tab.textContent)).toEqual(["Geral", "Entrevista: cenário", "Entrevista: personagem", "JEV", "OpenCode", "Memórias"])
+        expect(screen.getByText(/está desativada/)).toBeTruthy()
+        expect(screen.getByText("Avatar")).toBeTruthy()
+    })
+
+    it("trocar o provedor para OpenCode salva com o modelo limpo", async () => {
+        renderTab()
+        const [mainProviders] = screen.getAllByRole("radiogroup")
+        fireEvent.click(within(mainProviders!).getByRole("radio", { name: "OpenCode" }))
+        fireEvent.click(screen.getByRole("button", { name: "Salvar" }))
+        await waitFor(() => expect(saveSettings).toHaveBeenCalled())
+        expect(lastSaved().main).toMatchObject({ provider: "opencode", model: null, agent: null })
+    })
+
+    it("gerar o avatar preenche a imagem e só vale ao salvar", async () => {
+        generateAvatar.mockResolvedValueOnce({ url: "/api/files/ai/generated/maddox.png" })
+        renderTab()
+        fireEvent.click(screen.getByRole("button", { name: /Gerar com o Gerador de imagens/ }))
+        await waitFor(() => expect(generateAvatar).toHaveBeenCalledWith(DEFAULT_MADDOX_SETTINGS.avatar.persona))
+        await waitFor(() => expect(document.querySelector('img[src="/api/files/ai/generated/maddox.png"]')).toBeTruthy())
+        expect(saveSettings).not.toHaveBeenCalled()
+        fireEvent.click(screen.getByRole("button", { name: "Salvar" }))
+        await waitFor(() => expect(saveSettings).toHaveBeenCalled())
+        expect(lastSaved().avatar.url).toBe("/api/files/ai/generated/maddox.png")
+    })
+
+    it("liga uma decisão do JEV e salva", async () => {
+        renderTab()
+        fireEvent.click(screen.getByRole("tab", { name: "JEV" }))
+        const check = (await screen.findByRole("checkbox", { name: "Pedir teste" })) as HTMLInputElement
+        fireEvent.click(screen.getByText("Pedir teste"))
+        await waitFor(() => expect(check.checked).toBe(true))
+        fireEvent.click(screen.getByRole("button", { name: "Salvar" }))
+        await waitFor(() => expect(saveSettings).toHaveBeenCalled())
+        expect(lastSaved().jev["requires-check"]).toBe(true)
+        expect(lastSaved().jev["scene-image"]).toBe(false)
+    })
+
+    it("adiciona e remove tópicos e salva uma nova versão do roteiro com a versão da abertura", async () => {
+        saveScript.mockImplementation(async (input) => ({ current: { ...defaultMaddoxScript("scenario"), version: 1, topics: input.topics }, history: [] }))
+        renderTab()
+        fireEvent.click(screen.getByRole("tab", { name: "Entrevista: cenário" }))
+        const total = defaultMaddoxScript("scenario").topics.length
+        const save = (await screen.findByRole("button", { name: "Salvar nova versão do roteiro" })) as HTMLButtonElement
+        expect(save.disabled).toBe(true)
+        fireEvent.click(screen.getByRole("button", { name: "Remover o tópico 1" }))
+        fireEvent.click(screen.getByRole("button", { name: /Adicionar tópico/ }))
+        fireEvent.change(screen.getByLabelText(`${total}. Tópico`), { target: { value: "Facções e conflitos" } })
+        expect(save.disabled).toBe(false)
+        fireEvent.click(save)
+        await waitFor(() => expect(saveScript).toHaveBeenCalled())
+        const input = saveScript.mock.calls[0]![0]
+        expect(input.version).toBe(0)
+        expect(input.topics).toHaveLength(total)
+        expect(input.topics.at(-1)).toMatchObject({ text: "Facções e conflitos", active: true })
+        expect(input.topics[0].text).not.toBe(defaultMaddoxScript("scenario").topics[0]!.text)
+    })
+})

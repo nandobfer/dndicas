@@ -8,9 +8,10 @@ import { buildEntityUnderstandingSystemInstruction } from "@/features/entity-und
 
 describe("listas de memórias dos agentes", () => {
     it("tem as listas do Agente Opex e uma por agente do app", () => {
-        expect([...AI_AGENT_IDS]).toEqual(["opex-global", "opex-admin", "opex-user", "image-generator", "entity-understanding", "entity-import"])
+        expect([...AI_AGENT_IDS]).toEqual(["opex-global", "opex-admin", "opex-user", "image-generator", "entity-understanding", "entity-import", "maddox"])
         expect(aiAgentsOfTab("agente-opex")).toEqual(["opex-global", "opex-admin", "opex-user"])
         expect(aiAgentsOfTab("gerador-imagens")).toEqual(["image-generator"])
+        expect(aiAgentsOfTab("agente-maddox")).toEqual(["maddox"])
     })
 
     it("as memórias de administradores só entram nos turnos de administradores", () => {

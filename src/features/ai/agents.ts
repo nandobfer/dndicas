@@ -6,10 +6,10 @@
  * O Agente Opex tem três listas: as **globais** valem em toda conversa; as **de administradores**, só
  * nos turnos de administradores; as **de usuários**, só nos turnos de usuários comuns e visitantes.
  * Cada agente do app (Gerador de imagens, Entender com IA, Importador 5etools) tem uma lista própria,
- * que entra nas instruções de toda geração dele.
+ * que entra nas instruções de toda geração dele. O Agente Maddox (Campanhas Maddox) também tem a sua.
  */
 
-export const AI_AGENT_IDS = ["opex-global", "opex-admin", "opex-user", "image-generator", "entity-understanding", "entity-import"] as const
+export const AI_AGENT_IDS = ["opex-global", "opex-admin", "opex-user", "image-generator", "entity-understanding", "entity-import", "maddox"] as const
 export type AiAgentId = (typeof AI_AGENT_IDS)[number]
 
 export const AI_AGENTS: Record<AiAgentId, { label: string; title: string; description: string; tab: string }> = {
@@ -48,6 +48,12 @@ export const AI_AGENTS: Record<AiAgentId, { label: string; title: string; descri
         title: "Memórias do Importador 5etools",
         description: "Instruções permanentes de tradução e adaptação usadas ao importar entidades do 5etools (ex.: glossário preferido).",
         tab: "importador-5etools",
+    },
+    maddox: {
+        label: "Agente Maddox",
+        title: "Memórias do Maddox",
+        description: "Instruções permanentes que o Maddox segue como mestre e entrevistador em todas as campanhas (ex.: \"descreva os cenários com os cinco sentidos\").",
+        tab: "agente-maddox",
     },
 }
 

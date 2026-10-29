@@ -1,7 +1,7 @@
 import { hostname } from "os"
 import { dbConnect } from "@/lib/db"
 import { CronJobState } from "@/lib/db/models/CronJobState"
-import { HEALTH_CHECK_JOB_ID, OPEX_FILES_CLEANUP_JOB_ID, type CronJobConfig } from "@/lib/integrations/catalog"
+import { HEALTH_CHECK_JOB_ID, MADDOX_SESSIONS_CLEANUP_JOB_ID, OPEX_FILES_CLEANUP_JOB_ID, type CronJobConfig } from "@/lib/integrations/catalog"
 import { getIntegrationConfig, getInternalBaseUrl } from "@/lib/integrations/config"
 import { integrationDebug } from "@/lib/integrations/debug"
 import { nextRunAt, scheduleSignature, validateSchedule } from "@/lib/integrations/schedule"
@@ -301,6 +301,10 @@ export function registerBuiltInJobs(): void {
         const files = await cleanupPendingOpexFiles()
         const sessions = await purgeExpiredAnonymousSessions()
         return sessions ? `${files} · ${sessions} sessão(ões) de visitantes expiradas removidas` : files
+    })
+    registerInternalJob(MADDOX_SESSIONS_CLEANUP_JOB_ID, async () => {
+        const { processPendingMaddoxSessionDeletions } = await import("@/features/maddox/server/opencode-sessions")
+        return processPendingMaddoxSessionDeletions()
     })
 }
 
