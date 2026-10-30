@@ -17,7 +17,7 @@ import { motion } from "framer-motion"
 import Link from "next/link"
 import Image from "next/image"
 import { usePathname, useRouter } from "next/navigation"
-import { Home, User, Sparkles, FileText, Users, Scroll, Zap, Wand, AtSign, MessageSquare, Sword, ShieldCheck, Fingerprint, Backpack, ScrollText, Skull, LogOut, PlugZap, type LucideIcon } from "lucide-react"
+import { Home, User, Sparkles, FileText, Users, Scroll, Zap, Wand, AtSign, MessageSquare, Sword, ShieldCheck, Fingerprint, Backpack, ScrollText, Skull, LogOut, PlugZap, Swords, type LucideIcon } from "lucide-react"
 import { cn } from "@/core/utils"
 import { glassConfig } from "@/lib/config/glass-config"
 import { motionConfig } from "@/lib/config/motion-configs"
@@ -50,6 +50,7 @@ const mainItems = [
     { label: "Perfil", href: "/profile", icon: User, authenticated: true },
     { label: "Minhas Fichas", href: "/my-sheets", icon: ScrollText },
     { label: "Meus NPCs", href: "/my-npcs", icon: Users, authenticated: true },
+    { label: "Campanhas Maddox", href: "/campanhas", icon: Swords, authenticated: true },
 ]
 
 // T020: Renamed from "Módulos" to "Cadastros" and added "Usuários"

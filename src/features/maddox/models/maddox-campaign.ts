@@ -17,6 +17,8 @@ export interface IMaddoxCampaign {
     /** Versões dos roteiros com que as entrevistas desta campanha começaram. */
     scriptVersions: { scenario: number | null; character: number | null }
     turn: { number: number; phase: MaddoxTurnPhase }
+    /** Link de convite (Maddox 1). `select: false`: só o dono o recebe; gerar outro invalida o anterior. */
+    invite: { token: string | null; rotatedAt: Date | null }
     createdAt: Date
     updatedAt: Date
 }
@@ -37,11 +39,16 @@ const MaddoxCampaignSchema = new Schema<IMaddoxCampaign>(
             number: { type: Number, default: 0 },
             phase: { type: String, enum: MADDOX_TURN_PHASES, default: "master" },
         },
+        invite: {
+            token: { type: String, default: null, select: false },
+            rotatedAt: { type: Date, default: null },
+        },
     },
     { collection: "maddox_campaigns", timestamps: true, versionKey: false },
 )
 
 MaddoxCampaignSchema.index({ ownerId: 1, updatedAt: -1 })
 MaddoxCampaignSchema.index({ status: 1 })
+MaddoxCampaignSchema.index({ "invite.token": 1 }, { unique: true, partialFilterExpression: { "invite.token": { $type: "string" } } })
 
 export const MaddoxCampaignModel: Model<IMaddoxCampaign> = (mongoose.models.MaddoxCampaign as Model<IMaddoxCampaign>) || mongoose.model<IMaddoxCampaign>("MaddoxCampaign", MaddoxCampaignSchema)

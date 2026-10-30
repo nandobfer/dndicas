@@ -20,3 +20,8 @@ export const opexOwnerKey = (owner: { userId: string } | { anonymousId: string }
 export const opexChannel = (ownerKey: OpexOwnerKey) => `private-opex-${ownerKey}`
 
 export const OPEX_CHANNEL_PREFIX = "private-opex-"
+
+export const MADDOX_USER_CHANNEL_PREFIX = "private-maddox-u-"
+
+/** Canal das **Campanhas Maddox** de um usuário: avisa que uma campanha da qual ele participa mudou. */
+export const maddoxUserChannel = (userId: string) => `${MADDOX_USER_CHANNEL_PREFIX}${userId}`

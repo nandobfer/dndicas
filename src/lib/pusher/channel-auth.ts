@@ -4,12 +4,13 @@
  * Só canais CONHECIDOS são autorizados:
  * - `private-app` e `private-integration-{id}`: apenas **administradores**;
  * - `private-opex-u-{userId}`: o **próprio usuário** logado (Agente Opex);
- * - `private-opex-a-{anonymousId}`: o **visitante** dono do identificador anônimo (cookie assinado).
+ * - `private-opex-a-{anonymousId}`: o **visitante** dono do identificador anônimo (cookie assinado);
+ * - `private-maddox-u-{userId}`: o **próprio usuário** logado (Campanhas Maddox).
  * Canais públicos do DnDicas (fichas, Owlbear, geração) não passam por aqui.
  */
 
 import { isIntegrationId } from "@/lib/integrations/catalog"
-import { appChannel, OPEX_CHANNEL_PREFIX } from "./channel-names"
+import { appChannel, MADDOX_USER_CHANNEL_PREFIX, OPEX_CHANNEL_PREFIX } from "./channel-names"
 
 export interface ChannelViewer {
     /** Usuário logado (com o papel), ou `null` para visitante. */
@@ -23,6 +24,7 @@ export type ParsedChannel =
     | { kind: "integration"; integrationId: string }
     | { kind: "opex-user"; userId: string }
     | { kind: "opex-anonymous"; anonymousId: string }
+    | { kind: "maddox-user"; userId: string }
     | { kind: "unknown" }
 
 export function parseChannel(channel: string): ParsedChannel {
@@ -34,6 +36,9 @@ export function parseChannel(channel: string): ParsedChannel {
         const owner = channel.slice(OPEX_CHANNEL_PREFIX.length)
         if (owner.startsWith("u-") && owner.length > 2) return { kind: "opex-user", userId: owner.slice(2) }
         if (owner.startsWith("a-") && owner.length > 2) return { kind: "opex-anonymous", anonymousId: owner.slice(2) }
+    }
+    if (channel.startsWith(MADDOX_USER_CHANNEL_PREFIX) && channel.length > MADDOX_USER_CHANNEL_PREFIX.length) {
+        return { kind: "maddox-user", userId: channel.slice(MADDOX_USER_CHANNEL_PREFIX.length) }
     }
     return { kind: "unknown" }
 }
@@ -50,6 +55,8 @@ export function isChannelAuthorized(channel: string, viewer: ChannelViewer): boo
             return isIntegrationId(parsed.integrationId) && (viewer.user?.permissions.some(key => key === "*" || key === `integrations.${parsed.integrationId}.logs`) ?? false)
         case "opex-user":
             return viewer.user?.id === parsed.userId
+        case "maddox-user":
+            return viewer.user !== null && viewer.user.id === parsed.userId
         case "opex-anonymous":
             return viewer.anonymousId !== null && viewer.anonymousId === parsed.anonymousId
         default:

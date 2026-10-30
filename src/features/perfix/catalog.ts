@@ -14,6 +14,7 @@ export const PERMISSION_TREE = [
         { key: "catalog.edit", label: "Editar cadastros", sensitive: true }, { key: "catalog.generate", label: "Gerar com IA", sensitive: true },
     ] },
     { id: "fichas", label: "Fichas", children: [{ key: "sheets.view_all", label: "Ver todas as fichas", sensitive: true }] },
+    { id: "maddox", label: "Campanhas Maddox", children: [{ key: "maddox.play", label: "Criar e participar de campanhas" }] },
     { id: "feedback", label: "Feedback", children: [
         { key: "feedback.moderate", label: "Moderar", sensitive: true }, { key: "feedback.agent", label: "Executar fluxo agêntico", sensitive: true },
     ] },

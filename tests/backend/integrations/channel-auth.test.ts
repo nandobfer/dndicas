@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest"
 import { isChannelAuthorized, parseChannel } from "@/lib/pusher/channel-auth"
-import { opexChannel, opexOwnerKey } from "@/lib/pusher/channel-names"
+import { maddoxUserChannel, opexChannel, opexOwnerKey } from "@/lib/pusher/channel-names"
 
 const admin = { user: { id: "admin-1", permissions: ["admin.access"] }, anonymousId: null }
 const user = { user: { id: "user-1", permissions: [] }, anonymousId: null }
@@ -20,6 +20,15 @@ describe("autorização dos canais privados do Pusher", () => {
         const logs = { user: { id: "ops-1", permissions: ["integrations.pusher.logs"] }, anonymousId: null }
         expect(isChannelAuthorized("private-integration-pusher", logs)).toBe(true)
         expect(isChannelAuthorized("private-integration-google_auth", logs)).toBe(false)
+    })
+
+    it("canal das Campanhas Maddox: só o próprio usuário logado", () => {
+        const channel = maddoxUserChannel("user-1")
+        expect(parseChannel(channel)).toEqual({ kind: "maddox-user", userId: "user-1" })
+        expect(isChannelAuthorized(channel, user)).toBe(true)
+        expect(isChannelAuthorized(channel, admin)).toBe(false)
+        expect(isChannelAuthorized(channel, visitor)).toBe(false)
+        expect(isChannelAuthorized("private-maddox-u-", user)).toBe(false)
     })
 
     it("canal do Agente Opex: só o próprio usuário", () => {

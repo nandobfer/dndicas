@@ -4,6 +4,7 @@
  */
 import { registerMigrations } from "./index"
 import { migratePerfix } from "./migrate-perfix"
+import { grantMaddoxPlay } from "./grant-maddox-play"
 import { seedIntegrationsFromEnv } from "./seed-integrations-from-env"
 import { repairIntegrationIndexes } from "./repair-integration-indexes"
 import { ensureAiUsageIndexes } from "./ensure-ai-usage-indexes"
@@ -14,6 +15,7 @@ import { ensureOpexFeedbackIndexes } from "./ensure-opex-feedback-indexes"
 
 registerMigrations(
     { name: "migrate-perfix", run: migratePerfix },
+    { name: "grant-maddox-play", run: () => grantMaddoxPlay() },
     { name: "seed-integrations-from-env", run: () => seedIntegrationsFromEnv() },
     { name: "repair-integration-indexes", run: () => repairIntegrationIndexes() },
     { name: "ensure-ai-usage-indexes", run: () => ensureAiUsageIndexes() },
