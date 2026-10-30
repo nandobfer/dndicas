@@ -180,7 +180,8 @@ status `active` são do Maddox 3.
 | Uma geração por vez | Trava `generating` condicional; ocupada = 409 `INTERVIEW_BUSY`; trava com mais de 5 min é retomada |
 | Limite | 200 mensagens (409 `INTERVIEW_TOO_LONG`); cada resposta até 4.000 caracteres (Zod) |
 | Concluída | Não reabre (409 `INTERVIEW_DONE`); nome e retrato seguem editáveis |
-| Pronto para jogar | `isMemberReadyToPlay` (entrevista `done`) → `member.ready` no DTO; `assertMemberCanPlay` responde 409 `INTERVIEW_REQUIRED` (uso no Maddox 3) |
+| Pronto para jogar | `isMemberReadyToPlay` (entrevista `done`) → `member.ready` no DTO; `assertMemberCanPlay` responde 409 `INTERVIEW_REQUIRED`. Ainda não há ponto de entrada no jogo: **o Maddox 3 deve chamar `assertMemberCanPlay` em toda ação de jogo** (iniciar a campanha com o jogador, entrar na cena, enviar ação/turno), no servidor; o selo e os botões da tela não bastam |
+| Nome e retrato depois da entrevista | Continuam editáveis no lobby; a mudança é propagada à ficha D&D ligada (`name` e, se houver retrato, `photo`). O `result` gravado na entrevista é o registro histórico e não muda |
 | Visibilidade | A conversa é só de quem é entrevistado; cenário, situação inicial e perfis ficam visíveis a todos os membros; o link da ficha só para o dono do personagem |
 
 **Instruções** (`buildInterviewInstructions`): instruções do entrevistador + entrevista atual + rigor (colunas
@@ -202,7 +203,13 @@ pergunta `noul`) avalia após cada resposta se já há base suficiente e, se sim
 propor a síntese; falha do JEV é ignorada.
 
 Ao confirmar, uma geração **efêmera** (não suja a sessão do narrador) consolida a conversa em JSON validado por Zod,
-com uma nova tentativa; inválido duas vezes = 502 `CONSOLIDATION_FAILED` sem gravar nada.
+com uma nova tentativa; inválido duas vezes = 502 `CONSOLIDATION_FAILED` sem gravar nada. Os textos gerados
+**não têm teto de tamanho** no schema (um campo longo nunca invalida a consolidação); só raça/classe/subclasse/
+origem são cortadas em 2.000 caracteres ao gravar na ficha (`maxlength` dela) e o nome fora de 2..60 é ignorado.
+A conclusão revalida `proposed` depois de pegar a trava (`NO_PROPOSAL` se outra aba enviou um ajuste) e grava o
+cenário/perfil **antes** de marcar a entrevista como `done`: uma falha no meio deixa `proposed` e confirmar de
+novo reaplica. Uma nova resposta só é gravada depois de o turno ser preparado (entrevistador, roteiro, sessão do
+OpenCode): falha na preparação não deixa mensagem órfã.
 
 - **Cenário:** `campaign.setting` (Markdown nas seções de `MADDOX_SETTING_SECTIONS`: universo, cânone, contexto,
   regras internas, tom), `campaign.openingSituation` e, se um nome foi combinado, a campanha é renomeada (auditado).

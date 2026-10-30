@@ -337,6 +337,11 @@ export async function upsertCharacterDraft(campaignId: string, input: MaddoxChar
 
     if (current) {
         await MaddoxCharacterModel.updateOne({ _id: current._id }, { $set: { name: input.name, portraitUrl } })
+        // Ficha D&D criada pela entrevista acompanha o nome e o retrato (retrato removido não apaga a foto da ficha).
+        if (current.sheetId) {
+            const { CharacterSheet } = await import("@/features/character-sheets/models/character-sheet")
+            await CharacterSheet.updateOne({ _id: current.sheetId, userId }, { $set: { name: input.name, ...(portraitUrl ? { photo: portraitUrl } : {}) } })
+        }
         await recordAudit({ userId, entidade: MADDOX_CAMPAIGN_AUDIT_ENTITY, entidadeId: String(campaign._id), acao: AcaoAuditoria.ATUALIZAR, antes: { character: current.name }, depois: { character: input.name } })
     } else {
         const created = await MaddoxCharacterModel.create({ campaignId: campaign._id, memberId: member._id, userId, name: input.name, portraitUrl, interview: { status: "pending", scriptVersion: null } })

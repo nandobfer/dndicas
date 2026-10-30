@@ -230,6 +230,32 @@ describe("entrevista de cenário — conversa", () => {
         expect((await MaddoxInterviewModel.findOne({ campaignId }).lean())!.generating).toBeNull()
     })
 
+    it("entrevistador indisponível ao enviar: 409 e a conversa (e a proposta) ficam intactas", async () => {
+        const campaignId = await newCampaign()
+        await startScenario(campaignId)
+        scripted.push(proposalReply())
+        await run(await interviews.sendInterviewMessage(campaignId, "scenario", { content: "Pode ser." }, ids.owner))
+        const before = await MaddoxInterviewModel.findOne({ campaignId }).lean()
+        availability.available = false
+        availability.reason = 'O "Agente Maddox" está desativado.'
+        await expect(interviews.sendInterviewMessage(campaignId, "scenario", { content: "Ajuste" }, ids.owner)).rejects.toMatchObject({ status: 409, code: "MADDOX_UNAVAILABLE" })
+        const after = await MaddoxInterviewModel.findOne({ campaignId }).lean()
+        expect(after!.messages).toEqual(before!.messages)
+        expect(after).toMatchObject({ status: "proposed", generating: null })
+        expect((await MaddoxCampaignModel.findById(campaignId).lean())!.scenarioInterview.status).toBe("proposed")
+    })
+
+    it("falha da sessão do OpenCode ao enviar também não deixa mensagem órfã", async () => {
+        state.settings = { ...state.settings!, interviewer: { provider: "opencode", model: "anthropic/claude", agent: null, variant: null } }
+        const campaignId = await newCampaign()
+        await startScenario(campaignId)
+        ensureMaddoxSession.mockRejectedValueOnce(new Error("OpenCode fora do ar"))
+        await expect(interviews.sendInterviewMessage(campaignId, "scenario", { content: "Olá" }, ids.owner)).rejects.toThrow("OpenCode fora do ar")
+        const stored = await MaddoxInterviewModel.findOne({ campaignId }).lean()
+        expect(stored!.messages.map((message) => message.role)).toEqual(["maddox"])
+        expect(stored!.generating).toBeNull()
+    })
+
     it("limite de mensagens: 409 pedindo para concluir", async () => {
         const campaignId = await newCampaign()
         await startScenario(campaignId)
@@ -285,6 +311,58 @@ describe("conclusão do cenário", () => {
         await expect(completeInterview(campaignId, "scenario", ids.owner)).rejects.toMatchObject({ status: 409, code: "INTERVIEW_DONE" })
         await expect(interviews.sendInterviewMessage(campaignId, "scenario", { content: "mais" }, ids.owner)).rejects.toMatchObject({ status: 409, code: "INTERVIEW_DONE" })
         await expect(campaigns.updateCampaign(campaignId, { rigor: "fiel-dnd" }, ids.owner)).rejects.toMatchObject({ code: "RIGOR_LOCKED" })
+    })
+
+    it("campos longos do modelo não invalidam a consolidação: o texto é gravado inteiro", async () => {
+        const campaignId = await newCampaign()
+        await startScenario(campaignId)
+        scripted.push(proposalReply())
+        await run(await interviews.sendInterviewMessage(campaignId, "scenario", { content: "Pode ser." }, ids.owner))
+        const universo = "Aethra ".repeat(1500).trim()
+        const opening = "Numa taverna. ".repeat(600).trim()
+        expect(universo.length).toBeGreaterThan(6000)
+        generateAiText.mockResolvedValueOnce({ text: JSON.stringify({ setting: { universo }, openingSituation: opening }) })
+        const detail = await completeInterview(campaignId, "scenario", ids.owner)
+        expect(detail.setting).toContain(`## Universo e referências\n${universo}\n`)
+        expect(detail.openingSituation).toBe(opening)
+    })
+
+    it("depois de pegar a trava revalida a proposta: ajuste enviado por outra aba = 409 NO_PROPOSAL e nada é gravado", async () => {
+        const campaignId = await newCampaign()
+        await startScenario(campaignId)
+        scripted.push(proposalReply())
+        await run(await interviews.sendInterviewMessage(campaignId, "scenario", { content: "Pode ser." }, ids.owner))
+        // Simula a outra aba: entre a leitura e a trava, a proposta foi desfeita.
+        const original = MaddoxInterviewModel.findOneAndUpdate.bind(MaddoxInterviewModel)
+        const spy = vi.spyOn(MaddoxInterviewModel, "findOneAndUpdate").mockImplementationOnce(((filter: unknown, update: unknown, options: unknown) => {
+            return {
+                lean: async () => {
+                    await MaddoxInterviewModel.updateOne({ campaignId }, { $set: { status: "in-progress" } })
+                    return original(filter as never, update as never, options as never).lean()
+                },
+            }
+        }) as never)
+        await expect(completeInterview(campaignId, "scenario", ids.owner)).rejects.toMatchObject({ status: 409, code: "NO_PROPOSAL" })
+        spy.mockRestore()
+        expect(generateAiText).not.toHaveBeenCalled()
+        expect((await MaddoxInterviewModel.findOne({ campaignId }).lean())).toMatchObject({ status: "in-progress", generating: null })
+        expect((await MaddoxCampaignModel.findById(campaignId).lean())!.setting).toBe("")
+    })
+
+    it("falha ao gravar o cenário mantém a entrevista em 'proposed'; confirmar de novo conclui", async () => {
+        const campaignId = await newCampaign()
+        await startScenario(campaignId)
+        scripted.push(proposalReply())
+        await run(await interviews.sendInterviewMessage(campaignId, "scenario", { content: "Pode ser." }, ids.owner))
+        const json = JSON.stringify({ setting: { universo: "Aethra" }, openingSituation: "Início." })
+        generateAiText.mockResolvedValue({ text: json })
+        const spy = vi.spyOn(MaddoxCampaignModel, "updateOne").mockRejectedValueOnce(new Error("Mongo caiu") as never)
+        await expect(completeInterview(campaignId, "scenario", ids.owner)).rejects.toThrow("Mongo caiu")
+        spy.mockRestore()
+        expect((await MaddoxInterviewModel.findOne({ campaignId }).lean())).toMatchObject({ status: "proposed", generating: null })
+        const detail = await completeInterview(campaignId, "scenario", ids.owner)
+        expect(detail.scenarioStatus).toBe("done")
+        expect((await MaddoxInterviewModel.findOne({ campaignId }).lean())!.status).toBe("done")
     })
 
     it("JSON inválido duas vezes: 502 sem gravar nada e a trava liberada; inválido uma vez: tenta de novo", async () => {
@@ -369,5 +447,29 @@ describe("entrevista de personagem", () => {
         expect(sheet!.charisma).not.toBe(99)
         expect(detail.members.find((member) => member.userId === ids.ana)!.character!.sheetSlug).toBe("ana/lyra")
         expect(recordAudit).toHaveBeenCalledWith(expect.objectContaining({ depois: expect.objectContaining({ sheet: "ficha criada" }) }))
+    })
+
+    it("campos longos da ficha (idade, peso, olhos) são gravados inteiros; renomear depois propaga à ficha", async () => {
+        const campaignId = await newCampaign("equilibrado")
+        await finishScenario(campaignId)
+        await campaigns.upsertCharacterDraft(campaignId, { name: "Lyra" }, ids.ana)
+        await run((await interviews.startInterview(campaignId, "character", ids.ana)).turn!)
+        scripted.push(proposalReply())
+        await run(await interviews.sendInterviewMessage(campaignId, "character", { content: "Pronto." }, ids.ana))
+        const weight = "aproximadamente 85 kg, constituição robusta"
+        const eyes = "castanhos escuros com reflexos dourados ao sol"
+        const age = "por volta de cento e vinte anos, jovem para uma elfa"
+        const identidade = "Elfa. ".repeat(1500).trim()
+        generateAiText.mockResolvedValueOnce({ text: JSON.stringify({ name: "L".repeat(200), profile: { identidade }, sheet: { race: "Elfo", weight, eyes, age } }) })
+        await completeInterview(campaignId, "character", ids.ana)
+        const character = await MaddoxCharacterModel.findOne({ userId: ids.ana }).lean()
+        // Nome fora do limite é ignorado (fica o do esboço), sem invalidar o resto.
+        expect(character!.name).toBe("Lyra")
+        expect((character!.profile as unknown as Record<string, string>).identidade).toBe(identidade)
+        expect(await CharacterSheet.findById(character!.sheetId).lean()).toMatchObject({ weight, eyes, age, race: "Elfo" })
+
+        await campaigns.upsertCharacterDraft(campaignId, { name: "Lira", portraitUrl: "/uploads/lira.png" }, ids.ana)
+        expect(await CharacterSheet.findById(character!.sheetId).lean()).toMatchObject({ name: "Lira", photo: "/uploads/lira.png" })
+        expect((await MaddoxCharacterModel.findOne({ userId: ids.ana }).lean())!.name).toBe("Lira")
     })
 })

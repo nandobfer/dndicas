@@ -382,12 +382,20 @@ export async function sendInterviewMessage(campaignId: string, kind: MaddoxScrip
     const userMessage: IMaddoxInterviewMessage = { id: randomUUID(), role: "user", content: input.content, proposal: false, error: null, createdAt: new Date() }
     // Proposta anterior deixa de valer: a pessoa pediu ajustes.
     const messages = [...locked.messages.filter((message) => !message.error).map((message) => ({ ...message, proposal: false })), userMessage]
-    await MaddoxInterviewModel.updateOne({ _id: locked._id, "generating.token": token }, { $set: { messages, status: "in-progress" } })
+    // Prepara (entrevistador, roteiro, sessão do OpenCode) ANTES de gravar: se falhar, a trava é liberada e
+    // a conversa fica intacta (sem mensagem órfã nem proposta desfeita).
+    const turn = await prepareTurn(subject, kind, userId, { ...locked, messages, status: "in-progress" }, token, userMessage)
+    try {
+        await MaddoxInterviewModel.updateOne({ _id: locked._id, "generating.token": token }, { $set: { messages, status: "in-progress" } })
+    } catch (error) {
+        await releaseLock(locked._id, token).catch(() => undefined)
+        throw error
+    }
     if (kind === "scenario" && locked.status === "proposed") {
         await MaddoxCampaignModel.updateOne({ _id: subject.campaign._id }, { $set: { "scenarioInterview.status": "in-progress" } })
         await changed(subject.campaign._id)
     }
-    return prepareTurn(subject, kind, userId, { ...locked, messages, status: "in-progress" }, token, userMessage)
+    return turn
 }
 
 /** Gera de novo a última resposta do Maddox que falhou. */

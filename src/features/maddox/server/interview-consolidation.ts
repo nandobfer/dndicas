@@ -20,6 +20,8 @@ import { acquireInterviewLock, loadInterviewer, loadSubject, promptContext, rele
 
 const log = loggerFor({ module: "maddox", feature: "interview-consolidation" })
 const ATTEMPTS = 2
+/** `maxlength` de raça/classe/subclasse/origem na `CharacterSheet`. */
+const SHEET_NAME_FIELD_MAX = 2000
 
 type InterviewDoc = IMaddoxInterview
 
@@ -85,7 +87,9 @@ async function seedSheet(subject: InterviewSubject, name: string, portraitUrl: s
     const [raceRef, classRef, originRef] = await Promise.all([catalogRef("Race", seed?.race ?? null), catalogRef("CharacterClass", seed?.class ?? null), catalogRef("Background", seed?.origin ?? null)])
     const set: Record<string, unknown> = { name, ...(portraitUrl ? { photo: portraitUrl } : {}), ...(created ? { level: 1 } : {}) }
     if (seed) {
-        for (const key of ["race", "class", "subclass", "origin", "appearance", "age", "height", "weight", "eyes", "skin", "hair"] as const) if (seed[key]) set[key] = seed[key]
+        for (const key of ["appearance", "age", "height", "weight", "eyes", "skin", "hair"] as const) if (seed[key]) set[key] = seed[key]
+        // Raça, classe, subclasse e origem têm 2.000 caracteres na ficha; o texto inteiro segue no resultado da entrevista.
+        for (const key of ["race", "class", "subclass", "origin"] as const) if (seed[key]) set[key] = seed[key]!.slice(0, SHEET_NAME_FIELD_MAX)
         if (raceRef) set.raceRef = raceRef
         if (classRef) set.classRef = classRef
         if (originRef) set.originRef = originRef
@@ -102,7 +106,8 @@ async function finishInterview(doc: InterviewDoc, token: string, result: unknown
 
 async function completeScenario(subject: InterviewSubject, doc: InterviewDoc, token: string, data: ScenarioConsolidation, userId: string) {
     const rename = data.campaignName && data.campaignName !== subject.campaign.name ? data.campaignName : null
-    await finishInterview(doc, token, data)
+    // Grava o cenário antes de marcar a entrevista como concluída: uma falha no meio deixa a entrevista em
+    // `proposed`, e confirmar de novo reaplica (idempotente).
     await MaddoxCampaignModel.updateOne(
         { _id: subject.campaign._id },
         {
@@ -116,6 +121,7 @@ async function completeScenario(subject: InterviewSubject, doc: InterviewDoc, to
             },
         },
     )
+    await finishInterview(doc, token, data)
     await recordAudit({
         userId,
         entidade: MADDOX_CAMPAIGN_AUDIT_ENTITY,
@@ -131,12 +137,13 @@ async function completeCharacter(subject: InterviewSubject, doc: InterviewDoc, t
     const name = data.name ?? character.name
     const withSheet = MADDOX_SHEET_RIGORS.includes(subject.campaign.rigor)
     const sheet = withSheet ? await seedSheet(subject, name, character.portraitUrl ?? null, data.sheet) : null
-    await finishInterview(doc, token, data)
     const profile = Object.fromEntries(MADDOX_PROFILE_SECTIONS.map((item) => [item.key, data.profile[item.key] || "a definir durante a história"]))
     await MaddoxCharacterModel.updateOne(
         { _id: character._id },
         { $set: { name, profile, "interview.status": "done", "interview.scriptVersion": doc.scriptVersion, ...(sheet ? { sheetId: sheet.sheetId } : {}) } },
     )
+    // Por último: falha antes daqui mantém a entrevista em `proposed` e confirmar de novo reaplica.
+    await finishInterview(doc, token, data)
     await recordAudit({
         userId,
         entidade: MADDOX_CAMPAIGN_AUDIT_ENTITY,
@@ -160,6 +167,11 @@ export async function completeInterview(campaignId: string, kind: MaddoxScriptKi
     if (doc.status !== "proposed") throw new DomainError(409, "O Maddox ainda não apresentou a síntese para você confirmar.", "NO_PROPOSAL")
     const { settings, model } = await loadInterviewer()
     const { doc: locked, token } = await acquireInterviewLock(doc._id)
+    // Outra aba pode ter enviado um ajuste entre a leitura e a trava: só consolida a síntese confirmada.
+    if (locked.status !== "proposed") {
+        await releaseInterviewLock(locked._id, token)
+        throw new DomainError(409, "O Maddox ainda não apresentou a síntese para você confirmar.", "NO_PROPOSAL")
+    }
     try {
         const context = await promptContext(subject, kind, locked.scriptVersion, settings)
         const transcript = transcriptText(locked.messages.filter((message) => !message.error))
