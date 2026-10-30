@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest"
 import { hashMcpToken } from "@/features/mcp/server/mcp-token-service"
 import { importFresh } from "../helpers/module"
+vi.mock("@/features/perfix/server/access", () => ({ resolveAccess: vi.fn().mockResolvedValue({ effective: new Set(["*"]) }) }))
 
 function headers(token?: string) {
     const headers = new Headers()
@@ -10,7 +11,7 @@ function headers(token?: string) {
 
 describe("MCP auth service", () => {
     it("returns null when no bearer token is present", async () => {
-        vi.doMock("@/core/database/db", () => ({ default: vi.fn() }))
+        vi.doMock("@/lib/db", () => ({ dbConnect: vi.fn() }))
         vi.doMock("@/features/users/models/user", () => ({ User: { findOne: vi.fn() } }))
 
         const mod = await importFresh<typeof import("@/features/mcp/server/mcp-auth-service")>("@/features/mcp/server/mcp-auth-service")
@@ -19,7 +20,7 @@ describe("MCP auth service", () => {
     })
 
     it("rejects tokens with an invalid prefix", async () => {
-        vi.doMock("@/core/database/db", () => ({ default: vi.fn() }))
+        vi.doMock("@/lib/db", () => ({ dbConnect: vi.fn() }))
         vi.doMock("@/features/users/models/user", () => ({ User: { findOne: vi.fn() } }))
 
         const mod = await importFresh<typeof import("@/features/mcp/server/mcp-auth-service")>("@/features/mcp/server/mcp-auth-service")
@@ -39,12 +40,13 @@ describe("MCP auth service", () => {
             name: "Hero",
             email: "hero@example.com",
             role: "admin",
+            permissions: ["*"],
             mcpTokenLastUsedAt: new Date("2026-07-28T00:00:00.000Z"),
             save,
         })
         const findOne = vi.fn().mockReturnValue({ select })
 
-        vi.doMock("@/core/database/db", () => ({ default: vi.fn() }))
+        vi.doMock("@/lib/db", () => ({ dbConnect: vi.fn() }))
         vi.doMock("@/features/users/models/user", () => ({ User: { findOne } }))
 
         const mod = await importFresh<typeof import("@/features/mcp/server/mcp-auth-service")>("@/features/mcp/server/mcp-auth-service")
@@ -63,11 +65,12 @@ describe("MCP auth service", () => {
             name: "Hero",
             email: "hero@example.com",
             role: "admin",
+            permissions: ["*"],
         })
     })
 
     it("rejects revoked or unknown tokens", async () => {
-        vi.doMock("@/core/database/db", () => ({ default: vi.fn() }))
+        vi.doMock("@/lib/db", () => ({ dbConnect: vi.fn() }))
         vi.doMock("@/features/users/models/user", () => ({
             User: { findOne: vi.fn().mockReturnValue({ select: vi.fn().mockResolvedValue(null) }) },
         }))

@@ -21,7 +21,7 @@ export async function GET(req: NextRequest) {
   try {
     const { userId } = await auth();
     const user = userId ? await currentUser() : null;
-    const isAdmin = user?.publicMetadata?.role === 'admin';
+    const isAdmin = user?.can('catalog.edit') ?? false;
 
     const url = new URL(req.url);
     
@@ -96,7 +96,7 @@ export async function POST(req: NextRequest) {
     }
 
     // Admin check
-    const isAdmin = user.publicMetadata?.role === 'admin';
+    const isAdmin = user.can('catalog.edit');
     
     if (!isAdmin) {
       return NextResponse.json({ error: 'Acesso negado. Apenas administradores podem criar magias.' }, { status: 403 });

@@ -1,6 +1,7 @@
-import dbConnect from "@/core/database/db"
+import { dbConnect } from "@/lib/db"
 import { User } from "@/features/users/models/user"
 import { hashMcpToken, MCP_TOKEN_PREFIX } from "./mcp-token-service"
+import { resolveAccess } from "@/features/perfix/server/access"
 
 const MCP_TOKEN_TOUCH_INTERVAL_MS = 15 * 60 * 1000
 
@@ -10,6 +11,7 @@ export type McpAuthContext = {
     name: string | null
     email: string
     role: "admin" | "user"
+    permissions: string[]
 }
 
 export class McpAuthError extends Error {
@@ -56,12 +58,14 @@ export async function resolveMcpAuthContext(headers: Headers): Promise<McpAuthCo
         await user.save()
     }
 
+    const access = await resolveAccess(String(user._id))
     return {
         userId: user._id.toString(),
         username: user.username,
         name: user.name || null,
         email: user.email,
-        role: user.role,
+        role: access.effective.has("*") || access.effective.has("admin.access") ? "admin" : "user",
+        permissions: [...access.effective],
     }
 }
 
@@ -83,7 +87,7 @@ export function createMcpAuthAccess(headers: Headers) {
 
     async function requireAdminContext() {
         const context = await requireAuthContext()
-        if (context.role !== "admin") {
+        if (!context.permissions.some(key => key === "*" || key === "feedback.agent")) {
             throw new McpAuthError("Você não tem permissão para executar esta ação.", "MCP_FORBIDDEN")
         }
         return context

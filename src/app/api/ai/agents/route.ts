@@ -9,7 +9,7 @@ export const dynamic = "force-dynamic"
 
 /** GET /api/ai/agents — agentes primários do servidor OpenCode. */
 export const GET = withRoute(async ({ req }) => {
-    await requireAdminActor()
+    await requireAdminActor("integrations.ai.view")
     try {
         return ok(await listAiAgents({ fresh: req.nextUrl.searchParams.get("refresh") === "1", signal: req.signal }))
     } catch (error) {

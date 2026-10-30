@@ -8,10 +8,11 @@ O tema é baseado em **variáveis CSS** definidas em `src/app/globals.css`.
 
 ### Estrutura de Cores
 
-Todas as cores usam o formato HSL (Hue, Saturation, Lightness):
+As cores são consumidas em `hsl(var(--token))`. A primária reutiliza o token
+`--color-blue-500` existente via HSL relativo, sem duplicar seu valor numérico:
 
 ```css
---primary: 142.1 76.2% 36.3%;  /* H S L */
+--primary: from var(--color-blue-500) h s l;
 ```
 
 Isso permite fácil ajuste de:
@@ -26,8 +27,8 @@ Isso permite fácil ajuste de:
 ```css
 :root {
   /* Identidade D&D */
-  --primary: 142.1 76.2% 36.3%;           /* Verde D&D */
-  --primary-foreground: 355.7 100% 97.3%; /* Texto sobre primary */
+  --primary: from var(--color-blue-500) h s l; /* Azul original de Nova classe */
+  --primary-foreground: 0 0% 100%;            /* Texto sobre primary */
 
   /* Cores Secundárias */
   --secondary: 240 4.8% 95.9%;
@@ -56,7 +57,7 @@ Isso permite fácil ajuste de:
   /* Bordas e Inputs */
   --border: 240 5.9% 90%;
   --input: 240 5.9% 90%;
-  --ring: 142.1 76.2% 36.3%;             /* Focus ring */
+  --ring: 221.2 83.2% 53.3%;             /* Focus ring */
 
   /* Radius */
   --radius: 0.5rem;                       /* Border radius base */
@@ -69,10 +70,17 @@ Isso permite fácil ajuste de:
 .dark {
   --background: 240 10% 3.9%;
   --foreground: 0 0% 98%;
-  --primary: 142.1 70.6% 45.3%;           /* Verde mais claro no dark */
+  --primary: from var(--color-blue-500) h s l; /* Mesmo azul no dark */
+  --primary-foreground: 0 0% 100%;
   /* ... outras variáveis ajustadas */
 }
 ```
+
+Botões de ação devem usar `bg-primary text-primary-foreground hover:bg-primary/90`,
+com `ring-primary` e `shadow-primary` quando necessário, em vez de azuis hardcoded.
+Abas e switches também herdam esse token global. Não recolorir indicadores semânticos de sucesso.
+Cards das páginas de integrações reutilizam a família `GlassCard` de
+`@/components/ui/glass-card`; não criar variantes nem alterar o card base do Opex.
 
 ## Como Customizar o Tema
 

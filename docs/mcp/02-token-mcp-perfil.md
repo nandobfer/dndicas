@@ -4,7 +4,7 @@
 
 Permitir que usuários autenticados criem, copiem e revoguem um token permanente para uso em clientes MCP.
 
-Esse token será usado apenas para autenticar operações protegidas do MCP, principalmente mutações e execuções na central de feedback. A consulta pública do catálogo e a consulta pública de feedbacks continuam funcionando sem token.
+O token autentica operações protegidas do MCP quando disponíveis. A consulta pública do catálogo não exige token. A antiga superfície operacional foi removida na v4; a infraestrutura de geração e revogação permanece no perfil.
 
 ## Decisão de Autenticação
 
@@ -160,7 +160,7 @@ Componente atual:
 Nova seção:
 
 - Título: `Token MCP`
-- Descrição: `Use este token nas configurações do seu cliente MCP para operar a central de feedback.`
+- Descrição: `Use este token nas configurações do seu cliente MCP quando uma ferramenta exigir autenticação.`
 
 Estados:
 

@@ -12,7 +12,7 @@ vi.mock('next/link', () => ({
 }))
 
 vi.mock('@/core/hooks/useAuth', () => ({
-    useAuth: () => ({ isAdmin: false }),
+    useAuth: () => ({ isAdmin: false, can: () => false }),
 }))
 
 vi.mock('@/components/ui/glass-image', () => ({

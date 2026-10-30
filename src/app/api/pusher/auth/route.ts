@@ -27,7 +27,7 @@ export async function POST(request: NextRequest) {
 
     try {
         const [actor, anonymousId] = await Promise.all([getActor(), readAnonymousId().catch(() => null)])
-        const viewer = { user: actor ? { id: actor.id, role: actor.role } : null, anonymousId }
+        const viewer = { user: actor ? { id: actor.id, permissions: actor.permissions ?? [] } : null, anonymousId }
         if (!isChannelAuthorized(channel, viewer)) return NextResponse.json({ error: "Acesso negado" }, { status: 403 })
         return NextResponse.json(pusher.authorizeChannel(socketId, channel))
     } catch (error) {

@@ -8,7 +8,6 @@
 
 import * as React from "react"
 import { useForm } from "react-hook-form"
-import { zodResolver } from "@hookform/resolvers/zod"
 import { motion, AnimatePresence } from "framer-motion"
 import { User as UserIcon, Mail, AtSign, Shield, Loader2 } from "lucide-react"
 import { cn } from "@/core/utils"
@@ -17,9 +16,15 @@ import { GlassModal, GlassModalContent, GlassModalHeader, GlassModalTitle, Glass
 import { GlassInput } from "@/components/ui/glass-input"
 import { GlassSwitch } from "@/components/ui/glass-switch"
 import { glassConfig } from "@/lib/config/glass-config"
-import { RoleTabs } from "@/components/ui/role-tabs"
+import { RoleAssignment } from "@/features/perfix/components/RoleAssignment"
 import { createUserSchema, updateUserSchema, type CreateUserSchema, type UpdateUserSchema } from "../api/validation"
 import type { User, UserResponse, CreateUserInput, UpdateUserInput } from "../types/user.types"
+
+/** Criação aceita só os campos de cadastro: `status`/`version` existem apenas na edição (o schema é estrito). */
+function createPayload(values: CreateUserSchema | UpdateUserSchema): Record<string, unknown> {
+    const { username, email, name, roleIds } = values
+    return { username, email, ...(name ? { name } : {}), ...(roleIds !== undefined ? { roleIds } : {}) }
+}
 
 export interface UserFormModalProps {
     /** Whether the modal is open */
@@ -60,17 +65,24 @@ export function UserFormModal({ isOpen, onClose, onSubmit, user, isSubmitting = 
         reset,
         formState: { errors },
     } = useForm<CreateUserSchema | UpdateUserSchema>({
-        resolver: zodResolver(isEditMode ? updateUserSchema : createUserSchema),
+        resolver: async values => {
+            const parsed = isEditMode ? updateUserSchema.safeParse(values) : createUserSchema.safeParse(createPayload(values))
+            if (parsed.success) return { values: parsed.data, errors: {} }
+            // Erros sem campo (ex.: chaves não reconhecidas) viram erro geral do formulário, nunca somem.
+            const errors = Object.fromEntries(parsed.error.issues.map(issue => [issue.path.length ? String(issue.path[0]) : "root", { type: "validation", message: issue.message }]))
+            return { values: {}, errors }
+        },
         defaultValues: {
             username: user?.username || "",
             email: user?.email || "",
             name: user?.name || "",
-            role: user?.role || "user",
+            roleIds: user?.roleIds,
+            version: user?.version,
             status: user?.status || "active",
         },
     })
 
-    const role = watch("role")
+    const roleIds = watch("roleIds")
 
     // Reset form when modal opens/closes or user changes
     React.useEffect(() => {
@@ -79,7 +91,8 @@ export function UserFormModal({ isOpen, onClose, onSubmit, user, isSubmitting = 
                 username: user?.username || "",
                 email: user?.email || "",
                 name: user?.name || "",
-                role: user?.role || "user",
+                roleIds: user?.roleIds,
+                version: user?.version,
                 status: user?.status || "active",
             })
         }
@@ -106,7 +119,7 @@ export function UserFormModal({ isOpen, onClose, onSubmit, user, isSubmitting = 
                                 description="Usuários inativos não podem acessar o sistema"
                                 checked={watch("status") === "active"}
                                 onCheckedChange={(checked) => setValue("status", checked ? "active" : "inactive")}
-                                disabled={isSubmitting}
+                                disabled={isSubmitting || isSelfEdit}
                             />
                         </div>
                     )}
@@ -124,23 +137,15 @@ export function UserFormModal({ isOpen, onClose, onSubmit, user, isSubmitting = 
                     <div className="space-y-2">
                         <label className="text-sm font-medium text-white/80 flex items-center gap-2">
                             <Shield className="h-4 w-4" />
-                            Função <span className="text-rose-400">*</span>
+                            Perfis
                         </label>
                         <div className="w-full">
-                            <RoleTabs
-                                value={role === "admin" || role === "user" ? role : "user"}
-                                onChange={(newRole) => {
-                                    if (newRole !== "all") {
-                                        setValue("role", newRole)
-                                    }
-                                }}
-                                showAll={false}
-                                fullWidth
-                                disabled={isSelfEdit}
-                            />
+                            <RoleAssignment value={roleIds} onChange={ids => setValue("roleIds", ids)} disabled={isSelfEdit || isSubmitting} />
                         </div>
-                        {isSelfEdit && <p className="text-xs text-blue-400/80 mt-1">Você não pode alterar sua própria função administrativa.</p>}
+                        {isSelfEdit && <p className="text-xs text-blue-400/80 mt-1">Você não pode alterar seus próprios perfis.</p>}
                     </div>
+
+                    {errors.root?.message && <p role="alert" className="text-sm text-red-400">{errors.root.message}</p>}
 
                     {/* Actions */}
                     <div className="flex justify-end gap-3 pt-4 border-t border-white/10">
@@ -161,7 +166,7 @@ export function UserFormModal({ isOpen, onClose, onSubmit, user, isSubmitting = 
                             disabled={isSubmitting}
                             className={cn(
                                 "px-4 py-2 rounded-lg text-sm font-medium transition-colors",
-                                "bg-blue-500 text-white hover:bg-blue-600",
+                                "bg-primary text-primary-foreground hover:bg-primary/90",
                                 "disabled:opacity-50 disabled:cursor-not-allowed",
                                 "flex items-center gap-2",
                             )}

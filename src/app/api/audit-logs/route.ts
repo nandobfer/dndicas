@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import mongoose from "mongoose"
-import { requireAuth, hasRole } from '@/core/auth';
+import { denyUnlessPermission } from '@/features/auth/server/actor';
 import dbConnect from '@/core/database/db';
 import { AuditLogExtended, IAuditLogExtended } from "@/features/users/models/audit-log-extended"
 import { User } from "@/features/users/models/user"
@@ -11,6 +11,8 @@ import { ApiResponse, PaginatedResponse } from "@/core/types"
  * Aberto ao público conforme solicitado
  */
 export async function GET(request: NextRequest) {
+    const denied = await denyUnlessPermission("audit.view")
+    if (denied) return denied
     try {
         await dbConnect()
 
@@ -162,7 +164,7 @@ export async function GET(request: NextRequest) {
                               ...baseUser,
                               avatarUrl: baseUser.avatarUrl || currentUser?.avatarUrl,
                               status: baseUser.status || currentUser?.status || "active",
-                              role: baseUser.role || currentUser?.role || "user",
+                               roleIds: baseUser.roleIds || currentUser?.roles || [],
                               name: baseUser.name || currentUser?.name || (baseUser.email as string)?.split("@")[0],
                               username: baseUser.username || currentUser?.username || (baseUser.email as string)?.split("@")[0]
                           }

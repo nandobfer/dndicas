@@ -36,6 +36,7 @@ export const aiSettingsTools = [
         label: "Ler agente de IA",
         risk: "read",
         minRole: "admin",
+        permission: "integrations.ai.view",
         description:
             'Configuração de um agente de IA do DnDicas (provedor, modelo, instruções...) e se ele pode ser usado agora: image-generator = "Gerador de imagens", entity-understanding = "Entender com IA", entity-import = "Importador 5etools", memory-summary = "Resumo de memórias".',
         input: z.object({ feature: z.enum(AI_FEATURE_KEYS) }),
@@ -47,6 +48,7 @@ export const aiSettingsTools = [
         label: "Configurar agente de IA",
         risk: "write",
         minRole: "admin",
+        permission: "integrations.ai.edit",
         description: "Altera a configuração de um agente de IA. `patchJson` é mesclado sobre a configuração atual (veja get_ai_feature_settings); o provedor precisa estar conectado para ativar.",
         input: z.object({ feature: z.enum(AI_FEATURE_KEYS), patchJson: z.string() }),
         summarize: (input) => `Alterar a configuração do agente de IA ${input.feature}`,

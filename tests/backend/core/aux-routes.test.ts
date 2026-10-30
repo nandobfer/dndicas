@@ -247,85 +247,11 @@ describe('auxiliary backend routes', () => {
         expect(payload.code).toBe('FILE_REQUIRED');
     });
 
-    it('POST /api/feedback strips admin-only fields for non-admin creators', async () => {
-        const create = vi.fn().mockResolvedValue({ _id: 'feedback-1' });
-
-        vi.doMock('@/core/auth/server', () => ({
-            currentUser: vi.fn().mockResolvedValue({
-                id: 'clerk-1',
-                fullName: 'Hero Player',
-                username: 'hero',
-                emailAddresses: [{ emailAddress: 'hero@example.com' }],
-                publicMetadata: { role: 'user' },
-            }),
-        }));
-        vi.doMock('@/features/feedback/api/feedback.model', () => ({
-            FeedbackModel: {
-                find: vi.fn(),
-                countDocuments: vi.fn(),
-                create,
-            },
-        }));
-        vi.doMock('@/core/database/db', () => ({
-            default: vi.fn().mockResolvedValue(undefined),
-        }));
-        vi.doMock('@/core/database/audit-log', () => ({
-            logAction: vi.fn().mockResolvedValue(undefined),
-        }));
-        vi.doMock('@/features/feedback/services/feedback-timeline-service', () => ({
-            createFeedbackTimelineEvent: vi.fn().mockResolvedValue(undefined),
-        }));
-
-        const mod = await importFresh<typeof import('@/app/api/feedback/route')>('@/app/api/feedback/route');
-        const response = await mod.POST(makeJsonRequest('http://localhost/api/feedback', {
-            method: 'POST',
-            body: JSON.stringify({
-                title: 'Bug',
-                description: 'Descrição suficientemente longa para validar.',
-                type: 'bug',
-                status: 'concluido',
-                priority: 'alta',
-            }),
-        }));
-
-        expect(response.status).toBe(201);
-        expect(create).toHaveBeenCalledWith(expect.not.objectContaining({
-            status: 'concluido',
-            priority: 'alta',
-        }));
-    });
-
-    it('PATCH /api/feedback/[id] blocks non-owner non-admin users', async () => {
-        vi.doMock('@/core/auth/server', () => ({
-            auth: vi.fn().mockResolvedValue({ userId: 'clerk-2' }),
-            currentUser: vi.fn().mockResolvedValue({
-                publicMetadata: { role: 'user' },
-            }),
-        }));
-        vi.doMock('@/features/feedback/api/feedback.model', () => ({
-            FeedbackModel: {
-                findById: vi.fn().mockResolvedValue({ createdBy: 'clerk-1' }),
-                findByIdAndUpdate: vi.fn(),
-            },
-        }));
-        vi.doMock('@/core/database/db', () => ({
-            default: vi.fn().mockResolvedValue(undefined),
-        }));
-
-        const mod = await importFresh<typeof import('@/app/api/feedback/[id]/route')>('@/app/api/feedback/[id]/route');
-        const response = await mod.PATCH(makeJsonRequest('http://localhost/api/feedback/feedback-1', {
-            method: 'PATCH',
-            body: JSON.stringify({ title: 'Updated title' }),
-        }), { params: Promise.resolve({ id: 'feedback-1' }) });
-
-        expect(response.status).toBe(403);
-    });
-
     it('GET /api/admin/mention-audit requires admin users', async () => {
         vi.doMock('@/core/auth/server', () => ({
             auth: vi.fn().mockResolvedValue({ userId: 'clerk-1' }),
             currentUser: vi.fn().mockResolvedValue({
-                publicMetadata: { role: 'user' },
+                can: () => false,
             }),
         }));
         vi.doMock('@/core/database/db', () => ({

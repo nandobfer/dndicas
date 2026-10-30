@@ -5,6 +5,10 @@ Camada de IA copiada do Opex (Vercel AI SDK). Substitui o antigo `src/core/ai/ge
 
 ## Provedores (`/integracoes/ia`)
 
+Os cards de provedores, consumo, modelos, agentes e memórias usam a família
+`GlassCard` existente. Layout e cor primária seguem o padrão compartilhado descrito
+em [Integrações — Interface](./integrations.md#interface-dnd-6), sem containers de largura próprios.
+
 | Id | Integração | Uso no DnDicas |
 | --- | --- | --- |
 | `opencode` | `ai_opencode` | Texto (modelos e agentes das contas do servidor OpenCode 2.x) |

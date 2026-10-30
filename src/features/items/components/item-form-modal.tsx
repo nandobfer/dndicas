@@ -448,7 +448,7 @@ return (
                             type="submit"
                             className={cn(
                                 "flex flex-1 sm:flex-none items-center justify-center gap-2 px-6 py-2.5 rounded-lg text-sm font-medium transition-all shadow-lg active:scale-95",
-                                "bg-blue-500 text-white shadow-blue-500/20 hover:bg-blue-600",
+                                "bg-primary text-primary-foreground shadow-primary/20 hover:bg-primary/90",
                                 isSubmitting && "opacity-50 cursor-not-allowed",
                             )}
                             disabled={isSubmitting}

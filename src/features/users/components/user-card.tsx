@@ -2,6 +2,7 @@
 
 import { UserCircle, Mail, Shield, ShieldAlert, Calendar, User as UserIcon } from "lucide-react"
 import { Chip } from "@/components/ui/chip"
+import { RoleChip } from "@/features/perfix/components/permissions/RoleChip"
 import { cn } from "@/core/utils"
 import type { UserResponse } from "../types/user.types"
 import { format } from "date-fns"
@@ -26,12 +27,12 @@ export function UserCard({ user, showStatus = true }: UserCardProps) {
                 <div className="flex items-center gap-3">
                     <div className={cn(
                         "w-10 h-10 rounded-full flex items-center justify-center border-2 overflow-hidden bg-white/5",
-                        user.role === "admin" ? "border-blue-500/30" : "border-white/10"
+                        user.roles.some(role => role.permissoes.includes("*")) ? "border-blue-500/30" : "border-white/10"
                     )}>
                         {user.avatarUrl ? (
                             <img src={user.avatarUrl} alt={user.username} className="w-full h-full object-cover" />
                         ) : (
-                            <UserCircle className={cn("h-6 w-6", user.role === "admin" ? "text-blue-400" : "text-white/40")} />
+                            <UserCircle className="h-6 w-6 text-white/40" />
                         )}
                     </div>
                     <div className="min-w-0">
@@ -39,9 +40,7 @@ export function UserCard({ user, showStatus = true }: UserCardProps) {
                             <h3 className="text-sm font-bold text-white leading-tight truncate">
                                 {user.name || user.username}
                             </h3>
-                            <Chip variant={user.role === "admin" ? "artifact" : "common"} size="sm">
-                                {user.role === "admin" ? "Admin" : "Usuário"}
-                            </Chip>
+                            {user.roles.map(role => <RoleChip key={role.id} cargo={role} />)}
                         </div>
                         <p className="text-[10px] uppercase font-bold tracking-widest text-white/40 mt-0.5">
                             ID: {user.id.slice(0, 10)}...
@@ -76,7 +75,7 @@ export function UserCard({ user, showStatus = true }: UserCardProps) {
                         {format(new Date(user.createdAt), "dd MMM yyyy", { locale: ptBR })}
                     </span></span>
                 </div>
-                {user.role === "admin" && (
+                {user.roles.some(role => role.ativo && role.permissoes.includes("*")) && (
                     <div className="flex items-center gap-1.5">
                         <Shield className="w-3 h-3 text-blue-400/50" />
                         <span className="text-blue-400/50 uppercase tracking-tighter">Acesso Total</span>

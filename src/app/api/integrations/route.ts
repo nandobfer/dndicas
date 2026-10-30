@@ -5,7 +5,7 @@ import { listIntegrations } from "@/features/integrations/services/integration-s
 
 /** GET /api/integrations — integrações com ambiente, modo debug e o último status do teste de conexão. */
 export async function GET() {
-    const denied = await denyUnlessAdmin()
+    const denied = await denyUnlessAdmin("integrations.access")
     if (denied) return denied
     try {
         const data = await listIntegrations()

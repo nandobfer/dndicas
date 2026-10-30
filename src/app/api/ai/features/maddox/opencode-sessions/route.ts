@@ -8,6 +8,6 @@ export const dynamic = "force-dynamic"
 
 /** GET /api/ai/features/maddox/opencode-sessions — sessões do OpenCode mantidas pelo Maddox. */
 export const GET = withRoute(async () => {
-    await requireAdminActor()
+    await requireAdminActor("integrations.ai.view")
     return ok(await listMaddoxSessions())
 })

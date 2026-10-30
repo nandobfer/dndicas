@@ -42,7 +42,7 @@ export interface ToolRuntimeHooks {
      * no portal, relê a configuração do cliente e o papel do usuário (desligar no meio do turno vale
      * na hora). Ausente = confia no catálogo montado no início do turno (dono).
      */
-    authorize?: (tool: OpexTool) => Promise<void>
+    authorize?: (tool: OpexTool, input: unknown) => Promise<void>
 }
 
 export interface ToolRuntime {
@@ -67,7 +67,7 @@ export function buildToolRuntime(list: readonly OpexTool[], context: OpexToolCon
             execute: async (input: unknown, options) => {
                 const startedAt = Date.now()
                 try {
-                    await hooks.authorize?.(def)
+                    await hooks.authorize?.(def, def.input.parse(input))
                     if (needsConfirmation(def, confirmationOverrides)) {
                         const confirmation = await hooks.requestConfirmation(def, input, options.toolCallId)
                         confirmations.set(options.toolCallId, confirmation)

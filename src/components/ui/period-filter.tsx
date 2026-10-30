@@ -249,7 +249,7 @@ export function PeriodFilter({ startDate, endDate, onChange, className }: Period
                         <button
                             type="button"
                             onClick={handleApply}
-                            className="px-3 py-1.5 rounded-md text-sm bg-blue-500 text-white hover:bg-blue-600 transition-colors"
+                            className="px-3 py-1.5 rounded-md text-sm bg-primary text-primary-foreground hover:bg-primary/90 transition-colors"
                         >
                             Aplicar
                         </button>

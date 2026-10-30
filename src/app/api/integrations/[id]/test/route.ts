@@ -16,9 +16,9 @@ type Params = { params: Promise<{ id: string }> }
  * que acontecem, e uma linha final `{type:"result"}`.
  */
 export async function POST(request: NextRequest, { params }: Params) {
-    const denied = await denyUnlessAdmin()
-    if (denied) return denied
     const { id } = await params
+    const denied = await denyUnlessAdmin(`integrations.${id}.test`)
+    if (denied) return denied
     if (!isIntegrationId(id)) {
         return NextResponse.json({ success: false, error: "Integração não encontrada" }, { status: 404 })
     }

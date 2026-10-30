@@ -21,7 +21,7 @@ import { useRacesPage } from "../hooks/useRacesPage"
 import { cn } from "@/core/utils/index"
 
 export function RacesPage() {
-    const { isAdmin } = useAuth()
+    const isAdmin = useAuth().can("catalog.edit")
 
     const { isMobile, filters, data, modals, viewMode, setViewMode, actions } = useRacesPage()
 
@@ -43,10 +43,10 @@ export function RacesPage() {
                         onClick={actions.handleCreateClick}
                         className={cn(
                             "inline-flex items-center justify-center gap-2 px-4 py-2 rounded-lg",
-                            "bg-blue-500 text-white font-medium text-sm",
-                            "hover:bg-blue-600 transition-colors",
-                            "focus:outline-none focus:ring-2 focus:ring-blue-500/50",
-                            "shadow-lg shadow-blue-500/20",
+                            "bg-primary text-primary-foreground font-medium text-sm",
+                            "hover:bg-primary/90 transition-colors",
+                            "focus:outline-none focus:ring-2 focus:ring-primary/50",
+                            "shadow-lg shadow-primary/20",
                             "w-full sm:w-auto",
                         )}
                     >

@@ -12,3 +12,4 @@ node_modules
 docker-compose.yaml
 README.md
 LICENSE
+backups

@@ -15,7 +15,7 @@ export async function GET(req: NextRequest) {
   try {
     const { userId } = await auth()
     const user = userId ? await currentUser() : null
-    const isAdmin = user?.publicMetadata?.role === "admin"
+    const isAdmin = user?.can("mentions.review") ?? false
 
     if (!isAdmin) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })

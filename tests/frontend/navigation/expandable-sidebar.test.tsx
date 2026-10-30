@@ -26,6 +26,7 @@ vi.mock('@/core/hooks/useAuth', () => ({
     useAuth: () => ({
         isSignedIn: true,
         isAdmin: false,
+        can: () => false,
         fullName: 'Nando Burgos',
         email: 'nando@example.com',
         imageUrl: 'https://example.com/avatar.png',

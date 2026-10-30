@@ -18,7 +18,7 @@ export interface ClassesFiltersProps {
 }
 
 export function ClassesFilters({ filters, onSearchChange, onStatusChange, onSourcesChange, isSearching = false, hideStatus = false, className }: ClassesFiltersProps) {
-    const { isAdmin } = useAuth()
+    const isAdmin = useAuth().can("catalog.edit")
 
     return (
         <div className={cn("flex flex-col gap-4", className)}>

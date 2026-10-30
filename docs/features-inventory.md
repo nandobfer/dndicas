@@ -677,26 +677,21 @@ Página:
 
 APIs:
 
-- `GET /api/feedback`
-- `POST /api/feedback`
-- `PATCH /api/feedback/[id]`
+- `POST /api/opex-feedback/access`
+- `GET /api/opex-feedback/dashboard`
 
 Capacidades implementadas:
 
-- Usuários autenticados podem abrir modal de novo feedback.
-- Página usa filtros por busca, status e prioridade.
-- Tabela no desktop e lista no mobile.
-- Edição reaproveita o mesmo modal.
-- Permissões distinguem campos principais e campos administrativos:
-  - dono ou admin edita campos principais,
-  - apenas admin edita campos administrativos.
+- Usuários autenticados recebem acesso individual no cliente configurado em Tarefas Opex.
+- Apenas acessos previamente vinculados no servidor são reutilizados; novos usuários têm identificador exclusivo, sem email e sem administração do cliente.
+- Dashboard reproduz os gráficos do portal Opex e o link individual para a central externa.
+- Módulo interno e ferramentas MCP removidos; histórico preservado e exportável no host.
 
 Estados testáveis:
 
-- Visitante não vê botão de criação.
-- Usuário dono versus usuário não dono versus admin.
-- Busca e filtros.
-- Fluxo criar/editar.
+- Visitante vê convite de login; nenhum usuário é provisionado.
+- Integração não configurada, carregamento, erro, retry e estado vazio.
+- Período, atualização de gráficos e Financeiro apenas para administrador Opex.
 
 ## APIs Auxiliares e Estatísticas
 

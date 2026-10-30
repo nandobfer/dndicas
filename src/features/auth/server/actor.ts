@@ -1,6 +1,7 @@
 import { getCurrentUserFromDb } from "@/features/users/api/get-current-user"
 import { DomainError } from "@/lib/api/route"
 import { fail } from "@/lib/api/responses"
+import { optionalAccess } from "@/features/perfix/server/auth"
 
 /**
  * Ator das rotas copiadas do Opex. No Opex há um único dono (`getLocalUser`); no DnDicas o ator é
@@ -11,6 +12,8 @@ export interface Actor {
     id: string
     name: string
     role: "admin" | "user"
+    permissions?: string[]
+    realUserId?: string
 }
 
 /** Autor das gravações feitas pelo próprio sistema (rotinas, migrações, jobs). */
@@ -21,10 +24,12 @@ export async function getActor(): Promise<Actor | null> {
     const result = await getCurrentUserFromDb()
     if (!result.success || !result.user) return null
     const user = result.user
+    const access = await optionalAccess()
     return {
         id: String(user._id),
         name: user.name?.trim() || user.username,
-        role: user.role === "admin" ? "admin" : "user",
+        role: access && (access.effective.has("*") || access.effective.has("admin.access")) ? "admin" : "user",
+        permissions: [...access?.effective ?? []], realUserId: access?.realUserId,
     }
 }
 
@@ -36,21 +41,31 @@ export async function requireActor(): Promise<Actor> {
 }
 
 /** Exige administrador: 401 para visitantes e 403 para usuários comuns. */
-export async function requireAdminActor(): Promise<Actor> {
-    const actor = await requireActor()
-    if (actor.role !== "admin") throw new DomainError(403, "Acesso restrito a administradores.", "FORBIDDEN")
-    return actor
+export async function requireAdminActor(permission = "admin.access"): Promise<Actor> {
+    return requirePermissionActor(permission)
 }
 
 /**
  * Guarda para rotas que não usam `withRoute`: devolve a resposta 401/403 padronizada (`ApiResponse`)
  * quando o usuário não é administrador, ou `null` para seguir.
  */
-export async function denyUnlessAdmin(): Promise<Response | null> {
+export async function denyUnlessAdmin(permission = "admin.access"): Promise<Response | null> {
     try {
-        await requireAdminActor()
+        await requireAdminActor(permission)
         return null
     } catch (error) {
+        if (error instanceof DomainError) return fail(error.status, error.message, error.code)
+        throw error
+    }
+}
+/** Autoridade granular sem depender do papel de compatibilidade do Agente Opex. */
+export async function requirePermissionActor(permission: string): Promise<Actor> {
+    const { requireAccess } = await import("@/features/perfix/server/access")
+    const access = await requireAccess(permission)
+    return { id: access.userId, realUserId: access.realUserId, name: access.name, role: access.effective.has("*") || access.effective.has("admin.access") ? "admin" : "user", permissions: [...access.effective] }
+}
+export async function denyUnlessPermission(permission: string): Promise<Response | null> {
+    try { await requirePermissionActor(permission); return null } catch (error) {
         if (error instanceof DomainError) return fail(error.status, error.message, error.code)
         throw error
     }

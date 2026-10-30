@@ -15,7 +15,7 @@ function kindOf(value: string): MaddoxScriptKind {
 
 /** GET /api/ai/features/maddox/scripts/[kind]?version=N — uma versão do roteiro (sem `version`: vigente e histórico). */
 export const GET = withRoute<{ kind: string }>(async ({ req, params }) => {
-    await requireAdminActor()
+    await requireAdminActor("integrations.ai.view")
     const kind = kindOf(params.kind)
     const raw = new URL(req.url).searchParams.get("version")
     if (raw === null) return ok(await getMaddoxScriptState(kind))
@@ -28,7 +28,7 @@ export const GET = withRoute<{ kind: string }>(async ({ req, params }) => {
 
 /** PUT /api/ai/features/maddox/scripts/[kind] — grava uma nova versão (`version` = vigente na abertura). */
 export const PUT = withRoute<{ kind: string }>(async ({ req, params }) => {
-    const actor = await requireAdminActor()
+    const actor = await requireAdminActor("integrations.ai.edit")
     const kind = kindOf(params.kind)
     const body = await parseBody(req, saveMaddoxScriptSchema)
     if (!body.ok) return body.response

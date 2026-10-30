@@ -28,9 +28,9 @@ const executeSchema = z
  * autenticação da integração injetada pelo servidor.
  */
 export async function POST(request: NextRequest, { params }: Params) {
-    const denied = await denyUnlessAdmin()
-    if (denied) return denied
     const { id } = await params
+    const denied = await denyUnlessAdmin(`integrations.${id}.explore`)
+    if (denied) return denied
     if (!isIntegrationId(id)) {
         return NextResponse.json({ success: false, error: "Integração não encontrada" }, { status: 404 })
     }
@@ -42,7 +42,7 @@ export async function POST(request: NextRequest, { params }: Params) {
                 { status: 400 },
             )
         }
-        const data = await executeExplorerOperation(id, parsed.data, (await requireAdminActor()).id, request.signal)
+        const data = await executeExplorerOperation(id, parsed.data, (await requireAdminActor(`integrations.${id}.explore`)).id, request.signal)
         return NextResponse.json({ success: true, data })
     } catch (error) {
         if (error instanceof ExplorerError) {

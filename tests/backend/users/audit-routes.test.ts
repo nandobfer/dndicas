@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
+vi.mock('@/features/auth/server/actor', () => ({ denyUnlessPermission: vi.fn().mockResolvedValue(null) }));
 
 import { makeRequest, readJson } from '../helpers/http';
 import { importFresh } from '../helpers/module';

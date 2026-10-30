@@ -3,10 +3,23 @@
 Central administrativa das integrações do DnDicas, copiada da central do Opex. Toda configuração
 que antes vivia no `.env` passa a ser lida e gravada no MongoDB e editada pelos administradores.
 
-> **Acesso:** só administradores. O item "Integrações" (ícone `PlugZap`) fica na seção de
-> administração da barra lateral; `/integracoes/**` redireciona visitantes para o login e mostra
-> "Acesso restrito" para usuários comuns. As rotas `/api/integrations/**`, `/api/ai/**` e o canal
-> `private-integration-{id}` exigem administrador.
+> **Acesso:** `integrations.access` na sidebar/layout, com permissões `integrations.<id>.view/edit/test/logs/explore` nas APIs correspondentes. APIs de recursos de IA usam `integrations.ai.view/edit`. Canais administrativos continuam exigindo `admin.access`. O coringa `*` satisfaz todas essas permissões. Consulte [Perfix](./perfix.md).
+
+## Interface (DND-6)
+
+- `/integracoes/**` ocupa a largura disponível do dashboard. O `<main>` já aplica
+  `p-4 lg:p-6`; o layout das integrações não deve duplicar esse padding nem impor
+  `max-w-*`/centralização próprios. O antigo `mx-auto max-w-7xl` causava as faixas laterais extras.
+- Lista, detalhes, explorador, logs e abas de IA/Agente Opex/Jobs reutilizam
+  `@/components/ui/glass-card`, como as demais páginas. O antigo `opex/card` usava
+  `bg-card`, quase preto no tema dark, porque a central havia sido copiada do Opex.
+  Preservar o padding interno dos formulários e evitar animação dupla nos cards já animados pelo pai.
+- A cor primária **global** referencia `--color-blue-500` do Tailwind, o azul original
+  de "Nova classe"; antes, os controles Opex herdavam `--primary` verde enquanto os
+  botões dos cadastros tinham azul hardcoded. Botões primários usam `bg-primary`,
+  `text-primary-foreground` e `hover:bg-primary/90`, incluindo os cadastros e autenticação.
+  Verde de sucesso/conectado e cores semânticas de HTTP/console permanecem independentes.
+- Regressões de layout, autenticação, glass e controles: `tests/frontend/integrations/integrations-visual-standard.test.tsx`.
 
 ## Bootstrap: o que continua no `.env`
 
@@ -52,10 +65,12 @@ Módulo puro (tela e servidor). Integrações ativas:
 | `storage_s3` | Storage S3 | MinIO/S3; endpoint público para URLs assinadas |
 | `analytics_umami` | Analytics (Umami) | Script carregado pelo layout raiz; desativado, o script não entra |
 | `translation` | Tradução | Tradutor padrão dos scripts de seed, LibreTranslate e Google Cloud Translation |
+| `perfix` | Perfix | `/integracoes/perfix`: padrão de novos usuários, perfis/hierarquia/permissões/membros e Visualizar como |
 
-`IN_DEVELOPMENT_INTEGRATIONS`: **`opex`** — aparece na lista como "Em desenvolvimento", sem
-campos nem ações. Enquanto estiver ali, o fluxo agêntico dos feedbacks fica bloqueado
-(`assertOpexIntegrationAvailable()`, ver `feedback.md`).
+| `opex` | Tarefas Opex | URL pública, URL interna opcional e segredo `clientToken`; acesso automático e dashboard em `/feedback` (ver `opex-feedback.md`) |
+
+`IN_DEVELOPMENT_INTEGRATIONS` está vazio. O testador Opex verifica sessão administrativa e
+listagem de usuários sem provisionar usuários de teste. A central antiga foi removida.
 
 ## Rotinas (Crons)
 

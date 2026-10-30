@@ -21,7 +21,7 @@ export const APP_DOC_AUDIENCE: Readonly<Record<string, AppDocAudience>> = {
     "modules/dice-roller.md": "all",
     "modules/entity-understanding.md": "all",
     "modules/feats.md": "all",
-    "modules/feedback.md": "all",
+    "modules/opex-feedback.md": "all",
     "modules/items.md": "all",
     "modules/mcp.md": "all",
     "modules/monsters.md": "all",
@@ -38,6 +38,7 @@ export const APP_DOC_AUDIENCE: Readonly<Record<string, AppDocAudience>> = {
     "modules/maddox.md": "admin",
     "modules/seed-data.md": "admin",
     "modules/users.md": "admin",
+    "modules/perfix.md": "admin",
 }
 
 /** Teto de leitura por arquivo (bytes). */

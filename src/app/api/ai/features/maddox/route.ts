@@ -9,13 +9,13 @@ export const dynamic = "force-dynamic"
 
 /** GET /api/ai/features/maddox — configuração do Agente Maddox, roteiros vigentes e históricos. */
 export const GET = withRoute(async () => {
-    await requireAdminActor()
+    await requireAdminActor("integrations.ai.view")
     return ok(await getMaddoxSettings())
 })
 
 /** PUT /api/ai/features/maddox — salva (confere provedores, modelos, variantes e agentes no catálogo). */
 export const PUT = withRoute(async ({ req }) => {
-    const actor = await requireAdminActor()
+    const actor = await requireAdminActor("integrations.ai.edit")
     const body = await parseBody(req, maddoxSettingsSchema)
     if (!body.ok) return body.response
     return ok(await saveMaddoxSettings(body.data, actor.id))

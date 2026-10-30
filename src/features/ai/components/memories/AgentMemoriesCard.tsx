@@ -1,6 +1,6 @@
 "use client"
 
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/opex/card"
+import { GlassCard as Card, GlassCardContent as CardContent, GlassCardDescription as CardDescription, GlassCardHeader as CardHeader, GlassCardTitle as CardTitle } from "@/components/ui/glass-card"
 import { AI_AGENTS, type AiAgentId } from "../../agents"
 import { agentMemoriesSource } from "../../hooks/useMemories"
 import { MemoryList } from "./MemoryList"
@@ -20,7 +20,7 @@ export function AgentMemoriesCard({ agentId }: { agentId: AiAgentId }) {
                     {agent.description} Use para alimentar e treinar o agente. Clique para ver o texto completo.
                 </CardDescription>
             </CardHeader>
-            <CardContent>
+            <CardContent className="p-6 pt-0">
                 <MemoryList source={agentMemoriesSource(agentId)} canEdit emptyTitle="Nenhuma memória" emptyDescription={`Adicione instruções e fatos que o ${agent.label} deve lembrar.`} />
             </CardContent>
         </Card>

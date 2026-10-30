@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { requireAuth, hasRole } from '@/core/auth';
+import { denyUnlessPermission } from '@/features/auth/server/actor';
 import dbConnect from '@/core/database/db';
-import AuditLog from '@/core/database/audit-log';
+import AuditLog from '@/features/perfix/server/audit';
 import { ApiResponse } from '@/core/types';
 
 /**
@@ -13,6 +13,8 @@ export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const denied = await denyUnlessPermission("audit.view")
+  if (denied) return denied
   try {
       const { id } = await params
 

@@ -184,7 +184,7 @@ export function BackgroundFilters({
     isSearching = false,
     className,
 }: BackgroundFiltersProps) {
-    const { isAdmin } = useAuth()
+    const isAdmin = useAuth().can("catalog.edit")
     const isMobile = useIsMobile()
 
     const selectedSkills = filters.skillProficiencies || []

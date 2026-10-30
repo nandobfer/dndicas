@@ -22,7 +22,8 @@ import { UserNpcFormModal } from "./user-npc-form-modal"
 
 export function MonstersPage() {
     const router = useRouter()
-    const { isAdmin, isSignedIn } = useAuth()
+    const { can, isSignedIn } = useAuth()
+    const isAdmin = can("catalog.edit")
     const { filters, data, viewMode, setViewMode, actions, modals } = useMonstersPage()
     const deleteMutation = useDeleteMonster()
     const copyToNpcAction = useCopyToNpcAction("monster", { openFormOnCopy: false, onCopied: (npc) => router.push(getNpcDetailHref(npc, { edit: true })) })

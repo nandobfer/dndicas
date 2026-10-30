@@ -27,7 +27,6 @@ Fica fora desta fase:
 - Dados privados de usuários
 - NPCs pessoais
 - Fichas de personagem
-- Operações da central de feedback
 - Execuções agênticas
 
 ## Transporte MCP

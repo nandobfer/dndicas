@@ -31,7 +31,6 @@ export const OPEX_TOOL_GROUPS = [
     "integrations",
     "routines",
     "ai-settings",
-    "feedback",
 ] as const
 export type OpexToolGroup = (typeof OPEX_TOOL_GROUPS)[number]
 
@@ -47,7 +46,6 @@ export const OPEX_TOOL_GROUP_LABELS: Record<OpexToolGroup, { label: string; desc
     integrations: { label: "Integrações", description: "Ler (sem segredos), configurar e testar integrações (só administradores)" },
     routines: { label: "Rotinas", description: "Crons do agendador interno (só administradores)" },
     "ai-settings": { label: "Agentes de IA", description: "Configuração dos agentes de IA do DnDicas (Gerador de imagens, Entender com IA, Importador 5etools, Resumo de memórias) (só administradores)" },
-    feedback: { label: "Central de feedback", description: "Listar e ler feedbacks; criar, editar e comentar com login (editar: o autor ou administradores)" },
 }
 
 /** Papel mínimo de cada grupo (o servidor também confere por ferramenta). Sem papel: vale para visitantes. */

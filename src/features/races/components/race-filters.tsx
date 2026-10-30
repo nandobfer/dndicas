@@ -24,7 +24,7 @@ export interface RaceFiltersProps {
 }
 
 export function RaceFilters({ filters, onSearchChange, onStatusChange, onSourcesChange, isSearching = false, className }: RaceFiltersProps) {
-    const { isAdmin } = useAuth()
+    const isAdmin = useAuth().can("catalog.edit")
 
     return (
         <div className={cn("flex flex-col gap-4", className)}>

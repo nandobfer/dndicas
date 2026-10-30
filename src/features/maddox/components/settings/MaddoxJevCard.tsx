@@ -2,7 +2,7 @@
 
 import { Controller, type UseFormReturn } from "react-hook-form"
 import { Info } from "lucide-react"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/opex/card"
+import { GlassCard as Card, GlassCardContent as CardContent, GlassCardDescription as CardDescription, GlassCardHeader as CardHeader, GlassCardTitle as CardTitle } from "@/components/ui/glass-card"
 import { Switch } from "@/components/ui/opex/switch"
 import { ToggleRow } from "@/components/ui/opex/toggle-card"
 import type { AiProviderStatusDto } from "@/lib/ai/providers"

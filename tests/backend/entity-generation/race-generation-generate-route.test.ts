@@ -26,7 +26,7 @@ describe("POST /api/admin/entity-generation/races/[id]/generate", () => {
         })
 
         vi.doMock("@/core/auth/server", () => ({
-            currentUser: vi.fn().mockResolvedValue({ id: "user-1", publicMetadata: { role: "admin" } }),
+            currentUser: vi.fn().mockResolvedValue({ id: "user-1", can: (permission: string) => ["catalog.generate", "feedback.agent"].includes(permission) }),
         }))
         vi.doMock("@/features/entity-generation/server/race-ai-generation-service", () => ({
             generateRaceCandidates,
@@ -57,7 +57,7 @@ describe("POST /api/admin/entity-generation/races/[id]/generate", () => {
         const publishFailure = vi.fn().mockResolvedValue(undefined)
 
         vi.doMock("@/core/auth/server", () => ({
-            currentUser: vi.fn().mockResolvedValue({ id: "user-1", publicMetadata: { role: "admin" } }),
+            currentUser: vi.fn().mockResolvedValue({ id: "user-1", can: (permission: string) => ["catalog.generate", "feedback.agent"].includes(permission) }),
         }))
         vi.doMock("@/features/entity-generation/server/race-ai-generation-service", () => ({
             generateRaceCandidates: vi.fn().mockRejectedValue(new Error("Falhou")),

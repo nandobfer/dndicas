@@ -10,7 +10,7 @@ export const maxDuration = 120
 
 /** POST /api/ai/features/maddox/avatar — gera o avatar com o Gerador de imagens (vale só depois de salvar). */
 export const POST = withRoute(async ({ req }) => {
-    const actor = await requireAdminActor()
+    const actor = await requireAdminActor("integrations.ai.edit")
     const body = await parseBody(req, generateMaddoxAvatarSchema)
     if (!body.ok) return body.response
     return ok(await generateMaddoxAvatar(body.data.persona, actor.id))

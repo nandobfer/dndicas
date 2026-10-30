@@ -46,6 +46,8 @@ Antes de implementar, leia nesta ordem:
 ### UI e frontend
 
 - Prefira componentes no estilo "Glass" localizados em `src/components/ui/`. Caso não encontre um componente Glass adequado para a necessidade, utilize os componentes do Shadcn já disponíveis no projeto.
+- Abas usam a cor primária na aba ativa: `IntegrationTabs` (`src/features/integrations/components/tabs/IntegrationTabs.tsx`), `GlassSelector` ou `OptionTabs`. Nunca `@/core/ui/tabs`, cuja aba ativa fica preta no tema escuro.
+- Nunca use `<select>` ou `<input type="checkbox">` nativos: use o `Select` Glass de `@/core/ui/select`, `GlassSelector`/`StatusChips` para poucas opções fixas e o `Checkbox` de `@/core/ui/checkbox`. Veja "Abas e seletores" em `aicontext/use-componentes-ui.md`.
 - Não coloque regra de negócio complexa dentro de componentes.
 - Extraia lógica para hooks, serviços ou utilitários da feature.
 - Mantenha responsividade, loading, erro e confirmação explícita em ações críticas.

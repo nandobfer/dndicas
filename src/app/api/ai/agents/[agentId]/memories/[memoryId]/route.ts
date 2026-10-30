@@ -11,13 +11,13 @@ type Params = { agentId: string; memoryId: string }
 
 /** GET /api/ai/agents/[agentId]/memories/[memoryId] — uma memória. */
 export const GET = withRoute<Params>(async ({ params }) => {
-    await requireAdminActor()
+    await requireAdminActor("integrations.ai.view")
     return ok(await getAgentMemory(params.agentId, params.memoryId))
 })
 
 /** PATCH — edita o texto (reformatado pelo Resumo de memórias). */
 export const PATCH = withRoute<Params>(async ({ req, params }) => {
-    const actor = await requireAdminActor()
+    const actor = await requireAdminActor("integrations.ai.edit")
     const body = await parseBody(req, memoryInputSchema)
     if (!body.ok) return body.response
     return ok(await updateAgentMemory(params.agentId, params.memoryId, body.data.texto, actor.id))
@@ -25,6 +25,6 @@ export const PATCH = withRoute<Params>(async ({ req, params }) => {
 
 /** DELETE — exclui (a auditoria guarda o texto). */
 export const DELETE = withRoute<Params>(async ({ params }) => {
-    const actor = await requireAdminActor()
+    const actor = await requireAdminActor("integrations.ai.edit")
     return ok(await deleteAgentMemory(params.agentId, params.memoryId, actor.id))
 })

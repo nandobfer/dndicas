@@ -84,9 +84,13 @@ export function SignIn({ fallbackRedirectUrl, forceRedirectUrl }: { routing?: st
     const searchParams = useSearchParams()
     const [identifier, setIdentifier] = React.useState("")
     const [password, setPassword] = React.useState("")
-    const [error, setError] = React.useState<string | null>(null)
     const [isSubmitting, setIsSubmitting] = React.useState(false)
     const callbackUrl = forceRedirectUrl || searchParams.get("callbackUrl") || fallbackRedirectUrl || "/"
+    const [error, setError] = React.useState<string | null>(() =>
+        searchParams.get("error") === "SignupUnavailable"
+            ? "Cadastro indisponível no momento: nenhum perfil padrão válido está configurado. Peça a um administrador para configurar a integração Perfix."
+            : null,
+    )
 
     async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
         event.preventDefault()
@@ -136,7 +140,7 @@ export function SignIn({ fallbackRedirectUrl, forceRedirectUrl }: { routing?: st
                         <Input id="password" type="password" value={password} onChange={(event) => setPassword(event.target.value)} autoComplete="current-password" required />
                     </div>
                     {error && <p className="text-sm text-red-300">{error}</p>}
-                    <Button type="submit" className="w-full bg-blue-500 text-white hover:bg-blue-600" disabled={isSubmitting}>{isSubmitting ? "Entrando..." : "Entrar"}</Button>
+                    <Button type="submit" className="w-full bg-primary text-primary-foreground hover:bg-primary/90" disabled={isSubmitting}>{isSubmitting ? "Entrando..." : "Entrar"}</Button>
                     {googleEnabled && (
                         <>
                             <div className="relative py-1">
@@ -250,7 +254,7 @@ export function SignUp() {
                         <Input id="signup-password" type="password" value={password} onChange={(event) => setPassword(event.target.value)} autoComplete="new-password" required />
                     </div>
                     {error && <p className="text-sm text-red-300">{error}</p>}
-                    <Button type="submit" className="w-full bg-blue-500 text-white hover:bg-blue-600" disabled={isSubmitting}>{isSubmitting ? "Criando..." : "Criar conta"}</Button>
+                    <Button type="submit" className="w-full bg-primary text-primary-foreground hover:bg-primary/90" disabled={isSubmitting}>{isSubmitting ? "Criando..." : "Criar conta"}</Button>
                     <p className="text-center text-sm text-white/50">
                         Já tem conta? <Link href="/sign-in" className="text-blue-300 hover:text-blue-200">Entrar</Link>
                     </p>
@@ -452,7 +456,7 @@ export function UserProfile({ path = "/profile" }: { path?: string }) {
             <div className="flex flex-col items-center gap-4 text-white/70">
                 <User className="h-10 w-10" />
                 <p>Entre para ver seu perfil.</p>
-                <Button asChild className="bg-blue-500 text-white hover:bg-blue-600"><Link href={`/sign-in?callbackUrl=${encodeURIComponent(path)}`}>Entrar</Link></Button>
+                <Button asChild className="bg-primary text-primary-foreground hover:bg-primary/90"><Link href={`/sign-in?callbackUrl=${encodeURIComponent(path)}`}>Entrar</Link></Button>
             </div>
         )
     }
@@ -485,7 +489,7 @@ export function UserProfile({ path = "/profile" }: { path?: string }) {
                     <p className="text-sm"><span className="text-white/50">Email:</span> {user.email || "Não informado"}</p>
                     {message && <p className="text-sm text-emerald-300">{message}</p>}
                     {error && <p className="text-sm text-red-300">{error}</p>}
-                    <Button type="submit" className="w-full bg-blue-500 text-white hover:bg-blue-600" disabled={isSubmitting}>{isSubmitting ? "Salvando..." : "Salvar perfil"}</Button>
+                    <Button type="submit" className="w-full bg-primary text-primary-foreground hover:bg-primary/90" disabled={isSubmitting}>{isSubmitting ? "Salvando..." : "Salvar perfil"}</Button>
                 </form>
                 <div className="mt-8 border-t border-white/10 pt-6">
                     <div className="mb-4 flex items-start gap-3">
@@ -494,7 +498,7 @@ export function UserProfile({ path = "/profile" }: { path?: string }) {
                         </div>
                         <div>
                             <h2 className="text-lg font-semibold text-white">Token MCP</h2>
-                            <p className="text-sm text-white/60">Use este token nas configurações do seu cliente MCP para operar a central de feedback.</p>
+                            <p className="text-sm text-white/60">Use este token nas configurações do seu cliente MCP quando uma ferramenta exigir autenticação.</p>
                         </div>
                     </div>
 
@@ -543,7 +547,7 @@ export function UserProfile({ path = "/profile" }: { path?: string }) {
                         ) : (
                             <motion.div key="mcp-empty" {...tokenStateMotion} className="overflow-hidden rounded-xl border border-dashed border-white/15 bg-white/[0.03] p-4">
                                 <p className="text-sm text-white/70">Você ainda não tem um token MCP. Gere um token permanente para configurar clientes MCP autorizados.</p>
-                                <Button type="button" className="mt-4 bg-blue-500 text-white hover:bg-blue-600" onClick={() => void handleGenerateMcpToken()} disabled={isGeneratingToken}>
+                                <Button type="button" className="mt-4 bg-primary text-primary-foreground hover:bg-primary/90" onClick={() => void handleGenerateMcpToken()} disabled={isGeneratingToken}>
                                     {isGeneratingToken ? <Loader2 className="h-4 w-4 animate-spin" /> : <KeyRound className="h-4 w-4" />}
                                     {isGeneratingToken ? "Gerando..." : "Gerar token"}
                                 </Button>

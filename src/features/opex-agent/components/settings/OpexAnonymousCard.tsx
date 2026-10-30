@@ -1,7 +1,7 @@
 "use client"
 
 import { Controller, type UseFormReturn } from "react-hook-form"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/opex/card"
+import { GlassCard as Card, GlassCardContent as CardContent, GlassCardDescription as CardDescription, GlassCardHeader as CardHeader, GlassCardTitle as CardTitle } from "@/components/ui/glass-card"
 import { Field } from "@/components/ui/opex/field"
 import { FORM_GRID_WIDE } from "@/components/ui/opex/form-grid"
 import { FormToggleCard } from "@/components/ui/opex/toggle-card"
@@ -37,7 +37,7 @@ export function OpexAnonymousCard({ form }: { form: UseFormReturn<OpexAgentSetti
                     Visitantes consultam o catálogo e a documentação pública. As sessões deles ficam neste navegador (cookie) e expiram sozinhas; limpar os cookies começa do zero.
                 </CardDescription>
             </CardHeader>
-            <CardContent className="space-y-5">
+            <CardContent className="space-y-5 p-6 pt-0">
                 <FormToggleCard<OpexAgentSettings>
                     control={form.control}
                     name="anonymous.enabled"

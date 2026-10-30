@@ -3,7 +3,7 @@
 import type { RefObject } from "react"
 import { AnimatePresence, motion } from "framer-motion"
 import { Bug } from "lucide-react"
-import { Card, CardContent } from "@/components/ui/opex/card"
+import { GlassCard as Card, GlassCardContent as CardContent } from "@/components/ui/glass-card"
 import type { IntegrationId } from "@/lib/integrations/catalog"
 import { IntegrationDebugConsole } from "../IntegrationDebugConsole"
 
@@ -32,8 +32,8 @@ export function LogsPanel({ id, visible, debugHeight, logsCardRef, maximized, on
                     data-testid="integration-debug-panel"
                 >
                     {/* O `aside` fica na grade como placeholder; maximizar redimensiona só o Card. */}
-                    <Card ref={logsCardRef} className="flex h-full min-h-[360px] flex-col">
-                        <CardContent className="flex min-h-0 flex-1 flex-col pt-6">
+                    <Card animate={false} ref={logsCardRef} className="flex h-full min-h-[360px] flex-col">
+                        <CardContent className="flex min-h-0 flex-1 flex-col p-6">
                             <IntegrationDebugConsole
                                 integrationId={id}
                                 className="flex-1"

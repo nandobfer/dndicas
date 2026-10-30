@@ -15,6 +15,8 @@ import {
   GlassTooltipProvider,
 } from './glass-tooltip';
 import { Chip } from './chip';
+import { RoleChip } from '@/features/perfix/components/permissions/RoleChip';
+import type { RoleDto } from '@/features/perfix/types';
 
 export interface UserChipProps extends React.HTMLAttributes<HTMLDivElement> {
   /** User display name */
@@ -23,8 +25,8 @@ export interface UserChipProps extends React.HTMLAttributes<HTMLDivElement> {
   email?: string;
   /** User avatar URL */
   avatarUrl?: string;
-  /** User role */
-  role?: 'admin' | 'user';
+  /** Perfis ativos do usuário */
+  roles?: RoleDto[];
   /** User status */
   status?: 'active' | 'inactive';
   /** Size variant */
@@ -53,7 +55,7 @@ export function UserChip({
   name,
   email,
   avatarUrl,
-  role,
+  roles = [],
   status = 'active',
   size = 'md',
   showTooltip = true,
@@ -139,14 +141,7 @@ export function UserChip({
       </span>
 
       {/* Role badge */}
-      {showRole && role && (
-        <Chip
-          variant={role === 'admin' ? 'artifact' : 'veryRare'}
-          size="sm"
-        >
-          {role === 'admin' ? 'Admin' : 'User'}
-        </Chip>
-      )}
+      {showRole && roles.map(role => <RoleChip key={role.id} cargo={role} />)}
     </div>
   );
 
@@ -167,12 +162,7 @@ export function UserChip({
               <span className="text-xs text-white/60">{email}</span>
             )}
             <div className="flex items-center gap-2 mt-1">
-              <Chip
-                variant={role === 'admin' ? 'artifact' : 'veryRare'}
-                size="sm"
-              >
-                {role === 'admin' ? 'Admin' : 'User'}
-              </Chip>
+              {roles.map(role => <RoleChip key={role.id} cargo={role} />)}
               <Chip
                 variant={status === 'active' ? 'uncommon' : 'common'}
                 size="sm"

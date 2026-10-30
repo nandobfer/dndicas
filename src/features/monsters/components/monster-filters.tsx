@@ -41,7 +41,7 @@ export function MonsterFilters({
     sourceEntityType?: string
     className?: string
 }) {
-    const { isAdmin } = useAuth()
+    const isAdmin = useAuth().can("catalog.edit")
     const isMobile = useIsMobile()
 
     const handleCrInput = (value: string) => {

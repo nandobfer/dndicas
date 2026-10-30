@@ -3,10 +3,13 @@ import { makeJsonRequest, makeRequest } from "../helpers/http"
 import { importFresh } from "../helpers/module"
 
 const admin = { id: "admin-1", name: "Ana", role: "admin" as const }
+/** Permissões exigidas pelas rotas (Perfix: ver para leitura, editar para escrita). */
+const permissions: string[] = []
 
 function mockActor(result: "admin" | "user" | "anonymous") {
     vi.doMock("@/features/auth/server/actor", () => ({
-        requireAdminActor: vi.fn(async () => {
+        requireAdminActor: vi.fn(async (permission: string) => {
+            permissions.push(permission)
             // Importado aqui: o `importFresh` recria o módulo e o `withRoute` só reconhece a classe nova.
             const { DomainError } = await import("@/lib/api/route")
             if (result === "anonymous") throw new DomainError(401, "Faça login para continuar.", "UNAUTHORIZED")
@@ -25,6 +28,7 @@ const settingsService = () => {
 
 describe("rotas do Agente Maddox", () => {
     it("quem não é administrador recebe 401/403", async () => {
+        permissions.length = 0
         for (const [who, status] of [["anonymous", 401], ["user", 403]] as const) {
             mockActor(who)
             const { getMaddoxSettings } = settingsService()
@@ -85,5 +89,38 @@ describe("rotas do Agente Maddox", () => {
         const response = await route.DELETE(makeRequest("http://localhost/api/ai/features/maddox/opencode-sessions/abc", { method: "DELETE" }), { params: Promise.resolve({ id: "abc" }) })
         expect(response.status).toBe(200)
         expect(deleteMaddoxSession).toHaveBeenCalledWith("abc", "admin-1")
+    })
+
+    it("as rotas exigem as permissões de IA do Perfix (ver/editar)", async () => {
+        permissions.length = 0
+        mockActor("admin")
+        const { DEFAULT_MADDOX_SETTINGS } = await import("@/features/maddox/schemas")
+        settingsService()
+        vi.doMock("@/features/maddox/server/scripts", () => ({ getMaddoxScriptState: vi.fn(), getMaddoxScriptVersion: vi.fn(async () => ({ version: 0 })), saveMaddoxScript: vi.fn(async () => ({})) }))
+        vi.doMock("@/features/maddox/server/avatar", () => ({ generateMaddoxAvatar: vi.fn(async () => ({ url: "/x.png" })) }))
+        vi.doMock("@/features/maddox/server/opencode-sessions", () => ({ deleteMaddoxSession: vi.fn(async () => ({ deleted: true })), listMaddoxSessions: vi.fn(async () => []) }))
+        const settingsRoute = await importFresh<typeof import("@/app/api/ai/features/maddox/route")>("@/app/api/ai/features/maddox/route")
+        const scriptRoute = await importFresh<typeof import("@/app/api/ai/features/maddox/scripts/[kind]/route")>("@/app/api/ai/features/maddox/scripts/[kind]/route")
+        const avatarRoute = await importFresh<typeof import("@/app/api/ai/features/maddox/avatar/route")>("@/app/api/ai/features/maddox/avatar/route")
+        const sessionsRoute = await importFresh<typeof import("@/app/api/ai/features/maddox/opencode-sessions/route")>("@/app/api/ai/features/maddox/opencode-sessions/route")
+        const sessionRoute = await importFresh<typeof import("@/app/api/ai/features/maddox/opencode-sessions/[id]/route")>("@/app/api/ai/features/maddox/opencode-sessions/[id]/route")
+
+        await settingsRoute.GET(makeRequest("http://localhost/api/ai/features/maddox"), { params: Promise.resolve({}) } as never)
+        await settingsRoute.PUT(makeJsonRequest("http://localhost/api/ai/features/maddox", { method: "PUT", body: JSON.stringify(DEFAULT_MADDOX_SETTINGS) }), { params: Promise.resolve({}) } as never)
+        await sessionsRoute.GET(makeRequest("http://localhost/api/ai/features/maddox/opencode-sessions"), { params: Promise.resolve({}) } as never)
+        await scriptRoute.GET(makeRequest("http://localhost/api/ai/features/maddox/scripts/scenario"), { params: Promise.resolve({ kind: "scenario" }) })
+        await scriptRoute.PUT(makeJsonRequest("http://localhost/api/ai/features/maddox/scripts/scenario", { method: "PUT", body: JSON.stringify({ guide: "G", topics: [], notes: "", version: 0 }) }), { params: Promise.resolve({ kind: "scenario" }) })
+        await avatarRoute.POST(makeJsonRequest("http://localhost/api/ai/features/maddox/avatar", { method: "POST", body: JSON.stringify({ persona: "Mestre sábio" }) }), { params: Promise.resolve({}) } as never)
+        await sessionRoute.DELETE(makeRequest("http://localhost/api/ai/features/maddox/opencode-sessions/abc", { method: "DELETE" }), { params: Promise.resolve({ id: "abc" }) })
+
+        expect(permissions).toEqual([
+            "integrations.ai.view",
+            "integrations.ai.edit",
+            "integrations.ai.view",
+            "integrations.ai.view",
+            "integrations.ai.edit",
+            "integrations.ai.edit",
+            "integrations.ai.edit",
+        ])
     })
 })

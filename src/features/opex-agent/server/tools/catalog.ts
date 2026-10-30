@@ -108,6 +108,7 @@ export const catalogAdminTools = [
         risk: "write",
         confirmByDefault: true,
         minRole: "admin",
+        permission: "catalog.edit",
         description: "Ativa ou inativa uma entidade do catálogo (inativa some das buscas e páginas públicas). Subclasses mudam pela classe.",
         input: z.object({
             type: z.enum(STATUS_TYPES).describe("Tipo da entidade"),

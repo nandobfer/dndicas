@@ -13,7 +13,7 @@ import type { UserFilters } from '../types/user.types';
  */
 const DEFAULT_FILTERS: UserFilters = {
     search: "",
-    role: "all",
+    roleId: "",
     status: "all",
     page: 1,
     limit: 10,
@@ -35,7 +35,7 @@ export function useUsersFilters() {
   // Parse filters from URL
   const filtersFromUrl = useMemo<UserFilters>(() => ({
     search: searchParams.get('search') || DEFAULT_FILTERS.search,
-    role: (searchParams.get('role') as UserFilters['role']) || DEFAULT_FILTERS.role,
+    roleId: searchParams.get('roleId') || DEFAULT_FILTERS.roleId,
     status: (searchParams.get('status') as UserFilters['status']) || DEFAULT_FILTERS.status,
     page: parseInt(searchParams.get('page') || String(DEFAULT_FILTERS.page), 10),
     limit: parseInt(searchParams.get('limit') || String(DEFAULT_FILTERS.limit), 10),
@@ -54,8 +54,8 @@ export function useUsersFilters() {
       if (newFilters.search) {
         params.set('search', newFilters.search);
       }
-      if (newFilters.role && newFilters.role !== 'all') {
-        params.set('role', newFilters.role);
+      if (newFilters.roleId) {
+        params.set('roleId', newFilters.roleId);
       }
       if (newFilters.status && newFilters.status !== 'all') {
         params.set('status', newFilters.status);
@@ -91,8 +91,8 @@ export function useUsersFilters() {
    * Set role filter.
    */
   const setRole = useCallback(
-    (role: UserFilters['role']) => {
-      const newFilters = { ...filters, role, page: 1 };
+    (roleId: string) => {
+      const newFilters = { ...filters, roleId, page: 1 };
       setFilters(newFilters);
       updateUrl(newFilters);
     },
@@ -149,7 +149,7 @@ export function useUsersFilters() {
   const hasActiveFilters = useMemo(
     () =>
       filters.search !== DEFAULT_FILTERS.search ||
-      filters.role !== DEFAULT_FILTERS.role ||
+      filters.roleId !== DEFAULT_FILTERS.roleId ||
       filters.status !== DEFAULT_FILTERS.status,
     [filters]
   );

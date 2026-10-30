@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 
 import { importFresh } from '../helpers/module';
+vi.mock('@/features/perfix/server/access', () => ({ requestAccess: vi.fn().mockResolvedValue({ effective: new Set() }) }));
 
 describe('features/users/api/get-current-user', () => {
     it('returns an unauthenticated result when Auth.js has no session', async () => {

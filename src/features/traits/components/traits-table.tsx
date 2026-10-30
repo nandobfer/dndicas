@@ -45,7 +45,7 @@ export function TraitsTable({
     onDelete, 
     onLoadMore 
 }: TraitsTableProps) {
-    const { isAdmin } = useAuth()
+    const isAdmin = useAuth().can("catalog.edit")
 
     if (isLoading && traits.length === 0) {
         return (
