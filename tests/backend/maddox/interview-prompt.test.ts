@@ -57,6 +57,18 @@ describe("instruções da entrevista", () => {
         expect(text).toContain("ficha do D&D")
     })
 
+    it("traz o formato fixo da resposta (Markdown, negrito para nomes do catálogo, citação) antes da conclusão", () => {
+        const text = buildInterviewInstructions(base())
+        expect(text).toContain("## Formato da resposta")
+        expect(text).toContain("Responda em Markdown")
+        expect(text).toContain("**Elfo**")
+        expect(text).toContain("menções clicáveis do catálogo")
+        expect(text).toContain("citação (`>`)")
+        expect(text).toContain("um título (`###`) por tópico")
+        expect(text.indexOf("## Formato da resposta")).toBeLessThan(text.indexOf("## Conclusão"))
+        expect(text).toContain(MADDOX_PROPOSAL_MARKER)
+    })
+
     it("sem tópicos ativos segue só o guia", () => {
         expect(buildInterviewInstructions(base({ script: { version: 0, guide: "Guia", topics: [] } }))).toContain("não tem tópicos ativos")
     })

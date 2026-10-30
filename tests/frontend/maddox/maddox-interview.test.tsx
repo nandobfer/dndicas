@@ -136,7 +136,7 @@ describe("entrevista de cenário", () => {
         mockGets(campaign(), interview())
         const stream = streamFetch()
         renderWithQueryClient(<InterviewPage campaignId="c1" kind="scenario" />)
-        const conversation = await screen.findByRole("list", { name: "Conversa com o Maddox" })
+        const conversation = await screen.findByRole("log", { name: "Conversa com o Maddox" })
         expect(within(conversation).getByText("universo").tagName).toBe("STRONG")
 
         const box = screen.getByRole("textbox", { name: "Sua resposta" })
@@ -241,7 +241,128 @@ describe("entrevista de personagem", () => {
     })
 })
 
+/** O happy-dom devolve a cor como foi escrita (hex); um navegador devolveria `rgb(...)`. */
+const sameColor = (actual: string, hex: string) => {
+    const value = Number.parseInt(hex.slice(1), 16)
+    return [hex.toLowerCase(), `rgb(${(value >> 16) & 255}, ${(value >> 8) & 255}, ${value & 255})`].includes(actual.toLowerCase().replace(/\s+/g, " "))
+}
+
+describe("layout e estilo da conversa", () => {
+    it("página em largura total (sem mx-auto/max-w) e painel com altura própria e rolagem interna", async () => {
+        mockGets(campaign(), interview())
+        renderWithQueryClient(<InterviewPage campaignId="c1" kind="scenario" />)
+        const panel = await screen.findByTestId("interview-panel")
+        const page = screen.getByTestId("interview-page")
+        expect(page.className).not.toMatch(/mx-auto|max-w-/)
+        expect(page.className).toContain("space-y-6")
+        expect(panel.className).toMatch(/h-\[calc\(100dvh-18rem\)\]/)
+        expect(panel.className).toContain("min-h-[420px]")
+        const log = within(panel).getByRole("log", { name: "Conversa com o Maddox" })
+        expect(log.className).toContain("overflow-y-auto")
+        // O campo de resposta fica no rodapé do painel, depois da conversa.
+        const composer = within(panel).getByRole("form", { name: "Responder ao Maddox" })
+        expect(log.compareDocumentPosition(composer) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    })
+
+    it("o texto que chega rola a conversa (não a janela); subir mostra 'Ir para o fim'", async () => {
+        mockGets(campaign(), interview())
+        const stream = streamFetch()
+        const scrollTo = vi.fn()
+        const original = HTMLElement.prototype.scrollTo
+        HTMLElement.prototype.scrollTo = scrollTo as never
+        const windowScroll = vi.spyOn(window, "scrollTo").mockImplementation(() => undefined)
+        try {
+            renderWithQueryClient(<InterviewPage campaignId="c1" kind="scenario" />)
+            const log = await screen.findByRole("log", { name: "Conversa com o Maddox" })
+            const box = screen.getByRole("textbox", { name: "Sua resposta" })
+            fireEvent.change(box, { target: { value: "Oi" } })
+            fireEvent.keyDown(box, { key: "Enter" })
+            scrollTo.mockClear()
+            await act(async () => stream.send({ type: "delta", text: "Um mundo" }))
+            await waitFor(() => expect(scrollTo).toHaveBeenCalled())
+            expect(scrollTo.mock.contexts.every((context) => context === log)).toBe(true)
+            expect(windowScroll).not.toHaveBeenCalled()
+
+            Object.defineProperty(log, "scrollHeight", { value: 2000, configurable: true })
+            Object.defineProperty(log, "clientHeight", { value: 400, configurable: true })
+            log.scrollTop = 100
+            fireEvent.scroll(log)
+            fireEvent.click(await screen.findByRole("button", { name: /Ir para o fim/ }))
+            expect(scrollTo).toHaveBeenLastCalledWith({ top: 2000, behavior: "smooth" })
+            await act(async () => stream.end())
+        } finally {
+            HTMLElement.prototype.scrollTo = original
+            windowScroll.mockRestore()
+        }
+    })
+
+    it("campo de resposta no padrão do Opex: uma linha, botão redondo alinhado e a dica do teclado", async () => {
+        mockGets(campaign(), interview())
+        renderWithQueryClient(<InterviewPage campaignId="c1" kind="scenario" />)
+        const box = await screen.findByTestId("interview-composer-box")
+        expect(box.className).toContain("items-end")
+        const textarea = within(box).getByRole("textbox", { name: "Sua resposta" })
+        expect(textarea).toHaveAttribute("rows", "1")
+        expect(textarea.className).toContain("p-0")
+        const send = within(box).getByRole("button", { name: "Enviar resposta" })
+        expect(send.className).toMatch(/h-8/)
+        expect(send.className).toContain("rounded-full")
+        expect(screen.getByText("Enter envia · Shift+Enter quebra linha")).toBeInTheDocument()
+    })
+
+    it("Markdown colorido como o Opex: negrito âmbar, citação, nome do Maddox na cor do rigor e balão sem fundo colorido", async () => {
+        mockGets(campaign({ rigor: "equilibrado" }), interview({ messages: [msg("a1", "maddox", "### Universo\nO reino de **Aethra**.\n\n> Uma névoa cobre o porto.")] }))
+        renderWithQueryClient(<InterviewPage campaignId="c1" kind="scenario" />)
+        const strong = await screen.findByText("Aethra")
+        expect(strong.tagName).toBe("STRONG")
+        expect(strong.className).toContain("text-md-strong")
+        expect(screen.getByText("Uma névoa cobre o porto.").closest("blockquote")).not.toBeNull()
+        expect(screen.getByText("Universo").className).toContain("text-md-heading")
+        const message = screen.getByTestId("maddox-message")
+        expect(message.querySelector("[style*='background-color']")).toBeNull()
+        const { rigorColor } = await import("@/features/maddox/components/campaigns/campaign-visuals")
+        expect(sameColor(within(message).getByTestId("maddox-name").style.color, rigorColor("equilibrado"))).toBe(true)
+    })
+
+    it("menção do catálogo vira o badge clicável do DnDicas", async () => {
+        mockGets(campaign(), interview({ messages: [msg("a1", "maddox", "Que tal um [Elfo](#mention:Ra%C3%A7a:r1)?")] }))
+        renderWithQueryClient(<InterviewPage campaignId="c1" kind="scenario" />)
+        const label = await screen.findByText("Elfo")
+        const badge = label.closest(".mention")
+        expect(badge).not.toBeNull()
+        expect(badge).toHaveTextContent("Raça")
+        expect(label.closest("a[href^='#mention']")).toBeNull()
+    })
+
+    it("enquanto escreve mostra os pontinhos e, com texto, o cursor", async () => {
+        mockGets(campaign(), interview())
+        const stream = streamFetch()
+        renderWithQueryClient(<InterviewPage campaignId="c1" kind="scenario" />)
+        const box = await screen.findByRole("textbox", { name: "Sua resposta" })
+        fireEvent.change(box, { target: { value: "Oi" } })
+        fireEvent.keyDown(box, { key: "Enter" })
+        expect(await screen.findByTestId("maddox-writing-dots")).toBeInTheDocument()
+        expect(screen.getByRole("status")).toHaveTextContent("Maddox está escrevendo…")
+        await act(async () => stream.send({ type: "delta", text: "Certo" }))
+        expect(await screen.findByTestId("maddox-cursor")).toBeInTheDocument()
+        expect(screen.queryByTestId("maddox-writing-dots")).not.toBeInTheDocument()
+        await act(async () => stream.end())
+    })
+})
+
 describe("controles do design system", () => {
+    it("as páginas do Maddox não limitam nem centralizam a largura (padrão do dashboard)", () => {
+        // O layout do dashboard já aplica o padding; a página usa a largura toda (DND-6). Cards centrados de
+        // propósito (ex.: o convite) e elementos internos não entram aqui.
+        for (const file of ["interviews/InterviewPage.tsx", "campaigns/CampaignPage.tsx", "campaigns/CampaignsPage.tsx"]) {
+            const source = readFileSync(join(process.cwd(), "src/features/maddox/components", file), "utf8")
+            for (const className of source.matchAll(/className="([^"]*)"/g)) {
+                const value = className[1]!
+                expect(/\bmx-auto\b/.test(value) && /\bmax-w-(?:\d?xl|screen|prose|[2-9]xl)\b/.test(value), `${file}: ${value}`).toBe(false)
+            }
+        }
+    })
+
     it("as telas da entrevista não usam abas do core, select nem checkbox nativos", () => {
         const dir = join(process.cwd(), "src/features/maddox/components/interviews")
         for (const file of readdirSync(dir)) {

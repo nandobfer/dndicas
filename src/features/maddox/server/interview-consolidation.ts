@@ -9,6 +9,7 @@ import { characterConsolidationSchema, scenarioConsolidationSchema, type Charact
 import type { MaddoxCampaignDetailDto } from "../campaign-types"
 import { changed, getCampaignDetail } from "./campaigns"
 import { notifyInterviewChanged } from "./campaign-realtime"
+import { linkCatalogMentions } from "./catalog-mentions"
 import { buildConsolidationInstructions, parseJsonObject, settingMarkdown, transcriptText } from "./interview-prompt"
 import { acquireInterviewLock, loadInterviewer, loadSubject, promptContext, releaseInterviewLock, type InterviewSubject } from "./interviews"
 
@@ -106,14 +107,15 @@ async function finishInterview(doc: InterviewDoc, token: string, result: unknown
 
 async function completeScenario(subject: InterviewSubject, doc: InterviewDoc, token: string, data: ScenarioConsolidation, userId: string) {
     const rename = data.campaignName && data.campaignName !== subject.campaign.name ? data.campaignName : null
+    const [setting, openingSituation] = await Promise.all([linkCatalogMentions(settingMarkdown(data.setting)), linkCatalogMentions(data.openingSituation)])
     // Grava o cenário antes de marcar a entrevista como concluída: uma falha no meio deixa a entrevista em
     // `proposed`, e confirmar de novo reaplica (idempotente).
     await MaddoxCampaignModel.updateOne(
         { _id: subject.campaign._id },
         {
             $set: {
-                setting: settingMarkdown(data.setting),
-                openingSituation: data.openingSituation,
+                setting,
+                openingSituation,
                 "scenarioInterview.status": "done",
                 "scenarioInterview.completedAt": new Date(),
                 ...(subject.campaign.status === "interview" ? { status: "lobby" } : {}),
@@ -137,7 +139,9 @@ async function completeCharacter(subject: InterviewSubject, doc: InterviewDoc, t
     const name = data.name ?? character.name
     const withSheet = MADDOX_SHEET_RIGORS.includes(subject.campaign.rigor)
     const sheet = withSheet ? await seedSheet(subject, name, character.portraitUrl ?? null, data.sheet) : null
-    const profile = Object.fromEntries(MADDOX_PROFILE_SECTIONS.map((item) => [item.key, data.profile[item.key] || "a definir durante a história"]))
+    const profile = Object.fromEntries(
+        await Promise.all(MADDOX_PROFILE_SECTIONS.map(async (item) => [item.key, data.profile[item.key] ? await linkCatalogMentions(data.profile[item.key]!) : "a definir durante a história"] as const)),
+    )
     await MaddoxCharacterModel.updateOne(
         { _id: character._id },
         { $set: { name, profile, "interview.status": "done", "interview.scriptVersion": doc.scriptVersion, ...(sheet ? { sheetId: sheet.sheetId } : {}) } },

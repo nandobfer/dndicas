@@ -611,6 +611,24 @@ const columns: Column<Item>[] = [
 - As telas do Perfix e de usuários têm um teste de guarda
   (`tests/frontend/perfix/ui-components-guard.test.ts`) que falha com esses imports/elementos.
 
+## Largura das páginas e telas de chat (regra obrigatória)
+
+- **Páginas do dashboard usam a largura toda.** O layout do dashboard já aplica o padding (`p-4 lg:p-6`); o
+  elemento raiz da página é só a pilha (`space-y-6`, ou `flex w-full min-w-0 flex-col gap-6`), **sem**
+  `mx-auto` + `max-w-*` (padrão firmado na DND-6). Cards centrados de propósito, como o do convite das
+  Campanhas Maddox, são exceção pontual dentro da página, não o invólucro dela.
+- **Telas de chat seguem o chat do Agente Opex** (`src/features/opex-agent/components/chat/`):
+  - painel com altura própria (ex.: `h-[calc(100dvh-18rem)] min-h-[420px] flex flex-col`), conversa com
+    rolagem interna (`role="log"`, `min-h-0 flex-1 overflow-y-auto`) que acompanha o fim enquanto a pessoa não
+    sobe, e botão "Ir para o fim". Nunca deixe a caixa crescer com o texto nem role a janela;
+  - campo de resposta no rodapé (`border-t`): caixa `flex items-end gap-2 rounded-xl border bg-card px-3 py-2`,
+    `Textarea` de uma linha (`rows={1}`, `p-0`) que cresce até 180px e botão redondo `h-8 w-8 rounded-full`;
+    dica "Enter envia · Shift+Enter quebra linha";
+  - respostas do agente com o `Markdown` de `@/components/ui/opex/markdown` (títulos lilás, negrito âmbar,
+    citação ciano, menções do catálogo como badge) sobre fundo neutro, e cursor/pontinhos durante o stream.
+- **Ações ao lado de um campo longo** (ex.: link de convite) em colunas estreitas: o campo numa linha própria
+  e os botões numa linha abaixo (`grid` com `w-full`), nunca tudo numa linha só.
+
 ## Página de Demonstração
 
 Acesse `/ui-components` para ver todos os componentes em ação com exemplos interativos.

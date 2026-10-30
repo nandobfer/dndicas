@@ -21,6 +21,7 @@ import type { MaddoxInterviewDto, MaddoxInterviewMessageDto, MaddoxInterviewStat
 import type { MaddoxInterviewMessageInput } from "../interview-schemas"
 import { changed, loadMembership } from "./campaigns"
 import { notifyInterviewChanged } from "./campaign-realtime"
+import { linkCatalogMentions, mentionsToBold } from "./catalog-mentions"
 import { JEV_PROPOSAL_HINT, buildInterviewInstructions, createMarkerFilter, extractProposal, openingPrompt, transcriptText, type InterviewPromptContext } from "./interview-prompt"
 
 /**
@@ -211,7 +212,7 @@ async function prepareTurn(subject: InterviewSubject, kind: MaddoxScriptKind, us
 /** Conversa enviada ao modelo: a abertura como primeira fala do usuário e o histórico sem as falhas. */
 export function conversationMessages(kind: MaddoxScriptKind, messages: readonly IMaddoxInterviewMessage[]): ModelMessage[] {
     const history = messages.filter((message) => !message.error && message.content.trim())
-    return [{ role: "user", content: openingPrompt(kind) }, ...history.map((message): ModelMessage => (message.role === "user" ? { role: "user", content: message.content } : { role: "assistant", content: message.content }))]
+    return [{ role: "user", content: openingPrompt(kind) }, ...history.map((message): ModelMessage => (message.role === "user" ? { role: "user", content: message.content } : { role: "assistant", content: mentionsToBold(message.content) }))]
 }
 
 /** JEV "Fim da entrevista": já há base suficiente para propor a síntese? Falha = não opina. */
@@ -286,7 +287,8 @@ export async function runTurn(turn: PreparedTurn, emit: (line: MaddoxInterviewSt
         failure = error instanceof Error ? error.message : String(error)
     }
 
-    const { content, proposal } = extractProposal(text)
+    const { content: raw, proposal } = extractProposal(text)
+    const content = raw && !failure ? await linkCatalogMentions(raw) : raw
     if (!failure && !content) failure = "O Maddox não respondeu. Tente de novo."
     const message: IMaddoxInterviewMessage = { id: randomUUID(), role: "maddox", content: failure ? "" : content, proposal: !failure && proposal, error: failure, createdAt: new Date() }
     const status = message.proposal ? "proposed" : "in-progress"

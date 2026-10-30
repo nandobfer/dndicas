@@ -145,6 +145,14 @@ describe("página da campanha (lobby)", () => {
         expect(screen.getByText(/Preparação: o dono define o cenário com o Maddox/)).toBeInTheDocument()
 
         const link = await screen.findByLabelText("Link de convite")
+        // O link ocupa a linha inteira; os botões ficam num bloco abaixo (não vazam da coluna).
+        expect([...link.parentElement!.children].filter((element) => element.tagName === "BUTTON")).toHaveLength(0)
+        const actions = screen.getByTestId("invite-actions")
+        expect(actions.contains(link)).toBe(false)
+        expect(within(actions).getByRole("button", { name: /Copiar link/ })).toBeInTheDocument()
+        expect(within(actions).getByRole("button", { name: /Gerar novo link/ })).toBeInTheDocument()
+        expect(link.compareDocumentPosition(actions) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+        expect(link.className).toContain("w-full")
         expect((link as HTMLInputElement).value).toBe(`${window.location.origin}/campanhas/convite/${TOKEN}`)
         fireEvent.click(screen.getByRole("button", { name: /Copiar link/ }))
         await waitFor(() => expect(writeText).toHaveBeenCalledWith(`${window.location.origin}/campanhas/convite/${TOKEN}`))

@@ -50,14 +50,17 @@ export function InvitePanel({ campaignId, open }: { campaignId: string; open: bo
                             Não foi possível carregar o link de convite.
                         </p>
                     ) : (
-                        <div className="flex flex-col gap-2 sm:flex-row">
-                            <Input readOnly value={url} aria-label="Link de convite" onFocus={(event) => event.currentTarget.select()} className="font-mono text-xs" />
-                            <Button type="button" onClick={() => void copy()} disabled={!url}>
-                                {copied ? <Check aria-hidden /> : <Copy aria-hidden />} {copied ? "Copiado" : "Copiar link"}
-                            </Button>
-                            <Button type="button" variant="outline" onClick={() => setConfirming(true)} disabled={rotate.isPending}>
-                                {rotate.isPending ? <Loader2 className="animate-spin" aria-hidden /> : <RefreshCw aria-hidden />} Gerar novo link
-                            </Button>
+                        <div className="min-w-0 space-y-2">
+                            {/* O link ocupa a linha inteira; os botões ficam abaixo, sem vazar da coluna estreita do lobby. */}
+                            <Input readOnly value={url} aria-label="Link de convite" onFocus={(event) => event.currentTarget.select()} className="w-full min-w-0 font-mono text-xs" />
+                            <div className="grid grid-cols-1 gap-2 min-[360px]:grid-cols-2" data-testid="invite-actions">
+                                <Button type="button" className="w-full min-w-0" onClick={() => void copy()} disabled={!url}>
+                                    {copied ? <Check aria-hidden /> : <Copy aria-hidden />} {copied ? "Copiado" : "Copiar link"}
+                                </Button>
+                                <Button type="button" variant="outline" className="w-full min-w-0" onClick={() => setConfirming(true)} disabled={rotate.isPending}>
+                                    {rotate.isPending ? <Loader2 className="animate-spin" aria-hidden /> : <RefreshCw aria-hidden />} Gerar novo link
+                                </Button>
+                            </div>
                         </div>
                     )}
                 </CardContent>

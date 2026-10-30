@@ -33,7 +33,7 @@ export function InterviewPage({ campaignId, kind }: { campaignId: string; kind: 
 
     if (campaign.isLoading) {
         return (
-            <div className="space-y-4" aria-busy="true" aria-label="Carregando entrevista">
+            <div className="space-y-6" aria-busy="true" aria-label="Carregando entrevista">
                 <Skeleton className="h-24 w-full rounded-xl" />
                 <Skeleton className="h-80 w-full rounded-xl" />
             </div>
@@ -41,7 +41,7 @@ export function InterviewPage({ campaignId, kind }: { campaignId: string; kind: 
     }
     if (campaign.isError || !campaign.data) {
         return (
-            <div className="space-y-4">
+            <div className="space-y-6">
                 <BackLink campaignId={campaignId} />
                 {errorStatus(campaign.error) === 404 ? (
                     <EmptyState icon={MessageCircle} title="Campanha não encontrada" description="Ela não existe ou você não participa dela." />
@@ -97,7 +97,7 @@ function InterviewGate({ campaign, kind, userId }: { campaign: MaddoxCampaignDet
 
 function Shell({ campaignId, header, children }: { campaignId: string; header: React.ReactNode; children: React.ReactNode }) {
     return (
-        <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="mx-auto max-w-4xl space-y-5">
+        <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="space-y-6" data-testid="interview-page">
             <BackLink campaignId={campaignId} />
             {header}
             {children}
@@ -130,7 +130,6 @@ function InterviewConversation({ campaign, kind, userId }: { campaign: MaddoxCam
     const router = useRouter()
     const { query, live, start, send, retry, complete } = useMaddoxInterview(campaign.id, kind, userId)
     const color = rigorColor(campaign.rigor)
-    const me = campaign.members.find((member) => member.id === campaign.myMemberId)
 
     if (query.isLoading) return <Skeleton className="h-80 w-full rounded-xl" aria-label="Carregando conversa" />
     if (query.isError || !query.data) return <ErrorState title="Não foi possível carregar a entrevista" onRetry={() => void query.refetch()} />
@@ -163,7 +162,7 @@ function InterviewConversation({ campaign, kind, userId }: { campaign: MaddoxCam
 
     if (interview?.status === "done") {
         return (
-            <div className="space-y-5">
+            <div className="space-y-6">
                 <div className="flex flex-col gap-3 rounded-xl border border-white/10 bg-white/[0.03] p-4 sm:flex-row sm:items-center sm:justify-between">
                     <p className="flex items-center gap-2 text-sm text-white/80">
                         <CheckCircle2 className="h-4 w-4 shrink-0" style={{ color }} aria-hidden /> Entrevista concluída. {kind === "scenario" ? "O cenário está salvo na campanha." : "Seu personagem está pronto para entrar no jogo."}
@@ -178,19 +177,20 @@ function InterviewConversation({ campaign, kind, userId }: { campaign: MaddoxCam
     }
 
     return (
-        <div className="space-y-4">
-            <div className="rounded-xl border border-white/10 bg-white/[0.02] p-4">
-                <InterviewMessageList
-                    messages={shown}
-                    liveText={busy ? live.liveText : null}
-                    maddoxAvatarUrl={query.data.maddoxAvatarUrl}
-                    color={color}
-                    userName={me?.name ?? "Você"}
-                    userAvatarUrl={me?.avatarUrl ?? null}
-                    onRetry={() => void retry()}
-                    retrying={live.streaming}
-                />
-            </div>
+        <section
+            aria-label="Entrevista com o Maddox"
+            data-testid="interview-panel"
+            className="flex h-[calc(100dvh-18rem)] min-h-[420px] flex-col overflow-hidden rounded-xl border bg-card/40 backdrop-blur"
+            style={{ borderColor: `${color}40` }}
+        >
+            <InterviewMessageList
+                messages={shown}
+                liveText={busy ? live.liveText : null}
+                maddoxAvatarUrl={query.data.maddoxAvatarUrl}
+                color={color}
+                onRetry={() => void retry()}
+                retrying={live.streaming}
+            />
             {proposal && (
                 <InterviewProposalCard
                     kind={kind}
@@ -199,13 +199,13 @@ function InterviewConversation({ campaign, kind, userId }: { campaign: MaddoxCam
                     onConfirm={() => complete.mutate(undefined, { onSuccess: () => router.push(`/campanhas/${campaign.id}`) })}
                 />
             )}
-            <InterviewComposer disabled={busy || complete.isPending} busy={live.streaming} placeholder={proposal ? "Peça ajustes ao Maddox, se quiser…" : "Responda ao Maddox…"} onSend={send} />
             {complete.isPending && (
-                <p className="flex items-center gap-2 text-sm text-white/60" role="status">
+                <p className="flex items-center gap-2 px-4 pb-2 text-sm text-white/60" role="status">
                     <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> O Maddox está consolidando a entrevista…
                 </p>
             )}
-        </div>
+            <InterviewComposer disabled={busy || complete.isPending} busy={live.streaming} placeholder={proposal ? "Peça ajustes ao Maddox, se quiser…" : "Responda ao Maddox…"} onSend={send} />
+        </section>
     )
 }
 

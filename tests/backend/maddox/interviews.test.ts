@@ -40,6 +40,14 @@ vi.mock("@/lib/ai/stream", () => ({
 vi.mock("@/lib/ai/jev", () => ({ askJevSystemOne }))
 vi.mock("@/features/maddox/server/opencode-sessions", () => ({ ensureMaddoxSession, releaseInterviewSession }))
 vi.mock("@/features/character-sheets/api/character-sheets-service", () => ({ createBlankSheet }))
+const { searchCatalogEntities } = vi.hoisted(() => ({
+    searchCatalogEntities: vi.fn(async ({ query }: { query: string }) => ({
+        items: [{ id: "race-elfo", name: "Elfo", originalName: "Elf", type: "Raça" }].filter((item) => item.name.toLowerCase() === query.toLowerCase()),
+        limit: 10,
+        offset: 0,
+    })),
+}))
+vi.mock("@/features/mcp/server/catalog-entity-service", () => ({ searchCatalogEntities }))
 
 const { DEFAULT_MADDOX_SETTINGS } = await import("@/features/maddox/schemas")
 const { MADDOX_PROPOSAL_MARKER, MADDOX_INTERVIEW_MESSAGES_MAX } = await import("@/features/maddox/constants")
@@ -288,6 +296,37 @@ describe("entrevista de cenário — conversa", () => {
         await startScenario(campaignId)
         expect(ensureMaddoxSession).toHaveBeenCalledWith(expect.objectContaining({ campaignId, purpose: "scenario-interview", agent: "maddox" }))
         expect(streamCalls[0]).toMatchObject({ provider: "opencode", model: "anthropic/claude", opencodeSessionId: "ses_entrevista", temperature: null })
+    })
+})
+
+describe("menções do catálogo", () => {
+    it("o negrito com nome do catálogo é gravado como menção; o histórico volta ao modelo em negrito", async () => {
+        const campaignId = await newCampaign()
+        await startScenario(campaignId)
+        scripted.push(reply("Que tal um **Elfo** vindo de **Aethra**?"))
+        const lines = await run(await interviews.sendInterviewMessage(campaignId, "scenario", { content: "Sugira algo" }, ids.owner))
+        const final = lines.at(-1) as Extract<MaddoxInterviewStreamLine, { type: "done" }>
+        expect(final.message.content).toBe("Que tal um [Elfo](#mention:Ra%C3%A7a:race-elfo) vindo de **Aethra**?")
+        const stored = await MaddoxInterviewModel.findOne({ campaignId }).lean()
+        expect(stored!.messages.at(-1)!.content).toContain("(#mention:Ra%C3%A7a:race-elfo)")
+        expect(searchCatalogEntities).toHaveBeenCalledWith(expect.objectContaining({ query: "Elfo" }))
+
+        await run(await interviews.sendInterviewMessage(campaignId, "scenario", { content: "Gostei" }, ids.owner))
+        const history = streamCalls.at(-1)!.messages!.map((message) => (typeof message.content === "string" ? message.content : "")).join("\n")
+        expect(history).toContain("Que tal um **Elfo** vindo de **Aethra**?")
+        expect(history).not.toContain("#mention:")
+        expect(streamCalls.at(-1)!.instructions).toContain("## Formato da resposta")
+    })
+
+    it("a consolidação liga as menções no cenário e no perfil", async () => {
+        const campaignId = await newCampaign()
+        await startScenario(campaignId)
+        scripted.push(proposalReply())
+        await run(await interviews.sendInterviewMessage(campaignId, "scenario", { content: "Pode ser." }, ids.owner))
+        generateAiText.mockResolvedValueOnce({ text: JSON.stringify({ setting: { universo: "Terra de **Elfo**s e do povo **Elfo**" }, openingSituation: "Um **Elfo** chega." }) })
+        const detail = await completeInterview(campaignId, "scenario", ids.owner)
+        expect(detail.setting).toContain("povo [Elfo](#mention:Ra%C3%A7a:race-elfo)")
+        expect(detail.openingSituation).toBe("Um [Elfo](#mention:Ra%C3%A7a:race-elfo) chega.")
     })
 })
 

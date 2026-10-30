@@ -1,13 +1,17 @@
 "use client"
 
-import { useEffect, useRef } from "react"
-import { motion } from "framer-motion"
-import { AlertTriangle, Loader2, RotateCcw } from "lucide-react"
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react"
+import { AnimatePresence, motion, useReducedMotion } from "framer-motion"
+import { AlertTriangle, ArrowDown, Loader2, RotateCcw } from "lucide-react"
 import { Button } from "@/components/ui/opex/button"
 import { Markdown } from "@/components/ui/opex/markdown"
-import { cn } from "@/lib/utils"
 import type { MaddoxInterviewMessageDto } from "../../interview-types"
 import { MemberAvatar } from "../campaigns/campaign-visuals"
+
+/** Distância do fim (px) abaixo da qual a conversa acompanha o texto que chega. */
+const NEAR_BOTTOM_PX = 80
+
+const bubble = { initial: { opacity: 0, y: 8 }, animate: { opacity: 1, y: 0 }, transition: { duration: 0.2, ease: "easeOut" as const } }
 
 interface Props {
     messages: MaddoxInterviewMessageDto[]
@@ -15,74 +19,146 @@ interface Props {
     liveText: string | null
     maddoxAvatarUrl: string | null
     color: string
-    userName: string
-    userAvatarUrl: string | null
     onRetry?: () => void
     retrying?: boolean
 }
 
-/** Conversa da entrevista: Maddox à esquerda (avatar, Markdown), a pessoa entrevistada à direita. */
-export function InterviewMessageList({ messages, liveText, maddoxAvatarUrl, color, userName, userAvatarUrl, onRetry, retrying }: Props) {
-    const endRef = useRef<HTMLDivElement>(null)
+/**
+ * Conversa da entrevista no padrão do chat do Agente Opex: área com rolagem própria que acompanha o fim enquanto
+ * a pessoa não sobe para reler ("Ir para o fim"). Maddox à esquerda com o Markdown colorido; respostas à direita.
+ */
+export function InterviewMessageList({ messages, liveText, maddoxAvatarUrl, color, onRetry, retrying }: Props) {
+    const scrollRef = useRef<HTMLDivElement>(null)
+    const stickRef = useRef(true)
+    const [showJump, setShowJump] = useState(false)
     const lastIndex = messages.length - 1
 
+    const scrollToEnd = useCallback((behavior: ScrollBehavior = "auto") => {
+        const element = scrollRef.current
+        element?.scrollTo?.({ top: element.scrollHeight, behavior })
+    }, [])
+
+    const onScroll = () => {
+        const element = scrollRef.current
+        if (!element) return
+        const near = element.scrollHeight - element.scrollTop - element.clientHeight < NEAR_BOTTOM_PX
+        stickRef.current = near
+        setShowJump(!near)
+    }
+
+    const signature = `${messages.length}:${messages.at(-1)?.id ?? ""}:${liveText === null ? "-" : liveText.length}`
+    useLayoutEffect(() => {
+        if (stickRef.current) scrollToEnd()
+    }, [signature, scrollToEnd])
     useEffect(() => {
-        endRef.current?.scrollIntoView?.({ block: "end" })
-    }, [messages.length, liveText])
+        scrollToEnd()
+    }, [scrollToEnd])
 
     return (
-        <ol className="space-y-4" aria-label="Conversa com o Maddox" aria-live="polite">
-            {messages.map((message, index) =>
-                message.role === "maddox" ? (
-                    <MaddoxBubble key={message.id} avatarUrl={maddoxAvatarUrl} color={color}>
-                        {message.error ? (
-                            <div role="alert" className="space-y-2">
-                                <p className="flex items-start gap-2 text-sm text-amber-200">
-                                    <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />O Maddox não conseguiu responder: {message.error}
-                                </p>
-                                {index === lastIndex && onRetry && (
-                                    <Button size="sm" variant="outline" onClick={onRetry} disabled={retrying}>
-                                        {retrying ? <Loader2 className="animate-spin" aria-hidden /> : <RotateCcw aria-hidden />} Tentar de novo
-                                    </Button>
-                                )}
-                            </div>
-                        ) : (
-                            <Markdown lineAction={null}>{message.content}</Markdown>
-                        )}
-                    </MaddoxBubble>
-                ) : (
-                    <motion.li key={message.id} initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} className="flex justify-end gap-3">
-                        <div className="max-w-[85%] rounded-2xl rounded-tr-sm border border-white/10 bg-white/[0.06] px-4 py-2.5 text-sm whitespace-pre-wrap text-white">{message.content}</div>
-                        <MemberAvatar name={userName} imageUrl={userAvatarUrl} className="h-8 w-8 shrink-0" />
-                    </motion.li>
-                ),
-            )}
-            {liveText !== null && (
-                <MaddoxBubble avatarUrl={maddoxAvatarUrl} color={color} live>
-                    {liveText ? (
-                        <Markdown lineAction={null}>{liveText}</Markdown>
+        <div className="relative min-h-0 flex-1">
+            <div ref={scrollRef} onScroll={onScroll} className="h-full overflow-y-auto px-4 pb-2 pt-4" role="log" aria-live="polite" aria-label="Conversa com o Maddox">
+                {messages.map((message, index) =>
+                    message.role === "maddox" ? (
+                        <MaddoxMessage key={message.id} avatarUrl={maddoxAvatarUrl} color={color}>
+                            {message.error ? (
+                                <div role="alert" className="flex flex-wrap items-center gap-2 rounded-md border border-destructive/40 bg-destructive/10 px-2.5 py-1.5 text-xs text-destructive">
+                                    <AlertTriangle className="h-3.5 w-3.5 shrink-0" aria-hidden />
+                                    <span className="min-w-0 flex-1 break-words">O Maddox não conseguiu responder: {message.error}</span>
+                                    {index === lastIndex && onRetry && (
+                                        <Button type="button" size="sm" variant="outline" className="h-6 gap-1 px-2 text-[11px]" onClick={onRetry} disabled={retrying}>
+                                            {retrying ? <Loader2 className="h-3 w-3 animate-spin" aria-hidden /> : <RotateCcw className="h-3 w-3" aria-hidden />} Tentar de novo
+                                        </Button>
+                                    )}
+                                </div>
+                            ) : (
+                                <Markdown lineAction={null}>{message.content}</Markdown>
+                            )}
+                        </MaddoxMessage>
                     ) : (
-                        <p className="flex items-center gap-2 text-sm text-white/60">
-                            <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> Maddox está escrevendo…
-                        </p>
-                    )}
-                </MaddoxBubble>
-            )}
-            <div ref={endRef} />
-        </ol>
+                        <motion.div key={message.id} {...bubble} className="flex justify-end pb-3">
+                            <div className="max-w-[85%] whitespace-pre-wrap break-words rounded-2xl rounded-br-sm border border-primary/30 bg-primary/15 px-3.5 py-2 text-sm text-foreground">{message.content}</div>
+                        </motion.div>
+                    ),
+                )}
+                {liveText !== null && (
+                    <MaddoxMessage avatarUrl={maddoxAvatarUrl} color={color} live>
+                        <AnimatePresence initial={false}>{!liveText && <WritingIndicator color={color} />}</AnimatePresence>
+                        {liveText && <StreamingText text={liveText} color={color} />}
+                    </MaddoxMessage>
+                )}
+            </div>
+            <AnimatePresence>
+                {showJump && (
+                    <motion.div key="jump" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 8 }} transition={{ duration: 0.15 }} className="absolute bottom-3 left-1/2 -translate-x-1/2">
+                        <Button
+                            type="button"
+                            size="sm"
+                            variant="secondary"
+                            className="h-7 gap-1.5 rounded-full shadow-md"
+                            onClick={() => {
+                                stickRef.current = true
+                                setShowJump(false)
+                                scrollToEnd("smooth")
+                            }}
+                        >
+                            <ArrowDown className="h-3.5 w-3.5" aria-hidden /> Ir para o fim
+                        </Button>
+                    </motion.div>
+                )}
+            </AnimatePresence>
+        </div>
     )
 }
 
-function MaddoxBubble({ avatarUrl, color, live, children }: { avatarUrl: string | null; color: string; live?: boolean; children: React.ReactNode }) {
+function MaddoxMessage({ avatarUrl, color, live, children }: { avatarUrl: string | null; color: string; live?: boolean; children: React.ReactNode }) {
     return (
-        <motion.li initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} className="flex gap-3" data-live={live ? "true" : undefined}>
-            <MemberAvatar name="Maddox" imageUrl={avatarUrl} color={color} className="h-9 w-9 shrink-0" />
-            <div className={cn("min-w-0 max-w-[85%] rounded-2xl rounded-tl-sm border px-4 py-3")} style={{ borderColor: `${color}40`, backgroundColor: `${color}0f` }}>
-                <p className="mb-1 text-xs font-semibold" style={{ color }}>
+        <motion.div {...bubble} className="flex gap-2.5 pb-4" data-live={live ? "true" : undefined} data-testid="maddox-message">
+            <span className="mt-0.5 shrink-0 rounded-full ring-1" style={{ ["--tw-ring-color" as string]: `${color}66` }}>
+                <MemberAvatar name="Maddox" imageUrl={avatarUrl} color={color} className="h-7 w-7" />
+            </span>
+            <div className="min-w-0 flex-1 space-y-1">
+                <p className="text-xs font-semibold" style={{ color }} data-testid="maddox-name">
                     Maddox
                 </p>
                 {children}
             </div>
-        </motion.li>
+        </motion.div>
+    )
+}
+
+function StreamingText({ text, color }: { text: string; color: string }) {
+    const reduceMotion = useReducedMotion() ?? false
+    return (
+        <div className="relative">
+            <Markdown lineAction={null}>{text}</Markdown>
+            <motion.span
+                aria-hidden
+                data-testid="maddox-cursor"
+                className="ml-0.5 inline-block h-4 w-[3px] translate-y-0.5 rounded-sm align-middle"
+                style={{ backgroundColor: color }}
+                animate={reduceMotion ? undefined : { opacity: [1, 0.2, 1] }}
+                transition={{ duration: 0.9, repeat: Infinity }}
+            />
+        </div>
+    )
+}
+
+function WritingIndicator({ color }: { color: string }) {
+    const reduceMotion = useReducedMotion() ?? false
+    return (
+        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.15 }} className="flex items-center gap-2 text-xs text-muted-foreground" role="status">
+            <span className="flex gap-1" aria-hidden data-testid="maddox-writing-dots">
+                {[0, 1, 2].map((dot) => (
+                    <motion.span
+                        key={dot}
+                        className="h-1.5 w-1.5 rounded-full"
+                        style={{ backgroundColor: color }}
+                        animate={reduceMotion ? undefined : { opacity: [0.25, 1, 0.25], y: [0, -2, 0] }}
+                        transition={{ duration: 1, repeat: Infinity, delay: dot * 0.15 }}
+                    />
+                ))}
+            </span>
+            Maddox está escrevendo…
+        </motion.div>
     )
 }

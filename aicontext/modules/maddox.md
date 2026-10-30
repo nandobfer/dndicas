@@ -241,10 +241,26 @@ entrevista por participante, "Entrevista do personagem" (desabilitada até o cen
 
 `src/lib/ai/stream.ts` ganhou `messages` (conversa) e `opencodeSessionId` (sessão fixa) no `AiStreamRequest`.
 
+**Formato e menções do catálogo.** As instruções do entrevistador têm uma seção fixa "Formato da resposta"
+(`MADDOX_RESPONSE_FORMAT`, no código, independente da aba): Markdown em blocos curtos, `###` por assunto,
+listas, citação para ambientação e o nome oficial de raças, classes, subclasses, origens, magias, talentos, itens
+e monstros em **negrito**. O entrevistador não tem ferramentas: ao gravar cada fala (e o cenário, a situação
+inicial e o perfil consolidados), `server/catalog-mentions.ts` busca cada negrito no catálogo (o mesmo
+`searchCatalogEntities` do `search_catalog` do Opex, só ativas) e troca o que bate exatamente — sem acento e sem
+caixa, pelo nome ou pelo nome original — por `[Nome](#mention:Tipo:id)`, que o `Markdown` mostra como o badge
+clicável do DnDicas. Sem correspondência, o negrito fica; falha da busca mantém o negrito e registra aviso. O
+histórico enviado de volta ao modelo (e a transcrição da consolidação) converte as menções de novo em negrito
+(`mentionsToBold`). Até 25 nomes por fala.
+
+**Tela da entrevista.** Largura total (sem `mx-auto`/`max-w-*`), painel de altura própria no padrão do chat do
+Opex (conversa com rolagem interna e "Ir para o fim", proposta e campo de resposta no rodapé), balão do Maddox
+com o nome e o avatar na cor do rigor sobre fundo neutro, pontinhos e cursor durante o stream. No lobby, o link
+de convite fica numa linha e "Copiar link"/"Gerar novo link" abaixo.
+
 ## Testes
 
 `tests/backend/maddox/*` (configuração, roteiros, avatar, sessões, rotas, `campaigns.test.ts` com MongoDB em
 memória, `campaign-routes.test.ts`, `grant-maddox-play.test.ts`) e `tests/frontend/maddox/*`
 (`maddox-tab.test.tsx`, `maddox-campaigns.test.tsx`, `maddox-campaigns-realtime.test.tsx`; happy-dom).
 Maddox 2: `interview-prompt.test.ts`, `interviews.test.ts` (MongoDB em memória, IA/JEV/OpenCode mockados),
-`interview-routes.test.ts` e `tests/frontend/maddox/maddox-interview.test.tsx`.
+`interview-routes.test.ts`, `catalog-mentions.test.ts` e `tests/frontend/maddox/maddox-interview.test.tsx`.

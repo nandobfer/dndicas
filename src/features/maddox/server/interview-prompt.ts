@@ -1,3 +1,4 @@
+import { mentionsToBold } from "./catalog-mentions"
 import {
     MADDOX_PROFILE_SECTIONS,
     MADDOX_PROPOSAL_MARKER,
@@ -62,6 +63,7 @@ export function buildInterviewInstructions(context: InterviewPromptContext): str
             ? `## Tópicos, NESTA ORDEM\nConduza a conversa seguindo esta ordem, aproveitando o que já foi dito e perguntando só o que falta:\n${topics.map((topic, index) => `${index + 1}. ${topic.text.trim()}`).join("\n")}`
             : "## Tópicos\nO roteiro não tem tópicos ativos: siga só o guia.",
     )
+    parts.push(MADDOX_RESPONSE_FORMAT)
     parts.push(
         [
             "## Conclusão",
@@ -73,6 +75,20 @@ export function buildInterviewInstructions(context: InterviewPromptContext): str
     )
     return parts.join("\n\n")
 }
+
+/**
+ * Formato fixo das falas do entrevistador (não depende do texto configurado na aba): Markdown que a tela pinta
+ * como o Agente Opex, e os nomes do catálogo em negrito, que o servidor transforma em menções clicáveis.
+ */
+export const MADDOX_RESPONSE_FORMAT = [
+    "## Formato da resposta",
+    "- Responda em Markdown, em blocos curtos e fáceis de ler; termine com no máximo duas perguntas por vez.",
+    "- Use **negrito** para nomes próprios, lugares, facções e termos de regra.",
+    "- Ao citar raças, classes, subclasses, origens, magias, talentos, itens ou monstros do D&D, escreva o nome oficial em português entre **negrito** (ex.: **Elfo**, **Mago**, **Bola de Fogo**): eles viram menções clicáveis do catálogo. Não use links nem HTML.",
+    "- Use `###` para separar blocos quando houver mais de um assunto e listas para opções e sugestões.",
+    "- Use citação (`>`) para trechos de ambientação ou falas dentro do mundo do jogo.",
+    "- Evite tabelas longas. Na síntese final, use um título (`###`) por tópico combinado.",
+].join("\n")
 
 /** Pedido de abertura (primeira mensagem do Maddox, antes de qualquer resposta). */
 export function openingPrompt(kind: MaddoxScriptKind): string {
@@ -125,14 +141,14 @@ export interface TranscriptMessage {
 }
 
 export function transcriptText(messages: readonly TranscriptMessage[]): string {
-    return messages.map((message) => `${message.role === "maddox" ? "MADDOX" : "JOGADOR"}: ${message.content}`).join("\n\n")
+    return messages.map((message) => `${message.role === "maddox" ? "MADDOX" : "JOGADOR"}: ${mentionsToBold(message.content)}`).join("\n\n")
 }
 
 /** Instruções da consolidação (JSON estrito) do cenário ou do personagem. */
 export function buildConsolidationInstructions(context: InterviewPromptContext, withSheet: boolean): string {
     const base = [
         "Você consolida uma entrevista de preparação de campanha de RPG em JSON. Responda SOMENTE com um objeto JSON válido, sem texto antes ou depois e sem bloco de código.",
-        "Use apenas o que foi combinado e confirmado na conversa; não invente fatos. O que não foi definido fica como \"a definir durante a história\". Escreva em português do Brasil, em Markdown dentro das strings.",
+        "Use apenas o que foi combinado e confirmado na conversa; não invente fatos. O que não foi definido fica como \"a definir durante a história\". Escreva em português do Brasil, em Markdown dentro das strings, com o nome oficial de raças, classes, subclasses, origens, magias, talentos, itens e monstros do D&D em **negrito**.",
         rigorBlock(context.campaign.rigor),
     ]
     if (context.kind === "scenario") {
