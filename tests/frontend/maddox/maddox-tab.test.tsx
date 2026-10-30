@@ -188,7 +188,7 @@ describe("aba Agente Maddox", () => {
         current.isDefault = true
         renderTab()
         fireEvent.click(screen.getByRole("button", { name: "Salvar" }))
-        await waitFor(() => expect(toastError).toHaveBeenCalledWith(expect.stringMatching(/^Não foi possível salvar: /)))
+        await waitFor(() => expect(toastError).toHaveBeenCalledWith("Não foi possível salvar: A URL do avatar é longa demais (até 2.000 caracteres)"))
         expect(saveSettings).not.toHaveBeenCalled()
     })
 

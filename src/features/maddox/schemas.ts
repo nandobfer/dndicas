@@ -17,11 +17,11 @@ import {
 } from "./constants"
 
 const providerFields = {
-    provider: z.enum(AI_TEXT_PROVIDER_IDS).nullable(),
-    model: z.string().trim().max(200).nullable(),
+    provider: z.enum(AI_TEXT_PROVIDER_IDS, { error: "Provedor inválido" }).nullable(),
+    model: z.string().trim().max(200, "O nome do modelo é longo demais (até 200 caracteres)").nullable(),
     /** Agente do OpenCode (os demais provedores gravam `null`). */
-    agent: z.string().trim().max(100).nullable(),
-    variant: z.string().trim().max(50).nullable(),
+    agent: z.string().trim().max(100, "O nome do agente do OpenCode é longo demais (até 100 caracteres)").nullable(),
+    variant: z.string().trim().max(50, "O nome da variante é longo demais (até 50 caracteres)").nullable(),
 }
 
 /** Modelo do Maddox (narrador): todos os provedores de texto, inclusive o OpenCode. */
@@ -38,21 +38,21 @@ export type MaddoxInterviewerModel = z.infer<typeof maddoxInterviewerModelSchema
 
 export const maddoxAvatarSchema = z.object({
     /** URL da imagem (upload ou gerada); `null` = sem avatar. */
-    url: z.string().trim().max(2000).nullable(),
+    url: z.string().trim().max(2000, "A URL do avatar é longa demais (até 2.000 caracteres)").nullable(),
     persona: z.string().trim().max(MADDOX_PERSONA_MAX, `Até ${MADDOX_PERSONA_MAX.toLocaleString("pt-BR")} caracteres`),
 })
 export type MaddoxAvatar = z.infer<typeof maddoxAvatarSchema>
 
 export const maddoxOpencodeSchema = z.object({
-    sessionScope: z.enum(MADDOX_SESSION_SCOPES),
+    sessionScope: z.enum(MADDOX_SESSION_SCOPES, { error: "Escolha como as sessões do OpenCode são criadas" }),
     /** Exclui as sessões da campanha no OpenCode quando ela termina ou é arquivada. */
-    deleteOnCampaignEnd: z.boolean(),
+    deleteOnCampaignEnd: z.boolean({ error: "Informe se as sessões são excluídas ao encerrar a campanha" }),
     /** Diretório das sessões no servidor OpenCode (vazio = o da integração). */
-    directory: z.string().trim().max(500).nullable(),
+    directory: z.string().trim().max(500, "O diretório é longo demais (até 500 caracteres)").nullable(),
 })
 export type MaddoxOpencodeSettings = z.infer<typeof maddoxOpencodeSchema>
 
-export const maddoxJevSchema = z.object(Object.fromEntries(MADDOX_JEV_DECISIONS.map((decision) => [decision, z.boolean()])) as Record<MaddoxJevDecision, z.ZodBoolean>)
+export const maddoxJevSchema = z.object(Object.fromEntries(MADDOX_JEV_DECISIONS.map((decision) => [decision, z.boolean({ error: "Chave do JEV inválida" })])) as Record<MaddoxJevDecision, z.ZodBoolean>)
 export type MaddoxJevSettings = z.infer<typeof maddoxJevSchema>
 
 const instructionsField = z.string().trim().min(1, "Informe as instruções").max(MADDOX_INSTRUCTIONS_MAX, `Até ${MADDOX_INSTRUCTIONS_MAX.toLocaleString("pt-BR")} caracteres`)
@@ -60,7 +60,7 @@ const instructionsField = z.string().trim().min(1, "Informe as instruções").ma
 /** Configuração do Agente Maddox — mesmo schema na tela e na API. */
 export const maddoxSettingsSchema = z
     .object({
-        enabled: z.boolean(),
+        enabled: z.boolean({ error: "Informe se o Agente Maddox está ativo" }),
         main: maddoxMainModelSchema,
         interviewer: maddoxInterviewerModelSchema,
         instructions: instructionsField,

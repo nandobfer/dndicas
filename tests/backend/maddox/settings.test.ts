@@ -103,4 +103,25 @@ describe("configuração do Agente Maddox", () => {
         expect(result.success).toBe(false)
         if (!result.success) expect(result.error.issues.map((issue) => issue.path.join("."))).toEqual(expect.arrayContaining(["main.provider", "main.model", "interviewer.model"]))
     })
+
+    it("campos sem mensagem na tela têm erros em pt-BR (viram o aviso do Salvar)", async () => {
+        const { firstHiddenFormError } = await import("@/features/maddox/form-errors")
+        const cases: Array<[Partial<Settings>, string]> = [
+            [{ avatar: { url: `/${"x".repeat(2001)}`, persona: "p" } }, "A URL do avatar é longa demais (até 2.000 caracteres)"],
+            [{ main: { ...DEFAULT_MADDOX_SETTINGS.main, agent: "a".repeat(101) } }, "O nome do agente do OpenCode é longo demais (até 100 caracteres)"],
+            [{ interviewer: { ...DEFAULT_MADDOX_SETTINGS.interviewer, variant: "v".repeat(51) } }, "O nome da variante é longo demais (até 50 caracteres)"],
+            [{ opencode: { ...DEFAULT_MADDOX_SETTINGS.opencode, sessionScope: "global" as never } }, "Escolha como as sessões do OpenCode são criadas"],
+        ]
+        for (const [patch, message] of cases) {
+            const result = maddoxSettingsSchema.safeParse({ ...DEFAULT_MADDOX_SETTINGS, ...patch })
+            expect(result.success).toBe(false)
+            if (result.success) continue
+            const issue = result.error.issues[0]!
+            expect(issue.message).toBe(message)
+            // Mesmo formato que o react-hook-form entrega ao callback de erro.
+            const nested = issue.path.reduceRight<unknown>((acc, key) => ({ [String(key)]: acc }), { message: issue.message, type: issue.code })
+            expect(firstHiddenFormError(nested)).toBe(message)
+        }
+    })
 })
+
