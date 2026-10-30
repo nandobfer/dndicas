@@ -163,7 +163,7 @@ export const MADDOX_JEV_DECISION_DEFS: Record<MaddoxJevDecision, { label: string
 
 // ── OpenCode ──────────────────────────────────────────────────────────────────
 
-/** Sessões do OpenCode: uma por campanha (narrador) ou também uma por entrevista. */
+/** Sessões do OpenCode: uma por campanha (narrador) ou também uma por entrevista. A entrevista de personagem tem sempre sessão própria por membro. */
 export const MADDOX_SESSION_SCOPES = ["campaign", "campaign-and-interviews"] as const
 export type MaddoxSessionScope = (typeof MADDOX_SESSION_SCOPES)[number]
 

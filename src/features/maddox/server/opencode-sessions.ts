@@ -54,8 +54,13 @@ async function removeSession(opencode: OpencodeClient, sessionId: string): Promi
  * Finalidade efetivamente usada pela política: com "uma sessão por campanha", as entrevistas usam a
  * sessão do narrador.
  */
+/**
+ * Finalidade efetiva da sessão. Com "uma sessão por campanha", o narrador e a entrevista de cenário (só o dono)
+ * dividem a sessão; a entrevista de PERSONAGEM tem sempre sessão própria por membro: as respostas de um jogador são
+ * privadas e duas entrevistas simultâneas na mesma sessão misturariam o histórico do OpenCode.
+ */
 export function sessionPurposeFor(policy: Pick<MaddoxOpencodeSettings, "sessionScope">, purpose: MaddoxSessionPurpose): MaddoxSessionPurpose {
-    return policy.sessionScope === "campaign" ? "narrator" : purpose
+    return policy.sessionScope === "campaign" && purpose !== "character-interview" ? "narrator" : purpose
 }
 
 export interface EnsureMaddoxSessionInput {

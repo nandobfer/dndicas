@@ -51,7 +51,7 @@ const getOpencodeClient = vi.fn(async () => client)
 vi.mock("@/lib/ai/opencode-client", () => ({ getOpencodeClient, isOpencodeSessionNotFound: vi.fn(async (error: unknown) => error instanceof Error && error.message === "not-found") }))
 
 const CAMPAIGN = new Types.ObjectId()
-const { deleteMaddoxSession, ensureMaddoxSession, listMaddoxSessions, processPendingMaddoxSessionDeletions, releaseCampaignSessions, sessionPurposeFor } = await import("@/features/maddox/server/opencode-sessions")
+const { deleteMaddoxSession, ensureMaddoxSession, listMaddoxSessions, processPendingMaddoxSessionDeletions, releaseCampaignSessions, releaseInterviewSession, sessionPurposeFor } = await import("@/features/maddox/server/opencode-sessions")
 
 describe("sessões do OpenCode do Maddox", () => {
     beforeEach(() => {
@@ -110,12 +110,63 @@ describe("sessões do OpenCode do Maddox", () => {
         expect(client.session.remove.mock.calls[0]![0]).not.toEqual({ sessionID: a })
     })
 
-    it("com 'uma sessão por campanha', as entrevistas usam a do narrador", async () => {
+    it("com 'uma sessão por campanha', a entrevista de cenário usa a do narrador", async () => {
         policy.sessionScope = "campaign"
-        expect(sessionPurposeFor(policy as never, "character-interview")).toBe("narrator")
+        expect(sessionPurposeFor(policy as never, "scenario-interview")).toBe("narrator")
         const narrator = await ensureMaddoxSession({ campaignId: String(CAMPAIGN), purpose: "narrator", title: "x" })
         const interview = await ensureMaddoxSession({ campaignId: String(CAMPAIGN), purpose: "scenario-interview", title: "x" })
         expect(interview).toBe(narrator)
+    })
+
+    it("entrevista de personagem tem sempre sessão própria por membro, mesmo com 'uma sessão por campanha'", async () => {
+        policy.sessionScope = "campaign"
+        expect(sessionPurposeFor(policy as never, "character-interview")).toBe("character-interview")
+        const memberA = String(new Types.ObjectId())
+        const memberB = String(new Types.ObjectId())
+        const narrator = await ensureMaddoxSession({ campaignId: String(CAMPAIGN), purpose: "narrator", title: "x" })
+        const a = await ensureMaddoxSession({ campaignId: String(CAMPAIGN), purpose: "character-interview", memberId: memberA, title: "x" })
+        const b = await ensureMaddoxSession({ campaignId: String(CAMPAIGN), purpose: "character-interview", memberId: memberB, title: "x" })
+        expect(new Set([narrator, a, b]).size).toBe(3)
+        expect(await ensureMaddoxSession({ campaignId: String(CAMPAIGN), purpose: "character-interview", memberId: memberA, title: "x" })).toBe(a)
+        expect(rows.filter((row) => row.purpose === "character-interview").map((row) => String(row.memberId)).sort()).toEqual([memberA, memberB].sort())
+    })
+
+    it("o agente configurado chega ao session.create", async () => {
+        await ensureMaddoxSession({ campaignId: String(CAMPAIGN), purpose: "narrator", title: "x", agent: "maddox" })
+        expect(client.session.create.mock.calls[0]).toEqual([expect.objectContaining({ agent: "maddox" })])
+    })
+
+    it("releaseInterviewSession libera só a sessão daquela entrevista/membro", async () => {
+        const memberA = String(new Types.ObjectId())
+        const memberB = String(new Types.ObjectId())
+        const narrator = await ensureMaddoxSession({ campaignId: String(CAMPAIGN), purpose: "narrator", title: "x" })
+        const scenario = await ensureMaddoxSession({ campaignId: String(CAMPAIGN), purpose: "scenario-interview", title: "x" })
+        const a = await ensureMaddoxSession({ campaignId: String(CAMPAIGN), purpose: "character-interview", memberId: memberA, title: "x" })
+        const b = await ensureMaddoxSession({ campaignId: String(CAMPAIGN), purpose: "character-interview", memberId: memberB, title: "x" })
+
+        await releaseInterviewSession(String(CAMPAIGN), "character-interview", memberA)
+        expect(client.session.remove.mock.calls.map(([input]) => input.sessionID)).toEqual([a])
+        expect(rows.map((row) => row.sessionId).sort()).toEqual([narrator, scenario, b].sort())
+
+        await releaseInterviewSession(String(CAMPAIGN), "scenario-interview", null)
+        expect(client.session.remove.mock.calls.map(([input]) => input.sessionID)).toEqual([a, scenario])
+        expect(rows.map((row) => row.sessionId).sort()).toEqual([narrator, b].sort())
+    })
+
+    it("releaseInterviewSession com 'uma sessão por campanha' não toca a sessão do narrador (cenário compartilhado)", async () => {
+        policy.sessionScope = "campaign"
+        const narrator = await ensureMaddoxSession({ campaignId: String(CAMPAIGN), purpose: "scenario-interview", title: "x" })
+        await releaseInterviewSession(String(CAMPAIGN), "scenario-interview", null)
+        expect(client.session.remove).not.toHaveBeenCalled()
+        expect(rows.map((row) => row.sessionId)).toEqual([narrator])
+    })
+
+    it("releaseInterviewSession nunca lança: falha no OpenCode fica registrada e a sessão segue pendente", async () => {
+        const member = String(new Types.ObjectId())
+        await ensureMaddoxSession({ campaignId: String(CAMPAIGN), purpose: "character-interview", memberId: member, title: "x" })
+        client.session.remove.mockRejectedValueOnce(new Error("ECONNREFUSED"))
+        await expect(releaseInterviewSession(String(CAMPAIGN), "character-interview", member)).resolves.toBeUndefined()
+        expect(rows[0]).toMatchObject({ status: "pending-deletion", lastError: expect.stringContaining("ECONNREFUSED") })
     })
 
     it("exclusão com falha fica pendente e a rotina conclui depois", async () => {

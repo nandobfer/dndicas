@@ -53,8 +53,10 @@ entrevista (Maddox 2) usa a versão com que começou (`campaign.scriptVersions`,
 `maddox_opencode_sessions`:
 
 - `ensureMaddoxSession` reaproveita a sessão ativa da campanha/finalidade se ela ainda existir no
-  OpenCode, senão cria (diretório da política ou o da integração). Com `sessionScope = "campaign"`, as
-  entrevistas usam a sessão do narrador; com `campaign-and-interviews`, cada entrevista tem a sua.
+  OpenCode, senão cria (diretório da política ou o da integração). Com `sessionScope = "campaign"`, a
+  entrevista de cenário usa a sessão do narrador; a entrevista de **personagem tem sempre sessão própria por
+  membro** (respostas privadas e entrevistas simultâneas não podem dividir o histórico do OpenCode); com
+  `campaign-and-interviews`, cada entrevista tem a sua.
   Só uma sessão **comprovadamente inexistente** no OpenCode é substituída: outras falhas (timeout, 401,
   rede) respondem 502 sem tocar no registro. A nova sessão é criada antes de trocar o registro, e o
   índice único parcial (uma `active` por campanha/finalidade/membro) resolve chamadas concorrentes — a

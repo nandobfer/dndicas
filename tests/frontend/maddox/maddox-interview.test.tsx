@@ -12,6 +12,7 @@ const get = vi.fn()
 const post = vi.fn()
 
 vi.mock("sonner", () => ({ toast: { error: vi.fn(), success: vi.fn(), warning: vi.fn() } }))
+const { toast } = await import("sonner")
 vi.mock("next/navigation", () => ({ useRouter: () => ({ push, replace: vi.fn(), refresh: vi.fn() }), usePathname: () => "/campanhas/c1/entrevista/cenario" }))
 vi.mock("@/core/hooks/useAuth", () => ({ useAuth: () => ({ userId: "u-owner", isSignedIn: true, isLoaded: true, can: () => true }) }))
 vi.mock("@/lib/api", async (importOriginal) => {
@@ -77,18 +78,29 @@ function mockGets(detail: MaddoxCampaignDetailDto, state: MaddoxInterviewDto | n
 /** `fetch` com corpo NDJSON controlado pelo teste (linha a linha). */
 function streamFetch() {
     const encoder = new TextEncoder()
-    const queue: Array<(value: { value?: Uint8Array; done: boolean }) => void> = []
-    const pending: Array<{ value?: Uint8Array; done: boolean }> = []
-    const push = (chunk: { value?: Uint8Array; done: boolean }) => {
+    type Chunk = { value?: Uint8Array; done: boolean } | { error: Error }
+    type Waiter = { resolve: (value: { value?: Uint8Array; done: boolean }) => void; reject: (error: Error) => void }
+    const queue: Waiter[] = []
+    const pending: Chunk[] = []
+    const settle = (waiter: Waiter, chunk: Chunk) => ("error" in chunk ? waiter.reject(chunk.error) : waiter.resolve(chunk))
+    const push = (chunk: Chunk) => {
         const waiter = queue.shift()
-        if (waiter) waiter(chunk)
+        if (waiter) settle(waiter, chunk)
         else pending.push(chunk)
     }
     const fetchMock = vi.fn(async () => ({
         ok: true,
         status: 200,
         headers: new Headers({ "content-type": "application/x-ndjson; charset=utf-8" }),
-        body: { getReader: () => ({ read: () => new Promise<{ value?: Uint8Array; done: boolean }>((resolve) => (pending.length ? resolve(pending.shift()!) : queue.push(resolve))) }) },
+        body: {
+            getReader: () => ({
+                read: () =>
+                    new Promise<{ value?: Uint8Array; done: boolean }>((resolve, reject) => {
+                        if (pending.length) settle({ resolve, reject }, pending.shift()!)
+                        else queue.push({ resolve, reject })
+                    }),
+            }),
+        },
         json: async () => null,
     }))
     vi.stubGlobal("fetch", fetchMock)
@@ -96,6 +108,8 @@ function streamFetch() {
         fetchMock,
         send: (line: MaddoxInterviewStreamLine) => push({ value: encoder.encode(`${JSON.stringify(line)}\n`), done: false }),
         end: () => push({ done: true }),
+        /** A conexão cai no meio do stream (o servidor já gravou a resposta). */
+        drop: () => push({ error: new TypeError("network error") }),
     }
 }
 
@@ -199,6 +213,38 @@ describe("entrevista de cenário", () => {
         fireEvent.keyDown(box, { key: "Enter" })
         await waitFor(() => expect((screen.getByRole("textbox", { name: "Sua resposta" }) as HTMLTextAreaElement).value).toBe("Minha resposta"))
     })
+
+    it("conexão que cai DEPOIS de o stream abrir não devolve o texto ao campo (a resposta já foi gravada)", async () => {
+        mockGets(campaign(), interview())
+        const stream = streamFetch()
+        renderWithQueryClient(<InterviewPage campaignId="c1" kind="scenario" />)
+        const box = await screen.findByRole("textbox", { name: "Sua resposta" })
+        fireEvent.change(box, { target: { value: "Minha resposta" } })
+        fireEvent.keyDown(box, { key: "Enter" })
+        await act(async () => stream.send({ type: "user", message: msg("u1", "user", "Minha resposta") }))
+        await act(async () => stream.send({ type: "delta", text: "Ótimo" }))
+        // A conversa gravada (já com a resposta) vem do refetch depois da queda.
+        mockGets(campaign(), interview({ messages: [msg("a1", "maddox", "Que **universo** você imagina?"), msg("u1", "user", "Minha resposta")], generating: true }))
+        await act(async () => stream.drop())
+        await waitFor(() => expect(toast.error).toHaveBeenCalledWith(expect.stringContaining("Sua resposta foi enviada")))
+        expect((screen.getByRole("textbox", { name: "Sua resposta" }) as HTMLTextAreaElement).value).toBe("")
+        expect(await screen.findByText("Minha resposta")).toBeInTheDocument()
+    })
+
+    it("recarregada no meio da geração e sem realtime, a tela destrava sozinha quando o servidor termina", async () => {
+        let generating = true
+        get.mockImplementation(async (url: string) =>
+            url.includes("/interviews/")
+                ? ok({ interview: generating ? interview({ generating: true }) : interview({ generating: false, messages: [msg("a1", "maddox", "Que **universo** você imagina?"), msg("a2", "maddox", "Resposta gravada no servidor.")] }), maddoxAvatarUrl: null })
+                : ok(campaign()),
+        )
+        renderWithQueryClient(<InterviewPage campaignId="c1" kind="scenario" />)
+        const box = await screen.findByRole("textbox", { name: "Sua resposta" })
+        expect(box).toBeDisabled()
+        generating = false
+        await waitFor(() => expect(screen.getByRole("textbox", { name: "Sua resposta" })).not.toBeDisabled(), { timeout: 6000 })
+        expect(screen.getByText("Resposta gravada no servidor.")).toBeInTheDocument()
+    }, 10_000)
 
     it("jogador não faz a entrevista de cenário", async () => {
         mockGets(campaign({ myRole: "player" }), null)

@@ -34,6 +34,21 @@ export function splitInterviewLines(buffer: string): { lines: MaddoxInterviewStr
 }
 
 /**
+ * A conexão caiu DEPOIS de o stream abrir: o servidor já gravou a resposta da pessoa e continua gerando a do
+ * Maddox, então o texto não volta ao campo (evita resposta duplicada).
+ */
+export class InterviewStreamInterruptedError extends Error {
+    constructor(cause: unknown) {
+        super("A conexão caiu durante a resposta do Maddox. Sua resposta foi enviada; a conversa atualiza em instantes.")
+        this.name = "InterviewStreamInterruptedError"
+        this.cause = cause
+    }
+}
+
+/** Enquanto o servidor ainda gera (outra aba, recarga no meio da resposta): consulta de novo neste intervalo. */
+export const INTERVIEW_GENERATING_REFETCH_MS = 3000
+
+/**
  * POST numa rota de entrevista: lê o NDJSON (`user`, `delta`, `done`, `error`) ou, quando a entrevista já
  * começou, o JSON com a entrevista. Erros HTTP lançam com a mensagem pt-BR do servidor.
  */
@@ -56,7 +71,13 @@ export async function postInterviewStream(path: string, body: unknown, onLine: (
     let buffer = ""
     let final: MaddoxInterviewDto | null = null
     for (;;) {
-        const { value, done } = await reader.read()
+        let chunk: ReadableStreamReadResult<Uint8Array>
+        try {
+            chunk = await reader.read()
+        } catch (error) {
+            throw new InterviewStreamInterruptedError(error)
+        }
+        const { value, done } = chunk
         if (done) break
         buffer += decoder.decode(value, { stream: true })
         const { lines, rest } = splitInterviewLines(buffer)
@@ -94,6 +115,9 @@ export function useMaddoxInterview(campaignId: string, kind: MaddoxScriptKind, u
         queryKey: key,
         queryFn: async () => unwrapApi((await api.get<ApiResponse<MaddoxInterviewStateDto>>(interviewPath(campaignId, kind))).data),
         retry: false,
+        // Sem stream nesta aba e o servidor ainda gerando: o realtime pode não chegar (Pusher fora, evento perdido),
+        // então consulta de novo até a geração terminar para não deixar a tela travada.
+        refetchInterval: (current) => (current.state.data?.interview?.generating && !streamingRef.current ? INTERVIEW_GENERATING_REFETCH_MS : false),
     })
 
     // Outras abas: a entrevista mudou (resposta gravada, conclusão).
@@ -133,7 +157,9 @@ export function useMaddoxInterview(campaignId: string, kind: MaddoxScriptKind, u
             } catch (error) {
                 toast.error(error instanceof Error ? error.message : "Não foi possível falar com o Maddox agora.")
                 void queryClient.invalidateQueries({ queryKey: key })
-                return false
+                // Falha depois de o stream abrir: a resposta já está gravada, não devolve o texto ao campo.
+                return error instanceof InterviewStreamInterruptedError
+
             } finally {
                 streamingRef.current = false
                 setLive(IDLE)
