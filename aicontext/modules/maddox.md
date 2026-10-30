@@ -1,8 +1,9 @@
 # Módulo: Agente Maddox (Campanhas Maddox)
 
 Épico DND-2 (issue #192): campanhas narradas pela IA, com o **Maddox** como mestre/narrador. Esta
-documentação cobre a **entrega 0 (DND-8, #200)**: modelos no MongoDB e a configuração do agente. **Não há
-IA de narração nem telas de campanha ainda** (Maddox 1 em diante).
+documentação cobre a **entrega 0 (DND-8, #200)** — modelos no MongoDB e a configuração do agente — e a
+**entrega 1 (DND-18, #209)** — lista, criação com rigor, lobby e convite por link (seção "Campanhas").
+**Ainda não há IA de narração nem entrevistas** (Maddox 2 em diante).
 
 Código: `src/features/maddox/` (`constants`, `schemas`, `types`, `script-draft`, `models/`, `server/`,
 `hooks/`, `components/settings/`).
@@ -91,7 +92,68 @@ As memórias **de campanha** são diferentes das memórias **do agente** (lista 
 - `GET /api/ai/features/maddox/opencode-sessions`, `DELETE …/opencode-sessions/[id]` → `{ deleted }`
   (`false` = ficou pendente para a rotina).
 
+## Campanhas (Maddox 1)
+
+Permissão Perfix **`maddox.play`** ("Campanhas Maddox › Criar e participar de campanhas"): item
+"Campanhas Maddox" do sidebar (`NAV_PERMISSIONS["/campanhas"]`), páginas (`pageAccess`) e todas as rotas
+abaixo. A migração **`grant-maddox-play`** concede a chave ao perfil `user` e ao perfil padrão **uma única
+vez** (marca em `migration_marks`): se um administrador a retirar depois, ela não volta no boot.
+
+Telas (`src/features/maddox/components/campaigns/`, rotas pt-BR):
+
+| Rota | Conteúdo |
+| --- | --- |
+| `/campanhas` | Campanhas em que sou **dono ou membro ativo** (`joined`), da mais recente; um card largo por linha (capa ou gradiente na cor do rigor, chips de rigor/status/papel em cores de raridade, meu personagem, avatares dos membros, "atualizada há…"). Clicar abre a campanha. "Nova campanha" abre a criação |
+| `/campanhas/[id]` | Cabeçalho, lobby (participantes e personagens), "Criar/Editar personagem", "Editar" (dono), "Sair da campanha" (jogador), "Remover" (dono, com confirmação) e o painel "Convidar jogadores" (dono) |
+| `/campanhas/convite/[token]` | Resumo da campanha do link e "Entrar na campanha". Sem login vai ao login e volta; sem a permissão mostra "Acesso restrito" |
+
+**Criação:** nome (3–80) e **slider de rigor** (`RigorCard`), cópia do card de criticidade do agente
+adversário do Opex com o `Slider` copiado em `src/components/ui/opex/slider.tsx` (Radix, prop `color` para a
+cor de raridade do nível). Abaixo do slider, duas colunas por nível: "Pelas regras do D&D" (`rules`) e
+"Livre, na narrativa" (`free`), de `MADDOX_RIGOR_LEVEL_DEFS`. Passo 1 = Narrativo, último = Fiel ao D&D.
+Com o Agente Maddox indisponível (`maddoxAvailability`), a criação responde **409 `MADDOX_UNAVAILABLE`** com o
+motivo, mostrado no diálogo. A campanha nasce no `lobby` com o criador como membro `owner`; se o membro não
+puder ser gravado, a campanha é apagada (sem transação). O dono renomeia a qualquer momento; o **rigor só muda
+no lobby** (409 `RIGOR_LOCKED`).
+
+**Convite (só por link):** `invite.token` (32 bytes base64url, `select: false`, índice único parcial) nasce com
+a campanha; só o dono o lê (`GET …/invite`) e pode **gerar outro** (`POST …/invite`, com confirmação): o
+anterior deixa de valer. Entrar pelo link (`POST /invites/[token]`):
+
+- é idempotente para quem já é membro; quem **saiu** volta; quem foi **removido** recebe 403 `MEMBER_REMOVED`;
+- é aceito em qualquer fase, menos `ended`/`archived` (409 `INVITE_CLOSED`) — quem entra depois do início faz
+  a entrevista de personagem (Maddox 2) e é apresentado em seguida;
+- entradas simultâneas são resolvidas pelo índice único `{ campaignId, userId }`.
+
+**Membros:** quem não é membro recebe **404** (a campanha não é revelada). O dono não sai nem é removido
+(409); só o dono remove jogadores (403 para os demais).
+
+**Personagem (esboço):** cada membro cria/edita o próprio personagem com nome (2–60) e retrato opcional
+(`GlassImageUploader`, sem geração por IA). Um personagem por membro (`member.characterId`, gravação
+condicional resolve corridas), entrevista `pending`; o Maddox 2 completa o perfil pela entrevista. Bloqueado
+em campanha encerrada/arquivada.
+
+**Tempo real:** canal privado por usuário **`private-maddox-u-{userId}`** (autorizado em `channel-auth.ts` só
+para o próprio usuário). Cada mudança (criação, entrada, saída, remoção, personagem, edição) publica
+`maddox.campaign.changed { campaignId }` para todos os membros ativos (e para o removido); a lista e a campanha
+recarregam (`useMaddoxCampaignsRealtime`). Sem Pusher, a tela funciona por recarga.
+
+**Auditoria:** entidade `CampanhaMaddox` (criação, edição, novo link, entrada, saída/remoção, personagem).
+
+API (`src/app/api/maddox/campaigns/**`, todas com `maddox.play`, usuário efetivo do "Visualizar como"):
+
+- `GET/POST /api/maddox/campaigns` — minhas campanhas / criar (`{ name, rigor }`).
+- `GET/PATCH /api/maddox/campaigns/[id]` — detalhe (membros) / editar (dono).
+- `GET/POST /api/maddox/campaigns/[id]/invite` — link atual / gerar outro (dono).
+- `DELETE /api/maddox/campaigns/[id]/members/[memberId]` — sair (o próprio) ou remover (dono).
+- `PUT /api/maddox/campaigns/[id]/character` — esboço do meu personagem (`{ name, portraitUrl? }`).
+- `GET/POST /api/maddox/campaigns/invites/[token]` — resumo do convite / entrar.
+
+Serviço: `server/campaigns.ts`; schemas `campaign-schemas.ts`; DTOs `campaign-types.ts`; hooks
+`hooks/useMaddoxCampaigns.ts`.
+
 ## Testes
 
-`tests/backend/maddox/*` (configuração, roteiros, avatar, sessões, rotas) e
-`tests/frontend/maddox/maddox-tab.test.tsx` (happy-dom).
+`tests/backend/maddox/*` (configuração, roteiros, avatar, sessões, rotas, `campaigns.test.ts` com MongoDB em
+memória, `campaign-routes.test.ts`, `grant-maddox-play.test.ts`) e `tests/frontend/maddox/*`
+(`maddox-tab.test.tsx`, `maddox-campaigns.test.tsx`, `maddox-campaigns-realtime.test.tsx`; happy-dom).

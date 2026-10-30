@@ -8,6 +8,7 @@ let pathname = '/'
 const replace = vi.fn()
 const refresh = vi.fn()
 const signOut = vi.fn()
+let granted: string[] = []
 
 vi.mock('@/features/opex-agent/components/OpexNavItem', () => ({
     OpexNavItem: () => null,
@@ -26,7 +27,7 @@ vi.mock('@/core/hooks/useAuth', () => ({
     useAuth: () => ({
         isSignedIn: true,
         isAdmin: false,
-        can: () => false,
+        can: (key: string) => granted.includes(key),
         fullName: 'Nando Burgos',
         email: 'nando@example.com',
         imageUrl: 'https://example.com/avatar.png',
@@ -76,6 +77,17 @@ vi.mock('framer-motion', () => {
 describe('ExpandableSidebar', () => {
     beforeEach(() => {
         pathname = '/'
+        granted = []
+    })
+
+    it('shows "Campanhas Maddox" only with the maddox.play permission', () => {
+        const { unmount } = render(<ExpandableSidebar isExpanded={true} onExpand={vi.fn()} onCollapse={vi.fn()} />)
+        expect(screen.queryByText('Campanhas Maddox')).not.toBeInTheDocument()
+        unmount()
+
+        granted = ['maddox.play']
+        render(<ExpandableSidebar isExpanded={true} onExpand={vi.fn()} onCollapse={vi.fn()} />)
+        expect(screen.getByText('Campanhas Maddox').closest('a')).toHaveAttribute('href', '/campanhas')
     })
 
     it('shows the monsters catalog link for regular users', () => {

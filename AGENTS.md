@@ -13,6 +13,7 @@ Antes de implementar, leia nesta ordem:
    - UI/tema/componentes: `aicontext/use-para-atualizar-tema-e-componentes-ui.md` e `aicontext/use-componentes-ui.md`
    - Extensão de serviços ou componentes base: `aicontext/use-para-estender-o-core.md`
    - Autenticação: `aicontext/use-para-configurar-clerk.md`
+   - Recursos, telas, módulos ou APIs sujeitos a autorização: `aicontext/modules/perfix.md`
    - Arquitetura e decisões técnicas: `aicontext/use-diretrizes-do-projeto.md`
    - Módulos de negócio: `aicontext/modules/*.md`
 
@@ -26,6 +27,12 @@ Antes de implementar, leia nesta ordem:
 - Operações críticas devem preservar auditoria e logging estruturado.
 - Mensagens para usuário, erros acionáveis e estados vazios devem estar em pt-BR.
 - Ao criar ou expandir um módulo em `src/features`, atualize a documentação correspondente em `aicontext/modules/`.
+- Antes de implementar ou alterar recurso, tela, módulo ou API, avalie sua cobertura de autorização
+  conforme `aicontext/modules/perfix.md`. Se a cobertura existente for suficiente, reutilize-a. Se o
+  recurso deveria ser controlável por perfil e ainda não estiver mapeado, pergunte ao usuário se o
+  permissionamento deve entrar no plano. Se ele aprovar, inclua a cobertura completa (chave no catálogo,
+  rotas, páginas, sidebar, ferramentas do Agente Opex e a concessão inicial aos perfis existentes quando o
+  recurso for de usuário comum). Quando o usuário pedir explicitamente o mapeamento, considere-o aprovado.
 
 ## 3. Padrões operacionais
 
@@ -148,7 +155,8 @@ Antes de implementar, leia nesta ordem:
 
 1. Li o contexto certo em `aicontext/`.
 2. Não alterei `src/core/` desnecessariamente.
-3. Mantive tipos, autenticação, validação e auditoria quando aplicável.
+3. Mantive tipos, autenticação, validação e auditoria quando aplicável, e avaliei se o recurso precisa
+   de permissão nova no catálogo Perfix.
 4. Atualizei testes ou confirmei por que não eram necessários. Rodei só os testes afetados
    (`vitest run <arquivos>`, `related` ou `--changed`), com testes de UI em happy-dom; a suíte
    completa só se o usuário pediu.

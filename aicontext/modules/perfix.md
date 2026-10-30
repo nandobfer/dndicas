@@ -23,8 +23,18 @@ fluxos normais de um usuário autenticado (suas fichas, perfil, NPCs e feedbacks
 `catalog.ts` usa o catálogo em árvore do Perfix, normaliza dependências e rejeita chaves
 desconhecidas. Edição depende da visualização correspondente. Ramos: `admin.access`, `users.*`,
 `roles.*`, `integrations.access`, `integrations.<id>.{view,edit,test,logs,explore}`, `catalog.edit`,
-`catalog.generate`, `sheets.view_all`, `feedback.moderate`, `feedback.agent`, `audit.view` e
+`catalog.generate`, `sheets.view_all`, `maddox.play`, `feedback.moderate`, `feedback.agent`, `audit.view` e
 `mentions.review`.
+
+### Ao criar ou alterar recurso, tela, módulo ou API
+
+Avalie a cobertura de autorização antes de implementar. Se uma chave existente cobre o recurso, reutilize-a.
+Se o recurso deveria ser controlável por perfil e ainda não está mapeado, pergunte se o permissionamento entra
+no plano; aprovado, cubra **tudo**: chave no `PERMISSION_TREE`, rotas (`requirePermissionActor` /
+`protectedRoute`), páginas (`pageAccess`), sidebar (`NAV_PERMISSIONS`), ferramentas do Agente Opex e canais do
+Pusher. Chave nova para recurso de usuário comum precisa de **concessão inicial** aos perfis existentes (ex.:
+migração `grant-maddox-play`, que roda uma única vez com marca em `migration_marks` para não devolver a
+permissão que um administrador retirou).
 
 - `requestAccess()` revalida identidade ativa, perfis ativos e permissões no banco em cada
   requisição. Cabeçalho `x-perfix-view-as` tem precedência sobre o mapa de cookies por aba.

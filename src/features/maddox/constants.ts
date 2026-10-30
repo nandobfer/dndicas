@@ -20,18 +20,79 @@ export const MADDOX_SESSION_AUDIT_ENTITY = "SessaoOpencodeMaddox"
 export const MADDOX_RIGOR_LEVELS = ["narrativo", "flexivel", "equilibrado", "rigoroso", "fiel-dnd"] as const
 export type MaddoxRigorLevel = (typeof MADDOX_RIGOR_LEVELS)[number]
 
-export const MADDOX_RIGOR_LEVEL_DEFS: Record<MaddoxRigorLevel, { label: string; description: string; rarity: "common" | "uncommon" | "rare" | "veryRare" | "legendary" }> = {
-    narrativo: { label: "Narrativo", description: "Puramente interpretativo: sem rolagens, sem números, só história.", rarity: "common" },
-    flexivel: { label: "Flexível", description: "Narrativo, com regras do D&D só como inspiração.", rarity: "uncommon" },
-    equilibrado: { label: "Equilibrado", description: "Testes nos momentos importantes; o mestre decide o resto.", rarity: "rare" },
-    rigoroso: { label: "Rigoroso", description: "Regras do D&D na maior parte das situações, com ficha e rolagens.", rarity: "veryRare" },
-    "fiel-dnd": { label: "Fiel ao D&D", description: "Estritamente de acordo com as regras e o catálogo do DnDicas.", rarity: "legendary" },
+export type MaddoxRarity = "common" | "uncommon" | "rare" | "veryRare" | "legendary"
+
+/**
+ * Definição de cada passo do slider de rigor. Como o card de criticidade do agente adversário (opex),
+ * o nível mostra duas colunas: o que segue as regras do D&D (`rules`) e o que fica livre, só na
+ * narrativa (`free`). A cor é a da raridade do nível (`rarityColors`).
+ */
+export const MADDOX_RIGOR_LEVEL_DEFS: Record<MaddoxRigorLevel, { label: string; description: string; rarity: MaddoxRarity; rules: string[]; free: string[] }> = {
+    narrativo: {
+        label: "Narrativo",
+        description: "Puramente interpretativo: sem rolagens, sem números, só história.",
+        rarity: "common",
+        rules: [],
+        free: ["Ações, falas e intenções decididas pela história", "Combates narrados e cinemáticos", "Qualquer universo: anime, filme, livro, série", "Personagem descrito só em texto, sem ficha"],
+    },
+    flexivel: {
+        label: "Flexível",
+        description: "Narrativo, com regras do D&D só como inspiração.",
+        rarity: "uncommon",
+        rules: ["Conceitos do D&D (classes, magias, criaturas) como referência"],
+        free: ["Nenhuma rolagem de dados", "Combates narrados e cinemáticos", "Qualquer universo e estilo de personagem", "O mestre decide os resultados pela coerência da história"],
+    },
+    equilibrado: {
+        label: "Equilibrado",
+        description: "Testes nos momentos importantes; o mestre decide o resto.",
+        rarity: "rare",
+        rules: ["Testes de atributo e perícia nos momentos decisivos", "Ficha com atributos para os testes"],
+        free: ["Ações do dia a dia resolvidas na narrativa", "Combates narrados, com testes só nos golpes decisivos", "Universo livre, inspirado no D&D"],
+    },
+    rigoroso: {
+        label: "Rigoroso",
+        description: "Regras do D&D na maior parte das situações, com ficha e rolagens.",
+        rarity: "veryRare",
+        rules: ["Ficha completa do D&D", "Testes de atributo e perícia sempre que adequado", "Combate com iniciativa e turnos", "Magias, itens e habilidades do catálogo do DnDicas"],
+        free: ["Lacunas das regras decididas pelo mestre", "Ambientação própria, com raças e classes do D&D"],
+    },
+    "fiel-dnd": {
+        label: "Fiel ao D&D",
+        description: "Estritamente de acordo com as regras e o catálogo do DnDicas.",
+        rarity: "legendary",
+        rules: ["Ficha completa do D&D", "Testes, iniciativa, ação e ação bônus exatamente como nas regras", "Só raças, classes, magias e itens cadastrados no DnDicas", "Ação livre só vale se as regras permitirem"],
+        free: ["Somente o que as regras não cobrem, decidido pelo mestre"],
+    },
 }
+
+/** Permissão Perfix das Campanhas Maddox (criar, participar, convidar). */
+export const MADDOX_PLAY_PERMISSION = "maddox.play"
 
 // ── Campanhas ─────────────────────────────────────────────────────────────────
 
 export const MADDOX_CAMPAIGN_STATUSES = ["lobby", "interview", "active", "paused", "ended", "archived"] as const
 export type MaddoxCampaignStatus = (typeof MADDOX_CAMPAIGN_STATUSES)[number]
+
+export const MADDOX_CAMPAIGN_STATUS_DEFS: Record<MaddoxCampaignStatus, { label: string; rarity: MaddoxRarity | "artifact" }> = {
+    lobby: { label: "No lobby", rarity: "uncommon" },
+    interview: { label: "Em entrevista", rarity: "rare" },
+    active: { label: "Em andamento", rarity: "veryRare" },
+    paused: { label: "Pausada", rarity: "legendary" },
+    ended: { label: "Encerrada", rarity: "common" },
+    archived: { label: "Arquivada", rarity: "common" },
+}
+
+/** Fases em que não se convida mais ninguém (o link responde 409). */
+export const MADDOX_INVITE_CLOSED_STATUSES: readonly MaddoxCampaignStatus[] = ["ended", "archived"]
+
+export const MADDOX_CAMPAIGN_AUDIT_ENTITY = "CampanhaMaddox"
+export const MADDOX_CAMPAIGN_NAME_MIN = 3
+export const MADDOX_CAMPAIGN_NAME_MAX = 80
+export const MADDOX_CHARACTER_NAME_MIN = 2
+export const MADDOX_CHARACTER_NAME_MAX = 60
+
+/** Evento do canal do usuário (`private-maddox-u-{userId}`): algo mudou numa campanha da qual ele participa. */
+export const MADDOX_CAMPAIGN_CHANGED_EVENT = "maddox.campaign.changed"
 
 export const MADDOX_MEMBER_ROLES = ["owner", "player"] as const
 export type MaddoxMemberRole = (typeof MADDOX_MEMBER_ROLES)[number]
