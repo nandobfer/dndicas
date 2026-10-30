@@ -66,7 +66,7 @@ export const memoryTools = [
         permission: "integrations.ai.edit",
         label: "Criar memória",
         risk: "write",
-        description: `Cria uma memória (instrução ou fato permanente, de 3 a 2.000 caracteres) numa lista do Agente Opex ou do Agente Adversário (${AGENT_LIST}). O texto é revisado e resumido pelo uso "Resumo de memórias" (formattedByAi=false quando ele está indisponível). Até 50 por lista.`,
+        description: `Cria uma memória (instrução ou fato permanente, de 3 a 2.000 caracteres) numa lista do Agente Opex ou do Agente Adversário (${AGENT_LIST}). O texto é revisado e resumido pelo uso "Resumo de memórias" (formattedByAi=false quando ele está indisponível). Sem limite de quantidade por lista.`,
         input: z.object({ agent, text }),
         summarize: (input) => `Criar a memória (${AI_AGENTS[input.agent].title}): "${short(input.text)}"`,
         async execute(input, { actorId }) {

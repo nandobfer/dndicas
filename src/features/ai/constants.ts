@@ -3,7 +3,7 @@
 import type { AiProviderId } from "@/lib/ai/providers"
 
 /** Abas da página "Provedores de IA". `provedores` é a padrão (omitida da URL). */
-export const AI_TABS = ["provedores", "gerador-imagens", "entender-com-ia", "importador-5etools", "agente-opex", "resumo-memorias"] as const
+export const AI_TABS = ["provedores", "gerador-imagens", "entender-com-ia", "importador-5etools", "agente-opex", "agente-maddox", "resumo-memorias"] as const
 export type AiTab = (typeof AI_TABS)[number]
 
 /**
@@ -46,7 +46,6 @@ export const AI_FEATURE_UPDATED_EVENT = "ai-feature-updated"
 export const AI_MEMORY_AUDIT_ENTITY = "MemoriaAgente"
 /** Evento no canal da integração "Provedores de IA" quando as memórias de uma lista mudam. Payload: `{ agentId }`. */
 export const AI_MEMORIES_UPDATED_EVENT = "ai-memories-updated"
-export const AGENT_MEMORY_LIMIT = 50
 
 // ── Resumo de memórias ─────────────────────────────────────────────────────────
 

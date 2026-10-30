@@ -35,6 +35,7 @@ export const APP_DOC_AUDIENCE: Readonly<Record<string, AppDocAudience>> = {
     "modules/ai.md": "admin",
     "modules/core.md": "admin",
     "modules/integrations.md": "admin",
+    "modules/maddox.md": "admin",
     "modules/seed-data.md": "admin",
     "modules/users.md": "admin",
     "modules/perfix.md": "admin",

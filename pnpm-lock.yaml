@@ -47,6 +47,9 @@ importers:
       '@modelcontextprotocol/sdk':
         specifier: ^1.29.0
         version: 1.29.0(zod@4.4.3)
+      '@opencode/client':
+        specifier: 2.0.24
+        version: 2.0.24(effect@4.0.0-rc.112)
       '@nandobfer/perfix':
         specifier: github:nandobfer/Perfix#2ceef0948fcbc99f6943589048b365665912def8
         version: https://codeload.github.com/nandobfer/Perfix/tar.gz/2ceef0948fcbc99f6943589048b365665912def8(react@19.2.3)

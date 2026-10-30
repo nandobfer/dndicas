@@ -201,6 +201,8 @@ export const HEALTH_CHECK_JOB_ID = "integrations-health-check"
  * e sessões de visitantes expiradas (com mensagens, ações e arquivos).
  */
 export const OPEX_FILES_CLEANUP_JOB_ID = "opex-files-cleanup"
+/** Agente Maddox: retoma as exclusões pendentes das sessões do OpenCode das campanhas. */
+export const MADDOX_SESSIONS_CLEANUP_JOB_ID = "maddox-opencode-sessions-cleanup"
 
 /** Rotinas internas de uma integração ativável (id da rotina → id da integração): somem de Crons com ela desativada. */
 export const INTEGRATION_CRON_JOBS: Readonly<Record<string, IntegrationId>> = {}
@@ -234,6 +236,13 @@ export const DEFAULT_CRON_JOBS: CronJobConfig[] = [
     {
         id: OPEX_FILES_CLEANUP_JOB_ID,
         label: "Limpar arquivos pendentes e sessões de visitantes expiradas do Agente Opex",
+        kind: "internal",
+        schedule: { type: "interval", minutes: 60 },
+        enabled: true,
+    },
+    {
+        id: MADDOX_SESSIONS_CLEANUP_JOB_ID,
+        label: "Excluir as sessões do OpenCode pendentes do Agente Maddox",
         kind: "internal",
         schedule: { type: "interval", minutes: 60 },
         enabled: true,
