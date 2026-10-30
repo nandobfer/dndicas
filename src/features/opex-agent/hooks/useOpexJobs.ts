@@ -113,7 +113,7 @@ export function notifyJobFinished(payload: OpexJobFinishedPayload): void {
 }
 
 /**
- * Avisos dos jobs em qualquer tela (montado no item do agente na barra lateral). Chegam no canal do
+ * Avisos dos jobs em qualquer tela (montado no botão flutuante do agente). Chegam no canal do
  * próprio usuário, então só os jobs dele avisam.
  */
 export function useOpexJobNotifications(enabled: boolean): void {

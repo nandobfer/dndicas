@@ -31,7 +31,7 @@ desconhecidas. Edição depende da visualização correspondente. Ramos: `admin.
 Avalie a cobertura de autorização antes de implementar. Se uma chave existente cobre o recurso, reutilize-a.
 Se o recurso deveria ser controlável por perfil e ainda não está mapeado, pergunte se o permissionamento entra
 no plano; aprovado, cubra **tudo**: chave no `PERMISSION_TREE`, rotas (`requirePermissionActor` /
-`protectedRoute`), páginas (`pageAccess`), sidebar (`NAV_PERMISSIONS`), ferramentas do Agente Opex e canais do
+`protectedRoute`), páginas (`pageAccess`), navegação do header (`NAV_PERMISSIONS`, usada por `src/lib/config/navigation.ts`), ferramentas do Agente Opex e canais do
 Pusher. Chave nova para recurso de usuário comum precisa de **concessão inicial** aos perfis existentes (ex.:
 migração `grant-maddox-play`, que roda uma única vez com marca em `migration_marks` para não devolver a
 permissão que um administrador retirou).

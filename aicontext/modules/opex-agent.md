@@ -9,9 +9,12 @@ Os cards de configuração do agente em `/integracoes/ia` e de Jobs em `/integra
 reutilizam `GlassCard`; os controles herdam a primária global azul. Ver
 [Integrações — Interface](./integrations.md#interface-dnd-6) para as causas e regras visuais da DND-6.
 
-Está disponível para **todos**, inclusive visitantes sem login: item "Agente Opex" no rodapé da
-barra lateral (`OpexNavItem`, atalho **Ctrl+Shift+O**). Abre o chat num popover ancorado no item
-(no celular, em tela cheia), com abas de sessões, envio de arquivos, confirmações e resposta ao vivo.
+Está disponível para **todos**, inclusive visitantes sem login: botão flutuante redondo "Agente Opex"
+no canto inferior direito, no grupo reordenável com Dados e Busca (`OpexFab`, atalho **Ctrl+Shift+O**,
+ponto pulsante com sessão respondendo ou aguardando confirmação; some para o visitante quando o agente não
+está liberado para visitantes, regra em `useOpexFabEnabled`). Abre o chat num popover ancorado acima do botão,
+com opção de maximizar (abaixo de 768px, em tela cheia), com abas de sessões, envio de arquivos, confirmações
+e resposta ao vivo.
 
 | Papel | O que o agente pode fazer |
 | --- | --- |

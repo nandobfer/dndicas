@@ -95,7 +95,7 @@ As memórias **de campanha** são diferentes das memórias **do agente** (lista 
 ## Campanhas (Maddox 1)
 
 Permissão Perfix **`maddox.play`** ("Campanhas Maddox › Criar e participar de campanhas"): item
-"Campanhas Maddox" do sidebar (`NAV_PERMISSIONS["/campanhas"]`), páginas (`pageAccess`) e todas as rotas
+"Campanhas Maddox" da categoria **Campanhas** do header (`NAV_PERMISSIONS["/campanhas"]`; sem a permissão, a categoria não aparece), páginas (`pageAccess`) e todas as rotas
 abaixo. A migração **`grant-maddox-play`** concede a chave ao perfil `user` e ao perfil padrão **uma única
 vez** (marca em `migration_marks`): se um administrador a retirar depois, ela não volta no boot.
 

@@ -83,7 +83,7 @@ export function UnauthenticatedView({ redirectUrl = "/my-sheets" }: Unauthentica
                 </div>
 
                 {/* Right — local sign-in, sticky on desktop */}
-                <div className="w-full lg:w-auto flex-shrink-0 flex justify-center lg:sticky lg:top-6">
+                <div className="w-full lg:w-auto flex-shrink-0 flex justify-center lg:sticky lg:top-20">
                     <SignIn routing="hash" fallbackRedirectUrl={redirectUrl} forceRedirectUrl={redirectUrl} />
                 </div>
             </div>

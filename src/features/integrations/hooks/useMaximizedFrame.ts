@@ -84,8 +84,8 @@ export function applyFrame(el: HTMLElement, rect: FrameRect) {
 
 /**
  * Maximiza o PRÓPRIO elemento sobre a área de conteúdo do dashboard, sem remontá-lo (o terminal
- * xterm mantém logs, busca e destaques). Sidebar e tickers continuam visíveis. Acompanha resize
- * da janela e do `<main>` (sidebar abrindo/fechando). Entrada e saída animadas com framer-motion
+ * xterm mantém logs, busca e destaques). Header e tickers continuam visíveis. Acompanha resize
+ * da janela e do `<main>`. Entrada e saída animadas com framer-motion
  * (fade + leve escala), imediatas com `prefers-reduced-motion`.
  */
 export function useMaximizedFrame(frameRef: RefObject<HTMLElement | null>, maximized: boolean): void {

@@ -3,7 +3,7 @@
 Central administrativa das integrações do DnDicas, copiada da central do Opex. Toda configuração
 que antes vivia no `.env` passa a ser lida e gravada no MongoDB e editada pelos administradores.
 
-> **Acesso:** `integrations.access` na sidebar/layout, com permissões `integrations.<id>.view/edit/test/logs/explore` nas APIs correspondentes. APIs de recursos de IA usam `integrations.ai.view/edit`. Canais administrativos continuam exigindo `admin.access`. O coringa `*` satisfaz todas essas permissões. Consulte [Perfix](./perfix.md).
+> **Acesso:** `integrations.access` na navegação do header (**Administração › Integrações**)/layout, com permissões `integrations.<id>.view/edit/test/logs/explore` nas APIs correspondentes. APIs de recursos de IA usam `integrations.ai.view/edit`. Canais administrativos continuam exigindo `admin.access`. O coringa `*` satisfaz todas essas permissões. Consulte [Perfix](./perfix.md).
 
 ## Interface (DND-6)
 

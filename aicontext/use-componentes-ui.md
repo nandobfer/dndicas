@@ -596,6 +596,55 @@ const columns: Column<Item>[] = [
 - Customização de renderização por coluna
 - Responsiva
 
+## Layout do app: header translúcido e botões flutuantes (DND-20)
+
+O app **não tem sidebar** (nem o drawer do mobile). Todas as rotas de `src/app/(dashboard)/layout.tsx`,
+inclusive `/sign-in`, `/sign-up` e `/campanhas/convite/[token]`, montam o mesmo header fixo, o conteúdo
+na largura toda (`pt-16` para compensar o header) e o rodapé (`GlassFooter`).
+
+### Header (`src/components/ui/glass-header.tsx`)
+
+- Vidro escuro fixo no topo (`fixed inset-x-0 top-0 z-40 h-16 bg-black/40 backdrop-blur-sm border-b border-white/10`): o conteúdo passa por baixo ao rolar.
+- **Esquerda:** o logo (`/dndicas-logo.webp`), link para o Início. **Direita:** `HeaderUserMenu`.
+- **Desktop (a partir de `lg`, 1024px):** `HeaderCategoryMenu` ao centro, com **Início** (link direto) e as
+  categorias **Fichas**, **Campanhas**, **Catálogo** e **Administração**. Hover do mouse ou clique abrem um
+  container glass único com os itens (trocar de categoria troca o conteúdo sem fechar); Esc (o foco volta à
+  categoria), clique fora, escolha de item ou mudança de rota fecham. Teclado: ↓/Enter/Espaço abrem e focam o
+  primeiro item; ↑/↓/Home/End percorrem. O hover só vale para `pointerType === "mouse"` (no toque, o clique).
+- **Abaixo de `lg`:** só o avatar e o hambúrguer (`HeaderMobileMenu`), que abre um painel glass (Dialog do
+  Radix) com **Início** e as categorias em seções expansíveis; a seção da tela atual abre expandida.
+- **Usuário (`HeaderUserMenu`):** avatar, nome (`fullName || email || "Usuário"`) e `APP_VERSION` a partir de
+  `lg` (só o avatar abaixo). O menu (`GlassDropdownMenu`) tem **Perfil**, **Feedback** e **Sair** ("Saindo...",
+  volta a `/sign-in`). O visitante vê **"Entrar / Cadastrar"** (só o ícone abaixo de `lg`) e não tem menu.
+- **Catálogo dentro do Owlbear** (`/?owlbearCatalogEmbed=1`): sem header e sem rodapé. O hook
+  `useIsOwlbearCatalogEmbed` (`src/features/owlbear/hooks/`) lê o parâmetro no primeiro render e guarda uma
+  marca no `sessionStorage` do iframe, para manter o modo ao navegar dentro dele.
+
+### Categorias e itens (`src/lib/config/navigation.ts`)
+
+Para adicionar uma tela à navegação, inclua o item em `NAV_CATEGORIES` (mesmo ícone em desktop e mobile).
+`getVisibleNavigation` filtra pelos itens `authenticated` e pelas permissões de `NAV_PERMISSIONS`
+(`src/features/perfix/navigation.ts`, perfil efetivo, inclusive "Visualizar como") e **remove categorias
+vazias**. `resolveActiveNav` define o destaque por segmento de rota (`/spells` casa `/spells/x`, não
+`/spellsx`); um item com regra própria usa `match`: a ficha aberta (`/sheets/[...slug]`) destaca **Fichas ›
+Minhas Fichas** e só a lista exata `/sheets` destaca **Administração › Todas as fichas**. No Início o destaque
+fica só em **Início**. **Perfil** e **Feedback** ficam só no menu do usuário. Não há título de página nem
+breadcrumb no header.
+
+### Botões flutuantes (`src/features/dice-roller/components/global-fab-group.tsx`)
+
+- Grupo fixo no canto inferior direito (`fixed bottom-6 right-6 z-[99]`), em linha a partir de `sm` e em
+  coluna abaixo. Ordem padrão: **Dados → Agente Opex (`OpexFab`) → Busca**.
+- Reordenável por arraste (`@dnd-kit`): `MouseSensor` só ativa após 6px e `TouchSensor` após segurar 250ms
+  (tolerância 8px), então clique e rolagem não viram arraste; o clique que encerra um arraste é engolido.
+  Soltar fora da linha não muda a ordem. O arraste fica desligado enquanto a Busca está aberta.
+- A ordem fica no `localStorage` (`dndicas:fab-order`, ids `dice`, `opex`, `search`), vale para visitante e
+  em todas as telas. Só uma permutação exata dos ids é aceita; qualquer outro valor volta ao padrão
+  (`normalizeFabOrder` em `fab-order.ts`).
+- Botões ocultos não ocupam espaço e os demais mantêm a ordem salva entre si (`moveFab`): a **Busca** não
+  aparece no Início, **Dados** não aparece no Owlbear (SDK disponível ou catálogo embutido) e o **Agente Opex**
+  some quando não está liberado (`useOpexFabEnabled`). Um botão que reaparece volta à posição salva.
+
 ## Abas e seletores (regra obrigatória)
 
 - **Abas**: a aba ativa sempre usa a cor primária do tema. Use `IntegrationTabs`

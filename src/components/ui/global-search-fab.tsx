@@ -14,7 +14,13 @@ import { usePathname } from "next/navigation"
 
 const GLASS_STYLE = "bg-black/40 backdrop-blur-[4px]"
 
-export function GlobalSearchFAB({ embedded = false }: { embedded?: boolean }) {
+interface GlobalSearchFABProps {
+  /** Dentro do grupo de botões flutuantes: o grupo posiciona e decide quando o botão aparece. */
+  embedded?: boolean
+  onOpenChange?: (open: boolean) => void
+}
+
+export function GlobalSearchFAB({ embedded = false, onOpenChange }: GlobalSearchFABProps) {
   const [isOpen, setIsOpen] = React.useState(false)
   const isMobile = useIsMobile()
   const pathname = usePathname()
@@ -29,6 +35,7 @@ export function GlobalSearchFAB({ embedded = false }: { embedded?: boolean }) {
     if (!isOpen) {
       setQuery("")
       }
+    onOpenChange?.(isOpen)
   }, [isOpen])
 
   // Keyboard shortcut to open (Cmd/Ctrl + K)
@@ -46,8 +53,8 @@ export function GlobalSearchFAB({ embedded = false }: { embedded?: boolean }) {
     return () => window.removeEventListener("keydown", handleKeyDown)
   }, [])
 
-  // Avoid showing FAB on Dashboard since it has an inline search
-  if (pathname === "/") return null
+  // Avoid showing FAB on Dashboard since it has an inline search (no grupo, quem decide é o grupo)
+  if (!embedded && pathname === "/") return null
 
   return (
       <div className={embedded ? "relative" : "fixed bottom-6 right-6 z-[99]"} ref={containerRef}>

@@ -20,15 +20,6 @@ import { buttons } from './button-styles';
  * Spacing constants for layout components.
  */
 export const spacing = {
-  /** Sidebar dimensions */
-  sidebar: {
-    /** Width when expanded (px) */
-    expanded: 280,
-    /** Width when collapsed (px) */
-    collapsed: 72,
-    /** Transition duration (ms) */
-    transitionMs: 350,
-  },
   /** Page layout spacing */
   page: {
     /** Main content padding (px) */

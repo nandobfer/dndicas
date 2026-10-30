@@ -85,4 +85,6 @@ Script de terminal interativo para criar e consultar dice overrides diretamente,
 
 - Executar com: `pnpm dice-override-cli`
 
+## Botão flutuante (DND-20)
 
+O `DiceRollerFab` fica no grupo de botões flutuantes do canto inferior direito (`GlobalFabGroup`), reordenável por arraste junto com o Agente Opex e a Busca; ordem padrão **Dados → Agente Opex → Busca**, salva no `localStorage` (`dndicas:fab-order`). Não aparece no Owlbear (SDK disponível ou catálogo embutido via `useIsOwlbearCatalogEmbed`). Regras completas em [use-componentes-ui.md › Layout do app](../use-componentes-ui.md#layout-do-app-header-translúcido-e-botões-flutuantes-dnd-20).
