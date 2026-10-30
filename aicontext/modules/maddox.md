@@ -242,19 +242,29 @@ entrevista por participante, "Entrevista do personagem" (desabilitada até o cen
 `src/lib/ai/stream.ts` ganhou `messages` (conversa) e `opencodeSessionId` (sessão fixa) no `AiStreamRequest`.
 
 **Formato e menções do catálogo.** As instruções do entrevistador têm uma seção fixa "Formato da resposta"
-(`MADDOX_RESPONSE_FORMAT`, no código, independente da aba): Markdown em blocos curtos, `###` por assunto,
-listas, citação para ambientação e o nome oficial de raças, classes, subclasses, origens, magias, talentos, itens
-e monstros em **negrito**. O entrevistador não tem ferramentas: ao gravar cada fala (e o cenário, a situação
-inicial e o perfil consolidados), `server/catalog-mentions.ts` busca cada negrito no catálogo (o mesmo
-`searchCatalogEntities` do `search_catalog` do Opex, só ativas) e troca o que bate exatamente — sem acento e sem
-caixa, pelo nome ou pelo nome original — por `[Nome](#mention:Tipo:id)`, que o `Markdown` mostra como o badge
-clicável do DnDicas. Sem correspondência, o negrito fica; falha da busca mantém o negrito e registra aviso. O
-histórico enviado de volta ao modelo (e a transcrição da consolidação) converte as menções de novo em negrito
-(`mentionsToBold`). Até 25 nomes por fala.
+(`MADDOX_RESPONSE_FORMAT`, no código, independente da aba): Markdown em blocos curtos, `###` por assunto, listas,
+citação para ambientação e **negrito** para nomes próprios do mundo e ênfase. **Negrito nunca vira menção.** Para
+citar uma entidade do catálogo, o modelo escreve a marcação explícita com o tipo `{{Tipo:Nome oficial}}` (ex.:
+`{{Raça:Elfo}}`, `{{Magia:Bola de Fogo}}`; tipos = `catalogEntityTypes`), e é proibido usá-la para personagens,
+jogadores, lugares ou o que foi criado na campanha. O módulo puro `catalog-markup.ts` define a marcação; o servidor
+(`server/catalog-mentions.ts`) busca cada citação **só no tipo declarado** (o mesmo `searchCatalogEntities` do
+`search_catalog` do Opex, só ativas) e troca o que bate exatamente — sem acento e sem caixa, pelo nome ou nome
+original — por `[Nome](#mention:Tipo:id)`, que o `Markdown` mostra como o badge clicável do DnDicas.
+
+- **Nomes reservados** (`campaignReservedNames`): nome da campanha, personagens da mesa e nome/usuário dos jogadores
+  (inteiros e cada palavra de 3+ letras) nunca viram menção, mesmo com a marcação. Ex.: a personagem "Lyra
+  Ventobravo" não vira o monstro "Lyra".
+- Tipo inválido, sem correspondência, nome reservado ou falha da busca (aviso no log): vira `**Nome**`. A marcação
+  nunca aparece crua: o stream passa por `createMarkupFilter` (segura uma marcação partida entre pedaços) e a tela
+  aplica `liveMarkupToBold` ao texto ao vivo.
+- O histórico enviado ao modelo e a transcrição da consolidação voltam as menções para a marcação
+  (`mentionsToMarkup`). A consolidação pede a mesma marcação; cenário, situação inicial e perfil passam pela mesma
+  resolução com os nomes reservados. Até 25 citações por texto.
 
 **Tela da entrevista.** Largura total (sem `mx-auto`/`max-w-*`), painel de altura própria no padrão do chat do
-Opex (conversa com rolagem interna e "Ir para o fim", proposta e campo de resposta no rodapé), balão do Maddox
-com o nome e o avatar na cor do rigor sobre fundo neutro, pontinhos e cursor durante o stream. No lobby, o link
+Opex (conversa com rolagem interna e "Ir para o fim", proposta e campo de resposta no rodapé), fala do Maddox
+numa bolha neutra (`rounded-2xl`, borda sutil na cor do rigor) com o nome na cor do rigor, pontinhos e cursor dentro
+dela; avatar de tamanho fixo alinhado ao topo (`h-7 w-7 self-start shrink-0`), que não estica com a fala. No lobby, o link
 de convite fica numa linha e "Copiar link"/"Gerar novo link" abaixo.
 
 ## Testes
@@ -263,4 +273,4 @@ de convite fica numa linha e "Copiar link"/"Gerar novo link" abaixo.
 memória, `campaign-routes.test.ts`, `grant-maddox-play.test.ts`) e `tests/frontend/maddox/*`
 (`maddox-tab.test.tsx`, `maddox-campaigns.test.tsx`, `maddox-campaigns-realtime.test.tsx`; happy-dom).
 Maddox 2: `interview-prompt.test.ts`, `interviews.test.ts` (MongoDB em memória, IA/JEV/OpenCode mockados),
-`interview-routes.test.ts`, `catalog-mentions.test.ts` e `tests/frontend/maddox/maddox-interview.test.tsx`.
+`interview-routes.test.ts`, `catalog-mentions.test.ts`, `catalog-markup.test.ts` e `tests/frontend/maddox/maddox-interview.test.tsx`.

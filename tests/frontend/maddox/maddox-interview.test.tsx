@@ -324,6 +324,47 @@ describe("layout e estilo da conversa", () => {
         expect(sameColor(within(message).getByTestId("maddox-name").style.color, rigorColor("equilibrado"))).toBe(true)
     })
 
+    it("o texto do Maddox fica DENTRO da bolha e o avatar tem tamanho fixo (não estica com a fala)", async () => {
+        mockGets(campaign({ rigor: "equilibrado" }), interview({ messages: [msg("a1", "maddox", "Primeiro parágrafo.\n\nSegundo parágrafo bem longo.")] }))
+        renderWithQueryClient(<InterviewPage campaignId="c1" kind="scenario" />)
+        const message = await screen.findByTestId("maddox-message")
+        expect(message.className).toContain("items-start")
+        const bubble = within(message).getByTestId("maddox-bubble")
+        expect(bubble).toContainElement(screen.getByText("Primeiro parágrafo."))
+        expect(bubble).toContainElement(screen.getByText("Segundo parágrafo bem longo."))
+        expect(bubble).toContainElement(within(message).getByTestId("maddox-name"))
+        expect(bubble.className).toMatch(/\bborder\b/)
+        expect(bubble.className).toContain("rounded-2xl")
+        expect(bubble.className).toContain("bg-white/[0.03]")
+        // O avatar é o único filho fora da bolha: tamanho fixo, alinhado ao topo; nenhum anel envolve o texto.
+        const outside = [...message.children].filter((child) => child !== bubble)
+        expect(outside).toHaveLength(1)
+        expect(outside[0]!.className).toMatch(/\bh-7\b/)
+        expect(outside[0]!.className).toMatch(/\bw-7\b/)
+        expect(outside[0]!.className).toContain("self-start")
+        expect(outside[0]!.className).toContain("shrink-0")
+        expect(message.querySelector("[class*='ring-']")).toBeNull()
+    })
+
+    it("pontinhos e cursor ficam dentro da bolha; a citação do catálogo ao vivo aparece em negrito, nunca como {{", async () => {
+        mockGets(campaign(), interview())
+        const stream = streamFetch()
+        renderWithQueryClient(<InterviewPage campaignId="c1" kind="scenario" />)
+        const box = await screen.findByRole("textbox", { name: "Sua resposta" })
+        fireEvent.change(box, { target: { value: "Oi" } })
+        fireEvent.keyDown(box, { key: "Enter" })
+        const dots = await screen.findByTestId("maddox-writing-dots")
+        expect(dots.closest("[data-testid='maddox-bubble']")).not.toBeNull()
+        await act(async () => stream.send({ type: "delta", text: "Um {{Raça:Elfo}} e um {{Classe:Ma" }))
+        const live = (await screen.findByTestId("maddox-cursor")).closest("[data-testid='maddox-bubble']")!
+        expect(live).not.toBeNull()
+        const strong = within(live as HTMLElement).getByText("Elfo")
+        expect(strong.tagName).toBe("STRONG")
+        expect(live.textContent).not.toContain("{{")
+        expect(live.textContent).not.toMatch(/e um Ma/)
+        await act(async () => stream.end())
+    })
+
     it("menção do catálogo vira o badge clicável do DnDicas", async () => {
         mockGets(campaign(), interview({ messages: [msg("a1", "maddox", "Que tal um [Elfo](#mention:Ra%C3%A7a:r1)?")] }))
         renderWithQueryClient(<InterviewPage campaignId="c1" kind="scenario" />)

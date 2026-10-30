@@ -1,4 +1,5 @@
-import { mentionsToBold } from "./catalog-mentions"
+import { catalogEntityTypes } from "@/features/mcp/server/catalog-schemas"
+import { mentionsToMarkup } from "./catalog-mentions"
 import {
     MADDOX_PROFILE_SECTIONS,
     MADDOX_PROPOSAL_MARKER,
@@ -76,15 +77,22 @@ export function buildInterviewInstructions(context: InterviewPromptContext): str
     return parts.join("\n\n")
 }
 
+/** Como citar uma entidade do catálogo (marcação explícita com tipo, resolvida em menção pelo servidor). */
+export const CATALOG_CITATION_RULE = [
+    `- Para citar uma entidade do catálogo de D&D, escreva {{Tipo:Nome oficial em português}} — por exemplo {{Raça:Elfo}}, {{Classe:Mago}}, {{Magia:Bola de Fogo}}. Tipos aceitos: ${catalogEntityTypes.join(", ")}. Ela vira uma menção clicável do catálogo.`,
+    "- Nunca use essa marcação para personagens, jogadores, lugares, facções, NPCs ou qualquer coisa criada na campanha: esses nomes vão em **negrito**. Na dúvida se algo existe no D&D, use negrito.",
+    "- **Negrito** nunca vira menção: serve só para ênfase e para nomes próprios do mundo da campanha. Não use links nem HTML.",
+].join("\n")
+
 /**
  * Formato fixo das falas do entrevistador (não depende do texto configurado na aba): Markdown que a tela pinta
- * como o Agente Opex, e os nomes do catálogo em negrito, que o servidor transforma em menções clicáveis.
+ * como o Agente Opex e citações explícitas do catálogo, que o servidor transforma em menções clicáveis.
  */
 export const MADDOX_RESPONSE_FORMAT = [
     "## Formato da resposta",
     "- Responda em Markdown, em blocos curtos e fáceis de ler; termine com no máximo duas perguntas por vez.",
-    "- Use **negrito** para nomes próprios, lugares, facções e termos de regra.",
-    "- Ao citar raças, classes, subclasses, origens, magias, talentos, itens ou monstros do D&D, escreva o nome oficial em português entre **negrito** (ex.: **Elfo**, **Mago**, **Bola de Fogo**): eles viram menções clicáveis do catálogo. Não use links nem HTML.",
+    "- Use **negrito** para nomes próprios do mundo (personagens, lugares, facções) e para ênfase.",
+    CATALOG_CITATION_RULE,
     "- Use `###` para separar blocos quando houver mais de um assunto e listas para opções e sugestões.",
     "- Use citação (`>`) para trechos de ambientação ou falas dentro do mundo do jogo.",
     "- Evite tabelas longas. Na síntese final, use um título (`###`) por tópico combinado.",
@@ -141,14 +149,14 @@ export interface TranscriptMessage {
 }
 
 export function transcriptText(messages: readonly TranscriptMessage[]): string {
-    return messages.map((message) => `${message.role === "maddox" ? "MADDOX" : "JOGADOR"}: ${mentionsToBold(message.content)}`).join("\n\n")
+    return messages.map((message) => `${message.role === "maddox" ? "MADDOX" : "JOGADOR"}: ${mentionsToMarkup(message.content)}`).join("\n\n")
 }
 
 /** Instruções da consolidação (JSON estrito) do cenário ou do personagem. */
 export function buildConsolidationInstructions(context: InterviewPromptContext, withSheet: boolean): string {
     const base = [
         "Você consolida uma entrevista de preparação de campanha de RPG em JSON. Responda SOMENTE com um objeto JSON válido, sem texto antes ou depois e sem bloco de código.",
-        "Use apenas o que foi combinado e confirmado na conversa; não invente fatos. O que não foi definido fica como \"a definir durante a história\". Escreva em português do Brasil, em Markdown dentro das strings, com o nome oficial de raças, classes, subclasses, origens, magias, talentos, itens e monstros do D&D em **negrito**.",
+        "Use apenas o que foi combinado e confirmado na conversa; não invente fatos. O que não foi definido fica como \"a definir durante a história\". Escreva em português do Brasil, em Markdown dentro das strings. Cite entidades do catálogo de D&D (raças, classes, subclasses, origens, magias, talentos, itens, monstros) como {{Tipo:Nome oficial}}, como na conversa; personagens, lugares e tudo o que foi criado na campanha vão em **negrito**, nunca nessa marcação.",
         rigorBlock(context.campaign.rigor),
     ]
     if (context.kind === "scenario") {

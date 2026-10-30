@@ -4,6 +4,7 @@ import type { ModelMessage } from "ai"
 import { AcaoAuditoria, dbConnect, recordAudit } from "@/lib/db"
 import { DomainError } from "@/lib/api/route"
 import { loggerFor } from "@/lib/logger"
+import { User } from "@/features/users/models/user"
 import {
     MADDOX_CAMPAIGN_AUDIT_ENTITY,
     MADDOX_INTERVIEW_CONSUMPTION_ORIGIN,
@@ -15,13 +16,14 @@ import {
     type MaddoxScriptKind,
     type MaddoxSessionPurpose,
 } from "../constants"
-import { MaddoxCampaignModel, MaddoxCharacterModel, MaddoxInterviewModel, type IMaddoxCampaign, type IMaddoxCampaignMember, type IMaddoxCharacter, type IMaddoxInterview, type IMaddoxInterviewMessage } from "../models"
+import { MaddoxCampaignMemberModel, MaddoxCampaignModel, MaddoxCharacterModel, MaddoxInterviewModel, type IMaddoxCampaign, type IMaddoxCampaignMember, type IMaddoxCharacter, type IMaddoxInterview, type IMaddoxInterviewMessage } from "../models"
 import type { MaddoxSettings } from "../schemas"
 import type { MaddoxInterviewDto, MaddoxInterviewMessageDto, MaddoxInterviewStateDto, MaddoxInterviewStreamLine } from "../interview-types"
 import type { MaddoxInterviewMessageInput } from "../interview-schemas"
 import { changed, loadMembership } from "./campaigns"
 import { notifyInterviewChanged } from "./campaign-realtime"
-import { linkCatalogMentions, mentionsToBold } from "./catalog-mentions"
+import { createMarkupFilter } from "../catalog-markup"
+import { linkCatalogMentions, mentionsToMarkup } from "./catalog-mentions"
 import { JEV_PROPOSAL_HINT, buildInterviewInstructions, createMarkerFilter, extractProposal, openingPrompt, transcriptText, type InterviewPromptContext } from "./interview-prompt"
 
 /**
@@ -131,6 +133,20 @@ export async function loadInterviewer(): Promise<{ settings: MaddoxSettings; mod
     return { settings, model }
 }
 
+/**
+ * Nomes da própria campanha que nunca viram menção do catálogo: o nome da campanha, os personagens da mesa e os
+ * jogadores (ex.: a personagem "Lyra" não pode virar o monstro "Lyra").
+ */
+export async function campaignReservedNames(campaign: Pick<CampaignDoc, "_id" | "name">): Promise<string[]> {
+    const [characters, members] = await Promise.all([
+        MaddoxCharacterModel.find({ campaignId: campaign._id }).select("name").lean<{ name?: string }[]>(),
+        MaddoxCampaignMemberModel.find({ campaignId: campaign._id }).select("userId").lean<{ userId: string }[]>(),
+    ])
+    const userIds = members.map((member) => member.userId).filter((id) => Types.ObjectId.isValid(id))
+    const users = userIds.length ? await User.find({ _id: { $in: userIds } }).select("name username").lean<{ name?: string; username?: string }[]>() : []
+    return [campaign.name, ...characters.map((item) => item.name ?? ""), ...users.flatMap((user) => [user.name ?? "", user.username ?? ""])].filter(Boolean)
+}
+
 // ── Contexto do roteiro ────────────────────────────────────────────────────────
 
 export async function promptContext(subject: InterviewSubject, kind: MaddoxScriptKind, scriptVersion: number, settings: MaddoxSettings): Promise<InterviewPromptContext> {
@@ -212,7 +228,7 @@ async function prepareTurn(subject: InterviewSubject, kind: MaddoxScriptKind, us
 /** Conversa enviada ao modelo: a abertura como primeira fala do usuário e o histórico sem as falhas. */
 export function conversationMessages(kind: MaddoxScriptKind, messages: readonly IMaddoxInterviewMessage[]): ModelMessage[] {
     const history = messages.filter((message) => !message.error && message.content.trim())
-    return [{ role: "user", content: openingPrompt(kind) }, ...history.map((message): ModelMessage => (message.role === "user" ? { role: "user", content: message.content } : { role: "assistant", content: mentionsToBold(message.content) }))]
+    return [{ role: "user", content: openingPrompt(kind) }, ...history.map((message): ModelMessage => (message.role === "user" ? { role: "user", content: message.content } : { role: "assistant", content: mentionsToMarkup(message.content) }))]
 }
 
 /** JEV "Fim da entrevista": já há base suficiente para propor a síntese? Falha = não opina. */
@@ -258,6 +274,8 @@ export async function runTurn(turn: PreparedTurn, emit: (line: MaddoxInterviewSt
         const hint = await jevSaysReady(turn)
         const { streamAi } = await import("@/lib/ai/stream")
         const filter = createMarkerFilter()
+        // Depois do marcador de proposta: as citações `{{Tipo:Nome}}` saem em negrito (nunca cruas) até gravar.
+        const markup = createMarkupFilter()
         const instructions = buildInterviewInstructions(turn.context) + (hint ? `\n\n## Orientação deste turno\n${JEV_PROPOSAL_HINT}` : "")
         for await (const event of streamAi({
             provider: turn.model.provider,
@@ -275,20 +293,20 @@ export async function runTurn(turn: PreparedTurn, emit: (line: MaddoxInterviewSt
         })) {
             if (event.type === "delta") {
                 text += event.text
-                const visible = filter.push(event.text)
+                const visible = markup.push(filter.push(event.text))
                 if (visible) emit({ type: "delta", text: visible })
             } else if (event.type === "error") {
                 failure = event.message
             }
         }
-        const rest = filter.flush()
+        const rest = markup.push(filter.flush()) + markup.flush()
         if (rest && !failure) emit({ type: "delta", text: rest })
     } catch (error) {
         failure = error instanceof Error ? error.message : String(error)
     }
 
     const { content: raw, proposal } = extractProposal(text)
-    const content = raw && !failure ? await linkCatalogMentions(raw) : raw
+    const content = raw && !failure ? await linkCatalogMentions(raw, { reserved: await campaignReservedNames(turn.subject.campaign) }) : raw
     if (!failure && !content) failure = "O Maddox não respondeu. Tente de novo."
     const message: IMaddoxInterviewMessage = { id: randomUUID(), role: "maddox", content: failure ? "" : content, proposal: !failure && proposal, error: failure, createdAt: new Date() }
     const status = message.proposal ? "proposed" : "in-progress"

@@ -1,14 +1,20 @@
 import { MENTION_HREF_PREFIX } from "@/features/opex-agent/mentions"
+import type { CatalogEntityType } from "@/features/mcp/server/catalog-schemas"
 import { loggerFor } from "@/lib/logger"
+import { CATALOG_MARKUP, catalogTypeOf, normalizeCatalogName } from "../catalog-markup"
 
 /**
- * Menções do catálogo nas falas do Maddox. O entrevistador não tem ferramentas: ele escreve o nome oficial de
- * raças, classes, magias etc. em **negrito**, e o servidor troca cada negrito que bate exatamente (sem acento e
- * sem caixa) com uma entidade ativa do catálogo pelo link `[Nome](#mention:Tipo:id)`, que a tela mostra como o
- * badge clicável do DnDicas (o mesmo do Agente Opex). Negrito sem correspondência fica como está.
+ * Menções do catálogo nas falas do Maddox. O entrevistador não tem ferramentas: ele cita uma entidade de D&D de
+ * forma explícita, com o tipo (`{{Raça:Elfo}}`, ver `../catalog-markup.ts`). O servidor busca o nome **só no tipo
+ * declarado** e troca o que bate exatamente (sem acento e sem caixa, nome ou nome original) por
+ * `[Nome](#mention:Tipo:id)`, que a tela mostra como o badge clicável do DnDicas. Negrito comum nunca é consultado.
+ * Nomes da própria campanha (campanha, personagens, jogadores) nunca viram menção, mesmo se o modelo errar a
+ * marcação. Sem correspondência, tipo inválido ou falha da busca: `**Nome**`.
  */
 
 const log = loggerFor({ module: "maddox", feature: "catalog-mentions" })
+
+export const normalizeMentionName = normalizeCatalogName
 
 export interface CatalogMentionCandidate {
     id: string
@@ -17,61 +23,91 @@ export interface CatalogMentionCandidate {
     type: string
 }
 
-/** Busca por nome no catálogo (padrão: o mesmo serviço do `search_catalog` do Opex, só entidades ativas). */
-export type CatalogMentionSearch = (query: string) => Promise<CatalogMentionCandidate[]>
+/** Busca por nome em um tipo do catálogo (padrão: o mesmo serviço do `search_catalog` do Opex, só entidades ativas). */
+export type CatalogMentionSearch = (query: string, type: CatalogEntityType) => Promise<CatalogMentionCandidate[]>
 
-const BOLD = /\*\*([^*\n[\]]{2,80}?)\*\*/g
-const MENTION_LINK = /\[([^\]\n]+)\]\(#mention:[^)\s]+\)/g
-/** Teto de nomes consultados por mensagem (cada um é uma busca). */
+export interface LinkCatalogMentionsOptions {
+    /** Nomes da campanha que nunca viram menção (inteiros; cada palavra de 3+ letras também é reservada). */
+    reserved?: readonly string[]
+    search?: CatalogMentionSearch
+}
+
+const MENTION_LINK = /\[([^\]\n]+)\]\(#mention:([^):\s]+):[^)\s]+\)/g
+/** Teto de citações consultadas por mensagem (cada uma é uma busca). */
 const MAX_TERMS = 25
-
-export const normalizeMentionName = (value: string) =>
-    value
-        .normalize("NFD")
-        .replace(/[\u0300-\u036f]/g, "")
-        .toLowerCase()
-        .replace(/\s+/g, " ")
-        .trim()
 
 /** Import sob demanda (módulo pesado) e único: as buscas de uma mensagem rodam em paralelo e dividem a mesma carga. */
 let catalogService: Promise<typeof import("@/features/mcp/server/catalog-entity-service")> | null = null
 const loadCatalogService = () => (catalogService ??= import("@/features/mcp/server/catalog-entity-service"))
 
-const defaultSearch: CatalogMentionSearch = async (query) => {
+const defaultSearch: CatalogMentionSearch = async (query, type) => {
     const { searchCatalogEntities } = await loadCatalogService()
-    const result = await searchCatalogEntities({ query, limit: 10, offset: 0 })
+    const result = await searchCatalogEntities({ query, types: [type], limit: 10, offset: 0 })
     return result.items.map((item) => ({ id: String(item.id), name: String(item.name ?? ""), originalName: (item.originalName as string | null | undefined) ?? null, type: String(item.type) }))
 }
 
-const labelOf = (value: string) => value.replace(/[[\]]/g, " ").replace(/\s+/g, " ").trim()
+const labelOf = (value: string) => value.replace(/[[\]*]/g, " ").replace(/\s+/g, " ").trim()
 
-/** Troca `**Nome**` por menções do catálogo quando o nome existe. Falha da busca mantém o negrito (com log). */
-export async function linkCatalogMentions(text: string, search: CatalogMentionSearch = defaultSearch): Promise<string> {
-    if (!text.includes("**")) return text
-    const terms = [...new Set([...text.matchAll(BOLD)].map((match) => match[1]!.trim()).filter((term) => term.length >= 2))].slice(0, MAX_TERMS)
-    if (!terms.length) return text
+/** Conjunto normalizado dos nomes reservados: cada nome inteiro e cada palavra com 3+ letras. */
+export function reservedNameSet(names: readonly string[]): Set<string> {
+    const set = new Set<string>()
+    for (const name of names) {
+        const full = normalizeCatalogName(name)
+        if (!full) continue
+        set.add(full)
+        for (const word of full.split(/[^a-z0-9]+/)) if (word.length >= 3) set.add(word)
+    }
+    return set
+}
+
+const keyOf = (type: CatalogEntityType, name: string) => `${type}\u0000${normalizeCatalogName(name)}`
+
+/** Resolve as citações `{{Tipo:Nome}}` em menções; o que não resolver vira `**Nome**`. */
+export async function linkCatalogMentions(text: string, options: LinkCatalogMentionsOptions = {}): Promise<string> {
+    if (!text.includes("{{")) return text
+    const search = options.search ?? defaultSearch
+    const reserved = reservedNameSet(options.reserved ?? [])
+
+    const wanted = new Map<string, { type: CatalogEntityType; name: string }>()
+    for (const match of text.matchAll(CATALOG_MARKUP)) {
+        const type = catalogTypeOf(match[1]!)
+        const name = labelOf(match[2]!)
+        if (!type || name.length < 2 || reserved.has(normalizeCatalogName(name))) continue
+        if (wanted.size < MAX_TERMS) wanted.set(keyOf(type, name), { type, name })
+    }
 
     const found = new Map<string, CatalogMentionCandidate>()
     const results = await Promise.allSettled(
-        terms.map(async (term) => {
-            const wanted = normalizeMentionName(term)
-            const candidates = await search(term)
-            const match = candidates.find((item) => normalizeMentionName(item.name) === wanted || (item.originalName && normalizeMentionName(item.originalName) === wanted))
-            if (match) found.set(wanted, match)
+        [...wanted.entries()].map(async ([key, { type, name }]) => {
+            const target = normalizeCatalogName(name)
+            const candidates = await search(name, type)
+            const match = candidates.find((item) => item.type === type && (normalizeCatalogName(item.name) === target || (item.originalName && normalizeCatalogName(item.originalName) === target)))
+            if (match) found.set(key, match)
         }),
     )
     const failed = results.filter((result) => result.status === "rejected")
     if (failed.length) log.warn({ failed: failed.length, err: (failed[0] as PromiseRejectedResult).reason }, "[maddox] busca de menções do catálogo falhou; os nomes ficam em negrito")
-    if (!found.size) return text
 
-    return text.replace(BOLD, (whole, inner: string) => {
-        const match = found.get(normalizeMentionName(inner))
-        if (!match) return whole
-        return `[${labelOf(inner)}](${MENTION_HREF_PREFIX}${encodeURIComponent(match.type)}:${encodeURIComponent(match.id)})`
+    return text.replace(CATALOG_MARKUP, (_whole, rawType: string, rawName: string) => {
+        const name = labelOf(rawName)
+        const type = catalogTypeOf(rawType)
+        const match = type ? found.get(keyOf(type, name)) : undefined
+        if (!match) return `**${name}**`
+        return `[${name}](${MENTION_HREF_PREFIX}${encodeURIComponent(match.type)}:${encodeURIComponent(match.id)})`
     })
 }
 
-/** Volta as menções para `**Nome**` (histórico enviado ao modelo: ele continua escrevendo só negrito). */
-export function mentionsToBold(text: string): string {
-    return text.includes("#mention:") ? text.replace(MENTION_LINK, (_whole, label: string) => `**${label}**`) : text
+/** Volta as menções para a marcação `{{Tipo:Nome}}` (histórico enviado ao modelo: ele continua citando assim). */
+export function mentionsToMarkup(text: string): string {
+    return text.includes("#mention:")
+        ? text.replace(MENTION_LINK, (_whole, label: string, type: string) => {
+              let decoded = type
+              try {
+                  decoded = decodeURIComponent(type)
+              } catch {
+                  // tipo malformado: mantém como veio
+              }
+              return `{{${decoded}:${label}}}`
+          })
+        : text
 }

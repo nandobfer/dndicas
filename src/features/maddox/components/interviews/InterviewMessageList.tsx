@@ -5,6 +5,7 @@ import { AnimatePresence, motion, useReducedMotion } from "framer-motion"
 import { AlertTriangle, ArrowDown, Loader2, RotateCcw } from "lucide-react"
 import { Button } from "@/components/ui/opex/button"
 import { Markdown } from "@/components/ui/opex/markdown"
+import { liveMarkupToBold } from "../../catalog-markup"
 import type { MaddoxInterviewMessageDto } from "../../interview-types"
 import { MemberAvatar } from "../campaigns/campaign-visuals"
 
@@ -112,11 +113,14 @@ export function InterviewMessageList({ messages, liveText, maddoxAvatarUrl, colo
 
 function MaddoxMessage({ avatarUrl, color, live, children }: { avatarUrl: string | null; color: string; live?: boolean; children: React.ReactNode }) {
     return (
-        <motion.div {...bubble} className="flex gap-2.5 pb-4" data-live={live ? "true" : undefined} data-testid="maddox-message">
-            <span className="mt-0.5 shrink-0 rounded-full ring-1" style={{ ["--tw-ring-color" as string]: `${color}66` }}>
-                <MemberAvatar name="Maddox" imageUrl={avatarUrl} color={color} className="h-7 w-7" />
-            </span>
-            <div className="min-w-0 flex-1 space-y-1">
+        <motion.div {...bubble} className="flex items-start gap-2.5 pb-4" data-live={live ? "true" : undefined} data-testid="maddox-message">
+            {/* Tamanho fixo e alinhado ao topo: no flex, um filho sem altura própria esticaria até a altura da fala. */}
+            <MemberAvatar name="Maddox" imageUrl={avatarUrl} color={color} className="mt-0.5 h-7 w-7 shrink-0 self-start" />
+            <div
+                className="min-w-0 max-w-[85%] space-y-1 break-words rounded-2xl rounded-tl-sm border bg-white/[0.03] px-3.5 py-2.5 text-sm text-foreground"
+                style={{ borderColor: `${color}40` }}
+                data-testid="maddox-bubble"
+            >
                 <p className="text-xs font-semibold" style={{ color }} data-testid="maddox-name">
                     Maddox
                 </p>
@@ -130,7 +134,7 @@ function StreamingText({ text, color }: { text: string; color: string }) {
     const reduceMotion = useReducedMotion() ?? false
     return (
         <div className="relative">
-            <Markdown lineAction={null}>{text}</Markdown>
+            <Markdown lineAction={null}>{liveMarkupToBold(text)}</Markdown>
             <motion.span
                 aria-hidden
                 data-testid="maddox-cursor"

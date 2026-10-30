@@ -11,7 +11,7 @@ import { changed, getCampaignDetail } from "./campaigns"
 import { notifyInterviewChanged } from "./campaign-realtime"
 import { linkCatalogMentions } from "./catalog-mentions"
 import { buildConsolidationInstructions, parseJsonObject, settingMarkdown, transcriptText } from "./interview-prompt"
-import { acquireInterviewLock, loadInterviewer, loadSubject, promptContext, releaseInterviewLock, type InterviewSubject } from "./interviews"
+import { acquireInterviewLock, campaignReservedNames, loadInterviewer, loadSubject, promptContext, releaseInterviewLock, type InterviewSubject } from "./interviews"
 
 /**
  * Conclusão das entrevistas (Maddox 2) — SOMENTE servidor. Depois da confirmação, uma geração
@@ -107,7 +107,8 @@ async function finishInterview(doc: InterviewDoc, token: string, result: unknown
 
 async function completeScenario(subject: InterviewSubject, doc: InterviewDoc, token: string, data: ScenarioConsolidation, userId: string) {
     const rename = data.campaignName && data.campaignName !== subject.campaign.name ? data.campaignName : null
-    const [setting, openingSituation] = await Promise.all([linkCatalogMentions(settingMarkdown(data.setting)), linkCatalogMentions(data.openingSituation)])
+    const reserved = [...(await campaignReservedNames(subject.campaign)), ...(rename ? [rename] : [])]
+    const [setting, openingSituation] = await Promise.all([linkCatalogMentions(settingMarkdown(data.setting), { reserved }), linkCatalogMentions(data.openingSituation, { reserved })])
     // Grava o cenário antes de marcar a entrevista como concluída: uma falha no meio deixa a entrevista em
     // `proposed`, e confirmar de novo reaplica (idempotente).
     await MaddoxCampaignModel.updateOne(
@@ -139,8 +140,9 @@ async function completeCharacter(subject: InterviewSubject, doc: InterviewDoc, t
     const name = data.name ?? character.name
     const withSheet = MADDOX_SHEET_RIGORS.includes(subject.campaign.rigor)
     const sheet = withSheet ? await seedSheet(subject, name, character.portraitUrl ?? null, data.sheet) : null
+    const reserved = [...(await campaignReservedNames(subject.campaign)), name]
     const profile = Object.fromEntries(
-        await Promise.all(MADDOX_PROFILE_SECTIONS.map(async (item) => [item.key, data.profile[item.key] ? await linkCatalogMentions(data.profile[item.key]!) : "a definir durante a história"] as const)),
+        await Promise.all(MADDOX_PROFILE_SECTIONS.map(async (item) => [item.key, data.profile[item.key] ? await linkCatalogMentions(data.profile[item.key]!, { reserved }) : "a definir durante a história"] as const)),
     )
     await MaddoxCharacterModel.updateOne(
         { _id: character._id },

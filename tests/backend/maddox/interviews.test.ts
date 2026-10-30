@@ -41,8 +41,11 @@ vi.mock("@/lib/ai/jev", () => ({ askJevSystemOne }))
 vi.mock("@/features/maddox/server/opencode-sessions", () => ({ ensureMaddoxSession, releaseInterviewSession }))
 vi.mock("@/features/character-sheets/api/character-sheets-service", () => ({ createBlankSheet }))
 const { searchCatalogEntities } = vi.hoisted(() => ({
-    searchCatalogEntities: vi.fn(async ({ query }: { query: string }) => ({
-        items: [{ id: "race-elfo", name: "Elfo", originalName: "Elf", type: "Raça" }].filter((item) => item.name.toLowerCase() === query.toLowerCase()),
+    searchCatalogEntities: vi.fn(async ({ query, types }: { query: string; types?: string[] }) => ({
+        items: [
+            { id: "race-elfo", name: "Elfo", originalName: "Elf", type: "Raça" },
+            { id: "monster-lyra", name: "Lyra", originalName: "Lyra", type: "Monstro" },
+        ].filter((item) => item.name.toLowerCase() === query.toLowerCase() && (!types?.length || types.includes(item.type))),
         limit: 10,
         offset: 0,
     })),
@@ -300,33 +303,51 @@ describe("entrevista de cenário — conversa", () => {
 })
 
 describe("menções do catálogo", () => {
-    it("o negrito com nome do catálogo é gravado como menção; o histórico volta ao modelo em negrito", async () => {
+    it("a citação {{Tipo:Nome}} é gravada como menção; negrito não consulta; o stream nunca mostra {{ e o histórico volta com a marcação", async () => {
         const campaignId = await newCampaign()
         await startScenario(campaignId)
-        scripted.push(reply("Que tal um **Elfo** vindo de **Aethra**?"))
+        searchCatalogEntities.mockClear()
+        scripted.push(reply("Que tal um {", "{Raça:El", "fo}} vindo de **Aethra**?"))
         const lines = await run(await interviews.sendInterviewMessage(campaignId, "scenario", { content: "Sugira algo" }, ids.owner))
+        const deltas = lines.filter((line): line is Extract<MaddoxInterviewStreamLine, { type: "delta" }> => line.type === "delta").map((line) => line.text)
+        expect(deltas.join("")).toBe("Que tal um **Elfo** vindo de **Aethra**?")
+        for (const delta of deltas) expect(delta).not.toMatch(/[{}]/)
         const final = lines.at(-1) as Extract<MaddoxInterviewStreamLine, { type: "done" }>
         expect(final.message.content).toBe("Que tal um [Elfo](#mention:Ra%C3%A7a:race-elfo) vindo de **Aethra**?")
         const stored = await MaddoxInterviewModel.findOne({ campaignId }).lean()
         expect(stored!.messages.at(-1)!.content).toContain("(#mention:Ra%C3%A7a:race-elfo)")
-        expect(searchCatalogEntities).toHaveBeenCalledWith(expect.objectContaining({ query: "Elfo" }))
+        expect(searchCatalogEntities).toHaveBeenCalledTimes(1)
+        expect(searchCatalogEntities).toHaveBeenCalledWith(expect.objectContaining({ query: "Elfo", types: ["Raça"] }))
 
         await run(await interviews.sendInterviewMessage(campaignId, "scenario", { content: "Gostei" }, ids.owner))
         const history = streamCalls.at(-1)!.messages!.map((message) => (typeof message.content === "string" ? message.content : "")).join("\n")
-        expect(history).toContain("Que tal um **Elfo** vindo de **Aethra**?")
+        expect(history).toContain("Que tal um {{Raça:Elfo}} vindo de **Aethra**?")
         expect(history).not.toContain("#mention:")
-        expect(streamCalls.at(-1)!.instructions).toContain("## Formato da resposta")
+        expect(streamCalls.at(-1)!.instructions).toContain("{{Tipo:Nome oficial em português}}")
     })
 
-    it("a consolidação liga as menções no cenário e no perfil", async () => {
+    it("personagem com o mesmo nome de um monstro do catálogo nunca vira menção (caso da prévia)", async () => {
+        const campaignId = await newCampaign()
+        await finishScenario(campaignId)
+        await campaigns.upsertCharacterDraft(campaignId, { name: "Lyra Ventobravo" }, ids.ana)
+        scripted.push(reply("Olá! Vamos criar a {{Monstro:Lyra}}. Como a **Lyra** é por fora?"))
+        const { turn } = await interviews.startInterview(campaignId, "character", ids.ana)
+        await run(turn!)
+        const stored = await MaddoxInterviewModel.findOne({ campaignId, kind: "character" }).lean()
+        expect(stored!.messages.at(-1)!.content).toBe("Olá! Vamos criar a **Lyra**. Como a **Lyra** é por fora?")
+        expect(stored!.messages.at(-1)!.content).not.toContain("#mention:")
+    })
+
+    it("a consolidação liga as citações no cenário e protege os nomes da campanha", async () => {
         const campaignId = await newCampaign()
         await startScenario(campaignId)
         scripted.push(proposalReply())
         await run(await interviews.sendInterviewMessage(campaignId, "scenario", { content: "Pode ser." }, ids.owner))
-        generateAiText.mockResolvedValueOnce({ text: JSON.stringify({ setting: { universo: "Terra de **Elfo**s e do povo **Elfo**" }, openingSituation: "Um **Elfo** chega." }) })
+        generateAiText.mockResolvedValueOnce({ text: JSON.stringify({ setting: { universo: "Terra do povo {{Raça:Elfo}} e do vale **Valdrenn**" }, openingSituation: "Um {{Raça:Elfo}} chega a {{Monstro:Valdrenn}}." }) })
         const detail = await completeInterview(campaignId, "scenario", ids.owner)
         expect(detail.setting).toContain("povo [Elfo](#mention:Ra%C3%A7a:race-elfo)")
-        expect(detail.openingSituation).toBe("Um [Elfo](#mention:Ra%C3%A7a:race-elfo) chega.")
+        expect(detail.openingSituation).toBe("Um [Elfo](#mention:Ra%C3%A7a:race-elfo) chega a **Valdrenn**.")
+        expect(detail.setting).not.toContain("{{")
     })
 })
 
