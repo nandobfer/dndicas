@@ -1,3 +1,4 @@
+/** @vitest-environment happy-dom */
 import { fireEvent, screen } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import * as React from 'react'

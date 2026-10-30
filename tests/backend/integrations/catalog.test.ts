@@ -21,10 +21,13 @@ describe("catálogo das integrações do DnDicas", () => {
         for (const removed of ["github", "orcamentos", "builder_machine"]) expect(INTEGRATION_IDS).not.toContain(removed)
     })
 
-    it("mantém a integração Opex como \"Em desenvolvimento\" (sem configuração)", () => {
-        expect(isIntegrationInDevelopment("opex")).toBe(true)
+    it("oferece a integração Tarefas Opex configurável sem variáveis legadas", () => {
+        expect(isIntegrationInDevelopment("opex")).toBe(false)
         expect(isIntegrationInDevelopment("pusher")).toBe(false)
-        expect(getIntegrationDef("opex")).toBeUndefined()
+        const def = getIntegrationDef("opex")
+        expect(def.name).toBe("Tarefas Opex")
+        expect(def.secretFields).toEqual(expect.arrayContaining([expect.objectContaining({ key: "clientToken", required: true })]))
+        expect([...def.publicFields, ...def.secretFields].flatMap((field) => field.env ?? [])).toEqual([])
     })
 
     it("a integração Perfix é interna, sem campos e com página própria", () => {

@@ -1,3 +1,4 @@
+/** @vitest-environment happy-dom */
 import { render, screen } from "@testing-library/react"
 import { describe, expect, it } from "vitest"
 import { CatalogDashboardFrame, OWLBEAR_CATALOG_EMBED_PARAM } from "@/features/owlbear/catalog-dashboard-frame"

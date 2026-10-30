@@ -1,3 +1,4 @@
+/** @vitest-environment happy-dom */
 import { render, screen, fireEvent, waitFor, within, act } from "@testing-library/react"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { DiceRollerPanel } from "@/features/dice-roller/components/dice-roller-panel"

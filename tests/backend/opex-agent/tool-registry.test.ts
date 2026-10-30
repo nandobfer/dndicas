@@ -5,17 +5,17 @@ import type { OpexServerScope } from "@/features/opex-agent/server/scope"
 const names = (role: "admin" | "user" | "anonymous") => enabledOpexTools([], role).map((tool) => tool.name)
 
 describe("ferramentas do Agente Opex por papel", () => {
-    it("visitantes recebem só o catálogo, a documentação, o contexto e a leitura do feedback", () => {
+    it("visitantes recebem só o catálogo, a documentação e o contexto", () => {
         const tools = names("anonymous")
-        expect(tools).toEqual(expect.arrayContaining(["get_app_overview", "search_catalog", "get_entity", "list_app_docs", "search_app_docs", "read_app_doc", "list_feedbacks"]))
+        expect(tools).toEqual(expect.arrayContaining(["get_app_overview", "search_catalog", "get_entity", "list_app_docs", "search_app_docs", "read_app_doc"]))
         for (const blocked of ["list_my_sheets", "read_chat_file", "schedule_job", "create_feedback", "list_integrations", "create_agent_memory", "set_catalog_entity_status", "update_ai_feature_settings"]) {
             expect(tools).not.toContain(blocked)
         }
     })
 
-    it("usuários logados ganham as próprias fichas e NPCs, arquivos, jobs e feedback, sem administração", () => {
+    it("usuários logados ganham as próprias fichas e NPCs, arquivos e jobs, sem administração", () => {
         const tools = names("user")
-        expect(tools).toEqual(expect.arrayContaining(["list_my_sheets", "update_sheet", "list_my_npcs", "read_chat_file", "schedule_job", "create_feedback", "comment_feedback"]))
+        expect(tools).toEqual(expect.arrayContaining(["list_my_sheets", "update_sheet", "list_my_npcs", "read_chat_file", "schedule_job"]))
         for (const blocked of ["list_integrations", "update_integration", "run_routine", "create_agent_memory", "set_catalog_entity_status", "update_ai_feature_settings"]) {
             expect(tools).not.toContain(blocked)
         }
@@ -23,6 +23,8 @@ describe("ferramentas do Agente Opex por papel", () => {
 
     it("administradores recebem tudo", () => {
         expect(names("admin")).toHaveLength(opexToolMetas().length)
+        expect(names("admin")).not.toContain("create_feedback")
+        expect(names("admin")).not.toContain("list_feedbacks")
     })
 
     it("ferramentas desligadas saem do turno, menos as do grupo Contexto", () => {

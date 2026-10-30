@@ -1,3 +1,4 @@
+/** @vitest-environment happy-dom */
 /**
  * @fileoverview Tests for FeatFormModal — validates category selector rendering and validation.
  */

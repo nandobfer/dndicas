@@ -1,3 +1,4 @@
+/** @vitest-environment happy-dom */
 import { act, screen } from '@testing-library/react'
 import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import * as React from 'react'

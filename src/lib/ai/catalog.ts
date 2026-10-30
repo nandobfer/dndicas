@@ -2,26 +2,23 @@ import { dbConnect } from "@/lib/db"
 import { IntegrationStatus, type IIntegrationStatus } from "@/lib/db/models/IntegrationStatus"
 import { getIntegrationDef } from "@/lib/integrations/catalog"
 import { getIntegration, isIntegrationConfigured } from "@/lib/integrations/config"
-import { listAnthropicModels } from "./anthropic"
-import { listDeepseekModels } from "./deepseek"
-import { listGeminiModels } from "./gemini"
 import { listJevModels } from "./jev"
-import { listOpenaiModels } from "./openai"
-import { listOpencodeAgents, listOpencodeModels } from "./opencode"
-import { IMAGE_MODEL_LISTERS } from "./image"
 import { AI_PROVIDERS, getAiProvider, type AiAgentDto, type AiModelDto, type AiProviderId, type AiProviderStatusDto, type AiImageProviderId } from "./providers"
 
 /**
  * Catálogo dos provedores de IA (SOMENTE servidor): situação de cada provedor e modelos/agentes
  * disponíveis, com cache curto por configuração (`version` da integração).
+ *
+ * Os módulos de cada provedor (e as SDKs que eles carregam) entram sob demanda: este catálogo é
+ * alcançado pelas configurações de IA, e quem só lê a configuração não paga as SDKs.
  */
 
 const MODEL_LISTERS: Record<AiProviderId, (signal?: AbortSignal) => Promise<AiModelDto[]>> = {
-    opencode: listOpencodeModels,
-    gemini: listGeminiModels,
-    anthropic: listAnthropicModels,
-    openai: listOpenaiModels,
-    deepseek: listDeepseekModels,
+    opencode: async (signal) => (await import("./opencode")).listOpencodeModels(signal),
+    gemini: async (signal) => (await import("./gemini")).listGeminiModels(signal),
+    anthropic: async (signal) => (await import("./anthropic")).listAnthropicModels(signal),
+    openai: async (signal) => (await import("./openai")).listOpenaiModels(signal),
+    deepseek: async (signal) => (await import("./deepseek")).listDeepseekModels(signal),
     jev: listJevModels,
 }
 
@@ -66,11 +63,11 @@ export async function listAiModels(providerId: AiProviderId, options: { fresh?: 
 
 export async function listAiAgents(options: { fresh?: boolean; signal?: AbortSignal } = {}): Promise<AiAgentDto[]> {
     const { version } = await getIntegration("ai_opencode")
-    return cached(`agents:${version}`, () => listOpencodeAgents(options.signal), options.fresh === true)
+    return cached(`agents:${version}`, async () => (await import("./opencode")).listOpencodeAgents(options.signal), options.fresh === true)
 }
 
 /** Modelos de IMAGEM do provedor (Gemini e OpenAI), com o mesmo cache por configuração. */
 export async function listAiImageModels(providerId: AiImageProviderId, options: { fresh?: boolean; signal?: AbortSignal } = {}): Promise<AiModelDto[]> {
     const { version } = await getIntegration(getAiProvider(providerId).integrationId)
-    return cached(`image-models:${providerId}:${version}`, () => IMAGE_MODEL_LISTERS[providerId](options.signal), options.fresh === true)
+    return cached(`image-models:${providerId}:${version}`, async () => (await import("./image")).IMAGE_MODEL_LISTERS[providerId](options.signal), options.fresh === true)
 }

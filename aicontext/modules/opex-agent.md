@@ -5,14 +5,18 @@ do Ciliar). Na interface o nome é **"Agente Opex"**; no código, o namespace é
 
 ## Quem usa
 
+Os cards de configuração do agente em `/integracoes/ia` e de Jobs em `/integracoes/crons`
+reutilizam `GlassCard`; os controles herdam a primária global azul. Ver
+[Integrações — Interface](./integrations.md#interface-dnd-6) para as causas e regras visuais da DND-6.
+
 Está disponível para **todos**, inclusive visitantes sem login: item "Agente Opex" no rodapé da
 barra lateral (`OpexNavItem`, atalho **Ctrl+Shift+O**). Abre o chat num popover ancorado no item
 (no celular, em tela cheia), com abas de sessões, envio de arquivos, confirmações e resposta ao vivo.
 
 | Papel | O que o agente pode fazer |
 | --- | --- |
-| Visitante | Catálogo (busca e leitura), documentação pública, contexto, leitura da central de feedback |
-| Usuário logado | + as **próprias** fichas e NPCs (ler, criar, editar ficha), arquivos do chat, jobs agendados, criar/editar/comentar feedback |
+| Visitante | Catálogo (busca e leitura), documentação pública, contexto |
+| Usuário logado | + as **próprias** fichas e NPCs (ler, criar, editar ficha), arquivos do chat, jobs agendados |
 | Administrador | Tudo: + documentação técnica e guias `use-*.md`, integrações e rotinas, agentes de IA, memórias, ativar/inativar entidades do catálogo |
 
 O papel vem sempre do servidor: a cada turno, a cada ferramenta e na confirmação o usuário é
@@ -45,7 +49,6 @@ revalidado no banco (`loadActor`). Cada ferramenta declara `minRole` (ou herda d
 | Memórias | `list/get/create/update/delete_agent_memory` (todas as listas de `agents.ts`) |
 | Integrações e rotinas | `list/get/update/test_integration`, `list_routines`, `run_routine` (segredos nunca são lidos) |
 | Agentes de IA | `get/update_ai_feature_settings` (Gerador de imagens, Entender com IA, Importador 5etools, Resumo de memórias) |
-| Central de feedback | `list_feedbacks`, `get_feedback`, `get_feedback_timeline`, `create/update/comment_feedback` |
 
 As entidades citadas usam a menção `<span data-type="mention" ...>` e aparecem como badges
 (`MentionContent`). Destrutivas e marcadas com `confirmByDefault` pedem Confirmar/Cancelar no chat.

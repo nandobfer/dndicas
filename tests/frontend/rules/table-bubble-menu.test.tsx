@@ -1,3 +1,4 @@
+/** @vitest-environment happy-dom */
 /**
  * Tests for TableBubbleMenu — the floating toolbar that appears when the
  * cursor is inside a TipTap table cell.

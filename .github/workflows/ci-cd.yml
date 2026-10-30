@@ -1,0 +1,146 @@
+name: CI/CD
+
+# CI (Vitest em shards + TypeScript) roda em todo push na main e em todo pull request.
+# Localmente, a IA roda só os testes afetados pela mudança (AGENTS.md, seção 5).
+# CD (build + deploy) roda apenas para a main, depois de todos os shards e do typecheck:
+# constrói a imagem, publica no Docker Hub e recria o serviço no servidor por SSH.
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  vitest:
+    name: Vitest (${{ matrix.shard }}/${{ strategy.job-total }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    # O grupo inclui o shard: sem ele o `cancel-in-progress` cancelaria o shard irmão.
+    concurrency:
+      group: ci-${{ github.workflow }}-${{ github.ref }}-${{ matrix.shard }}
+      cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+    strategy:
+      fail-fast: false
+      matrix:
+        # Para mudar a quantidade de shards, basta editar esta lista. Cada shard roda com
+        # `maxWorkers: "100%"` (2 workers no runner padrão de 2 vCPU).
+        shard: [1, 2, 3, 4]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Instalar pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Configurar Node
+        uses: actions/setup-node@v5
+        with:
+          node-version: "22"
+          cache: pnpm
+
+      - name: Instalar dependências
+        run: pnpm install --frozen-lockfile
+
+      - name: Rodar a suíte Vitest
+        run: pnpm test --shard=${{ matrix.shard }}/${{ strategy.job-total }}
+
+  typecheck:
+    name: TypeScript
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    concurrency:
+      group: ci-${{ github.workflow }}-${{ github.ref }}-typecheck
+      cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Instalar pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Configurar Node
+        uses: actions/setup-node@v5
+        with:
+          node-version: "22"
+          cache: pnpm
+
+      - name: Instalar dependências
+        run: pnpm install --frozen-lockfile
+
+      - name: Rodar o TypeScript
+        run: pnpm exec tsc --noEmit
+
+  build-and-deploy:
+    name: Build and Deploy
+    needs: [vitest, typecheck]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    concurrency:
+      group: deploy-production
+      cancel-in-progress: false
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v5
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Build and Push Docker Image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./Dockerfile
+          network: host
+          push: true
+          tags: nandoburgos/dndicas:latest
+          build-args: |
+            AUTH_URL=${{ secrets.AUTH_URL }}
+            NEXT_PUBLIC_APP_URL=${{ secrets.NEXT_PUBLIC_APP_URL }}
+
+      - name: Validate SSH secrets
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+          SSH_KNOWN_HOSTS: ${{ secrets.SSH_KNOWN_HOSTS }}
+        run: |
+          test -n "$SSH_PRIVATE_KEY" || { echo "Missing required secret: SSH_PRIVATE_KEY"; exit 1; }
+          test -n "$SSH_KNOWN_HOSTS" || { echo "Missing required secret: SSH_KNOWN_HOSTS"; exit 1; }
+
+      - name: Start SSH agent
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
+
+      - name: Configure SSH host verification
+        env:
+          SSH_KNOWN_HOSTS: ${{ secrets.SSH_KNOWN_HOSTS }}
+        run: |
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+          printf '%s\n' "$SSH_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          chmod 644 ~/.ssh/known_hosts
+
+      - name: Deploy to Server via SSH
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_PORT: ${{ secrets.DEPLOY_PORT }}
+          DEPLOY_USERNAME: ${{ secrets.DEPLOY_USERNAME }}
+          DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
+        run: |
+          test -n "$DEPLOY_HOST" || { echo "Missing required secret: DEPLOY_HOST"; exit 1; }
+          test -n "$DEPLOY_USERNAME" || { echo "Missing required secret: DEPLOY_USERNAME"; exit 1; }
+          ssh -p "${DEPLOY_PORT:-22}" "${DEPLOY_USERNAME}@${DEPLOY_HOST}" \
+            -o StrictHostKeyChecking=yes \
+            "cd ${DEPLOY_PATH:-/home/dndicas} && docker compose pull && docker compose up -d"

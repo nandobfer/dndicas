@@ -1,3 +1,4 @@
+/** @vitest-environment happy-dom */
 import { fireEvent, render, screen } from "@testing-library/react"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import { PermissionsProvider } from "@nandobfer/perfix/react"
@@ -28,7 +29,9 @@ describe("Lista de perfis", () => {
         expect(screen.getByText("Nenhum perfil encontrado.")).toBeInTheDocument()
     })
     it("exige confirmação e envia versão na exclusão", () => {
-        vi.spyOn(window, "confirm").mockReturnValueOnce(false).mockReturnValueOnce(true)
+        // O happy-dom não implementa `window.confirm`: define-se a função no próprio teste.
+        const confirm = vi.fn<() => boolean>().mockReturnValueOnce(false).mockReturnValueOnce(true)
+        Object.defineProperty(window, "confirm", { value: confirm, configurable: true })
         render(<PermissionsProvider permissions={["*"]} roles={adminRoles}><RolesPage /></PermissionsProvider>)
         fireEvent.click(screen.getByRole("button", { name: "Excluir Editor" }))
         expect(mocks.mutate).not.toHaveBeenCalled()

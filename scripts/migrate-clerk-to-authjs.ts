@@ -62,7 +62,6 @@ const REMAP_TARGETS = [
     { collectionName: "owlbear_sessions", fieldName: "userId", label: "owlbearSessions.userId" },
     { collectionName: "owlbear_room_npcs", fieldName: "userId", label: "owlbearRoomNpcs.userId" },
     { collectionName: "user_npcs", fieldName: "userId", label: "userNpcs.userId" },
-    { collectionName: "feedbacks", fieldName: "createdBy", label: "feedback.createdBy" },
     { collectionName: "auditlogs", fieldName: "userId", label: "auditLogs.userId" },
     { collectionName: "auditlogs", fieldName: "performedBy", label: "auditLogs.performedBy" },
     { collectionName: "usagelogs", fieldName: "userId", label: "usageLogs.userId" },

@@ -1,3 +1,4 @@
+/** @vitest-environment happy-dom */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 const mocks = vi.hoisted(() => ({ use: vi.fn(), eject: vi.fn(), header: "none" }))
 vi.mock("@nandobfer/perfix/react", () => ({ getViewAsHeaderValue: () => mocks.header }))

@@ -1,5 +1,6 @@
 allowBuilds:
   mongodb-memory-server: true
+  esbuild: true
   msgpackr-extract: false
   protobufjs: true
   sharp: true

@@ -1,3 +1,4 @@
+/** @vitest-environment happy-dom */
 /**
  * @fileoverview Tests for ClassProgressionTable component.
  * Tests rendering, edit mode, spell template shortcuts, custom columns, subclass rows, empty/loading states.

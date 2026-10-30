@@ -67,15 +67,15 @@ A IA aparece como apoio, não como substituta da mesa.
 - `Entender com IA` abre um chat contextual para explicar regras, magias, monstros, itens e outras entidades em pt-BR.
 - Geração de arte cria imagens no estilo de fantasia para fichas e catálogos, salvando o resultado no storage do projeto.
 - Fluxos administrativos podem usar IA para revisar, traduzir ou gerar candidatos de entidades a partir de fontes estruturadas.
-- A central de feedback usa automação agêntica para transformar sugestões em planos, iterações e, futuramente, pull requests revisáveis.
+- A central de feedback no Opex acompanha sugestões e tarefas; o Agente Opex do DnDicas continua independente dessa integração.
 
 Todo conteúdo HTML vindo de IA passa por sanitização antes de ser renderizado na interface.
 
 ## Feedback E Evolução
 
-O projeto possui uma central de feedback onde usuários autenticados podem registrar sugestões, bugs e comentários. A proposta é aproximar o ciclo de desenvolvimento do uso real: uma ideia pode virar discussão, plano, execução assistida por agente, preview e aprovação.
+Em `/feedback`, usuários autenticados recebem automaticamente um acesso individual ao cliente configurado na integração Tarefas Opex. A página mostra os gráficos do portal do cliente e o link para abrir a central externa. Visitantes são convidados a entrar.
 
-Esse fluxo ainda está em evolução, mas já reflete uma direção importante do Dungeons & Dicas: construir ferramentas de RPG com feedback direto de quem joga.
+A antiga central interna e suas APIs/ferramentas MCP foram removidas. Os dados históricos permanecem no MongoDB; `pnpm export:feedbacks --out backups/feedback-pendentes.json` exporta os pendentes para importação posterior no Opex.
 
 ## Seção Técnica
 
@@ -89,7 +89,7 @@ O Dungeons & Dicas é uma aplicação full-stack em TypeScript, construída com:
 - TanStack Query para estado assíncrono no cliente.
 - Vercel AI SDK com provedores configuráveis (OpenCode, Gemini, Anthropic, OpenAI, DeepSeek, JEV) para os agentes de texto, ferramentas e imagens, incluindo o Agente Opex.
 - S3/MinIO para uploads, imagens e arquivos gerados.
-- Pusher/Soketi para realtime em feedbacks, geração de entidades e Owlbear.
+- Pusher/Soketi para realtime no Agente Opex, geração de entidades e Owlbear.
 - Owlbear Rodeo SDK para actions, metadata de sala, tokens e menus de contexto.
 - Tiptap para rich text, tabelas, imagens e menções.
 - Fuse.js, Web Workers e busca server-side para catálogos e menções.
@@ -171,7 +171,7 @@ Para entender os módulos principais, veja especialmente:
 - `aicontext/modules/dice-roller.md`
 - `aicontext/modules/monsters.md`
 - `aicontext/modules/entity-understanding.md`
-- `aicontext/modules/feedback.md`
+- `aicontext/modules/opex-feedback.md`
 
 ## Status
 

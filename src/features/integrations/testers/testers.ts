@@ -1,4 +1,5 @@
 import { getIntegrationConfig, getInternalBaseUrl } from "@/lib/integrations/config"
+import { testOpex } from "@/features/opex-feedback/server/tester"
 import type { IntegrationId } from "@/lib/integrations/catalog"
 import { describeSchedule } from "@/lib/integrations/schedule"
 import { CronJobState } from "@/lib/db/models/CronJobState"
@@ -270,6 +271,7 @@ export const INTEGRATION_TESTERS: Record<IntegrationId, IntegrationTester> = {
         emit("success", `Perfil padrão válido: ${id}`)
         return "Perfix disponível; perfil padrão válido"
     },
+    opex: testOpex,
     google_auth: testGoogleAuth,
     pusher: testPusher,
     internal_api: testInternalApi,

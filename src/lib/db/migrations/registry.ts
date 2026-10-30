@@ -9,6 +9,7 @@ import { repairIntegrationIndexes } from "./repair-integration-indexes"
 import { ensureAiUsageIndexes } from "./ensure-ai-usage-indexes"
 import { ensureAiConsumptionIndexes } from "./ensure-ai-consumption-indexes"
 import { ensureOpexIndexes } from "./ensure-opex-indexes"
+import { ensureOpexFeedbackIndexes } from "./ensure-opex-feedback-indexes"
 
 registerMigrations(
     { name: "migrate-perfix", run: migratePerfix },
@@ -17,4 +18,5 @@ registerMigrations(
     { name: "ensure-ai-usage-indexes", run: () => ensureAiUsageIndexes() },
     { name: "ensure-ai-consumption-indexes", run: () => ensureAiConsumptionIndexes() },
     { name: "ensure-opex-indexes", run: () => ensureOpexIndexes() },
+    { name: "ensure-opex-feedback-indexes", run: () => ensureOpexFeedbackIndexes() },
 )

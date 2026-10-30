@@ -3,7 +3,7 @@
 import { useMemo } from "react"
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion"
 import { BarChart3, RefreshCw } from "lucide-react"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/opex/card"
+import { GlassCard as Card, GlassCardContent as CardContent, GlassCardHeader as CardHeader, GlassCardTitle as CardTitle } from "@/components/ui/glass-card"
 import { Button } from "@/components/ui/opex/button"
 import { Skeleton } from "@/components/ui/opex/skeleton"
 import { DATE_PRESET, PresetDateRangeFilter } from "@/components/ui/opex/preset-date-range-filter"
@@ -50,7 +50,7 @@ export function JevUsageCard() {
             </div>
             <p className="text-sm text-muted-foreground">Logs retidos por 90 dias. Entrada: US$ 0,042 por milhão de tokens; saída gratuita.</p>
         </CardHeader>
-        <CardContent className="space-y-4">
+        <CardContent className="space-y-4 p-6 pt-0">
             <FilterGroup label="Período">
                 <PresetDateRangeFilter startDate={range.usageFrom} endDate={range.usageTo} onChange={(next) => setRange({ usageFrom: next.startDate, usageTo: next.endDate })} />
             </FilterGroup>

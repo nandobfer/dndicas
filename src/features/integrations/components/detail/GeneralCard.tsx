@@ -3,7 +3,7 @@
 import type { Dispatch, SetStateAction } from "react"
 import { motion } from "framer-motion"
 import { Bug } from "lucide-react"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/opex/card"
+import { GlassCard as Card, GlassCardContent as CardContent, GlassCardHeader as CardHeader, GlassCardTitle as CardTitle } from "@/components/ui/glass-card"
 import { Label } from "@/components/ui/opex/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/opex/select"
 import { Switch } from "@/components/ui/opex/switch"
@@ -20,11 +20,11 @@ interface GeneralCardProps {
 export function GeneralCard({ draft, setDraft, readOnly }: GeneralCardProps) {
     return (
         <motion.div {...cardMotion}>
-            <Card>
+            <Card animate={false}>
                 <CardHeader>
                     <CardTitle className="text-base">Geral</CardTitle>
                 </CardHeader>
-                <CardContent className={FIELD_GRID}>
+                <CardContent className={`${FIELD_GRID} p-6 pt-0`}>
                     <div className="space-y-1.5">
                         <Label>Ambiente</Label>
                         <Select

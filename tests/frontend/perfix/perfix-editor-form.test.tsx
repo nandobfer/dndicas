@@ -1,3 +1,4 @@
+/** @vitest-environment happy-dom */
 import { fireEvent, render, screen, waitFor } from "@testing-library/react"
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest"
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
@@ -47,7 +48,8 @@ describe("Integração Perfix", () => {
     })
 
     it("perfil padrão é um select Glass e escolher 'Sem perfil' salva null", async () => {
-        vi.spyOn(window, "confirm").mockReturnValue(true)
+        // O happy-dom não implementa `window.confirm`: define-se a função no próprio teste.
+        Object.defineProperty(window, "confirm", { value: () => true, configurable: true })
         show()
         const trigger = await screen.findByRole("combobox", { name: "Perfil padrão de novos usuários" })
         expect(document.querySelector("select:not([aria-hidden])")).toBeNull()

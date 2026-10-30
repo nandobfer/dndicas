@@ -225,9 +225,15 @@ Escreva testes para:
 - Lógica de negócio crítica
 
 ```bash
-npm test                 # Roda todos os testes
-npm test -- --watch      # Modo watch
+pnpm exec vitest run <arquivos>              # Só os testes criados/alterados
+pnpm exec vitest related --run <src alterado> # Testes que dependem do código alterado
+pnpm exec vitest run --changed origin/main   # Pelo grafo de imports do que mudou
+pnpm test                                    # Suíte completa (só com pedido explícito)
 ```
+
+Testes de componente/hook declaram `/** @vitest-environment happy-dom */` na primeira linha; o
+restante roda em `node`. Regras completas (exceções de jsdom, mocks, imports sob demanda, shards do
+CI) na seção 5 do `AGENTS.md` e em `tests/README.md`.
 
 ## Commits
 

@@ -1,3 +1,4 @@
+/** @vitest-environment happy-dom */
 import type { ButtonHTMLAttributes } from "react"
 import { fireEvent, render, screen } from "@testing-library/react"
 import { beforeEach, describe, expect, it, vi } from "vitest"

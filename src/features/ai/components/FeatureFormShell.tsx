@@ -4,7 +4,7 @@ import type { ReactNode } from "react"
 import { AnimatePresence, motion } from "framer-motion"
 import { Info, Loader2, Save, Undo2 } from "lucide-react"
 import { Button } from "@/components/ui/opex/button"
-import { Card, CardContent } from "@/components/ui/opex/card"
+import { GlassCard as Card, GlassCardContent as CardContent } from "@/components/ui/glass-card"
 import { ToggleCard } from "@/components/ui/opex/toggle-card"
 import type { AiFeatureAvailability } from "../types"
 
@@ -31,7 +31,7 @@ export function FeatureFormShell({ id, label, description, enabled, onEnabledCha
     return (
         <>
             <Card>
-                <CardContent className="space-y-3 pt-6">
+                <CardContent className="space-y-3 p-6">
                     <ToggleCard id={id} label={label} description={description} checked={enabled} onCheckedChange={onEnabledChange} disabled={readOnly} onLabel="Ligado" offLabel="Desligado" />
                     <AnimatePresence initial={false}>
                         {!dirty && !availability.available && availability.reason && (

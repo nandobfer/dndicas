@@ -1,7 +1,7 @@
 "use client"
 
 import { Controller, type UseFormReturn } from "react-hook-form"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/opex/card"
+import { GlassCard as Card, GlassCardContent as CardContent, GlassCardDescription as CardDescription, GlassCardHeader as CardHeader, GlassCardTitle as CardTitle } from "@/components/ui/glass-card"
 import { Field } from "@/components/ui/opex/field"
 import { FORM_GRID_WIDE } from "@/components/ui/opex/form-grid"
 import { Input } from "@/components/ui/opex/input"
@@ -21,7 +21,7 @@ export function OpexFilesCard({ form }: { form: UseFormReturn<OpexAgentSettings>
                     Imagens e PDFs vão para o modelo quando o provedor lê o tipo (Gemini também lê áudio e vídeo; DeepSeek só texto). Textos e códigos vão como texto. Os demais ficam só como referência. Só usuários logados enviam arquivos.
                 </CardDescription>
             </CardHeader>
-            <CardContent>
+            <CardContent className="p-6 pt-0">
                 <div className={FORM_GRID_WIDE}>
                     <Field id="opex-files-max" label="Arquivos por mensagem" error={errors?.maxPerMessage?.message}>
                         <Controller

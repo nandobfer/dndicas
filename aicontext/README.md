@@ -90,6 +90,7 @@ Arquivos:
 - **[search.md](./modules/search.md)**: busca unificada server-side para entidades e menções
 - **[integrations.md](./modules/integrations.md)**: central de integrações (`/integracoes`, acesso por permissão) — configuração no banco em vez do `.env`
 - **[perfix.md](./modules/perfix.md)**: perfis, permissões, hierarquia, perfil padrão e impersonação real de usuários
+- **[opex-feedback.md](./modules/opex-feedback.md)**: acesso automático e dashboard da central de feedback no Opex
 - **[ai.md](./modules/ai.md)**: provedores de IA, agentes (Gerador de imagens, Entender com IA, Importador 5etools, Resumo de memórias) e memórias
 - **[opex-agent.md](./modules/opex-agent.md)**: Agente Opex, o assistente por chat para todos (visitantes, usuários e administradores)
 
