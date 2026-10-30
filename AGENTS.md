@@ -139,8 +139,9 @@ Antes de implementar, leia nesta ordem:
   - testes que dependem do código alterado: `pnpm exec vitest related --run <arquivos de src>`;
   - pelo grafo de imports dos arquivos modificados no git: `pnpm exec vitest run --changed` (ou
     `--changed origin/main`). O `vitest.config.ts` tira o `package.json` dos `forceRerunTriggers`
-    para que o bump de versão não dispare a suíte inteira; alterar o próprio `vitest.config.ts`
-    ainda dispara, então nesse caso rode os arquivos de teste pelo caminho.
+    para que alterações no `package.json` (dependências, versão) não disparem a suíte inteira;
+    alterar o próprio `vitest.config.ts` ainda dispara, então nesse caso rode os arquivos de teste
+    pelo caminho.
 - Se um teste afetado falhar por causa da mudança, corrija antes de encerrar.
 
 ## 6. Checklist mínimo antes de encerrar
@@ -152,12 +153,3 @@ Antes de implementar, leia nesta ordem:
    (`vitest run <arquivos>`, `related` ou `--changed`), com testes de UI em happy-dom; a suíte
    completa só se o usuário pediu.
 5. Atualizei a documentação contextual se a mudança alterou comportamento, fluxo ou contrato.
-
-## 7. Versionamento em cada commit
-
-- **Sempre que for fazer um `git commit`, incremente a versão em `src/lib/config/version.ts`** seguindo versionamento semântico (`major.minor.patch`):
-  - **major** (`X.0.0`): mudanças incompatíveis / breaking changes.
-  - **minor** (`x.Y.0`): nova funcionalidade compatível com versões anteriores.
-  - **hotfix/patch** (`x.y.Z`): correção de bug compatível com versões anteriores.
-- Faça o bump da versão no mesmo commit da alteração correspondente.
-
