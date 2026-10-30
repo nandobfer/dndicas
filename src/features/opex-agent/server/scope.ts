@@ -52,9 +52,11 @@ export function sessionFilterOf(scope: OpexServerScope): Record<string, unknown>
 /** Usuário revalidado no banco (ativo e não excluído), com o papel atual. */
 export async function loadActor(userId: string): Promise<Actor> {
     if (!Types.ObjectId.isValid(userId)) throw new DomainError(403, "O usuário foi desativado ou removido", "OPEX_ACTOR_INVALID")
-    const user = await User.findOne({ _id: userId, deleted: { $ne: true }, status: "active" }).select("name username role").lean<{ _id: unknown; name?: string; username: string; role: string }>()
+    const user = await User.findOne({ _id: userId, deleted: { $ne: true }, status: "active" }).select("name username").lean<{ _id: unknown; name?: string; username: string }>()
     if (!user) throw new DomainError(403, "O usuário foi desativado ou removido", "OPEX_ACTOR_INVALID")
-    return { id: String(user._id), name: user.name?.trim() || user.username, role: user.role === "admin" ? "admin" : "user" }
+    const { resolveAccess } = await import("@/features/perfix/server/access")
+    const access = await resolveAccess(userId)
+    return { id: String(user._id), name: user.name?.trim() || user.username, role: access.effective.has("*") || access.effective.has("admin.access") ? "admin" : "user", permissions: [...access.effective] }
 }
 
 /** Reconstrói o escopo de uma sessão gravada (follow-ups, confirmações e jobs), revalidando o usuário. */

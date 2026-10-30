@@ -65,7 +65,7 @@ Esta pasta contém documentação estruturada para desenvolvimento assistido por
 - Setup Auth.js com credenciais locais
 - Variáveis de ambiente necessárias
 - Helpers server-side e client-side
-- Roles e status no MongoDB
+- Perfis Perfix, permissões e status no MongoDB
 - Migração de usuários legados
 - Troubleshooting de autenticação
 
@@ -88,7 +88,8 @@ Arquivos:
 - **[organizations.md](./modules/organizations.md)**: CRUD de empresas, filiais e clientes (módulo exemplo)
 - **[dice-roller.md](./modules/dice-roller.md)**: rolagens autoritativas, overrides e visualização 3D dos dados
 - **[search.md](./modules/search.md)**: busca unificada server-side para entidades e menções
-- **[integrations.md](./modules/integrations.md)**: central de integrações (`/integracoes`, só administradores) — configuração no banco em vez do `.env`
+- **[integrations.md](./modules/integrations.md)**: central de integrações (`/integracoes`, acesso por permissão) — configuração no banco em vez do `.env`
+- **[perfix.md](./modules/perfix.md)**: perfis, permissões, hierarquia, perfil padrão e impersonação real de usuários
 - **[opex-feedback.md](./modules/opex-feedback.md)**: acesso automático e dashboard da central de feedback no Opex
 - **[ai.md](./modules/ai.md)**: provedores de IA, agentes (Gerador de imagens, Entender com IA, Importador 5etools, Resumo de memórias) e memórias
 - **[opex-agent.md](./modules/opex-agent.md)**: Agente Opex, o assistente por chat para todos (visitantes, usuários e administradores)

@@ -12,9 +12,9 @@ type Params = { params: Promise<{ id: string }> }
  * Fallback do terminal quando o Pusher não está disponível, e carga inicial quando está.
  */
 export async function GET(request: NextRequest, { params }: Params) {
-    const denied = await denyUnlessAdmin()
-    if (denied) return denied
     const { id } = await params
+    const denied = await denyUnlessAdmin(`integrations.${id}.logs`)
+    if (denied) return denied
     if (!isIntegrationId(id)) {
         return NextResponse.json({ success: false, error: "Integração não encontrada" }, { status: 404 })
     }

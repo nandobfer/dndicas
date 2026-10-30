@@ -261,6 +261,16 @@ const testTranslation: IntegrationTester = async ({ emit, signal }) => {
 }
 
 export const INTEGRATION_TESTERS: Record<IntegrationId, IntegrationTester> = {
+    perfix: async ({ emit }) => {
+        await dbConnect()
+        const { assertTransactionsSupported } = await import("@/features/perfix/server/access")
+        await assertTransactionsSupported()
+        emit("success", "MongoDB com suporte a transações (replica set)")
+        const { getDefaultRoleId } = await import("@/features/perfix/server/settings")
+        const id = await getDefaultRoleId()
+        emit("success", `Perfil padrão válido: ${id}`)
+        return "Perfix disponível; perfil padrão válido"
+    },
     opex: testOpex,
     google_auth: testGoogleAuth,
     pusher: testPusher,

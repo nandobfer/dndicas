@@ -25,6 +25,7 @@ import { loadStoredIntegration, type StoredIntegration } from "./store"
  */
 
 export interface IntegrationConfigMap {
+    perfix: Record<string, never>
     opex: { baseUrl?: string; internalUrl?: string; clientToken?: string }
     google_auth: { clientId?: string; clientSecret?: string }
     pusher: {

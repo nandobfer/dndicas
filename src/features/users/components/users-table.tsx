@@ -1,4 +1,5 @@
 "use client";
+import { RoleChip } from "@/features/perfix/components/permissions/RoleChip"
 
 /**
  * @fileoverview Users table component with server-side pagination.
@@ -55,7 +56,8 @@ const columns = [
  * UsersTable component with animations and pagination.
  */
 export function UsersTable({ users, total, page, limit, isLoading = false, onEdit, onDelete, onPageChange }: UsersTableProps) {
-    const { userId, isAdmin } = useAuth()
+    const { userId, can } = useAuth()
+    const isAdmin = can("users.edit") || can("users.delete")
     const totalPages = Math.ceil(total / limit)
 
     // Filter columns based on role
@@ -134,9 +136,7 @@ export function UsersTable({ users, total, page, limit, isLoading = false, onEdi
 
                                     {/* Role */}
                                     <td className="px-4 py-3 text-right">
-                                        <Chip variant={chipVariantMap[user.role]} size="sm">
-                                            {user.role === "admin" ? "Admin" : "User"}
-                                        </Chip>
+                                        {user.roles.map(role => <RoleChip key={role.id} cargo={role} />)}
                                     </td>
 
                                     {/* Actions */}
@@ -156,11 +156,11 @@ export function UsersTable({ users, total, page, limit, isLoading = false, onEdi
                                                     </button>
                                                 </GlassDropdownMenuTrigger>
                                                 <GlassDropdownMenuContent align="end">
-                                                    <GlassDropdownMenuItem onClick={() => onEdit(user)}>
+                                                    {can("users.edit") && <GlassDropdownMenuItem onClick={() => onEdit(user)}>
                                                         <Pencil className="h-4 w-4" />
                                                         Editar
-                                                    </GlassDropdownMenuItem>
-                                                    {user.id === userId ? (
+                                                    </GlassDropdownMenuItem>}
+                                                    {can("users.delete") && (user.id === userId ? (
                                                         <GlassTooltip>
                                                             <GlassTooltipTrigger asChild>
                                                                 <div>
@@ -183,7 +183,7 @@ export function UsersTable({ users, total, page, limit, isLoading = false, onEdi
                                                             <Trash2 className="h-4 w-4" />
                                                             Excluir
                                                         </GlassDropdownMenuItem>
-                                                    )}
+                                                    ))}
                                                 </GlassDropdownMenuContent>
                                             </GlassDropdownMenu>
                                         </td>

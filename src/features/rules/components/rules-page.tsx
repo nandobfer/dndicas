@@ -15,7 +15,7 @@ import { motionConfig } from "@/lib/config/motion-configs"
 import { useRulesPage } from "../hooks/useRulesPage"
 
 export function RulesPage() {
-    const { isAdmin } = useAuth()
+    const isAdmin = useAuth().can("catalog.edit")
 
     // Logic moved to custom hook for better maintainability (T044)
     const { isMobile, filters, pagination, data, actions, modals, viewMode, setViewMode, isDefault } = useRulesPage()

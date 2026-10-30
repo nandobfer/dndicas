@@ -25,6 +25,7 @@ import { SidebarItem, SidebarSection } from "./sidebar-item"
 import { TooltipProvider } from "@/core/ui/tooltip"
 import { useAuth } from "@/core/hooks/useAuth"
 import { APP_VERSION } from "@/lib/config/version"
+import { canNavigate } from "@/features/perfix/navigation"
 import { OpexNavItem } from "@/features/opex-agent/components/OpexNavItem"
 
 export interface ExpandableSidebarProps {
@@ -90,7 +91,7 @@ type NavigationItem = {
 export const ExpandableSidebar: React.FC<ExpandableSidebarProps> = ({ isExpanded, onExpand, onCollapse, isMobile = false, className }) => {
     const pathname = usePathname()
     const router = useRouter()
-    const { isSignedIn, isAdmin, fullName, email, imageUrl, signOut } = useAuth()
+    const { isSignedIn, can, fullName, email, imageUrl, signOut } = useAuth()
     const [isSigningOut, setIsSigningOut] = React.useState(false)
     const displayName = fullName || email || "Usuário"
 
@@ -107,7 +108,7 @@ export const ExpandableSidebar: React.FC<ExpandableSidebarProps> = ({ isExpanded
 
     const filterItems = (items: NavigationItem[]) =>
         items.filter((item) => {
-            if (item.admin && !isAdmin) return false
+            if (!canNavigate(item.href, can)) return false
             if (item.authenticated && !isSignedIn) return false
             return true
         })

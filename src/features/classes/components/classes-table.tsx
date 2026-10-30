@@ -44,7 +44,7 @@ export interface ClassesTableProps {
 }
 
 export function ClassesTable({ classes, total, isLoading = false, hasNextPage = false, isFetchingNextPage = false, hasActiveFilters = false, onEdit, onDelete, onLoadMore, selectedId, onSelect, hideActions = false }: ClassesTableProps) {
-    const { isAdmin } = useAuth()
+    const isAdmin = useAuth().can("catalog.edit")
 
     if (isLoading && classes.length === 0) {
         return (

@@ -3,10 +3,7 @@
 Central administrativa das integrações do DnDicas, copiada da central do Opex. Toda configuração
 que antes vivia no `.env` passa a ser lida e gravada no MongoDB e editada pelos administradores.
 
-> **Acesso:** só administradores. O item "Integrações" (ícone `PlugZap`) fica na seção de
-> administração da barra lateral; `/integracoes/**` redireciona visitantes para o login e mostra
-> "Acesso restrito" para usuários comuns. As rotas `/api/integrations/**`, `/api/ai/**` e o canal
-> `private-integration-{id}` exigem administrador.
+> **Acesso:** `integrations.access` na sidebar/layout, com permissões `integrations.<id>.view/edit/test/logs/explore` nas APIs correspondentes. APIs de recursos de IA usam `integrations.ai.view/edit`. Canais administrativos continuam exigindo `admin.access`. O coringa `*` satisfaz todas essas permissões. Consulte [Perfix](./perfix.md).
 
 ## Interface (DND-6)
 
@@ -68,6 +65,7 @@ Módulo puro (tela e servidor). Integrações ativas:
 | `storage_s3` | Storage S3 | MinIO/S3; endpoint público para URLs assinadas |
 | `analytics_umami` | Analytics (Umami) | Script carregado pelo layout raiz; desativado, o script não entra |
 | `translation` | Tradução | Tradutor padrão dos scripts de seed, LibreTranslate e Google Cloud Translation |
+| `perfix` | Perfix | `/integracoes/perfix`: padrão de novos usuários, perfis/hierarquia/permissões/membros e Visualizar como |
 
 | `opex` | Tarefas Opex | URL pública, URL interna opcional e segredo `clientToken`; acesso automático e dashboard em `/feedback` (ver `opex-feedback.md`) |
 

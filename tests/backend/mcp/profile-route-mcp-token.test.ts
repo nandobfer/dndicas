@@ -4,7 +4,7 @@ import { importFresh } from "../helpers/module"
 describe("profile route MCP token metadata", () => {
     it("returns an empty MCP token state when the user has no token", async () => {
         vi.doMock("@/core/auth/helpers", () => ({ requireAuth: vi.fn().mockResolvedValue("user-1") }))
-        vi.doMock("@/core/database/db", () => ({ default: vi.fn() }))
+        vi.doMock("@/lib/db", () => ({ dbConnect: vi.fn() }))
         vi.doMock("@/features/users/models/user", () => ({
             User: {
                 findOne: vi.fn().mockReturnValue({
@@ -31,7 +31,7 @@ describe("profile route MCP token metadata", () => {
 
     it("returns only masked MCP token metadata", async () => {
         vi.doMock("@/core/auth/helpers", () => ({ requireAuth: vi.fn().mockResolvedValue("user-1") }))
-        vi.doMock("@/core/database/db", () => ({ default: vi.fn() }))
+        vi.doMock("@/lib/db", () => ({ dbConnect: vi.fn() }))
         vi.doMock("@/features/users/models/user", () => ({
             User: {
                 findOne: vi.fn().mockReturnValue({

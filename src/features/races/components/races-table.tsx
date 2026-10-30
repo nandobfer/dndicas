@@ -33,7 +33,7 @@ interface RacesTableProps {
 }
 
 export function RacesTable({ data, isLoading, hasNextPage = false, isFetchingNextPage = false, onLoadMore, onEdit, onGenerateAI, onDelete, selectedId, onSelect, hideActions = false }: RacesTableProps) {
-    const { isAdmin } = useAuth()
+    const isAdmin = useAuth().can("catalog.edit")
 
     const getSpeedLabel = (speed: string) => {
         const trimmedSpeed = speed.trim()

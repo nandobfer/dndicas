@@ -37,6 +37,7 @@ export const APP_DOC_AUDIENCE: Readonly<Record<string, AppDocAudience>> = {
     "modules/integrations.md": "admin",
     "modules/seed-data.md": "admin",
     "modules/users.md": "admin",
+    "modules/perfix.md": "admin",
 }
 
 /** Teto de leitura por arquivo (bytes). */

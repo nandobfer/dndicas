@@ -10,7 +10,7 @@
  * - admin: Full access to all features
  * - user: Standard user access
  */
-export type UserRole = 'admin' | 'user';
+import type { RoleDto } from '@/features/perfix/types';
 
 /**
  * User status enumeration.
@@ -40,7 +40,9 @@ export interface User {
     /** Avatar URL (optional) */
     avatarUrl?: string
     /** User role for authorization */
-    role: UserRole
+    roles: RoleDto[]
+    roleIds: string[]
+    version: number
     /** User status for soft delete */
     status: UserStatus
     /** Whether the user is soft-deleted */
@@ -64,7 +66,9 @@ export interface UserResponse {
     email: string
     name?: string
     avatarUrl?: string
-    role: UserRole
+    roles: RoleDto[]
+    roleIds: string[]
+    version: number
     status: UserStatus
     deleted?: boolean
     createdAt: string
@@ -93,7 +97,7 @@ export interface CreateUserInput {
   email: string;
   name?: string;
   avatarUrl?: string;
-  role?: UserRole;
+  roleIds?: string[];
 }
 
 /**
@@ -105,7 +109,8 @@ export interface UpdateUserInput {
   email?: string;
   name?: string;
   avatarUrl?: string;
-  role?: UserRole;
+  roleIds?: string[];
+  version: number;
   status?: UserStatus;
 }
 
@@ -116,7 +121,7 @@ export interface UserFilters {
   /** Text search (name, email, username) */
   search?: string;
   /** Filter by role */
-  role?: 'all' | UserRole;
+  roleId?: string;
   /** Filter by status */
   status?: 'all' | UserStatus;
   /** Page number (1-indexed) */
@@ -133,5 +138,5 @@ export interface UserSummary {
   username: string;
   name?: string;
   avatarUrl?: string;
-  role: UserRole;
+  roles: RoleDto[];
 }

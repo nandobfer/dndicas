@@ -84,9 +84,13 @@ export function SignIn({ fallbackRedirectUrl, forceRedirectUrl }: { routing?: st
     const searchParams = useSearchParams()
     const [identifier, setIdentifier] = React.useState("")
     const [password, setPassword] = React.useState("")
-    const [error, setError] = React.useState<string | null>(null)
     const [isSubmitting, setIsSubmitting] = React.useState(false)
     const callbackUrl = forceRedirectUrl || searchParams.get("callbackUrl") || fallbackRedirectUrl || "/"
+    const [error, setError] = React.useState<string | null>(() =>
+        searchParams.get("error") === "SignupUnavailable"
+            ? "Cadastro indisponível no momento: nenhum perfil padrão válido está configurado. Peça a um administrador para configurar a integração Perfix."
+            : null,
+    )
 
     async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
         event.preventDefault()

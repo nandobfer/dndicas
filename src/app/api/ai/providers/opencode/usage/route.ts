@@ -9,7 +9,7 @@ export const dynamic = "force-dynamic"
 
 /** Sessão interna; não é endpoint público por token. */
 export const GET = withRoute(async ({ req }) => {
-    await requireAdminActor()
+    await requireAdminActor("integrations.ai.view")
     const parsed = opencodeUsageQuerySchema.safeParse(Object.fromEntries(req.nextUrl.searchParams))
     if (!parsed.success) return validationError(parsed.error)
     return ok(await getOpencodeUsage(parsed.data))

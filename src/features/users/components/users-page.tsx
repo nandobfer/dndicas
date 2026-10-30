@@ -27,7 +27,7 @@ import type { UserResponse, CreateUserInput, UpdateUserInput } from '../types/us
  * Users page component with full CRUD functionality.
  */
 export function UsersPage() {
-  const { isAdmin } = useAuth()
+  const { can } = useAuth()
   
   // Responsive logic moved to custom hook for better maintainability
   const { isMobile, filters, pagination, data, actions, modals } = useUsersPage();
@@ -43,7 +43,7 @@ export function UsersPage() {
                   <p className="text-xs sm:text-sm text-white/60 mt-1">Gerencie os usuários do sistema</p>
               </div>
 
-              {isAdmin && (
+              {can("users.create") && (
                   <button
                       onClick={actions.handleCreateClick}
                       className={cn(
@@ -64,7 +64,7 @@ export function UsersPage() {
           <GlassCard>
               <GlassCardContent className="py-4">
                   <UserFilters
-                      filters={filters as any}
+                      filters={filters}
                       onSearchChange={actions.handleSearchChange}
                       onRoleChange={actions.handleRoleChange}
                       onStatusChange={actions.handleStatusChange}
@@ -81,9 +81,9 @@ export function UsersPage() {
                   hasNextPage={data.mobile.hasNextPage}
                   isFetchingNextPage={data.mobile.isFetchingNextPage}
                   onLoadMore={data.mobile.fetchNextPage}
-                  onEdit={actions.handleEditClick}
-                  onDelete={actions.handleDeleteClick}
-                  isAdmin={isAdmin}
+                  onEdit={can("users.edit") ? actions.handleEditClick : undefined}
+                  onDelete={can("users.delete") ? actions.handleDeleteClick : undefined}
+                  isAdmin={can("users.edit") || can("users.delete")}
               />
           ) : (
               <UsersTable

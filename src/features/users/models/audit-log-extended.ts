@@ -7,7 +7,7 @@
  */
 
 import mongoose, { Schema, Document, Model } from 'mongoose';
-import AuditLogBase, { IAuditLog } from '@/core/database/audit-log';
+import AuditLogBase, { IAuditLog } from '@/features/perfix/server/audit';
 import type { AuditAction, AuditEntity } from '../types/audit.types';
 
 /**
@@ -24,7 +24,7 @@ export interface IAuditLogExtended extends Document {
         username: string
         email: string
         avatarUrl?: string
-        role: "admin" | "user"
+        roleIds: string[]
         status?: "active" | "inactive"
     }
     previousData?: Record<string, unknown>
@@ -78,7 +78,7 @@ const AuditLogExtendedSchema = new Schema<IAuditLogExtended>(
             username: { type: String },
             email: { type: String },
             avatarUrl: { type: String },
-            role: { type: String, enum: ["admin", "user"] },
+            roleIds: { type: [String], default: [] },
             status: { type: String, enum: ["active", "inactive"] },
         },
         previousData: {

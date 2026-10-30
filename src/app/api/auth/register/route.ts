@@ -38,13 +38,15 @@ export async function POST(request: NextRequest) {
             name: parsed.data.name || undefined,
             passwordHash,
             passwordSetupRequired: false,
-            role: "user",
+            roles: await (await import("@/features/perfix/server/settings")).signupRoleIds(),
             status: "active",
             deleted: false,
         })
 
         return NextResponse.json({ id: user._id.toString(), email: user.email, username: user.username }, { status: 201 })
     } catch (error) {
+        const { DomainError } = await import("@/lib/api/route")
+        if (error instanceof DomainError) return NextResponse.json({ success: false, error: error.message, code: error.code }, { status: error.status })
         console.error("[Auth Register] error:", error)
         const message = error instanceof Error ? error.message : "Erro desconhecido"
         return NextResponse.json({ error: "Erro ao criar conta", details: message }, { status: 500 })

@@ -596,6 +596,21 @@ const columns: Column<Item>[] = [
 - Customização de renderização por coluna
 - Responsiva
 
+## Abas e seletores (regra obrigatória)
+
+- **Abas**: a aba ativa sempre usa a cor primária do tema. Use `IntegrationTabs`
+  (`src/features/integrations/components/tabs/IntegrationTabs.tsx`, `aria-selected:bg-primary`, com
+  ícone e troca animada) para seções de página, ou `GlassSelector`/`OptionTabs` para escolher entre
+  poucas opções. **Não use `@/core/ui/tabs`**: a aba ativa dele é `bg-background`, preta no tema
+  escuro.
+- **Seletores**: nunca `<select>` nativo. Use o `Select` Glass de `@/core/ui/select` (menu com
+  `GlassBackdrop`) para listas dinâmicas ou longas, e `GlassSelector`/`StatusChips` para poucas
+  opções fixas (ex.: Todos/Ativos/Inativos). O Radix não aceita `SelectItem` com `value=""`: use um
+  sentinela (`"all"`, `"none"`) e converta na borda do componente.
+- **Checkbox**: nunca `<input type="checkbox">` nativo; use `@/core/ui/checkbox`.
+- As telas do Perfix e de usuários têm um teste de guarda
+  (`tests/frontend/perfix/ui-components-guard.test.ts`) que falha com esses imports/elementos.
+
 ## Página de Demonstração
 
 Acesse `/ui-components` para ver todos os componentes em ação com exemplos interativos.

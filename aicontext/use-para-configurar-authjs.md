@@ -7,7 +7,7 @@ Use este guia sempre que trabalhar em autenticação no Dungeons & Dicas.
 O projeto usa Auth.js com credenciais locais, login Google e MongoDB como fonte autoritativa de usuários.
 
 - O ID canônico de usuário é `User._id.toString()`.
-- Roles e status ficam no MongoDB local.
+- Perfis (`User.roles`) e status ficam no MongoDB local. Permissões vêm do Perfix, nunca do JWT; o campo `role` foi removido (ver `modules/perfix.md`).
 - Login usa email ou username + senha.
 - Login Google usa o provider oficial `next-auth/providers/google` e vincula/cria usuário local por email.
 - Sessões devem ser persistentes e não devem expirar por inatividade no fluxo normal.
@@ -25,7 +25,7 @@ O projeto usa Auth.js com credenciais locais, login Google e MongoDB como fonte 
 - `src/core/auth/server.ts`: compatibilidade server-side para `auth()` e `currentUser()` internos.
 - `src/core/auth/helpers.ts`: helpers de autorização usados por APIs.
 - `src/core/hooks/useAuth.ts`: hook client-side do projeto.
-- `src/features/users/models/user.ts`: usuário local, senha, role, status e `legacyClerkId` temporário.
+- `src/features/users/models/user.ts`: usuário local, senha, IDs de perfis, versão de acesso, status e `legacyClerkId` temporário.
 
 ## Variáveis De Ambiente
 
@@ -56,7 +56,9 @@ No Google Cloud Console, configure o redirect URI do ambiente local como `http:/
 - Para Google OAuth, use apenas `next-auth/providers/google`; não adicione biblioteca externa.
 - Não use `clerkId` como ownership novo.
 - Use `auth()` de `@/core/auth/server` em rotas que precisam apenas do `userId`.
-- Use `currentUser()` de `@/core/auth/server` quando precisar de role/perfil no servidor.
+- Use `currentUser()` e `user.can("permissao")` ou `requireAccess(...keys)` de `@/features/perfix/server/access` para autorização. `useAuth()` expõe `can`, `canAny`, perfis e estado de impersonação. `isAdmin` deriva de `admin.access`.
+- Cadastro local/primeiro login Google recebem o padrão configurado na integração Perfix e falham fechados se indisponível. Auth.js executa migrações antes de persistir usuários; não reintroduza `role` em sessão/JWT.
+- Durante “Visualizar como usuário”, `auth()` e `currentUser()` representam o alvo; auditoria precisa preservar o administrador real. Não use claims brutos de Auth.js para ownership.
 - Use `requireAuth()` e helpers de `@/core/auth/helpers` para rotas críticas.
 - Use `useAuth()` de `@/core/hooks/useAuth` no client.
 - Não dependa de cookie Auth.js dentro de iframe cross-origin do Owlbear. Para actions Owlbear, use o handoff via Pusher: a action abre `/owlbear/auth/bridge`, a página top-level publica `owlbear-auth-ready` via `/api/owlbear/auth/pusher-handoff`, e `/api/owlbear/session` troca o `handoffToken` por uma `OwlbearSession`.

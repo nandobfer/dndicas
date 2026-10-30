@@ -63,7 +63,7 @@ async function getUserDetails(userId: string): Promise<
           username: string
           email: string
           avatarUrl?: string
-          role: "admin" | "user"
+          roleIds: string[]
           status: "active" | "inactive"
       }
     | undefined
@@ -88,7 +88,7 @@ async function getUserDetails(userId: string): Promise<
             username: user.username,
             email: user.email,
             avatarUrl: user.avatarUrl,
-            role: user.role,
+            roleIds: user.roles,
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             status: (user.status as any) || "active",
         }

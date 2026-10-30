@@ -5,7 +5,7 @@ import { describe, expect, it, vi } from "vitest"
 import { RaceFilters } from "@/features/races/components/race-filters"
 
 vi.mock("@/core/hooks/useAuth", () => ({
-    useAuth: () => ({ isAdmin: false }),
+    useAuth: () => ({ isAdmin: false, can: () => false }),
 }))
 
 vi.mock("@/components/ui/search-input", () => ({

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
-import { auth } from "@/core/auth/server"
+import { auth, currentUser } from "@/core/auth/server"
 import { getClassById, updateClass, deleteClass } from "@/features/classes/api/classes-service"
 import { updateClassSchema } from "@/features/classes/api/validation"
 import { getLocalUserById } from "@/features/users/api/get-current-user"
@@ -11,8 +11,8 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
     try {
         const { id } = await params
         const { userId } = await auth()
-        const user = userId ? await getLocalUserById(userId) : null
-        const isAdmin = user?.role === "admin"
+        const user = userId ? await currentUser() : null
+        const isAdmin = user?.can("catalog.edit") ?? false
 
         const doc = await getClassById(id, isAdmin)
         if (!doc) return NextResponse.json({ error: "Classe não encontrada" }, { status: 404 })
@@ -35,10 +35,10 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
         const { userId } = await auth()
         if (!userId) return NextResponse.json({ error: "Não autorizado" }, { status: 401 })
 
-        const user = await getLocalUserById(userId)
+        const user = await currentUser()
         if (!user) return NextResponse.json({ error: "Usuário não encontrado" }, { status: 404 })
 
-        const isAdmin = user.role === "admin"
+        const isAdmin = user.can("catalog.edit")
         if (!isAdmin) return NextResponse.json({ error: "Acesso negado. Apenas administradores podem editar classes." }, { status: 403 })
 
         const { id } = await params
@@ -84,10 +84,10 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
         const { userId } = await auth()
         if (!userId) return NextResponse.json({ error: "Não autorizado" }, { status: 401 })
 
-        const user = await getLocalUserById(userId)
+        const user = await currentUser()
         if (!user) return NextResponse.json({ error: "Usuário não encontrado" }, { status: 404 })
 
-        const isAdmin = user.role === "admin"
+        const isAdmin = user.can("catalog.edit")
         if (!isAdmin) return NextResponse.json({ error: "Acesso negado. Apenas administradores podem excluir classes." }, { status: 403 })
 
         const { id } = await params

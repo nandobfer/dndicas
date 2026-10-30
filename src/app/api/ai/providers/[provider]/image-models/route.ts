@@ -10,7 +10,7 @@ export const dynamic = "force-dynamic"
 
 /** GET /api/ai/providers/[provider]/image-models — modelos de imagem (Gemini e OpenAI; `?refresh=1` ignora o cache). */
 export const GET = withRoute<{ provider: string }>(async ({ req, params }) => {
-    await requireAdminActor()
+    await requireAdminActor("integrations.ai.view")
     if (!isAiImageProviderId(params.provider)) throw new DomainError(404, "Provedor sem modelos de imagem", "AI_PROVIDER_NOT_FOUND")
     try {
         return ok(await listAiImageModels(params.provider, { fresh: req.nextUrl.searchParams.get("refresh") === "1", signal: req.signal }))

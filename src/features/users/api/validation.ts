@@ -6,6 +6,7 @@
  */
 
 import { z } from 'zod';
+import { ids, objectId } from '@/features/perfix/schemas';
 
 /**
  * Schema for creating a new user.
@@ -33,8 +34,8 @@ export const createUserSchema = z.object({
     .url('URL do avatar inválida')
     .optional()
     .or(z.literal('')),
-  role: z.enum(['admin', 'user']).default('user'),
-});
+  roleIds: ids.optional(),
+}).strict();
 
 /**
  * Schema for updating an existing user.
@@ -42,6 +43,7 @@ export const createUserSchema = z.object({
  */
 export const updateUserSchema = createUserSchema.partial().extend({
   status: z.enum(['active', 'inactive']).optional(),
+  version: z.number().int().nonnegative(),
 });
 
 /** Inferred type from createUserSchema */
@@ -55,7 +57,7 @@ export type UpdateUserSchema = z.infer<typeof updateUserSchema>;
  */
 export const userFiltersSchema = z.object({
   search: z.string().optional(),
-  role: z.enum(['all', 'admin', 'user']).default('all'),
+  roleId: objectId.optional().or(z.literal('')),
   status: z.enum(['all', 'active', 'inactive']).default('active'),
   page: z.coerce.number().min(1).default(1),
   limit: z.coerce.number().min(1).max(100).default(10),

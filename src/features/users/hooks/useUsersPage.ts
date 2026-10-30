@@ -21,7 +21,7 @@ export function useUsersPage() {
     // State
     const [page, setPage] = React.useState(1);
     const [search, setSearch] = React.useState("");
-    const [role, setRole] = React.useState<UserFilters['role']>(undefined);
+    const [roleId, setRole] = React.useState<string>("");
     const [status, setStatus] = React.useState<UserFilters['status']>(undefined);
     
     // Debounced search
@@ -30,10 +30,10 @@ export function useUsersPage() {
     // Common filters object
     const filters = React.useMemo(() => ({
         search: debouncedSearch,
-        role,
+        roleId,
         status,
         limit: 10,
-    }), [debouncedSearch, role, status]);
+    }), [debouncedSearch, roleId, status]);
 
     /**
      * Data Fetching
@@ -65,7 +65,7 @@ export function useUsersPage() {
         setPage(1);
     };
 
-    const handleRoleChange = (value: UserFilters['role']) => {
+    const handleRoleChange = (value: string) => {
         setRole(value);
         setPage(1);
     };
@@ -105,7 +105,7 @@ export function useUsersPage() {
 
     const handleDeleteConfirm = async () => {
         if (selectedUser) {
-            await deleteMutation.mutateAsync(selectedUser.id);
+            await deleteMutation.mutateAsync({ id: selectedUser.id, version: selectedUser.version });
             setIsDeleteOpen(false);
             setSelectedUser(null);
         }
@@ -115,7 +115,7 @@ export function useUsersPage() {
         isMobile,
         filters: {
             search,
-            role,
+            roleId,
             status,
         },
         pagination: {

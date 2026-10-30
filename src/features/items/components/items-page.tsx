@@ -20,7 +20,7 @@ import { ItemFormModal } from "./item-form-modal"
 import { DeleteItemDialog } from "./delete-item-dialog"
 
 export function ItemsPage() {
-    const { isAdmin } = useAuth()
+    const isAdmin = useAuth().can("catalog.edit")
 
     const { filters, data, viewMode, setViewMode, actions, modals } = useItemsPage()
 

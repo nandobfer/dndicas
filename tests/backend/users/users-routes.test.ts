@@ -1,247 +1,63 @@
-import { describe, expect, it, vi } from 'vitest';
-
-import { makeJsonRequest, makeRequest, readJson } from '../helpers/http';
-import { importFresh } from '../helpers/module';
-
-describe('/api/users routes', () => {
-    it('GET /api/users validates filters and returns 400 for invalid pagination', async () => {
-        vi.doMock('@/core/database/db', () => ({
-            default: vi.fn().mockResolvedValue(undefined),
-        }));
-        vi.doMock('@/features/users/models/user', () => ({
-            User: {
-                find: vi.fn(),
-                countDocuments: vi.fn(),
-            },
-        }));
-        vi.doMock('@/features/users/api/get-current-user', () => ({
-            requireAdmin: vi.fn(),
-            getCurrentUserFromDb: vi.fn(),
-        }));
-        vi.doMock('@/features/users/api/audit-service', () => ({
-            logCreate: vi.fn(),
-            logUpdate: vi.fn(),
-        }));
-
-        const mod = await importFresh<typeof import('@/app/api/users/route')>('@/app/api/users/route');
-        const response = await mod.GET(makeRequest('http://localhost/api/users?page=0'));
-        const payload = await readJson<{
-            error: string;
-        }>(response);
-
-        expect(response.status).toBe(400);
-        expect(payload.error).toBe('Filtros inválidos');
-    });
-
-    it('GET /api/users lists paginated users with normalized response fields', async () => {
-        const lean = vi.fn().mockResolvedValue([
-            {
-                _id: { toString: () => 'mongo-1' },
-                username: 'hero',
-                email: 'hero@example.com',
-                name: 'Hero',
-                avatarUrl: null,
-                role: 'admin',
-                status: 'active',
-                deleted: false,
-                createdAt: new Date('2024-01-01T00:00:00.000Z'),
-                updatedAt: new Date('2024-01-02T00:00:00.000Z'),
-            },
-        ]);
-        const limit = vi.fn(() => ({ lean }));
-        const skip = vi.fn(() => ({ limit }));
-        const sort = vi.fn(() => ({ skip }));
-
-        vi.doMock('@/core/database/db', () => ({
-            default: vi.fn().mockResolvedValue(undefined),
-        }));
-        vi.doMock('@/features/users/models/user', () => ({
-            User: {
-                find: vi.fn(() => ({ sort })),
-                countDocuments: vi.fn().mockResolvedValue(1),
-            },
-        }));
-        vi.doMock('@/features/users/api/get-current-user', () => ({
-            requireAdmin: vi.fn(),
-            getCurrentUserFromDb: vi.fn(),
-        }));
-        vi.doMock('@/features/users/api/audit-service', () => ({
-            logCreate: vi.fn(),
-            logUpdate: vi.fn(),
-        }));
-
-        const mod = await importFresh<typeof import('@/app/api/users/route')>('@/app/api/users/route');
-        const response = await mod.GET(makeRequest('http://localhost/api/users?search=hero&status=all&role=admin&page=1&limit=10'));
-        const payload = await readJson<{
-            error: string;
-        }>(response);
-
-        expect(response.status).toBe(200);
-        expect(payload).toEqual({
-            items: [
-                {
-                    id: 'mongo-1',
-                    username: 'hero',
-                    email: 'hero@example.com',
-                    name: 'Hero',
-                    avatarUrl: null,
-                    role: 'admin',
-                    status: 'active',
-                    deleted: false,
-                    passwordSetupRequired: false,
-                    createdAt: '2024-01-01T00:00:00.000Z',
-                    updatedAt: '2024-01-02T00:00:00.000Z',
-                },
-            ],
-            total: 1,
-            page: 1,
-            totalPages: 1,
-        });
-    });
-
-    it('POST /api/users returns 403 when the current user is not admin', async () => {
-        vi.doMock('@/core/database/db', () => ({
-            default: vi.fn(),
-        }));
-        vi.doMock('@/features/users/models/user', () => ({
-            User: {},
-        }));
-        vi.doMock('@/features/users/api/get-current-user', () => ({
-            requireAdmin: vi.fn().mockRejectedValue(new Error('forbidden')),
-            getCurrentUserFromDb: vi.fn(),
-        }));
-        vi.doMock('@/features/users/api/audit-service', () => ({
-            logCreate: vi.fn(),
-            logUpdate: vi.fn(),
-        }));
-
-        const mod = await importFresh<typeof import('@/app/api/users/route')>('@/app/api/users/route');
-        const response = await mod.POST(makeJsonRequest('http://localhost/api/users', {
-            method: 'POST',
-            body: JSON.stringify({}),
-        }));
-
-        expect(response.status).toBe(403);
-    });
-
-    it('PUT /api/users/[id] blocks self-role changes', async () => {
-        const user = {
-            _id: { toString: () => 'mongo-1' },
-            username: 'hero',
-            email: 'hero@example.com',
-            name: 'Hero',
-            role: 'admin',
-            status: 'active',
-            updatedAt: new Date('2024-01-02T00:00:00.000Z'),
-            save: vi.fn(),
-        };
-
-        vi.doMock('@/core/database/db', () => ({
-            default: vi.fn().mockResolvedValue(undefined),
-        }));
-        vi.doMock('@/features/users/models/user', () => ({
-            User: {
-                findOne: vi.fn().mockResolvedValue(user),
-            },
-        }));
-        vi.doMock('@/features/users/api/get-current-user', () => ({
-            requireAdmin: vi.fn().mockResolvedValue({ _id: { toString: () => 'mongo-1' }, role: 'admin' }),
-            getCurrentUserFromDb: vi.fn(),
-        }));
-        vi.doMock('@/features/users/api/audit-service', () => ({
-            logUpdate: vi.fn(),
-            logDelete: vi.fn(),
-        }));
-
-        const mod = await importFresh<typeof import('@/app/api/users/[id]/route')>('@/app/api/users/[id]/route');
-        const response = await mod.PUT(makeJsonRequest('http://localhost/api/users/mongo-1', {
-            method: 'PUT',
-            body: JSON.stringify({ role: 'user' }),
-        }), { params: Promise.resolve({ id: 'mongo-1' }) });
-        const payload = await readJson<{
-            error: string;
-        }>(response);
-
-        expect(response.status).toBe(400);
-        expect(payload.error).toContain('própria função');
-    });
-
-    it('PUT /api/users/[id] updates role locally without external provider calls', async () => {
-        const save = vi.fn().mockResolvedValue(undefined);
-        const logUpdate = vi.fn();
-        const user = {
-            _id: { toString: () => 'mongo-target' },
-            username: 'target_user',
-            email: 'target@example.com',
-            name: 'Target User',
-            role: 'admin',
-            status: 'active',
-            deleted: false,
-            createdAt: new Date('2024-01-01T00:00:00.000Z'),
-            updatedAt: new Date('2024-01-02T00:00:00.000Z'),
-            save,
-        };
-
-        vi.doMock('@/core/database/db', () => ({
-            default: vi.fn().mockResolvedValue(undefined),
-        }));
-        vi.doMock('@/features/users/models/user', () => ({
-            User: {
-                findOne: vi.fn().mockResolvedValue(user),
-            },
-        }));
-        vi.doMock('@/features/users/api/get-current-user', () => ({
-            requireAdmin: vi.fn().mockResolvedValue({ _id: { toString: () => 'mongo-admin' }, role: 'admin' }),
-            getCurrentUserFromDb: vi.fn(),
-        }));
-        vi.doMock('@/features/users/api/audit-service', () => ({
-            logUpdate,
-            logDelete: vi.fn(),
-        }));
-
-        const mod = await importFresh<typeof import('@/app/api/users/[id]/route')>('@/app/api/users/[id]/route');
-        const response = await mod.PUT(makeJsonRequest('http://localhost/api/users/mongo-target', {
-            method: 'PUT',
-            body: JSON.stringify({
-                username: 'target_user',
-                email: 'target@example.com',
-                name: 'Target User',
-                role: 'user',
-                status: 'active',
-            }),
-        }), { params: Promise.resolve({ id: 'mongo-target' }) });
-
-        expect(response.status).toBe(200);
-        expect(user.role).toBe('user');
-        expect(save).toHaveBeenCalled();
-        expect(logUpdate).toHaveBeenCalled();
-    });
-
-    it('DELETE /api/users/[id] blocks self deletion', async () => {
-        vi.doMock('@/core/database/db', () => ({
-            default: vi.fn(),
-        }));
-        vi.doMock('@/features/users/models/user', () => ({
-            User: {},
-        }));
-        vi.doMock('@/features/users/api/get-current-user', () => ({
-            requireAdmin: vi.fn().mockResolvedValue({ _id: { toString: () => 'mongo-1' } }),
-            getCurrentUserFromDb: vi.fn(),
-        }));
-        vi.doMock('@/features/users/api/audit-service', () => ({
-            logUpdate: vi.fn(),
-            logDelete: vi.fn(),
-        }));
-
-        const mod = await importFresh<typeof import('@/app/api/users/[id]/route')>('@/app/api/users/[id]/route');
-        const response = await mod.DELETE(makeRequest('http://localhost/api/users/mongo-1', {
-            method: 'DELETE',
-        }), { params: Promise.resolve({ id: 'mongo-1' }) });
-        const payload = await readJson<{
-            error: string;
-        }>(response);
-
-        expect(response.status).toBe(400);
-        expect(payload.error).toContain('própria conta');
-    });
-});
+import { beforeEach, describe, expect, it, vi } from "vitest"
+import { makeJsonRequest, makeRequest, readJson } from "../helpers/http"
+import { DomainError } from "@/lib/api/route"
+const mocks = vi.hoisted(() => ({ requireAccess: vi.fn(), roleRows: vi.fn(), find: vi.fn(), count: vi.fn(), findOne: vi.fn(), saveAssignment: vi.fn(), audit: vi.fn() }))
+vi.mock("@/features/perfix/server/access", () => ({
+    requireAccess: mocks.requireAccess, requirePermissions: vi.fn(), roleRows: mocks.roleRows, auditAccess: mocks.audit,
+    authorityTransaction: async (access: unknown, _keys: string[], run: (a: unknown, s: object) => Promise<unknown>) => run(access, {}),
+    denied: (message: string) => new DomainError(403, message),
+}))
+vi.mock("@/features/perfix/server/commands", () => ({ saveAssignment: mocks.saveAssignment }))
+vi.mock("@/features/users/models/user", () => ({ User: { find: mocks.find, countDocuments: mocks.count, findOne: mocks.findOne } }))
+import { GET, POST } from "@/app/api/users/route"
+import { PUT, DELETE } from "@/app/api/users/[id]/route"
+const id = "a".repeat(24), roleId = "b".repeat(24)
+beforeEach(() => {
+    mocks.requireAccess.mockReset().mockResolvedValue({ userId: id, realUserId: id, roles: [], effective: new Set(["*"]) })
+    mocks.roleRows.mockResolvedValue([{ id: roleId, slug: "user", nome: "Usuário", descricao: "", cor: "azul", permissoes: [], ativo: true, posicao: 1, version: 0 }])
+    mocks.audit.mockReset()
+})
+describe("APIs de usuários com perfis Perfix", () => {
+    it("valida paginação antes de consultar usuários", async () => {
+        const response = await GET(makeRequest("http://localhost/api/users?page=0"))
+        expect(response.status).toBe(400)
+    })
+    it("lista perfis sem expor role legado ou senha", async () => {
+        const user = { _id: id, username: "hero", name: "Hero", email: "hero@example.com", roles: [roleId], status: "active", deleted: false, accessVersion: 2, createdAt: new Date(), updatedAt: new Date() }
+        mocks.find.mockReturnValue({ sort: () => ({ skip: () => ({ limit: async () => [user] }) }) })
+        mocks.count.mockResolvedValue(1)
+        const response = await GET(makeRequest(`http://localhost/api/users?roleId=${roleId}`))
+        const body = await readJson<{ data: { items: Record<string, unknown>[]; total: number } }>(response)
+        expect(response.status).toBe(200)
+        expect(body.data.items[0]).toMatchObject({ roleIds: [roleId], version: 2, roles: [expect.objectContaining({ id: roleId })] })
+        expect(body.data.items[0]).not.toHaveProperty("role")
+        expect(mocks.find).toHaveBeenCalledWith(expect.objectContaining({ roles: roleId }))
+    })
+    it("retorna 403 sem users.create", async () => {
+        mocks.requireAccess.mockRejectedValue(new DomainError(403, "Acesso negado"))
+        expect((await POST(makeJsonRequest("http://localhost/api/users", { method: "POST", body: "{}" }))).status).toBe(403)
+    })
+    it("bloqueia alterações de perfis do próprio usuário", async () => {
+        const user = { _id: id, roles: [roleId], accessVersion: 0, createdAt: new Date(), updatedAt: new Date() }
+        mocks.findOne.mockReturnValue({ session: async () => user })
+        mocks.saveAssignment.mockRejectedValue(new DomainError(403, "Você não pode alterar seus próprios perfis"))
+        const response = await PUT(makeJsonRequest(`http://localhost/api/users/${id}`, { method: "PUT", body: JSON.stringify({ roleIds: [], version: 0 }) }), { params: Promise.resolve({ id }) })
+        expect(response.status).toBe(403)
+    })
+    it("atualiza perfis transacionalmente e registra auditoria", async () => {
+        const user = { _id: id, roles: [], status: "active", accessVersion: 0, save: vi.fn(), createdAt: new Date(), updatedAt: new Date() }
+        mocks.findOne.mockReturnValue({ session: async () => user })
+        mocks.saveAssignment.mockResolvedValue({ ...user, roles: [roleId], accessVersion: 1 })
+        const response = await PUT(makeJsonRequest(`http://localhost/api/users/${id}`, { method: "PUT", body: JSON.stringify({ roleIds: [roleId], version: 0 }) }), { params: Promise.resolve({ id }) })
+        expect(response.status).toBe(200)
+        expect(mocks.saveAssignment).toHaveBeenCalledWith(expect.anything(), id, [roleId], 0, "active", expect.anything())
+        expect(mocks.audit).toHaveBeenCalled()
+    })
+    it("bloqueia autoexclusão e exige a versão", async () => {
+        mocks.findOne.mockReturnValue({ session: async () => ({ _id: id, roles: [roleId] }) })
+        mocks.saveAssignment.mockRejectedValue(new DomainError(403, "Você não pode desativar sua própria conta"))
+        const response = await DELETE(makeJsonRequest(`http://localhost/api/users/${id}`, { method: "DELETE", body: JSON.stringify({ version: 0 }) }), { params: Promise.resolve({ id }) })
+        expect(response.status).toBe(403)
+        expect((await DELETE(makeJsonRequest(`http://localhost/api/users/${id}`, { method: "DELETE", body: "{}" }), { params: Promise.resolve({ id }) })).status).toBe(400)
+    })
+})

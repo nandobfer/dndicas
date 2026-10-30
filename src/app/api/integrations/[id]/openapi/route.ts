@@ -15,9 +15,9 @@ type Params = { params: Promise<{ id: string }> }
  * Swagger cadastrada (cache de 10 min por instância; `?refresh=1` força). Nunca devolve credenciais.
  */
 export async function GET(request: NextRequest, { params }: Params) {
-    const denied = await denyUnlessAdmin()
-    if (denied) return denied
     const { id } = await params
+    const denied = await denyUnlessAdmin(`integrations.${id}.explore`)
+    if (denied) return denied
     if (!isIntegrationId(id)) {
         return NextResponse.json({ success: false, error: "Integração não encontrada" }, { status: 404 })
     }

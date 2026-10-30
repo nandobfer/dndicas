@@ -21,7 +21,7 @@ import { useRacesPage } from "../hooks/useRacesPage"
 import { cn } from "@/core/utils/index"
 
 export function RacesPage() {
-    const { isAdmin } = useAuth()
+    const isAdmin = useAuth().can("catalog.edit")
 
     const { isMobile, filters, data, modals, viewMode, setViewMode, actions } = useRacesPage()
 

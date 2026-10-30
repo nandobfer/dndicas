@@ -8,18 +8,19 @@ import { Settings } from "lucide-react"
 import IntegracoesLayout from "@/app/(dashboard)/integracoes/layout"
 import { CadastroTableCard } from "@/components/list/CadastroTableCard"
 import { Button } from "@/components/ui/opex/button"
-import { getActor } from "@/features/auth/server/actor"
 import { GeneralCard } from "@/features/integrations/components/detail/GeneralCard"
 import { IntegrationTabs } from "@/features/integrations/components/tabs/IntegrationTabs"
 
-vi.mock("@/features/auth/server/actor", () => ({ getActor: vi.fn() }))
+// A central de integrações é protegida por permissão (`requestAccess`), não por papel.
+const access = vi.hoisted(() => ({ effective: new Set<string>() }))
+vi.mock("@/features/perfix/server/access", () => ({ requestAccess: async () => (access.effective.size ? { effective: access.effective } : null) }))
 vi.mock("next/navigation", () => ({
     redirect: vi.fn((url: string) => { throw new Error(`redirect:${url}`) }),
 }))
 
 describe("Padrão visual das integrações", () => {
     beforeEach(() => {
-        vi.mocked(getActor).mockResolvedValue({ id: "admin", name: "Administrador", role: "admin" })
+        access.effective = new Set(["integrations.access"])
     })
 
     it("deixa o espaçamento horizontal a cargo do layout do dashboard", async () => {
@@ -31,13 +32,13 @@ describe("Padrão visual das integrações", () => {
     })
 
     it("preserva o redirecionamento de visitantes", async () => {
-        vi.mocked(getActor).mockResolvedValue(null)
+        access.effective = new Set()
         await expect(IntegracoesLayout({ children: <p>Conteúdo privado</p> }))
             .rejects.toThrow("redirect:/sign-in?callbackUrl=%2Fintegracoes")
     })
 
     it("preserva o bloqueio de usuários comuns", async () => {
-        vi.mocked(getActor).mockResolvedValue({ id: "user", name: "Usuário", role: "user" })
+        access.effective = new Set(["users.view"])
         render(await IntegracoesLayout({ children: <p>Conteúdo privado</p> }))
         expect(screen.getByText("Acesso restrito")).toBeInTheDocument()
         expect(screen.queryByText("Conteúdo privado")).not.toBeInTheDocument()

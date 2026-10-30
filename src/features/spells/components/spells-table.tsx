@@ -69,7 +69,7 @@ export interface SpellsTableProps {
  * - Actions dropdown (admin only)
  */
 export function SpellsTable({ spells, total, isLoading = false, hasNextPage = false, isFetchingNextPage = false, hasActiveFilters = false, onEdit, onDelete, onGenerateAI, onLoadMore }: SpellsTableProps) {
-    const { isAdmin } = useAuth()
+    const isAdmin = useAuth().can("catalog.edit")
 
     if (isLoading && spells.length === 0) {
         return (
