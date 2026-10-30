@@ -190,6 +190,81 @@ describe("página da campanha (lobby)", () => {
         await waitFor(() => expect(push).toHaveBeenCalledWith("/campanhas"))
     })
 
+    const ownerDetail = (over: Partial<MaddoxCampaignDetailDto> = {}) => {
+        const campaign = detail(over)
+        get.mockImplementation(async (url: string) => (url.endsWith("/invite") ? ok({ token: TOKEN, rotatedAt: null }) : ok(campaign)))
+        patch.mockImplementation(async (_url: string, body: Record<string, unknown>) => ok({ ...campaign, ...body }))
+        return campaign
+    }
+
+    async function openEdit() {
+        fireEvent.click(await screen.findByRole("button", { name: /^Editar$/ }))
+        return screen.findByRole("dialog")
+    }
+
+    it("editar: o formulário vem com os dados da campanha e envia só o nome alterado", async () => {
+        ownerDetail({ rigor: "equilibrado" })
+        renderWithQueryClient(<CampaignPage campaignId="c1" />)
+        const dialog = await openEdit()
+        const name = within(dialog).getByLabelText("Nome da campanha") as HTMLInputElement
+        expect(name.value).toBe("Brumas de Valdrenn")
+        expect(within(dialog).getByRole("slider", { name: "Grau de rigor da campanha" })).toHaveAttribute("aria-valuetext", "Equilibrado")
+        fireEvent.change(name, { target: { value: "Brumas Eternas" } })
+        fireEvent.click(within(dialog).getByRole("button", { name: "Salvar" }))
+        await waitFor(() => expect(patch).toHaveBeenCalledWith("/maddox/campaigns/c1", { name: "Brumas Eternas" }))
+    })
+
+    it("editar no lobby: mudar o rigor envia só o rigor", async () => {
+        ownerDetail({ rigor: "equilibrado" })
+        renderWithQueryClient(<CampaignPage campaignId="c1" />)
+        const dialog = await openEdit()
+        const slider = within(dialog).getByRole("slider", { name: "Grau de rigor da campanha" })
+        fireEvent.keyDown(slider, { key: "End" })
+        await waitFor(() => expect(slider).toHaveAttribute("aria-valuetext", "Fiel ao D&D"))
+        fireEvent.click(within(dialog).getByRole("button", { name: "Salvar" }))
+        await waitFor(() => expect(patch).toHaveBeenCalledWith("/maddox/campaigns/c1", { rigor: "fiel-dnd" }))
+    })
+
+    it("editar fora do lobby: slider desabilitado e o PATCH não leva o rigor", async () => {
+        ownerDetail({ rigor: "equilibrado", status: "active" })
+        renderWithQueryClient(<CampaignPage campaignId="c1" />)
+        const dialog = await openEdit()
+        expect(within(dialog).getByText(/o grau de rigor não pode mais mudar/)).toBeInTheDocument()
+        const slider = within(dialog).getByRole("slider", { name: "Grau de rigor da campanha" })
+        expect(slider).toHaveAttribute("data-disabled")
+        fireEvent.keyDown(slider, { key: "End" })
+        expect(slider).toHaveAttribute("aria-valuetext", "Equilibrado")
+        fireEvent.change(within(dialog).getByLabelText("Nome da campanha"), { target: { value: "Em andamento" } })
+        fireEvent.click(within(dialog).getByRole("button", { name: "Salvar" }))
+        await waitFor(() => expect(patch).toHaveBeenCalledTimes(1))
+        expect(patch).toHaveBeenCalledWith("/maddox/campaigns/c1", { name: "Em andamento" })
+    })
+
+    it("editar sem alterações fecha sem chamar a API", async () => {
+        ownerDetail()
+        renderWithQueryClient(<CampaignPage campaignId="c1" />)
+        const dialog = await openEdit()
+        fireEvent.click(within(dialog).getByRole("button", { name: "Salvar" }))
+        await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument())
+        expect(patch).not.toHaveBeenCalled()
+    })
+
+    it("editar o personagem existente vem pré-preenchido e salva o mesmo personagem", async () => {
+        const lyra = { id: "ch1", name: "Lyra", portraitUrl: null, interviewStatus: "pending" as const }
+        put.mockResolvedValue(ok(detail({ myRole: "player", myMemberId: "m2", myCharacter: { ...lyra, name: "Lyra Ventobravo" } })))
+        // A tela identifica o "você" pelo userId do useAuth (u-owner): o membro com personagem passa a ser o usuário logado.
+        const players = detail().members.map((item) => (item.id === "m2" ? { ...item, userId: "u-owner" } : { ...item, userId: "u-dono" }))
+        get.mockResolvedValue(ok(detail({ myRole: "player", myMemberId: "m2", myCharacter: lyra, members: players })))
+        renderWithQueryClient(<CampaignPage campaignId="c1" />)
+        fireEvent.click(await screen.findByRole("button", { name: /Editar personagem/ }))
+        const name = (await screen.findByLabelText("Nome do personagem")) as HTMLInputElement
+        expect(name.value).toBe("Lyra")
+        expect(screen.getByText("Editar personagem", { selector: "h2" })).toBeInTheDocument()
+        fireEvent.change(name, { target: { value: "Lyra Ventobravo" } })
+        fireEvent.click(screen.getByRole("button", { name: "Salvar personagem" }))
+        await waitFor(() => expect(put).toHaveBeenCalledWith("/maddox/campaigns/c1/character", { name: "Lyra Ventobravo", portraitUrl: null }))
+    })
+
     it("campanha que não é minha: 404 vira 'Campanha não encontrada'", async () => {
         get.mockRejectedValue(Object.assign(new Error("404"), { isAxiosError: true, response: { status: 404, data: { success: false, error: "Campanha não encontrada" } } }))
         renderWithQueryClient(<CampaignPage campaignId="c1" />)
@@ -209,6 +284,15 @@ describe("convite", () => {
         fireEvent.click(screen.getByRole("button", { name: /Entrar na campanha/ }))
         await waitFor(() => expect(post).toHaveBeenCalledWith(`/maddox/campaigns/invites/${TOKEN}`))
         await waitFor(() => expect(push).toHaveBeenCalledWith("/campanhas/c1"))
+    })
+
+    it("quem já participa vê 'abrir campanha' em vez de entrar", async () => {
+        get.mockResolvedValue(ok({ ...preview, alreadyMember: true }))
+        renderWithQueryClient(<InviteAcceptPage token={TOKEN} />)
+        fireEvent.click(await screen.findByRole("button", { name: "Você já participa: abrir campanha" }))
+        expect(screen.queryByRole("button", { name: /Entrar na campanha/ })).not.toBeInTheDocument()
+        expect(push).toHaveBeenCalledWith("/campanhas/c1")
+        expect(post).not.toHaveBeenCalled()
     })
 
     it("campanha encerrada não oferece a entrada", async () => {

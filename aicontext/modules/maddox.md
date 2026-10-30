@@ -156,4 +156,4 @@ Serviço: `server/campaigns.ts`; schemas `campaign-schemas.ts`; DTOs `campaign-t
 
 `tests/backend/maddox/*` (configuração, roteiros, avatar, sessões, rotas, `campaigns.test.ts` com MongoDB em
 memória, `campaign-routes.test.ts`, `grant-maddox-play.test.ts`) e `tests/frontend/maddox/*`
-(`maddox-tab.test.tsx`, `maddox-campaigns.test.tsx`; happy-dom).
+(`maddox-tab.test.tsx`, `maddox-campaigns.test.tsx`, `maddox-campaigns-realtime.test.tsx`; happy-dom).
