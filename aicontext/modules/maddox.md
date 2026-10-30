@@ -76,6 +76,11 @@ Nada cria sessões nesta entrega: o primeiro uso é o Maddox narrador (Maddox 4)
 | `maddox_interview_scripts` | versões dos roteiros |
 | `maddox_opencode_sessions` | sessões do OpenCode do Maddox |
 
+Os índices (inclusive os únicos que sustentam regras: `{ kind, version }` dos roteiros, uma sessão `active`
+por campanha/finalidade/membro, `sessionId`, `{ campaignId, userId }` dos membros) são garantidos pela migração
+**`ensure-maddox-indexes`** (`src/lib/db/migrations/`), já que o autoIndex não roda em models compilados antes
+da conexão.
+
 As memórias **de campanha** são diferentes das memórias **do agente** (lista `maddox`, escritas pelo admin).
 
 ## API (administradores)

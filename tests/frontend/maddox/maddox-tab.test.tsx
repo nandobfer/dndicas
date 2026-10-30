@@ -9,6 +9,11 @@ import type { MaddoxSettingsDto } from "@/features/maddox/types"
 const saveSettings = vi.fn()
 const saveScript = vi.fn()
 const generateAvatar = vi.fn()
+const deleteSession = vi.fn()
+const toastError = vi.fn()
+let sessions: Array<Record<string, unknown>> = []
+
+vi.mock("sonner", () => ({ toast: { error: toastError, success: vi.fn(), warning: vi.fn() } }))
 
 const dto = (): MaddoxSettingsDto => ({
     settings: structuredClone(DEFAULT_MADDOX_SETTINGS),
@@ -27,8 +32,8 @@ vi.mock("@/features/maddox/hooks/useMaddoxSettings", () => ({
     useSaveMaddoxScript: () => ({ mutateAsync: saveScript, isPending: false }),
     useMaddoxScriptVersion: () => ({ data: undefined, isLoading: false }),
     useGenerateMaddoxAvatar: () => ({ mutateAsync: generateAvatar, isPending: false }),
-    useMaddoxSessions: () => ({ data: [], isLoading: false, isError: false, isFetching: false, refetch: vi.fn() }),
-    useDeleteMaddoxSession: () => ({ mutate: vi.fn(), isPending: false }),
+    useMaddoxSessions: () => ({ data: sessions, isLoading: false, isError: false, isFetching: false, refetch: vi.fn() }),
+    useDeleteMaddoxSession: () => ({ mutate: deleteSession, isPending: false }),
 }))
 
 /** Integrações falsas; o filtro de provedores é o real (`toProviderStatuses`). */
@@ -63,6 +68,9 @@ describe("aba Agente Maddox", () => {
         saveSettings.mockReset().mockImplementation(async (values) => ({ ...current, settings: values }))
         saveScript.mockReset()
         generateAvatar.mockReset()
+        deleteSession.mockReset()
+        toastError.mockReset()
+        sessions = []
     })
 
     it("mostra as seções e o aviso de disponibilidade", () => {
@@ -138,5 +146,74 @@ describe("aba Agente Maddox", () => {
         expect(input.topics).toHaveLength(total)
         expect(input.topics.at(-1)).toMatchObject({ text: "Facções e conflitos", active: true })
         expect(input.topics[0].text).not.toBe(defaultMaddoxScript("scenario").topics[0]!.text)
+    })
+
+    it("seção OpenCode: muda a política e salva", async () => {
+        renderTab()
+        fireEvent.click(screen.getByRole("tab", { name: "OpenCode" }))
+        fireEvent.click(await screen.findByRole("radio", { name: "Uma sessão por campanha" }))
+        const remove = document.getElementById("maddox-opencode-delete") as HTMLInputElement
+        fireEvent.click(remove)
+        await waitFor(() => expect(remove.checked).toBe(false))
+        fireEvent.change(screen.getByLabelText("Diretório das sessões"), { target: { value: "/srv/maddox" } })
+        fireEvent.click(screen.getByRole("button", { name: "Salvar" }))
+        await waitFor(() => expect(saveSettings).toHaveBeenCalled())
+        expect(lastSaved().opencode).toEqual({ sessionScope: "campaign", deleteOnCampaignEnd: false, directory: "/srv/maddox" })
+    })
+
+    it("seção OpenCode: lista as sessões e exclui só depois de confirmar", async () => {
+        sessions = [{ id: "s1", campaignId: "c1", campaignName: "A Torre", purpose: "narrator", memberId: null, sessionId: "ses_1", directory: null, status: "active", lastError: null, lastUsedAt: null, createdAt: "2026-10-29T12:00:00.000Z" }]
+        renderTab()
+        fireEvent.click(screen.getByRole("tab", { name: "OpenCode" }))
+        expect(await screen.findByText("A Torre")).toBeTruthy()
+        fireEvent.click(screen.getByRole("button", { name: "Excluir" }))
+        expect(deleteSession).not.toHaveBeenCalled()
+        fireEvent.click(await screen.findByRole("button", { name: "Excluir sessão" }))
+        expect(deleteSession).toHaveBeenCalledWith("s1", expect.anything())
+    })
+
+    it("ativar sem provedor e modelo não salva e mostra o erro em Geral", async () => {
+        renderTab()
+        const enabled = document.getElementById("maddox-enabled") as HTMLInputElement
+        fireEvent.click(enabled)
+        await waitFor(() => expect(enabled.checked).toBe(true))
+        fireEvent.click(screen.getByRole("button", { name: "Salvar" }))
+        expect(await screen.findByText("Selecione o provedor")).toBeTruthy()
+        expect(saveSettings).not.toHaveBeenCalled()
+        expect(toastError).not.toHaveBeenCalled()
+    })
+
+    it("erro em campo sem mensagem na tela vira aviso (não falha em silêncio)", async () => {
+        current.settings.avatar.url = `/api/files/${"x".repeat(2000)}`
+        current.isDefault = true
+        renderTab()
+        fireEvent.click(screen.getByRole("button", { name: "Salvar" }))
+        await waitFor(() => expect(toastError).toHaveBeenCalledWith(expect.stringMatching(/^Não foi possível salvar: /)))
+        expect(saveSettings).not.toHaveBeenCalled()
+    })
+
+    it("falha ao salvar mantém o rascunho para tentar de novo", async () => {
+        saveSettings.mockRejectedValueOnce(new Error("500"))
+        renderTab()
+        fireEvent.click(screen.getByRole("tab", { name: "JEV" }))
+        const check = (await screen.findByRole("checkbox", { name: "Pedir teste" })) as HTMLInputElement
+        fireEvent.click(screen.getByText("Pedir teste"))
+        await waitFor(() => expect(check.checked).toBe(true))
+        fireEvent.click(screen.getByRole("button", { name: "Salvar" }))
+        await waitFor(() => expect(saveSettings).toHaveBeenCalled())
+        expect(check.checked).toBe(true)
+        expect((screen.getByRole("button", { name: "Desfazer" }) as HTMLButtonElement).disabled).toBe(false)
+    })
+
+    it("roteiro desatualizado avisa e Desfazer carrega a versão nova", async () => {
+        const view = renderTab()
+        fireEvent.click(screen.getByRole("tab", { name: "Entrevista: cenário" }))
+        await screen.findByRole("button", { name: "Salvar nova versão do roteiro" })
+        current = { ...current, scripts: { ...current.scripts, scenario: { ...current.scripts.scenario, current: { ...defaultMaddoxScript("scenario"), version: 3, guide: "Guia da v3" } } } }
+        view.rerender(<MaddoxTab onDirtyChange={vi.fn()} />)
+        expect(await screen.findByText(/Outra pessoa salvou a versão v3/)).toBeTruthy()
+        fireEvent.click(screen.getByRole("button", { name: "Desfazer roteiro" }))
+        await waitFor(() => expect(screen.queryByText(/Outra pessoa salvou a versão v3/)).toBeNull())
+        expect((screen.getByLabelText("Guia da entrevista") as HTMLTextAreaElement).value).toBe("Guia da v3")
     })
 })

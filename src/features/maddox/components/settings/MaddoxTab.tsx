@@ -4,6 +4,7 @@ import { useEffect, useState } from "react"
 import { AnimatePresence, motion } from "framer-motion"
 import { useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
+import { toast } from "sonner"
 import { Brain, Info, Loader2, MapPinned, RotateCcw, Save, ScanEye, Server, Settings2, Undo2, UserRound } from "lucide-react"
 import { Button } from "@/components/ui/opex/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/opex/card"
@@ -18,6 +19,7 @@ import type { IntegrationTabDef } from "@/features/integrations/components/tabs/
 import { apiErrorMessage } from "@/lib/api"
 import { DEFAULT_MADDOX_INSTRUCTIONS, DEFAULT_MADDOX_INTERVIEWER_INSTRUCTIONS, MADDOX_SCRIPT_KINDS, type MaddoxScriptKind } from "../../constants"
 import { DEFAULT_MADDOX_SETTINGS, maddoxSettingsSchema, type MaddoxSettings } from "../../schemas"
+import { firstHiddenFormError } from "../../form-errors"
 import { draftFromScript, isScriptDraftDirty, isScriptDraftValid, type MaddoxScriptDraft } from "../../script-draft"
 import type { MaddoxScriptVersionDto } from "../../types"
 import { useMaddoxSettings, useSaveMaddoxScript, useSaveMaddoxSettings } from "../../hooks/useMaddoxSettings"
@@ -94,7 +96,12 @@ export function MaddoxTab({ onDirtyChange }: { onDirtyChange: (dirty: boolean) =
                 const saved = await save.mutateAsync(values).catch(() => null)
                 if (saved) form.reset(saved.settings)
             },
-            (fieldErrors) => go(fieldErrors.opencode ? "opencode" : "geral"),
+            (fieldErrors) => {
+                go(fieldErrors.opencode ? "opencode" : "geral")
+                // Campos sem mensagem própria na tela (ex.: URL do avatar) não podem falhar em silêncio.
+                const hidden = firstHiddenFormError(fieldErrors)
+                if (hidden) toast.error(`Não foi possível salvar: ${hidden}`)
+            },
         )
         return (
             <div className="flex flex-wrap justify-end gap-2 border-t pt-6">
