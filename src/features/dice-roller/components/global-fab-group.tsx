@@ -2,7 +2,7 @@
 
 import * as React from "react"
 import { usePathname } from "next/navigation"
-import { DndContext, MouseSensor, TouchSensor, closestCenter, useSensor, useSensors, type DragEndEvent } from "@dnd-kit/core"
+import { DndContext, MouseSensor, TouchSensor, useSensor, useSensors, type DragEndEvent } from "@dnd-kit/core"
 import { SortableContext, rectSortingStrategy, useSortable } from "@dnd-kit/sortable"
 import { CSS } from "@dnd-kit/utilities"
 import { cn } from "@/core/utils"
@@ -11,7 +11,25 @@ import { GlobalSearchFAB } from "@/components/ui/global-search-fab"
 import { OpexFab, useOpexFabEnabled } from "@/features/opex-agent/components/OpexFab"
 import { useIsOwlbearAvailable } from "@/features/owlbear/hooks/use-is-owlbear-available"
 import { useIsOwlbearCatalogEmbed } from "@/features/owlbear/hooks/use-is-owlbear-catalog-embed"
-import { FAB_MOUSE_ACTIVATION, FAB_TOUCH_ACTIVATION, moveFab, useFabOrder, type FabId } from "./fab-order"
+import { FAB_MOUSE_ACTIVATION, FAB_TOUCH_ACTIVATION, createRowCollisionDetection, moveFab, useFabOrder, type FabId } from "./fab-order"
+
+type DndListeners = Record<string, (event: React.SyntheticEvent) => void>
+
+/**
+ * Só deixa o arraste começar em eventos que nasceram dentro do próprio botão na DOM. Os eventos do
+ * React borbulham pela árvore de componentes, então um toque no chat do Opex (aberto em portal)
+ * chegaria ao wrapper e arrastaria o botão.
+ */
+export function onlyFromOwnDom(listeners: DndListeners | undefined): DndListeners {
+    const guarded: DndListeners = {}
+    for (const [name, handler] of Object.entries(listeners ?? {})) {
+        guarded[name] = (event) => {
+            const target = event.target
+            if (target instanceof Node && event.currentTarget instanceof Node && event.currentTarget.contains(target)) handler(event)
+        }
+    }
+    return guarded
+}
 
 function SortableFab({ id, disabled, children, suppressClick }: { id: FabId; disabled: boolean; children: React.ReactNode; suppressClick: React.RefObject<boolean> }) {
     const { listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id, disabled })
@@ -28,7 +46,7 @@ function SortableFab({ id, disabled, children, suppressClick }: { id: FabId; dis
                 event.stopPropagation()
                 suppressClick.current = false
             }}
-            {...listeners}
+            {...onlyFromOwnDom(listeners as DndListeners | undefined)}
         >
             {children}
         </div>
@@ -48,6 +66,8 @@ export function GlobalFabGroup() {
     const { order, saveOrder, ready } = useFabOrder()
     const [searchOpen, setSearchOpen] = React.useState(false)
     const suppressClick = React.useRef(false)
+    const rowRef = React.useRef<HTMLDivElement>(null)
+    const collisionDetection = React.useMemo(() => createRowCollisionDetection(() => rowRef.current?.getBoundingClientRect()), [])
     const sensors = useSensors(useSensor(MouseSensor, { activationConstraint: FAB_MOUSE_ACTIVATION }), useSensor(TouchSensor, { activationConstraint: FAB_TOUCH_ACTIVATION }))
 
     const visibility: Record<FabId, boolean> = {
@@ -79,8 +99,8 @@ export function GlobalFabGroup() {
     }
 
     return (
-        <div className="fixed bottom-6 right-6 z-[99] flex flex-col items-end gap-3 sm:flex-row sm:items-center" data-testid="global-fab-group">
-            <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd} onDragCancel={() => (suppressClick.current = false)}>
+        <div ref={rowRef} className="fixed bottom-6 right-6 z-[99] flex flex-col items-end gap-3 sm:flex-row sm:items-center" data-testid="global-fab-group">
+            <DndContext sensors={sensors} collisionDetection={collisionDetection} onDragEnd={onDragEnd} onDragCancel={() => (suppressClick.current = false)}>
                 <SortableContext items={visible} strategy={rectSortingStrategy}>
                     {visible.map((id) => (
                         <SortableFab key={id} id={id} disabled={searchOpen && visibility.search} suppressClick={suppressClick}>

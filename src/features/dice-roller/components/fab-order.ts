@@ -1,6 +1,7 @@
 "use client"
 
 import * as React from "react"
+import { closestCenter, type CollisionDetection } from "@dnd-kit/core"
 
 /** Botões flutuantes do canto inferior direito. */
 export const FAB_IDS = ["dice", "opex", "search"] as const
@@ -49,6 +50,26 @@ export function moveFab(order: readonly FabId[], visible: readonly FabId[], acti
     visibleOrder.splice(to, 0, ...visibleOrder.splice(from, 1))
     let next = 0
     return current.map((id) => (visible.includes(id) ? visibleOrder[next++] : id))
+}
+
+/** Folga em volta do grupo em que soltar ainda conta como "na linha". */
+export const FAB_ROW_DROP_MARGIN = 16
+
+/**
+ * Colisão do grupo: só há destino com o ponteiro sobre a linha (com folga). Solto fora dela, não há
+ * destino (`over` nulo) e o botão volta para a posição de onde saiu.
+ */
+export function createRowCollisionDetection(getRowRect: () => DOMRect | null | undefined, margin = FAB_ROW_DROP_MARGIN): CollisionDetection {
+    return (args) => {
+        const pointer = args.pointerCoordinates
+        const rect = getRowRect()
+        if (pointer && rect) {
+            const inside =
+                pointer.x >= rect.left - margin && pointer.x <= rect.right + margin && pointer.y >= rect.top - margin && pointer.y <= rect.bottom + margin
+            if (!inside) return []
+        }
+        return closestCenter(args)
+    }
 }
 
 function readStoredOrder(): FabId[] {

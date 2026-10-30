@@ -37,6 +37,8 @@ export function HeaderCategoryMenu({ categories, active, pathname }: HeaderCateg
     const triggerRefs = React.useRef(new Map<NavCategoryId, HTMLButtonElement>())
     const itemRefs = React.useRef<HTMLAnchorElement[]>([])
     const closeTimer = React.useRef<ReturnType<typeof setTimeout> | null>(null)
+    /** Tipo do ponteiro que iniciou o clique atual (nulo no clique por teclado). */
+    const clickPointerType = React.useRef<string | null>(null)
     const reduceMotion = useReducedMotion() ?? false
 
     const cancelClose = React.useCallback(() => {
@@ -70,14 +72,24 @@ export function HeaderCategoryMenu({ categories, active, pathname }: HeaderCateg
         setFocusFirst(false)
     }, [focusFirst, openId])
 
+    // Esc fecha mesmo com o container aberto só pelo hover (foco fora do menu); o foco volta à
+    // categoria apenas quando estava dentro do menu.
+    React.useEffect(() => {
+        if (!openId) return
+        const onKeyDown = (event: KeyboardEvent) => {
+            if (event.key !== "Escape") return
+            event.preventDefault()
+            const focusWasInside = Boolean(rootRef.current?.contains(document.activeElement))
+            cancelClose()
+            setOpenId(null)
+            if (focusWasInside) triggerRefs.current.get(openId)?.focus()
+        }
+        document.addEventListener("keydown", onKeyDown)
+        return () => document.removeEventListener("keydown", onKeyDown)
+    }, [openId, cancelClose])
+
     const openCategory = categories.find((category) => category.id === openId) ?? null
     itemRefs.current = []
-
-    const closeAndFocusTrigger = () => {
-        const id = openId
-        close()
-        if (id) triggerRefs.current.get(id)?.focus()
-    }
 
     const onTriggerKeyDown = (event: React.KeyboardEvent, id: NavCategoryId) => {
         if (event.key === "ArrowDown" || ((event.key === "Enter" || event.key === " ") && openId !== id)) {
@@ -107,12 +119,6 @@ export function HeaderCategoryMenu({ categories, active, pathname }: HeaderCateg
             className="relative flex items-center gap-1"
             onPointerEnter={(event) => event.pointerType === "mouse" && cancelClose()}
             onPointerLeave={(event) => event.pointerType === "mouse" && openId && scheduleClose()}
-            onKeyDown={(event) => {
-                if (event.key === "Escape" && openId) {
-                    event.preventDefault()
-                    closeAndFocusTrigger()
-                }
-            }}
         >
             <Link href={HOME_HREF} className={headerNavLinkClass(active?.kind === "home")} aria-current={active?.kind === "home" ? "page" : undefined}>
                 Início
@@ -139,9 +145,17 @@ export function HeaderCategoryMenu({ categories, active, pathname }: HeaderCateg
                             cancelClose()
                             setOpenId(category.id)
                         }}
+                        onPointerDown={(event) => {
+                            clickPointerType.current = event.pointerType
+                        }}
                         onClick={() => {
+                            const pointerType = clickPointerType.current
+                            clickPointerType.current = null
                             cancelClose()
-                            setOpenId((current) => (current === category.id ? null : category.id))
+                            // Com mouse, o hover já abriu: o clique mantém aberto em vez de fechar.
+                            // Toque e teclado alternam.
+                            if (pointerType === "mouse") setOpenId(category.id)
+                            else setOpenId((current) => (current === category.id ? null : category.id))
                         }}
                         onKeyDown={(event) => onTriggerKeyDown(event, category.id)}
                     >

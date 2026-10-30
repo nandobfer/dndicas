@@ -608,8 +608,10 @@ na largura toda (`pt-16` para compensar o header) e o rodapé (`GlassFooter`).
 - **Esquerda:** o logo (`/dndicas-logo.webp`), link para o Início. **Direita:** `HeaderUserMenu`.
 - **Desktop (a partir de `lg`, 1024px):** `HeaderCategoryMenu` ao centro, com **Início** (link direto) e as
   categorias **Fichas**, **Campanhas**, **Catálogo** e **Administração**. Hover do mouse ou clique abrem um
-  container glass único com os itens (trocar de categoria troca o conteúdo sem fechar); Esc (o foco volta à
-  categoria), clique fora, escolha de item ou mudança de rota fecham. Teclado: ↓/Enter/Espaço abrem e focam o
+  container glass único com os itens (trocar de categoria troca o conteúdo sem fechar); com mouse, o clique
+  depois do hover mantém aberto, no toque e no teclado ele alterna. Esc (ouvido no `document`, vale mesmo
+  aberto só pelo hover; o foco volta à categoria se estava no menu), clique fora, escolha de item ou mudança
+  de rota fecham. Teclado: ↓/Enter/Espaço abrem e focam o
   primeiro item; ↑/↓/Home/End percorrem. O hover só vale para `pointerType === "mouse"` (no toque, o clique).
 - **Abaixo de `lg`:** só o avatar e o hambúrguer (`HeaderMobileMenu`), que abre um painel glass (Dialog do
   Radix) com **Início** e as categorias em seções expansíveis; a seção da tela atual abre expandida.
@@ -637,7 +639,9 @@ breadcrumb no header.
   coluna abaixo. Ordem padrão: **Dados → Agente Opex (`OpexFab`) → Busca**.
 - Reordenável por arraste (`@dnd-kit`): `MouseSensor` só ativa após 6px e `TouchSensor` após segurar 250ms
   (tolerância 8px), então clique e rolagem não viram arraste; o clique que encerra um arraste é engolido.
-  Soltar fora da linha não muda a ordem. O arraste fica desligado enquanto a Busca está aberta.
+  O arraste só começa em eventos nascidos dentro do botão na DOM (`onlyFromOwnDom`): selecionar texto no chat
+  do Opex, aberto em portal, não arrasta. A colisão (`createRowCollisionDetection`) só aceita destino com o
+  ponteiro sobre a linha (folga de 16px): solto fora, o botão volta à posição de onde saiu sem mudar a ordem. O arraste fica desligado enquanto a Busca está aberta.
 - A ordem fica no `localStorage` (`dndicas:fab-order`, ids `dice`, `opex`, `search`), vale para visitante e
   em todas as telas. Só uma permutação exata dos ids é aceita; qualquer outro valor volta ao padrão
   (`normalizeFabOrder` em `fab-order.ts`).

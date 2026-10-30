@@ -100,9 +100,45 @@ describe("GlassHeader (desktop)", () => {
         render(<GlassHeader />)
         const trigger = desktop().getByRole("button", { name: "Fichas" })
         fireEvent.click(trigger)
-        fireEvent.keyDown(desktop().getByRole("link", { name: "Minhas Fichas" }), { key: "Escape" })
+        const item = desktop().getByRole("link", { name: "Minhas Fichas" })
+        item.focus()
+        fireEvent.keyDown(item, { key: "Escape" })
         await waitFor(() => expect(desktop().queryByRole("region")).not.toBeInTheDocument())
         expect(trigger).toHaveFocus()
+    })
+
+    it("fecha com Esc o container aberto só pelo hover, sem foco no menu", async () => {
+        render(<GlassHeader />)
+        const trigger = desktop().getByRole("button", { name: "Catálogo" })
+        fireEvent.pointerEnter(trigger, mouse)
+        expect(desktop().getByRole("region", { name: "Catálogo" })).toBeInTheDocument()
+        expect(document.activeElement).toBe(document.body)
+        fireEvent.keyDown(document.body, { key: "Escape" })
+        await waitFor(() => expect(desktop().queryByRole("region")).not.toBeInTheDocument())
+        expect(trigger).not.toHaveFocus()
+    })
+
+    it("com mouse, clicar depois do hover mantém o container aberto", () => {
+        render(<GlassHeader />)
+        const trigger = desktop().getByRole("button", { name: "Catálogo" })
+        fireEvent.pointerEnter(trigger, mouse)
+        fireEvent.pointerDown(trigger, mouse)
+        fireEvent.click(trigger)
+        expect(desktop().getByRole("region", { name: "Catálogo" })).toBeInTheDocument()
+        fireEvent.pointerDown(trigger, mouse)
+        fireEvent.click(trigger)
+        expect(desktop().getByRole("region", { name: "Catálogo" })).toBeInTheDocument()
+    })
+
+    it("no toque, o clique abre e fecha", async () => {
+        render(<GlassHeader />)
+        const trigger = desktop().getByRole("button", { name: "Catálogo" })
+        fireEvent.pointerDown(trigger, { pointerType: "touch" })
+        fireEvent.click(trigger)
+        expect(desktop().getByRole("region", { name: "Catálogo" })).toBeInTheDocument()
+        fireEvent.pointerDown(trigger, { pointerType: "touch" })
+        fireEvent.click(trigger)
+        await waitFor(() => expect(desktop().queryByRole("region")).not.toBeInTheDocument())
     })
 
     it("fecha ao clicar fora e ao escolher um item", async () => {
