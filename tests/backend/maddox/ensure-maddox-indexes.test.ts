@@ -11,6 +11,7 @@ vi.mock("@/features/maddox/models", () => ({
     MaddoxNpcModel: fake("MaddoxNpc"),
     MaddoxCampaignMemoryModel: fake("MaddoxCampaignMemory"),
     MaddoxInterviewScriptModel: fake("MaddoxInterviewScript"),
+    MaddoxInterviewModel: fake("MaddoxInterview"),
     MaddoxOpencodeSessionModel: fake("MaddoxOpencodeSession"),
 }))
 
@@ -20,7 +21,7 @@ const indexes = (model: unknown) => (model as mongoose.Model<unknown>).schema.in
 describe("migração ensure-maddox-indexes", () => {
     it("cria os índices de todas as coleções Maddox e pode rodar de novo", async () => {
         await ensureMaddoxIndexes()
-        expect([...created].sort()).toEqual(["MaddoxCampaign", "MaddoxCampaignMember", "MaddoxCampaignMemory", "MaddoxCharacter", "MaddoxInterviewScript", "MaddoxNpc", "MaddoxOpencodeSession"])
+        expect([...created].sort()).toEqual(["MaddoxCampaign", "MaddoxCampaignMember", "MaddoxCampaignMemory", "MaddoxCharacter", "MaddoxInterview", "MaddoxInterviewScript", "MaddoxNpc", "MaddoxOpencodeSession"])
         await expect(ensureMaddoxIndexes()).resolves.toBeUndefined()
     })
 
@@ -33,10 +34,12 @@ describe("migração ensure-maddox-indexes", () => {
     it("os índices únicos que sustentam as regras existem nos schemas", async () => {
         const { MaddoxInterviewScriptModel } = await vi.importActual<typeof import("@/features/maddox/models/maddox-interview-script")>("@/features/maddox/models/maddox-interview-script")
         const { MaddoxOpencodeSessionModel } = await vi.importActual<typeof import("@/features/maddox/models/maddox-opencode-session")>("@/features/maddox/models/maddox-opencode-session")
+        const { MaddoxInterviewModel } = await vi.importActual<typeof import("@/features/maddox/models/maddox-interview")>("@/features/maddox/models/maddox-interview")
         const { MaddoxCampaignMemberModel } = await vi.importActual<typeof import("@/features/maddox/models/maddox-campaign-member")>("@/features/maddox/models/maddox-campaign-member")
         expect(indexes(MaddoxInterviewScriptModel)).toContainEqual([{ kind: 1, version: 1 }, expect.objectContaining({ unique: true })])
         expect(indexes(MaddoxOpencodeSessionModel)).toContainEqual([{ campaignId: 1, purpose: 1, memberId: 1 }, expect.objectContaining({ unique: true, partialFilterExpression: { status: "active" } })])
         expect(indexes(MaddoxOpencodeSessionModel)).toContainEqual([{ sessionId: 1 }, expect.objectContaining({ unique: true })])
+        expect(indexes(MaddoxInterviewModel)).toContainEqual([{ campaignId: 1, kind: 1, memberId: 1 }, expect.objectContaining({ unique: true })])
         expect(indexes(MaddoxCampaignMemberModel)).toContainEqual([{ campaignId: 1, userId: 1 }, expect.objectContaining({ unique: true })])
     })
 })

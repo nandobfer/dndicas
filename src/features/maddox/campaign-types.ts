@@ -1,4 +1,4 @@
-import type { MaddoxCampaignStatus, MaddoxInterviewStatus, MaddoxMemberRole, MaddoxRigorLevel } from "./constants"
+import type { MaddoxCampaignStatus, MaddoxInterviewStatus, MaddoxMemberRole, MaddoxRigorLevel, MaddoxScenarioStatus } from "./constants"
 
 /** DTOs das Campanhas Maddox (Maddox 1). */
 
@@ -7,6 +7,10 @@ export interface MaddoxCampaignCharacterDto {
     name: string
     portraitUrl: string | null
     interviewStatus: MaddoxInterviewStatus
+    /** Perfil narrativo consolidado pela entrevista (seções de `MADDOX_PROFILE_SECTIONS`). */
+    profile: Record<string, string>
+    /** Ficha D&D criada pela entrevista (rigor Equilibrado ou acima): `/sheets/<slug>`. */
+    sheetSlug: string | null
 }
 
 export interface MaddoxCampaignMemberDto {
@@ -18,6 +22,8 @@ export interface MaddoxCampaignMemberDto {
     role: MaddoxMemberRole
     joinedAt: string | null
     character: MaddoxCampaignCharacterDto | null
+    /** Pronto para entrar no jogo: a entrevista de personagem foi concluída. */
+    ready: boolean
 }
 
 export interface MaddoxCampaignListItemDto {
@@ -32,6 +38,8 @@ export interface MaddoxCampaignListItemDto {
     myCharacter: MaddoxCampaignCharacterDto | null
     members: MaddoxCampaignMemberDto[]
     turnNumber: number
+    /** Entrevista de cenário (Maddox 2). */
+    scenarioStatus: MaddoxScenarioStatus
     createdAt: string
     updatedAt: string
 }
@@ -41,6 +49,11 @@ export interface MaddoxCampaignDetailDto extends MaddoxCampaignListItemDto {
     myMemberId: string
     /** Convites abertos nesta fase (`false` em encerrada/arquivada). */
     inviteOpen: boolean
+    /** Cenário consolidado e situação inicial (Markdown; vazios até concluir a entrevista de cenário). */
+    setting: string
+    openingSituation: string
+    /** O rigor não muda mais (a entrevista de cenário já começou ou a campanha saiu do lobby). */
+    rigorLocked: boolean
 }
 
 export interface MaddoxInviteLinkDto {

@@ -18,7 +18,7 @@ import { loadMaddoxSettings } from "./settings"
  * retomada pela rotina `maddox-opencode-sessions-cleanup`. A exclusão é idempotente: uma sessão que já
  * não existe conta como excluída.
  *
- * Nesta entrega nada cria sessões ainda: o primeiro uso é o Maddox narrador (Maddox 4).
+ * As entrevistas (Maddox 2) são o primeiro uso; o Maddox narrador vem no Maddox 4.
  */
 
 const log = loggerFor({ module: "maddox", feature: "opencode-sessions" })
@@ -64,6 +64,8 @@ export interface EnsureMaddoxSessionInput {
     /** Entrevista de personagem: o membro entrevistado. */
     memberId?: string | null
     title: string
+    /** Agente do OpenCode da sessão (no OpenCode 2 o agente é estado da sessão, definido ao criar). */
+    agent?: string | null
 }
 
 const isDuplicateKey = (error: unknown) => typeof error === "object" && error !== null && "code" in error && (error as { code: unknown }).code === 11000
@@ -107,6 +109,7 @@ export async function ensureMaddoxSession(input: EnsureMaddoxSessionInput): Prom
     const directory = settings.opencode.directory || (await getOpencodeConnection()).directory || null
     const session = await opencode.session.create({
         title: input.title.slice(0, 120),
+        ...(input.agent ? { agent: input.agent } : {}),
         ...(directory ? { location: { directory } } : {}),
         metadata: { app: "dndicas", kind: "maddox", purpose, campaignId: input.campaignId },
     })
@@ -167,6 +170,25 @@ export async function releaseCampaignSessions(campaignId: string): Promise<numbe
     let removed = 0
     for (const row of rows) if (await releaseRow(row)) removed++
     return removed
+}
+
+/**
+ * Fim de uma entrevista com sessão própria (política "uma por campanha e uma por entrevista"): libera a
+ * sessão dela. Com "uma por campanha" a entrevista usou a sessão do narrador, que continua. Nunca lança.
+ */
+export async function releaseInterviewSession(campaignId: string, purpose: Exclude<MaddoxSessionPurpose, "narrator">, memberId: string | null): Promise<void> {
+    try {
+        await dbConnect()
+        const rows = await MaddoxOpencodeSessionModel.find({
+            campaignId: new Types.ObjectId(campaignId),
+            purpose,
+            memberId: purpose === "character-interview" && memberId ? new Types.ObjectId(memberId) : null,
+            status: "active",
+        }).lean<SessionRow[]>()
+        for (const row of rows) await releaseRow(row)
+    } catch (error) {
+        log.warn({ err: errorText(error), campaignId, purpose }, "[maddox] falha ao liberar a sessão da entrevista")
+    }
 }
 
 /** Painel da aba: exclui uma sessão (no OpenCode e o registro). Falha no OpenCode = fica pendente. */

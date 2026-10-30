@@ -3,7 +3,8 @@
 Épico DND-2 (issue #192): campanhas narradas pela IA, com o **Maddox** como mestre/narrador. Esta
 documentação cobre a **entrega 0 (DND-8, #200)** — modelos no MongoDB e a configuração do agente — e a
 **entrega 1 (DND-18, #209)** — lista, criação com rigor, lobby e convite por link (seção "Campanhas").
-**Ainda não há IA de narração nem entrevistas** (Maddox 2 em diante).
+A **entrega 2 (DND-12, #206)** — entrevistas de cenário e de personagem — está na seção "Entrevistas
+(Maddox 2)". **Ainda não há IA de narração** (Maddox 4).
 
 Código: `src/features/maddox/` (`constants`, `schemas`, `types`, `script-draft`, `models/`, `server/`,
 `hooks/`, `components/settings/`).
@@ -18,7 +19,7 @@ roteiros e as memórias salvam à parte.
 | --- | --- |
 | Geral | Ativo; **Avatar** (upload/substituição pelo `GlassImageUploader` ou "Gerar com o Gerador de imagens" a partir da persona — 1:1, do peito para cima; só vale depois de salvar); modelo do **Maddox (narrador)** e do **Entrevistador** ("Mesmo do Maddox" = sem provedor próprio); instruções de cada um com "Restaurar padrão" |
 | Entrevista: cenário / Entrevista: personagem | Roteiros versionados (abaixo), cada um com "Salvar nova versão do roteiro" e "Desfazer roteiro" |
-| JEV | Uma chave por decisão (`MADDOX_JEV_DECISIONS`): pergunta ou ação do jogador, validade de ação livre, pedir teste, início/fim de combate, conhecimento do mestre, fim da entrevista, gerar imagem na cena. **Ainda sem uso** |
+| JEV | Uma chave por decisão (`MADDOX_JEV_DECISIONS`): pergunta ou ação do jogador, validade de ação livre, pedir teste, início/fim de combate, conhecimento do mestre, fim da entrevista, gerar imagem na cena. Em uso: **"Fim da entrevista"** (Maddox 2); as demais ainda sem uso |
 | OpenCode | Política das sessões e lista das sessões ativas com "Excluir" (confirmação) |
 | Memórias | Lista `maddox` de `agent_memories` (mesmo card dos demais agentes, sem limite de quantidade; API `/api/ai/agents/maddox/memories/**`) |
 
@@ -63,7 +64,11 @@ entrevista (Maddox 2) usa a versão com que começou (`campaign.scriptVersions`,
 - Rotina interna **`maddox-opencode-sessions-cleanup`** (a cada 60 min) retoma as exclusões pendentes.
 - Cliente: `src/lib/ai/opencode-client.ts` (`@opencode/client`, importado sob demanda).
 
-Nada cria sessões nesta entrega: o primeiro uso é o Maddox narrador (Maddox 4).
+As entrevistas (Maddox 2) são o primeiro uso: com o OpenCode como provedor do entrevistador, cada turno fixa
+a sessão gerenciada (`sessionId`, modo `existing` no `ai-sdk-provider-opencode-sdk`; o OpenCode guarda o
+histórico e só a última fala é enviada). `ensureMaddoxSession` recebe o `agent` (no OpenCode 2 o agente é
+estado da sessão). Ao concluir, `releaseInterviewSession` libera a sessão própria da entrevista; com "uma
+sessão por campanha", a entrevista usou a do narrador, que continua.
 
 ## Modelos (`src/features/maddox/models/`)
 
@@ -75,6 +80,7 @@ Nada cria sessões nesta entrega: o primeiro uso é o Maddox narrador (Maddox 4)
 | `maddox_npcs` | NPC: descrição pública, notas exclusivas do mestre, visibilidade |
 | `maddox_campaign_memories` | memórias da campanha (fato, evento, local, missão, relação), visibilidade jogadores/mestre, índice de texto para a busca |
 | `maddox_interview_scripts` | versões dos roteiros |
+| `maddox_interviews` | entrevistas (Maddox 2): conversa (`messages`), versão do roteiro, status, trava `generating`, resultado consolidado; única por `{ campaignId, kind, memberId }` |
 | `maddox_opencode_sessions` | sessões do OpenCode do Maddox |
 
 Os índices (inclusive os únicos que sustentam regras: `{ kind, version }` dos roteiros, uma sessão `active`
@@ -152,8 +158,86 @@ API (`src/app/api/maddox/campaigns/**`, todas com `maddox.play`, usuário efetiv
 Serviço: `server/campaigns.ts`; schemas `campaign-schemas.ts`; DTOs `campaign-types.ts`; hooks
 `hooks/useMaddoxCampaigns.ts`.
 
+## Entrevistas (Maddox 2)
+
+Código: `server/interviews.ts` (início, mensagens, nova tentativa, trava, JEV, OpenCode),
+`server/interview-consolidation.ts` (conclusão), `server/interview-prompt.ts` (módulo puro: instruções,
+marcador, JSON), `server/interview-stream.ts` (NDJSON), `interview-schemas.ts`, `interview-types.ts`,
+`hooks/useMaddoxInterview.ts`, `components/interviews/`.
+
+**Fluxo e status.** Criar a campanha leva o dono a `/campanhas/[id]/entrevista/cenario`. "Começar entrevista"
+grava a versão vigente do roteiro (`campaign.scriptVersions.scenario`), muda a campanha para **`interview`**
+("Em entrevista") e `scenarioInterview.status` para `in-progress`, e **trava o rigor** (409 `RIGOR_LOCKED` daí em
+diante, mesmo de volta ao lobby). Concluir grava o cenário e volta a campanha a **`lobby`**, com
+`scenarioInterview.status = "done"`. Convites continuam abertos durante a entrevista. O "Iniciar campanha" e o
+status `active` são do Maddox 3.
+
+| Regra | Comportamento |
+| --- | --- |
+| Cenário | Só o dono (403 para jogadores; 404 para quem não participa) |
+| Personagem | Cada membro, depois do cenário `done` (409 `SCENARIO_PENDING`) e com o esboço criado (409 `CHARACTER_DRAFT_REQUIRED`; a tela abre o diálogo de nome/retrato). Grava `character.interview.scriptVersion` e, se vazio, `campaign.scriptVersions.character` |
+| Campanha encerrada/arquivada | 409 `CAMPAIGN_CLOSED` |
+| Uma geração por vez | Trava `generating` condicional; ocupada = 409 `INTERVIEW_BUSY`; trava com mais de 5 min é retomada |
+| Limite | 200 mensagens (409 `INTERVIEW_TOO_LONG`); cada resposta até 4.000 caracteres (Zod) |
+| Concluída | Não reabre (409 `INTERVIEW_DONE`); nome e retrato seguem editáveis |
+| Pronto para jogar | `isMemberReadyToPlay` (entrevista `done`) → `member.ready` no DTO; `assertMemberCanPlay` responde 409 `INTERVIEW_REQUIRED` (uso no Maddox 3) |
+| Visibilidade | A conversa é só de quem é entrevistado; cenário, situação inicial e perfis ficam visíveis a todos os membros; o link da ficha só para o dono do personagem |
+
+**Instruções** (`buildInterviewInstructions`): instruções do entrevistador + entrevista atual + rigor (colunas
+`rules`/`free`) + no personagem o cenário, a situação inicial e os outros personagens (e, a partir de Equilibrado, o
+pedido de raça/classe/origem/atributos) + o guia da **versão gravada** + os **tópicos ativos numerados na ordem
+do roteiro** + o protocolo de conclusão. Modelo: o do entrevistador ou, sem provedor próprio, o do Maddox (com
+temperatura e tokens). Indisponível = 409 `MADDOX_UNAVAILABLE`. Consumo medido na origem `maddox-interview`.
+
+**Conversa.** Os provedores sem sessão recebem o histórico gravado (`messages`, abertura como primeira fala do
+usuário). A geração **não depende da conexão**: se o navegador fechar, a resposta é gravada mesmo assim; outras
+abas recarregam pelo evento `maddox.interview.changed { campaignId, kind }` no canal do próprio usuário. Falha
+do provedor grava a mensagem com `error` e a tela oferece "Tentar de novo".
+
+**Conclusão.** Com base suficiente, o Maddox apresenta a síntese e termina com a linha
+`[[MADDOX_PROPOSTA_DE_CONCLUSAO]]`. O servidor a remove (o filtro do stream segura o marcador mesmo partido entre
+deltas), grava `proposal: true` e o status `proposed`, e a tela mostra **"Confirmar e concluir"**. Uma nova
+resposta (pedido de ajuste) desfaz a proposta. Com a chave JEV **"Fim da entrevista"** ligada, o JEV (`jev-latest`,
+pergunta `noul`) avalia após cada resposta se já há base suficiente e, se sim, o turno ganha a orientação de
+propor a síntese; falha do JEV é ignorada.
+
+Ao confirmar, uma geração **efêmera** (não suja a sessão do narrador) consolida a conversa em JSON validado por Zod,
+com uma nova tentativa; inválido duas vezes = 502 `CONSOLIDATION_FAILED` sem gravar nada.
+
+- **Cenário:** `campaign.setting` (Markdown nas seções de `MADDOX_SETTING_SECTIONS`: universo, cânone, contexto,
+  regras internas, tom), `campaign.openingSituation` e, se um nome foi combinado, a campanha é renomeada (auditado).
+- **Personagem:** `character.profile` nas seções de `MADDOX_PROFILE_SECTIONS` (identidade, origem,
+  personalidade, capacidades, equipamentos, relações, condição; vazias = "a definir durante a história") e o nome
+  combinado. A partir do rigor **Equilibrado** (`MADDOX_SHEET_RIGORS`) cria também a **ficha D&D**
+  (`createBlankSheet` + raça, classe, subclasse, origem, aparência e medidas, retrato, nível 1 e atributos de 1 a
+  30 — fora disso é descartado). `raceRef`/`classRef`/`originRef` por nome exato no catálogo (sem acento e sem
+  caixa); sem correspondência fica só o texto. A ficha é ligada ao personagem logo ao ser criada (nova tentativa
+  reaproveita). Ela aparece também em "Minhas fichas" do jogador.
+
+Auditoria (`CampanhaMaddox`): início e conclusão de cada entrevista (versão do roteiro, rigor, ficha criada) e
+a renomeação. O conteúdo das mensagens não é auditado.
+
+API (todas com `maddox.play`, usuário efetivo; `[kind]` = `scenario` | `character`, outro valor = 404):
+
+- `GET /api/maddox/campaigns/[id]/interviews/[kind]` — `{ interview | null, maddoxAvatarUrl }`.
+- `POST …/interviews/[kind]` — começa e transmite a abertura em **NDJSON**; já começada devolve JSON.
+- `POST …/interviews/[kind]/messages` — `{ content }`: grava e transmite a resposta do Maddox.
+- `POST …/interviews/[kind]/retry` — gera de novo a última resposta que falhou.
+- `POST …/interviews/[kind]/complete` — consolida e devolve o detalhe da campanha.
+
+Linhas do NDJSON: `user`, `delta`, `done { message, interview }`, `error { message, interview? }`, `ping`.
+
+Telas: `/campanhas/[id]/entrevista/cenario` e `/campanhas/[id]/entrevista/personagem` (`pageAccess`). No lobby, o
+card **"Cenário"** (começar/continuar para o dono, espera para os jogadores, cenário salvo recolhível), chips da
+entrevista por participante, "Entrevista do personagem" (desabilitada até o cenário), selo "Pronto para jogar",
+"Ver perfil" e "X de N prontos para jogar".
+
+`src/lib/ai/stream.ts` ganhou `messages` (conversa) e `opencodeSessionId` (sessão fixa) no `AiStreamRequest`.
+
 ## Testes
 
 `tests/backend/maddox/*` (configuração, roteiros, avatar, sessões, rotas, `campaigns.test.ts` com MongoDB em
 memória, `campaign-routes.test.ts`, `grant-maddox-play.test.ts`) e `tests/frontend/maddox/*`
 (`maddox-tab.test.tsx`, `maddox-campaigns.test.tsx`, `maddox-campaigns-realtime.test.tsx`; happy-dom).
+Maddox 2: `interview-prompt.test.ts`, `interviews.test.ts` (MongoDB em memória, IA/JEV/OpenCode mockados),
+`interview-routes.test.ts` e `tests/frontend/maddox/maddox-interview.test.tsx`.

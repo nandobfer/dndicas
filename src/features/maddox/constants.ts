@@ -273,3 +273,65 @@ export const DEFAULT_MADDOX_CHARACTER_TOPICS: readonly MaddoxScriptTopic[] = top
     "Equipamentos, recursos e condição inicial",
     "Relações, vínculos e compromissos anteriores",
 ])
+
+// ── Entrevistas em andamento (Maddox 2) ───────────────────────────────────────
+
+/** Situação da entrevista de cenário na campanha (`pending` = ainda não começou). */
+export const MADDOX_SCENARIO_STATUSES = ["pending", "in-progress", "proposed", "done"] as const
+export type MaddoxScenarioStatus = (typeof MADDOX_SCENARIO_STATUSES)[number]
+
+/** Situação de uma entrevista (cenário ou personagem). `proposed` = o Maddox propôs a síntese e aguarda a confirmação. */
+export const MADDOX_INTERVIEW_RUN_STATUSES = ["in-progress", "proposed", "done"] as const
+export type MaddoxInterviewRunStatus = (typeof MADDOX_INTERVIEW_RUN_STATUSES)[number]
+
+export const MADDOX_INTERVIEW_STATUS_DEFS: Record<MaddoxInterviewStatus | "proposed", { label: string; rarity: MaddoxRarity }> = {
+    pending: { label: "Entrevista pendente", rarity: "common" },
+    "in-progress": { label: "Em entrevista", rarity: "rare" },
+    proposed: { label: "Aguardando confirmação", rarity: "veryRare" },
+    done: { label: "Entrevista concluída", rarity: "legendary" },
+}
+
+/** Rotas pt-BR das entrevistas (`/campanhas/[id]/entrevista/...`). */
+export const MADDOX_INTERVIEW_SLUGS: Record<MaddoxScriptKind, string> = { scenario: "cenario", character: "personagem" }
+
+/** Linha que o entrevistador acrescenta ao fim da síntese para propor a conclusão (removida antes de gravar/mostrar). */
+export const MADDOX_PROPOSAL_MARKER = "[[MADDOX_PROPOSTA_DE_CONCLUSAO]]"
+
+export const MADDOX_INTERVIEW_MESSAGE_MAX = 4000
+export const MADDOX_INTERVIEW_MESSAGES_MAX = 200
+/** Uma geração travada há mais que isso (queda do processo) pode ser retomada. */
+export const MADDOX_INTERVIEW_LOCK_MS = 5 * 60_000
+
+/** Evento do canal do usuário: a MINHA entrevista mudou (sincroniza outras abas). */
+export const MADDOX_INTERVIEW_CHANGED_EVENT = "maddox.interview.changed"
+
+/** Origem do consumo de IA das entrevistas (painel de consumo). */
+export const MADDOX_INTERVIEW_CONSUMPTION_ORIGIN = "maddox-interview"
+
+/** Modelo do JEV usado nas decisões do Maddox (a seção JEV só liga e desliga cada decisão). */
+export const MADDOX_JEV_MODEL = "jev-latest"
+
+/** Rigores em que a entrevista de personagem também cria a ficha D&D (`CharacterSheet`). */
+export const MADDOX_SHEET_RIGORS: readonly MaddoxRigorLevel[] = ["equilibrado", "rigoroso", "fiel-dnd"]
+
+/** Seções do cenário consolidado (como o `setting.md` do roleplay). */
+export const MADDOX_SETTING_SECTIONS = [
+    { key: "universo", label: "Universo e referências" },
+    { key: "canone", label: "Cânone e adaptações" },
+    { key: "contexto", label: "Época, região e contexto" },
+    { key: "regras", label: "Regras internas" },
+    { key: "tom", label: "Tom e preferências narrativas" },
+] as const
+export type MaddoxSettingSectionKey = (typeof MADDOX_SETTING_SECTIONS)[number]["key"]
+
+/** Seções do perfil narrativo do personagem (como o `protagonista.md` do roleplay). */
+export const MADDOX_PROFILE_SECTIONS = [
+    { key: "identidade", label: "Identidade e aparência" },
+    { key: "origem", label: "Origem e background" },
+    { key: "personalidade", label: "Personalidade e motivações" },
+    { key: "capacidades", label: "Capacidades e limitações" },
+    { key: "equipamentos", label: "Equipamentos e recursos" },
+    { key: "relacoes", label: "Relações e compromissos" },
+    { key: "condicao", label: "Condição atual" },
+] as const
+export type MaddoxProfileSectionKey = (typeof MADDOX_PROFILE_SECTIONS)[number]["key"]
