@@ -460,8 +460,16 @@ describe("entrevista de personagem", () => {
         const eyes = "castanhos escuros com reflexos dourados ao sol"
         const age = "por volta de cento e vinte anos, jovem para uma elfa"
         const identidade = "Elfa. ".repeat(1500).trim()
-        generateAiText.mockResolvedValueOnce({ text: JSON.stringify({ name: "L".repeat(200), profile: { identidade }, sheet: { race: "Elfo", weight, eyes, age } }) })
+        const origin = "Criminosa do porto de Valdrenn. ".repeat(80).trim()
+        expect(origin.length).toBeGreaterThan(2500)
+        generateAiText.mockResolvedValueOnce({ text: JSON.stringify({ name: "L".repeat(200), profile: { identidade }, sheet: { race: "Elfo", origin, weight, eyes, age } }) })
         await completeInterview(campaignId, "character", ids.ana)
+        // Origem acima do limite da ficha: a ficha guarda 2.000 caracteres e o resultado da entrevista, o texto inteiro.
+        const sheetAfter = await CharacterSheet.findById((await MaddoxCharacterModel.findOne({ userId: ids.ana }).lean())!.sheetId).lean()
+        expect(sheetAfter!.origin).toBe(origin.slice(0, 2000))
+        expect(sheetAfter!.origin).toHaveLength(2000)
+        const result = (await MaddoxInterviewModel.findOne({ campaignId, kind: "character" }).lean())!.result as { sheet: { origin: string } }
+        expect(result.sheet.origin).toBe(origin)
         const character = await MaddoxCharacterModel.findOne({ userId: ids.ana }).lean()
         // Nome fora do limite é ignorado (fica o do esboço), sem invalidar o resto.
         expect(character!.name).toBe("Lyra")
