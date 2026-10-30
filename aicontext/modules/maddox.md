@@ -19,7 +19,7 @@ roteiros e as memórias salvam à parte.
 | Entrevista: cenário / Entrevista: personagem | Roteiros versionados (abaixo), cada um com "Salvar nova versão do roteiro" e "Desfazer roteiro" |
 | JEV | Uma chave por decisão (`MADDOX_JEV_DECISIONS`): pergunta ou ação do jogador, validade de ação livre, pedir teste, início/fim de combate, conhecimento do mestre, fim da entrevista, gerar imagem na cena. **Ainda sem uso** |
 | OpenCode | Política das sessões e lista das sessões ativas com "Excluir" (confirmação) |
-| Memórias | Lista `maddox` de `agent_memories` (mesmo card dos demais agentes; API `/api/ai/agents/maddox/memories/**`) |
+| Memórias | Lista `maddox` de `agent_memories` (mesmo card dos demais agentes, sem limite de quantidade; API `/api/ai/agents/maddox/memories/**`) |
 
 A configuração fica em `ai_feature_settings` (feature `maddox`) com o schema `maddoxSettingsSchema`:
 `enabled`, `main` (provedor, modelo, agente, variante, temperatura, tokens), `interviewer` (provedor,

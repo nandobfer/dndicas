@@ -2,7 +2,6 @@
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/opex/card"
 import { AI_AGENTS, type AiAgentId } from "../../agents"
-import { AGENT_MEMORY_LIMIT } from "../../constants"
 import { agentMemoriesSource } from "../../hooks/useMemories"
 import { MemoryList } from "./MemoryList"
 
@@ -18,7 +17,7 @@ export function AgentMemoriesCard({ agentId }: { agentId: AiAgentId }) {
             <CardHeader>
                 <CardTitle className="text-base">{agent.title}</CardTitle>
                 <CardDescription>
-                    {agent.description} Use para alimentar e treinar o agente. Clique para ver o texto completo. Até {AGENT_MEMORY_LIMIT} memórias.
+                    {agent.description} Use para alimentar e treinar o agente. Clique para ver o texto completo.
                 </CardDescription>
             </CardHeader>
             <CardContent>

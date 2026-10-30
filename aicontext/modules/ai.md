@@ -45,7 +45,7 @@ A rota genérica `/api/core/ai` (sem consumidor) foi removida.
 ## Memórias
 
 Instruções permanentes por lista (`agent_memories`), injetadas no fim das instruções de cada agente
-(`memoriesSection`). Até **50 por lista**, **3–2.000 caracteres** cada; o texto passa pelo Resumo
+(`memoriesSection`). Sem limite de quantidade por lista; **3–2.000 caracteres** cada; o texto passa pelo Resumo
 de memórias (sem ele, grava como veio). Criar/editar/excluir é auditado e avisa em tempo real.
 
 | Lista | Aplicada em |

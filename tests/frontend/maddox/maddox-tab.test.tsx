@@ -31,19 +31,20 @@ vi.mock("@/features/maddox/hooks/useMaddoxSettings", () => ({
     useDeleteMaddoxSession: () => ({ mutate: vi.fn(), isPending: false }),
 }))
 
-vi.mock("@/features/ai/hooks/useAi", () => ({
-    AI_QUERY_KEY: "ai",
-    useAiProviderStatuses: () => ({
-        providers: [
-            { id: "opencode", name: "OpenCode", configured: true, connected: true },
-            { id: "gemini", name: "Gemini", configured: true, connected: true },
-            { id: "jev", name: "JEV", configured: false, connected: false },
-        ],
-    }),
-    useImageGeneratorSettings: () => ({ data: { availability: { available: true, reason: null } } }),
-    useAiModels: () => ({ data: [], isLoading: false, isError: false }),
-    useAiAgents: () => ({ data: [], isLoading: false, isError: false }),
-}))
+/** Integrações falsas; o filtro de provedores é o real (`toProviderStatuses`). */
+let integrations: Array<{ id: string; configured: boolean; health: { status: string } }> = []
+const healthy = (id: string) => ({ id, configured: true, health: { status: "ok" } })
+
+vi.mock("@/features/ai/hooks/useAi", async (importOriginal) => {
+    const actual = await importOriginal<typeof import("@/features/ai/hooks/useAi")>()
+    return {
+        AI_QUERY_KEY: "ai",
+        useAiProviderStatuses: (includeAll = false) => ({ providers: actual.toProviderStatuses(integrations as never, includeAll) }),
+        useImageGeneratorSettings: () => ({ data: { availability: { available: true, reason: null } } }),
+        useAiModels: () => ({ data: [], isLoading: false, isError: false }),
+        useAiAgents: () => ({ data: [], isLoading: false, isError: false }),
+    }
+})
 
 let current: MaddoxSettingsDto = dto()
 const { MaddoxTab } = await import("@/features/maddox/components/settings/MaddoxTab")
@@ -57,6 +58,7 @@ const lastSaved = () => saveSettings.mock.calls.at(-1)![0] as typeof DEFAULT_MAD
 describe("aba Agente Maddox", () => {
     beforeEach(() => {
         current = dto()
+        integrations = [healthy("ai_opencode"), healthy("ai_gemini"), healthy("ai_jev")]
         window.history.replaceState(null, "", "/integracoes/ia?aba=agente-maddox")
         saveSettings.mockReset().mockImplementation(async (values) => ({ ...current, settings: values }))
         saveScript.mockReset()
@@ -102,6 +104,20 @@ describe("aba Agente Maddox", () => {
         await waitFor(() => expect(saveSettings).toHaveBeenCalled())
         expect(lastSaved().jev["requires-check"]).toBe(true)
         expect(lastSaved().jev["scene-image"]).toBe(false)
+    })
+
+    it("JEV configurado e testado não mostra o aviso de desconectado", async () => {
+        renderTab()
+        fireEvent.click(screen.getByRole("tab", { name: "JEV" }))
+        await screen.findByRole("checkbox", { name: "Pedir teste" })
+        expect(screen.queryByText(/O JEV não está conectado/)).toBeNull()
+    })
+
+    it("JEV sem teste ou com falha mostra o aviso", async () => {
+        integrations = [healthy("ai_opencode"), healthy("ai_gemini"), { id: "ai_jev", configured: true, health: { status: "error" } }]
+        renderTab()
+        fireEvent.click(screen.getByRole("tab", { name: "JEV" }))
+        expect(await screen.findByText(/O JEV não está conectado/)).toBeTruthy()
     })
 
     it("adiciona e remove tópicos e salva uma nova versão do roteiro com a versão da abertura", async () => {

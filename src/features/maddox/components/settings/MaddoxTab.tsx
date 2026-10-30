@@ -56,7 +56,8 @@ export function MaddoxTab({ onDirtyChange }: { onDirtyChange: (dirty: boolean) =
     const saveCharacter = useSaveMaddoxScript("character")
     const scriptSavers = { scenario: saveScenario, character: saveCharacter }
     const imageGenerator = useImageGeneratorSettings()
-    const { providers } = useAiProviderStatuses()
+    // `true`: inclui o JEV, que não gera texto e fica fora da lista padrão.
+    const { providers } = useAiProviderStatuses(true)
     const form = useForm<MaddoxSettings>({ resolver: zodResolver(maddoxSettingsSchema), mode: "onChange", defaultValues: DEFAULT_MADDOX_SETTINGS })
     const [scripts, setScripts] = useState<ScriptDrafts | null>(null)
     // O rascunho dos roteiros nasce uma vez, durante a renderização (um refetch não sobrescreve o que está sendo editado).

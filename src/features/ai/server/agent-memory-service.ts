@@ -7,7 +7,7 @@ import { loggerFor } from "@/lib/logger"
 import { integrationChannel } from "@/lib/pusher/channel-names"
 import { publishToChannels } from "@/lib/pusher/channels"
 import { AI_AGENTS, isAiAgentId, type AiAgentId } from "../agents"
-import { AGENT_MEMORY_LIMIT, AI_MEMORIES_UPDATED_EVENT, AI_MEMORY_AUDIT_ENTITY } from "../constants"
+import { AI_MEMORIES_UPDATED_EVENT, AI_MEMORY_AUDIT_ENTITY } from "../constants"
 import { memoryInputSchema } from "../schemas"
 import type { MemoryDto, MemoryMutationResult } from "../types"
 import { formatMemory } from "./memory-summary"
@@ -15,7 +15,7 @@ import { formatMemory } from "./memory-summary"
 /**
  * Memórias (instruções permanentes) dos agentes de IA, uma lista por item do catálogo `agents.ts`.
  * Criar e editar passam pelo uso "Resumo de memórias" (texto formatado + resumo de uma linha).
- * Excluir remove (a auditoria guarda o texto). Até 50 por lista. Copiado do Opex: no DnDicas toda
+ * Excluir remove (a auditoria guarda o texto). Sem limite de quantidade por lista. Copiado do Opex: no DnDicas toda
  * ação é de um administrador (tela de Integrações ou ferramentas do Agente Opex num turno de admin).
  */
 
@@ -52,7 +52,7 @@ async function publish(agentId: AiAgentId) {
 export async function listAgentMemories(agentId: string): Promise<MemoryDto[]> {
     const agent = assertAgentId(agentId)
     await dbConnect()
-    const rows = (await AgentMemory.find({ agentId: agent }).sort({ createdAt: -1 }).limit(AGENT_MEMORY_LIMIT).lean()) as IAgentMemory[]
+    const rows = (await AgentMemory.find({ agentId: agent }).sort({ createdAt: -1 }).lean()) as IAgentMemory[]
     const authors = await authorNames(rows.map((row) => row.updatedBy))
     return rows.map((row) => toMemoryDto(row, authors))
 }
@@ -70,13 +70,8 @@ export async function agentMemoryTexts(agentIds: readonly AiAgentId[]): Promise<
         .sort({ createdAt: 1 })
         .select("agentId texto")
         .lean()
-    // Uma lista depois da outra, na ordem pedida (ex.: globais antes das do dono), até o limite de cada.
-    return agentIds.flatMap((agentId) =>
-        rows
-            .filter((row) => row.agentId === agentId)
-            .slice(0, AGENT_MEMORY_LIMIT)
-            .map((row) => row.texto),
-    )
+    // Uma lista depois da outra, na ordem pedida (ex.: globais antes das do dono).
+    return agentIds.flatMap((agentId) => rows.filter((row) => row.agentId === agentId).map((row) => row.texto))
 }
 
 export { memoriesSection } from "../memories-prompt"
@@ -91,9 +86,6 @@ export async function createAgentMemory(agentId: string, texto: string, actorId:
     const agent = assertAgentId(agentId)
     const input = parseText(texto)
     await dbConnect()
-    if ((await AgentMemory.countDocuments({ agentId: agent })) >= AGENT_MEMORY_LIMIT) {
-        throw new DomainError(409, `Limite de ${AGENT_MEMORY_LIMIT} memórias atingido. Exclua uma antes de adicionar outra.`, "MEMORY_LIMIT")
-    }
     const formatted = await formatMemory(input)
     const now = new Date()
     const memory = (await AgentMemory.create({ agentId: agent, texto: formatted.texto, resumo: formatted.resumo, createdBy: actorId, updatedBy: actorId, createdAt: now, updatedAt: now })).toObject() as IAgentMemory
