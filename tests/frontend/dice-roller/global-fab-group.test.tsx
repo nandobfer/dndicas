@@ -209,8 +209,8 @@ describe("GlobalFabGroup › arraste", () => {
         const dice = await screen.findByRole("button", { name: "Dice FAB" })
         await drag(dice, { x: center(2), y: 25 }, { x: center(0), y: 25 }, true)
         expect(diceClick).not.toHaveBeenCalled()
-        // O próximo clique simples volta a abrir.
-        await new Promise((done) => setTimeout(done, 0))
+        // O próximo clique simples volta a abrir (o dnd-kit também barra cliques por 50ms após soltar).
+        await new Promise((done) => setTimeout(done, 80))
         fireEvent.click(dice)
         expect(diceClick).toHaveBeenCalledTimes(1)
         await waitFor(() => expect(savedOrder()).toEqual(["opex", "search", "dice"]))
