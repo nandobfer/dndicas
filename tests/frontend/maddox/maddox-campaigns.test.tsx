@@ -50,6 +50,7 @@ const listItem = (over: Partial<MaddoxCampaignListItemDto> = {}): MaddoxCampaign
     turnPhase: "master",
     startedAt: null,
     scenarioStatus: "pending",
+    showCheckDc: false,
     createdAt: "2026-10-30T10:00:00.000Z",
     updatedAt: new Date().toISOString(),
     ...over,
@@ -117,7 +118,7 @@ describe("lista de campanhas", () => {
 
         fireEvent.change(screen.getByLabelText("Nome da campanha"), { target: { value: "Nova Mesa" } })
         fireEvent.click(screen.getByRole("button", { name: "Criar campanha" }))
-        await waitFor(() => expect(post).toHaveBeenCalledWith("/maddox/campaigns", { name: "Nova Mesa", rigor: "fiel-dnd" }))
+        await waitFor(() => expect(post).toHaveBeenCalledWith("/maddox/campaigns", { name: "Nova Mesa", rigor: "fiel-dnd", showCheckDc: false }))
         await waitFor(() => expect(push).toHaveBeenCalledWith("/campanhas/c9/entrevista/cenario"))
     })
 

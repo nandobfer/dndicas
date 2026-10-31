@@ -199,6 +199,32 @@ describe("DiceRollerPanel", () => {
         })
     })
 
+    it("uses a custom roll request and button label (Maddox check) and can hide the roll button for replays", async () => {
+        const rollRequest = vi.fn(async () => ({
+            rollId: "check-1",
+            label: "Furtividade (Destreza)",
+            terms: [{ dice: "d20" as const, quantity: 1, results: [12] }],
+            mode: "advantage" as const,
+            selectedD20: { kept: 12, discarded: 7, reason: "advantage" as const },
+            diceTotal: 12,
+            modifier: 5,
+            total: 17,
+            createdAt: "2026-01-01T00:00:00.000Z",
+        }))
+        const preset = { label: "Furtividade (Destreza)", terms: [{ dice: "d20" as const, quantity: 1 }], modifier: 5, mode: "advantage" as const, source: "sheet" as const }
+        const { unmount } = render(<DiceRollerPanel preset={preset} hideConfigurationControls rollButtonLabel="Rolar" rollRequest={rollRequest} />)
+
+        expect(screen.queryByRole("button", { name: "JOGAR" })).not.toBeInTheDocument()
+        fireEvent.click(screen.getByRole("button", { name: "Rolar" }))
+        await waitFor(() => expect(rollRequest).toHaveBeenCalledWith(expect.objectContaining({ terms: [{ dice: "d20", quantity: 1 }], modifier: 5, mode: "advantage" })))
+        expect(requestDiceRollMock).not.toHaveBeenCalled()
+        unmount()
+
+        render(<DiceRollerPanel preset={preset} hideConfigurationControls hideRollButton />)
+        expect(screen.queryByRole("button", { name: "Rolar" })).not.toBeInTheDocument()
+        expect(screen.queryByRole("button", { name: "JOGAR" })).not.toBeInTheDocument()
+    })
+
     it("renders one visual die per selected die", async () => {
         render(
             <DiceRollerPanel

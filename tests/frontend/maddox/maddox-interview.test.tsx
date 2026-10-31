@@ -49,6 +49,7 @@ const campaign = (over: Partial<MaddoxCampaignDetailDto> = {}): MaddoxCampaignDe
     turnPhase: "master",
     startedAt: null,
     scenarioStatus: "in-progress",
+    showCheckDc: false,
     createdAt: "2026-10-30T10:00:00.000Z",
     updatedAt: "2026-10-30T10:00:00.000Z",
     myMemberId: "m1",

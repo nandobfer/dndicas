@@ -27,9 +27,35 @@ const releaseChannel = vi.fn()
 vi.mock("sonner", () => ({ toast: { error: vi.fn(), success: vi.fn(), warning: vi.fn() } }))
 vi.mock("next/navigation", () => ({ useRouter: () => ({ push: vi.fn(), replace: vi.fn(), refresh: vi.fn() }), usePathname: () => "/campanhas/c1/mesa" }))
 vi.mock("@/core/hooks/useAuth", () => ({ useAuth: () => ({ userId: "u-owner", isSignedIn: true, isLoaded: true, can: () => true }) }))
+const addWindow = vi.fn()
+/** Painel de dados simplificado (o 3D real é testado em tests/frontend/dice-roller): expõe as props que a mesa passa. */
+vi.mock("@/features/dice-roller/components/dice-roller-panel", () => ({
+    DiceRollerPanel: (props: {
+        preset?: { modifier?: number; mode?: string } | null
+        externalResult?: { total: number } | null
+        hideRollButton?: boolean
+        disableRolling?: boolean
+        disabledRollingMessage?: string | null
+        rollButtonLabel?: string
+        rollRequest?: (input: unknown) => Promise<unknown>
+    }) => (
+        <div data-testid="fake-dice-panel" data-modifier={props.preset?.modifier} data-mode={props.preset?.mode} data-external={props.externalResult?.total ?? ""}>
+            {!props.hideRollButton && (
+                <button type="button" disabled={props.disableRolling} onClick={() => void props.rollRequest?.({ terms: [{ dice: "d20", quantity: 1 }] })}>
+                    {props.rollButtonLabel ?? "JOGAR"}
+                </button>
+            )}
+            {props.disabledRollingMessage}
+        </div>
+    ),
+}))
+const sheetPreview = { strength: 10, dexterity: 16, constitution: 10, intelligence: 10, wisdom: 10, charisma: 10, level: 1, proficiencyBonusOverride: null, savingThrows: {}, skills: { Furtividade: { proficient: true, expertise: false } } }
+vi.mock("@/features/character-sheets/api/character-sheets-queries", () => ({ useSheet: (id: string | null) => ({ data: id ? sheetPreview : undefined, isLoading: false, isError: false }) }))
+vi.mock("@/features/character-sheets/components/sheet-form", () => ({ SheetForm: () => <div data-testid="sheet-form" /> }))
+vi.mock("@/core/context/window-context", () => ({ useWindows: () => ({ addWindow, removeWindow: vi.fn() }) }))
 vi.mock("@/lib/pusher/client", () => ({ isPusherClientAvailable: () => pusherAvailable, acquireChannel, releaseChannel }))
 /** Stream da mesa controlado pelo teste (sem rede): `setStream` re-renderiza quem usa o hook. */
-let streamSnapshot: MaddoxGameStreamState = { live: [], settled: [], finished: 0, connected: true }
+let streamSnapshot: MaddoxGameStreamState = { live: [], settled: [], finished: 0, connected: true, rolled: [] }
 const streamListeners = new Set<() => void>()
 const setStream = (patch: Partial<MaddoxGameStreamState>) => {
     streamSnapshot = { ...streamSnapshot, ...patch }
@@ -76,6 +102,7 @@ const message = (id: string, over: Partial<MaddoxGameMessageDto>): MaddoxGameMes
     replyToId: null,
     skippedByName: null,
     error: null,
+    check: null,
     createdAt: "2026-10-31T10:00:00.000Z",
     ...over,
 })
@@ -87,9 +114,11 @@ const gameState = (over: Partial<MaddoxGameStateDto> = {}): MaddoxGameStateDto =
     status: "active",
     ownerId: "u-owner",
     maddoxAvatarUrl: null,
-    turn: { number: 1, phase: "players", startedAt: null, generating: false, failed: false },
+    turn: { number: 1, phase: "players", startedAt: null, generating: false, failed: false, awaitingChecks: false, pendingChecks: [] },
     participants: [participant("m1", "u-owner", "Kael"), participant("m2", "u-ana", "Lyra"), participant("m3", "u-bia", "Borin")],
-    me: { memberId: "m1", isOwner: true, ready: true, eligible: true, declared: false },
+    me: { memberId: "m1", isOwner: true, ready: true, eligible: true, declared: false, sheet: null },
+    showCheckDc: false,
+    npcs: [],
     messages: [
         message("n1", { kind: "narration", phase: "master", content: "Uma taverna em **chamas**." }),
         message("d1", { kind: "declaration", memberId: "m2", characterName: "Lyra", content: "Corro até a porta." }),
@@ -102,7 +131,7 @@ const gameState = (over: Partial<MaddoxGameStateDto> = {}): MaddoxGameStateDto =
 })
 
 const { GamePage } = await import("@/features/maddox/components/game/GamePage")
-const { seatStatus, turnProgress, composerBlockReason, gameRefetchInterval, MADDOX_GAME_POLL_MS } = await import("@/features/maddox/game-view")
+const { seatStatus, turnProgress, composerBlockReason, gameRefetchInterval, masterBannerText, MADDOX_GAME_POLL_MS } = await import("@/features/maddox/game-view")
 const { MADDOX_MASTER_RETRY_MS } = await import("@/features/maddox/constants")
 
 beforeEach(() => {
@@ -113,7 +142,7 @@ beforeEach(() => {
     pusherAvailable = true
     acquireChannel.mockClear()
     releaseChannel.mockClear()
-    streamSnapshot = { live: [], settled: [], finished: 0, connected: true }
+    streamSnapshot = { live: [], settled: [], finished: 0, connected: true, rolled: [] }
 })
 
 async function renderGame(state: MaddoxGameStateDto) {
@@ -123,7 +152,7 @@ async function renderGame(state: MaddoxGameStateDto) {
     return view
 }
 
-const ME = (over: Partial<MaddoxGameStateDto["me"]>) => ({ memberId: "m1", isOwner: true, ready: true, eligible: true, declared: false, ...over })
+const ME = (over: Partial<MaddoxGameStateDto["me"]>): MaddoxGameStateDto["me"] => ({ memberId: "m1", isOwner: true, ready: true, eligible: true, declared: false, sheet: null, ...over })
 
 describe("mesa Maddox — conversa e turno", () => {
     it("mostra narração, declaração, pergunta com a resposta ligada, 'não fez nada' e a faixa do turno", async () => {
@@ -140,7 +169,7 @@ describe("mesa Maddox — conversa e turno", () => {
     })
 
     it("turno do mestre: o campo fica bloqueado e o Maddox aparece narrando", async () => {
-        await renderGame(gameState({ turn: { number: 2, phase: "master", startedAt: null, generating: true, failed: false } }))
+        await renderGame(gameState({ turn: { number: 2, phase: "master", startedAt: null, generating: true, failed: false, awaitingChecks: false, pendingChecks: [] } }))
         expect(screen.getByTestId("turn-banner")).toHaveTextContent("Turno do mestre — o Maddox está narrando…")
         expect(screen.getByTestId("game-composer-hint")).toHaveTextContent("O Maddox está narrando. Aguarde o turno dos jogadores.")
         expect(screen.getByLabelText("O que o seu personagem faz")).toBeDisabled()
@@ -261,7 +290,7 @@ describe("mesa Maddox — participantes e presença", () => {
 
     it("quando alguém sai da mesa, pede ao servidor que reavalie o turno", async () => {
         await renderGame(gameState())
-        post.mockResolvedValue(ok(gameState({ turn: { number: 2, phase: "players", startedAt: null, generating: false, failed: false } })))
+        post.mockResolvedValue(ok(gameState({ turn: { number: 2, phase: "players", startedAt: null, generating: false, failed: false, awaitingChecks: false, pendingChecks: [] } })))
         presenceIds = ["u-owner"]
         emit("pusher:member_removed")
         await waitFor(() => expect(post).toHaveBeenCalledWith("/maddox/campaigns/c1/game/check"), { timeout: 3000 })
@@ -292,7 +321,7 @@ describe("mesa Maddox — participantes e presença", () => {
 const liveItem = (over: Partial<MaddoxLiveGenerationDto> = {}): MaddoxLiveGenerationDto => ({ liveId: "l1", kind: "narration", turnNumber: 2, replyToId: null, text: "", tool: false, startedAt: "2026-10-31T10:00:00.000Z", ...over })
 
 describe("Maddox 4 — narração ao vivo, falhas e foco", () => {
-    const masterTurn = { number: 2, phase: "master" as const, startedAt: null, generating: true, failed: false }
+    const masterTurn = { number: 2, phase: "master" as const, startedAt: null, generating: true, failed: false, awaitingChecks: false, pendingChecks: [] }
 
     it("narração chegando em streaming: texto parcial com citação em negrito, cursor, aviso de ferramenta e divisor do turno", async () => {
         await renderGame(gameState({ turn: masterTurn }))
@@ -401,8 +430,8 @@ describe("regras de exibição da mesa", () => {
 })
 
 describe("mesa Maddox — recarga depois de falha do mestre", () => {
-    const master = (generating: boolean) => ({ number: 2, phase: "master" as const, startedAt: null, generating, failed: false })
-    const players = { number: 2, phase: "players" as const, startedAt: null, generating: false, failed: false }
+    const master = (generating: boolean) => ({ number: 2, phase: "master" as const, startedAt: null, generating, failed: false, awaitingChecks: false, pendingChecks: [] })
+    const players = { number: 2, phase: "players" as const, startedAt: null, generating: false, failed: false, awaitingChecks: false, pendingChecks: [] }
 
     it("gameRefetchInterval: com tempo real só recarrega no turno do mestre sem geração; sem Pusher recarrega sempre", () => {
         expect(gameRefetchInterval({ status: "active", turn: master(false) }, true)).toBe(MADDOX_MASTER_RETRY_MS)
@@ -441,5 +470,154 @@ describe("mesa Maddox — recarga depois de falha do mestre", () => {
     it("sem Pusher: recarrega a cada MADDOX_GAME_POLL_MS", async () => {
         pusherAvailable = false
         expect(await countGetsAfter(gameState({ turn: players }), MADDOX_GAME_POLL_MS * 2 + 100)).toBeGreaterThanOrEqual(2)
+    })
+})
+
+// ── Maddox 5: testes pedidos pelo Maddox, ficha e NPCs ─────────────────────────
+
+const roll17 = { rollId: "r1", label: "Furtividade (Destreza)", terms: [{ dice: "d20" as const, quantity: 1, results: [12] }], mode: "advantage" as const, selectedD20: { kept: 12, discarded: 7, reason: "advantage" as const }, diceTotal: 12, modifier: 5, total: 17, createdAt: "2026-10-31T10:00:00.000Z" }
+
+const checkDto = (over: Partial<NonNullable<MaddoxGameMessageDto["check"]>> = {}): NonNullable<MaddoxGameMessageDto["check"]> => ({
+    status: "pending",
+    round: 0,
+    kind: "skill",
+    ability: "dexterity",
+    skill: "Furtividade",
+    mode: "advantage",
+    reason: "Esgueirar-se entre os guardas",
+    dc: null,
+    sheetId: "s-lyra",
+    roll: null,
+    modifierParts: [],
+    rolledByName: null,
+    success: null,
+    cancelReason: null,
+    ...over,
+})
+
+const awaitingTurn = { number: 2, phase: "master" as const, startedAt: null, generating: false, failed: false, awaitingChecks: true, pendingChecks: [{ checkId: "k1", memberId: "m2", characterName: "Lyra" }] }
+const checkMessage = (over: Partial<NonNullable<MaddoxGameMessageDto["check"]>> = {}) => message("k1", { kind: "check", phase: "master", turnNumber: 2, memberId: "m2", characterName: "Lyra", check: checkDto(over) })
+
+describe("mesa Maddox — testes pedidos pelo Maddox (Maddox 5)", () => {
+    it("o jogador indicado vê o pedido com o d20, as partes do modificador e 'Rolar'; a rolagem vai ao servidor sem dado nem modificador", async () => {
+        post.mockResolvedValue(ok({ roll: roll17, state: gameState({ me: ME({ memberId: "m2", isOwner: false }), turn: { ...awaitingTurn, awaitingChecks: false, pendingChecks: [], generating: true }, messages: [checkMessage({ status: "rolled", roll: roll17 })] }) }))
+        await renderGame(gameState({ rigor: "fiel-dnd", me: ME({ memberId: "m2", isOwner: false }), turn: awaitingTurn, messages: [message("n2", { kind: "narration", phase: "master", turnNumber: 2, content: "Lyra avança…" }), checkMessage()] }))
+        const card = screen.getByTestId("game-check-request")
+        expect(card).toHaveTextContent("O Maddox pede um teste para você")
+        expect(within(card).getByTestId("check-title")).toHaveTextContent("Teste de perícia: Furtividade (Destreza)")
+        expect(card).toHaveTextContent("Esgueirar-se entre os guardas")
+        // Prévia pela ficha: DES 16 (+3) + proficiência +2.
+        const modifiers = within(card).getByTestId("check-modifiers")
+        expect(modifiers).toHaveTextContent("d20")
+        expect(modifiers).toHaveTextContent("Destreza +3")
+        expect(modifiers).toHaveTextContent("Prof. +2")
+        expect(within(card).getByTestId("check-modifier-total")).toHaveTextContent("= d20 +5")
+        expect(modifiers).toHaveTextContent("Vantagem")
+        expect(modifiers).not.toHaveTextContent("CD")
+        const panel = within(card).getByTestId("fake-dice-panel")
+        expect(panel).toHaveAttribute("data-modifier", "5")
+        expect(panel).toHaveAttribute("data-mode", "advantage")
+        expect(screen.getByTestId("turn-banner")).toHaveTextContent("Turno do mestre — o Maddox pediu um teste para você")
+        expect(screen.getByText("O Maddox pediu um teste para você: role os dados na conversa.")).toBeInTheDocument()
+        // Esperando a rolagem, o Maddox não aparece "narrando".
+        expect(screen.queryByTestId("maddox-writing")).not.toBeInTheDocument()
+
+        fireEvent.click(within(panel).getByRole("button", { name: "Rolar" }))
+        await waitFor(() => expect(post).toHaveBeenCalledWith("/maddox/campaigns/c1/game/checks/k1/roll", {}))
+        expect(await screen.findByText("Resultado enviado ao Maddox.")).toBeInTheDocument()
+    })
+
+    it("os outros não recebem o pedido: veem a espera com o nome; o dono pode 'Rolar no lugar' com confirmação", async () => {
+        post.mockResolvedValue(ok({ roll: roll17, state: gameState({ turn: { ...awaitingTurn, awaitingChecks: false, pendingChecks: [], generating: true } }) }))
+        await renderGame(gameState({ rigor: "fiel-dnd", turn: awaitingTurn, messages: [message("n2", { kind: "narration", phase: "master", turnNumber: 2, content: "Lyra avança…" })] }))
+        expect(screen.queryByTestId("game-check-request")).not.toBeInTheDocument()
+        expect(screen.getByTestId("turn-banner")).toHaveTextContent("Turno do mestre — aguardando o teste de Lyra")
+        expect(screen.getByText("O Maddox aguarda os testes pedidos. Aguarde o turno dos jogadores.")).toBeInTheDocument()
+        const seat = screen.getByTestId("seat-m2")
+        expect(seat).toHaveTextContent("Rolando teste")
+        expect(within(screen.getByTestId("seat-m1")).queryByRole("button", { name: /Rolar no lugar/ })).not.toBeInTheDocument()
+        fireEvent.click(within(seat).getByRole("button", { name: "Rolar no lugar de Lyra" }))
+        const dialog = await screen.findByRole("alertdialog")
+        expect(dialog).toHaveTextContent("Rolar o teste no lugar de Lyra?")
+        expect(post).not.toHaveBeenCalled()
+        fireEvent.click(within(dialog).getByRole("button", { name: "Rolar no lugar" }))
+        await waitFor(() => expect(post).toHaveBeenCalledWith("/maddox/campaigns/c1/game/checks/k1/roll", {}))
+    })
+
+    it("um jogador que não é o dono não tem 'Rolar no lugar'", async () => {
+        await renderGame(gameState({ rigor: "fiel-dnd", me: ME({ memberId: "m3", isOwner: false }), turn: awaitingTurn }))
+        expect(screen.getByTestId("turn-banner")).toHaveTextContent("aguardando o teste de Lyra")
+        expect(screen.queryByRole("button", { name: /Rolar no lugar/ })).not.toBeInTheDocument()
+    })
+
+    it("rolagem recebida pelo stream: todos repetem o dado com o resultado oficial, sem botão", async () => {
+        await renderGame(gameState({ rigor: "fiel-dnd", turn: { ...awaitingTurn, awaitingChecks: false, pendingChecks: [], generating: true }, messages: [checkMessage({ status: "rolled", roll: roll17, modifierParts: [{ label: "Destreza", value: "+3", color: "dexterity" }, { label: "Prof.", value: "+2", color: "prof" }] })] }))
+        expect(screen.getByTestId("check-roll-total")).toHaveTextContent("17")
+        act(() => setStream({ rolled: [{ messageId: "k1", roll: roll17 }] }))
+        const card = await screen.findByTestId("game-check-result")
+        const panel = within(card).getByTestId("fake-dice-panel")
+        expect(panel).toHaveAttribute("data-external", "17")
+        expect(within(panel).queryByRole("button")).not.toBeInTheDocument()
+        expect(card).toHaveTextContent("Lyra rolou")
+        expect(within(card).getByTestId("check-modifiers")).toHaveTextContent("Destreza +3")
+    })
+
+    it("resultado gravado: total, d20 com o descartado, quem rolou no lugar e, com a CD visível, a CD e o sucesso", async () => {
+        await renderGame(
+            gameState({
+                rigor: "fiel-dnd",
+                showCheckDc: true,
+                messages: [checkMessage({ status: "rolled", roll: roll17, dc: 15, success: true, rolledByName: "Marina", modifierParts: [{ label: "Destreza", value: "+3", color: "dexterity" }] })],
+            }),
+        )
+        const card = screen.getByTestId("game-check-result")
+        expect(within(card).getByTestId("check-roll-result")).toHaveTextContent("17d20 12 (descartado 7) +5")
+        expect(card).toHaveTextContent("(rolado por Marina no lugar do jogador)")
+        expect(card).toHaveTextContent("CD 15")
+        expect(within(card).getByTestId("check-outcome")).toHaveTextContent("Sucesso")
+    })
+
+    it("teste cancelado vira uma nota discreta", async () => {
+        await renderGame(gameState({ rigor: "fiel-dnd", messages: [checkMessage({ status: "cancelled", cancelReason: "O jogador saiu da campanha" })] }))
+        expect(screen.getByTestId("game-check-cancelled")).toHaveTextContent("Teste de Lyra cancelado (o jogador saiu da campanha).")
+    })
+
+    it("'Minha ficha' só aparece com ficha e abre a janela da ficha; NPCs conhecidos com nome e foto", async () => {
+        const view = await renderGame(gameState({ npcs: [] }))
+        expect(screen.queryByRole("button", { name: /Minha ficha/ })).not.toBeInTheDocument()
+        expect(screen.getByText("Ninguém ainda: os NPCs aparecem aqui quando o grupo os conhece.")).toBeInTheDocument()
+        view.unmount()
+
+        await renderGame(gameState({ rigor: "fiel-dnd", me: ME({ sheet: { id: "s1", slug: "lyra" } }), npcs: [{ id: "n1", name: "Bartolomeu", portraitUrl: "/api/upload?key=npc.png" }, { id: "n2", name: "Irmã Vela", portraitUrl: null }] }))
+        fireEvent.click(screen.getByRole("button", { name: /Minha ficha/ }))
+        expect(addWindow).toHaveBeenCalledWith(expect.objectContaining({ id: "maddox-sheet", title: "Minha ficha" }))
+        expect(screen.getByTestId("npc-n1")).toHaveTextContent("Bartolomeu")
+        expect(screen.getByTestId("npc-n2")).toHaveTextContent("Irmã Vela")
+        expect(screen.getByText("NPCs conhecidos (2)")).toBeInTheDocument()
+    })
+
+    it("regras puras: situação 'Rolando teste', faixa com vários nomes e sem recarga periódica esperando rolagens", () => {
+        const state = gameState({ turn: { ...awaitingTurn, pendingChecks: [{ checkId: "k1", memberId: "m2", characterName: "Lyra" }, { checkId: "k2", memberId: "m3", characterName: "Borin" }] } })
+        const presence = { available: true, online: new Set(["u-owner", "u-ana", "u-bia"]) }
+        expect(seatStatus(participant("m2", "u-ana", "Lyra"), state, presence)).toBe("rolling")
+        expect(seatStatus(participant("m1", "u-owner", "Kael"), state, presence)).toBe("watching")
+        expect(masterBannerText(state)).toBe("Turno do mestre — aguardando o teste de Lyra e Borin")
+        expect(masterBannerText({ ...state, me: ME({ memberId: "m2" }) })).toBe("Turno do mestre — o Maddox pediu um teste para você (e aguarda Borin)")
+        expect(composerBlockReason({ ...state, me: ME({ memberId: "m3" }) })).toBe("O Maddox pediu um teste para você: role os dados na conversa.")
+        expect(gameRefetchInterval(state, true)).toBe(false)
+    })
+})
+
+describe("controles da mesa usam os componentes do projeto", () => {
+    it("components/game não importa @/core/ui/tabs nem usa select/checkbox nativos", async () => {
+        const { readdirSync, readFileSync } = await import("node:fs")
+        const { join } = await import("node:path")
+        const dir = join(process.cwd(), "src/features/maddox/components/game")
+        for (const file of readdirSync(dir).filter((name) => name.endsWith(".tsx"))) {
+            const source = readFileSync(join(dir, file), "utf8")
+            expect(source, file).not.toContain("@/core/ui/tabs")
+            expect(source, file).not.toMatch(/<select[\s>]/)
+            expect(source, file).not.toMatch(/type=["']checkbox["']/)
+        }
     })
 })

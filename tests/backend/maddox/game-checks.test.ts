@@ -197,7 +197,7 @@ describe("Maddox 5 — teste de perícia em campanha fiel (critério de aceite)"
 
         script.push([{ text: "Os guardas não percebem nada: Lyra alcança a porta da cripta. O que vocês fazem?" }])
         await fixD20(table.player, 12)
-        const lines: { type: string; messageId?: string }[] = []
+        const lines: { type: string }[] = []
         const unsubscribe = subscribeGameLive(table.id, (line) => lines.push(line))
         const { roll, state } = await checks.rollCheck(table.id, request.id, table.player)
         await waitForCampaignIdle(table.id)
