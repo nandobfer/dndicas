@@ -26,7 +26,7 @@ async function handle(tool: MaddoxMasterTool, args: Record<string, unknown>) {
     if (!isActiveMaddoxJob(turn.campaignId, turn.jobId)) return errorContent("Esta narração já terminou: as ferramentas do Maddox só funcionam durante a geração.")
     try {
         await dbConnect()
-        return jsonContent((await runMaddoxTool(tool, { campaignId: new Types.ObjectId(turn.campaignId), turnNumber: turn.turnNumber }, input)) as Record<string, unknown>)
+        return jsonContent((await runMaddoxTool(tool, { campaignId: new Types.ObjectId(turn.campaignId), turnNumber: turn.turnNumber, jobId: turn.jobId }, input)) as Record<string, unknown>)
     } catch (error) {
         return errorContent(error instanceof MaddoxToolError ? error.message : "Falha ao executar a ferramenta.")
     }

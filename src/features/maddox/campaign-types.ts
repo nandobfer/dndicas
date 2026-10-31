@@ -44,6 +44,8 @@ export interface MaddoxCampaignListItemDto {
     startedAt: string | null
     /** Entrevista de cenário (Maddox 2). */
     scenarioStatus: MaddoxScenarioStatus
+    /** CD dos testes visível aos jogadores (Maddox 5). */
+    showCheckDc: boolean
     createdAt: string
     updatedAt: string
 }

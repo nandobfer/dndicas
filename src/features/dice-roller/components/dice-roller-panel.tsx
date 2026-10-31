@@ -44,6 +44,12 @@ interface DiceRollerPanelProps {
     disabledRollingMessage?: string | null
     hideConfigurationControls?: boolean
     forceCombinationModifierInline?: boolean
+    /** Quem faz a rolagem oficial (padrão: `requestDiceRoll`). Ex.: o teste do Maddox rola no servidor da campanha. */
+    rollRequest?: (input: Omit<DiceRollRequest, "diceSessionId">) => Promise<DiceRollResponse>
+    /** Rótulo do botão de rolar (padrão "JOGAR"). */
+    rollButtonLabel?: string
+    /** Esconde o botão de rolar (só repete um resultado externo). */
+    hideRollButton?: boolean
 }
 
 export function DiceRollerPanel({
@@ -57,6 +63,9 @@ export function DiceRollerPanel({
     disabledRollingMessage = null,
     hideConfigurationControls = false,
     forceCombinationModifierInline = false,
+    rollRequest,
+    rollButtonLabel = "JOGAR",
+    hideRollButton = false,
 }: DiceRollerPanelProps) {
     const [terms, setTerms] = React.useState<DiceTerm[]>(() => getInitialState(preset).terms)
     const [modifier, setModifier] = React.useState<number | "">(() => getInitialState(preset).modifier)
@@ -252,7 +261,7 @@ export function DiceRollerPanel({
         setShowResults(false)
         setErrorMessage(null)
         try {
-            const nextResult = await requestDiceRoll({
+            const nextResult = await (rollRequest ?? requestDiceRoll)({
                 terms: nextTerms,
                 modifier: modifier === "" ? 0 : modifier,
                 mode: activeMode,
@@ -287,15 +296,17 @@ export function DiceRollerPanel({
                         : "grid-cols-1"
             )}>
                 <div className="space-y-5">
-                    <GlassButton
-                        type="button"
-                        size="lg"
-                        onClick={handleRoll}
-                        disabled={isRollButtonDisabled}
-                        className="w-full border-blue-400/20 bg-blue-500/20 text-blue-100 hover:bg-blue-500/30"
-                    >
-                        {isRolling || isAnimatingDice ? "Rolando..." : "JOGAR"}
-                    </GlassButton>
+                    {!hideRollButton && (
+                        <GlassButton
+                            type="button"
+                            size="lg"
+                            onClick={handleRoll}
+                            disabled={isRollButtonDisabled}
+                            className="w-full border-blue-400/20 bg-blue-500/20 text-blue-100 hover:bg-blue-500/30"
+                        >
+                            {isRolling || isAnimatingDice ? "Rolando..." : rollButtonLabel}
+                        </GlassButton>
+                    )}
                     <DiceVisualStage
                         terms={normalizedTerms}
                         result={result}

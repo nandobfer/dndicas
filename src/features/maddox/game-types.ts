@@ -1,4 +1,7 @@
-import type { MaddoxCampaignStatus, MaddoxGameMessageKind, MaddoxRigorLevel, MaddoxTurnPhase } from "./constants"
+import type { CalcPart } from "@/features/character-sheets/utils/dnd-calculations"
+import type { AttributeType, SkillName } from "@/features/character-sheets/types/character-sheet.types"
+import type { DiceRollResponse } from "@/features/dice-roller/types"
+import type { MaddoxCampaignStatus, MaddoxCheckKind, MaddoxCheckMode, MaddoxCheckStatus, MaddoxGameMessageKind, MaddoxRigorLevel, MaddoxTurnPhase } from "./constants"
 
 /** DTOs da mesa (Maddox 3). Todos os membros recebem os mesmos dados; `me` é o que muda por usuário. */
 
@@ -16,7 +19,46 @@ export interface MaddoxGameMessageDto {
     skippedByName: string | null
     /** Resposta do mestre que falhou (Maddox 4): aviso em pt-BR; `content` vem vazio. */
     error: string | null
+    /** Teste pedido pelo Maddox (`kind: "check"`, Maddox 5). Pendente só chega ao jogador indicado. */
+    check: MaddoxGameCheckDto | null
     createdAt: string
+}
+
+/** Teste pedido pelo Maddox (Maddox 5). A CD só vem quando a campanha a deixa visível. */
+export interface MaddoxGameCheckDto {
+    status: MaddoxCheckStatus
+    round: number
+    kind: MaddoxCheckKind
+    ability: AttributeType
+    skill: SkillName | null
+    mode: MaddoxCheckMode
+    reason: string
+    /** `null` = CD secreta. */
+    dc: number | null
+    /** Ficha do personagem (prévia do modificador na tela do jogador indicado). */
+    sheetId: string | null
+    /** Rolado: resultado oficial do motor de dados, com as partes do modificador usado. */
+    roll: DiceRollResponse | null
+    modifierParts: CalcPart[]
+    /** Nome de quem rolou no lugar do jogador (o dono); `null` = o próprio jogador. */
+    rolledByName: string | null
+    /** Sucesso ou falha (só com a CD visível). */
+    success: boolean | null
+    cancelReason: string | null
+}
+
+/** Teste pendente do turno do mestre, sem detalhes (para a faixa, o painel e o "Rolar no lugar"). */
+export interface MaddoxPendingCheckDto {
+    checkId: string
+    memberId: string
+    characterName: string
+}
+
+/** NPC que os jogadores conhecem (nome e foto). */
+export interface MaddoxGameNpcDto {
+    id: string
+    name: string
+    portraitUrl: string | null
 }
 
 export interface MaddoxGameParticipantDto {
@@ -42,9 +84,30 @@ export interface MaddoxGameStateDto {
     ownerId: string
     maddoxAvatarUrl: string | null
     /** `failed`: a última geração do mestre falhou e a nova tentativa acontece em instantes (Maddox 4). */
-    turn: { number: number; phase: MaddoxTurnPhase; startedAt: string | null; generating: boolean; failed: boolean }
+    turn: {
+        number: number
+        phase: MaddoxTurnPhase
+        startedAt: string | null
+        generating: boolean
+        failed: boolean
+        /** O turno do mestre espera as rolagens dos testes pedidos (Maddox 5). */
+        awaitingChecks: boolean
+        pendingChecks: MaddoxPendingCheckDto[]
+    }
+    /** Mostra a CD dos testes aos jogadores. */
+    showCheckDc: boolean
+    /** NPCs que os jogadores conhecem. */
+    npcs: MaddoxGameNpcDto[]
     participants: MaddoxGameParticipantDto[]
-    me: { memberId: string | null; isOwner: boolean; ready: boolean; eligible: boolean; declared: boolean }
+    me: {
+        memberId: string | null
+        isOwner: boolean
+        ready: boolean
+        eligible: boolean
+        declared: boolean
+        /** Minha ficha D&D (só a minha; graus com ficha). */
+        sheet: { id: string; slug: string } | null
+    }
     /** Mensagens mais recentes, em ordem cronológica. */
     messages: MaddoxGameMessageDto[]
     /** Há mensagens anteriores (cursor = id da primeira). */
@@ -79,4 +142,5 @@ export type MaddoxGameStreamLine =
     | { type: "delta"; liveId: string; text: string }
     | { type: "tool"; liveId: string; running: boolean }
     | { type: "live-end"; liveId: string; messageId: string | null; error: string | null }
+    | { type: "check-rolled"; messageId: string; roll: DiceRollResponse }
     | { type: "ping" }

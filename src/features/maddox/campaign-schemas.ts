@@ -17,12 +17,15 @@ const campaignName = z
 
 const rigor = z.enum(MADDOX_RIGOR_LEVELS, { error: "Escolha um grau de rigor válido" })
 
-export const createMaddoxCampaignSchema = z.strictObject({ name: campaignName, rigor })
+/** CD dos testes pedidos pelo Maddox (Maddox 5): `false` = secreta (padrão), `true` = visível aos jogadores. */
+const showCheckDc = z.boolean({ error: "Escolha se a CD dos testes fica visível" })
+
+export const createMaddoxCampaignSchema = z.strictObject({ name: campaignName, rigor, showCheckDc: showCheckDc.optional() })
 export type CreateMaddoxCampaignInput = z.infer<typeof createMaddoxCampaignSchema>
 
 export const updateMaddoxCampaignSchema = z
-    .strictObject({ name: campaignName.optional(), rigor: rigor.optional() })
-    .refine((value) => value.name !== undefined || value.rigor !== undefined, { error: "Nada para alterar" })
+    .strictObject({ name: campaignName.optional(), rigor: rigor.optional(), showCheckDc: showCheckDc.optional() })
+    .refine((value) => value.name !== undefined || value.rigor !== undefined || value.showCheckDc !== undefined, { error: "Nada para alterar" })
 export type UpdateMaddoxCampaignInput = z.infer<typeof updateMaddoxCampaignSchema>
 
 export const maddoxCharacterDraftSchema = z.strictObject({

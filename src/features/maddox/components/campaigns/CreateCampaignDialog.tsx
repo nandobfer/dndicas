@@ -8,13 +8,14 @@ import { Field } from "@/components/ui/opex/field"
 import { Input } from "@/components/ui/opex/input"
 import { GlassModal, GlassModalContent, GlassModalDescription, GlassModalFooter, GlassModalHeader, GlassModalTitle } from "@/components/ui/glass-modal"
 import { apiErrorMessage } from "@/lib/api"
-import { MADDOX_CAMPAIGN_NAME_MAX } from "../../constants"
+import { MADDOX_CAMPAIGN_NAME_MAX, MADDOX_CHECK_RIGORS } from "../../constants"
 import { createMaddoxCampaignSchema, type CreateMaddoxCampaignInput } from "../../campaign-schemas"
 import type { MaddoxCampaignDetailDto } from "../../campaign-types"
 import { useCreateMaddoxCampaign } from "../../hooks/useMaddoxCampaigns"
+import { CheckDcField } from "./CheckDcField"
 import { RigorCard } from "./RigorCard"
 
-const DEFAULTS: CreateMaddoxCampaignInput = { name: "", rigor: "equilibrado" }
+const DEFAULTS: CreateMaddoxCampaignInput = { name: "", rigor: "equilibrado", showCheckDc: false }
 
 /** Criação da campanha: nome e grau de rigor. Nasce no lobby, com o criador como dono. */
 export function CreateCampaignDialog({ open, onOpenChange, onCreated }: { open: boolean; onOpenChange: (open: boolean) => void; onCreated: (campaign: MaddoxCampaignDetailDto) => void }) {
@@ -31,7 +32,7 @@ export function CreateCampaignDialog({ open, onOpenChange, onCreated }: { open: 
     }
 
     const submit = form.handleSubmit((values) =>
-        create.mutate(values, {
+        create.mutate({ name: values.name, rigor: values.rigor, ...(MADDOX_CHECK_RIGORS.includes(values.rigor) ? { showCheckDc: values.showCheckDc ?? false } : {}) }, {
             onSuccess: (campaign) => {
                 form.reset(DEFAULTS)
                 onCreated(campaign)
@@ -55,6 +56,7 @@ export function CreateCampaignDialog({ open, onOpenChange, onCreated }: { open: 
                     </Field>
 
                     <RigorCard form={form} />
+                    <CheckDcField form={form} />
 
                     {create.isError && (
                         <p role="alert" className="flex items-start gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-sm text-amber-200">

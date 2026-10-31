@@ -12,20 +12,25 @@ import { MADDOX_CAMPAIGN_NAME_MAX } from "../../constants"
 import { createMaddoxCampaignSchema, type CreateMaddoxCampaignInput } from "../../campaign-schemas"
 import type { MaddoxCampaignDetailDto } from "../../campaign-types"
 import { useUpdateMaddoxCampaign } from "../../hooks/useMaddoxCampaigns"
+import { CheckDcField } from "./CheckDcField"
 import { RigorCard } from "./RigorCard"
 
 /** Dono edita o nome e, só antes da entrevista de cenário, o grau de rigor. */
 export function EditCampaignDialog({ campaign, open, onOpenChange }: { campaign: MaddoxCampaignDetailDto; open: boolean; onOpenChange: (open: boolean) => void }) {
-    const form = useForm<CreateMaddoxCampaignInput>({ resolver: zodResolver(createMaddoxCampaignSchema), defaultValues: { name: campaign.name, rigor: campaign.rigor } })
+    const form = useForm<CreateMaddoxCampaignInput>({ resolver: zodResolver(createMaddoxCampaignSchema), defaultValues: { name: campaign.name, rigor: campaign.rigor, showCheckDc: campaign.showCheckDc } })
     const update = useUpdateMaddoxCampaign(campaign.id)
     const rigorLocked = campaign.rigorLocked
 
     useEffect(() => {
-        if (open) form.reset({ name: campaign.name, rigor: campaign.rigor })
-    }, [open, campaign.name, campaign.rigor, form])
+        if (open) form.reset({ name: campaign.name, rigor: campaign.rigor, showCheckDc: campaign.showCheckDc })
+    }, [open, campaign.name, campaign.rigor, campaign.showCheckDc, form])
 
     const submit = form.handleSubmit((values) => {
-        const changes = { ...(values.name !== campaign.name ? { name: values.name } : {}), ...(!rigorLocked && values.rigor !== campaign.rigor ? { rigor: values.rigor } : {}) }
+        const changes = {
+            ...(values.name !== campaign.name ? { name: values.name } : {}),
+            ...(!rigorLocked && values.rigor !== campaign.rigor ? { rigor: values.rigor } : {}),
+            ...((values.showCheckDc ?? false) !== campaign.showCheckDc ? { showCheckDc: values.showCheckDc ?? false } : {}),
+        }
         if (Object.keys(changes).length === 0) return onOpenChange(false)
         update.mutate(changes, { onSuccess: () => onOpenChange(false) })
     })
@@ -44,6 +49,7 @@ export function EditCampaignDialog({ campaign, open, onOpenChange }: { campaign:
                         <Input id="maddox-campaign-edit-name" maxLength={MADDOX_CAMPAIGN_NAME_MAX} {...form.register("name")} />
                     </Field>
                     <RigorCard form={form} disabled={rigorLocked} />
+                    <CheckDcField form={form} />
                     <GlassModalFooter>
                         <Button type="button" variant="ghost" onClick={() => onOpenChange(false)} disabled={update.isPending}>
                             Cancelar

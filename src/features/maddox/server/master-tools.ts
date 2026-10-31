@@ -4,6 +4,11 @@ import type { ToolSet } from "ai"
 import { loggerFor } from "@/lib/logger"
 import {
     MADDOX_CAMPAIGN_MEMORY_KINDS,
+    MADDOX_CHECK_DC_MAX,
+    MADDOX_CHECK_DC_MIN,
+    MADDOX_CHECK_REASON_MAX,
+    MADDOX_CHECK_RIGORS,
+    MADDOX_CHECK_ROUNDS_MAX,
     MADDOX_NPC_STATUSES,
     MADDOX_QUEST_STATUSES,
     MADDOX_TOOL_NAME_MAX,
@@ -13,7 +18,9 @@ import {
     MADDOX_VISIBILITIES,
 } from "../constants"
 import { normalizeCatalogName } from "../catalog-markup"
-import { MaddoxCampaignMemoryModel, MaddoxCampaignModel, MaddoxCharacterModel, MaddoxNpcModel, type IMaddoxCampaign, type IMaddoxCampaignMemory, type IMaddoxNpc } from "../models"
+import { MaddoxCampaignMemberModel, MaddoxCampaignMemoryModel, MaddoxCampaignModel, MaddoxCharacterModel, MaddoxNpcModel, type IMaddoxCampaign, type IMaddoxCampaignMemory, type IMaddoxCharacter, type IMaddoxNpc } from "../models"
+import { MADDOX_ABILITIES, MADDOX_ABILITY_LABELS, MADDOX_SKILLS, checkAbility, checkTitle } from "../check-modifier"
+import { addDraftCheck, jobDraftChecks, maddoxJobMeta } from "./game-live"
 
 /**
  * Ferramentas de persistência do Maddox narrador (Maddox 4) — SOMENTE servidor. Definidas uma vez e expostas de
@@ -29,6 +36,8 @@ const log = loggerFor({ module: "maddox", feature: "narrator-tools" })
 export interface MaddoxToolContext {
     campaignId: Types.ObjectId
     turnNumber: number
+    /** Job da fila que está gerando (testes pedidos ficam nele até a narração ser gravada). */
+    jobId?: string
 }
 
 export interface MaddoxMasterTool {
@@ -277,6 +286,67 @@ export const MADDOX_MASTER_TOOLS: readonly MaddoxMasterTool[] = [
             return { saved: true, characterName: target.name, ...fit.notice() }
         },
     }),
+    define({
+        name: "request_check",
+        description: [
+            "Pede um teste de perícia, atributo ou resistência para UM personagem jogador. Use quando o resultado de uma tentativa for incerto e relevante.",
+            "O jogador rola o d20 com os modificadores da ficha dele; o resultado chega na próxima mensagem. Depois de pedir,",
+            "narre até o momento da tentativa e PARE: não decida o resultado nem pergunte o que os jogadores fazem. Um teste por personagem a cada narração.",
+        ].join(" "),
+        readOnly: false,
+        input: z.object({
+            personagem: z.string().min(1).describe("Nome do personagem jogador que faz o teste"),
+            tipo: z.enum(["pericia", "atributo", "resistencia"]).describe("pericia = teste de perícia; atributo = teste de atributo puro; resistencia = teste de resistência"),
+            pericia: z.enum(MADDOX_SKILLS as [string, ...string[]]).optional().describe("Obrigatória quando tipo = pericia"),
+            atributo: z.enum(MADDOX_ABILITIES.map((ability) => MADDOX_ABILITY_LABELS[ability]) as [string, ...string[]]).optional().describe("Obrigatório quando tipo = atributo ou resistencia"),
+            cd: z.number().int().min(MADDOX_CHECK_DC_MIN).max(MADDOX_CHECK_DC_MAX).describe("Classe de dificuldade (CD) do teste, pelas regras do D&D"),
+            modo: z.enum(["normal", "vantagem", "desvantagem"]).optional().describe("Vantagem ou desvantagem quando a situação der"),
+            motivo: z.string().min(1).describe("O que o personagem tenta, curto e sem revelar segredos (os jogadores leem)"),
+        }),
+        async execute(context, input) {
+            const campaign = await MaddoxCampaignModel.findById(context.campaignId).select("rigor").lean<Pick<IMaddoxCampaign, "rigor">>()
+            if (!campaign || !MADDOX_CHECK_RIGORS.includes(campaign.rigor)) throw new MaddoxToolError("Esta campanha é narrativa: não peça testes nem dados, resolva pela história.")
+            const meta = context.jobId ? maddoxJobMeta(String(context.campaignId), context.jobId) : null
+            if (!meta || meta.kind !== "narration") throw new MaddoxToolError("Testes só são pedidos na narração do turno do mestre. Responda à pergunta sem pedir teste.")
+            if (meta.round >= MADDOX_CHECK_ROUNDS_MAX - 1) throw new MaddoxToolError("Limite de testes deste turno atingido: conclua a narração resolvendo a situação sem novos testes.")
+            const kind = input.tipo === "pericia" ? "skill" : input.tipo === "resistencia" ? "save" : "ability"
+            const skill = kind === "skill" ? ((input.pericia ?? null) as (typeof MADDOX_SKILLS)[number] | null) : null
+            if (kind === "skill" && !skill) throw new MaddoxToolError(`Informe a perícia do teste. Perícias: ${MADDOX_SKILLS.join(", ")}.`)
+            const labelled = MADDOX_ABILITIES.find((ability) => MADDOX_ABILITY_LABELS[ability] === input.atributo) ?? null
+            if (kind !== "skill" && !labelled) throw new MaddoxToolError("Informe o atributo do teste (Força, Destreza, Constituição, Inteligência, Sabedoria ou Carisma).")
+            const ability = checkAbility(kind, labelled, skill)!
+
+            const characters = await MaddoxCharacterModel.find({ campaignId: context.campaignId, status: "active" }).select("name memberId userId sheetId interview").lean<IMaddoxCharacter[]>()
+            const target = characters.find((character) => keyOf(character.name) === keyOf(input.personagem))
+            if (!target) throw new MaddoxToolError(`Nenhum personagem jogador chamado "${input.personagem}". Personagens: ${characters.map((character) => character.name).join(", ") || "nenhum"}.`)
+            const member = await MaddoxCampaignMemberModel.findOne({ _id: target.memberId, campaignId: context.campaignId, status: "joined" }).select("_id userId").lean<{ _id: Types.ObjectId; userId: string }>()
+            if (!member || target.interview?.status !== "done") throw new MaddoxToolError(`${target.name} não está jogando agora: não peça teste para esse personagem.`)
+            if (!target.sheetId) throw new MaddoxToolError(`${target.name} não tem ficha D&D: resolva a tentativa pela narração.`)
+            if (jobDraftChecks(String(context.campaignId), context.jobId!).some((check) => check.memberId === String(member._id))) throw new MaddoxToolError(`Já existe um teste pedido para ${target.name} nesta narração: um teste por personagem.`)
+
+            const mode = input.modo === "vantagem" ? "advantage" : input.modo === "desvantagem" ? "disadvantage" : "normal"
+            const added = addDraftCheck(String(context.campaignId), context.jobId!, {
+                memberId: String(member._id),
+                userId: member.userId,
+                characterId: String(target._id),
+                characterName: target.name,
+                sheetId: String(target.sheetId),
+                kind,
+                ability,
+                skill,
+                dc: input.cd,
+                mode,
+                reason: clip(input.motivo, MADDOX_CHECK_REASON_MAX),
+            })
+            if (!added) throw new MaddoxToolError("Esta narração já terminou.")
+            const title = checkTitle({ kind, ability, skill })
+            return {
+                requested: true,
+                check: `${title} para ${target.name}, CD ${input.cd}${mode === "normal" ? "" : mode === "advantage" ? ", com vantagem" : ", com desvantagem"}`,
+                note: "Narre até o momento da tentativa e pare, sem decidir o resultado nem perguntar o que os jogadores fazem. O resultado da rolagem chega na próxima mensagem.",
+            }
+        },
+    }),
 ]
 
 export function findMaddoxTool(name: string): MaddoxMasterTool | undefined {
@@ -298,11 +368,15 @@ export async function runMaddoxTool(tool: MaddoxMasterTool, context: MaddoxToolC
     }
 }
 
-/** Ferramentas no formato da AI SDK (a SDK `ai` entra sob demanda). */
-export async function buildMaddoxAiTools(context: MaddoxToolContext): Promise<ToolSet> {
+/** Ferramenta dos testes (Maddox 5): só oferecida à AI SDK nas narrações dos graus com ficha. */
+export const MADDOX_CHECK_TOOL_NAME = "request_check"
+
+/** Ferramentas no formato da AI SDK (a SDK `ai` entra sob demanda). `checks: false` tira o `request_check`. */
+export async function buildMaddoxAiTools(context: MaddoxToolContext, options: { checks?: boolean } = {}): Promise<ToolSet> {
     const { dynamicTool } = await import("ai")
     const tools: ToolSet = {}
     for (const def of MADDOX_MASTER_TOOLS) {
+        if (def.name === MADDOX_CHECK_TOOL_NAME && !options.checks) continue
         tools[def.name] = dynamicTool({
             description: def.description,
             inputSchema: def.input,

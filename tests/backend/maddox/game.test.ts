@@ -408,9 +408,10 @@ describe("Maddox 3 — turno do mestre interrompido", () => {
     it("falha ao gravar a narração também deixa o turno no mestre, sem narração órfã", async () => {
         const { id, owner } = await table(1)
         await g.startCampaign(id, owner)
-        const original = MaddoxCampaignMessageModel.create.bind(MaddoxCampaignMessageModel)
-        const create = vi.spyOn(MaddoxCampaignMessageModel, "create").mockImplementation(((doc: { kind?: string }) =>
-            doc?.kind === "narration" ? Promise.reject(new Error("banco indisponível")) : original(doc as never)) as never)
+        // A narração (e os testes pedidos nela, Maddox 5) são gravados juntos por `insertMany`.
+        const original = MaddoxCampaignMessageModel.insertMany.bind(MaddoxCampaignMessageModel)
+        const create = vi.spyOn(MaddoxCampaignMessageModel, "insertMany").mockImplementation(((docs: { kind?: string }[], options: unknown) =>
+            docs?.[0]?.kind === "narration" ? Promise.reject(new Error("banco indisponível")) : original(docs as never, options as never)) as never)
         const state = await declare(id, owner)
         create.mockRestore()
         expect(state.turn).toMatchObject({ number: 2, phase: "master", generating: false })

@@ -130,9 +130,9 @@ export const MADDOX_GAME_CHANGED_EVENT = "maddox.game.changed"
 
 /**
  * Mensagens da mesa: narração do mestre, declaração do jogador, "não fazer nada" (`pass`), pergunta ao
- * mestre (não encerra o turno) e a resposta dele.
+ * mestre (não encerra o turno), a resposta dele e o teste pedido pelo Maddox (`check`, Maddox 5).
  */
-export const MADDOX_GAME_MESSAGE_KINDS = ["narration", "declaration", "pass", "question", "answer"] as const
+export const MADDOX_GAME_MESSAGE_KINDS = ["narration", "declaration", "pass", "question", "answer", "check"] as const
 export type MaddoxGameMessageKind = (typeof MADDOX_GAME_MESSAGE_KINDS)[number]
 
 /** O que o jogador envia no próprio turno. */
@@ -203,6 +203,26 @@ export const MADDOX_TURN_TOKEN_TTL_MS = 20 * 60 * 1000
 
 /** Resposta gravada quando a geração da resposta a uma pergunta falha. */
 export const MADDOX_ANSWER_FAILED_MESSAGE = "O Maddox não conseguiu responder agora. Pergunte de novo."
+
+// ── Fichas e testes (Maddox 5) ─────────────────────────────────────────────────
+
+/** Graus em que o Maddox pede testes de atributo, perícia ou resistência (os mesmos que criam a ficha D&D). */
+export const MADDOX_CHECK_RIGORS: readonly MaddoxRigorLevel[] = ["equilibrado", "rigoroso", "fiel-dnd"]
+/** Rodadas de teste por turno do mestre (a última narração não pode pedir novos testes). */
+export const MADDOX_CHECK_ROUNDS_MAX = 3
+export const MADDOX_CHECK_KINDS = ["skill", "ability", "save"] as const
+export type MaddoxCheckKind = (typeof MADDOX_CHECK_KINDS)[number]
+export const MADDOX_CHECK_KIND_LABELS: Record<MaddoxCheckKind, string> = { skill: "Teste de perícia", ability: "Teste de atributo", save: "Teste de resistência" }
+export const MADDOX_CHECK_STATUSES = ["pending", "rolled", "cancelled"] as const
+export type MaddoxCheckStatus = (typeof MADDOX_CHECK_STATUSES)[number]
+export const MADDOX_CHECK_MODES = ["normal", "advantage", "disadvantage"] as const
+export type MaddoxCheckMode = (typeof MADDOX_CHECK_MODES)[number]
+export const MADDOX_CHECK_MODE_LABELS: Record<MaddoxCheckMode, string> = { normal: "Normal", advantage: "Vantagem", disadvantage: "Desvantagem" }
+export const MADDOX_CHECK_DC_MIN = 1
+export const MADDOX_CHECK_DC_MAX = 30
+export const MADDOX_CHECK_REASON_MAX = 200
+/** Consulta do JEV "Pedir teste" (orientação ao narrador): passou disso, a orientação é ignorada. */
+export const MADDOX_CHECK_HINT_TIMEOUT_MS = 20_000
 
 // ── Entrevistas ───────────────────────────────────────────────────────────────
 

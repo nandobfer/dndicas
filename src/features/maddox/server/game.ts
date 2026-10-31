@@ -9,6 +9,7 @@ import { User } from "@/features/users/models/user"
 import {
     MADDOX_ANSWER_FAILED_MESSAGE,
     MADDOX_CAMPAIGN_AUDIT_ENTITY,
+    MADDOX_CHECK_RIGORS,
     MADDOX_DECLARATION_VALIDATION_RIGORS,
     MADDOX_GAME_CHANGED_EVENT,
     MADDOX_GAME_PAGE_SIZE,
@@ -24,16 +25,18 @@ import {
     MaddoxCampaignMessageModel,
     MaddoxCampaignModel,
     MaddoxCharacterModel,
+    MaddoxNpcModel,
     type IMaddoxCampaign,
     type IMaddoxCampaignMember,
     type IMaddoxCampaignMessage,
     type IMaddoxCharacter,
 } from "../models"
 import type { MaddoxGameActionInput, MaddoxSkipPlayerInput } from "../game-schemas"
-import type { MaddoxGameMessageDto, MaddoxGameMessagesPageDto, MaddoxGameParticipantDto, MaddoxGameStateDto } from "../game-types"
+import type { MaddoxGameCheckDto, MaddoxGameMessageDto, MaddoxGameMessagesPageDto, MaddoxGameParticipantDto, MaddoxGameStateDto } from "../game-types"
+import { checkSucceeded } from "../check-modifier"
 import { assertMemberCanPlay, isMemberReadyToPlay, loadMembership } from "./campaigns"
 import { getMaddoxMaster, type MaddoxMasterDeclaration } from "./game-master"
-import { beginLive, enqueueMaddoxJob, isCampaignBusy } from "./game-live"
+import { beginLive, enqueueMaddoxJob, isCampaignBusy, takeDraftChecks } from "./game-live"
 import { onlineUserIds } from "./game-presence"
 
 /**
@@ -61,7 +64,7 @@ type MessageDoc = IMaddoxCampaignMessage
 const isDuplicateKey = (error: unknown) => typeof error === "object" && error !== null && (error as { code?: number }).code === 11000
 const idSet = (ids: readonly Types.ObjectId[] | undefined) => new Set((ids ?? []).map(String))
 
-function assertActive(campaign: CampaignDoc) {
+export function assertActive(campaign: CampaignDoc) {
     if (campaign.status !== "active") throw new DomainError(409, "A campanha não está em andamento.", "CAMPAIGN_NOT_ACTIVE")
 }
 
@@ -69,7 +72,7 @@ function assertPlayersTurn(campaign: CampaignDoc) {
     if (campaign.turn?.phase !== "players") throw new DomainError(409, "O Maddox está narrando. Aguarde o turno dos jogadores.", "MASTER_TURN")
 }
 
-async function loadAsMember(campaignId: string, userId: string): Promise<{ campaign: CampaignDoc; member: MemberDoc }> {
+export async function loadAsMember(campaignId: string, userId: string): Promise<{ campaign: CampaignDoc; member: MemberDoc }> {
     const { campaign, member } = await loadMembership(campaignId, userId)
     if (!member) throw new DomainError(404, "Campanha não encontrada", "NOT_FOUND")
     return { campaign: campaign as CampaignDoc, member }
@@ -93,7 +96,7 @@ async function joinedMembers(campaignId: Types.ObjectId) {
 const readyMemberIds = async (campaignId: Types.ObjectId) => (await joinedMembers(campaignId)).filter(({ character }) => isMemberReadyToPlay(character)).map(({ member }) => member._id)
 
 /** Avisa todos os membros ativos (e quem mais for indicado) que a mesa mudou. Nunca lança. */
-async function publishGameChanged(campaignId: Types.ObjectId, extraUserIds: string[] = []) {
+export async function publishGameChanged(campaignId: Types.ObjectId, extraUserIds: string[] = []) {
     try {
         await MaddoxCampaignModel.updateOne({ _id: campaignId }, { $set: { updatedAt: new Date() } }, { timestamps: false })
         const campaign = await MaddoxCampaignModel.findById(campaignId).select("turn").lean<Pick<CampaignDoc, "turn">>()
@@ -114,6 +117,8 @@ async function publishGameChanged(campaignId: Types.ObjectId, extraUserIds: stri
 async function runMasterTurn(campaignId: Types.ObjectId, token: string, turnNumber: number, jobId: string): Promise<void> {
     const campaign = await MaddoxCampaignModel.findById(campaignId).lean<CampaignDoc>()
     if (!campaign || campaign.turn?.generating?.token !== token || campaign.turn.number !== turnNumber) return
+    // Rodada de testes (Maddox 5): 0 narra as declarações; cada continuação narra o resultado dos testes da rodada anterior.
+    const round = campaign.turn.checkRound ?? 0
     // Pulso da trava: uma narração longa (com ferramentas) não é tomada como trava velha por outra chamada.
     const heartbeat = setInterval(() => {
         void MaddoxCampaignModel.updateOne({ _id: campaignId, "turn.generating.token": token }, { $set: { "turn.generating.startedAt": new Date() } }, { timestamps: false }).catch(() => undefined)
@@ -121,32 +126,60 @@ async function runMasterTurn(campaignId: Types.ObjectId, token: string, turnNumb
     heartbeat.unref?.()
     let live: ReturnType<typeof beginLive> | null = null
     try {
-        const existing = await MaddoxCampaignMessageModel.findOne({ campaignId, turnNumber, kind: "narration" }).select("_id").lean()
+        const existing = await MaddoxCampaignMessageModel.findOne({ campaignId, turnNumber, kind: "narration", ...segmentFilter(round) }).select("_id").lean()
         if (!existing) {
             const actions = await MaddoxCampaignMessageModel.find({ campaignId, turnNumber: turnNumber - 1, turnAction: true }).sort({ _id: 1 }).lean<MessageDoc[]>()
-            const declarations: MaddoxMasterDeclaration[] = actions.map((action) => ({
+            let declarations: MaddoxMasterDeclaration[] = actions.map((action) => ({
                 characterName: action.characterName ?? "Personagem",
                 kind: action.kind === "pass" ? "pass" : "declaration",
                 content: action.content,
                 skipped: Boolean(action.skippedBy),
             }))
+            if (round === 0 && declarations.length > 0 && MADDOX_CHECK_RIGORS.includes(campaign.rigor)) {
+                const { withCheckHints } = await import("./check-hints")
+                declarations = await withCheckHints(campaign, declarations)
+            }
             live = beginLive(String(campaignId), { kind: "narration", turnNumber, replyToId: null })
             const master = await getMaddoxMaster()
             const sink = live
-            const content = await withGenerationTimeout((signal) => master.narrate({ campaignId: String(campaignId), jobId, turnNumber, declarations, signal }, sink))
-            const message = await MaddoxCampaignMessageModel.create({ campaignId, turnNumber, phase: "master", kind: "narration", content })
-            live.end({ messageId: String(message._id), error: null })
+            const content = await withGenerationTimeout((signal) => master.narrate({ campaignId: String(campaignId), jobId, turnNumber, round, declarations, signal }, sink))
+            // Os testes pedidos nesta geração só viram mensagens agora, logo abaixo da narração (ordem dos `_id`).
+            const { draftCheckMessage } = await import("./game-checks")
+            const drafts = takeDraftChecks(String(campaignId), jobId)
+            const [message] = await MaddoxCampaignMessageModel.insertMany(
+                [{ campaignId, turnNumber, phase: "master", kind: "narration", content, segment: round }, ...drafts.map((draft) => draftCheckMessage(campaignId, turnNumber, round, draft))],
+                { ordered: true },
+            )
+            live.end({ messageId: String(message!._id), error: null })
+            if (drafts.length) log.info({ campaignId: String(campaignId), turnNumber, round, checks: drafts.length }, "[maddox] Maddox pediu testes")
         }
-        const eligible = await readyMemberIds(campaignId)
-        const opened = await MaddoxCampaignModel.updateOne(
-            { _id: campaignId, "turn.generating.token": token },
-            { $set: { "turn.phase": "players", "turn.startedAt": new Date(), "turn.eligibleMemberIds": eligible, "turn.declaredMemberIds": [], "turn.generating": null, "turn.failedAt": null } },
-        )
-        if (opened.modifiedCount === 0) log.info({ campaignId: String(campaignId), turnNumber }, "[maddox] Turno do mestre já retomado por outra chamada")
+        const awaiting = await MaddoxCampaignMessageModel.exists({ campaignId, turnNumber, kind: "check", "check.round": round, "check.status": "pending" })
+        if (awaiting) {
+            // Os testes fazem parte do turno do mestre: a mesa espera as rolagens (sem trava de geração).
+            await MaddoxCampaignModel.updateOne({ _id: campaignId, "turn.generating.token": token }, { $set: { "turn.awaitingChecks": true, "turn.generating": null, "turn.failedAt": null } })
+        } else {
+            const eligible = await readyMemberIds(campaignId)
+            const opened = await MaddoxCampaignModel.updateOne(
+                { _id: campaignId, "turn.generating.token": token },
+                {
+                    $set: {
+                        "turn.phase": "players",
+                        "turn.startedAt": new Date(),
+                        "turn.eligibleMemberIds": eligible,
+                        "turn.declaredMemberIds": [],
+                        "turn.generating": null,
+                        "turn.failedAt": null,
+                        "turn.awaitingChecks": false,
+                        "turn.checkRound": 0,
+                    },
+                },
+            )
+            if (opened.modifiedCount === 0) log.info({ campaignId: String(campaignId), turnNumber }, "[maddox] Turno do mestre já retomado por outra chamada")
+        }
     } catch (error) {
         // Libera a trava e marca a falha: a retomada só acontece depois de `MADDOX_MASTER_RETRY_MS` (no `GET`/`check`).
         // Sem aviso aos clientes: o estado não mudou, e recarregar já faria a próxima tentativa sem espera.
-        log.error({ err: error instanceof Error ? error.message : error, campaignId: String(campaignId), turnNumber, retryInMs: MADDOX_MASTER_RETRY_MS }, "[maddox] Falha no turno do mestre")
+        log.error({ err: error instanceof Error ? error.message : error, campaignId: String(campaignId), turnNumber, round, retryInMs: MADDOX_MASTER_RETRY_MS }, "[maddox] Falha no turno do mestre")
         // Encerra a geração ao vivo antes de gravar: se a gravação falhar, os clientes não ficam com uma bolha fantasma.
         live?.end({ messageId: null, error: "O Maddox teve um problema ao narrar. Uma nova tentativa acontece em instantes." })
         try {
@@ -161,6 +194,9 @@ async function runMasterTurn(campaignId: Types.ObjectId, token: string, turnNumb
     }
     await publishGameChanged(campaignId)
 }
+
+/** Narração da rodada `round` (as gravadas antes do Maddox 5 não têm `segment` e contam como a rodada 0). */
+const segmentFilter = (round: number) => (round === 0 ? { segment: { $in: [0, null] } } : { segment: round })
 
 /**
  * Teto de duração de uma geração do mestre: passado `MADDOX_MASTER_GENERATION_TIMEOUT_MS`, aborta o provedor (sinal) e
@@ -182,14 +218,16 @@ async function withGenerationTimeout<T>(run: (signal: AbortSignal) => Promise<T>
     }
 }
 
-/** Põe o turno do mestre na fila da campanha (roda em segundo plano; a promessa nunca rejeita). */
-function scheduleMasterTurn(campaignId: Types.ObjectId, token: string, turnNumber: number): Promise<void> {
-    return enqueueMaddoxJob(String(campaignId), `narração do turno ${turnNumber}`, ({ jobId }) => runMasterTurn(campaignId, token, turnNumber, jobId))
+/** Põe o turno do mestre (rodada de testes `round`) na fila da campanha (roda em segundo plano; a promessa nunca rejeita). */
+export function scheduleMasterTurn(campaignId: Types.ObjectId, token: string, turnNumber: number, round = 0): Promise<void> {
+    return enqueueMaddoxJob(String(campaignId), `narração do turno ${turnNumber}${round ? ` (testes ${round})` : ""}`, ({ jobId }) => runMasterTurn(campaignId, token, turnNumber, jobId), { kind: "narration", turnNumber, round })
 }
 
 /** Fase do mestre sem geração em andamento (falha ou trava velha): pega a trava e narra. */
 async function resumeMasterTurn(campaign: CampaignDoc): Promise<boolean> {
     if (campaign.status !== "active" || campaign.turn?.phase !== "master") return false
+    // Esperando as rolagens dos testes: nada a gerar até o último teste da rodada ser rolado.
+    if (campaign.turn.awaitingChecks) return false
     // Geração na fila ou rodando neste processo: a trava é dela (o pulso a mantém), nada a retomar.
     if (isCampaignBusy(String(campaign._id))) return false
     const generating = campaign.turn.generating
@@ -205,13 +243,14 @@ async function resumeMasterTurn(campaign: CampaignDoc): Promise<boolean> {
             status: "active",
             "turn.phase": "master",
             "turn.number": campaign.turn.number,
+            "turn.awaitingChecks": { $ne: true },
             $or: [{ "turn.generating": null, $or: [{ "turn.failedAt": null }, { "turn.failedAt": { $lt: retryAfter } }] }, { "turn.generating.startedAt": { $lt: stale } }],
         },
         { $set: { "turn.generating": { token, startedAt: new Date() } } },
     )
     if (won.modifiedCount === 0) return false
     log.info({ campaignId: String(campaign._id), turnNumber: campaign.turn.number }, "[maddox] Retomando o turno do mestre")
-    void scheduleMasterTurn(campaign._id, token, campaign.turn.number)
+    void scheduleMasterTurn(campaign._id, token, campaign.turn.number, campaign.turn.checkRound ?? 0)
     return true
 }
 
@@ -254,7 +293,7 @@ async function evaluateTurn(campaignId: Types.ObjectId): Promise<void> {
     const number = campaign.turn.number
     const closed = await MaddoxCampaignModel.updateOne(
         { _id: campaignId, status: "active", "turn.number": number, "turn.phase": "players" },
-        { $set: { "turn.number": number + 1, "turn.phase": "master" as MaddoxTurnPhase, "turn.startedAt": new Date(), "turn.eligibleMemberIds": [], "turn.declaredMemberIds": [], "turn.generating": { token, startedAt: new Date() }, "turn.failedAt": null } },
+        { $set: { "turn.number": number + 1, "turn.phase": "master" as MaddoxTurnPhase, "turn.startedAt": new Date(), "turn.eligibleMemberIds": [], "turn.declaredMemberIds": [], "turn.generating": { token, startedAt: new Date() }, "turn.failedAt": null, "turn.checkRound": 0, "turn.awaitingChecks": false } },
     )
     if (closed.modifiedCount === 0) return
     log.info({ campaignId: String(campaignId), turnNumber: number, required: required.length, presence: online ? "pusher" : "unknown" }, "[maddox] Turno dos jogadores fechado")
@@ -321,7 +360,7 @@ export async function startCampaign(campaignId: string, userId: string): Promise
     const now = new Date()
     const started = await MaddoxCampaignModel.updateOne(
         { _id: campaign._id, status: "lobby", "scenarioInterview.status": "done" },
-        { $set: { status: "active", startedAt: now, turn: { number: 1, phase: "master", startedAt: now, eligibleMemberIds: [], declaredMemberIds: [], generating: { token, startedAt: now }, failedAt: null } } },
+        { $set: { status: "active", startedAt: now, turn: { number: 1, phase: "master", startedAt: now, eligibleMemberIds: [], declaredMemberIds: [], generating: { token, startedAt: now }, failedAt: null, checkRound: 0, awaitingChecks: false } } },
     )
     if (started.modifiedCount === 0) throw new DomainError(409, "Esta campanha já foi iniciada.", "CAMPAIGN_ALREADY_STARTED")
     await recordAudit({ userId, entidade: MADDOX_CAMPAIGN_AUDIT_ENTITY, entidadeId: campaignId, acao: AcaoAuditoria.ATUALIZAR, antes: { status: campaign.status }, depois: { status: "active", turn: 1 } })
@@ -375,7 +414,10 @@ export async function submitGameAction(campaignId: string, input: MaddoxGameActi
 
 /** Responde a pergunta na fila da campanha, transmitindo a todos; falha grava a resposta com `error`. */
 function scheduleAnswer(campaignId: Types.ObjectId, turnNumber: number, questionId: Types.ObjectId, characterName: string, question: string): Promise<void> {
-    return enqueueMaddoxJob(String(campaignId), `resposta do turno ${turnNumber}`, async ({ jobId }) => {
+    return enqueueMaddoxJob(
+        String(campaignId),
+        `resposta do turno ${turnNumber}`,
+        async ({ jobId }) => {
         const live = beginLive(String(campaignId), { kind: "answer", turnNumber, replyToId: String(questionId) })
         let content = ""
         let error: string | null = null
@@ -394,7 +436,9 @@ function scheduleAnswer(campaignId: Types.ObjectId, turnNumber: number, question
             throw failure
         }
         await publishGameChanged(campaignId)
-    })
+        },
+        { kind: "answer", turnNumber, round: 0 },
+    )
 }
 
 /** Membro da campanha (404 para quem não participa): acesso ao stream da mesa. */
@@ -438,6 +482,9 @@ export async function checkTurn(campaignId: string, userId: string): Promise<Mad
 
 /** Membro saiu ou foi removido: deixa de contar no turno atual, que pode fechar. */
 export async function onMemberLeftGame(campaignId: Types.ObjectId, memberId: Types.ObjectId): Promise<void> {
+    // Testes pendentes dele são cancelados (Maddox 5): a rodada pode terminar e o Maddox continuar sem eles.
+    const { cancelMemberChecks } = await import("./game-checks")
+    await cancelMemberChecks(campaignId, memberId)
     const pulled = await MaddoxCampaignModel.updateOne({ _id: campaignId, status: "active" }, { $pull: { "turn.eligibleMemberIds": memberId } })
     if (pulled.modifiedCount === 0) return
     await publishGameChanged(campaignId)
@@ -446,9 +493,24 @@ export async function onMemberLeftGame(campaignId: Types.ObjectId, memberId: Typ
 
 // ── Leitura ────────────────────────────────────────────────────────────────────
 
-async function messagesDto(messages: MessageDoc[]): Promise<MaddoxGameMessageDto[]> {
+/** Quem lê as mensagens: o teste pendente só chega ao jogador indicado. */
+interface MessagesViewer {
+    memberId: string | null
+    showCheckDc: boolean
+}
+
+const visibleTo = (viewer: MessagesViewer) => (message: MessageDoc) => !(message.kind === "check" && message.check?.status === "pending" && String(message.memberId) !== viewer.memberId)
+
+async function messagesDto(all: MessageDoc[], viewer: MessagesViewer): Promise<MaddoxGameMessageDto[]> {
+    const messages = all.filter(visibleTo(viewer))
     const characterIds = [...new Set(messages.map((message) => message.characterId).filter((id): id is Types.ObjectId => Boolean(id)).map(String))]
-    const skippers = [...new Set(messages.map((message) => message.skippedBy).filter((id): id is string => Boolean(id) && Types.ObjectId.isValid(id!)))]
+    const skippers = [
+        ...new Set(
+            messages
+                .flatMap((message) => [message.skippedBy, message.check?.rolledBy && message.check.rolledBy !== message.userId ? message.check.rolledBy : null])
+                .filter((id): id is string => Boolean(id) && Types.ObjectId.isValid(id!)),
+        ),
+    ]
     const [characters, users] = await Promise.all([
         characterIds.length ? MaddoxCharacterModel.find({ _id: { $in: characterIds } }).select("name portraitUrl").lean<Pick<CharacterDoc, "_id" | "name" | "portraitUrl">[]>() : Promise.resolve([]),
         skippers.length ? User.find({ _id: { $in: skippers } }).select("name username").lean<{ _id: Types.ObjectId; name?: string; username?: string }[]>() : Promise.resolve([]),
@@ -469,18 +531,40 @@ async function messagesDto(messages: MessageDoc[]): Promise<MaddoxGameMessageDto
             replyToId: message.replyToId ? String(message.replyToId) : null,
             skippedByName: message.skippedBy ? (userById.get(message.skippedBy) ?? "Dono") : null,
             error: message.error ?? null,
+            check: message.check ? checkDto(message, viewer, userById) : null,
             createdAt: new Date(message.createdAt).toISOString(),
         }
     })
 }
 
-async function messagesPage(campaignId: Types.ObjectId, before: Types.ObjectId | null): Promise<MaddoxGameMessagesPageDto> {
+function checkDto(message: MessageDoc, viewer: MessagesViewer, userById: Map<string, string>): MaddoxGameCheckDto {
+    const check = message.check!
+    const byOwner = Boolean(check.rolledBy && check.rolledBy !== message.userId)
+    return {
+        status: check.status,
+        round: check.round,
+        kind: check.kind,
+        ability: check.ability,
+        skill: check.skill ?? null,
+        mode: check.mode,
+        reason: check.reason,
+        dc: viewer.showCheckDc ? check.dc : null,
+        sheetId: check.sheetId ? String(check.sheetId) : null,
+        roll: check.roll ?? null,
+        modifierParts: check.modifierParts ?? [],
+        rolledByName: byOwner ? (userById.get(check.rolledBy!) ?? "Dono") : null,
+        success: viewer.showCheckDc && check.roll ? checkSucceeded(check.roll.total, check.dc) : null,
+        cancelReason: check.cancelReason ?? null,
+    }
+}
+
+async function messagesPage(campaignId: Types.ObjectId, before: Types.ObjectId | null, viewer: MessagesViewer): Promise<MaddoxGameMessagesPageDto> {
     const docs = await MaddoxCampaignMessageModel.find({ campaignId, ...(before ? { _id: { $lt: before } } : {}) })
         .sort({ _id: -1 })
         .limit(MADDOX_GAME_PAGE_SIZE + 1)
         .lean<MessageDoc[]>()
     const hasMore = docs.length > MADDOX_GAME_PAGE_SIZE
-    return { messages: await messagesDto(docs.slice(0, MADDOX_GAME_PAGE_SIZE).reverse()), hasMore }
+    return { messages: await messagesDto(docs.slice(0, MADDOX_GAME_PAGE_SIZE).reverse(), viewer), hasMore }
 }
 
 async function maddoxAvatarUrl(): Promise<string | null> {
@@ -502,7 +586,19 @@ export async function getGameState(campaignId: string, userId: string): Promise<
         if (await resumeMasterTurn(campaign)) campaign = await reloadCampaign(campaign._id)
         campaign = await fillEmptyTurn(campaign)
     }
-    const [members, page, avatarUrl] = await Promise.all([joinedMembers(campaign._id), messagesPage(campaign._id, null), maddoxAvatarUrl()])
+    const viewer: MessagesViewer = { memberId: String(loaded.member._id), showCheckDc: Boolean(campaign.showCheckDc) }
+    const [members, page, avatarUrl, npcs, pendingChecks] = await Promise.all([
+        joinedMembers(campaign._id),
+        messagesPage(campaign._id, null, viewer),
+        maddoxAvatarUrl(),
+        MaddoxNpcModel.find({ campaignId: campaign._id, visibility: "players" }).sort({ name: 1 }).select("name portraitUrl").lean<{ _id: Types.ObjectId; name: string; portraitUrl: string | null }[]>(),
+        campaign.status === "active" && campaign.turn?.phase === "master" && campaign.turn.awaitingChecks
+            ? MaddoxCampaignMessageModel.find({ campaignId: campaign._id, turnNumber: campaign.turn.number, kind: "check", "check.round": campaign.turn.checkRound ?? 0, "check.status": "pending" })
+                  .sort({ _id: 1 })
+                  .select("memberId characterName")
+                  .lean<{ _id: Types.ObjectId; memberId: Types.ObjectId; characterName: string | null }[]>()
+            : Promise.resolve([]),
+    ])
     const userIds = members.map(({ member }) => member.userId).filter((id) => Types.ObjectId.isValid(id))
     const found = userIds.length ? await User.find({ _id: { $in: userIds } }).select("name username").lean<{ _id: Types.ObjectId; name?: string; username?: string }[]>() : []
     const users = new Map(found.map((user) => [String(user._id), user.name?.trim() || user.username || "Usuário"]))
@@ -535,10 +631,21 @@ export async function getGameState(campaignId: string, userId: string): Promise<
             phase: campaign.turn?.phase ?? "master",
             startedAt: campaign.turn?.startedAt ? new Date(campaign.turn.startedAt).toISOString() : null,
             generating: Boolean(campaign.turn?.generating),
-            failed: campaign.turn?.phase === "master" && !campaign.turn?.generating && Boolean(campaign.turn?.failedAt),
+            failed: campaign.turn?.phase === "master" && !campaign.turn?.generating && !campaign.turn?.awaitingChecks && Boolean(campaign.turn?.failedAt),
+            awaitingChecks: campaign.turn?.phase === "master" && Boolean(campaign.turn?.awaitingChecks),
+            pendingChecks: pendingChecks.map((check) => ({ checkId: String(check._id), memberId: String(check.memberId), characterName: check.characterName ?? "Personagem" })),
         },
+        showCheckDc: Boolean(campaign.showCheckDc),
+        npcs: npcs.map((npc) => ({ id: String(npc._id), name: npc.name, portraitUrl: npc.portraitUrl ?? null })),
         participants,
-        me: { memberId: String(loaded.member._id), isOwner: campaign.ownerId === userId, ready: mine?.ready ?? false, eligible: mine?.eligible ?? false, declared: mine?.declared ?? false },
+        me: {
+            memberId: String(loaded.member._id),
+            isOwner: campaign.ownerId === userId,
+            ready: mine?.ready ?? false,
+            eligible: mine?.eligible ?? false,
+            declared: mine?.declared ?? false,
+            sheet: await mySheet(members.find(({ member }) => String(member._id) === String(loaded.member._id))?.character ?? null),
+        },
         messages: page.messages,
         hasMore: page.hasMore,
     }
@@ -546,8 +653,16 @@ export async function getGameState(campaignId: string, userId: string): Promise<
 
 /** Mensagens anteriores a `before` (paginação "Carregar anteriores"). */
 export async function listGameMessages(campaignId: string, before: string | null, userId: string): Promise<MaddoxGameMessagesPageDto> {
-    const { campaign } = await loadAsMember(campaignId, userId)
+    const { campaign, member } = await loadAsMember(campaignId, userId)
     if (before !== null && !Types.ObjectId.isValid(before)) throw new DomainError(400, "Cursor inválido", "INVALID_CURSOR")
     await dbConnect()
-    return messagesPage(campaign._id, before ? new Types.ObjectId(before) : null)
+    return messagesPage(campaign._id, before ? new Types.ObjectId(before) : null, { memberId: String(member._id), showCheckDc: Boolean(campaign.showCheckDc) })
+}
+
+/** Ficha D&D do MEU personagem (só a minha chega à tela). */
+async function mySheet(character: CharacterDoc | null): Promise<{ id: string; slug: string } | null> {
+    if (!character?.sheetId) return null
+    const { CharacterSheet } = await import("@/features/character-sheets/models/character-sheet")
+    const sheet = await CharacterSheet.findById(character.sheetId).select("slug").lean<{ _id: Types.ObjectId; slug: string }>()
+    return sheet ? { id: String(sheet._id), slug: sheet.slug } : null
 }
