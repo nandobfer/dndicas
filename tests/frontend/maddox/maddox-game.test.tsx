@@ -521,6 +521,32 @@ const checkDto = (over: Partial<NonNullable<MaddoxGameMessageDto["check"]>> = {}
 const awaitingTurn = { number: 2, phase: "master" as const, startedAt: null, generating: false, failed: false, awaitingChecks: true, pendingChecks: [{ checkId: "k1", memberId: "m2", characterName: "Lyra" }] }
 const checkMessage = (over: Partial<NonNullable<MaddoxGameMessageDto["check"]>> = {}) => message("k1", { kind: "check", phase: "master", turnNumber: 2, memberId: "m2", characterName: "Lyra", check: checkDto(over) })
 
+describe("mesa Maddox — layout em tela inteira", () => {
+    it("coluna com a altura da área útil; cabeçalho compacto fixo com turno, 'Minha ficha' à direita e a faixa; chat e ferramentas ocupam o resto", async () => {
+        await renderGame(gameState({ rigor: "fiel-dnd", me: ME({ sheet: { id: "s1", slug: "lyra" } }) }))
+        const page = screen.getByTestId("game-page")
+        expect(page).toHaveAttribute("data-layout", "fill")
+        for (const cls of ["flex", "flex-col", "lg:h-[calc(100dvh-7rem)]", "lg:min-h-[640px]"]) expect(page.className.split(" ")).toContain(cls)
+        const header = screen.getByTestId("campaign-chat-header")
+        for (const cls of ["sticky", "top-16", "z-20", "shrink-0"]) expect(header.className.split(" ")).toContain(cls)
+        expect(within(header).getByRole("heading", { level: 1 })).toHaveTextContent("Brumas")
+        expect(header).toHaveTextContent("Turno 1")
+        expect(within(header).getByRole("link", { name: "Voltar à campanha" })).toHaveAttribute("href", "/campanhas/c1")
+        expect(header).toContainElement(screen.getByTestId("turn-banner"))
+        const sheetButton = within(header).getByRole("button", { name: /Minha ficha/ })
+        expect(sheetButton.closest("div")!.className.split(" ")).toContain("ml-auto")
+        const grid = screen.getByTestId("game-grid")
+        expect(grid.className.split(" ")).toEqual(expect.arrayContaining(["lg:min-h-0", "lg:flex-1"]))
+        const panel = screen.getByTestId("game-panel")
+        expect(panel.className.split(" ")).toEqual(expect.arrayContaining(["h-[80dvh]", "min-h-[480px]", "lg:h-full", "lg:min-h-0"]))
+        expect(panel.className).not.toContain("18rem")
+        const tools = screen.getByTestId("game-tools")
+        expect(tools.className.split(" ")).toEqual(expect.arrayContaining(["lg:min-h-0", "lg:overflow-y-auto"]))
+        expect(grid).toContainElement(panel)
+        expect(grid).toContainElement(tools)
+    })
+})
+
 describe("mesa Maddox — testes pedidos pelo Maddox (Maddox 5)", () => {
     it("o jogador indicado vê o pedido com o d20, as partes do modificador e 'Rolar'; a rolagem vai ao servidor sem dado nem modificador", async () => {
         post.mockResolvedValue(ok({ roll: roll17, state: gameState({ me: ME({ memberId: "m2", isOwner: false }), turn: { ...awaitingTurn, awaitingChecks: false, pendingChecks: [], generating: true }, messages: [checkMessage({ status: "rolled", roll: roll17 })] }) }))

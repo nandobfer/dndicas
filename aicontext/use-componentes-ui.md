@@ -683,7 +683,10 @@ breadcrumb no header.
   `mx-auto` + `max-w-*` (padrão firmado na DND-6). Cards centrados de propósito, como o do convite das
   Campanhas Maddox, são exceção pontual dentro da página, não o invólucro dela.
 - **Telas de chat seguem o chat do Agente Opex** (`src/features/opex-agent/components/chat/`):
-  - painel com altura própria (ex.: `h-[calc(100dvh-18rem)] min-h-[420px] flex flex-col`), conversa com
+  - painel com altura própria. Em tela inteira (Campanhas Maddox), a página é uma coluna com a altura da área útil
+    (`flex flex-col lg:h-[calc(100dvh-7rem)] lg:min-h-[640px]`: header do app 4rem + padding do `<main>` 1,5rem × 2),
+    cabeçalho compacto `sticky top-16 shrink-0` e o painel em `min-h-0 flex-1` → `h-full flex flex-col`, sem descontar
+    a altura do cabeçalho com número fixo; conversa com
     rolagem interna (`role="log"`, `min-h-0 flex-1 overflow-y-auto`) que acompanha o fim enquanto a pessoa não
     sobe, e botão "Ir para o fim". Nunca deixe a caixa crescer com o texto nem role a janela;
   - campo de resposta no rodapé (`border-t`): caixa `flex items-end gap-2 rounded-xl border bg-card px-3 py-2`,

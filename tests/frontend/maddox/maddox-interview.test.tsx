@@ -322,20 +322,41 @@ const sameColor = (actual: string, hex: string) => {
 }
 
 describe("layout e estilo da conversa", () => {
-    it("página em largura total (sem mx-auto/max-w) e painel com altura própria e rolagem interna", async () => {
+    it("chat em tela inteira: coluna com a altura da área útil, cabeçalho compacto fixo e painel que ocupa o resto", async () => {
         mockGets(campaign(), interview())
         renderWithQueryClient(<InterviewPage campaignId="c1" kind="scenario" />)
         const panel = await screen.findByTestId("interview-panel")
         const page = screen.getByTestId("interview-page")
         expect(page.className).not.toMatch(/mx-auto|max-w-/)
-        expect(page.className).toContain("space-y-6")
-        expect(panel.className).toMatch(/h-\[calc\(100dvh-18rem\)\]/)
-        expect(panel.className).toContain("min-h-[420px]")
+        expect(page).toHaveAttribute("data-layout", "fill")
+        // 7rem = header do app (4rem) + padding do <main> (1,5rem × 2); no celular, 6rem.
+        for (const cls of ["flex", "flex-col", "lg:h-[calc(100dvh-7rem)]", "lg:min-h-[640px]", "h-[calc(100dvh-6rem)]", "min-h-[480px]"]) expect(page.className.split(" ")).toContain(cls)
+        expect(page.className).not.toContain("18rem")
+        const area = screen.getByTestId("interview-chat-area")
+        expect(area.className.split(" ")).toEqual(expect.arrayContaining(["min-h-0", "flex-1"]))
+        expect(area).toContainElement(panel)
+        expect(panel.className.split(" ")).toContain("h-full")
+        expect(panel.className).not.toMatch(/min-h-\[|calc\(/)
+        const header = screen.getByTestId("campaign-chat-header")
+        for (const cls of ["sticky", "top-16", "z-20", "shrink-0"]) expect(header.className.split(" ")).toContain(cls)
+        expect(within(header).getByRole("heading", { level: 1 })).toHaveTextContent("Entrevista de cenário")
+        expect(header).toHaveTextContent("Brumas de Valdrenn")
+        expect(within(header).getByRole("link", { name: "Voltar à campanha" })).toHaveAttribute("href", "/campanhas/c1")
+        // O cabeçalho vem antes do chat, fora da área que rola.
+        expect(header.compareDocumentPosition(area) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
         const log = within(panel).getByRole("log", { name: "Conversa com o Maddox" })
         expect(log.className).toContain("overflow-y-auto")
         // O campo de resposta fica no rodapé do painel, depois da conversa.
         const composer = within(panel).getByRole("form", { name: "Responder ao Maddox" })
         expect(log.compareDocumentPosition(composer) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    })
+
+    it("telas sem chat (antes de começar) mantêm o cabeçalho grande, sem o layout de tela inteira", async () => {
+        mockGets(campaign({ status: "lobby", scenarioStatus: "pending", rigorLocked: false }), null)
+        renderWithQueryClient(<InterviewPage campaignId="c1" kind="scenario" />)
+        expect(await screen.findByRole("button", { name: /Começar entrevista/ })).toBeInTheDocument()
+        expect(screen.getByTestId("interview-page")).not.toHaveAttribute("data-layout")
+        expect(screen.queryByTestId("campaign-chat-header")).not.toBeInTheDocument()
     })
 
     it("o texto que chega rola a conversa (não a janela); subir mostra 'Ir para o fim'", async () => {

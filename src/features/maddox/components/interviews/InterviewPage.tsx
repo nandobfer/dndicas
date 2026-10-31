@@ -21,6 +21,7 @@ import { InterviewComposer } from "./InterviewComposer"
 import { AbilityScoresCard } from "./AbilityScoresCard"
 import { InterviewMessageList } from "./InterviewMessageList"
 import { InterviewProposalCard } from "./InterviewProposalCard"
+import { CampaignChatHeader } from "../CampaignChatHeader"
 
 const errorStatus = (error: unknown) => (error as { response?: { status?: number } } | null)?.response?.status
 
@@ -89,11 +90,7 @@ function InterviewGate({ campaign, kind, userId }: { campaign: MaddoxCampaignDet
             </Shell>
         )
     }
-    return (
-        <Shell campaignId={campaign.id} header={header}>
-            <InterviewConversation campaign={campaign} kind={kind} userId={userId} />
-        </Shell>
-    )
+    return <InterviewConversation campaign={campaign} kind={kind} userId={userId} header={header} />
 }
 
 function Shell({ campaignId, header, children }: { campaignId: string; header: React.ReactNode; children: React.ReactNode }) {
@@ -127,13 +124,62 @@ function InterviewHeader({ campaign, kind }: { campaign: MaddoxCampaignDetailDto
     )
 }
 
-function InterviewConversation({ campaign, kind, userId }: { campaign: MaddoxCampaignDetailDto; kind: MaddoxScriptKind; userId: string | null }) {
+/**
+ * Conversa em tela inteira: cabeçalho compacto e fixo e o chat ocupando o resto da área visível. No desktop a
+ * coluna tem a altura exata da área útil (7rem = header do app 4rem + padding do `<main>` 1,5rem × 2), sem
+ * desconto fixo pelo cabeçalho; no celular, 6rem (padding de 1rem × 2).
+ */
+function ChatShell({ campaign, kind, children }: { campaign: MaddoxCampaignDetailDto; kind: MaddoxScriptKind; children: React.ReactNode }) {
+    const color = rigorColor(campaign.rigor)
+    const status = kind === "scenario" ? campaign.scenarioStatus : (campaign.myCharacter?.interviewStatus ?? "pending")
+    const subtitle = `${campaign.name}${kind === "character" && campaign.myCharacter ? ` · ${campaign.myCharacter.name}` : ""}`
+    return (
+        <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            className="flex h-[calc(100dvh-6rem)] min-h-[480px] flex-col gap-3 lg:h-[calc(100dvh-7rem)] lg:min-h-[640px]"
+            data-testid="interview-page"
+            data-layout="fill"
+        >
+            <CampaignChatHeader
+                campaignId={campaign.id}
+                color={color}
+                icon={kind === "scenario" ? BookOpen : UserRound}
+                title={TITLES[kind]}
+                subtitle={subtitle}
+                chips={
+                    <>
+                        <RigorChip rigor={campaign.rigor} />
+                        <InterviewChip status={status} />
+                    </>
+                }
+            />
+            <div className="min-h-0 flex-1" data-testid="interview-chat-area">
+                {children}
+            </div>
+        </motion.div>
+    )
+}
+
+function InterviewConversation({ campaign, kind, userId, header }: { campaign: MaddoxCampaignDetailDto; kind: MaddoxScriptKind; userId: string | null; header: React.ReactNode }) {
     const router = useRouter()
     const { query, live, start, send, retry, complete, rollAbility, resetRolls, submitScores } = useMaddoxInterview(campaign.id, kind, userId)
     const color = rigorColor(campaign.rigor)
 
-    if (query.isLoading) return <Skeleton className="h-80 w-full rounded-xl" aria-label="Carregando conversa" />
-    if (query.isError || !query.data) return <ErrorState title="Não foi possível carregar a entrevista" onRetry={() => void query.refetch()} />
+    if (query.isLoading) {
+        return (
+            <Shell campaignId={campaign.id} header={header}>
+                <Skeleton className="h-80 w-full rounded-xl" aria-label="Carregando conversa" />
+            </Shell>
+        )
+    }
+    if (query.isError || !query.data) {
+        return (
+            <Shell campaignId={campaign.id} header={header}>
+                <ErrorState title="Não foi possível carregar a entrevista" onRetry={() => void query.refetch()} />
+            </Shell>
+        )
+    }
 
     const interview = query.data.interview
     const messages = interview?.messages ?? []
@@ -144,6 +190,7 @@ function InterviewConversation({ campaign, kind, userId }: { campaign: MaddoxCam
 
     if (!interview && !live.streaming) {
         return (
+            <Shell campaignId={campaign.id} header={header}>
             <div className="space-y-4 rounded-xl border border-white/10 bg-white/[0.03] p-6 text-center">
                 <Sparkles className="mx-auto h-8 w-8" style={{ color }} aria-hidden />
                 <div className="space-y-1">
@@ -158,11 +205,13 @@ function InterviewConversation({ campaign, kind, userId }: { campaign: MaddoxCam
                     <MessageCircle aria-hidden /> Começar entrevista
                 </Button>
             </div>
+            </Shell>
         )
     }
 
     if (interview?.status === "done") {
         return (
+            <Shell campaignId={campaign.id} header={header}>
             <div className="space-y-6">
                 <div className="flex flex-col gap-3 rounded-xl border border-white/10 bg-white/[0.03] p-4 sm:flex-row sm:items-center sm:justify-between">
                     <p className="flex items-center gap-2 text-sm text-white/80">
@@ -174,14 +223,16 @@ function InterviewConversation({ campaign, kind, userId }: { campaign: MaddoxCam
                 </div>
                 {kind === "scenario" ? <ScenarioSummary campaign={campaign} /> : <ProfileSummary campaign={campaign} />}
             </div>
+            </Shell>
         )
     }
 
     return (
+        <ChatShell campaign={campaign} kind={kind}>
         <section
             aria-label="Entrevista com o Maddox"
             data-testid="interview-panel"
-            className="flex h-[calc(100dvh-18rem)] min-h-[420px] flex-col overflow-hidden rounded-xl border bg-card/40 backdrop-blur"
+            className="flex h-full flex-col overflow-hidden rounded-xl border bg-card/40 backdrop-blur"
             style={{ borderColor: `${color}40` }}
         >
             <InterviewMessageList
@@ -227,6 +278,7 @@ function InterviewConversation({ campaign, kind, userId }: { campaign: MaddoxCam
                 focusKey={[...messages].reverse().find((message) => message.role === "maddox")?.id ?? ""}
             />
         </section>
+        </ChatShell>
     )
 }
 

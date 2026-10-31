@@ -32,6 +32,7 @@ import { GameMessageList } from "./GameMessageList"
 import { MySheetButton } from "./MySheetButton"
 import { NpcPanel } from "./NpcPanel"
 import { TurnPanel } from "./TurnPanel"
+import { CampaignChatHeader } from "../CampaignChatHeader"
 
 const errorStatus = (error: unknown) => (error as { response?: { status?: number } } | null)?.response?.status
 
@@ -133,33 +134,36 @@ function GameTable({ state, presence, stream }: { state: MaddoxGameStateDto; pre
     const masterTurn = state.turn.phase === "master"
 
     return (
-        <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="space-y-6" data-testid="game-page">
-            <BackLink campaignId={state.campaignId} />
-            <header className="relative overflow-hidden rounded-xl border border-white/10 p-5" style={{ background: `radial-gradient(circle at 10% 0%, ${color}40, transparent 60%)`, boxShadow: `inset 3px 0 0 ${color}` }}>
-                <h1 className="flex items-center gap-2 text-xl font-bold text-white">
-                    <Swords className="h-5 w-5 shrink-0" style={{ color }} aria-hidden />
-                    <span className="truncate">{state.name}</span>
-                </h1>
-                <div className="mt-2 flex flex-wrap items-center gap-1.5">
-                    <RigorChip rigor={state.rigor} />
-                    <RarityChip color={color}>Turno {state.turn.number}</RarityChip>
-                    <span className="ml-auto">
-                        <MySheetButton sheet={state.me.sheet} />
-                    </span>
-                </div>
-                <p className="mt-3 flex items-center gap-2 text-sm text-white/80" role="status" data-testid="turn-banner">
-                    {masterTurn ? <Dices className="h-4 w-4 shrink-0" style={{ color }} aria-hidden /> : <MessageCircle className="h-4 w-4 shrink-0" style={{ color }} aria-hidden />}
-                    {masterTurn
-                        ? masterBannerText(state)
-                        : `${MADDOX_TURN_PHASE_LABELS.players} — ${progress.declared} de ${progress.total} ${presence.available ? "jogador(es) online" : "jogador(es)"} já declararam`}
-                </p>
-            </header>
+        // Tela inteira: cabeçalho compacto e fixo; a grade (chat + ferramentas) ocupa o resto da área útil no desktop
+        // (7rem = header do app 4rem + padding do `<main>` 1,5rem × 2). No celular a coluna lateral vem abaixo do chat.
+        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex flex-col gap-3 lg:h-[calc(100dvh-7rem)] lg:min-h-[640px]" data-testid="game-page" data-layout="fill">
+            <CampaignChatHeader
+                campaignId={state.campaignId}
+                color={color}
+                icon={Swords}
+                title={state.name}
+                chips={
+                    <>
+                        <RigorChip rigor={state.rigor} />
+                        <RarityChip color={color}>Turno {state.turn.number}</RarityChip>
+                    </>
+                }
+                actions={<MySheetButton sheet={state.me.sheet} />}
+                banner={
+                    <p className="flex items-center gap-2 text-xs text-white/80" role="status" data-testid="turn-banner">
+                        {masterTurn ? <Dices className="h-3.5 w-3.5 shrink-0" style={{ color }} aria-hidden /> : <MessageCircle className="h-3.5 w-3.5 shrink-0" style={{ color }} aria-hidden />}
+                        {masterTurn
+                            ? masterBannerText(state)
+                            : `${MADDOX_TURN_PHASE_LABELS.players} — ${progress.declared} de ${progress.total} ${presence.available ? "jogador(es) online" : "jogador(es)"} já declararam`}
+                    </p>
+                }
+            />
 
-            <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,340px)]">
+            <div className="grid gap-6 lg:min-h-0 lg:flex-1 lg:grid-cols-[minmax(0,1fr)_minmax(0,340px)]" data-testid="game-grid">
                 <section
                     aria-label="Mesa"
                     data-testid="game-panel"
-                    className="flex h-[calc(100dvh-18rem)] min-h-[460px] flex-col overflow-hidden rounded-xl border bg-card/40 backdrop-blur"
+                    className="flex h-[80dvh] min-h-[480px] flex-col overflow-hidden rounded-xl border bg-card/40 backdrop-blur lg:h-full lg:min-h-0"
                     style={{ borderColor: `${color}40` }}
                 >
                     <GameMessageList
@@ -186,7 +190,7 @@ function GameTable({ state, presence, stream }: { state: MaddoxGameStateDto; pre
                         </div>
                     )}
                 </section>
-                <div className="space-y-6">
+                <div className="space-y-6 lg:min-h-0 lg:overflow-y-auto" data-testid="game-tools">
                     <TurnPanel
                         state={state}
                         presence={presence}

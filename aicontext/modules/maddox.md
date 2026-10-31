@@ -269,6 +269,15 @@ original — por `[Nome](#mention:Tipo:id)`, que o `Markdown` mostra como o badg
   (`mentionsToMarkup`). A consolidação pede a mesma marcação; cenário, situação inicial e perfil passam pela mesma
   resolução com os nomes reservados. Até 25 citações por texto.
 
+**Chat em tela inteira (entrevista e mesa).** A tela do chat é uma coluna com a altura da área útil
+(`lg:h-[calc(100dvh-7rem)] lg:min-h-[640px]`; no celular, a entrevista usa `h-[calc(100dvh-6rem)] min-h-[480px]`) com o
+**cabeçalho compacto e fixo** `CampaignChatHeader` (`components/CampaignChatHeader.tsx`: `sticky top-16 z-20`, quase opaco,
+seta "Voltar à campanha", título, subtítulo, chips, ações à direita com `ml-auto` e, na mesa, a faixa do turno
+`turn-banner` na segunda linha) e o chat em `min-h-0 flex-1`. Na mesa, a grade chat + ferramentas é `lg:flex-1`; o painel
+do chat é `h-[80dvh] min-h-[480px] lg:h-full` e a coluna lateral ("Na mesa", "NPCs conhecidos") rola sozinha
+(`lg:overflow-y-auto`). A entrada só esmaece (sem deslocamento vertical). As telas sem chat (antes de começar,
+aguardando, sem personagem, concluída, mesa fora de jogo) mantêm o cabeçalho grande e o link "Voltar à campanha".
+
 **Tela da entrevista.** Largura total (sem `mx-auto`/`max-w-*`), painel de altura própria no padrão do chat do
 Opex (conversa com rolagem interna e "Ir para o fim", proposta e campo de resposta no rodapé), fala do Maddox
 numa bolha neutra (`rounded-2xl`, borda sutil na cor do rigor) com o nome na cor do rigor, pontinhos e cursor dentro
