@@ -11,6 +11,8 @@ import { DiceRollerProvider } from "@/features/dice-roller/components/dice-roll-
 import { GlobalFabGroup } from "@/features/dice-roller/components/global-fab-group"
 import { OpexScopeProvider } from "@/features/opex-agent/components/OpexScopeProvider"
 import { useIsOwlbearCatalogEmbed } from "@/features/owlbear/hooks/use-is-owlbear-catalog-embed"
+import { HeaderViewAs } from "@/features/perfix/components/view-as/HeaderViewAs"
+import { ViewAsBanner } from "@/features/perfix/components/view-as/ViewAsBanner"
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
     useWarmSearchCache()
@@ -24,15 +26,21 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             {/* Liquid Glass Background */}
             <LiquidGlassBackground />
 
-            {!isOwlbearCatalogEmbed && <GlassHeader />}
+            {!isOwlbearCatalogEmbed && <GlassHeader actions={<HeaderViewAs />} />}
 
-            {/* Main Content Area - largura toda, abaixo do header fixo */}
+            {/*
+              Conteúdo em largura toda. Abaixo do header fixo vai só a compensação exata da altura dele (`pt-16`);
+              o padding do <main> é o mesmo nos quatro lados, então o topo fica igual ao lateral. Nada mais entra
+              no fluxo acima do conteúdo (a faixa da simulação "Visualizar como" só aparece enquanto simula).
+            */}
             <div className={cn("relative z-10 flex flex-1 flex-col min-w-0", !isOwlbearCatalogEmbed && "pt-16")}>
+                <ViewAsBanner />
                 {/* Page Content */}
                 <motion.main
                     data-dashboard-content
                     className="flex flex-1 flex-col gap-4 p-4 lg:gap-6 lg:p-6"
-                    variants={motionConfig.variants.fadeInUp}
+                    // Só esmaece: um deslocamento vertical na entrada desalinha o topo com o lateral enquanto anima.
+                    variants={motionConfig.variants.fade}
                     initial="initial"
                     animate="animate"
                     transition={motionConfig.transitions.normal}

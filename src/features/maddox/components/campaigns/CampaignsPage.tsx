@@ -22,7 +22,7 @@ export function CampaignsPage() {
     useMaddoxCampaignsRealtime(userId)
 
     return (
-        <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="space-y-6">
+        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-6">
             <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
                 <div>
                     <h1 className="flex items-center gap-2 text-xl font-bold text-white sm:text-2xl">

@@ -47,6 +47,14 @@ describe("GlassHeader (desktop)", () => {
         expect(desktop().getByRole("link", { name: "Início" })).toHaveAttribute("aria-current", "page")
     })
 
+    it("ações extras (ex.: 'Visualizar como') entram à direita, antes do usuário", () => {
+        render(<GlassHeader actions={<button type="button">Visualizar como</button>} />)
+        const action = screen.getByRole("button", { name: "Visualizar como" })
+        const right = action.parentElement!
+        expect(right.className).toContain("ml-auto")
+        expect(right.firstElementChild).toBe(action)
+    })
+
     it("não tem sidebar nem drawer lateral", () => {
         const { container } = render(<GlassHeader />)
         expect(container.querySelector("aside")).toBeNull()
