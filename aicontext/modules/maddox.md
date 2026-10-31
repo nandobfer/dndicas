@@ -393,19 +393,22 @@ falha — mesmo que não respeite o sinal —, então a fila anda e o pulso da t
 é gravada com `error` ("O Maddox não conseguiu responder agora. Pergunte de novo."); a narração que falha marca `failedAt`
 (`turn.failed` no DTO). Consumo nas origens `maddox-narration` e `maddox-validation`.
 
-`GET …/game/stream` (membros; `maddox.play`): `snapshot { live[] }`, `live-start`, `delta { liveId, text }`,
+Uma falha da narração encerra a geração ao vivo **antes** de gravar `failedAt` (se a gravação falhar, nenhum cliente fica
+com a bolha parada). `GET …/game/stream` (membros; `maddox.play`): `snapshot { live[] }`, `live-start`, `delta { liveId, text }`,
 `tool { liveId, running }`, `live-end { liveId, messageId, error }` e `ping` (15 s). O mesmo fluxo chega a **todos** os
 jogadores com a mesa aberta. O texto ao vivo passa pelo `createMarkupFilter` (marcação do catálogo nunca crua) e, ao gravar, as
 menções são resolvidas com os nomes reservados da campanha **e dos NPCs**.
 
 **Ação livre.** **Rigoroso e Fiel ao D&D** (`MADDOX_DECLARATION_VALIDATION_RIGORS`) validam a declaração **antes de gravar**: com
 a chave JEV "Validade de ação livre" ligada decide o JEV (`noul`, motivo padrão); senão, uma geração curta e efêmera do narrador
-devolve `{ valid, reason }`. Quem já declarou recebe **409 `ALREADY_DECLARED` antes** da validação (sem chamada de IA).
+devolve `{ valid, reason }`, com teto de 20 s (`MADDOX_VALIDATION_TIMEOUT_MS`, sinal no provedor e no JEV; passou = aceita).
+Quem já declarou recebe **409 `ALREADY_DECLARED` antes** da validação (sem chamada de IA).
 Inválida = **409 `ACTION_INVALID`** com o motivo: nada é gravado e a vez não é gasta. Falha do
 validador aceita a declaração (aviso no log). **Narrativo, Flexível e Equilibrado** julgam na narração: a ação impossível vira
 uma tentativa frustrada narrada com a causa na ficção. Perguntas e "Não fazer nada" nunca são validadas.
 
-**Tela.** A mesa assina o stream (`useMaddoxGameStream`, reconecta sozinho): a fala do Maddox chega aos poucos numa bolha com
+**Tela.** A mesa assina o stream (`useMaddoxGameStream`): reconecta sozinho com espera crescente (3 s, dobrando até 60 s;
+sem linha nem `ping` por 45 s refaz a conexão) e **para** em 401/403/404; a fala do Maddox chega aos poucos numa bolha com
 cursor e "Consultando as anotações da campanha…" enquanto ele usa ferramentas; a resposta ao vivo aparece ligada à pergunta; a
 geração que terminou fica na tela até a mensagem gravada chegar (sem piscar). A faixa mostra "o Maddox teve um problema;
 tentando de novo em instantes…" depois de uma falha. `ACTION_INVALID` aparece acima do campo e o rascunho volta.

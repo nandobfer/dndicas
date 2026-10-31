@@ -11,6 +11,7 @@ vi.mock("@/lib/ai/stream", () => ({ generateAiText }))
 vi.mock("@/features/maddox/server/narrator", () => ({ loadNarrator: vi.fn(async () => ({ model: { provider: "gemini", model: "g", agent: null, variant: null } })) }))
 
 const { validateDeclaration } = await import("@/features/maddox/server/action-validation")
+const { MADDOX_VALIDATION_TIMEOUT_MS } = await import("@/features/maddox/constants")
 
 const input = {
     campaign: { _id: new Types.ObjectId(), name: "Brumas", rigor: "fiel-dnd" as const, setting: "Reinos.", state: { scene: "", location: "", situation: "Emboscada.", pendingDecision: "", updatedTurn: null, updatedAt: null } },
@@ -55,5 +56,29 @@ describe("validação da ação livre ao declarar", () => {
         expect(await validateDeclaration(input)).toEqual({ valid: true, reason: "" })
         generateAiText.mockRejectedValueOnce(new Error("fora do ar"))
         expect(await validateDeclaration(input)).toEqual({ valid: true, reason: "" })
+    })
+
+    it("provedor que nunca responde: passado o teto, a validação desiste e a declaração é ACEITA (requisição não fica presa)", async () => {
+        vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] })
+        try {
+            let signal: AbortSignal | undefined
+            generateAiText.mockImplementationOnce(async (request) => {
+                signal = request.signal as AbortSignal
+                return new Promise(() => undefined)
+            })
+            const pending = validateDeclaration(input)
+            await vi.advanceTimersByTimeAsync(MADDOX_VALIDATION_TIMEOUT_MS + 10)
+            expect(await pending).toEqual({ valid: true, reason: "" })
+            expect(signal?.aborted).toBe(true)
+
+            jev.on = true
+            askJevSystemOne.mockImplementationOnce(async () => new Promise(() => undefined))
+            const viaJev = validateDeclaration(input)
+            await vi.advanceTimersByTimeAsync(MADDOX_VALIDATION_TIMEOUT_MS + 10)
+            expect(await viaJev).toEqual({ valid: true, reason: "" })
+            expect(askJevSystemOne.mock.calls.at(-1)![0]).toMatchObject({ signal: expect.any(AbortSignal) })
+        } finally {
+            vi.useRealTimers()
+        }
     })
 })

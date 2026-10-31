@@ -147,8 +147,14 @@ async function runMasterTurn(campaignId: Types.ObjectId, token: string, turnNumb
         // Libera a trava e marca a falha: a retomada só acontece depois de `MADDOX_MASTER_RETRY_MS` (no `GET`/`check`).
         // Sem aviso aos clientes: o estado não mudou, e recarregar já faria a próxima tentativa sem espera.
         log.error({ err: error instanceof Error ? error.message : error, campaignId: String(campaignId), turnNumber, retryInMs: MADDOX_MASTER_RETRY_MS }, "[maddox] Falha no turno do mestre")
-        await MaddoxCampaignModel.updateOne({ _id: campaignId, "turn.generating.token": token }, { $set: { "turn.generating": null, "turn.failedAt": new Date() } })
+        // Encerra a geração ao vivo antes de gravar: se a gravação falhar, os clientes não ficam com uma bolha fantasma.
         live?.end({ messageId: null, error: "O Maddox teve um problema ao narrar. Uma nova tentativa acontece em instantes." })
+        try {
+            await MaddoxCampaignModel.updateOne({ _id: campaignId, "turn.generating.token": token }, { $set: { "turn.generating": null, "turn.failedAt": new Date() } })
+        } catch (writeError) {
+            // A trava velha (`MADDOX_MASTER_LOCK_STALE_MS`) ainda permite retomar quando o banco voltar.
+            log.error({ err: writeError instanceof Error ? writeError.message : writeError, campaignId: String(campaignId), turnNumber }, "[maddox] Falha ao gravar a falha do turno do mestre")
+        }
         return
     } finally {
         clearInterval(heartbeat)

@@ -572,6 +572,29 @@ describe("Maddox 4 — mestre em segundo plano e streaming", () => {
         expect(state.messages.find((message) => message.kind === "answer")).toMatchObject({ error: "O Maddox não conseguiu responder agora. Pergunte de novo." })
     })
 
+    it("falha do mestre com o banco fora no mesmo instante: a geração ao vivo termina mesmo assim (sem bolha fantasma)", async () => {
+        const { id, owner } = await table(1)
+        fakeMaster.narrate.mockRejectedValueOnce(new Error("fora do ar"))
+        const original = MaddoxCampaignModel.updateOne.bind(MaddoxCampaignModel)
+        const spy = vi.spyOn(MaddoxCampaignModel, "updateOne").mockImplementation(((filter: never, update: { $set?: Record<string, unknown> }, ...rest: never[]) => {
+            if (update?.$set && "turn.failedAt" in update.$set && update.$set["turn.failedAt"] instanceof Date) return Promise.reject(new Error("banco indisponível")) as never
+            return (original as (...args: unknown[]) => unknown)(filter, update, ...rest) as never
+        }) as never)
+        const lines: { type: string; error?: string | null }[] = []
+        const unsubscribe = subscribeGameLive(id, (line) => lines.push(line as never))
+        try {
+            await game.startCampaign(id, owner)
+            await waitForCampaignIdle(id)
+        } finally {
+            unsubscribe()
+            spy.mockRestore()
+        }
+        expect(lines.map((line) => line.type)).toEqual(["live-start", "live-end"])
+        expect(lines.at(-1)).toMatchObject({ error: expect.stringContaining("nova tentativa") })
+        const { liveSnapshot } = await import("@/features/maddox/server/game-live")
+        expect(liveSnapshot(id)).toEqual([])
+    })
+
     it("falha do mestre marca o turno como `failed` para a faixa da mesa", async () => {
         const { id, owner } = await table(1)
         fakeMaster.narrate.mockRejectedValueOnce(new Error("fora do ar"))

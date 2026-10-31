@@ -6,9 +6,15 @@ import { withBasePath } from "@/lib/base-path"
 import type { MaddoxGameStreamLine, MaddoxLiveGenerationDto } from "../game-types"
 import { MADDOX_CAMPAIGNS_KEY } from "./useMaddoxCampaigns"
 
-const RETRY_MS = 3_000
+/** Primeira espera para reconectar; dobra a cada falha seguida até `MADDOX_GAME_STREAM_RETRY_MAX_MS`. */
+export const MADDOX_GAME_STREAM_RETRY_MS = 3_000
+export const MADDOX_GAME_STREAM_RETRY_MAX_MS = 60_000
 /** Sem nada (nem `ping`) por este tempo, a conexão é refeita. */
-const STALE_MS = 45_000
+export const MADDOX_GAME_STREAM_STALE_MS = 45_000
+/** Respostas que não melhoram tentando de novo (sem login, sem permissão, fora da campanha): o stream para. */
+const FATAL_STATUSES = new Set([401, 403, 404])
+
+class FatalStreamError extends Error {}
 
 /** Geração que terminou: fica na tela até a mensagem gravada chegar no estado da mesa (sem piscar). */
 export interface MaddoxSettledGeneration extends MaddoxLiveGenerationDto {
@@ -65,7 +71,8 @@ export function reduceGameStream(state: MaddoxGameStreamState, line: MaddoxGameS
 
 /**
  * Gerações do Maddox ao vivo na mesa (`GET /api/maddox/campaigns/[id]/game/stream`, NDJSON), iguais para todos os
- * jogadores. A cada conexão chega o retrato do que está em andamento; caiu, reconecta sozinho. Quando uma geração
+ * jogadores. A cada conexão chega o retrato do que está em andamento; caiu, reconecta sozinho (espera crescente; para em
+ * 401/403/404). Quando uma geração
  * termina, a mesa recarrega para trazer a mensagem gravada.
  */
 export function useMaddoxGameStream(campaignId: string, enabled: boolean): MaddoxGameStreamState {
@@ -83,16 +90,19 @@ export function useMaddoxGameStream(campaignId: string, enabled: boolean): Maddo
 
         const armWatchdog = () => {
             if (watchdog) clearTimeout(watchdog)
-            watchdog = setTimeout(() => controller?.abort(), STALE_MS)
+            watchdog = setTimeout(() => controller?.abort(), MADDOX_GAME_STREAM_STALE_MS)
         }
         const refresh = () => void queryClient.invalidateQueries({ queryKey: MADDOX_CAMPAIGNS_KEY })
 
+        let failures = 0
         const connect = async () => {
             controller = new AbortController()
             armWatchdog()
             try {
                 const res = await fetch(url, { signal: controller.signal, cache: "no-store" })
+                if (FATAL_STATUSES.has(res.status)) throw new FatalStreamError(`HTTP ${res.status}`)
                 if (!res.ok || !res.body) throw new Error(`HTTP ${res.status}`)
+                failures = 0
                 setState((value) => ({ id: campaignId, value: { ...current(value), connected: true } }))
                 const reader = res.body.getReader()
                 const decoder = new TextDecoder()
@@ -110,12 +120,21 @@ export function useMaddoxGameStream(campaignId: string, enabled: boolean): Maddo
                     if (parsed.lines.some((line) => line.type === "live-end") || (first && parsed.lines.some((line) => line.type === "snapshot"))) refresh()
                     first = false
                 }
-            } catch {
+            } catch (error) {
+                if (error instanceof FatalStreamError) {
+                    // Sem login, sem permissão ou fora da campanha: tentar de novo não resolve (a tela já trata pelo estado da mesa).
+                    if (watchdog) clearTimeout(watchdog)
+                    if (!disposed) setState((value) => ({ id: campaignId, value: { ...current(value), connected: false } }))
+                    return
+                }
                 // queda ou aborto: tenta de novo abaixo
             }
             if (disposed) return
+            if (watchdog) clearTimeout(watchdog)
             setState((value) => ({ id: campaignId, value: { ...current(value), connected: false } }))
-            retry = setTimeout(() => void connect(), RETRY_MS)
+            const wait = Math.min(MADDOX_GAME_STREAM_RETRY_MS * 2 ** failures, MADDOX_GAME_STREAM_RETRY_MAX_MS)
+            failures += 1
+            retry = setTimeout(() => void connect(), wait)
         }
 
         void connect()

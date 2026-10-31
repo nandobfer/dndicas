@@ -79,7 +79,8 @@ a autoridade real para permitir encerrar mesmo quando o alvo deixou de existir.
 
 `ViewAsProvider` persiste estado no `sessionStorage`, espelha cookies por aba e mostra banner e
 seletor portados do Ciliar. O seletor fica no header do app (`HeaderViewAs`, só para o administrador real) e o banner
-logo abaixo do header, no layout `(dashboard)`; o `PerfixProvider` não renderiza nada no fluxo acima do conteúdo. `transport.ts` instala o cabeçalho por aba em axios e no fetch
+logo abaixo do header, no layout `(dashboard)`; nas extensões do Owlbear (fora desse layout) o banner fica no topo de
+`src/app/owlbear/layout.tsx`. O `PerfixProvider` não renderiza nada no fluxo acima do conteúdo. `transport.ts` instala o cabeçalho por aba em axios e no fetch
 same-origin (incluindo RSC), sem enviar o cabeçalho para terceiros. Cabeçalho `none` explicitamente
 ignora os cookies. Trocas cancelam/limpam queries, reconectam Pusher e atualizam componentes de
 servidor. A sessão não reutiliza dados da identidade anterior durante carregamento/logout.

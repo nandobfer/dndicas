@@ -1,6 +1,6 @@
 import { z } from "zod"
 import { loggerFor } from "@/lib/logger"
-import { MADDOX_JEV_MODEL, MADDOX_PROFILE_SECTIONS, MADDOX_RIGOR_LEVEL_DEFS, MADDOX_VALIDATION_CONSUMPTION_ORIGIN } from "../constants"
+import { MADDOX_JEV_MODEL, MADDOX_PROFILE_SECTIONS, MADDOX_RIGOR_LEVEL_DEFS, MADDOX_VALIDATION_CONSUMPTION_ORIGIN, MADDOX_VALIDATION_TIMEOUT_MS } from "../constants"
 import type { IMaddoxCampaign, IMaddoxCharacter } from "../models"
 import { parseJsonObject, rigorBlock } from "./interview-prompt"
 
@@ -45,11 +45,12 @@ function characterText(character: ValidateDeclarationInput["character"]): string
 const fallbackReason = (input: ValidateDeclarationInput) =>
     `O Maddox considera que essa ação não é possível para ${input.character?.name ?? "o seu personagem"} pelas regras desta campanha (${MADDOX_RIGOR_LEVEL_DEFS[input.campaign.rigor].label}). Reescreva a declaração.`
 
-async function viaJev(input: ValidateDeclarationInput): Promise<DeclarationVerdict> {
+async function viaJev(input: ValidateDeclarationInput, signal: AbortSignal): Promise<DeclarationVerdict> {
     const { askJevSystemOne } = await import("@/lib/ai/jev")
     const response = await askJevSystemOne({
         model: MADDOX_JEV_MODEL,
         tracking: { feature: "maddox", subject: String(input.campaign._id) },
+        signal,
         state: {
             rigor: rigorBlock(input.campaign.rigor),
             cenario: input.campaign.setting ?? "",
@@ -70,7 +71,7 @@ async function viaJev(input: ValidateDeclarationInput): Promise<DeclarationVerdi
     return answer.noul < 0.5 ? { valid: false, reason: fallbackReason(input) } : ACCEPT
 }
 
-async function viaNarrator(input: ValidateDeclarationInput): Promise<DeclarationVerdict> {
+async function viaNarrator(input: ValidateDeclarationInput, signal: AbortSignal): Promise<DeclarationVerdict> {
     const [{ loadNarrator }, { generateAiText }] = await Promise.all([import("./narrator"), import("@/lib/ai/stream")])
     const { model } = await loadNarrator()
     const instructions = [
@@ -90,6 +91,7 @@ async function viaNarrator(input: ValidateDeclarationInput): Promise<Declaration
         prompt: `Ação declarada por ${input.character?.name ?? "o personagem"}: ${input.content}`,
         title: `Maddox · validação · ${input.campaign.name}`,
         consumption: { origin: MADDOX_VALIDATION_CONSUMPTION_ORIGIN, subject: String(input.campaign._id) },
+        signal,
     })
     const verdict = verdictSchema.parse(parseJsonObject(text))
     if (verdict.valid) return ACCEPT
@@ -97,11 +99,28 @@ async function viaNarrator(input: ValidateDeclarationInput): Promise<Declaration
     return { valid: false, reason: reason ? (reason.length > REASON_MAX ? `${reason.slice(0, REASON_MAX - 1).trimEnd()}…` : reason) : fallbackReason(input) }
 }
 
+/** Rejeita quando o teto passa, mesmo que o provedor ignore o sinal (a requisição do jogador nunca fica presa). */
+async function withValidationTimeout<T>(run: (signal: AbortSignal) => Promise<T>): Promise<T> {
+    const controller = new AbortController()
+    let timer: ReturnType<typeof setTimeout> | null = null
+    const timeout = new Promise<never>((_, reject) => {
+        timer = setTimeout(() => {
+            controller.abort()
+            reject(new Error(`validação passou de ${MADDOX_VALIDATION_TIMEOUT_MS} ms`))
+        }, MADDOX_VALIDATION_TIMEOUT_MS)
+    })
+    try {
+        return await Promise.race([run(controller.signal), timeout])
+    } finally {
+        if (timer) clearTimeout(timer)
+    }
+}
+
 export async function validateDeclaration(input: ValidateDeclarationInput): Promise<DeclarationVerdict> {
     try {
         const { loadMaddoxSettings } = await import("./settings")
         const { settings } = await loadMaddoxSettings()
-        const verdict = settings.jev["free-action-validity"] ? await viaJev(input) : await viaNarrator(input)
+        const verdict = await withValidationTimeout((signal) => (settings.jev["free-action-validity"] ? viaJev(input, signal) : viaNarrator(input, signal)))
         if (!verdict.valid) log.info({ campaignId: String(input.campaign._id), rigor: input.campaign.rigor }, "[maddox] declaração recusada pela validação de ação livre")
         return verdict
     } catch (error) {

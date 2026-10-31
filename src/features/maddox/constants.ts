@@ -169,6 +169,11 @@ export const MADDOX_MASTER_HEARTBEAT_MS = 30 * 1000
 export const MADDOX_MASTER_GENERATION_TIMEOUT_MS = 5 * 60 * 1000
 export const MADDOX_MASTER_TIMEOUT_MESSAGE = "O Maddox demorou demais para responder."
 /**
+ * Teto da validação da ação livre ao declarar (roda dentro da requisição do jogador): passado, a validação é abandonada
+ * e a declaração é ACEITA, como em qualquer falha do validador.
+ */
+export const MADDOX_VALIDATION_TIMEOUT_MS = 20_000
+/**
  * Tetos de PROTEÇÃO dos textos gravados pelas ferramentas do narrador (não são limites de uso): bem acima do tamanho
  * orientado no prompt (`MADDOX_TOOL_TEXT_GUIDE` caracteres por anotação), só barram um texto descontrolado. Um texto cortado
  * é avisado ao modelo no retorno da ferramenta (`truncated`), para ele consolidar em vez de perder conteúdo calado.
