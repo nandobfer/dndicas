@@ -337,8 +337,8 @@ export function narratorTranscript(messages: readonly NarratorTranscriptMessage[
                     : message.kind === "check"
                       ? `[Turno ${message.turnNumber} — teste] ${content}`
                       : message.kind === "pass"
-                      ? `[Turno ${message.turnNumber} — ${who} não fez nada]`
-                      : `[Turno ${message.turnNumber} — ${who} declara] ${content}`
+                        ? `[Turno ${message.turnNumber} — ${who} não fez nada]`
+                        : `[Turno ${message.turnNumber} — ${who} declara] ${content}`
         if (size + line.length > maxChars && lines.length > 0) break
         lines.unshift(line)
         size += line.length + 2

@@ -418,24 +418,24 @@ function scheduleAnswer(campaignId: Types.ObjectId, turnNumber: number, question
         String(campaignId),
         `resposta do turno ${turnNumber}`,
         async ({ jobId }) => {
-        const live = beginLive(String(campaignId), { kind: "answer", turnNumber, replyToId: String(questionId) })
-        let content = ""
-        let error: string | null = null
-        try {
-            const master = await getMaddoxMaster()
-            content = await withGenerationTimeout((signal) => master.answer({ campaignId: String(campaignId), jobId, turnNumber, questionId: String(questionId), characterName, question, signal }, live))
-        } catch (failure) {
-            log.warn({ err: failure instanceof Error ? failure.message : String(failure), campaignId: String(campaignId), turnNumber }, "[maddox] Falha ao responder a pergunta")
-            error = MADDOX_ANSWER_FAILED_MESSAGE
-        }
-        try {
-            const message = await MaddoxCampaignMessageModel.create({ campaignId, turnNumber, phase: "players", kind: "answer", content: error ? "" : content, error, replyToId: questionId })
-            live.end({ messageId: String(message._id), error })
-        } catch (failure) {
-            live.end({ messageId: null, error: MADDOX_ANSWER_FAILED_MESSAGE })
-            throw failure
-        }
-        await publishGameChanged(campaignId)
+            const live = beginLive(String(campaignId), { kind: "answer", turnNumber, replyToId: String(questionId) })
+            let content = ""
+            let error: string | null = null
+            try {
+                const master = await getMaddoxMaster()
+                content = await withGenerationTimeout((signal) => master.answer({ campaignId: String(campaignId), jobId, turnNumber, questionId: String(questionId), characterName, question, signal }, live))
+            } catch (failure) {
+                log.warn({ err: failure instanceof Error ? failure.message : String(failure), campaignId: String(campaignId), turnNumber }, "[maddox] Falha ao responder a pergunta")
+                error = MADDOX_ANSWER_FAILED_MESSAGE
+            }
+            try {
+                const message = await MaddoxCampaignMessageModel.create({ campaignId, turnNumber, phase: "players", kind: "answer", content: error ? "" : content, error, replyToId: questionId })
+                live.end({ messageId: String(message._id), error })
+            } catch (failure) {
+                live.end({ messageId: null, error: MADDOX_ANSWER_FAILED_MESSAGE })
+                throw failure
+            }
+            await publishGameChanged(campaignId)
         },
         { kind: "answer", turnNumber, round: 0 },
     )

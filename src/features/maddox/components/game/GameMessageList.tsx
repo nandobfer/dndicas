@@ -7,7 +7,9 @@ import { Button } from "@/components/ui/opex/button"
 import { Markdown } from "@/components/ui/opex/markdown"
 import type { MaddoxGameMessageDto, MaddoxLiveGenerationDto } from "../../game-types"
 import { liveMarkupToBold } from "../../catalog-markup"
+import type { DiceRollResponse } from "@/features/dice-roller/types"
 import { MemberAvatar } from "../campaigns/campaign-visuals"
+import { GameCheckCard } from "./GameCheckCard"
 
 const NEAR_BOTTOM_PX = 80
 const bubble = { initial: { opacity: 0, y: 8 }, animate: { opacity: 1, y: 0 }, transition: { duration: 0.2, ease: "easeOut" as const } }
@@ -24,6 +26,10 @@ interface Props {
     hasMore: boolean
     loadingMore: boolean
     onLoadMore: () => void
+    /** Rolagens recentes de testes (stream da mesa), por mensagem: a animação é repetida para todos. */
+    replays?: ReadonlyMap<string, DiceRollResponse>
+    /** Rola um teste pedido pelo Maddox (Maddox 5). */
+    onRollCheck?: (checkId: string) => Promise<DiceRollResponse>
 }
 
 /**
@@ -31,7 +37,12 @@ interface Props {
  * à esquerda com o avatar dele; declarações e perguntas com o retrato do personagem (as minhas à direita);
  * "não fez nada" como linha discreta; divisor a cada turno.
  */
-export function GameMessageList({ messages, myMemberId, maddoxAvatarUrl, color, narrating, live = [], hasMore, loadingMore, onLoadMore }: Props) {
+const NO_REPLAYS: ReadonlyMap<string, DiceRollResponse> = new Map()
+const noRoll = async (): Promise<DiceRollResponse> => {
+    throw new Error("Rolagem indisponível")
+}
+
+export function GameMessageList({ messages, myMemberId, maddoxAvatarUrl, color, narrating, live = [], hasMore, loadingMore, onLoadMore, replays = NO_REPLAYS, onRollCheck = noRoll }: Props) {
     const scrollRef = useRef<HTMLDivElement>(null)
     const stickRef = useRef(true)
     const [showJump, setShowJump] = useState(false)
@@ -76,7 +87,11 @@ export function GameMessageList({ messages, myMemberId, maddoxAvatarUrl, color, 
                     return (
                         <Fragment key={message.id}>
                             {divider && <TurnDivider number={message.turnNumber} color={color} />}
-                            <GameMessage message={message} mine={message.memberId !== null && message.memberId === myMemberId} replyTo={message.replyToId ? (byId.get(message.replyToId) ?? null) : null} maddoxAvatarUrl={maddoxAvatarUrl} color={color} />
+                            {message.kind === "check" && message.check ? (
+                                <GameCheckCard message={message} mine={message.memberId !== null && message.memberId === myMemberId} color={color} replay={replays.get(message.id) ?? null} onRoll={onRollCheck} />
+                            ) : (
+                                <GameMessage message={message} mine={message.memberId !== null && message.memberId === myMemberId} replyTo={message.replyToId ? (byId.get(message.replyToId) ?? null) : null} maddoxAvatarUrl={maddoxAvatarUrl} color={color} />
+                            )}
                         </Fragment>
                     )
                 })}

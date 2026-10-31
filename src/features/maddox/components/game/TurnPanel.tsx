@@ -1,7 +1,7 @@
 "use client"
 
 import { useState } from "react"
-import { Crown, SkipForward, Users } from "lucide-react"
+import { Crown, Dices, SkipForward, Users } from "lucide-react"
 import { Button } from "@/components/ui/opex/button"
 import { ConfirmDialog } from "@/components/ui/opex/confirm-dialog"
 import { GlassCard as Card, GlassCardContent as CardContent, GlassCardHeader as CardHeader, GlassCardTitle as CardTitle } from "@/components/ui/glass-card"
@@ -19,6 +19,7 @@ export const SEAT_COLORS: Record<MaddoxSeatStatus, string> = {
     "next-turn": rarityColors.veryRare,
     preparing: rarityColors.common,
     watching: rarityColors.rare,
+    rolling: rarityColors.mythic,
 }
 
 interface Props {
@@ -27,11 +28,16 @@ interface Props {
     color: string
     skipping: boolean
     onSkip: (memberId: string) => void
+    /** Dono rola o teste pendente no lugar do jogador ausente (Maddox 5). */
+    rollingFor?: boolean
+    onRollFor?: (checkId: string, characterName: string) => void
 }
 
 /** Participantes da mesa: presença, situação no turno e "Pular" (dono) para quem está sendo aguardado. */
-export function TurnPanel({ state, presence, color, skipping, onSkip }: Props) {
+export function TurnPanel({ state, presence, color, skipping, onSkip, rollingFor = false, onRollFor }: Props) {
     const [confirming, setConfirming] = useState<MaddoxGameParticipantDto | null>(null)
+    const [confirmingRoll, setConfirmingRoll] = useState<{ checkId: string; characterName: string } | null>(null)
+    const canRollFor = state.me.isOwner && state.me.ready && state.status === "active" && state.turn.phase === "master" && state.turn.awaitingChecks
     const canSkip = state.me.isOwner && state.me.ready && state.status === "active" && state.turn.phase === "players"
 
     return (
@@ -68,6 +74,15 @@ export function TurnPanel({ state, presence, color, skipping, onSkip }: Props) {
                                     </p>
                                 </div>
                                 <RarityChip color={SEAT_COLORS[seat]}>{MADDOX_SEAT_LABELS[seat]}</RarityChip>
+                                {canRollFor &&
+                                    participant.memberId !== state.me.memberId &&
+                                    state.turn.pendingChecks
+                                        .filter((check) => check.memberId === participant.memberId)
+                                        .map((check) => (
+                                            <Button key={check.checkId} size="sm" variant="ghost" onClick={() => setConfirmingRoll({ checkId: check.checkId, characterName: check.characterName })} aria-label={`Rolar no lugar de ${check.characterName}`} disabled={rollingFor}>
+                                                <Dices aria-hidden /> Rolar no lugar
+                                            </Button>
+                                        ))}
                                 {canSkip && participant.eligible && !participant.declared && (
                                     <Button size="sm" variant="ghost" onClick={() => setConfirming(participant)} aria-label={`Pular ${participant.characterName ?? participant.name}`} disabled={skipping}>
                                         <SkipForward aria-hidden /> Pular
@@ -93,6 +108,18 @@ export function TurnPanel({ state, presence, color, skipping, onSkip }: Props) {
                 onConfirm={() => {
                     if (confirming) onSkip(confirming.memberId)
                     setConfirming(null)
+                }}
+            />
+            <ConfirmDialog
+                open={confirmingRoll !== null}
+                onOpenChange={(open) => !open && setConfirmingRoll(null)}
+                title={`Rolar o teste no lugar de ${confirmingRoll?.characterName ?? "jogador"}?`}
+                description="O dado é rolado agora, com os modificadores da ficha do personagem, e o resultado vai para o Maddox. Use quando o jogador não puder rolar."
+                confirmLabel="Rolar no lugar"
+                pending={rollingFor}
+                onConfirm={() => {
+                    if (confirmingRoll) onRollFor?.(confirmingRoll.checkId, confirmingRoll.characterName)
+                    setConfirmingRoll(null)
                 }}
             />
         </Card>
