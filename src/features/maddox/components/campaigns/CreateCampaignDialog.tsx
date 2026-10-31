@@ -47,7 +47,7 @@ export function CreateCampaignDialog({ open, onOpenChange, onCreated }: { open: 
                         <GlassModalTitle className="flex items-center gap-2">
                             <Swords className="h-5 w-5 text-primary" aria-hidden /> Nova campanha
                         </GlassModalTitle>
-                        <GlassModalDescription>A campanha começa no lobby: convide os jogadores pelo link e cada um cria o seu personagem antes de começar.</GlassModalDescription>
+                        <GlassModalDescription>Depois de criar, você define o cenário com o Maddox numa entrevista. Convide os jogadores pelo link: cada um faz a entrevista do próprio personagem.</GlassModalDescription>
                     </GlassModalHeader>
 
                     <Field id="maddox-campaign-name" label="Nome da campanha" error={form.formState.errors.name?.message}>

@@ -84,4 +84,55 @@ describe('lib/ai/stream — provedores sob demanda', () => {
         expect(events[1]).toMatchObject({ type: 'done', finishReason: 'stop', usage: { inputTokens: 3, outputTokens: 2, totalTokens: 5, costUsd: null } });
         expect(mocks.recordAiConsumption).toHaveBeenCalledWith(expect.objectContaining({ provider: 'anthropic', origin: 'teste', totalTokens: 5 }));
     });
+
+    describe('sessão fixa do OpenCode e conversa (Maddox)', () => {
+        const opencodeModel = vi.fn((modelId: string, options: Record<string, unknown>) => ({ provider: 'opencode', modelId, options }));
+        const dispose = vi.fn(async () => undefined);
+
+        beforeEach(() => {
+            opencodeModel.mockClear();
+            dispose.mockClear();
+            mocks.opencodeFactory.mockResolvedValue({ provider: Object.assign(opencodeModel, { dispose }), directory: '/srv/mesa' });
+        });
+
+        it('sessão fixa: reaproveita a sessão (modo existing) e não cria outra', async () => {
+            await prepareModel({ provider: 'opencode', model: 'anthropic/claude', agent: 'maddox', title: 'Maddox', opencodeSessionId: 'ses_fixa' });
+
+            const options = opencodeModel.mock.calls[0]![1];
+            expect(options).toMatchObject({ sessionId: 'ses_fixa', sessionMode: 'existing', createNewSession: false, agent: 'maddox', location: { directory: '/srv/mesa' } });
+        });
+
+        it('sem sessão fixa: cria uma sessão nova e não fixa sessionId', async () => {
+            await prepareModel({ provider: 'opencode', model: 'anthropic/claude', title: 'Opex' });
+
+            const options = opencodeModel.mock.calls[0]![1];
+            expect(options).toMatchObject({ createNewSession: true });
+            expect(options).not.toHaveProperty('sessionId');
+            expect(options).not.toHaveProperty('sessionMode');
+        });
+
+        it('messages substitui prompt; sem messages, vai o prompt', async () => {
+            const finished = () => ({
+                fullStream: (async function* () {
+                    yield { type: 'finish', finishReason: 'stop', totalUsage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 } };
+                })(),
+            });
+            mocks.streamText.mockReset().mockImplementation(finished);
+            const messages = [
+                { role: 'user' as const, content: 'Comece' },
+                { role: 'assistant' as const, content: 'Olá' },
+                { role: 'user' as const, content: 'Fantasia sombria' },
+            ];
+
+            await collect(streamAi({ provider: 'anthropic', model: 'claude-x', instructions: 'i', prompt: 'ignorado', messages }));
+            const withMessages = mocks.streamText.mock.calls[0]![0];
+            expect(withMessages.messages).toEqual(messages);
+            expect(withMessages).not.toHaveProperty('prompt');
+
+            await collect(streamAi({ provider: 'anthropic', model: 'claude-x', instructions: 'i', prompt: 'oi', messages: [] }));
+            const withPrompt = mocks.streamText.mock.calls[1]![0];
+            expect(withPrompt.prompt).toBe('oi');
+            expect(withPrompt).not.toHaveProperty('messages');
+        });
+    });
 });

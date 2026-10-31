@@ -2,6 +2,7 @@ import { randomBytes } from "node:crypto"
 import { Types } from "mongoose"
 import { AcaoAuditoria, dbConnect, recordAudit } from "@/lib/db"
 import { DomainError } from "@/lib/api/route"
+import { loggerFor } from "@/lib/logger"
 import { User } from "@/features/users/models/user"
 import { MADDOX_CAMPAIGN_AUDIT_ENTITY, MADDOX_INVITE_CLOSED_STATUSES, type MaddoxCampaignStatus } from "../constants"
 import { MaddoxCampaignMemberModel, MaddoxCampaignModel, MaddoxCharacterModel, type IMaddoxCampaign, type IMaddoxCampaignMember, type IMaddoxCharacter } from "../models"
@@ -17,9 +18,12 @@ import type {
 import { notifyCampaignChanged } from "./campaign-realtime"
 
 /**
- * Campanhas Maddox (Maddox 1): lista, criação, lobby, link de convite e esboço de personagem.
+ * Campanhas Maddox (Maddox 1 e 2; a mesa do Maddox 3 fica em `./game`): lista, criação, lobby, link de convite, esboço de personagem e a
+ * regra "só entra no jogo quem concluiu a entrevista".
  * SOMENTE servidor. `userId` é sempre o usuário EFETIVO (respeita o "Visualizar como").
  */
+
+const log = loggerFor({ module: "maddox", feature: "campaigns" })
 
 const NOT_FOUND = "Campanha não encontrada"
 const INVITE_NOT_FOUND = "Convite inválido ou expirado. Peça um link novo ao dono da campanha."
@@ -39,10 +43,40 @@ function objectId(id: string, message = NOT_FOUND): Types.ObjectId {
     return new Types.ObjectId(id)
 }
 
-function characterDto(character: CharacterDoc | undefined): MaddoxCampaignCharacterDto | null {
+function characterDto(character: CharacterDoc | undefined, sheetSlugs: Map<string, string>): MaddoxCampaignCharacterDto | null {
     if (!character) return null
-    return { id: String(character._id), name: character.name, portraitUrl: character.portraitUrl ?? null, interviewStatus: character.interview?.status ?? "pending" }
+    const profile = character.profile instanceof Map ? Object.fromEntries(character.profile) : { ...(character.profile ?? {}) }
+    return {
+        id: String(character._id),
+        name: character.name,
+        portraitUrl: character.portraitUrl ?? null,
+        interviewStatus: character.interview?.status ?? "pending",
+        profile,
+        sheetSlug: character.sheetId ? (sheetSlugs.get(String(character.sheetId)) ?? null) : null,
+    }
 }
+
+/** Só entra no jogo (Maddox 3) quem concluiu a entrevista de personagem. */
+export function isMemberReadyToPlay(character: Pick<CharacterDoc, "interview"> | null | undefined): boolean {
+    return character?.interview?.status === "done"
+}
+
+/** Barra quem ainda não concluiu a entrevista de personagem (409 `INTERVIEW_REQUIRED`). */
+export async function assertMemberCanPlay(campaignId: string, userId: string): Promise<void> {
+    const { member } = await loadMembership(campaignId, userId)
+    const character = member?.characterId ? await MaddoxCharacterModel.findById(member.characterId).select("interview").lean<CharacterDoc>() : null
+    if (!isMemberReadyToPlay(character)) throw new DomainError(409, "Conclua a entrevista de personagem com o Maddox antes de entrar no jogo.", "INTERVIEW_REQUIRED")
+}
+
+/** Membro ativo da campanha (autorização do canal de presença da mesa). */
+export async function isActiveCampaignMember(campaignId: string, userId: string): Promise<boolean> {
+    if (!Types.ObjectId.isValid(campaignId)) return false
+    await dbConnect()
+    return (await MaddoxCampaignMemberModel.exists({ campaignId: new Types.ObjectId(campaignId), userId, status: "joined" })) !== null
+}
+
+/** O rigor só muda no lobby e antes de a entrevista de cenário começar. */
+const rigorLocked = (campaign: Pick<CampaignDoc, "status" | "scenarioInterview">) => campaign.status !== "lobby" || (campaign.scenarioInterview?.status ?? "pending") !== "pending"
 
 async function loadUsers(ids: string[]) {
     const valid = [...new Set(ids)].filter((id) => Types.ObjectId.isValid(id))
@@ -61,12 +95,20 @@ async function buildDtos(campaigns: CampaignDoc[], userId: string): Promise<(Mad
         characterIds.length ? MaddoxCharacterModel.find({ _id: { $in: characterIds } }).lean<CharacterDoc[]>() : Promise.resolve([] as CharacterDoc[]),
         loadUsers([...members.map((member) => member.userId), ...campaigns.map((campaign) => campaign.ownerId)]),
     ])
+    const sheetIds = characters.map((character) => character.sheetId).filter((id): id is Types.ObjectId => Boolean(id))
+    const sheetSlugs = new Map<string, string>()
+    if (sheetIds.length) {
+        const { CharacterSheet } = await import("@/features/character-sheets/models/character-sheet")
+        const sheets = await CharacterSheet.find({ _id: { $in: sheetIds } }).select("slug").lean<{ _id: Types.ObjectId; slug: string }[]>()
+        for (const sheet of sheets) sheetSlugs.set(String(sheet._id), sheet.slug)
+    }
     const characterById = new Map(characters.map((character) => [String(character._id), character]))
     return campaigns.map((campaign) => {
         const own = members.filter((member) => String(member.campaignId) === String(campaign._id))
         const dtos: MaddoxCampaignMemberDto[] = own
             .map((member) => {
                 const user = users.get(member.userId)
+                const character = member.characterId ? characterById.get(String(member.characterId)) : undefined
                 return {
                     id: String(member._id),
                     userId: member.userId,
@@ -75,7 +117,8 @@ async function buildDtos(campaigns: CampaignDoc[], userId: string): Promise<(Mad
                     avatarUrl: user?.avatarUrl ?? null,
                     role: member.role,
                     joinedAt: iso(member.joinedAt),
-                    character: characterDto(member.characterId ? characterById.get(String(member.characterId)) : undefined),
+                    character: characterDto(character, sheetSlugs),
+                    ready: isMemberReadyToPlay(character),
                 }
             })
             .sort((a, b) => (a.role === b.role ? 0 : a.role === "owner" ? -1 : 1))
@@ -93,6 +136,9 @@ async function buildDtos(campaigns: CampaignDoc[], userId: string): Promise<(Mad
             myCharacter: myDto?.character ?? null,
             members: dtos,
             turnNumber: campaign.turn?.number ?? 0,
+            turnPhase: campaign.turn?.phase ?? "master",
+            startedAt: iso(campaign.startedAt),
+            scenarioStatus: campaign.scenarioInterview?.status ?? "pending",
             createdAt: new Date(campaign.createdAt).toISOString(),
             updatedAt: new Date(campaign.updatedAt).toISOString(),
             myMemberId: mine ? String(mine._id) : null,
@@ -104,13 +150,13 @@ const memberUserIds = async (campaignId: Types.ObjectId) =>
     (await MaddoxCampaignMemberModel.find({ campaignId, status: "joined" }).select("userId").lean<{ userId: string }[]>()).map((member) => member.userId)
 
 /** Avisa os membros ativos (e quem mais for indicado, ex.: o removido) e marca a campanha como atualizada. */
-async function changed(campaignId: Types.ObjectId, extraUserIds: string[] = []) {
+export async function changed(campaignId: Types.ObjectId, extraUserIds: string[] = []) {
     await MaddoxCampaignModel.updateOne({ _id: campaignId }, { $set: { updatedAt: new Date() } }, { timestamps: false })
     await notifyCampaignChanged(String(campaignId), [...(await memberUserIds(campaignId)), ...extraUserIds])
 }
 
 /** Campanha + meu registro de membro ativo. Quem não participa recebe 404 (não revela a campanha). */
-async function loadMembership(campaignId: string, userId: string): Promise<{ campaign: CampaignDoc; member: MemberDoc | null }> {
+export async function loadMembership(campaignId: string, userId: string): Promise<{ campaign: CampaignDoc; member: MemberDoc | null }> {
     const _id = objectId(campaignId)
     await dbConnect()
     const campaign = await MaddoxCampaignModel.findById(_id).lean<CampaignDoc>()
@@ -145,7 +191,14 @@ export async function listMyCampaigns(userId: string): Promise<MaddoxCampaignLis
 export async function getCampaignDetail(campaignId: string, userId: string): Promise<MaddoxCampaignDetailDto> {
     const { campaign } = await loadMembership(campaignId, userId)
     const [dto] = await buildDtos([campaign], userId)
-    return { ...dto!, myMemberId: dto!.myMemberId ?? "", inviteOpen: inviteOpen(campaign.status) }
+    return {
+        ...dto!,
+        myMemberId: dto!.myMemberId ?? "",
+        inviteOpen: inviteOpen(campaign.status),
+        setting: campaign.setting ?? "",
+        openingSituation: campaign.openingSituation ?? "",
+        rigorLocked: rigorLocked(campaign),
+    }
 }
 
 // ── Criação e edição ───────────────────────────────────────────────────────────
@@ -172,11 +225,11 @@ export async function createCampaign(input: CreateMaddoxCampaignInput, userId: s
     return getCampaignDetail(String(campaign._id), userId)
 }
 
-/** Dono renomeia; o rigor só muda enquanto a campanha está no lobby. */
+/** Dono renomeia; o rigor só muda no lobby e antes de a entrevista de cenário começar. */
 export async function updateCampaign(campaignId: string, input: UpdateMaddoxCampaignInput, userId: string): Promise<MaddoxCampaignDetailDto> {
     const { campaign } = await loadAsOwner(campaignId, userId)
-    if (input.rigor !== undefined && input.rigor !== campaign.rigor && campaign.status !== "lobby") {
-        throw new DomainError(409, "O grau de rigor só pode mudar enquanto a campanha está no lobby.", "RIGOR_LOCKED")
+    if (input.rigor !== undefined && input.rigor !== campaign.rigor && rigorLocked(campaign)) {
+        throw new DomainError(409, "O grau de rigor só pode mudar no lobby, antes da entrevista de cenário.", "RIGOR_LOCKED")
     }
     const next = { ...(input.name !== undefined ? { name: input.name } : {}), ...(input.rigor !== undefined ? { rigor: input.rigor } : {}) }
     await MaddoxCampaignModel.updateOne({ _id: campaign._id }, { $set: next })
@@ -278,14 +331,24 @@ export async function removeMember(campaignId: string, memberId: string, userId:
     await MaddoxCampaignMemberModel.updateOne({ _id: target._id, status: "joined" }, { $set: { status } })
     await recordAudit({ userId, entidade: MADDOX_CAMPAIGN_AUDIT_ENTITY, entidadeId: String(campaign._id), acao: self ? AcaoAuditoria.ATUALIZAR : AcaoAuditoria.EXCLUIR, antes: { member: target.userId, status: "joined" }, depois: { member: target.userId, status } })
     await changed(campaign._id, [target.userId])
+    if (campaign.status === "active") {
+        // Sob demanda: `game` importa este módulo. Quem sai deixa de contar no turno dos jogadores. A saída já
+        // foi gravada, auditada e avisada: uma falha ao reavaliar o turno não a desfaz (o `check` refaz depois).
+        try {
+            const { onMemberLeftGame } = await import("./game")
+            await onMemberLeftGame(campaign._id, target._id)
+        } catch (error) {
+            log.warn({ err: error, campaignId: String(campaign._id), memberId: String(target._id) }, "[maddox] Falha ao reavaliar o turno após a saída do membro")
+        }
+    }
     return { left: self }
 }
 
 // ── Personagem (esboço) ────────────────────────────────────────────────────────
 
 /**
- * Esboço do MEU personagem no lobby: nome e retrato. A entrevista de personagem (Maddox 2) completa o
- * perfil; aqui ela fica `pending`. Regravar atualiza o mesmo personagem.
+ * Esboço do MEU personagem: nome e retrato. A entrevista de personagem (Maddox 2) completa o perfil;
+ * aqui ela fica `pending`. Regravar atualiza o mesmo personagem (nome e retrato seguem editáveis).
  */
 export async function upsertCharacterDraft(campaignId: string, input: MaddoxCharacterDraftInput, userId: string): Promise<MaddoxCampaignDetailDto> {
     const { campaign, member } = await loadMembership(campaignId, userId)
@@ -296,6 +359,11 @@ export async function upsertCharacterDraft(campaignId: string, input: MaddoxChar
 
     if (current) {
         await MaddoxCharacterModel.updateOne({ _id: current._id }, { $set: { name: input.name, portraitUrl } })
+        // Ficha D&D criada pela entrevista acompanha o nome e o retrato (retrato removido não apaga a foto da ficha).
+        if (current.sheetId) {
+            const { CharacterSheet } = await import("@/features/character-sheets/models/character-sheet")
+            await CharacterSheet.updateOne({ _id: current.sheetId, userId }, { $set: { name: input.name, ...(portraitUrl ? { photo: portraitUrl } : {}) } })
+        }
         await recordAudit({ userId, entidade: MADDOX_CAMPAIGN_AUDIT_ENTITY, entidadeId: String(campaign._id), acao: AcaoAuditoria.ATUALIZAR, antes: { character: current.name }, depois: { character: input.name } })
     } else {
         const created = await MaddoxCharacterModel.create({ campaignId: campaign._id, memberId: member._id, userId, name: input.name, portraitUrl, interview: { status: "pending", scriptVersion: null } })
