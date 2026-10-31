@@ -26,6 +26,13 @@ describe("HeaderMobileMenu", () => {
         expect(panel.queryByRole("button", { name: "Administração" })).not.toBeInTheDocument()
     })
 
+    it("usa o mesmo espaçamento (8px) nos quatro lados da barra do painel", () => {
+        renderMenu("/")
+        fireEvent.click(screen.getByRole("button", { name: "Abrir menu" }))
+        const classes = screen.getByTestId("header-mobile-menu-bar").className.split(/\s+/)
+        expect(classes.filter((name) => /^(?:[a-z]+:)?p[xytrbl]?-/.test(name))).toEqual(["p-2"])
+    })
+
     it("expande e recolhe as seções", () => {
         renderMenu("/")
         fireEvent.click(screen.getByRole("button", { name: "Abrir menu" }))

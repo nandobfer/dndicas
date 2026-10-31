@@ -79,7 +79,7 @@ export function HeaderMobileMenu({ categories, active, pathname }: HeaderMobileM
                                 transition={{ duration: 0.2, ease: "easeOut" }}
                                 className="fixed inset-x-2 top-2 z-[61] flex max-h-[calc(100dvh-1rem)] flex-col overflow-hidden rounded-2xl border border-white/10 bg-black/70 shadow-2xl shadow-black/50 backdrop-blur-xl"
                             >
-                                <div className="flex h-14 items-center justify-between border-b border-white/10 px-3">
+                                <div className="flex h-14 items-center justify-between border-b border-white/10 p-2" data-testid="header-mobile-menu-bar">
                                     <VisuallyHidden>
                                         <DialogPrimitive.Title>Menu</DialogPrimitive.Title>
                                     </VisuallyHidden>

@@ -16,6 +16,21 @@ import { HOME_HREF, type ActiveNav, type NavCategory, type NavCategoryId } from 
 
 /** Tempo para sair do botão e chegar ao container sem fechá-lo. */
 export const CATEGORY_CLOSE_DELAY_MS = 150
+/** Distância mínima entre o container e as bordas da janela. */
+export const PANEL_VIEWPORT_MARGIN = 10
+const PANEL_WIDE_WIDTH = 440
+const PANEL_NARROW_WIDTH = 260
+const panelWidthFor = (category: NavCategory) => (category.items.length > 5 ? PANEL_WIDE_WIDTH : PANEL_NARROW_WIDTH)
+
+/**
+ * Posição do container (relativa ao grupo de links): a borda esquerda alinha com a da categoria
+ * aberta, sem deixar o container sair da janela.
+ */
+export function anchorPanelLeft(root: { left: number }, trigger: { left: number }, panelWidth: number, viewportWidth: number, margin = PANEL_VIEWPORT_MARGIN) {
+    const maxLeft = viewportWidth - margin - panelWidth - root.left
+    const minLeft = margin - root.left
+    return Math.round(Math.max(minLeft, Math.min(trigger.left - root.left, maxLeft)))
+}
 const PANEL_ID = "header-category-panel"
 
 export const headerNavLinkClass = (active: boolean, open = false) =>
@@ -89,6 +104,22 @@ export function HeaderCategoryMenu({ categories, active, pathname }: HeaderCateg
     }, [openId, cancelClose])
 
     const openCategory = categories.find((category) => category.id === openId) ?? null
+    const openPanelWidth = openCategory ? panelWidthFor(openCategory) : 0
+    const [panelLeft, setPanelLeft] = React.useState(0)
+
+    // Um único container: ao trocar de categoria ele é reposicionado sob a nova, sem remontar.
+    React.useLayoutEffect(() => {
+        if (!openId) return
+        const measure = () => {
+            const root = rootRef.current
+            const trigger = triggerRefs.current.get(openId)
+            if (!root || !trigger) return
+            setPanelLeft(anchorPanelLeft(root.getBoundingClientRect(), trigger.getBoundingClientRect(), openPanelWidth, window.innerWidth))
+        }
+        measure()
+        window.addEventListener("resize", measure)
+        return () => window.removeEventListener("resize", measure)
+    }, [openId, openPanelWidth])
     itemRefs.current = []
 
     const onTriggerKeyDown = (event: React.KeyboardEvent, id: NavCategoryId) => {
@@ -176,13 +207,14 @@ export function HeaderCategoryMenu({ categories, active, pathname }: HeaderCateg
                         animate={{ opacity: 1, y: 0, scale: 1 }}
                         exit={{ opacity: 0, y: -6, scale: 0.98, transition: { duration: 0.12 } }}
                         transition={reduceMotion ? { duration: 0 } : { type: "spring", stiffness: 420, damping: 34 }}
-                        className="absolute left-1/2 top-[calc(100%+12px)] z-50 -translate-x-1/2"
+                        style={{ left: `${panelLeft}px` }}
+                        className={cn("absolute top-[calc(100%+12px)] z-50", !reduceMotion && "transition-[left] duration-150 ease-out")}
                     >
                         <motion.div
                             layout={!reduceMotion}
                             className="overflow-hidden rounded-2xl border border-white/10 bg-black/60 p-2 shadow-2xl shadow-black/50 backdrop-blur-xl"
                         >
-                            <ul className={cn("grid gap-1", openCategory.items.length > 5 ? "w-[440px] grid-cols-2" : "w-[260px] grid-cols-1")}>
+                            <ul className={cn("grid gap-1", openPanelWidth === PANEL_WIDE_WIDTH ? "w-[440px] grid-cols-2" : "w-[260px] grid-cols-1")}>
                                 {openCategory.items.map((item, index) => {
                                     const isItemActive = active?.kind === "item" && active.href === item.href
                                     const Icon = item.icon

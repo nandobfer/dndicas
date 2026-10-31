@@ -1,9 +1,9 @@
 /** @vitest-environment happy-dom */
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react"
 import * as React from "react"
-import { beforeEach, describe, expect, it, vi } from "vitest"
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { GlassHeader } from "@/components/ui/glass-header"
-import { CATEGORY_CLOSE_DELAY_MS } from "@/components/ui/header-category-menu"
+import { CATEGORY_CLOSE_DELAY_MS, PANEL_VIEWPORT_MARGIN, anchorPanelLeft } from "@/components/ui/header-category-menu"
 
 let pathname = "/"
 let signedIn = true
@@ -229,5 +229,92 @@ describe("GlassHeader (desktop)", () => {
         fireEvent.click(desktop().getByRole("button", { name: "Fichas" }))
         expect(within(desktop().getByRole("region")).getAllByRole("link").map((link) => link.textContent)).toEqual(["Minhas Fichas"])
         expect(screen.getByRole("link", { name: "Entrar / Cadastrar" })).toHaveAttribute("href", "/sign-in")
+    })
+})
+
+describe("GlassHeader › espaçamento e alinhamento", () => {
+    beforeEach(() => {
+        pathname = "/"
+        signedIn = true
+        granted = []
+    })
+
+    it("usa o mesmo espaçamento (10px) nos quatro lados da barra", () => {
+        render(<GlassHeader />)
+        const classes = screen.getByTestId("glass-header-bar").className.split(/\s+/)
+        expect(classes).toContain("p-2.5")
+        expect(classes.filter((name) => /^(?:[a-z]+:)?p[xytrbl]?-/.test(name))).toEqual(["p-2.5"])
+        expect(screen.getByRole("banner").className).toContain("h-16")
+    })
+
+    it("alinha a navegação à esquerda, logo após o logo, e leva o usuário para a direita", () => {
+        render(<GlassHeader />)
+        const start = screen.getByTestId("header-start")
+        const nav = screen.getByTestId("header-desktop-nav")
+        expect(start.firstElementChild).toBe(screen.getByRole("link", { name: "Dungeons & Dicas: Início" }))
+        expect(start.children[1]).toBe(nav)
+        expect(nav.className).not.toMatch(/justify-center|flex-1/)
+        expect(screen.getByTestId("glass-header-bar").className).not.toContain("justify-between")
+        expect(screen.getByTestId("header-mobile-nav").parentElement!.className).toContain("ml-auto")
+    })
+})
+
+describe("GlassHeader › container ancorado na categoria", () => {
+    const original = Element.prototype.getBoundingClientRect
+    let positions: Record<string, number>
+
+    const rect = (left: number, width: number) =>
+        ({ left, right: left + width, top: 0, bottom: 40, width, height: 40, x: left, y: 0, toJSON: () => ({}) }) as DOMRect
+
+    beforeEach(() => {
+        pathname = "/"
+        signedIn = true
+        granted = ["*"]
+        Object.defineProperty(window, "innerWidth", { configurable: true, value: 1280 })
+        positions = { root: 100, Fichas: 180, Campanhas: 260, "Catálogo": 380, "Administração": 480 }
+        Element.prototype.getBoundingClientRect = function (this: Element) {
+            if (this.getAttribute("aria-haspopup") === "true") return rect(positions[this.textContent ?? ""] ?? 0, 90)
+            if (this.querySelector?.('[aria-haspopup="true"]') && this.parentElement?.getAttribute("data-testid") === "header-desktop-nav") return rect(positions.root, 600)
+            return original.call(this)
+        }
+    })
+
+    afterEach(() => {
+        Element.prototype.getBoundingClientRect = original
+    })
+
+    const panel = () => desktop().getByRole("region")
+
+    it("alinha a borda esquerda do container com a da categoria aberta", () => {
+        render(<GlassHeader />)
+        fireEvent.pointerEnter(desktop().getByRole("button", { name: "Catálogo" }), mouse)
+        expect(panel().style.left).toBe("280px")
+        expect(panel().className).not.toMatch(/left-1\/2|-translate-x-1\/2/)
+    })
+
+    it("ao trocar de categoria, reposiciona o mesmo container sob a nova", () => {
+        render(<GlassHeader />)
+        fireEvent.pointerEnter(desktop().getByRole("button", { name: "Catálogo" }), mouse)
+        const first = panel()
+        fireEvent.pointerEnter(desktop().getByRole("button", { name: "Fichas" }), mouse)
+        expect(desktop().getAllByRole("region")).toHaveLength(1)
+        expect(panel()).toBe(first)
+        expect(panel().style.left).toBe("80px")
+    })
+
+    it("não deixa o container passar da borda direita da janela", () => {
+        Object.defineProperty(window, "innerWidth", { configurable: true, value: 800 })
+        render(<GlassHeader />)
+        // Catálogo tem 9 itens (container de 440px): 800 - 10 - 440 - 100 = 250.
+        fireEvent.pointerEnter(desktop().getByRole("button", { name: "Catálogo" }), mouse)
+        expect(panel().style.left).toBe("250px")
+    })
+})
+
+describe("anchorPanelLeft", () => {
+    it("alinha à categoria quando cabe e respeita as bordas da janela", () => {
+        expect(anchorPanelLeft({ left: 100 }, { left: 260 }, 260, 1280)).toBe(160)
+        expect(anchorPanelLeft({ left: 100 }, { left: 900 }, 440, 1280)).toBe(1280 - PANEL_VIEWPORT_MARGIN - 440 - 100)
+        expect(anchorPanelLeft({ left: 100 }, { left: 0 }, 260, 1280)).toBe(PANEL_VIEWPORT_MARGIN - 100)
     })
 })

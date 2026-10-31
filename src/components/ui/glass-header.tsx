@@ -26,16 +26,19 @@ export function GlassHeader() {
 
     return (
         <header className="fixed inset-x-0 top-0 z-40 h-16 border-b border-white/10 bg-black/40 backdrop-blur-sm">
-            <div className="flex h-full items-center justify-between gap-4 px-4 lg:px-6">
-                <Link href={HOME_HREF} className="flex flex-shrink-0 items-center rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/30" aria-label="Dungeons & Dicas: Início">
-                    <Image src="/dndicas-logo.webp" alt="Dungeons & Dicas" width={44} height={44} className="h-11 w-11 object-contain" priority />
-                </Link>
+            {/* 10px iguais nos quatro lados: 10 + logo de 44 + 10 = 64 de altura. */}
+            <div className="flex h-full items-center gap-2.5 p-2.5" data-testid="glass-header-bar">
+                <div className="flex min-w-0 items-center gap-2.5" data-testid="header-start">
+                    <Link href={HOME_HREF} className="flex flex-shrink-0 items-center rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/30" aria-label="Dungeons & Dicas: Início">
+                        <Image src="/dndicas-logo.webp" alt="Dungeons & Dicas" width={44} height={44} className="h-11 w-11 object-contain" priority />
+                    </Link>
 
-                <nav aria-label="Navegação principal" className="hidden flex-1 justify-center lg:flex" data-testid="header-desktop-nav">
-                    <HeaderCategoryMenu categories={categories} active={active} pathname={pathname} />
-                </nav>
+                    <nav aria-label="Navegação principal" className="hidden lg:flex" data-testid="header-desktop-nav">
+                        <HeaderCategoryMenu categories={categories} active={active} pathname={pathname} />
+                    </nav>
+                </div>
 
-                <div className="flex flex-shrink-0 items-center gap-1">
+                <div className="ml-auto flex flex-shrink-0 items-center gap-1">
                     <HeaderUserMenu />
                     <div className="lg:hidden" data-testid="header-mobile-nav">
                         <HeaderMobileMenu categories={categories} active={active} pathname={pathname} />
