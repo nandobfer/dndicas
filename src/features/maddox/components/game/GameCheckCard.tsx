@@ -50,6 +50,9 @@ export function GameCheckCard({ message, mine, color, replay, onRoll }: Props) {
     const spec = { kind: check.kind, ability: check.ability, skill: check.skill }
     const title = checkTitle(spec)
     const [localRoll, setLocalRoll] = useState<DiceRollResponse | null>(null)
+    // Modificador do painel congelado no clique: o painel se reinicia quando o preset muda, então o resultado do
+    // servidor (que pode trazer outro modificador) nunca troca o preset de quem está vendo o dado rolar.
+    const [frozenModifier, setFrozenModifier] = useState<number | null>(null)
     const pendingMine = check.status === "pending" && mine
     const sheet = useSheet(pendingMine && !localRoll ? check.sheetId : null)
     const preview = useMemo(() => (sheet.data ? checkModifier(sheet.data as CharacterSheet, spec) : null), [sheet.data, spec.kind, spec.ability, spec.skill]) // eslint-disable-line react-hooks/exhaustive-deps
@@ -58,7 +61,10 @@ export function GameCheckCard({ message, mine, color, replay, onRoll }: Props) {
     const modifier = roll ? roll.modifier : (preview?.value ?? 0)
     // Quem rola mantém o próprio painel (a animação local); os outros repetem a rolagem recebida pelo stream da mesa.
     const showPanel = pendingMine || Boolean(localRoll) || Boolean(replay)
-    const preset = useMemo<DiceRollPreset>(() => ({ label: title, terms: [{ dice: "d20", quantity: 1 }], modifier, mode: check.mode, source: "sheet" }), [title, modifier, check.mode])
+    const presetModifier = frozenModifier ?? (pendingMine ? (preview?.value ?? 0) : (replay ?? check.roll)?.modifier ?? 0)
+    const preset = useMemo<DiceRollPreset>(() => ({ label: title, terms: [{ dice: "d20", quantity: 1 }], modifier: presetModifier, mode: check.mode, source: "sheet" }), [title, presetModifier, check.mode])
+    // A prévia do modificador depende da ficha: "Rolar" espera ela carregar.
+    const sheetLoading = pendingMine && !localRoll && !sheet.data && !sheet.isError
 
     if (check.status === "cancelled") {
         return (
@@ -110,10 +116,11 @@ export function GameCheckCard({ message, mine, color, replay, onRoll }: Props) {
                             hideConfigurationControls
                             rollButtonLabel="Rolar"
                             hideRollButton={!pendingMine && !localRoll}
-                            disableRolling={Boolean(localRoll) || !pendingMine}
-                            disabledRollingMessage={localRoll ? "Resultado enviado ao Maddox." : null}
+                            disableRolling={Boolean(localRoll) || !pendingMine || sheetLoading}
+                            disabledRollingMessage={localRoll ? "Resultado enviado ao Maddox." : sheetLoading ? "Carregando a ficha…" : null}
                             externalResult={pendingMine || localRoll ? null : replay}
                             rollRequest={async () => {
+                                setFrozenModifier(presetModifier)
                                 const result = await onRoll(message.id)
                                 setLocalRoll(result)
                                 return result

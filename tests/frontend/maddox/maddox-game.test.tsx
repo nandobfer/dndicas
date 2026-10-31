@@ -28,29 +28,50 @@ vi.mock("sonner", () => ({ toast: { error: vi.fn(), success: vi.fn(), warning: v
 vi.mock("next/navigation", () => ({ useRouter: () => ({ push: vi.fn(), replace: vi.fn(), refresh: vi.fn() }), usePathname: () => "/campanhas/c1/mesa" }))
 vi.mock("@/core/hooks/useAuth", () => ({ useAuth: () => ({ userId: "u-owner", isSignedIn: true, isLoaded: true, can: () => true }) }))
 const addWindow = vi.fn()
-/** Painel de dados simplificado (o 3D real é testado em tests/frontend/dice-roller): expõe as props que a mesa passa. */
-vi.mock("@/features/dice-roller/components/dice-roller-panel", () => ({
-    DiceRollerPanel: (props: {
-        preset?: { modifier?: number; mode?: string } | null
-        externalResult?: { total: number } | null
-        hideRollButton?: boolean
-        disableRolling?: boolean
-        disabledRollingMessage?: string | null
-        rollButtonLabel?: string
-        rollRequest?: (input: unknown) => Promise<unknown>
-    }) => (
-        <div data-testid="fake-dice-panel" data-modifier={props.preset?.modifier} data-mode={props.preset?.mode} data-external={props.externalResult?.total ?? ""}>
-            {!props.hideRollButton && (
-                <button type="button" disabled={props.disableRolling} onClick={() => void props.rollRequest?.({ terms: [{ dice: "d20", quantity: 1 }] })}>
-                    {props.rollButtonLabel ?? "JOGAR"}
-                </button>
-            )}
-            {props.disabledRollingMessage}
-        </div>
-    ),
-}))
+/**
+ * Painel de dados simplificado (o 3D real é testado em tests/frontend/dice-roller): expõe as props que a mesa passa e,
+ * como o painel real, ZERA o resultado mostrado quando o `preset` muda (efeito em `[preset]`).
+ */
+vi.mock("@/features/dice-roller/components/dice-roller-panel", async () => {
+    const { useEffect, useState } = await import("react")
+    return {
+        DiceRollerPanel: (props: {
+            preset?: { modifier?: number; mode?: string } | null
+            externalResult?: { total: number } | null
+            hideRollButton?: boolean
+            disableRolling?: boolean
+            disabledRollingMessage?: string | null
+            rollButtonLabel?: string
+            rollRequest?: (input: unknown) => Promise<{ total: number }>
+        }) => {
+            const [shown, setShown] = useState<number | null>(null)
+            useEffect(() => setShown(null), [props.preset])
+            return (
+                <div data-testid="fake-dice-panel" data-modifier={props.preset?.modifier} data-mode={props.preset?.mode} data-external={props.externalResult?.total ?? ""} data-shown={shown ?? ""}>
+                    {!props.hideRollButton && (
+                        <button
+                            type="button"
+                            disabled={props.disableRolling}
+                            onClick={async () => {
+                                const result = await props.rollRequest?.({ terms: [{ dice: "d20", quantity: 1 }] })
+                                if (result) setShown(result.total)
+                            }}
+                        >
+                            {props.rollButtonLabel ?? "JOGAR"}
+                        </button>
+                    )}
+                    {props.disabledRollingMessage}
+                </div>
+            )
+        },
+    }
+})
 const sheetPreview = { strength: 10, dexterity: 16, constitution: 10, intelligence: 10, wisdom: 10, charisma: 10, level: 1, proficiencyBonusOverride: null, savingThrows: {}, skills: { Furtividade: { proficient: true, expertise: false } } }
-vi.mock("@/features/character-sheets/api/character-sheets-queries", () => ({ useSheet: (id: string | null) => ({ data: id ? sheetPreview : undefined, isLoading: false, isError: false }) }))
+/** Ficha da prévia controlada pelo teste (`loading` = ainda carregando; `data` troca a ficha). */
+const sheetQuery: { loading: boolean; data: typeof sheetPreview } = { loading: false, data: sheetPreview }
+vi.mock("@/features/character-sheets/api/character-sheets-queries", () => ({
+    useSheet: (id: string | null) => ({ data: id && !sheetQuery.loading ? sheetQuery.data : undefined, isLoading: Boolean(id) && sheetQuery.loading, isError: false }),
+}))
 vi.mock("@/features/character-sheets/components/sheet-form", () => ({ SheetForm: () => <div data-testid="sheet-form" /> }))
 vi.mock("@/core/context/window-context", () => ({ useWindows: () => ({ addWindow, removeWindow: vi.fn() }) }))
 vi.mock("@/lib/pusher/client", () => ({ isPusherClientAvailable: () => pusherAvailable, acquireChannel, releaseChannel }))
@@ -135,6 +156,8 @@ const { seatStatus, turnProgress, composerBlockReason, gameRefetchInterval, mast
 const { MADDOX_MASTER_RETRY_MS } = await import("@/features/maddox/constants")
 
 beforeEach(() => {
+    sheetQuery.loading = false
+    sheetQuery.data = sheetPreview
     get.mockReset()
     post.mockReset()
     handlers.clear()
@@ -525,6 +548,32 @@ describe("mesa Maddox — testes pedidos pelo Maddox (Maddox 5)", () => {
         fireEvent.click(within(panel).getByRole("button", { name: "Rolar" }))
         await waitFor(() => expect(post).toHaveBeenCalledWith("/maddox/campaigns/c1/game/checks/k1/roll", {}))
         expect(await screen.findByText("Resultado enviado ao Maddox.")).toBeInTheDocument()
+    })
+
+    it("'Rolar' espera a ficha carregar; o modificador do servidor diferente da prévia não zera o dado de quem rolou", async () => {
+        sheetQuery.loading = true
+        // Servidor calcula +7 (ficha editada em outra janela); a prévia mostrava +5.
+        const roll19 = { ...roll17, modifier: 7, total: 19 }
+        post.mockResolvedValue(ok({ roll: roll19, state: gameState({ me: ME({ memberId: "m2", isOwner: false }), turn: { ...awaitingTurn, awaitingChecks: false, pendingChecks: [], generating: true }, messages: [checkMessage({ status: "rolled", roll: roll19 })] }) }))
+        const view = await renderGame(gameState({ rigor: "fiel-dnd", me: ME({ memberId: "m2", isOwner: false }), turn: awaitingTurn, messages: [checkMessage()] }))
+        let panel = within(screen.getByTestId("game-check-request")).getByTestId("fake-dice-panel")
+        expect(within(panel).getByRole("button", { name: "Rolar" })).toBeDisabled()
+        expect(panel).toHaveTextContent("Carregando a ficha…")
+        sheetQuery.loading = false
+        view.rerender(<GamePage campaignId="c1" />)
+        panel = await waitFor(() => {
+            const current = within(screen.getByTestId("game-check-request")).getByTestId("fake-dice-panel")
+            expect(within(current).getByRole("button", { name: "Rolar" })).toBeEnabled()
+            return current
+        })
+        expect(panel).toHaveAttribute("data-modifier", "5")
+        fireEvent.click(within(panel).getByRole("button", { name: "Rolar" }))
+        expect(await screen.findByText("Resultado enviado ao Maddox.")).toBeInTheDocument()
+        const after = screen.getByTestId("fake-dice-panel")
+        // O preset fica com o modificador do clique e o painel mantém o total mostrado.
+        expect(after).toHaveAttribute("data-modifier", "5")
+        await waitFor(() => expect(after).toHaveAttribute("data-shown", "19"))
+        expect(screen.getByTestId("check-modifier-total")).toHaveTextContent("= d20 +7")
     })
 
     it("os outros não recebem o pedido: veem a espera com o nome; o dono pode 'Rolar no lugar' com confirmação", async () => {

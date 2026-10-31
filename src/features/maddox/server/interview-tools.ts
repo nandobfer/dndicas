@@ -69,10 +69,21 @@ export function latestAbilityCard(messages: readonly IMaddoxInterviewMessage[]):
     return null
 }
 
-/** Card enviado mais recente (o que entra na ficha). */
+/**
+ * Último envio do card (o que entra na ficha). Um card reaberto pelo Maddox e não reenviado não apaga o envio anterior:
+ * vale o mais novo com valores — enviado ou já substituído (`superseded`) —, com o bônus aplicado a ele.
+ */
 export function submittedAbilityCard(messages: readonly IMaddoxInterviewMessage[]): IMaddoxAbilityScoresCard | null {
-    const latest = latestAbilityCard(messages)
-    return latest?.card.status === "submitted" && latest.card.base ? latest.card : null
+    for (let index = messages.length - 1; index >= 0; index--) {
+        const card = messages[index]!.abilityScores
+        if (card && card.base && card.method && (card.status === "submitted" || card.status === "superseded")) return card
+    }
+    return null
+}
+
+/** Card aberto e nenhum envio ainda: os atributos não estão definidos (a conclusão espera o envio). */
+export function abilityCardAwaitingFirstSubmit(messages: readonly IMaddoxInterviewMessage[]): boolean {
+    return latestAbilityCard(messages)?.card.status === "pending" && !submittedAbilityCard(messages)
 }
 
 const rollsState = (doc: Pick<IMaddoxInterview, "abilityRolls">) => (doc.abilityRolls ? { scores: doc.abilityRolls.rolls.map((roll) => roll.score), sixth: doc.abilityRolls.sixth, invalid: doc.abilityRolls.invalid } : null)

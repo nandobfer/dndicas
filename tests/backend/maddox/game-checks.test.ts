@@ -9,7 +9,8 @@ import { MongoMemoryServer } from "mongodb-memory-server"
  */
 
 type ToolCall = { name: string; input: Record<string, unknown> }
-type Step = { tools?: ToolCall[]; text?: string }
+/** `during`: roda no meio da geração, depois das ferramentas do passo (ex.: o jogador sai da campanha). */
+type Step = { tools?: ToolCall[]; text?: string; during?: () => Promise<void> }
 
 const calls: { instructions: string; userText: string; toolNames: string[] }[] = []
 /** Roteiro por geração (na ordem em que o narrador é chamado). */
@@ -24,14 +25,17 @@ vi.mock("@/lib/db", () => ({
 // O motor de dados conecta pelo `dbConnect` do core: no teste, a conexão já é a do MongoDB em memória.
 vi.mock("@/core/database/db", () => ({ default: vi.fn(async () => undefined) }))
 vi.mock("@/lib/pusher/channels", () => ({ publishToChannels: vi.fn(async () => undefined) }))
-const jev = { enabled: false, answers: {} as Record<string, { type: "noul"; noul: number }>, fail: false, calls: 0 }
+const jev = { enabled: false, answers: {} as Record<string, { type: "noul"; noul: number }>, fail: false, hang: false, calls: 0 }
 vi.mock("@/lib/ai/jev", () => ({
     askJevSystemOne: vi.fn(async () => {
         jev.calls += 1
         if (jev.fail) throw new Error("JEV fora do ar")
+        // JEV que nunca responde: só o teto (`MADDOX_CHECK_HINT_TIMEOUT_MS`, reduzido abaixo) libera a narração.
+        if (jev.hang) return new Promise<never>(() => undefined)
         return { answers: jev.answers }
     }),
 }))
+vi.mock("@/features/maddox/constants", async (importOriginal) => ({ ...(await importOriginal<typeof import("@/features/maddox/constants")>()), MADDOX_CHECK_HINT_TIMEOUT_MS: 80 }))
 vi.mock("@/features/maddox/server/game-presence", () => ({ onlineUserIds: vi.fn(async () => null) }))
 vi.mock("@/features/maddox/server/settings", () => ({
     loadMaddoxSettings: vi.fn(async () => ({
@@ -84,6 +88,7 @@ vi.mock("ai", () => ({
                             yield { type: "tool-error", toolCallId, toolName: call.name, error }
                         }
                     }
+                    if (step.during) await step.during()
                     if (step.text) for (const piece of step.text.match(/[\s\S]{1,12}/g) ?? []) yield { type: "text-delta", text: piece }
                 }
                 yield { type: "finish", finishReason: "stop", totalUsage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 } }
@@ -170,7 +175,7 @@ beforeEach(async () => {
     calls.length = 0
     script.length = 0
     failNext.value = false
-    Object.assign(jev, { enabled: false, answers: {}, fail: false, calls: 0 })
+    Object.assign(jev, { enabled: false, answers: {}, fail: false, hang: false, calls: 0 })
     vi.mocked(recordAudit).mockClear()
 })
 
@@ -336,6 +341,36 @@ describe("Maddox 5 — regras dos testes", () => {
         expect(calls.at(-1)!.userText).toContain("Lyra — Furtividade (Destreza), CD 15: cancelado")
     })
 
+    it("o jogador que sai DURANTE a geração (depois do request_check) recebe o teste já cancelado e o Maddox continua", async () => {
+        const table = await faithfulTable()
+        script.push([{ text: "Os guardas cochilam na entrada da cripta. O que vocês fazem?" }])
+        await game.startCampaign(table.id, table.owner)
+        await waitForCampaignIdle(table.id)
+        script.push([{ tools: [stealthCheck], during: () => campaigns.removeMember(table.id, table.lyra.memberId, table.player).then(() => undefined), text: "Lyra avança rente à parede…" }])
+        script.push([{ text: "Sem Lyra, Doran segue sozinho. O que você faz?" }])
+        await game.submitGameAction(table.id, { kind: "declaration", content: "Doran espera na esquina." }, table.owner)
+        await game.submitGameAction(table.id, { kind: "declaration", content: "Lyra se esgueira até a porta da cripta." }, table.player)
+        await waitForCampaignIdle(table.id)
+        await waitForCampaignIdle(table.id)
+        const check = await MaddoxCampaignMessageModel.findOne({ campaignId: table.id, kind: "check" }).lean()
+        expect(check!.check).toMatchObject({ status: "cancelled", cancelReason: "O jogador saiu da campanha" })
+        const state = await game.getGameState(table.id, table.owner)
+        expect(state.turn).toMatchObject({ phase: "players", awaitingChecks: false })
+        expect(calls.at(-1)!.userText).toContain("Lyra — Furtividade (Destreza), CD 15: cancelado")
+    })
+
+    it("teste pendente de quem já não está na campanha não trava a mesa: o GET seguinte cancela e retoma", async () => {
+        const table = await faithfulTable()
+        await untilCheckRequested(table)
+        // Saída gravada sem passar pelo cancelamento (ex.: queda entre a saída e o aviso à mesa).
+        await MaddoxCampaignMemberModel.updateOne({ _id: table.lyra.memberId }, { $set: { status: "left" } })
+        script.push([{ text: "A mesa segue. O que vocês fazem?" }])
+        await game.getGameState(table.id, table.owner)
+        await waitForCampaignIdle(table.id)
+        expect((await MaddoxCampaignMessageModel.findOne({ campaignId: table.id, kind: "check" }).lean())!.check).toMatchObject({ status: "cancelled" })
+        expect((await game.getGameState(table.id, table.owner)).turn).toMatchObject({ phase: "players", awaitingChecks: false })
+    })
+
     it("falha da geração descarta os testes pedidos; a nova tentativa não duplica nada", async () => {
         const table = await faithfulTable()
         script.push([{ text: "Abertura. O que vocês fazem?" }])
@@ -408,6 +443,19 @@ describe("Maddox 5 — regras dos testes", () => {
         await waitForCampaignIdle(table.id)
         expect(calls.at(-1)!.userText).toContain("Lyra salta.")
         expect(calls.at(-1)!.userText).not.toContain("o JEV indica")
+
+        // JEV que nunca responde: o teto libera a narração sem a orientação, o turno abre e a trava é solta.
+        jev.fail = false
+        jev.hang = true
+        script.push([{ text: "Narração sem o JEV. O que vocês fazem?" }])
+        await game.submitGameAction(table.id, { kind: "declaration", content: "Doran vigia." }, table.owner)
+        await game.submitGameAction(table.id, { kind: "declaration", content: "Lyra corre." }, table.player)
+        await waitForCampaignIdle(table.id)
+        expect(calls.at(-1)!.userText).toContain("Lyra corre.")
+        expect(calls.at(-1)!.userText).not.toContain("o JEV indica")
+        const after = await MaddoxCampaignModel.findById(table.id).lean()
+        expect(after!.turn).toMatchObject({ phase: "players", generating: null })
+        jev.hang = false
         expect((await game.getGameState(table.id, table.owner)).turn.phase).toBe("players")
     })
 })

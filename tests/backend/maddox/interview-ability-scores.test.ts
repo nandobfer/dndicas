@@ -348,6 +348,43 @@ describe("atributos pelo card na entrevista de personagem", () => {
         expect(cards.map((card) => card.status)).toEqual(["superseded", "pending"])
     })
 
+    it("card reaberto e não reenviado: a conclusão usa o último envio com o bônus, não os atributos da IA", async () => {
+        await BackgroundModel.collection.insertOne({ name: "Criminoso", originalName: "Criminal", suggestedAttributes: ["Destreza", "Constituição", "Inteligência"], status: "active" })
+        const campaignId = await characterInterview()
+        await openCard(campaignId)
+        const base = { strength: 15, dexterity: 14, constitution: 13, intelligence: 12, wisdom: 10, charisma: 8 }
+        await run(await scoresService.submitAbilityScores(campaignId, "character", { method: "standard", scores: base }, ids.ana))
+        scripted.push([call("apply_ability_bonus", { antecedente: "Criminoso", bonus: { Destreza: 2, "Inteligência": 1 } }), say("Bônus aplicado.")])
+        await run(await interviews.sendInterviewMessage(campaignId, "character", { content: "Sou criminosa." }, ids.ana))
+        scripted.push([call("request_ability_scores", { motivo: "Ajuste se quiser" }), say("Reabri o card.")])
+        await run(await interviews.sendInterviewMessage(campaignId, "character", { content: "Talvez trocar Força e Carisma." }, ids.ana))
+        scripted.push([say(PROPOSAL)])
+        await run(await interviews.sendInterviewMessage(campaignId, "character", { content: "Deixa como estava. Pode concluir." }, ids.ana))
+        generateAiText.mockResolvedValueOnce({ text: JSON.stringify({ name: null, profile: { identidade: "Ladra" }, sheet: { race: "Elfo", class: "Ladino", attributes: { strength: 8, dexterity: 8, constitution: 8, intelligence: 8, wisdom: 8, charisma: 15 } } }) })
+        await completeInterview(campaignId, "character", ids.ana)
+        expect(generateAiText.mock.calls.at(-1)![0].instructions).toContain("Os atributos já foram definidos pelo card")
+        const character = await MaddoxCharacterModel.findOne({ userId: ids.ana }).lean()
+        expect(await CharacterSheet.findById(character!.sheetId).lean()).toMatchObject({ strength: 15, dexterity: 16, constitution: 13, intelligence: 13, wisdom: 10, charisma: 8 })
+        expect((await interviewDoc()).result).toMatchObject({ abilityScores: { method: "standard", base, bonus: { background: "Criminoso" } } })
+    })
+
+    it("card aberto e nunca enviado: concluir responde 409 sem consolidar; depois do envio conclui", async () => {
+        const campaignId = await characterInterview("equilibrado")
+        scripted.push([call("request_ability_scores"), say(PROPOSAL)])
+        await run(await interviews.sendInterviewMessage(campaignId, "character", { content: "Pode fechar." }, ids.ana))
+        expect((await interviewDoc()).status).toBe("proposed")
+        const consolidations = generateAiText.mock.calls.length
+        expect(await errorOf(completeInterview(campaignId, "character", ids.ana))).toMatchObject({ status: 409, code: "ABILITY_SCORES_PENDING", message: "Envie os atributos pelo card antes de concluir a entrevista." })
+        expect(generateAiText.mock.calls.length).toBe(consolidations)
+        expect((await interviewDoc()).generating).toBeNull()
+        scripted.push([say(PROPOSAL)])
+        await run(await scoresService.submitAbilityScores(campaignId, "character", { method: "point-buy", scores: { strength: 15, dexterity: 15, constitution: 15, intelligence: 8, wisdom: 8, charisma: 8 } }, ids.ana))
+        generateAiText.mockResolvedValueOnce({ text: JSON.stringify({ name: null, profile: { identidade: "Guerreira" }, sheet: { race: "Humano", class: "Guerreiro", attributes: null } }) })
+        await completeInterview(campaignId, "character", ids.ana)
+        const character = await MaddoxCharacterModel.findOne({ userId: ids.ana }).lean()
+        expect(await CharacterSheet.findById(character!.sheetId).lean()).toMatchObject({ strength: 15, dexterity: 15, constitution: 15, intelligence: 8 })
+    })
+
     it("graus sem ficha não usam card: sem ferramentas, sem seção, rolagem 409; entrevista de cenário responde 404", async () => {
         const campaignId = await characterInterview("narrativo")
         expect(calls.at(-1)!.via).toBe("stream")

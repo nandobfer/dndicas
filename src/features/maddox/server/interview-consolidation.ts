@@ -11,7 +11,7 @@ import { changed, getCampaignDetail } from "./campaigns"
 import { notifyInterviewChanged } from "./campaign-realtime"
 import { linkCatalogMentions } from "./catalog-mentions"
 import { buildConsolidationInstructions, parseJsonObject, settingMarkdown, transcriptText } from "./interview-prompt"
-import { submittedAbilityCard } from "./interview-tools"
+import { abilityCardAwaitingFirstSubmit, submittedAbilityCard } from "./interview-tools"
 import { finalScores } from "../interview-scores"
 import { acquireInterviewLock, campaignReservedNames, loadInterviewer, loadSubject, promptContext, releaseInterviewLock, type InterviewSubject } from "./interviews"
 
@@ -177,6 +177,10 @@ export async function completeInterview(campaignId: string, kind: MaddoxScriptKi
     if (!doc) throw new DomainError(404, "A entrevista ainda não começou.", "INTERVIEW_NOT_STARTED")
     if (doc.status === "done") throw new DomainError(409, "Esta entrevista já foi concluída.", "INTERVIEW_DONE")
     if (doc.status !== "proposed") throw new DomainError(409, "O Maddox ainda não apresentou a síntese para você confirmar.", "NO_PROPOSAL")
+    // Card de atributos aberto e nunca enviado: a ficha não sai de atributos extraídos da conversa.
+    if (kind === "character" && MADDOX_SHEET_RIGORS.includes(subject.campaign.rigor) && abilityCardAwaitingFirstSubmit(doc.messages)) {
+        throw new DomainError(409, "Envie os atributos pelo card antes de concluir a entrevista.", "ABILITY_SCORES_PENDING")
+    }
     const { settings, model } = await loadInterviewer()
     const { doc: locked, token } = await acquireInterviewLock(doc._id)
     // Outra aba pode ter enviado um ajuste entre a leitura e a trava: só consolida a síntese confirmada.

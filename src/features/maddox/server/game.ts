@@ -153,10 +153,17 @@ async function runMasterTurn(campaignId: Types.ObjectId, token: string, turnNumb
             live.end({ messageId: String(message!._id), error: null })
             if (drafts.length) log.info({ campaignId: String(campaignId), turnNumber, round, checks: drafts.length }, "[maddox] Maddox pediu testes")
         }
-        const awaiting = await MaddoxCampaignMessageModel.exists({ campaignId, turnNumber, kind: "check", "check.round": round, "check.status": "pending" })
-        if (awaiting) {
+        // Quem saiu da campanha durante a geração não recebe o teste: ele já entra cancelado (o Maddox resolve sem ele).
+        const { cancelOrphanChecks } = await import("./game-checks")
+        await cancelOrphanChecks(campaignId, turnNumber, round)
+
+        const roundChecks = await MaddoxCampaignMessageModel.exists({ campaignId, turnNumber, kind: "check", "check.round": round })
+        if (roundChecks) {
             // Os testes fazem parte do turno do mestre: a mesa espera as rolagens (sem trava de geração).
             await MaddoxCampaignModel.updateOne({ _id: campaignId, "turn.generating.token": token }, { $set: { "turn.awaitingChecks": true, "turn.generating": null, "turn.failedAt": null } })
+            // Nenhum pendente (todos cancelados porque o jogador saiu): a continuação entra na fila logo.
+            const { advanceAfterChecks } = await import("./game-checks")
+            await advanceAfterChecks(campaignId, turnNumber, round)
         } else {
             const eligible = await readyMemberIds(campaignId)
             const opened = await MaddoxCampaignModel.updateOne(

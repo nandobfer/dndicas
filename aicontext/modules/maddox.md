@@ -462,6 +462,9 @@ pela `ensure-maddox-indexes`).
 auditoria `CampanhaMaddox` `{ turn, check, rolledFor, total }`). Outros = 403 `NOT_CHECK_TARGET`; quem não participa = 404; teste
 cancelado ou fora da rodada = 409 `CHECK_NOT_PENDING`. O membro que sai ou é removido tem os testes pendentes **cancelados**
 (`cancelMemberChecks`, chamado por `onMemberLeftGame`) e a rodada pode terminar; o Maddox recebe "cancelado; resolva sem o teste".
+Quem sai **durante a geração** (o pedido ainda estava em memória) é coberto por `cancelOrphanChecks`: ao gravar a narração e em
+`advanceAfterChecks` (também na retomada do `GET`), testes pendentes de membros que não estão mais `joined` viram `cancelled`; se a
+rodada ficar sem pendentes, a continuação entra na fila na hora.
 
 **Visibilidade.** O teste **pendente só chega ao jogador indicado** (filtro no servidor em `messagesDto`, também na paginação). Os
 outros recebem só `turn.pendingChecks` (`checkId`, membro, nome do personagem): a faixa "Turno do mestre — aguardando o teste de
@@ -481,7 +484,9 @@ provavelmente exige teste; você decide)". Chave desligada, falha ou teto: narra
 
 - **Card do teste** (`GameCheckCard`): "O Maddox pede um teste para você", "Teste de perícia: Furtividade (Destreza)", motivo, `d20` +
   as partes do modificador nas cores dos atributos (as do `CalcTooltip`) e "= d20 +5", chip de vantagem/desvantagem e de CD (visível).
-  A prévia usa a ficha ao vivo (`useSheet`). Abaixo, o `DiceRollerPanel` sem controles, com o d20 parado e o botão **"Rolar"**, que
+  A prévia usa a ficha ao vivo (`useSheet`); "Rolar" fica desabilitado ("Carregando a ficha…") até ela chegar. O modificador do
+  `preset` do painel é congelado no clique: o resultado do servidor (que pode trazer outro modificador) não troca o preset — o painel
+  se reinicia quando o preset muda e o dado/total sumiriam para quem rolou. Abaixo, o `DiceRollerPanel` sem controles, com o d20 parado e o botão **"Rolar"**, que
   chama `POST …/game/checks/[checkId]/roll` (corpo `{}`); depois, "Resultado enviado ao Maddox.".
 - Faixa: "o Maddox pediu um teste para você" (com "e aguarda …" se houver outros) ou "aguardando o teste de …"; o campo de texto
   fica bloqueado com o motivo; o Maddox não aparece "narrando" enquanto espera.
@@ -539,7 +544,10 @@ reiniciar, enviar), `components/interviews/AbilityScoresCard.tsx`. As regras dos
 - **Prompt.** A seção "Atributos do personagem" troca o antigo "combine … os valores dos seis atributos": card como único caminho,
   nunca pedir números digitados nem rolar/inventar, os três métodos, bônus sugerido e `get_ability_scores` antes da síntese. Cada
   turno leva "Atributos: situação atual" e, no OpenCode, o servidor MCP e o token (`turno`).
-- **Consolidação.** Com card enviado, a ficha recebe os valores **finais do card** (base + bônus) e ignora os atributos extraídos
+- **Consolidação.** Vale o **último envio** (`submittedAbilityCard`: o card mais novo com valores, enviado ou já `superseded` — um card
+  reaberto e não reenviado não apaga o envio anterior nem o bônus). Card aberto e nunca enviado: concluir responde 409
+  `ABILITY_SCORES_PENDING` ("Envie os atributos pelo card antes de concluir a entrevista.") sem consolidar. Com envio, a ficha recebe
+  os valores **finais do card** (base + bônus) e ignora os atributos extraídos
   pela IA (as instruções avisam); o resultado guarda `abilityScores { method, base, bonus, final }`. Entrevistas antigas, sem card,
   seguem pela extração por IA.
 - **Tela.** O card aparece abaixo da fala que o abriu: `GlassSelector` do método, grade do conjunto padrão (sem repetir valores),

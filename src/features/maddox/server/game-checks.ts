@@ -6,7 +6,7 @@ import { loggerFor } from "@/lib/logger"
 import type { DiceRollResponse } from "@/features/dice-roller/types"
 import { MADDOX_CAMPAIGN_AUDIT_ENTITY } from "../constants"
 import { checkModifier, checkTitle, type MaddoxCheckSheet } from "../check-modifier"
-import { MaddoxCampaignMessageModel, MaddoxCampaignModel, type IMaddoxCampaignMessage } from "../models"
+import { MaddoxCampaignMemberModel, MaddoxCampaignMessageModel, MaddoxCampaignModel, type IMaddoxCampaignMessage } from "../models"
 import type { MaddoxGameStateDto } from "../game-types"
 import { assertMemberCanPlay } from "./campaigns"
 import { emitCheckRolled, type MaddoxDraftCheck } from "./game-live"
@@ -109,6 +109,7 @@ async function loadSheet(sheetId: Types.ObjectId): Promise<MaddoxCheckSheet | nu
  * vence, mesmo com rolagens simultâneas).
  */
 export async function advanceAfterChecks(campaignId: Types.ObjectId, turnNumber: number, round: number): Promise<boolean> {
+    await cancelOrphanChecks(campaignId, turnNumber, round)
     const pending = await MaddoxCampaignMessageModel.exists({ campaignId, turnNumber, kind: "check", "check.round": round, "check.status": "pending" })
     if (pending) return false
     const token = randomUUID()
@@ -121,6 +122,27 @@ export async function advanceAfterChecks(campaignId: Types.ObjectId, turnNumber:
     void scheduleMasterTurn(campaignId, token, turnNumber, round + 1)
     await publishGameChanged(campaignId)
     return true
+}
+
+/**
+ * Cancela os testes pendentes da rodada cujo membro já não está na campanha. Cobre quem saiu DURANTE a geração: o
+ * pedido ainda estava em memória quando `onMemberLeftGame` rodou, e só virou mensagem pendente depois. Devolve
+ * quantos foram cancelados.
+ */
+export async function cancelOrphanChecks(campaignId: Types.ObjectId, turnNumber: number, round: number): Promise<number> {
+    const pending = await MaddoxCampaignMessageModel.find({ campaignId, turnNumber, kind: "check", "check.round": round, "check.status": "pending" }).select("memberId").lean<{ memberId: Types.ObjectId | null }[]>()
+    if (!pending.length) return 0
+    const memberIds = pending.map((item) => item.memberId).filter((id): id is Types.ObjectId => Boolean(id))
+    const joined = await MaddoxCampaignMemberModel.find({ _id: { $in: memberIds }, campaignId, status: "joined" }).select("_id").lean<{ _id: Types.ObjectId }[]>()
+    const present = new Set(joined.map((member) => String(member._id)))
+    const gone = memberIds.filter((id) => !present.has(String(id)))
+    if (!gone.length) return 0
+    const cancelled = await MaddoxCampaignMessageModel.updateMany(
+        { campaignId, turnNumber, kind: "check", "check.round": round, "check.status": "pending", memberId: { $in: gone } },
+        { $set: { "check.status": "cancelled", "check.cancelReason": "O jogador saiu da campanha" } },
+    )
+    if (cancelled.modifiedCount) log.info({ campaignId: String(campaignId), turnNumber, round, cancelled: cancelled.modifiedCount }, "[maddox] Testes de quem saiu da campanha cancelados")
+    return cancelled.modifiedCount
 }
 
 /** O membro saiu ou foi removido: os testes pendentes dele são cancelados e a rodada pode terminar. */
