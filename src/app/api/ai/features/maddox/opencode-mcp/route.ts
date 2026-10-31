@@ -14,9 +14,9 @@ export const GET = withRoute(async () => {
     return ok(await maddoxMcpStatus(settings))
 })
 
-/** POST …/opencode-mcp — adiciona e conecta o MCP do Maddox no OpenCode (se faltar) e devolve a situação. */
+/** POST …/opencode-mcp — registra (ou refaz o registro com a URL atual) e conecta o MCP do Maddox no OpenCode. */
 export const POST = withRoute(async () => {
     await requireAdminActor("integrations.ai.edit")
     const { settings } = await loadMaddoxSettings()
-    return ok(await maddoxMcpStatus(settings, true))
+    return ok(await maddoxMcpStatus(settings, "explicit"))
 })

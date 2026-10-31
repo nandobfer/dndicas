@@ -37,9 +37,11 @@ export interface MaddoxGeneratedAvatarDto {
 export interface MaddoxMcpStatusDto {
     /** URL chamada pelo OpenCode (`null` = sem URL pública do app nem URL configurada). */
     url: string | null
+    /** URL com que o OpenCode tem o MCP registrado (`null` = o OpenCode não informa). */
+    registeredUrl: string | null
     server: string
-    /** `missing` = não registrado; `unknown` = não deu para consultar o OpenCode. */
-    status: "connected" | "pending" | "disabled" | "failed" | "needs_auth" | "missing" | "unknown"
+    /** `missing` = não registrado; `outdated` = registrado com outra URL; `unknown` = não deu para consultar o OpenCode. */
+    status: "connected" | "pending" | "disabled" | "failed" | "needs_auth" | "missing" | "outdated" | "unknown"
     error: string | null
 }
 

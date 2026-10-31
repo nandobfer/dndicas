@@ -36,6 +36,8 @@ const fakeMaster = {
     }),
 }
 vi.mock("@/features/maddox/server/game-master", () => ({ getMaddoxMaster: vi.fn(async () => fakeMaster) }))
+// Teto curto de duração das gerações do mestre para o teste do mestre que nunca responde.
+vi.mock("@/features/maddox/constants", async (importOriginal) => ({ ...(await importOriginal<typeof import("@/features/maddox/constants")>()), MADDOX_MASTER_GENERATION_TIMEOUT_MS: 300 }))
 const validateDeclaration = vi.fn<(input: unknown) => Promise<{ valid: boolean; reason: string }>>(async () => ({ valid: true, reason: "" }))
 vi.mock("@/features/maddox/server/action-validation", () => ({ validateDeclaration }))
 
@@ -538,6 +540,38 @@ describe("Maddox 4 — mestre em segundo plano e streaming", () => {
         expect(await narrations(id)).toBe(1)
     })
 
+    it("mestre que nunca responde: o teto de duração aborta a geração, libera a trava e a fila volta a andar", async () => {
+        const { id, owner, seats } = await table(1)
+        let aborted: AbortSignal | undefined
+        fakeMaster.narrate.mockImplementationOnce(async (context: MaddoxNarrationContext) => {
+            aborted = context.signal
+            return new Promise<string>(() => undefined)
+        })
+        const lines: { type: string; error?: string | null }[] = []
+        const unsubscribe = subscribeGameLive(id, (line) => lines.push(line as never))
+        await game.startCampaign(id, owner)
+        await waitForCampaignIdle(id)
+        unsubscribe()
+        expect(aborted?.aborted).toBe(true)
+        const stored = await MaddoxCampaignModel.findById(id).lean()
+        expect(stored!.turn).toMatchObject({ phase: "master", generating: null })
+        expect(stored!.turn.failedAt).toBeInstanceOf(Date)
+        expect(lines.at(-1)).toMatchObject({ type: "live-end", error: expect.stringContaining("nova tentativa") })
+        // A retomada depois do intervalo narra normalmente (a fila não ficou presa).
+        await MaddoxCampaignModel.updateOne({ _id: id }, { $set: { "turn.failedAt": new Date(Date.now() - MADDOX_MASTER_RETRY_MS - 1000) } })
+        const state = await g.getGameState(id, seats[0]!.userId)
+        expect(state.turn).toMatchObject({ number: 1, phase: "players", generating: false })
+        expect(await narrations(id)).toBe(1)
+    })
+
+    it("resposta que nunca chega também é abortada pelo teto e vira o aviso de falha", async () => {
+        const { id, owner, seats } = await table(1)
+        await g.startCampaign(id, owner)
+        fakeMaster.answer.mockImplementationOnce(async () => new Promise<string>(() => undefined))
+        const state = await g.submitGameAction(id, { kind: "question", content: "Alguém?" }, seats[0]!.userId)
+        expect(state.messages.find((message) => message.kind === "answer")).toMatchObject({ error: "O Maddox não conseguiu responder agora. Pergunte de novo." })
+    })
+
     it("falha do mestre marca o turno como `failed` para a faixa da mesa", async () => {
         const { id, owner } = await table(1)
         fakeMaster.narrate.mockRejectedValueOnce(new Error("fora do ar"))
@@ -570,6 +604,19 @@ describe("Maddox 4 — validação da ação livre ao declarar", () => {
         const state = await g.submitGameAction(id, { kind: "declaration", content: "Lanço uma bola de fogo." }, owner)
         expect(state.turn.number).toBe(2)
         expect(validateDeclaration).not.toHaveBeenCalled()
+    })
+
+    it("quem já declarou recebe ALREADY_DECLARED sem disparar a validação por IA", async () => {
+        const { id, owner, token } = await rigorousTable("rigoroso")
+        const late = await seedUser("segundo")
+        await campaigns.joinByInvite(token, late)
+        await giveCharacter(id, late, "Segunda")
+        // Turno 2 com os dois elegíveis: a declaração do dono não fecha o turno.
+        await g.submitGameAction(id, { kind: "pass" }, owner)
+        await game.submitGameAction(id, { kind: "declaration", content: "Saco a espada." }, owner)
+        expect(validateDeclaration).toHaveBeenCalledTimes(1)
+        await expect(game.submitGameAction(id, { kind: "declaration", content: "De novo." }, owner)).rejects.toMatchObject({ status: 409, code: "ALREADY_DECLARED" })
+        expect(validateDeclaration).toHaveBeenCalledTimes(1)
     })
 
     it("perguntas e \"não fazer nada\" nunca passam pela validação", async () => {

@@ -11,7 +11,7 @@ const saveScript = vi.fn()
 const generateAvatar = vi.fn()
 const deleteSession = vi.fn()
 const registerMcp = vi.fn()
-let mcpStatus: MaddoxMcpStatusDto = { url: "https://dndicas.example/api/maddox/mcp", server: "dndicas-maddox", status: "missing", error: null }
+let mcpStatus: MaddoxMcpStatusDto = { url: "https://dndicas.example/api/maddox/mcp", registeredUrl: null, server: "dndicas-maddox", status: "missing", error: null }
 const toastError = vi.fn()
 let sessions: Array<Record<string, unknown>> = []
 
@@ -194,7 +194,7 @@ describe("aba Agente Maddox", () => {
 
     it("seção OpenCode: MCP do Maddox mostra a situação, registra no OpenCode e salva a URL", async () => {
         registerMcp.mockClear()
-        mcpStatus = { url: "https://dndicas.example/api/maddox/mcp", server: "dndicas-maddox", status: "missing", error: null }
+        mcpStatus = { url: "https://dndicas.example/api/maddox/mcp", registeredUrl: null, server: "dndicas-maddox", status: "missing", error: null }
         renderTab()
         fireEvent.click(screen.getByRole("tab", { name: "OpenCode" }))
         expect(await screen.findByTestId("maddox-mcp-status")).toHaveTextContent("Não registrado")
@@ -208,12 +208,28 @@ describe("aba Agente Maddox", () => {
         expect(lastSaved().opencode.mcpUrl).toBe("https://outro.example/api/maddox/mcp")
     })
 
-    it("seção OpenCode: MCP conectado não oferece registrar", async () => {
-        mcpStatus = { url: "https://dndicas.example/api/maddox/mcp", server: "dndicas-maddox", status: "connected", error: null }
+    it("seção OpenCode: MCP conectado com a URL atual não oferece registrar", async () => {
+        mcpStatus = { url: "https://dndicas.example/api/maddox/mcp", registeredUrl: "https://dndicas.example/api/maddox/mcp", server: "dndicas-maddox", status: "connected", error: null }
         renderTab()
         fireEvent.click(screen.getByRole("tab", { name: "OpenCode" }))
         expect(await screen.findByTestId("maddox-mcp-status")).toHaveTextContent("Conectado")
         expect(screen.queryByRole("button", { name: /Registrar no OpenCode/ })).not.toBeInTheDocument()
+    })
+
+    it("seção OpenCode: URL desatualizada mostra a registrada; conectado sem URL conhecida avisa e oferece registrar", async () => {
+        mcpStatus = { url: "https://novo.example/api/maddox/mcp", registeredUrl: "https://antigo.example/api/maddox/mcp", server: "dndicas-maddox", status: "outdated", error: null }
+        const view = renderTab()
+        fireEvent.click(screen.getByRole("tab", { name: "OpenCode" }))
+        expect(await screen.findByTestId("maddox-mcp-status")).toHaveTextContent("URL desatualizada")
+        expect(screen.getByText("Registrado no OpenCode com https://antigo.example/api/maddox/mcp.")).toBeInTheDocument()
+        expect(screen.getByRole("button", { name: /Registrar no OpenCode/ })).toBeInTheDocument()
+        view.unmount()
+
+        mcpStatus = { url: "https://novo.example/api/maddox/mcp", registeredUrl: null, server: "dndicas-maddox", status: "connected", error: null }
+        renderTab()
+        fireEvent.click(screen.getByRole("tab", { name: "OpenCode" }))
+        expect(await screen.findByText(/O OpenCode não informa a URL registrada/)).toBeInTheDocument()
+        expect(screen.getByRole("button", { name: /Registrar no OpenCode/ })).toBeInTheDocument()
     })
 
     it("seção OpenCode: lista as sessões e exclui só depois de confirmar", async () => {

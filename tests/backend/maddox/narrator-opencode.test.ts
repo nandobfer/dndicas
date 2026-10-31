@@ -88,4 +88,12 @@ describe("Maddox narrador no OpenCode", () => {
         await expect(aiMaddoxMaster.narrate({ campaignId: String(campaign._id), jobId: "job-2", turnNumber: 1, declarations: [] }, { delta: () => undefined, tool: () => undefined })).rejects.toMatchObject({ code: "MADDOX_UNAVAILABLE" })
         expect(requests).toHaveLength(0)
     })
+
+    it("geração abortada pelo teto de duração nunca devolve o texto parcial como narração", async () => {
+        const campaign = await MaddoxCampaignModel.create({ name: "Brumas", ownerId: "u1", rigor: "narrativo" })
+        const controller = new AbortController()
+        controller.abort()
+        await expect(aiMaddoxMaster.narrate({ campaignId: String(campaign._id), jobId: "job-3", turnNumber: 1, declarations: [], signal: controller.signal }, { delta: () => undefined, tool: () => undefined })).rejects.toThrow("O Maddox demorou demais para responder.")
+        expect(requests[0]).toMatchObject({ signal: controller.signal })
+    })
 })

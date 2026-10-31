@@ -4,6 +4,7 @@ import { DomainError } from "@/lib/api/route"
 import { loggerFor } from "@/lib/logger"
 import { User } from "@/features/users/models/user"
 import {
+    MADDOX_MASTER_TIMEOUT_MESSAGE,
     MADDOX_MCP_SERVER_NAME,
     MADDOX_NARRATION_CONSUMPTION_ORIGIN,
     MADDOX_NARRATOR_HISTORY_CHARS,
@@ -126,6 +127,7 @@ interface GenerateArgs {
     /** Mensagens que já estão na tarefa e não entram na transcrição. */
     excludeIds: Set<string>
     title: string
+    signal?: AbortSignal
 }
 
 /** Stream de texto com a marcação do catálogo segurada (nunca crua ao vivo). */
@@ -176,14 +178,17 @@ async function generate(args: GenerateArgs, sink: MaddoxMasterSink): Promise<str
             opencodeSessionId: sessionId,
             title: args.title,
             consumption: { origin: MADDOX_NARRATION_CONSUMPTION_ORIGIN, subject: args.campaignId },
+            signal: args.signal,
         })) {
             if (event.type === "delta") stream.push(event.text)
             else if (event.type === "tool") sink.tool(event.state === "running")
             else if (event.type === "error") failure = event.message
         }
     } else {
-        failure = await generateWithTools({ model, instructions: buildNarratorInstructions(promptContext, { kind: "ai-sdk" }), userText, campaignId, turnNumber: args.turnNumber }, stream, sink)
+        failure = await generateWithTools({ model, instructions: buildNarratorInstructions(promptContext, { kind: "ai-sdk" }), userText, campaignId, turnNumber: args.turnNumber, signal: args.signal }, stream, sink)
     }
+    // Abortada pelo teto de duração: o texto parcial nunca vira narração gravada.
+    if (args.signal?.aborted) throw new Error(MADDOX_MASTER_TIMEOUT_MESSAGE)
     sink.tool(false)
     const raw = stream.finish().trim()
     if (failure) throw new Error(failure)
@@ -199,6 +204,7 @@ interface ToolGeneration {
     userText: string
     campaignId: Types.ObjectId
     turnNumber: number
+    signal?: AbortSignal
 }
 
 /** Laço de ferramentas na AI SDK. Devolve a mensagem de falha (`null` = ok). */
@@ -220,6 +226,7 @@ async function generateWithTools(input: ToolGeneration, stream: ReturnType<typeo
             messages: [{ role: "user", content: input.userText }],
             tools: await buildMaddoxAiTools({ campaignId: input.campaignId, turnNumber: input.turnNumber }),
             stopWhen: stepCountIs(MADDOX_NARRATOR_MAX_STEPS),
+            abortSignal: input.signal,
             providerOptions: prepared.providerOptions,
             ...(prepared.reasoning ? { reasoning: prepared.reasoning } : {}),
             ...samplingOptions({ provider: model.provider, variant: model.variant, temperature: model.temperature, maxOutputTokens: model.maxOutputTokens }),
@@ -250,6 +257,9 @@ async function generateWithTools(input: ToolGeneration, stream: ReturnType<typeo
                     break
                 case "error":
                     failure = describeAiError(part.error)
+                    break
+                case "abort":
+                    failure = MADDOX_MASTER_TIMEOUT_MESSAGE
                     break
                 case "finish":
                     if (part.finishReason === "error" && !failure) failure = "O modelo terminou com erro"
@@ -295,6 +305,7 @@ export const aiMaddoxMaster: MaddoxMaster = {
                 task: { kind: "narration", turnNumber: context.turnNumber, declarations: context.declarations },
                 excludeIds: new Set(previous.map((item) => String(item._id))),
                 title: `Maddox · narração · turno ${context.turnNumber}`,
+                signal: context.signal,
             },
             sink,
         )
@@ -310,6 +321,7 @@ export const aiMaddoxMaster: MaddoxMaster = {
                 task: { kind: "answer", turnNumber: context.turnNumber, characterName: context.characterName, question: context.question, declarations: declarationsOf(actions) },
                 excludeIds: new Set([context.questionId, ...actions.map((action) => String(action._id))]),
                 title: `Maddox · pergunta · turno ${context.turnNumber}`,
+                signal: context.signal,
             },
             sink,
         )

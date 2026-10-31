@@ -23,6 +23,8 @@ export interface MaddoxNarrationContext {
     turnNumber: number
     /** Declarações do turno dos jogadores que acabou de fechar (vazio na abertura). */
     declarations: MaddoxMasterDeclaration[]
+    /** Abortado quando a geração passa do teto de duração (`MADDOX_MASTER_GENERATION_TIMEOUT_MS`). */
+    signal?: AbortSignal
 }
 
 export interface MaddoxAnswerContext {
@@ -32,6 +34,7 @@ export interface MaddoxAnswerContext {
     questionId: string
     characterName: string
     question: string
+    signal?: AbortSignal
 }
 
 export interface MaddoxMaster {

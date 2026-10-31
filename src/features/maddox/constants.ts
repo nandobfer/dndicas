@@ -162,6 +162,23 @@ export const MADDOX_DECLARATION_VALIDATION_RIGORS: readonly MaddoxRigorLevel[] =
 
 /** Enquanto o mestre gera, a trava do turno é renovada neste intervalo (a trava velha só vale para quedas). */
 export const MADDOX_MASTER_HEARTBEAT_MS = 30 * 1000
+/**
+ * Teto de duração de cada geração do mestre (narração ou resposta). Passou disso, a geração é abortada e tratada como
+ * falha (`failedAt`, trava liberada): um provedor que para de responder não segura a fila da campanha nem o pulso da trava.
+ */
+export const MADDOX_MASTER_GENERATION_TIMEOUT_MS = 5 * 60 * 1000
+export const MADDOX_MASTER_TIMEOUT_MESSAGE = "O Maddox demorou demais para responder."
+/**
+ * Tetos de PROTEÇÃO dos textos gravados pelas ferramentas do narrador (não são limites de uso): bem acima do tamanho
+ * orientado no prompt (`MADDOX_TOOL_TEXT_GUIDE` caracteres por anotação), só barram um texto descontrolado. Um texto cortado
+ * é avisado ao modelo no retorno da ferramenta (`truncated`), para ele consolidar em vez de perder conteúdo calado.
+ */
+export const MADDOX_TOOL_TEXT_MAX = 20_000
+export const MADDOX_TOOL_NAME_MAX = 120
+export const MADDOX_TOOL_TAG_MAX = 60
+export const MADDOX_TOOL_TAGS_MAX = 12
+/** Tamanho orientado no prompt para cada anotação consolidada. */
+export const MADDOX_TOOL_TEXT_GUIDE = 3_000
 /** Passos do laço de ferramentas por geração do narrador. */
 export const MADDOX_NARRATOR_MAX_STEPS = 12
 /** Transcrição recente enviada ao narrador (o estado gravado cobre o que fica de fora). */

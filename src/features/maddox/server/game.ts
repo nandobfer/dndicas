@@ -12,7 +12,9 @@ import {
     MADDOX_DECLARATION_VALIDATION_RIGORS,
     MADDOX_GAME_CHANGED_EVENT,
     MADDOX_GAME_PAGE_SIZE,
+    MADDOX_MASTER_GENERATION_TIMEOUT_MS,
     MADDOX_MASTER_HEARTBEAT_MS,
+    MADDOX_MASTER_TIMEOUT_MESSAGE,
     MADDOX_MASTER_LOCK_STALE_MS,
     MADDOX_MASTER_RETRY_MS,
     type MaddoxTurnPhase,
@@ -130,7 +132,8 @@ async function runMasterTurn(campaignId: Types.ObjectId, token: string, turnNumb
             }))
             live = beginLive(String(campaignId), { kind: "narration", turnNumber, replyToId: null })
             const master = await getMaddoxMaster()
-            const content = await master.narrate({ campaignId: String(campaignId), jobId, turnNumber, declarations }, live)
+            const sink = live
+            const content = await withGenerationTimeout((signal) => master.narrate({ campaignId: String(campaignId), jobId, turnNumber, declarations, signal }, sink))
             const message = await MaddoxCampaignMessageModel.create({ campaignId, turnNumber, phase: "master", kind: "narration", content })
             live.end({ messageId: String(message._id), error: null })
         }
@@ -151,6 +154,26 @@ async function runMasterTurn(campaignId: Types.ObjectId, token: string, turnNumb
         clearInterval(heartbeat)
     }
     await publishGameChanged(campaignId)
+}
+
+/**
+ * Teto de duração de uma geração do mestre: passado `MADDOX_MASTER_GENERATION_TIMEOUT_MS`, aborta o provedor (sinal) e
+ * rejeita mesmo que a geração não respeite o sinal — o job termina, a fila anda e o pulso da trava para.
+ */
+async function withGenerationTimeout<T>(run: (signal: AbortSignal) => Promise<T>): Promise<T> {
+    const controller = new AbortController()
+    let timer: ReturnType<typeof setTimeout> | null = null
+    const timeout = new Promise<never>((_, reject) => {
+        timer = setTimeout(() => {
+            controller.abort()
+            reject(new Error(MADDOX_MASTER_TIMEOUT_MESSAGE))
+        }, MADDOX_MASTER_GENERATION_TIMEOUT_MS)
+    })
+    try {
+        return await Promise.race([run(controller.signal), timeout])
+    } finally {
+        if (timer) clearTimeout(timer)
+    }
 }
 
 /** Põe o turno do mestre na fila da campanha (roda em segundo plano; a promessa nunca rejeita). */
@@ -231,6 +254,13 @@ async function evaluateTurn(campaignId: Types.ObjectId): Promise<void> {
     log.info({ campaignId: String(campaignId), turnNumber: number, required: required.length, presence: online ? "pusher" : "unknown" }, "[maddox] Turno dos jogadores fechado")
     await publishGameChanged(campaignId)
     void scheduleMasterTurn(campaignId, token, number + 1)
+}
+
+/** 409 `ALREADY_DECLARED` se o membro já declarou ou passou neste turno (lista do turno ou mensagem gravada). */
+async function assertNotDeclared(campaign: CampaignDoc, target: MemberDoc): Promise<void> {
+    const turnNumber = campaign.turn.number
+    const declared = idSet(campaign.turn.declaredMemberIds).has(String(target._id)) || Boolean(await MaddoxCampaignMessageModel.exists({ campaignId: campaign._id, turnNumber, memberId: target._id, turnAction: true }))
+    if (declared) throw new DomainError(409, "Este jogador já declarou neste turno.", "ALREADY_DECLARED")
 }
 
 /** Grava a declaração/"não fazer nada" de um membro e a conta no turno (409 se o turno fechou no meio). */
@@ -324,6 +354,8 @@ export async function submitGameAction(campaignId: string, input: MaddoxGameActi
     }
 
     if (input.kind === "declaration" && MADDOX_DECLARATION_VALIDATION_RIGORS.includes(campaign.rigor)) {
+        // Já declarou (ou clique duplo): responde ALREADY_DECLARED sem pagar uma validação por IA que seria descartada.
+        await assertNotDeclared(campaign, member)
         const { validateDeclaration } = await import("./action-validation")
         const verdict = await validateDeclaration({ campaign, character, content: input.content })
         if (!verdict.valid) throw new DomainError(409, verdict.reason, "ACTION_INVALID")
@@ -343,7 +375,7 @@ function scheduleAnswer(campaignId: Types.ObjectId, turnNumber: number, question
         let error: string | null = null
         try {
             const master = await getMaddoxMaster()
-            content = await master.answer({ campaignId: String(campaignId), jobId, turnNumber, questionId: String(questionId), characterName, question }, live)
+            content = await withGenerationTimeout((signal) => master.answer({ campaignId: String(campaignId), jobId, turnNumber, questionId: String(questionId), characterName, question, signal }, live))
         } catch (failure) {
             log.warn({ err: failure instanceof Error ? failure.message : String(failure), campaignId: String(campaignId), turnNumber }, "[maddox] Falha ao responder a pergunta")
             error = MADDOX_ANSWER_FAILED_MESSAGE

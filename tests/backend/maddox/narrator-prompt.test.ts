@@ -33,6 +33,8 @@ describe("instruções do Maddox narrador", () => {
         expect(text).toContain("**Reacender o farol** [ativa]: Descobrir a causa.")
         expect(text).toContain("**Contrabando** [SÓ O MESTRE]")
         expect(text).toContain("update_campaign_state")
+        expect(text).toContain("até uns 3.000 caracteres")
+        expect(text).toContain("Se o retorno trouxer `truncated`")
         expect(text).not.toContain("servidor MCP")
     })
 

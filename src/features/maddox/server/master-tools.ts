@@ -2,7 +2,16 @@ import { z } from "zod"
 import { Types } from "mongoose"
 import type { ToolSet } from "ai"
 import { loggerFor } from "@/lib/logger"
-import { MADDOX_CAMPAIGN_MEMORY_KINDS, MADDOX_NPC_STATUSES, MADDOX_QUEST_STATUSES, MADDOX_VISIBILITIES } from "../constants"
+import {
+    MADDOX_CAMPAIGN_MEMORY_KINDS,
+    MADDOX_NPC_STATUSES,
+    MADDOX_QUEST_STATUSES,
+    MADDOX_TOOL_NAME_MAX,
+    MADDOX_TOOL_TAG_MAX,
+    MADDOX_TOOL_TAGS_MAX,
+    MADDOX_TOOL_TEXT_MAX,
+    MADDOX_VISIBILITIES,
+} from "../constants"
 import { normalizeCatalogName } from "../catalog-markup"
 import { MaddoxCampaignMemoryModel, MaddoxCampaignModel, MaddoxCharacterModel, MaddoxNpcModel, type IMaddoxCampaign, type IMaddoxCampaignMemory, type IMaddoxNpc } from "../models"
 
@@ -11,7 +20,8 @@ import { MaddoxCampaignMemoryModel, MaddoxCampaignModel, MaddoxCharacterModel, M
  * dois jeitos: à AI SDK (`buildMaddoxAiTools`, provedores diretos) e ao MCP do Maddox (`maddox-mcp.ts`, OpenCode).
  * A campanha vem sempre do contexto da geração, nunca do modelo.
  *
- * Textos gerados não invalidam a chamada por tamanho: são cortados no código onde há teto (memória do projeto).
+ * Textos gerados não invalidam a chamada por tamanho: acima do teto de PROTEÇÃO (`MADDOX_TOOL_TEXT_MAX`, muito acima do
+ * tamanho orientado no prompt) são cortados e o retorno avisa o modelo (`truncated` com os campos), para ele consolidar.
  */
 
 const log = loggerFor({ module: "maddox", feature: "narrator-tools" })
@@ -31,16 +41,27 @@ export interface MaddoxMasterTool {
 
 export class MaddoxToolError extends Error {}
 
-const NAME_MAX = 120
-const SHORT_MAX = 2_000
-const TEXT_MAX = 8_000
-const TAGS_MAX = 12
-
 const clip = (value: string | undefined | null, max: number) => {
     const text = (value ?? "").trim()
     return text.length > max ? `${text.slice(0, max - 1).trimEnd()}…` : text
 }
 const preview = (value: string, max = 200) => clip(value.replace(/\s+/g, " "), max)
+
+/** Corta no teto de proteção e anota o campo cortado (o retorno avisa o modelo). */
+function fitter() {
+    const cut: string[] = []
+    return {
+        fit(field: string, value: string | undefined | null, max = MADDOX_TOOL_TEXT_MAX) {
+            const text = (value ?? "").trim()
+            if (text.length > max) cut.push(field)
+            return clip(text, max)
+        },
+        /** `{ truncated }` para o retorno quando algo foi cortado. */
+        notice() {
+            return cut.length ? { truncated: [...cut], note: `Texto acima do teto de ${MADDOX_TOOL_TEXT_MAX.toLocaleString("pt-BR")} caracteres foi cortado em: ${cut.join(", ")}. Consolide e grave de novo, mais conciso.` } : {}
+        },
+    }
+}
 const keyOf = (value: string) => normalizeCatalogName(value)
 
 function define<S extends z.ZodRawShape>(def: { name: string; description: string; readOnly: boolean; input: z.ZodObject<S>; execute: (context: MaddoxToolContext, input: z.infer<z.ZodObject<S>>) => Promise<unknown> }): MaddoxMasterTool {
@@ -103,11 +124,12 @@ export const MADDOX_MASTER_TOOLS: readonly MaddoxMasterTool[] = [
             pendingDecision: optionalText.describe("Pergunta ou decisão aguardada dos jogadores"),
         }),
         async execute(context, input) {
+            const fit = fitter()
             const set: Record<string, unknown> = { "state.updatedTurn": context.turnNumber, "state.updatedAt": new Date() }
-            for (const field of ["scene", "location", "situation", "pendingDecision"] as const) if (input[field] !== undefined) set[`state.${field}`] = clip(input[field], TEXT_MAX)
+            for (const field of ["scene", "location", "situation", "pendingDecision"] as const) if (input[field] !== undefined) set[`state.${field}`] = fit.fit(field, input[field])
             await MaddoxCampaignModel.updateOne({ _id: context.campaignId }, { $set: set }, { timestamps: false })
             const campaign = await MaddoxCampaignModel.findById(context.campaignId).select("state").lean<Pick<IMaddoxCampaign, "state">>()
-            return { saved: true, state: stateShape(campaign) }
+            return { saved: true, state: stateShape(campaign), ...fit.notice() }
         },
     }),
     define({
@@ -137,31 +159,40 @@ export const MADDOX_MASTER_TOOLS: readonly MaddoxMasterTool[] = [
     define({
         name: "save_npc",
         description:
-            "Cria ou atualiza um NPC pelo nome (sem duplicar). `publicDescription` é o que os jogadores conhecem; `masterNotes` é segredo do mestre (intenções, segredos, planos). Envie só os campos que mudaram.",
+            "Cria ou atualiza um NPC pelo nome (sem duplicar; acento e caixa não importam e a grafia gravada é mantida). `publicDescription` é o que os jogadores conhecem; `masterNotes` é segredo do mestre (intenções, segredos, planos). Envie só os campos que mudaram. Para renomear, envie `newName`.",
         readOnly: false,
         input: z.object({
             name: z.string().min(1).describe("Nome do NPC"),
+            newName: z.string().optional().describe("Só para renomear um NPC que já existe"),
             publicDescription: optionalText.describe("Aparência, papel e o que os jogadores sabem"),
             masterNotes: optionalText.describe("Conhecimento exclusivo do mestre"),
             visibility: z.enum(MADDOX_VISIBILITIES).optional().describe("players = os jogadores já conhecem; master = só o mestre"),
             status: z.enum(MADDOX_NPC_STATUSES).optional(),
         }),
         async execute(context, input) {
-            const name = clip(input.name, NAME_MAX)
+            const fit = fitter()
+            const name = clip(input.name, MADDOX_TOOL_NAME_MAX)
             const nameKey = keyOf(name)
             if (!nameKey) throw new MaddoxToolError("Informe o nome do NPC.")
             const set: Record<string, unknown> = {}
-            if (input.publicDescription !== undefined) set.publicDescription = clip(input.publicDescription, TEXT_MAX)
-            if (input.masterNotes !== undefined) set.masterNotes = clip(input.masterNotes, TEXT_MAX)
+            if (input.publicDescription !== undefined) set.publicDescription = fit.fit("publicDescription", input.publicDescription)
+            if (input.masterNotes !== undefined) set.masterNotes = fit.fit("masterNotes", input.masterNotes)
             if (input.visibility) set.visibility = input.visibility
             if (input.status) set.status = input.status
-            const existing = await MaddoxNpcModel.findOne({ campaignId: context.campaignId, nameKey }).select("_id").lean()
+            const existing = await MaddoxNpcModel.findOne({ campaignId: context.campaignId, nameKey }).select("_id name").lean<{ _id: Types.ObjectId; name: string }>()
             if (existing) {
-                await MaddoxNpcModel.updateOne({ _id: existing._id }, { $set: { ...set, name } })
-                return { saved: true, created: false, name }
+                // A grafia gravada é a canônica: só muda com `newName` explícito.
+                const newName = input.newName?.trim() ? clip(input.newName, MADDOX_TOOL_NAME_MAX) : null
+                if (newName && keyOf(newName) !== nameKey) {
+                    const taken = await MaddoxNpcModel.exists({ campaignId: context.campaignId, nameKey: keyOf(newName), _id: { $ne: existing._id } })
+                    if (taken) throw new MaddoxToolError(`Já existe um NPC chamado "${newName}" nesta campanha.`)
+                }
+                if (newName) Object.assign(set, { name: newName, nameKey: keyOf(newName) })
+                await MaddoxNpcModel.updateOne({ _id: existing._id }, { $set: set })
+                return { saved: true, created: false, name: newName ?? existing.name, ...fit.notice() }
             }
             await MaddoxNpcModel.create({ campaignId: context.campaignId, name, nameKey, ...set })
-            return { saved: true, created: true, name }
+            return { saved: true, created: true, name, ...fit.notice() }
         },
     }),
     define({
@@ -206,17 +237,18 @@ export const MADDOX_MASTER_TOOLS: readonly MaddoxMasterTool[] = [
             status: z.enum(MADDOX_QUEST_STATUSES).optional().describe("Só para `missao`"),
         }),
         async execute(context, input) {
-            const title = clip(input.title, NAME_MAX)
+            const fit = fitter()
+            const title = clip(input.title, MADDOX_TOOL_NAME_MAX)
             const titleKey = keyOf(title)
             if (!titleKey) throw new MaddoxToolError("Informe o título da memória.")
-            const set: Record<string, unknown> = { title, text: clip(input.text, TEXT_MAX), turnNumber: context.turnNumber }
+            const set: Record<string, unknown> = { title, text: fit.fit("text", input.text), turnNumber: context.turnNumber }
             if (input.visibility) set.visibility = input.visibility
-            if (input.tags) set.tags = input.tags.map((tag) => clip(tag, 60)).filter(Boolean).slice(0, TAGS_MAX)
+            if (input.tags) set.tags = input.tags.map((tag) => clip(tag, MADDOX_TOOL_TAG_MAX)).filter(Boolean).slice(0, MADDOX_TOOL_TAGS_MAX)
             if (input.kind === "missao" && input.status) set.status = input.status
             const existing = await MaddoxCampaignMemoryModel.findOne({ campaignId: context.campaignId, kind: input.kind, titleKey }).select("_id").lean()
             if (existing) {
                 await MaddoxCampaignMemoryModel.updateOne({ _id: existing._id }, { $set: set })
-                return { saved: true, created: false, kind: input.kind, title }
+                return { saved: true, created: false, kind: input.kind, title, ...fit.notice() }
             }
             await MaddoxCampaignMemoryModel.create({
                 campaignId: context.campaignId,
@@ -227,7 +259,7 @@ export const MADDOX_MASTER_TOOLS: readonly MaddoxMasterTool[] = [
                 ...set,
                 ...(input.kind === "missao" ? { status: input.status ?? "ativa" } : {}),
             })
-            return { saved: true, created: true, kind: input.kind, title }
+            return { saved: true, created: true, kind: input.kind, title, ...fit.notice() }
         },
     }),
     define({
@@ -240,8 +272,9 @@ export const MADDOX_MASTER_TOOLS: readonly MaddoxMasterTool[] = [
             const characters = await MaddoxCharacterModel.find({ campaignId: context.campaignId, status: "active" }).select("name").lean<{ _id: Types.ObjectId; name: string }[]>()
             const target = characters.find((character) => keyOf(character.name) === keyOf(input.characterName))
             if (!target) throw new MaddoxToolError(`Nenhum personagem jogador chamado "${input.characterName}". Personagens: ${characters.map((character) => character.name).join(", ") || "nenhum"}.`)
-            await MaddoxCharacterModel.updateOne({ _id: target._id }, { $set: { currentState: clip(input.currentState, SHORT_MAX * 2) } })
-            return { saved: true, characterName: target.name }
+            const fit = fitter()
+            await MaddoxCharacterModel.updateOne({ _id: target._id }, { $set: { currentState: fit.fit("currentState", input.currentState) } })
+            return { saved: true, characterName: target.name, ...fit.notice() }
         },
     }),
 ]

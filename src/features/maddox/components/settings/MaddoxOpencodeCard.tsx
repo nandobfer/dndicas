@@ -83,6 +83,7 @@ const MCP_STATUS_LABELS: Record<MaddoxMcpStatusDto["status"], string> = {
     failed: "Falhou",
     needs_auth: "Pede autenticação",
     missing: "Não registrado",
+    outdated: "URL desatualizada",
     unknown: "Sem resposta do OpenCode",
 }
 
@@ -120,8 +121,12 @@ export function MaddoxOpencodeMcpCard() {
                             <span className={connected ? "rounded bg-success/15 px-1.5 py-0.5 text-xs text-success" : "rounded bg-warning/15 px-1.5 py-0.5 text-xs text-warning"}>{MCP_STATUS_LABELS[status.status]}</span>
                             <span className="truncate font-mono text-xs text-muted-foreground">{status.url ?? "sem URL pública do app"}</span>
                         </p>
+                        {status.registeredUrl && status.registeredUrl !== status.url && <p className="text-xs text-warning">Registrado no OpenCode com {status.registeredUrl}.</p>}
                         {status.error && <p className="text-xs text-destructive">{status.error}</p>}
-                        {!connected && (
+                        {connected && !status.registeredUrl && (
+                            <p className="text-xs text-muted-foreground">O OpenCode não informa a URL registrada. Se trocar a URL do MCP, clique em &quot;Registrar no OpenCode&quot; de novo ou ajuste o opencode.json.</p>
+                        )}
+                        {(!connected || !status.registeredUrl) && (
                             <Button type="button" size="sm" variant="outline" disabled={register.isPending || !status.url} onClick={() => register.mutate()}>
                                 {register.isPending ? <Loader2 className="animate-spin" aria-hidden /> : <Plug aria-hidden />} Registrar no OpenCode
                             </Button>

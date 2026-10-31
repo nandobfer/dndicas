@@ -201,7 +201,7 @@ describe("Maddox 4 — campanha narrativa de ponta a ponta", () => {
         // Persistência no banco.
         const npcs = await MaddoxNpcModel.find({ campaignId: id }).lean()
         expect(npcs).toHaveLength(1)
-        expect(npcs[0]).toMatchObject({ name: "BARTOLOMEU", publicDescription: "Faroleiro idoso.", masterNotes: "Esconde um contrabandista no farol." })
+        expect(npcs[0]).toMatchObject({ name: "Bartolomeu", publicDescription: "Faroleiro idoso.", masterNotes: "Esconde um contrabandista no farol." })
         const local = await MaddoxCampaignMemoryModel.findOne({ campaignId: id, kind: "local" }).lean()
         expect(local).toMatchObject({ title: "Porto de Brumas", origin: "agent", createdBy: "maddox", turnNumber: 2 })
         const quests = await MaddoxCampaignMemoryModel.find({ campaignId: id, kind: "missao" }).lean()

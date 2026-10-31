@@ -1,5 +1,5 @@
 import { memoriesSection } from "@/features/ai/memories-prompt"
-import { MADDOX_DECLARATION_VALIDATION_RIGORS, MADDOX_PROFILE_SECTIONS, type MaddoxCampaignMemoryKind, type MaddoxGameMessageKind, type MaddoxQuestStatus, type MaddoxRigorLevel, type MaddoxVisibility } from "../constants"
+import { MADDOX_DECLARATION_VALIDATION_RIGORS, MADDOX_PROFILE_SECTIONS, MADDOX_TOOL_TEXT_GUIDE, type MaddoxCampaignMemoryKind, type MaddoxGameMessageKind, type MaddoxQuestStatus, type MaddoxRigorLevel, type MaddoxVisibility } from "../constants"
 import { CATALOG_CITATION_RULE, rigorBlock } from "./interview-prompt"
 
 /**
@@ -65,6 +65,7 @@ export const MADDOX_PERSISTENCE_RULE = [
     "- O estado gravado abaixo é a versão oficial da história. Consulte os detalhes pelas ferramentas quando a cena depender deles (NPC, local, missão, memória) em vez de inventar.",
     "- Antes de concluir, grave o que mudou: `update_campaign_state` quando a cena, o local, a situação ou a decisão aguardada mudar; `save_npc` para NPCs novos ou que mudaram; `save_memory` para locais (`local`), missões (`missao`, com `status`), marcos da história (`evento`), relações (`relacao`) e fatos duráveis (`fato`); `update_character_state` quando ferimentos, recursos ou a situação de um personagem mudar.",
     "- Grave só o que é novo ou mudou, sem duplicar nem gravar a cada golpe ou fala. Separe o que os jogadores sabem (`players`) do que é segredo do mestre (`master`).",
+    `- Cada anotação é um texto consolidado e conciso, de até uns ${MADDOX_TOOL_TEXT_GUIDE.toLocaleString("pt-BR")} caracteres: ao atualizar, reescreva o essencial em vez de acumular. Se o retorno trouxer \`truncated\`, consolide e grave de novo.`,
     "- Grave antes ou depois de escrever a narração, nunca no meio dela, e não comente as gravações no texto.",
 ].join("\n")
 

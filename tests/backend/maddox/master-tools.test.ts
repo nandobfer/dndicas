@@ -4,6 +4,7 @@ import { MongoMemoryServer } from "mongodb-memory-server"
 
 const { MaddoxCampaignMemoryModel, MaddoxCampaignModel, MaddoxCharacterModel, MaddoxNpcModel } = await import("@/features/maddox/models")
 const { findMaddoxTool, runMaddoxTool, MaddoxToolError } = await import("@/features/maddox/server/master-tools")
+const { MADDOX_TOOL_TEXT_MAX } = await import("@/features/maddox/constants")
 
 let mongo: MongoMemoryServer
 
@@ -28,16 +29,27 @@ beforeEach(async () => {
 })
 
 describe("ferramentas do Maddox narrador", () => {
-    it("save_npc grava pelo nome sem acento e sem caixa, sem duplicar; get_npc traz as notas do mestre", async () => {
+    it("save_npc grava pelo nome sem acento e sem caixa, sem duplicar e mantendo a grafia gravada; get_npc traz as notas do mestre", async () => {
         const id = await campaign()
         expect(await run("save_npc", id, { name: "Ângela", publicDescription: "Taverneira.", masterNotes: "Espiã." })).toMatchObject({ created: true })
-        expect(await run("save_npc", id, { name: "angela", status: "dead" })).toMatchObject({ created: false })
+        expect(await run("save_npc", id, { name: "angela", status: "dead" })).toMatchObject({ created: false, name: "Ângela" })
         const npcs = await MaddoxNpcModel.find({ campaignId: id }).lean()
         expect(npcs).toHaveLength(1)
-        expect(npcs[0]).toMatchObject({ name: "angela", publicDescription: "Taverneira.", masterNotes: "Espiã.", status: "dead" })
-        expect(await run("get_npc", id, { name: "ANGELA" })).toMatchObject({ found: true, npc: { masterNotes: "Espiã." } })
-        expect(await run("list_npcs", id, {})).toMatchObject({ npcs: [{ name: "angela" }] })
+        expect(npcs[0]).toMatchObject({ name: "Ângela", publicDescription: "Taverneira.", masterNotes: "Espiã.", status: "dead" })
+        expect(await run("get_npc", id, { name: "ANGELA" })).toMatchObject({ found: true, npc: { name: "Ângela", masterNotes: "Espiã." } })
+        expect(await run("list_npcs", id, {})).toMatchObject({ npcs: [{ name: "Ângela" }] })
         expect((await run("list_npcs", id, {})) as { npcs: Record<string, unknown>[] }).not.toHaveProperty("npcs.0.masterNotes")
+    })
+
+    it("save_npc renomeia só com `newName` explícito e recusa um nome já usado por outro NPC", async () => {
+        const id = await campaign()
+        await run("save_npc", id, { name: "Ângela" })
+        await run("save_npc", id, { name: "Bruno" })
+        expect(await run("save_npc", id, { name: "angela", newName: "Ângela Ventobravo" })).toMatchObject({ created: false, name: "Ângela Ventobravo" })
+        expect(await run("get_npc", id, { name: "angela ventobravo" })).toMatchObject({ found: true, npc: { name: "Ângela Ventobravo" } })
+        expect(await run("get_npc", id, { name: "Ângela" })).toMatchObject({ found: false })
+        await expect(run("save_npc", id, { name: "Bruno", newName: "ângela VENTOBRAVO" })).rejects.toThrow(/Já existe um NPC chamado/)
+        expect(await MaddoxNpcModel.countDocuments({ campaignId: id })).toBe(2)
     })
 
     it("cada campanha só enxerga os próprios registros", async () => {
@@ -63,12 +75,21 @@ describe("ferramentas do Maddox narrador", () => {
         expect(await run("search_memories", id, { kind: "local" })).toMatchObject({ memories: [{ kind: "local" }] })
     })
 
-    it("texto longo é cortado (não invalida a chamada)", async () => {
+    it("teto de proteção: no limite grava inteiro; acima corta, não invalida a chamada e avisa o modelo (`truncated`)", async () => {
         const id = await campaign()
-        await run("save_memory", id, { kind: "fato", title: "Longo", text: "x".repeat(20_000) })
-        const memory = await MaddoxCampaignMemoryModel.findOne({ campaignId: id }).lean()
-        expect(memory!.text.length).toBe(8_000)
+        const atLimit = await run("save_memory", id, { kind: "fato", title: "No limite", text: "x".repeat(MADDOX_TOOL_TEXT_MAX) })
+        expect(atLimit).not.toHaveProperty("truncated")
+        expect((await MaddoxCampaignMemoryModel.findOne({ campaignId: id, title: "No limite" }).lean())!.text).toHaveLength(MADDOX_TOOL_TEXT_MAX)
+
+        const over = await run("save_memory", id, { kind: "fato", title: "Acima", text: "y".repeat(MADDOX_TOOL_TEXT_MAX + 1) })
+        expect(over).toMatchObject({ saved: true, truncated: ["text"], note: expect.stringContaining("Consolide") })
+        const memory = await MaddoxCampaignMemoryModel.findOne({ campaignId: id, title: "Acima" }).lean()
+        expect(memory!.text).toHaveLength(MADDOX_TOOL_TEXT_MAX)
         expect(memory!.text.endsWith("…")).toBe(true)
+
+        await MaddoxCharacterModel.create({ campaignId: id, memberId: new mongoose.Types.ObjectId(), userId: "u1", name: "Lyra" })
+        expect(await run("update_character_state", id, { characterName: "Lyra", currentState: "z".repeat(MADDOX_TOOL_TEXT_MAX + 10) })).toMatchObject({ truncated: ["currentState"] })
+        expect(await run("save_npc", id, { name: "Ana", masterNotes: "n".repeat(MADDOX_TOOL_TEXT_MAX + 1), publicDescription: "curta" })).toMatchObject({ truncated: ["masterNotes"] })
     })
 
     it("update_campaign_state grava só os campos enviados e o turno; get_campaign_state traz os personagens", async () => {

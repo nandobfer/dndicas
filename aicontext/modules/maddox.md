@@ -356,13 +356,15 @@ anotações (missões ativas sempre; o que é segredo do mestre marcado `[SÓ O 
 A mensagem do turno leva a transcrição recente (até 40.000 caracteres, `MADDOX_NARRATOR_HISTORY_CHARS`) e a tarefa: abertura,
 narração das declarações do turno que fechou, ou resposta a uma pergunta **sem avançar a cena**.
 
-**Ferramentas** (a campanha vem sempre do contexto da geração, nunca do modelo; textos longos são cortados, nunca invalidam a
-chamada; erro volta ao modelo em pt-BR; cada gravação gera log estruturado):
+**Ferramentas** (a campanha vem sempre do contexto da geração, nunca do modelo; erro volta ao modelo em pt-BR; cada gravação gera
+log estruturado). **Tamanho:** o prompt orienta anotações consolidadas de até ~3.000 caracteres (`MADDOX_TOOL_TEXT_GUIDE`); o
+corte só acontece no **teto de proteção** `MADDOX_TOOL_TEXT_MAX` = 20.000 (nomes e títulos: 120), nunca invalida a chamada e o
+retorno avisa o modelo (`truncated` com os campos cortados) para ele consolidar e gravar de novo.
 
 | Ferramenta | Grava em |
 | --- | --- |
 | `get_campaign_state` / `update_campaign_state` | `campaign.state` (`scene`, `location`, `situation`, `pendingDecision`, `updatedTurn`) |
-| `list_npcs`, `get_npc`, `save_npc` | `maddox_npcs` pelo nome sem acento e sem caixa (`nameKey`, sem duplicar): descrição pública, `masterNotes`, visibilidade, situação |
+| `list_npcs`, `get_npc`, `save_npc` | `maddox_npcs` pelo nome sem acento e sem caixa (`nameKey`, sem duplicar): descrição pública, `masterNotes`, visibilidade, situação. A grafia gravada é mantida ao atualizar; renomear só com `newName` (nome já usado por outro NPC = erro) |
 | `search_memories`, `save_memory` | `maddox_campaign_memories` por tipo + título (`titleKey`): `local` (locais), `missao` (missões, com `status` ativa/concluída/falhou/abandonada — nasce `ativa`), `evento` (marcos), `relacao`, `fato`, `outro`; `origin: agent`, `createdBy: maddox`, `turnNumber` |
 | `update_character_state` | `character.currentState` (o perfil da entrevista não muda) |
 
@@ -370,7 +372,10 @@ chamada; erro volta ao modelo em pt-BR; cada gravação gera log estruturado):
 `MADDOX_NARRATOR_MAX_STEPS`). **OpenCode:** sessão `narrator` da campanha (`ensureMaddoxSession`), sem ferramentas na chamada;
 antes de narrar, `ensureMaddoxMcp` confere no OpenCode (`mcp.list`, no diretório das sessões) o MCP **`dndicas-maddox`** e, se
 faltar, adiciona (`mcp.add`, remoto, sem OAuth) e conecta; sem conexão = 409 `MADDOX_UNAVAILABLE` (o turno fica com falha e é
-tentado de novo). Um resultado positivo fica em cache por 1 min. Use no OpenCode um agente **sem ferramentas de arquivos ou
+tentado de novo). Um resultado positivo fica em cache por 1 min. **Troca de URL:** a URL registrada vem dos documentos de
+configuração do OpenCode (`config.get`) ou do registro feito por este processo; se for outra que a configurada, o card mostra
+"URL desatualizada" (com a registrada) e narrar ou "Registrar no OpenCode" troca o registro (`mcp.remove` + `mcp.add`). Quando o
+OpenCode não informa a URL registrada, o card avisa e o botão refaz o registro com a URL atual. Use no OpenCode um agente **sem ferramentas de arquivos ou
 terminal**.
 
 **MCP do Maddox** (`/api/maddox/mcp`, Streamable HTTP sem sessão, separado do `/api/mcp` público): as mesmas ferramentas com o
@@ -381,7 +386,9 @@ de uma geração que **já terminou** (o job precisa estar rodando no barramento
 **Fila e streaming.** O barramento (`globalThis.__maddoxGameHub`, possível pela instância única) mantém por campanha uma **fila em
 série** — uma geração do Maddox por vez (narrações e respostas), o que evita duas gerações na mesma sessão do OpenCode e corridas
 no estado —, as gerações ao vivo e os ouvintes. Fechar o turno, iniciar a campanha ou perguntar **responde logo**; a geração roda
-em segundo plano e não depende da conexão de ninguém. Enquanto narra, a trava do turno é renovada a cada 30 s
+em segundo plano e não depende da conexão de ninguém. Cada geração tem **teto de duração** de 5 min
+(`MADDOX_MASTER_GENERATION_TIMEOUT_MS`): passado, o provedor é abortado (sinal no `streamText`/`streamAi`) e a geração é tratada como
+falha — mesmo que não respeite o sinal —, então a fila anda e o pulso da trava para; o texto parcial nunca é gravado. Enquanto narra, a trava do turno é renovada a cada 30 s
 (`MADDOX_MASTER_HEARTBEAT_MS`) e a retomada (`GET`/`check`) ignora campanhas com geração ativa no processo. A resposta que falha
 é gravada com `error` ("O Maddox não conseguiu responder agora. Pergunte de novo."); a narração que falha marca `failedAt`
 (`turn.failed` no DTO). Consumo nas origens `maddox-narration` e `maddox-validation`.
@@ -393,7 +400,8 @@ menções são resolvidas com os nomes reservados da campanha **e dos NPCs**.
 
 **Ação livre.** **Rigoroso e Fiel ao D&D** (`MADDOX_DECLARATION_VALIDATION_RIGORS`) validam a declaração **antes de gravar**: com
 a chave JEV "Validade de ação livre" ligada decide o JEV (`noul`, motivo padrão); senão, uma geração curta e efêmera do narrador
-devolve `{ valid, reason }`. Inválida = **409 `ACTION_INVALID`** com o motivo: nada é gravado e a vez não é gasta. Falha do
+devolve `{ valid, reason }`. Quem já declarou recebe **409 `ALREADY_DECLARED` antes** da validação (sem chamada de IA).
+Inválida = **409 `ACTION_INVALID`** com o motivo: nada é gravado e a vez não é gasta. Falha do
 validador aceita a declaração (aviso no log). **Narrativo, Flexível e Equilibrado** julgam na narração: a ação impossível vira
 uma tentativa frustrada narrada com a causa na ficção. Perguntas e "Não fazer nada" nunca são validadas.
 
