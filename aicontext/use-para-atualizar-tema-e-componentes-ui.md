@@ -290,20 +290,18 @@ Para customizações globais do Tailwind, edite `tailwind.config.ts` (não prese
 
 ## Layout Components
 
-### Sidebar
+### Navegação (header)
 
-Edite `src/core/ui/layout/sidebar.tsx` para adicionar itens:
+O app não tem sidebar. A navegação fica no header translúcido (`src/components/ui/glass-header.tsx`) e
+os itens, agrupados por categoria, em `src/lib/config/navigation.ts` (`NAV_CATEGORIES`):
 
 ```typescript
-export const SidebarItems = [
-  { label: "Início", href: "/", icon: Home },
-  { label: "Perfil", href: "/profile", icon: User },
-];
+{ label: "Magias", href: "/spells", icon: Wand }
 ```
 
-### Topbar
-
-Customizável em `src/core/ui/layout/topbar.tsx`.
+Detalhes (categorias, destaque, mobile, menu do usuário e botões flutuantes) em
+[use-componentes-ui.md › Layout do app](./use-componentes-ui.md#layout-do-app-header-translúcido-e-botões-flutuantes-dnd-20).
+`src/core/ui/layout/sidebar.tsx` e `topbar.tsx` não são usados pelo app.
 
 ## Responsividade
 

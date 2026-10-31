@@ -13,7 +13,7 @@ import type { OpexFileDto, OpexFileReservationDto } from "../types"
 import { useOpexScope } from "../components/OpexScopeProvider"
 
 /**
- * Fila de envio dos arquivos do chat, por sessão. Fica acima do popover (no item da barra lateral):
+ * Fila de envio dos arquivos do chat, por sessão. Fica acima do popover (no botão flutuante `OpexFab`):
  * fechar o chat ou trocar de aba não perde os envios. Cada arquivo segue o fluxo dos anexos de
  * tarefa: reserva (URL assinada) → PUT direto no Storage S3 com progresso real → confirmação.
  */

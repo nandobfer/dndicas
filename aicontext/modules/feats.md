@@ -236,9 +236,9 @@ src/app/(dashboard)/_components/
 **Filter**: EntityMultiSelect includes "Talento" option with amber checkActive styling  
 **Query**: `/api/audit-logs?entityType=Feat` or `entityType=Talento`
 
-### Sidebar Navigation
+### Header Navigation
 **Entry**: `{ label: "Talentos", href: "/feats", icon: Zap }`  
-**Location**: cadastrosItems array in `expandable-sidebar.tsx`
+**Location**: categoria `catalogo` de `NAV_CATEGORIES` em `src/lib/config/navigation.ts`
 
 ---
 

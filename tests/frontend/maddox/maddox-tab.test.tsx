@@ -58,6 +58,35 @@ function renderTab() {
     return renderWithQueryClient(<MaddoxTab onDirtyChange={vi.fn()} />)
 }
 
+/** Relê o interruptor (o nó pode ter sido remontado) e confere o estado. */
+const checkedNow = (name: string) => (screen.getByRole("checkbox", { name }) as HTMLInputElement).checked
+
+/**
+ * O painel da aba é montado pelo `AnimatePresence` em dois commits e o nó do interruptor pode ser
+ * substituído logo depois de aparecer. Espera ele ficar estável (duas leituras seguidas no mesmo nó)
+ * para o clique não cair num nó que acabou de sair do DOM.
+ */
+async function stableCheckbox(name: string, settleMs = 60): Promise<HTMLInputElement> {
+    let node = (await screen.findByRole("checkbox", { name })) as HTMLInputElement
+    for (let attempt = 0; attempt < 20; attempt++) {
+        await new Promise((resolve) => setTimeout(resolve, settleMs))
+        const current = screen.queryAllByRole("checkbox", { name })[0] as HTMLInputElement | undefined
+        if (current === node) return node
+        if (current) node = current
+    }
+    return node
+}
+
+/**
+ * Liga o interruptor e espera o formulário registrar a alteração: com `mode: "onChange"`, o
+ * `isDirty` (que habilita o Salvar) só vale depois da validação.
+ */
+async function toggleOn(name: string) {
+    fireEvent.click(await stableCheckbox(name))
+    await waitFor(() => expect(checkedNow(name)).toBe(true))
+    await waitFor(() => expect((screen.getByRole("button", { name: "Salvar" }) as HTMLButtonElement).disabled).toBe(false))
+}
+
 const lastSaved = () => saveSettings.mock.calls.at(-1)![0] as typeof DEFAULT_MADDOX_SETTINGS
 
 describe("aba Agente Maddox", () => {
@@ -105,9 +134,7 @@ describe("aba Agente Maddox", () => {
     it("liga uma decisão do JEV e salva", async () => {
         renderTab()
         fireEvent.click(screen.getByRole("tab", { name: "JEV" }))
-        const check = (await screen.findByRole("checkbox", { name: "Pedir teste" })) as HTMLInputElement
-        fireEvent.click(screen.getByText("Pedir teste"))
-        await waitFor(() => expect(check.checked).toBe(true))
+        await toggleOn("Pedir teste")
         fireEvent.click(screen.getByRole("button", { name: "Salvar" }))
         await waitFor(() => expect(saveSettings).toHaveBeenCalled())
         expect(lastSaved().jev["requires-check"]).toBe(true)
@@ -196,12 +223,10 @@ describe("aba Agente Maddox", () => {
         saveSettings.mockRejectedValueOnce(new Error("500"))
         renderTab()
         fireEvent.click(screen.getByRole("tab", { name: "JEV" }))
-        const check = (await screen.findByRole("checkbox", { name: "Pedir teste" })) as HTMLInputElement
-        fireEvent.click(screen.getByText("Pedir teste"))
-        await waitFor(() => expect(check.checked).toBe(true))
+        await toggleOn("Pedir teste")
         fireEvent.click(screen.getByRole("button", { name: "Salvar" }))
         await waitFor(() => expect(saveSettings).toHaveBeenCalled())
-        expect(check.checked).toBe(true)
+        expect(checkedNow("Pedir teste")).toBe(true)
         expect((screen.getByRole("button", { name: "Desfazer" }) as HTMLButtonElement).disabled).toBe(false)
     })
 

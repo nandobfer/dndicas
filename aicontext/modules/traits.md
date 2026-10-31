@@ -294,11 +294,11 @@ In the `TraitsTable`, the "Prever" column uses an **eye icon**. Clicking it open
 
 ## Integration Points
 
-### 1. Sidebar Navigation
+### 1. Header Navigation
 
-**File**: `src/components/ui/expandable-sidebar.tsx`
+**File**: `src/lib/config/navigation.ts`
 
-Add to `cadastrosItems` array:
+Add to the `catalogo` category of `NAV_CATEGORIES`:
 ```typescript
 { label: "Habilidades", href: "/traits", icon: Sparkles }
 ```

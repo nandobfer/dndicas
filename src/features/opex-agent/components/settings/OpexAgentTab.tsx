@@ -97,7 +97,7 @@ export function OpexAgentTab({ onDirtyChange }: { onDirtyChange: (dirty: boolean
                                         name="enabled"
                                         id="opex-enabled"
                                         label="Agente Opex"
-                                        description="Assistente por chat para todos (item da barra lateral, Ctrl+Shift+O): consulta o catálogo e a documentação do DnDicas, cuida das fichas e NPCs do usuário e, para administradores, configura integrações, agentes de IA e memórias"
+                                        description="Assistente por chat para todos (botão flutuante no canto inferior direito, Ctrl+Shift+O): consulta o catálogo e a documentação do DnDicas, cuida das fichas e NPCs do usuário e, para administradores, configura integrações, agentes de IA e memórias"
                                     />
                                     <AnimatePresence initial={false}>
                                         {!dirty && !availability.available && availability.reason && (

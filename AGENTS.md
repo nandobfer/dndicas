@@ -31,7 +31,7 @@ Antes de implementar, leia nesta ordem:
   conforme `aicontext/modules/perfix.md`. Se a cobertura existente for suficiente, reutilize-a. Se o
   recurso deveria ser controlável por perfil e ainda não estiver mapeado, pergunte ao usuário se o
   permissionamento deve entrar no plano. Se ele aprovar, inclua a cobertura completa (chave no catálogo,
-  rotas, páginas, sidebar, ferramentas do Agente Opex e a concessão inicial aos perfis existentes quando o
+  rotas, páginas, navegação do header, ferramentas do Agente Opex e a concessão inicial aos perfis existentes quando o
   recurso for de usuário comum). Quando o usuário pedir explicitamente o mapeamento, considere-o aprovado.
 
 ## 3. Padrões operacionais
