@@ -8,7 +8,8 @@ import { api, apiErrorMessage, unwrapApi } from "@/lib/api"
 import type { ApiResponse } from "@/lib/types/api"
 import { maddoxCampaignPresenceChannel, maddoxUserChannel } from "@/lib/pusher/channel-names"
 import { acquireChannel, isPusherClientAvailable, releaseChannel } from "@/lib/pusher/client"
-import { MADDOX_CAMPAIGN_CHANGED_EVENT, MADDOX_GAME_CHANGED_EVENT, MADDOX_MASTER_RETRY_MS } from "../constants"
+import { MADDOX_CAMPAIGN_CHANGED_EVENT, MADDOX_GAME_CHANGED_EVENT } from "../constants"
+import { gameRefetchInterval, MADDOX_GAME_POLL_MS } from "../game-view"
 import type { MaddoxGameActionInput } from "../game-schemas"
 import type { MaddoxGameMessagesPageDto, MaddoxGameStateDto } from "../game-types"
 import type { MaddoxCampaignDetailDto } from "../campaign-types"
@@ -18,8 +19,7 @@ export const maddoxGameKey = (campaignId: string) => [...MADDOX_CAMPAIGNS_KEY, "
 
 const gamePath = (campaignId: string) => `/maddox/campaigns/${campaignId}/game`
 
-/** Sem Pusher, a mesa recarrega neste intervalo (os outros jogadores não avisam em tempo real). */
-export const MADDOX_GAME_POLL_MS = 5000
+export { MADDOX_GAME_POLL_MS }
 /** Espera antes de pedir a reavaliação do turno depois que alguém sai da mesa (várias saídas = uma chamada). */
 export const MADDOX_PRESENCE_CHECK_DEBOUNCE_MS = 1500
 
@@ -29,13 +29,7 @@ export function useMaddoxGame(campaignId: string) {
         queryKey: maddoxGameKey(campaignId),
         queryFn: async () => unwrapApi((await api.get<ApiResponse<MaddoxGameStateDto>>(gamePath(campaignId))).data),
         retry: false,
-        // Turno do mestre sem geração em andamento = a última tentativa falhou: recarrega no intervalo da nova
-        // tentativa (o servidor só retoma depois dele), para a mesa não ficar parada sem nenhum aviso.
-        refetchInterval: (query) => {
-            if (!realtime) return MADDOX_GAME_POLL_MS
-            const turn = query.state.data?.turn
-            return query.state.data?.status === "active" && turn?.phase === "master" && !turn.generating ? MADDOX_MASTER_RETRY_MS : false
-        },
+        refetchInterval: (query) => gameRefetchInterval(query.state.data, realtime),
     })
 }
 

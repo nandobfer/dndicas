@@ -1,5 +1,5 @@
 /** @vitest-environment happy-dom */
-import { beforeEach, describe, expect, it, vi } from "vitest"
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { fireEvent, screen, waitFor, within } from "@testing-library/react"
 import { renderWithQueryClient } from "../test-utils"
 import type { MaddoxGameMessageDto, MaddoxGameParticipantDto, MaddoxGameStateDto } from "@/features/maddox/game-types"
@@ -85,7 +85,8 @@ const gameState = (over: Partial<MaddoxGameStateDto> = {}): MaddoxGameStateDto =
 })
 
 const { GamePage } = await import("@/features/maddox/components/game/GamePage")
-const { seatStatus, turnProgress, composerBlockReason } = await import("@/features/maddox/game-view")
+const { seatStatus, turnProgress, composerBlockReason, gameRefetchInterval, MADDOX_GAME_POLL_MS } = await import("@/features/maddox/game-view")
+const { MADDOX_MASTER_RETRY_MS } = await import("@/features/maddox/constants")
 
 beforeEach(() => {
     get.mockReset()
@@ -294,5 +295,49 @@ describe("regras de exibição da mesa", () => {
             expect(source, file).not.toMatch(/<select[\s>]/)
             expect(source, file).not.toMatch(/type=["']checkbox["']/)
         }
+    })
+})
+
+describe("mesa Maddox — recarga depois de falha do mestre", () => {
+    const master = (generating: boolean) => ({ number: 2, phase: "master" as const, startedAt: null, generating })
+    const players = { number: 2, phase: "players" as const, startedAt: null, generating: false }
+
+    it("gameRefetchInterval: com tempo real só recarrega no turno do mestre sem geração; sem Pusher recarrega sempre", () => {
+        expect(gameRefetchInterval({ status: "active", turn: master(false) }, true)).toBe(MADDOX_MASTER_RETRY_MS)
+        expect(gameRefetchInterval({ status: "active", turn: master(true) }, true)).toBe(false)
+        expect(gameRefetchInterval({ status: "active", turn: players }, true)).toBe(false)
+        expect(gameRefetchInterval({ status: "lobby", turn: master(false) }, true)).toBe(false)
+        expect(gameRefetchInterval(undefined, true)).toBe(false)
+        expect(gameRefetchInterval({ status: "active", turn: players }, false)).toBe(MADDOX_GAME_POLL_MS)
+        expect(gameRefetchInterval(undefined, false)).toBe(MADDOX_GAME_POLL_MS)
+    })
+
+    afterEach(() => {
+        vi.useRealTimers()
+    })
+
+    async function countGetsAfter(state: MaddoxGameStateDto, ms: number) {
+        vi.useFakeTimers({ shouldAdvanceTime: true, toFake: ["setTimeout", "clearTimeout", "setInterval", "clearInterval"] })
+        await renderGame(state)
+        const before = get.mock.calls.length
+        await vi.advanceTimersByTimeAsync(ms)
+        return get.mock.calls.length - before
+    }
+
+    it("com Pusher, turno do mestre sem geração (falhou): a mesa recarrega após MADDOX_MASTER_RETRY_MS", async () => {
+        expect(await countGetsAfter(gameState({ turn: master(false) }), MADDOX_MASTER_RETRY_MS + 100)).toBeGreaterThanOrEqual(1)
+    })
+
+    it("com Pusher, geração em andamento ou turno dos jogadores: não recarrega sozinha", async () => {
+        expect(await countGetsAfter(gameState({ turn: master(true) }), MADDOX_MASTER_RETRY_MS * 2)).toBe(0)
+    })
+
+    it("com Pusher, turno dos jogadores: não recarrega sozinha", async () => {
+        expect(await countGetsAfter(gameState({ turn: players }), MADDOX_MASTER_RETRY_MS * 2)).toBe(0)
+    })
+
+    it("sem Pusher: recarrega a cada MADDOX_GAME_POLL_MS", async () => {
+        pusherAvailable = false
+        expect(await countGetsAfter(gameState({ turn: players }), MADDOX_GAME_POLL_MS * 2 + 100)).toBeGreaterThanOrEqual(2)
     })
 })

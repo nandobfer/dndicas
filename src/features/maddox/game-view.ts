@@ -1,4 +1,8 @@
+import { MADDOX_MASTER_RETRY_MS } from "./constants"
 import type { MaddoxGameParticipantDto, MaddoxGameStateDto } from "./game-types"
+
+/** Sem Pusher, a mesa recarrega neste intervalo (os outros jogadores não avisam em tempo real). */
+export const MADDOX_GAME_POLL_MS = 5000
 
 /** Regras de exibição da mesa (Maddox 3) — módulo PURO, sem React. */
 
@@ -40,4 +44,14 @@ export function composerBlockReason(state: Pick<MaddoxGameStateDto, "status" | "
     if (state.turn.phase === "master") return "O Maddox está narrando. Aguarde o turno dos jogadores."
     if (!state.me.eligible) return "Você entra no jogo a partir do próximo turno."
     return null
+}
+
+/**
+ * Intervalo de recarga da mesa (`false` = só pelo tempo real). Sem Pusher, recarrega sempre. Com Pusher, só
+ * quando o turno do mestre está sem geração em andamento — a última tentativa falhou e o servidor não avisa:
+ * recarregar no intervalo da nova tentativa faz a retomada, sem laço.
+ */
+export function gameRefetchInterval(state: Pick<MaddoxGameStateDto, "status" | "turn"> | undefined, realtime: boolean): number | false {
+    if (!realtime) return MADDOX_GAME_POLL_MS
+    return state?.status === "active" && state.turn.phase === "master" && !state.turn.generating ? MADDOX_MASTER_RETRY_MS : false
 }
