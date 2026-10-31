@@ -47,6 +47,8 @@ const listItem = (over: Partial<MaddoxCampaignListItemDto> = {}): MaddoxCampaign
     myCharacter: null,
     members: [member("m1", "u-owner", "Marina Dona", "owner"), member("m2", "u-ana", "Ana Jogadora", "player", { id: "ch1", name: "Lyra", portraitUrl: null, interviewStatus: "pending", profile: {}, sheetSlug: null })],
     turnNumber: 0,
+    turnPhase: "master",
+    startedAt: null,
     scenarioStatus: "pending",
     createdAt: "2026-10-30T10:00:00.000Z",
     updatedAt: new Date().toISOString(),
@@ -399,5 +401,52 @@ describe("lobby com as entrevistas (Maddox 2)", () => {
             expect(source, file).not.toMatch(/<select[\s>]/)
             expect(source, file).not.toMatch(/type=["']checkbox["']/)
         }
+    })
+})
+
+describe("lobby com a mesa (Maddox 3)", () => {
+    const invite = (url: string, body: unknown) => (url.endsWith("/invite") ? ok({ token: TOKEN, rotatedAt: null }) : ok(body))
+    const ready = (name: string) => ({ id: `ch-${name}`, name, portraitUrl: null, interviewStatus: "done" as const, profile: {}, sheetSlug: null })
+    const readyMembers = () => detail().members.map((item) => ({ ...item, character: ready(item.id === "m1" ? "Kael" : "Lyra"), ready: true }))
+
+    it("dono com o cenário e a própria entrevista prontos inicia a campanha com confirmação e vai para a mesa", async () => {
+        get.mockImplementation(async (url: string) => invite(url, detail({ scenarioStatus: "done", members: readyMembers() })))
+        post.mockResolvedValue(ok({ campaignId: "c1", status: "active" }))
+        renderWithQueryClient(<CampaignPage campaignId="c1" />)
+        fireEvent.click(await screen.findByRole("button", { name: /Iniciar campanha/ }))
+        const dialog = await screen.findByRole("alertdialog")
+        expect(within(dialog).getByText(/Jogam 2 participante\(s\) pronto\(s\)/)).toBeInTheDocument()
+        fireEvent.click(within(dialog).getByRole("button", { name: "Iniciar campanha" }))
+        await waitFor(() => expect(post).toHaveBeenCalledWith("/maddox/campaigns/c1/start"))
+        await waitFor(() => expect(push).toHaveBeenCalledWith("/campanhas/c1/mesa"))
+    })
+
+    it("sem o cenário ou sem a entrevista do dono, o botão fica desabilitado com o motivo", async () => {
+        get.mockImplementation(async (url: string) => invite(url, detail()))
+        const view = renderWithQueryClient(<CampaignPage campaignId="c1" />)
+        const button = await screen.findByRole("button", { name: /Iniciar campanha/ })
+        expect(button).toBeDisabled()
+        expect(button).toHaveAttribute("title", "Conclua a entrevista de cenário com o Maddox")
+        view.unmount()
+
+        get.mockImplementation(async (url: string) => invite(url, detail({ scenarioStatus: "done" })))
+        renderWithQueryClient(<CampaignPage campaignId="c1" />)
+        const again = await screen.findByRole("button", { name: /Iniciar campanha/ })
+        expect(again).toBeDisabled()
+        expect(again).toHaveAttribute("title", "Conclua a sua entrevista de personagem")
+    })
+
+    it("jogador não vê 'Iniciar campanha'; em andamento, todos veem 'Entrar na mesa' e o turno", async () => {
+        get.mockImplementation(async (url: string) => invite(url, detail({ myRole: "player", myMemberId: "m2", scenarioStatus: "done", members: readyMembers() })))
+        const view = renderWithQueryClient(<CampaignPage campaignId="c1" />)
+        await screen.findByRole("list", { name: "Participantes" })
+        expect(screen.queryByRole("button", { name: /Iniciar campanha/ })).not.toBeInTheDocument()
+        view.unmount()
+
+        get.mockImplementation(async (url: string) => invite(url, detail({ status: "active", turnNumber: 3, turnPhase: "players", scenarioStatus: "done", rigorLocked: true, members: readyMembers() })))
+        renderWithQueryClient(<CampaignPage campaignId="c1" />)
+        expect(await screen.findByRole("link", { name: /Entrar na mesa/ })).toHaveAttribute("href", "/campanhas/c1/mesa")
+        expect(screen.getByTestId("campaign-active-banner")).toHaveTextContent("Em andamento · Turno 3 · Turno dos jogadores")
+        expect(screen.queryByRole("button", { name: /Iniciar campanha/ })).not.toBeInTheDocument()
     })
 })

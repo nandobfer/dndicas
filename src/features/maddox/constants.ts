@@ -119,6 +119,33 @@ export type MaddoxCampaignMemoryKind = (typeof MADDOX_CAMPAIGN_MEMORY_KINDS)[num
 export const MADDOX_TURN_PHASES = ["master", "players"] as const
 export type MaddoxTurnPhase = (typeof MADDOX_TURN_PHASES)[number]
 
+// ── Mesa e turnos (Maddox 3) ──────────────────────────────────────────────────
+
+/** Evento do canal do usuário: a mesa (turno ou mensagens) de uma campanha mudou. */
+export const MADDOX_GAME_CHANGED_EVENT = "maddox.game.changed"
+
+/**
+ * Mensagens da mesa: narração do mestre, declaração do jogador, "não fazer nada" (`pass`), pergunta ao
+ * mestre (não encerra o turno) e a resposta dele.
+ */
+export const MADDOX_GAME_MESSAGE_KINDS = ["narration", "declaration", "pass", "question", "answer"] as const
+export type MaddoxGameMessageKind = (typeof MADDOX_GAME_MESSAGE_KINDS)[number]
+
+/** O que o jogador envia no próprio turno. */
+export const MADDOX_GAME_ACTION_KINDS = ["declaration", "pass", "question"] as const
+export type MaddoxGameActionKind = (typeof MADDOX_GAME_ACTION_KINDS)[number]
+
+export const MADDOX_GAME_MESSAGE_MAX = 4_000
+/** Mensagens por página da mesa (as mais recentes; "Carregar anteriores" busca o resto). */
+export const MADDOX_GAME_PAGE_SIZE = 100
+/** Trava do turno do mestre mais antiga que isto é retomada (geração interrompida). */
+export const MADDOX_MASTER_LOCK_STALE_MS = 2 * 60 * 1000
+
+export const MADDOX_TURN_PHASE_LABELS: Record<MaddoxTurnPhase, string> = {
+    master: "Turno do mestre",
+    players: "Turno dos jogadores",
+}
+
 // ── Entrevistas ───────────────────────────────────────────────────────────────
 
 export const MADDOX_SCRIPT_KINDS = ["scenario", "character"] as const

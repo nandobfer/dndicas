@@ -4,7 +4,7 @@ import { useState } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { motion } from "framer-motion"
-import { ArrowLeft, CheckCircle2, Crown, DoorOpen, Hourglass, MessageCircle, Pencil, ScrollText, Swords, UserMinus, UserRound, Users } from "lucide-react"
+import { ArrowLeft, CheckCircle2, Crown, Dices, DoorOpen, Hourglass, MessageCircle, Pencil, Play, ScrollText, Swords, UserMinus, UserRound, Users } from "lucide-react"
 import { Button } from "@/components/ui/opex/button"
 import { ConfirmDialog } from "@/components/ui/opex/confirm-dialog"
 import { Skeleton } from "@/components/ui/opex/skeleton"
@@ -12,9 +12,10 @@ import { ErrorState } from "@/components/feedback/ErrorState"
 import { EmptyState } from "@/components/feedback/EmptyState"
 import { GlassCard as Card, GlassCardContent as CardContent, GlassCardDescription as CardDescription, GlassCardHeader as CardHeader, GlassCardTitle as CardTitle } from "@/components/ui/glass-card"
 import { useAuth } from "@/core/hooks/useAuth"
-import { MADDOX_RIGOR_LEVEL_DEFS } from "../../constants"
+import { MADDOX_RIGOR_LEVEL_DEFS, MADDOX_TURN_PHASE_LABELS } from "../../constants"
 import type { MaddoxCampaignCharacterDto, MaddoxCampaignDetailDto, MaddoxCampaignMemberDto } from "../../campaign-types"
 import { useMaddoxCampaign, useMaddoxCampaignsRealtime, useRemoveMaddoxMember } from "../../hooks/useMaddoxCampaigns"
+import { useStartMaddoxCampaign } from "../../hooks/useMaddoxGame"
 import { CharacterDraftDialog } from "./CharacterDraftDialog"
 import { EditCampaignDialog } from "./EditCampaignDialog"
 import { InvitePanel } from "./InvitePanel"
@@ -68,6 +69,8 @@ function CampaignView({ campaign, userId }: { campaign: MaddoxCampaignDetailDto;
     const isOwner = campaign.myRole === "owner"
     const color = rigorColor(campaign.rigor)
     const remove = useRemoveMaddoxMember(campaign.id)
+    const start = useStartMaddoxCampaign(campaign.id)
+    const [starting, setStarting] = useState(false)
     const [editing, setEditing] = useState(false)
     const [characterOpen, setCharacterOpen] = useState(false)
     const [removing, setRemoving] = useState<MaddoxCampaignMemberDto | null>(null)
@@ -75,6 +78,9 @@ function CampaignView({ campaign, userId }: { campaign: MaddoxCampaignDetailDto;
     const [viewing, setViewing] = useState<{ character: MaddoxCampaignCharacterDto; playerName: string; own: boolean } | null>(null)
     const ready = campaign.members.filter((member) => member.ready).length
     const scenarioDone = campaign.scenarioStatus === "done"
+    const active = campaign.status === "active"
+    const meReady = campaign.members.find((member) => member.id === campaign.myMemberId)?.ready ?? false
+    const startBlocked = campaign.status !== "lobby" || !scenarioDone ? "Conclua a entrevista de cenário com o Maddox" : !meReady ? "Conclua a sua entrevista de personagem" : null
 
     return (
         <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="space-y-6">
@@ -95,6 +101,18 @@ function CampaignView({ campaign, userId }: { campaign: MaddoxCampaignDetailDto;
                         <p className="text-sm text-white/60">{MADDOX_RIGOR_LEVEL_DEFS[campaign.rigor].description}</p>
                     </div>
                     <div className="flex flex-wrap gap-2">
+                        {active && (
+                            <Button asChild>
+                                <Link href={`/campanhas/${campaign.id}/mesa`}>
+                                    <Dices aria-hidden /> Entrar na mesa
+                                </Link>
+                            </Button>
+                        )}
+                        {isOwner && !active && (campaign.status === "lobby" || campaign.status === "interview") && (
+                            <Button onClick={() => setStarting(true)} disabled={startBlocked !== null} title={startBlocked ?? undefined}>
+                                <Play aria-hidden /> Iniciar campanha
+                            </Button>
+                        )}
                         {isOwner ? (
                             <Button variant="outline" onClick={() => setEditing(true)}>
                                 <Pencil aria-hidden /> Editar
@@ -114,6 +132,13 @@ function CampaignView({ campaign, userId }: { campaign: MaddoxCampaignDetailDto;
                     {scenarioDone
                         ? `Lobby: ${ready} de ${campaign.members.length} participante(s) prontos para jogar. Só entra no jogo quem concluir a entrevista de personagem com o Maddox.`
                         : "Preparação: o dono define o cenário com o Maddox. Enquanto isso, convide os jogadores e crie o seu personagem."}
+                </p>
+            )}
+
+            {active && (
+                <p className="flex items-start gap-2 rounded-lg border border-white/10 bg-white/[0.03] p-3 text-sm text-white/70" data-testid="campaign-active-banner">
+                    <Dices className="mt-0.5 h-4 w-4 shrink-0 text-primary" aria-hidden />
+                    {`Em andamento · Turno ${campaign.turnNumber} · ${MADDOX_TURN_PHASE_LABELS[campaign.turnPhase]}. Quem entra agora faz a entrevista de personagem e joga a partir do próximo turno.`}
                 </p>
             )}
 
@@ -203,6 +228,15 @@ function CampaignView({ campaign, userId }: { campaign: MaddoxCampaignDetailDto;
                 variant="destructive"
                 pending={remove.isPending}
                 onConfirm={() => removing && remove.mutate(removing.id, { onSettled: () => setRemoving(null) })}
+            />
+            <ConfirmDialog
+                open={starting}
+                onOpenChange={setStarting}
+                title="Iniciar a campanha?"
+                description={`O Maddox abre a história no turno 1. Jogam ${ready} participante(s) pronto(s); quem concluir a entrevista depois entra a partir do próximo turno.`}
+                confirmLabel="Iniciar campanha"
+                pending={start.isPending}
+                onConfirm={() => start.mutate(undefined, { onSuccess: () => router.push(`/campanhas/${campaign.id}/mesa`), onSettled: () => setStarting(false) })}
             />
             <ConfirmDialog
                 open={leaving}

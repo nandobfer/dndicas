@@ -7,7 +7,7 @@ import { api, apiErrorMessage, unwrapApi } from "@/lib/api"
 import type { ApiResponse } from "@/lib/types/api"
 import { maddoxUserChannel } from "@/lib/pusher/channel-names"
 import { acquireChannel, isPusherClientAvailable, releaseChannel } from "@/lib/pusher/client"
-import { MADDOX_CAMPAIGN_CHANGED_EVENT } from "../constants"
+import { MADDOX_CAMPAIGN_CHANGED_EVENT, MADDOX_GAME_CHANGED_EVENT } from "../constants"
 import type { CreateMaddoxCampaignInput, MaddoxCharacterDraftInput, UpdateMaddoxCampaignInput } from "../campaign-schemas"
 import type { MaddoxCampaignDetailDto, MaddoxCampaignListItemDto, MaddoxInviteLinkDto, MaddoxInvitePreviewDto } from "../campaign-types"
 
@@ -35,10 +35,13 @@ export function useMaddoxCampaignsRealtime(userId: string | null) {
         const channel = acquireChannel(name)
         const refresh = () => void queryClient.invalidateQueries({ queryKey: MADDOX_CAMPAIGNS_KEY })
         channel.bind(MADDOX_CAMPAIGN_CHANGED_EVENT, refresh)
+        // A mesa (Maddox 3) também muda o lobby: início da campanha, número e fase do turno.
+        channel.bind(MADDOX_GAME_CHANGED_EVENT, refresh)
         // Cada nova assinatura (inclusive reconexão) repõe os eventos que podem ter sido perdidos.
         channel.bind("pusher:subscription_succeeded", refresh)
         return () => {
             channel.unbind(MADDOX_CAMPAIGN_CHANGED_EVENT, refresh)
+            channel.unbind(MADDOX_GAME_CHANGED_EVENT, refresh)
             channel.unbind("pusher:subscription_succeeded", refresh)
             releaseChannel(name)
         }

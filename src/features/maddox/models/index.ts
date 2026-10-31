@@ -6,3 +6,4 @@ export { MaddoxCampaignMemoryModel, type IMaddoxCampaignMemory } from "./maddox-
 export { MaddoxInterviewScriptModel, type IMaddoxInterviewScript } from "./maddox-interview-script"
 export { MaddoxOpencodeSessionModel, type IMaddoxOpencodeSession } from "./maddox-opencode-session"
 export { MaddoxInterviewModel, type IMaddoxInterview, type IMaddoxInterviewMessage } from "./maddox-interview"
+export { MaddoxCampaignMessageModel, type IMaddoxCampaignMessage } from "./maddox-campaign-message"
