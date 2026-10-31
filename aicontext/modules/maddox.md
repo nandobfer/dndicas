@@ -270,7 +270,8 @@ original — por `[Nome](#mention:Tipo:id)`, que o `Markdown` mostra como o badg
   resolução com os nomes reservados. Até 25 citações por texto.
 
 **Chat em tela inteira (entrevista e mesa).** A tela do chat é uma coluna com a altura da área útil
-(`lg:h-[calc(100dvh-7rem)] lg:min-h-[640px]`; no celular, a entrevista usa `h-[calc(100dvh-6rem)] min-h-[480px]`) com o
+(`lg:h-[calc(100dvh_-_7rem_-_var(--view-as-banner-height,0px))] lg:min-h-[640px]`; no celular, a entrevista usa 6rem e
+`min-h-[480px]`; a faixa "Visualizar como", só durante a simulação, publica a altura real em `--view-as-banner-height`) com o
 **cabeçalho compacto e fixo** `CampaignChatHeader` (`components/CampaignChatHeader.tsx`: `sticky top-16 z-20`, quase opaco,
 seta "Voltar à campanha", título, subtítulo, chips, ações à direita com `ml-auto` e, na mesa, a faixa do turno
 `turn-banner` na segunda linha) e o chat em `min-h-0 flex-1`. Na mesa, a grade chat + ferramentas é `lg:flex-1`; o painel

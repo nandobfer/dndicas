@@ -135,8 +135,8 @@ function GameTable({ state, presence, stream }: { state: MaddoxGameStateDto; pre
 
     return (
         // Tela inteira: cabeçalho compacto e fixo; a grade (chat + ferramentas) ocupa o resto da área útil no desktop
-        // (7rem = header do app 4rem + padding do `<main>` 1,5rem × 2). No celular a coluna lateral vem abaixo do chat.
-        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex flex-col gap-3 lg:h-[calc(100dvh-7rem)] lg:min-h-[640px]" data-testid="game-page" data-layout="fill">
+        // (7rem = header do app 4rem + padding do `<main>` 1,5rem × 2, menos a faixa "Visualizar como" quando aparece). No celular a coluna lateral vem abaixo do chat.
+        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex flex-col gap-3 lg:h-[calc(100dvh_-_7rem_-_var(--view-as-banner-height,0px))] lg:min-h-[640px]" data-testid="game-page" data-layout="fill">
             <CampaignChatHeader
                 campaignId={state.campaignId}
                 color={color}

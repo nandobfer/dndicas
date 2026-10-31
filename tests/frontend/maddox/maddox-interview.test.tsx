@@ -329,8 +329,8 @@ describe("layout e estilo da conversa", () => {
         const page = screen.getByTestId("interview-page")
         expect(page.className).not.toMatch(/mx-auto|max-w-/)
         expect(page).toHaveAttribute("data-layout", "fill")
-        // 7rem = header do app (4rem) + padding do <main> (1,5rem × 2); no celular, 6rem.
-        for (const cls of ["flex", "flex-col", "lg:h-[calc(100dvh-7rem)]", "lg:min-h-[640px]", "h-[calc(100dvh-6rem)]", "min-h-[480px]"]) expect(page.className.split(" ")).toContain(cls)
+        // 7rem = header do app (4rem) + padding do <main> (1,5rem × 2), menos a faixa "Visualizar como"; no celular, 6rem.
+        for (const cls of ["flex", "flex-col", "lg:h-[calc(100dvh_-_7rem_-_var(--view-as-banner-height,0px))]", "lg:min-h-[640px]", "h-[calc(100dvh_-_6rem_-_var(--view-as-banner-height,0px))]", "min-h-[480px]"]) expect(page.className.split(" ")).toContain(cls)
         expect(page.className).not.toContain("18rem")
         const area = screen.getByTestId("interview-chat-area")
         expect(area.className.split(" ")).toEqual(expect.arrayContaining(["min-h-0", "flex-1"]))

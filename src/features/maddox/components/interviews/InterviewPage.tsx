@@ -127,7 +127,8 @@ function InterviewHeader({ campaign, kind }: { campaign: MaddoxCampaignDetailDto
 /**
  * Conversa em tela inteira: cabeçalho compacto e fixo e o chat ocupando o resto da área visível. No desktop a
  * coluna tem a altura exata da área útil (7rem = header do app 4rem + padding do `<main>` 1,5rem × 2), sem
- * desconto fixo pelo cabeçalho; no celular, 6rem (padding de 1rem × 2).
+ * desconto fixo pelo cabeçalho; no celular, 6rem (padding de 1rem × 2). A faixa "Visualizar como" (só na simulação) entra pela
+ * variável `--view-as-banner-height`, publicada por ela com a altura real.
  */
 function ChatShell({ campaign, kind, children }: { campaign: MaddoxCampaignDetailDto; kind: MaddoxScriptKind; children: React.ReactNode }) {
     const color = rigorColor(campaign.rigor)
@@ -137,7 +138,7 @@ function ChatShell({ campaign, kind, children }: { campaign: MaddoxCampaignDetai
         <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
-            className="flex h-[calc(100dvh-6rem)] min-h-[480px] flex-col gap-3 lg:h-[calc(100dvh-7rem)] lg:min-h-[640px]"
+            className="flex h-[calc(100dvh_-_6rem_-_var(--view-as-banner-height,0px))] min-h-[480px] flex-col gap-3 lg:h-[calc(100dvh_-_7rem_-_var(--view-as-banner-height,0px))] lg:min-h-[640px]"
             data-testid="interview-page"
             data-layout="fill"
         >

@@ -526,7 +526,7 @@ describe("mesa Maddox — layout em tela inteira", () => {
         await renderGame(gameState({ rigor: "fiel-dnd", me: ME({ sheet: { id: "s1", slug: "lyra" } }) }))
         const page = screen.getByTestId("game-page")
         expect(page).toHaveAttribute("data-layout", "fill")
-        for (const cls of ["flex", "flex-col", "lg:h-[calc(100dvh-7rem)]", "lg:min-h-[640px]"]) expect(page.className.split(" ")).toContain(cls)
+        for (const cls of ["flex", "flex-col", "lg:h-[calc(100dvh_-_7rem_-_var(--view-as-banner-height,0px))]", "lg:min-h-[640px]"]) expect(page.className.split(" ")).toContain(cls)
         const header = screen.getByTestId("campaign-chat-header")
         for (const cls of ["sticky", "top-16", "z-20", "shrink-0"]) expect(header.className.split(" ")).toContain(cls)
         expect(within(header).getByRole("heading", { level: 1 })).toHaveTextContent("Brumas")

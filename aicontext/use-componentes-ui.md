@@ -684,7 +684,8 @@ breadcrumb no header.
   Campanhas Maddox, são exceção pontual dentro da página, não o invólucro dela.
 - **Telas de chat seguem o chat do Agente Opex** (`src/features/opex-agent/components/chat/`):
   - painel com altura própria. Em tela inteira (Campanhas Maddox), a página é uma coluna com a altura da área útil
-    (`flex flex-col lg:h-[calc(100dvh-7rem)] lg:min-h-[640px]`: header do app 4rem + padding do `<main>` 1,5rem × 2),
+    (`flex flex-col lg:h-[calc(100dvh_-_7rem_-_var(--view-as-banner-height,0px))] lg:min-h-[640px]`: header do app 4rem +
+    padding do `<main>` 1,5rem × 2 e a faixa "Visualizar como", que publica a própria altura nessa variável enquanto aparece),
     cabeçalho compacto `sticky top-16 shrink-0` e o painel em `min-h-0 flex-1` → `h-full flex flex-col`, sem descontar
     a altura do cabeçalho com número fixo; conversa com
     rolagem interna (`role="log"`, `min-h-0 flex-1 overflow-y-auto`) que acompanha o fim enquanto a pessoa não
