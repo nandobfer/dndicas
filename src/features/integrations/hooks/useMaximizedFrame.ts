@@ -3,8 +3,10 @@
 import { useEffect, useLayoutEffect, type RefObject } from "react"
 import { animate } from "framer-motion"
 
-/** Seletor da área de conteúdo do dashboard (o `<motion.main>` do `DashboardShell`). */
+/** Seletor da área de conteúdo do dashboard (o `<motion.main>` de `src/app/(dashboard)/layout.tsx`). */
 export const DASHBOARD_CONTENT_SELECTOR = "[data-dashboard-content]"
+/** Seletor do header fixo do app (ausente no catálogo embutido no Owlbear). */
+export const APP_HEADER_SELECTOR = "[data-app-header]"
 
 export const MAXIMIZE_ENTER = { duration: 0.22, ease: "easeOut" } as const
 export const MAXIMIZE_EXIT = { duration: 0.16, ease: "easeIn" } as const
@@ -24,13 +26,21 @@ export interface FrameRect {
 
 /** Retângulo visível da área de conteúdo, ou da janela quando fora do dashboard. */
 export function dashboardContentRect(doc: Document = document): FrameRect {
+    const view = doc.defaultView
+    const viewWidth = view?.innerWidth ?? 0
+    const viewHeight = view?.innerHeight ?? 0
+    // Nada fica sob o header fixo: o topo visível começa onde ele termina.
+    const header = doc.querySelector<HTMLElement>(APP_HEADER_SELECTOR)
+    const visibleTop = header ? Math.max(0, header.getBoundingClientRect().bottom) : 0
     const main = doc.querySelector<HTMLElement>(DASHBOARD_CONTENT_SELECTOR)
     if (main) {
         const r = main.getBoundingClientRect()
-        return { top: r.top, left: r.left, width: r.width, height: r.height }
+        // Só a parte visível do `<main>` (ele rola junto com a página).
+        const top = Math.max(r.top, visibleTop)
+        const bottom = Math.min(r.bottom, viewHeight)
+        return { top, left: r.left, width: r.width, height: Math.max(0, bottom - top) }
     }
-    const view = doc.defaultView
-    return { top: 0, left: 0, width: view?.innerWidth ?? 0, height: view?.innerHeight ?? 0 }
+    return { top: visibleTop, left: 0, width: viewWidth, height: Math.max(0, viewHeight - visibleTop) }
 }
 
 function prefersReducedMotion(): boolean {

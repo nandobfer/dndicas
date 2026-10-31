@@ -605,6 +605,7 @@ na largura toda (`pt-16` para compensar o header) e o rodapé (`GlassFooter`).
 ### Header (`src/components/ui/glass-header.tsx`)
 
 - Vidro escuro fixo no topo (`fixed inset-x-0 top-0 z-40 h-16 bg-black/40 backdrop-blur-sm border-b border-white/10`): o conteúdo passa por baixo ao rolar.
+- Marcações usadas por quem posiciona algo sobre o conteúdo: o header tem `data-app-header` e o `<motion.main>` do layout tem `data-dashboard-content`. O painel maximizado (`useMaximizedFrame`, ex.: Integrações › Logs) ocupa só a parte visível do conteúdo, abaixo do header.
 - **Espaçamento igual nos quatro lados:** a barra usa `p-2.5` (10px), em todas as larguras: 10 + logo de 44 + 10 = 64. Não use padding horizontal diferente do vertical. A barra do topo do painel mobile segue a mesma regra (`p-2`).
 - **Esquerda:** o logo (`/dndicas-logo.webp`, link para o Início) e, logo após ele (`gap-2.5`), a navegação, alinhada à esquerda e nunca centralizada. **Direita:** `HeaderUserMenu`, empurrado com `ml-auto`.
 - **Desktop (a partir de `lg`, 1024px):** `HeaderCategoryMenu`, com **Início** (link direto) e as

@@ -245,6 +245,7 @@ describe("GlassHeader › espaçamento e alinhamento", () => {
         expect(classes).toContain("p-2.5")
         expect(classes.filter((name) => /^(?:[a-z]+:)?p[xytrbl]?-/.test(name))).toEqual(["p-2.5"])
         expect(screen.getByRole("banner").className).toContain("h-16")
+        expect(screen.getByRole("banner")).toHaveAttribute("data-app-header")
     })
 
     it("alinha a navegação à esquerda, logo após o logo, e leva o usuário para a direita", () => {

@@ -25,7 +25,7 @@ export function GlassHeader() {
     const active = resolveActiveNav(pathname, categories)
 
     return (
-        <header className="fixed inset-x-0 top-0 z-40 h-16 border-b border-white/10 bg-black/40 backdrop-blur-sm">
+        <header data-app-header className="fixed inset-x-0 top-0 z-40 h-16 border-b border-white/10 bg-black/40 backdrop-blur-sm">
             {/* 10px iguais nos quatro lados: 10 + logo de 44 + 10 = 64 de altura. */}
             <div className="flex h-full items-center gap-2.5 p-2.5" data-testid="glass-header-bar">
                 <div className="flex min-w-0 items-center gap-2.5" data-testid="header-start">

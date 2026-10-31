@@ -30,6 +30,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             <div className={cn("relative z-10 flex flex-1 flex-col min-w-0", !isOwlbearCatalogEmbed && "pt-16")}>
                 {/* Page Content */}
                 <motion.main
+                    data-dashboard-content
                     className="flex flex-1 flex-col gap-4 p-4 lg:gap-6 lg:p-6"
                     variants={motionConfig.variants.fadeInUp}
                     initial="initial"

@@ -36,6 +36,8 @@ describe("DashboardLayout", () => {
         const content = screen.getByText("Conteúdo").closest("main")!.parentElement!
         expect(content.className).toContain("pt-16")
         expect(content.getAttribute("style") ?? "").not.toContain("margin-left")
+        // O painel maximizado (Integrações › Logs) usa esta marca para ocupar só a área abaixo do header.
+        expect(screen.getByText("Conteúdo").closest("main")).toHaveAttribute("data-dashboard-content")
     })
 
     it("no catálogo dentro do Owlbear mostra só o conteúdo, também após navegar sem o parâmetro", async () => {
