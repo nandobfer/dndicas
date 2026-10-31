@@ -11,7 +11,7 @@ import type { CharacterSheet } from "@/features/character-sheets/types/character
 import { DiceRollerPanel } from "@/features/dice-roller/components/dice-roller-panel"
 import type { DiceRollPreset, DiceRollResponse } from "@/features/dice-roller/types"
 import { checkKindLabel, checkModeLabel, checkModifier, checkTitle, signed } from "../../check-modifier"
-import type { MaddoxGameCheckDto, MaddoxGameMessageDto } from "../../game-types"
+import type { MaddoxGameMessageDto } from "../../game-types"
 import { MemberAvatar, RarityChip } from "../campaigns/campaign-visuals"
 
 /** Cores das partes do modificador, as mesmas do `CalcTooltip` da ficha. */

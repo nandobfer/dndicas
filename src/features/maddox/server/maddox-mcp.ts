@@ -7,7 +7,8 @@ import { jsonContent } from "@/features/mcp/server/mcp-response"
 import { MADDOX_MCP_SERVER_NAME } from "../constants"
 import { isActiveMaddoxJob } from "./game-live"
 import { MADDOX_MASTER_TOOLS, MaddoxToolError, runMaddoxTool, type MaddoxMasterTool } from "./master-tools"
-import { verifyMaddoxTurnToken } from "./master-turn-token"
+import { verifyMaddoxInterviewToken, verifyMaddoxTurnToken } from "./master-turn-token"
+import { MADDOX_INTERVIEW_TOOLS, MaddoxInterviewToolError, runInterviewTool, type MaddoxInterviewTool } from "./interview-tools"
 
 /**
  * Servidor MCP do Maddox (Maddox 4): as mesmas ferramentas de persistência do narrador, para o OpenCode (que não
@@ -32,6 +33,19 @@ async function handle(tool: MaddoxMasterTool, args: Record<string, unknown>) {
     }
 }
 
+/** Ferramentas da entrevista (Maddox 5): token de entrevista próprio, válido só enquanto a geração dele roda. */
+async function handleInterview(tool: MaddoxInterviewTool, args: Record<string, unknown>) {
+    const { [TURN_FIELD]: token, ...input } = args
+    const turn = verifyMaddoxInterviewToken(typeof token === "string" ? token : null)
+    if (!turn || !Types.ObjectId.isValid(turn.interviewId)) return errorContent("Token de turno inválido ou expirado: use o valor de `turno` informado nas instruções desta entrevista.")
+    try {
+        await dbConnect()
+        return jsonContent((await runInterviewTool(tool, { interviewId: new Types.ObjectId(turn.interviewId), lockToken: turn.lockToken }, input)) as Record<string, unknown>)
+    } catch (error) {
+        return errorContent(error instanceof MaddoxInterviewToolError ? error.message : "Falha ao executar a ferramenta.")
+    }
+}
+
 export function createMaddoxMcpServer() {
     const server = new McpServer({ name: MADDOX_MCP_SERVER_NAME, version: APP_VERSION })
     for (const tool of MADDOX_MASTER_TOOLS) {
@@ -44,6 +58,18 @@ export function createMaddoxMcpServer() {
                 annotations: { readOnlyHint: tool.readOnly, openWorldHint: false },
             },
             async (args: Record<string, unknown>) => handle(tool, args),
+        )
+    }
+    for (const tool of MADDOX_INTERVIEW_TOOLS) {
+        server.registerTool(
+            tool.name,
+            {
+                title: tool.name,
+                description: `${tool.description} Só na entrevista de personagem. Sempre envie \`${TURN_FIELD}\` com o token de turno das instruções da entrevista.`,
+                inputSchema: { [TURN_FIELD]: z.string().describe("Token de turno informado nas instruções da entrevista"), ...tool.input.shape },
+                annotations: { readOnlyHint: tool.readOnly, openWorldHint: false },
+            },
+            async (args: Record<string, unknown>) => handleInterview(tool, args),
         )
     }
     return server

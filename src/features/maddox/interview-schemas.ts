@@ -1,5 +1,5 @@
 import { z } from "zod"
-import { MADDOX_CAMPAIGN_NAME_MAX, MADDOX_CAMPAIGN_NAME_MIN, MADDOX_CHARACTER_NAME_MAX, MADDOX_INTERVIEW_MESSAGE_MAX, MADDOX_PROFILE_SECTIONS, MADDOX_SCRIPT_KINDS, MADDOX_SETTING_SECTIONS } from "./constants"
+import { MADDOX_ABILITY_METHODS, MADDOX_CAMPAIGN_NAME_MAX, MADDOX_CAMPAIGN_NAME_MIN, MADDOX_CHARACTER_NAME_MAX, MADDOX_INTERVIEW_MESSAGE_MAX, MADDOX_PROFILE_SECTIONS, MADDOX_SCRIPT_KINDS, MADDOX_SETTING_SECTIONS } from "./constants"
 
 /** Schemas das entrevistas do Maddox (Maddox 2) — módulo PURO (tela, rotas e consolidação). */
 
@@ -13,6 +13,18 @@ export const maddoxInterviewMessageSchema = z.strictObject({
         .max(MADDOX_INTERVIEW_MESSAGE_MAX, { error: `A resposta pode ter no máximo ${MADDOX_INTERVIEW_MESSAGE_MAX.toLocaleString("pt-BR")} caracteres` }),
 })
 export type MaddoxInterviewMessageInput = z.infer<typeof maddoxInterviewMessageSchema>
+
+const score = z.number({ error: "Defina o valor do atributo" }).int({ error: "Use um número inteiro" }).min(1).max(30)
+
+/** Envio do card de atributos (Maddox 5): método e os seis valores-base. */
+export const maddoxAbilityScoresSubmitSchema = z.strictObject({
+    method: z.enum(MADDOX_ABILITY_METHODS, { error: "Escolha o método" }),
+    scores: z.strictObject({ strength: score, dexterity: score, constitution: score, intelligence: score, wisdom: score, charisma: score }),
+})
+export type MaddoxAbilityScoresSubmitInput = z.infer<typeof maddoxAbilityScoresSubmitSchema>
+
+/** Rolagem e reinício das rolagens: corpo vazio (o servidor rola). */
+export const maddoxAbilityRollSchema = z.strictObject({})
 
 // Texto gerado pelo modelo não tem teto de tamanho: um campo longo nunca invalida a consolidação inteira
 // (limites da ficha são tratados ao gravar, sem perder o texto do perfil).

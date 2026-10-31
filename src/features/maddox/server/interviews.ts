@@ -9,21 +9,27 @@ import {
     MADDOX_CAMPAIGN_AUDIT_ENTITY,
     MADDOX_INTERVIEW_CONSUMPTION_ORIGIN,
     MADDOX_INTERVIEW_LOCK_MS,
+    MADDOX_INTERVIEW_MAX_STEPS,
     MADDOX_INTERVIEW_MESSAGES_MAX,
     MADDOX_INVITE_CLOSED_STATUSES,
     MADDOX_JEV_MODEL,
+    MADDOX_MCP_SERVER_NAME,
+    MADDOX_SHEET_RIGORS,
     isMaddoxScriptKind,
     type MaddoxScriptKind,
     type MaddoxSessionPurpose,
 } from "../constants"
 import { MaddoxCampaignMemberModel, MaddoxCampaignModel, MaddoxCharacterModel, MaddoxInterviewModel, type IMaddoxCampaign, type IMaddoxCampaignMember, type IMaddoxCharacter, type IMaddoxInterview, type IMaddoxInterviewMessage } from "../models"
 import type { MaddoxSettings } from "../schemas"
-import type { MaddoxInterviewDto, MaddoxInterviewMessageDto, MaddoxInterviewStateDto, MaddoxInterviewStreamLine } from "../interview-types"
+import type { MaddoxAbilityRollsDto, MaddoxAbilityScoresDto, MaddoxInterviewDto, MaddoxInterviewMessageDto, MaddoxInterviewStateDto, MaddoxInterviewStreamLine } from "../interview-types"
 import type { MaddoxInterviewMessageInput } from "../interview-schemas"
 import { changed, loadMembership } from "./campaigns"
 import { notifyInterviewChanged } from "./campaign-realtime"
 import { createMarkupFilter } from "../catalog-markup"
 import { linkCatalogMentions, mentionsToMarkup } from "./catalog-mentions"
+import { finalScores } from "../interview-scores"
+import { abilityStatusText, takeInterviewDraft } from "./interview-tools"
+import type { IMaddoxAbilityScoresCard } from "../models"
 import { JEV_PROPOSAL_HINT, buildInterviewInstructions, createMarkerFilter, extractProposal, openingPrompt, transcriptText, type InterviewPromptContext } from "./interview-prompt"
 
 /**
@@ -51,8 +57,35 @@ export function interviewKind(value: string): MaddoxScriptKind {
 
 const iso = (value: Date | null | undefined) => (value ? new Date(value).toISOString() : null)
 
+export function abilityScoresDto(card: IMaddoxAbilityScoresCard): MaddoxAbilityScoresDto {
+    return {
+        status: card.status,
+        method: card.method ?? null,
+        base: card.base ?? null,
+        prefill: card.prefill ?? null,
+        bonus: card.bonus ?? null,
+        final: card.base ? finalScores(card.base, card.bonus?.parts) : null,
+        reason: card.reason ?? null,
+        submittedAt: iso(card.submittedAt),
+    }
+}
+
 function messageDto(message: IMaddoxInterviewMessage): MaddoxInterviewMessageDto {
-    return { id: message.id, role: message.role, content: message.content, proposal: Boolean(message.proposal), error: message.error ?? null, createdAt: new Date(message.createdAt).toISOString() }
+    return {
+        id: message.id,
+        role: message.role,
+        content: message.content,
+        proposal: Boolean(message.proposal),
+        error: message.error ?? null,
+        ...(message.abilityScores ? { abilityScores: abilityScoresDto(message.abilityScores) } : {}),
+        createdAt: new Date(message.createdAt).toISOString(),
+    }
+}
+
+function abilityRollsDto(doc: InterviewDoc): MaddoxAbilityRollsDto | null {
+    const rolls = doc.abilityRolls
+    if (!rolls) return null
+    return { rolls: rolls.rolls.map((roll) => ({ dice: roll.dice, score: roll.score })), sixth: rolls.sixth ?? null, invalid: Boolean(rolls.invalid) }
 }
 
 export function interviewDto(doc: InterviewDoc): MaddoxInterviewDto {
@@ -63,8 +96,10 @@ export function interviewDto(doc: InterviewDoc): MaddoxInterviewDto {
         kind: doc.kind,
         status: doc.status,
         scriptVersion: doc.scriptVersion,
-        messages: (doc.messages ?? []).map(messageDto),
+        // Falas internas (sistema) vão ao modelo, nunca à tela.
+        messages: (doc.messages ?? []).filter((message) => !message.internal).map(messageDto),
         generating: Boolean(doc.generating?.token) && Date.now() - lockedAt < MADDOX_INTERVIEW_LOCK_MS,
+        abilityRolls: abilityRollsDto(doc),
         completedAt: iso(doc.completedAt),
     }
 }
@@ -202,13 +237,21 @@ export interface PreparedTurn {
     context: InterviewPromptContext
 }
 
+/** Entrevista de personagem num grau com ficha: atributos pelo card, com as ferramentas do entrevistador. */
+export const usesAbilityCard = (subject: InterviewSubject, kind: MaddoxScriptKind) => kind === "character" && MADDOX_SHEET_RIGORS.includes(subject.campaign.rigor)
+
 /** Resolve modelo, roteiro e sessão do OpenCode; qualquer falha libera a trava e propaga (erro JSON). */
-async function prepareTurn(subject: InterviewSubject, kind: MaddoxScriptKind, userId: string, interview: InterviewDoc, token: string, userMessage: IMaddoxInterviewMessage | null): Promise<PreparedTurn> {
+export async function prepareTurn(subject: InterviewSubject, kind: MaddoxScriptKind, userId: string, interview: InterviewDoc, token: string, userMessage: IMaddoxInterviewMessage | null): Promise<PreparedTurn> {
     try {
         const { settings, model } = await loadInterviewer()
         const context = await promptContext(subject, kind, interview.scriptVersion, settings)
         let opencodeSessionId: string | null = null
         if (model.provider === "opencode") {
+            // As ferramentas de atributos chegam pelo MCP do Maddox: sem ele, o turno não começa (nada é gravado).
+            if (usesAbilityCard(subject, kind)) {
+                const { ensureMaddoxMcp } = await import("./opencode-mcp")
+                await ensureMaddoxMcp(settings)
+            }
             const { ensureMaddoxSession } = await import("./opencode-sessions")
             opencodeSessionId = await ensureMaddoxSession({
                 campaignId: String(subject.campaign._id),
@@ -227,6 +270,7 @@ async function prepareTurn(subject: InterviewSubject, kind: MaddoxScriptKind, us
 
 /** Conversa enviada ao modelo: a abertura como primeira fala do usuário e o histórico sem as falhas. */
 export function conversationMessages(kind: MaddoxScriptKind, messages: readonly IMaddoxInterviewMessage[]): ModelMessage[] {
+    // As falas internas (ex.: atributos enviados) entram como fala do usuário: o modelo precisa vê-las.
     const history = messages.filter((message) => !message.error && message.content.trim())
     return [{ role: "user", content: openingPrompt(kind) }, ...history.map((message): ModelMessage => (message.role === "user" ? { role: "user", content: message.content } : { role: "assistant", content: mentionsToMarkup(message.content) }))]
 }
@@ -261,6 +305,81 @@ async function jevSaysReady(turn: PreparedTurn): Promise<boolean> {
     }
 }
 
+type InterviewStreamEvent = { type: "delta"; text: string } | { type: "error"; message: string } | { type: "other" }
+
+/**
+ * Turno com as ferramentas de atributos nos provedores diretos (Gemini, Anthropic, OpenAI, DeepSeek): `streamText`
+ * da AI SDK com o laço de ferramentas, no mesmo formato de eventos do `streamAi`. Texto de um passo novo depois de
+ * ferramentas sai separado por parágrafo.
+ */
+async function* streamWithInterviewTools(
+    request: { provider: InterviewerModel["provider"]; model: string; variant: string | null; temperature: number | null; maxOutputTokens: number | null; instructions: string; messages: ModelMessage[]; consumption: { origin: string; subject: string } },
+    context: { interviewId: Types.ObjectId; lockToken: string },
+): AsyncGenerator<InterviewStreamEvent> {
+    const [{ streamText, stepCountIs }, { prepareModel, samplingOptions, describeAiError }, { buildInterviewAiTools }, { recordAiConsumption }] = await Promise.all([
+        import("ai"),
+        import("@/lib/ai/stream"),
+        import("./interview-tools"),
+        import("@/lib/ai/consumption"),
+    ])
+    let prepared: Awaited<ReturnType<typeof prepareModel>>
+    try {
+        prepared = await prepareModel({ provider: request.provider, model: request.model, variant: request.variant })
+    } catch (error) {
+        yield { type: "error", message: describeAiError(error) }
+        return
+    }
+    try {
+        const result = streamText({
+            model: prepared.model,
+            instructions: request.instructions,
+            messages: request.messages,
+            tools: await buildInterviewAiTools(context),
+            stopWhen: stepCountIs(MADDOX_INTERVIEW_MAX_STEPS),
+            providerOptions: prepared.providerOptions,
+            ...(prepared.reasoning ? { reasoning: prepared.reasoning } : {}),
+            ...samplingOptions({ provider: request.provider, variant: request.variant, temperature: request.temperature, maxOutputTokens: request.maxOutputTokens }),
+        })
+        let written = ""
+        let stepHasText = false
+        for await (const part of result.fullStream) {
+            if (part.type === "start-step") stepHasText = false
+            else if (part.type === "text-delta" && part.text) {
+                if (!stepHasText && written && !written.endsWith("\n")) {
+                    written += "\n\n"
+                    yield { type: "delta", text: "\n\n" }
+                }
+                stepHasText = true
+                written += part.text
+                yield { type: "delta", text: part.text }
+            } else if (part.type === "error") {
+                yield { type: "error", message: describeAiError(part.error) }
+            } else if (part.type === "finish") {
+                if (part.finishReason === "error") yield { type: "error", message: "O modelo terminou com erro" }
+                else {
+                    const usage = part.totalUsage
+                    const num = (value: unknown) => (typeof value === "number" && Number.isFinite(value) ? value : null)
+                    await recordAiConsumption({
+                        dedupKey: `maddox-interview:${randomUUID()}`,
+                        provider: request.provider,
+                        origin: request.consumption.origin,
+                        subject: request.consumption.subject,
+                        model: request.model,
+                        inputTokens: num(usage?.inputTokens),
+                        outputTokens: num(usage?.outputTokens),
+                        totalTokens: num(usage?.totalTokens),
+                        costUsd: null,
+                    }).catch((error: unknown) => log.warn({ err: error instanceof Error ? error.message : String(error) }, "[maddox] não foi possível registrar o consumo da entrevista"))
+                }
+            }
+        }
+    } catch (error) {
+        yield { type: "error", message: describeAiError(error) }
+    } finally {
+        await prepared.dispose().catch(() => undefined)
+    }
+}
+
 /**
  * Gera a resposta do Maddox, transmitindo os deltas (sem o marcador) e gravando a mensagem ao fim.
  * Nunca lança: falha do provedor vira uma mensagem com `error` ("Tentar de novo").
@@ -276,8 +395,21 @@ export async function runTurn(turn: PreparedTurn, emit: (line: MaddoxInterviewSt
         const filter = createMarkerFilter()
         // Depois do marcador de proposta: as citações `{{Tipo:Nome}}` saem em negrito (nunca cruas) até gravar.
         const markup = createMarkupFilter()
-        const instructions = buildInterviewInstructions(turn.context) + (hint ? `\n\n## Orientação deste turno\n${JEV_PROPOSAL_HINT}` : "")
-        for await (const event of streamAi({
+        const abilities = usesAbilityCard(turn.subject, kind)
+        const viaMcp = abilities && turn.model.provider === "opencode"
+        let context = turn.context
+        if (abilities) {
+            const { createMaddoxInterviewToken } = await import("./master-turn-token")
+            context = {
+                ...context,
+                abilities: {
+                    status: abilityStatusText(interview),
+                    tools: viaMcp ? { kind: "mcp", server: MADDOX_MCP_SERVER_NAME, token: createMaddoxInterviewToken({ interviewId: String(interview._id), lockToken: token }) } : { kind: "ai-sdk" },
+                },
+            }
+        }
+        const instructions = buildInterviewInstructions(context) + (hint ? `\n\n## Orientação deste turno\n${JEV_PROPOSAL_HINT}` : "")
+        const request = {
             provider: turn.model.provider,
             model: turn.model.model,
             agent: turn.model.agent,
@@ -290,7 +422,9 @@ export async function runTurn(turn: PreparedTurn, emit: (line: MaddoxInterviewSt
             opencodeSessionId: turn.opencodeSessionId,
             title: `Maddox · entrevista · ${turn.subject.campaign.name}`,
             consumption: { origin: MADDOX_INTERVIEW_CONSUMPTION_ORIGIN, subject: String(turn.subject.campaign._id) },
-        })) {
+        }
+        const source = abilities && !viaMcp ? streamWithInterviewTools(request, { interviewId: interview._id, lockToken: token }) : streamAi(request)
+        for await (const event of source) {
             if (event.type === "delta") {
                 text += event.text
                 const visible = markup.push(filter.push(event.text))
@@ -308,10 +442,24 @@ export async function runTurn(turn: PreparedTurn, emit: (line: MaddoxInterviewSt
     const { content: raw, proposal } = extractProposal(text)
     const content = raw && !failure ? await linkCatalogMentions(raw, { reserved: await campaignReservedNames(turn.subject.campaign) }) : raw
     if (!failure && !content) failure = "O Maddox não respondeu. Tente de novo."
-    const message: IMaddoxInterviewMessage = { id: randomUUID(), role: "maddox", content: failure ? "" : content, proposal: !failure && proposal, error: failure, createdAt: new Date() }
+    // Card pedido nesta fala (ferramentas): só existe se a fala for gravada.
+    const draft = takeInterviewDraft(token)
+    if (failure && (draft?.card || draft?.resetRolls)) log.info({ campaignId: String(turn.subject.campaign._id) }, "[maddox] card de atributos pedido descartado: a geração falhou")
+    const card: IMaddoxAbilityScoresCard | null =
+        !failure && draft?.card ? { status: "pending", method: null, base: null, prefill: draft.card.prefill, bonus: draft.card.bonus, reason: draft.card.reason, submittedAt: null } : null
+    const message: IMaddoxInterviewMessage = { id: randomUUID(), role: "maddox", content: failure ? "" : content, proposal: !failure && proposal, error: failure, ...(card ? { abilityScores: card } : {}), createdAt: new Date() }
     const status = message.proposal ? "proposed" : "in-progress"
+    const resetRolls = !failure && Boolean(draft?.resetRolls)
     try {
-        await MaddoxInterviewModel.updateOne({ _id: interview._id, "generating.token": token }, { $push: { messages: message }, $set: { status, generating: null } })
+        if (card) {
+            // Reaberto: o card enviado anterior fica como histórico ("Reaberto abaixo").
+            await MaddoxInterviewModel.updateOne(
+                { _id: interview._id, "generating.token": token },
+                { $set: { "messages.$[old].abilityScores.status": "superseded" } },
+                { arrayFilters: [{ "old.abilityScores.status": { $in: ["submitted", "pending"] } }] },
+            )
+        }
+        await MaddoxInterviewModel.updateOne({ _id: interview._id, "generating.token": token }, { $push: { messages: message }, $set: { status, generating: null, ...(resetRolls ? { abilityRolls: null } : {}) } })
         if (!failure && kind === "scenario") {
             // Só avisa a mesa quando a situação do cenário muda (proposta feita ou desfeita).
             const moved = await MaddoxCampaignModel.updateOne({ _id: turn.subject.campaign._id, "scenarioInterview.status": { $nin: ["done", status] } }, { $set: { "scenarioInterview.status": status } })
@@ -385,7 +533,7 @@ export async function startInterview(campaignId: string, kind: MaddoxScriptKind,
     return { interview: interviewDto(cleaned), turn: await prepareTurn(subject, kind, userId, cleaned, token, null) }
 }
 
-async function existingInterview(subject: InterviewSubject, kind: MaddoxScriptKind): Promise<InterviewDoc> {
+export async function existingInterview(subject: InterviewSubject, kind: MaddoxScriptKind): Promise<InterviewDoc> {
     const doc = await MaddoxInterviewModel.findOne(interviewFilter(subject, kind)).lean<InterviewDoc>()
     if (!doc) throw new DomainError(404, "A entrevista ainda não começou.", "INTERVIEW_NOT_STARTED")
     if (doc.status === "done") throw new DomainError(409, "Esta entrevista já foi concluída.", "INTERVIEW_DONE")

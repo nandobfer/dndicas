@@ -5,8 +5,10 @@ process.env.AUTH_SECRET ||= "segredo-de-teste-do-maddox"
 const runMaddoxTool = vi.fn(async (_tool: { name: string }, _context: unknown, input: unknown) => ({ saved: true, input }))
 vi.mock("@/lib/db", () => ({ dbConnect: vi.fn(async () => undefined) }))
 vi.mock("@/features/maddox/server/master-tools", async (importOriginal) => ({ ...(await importOriginal<typeof import("@/features/maddox/server/master-tools")>()), runMaddoxTool }))
+const runInterviewTool = vi.fn(async (_tool: { name: string }, _context: unknown, input: unknown) => ({ ok: true, input }))
+vi.mock("@/features/maddox/server/interview-tools", async (importOriginal) => ({ ...(await importOriginal<typeof import("@/features/maddox/server/interview-tools")>()), runInterviewTool }))
 
-const { createMaddoxTurnToken, verifyMaddoxTurnToken } = await import("@/features/maddox/server/master-turn-token")
+const { createMaddoxTurnToken, verifyMaddoxTurnToken, createMaddoxInterviewToken, verifyMaddoxInterviewToken } = await import("@/features/maddox/server/master-turn-token")
 const { enqueueMaddoxJob, waitForCampaignIdle } = await import("@/features/maddox/server/game-live")
 const route = await import("@/app/api/maddox/mcp/route")
 const publicRoute = await import("@/app/api/mcp/route")
@@ -105,6 +107,42 @@ describe("MCP do Maddox (/api/maddox/mcp)", () => {
         const late = await rpc(route.POST, "tools/call", { name: "save_npc", arguments: { turno: ended, name: "X" } })
         expect(late.result).toMatchObject({ isError: true })
         expect(JSON.stringify(late.result)).toContain("só funcionam durante a geração")
+        expect(runMaddoxTool).not.toHaveBeenCalled()
+    })
+})
+
+describe("ferramentas da entrevista no MCP do Maddox (Maddox 5)", () => {
+    const INTERVIEW = "6a00000000000000000000aa"
+    beforeEach(() => {
+        runInterviewTool.mockClear()
+        runMaddoxTool.mockClear()
+    })
+
+    it("as três ferramentas de atributos estão no mesmo MCP, exigindo `turno`", async () => {
+        const list = await rpc(route.POST, "tools/list")
+        const tools = list.result!.tools!.filter((tool) => ["request_ability_scores", "get_ability_scores", "apply_ability_bonus"].includes(tool.name))
+        expect(tools).toHaveLength(3)
+        for (const tool of tools) expect(tool.inputSchema.properties).toHaveProperty("turno")
+    })
+
+    it("token de entrevista chega à ferramenta com a entrevista e a trava do token", async () => {
+        const turno = createMaddoxInterviewToken({ interviewId: INTERVIEW, lockToken: "trava-1" })
+        const result = await rpc(route.POST, "tools/call", { name: "get_ability_scores", arguments: { turno } })
+        expect(result.result!.isError).toBeFalsy()
+        expect(runInterviewTool).toHaveBeenCalledWith(expect.objectContaining({ name: "get_ability_scores" }), expect.objectContaining({ lockToken: "trava-1" }), {})
+        expect(String((runInterviewTool.mock.calls[0]![1] as { interviewId: unknown }).interviewId)).toBe(INTERVIEW)
+    })
+
+    it("token do narrador não serve na entrevista, e o da entrevista não serve no narrador", async () => {
+        const narrador = createMaddoxTurnToken({ campaignId: CAMPAIGN, jobId: "j1", turnNumber: 1 })
+        const entrevista = createMaddoxInterviewToken({ interviewId: INTERVIEW, lockToken: "trava-1" })
+        expect(verifyMaddoxInterviewToken(narrador)).toBeNull()
+        expect(verifyMaddoxTurnToken(entrevista)).toBeNull()
+        const asInterview = await rpc(route.POST, "tools/call", { name: "get_ability_scores", arguments: { turno: narrador } })
+        expect(asInterview.result!.isError).toBe(true)
+        const asNarrator = await rpc(route.POST, "tools/call", { name: "get_campaign_state", arguments: { turno: entrevista } })
+        expect(asNarrator.result!.isError).toBe(true)
+        expect(runInterviewTool).not.toHaveBeenCalled()
         expect(runMaddoxTool).not.toHaveBeenCalled()
     })
 })

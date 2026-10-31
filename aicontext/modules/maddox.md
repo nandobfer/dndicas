@@ -493,6 +493,68 @@ provavelmente exige teste; você decide)". Chave desligada, falha ou teto: narra
 **Painel de dados.** O `DiceRollerPanel` ganhou `rollRequest` (quem faz a rolagem oficial; padrão `requestDiceRoll`),
 `rollButtonLabel` (padrão "JOGAR") e `hideRollButton` (só repete um resultado externo). Ver `dice-roller.md`.
 
+### Atributos na entrevista de personagem (Maddox 5)
+
+Escopo acrescentado à DND-16 depois da prévia: na entrevista, o Maddox pedia ao jogador que rolasse 4d6 "por fora" e digitasse os
+números (improviso do modelo — a entrevista não tinha ferramenta de dados e a consolidação gravava os atributos extraídos pela IA).
+Agora, nos graus com ficha (Equilibrado, Rigoroso e Fiel ao D&D), os seis atributos só entram pelo **card de atributos**. Narrativo e
+Flexível seguem sem atributos.
+
+Código: `interview-scores.ts` (PURO: validação por método, sexta = 72 − soma, bônus, final = base + bônus, `scoresLine`),
+`server/interview-tools.ts` (ferramentas, rascunho em memória, situação para o prompt), `server/interview-scores-service.ts` (rolar,
+reiniciar, enviar), `components/interviews/AbilityScoresCard.tsx`. As regras dos métodos ficam em
+`src/features/character-sheets/utils/ability-score-rules.ts` (sem "use client", importável pelo servidor) e são reexportadas por
+`assisted-creation.ts`; o `PointBuyControls` saiu do modal de criação assistida para
+`src/features/character-sheets/components/point-buy-controls.tsx` (o modal e o card usam o mesmo).
+
+- **Métodos.** Conjunto padrão (15, 14, 13, 12, 10, 8, um por atributo); compra de pontos (27 pontos, 8–15, tabela da ficha);
+  rolagem: **cinco 4d6 descartando o menor + a sexta = 72 − soma** (a regra da ficha, `calculateFinalDiceScore`).
+- **Quem rola.** O jogador, no `DiceRollerPanel` do card (4d6, "Rolar 4d6"), mas cada rolagem acontece **no servidor da entrevista**
+  (`POST …/ability-scores/roll`, corpo `{}`): `rollGeneralDice` com as regras de dado do jogador, gravada em
+  `maddox_interviews.abilityRolls` (`rolls[{ dice, score, rollId }]`, `sixth`, `invalid`) por troca condicional (dois cliques = uma
+  rolagem; o outro 409 `ROLL_CONFLICT`). O envio só aceita exatamente as pontuações roladas. "Reiniciar" (`…/reset`) só existe com a
+  sexta fora de 3–18; rolar tudo de novo é decisão do Maddox (`novaRolagem`). As rolagens pertencem à entrevista: reabrir o card
+  mantém os mesmos dados.
+- **Card** (`messages[].abilityScores`, numa fala do Maddox): `pending` → `submitted` (travado) → `superseded` quando o Maddox reabre
+  (o novo card vem com `prefill` — método e valores do último envio — e herda o bônus). O final é sempre derivado (base + bônus).
+- **Ferramentas do entrevistador** (só entrevista de personagem nos graus com ficha; valem só enquanto a geração que as recebeu
+  roda — a trava `generating.token`):
+  - `request_ability_scores { motivo?, novaRolagem? }` abre/reabre o card. O pedido fica num rascunho em memória
+    (`globalThis.__maddoxInterviewDrafts`, pela trava) e só vira card quando a fala é gravada; falha da geração descarta. Card já
+    aberto → `{ alreadyOpen: true }`.
+  - `get_ability_scores {}` (leitura): situação, método, base, bônus, final e rolagens.
+  - `apply_ability_bonus { antecedente, bonus: { "Destreza": 2, … } }`: exige card enviado; exatamente 3 pontos, +1/+2 por atributo,
+    só nos `suggestedAttributes` do antecedente quando ele existe no catálogo (`BackgroundModel` por nome/nome original). **Só
+    sugerido** (não bloqueia a síntese) e **sem teto de 20**.
+- **Como chegam ao modelo.** Provedores diretos: `streamText` da AI SDK com as ferramentas (`MADDOX_INTERVIEW_MAX_STEPS`), no mesmo
+  formato de eventos do `streamAi` (o `src/lib/ai/stream.ts` não mudou). OpenCode: **o mesmo MCP do narrador** (`dndicas-maddox`,
+  `/api/maddox/mcp`) registra também as três ferramentas, com um **token de entrevista** próprio
+  (`createMaddoxInterviewToken`, HMAC no domínio `maddox-interview:` com `{ interviewId, lockToken }`): o token do narrador não serve na
+  entrevista e vice-versa. `prepareTurn` garante o MCP (`ensureMaddoxMcp`) antes de gravar qualquer coisa.
+- **Envio** (`POST …/interviews/character/ability-scores`, `{ method, scores }` estrito → NDJSON da fala seguinte): valida o
+  método, pega a trava (409 `INTERVIEW_BUSY`), prepara o turno **antes de gravar** (falha de preparação deixa card e conversa
+  intactos) e grava o card `submitted` + uma **fala interna** (`internal: true`, "[Sistema] O jogador enviou os atributos…"), que vai
+  ao modelo e à transcrição ("SISTEMA:") mas nunca ao DTO. Uma proposta pendente é desfeita. Auditoria `CampanhaMaddox` com método
+  e base. Falha do provedor: "Tentar de novo" (a rota de sempre) gera a fala seguinte com o card já enviado.
+- **Prompt.** A seção "Atributos do personagem" troca o antigo "combine … os valores dos seis atributos": card como único caminho,
+  nunca pedir números digitados nem rolar/inventar, os três métodos, bônus sugerido e `get_ability_scores` antes da síntese. Cada
+  turno leva "Atributos: situação atual" e, no OpenCode, o servidor MCP e o token (`turno`).
+- **Consolidação.** Com card enviado, a ficha recebe os valores **finais do card** (base + bônus) e ignora os atributos extraídos
+  pela IA (as instruções avisam); o resultado guarda `abilityScores { method, base, bonus, final }`. Entrevistas antigas, sem card,
+  seguem pela extração por IA.
+- **Tela.** O card aparece abaixo da fala que o abriu: `GlassSelector` do método, grade do conjunto padrão (sem repetir valores),
+  `PointBuyControls` com "N/27", painel 4d6 com as pontuações (a nova só aparece quando o dado para) e a sexta calculada,
+  distribuição por `GlassSelector`, prévia base/bônus/final e "Enviar atributos" com confirmação ("Depois de enviar, só o Maddox
+  pode reabrir o card."). Desabilitado enquanto o Maddox responde. Enviado: somente leitura (método, base, bônus, final); substituído:
+  "Reaberto abaixo". O campo de mensagem continua livre com o card aberto.
+
+API (`maddox.play`, só o próprio membro; `scenario` = 404, grau sem ficha = 409 `ABILITIES_DISABLED`, sem card pendente = 409
+`NO_PENDING_SCORES`):
+
+- `POST /api/maddox/campaigns/[id]/interviews/character/ability-scores` — `{ method, scores }` → NDJSON.
+- `POST …/ability-scores/roll` — `{}` → `{ roll, interview }` (409 `ROLLS_DONE`, `ROLLS_INVALID`, `ROLL_CONFLICT`).
+- `POST …/ability-scores/reset` — `{}` → `{ interview }` (409 `ROLLS_NOT_RESETTABLE`).
+
 API (`maddox.play`, usuário efetivo):
 
 - `POST /api/maddox/campaigns/[id]/game/checks/[checkId]/roll` — `{}` (estrito: dado ou modificador no corpo = 400) → `{ roll, state }`.
@@ -528,3 +590,9 @@ jogador, falha da geração, teto de rodadas, campanha narrativa e o JEV "Pedir 
 continuação), `game-routes.test.ts` (rota de rolagem), `campaigns.test.ts` (`showCheckDc`); na tela, `maddox-game.test.tsx` (card,
 espera, "Rolar no lugar", repetição da rolagem, CD, cancelado, "Minha ficha", NPCs e o teste estático dos controles),
 `maddox-game-stream.test.ts` (`check-rolled`), `maddox-campaigns.test.tsx` e `tests/frontend/dice-roller/dice-roller-panel.test.tsx`.
+Atributos na entrevista (Maddox 5): `interview-ability-scores.test.ts` (fluxo completo com o entrevistador real sobre um
+`streamText` roteirizado: card pedido, cinco rolagens no motor, envio, fala interna fora do DTO, bônus recusado/aplicado, consulta e a
+ficha com base + bônus; conjunto padrão/compra de pontos, reiniciar, rolagens simultâneas, trava, entrevistador indisponível,
+"Tentar de novo", geração que falha, card já aberto, reabrir com `prefill`, `novaRolagem`, grau narrativo e cenário),
+`interview-scores.test.ts`, `interview-prompt.test.ts`, `interview-routes.test.ts` e `maddox-mcp.test.ts` (token de entrevista); na
+tela, `maddox-interview-ability-scores.test.tsx`.

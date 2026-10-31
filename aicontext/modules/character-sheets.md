@@ -57,3 +57,11 @@ A rota `/sheets` é protegida por guard server-side usando `getCurrentUserFromDb
 
 ### Métricas de uso no dashboard
 O dashboard usa `GET /api/stats/entity-usage?entityType=...` para exibir uso real de entidades em vez de crescimento temporal nos cards do catálogo. A rota deriva uso em fichas a partir de `classRef`, `raceRef`, `originRef`, `catalogSpellId`, `catalogFeatId`, `catalogTraitId`, `catalogItemId` e `resourceCharges.source.entityType`, retornando `{ active, usage }` para preservar o contrato visual do `EntityCard`.
+
+## Regras dos métodos de atributos
+
+`src/features/character-sheets/utils/ability-score-rules.ts` (módulo puro, sem "use client") concentra o conjunto padrão
+(15, 14, 13, 12, 10, 8), a compra de pontos (27 pontos, 8–15, `POINT_BUY_COSTS`) e a rolagem (4d6 descartando o menor; a sexta
+pontuação é 72 − a soma das cinco). `assisted-creation.ts` reexporta essas funções para a criação assistida, e a entrevista de
+personagem do Maddox as usa no servidor. O `PointBuyControls` (`components/point-buy-controls.tsx`) é compartilhado pelo modal de
+criação assistida e pelo card de atributos do Maddox.

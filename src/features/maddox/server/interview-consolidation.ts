@@ -11,6 +11,8 @@ import { changed, getCampaignDetail } from "./campaigns"
 import { notifyInterviewChanged } from "./campaign-realtime"
 import { linkCatalogMentions } from "./catalog-mentions"
 import { buildConsolidationInstructions, parseJsonObject, settingMarkdown, transcriptText } from "./interview-prompt"
+import { submittedAbilityCard } from "./interview-tools"
+import { finalScores } from "../interview-scores"
 import { acquireInterviewLock, campaignReservedNames, loadInterviewer, loadSubject, promptContext, releaseInterviewLock, type InterviewSubject } from "./interviews"
 
 /**
@@ -72,7 +74,7 @@ async function catalogRef(modelName: "Race" | "CharacterClass" | "Background", n
 }
 
 /** Cria (ou atualiza) a ficha D&D básica do personagem a partir da consolidação. */
-async function seedSheet(subject: InterviewSubject, name: string, portraitUrl: string | null, seed: CharacterSheetSeed | null): Promise<{ sheetId: Types.ObjectId; created: boolean }> {
+async function seedSheet(subject: InterviewSubject, name: string, portraitUrl: string | null, seed: CharacterSheetSeed | null, abilities: Record<string, number> | null): Promise<{ sheetId: Types.ObjectId; created: boolean }> {
     const { CharacterSheet } = await import("@/features/character-sheets/models/character-sheet")
     let sheetId = subject.character?.sheetId ?? null
     let created = false
@@ -94,8 +96,10 @@ async function seedSheet(subject: InterviewSubject, name: string, portraitUrl: s
         if (raceRef) set.raceRef = raceRef
         if (classRef) set.classRef = classRef
         if (originRef) set.originRef = originRef
-        for (const [key, value] of Object.entries(seed.attributes ?? {})) if (typeof value === "number") set[key] = value
+        if (!abilities) for (const [key, value] of Object.entries(seed.attributes ?? {})) if (typeof value === "number") set[key] = value
     }
+    // Atributos enviados pelo card (Maddox 5): valem sobre qualquer valor extraído da conversa.
+    if (abilities) Object.assign(set, abilities)
     await CharacterSheet.updateOne({ _id: sheetId }, { $set: set })
     return { sheetId, created }
 }
@@ -139,7 +143,9 @@ async function completeCharacter(subject: InterviewSubject, doc: InterviewDoc, t
     const character = subject.character!
     const name = data.name ?? character.name
     const withSheet = MADDOX_SHEET_RIGORS.includes(subject.campaign.rigor)
-    const sheet = withSheet ? await seedSheet(subject, name, character.portraitUrl ?? null, data.sheet) : null
+    const card = withSheet ? submittedAbilityCard(doc.messages) : null
+    const final = card?.base ? finalScores(card.base, card.bonus?.parts) : null
+    const sheet = withSheet ? await seedSheet(subject, name, character.portraitUrl ?? null, data.sheet, final) : null
     const reserved = [...(await campaignReservedNames(subject.campaign)), name]
     const profile = Object.fromEntries(
         await Promise.all(MADDOX_PROFILE_SECTIONS.map(async (item) => [item.key, data.profile[item.key] ? await linkCatalogMentions(data.profile[item.key]!, { reserved }) : "a definir durante a história"] as const)),
@@ -149,7 +155,7 @@ async function completeCharacter(subject: InterviewSubject, doc: InterviewDoc, t
         { $set: { name, profile, "interview.status": "done", "interview.scriptVersion": doc.scriptVersion, ...(sheet ? { sheetId: sheet.sheetId } : {}) } },
     )
     // Por último: falha antes daqui mantém a entrevista em `proposed` e confirmar de novo reaplica.
-    await finishInterview(doc, token, data)
+    await finishInterview(doc, token, card?.base && final ? { ...data, abilityScores: { method: card.method, base: card.base, bonus: card.bonus ?? null, final } } : data)
     await recordAudit({
         userId,
         entidade: MADDOX_CAMPAIGN_AUDIT_ENTITY,
@@ -181,7 +187,8 @@ export async function completeInterview(campaignId: string, kind: MaddoxScriptKi
     try {
         const context = await promptContext(subject, kind, locked.scriptVersion, settings)
         const transcript = transcriptText(locked.messages.filter((message) => !message.error))
-        const instructions = buildConsolidationInstructions(context, kind === "character" && MADDOX_SHEET_RIGORS.includes(subject.campaign.rigor))
+        const withSheet = kind === "character" && MADDOX_SHEET_RIGORS.includes(subject.campaign.rigor)
+        const instructions = buildConsolidationInstructions(context, withSheet, withSheet && Boolean(submittedAbilityCard(locked.messages)))
         if (kind === "scenario") await completeScenario(subject, locked, token, await consolidate(instructions, transcript, scenarioConsolidationSchema, model, campaignId), userId)
         else await completeCharacter(subject, locked, token, await consolidate(instructions, transcript, characterConsolidationSchema, model, campaignId), userId)
     } catch (error) {

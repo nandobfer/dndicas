@@ -1,6 +1,9 @@
 import { catalogEntityTypes } from "@/features/mcp/server/catalog-schemas"
 import { mentionsToMarkup } from "./catalog-mentions"
 import {
+    MADDOX_ABILITY_BONUS_MAX,
+    MADDOX_ABILITY_BONUS_POINTS,
+    MADDOX_INTERVIEW_TOOL_NAMES,
     MADDOX_PROFILE_SECTIONS,
     MADDOX_PROPOSAL_MARKER,
     MADDOX_RIGOR_LEVEL_DEFS,
@@ -24,6 +27,11 @@ export interface InterviewPromptContext {
     /** Entrevista de personagem: nome do esboço e dos outros personagens da mesa. */
     character?: { name: string } | null
     otherCharacters?: string[]
+    /**
+     * Atributos pelo card (Maddox 5, entrevista de personagem nos graus com ficha): situação atual e como as
+     * ferramentas chegam (AI SDK ou MCP do Maddox com o token da entrevista).
+     */
+    abilities?: { status: string; tools: { kind: "ai-sdk" } | { kind: "mcp"; server: string; token: string } } | null
 }
 
 export function activeTopics(topics: readonly MaddoxScriptTopic[]): MaddoxScriptTopic[] {
@@ -49,7 +57,8 @@ export function buildInterviewInstructions(context: InterviewPromptContext): str
     )
     parts.push(rigorBlock(context.campaign.rigor))
     if (!isScenario && MADDOX_SHEET_RIGORS.includes(context.campaign.rigor)) {
-        parts.push("Neste grau de rigor o personagem terá ficha do D&D: combine também raça, classe, origem (antecedente) e os valores dos seis atributos.")
+        parts.push("Neste grau de rigor o personagem terá ficha do D&D: combine também raça, classe, origem (antecedente) e os seis atributos (pelo card, veja abaixo).")
+        parts.push(abilitiesSection(context.abilities ?? null))
     }
 
     if (!isScenario) {
@@ -75,6 +84,29 @@ export function buildInterviewInstructions(context: InterviewPromptContext): str
         ].join("\n"),
     )
     return parts.join("\n\n")
+}
+
+const T = MADDOX_INTERVIEW_TOOL_NAMES
+
+/** Seção "Atributos do personagem" (graus com ficha). */
+export function abilitiesSection(abilities: InterviewPromptContext["abilities"]): string {
+    const lines = [
+        "## Atributos do personagem",
+        `- Os seis atributos são definidos SÓ pelo card de atributos: chame \`${T.request}\` quando chegar a hora (o card aparece abaixo da sua fala). Nunca peça ao jogador que digite números, nunca role dados nem invente valores por ele.`,
+        "- Métodos do card: conjunto padrão (15, 14, 13, 12, 10 e 8, um por atributo); compra de pontos (27 pontos, cada atributo entre 8 e 15); rolagem, feita pelo próprio jogador no card: cinco rolagens de 4d6 descartando o menor dado, e a sexta pontuação é 72 menos a soma das cinco. Explique em poucas linhas e deixe o jogador escolher.",
+        "- Quando o jogador enviar, você recebe uma fala do sistema com os valores: comente em poucas linhas e siga a entrevista. Para mudar os valores, reabra o card com a mesma ferramenta (ele vem preenchido com os atuais).",
+        `- Bônus do antecedente (sugira, não é obrigatório): com a origem definida e os atributos enviados, proponha distribuir ${MADDOX_ABILITY_BONUS_POINTS} pontos (no máximo +${MADDOX_ABILITY_BONUS_MAX} por atributo, nos atributos sugeridos pelo antecedente) e aplique com \`${T.bonus}\`.`,
+        `- Antes da síntese, consulte \`${T.get}\` e liste na síntese os valores finais (base + bônus).`,
+    ]
+    if (abilities) {
+        lines.push(`\n### Atributos: situação atual\n${abilities.status}`)
+        if (abilities.tools.kind === "mcp") {
+            lines.push(
+                `\n### Ferramentas de atributos (MCP)\nUse as ferramentas \`${T.request}\`, \`${T.get}\` e \`${T.bonus}\` do servidor MCP \`${abilities.tools.server}\`. Em TODA chamada envie \`turno\` com este valor exato: ${abilities.tools.token}`,
+            )
+        }
+    }
+    return lines.join("\n")
 }
 
 /** Como citar uma entidade do catálogo (marcação explícita com tipo, resolvida em menção pelo servidor). */
@@ -146,14 +178,15 @@ export function createMarkerFilter() {
 export interface TranscriptMessage {
     role: "maddox" | "user"
     content: string
+    internal?: boolean
 }
 
 export function transcriptText(messages: readonly TranscriptMessage[]): string {
-    return messages.map((message) => `${message.role === "maddox" ? "MADDOX" : "JOGADOR"}: ${mentionsToMarkup(message.content)}`).join("\n\n")
+    return messages.map((message) => `${message.internal ? "SISTEMA" : message.role === "maddox" ? "MADDOX" : "JOGADOR"}: ${mentionsToMarkup(message.content)}`).join("\n\n")
 }
 
 /** Instruções da consolidação (JSON estrito) do cenário ou do personagem. */
-export function buildConsolidationInstructions(context: InterviewPromptContext, withSheet: boolean): string {
+export function buildConsolidationInstructions(context: InterviewPromptContext, withSheet: boolean, abilitiesDefined = false): string {
     const base = [
         "Você consolida uma entrevista de preparação de campanha de RPG em JSON. Responda SOMENTE com um objeto JSON válido, sem texto antes ou depois e sem bloco de código.",
         "Use apenas o que foi combinado e confirmado na conversa; não invente fatos. O que não foi definido fica como \"a definir durante a história\". Escreva em português do Brasil, em Markdown dentro das strings. Cite entidades do catálogo de D&D (raças, classes, subclasses, origens, magias, talentos, itens, monstros) como {{Tipo:Nome oficial}}, como na conversa; personagens, lugares e tudo o que foi criado na campanha vão em **negrito**, nunca nessa marcação.",
@@ -169,6 +202,7 @@ export function buildConsolidationInstructions(context: InterviewPromptContext, 
         const sheet = withSheet
             ? `,\n  "sheet": {\n    "race": "<raça>", "class": "<classe>", "subclass": "<subclasse ou null>", "origin": "<origem/antecedente>",\n    "appearance": "<aparência>", "age": "<idade>", "height": "<altura>", "weight": "<peso>", "eyes": "<olhos>", "skin": "<pele>", "hair": "<cabelo>",\n    "attributes": { "strength": <1-30 ou null>, "dexterity": <...>, "constitution": <...>, "intelligence": <...>, "wisdom": <...>, "charisma": <...> }\n  }`
             : ',\n  "sheet": null'
+        if (withSheet && abilitiesDefined) base.push("Os atributos já foram definidos pelo card de atributos e entram na ficha direto: em \"attributes\" devolva null.")
         base.push(`Cenário da campanha:\n${context.campaign.setting.trim() || "(sem cenário)"}`)
         base.push(`Formato:\n{\n  "name": "<nome do personagem combinado, ou null>",\n  "profile": {\n${keys}\n  }${sheet}\n}`)
     }

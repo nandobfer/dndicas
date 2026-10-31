@@ -420,6 +420,20 @@ export const MADDOX_JEV_MODEL = "jev-latest"
 /** Rigores em que a entrevista de personagem também cria a ficha D&D (`CharacterSheet`). */
 export const MADDOX_SHEET_RIGORS: readonly MaddoxRigorLevel[] = ["equilibrado", "rigoroso", "fiel-dnd"]
 
+/** Atributos na entrevista de personagem (Maddox 5): métodos aceitos pelo card. */
+export const MADDOX_ABILITY_METHODS = ["standard", "point-buy", "roll"] as const
+export type MaddoxAbilityMethod = (typeof MADDOX_ABILITY_METHODS)[number]
+export const MADDOX_ABILITY_METHOD_LABELS: Record<MaddoxAbilityMethod, string> = { standard: "Conjunto padrão", "point-buy": "Compra de pontos", roll: "Rolagem" }
+/** Rolagens de 4d6 do método de rolagem; a sexta pontuação é 72 − a soma delas. */
+export const MADDOX_ABILITY_ROLLS = 5
+export const MADDOX_ABILITY_ROLL_TOTAL = 72
+/** Bônus do antecedente: pontos a distribuir e o máximo por atributo. */
+export const MADDOX_ABILITY_BONUS_POINTS = 3
+export const MADDOX_ABILITY_BONUS_MAX = 2
+/** Passos do laço de ferramentas do entrevistador (provedores diretos). */
+export const MADDOX_INTERVIEW_MAX_STEPS = 6
+export const MADDOX_INTERVIEW_TOOL_NAMES = { request: "request_ability_scores", get: "get_ability_scores", bonus: "apply_ability_bonus" } as const
+
 /** Seções do cenário consolidado (como o `setting.md` do roleplay). */
 export const MADDOX_SETTING_SECTIONS = [
     { key: "universo", label: "Universo e referências" },

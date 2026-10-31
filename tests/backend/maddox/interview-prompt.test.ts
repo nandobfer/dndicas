@@ -6,6 +6,7 @@ import {
     buildInterviewInstructions,
     createMarkerFilter,
     extractProposal,
+    transcriptText,
     parseJsonObject,
     settingMarkdown,
     type InterviewPromptContext,
@@ -133,5 +134,47 @@ describe("modelo do entrevistador", () => {
     })
     it("sem modelo configurado devolve null", () => {
         expect(resolveInterviewerModel(DEFAULT_MADDOX_SETTINGS)).toBeNull()
+    })
+})
+
+describe("atributos na entrevista de personagem (Maddox 5)", () => {
+    const character = (rigor: InterviewPromptContext["campaign"]["rigor"], abilities: InterviewPromptContext["abilities"] = null) =>
+        buildInterviewInstructions(base({ kind: "character", character: { name: "Lyra" }, campaign: { name: "Brumas", rigor, setting: "Aethra", openingSituation: "" }, abilities }))
+
+    it("nos graus com ficha: card como único caminho, sem números digitados, regra 72 − soma e bônus só sugerido", () => {
+        for (const rigor of ["equilibrado", "rigoroso", "fiel-dnd"] as const) {
+            const text = character(rigor)
+            expect(text).toContain("## Atributos do personagem")
+            expect(text).toContain("`request_ability_scores`")
+            expect(text).toContain("Nunca peça ao jogador que digite números, nunca role dados nem invente valores por ele.")
+            expect(text).toContain("cinco rolagens de 4d6 descartando o menor dado, e a sexta pontuação é 72 menos a soma das cinco")
+            expect(text).toContain("15, 14, 13, 12, 10 e 8")
+            expect(text).toContain("27 pontos")
+            expect(text).toContain("Bônus do antecedente (sugira, não é obrigatório)")
+            expect(text).toContain("`apply_ability_bonus`")
+            expect(text).toContain("`get_ability_scores`")
+        }
+    })
+
+    it("Narrativo, Flexível e o cenário não recebem a seção", () => {
+        expect(character("narrativo")).not.toContain("## Atributos do personagem")
+        expect(character("flexivel")).not.toContain("## Atributos do personagem")
+        expect(buildInterviewInstructions(base({ campaign: { name: "B", rigor: "fiel-dnd", setting: "", openingSituation: "" } }))).not.toContain("## Atributos do personagem")
+    })
+
+    it("traz a situação atual; pelo MCP, o servidor e o token de turno da entrevista", () => {
+        const sdk = character("fiel-dnd", { status: "Atributos enviados (Rolagem): Força 8", tools: { kind: "ai-sdk" } })
+        expect(sdk).toContain("### Atributos: situação atual\nAtributos enviados (Rolagem): Força 8")
+        expect(sdk).not.toContain("turno")
+        const mcp = character("fiel-dnd", { status: "Card aberto", tools: { kind: "mcp", server: "dndicas-maddox", token: "tok.123" } })
+        expect(mcp).toContain("servidor MCP `dndicas-maddox`")
+        expect(mcp).toContain("envie `turno` com este valor exato: tok.123")
+    })
+
+    it("a fala interna aparece como SISTEMA na transcrição; a consolidação avisa que os atributos vêm do card", () => {
+        expect(transcriptText([{ role: "user", content: "[Sistema] Enviou", internal: true }, { role: "user", content: "Oi" }])).toBe("SISTEMA: [Sistema] Enviou\n\nJOGADOR: Oi")
+        const context = base({ kind: "character", campaign: { name: "B", rigor: "fiel-dnd", setting: "", openingSituation: "" } })
+        expect(buildConsolidationInstructions(context, true, true)).toContain("Os atributos já foram definidos pelo card")
+        expect(buildConsolidationInstructions(context, true, false)).not.toContain("Os atributos já foram definidos pelo card")
     })
 })

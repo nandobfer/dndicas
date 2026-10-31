@@ -36,7 +36,30 @@ vi.mock("@/lib/ai/stream", () => ({
         for (const event of scripted.shift() ?? [{ type: "delta", text: "Olá!" }, { type: "done", finishReason: "stop", usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2, costUsd: null }, durationMs: 1 }]) yield event
     }),
     generateAiText,
+    prepareModel: vi.fn(async () => ({ model: {}, dispose: async () => undefined })),
+    samplingOptions: () => ({}),
+    describeAiError: (error: unknown) => (error instanceof Error ? error.message : String(error)),
 }))
+// Entrevista de personagem nos graus com ficha (Maddox 5): provedor direto usa o `streamText` com as ferramentas de
+// atributos; aqui ele consome as mesmas respostas roteirizadas.
+vi.mock("ai", () => ({
+    dynamicTool: (def: unknown) => def,
+    stepCountIs: (count: number) => count,
+    streamText: (options: { instructions: string; messages: AiStreamRequest["messages"] }) => {
+        streamCalls.push({ provider: "gemini", model: "gemini-pro", prompt: "", instructions: options.instructions, messages: options.messages })
+        const events = scripted.shift() ?? [{ type: "delta", text: "Olá!" }]
+        return {
+            fullStream: (async function* () {
+                for (const event of events) {
+                    if (event.type === "delta") yield { type: "text-delta", text: event.text }
+                    else if (event.type === "error") yield { type: "error", error: new Error(event.message) }
+                }
+                yield { type: "finish", finishReason: "stop", totalUsage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 } }
+            })(),
+        }
+    },
+}))
+vi.mock("@/lib/ai/consumption", () => ({ recordAiConsumption: vi.fn(async () => undefined) }))
 vi.mock("@/lib/ai/jev", () => ({ askJevSystemOne }))
 vi.mock("@/features/maddox/server/opencode-sessions", () => ({ ensureMaddoxSession, releaseInterviewSession }))
 vi.mock("@/features/character-sheets/api/character-sheets-service", () => ({ createBlankSheet }))

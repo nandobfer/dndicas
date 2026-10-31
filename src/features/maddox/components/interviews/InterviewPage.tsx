@@ -18,6 +18,7 @@ import { useMaddoxInterview } from "../../hooks/useMaddoxInterview"
 import { CharacterDraftDialog } from "../campaigns/CharacterDraftDialog"
 import { InterviewChip, RigorChip, rigorColor } from "../campaigns/campaign-visuals"
 import { InterviewComposer } from "./InterviewComposer"
+import { AbilityScoresCard } from "./AbilityScoresCard"
 import { InterviewMessageList } from "./InterviewMessageList"
 import { InterviewProposalCard } from "./InterviewProposalCard"
 
@@ -128,7 +129,7 @@ function InterviewHeader({ campaign, kind }: { campaign: MaddoxCampaignDetailDto
 
 function InterviewConversation({ campaign, kind, userId }: { campaign: MaddoxCampaignDetailDto; kind: MaddoxScriptKind; userId: string | null }) {
     const router = useRouter()
-    const { query, live, start, send, retry, complete } = useMaddoxInterview(campaign.id, kind, userId)
+    const { query, live, start, send, retry, complete, rollAbility, resetRolls, submitScores } = useMaddoxInterview(campaign.id, kind, userId)
     const color = rigorColor(campaign.rigor)
 
     if (query.isLoading) return <Skeleton className="h-80 w-full rounded-xl" aria-label="Carregando conversa" />
@@ -190,6 +191,20 @@ function InterviewConversation({ campaign, kind, userId }: { campaign: MaddoxCam
                 color={color}
                 onRetry={() => void retry()}
                 retrying={live.streaming}
+                renderAfter={(message) =>
+                    message.abilityScores ? (
+                        <AbilityScoresCard
+                            card={message.abilityScores}
+                            rolls={interview?.abilityRolls ?? null}
+                            color={color}
+                            disabled={busy || complete.isPending}
+                            onRoll={rollAbility}
+                            onReset={() => resetRolls.mutate()}
+                            resetting={resetRolls.isPending}
+                            onSubmit={(method, scores) => void submitScores(method, scores)}
+                        />
+                    ) : null
+                }
             />
             {proposal && (
                 <InterviewProposalCard
