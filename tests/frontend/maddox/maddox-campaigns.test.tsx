@@ -32,6 +32,7 @@ const member = (id: string, userId: string, name: string, role: "owner" | "playe
     role,
     joinedAt: "2026-10-30T10:00:00.000Z",
     character,
+    ready: character?.interviewStatus === "done",
 })
 
 const listItem = (over: Partial<MaddoxCampaignListItemDto> = {}): MaddoxCampaignListItemDto => ({
@@ -44,14 +45,15 @@ const listItem = (over: Partial<MaddoxCampaignListItemDto> = {}): MaddoxCampaign
     ownerName: "Marina Dona",
     myRole: "owner",
     myCharacter: null,
-    members: [member("m1", "u-owner", "Marina Dona", "owner"), member("m2", "u-ana", "Ana Jogadora", "player", { id: "ch1", name: "Lyra", portraitUrl: null, interviewStatus: "pending" })],
+    members: [member("m1", "u-owner", "Marina Dona", "owner"), member("m2", "u-ana", "Ana Jogadora", "player", { id: "ch1", name: "Lyra", portraitUrl: null, interviewStatus: "pending", profile: {}, sheetSlug: null })],
     turnNumber: 0,
+    scenarioStatus: "pending",
     createdAt: "2026-10-30T10:00:00.000Z",
     updatedAt: new Date().toISOString(),
     ...over,
 })
 
-const detail = (over: Partial<MaddoxCampaignDetailDto> = {}): MaddoxCampaignDetailDto => ({ ...listItem(), myMemberId: "m1", inviteOpen: true, ...over })
+const detail = (over: Partial<MaddoxCampaignDetailDto> = {}): MaddoxCampaignDetailDto => ({ ...listItem(), myMemberId: "m1", inviteOpen: true, setting: "", openingSituation: "", rigorLocked: false, ...over })
 
 const { CampaignsPage } = await import("@/features/maddox/components/campaigns/CampaignsPage")
 const { CampaignPage } = await import("@/features/maddox/components/campaigns/CampaignPage")
@@ -114,7 +116,7 @@ describe("lista de campanhas", () => {
         fireEvent.change(screen.getByLabelText("Nome da campanha"), { target: { value: "Nova Mesa" } })
         fireEvent.click(screen.getByRole("button", { name: "Criar campanha" }))
         await waitFor(() => expect(post).toHaveBeenCalledWith("/maddox/campaigns", { name: "Nova Mesa", rigor: "fiel-dnd" }))
-        await waitFor(() => expect(push).toHaveBeenCalledWith("/campanhas/c9"))
+        await waitFor(() => expect(push).toHaveBeenCalledWith("/campanhas/c9/entrevista/cenario"))
     })
 
     it("Maddox indisponível: mostra o motivo no diálogo", async () => {
@@ -140,9 +142,17 @@ describe("página da campanha (lobby)", () => {
         const list = await screen.findByRole("list", { name: "Participantes" })
         expect(within(list).getByText("Lyra")).toBeInTheDocument()
         expect(within(list).getByText(/Ana Jogadora/)).toBeInTheDocument()
-        expect(screen.getByText(/1 de 2 participante\(s\) já criaram o personagem/)).toBeInTheDocument()
+        expect(screen.getByText(/Preparação: o dono define o cenário com o Maddox/)).toBeInTheDocument()
 
         const link = await screen.findByLabelText("Link de convite")
+        // O link ocupa a linha inteira; os botões ficam num bloco abaixo (não vazam da coluna).
+        expect([...link.parentElement!.children].filter((element) => element.tagName === "BUTTON")).toHaveLength(0)
+        const actions = screen.getByTestId("invite-actions")
+        expect(actions.contains(link)).toBe(false)
+        expect(within(actions).getByRole("button", { name: /Copiar link/ })).toBeInTheDocument()
+        expect(within(actions).getByRole("button", { name: /Gerar novo link/ })).toBeInTheDocument()
+        expect(link.compareDocumentPosition(actions) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+        expect(link.className).toContain("w-full")
         expect((link as HTMLInputElement).value).toBe(`${window.location.origin}/campanhas/convite/${TOKEN}`)
         fireEvent.click(screen.getByRole("button", { name: /Copiar link/ }))
         await waitFor(() => expect(writeText).toHaveBeenCalledWith(`${window.location.origin}/campanhas/convite/${TOKEN}`))
@@ -168,7 +178,7 @@ describe("página da campanha (lobby)", () => {
 
     it("cria o esboço do próprio personagem", async () => {
         get.mockImplementation(async (url: string) => (url.endsWith("/invite") ? ok({ token: TOKEN, rotatedAt: null }) : ok(detail())))
-        put.mockResolvedValue(ok(detail({ myCharacter: { id: "ch2", name: "Thorin", portraitUrl: null, interviewStatus: "pending" } })))
+        put.mockResolvedValue(ok(detail({ myCharacter: { id: "ch2", name: "Thorin", portraitUrl: null, interviewStatus: "pending", profile: {}, sheetSlug: null } })))
         renderWithQueryClient(<CampaignPage campaignId="c1" />)
         fireEvent.click(await screen.findByRole("button", { name: /Criar personagem/ }))
         fireEvent.change(await screen.findByLabelText("Nome do personagem"), { target: { value: "Thorin" } })
@@ -226,7 +236,7 @@ describe("página da campanha (lobby)", () => {
     })
 
     it("editar fora do lobby: slider desabilitado e o PATCH não leva o rigor", async () => {
-        ownerDetail({ rigor: "equilibrado", status: "active" })
+        ownerDetail({ rigor: "equilibrado", status: "active", rigorLocked: true })
         renderWithQueryClient(<CampaignPage campaignId="c1" />)
         const dialog = await openEdit()
         expect(within(dialog).getByText(/o grau de rigor não pode mais mudar/)).toBeInTheDocument()
@@ -250,7 +260,7 @@ describe("página da campanha (lobby)", () => {
     })
 
     it("editar o personagem existente vem pré-preenchido e salva o mesmo personagem", async () => {
-        const lyra = { id: "ch1", name: "Lyra", portraitUrl: null, interviewStatus: "pending" as const }
+        const lyra = { id: "ch1", name: "Lyra", portraitUrl: null, interviewStatus: "pending" as const, profile: {}, sheetSlug: null }
         put.mockResolvedValue(ok(detail({ myRole: "player", myMemberId: "m2", myCharacter: { ...lyra, name: "Lyra Ventobravo" } })))
         // A tela identifica o "você" pelo userId do useAuth (u-owner): o membro com personagem passa a ser o usuário logado.
         const players = detail().members.map((item) => (item.id === "m2" ? { ...item, userId: "u-owner" } : { ...item, userId: "u-dono" }))
@@ -307,5 +317,87 @@ describe("convite", () => {
         renderWithQueryClient(<InviteAcceptPage token={TOKEN} />)
         expect(await screen.findByText("Convite indisponível")).toBeInTheDocument()
         expect(screen.getByText(/Convite inválido ou expirado/)).toBeInTheDocument()
+    })
+})
+
+describe("lobby com as entrevistas (Maddox 2)", () => {
+    const invite = (url: string, body: unknown) => (url.endsWith("/invite") ? ok({ token: TOKEN, rotatedAt: null }) : ok(body))
+    const lyra = (over: Partial<NonNullable<MaddoxCampaignMemberDto["character"]>> = {}) => ({ id: "ch1", name: "Lyra", portraitUrl: null, interviewStatus: "pending" as const, profile: {}, sheetSlug: null, ...over })
+
+    it("dono com o cenário pendente vê a chamada para a entrevista de cenário", async () => {
+        get.mockImplementation(async (url: string) => invite(url, detail()))
+        renderWithQueryClient(<CampaignPage campaignId="c1" />)
+        const link = await screen.findByRole("link", { name: /Começar entrevista de cenário/ })
+        expect(link).toHaveAttribute("href", "/campanhas/c1/entrevista/cenario")
+    })
+
+    it("dono com a entrevista começada vê 'Continuar'", async () => {
+        get.mockImplementation(async (url: string) => invite(url, detail({ status: "interview", scenarioStatus: "in-progress", rigorLocked: true })))
+        renderWithQueryClient(<CampaignPage campaignId="c1" />)
+        expect(await screen.findByRole("link", { name: /Continuar entrevista de cenário/ })).toBeInTheDocument()
+    })
+
+    it("jogador aguarda o cenário: a entrevista do personagem fica desabilitada", async () => {
+        const members = detail().members.map((item) => (item.id === "m2" ? { ...item, character: lyra() } : item))
+        get.mockResolvedValue(ok(detail({ myRole: "player", myMemberId: "m2", myCharacter: lyra(), members })))
+        renderWithQueryClient(<CampaignPage campaignId="c1" />)
+        expect(await screen.findByText(/Aguardando Marina Dona definir o cenário com o Maddox/)).toBeInTheDocument()
+        expect(screen.getByRole("button", { name: /Entrevista do personagem/ })).toBeDisabled()
+        expect(screen.queryByRole("link", { name: /entrevista de cenário/ })).not.toBeInTheDocument()
+    })
+
+    it("cenário pronto: mostra o cenário salvo e libera a entrevista do personagem", async () => {
+        const members = detail().members.map((item) => (item.id === "m2" ? { ...item, character: lyra() } : item))
+        get.mockResolvedValue(ok(detail({ myRole: "player", myMemberId: "m2", myCharacter: lyra(), members, scenarioStatus: "done", setting: "## Universo e referências\nAethra", openingSituation: "Numa taverna." })))
+        renderWithQueryClient(<CampaignPage campaignId="c1" />)
+        expect(await screen.findByText("Aethra")).toBeInTheDocument()
+        expect(screen.getByText("Numa taverna.")).toBeInTheDocument()
+        expect(screen.getByRole("link", { name: /Entrevista do personagem/ })).toHaveAttribute("href", "/campanhas/c1/entrevista/personagem")
+        const row = within(screen.getByRole("list", { name: "Participantes" })).getByText("Lyra").closest("li")!
+        expect(within(row).getByText("Entrevista pendente")).toBeInTheDocument()
+        expect(screen.getByText(/0 de 2 participante\(s\) prontos para jogar/)).toBeInTheDocument()
+    })
+
+    it("entrevista concluída: selo de pronto, 'Ver perfil' com as seções e o link da ficha (só para o dono do personagem)", async () => {
+        const done = lyra({ interviewStatus: "done", profile: { identidade: "Elfa de olhos cinzentos", origem: "Órfã do porto" }, sheetSlug: "ana/lyra" })
+        const members = detail().members.map((item) => (item.id === "m2" ? { ...item, character: done, ready: true } : item))
+        get.mockResolvedValue(ok(detail({ myRole: "player", myMemberId: "m2", myCharacter: done, members, scenarioStatus: "done", setting: "Aethra" })))
+        renderWithQueryClient(<CampaignPage campaignId="c1" />)
+        const list = await screen.findByRole("list", { name: "Participantes" })
+        const row = within(list).getByText("Lyra").closest("li")!
+        const chip = within(row).getByText("Entrevista concluída")
+        expect(sameColor(chip.style.color, rarityColors.legendary)).toBe(true)
+        expect(within(row).getByLabelText("Pronto para jogar")).toBeInTheDocument()
+        expect(within(row).queryByRole("link", { name: /Entrevista do personagem/ })).not.toBeInTheDocument()
+        expect(screen.getByText(/1 de 2 participante\(s\) prontos para jogar/)).toBeInTheDocument()
+
+        fireEvent.click(within(row).getByRole("button", { name: /Ver perfil/ }))
+        const dialog = await screen.findByRole("dialog")
+        expect(within(dialog).getByText("Identidade e aparência")).toBeInTheDocument()
+        expect(within(dialog).getByText("Elfa de olhos cinzentos")).toBeInTheDocument()
+        expect(within(dialog).getByRole("link", { name: /Abrir ficha do D&D/ })).toHaveAttribute("href", "/sheets/ana/lyra")
+    })
+
+    it("o perfil de outro jogador não mostra o link da ficha", async () => {
+        const done = lyra({ interviewStatus: "done", profile: { identidade: "Elfa" }, sheetSlug: "ana/lyra" })
+        const members = detail().members.map((item) => (item.id === "m2" ? { ...item, character: done, ready: true } : item))
+        get.mockImplementation(async (url: string) => invite(url, detail({ members, scenarioStatus: "done", setting: "Aethra" })))
+        renderWithQueryClient(<CampaignPage campaignId="c1" />)
+        fireEvent.click(await screen.findByRole("button", { name: /Ver perfil/ }))
+        const dialog = await screen.findByRole("dialog")
+        expect(within(dialog).getByText("Elfa")).toBeInTheDocument()
+        expect(within(dialog).queryByRole("link", { name: /Abrir ficha/ })).not.toBeInTheDocument()
+    })
+
+    it("as telas das campanhas não usam abas do core, select nem checkbox nativos", async () => {
+        const { readdirSync, readFileSync } = await import("node:fs")
+        const { join } = await import("node:path")
+        const dir = join(process.cwd(), "src/features/maddox/components/campaigns")
+        for (const file of readdirSync(dir)) {
+            const source = readFileSync(join(dir, file), "utf8")
+            expect(source, file).not.toMatch(/@\/core\/ui\/tabs/)
+            expect(source, file).not.toMatch(/<select[\s>]/)
+            expect(source, file).not.toMatch(/type=["']checkbox["']/)
+        }
     })
 })

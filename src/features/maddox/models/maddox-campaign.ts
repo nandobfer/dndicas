@@ -1,5 +1,14 @@
 import mongoose, { Schema, type Model, type Types } from "mongoose"
-import { MADDOX_CAMPAIGN_STATUSES, MADDOX_RIGOR_LEVELS, MADDOX_TURN_PHASES, type MaddoxCampaignStatus, type MaddoxRigorLevel, type MaddoxTurnPhase } from "../constants"
+import {
+    MADDOX_CAMPAIGN_STATUSES,
+    MADDOX_RIGOR_LEVELS,
+    MADDOX_SCENARIO_STATUSES,
+    MADDOX_TURN_PHASES,
+    type MaddoxCampaignStatus,
+    type MaddoxRigorLevel,
+    type MaddoxScenarioStatus,
+    type MaddoxTurnPhase,
+} from "../constants"
 
 /**
  * Campanha Maddox — `maddox_campaigns`. Nasce no lobby (Maddox 1), passa pela entrevista de cenário
@@ -14,6 +23,10 @@ export interface IMaddoxCampaign {
     coverUrl: string | null
     /** Cenário consolidado ao fim da entrevista de cenário (Markdown). */
     setting: string
+    /** Situação inicial combinada na entrevista de cenário (Markdown). */
+    openingSituation: string
+    /** Entrevista de cenário (Maddox 2): começar trava o rigor; concluir grava `setting`. */
+    scenarioInterview: { status: MaddoxScenarioStatus; completedAt: Date | null }
     /** Versões dos roteiros com que as entrevistas desta campanha começaram. */
     scriptVersions: { scenario: number | null; character: number | null }
     turn: { number: number; phase: MaddoxTurnPhase }
@@ -31,6 +44,11 @@ const MaddoxCampaignSchema = new Schema<IMaddoxCampaign>(
         status: { type: String, enum: MADDOX_CAMPAIGN_STATUSES, default: "lobby" },
         coverUrl: { type: String, default: null },
         setting: { type: String, default: "" },
+        openingSituation: { type: String, default: "" },
+        scenarioInterview: {
+            status: { type: String, enum: MADDOX_SCENARIO_STATUSES, default: "pending" },
+            completedAt: { type: Date, default: null },
+        },
         scriptVersions: {
             scenario: { type: Number, default: null },
             character: { type: Number, default: null },

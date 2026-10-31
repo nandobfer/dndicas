@@ -14,11 +14,11 @@ import type { MaddoxCampaignDetailDto } from "../../campaign-types"
 import { useUpdateMaddoxCampaign } from "../../hooks/useMaddoxCampaigns"
 import { RigorCard } from "./RigorCard"
 
-/** Dono edita o nome e, só no lobby, o grau de rigor. */
+/** Dono edita o nome e, só antes da entrevista de cenário, o grau de rigor. */
 export function EditCampaignDialog({ campaign, open, onOpenChange }: { campaign: MaddoxCampaignDetailDto; open: boolean; onOpenChange: (open: boolean) => void }) {
     const form = useForm<CreateMaddoxCampaignInput>({ resolver: zodResolver(createMaddoxCampaignSchema), defaultValues: { name: campaign.name, rigor: campaign.rigor } })
     const update = useUpdateMaddoxCampaign(campaign.id)
-    const rigorLocked = campaign.status !== "lobby"
+    const rigorLocked = campaign.rigorLocked
 
     useEffect(() => {
         if (open) form.reset({ name: campaign.name, rigor: campaign.rigor })
@@ -38,7 +38,7 @@ export function EditCampaignDialog({ campaign, open, onOpenChange }: { campaign:
                         <GlassModalTitle className="flex items-center gap-2">
                             <Pencil className="h-5 w-5 text-primary" aria-hidden /> Editar campanha
                         </GlassModalTitle>
-                        <GlassModalDescription>{rigorLocked ? "A campanha já saiu do lobby: o grau de rigor não pode mais mudar." : "Enquanto a campanha está no lobby, o grau de rigor ainda pode mudar."}</GlassModalDescription>
+                        <GlassModalDescription>{rigorLocked ? "A entrevista de cenário já começou: o grau de rigor não pode mais mudar." : "Antes da entrevista de cenário, o grau de rigor ainda pode mudar."}</GlassModalDescription>
                     </GlassModalHeader>
                     <Field id="maddox-campaign-edit-name" label="Nome da campanha" error={form.formState.errors.name?.message}>
                         <Input id="maddox-campaign-edit-name" maxLength={MADDOX_CAMPAIGN_NAME_MAX} {...form.register("name")} />

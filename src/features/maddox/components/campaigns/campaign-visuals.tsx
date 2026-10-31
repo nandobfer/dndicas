@@ -4,7 +4,7 @@ import type { ReactNode } from "react"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/opex/avatar"
 import { rarityColors } from "@/lib/config/colors"
 import { cn } from "@/lib/utils"
-import { MADDOX_CAMPAIGN_STATUS_DEFS, MADDOX_RIGOR_LEVEL_DEFS, type MaddoxCampaignStatus, type MaddoxRigorLevel } from "../../constants"
+import { MADDOX_CAMPAIGN_STATUS_DEFS, MADDOX_INTERVIEW_STATUS_DEFS, MADDOX_RIGOR_LEVEL_DEFS, type MaddoxCampaignStatus, type MaddoxInterviewStatus, type MaddoxRigorLevel } from "../../constants"
 
 /** Cor de raridade do nível de rigor (comum → lendário). */
 export const rigorColor = (rigor: MaddoxRigorLevel) => rarityColors[MADDOX_RIGOR_LEVEL_DEFS[rigor].rarity]
@@ -42,3 +42,8 @@ export function MemberAvatar({ name, imageUrl, color, className }: { name: strin
         </Avatar>
     )
 }
+
+/** Situação da entrevista (cenário ou personagem) na cor de raridade. */
+export const InterviewChip = ({ status }: { status: MaddoxInterviewStatus | "proposed" }) => (
+    <RarityChip color={rarityColors[MADDOX_INTERVIEW_STATUS_DEFS[status].rarity]}>{MADDOX_INTERVIEW_STATUS_DEFS[status].label}</RarityChip>
+)

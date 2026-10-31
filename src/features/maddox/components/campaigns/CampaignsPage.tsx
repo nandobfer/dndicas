@@ -59,7 +59,7 @@ export function CampaignsPage() {
                 onOpenChange={setCreating}
                 onCreated={(campaign) => {
                     setCreating(false)
-                    router.push(`/campanhas/${campaign.id}`)
+                    router.push(`/campanhas/${campaign.id}/entrevista/cenario`)
                 }}
             />
         </motion.div>

@@ -81,7 +81,7 @@ export function RigorCard({ form, disabled = false }: { form: UseFormReturn<Crea
                                     </motion.div>
                                 </AnimatePresence>
                                 <p className="text-xs text-muted-foreground">
-                                    Em todos os níveis, o Maddox narra como mestre e decide o que as regras não deixam claro. O rigor só pode mudar enquanto a campanha está no lobby.
+                                    Em todos os níveis, o Maddox narra como mestre e decide o que as regras não deixam claro. O rigor só pode mudar antes da entrevista de cenário.
                                 </p>
                             </div>
                         )

@@ -1,4 +1,4 @@
-import type { LanguageModel, streamText } from "ai"
+import type { LanguageModel, ModelMessage, streamText } from "ai"
 import { randomUUID } from "node:crypto"
 import { loggerFor } from "@/lib/logger"
 import { getAiProvider, isAiReasoningLevel, type AiProviderId } from "./providers"
@@ -17,7 +17,15 @@ export interface AiStreamRequest {
     provider: AiProviderId
     model: string
     instructions: string
+    /** Texto único do usuário. Ignorado quando `messages` vem preenchido. */
     prompt: string
+    /** Conversa (histórico + última mensagem do usuário), alternativa ao `prompt`. */
+    messages?: ModelMessage[]
+    /**
+     * Só OpenCode: fixa uma sessão existente (modo `existing`). O OpenCode guarda o histórico e só a
+     * última mensagem do usuário é enviada; a sessão não é excluída no `dispose`.
+     */
+    opencodeSessionId?: string | null
     /** OpenCode: variante do modelo; Gemini: nível de thinking; Anthropic, OpenAI e DeepSeek: nível de raciocínio. */
     variant?: string | null
     /** Só OpenCode. */
@@ -71,16 +79,17 @@ const DIRECT_PROVIDERS = {
 } as const satisfies Partial<Record<AiProviderId, () => Promise<(modelId: string) => LanguageModel>>>
 
 /** Modelo da AI SDK pronto para o provedor (exportado para o loop de ferramentas do Agente Opex). */
-export async function prepareModel(request: Pick<AiStreamRequest, "provider" | "model" | "variant" | "agent" | "title">): Promise<PreparedModel> {
+export async function prepareModel(request: Pick<AiStreamRequest, "provider" | "model" | "variant" | "agent" | "title" | "opencodeSessionId">): Promise<PreparedModel> {
     if (request.provider === "opencode") {
         const { createOpencodeProvider } = await import("./opencode")
         const { provider, directory } = await createOpencodeProvider()
+        const pinned = request.opencodeSessionId || null
         const model = provider(request.model, {
             agent: request.agent || undefined,
             variant: request.variant || undefined,
             sessionTitle: request.title ?? "Opex",
             location: directory ? { directory } : undefined,
-            createNewSession: true,
+            ...(pinned ? { sessionId: pinned, sessionMode: "existing" as const, createNewSession: false } : { createNewSession: true }),
             // Formulários (pergunta do agente) não têm quem responda: cancela e encerra o turno.
             formPolicy: "cancel",
             logger: false,
@@ -150,7 +159,7 @@ export async function* streamAi(request: AiStreamRequest): AsyncGenerator<AiStre
         const result = streamText({
             model: prepared.model,
             instructions: request.instructions,
-            prompt: request.prompt,
+            ...(request.messages?.length ? { messages: request.messages } : { prompt: request.prompt }),
             abortSignal: request.signal,
             providerOptions: prepared.providerOptions,
             ...(prepared.reasoning ? { reasoning: prepared.reasoning } : {}),
