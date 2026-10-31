@@ -6,7 +6,7 @@ import {
     MADDOX_CAMPAIGN_MEMORY_KINDS,
     MADDOX_CHECK_DC_MAX,
     MADDOX_CHECK_DC_MIN,
-    MADDOX_CHECK_REASON_MAX,
+    MADDOX_CHECK_REASON_GUIDE,
     MADDOX_CHECK_RIGORS,
     MADDOX_CHECK_ROUNDS_MAX,
     MADDOX_NPC_STATUSES,
@@ -301,7 +301,7 @@ export const MADDOX_MASTER_TOOLS: readonly MaddoxMasterTool[] = [
             atributo: z.enum(MADDOX_ABILITIES.map((ability) => MADDOX_ABILITY_LABELS[ability]) as [string, ...string[]]).optional().describe("Obrigatório quando tipo = atributo ou resistencia"),
             cd: z.number().int().min(MADDOX_CHECK_DC_MIN).max(MADDOX_CHECK_DC_MAX).describe("Classe de dificuldade (CD) do teste, pelas regras do D&D"),
             modo: z.enum(["normal", "vantagem", "desvantagem"]).optional().describe("Vantagem ou desvantagem quando a situação der"),
-            motivo: z.string().min(1).describe("O que o personagem tenta, curto e sem revelar segredos (os jogadores leem)"),
+            motivo: z.string().min(1).describe(`O que o personagem tenta, curto (até uns ${MADDOX_CHECK_REASON_GUIDE} caracteres) e sem revelar segredos (os jogadores leem)`),
         }),
         async execute(context, input) {
             const campaign = await MaddoxCampaignModel.findById(context.campaignId).select("rigor").lean<Pick<IMaddoxCampaign, "rigor">>()
@@ -325,6 +325,8 @@ export const MADDOX_MASTER_TOOLS: readonly MaddoxMasterTool[] = [
             if (jobDraftChecks(String(context.campaignId), context.jobId!).some((check) => check.memberId === String(member._id))) throw new MaddoxToolError(`Já existe um teste pedido para ${target.name} nesta narração: um teste por personagem.`)
 
             const mode = input.modo === "vantagem" ? "advantage" : input.modo === "desvantagem" ? "disadvantage" : "normal"
+            // Só o teto de PROTEÇÃO corta o motivo (avisado no retorno); o tamanho curto é orientação da descrição.
+            const fit = fitter()
             const added = addDraftCheck(String(context.campaignId), context.jobId!, {
                 memberId: String(member._id),
                 userId: member.userId,
@@ -336,7 +338,7 @@ export const MADDOX_MASTER_TOOLS: readonly MaddoxMasterTool[] = [
                 skill,
                 dc: input.cd,
                 mode,
-                reason: clip(input.motivo, MADDOX_CHECK_REASON_MAX),
+                reason: fit.fit("motivo", input.motivo),
             })
             if (!added) throw new MaddoxToolError("Esta narração já terminou.")
             const title = checkTitle({ kind, ability, skill })
@@ -344,6 +346,7 @@ export const MADDOX_MASTER_TOOLS: readonly MaddoxMasterTool[] = [
                 requested: true,
                 check: `${title} para ${target.name}, CD ${input.cd}${mode === "normal" ? "" : mode === "advantage" ? ", com vantagem" : ", com desvantagem"}`,
                 note: "Narre até o momento da tentativa e pare, sem decidir o resultado nem perguntar o que os jogadores fazem. O resultado da rolagem chega na próxima mensagem.",
+                ...fit.notice(),
             }
         },
     }),

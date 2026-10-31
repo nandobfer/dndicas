@@ -161,6 +161,22 @@ describe("request_check (Maddox 5)", () => {
         })
     })
 
+    it("motivo longo é gravado inteiro; só o teto de proteção corta, avisando o modelo (`truncated`)", async () => {
+        const table = await faithful()
+        const long = `Lyra tenta ${"esgueirar-se entre as colunas da cripta sem ser vista ".repeat(5)}`.trim()
+        expect(long.length).toBeGreaterThan(200)
+        await inJob(table.id, { kind: "narration", round: 0 }, async (jobId) => {
+            const result = await call(table.id, jobId, { ...stealth, motivo: long })
+            expect(result).not.toHaveProperty("truncated")
+            expect(jobDraftChecks(String(table.id), jobId)[0]!.reason).toBe(long)
+        })
+        await inJob(table.id, { kind: "narration", round: 0 }, async (jobId) => {
+            const result = await call(table.id, jobId, { ...stealth, motivo: "x".repeat(MADDOX_TOOL_TEXT_MAX + 50) })
+            expect(result).toMatchObject({ truncated: ["motivo"] })
+            expect(jobDraftChecks(String(table.id), jobId)[0]!.reason.length).toBeLessThanOrEqual(MADDOX_TOOL_TEXT_MAX)
+        })
+    })
+
     it("recusa campanha narrativa, resposta a pergunta, a última rodada, personagem sem ficha, desconhecido e perícia ausente", async () => {
         const narrative = await faithful("narrativo")
         await inJob(narrative.id, { kind: "narration", round: 0 }, async (jobId) => {

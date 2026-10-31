@@ -226,8 +226,16 @@ export function scheduleMasterTurn(campaignId: Types.ObjectId, token: string, tu
 /** Fase do mestre sem geração em andamento (falha ou trava velha): pega a trava e narra. */
 async function resumeMasterTurn(campaign: CampaignDoc): Promise<boolean> {
     if (campaign.status !== "active" || campaign.turn?.phase !== "master") return false
-    // Esperando as rolagens dos testes: nada a gerar até o último teste da rodada ser rolado.
-    if (campaign.turn.awaitingChecks) return false
+    // Esperando as rolagens dos testes: nada a gerar até o último teste da rodada ser rolado. Sem teste pendente (a rolagem
+    // foi gravada, mas a continuação não chegou a ser agendada: queda do banco ou do processo), retoma pela mesma troca
+    // condicional da rolagem — só uma chamada vence.
+    if (campaign.turn.awaitingChecks) {
+        if (isCampaignBusy(String(campaign._id))) return false
+        const { advanceAfterChecks } = await import("./game-checks")
+        const advanced = await advanceAfterChecks(campaign._id, campaign.turn.number, campaign.turn.checkRound ?? 0)
+        if (advanced) log.info({ campaignId: String(campaign._id), turnNumber: campaign.turn.number }, "[maddox] Testes da rodada já rolados: retomando a continuação")
+        return advanced
+    }
     // Geração na fila ou rodando neste processo: a trava é dela (o pulso a mantém), nada a retomar.
     if (isCampaignBusy(String(campaign._id))) return false
     const generating = campaign.turn.generating

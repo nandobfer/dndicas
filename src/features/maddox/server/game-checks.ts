@@ -108,18 +108,19 @@ async function loadSheet(sheetId: Types.ObjectId): Promise<MaddoxCheckSheet | nu
  * Sem teste pendente na rodada, a continuação do Maddox entra na fila (uma só: a troca é condicional e só uma chamada
  * vence, mesmo com rolagens simultâneas).
  */
-export async function advanceAfterChecks(campaignId: Types.ObjectId, turnNumber: number, round: number): Promise<void> {
+export async function advanceAfterChecks(campaignId: Types.ObjectId, turnNumber: number, round: number): Promise<boolean> {
     const pending = await MaddoxCampaignMessageModel.exists({ campaignId, turnNumber, kind: "check", "check.round": round, "check.status": "pending" })
-    if (pending) return
+    if (pending) return false
     const token = randomUUID()
     const won = await MaddoxCampaignModel.updateOne(
         { _id: campaignId, status: "active", "turn.number": turnNumber, "turn.phase": "master", "turn.awaitingChecks": true, "turn.checkRound": round },
         { $set: { "turn.awaitingChecks": false, "turn.checkRound": round + 1, "turn.generating": { token, startedAt: new Date() }, "turn.failedAt": null } },
     )
-    if (won.modifiedCount === 0) return
+    if (won.modifiedCount === 0) return false
     log.info({ campaignId: String(campaignId), turnNumber, round }, "[maddox] Testes da rodada concluídos; o Maddox continua a narração")
-    await publishGameChanged(campaignId)
     void scheduleMasterTurn(campaignId, token, turnNumber, round + 1)
+    await publishGameChanged(campaignId)
+    return true
 }
 
 /** O membro saiu ou foi removido: os testes pendentes dele são cancelados e a rodada pode terminar. */

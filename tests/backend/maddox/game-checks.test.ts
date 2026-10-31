@@ -251,6 +251,25 @@ describe("Maddox 5 — regras dos testes", () => {
         await waitForCampaignIdle(table.id)
     })
 
+    it("rolagem gravada sem a continuação agendada (queda depois de gravar): o GET seguinte retoma o turno", async () => {
+        const table = await faithfulTable()
+        await untilCheckRequested(table)
+        // Simula a queda: o teste ficou `rolled`, mas `advanceAfterChecks` nunca rodou (o turno segue esperando).
+        await MaddoxCampaignMessageModel.updateOne({ campaignId: table.id, kind: "check" }, { $set: { "check.status": "rolled", "check.roll": { rollId: "r", terms: [{ dice: "d20", quantity: 1, results: [14] }], mode: "advantage", selectedD20: { kept: 14, discarded: 3, reason: "advantage" }, diceTotal: 14, modifier: 5, total: 19, createdAt: new Date().toISOString() }, "check.rolledBy": table.player } })
+        const checkId = String((await MaddoxCampaignMessageModel.findOne({ campaignId: table.id, kind: "check" }).lean())!._id)
+        await expect(checks.rollCheck(table.id, checkId, table.player)).rejects.toMatchObject({ code: "CHECK_ALREADY_ROLLED" })
+        expect((await MaddoxCampaignModel.findById(table.id).lean())!.turn.awaitingChecks).toBe(true)
+
+        script.push([{ text: "Lyra passa despercebida. O que vocês fazem?" }])
+        const generations = calls.length
+        // Duas leituras ao mesmo tempo: só uma continuação.
+        await Promise.all([game.getGameState(table.id, table.owner), game.getGameState(table.id, table.player)])
+        await waitForCampaignIdle(table.id)
+        expect(calls.length).toBe(generations + 1)
+        expect(calls.at(-1)!.userText).toContain("Lyra — Furtividade (Destreza), CD 15: total 19")
+        expect((await game.getGameState(table.id, table.owner)).turn).toMatchObject({ number: 2, phase: "players", awaitingChecks: false })
+    })
+
     it("o dono rola no lugar do jogador ausente (auditado), com o modificador da ficha do personagem", async () => {
         const table = await faithfulTable()
         await untilCheckRequested(table)

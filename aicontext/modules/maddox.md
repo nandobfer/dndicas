@@ -433,7 +433,8 @@ proficiência, resistências e perícias treinadas). Narrativo e Flexível não 
 **Turno do mestre em rodadas** (`turn.checkRound`, `turn.awaitingChecks`):
 
 1. Rodada 0 narra as declarações. A ferramenta `request_check` (personagem, `tipo` perícia/atributo/resistência, `pericia` ou
-   `atributo`, `cd` 1–30, `modo`, `motivo` público) guarda o pedido **em memória no job da fila** (`game-live`: `addDraftCheck`,
+   `atributo`, `cd` 1–30, `modo`, `motivo` público — curto por orientação, sem corte abaixo do teto de proteção
+   `MADDOX_TOOL_TEXT_MAX`, com `truncated` no retorno se passar) guarda o pedido **em memória no job da fila** (`game-live`: `addDraftCheck`,
    instância única). Só depois de gravar a narração os pedidos viram mensagens `kind: "check"` (mesmo `insertMany`, logo abaixo da
    narração); se a geração falhar, somem com o job e a nova tentativa não duplica nada.
 2. Com teste pendente, o turno fica em `master` com `awaitingChecks: true` e sem trava (`resumeMasterTurn` ignora). Declarar,
@@ -443,7 +444,9 @@ proficiência, resistências e perícias treinadas). Narrativo e Flexível não 
    `pending → rolled` é condicional (rolagem dupla = 409 `CHECK_ALREADY_ROLLED`). Grava `check.roll`, as partes do modificador e
    quem rolou; avisa a mesa e o stream (`check-rolled`).
 4. Sem teste pendente na rodada, uma troca condicional (`awaitingChecks: true` + `checkRound`) faz `checkRound + 1`, pega a trava e
-   põe a **continuação** na fila (uma só, mesmo com rolagens simultâneas). A tarefa leva as declarações e os resultados
+   põe a **continuação** na fila (uma só, mesmo com rolagens simultâneas). Se a rolagem foi gravada mas a continuação não chegou a
+   ser agendada (queda do banco ou do processo), o `GET …/game`/`check` seguinte vê `awaitingChecks` sem teste pendente e retoma pela
+   mesma troca condicional (`resumeMasterTurn` → `advanceAfterChecks`). A tarefa leva as declarações e os resultados
    (`checkResultLine`: total, d20, modificador, vantagem com o descartado, 20/1 natural, "rolado pelo dono", CD e sucesso/falha); o
    Maddox narra a consequência a partir de onde parou. Narrações da rodada são `segment = checkRound` (as antigas, sem o campo,
    contam como 0).

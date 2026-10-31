@@ -220,7 +220,8 @@ export type MaddoxCheckMode = (typeof MADDOX_CHECK_MODES)[number]
 export const MADDOX_CHECK_MODE_LABELS: Record<MaddoxCheckMode, string> = { normal: "Normal", advantage: "Vantagem", disadvantage: "Desvantagem" }
 export const MADDOX_CHECK_DC_MIN = 1
 export const MADDOX_CHECK_DC_MAX = 30
-export const MADDOX_CHECK_REASON_MAX = 200
+/** Tamanho orientado do motivo público do teste (só orientação: o corte é o teto de proteção `MADDOX_TOOL_TEXT_MAX`). */
+export const MADDOX_CHECK_REASON_GUIDE = 200
 /** Consulta do JEV "Pedir teste" (orientação ao narrador): passou disso, a orientação é ignorada. */
 export const MADDOX_CHECK_HINT_TIMEOUT_MS = 20_000
 

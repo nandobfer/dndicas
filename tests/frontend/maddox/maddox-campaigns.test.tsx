@@ -122,6 +122,37 @@ describe("lista de campanhas", () => {
         await waitFor(() => expect(push).toHaveBeenCalledWith("/campanhas/c9/entrevista/cenario"))
     })
 
+    it("CD dos testes na criação: 'Visível' vai no POST nos graus com testes; em grau narrativo o campo some e não é enviado", async () => {
+        post.mockResolvedValue(ok(detail({ id: "c9", name: "Nova Mesa", rigor: "rigoroso", showCheckDc: true })))
+        renderWithQueryClient(<CampaignsPage />)
+        fireEvent.click(await screen.findByRole("button", { name: /Nova campanha/ }))
+        const slider = await screen.findByRole("slider", { name: "Grau de rigor da campanha" })
+        // Equilibrado (padrão) usa testes: o campo aparece com a CD secreta.
+        const field = screen.getByTestId("check-dc-field")
+        expect(field).toHaveTextContent("o Maddox define a CD em segredo")
+        fireEvent.click(within(field).getByRole("button", { name: "Visível" }))
+        await waitFor(() => expect(screen.getByTestId("check-dc-field")).toHaveTextContent("Os jogadores veem a classe de dificuldade"))
+        fireEvent.keyDown(slider, { key: "ArrowRight" })
+        await waitFor(() => expect(slider).toHaveAttribute("aria-valuetext", "Rigoroso"))
+        fireEvent.change(screen.getByLabelText("Nome da campanha"), { target: { value: "Nova Mesa" } })
+        fireEvent.click(screen.getByRole("button", { name: "Criar campanha" }))
+        await waitFor(() => expect(post).toHaveBeenCalledWith("/maddox/campaigns", { name: "Nova Mesa", rigor: "rigoroso", showCheckDc: true }))
+    })
+
+    it("CD dos testes na criação: grau narrativo esconde o campo e não envia showCheckDc", async () => {
+        post.mockResolvedValue(ok(detail({ id: "c9", name: "Só História", rigor: "narrativo" })))
+        renderWithQueryClient(<CampaignsPage />)
+        fireEvent.click(await screen.findByRole("button", { name: /Nova campanha/ }))
+        const slider = await screen.findByRole("slider", { name: "Grau de rigor da campanha" })
+        fireEvent.click(within(screen.getByTestId("check-dc-field")).getByRole("button", { name: "Visível" }))
+        fireEvent.keyDown(slider, { key: "Home" })
+        await waitFor(() => expect(slider).toHaveAttribute("aria-valuetext", "Narrativo"))
+        expect(screen.queryByTestId("check-dc-field")).not.toBeInTheDocument()
+        fireEvent.change(screen.getByLabelText("Nome da campanha"), { target: { value: "Só História" } })
+        fireEvent.click(screen.getByRole("button", { name: "Criar campanha" }))
+        await waitFor(() => expect(post).toHaveBeenCalledWith("/maddox/campaigns", { name: "Só História", rigor: "narrativo" }))
+    })
+
     it("Maddox indisponível: mostra o motivo no diálogo", async () => {
         get.mockResolvedValue(ok([]))
         post.mockRejectedValue(Object.assign(new Error("409"), { isAxiosError: true, response: { status: 409, data: { success: false, error: 'O "Agente Maddox" está desativado.' } } }))
@@ -251,6 +282,34 @@ describe("página da campanha (lobby)", () => {
         fireEvent.click(within(dialog).getByRole("button", { name: "Salvar" }))
         await waitFor(() => expect(patch).toHaveBeenCalledTimes(1))
         expect(patch).toHaveBeenCalledWith("/maddox/campaigns/c1", { name: "Em andamento" })
+    })
+
+    it("editar a CD dos testes (mesmo em andamento) envia só showCheckDc; voltar ao valor original não chama a API", async () => {
+        // Servidor com estado: o PATCH grava e a recarga da campanha devolve o valor novo.
+        let current = detail({ rigor: "fiel-dnd", status: "active", rigorLocked: true, showCheckDc: false })
+        get.mockImplementation(async (url: string) => (url.endsWith("/invite") ? ok({ token: TOKEN, rotatedAt: null }) : ok(current)))
+        patch.mockImplementation(async (_url: string, body: Record<string, unknown>) => {
+            current = { ...current, ...body }
+            return ok(current)
+        })
+        renderWithQueryClient(<CampaignPage campaignId="c1" />)
+        let dialog = await openEdit()
+        const field = within(dialog).getByTestId("check-dc-field")
+        expect(field).toHaveTextContent("o Maddox define a CD em segredo")
+        fireEvent.click(within(field).getByRole("button", { name: "Visível" }))
+        fireEvent.click(within(dialog).getByRole("button", { name: "Salvar" }))
+        await waitFor(() => expect(patch).toHaveBeenCalledWith("/maddox/campaigns/c1", { showCheckDc: true }))
+        await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument())
+
+        patch.mockClear()
+        dialog = await openEdit()
+        await waitFor(() => expect(within(dialog).getByTestId("check-dc-field")).toHaveTextContent("Os jogadores veem a classe de dificuldade"))
+        const again = within(dialog).getByTestId("check-dc-field")
+        fireEvent.click(within(again).getByRole("button", { name: "Secreta" }))
+        fireEvent.click(within(again).getByRole("button", { name: "Visível" }))
+        fireEvent.click(within(dialog).getByRole("button", { name: "Salvar" }))
+        await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument())
+        expect(patch).not.toHaveBeenCalled()
     })
 
     it("editar sem alterações fecha sem chamar a API", async () => {
