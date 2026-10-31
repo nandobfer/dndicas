@@ -22,6 +22,10 @@ ENV PATH="$PNPM_HOME:$PATH"
 RUN corepack enable
 
 COPY --from=deps /app/node_modules ./node_modules
+# O corepack baixa o pnpm no primeiro uso. O estágio de dependências já fez esse download
+# (ele roda `pnpm install`), então o builder reaproveita o cache e não depende da rede:
+# no build da prévia o registro npm não resolve (getaddrinfo EAI_AGAIN) e `pnpm run build` falhava.
+COPY --from=deps /root/.cache/node/corepack /root/.cache/node/corepack
 COPY . .
 
 # ARGS necessárias para o Next.js "injetar" no bundle do cliente durante o 'next build'
