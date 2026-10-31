@@ -1,9 +1,10 @@
 /** @vitest-environment happy-dom */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
-import { fireEvent, screen, waitFor, within } from "@testing-library/react"
+import { act, fireEvent, screen, waitFor, within } from "@testing-library/react"
 import { renderWithQueryClient } from "../test-utils"
-import type { MaddoxGameMessageDto, MaddoxGameParticipantDto, MaddoxGameStateDto } from "@/features/maddox/game-types"
+import type { MaddoxGameMessageDto, MaddoxGameParticipantDto, MaddoxGameStateDto, MaddoxLiveGenerationDto } from "@/features/maddox/game-types"
 import { rarityColors } from "@/lib/config/colors"
+import type { MaddoxGameStreamState } from "@/features/maddox/hooks/useMaddoxGameStream"
 
 const get = vi.fn()
 const post = vi.fn()
@@ -27,6 +28,21 @@ vi.mock("sonner", () => ({ toast: { error: vi.fn(), success: vi.fn(), warning: v
 vi.mock("next/navigation", () => ({ useRouter: () => ({ push: vi.fn(), replace: vi.fn(), refresh: vi.fn() }), usePathname: () => "/campanhas/c1/mesa" }))
 vi.mock("@/core/hooks/useAuth", () => ({ useAuth: () => ({ userId: "u-owner", isSignedIn: true, isLoaded: true, can: () => true }) }))
 vi.mock("@/lib/pusher/client", () => ({ isPusherClientAvailable: () => pusherAvailable, acquireChannel, releaseChannel }))
+/** Stream da mesa controlado pelo teste (sem rede): `setStream` re-renderiza quem usa o hook. */
+let streamSnapshot: MaddoxGameStreamState = { live: [], settled: [], finished: 0, connected: true }
+const streamListeners = new Set<() => void>()
+const setStream = (patch: Partial<MaddoxGameStreamState>) => {
+    streamSnapshot = { ...streamSnapshot, ...patch }
+    streamListeners.forEach((listener) => listener())
+}
+vi.mock("@/features/maddox/hooks/useMaddoxGameStream", async () => {
+    const { useSyncExternalStore } = await import("react")
+    const subscribe = (listener: () => void) => {
+        streamListeners.add(listener)
+        return () => void streamListeners.delete(listener)
+    }
+    return { useMaddoxGameStream: () => useSyncExternalStore(subscribe, () => streamSnapshot) }
+})
 vi.mock("@/lib/api", async (importOriginal) => {
     const actual = await importOriginal<typeof import("@/lib/api")>()
     return { ...actual, api: { get, post, put: vi.fn(), patch: vi.fn(), delete: vi.fn() } }
@@ -59,6 +75,7 @@ const message = (id: string, over: Partial<MaddoxGameMessageDto>): MaddoxGameMes
     content: "",
     replyToId: null,
     skippedByName: null,
+    error: null,
     createdAt: "2026-10-31T10:00:00.000Z",
     ...over,
 })
@@ -70,7 +87,7 @@ const gameState = (over: Partial<MaddoxGameStateDto> = {}): MaddoxGameStateDto =
     status: "active",
     ownerId: "u-owner",
     maddoxAvatarUrl: null,
-    turn: { number: 1, phase: "players", startedAt: null, generating: false },
+    turn: { number: 1, phase: "players", startedAt: null, generating: false, failed: false },
     participants: [participant("m1", "u-owner", "Kael"), participant("m2", "u-ana", "Lyra"), participant("m3", "u-bia", "Borin")],
     me: { memberId: "m1", isOwner: true, ready: true, eligible: true, declared: false },
     messages: [
@@ -96,6 +113,7 @@ beforeEach(() => {
     pusherAvailable = true
     acquireChannel.mockClear()
     releaseChannel.mockClear()
+    streamSnapshot = { live: [], settled: [], finished: 0, connected: true }
 })
 
 async function renderGame(state: MaddoxGameStateDto) {
@@ -122,7 +140,7 @@ describe("mesa Maddox — conversa e turno", () => {
     })
 
     it("turno do mestre: o campo fica bloqueado e o Maddox aparece narrando", async () => {
-        await renderGame(gameState({ turn: { number: 2, phase: "master", startedAt: null, generating: true } }))
+        await renderGame(gameState({ turn: { number: 2, phase: "master", startedAt: null, generating: true, failed: false } }))
         expect(screen.getByTestId("turn-banner")).toHaveTextContent("Turno do mestre — o Maddox está narrando…")
         expect(screen.getByTestId("game-composer-hint")).toHaveTextContent("O Maddox está narrando. Aguarde o turno dos jogadores.")
         expect(screen.getByLabelText("O que o seu personagem faz")).toBeDisabled()
@@ -243,7 +261,7 @@ describe("mesa Maddox — participantes e presença", () => {
 
     it("quando alguém sai da mesa, pede ao servidor que reavalie o turno", async () => {
         await renderGame(gameState())
-        post.mockResolvedValue(ok(gameState({ turn: { number: 2, phase: "players", startedAt: null, generating: false } })))
+        post.mockResolvedValue(ok(gameState({ turn: { number: 2, phase: "players", startedAt: null, generating: false, failed: false } })))
         presenceIds = ["u-owner"]
         emit("pusher:member_removed")
         await waitFor(() => expect(post).toHaveBeenCalledWith("/maddox/campaigns/c1/game/check"), { timeout: 3000 })
@@ -268,6 +286,90 @@ describe("mesa Maddox — participantes e presença", () => {
         get.mockRejectedValue({ response: { status: 404 } })
         renderWithQueryClient(<GamePage campaignId="c1" />)
         expect(await screen.findByText("Campanha não encontrada")).toBeInTheDocument()
+    })
+})
+
+const liveItem = (over: Partial<MaddoxLiveGenerationDto> = {}): MaddoxLiveGenerationDto => ({ liveId: "l1", kind: "narration", turnNumber: 2, replyToId: null, text: "", tool: false, startedAt: "2026-10-31T10:00:00.000Z", ...over })
+
+describe("Maddox 4 — narração ao vivo, falhas e foco", () => {
+    const masterTurn = { number: 2, phase: "master" as const, startedAt: null, generating: true, failed: false }
+
+    it("narração chegando em streaming: texto parcial com citação em negrito, cursor, aviso de ferramenta e divisor do turno", async () => {
+        await renderGame(gameState({ turn: masterTurn }))
+        act(() => setStream({ live: [liveItem({ text: "A névoa cobre o {{Raça:Elf", tool: true })] }))
+        const bubble = await screen.findByTestId("maddox-live-narration")
+        expect(bubble).toHaveTextContent("A névoa cobre o")
+        expect(bubble).not.toHaveTextContent("{{")
+        expect(within(bubble).getByTestId("live-cursor")).toBeInTheDocument()
+        expect(within(bubble).getByTestId("live-tool")).toHaveTextContent("Consultando as anotações da campanha…")
+        expect(screen.queryByTestId("maddox-writing")).not.toBeInTheDocument()
+        expect(screen.getAllByTestId("turn-divider").map((item) => item.textContent)).toEqual(["Turno 1", "Turno 2"])
+        act(() => setStream({ live: [liveItem({ text: "A névoa cobre o {{Raça:Elfo}} e o cais." })] }))
+        expect(screen.getByTestId("maddox-live-narration")).toHaveTextContent("A névoa cobre o Elfo e o cais.")
+    })
+
+    it("geração que terminou fica na tela até a mensagem gravada chegar (sem piscar nem duplicar)", async () => {
+        const settled = { ...liveItem({ text: "Fim da cena." }), messageId: "n2" }
+        await renderGame(gameState({ turn: masterTurn }))
+        act(() => setStream({ settled: [settled], finished: 1 }))
+        expect(screen.getByTestId("maddox-live-narration")).toHaveTextContent("Fim da cena.")
+        get.mockResolvedValue(ok(gameState({ turn: { ...masterTurn, phase: "players", generating: false }, messages: [...gameState().messages, message("n2", { kind: "narration", phase: "master", turnNumber: 2, content: "Fim da cena." })] })))
+        emit("maddox.game.changed")
+        await waitFor(() => expect(screen.queryByTestId("maddox-live-narration")).not.toBeInTheDocument())
+        expect(screen.getAllByText("Fim da cena.")).toHaveLength(1)
+    })
+
+    it("resposta ao vivo aparece ligada à pergunta; resposta que falhou mostra o aviso", async () => {
+        await renderGame(gameState({ messages: [...gameState().messages, message("q2", { kind: "question", memberId: "m2", characterName: "Lyra", content: "E a ponte?" }), message("a2", { kind: "answer", replyToId: "q1", error: "O Maddox não conseguiu responder agora. Pergunte de novo." })] }))
+        expect(screen.getByTestId("maddox-answer-error")).toHaveTextContent("O Maddox não conseguiu responder agora. Pergunte de novo.")
+        act(() => setStream({ live: [liveItem({ kind: "answer", turnNumber: 1, replyToId: "q2", text: "A ponte caiu." })] }))
+        const answer = screen.getByTestId("maddox-live-answer")
+        expect(answer).toHaveTextContent("Respondendo a Lyra")
+        expect(answer).toHaveTextContent("A ponte caiu.")
+    })
+
+    it("falha do mestre: a faixa avisa a nova tentativa e não mostra o Maddox narrando", async () => {
+        await renderGame(gameState({ turn: { ...masterTurn, generating: false, failed: true } }))
+        expect(screen.getByTestId("turn-banner")).toHaveTextContent("o Maddox teve um problema; tentando de novo em instantes")
+        expect(screen.queryByTestId("maddox-writing")).not.toBeInTheDocument()
+    })
+
+    it("declaração recusada (ACTION_INVALID): mostra o motivo e devolve o rascunho", async () => {
+        await renderGame(gameState({ rigor: "fiel-dnd" }))
+        post.mockRejectedValueOnce({ isAxiosError: true, response: { status: 409, data: { success: false, error: "Kael não conhece magia.", code: "ACTION_INVALID" } } })
+        const field = screen.getByLabelText("O que o seu personagem faz")
+        fireEvent.change(field, { target: { value: "Lanço uma bola de fogo." } })
+        fireEvent.click(screen.getByRole("button", { name: /Declarar/ }))
+        expect(await screen.findByTestId("game-composer-invalid")).toHaveTextContent("Kael não conhece magia.")
+        expect(field).toHaveValue("Lanço uma bola de fogo.")
+    })
+
+    it("quando o Maddox termina de narrar, o foco volta ao campo de texto", async () => {
+        await renderGame(gameState({ turn: masterTurn }))
+        const field = screen.getByLabelText("O que o seu personagem faz")
+        expect(field).toBeDisabled()
+        expect(document.activeElement).not.toBe(field)
+        get.mockResolvedValue(ok(gameState({ turn: { ...masterTurn, phase: "players", generating: false } })))
+        act(() => setStream({ finished: 1 }))
+        emit("maddox.game.changed")
+        await waitFor(() => expect(field).not.toBeDisabled())
+        await waitFor(() => expect(document.activeElement).toBe(field))
+    })
+
+    it("resposta a uma pergunta termina: foca o campo, mas não rouba o foco de outro campo editável", async () => {
+        await renderGame(gameState())
+        const field = screen.getByLabelText("O que o seu personagem faz")
+        field.blur()
+        act(() => setStream({ finished: 1 }))
+        await waitFor(() => expect(document.activeElement).toBe(field))
+
+        const other = document.createElement("input")
+        document.body.appendChild(other)
+        other.focus()
+        act(() => setStream({ finished: 2 }))
+        await new Promise((resolve) => setTimeout(resolve, 20))
+        expect(document.activeElement).toBe(other)
+        other.remove()
     })
 })
 
@@ -299,8 +401,8 @@ describe("regras de exibição da mesa", () => {
 })
 
 describe("mesa Maddox — recarga depois de falha do mestre", () => {
-    const master = (generating: boolean) => ({ number: 2, phase: "master" as const, startedAt: null, generating })
-    const players = { number: 2, phase: "players" as const, startedAt: null, generating: false }
+    const master = (generating: boolean) => ({ number: 2, phase: "master" as const, startedAt: null, generating, failed: false })
+    const players = { number: 2, phase: "players" as const, startedAt: null, generating: false, failed: false }
 
     it("gameRefetchInterval: com tempo real só recarrega no turno do mestre sem geração; sem Pusher recarrega sempre", () => {
         expect(gameRefetchInterval({ status: "active", turn: master(false) }, true)).toBe(MADDOX_MASTER_RETRY_MS)

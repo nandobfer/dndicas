@@ -23,6 +23,7 @@ const service = {
     submitGameAction: vi.fn(async () => state),
     skipPlayer: vi.fn(async () => state),
     checkTurn: vi.fn(async () => state),
+    assertGameMember: vi.fn<(id: string, userId: string) => Promise<void>>(async () => undefined),
 }
 vi.doMock("@/features/maddox/server/game", () => service)
 
@@ -102,5 +103,35 @@ describe("rotas da mesa Maddox", () => {
         const response = await route.POST(post(`${base}/game/actions`, { kind: "pass" }), ctx({ id: "c1" }))
         expect(response.status).toBe(409)
         expect(await response.json()).toMatchObject({ success: false, code: "NEXT_TURN" })
+    })
+
+    it("stream da mesa: só membros; abre com o snapshot das gerações ao vivo", async () => {
+        type StreamRoute = typeof import("@/app/api/maddox/campaigns/[id]/game/stream/route")
+        who = "anonymous"
+        let route = await importFresh<StreamRoute>("@/app/api/maddox/campaigns/[id]/game/stream/route")
+        expect((await route.GET(makeRequest(`${base}/game/stream`), ctx({ id: "c1" }))).status).toBe(401)
+
+        who = "player"
+        route = await importFresh<StreamRoute>("@/app/api/maddox/campaigns/[id]/game/stream/route")
+        const { DomainError } = await import("@/lib/api/route")
+        service.assertGameMember.mockRejectedValueOnce(new DomainError(404, "Campanha não encontrada", "NOT_FOUND"))
+        expect((await route.GET(makeRequest(`${base}/game/stream`), ctx({ id: "c1" }))).status).toBe(404)
+
+        const { beginLive } = await import("@/features/maddox/server/game-live")
+        const live = beginLive("c1", { kind: "narration", turnNumber: 3, replyToId: null })
+        live.delta("A névoa")
+        const controller = new AbortController()
+        const res = await route.GET(makeRequest(`${base}/game/stream`, { signal: controller.signal }), ctx({ id: "c1" }))
+        expect(res.status).toBe(200)
+        expect(res.headers.get("content-type")).toContain("application/x-ndjson")
+        expect(service.assertGameMember).toHaveBeenLastCalledWith("c1", "user-1")
+        const reader = res.body!.getReader()
+        const first = JSON.parse(new TextDecoder().decode((await reader.read()).value).split("\n")[0]!)
+        expect(first).toMatchObject({ type: "snapshot", live: [{ kind: "narration", turnNumber: 3, text: "A névoa" }] })
+        live.delta(" sobe.")
+        const next = JSON.parse(new TextDecoder().decode((await reader.read()).value).split("\n")[0]!)
+        expect(next).toMatchObject({ type: "delta", text: " sobe." })
+        live.end({ messageId: "m1", error: null })
+        controller.abort()
     })
 })

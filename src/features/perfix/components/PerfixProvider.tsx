@@ -6,8 +6,6 @@ import { PermissionsProvider, ViewAsProvider, useViewAs, getViewAsHeaderValue } 
 import api from "@/core/utils/api"
 import { resetPusherClient } from "@/lib/pusher/client"
 import { AUTH_SESSION_CHANGED_EVENT } from "@/features/auth/auth-session-events"
-import { ViewAsSelector } from "./view-as/ViewAsSelector"
-import { ViewAsBanner } from "./view-as/ViewAsBanner"
 import type { AccessDto } from "../types"
 import { toast } from "sonner"
 import { installViewAsTransport } from "../transport"
@@ -70,8 +68,7 @@ function SessionBoundary({ children }: { children: ReactNode }) {
         return () => { window.clearTimeout(timer); setShowLoading(false) }
     }, [isLoaded, mounted])
     return <SessionContext.Provider value={{ session, isLoaded }}><PermissionsProvider permissions={session?.access.permissions ?? []} roles={session?.access.roles ?? []} realIsAdmin={session?.access.realIsAdministrator ?? false}>
-        {session?.access.realIsAdministrator && <div className="flex justify-end px-4 py-2"><ViewAsSelector /></div>}
-        <ViewAsBanner />
+        {/* O seletor "Visualizar como" e a faixa da simulação ficam no layout do app (header e abaixo dele), fora do fluxo do topo. */}
         <div key={identityState.generation}>{children}</div>
         {showLoading && !isLoaded && <div className="fixed inset-0 z-[100]"><AccessLoadingScreen /></div>}
     </PermissionsProvider></SessionContext.Provider>

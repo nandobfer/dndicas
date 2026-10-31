@@ -14,11 +14,12 @@ import { HeaderUserMenu } from "./header-user-menu"
 export const GLASS_HEADER_HEIGHT = 64
 
 /**
- * Header translúcido fixo do app (desktop e mobile), no lugar do antigo sidebar.
+ * Header translúcido fixo do app (desktop e mobile), no lugar do antigo sidebar. `actions` entra à direita, antes do
+ * usuário (ex.: "Visualizar como" do administrador).
  * Desktop (a partir de `lg`): logo, "Início" + categorias ao centro e o usuário à direita.
  * Mobile: logo, avatar e o hambúrguer com o painel de categorias.
  */
-export function GlassHeader() {
+export function GlassHeader({ actions }: { actions?: React.ReactNode } = {}) {
     const pathname = usePathname() ?? HOME_HREF
     const { isSignedIn, can } = useAuth()
     const categories = getVisibleNavigation({ isSignedIn, can })
@@ -39,6 +40,7 @@ export function GlassHeader() {
                 </div>
 
                 <div className="ml-auto flex flex-shrink-0 items-center gap-1">
+                    {actions}
                     <HeaderUserMenu />
                     <div className="lg:hidden" data-testid="header-mobile-nav">
                         <HeaderMobileMenu categories={categories} active={active} pathname={pathname} />

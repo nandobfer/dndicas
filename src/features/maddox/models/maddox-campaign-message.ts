@@ -24,6 +24,8 @@ export interface IMaddoxCampaignMessage {
     skippedBy: string | null
     /** Declaração ou "não fazer nada": conta para fechar o turno (única por membro e turno). */
     turnAction: boolean
+    /** Resposta do mestre que falhou (Maddox 4): o texto de aviso vai em `error`, `content` fica vazio. */
+    error: string | null
     createdAt: Date
     updatedAt: Date
 }
@@ -42,6 +44,7 @@ const MaddoxCampaignMessageSchema = new Schema<IMaddoxCampaignMessage>(
         replyToId: { type: Schema.Types.ObjectId, default: null },
         skippedBy: { type: String, default: null },
         turnAction: { type: Boolean, default: false },
+        error: { type: String, default: null },
     },
     { collection: "maddox_campaign_messages", timestamps: true, versionKey: false },
 )

@@ -6,6 +6,8 @@ export interface IMaddoxNpc {
     _id: Types.ObjectId
     campaignId: Types.ObjectId
     name: string
+    /** Nome normalizado (sem acento e sem caixa) para a gravação pelo nome (Maddox 4). */
+    nameKey: string
     portraitUrl: string | null
     publicDescription: string
     masterNotes: string
@@ -19,6 +21,7 @@ const MaddoxNpcSchema = new Schema<IMaddoxNpc>(
     {
         campaignId: { type: Schema.Types.ObjectId, ref: "MaddoxCampaign", required: true },
         name: { type: String, required: true, trim: true },
+        nameKey: { type: String, default: "" },
         portraitUrl: { type: String, default: null },
         publicDescription: { type: String, default: "" },
         masterNotes: { type: String, default: "" },
@@ -29,5 +32,6 @@ const MaddoxNpcSchema = new Schema<IMaddoxNpc>(
 )
 
 MaddoxNpcSchema.index({ campaignId: 1, name: 1 })
+MaddoxNpcSchema.index({ campaignId: 1, nameKey: 1 })
 
 export const MaddoxNpcModel: Model<IMaddoxNpc> = (mongoose.models.MaddoxNpc as Model<IMaddoxNpc>) || mongoose.model<IMaddoxNpc>("MaddoxNpc", MaddoxNpcSchema)

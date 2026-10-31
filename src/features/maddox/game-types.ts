@@ -14,6 +14,8 @@ export interface MaddoxGameMessageDto {
     replyToId: string | null
     /** Nome do dono que pulou o jogador ("não fez nada" registrado por ele). */
     skippedByName: string | null
+    /** Resposta do mestre que falhou (Maddox 4): aviso em pt-BR; `content` vem vazio. */
+    error: string | null
     createdAt: string
 }
 
@@ -39,7 +41,8 @@ export interface MaddoxGameStateDto {
     status: MaddoxCampaignStatus
     ownerId: string
     maddoxAvatarUrl: string | null
-    turn: { number: number; phase: MaddoxTurnPhase; startedAt: string | null; generating: boolean }
+    /** `failed`: a última geração do mestre falhou e a nova tentativa acontece em instantes (Maddox 4). */
+    turn: { number: number; phase: MaddoxTurnPhase; startedAt: string | null; generating: boolean; failed: boolean }
     participants: MaddoxGameParticipantDto[]
     me: { memberId: string | null; isOwner: boolean; ready: boolean; eligible: boolean; declared: boolean }
     /** Mensagens mais recentes, em ordem cronológica. */
@@ -52,3 +55,28 @@ export interface MaddoxGameMessagesPageDto {
     messages: MaddoxGameMessageDto[]
     hasMore: boolean
 }
+
+// ── Streaming da mesa (Maddox 4) ──────────────────────────────────────────────
+
+/** Geração do Maddox em andamento (narração do turno ou resposta a uma pergunta), igual para todos. */
+export interface MaddoxLiveGenerationDto {
+    liveId: string
+    kind: "narration" | "answer"
+    turnNumber: number
+    /** Resposta: a pergunta respondida. */
+    replyToId: string | null
+    /** Texto já transmitido (citações do catálogo em negrito até a gravação). */
+    text: string
+    /** O Maddox está usando uma ferramenta (consultando ou gravando as anotações da campanha). */
+    tool: boolean
+    startedAt: string
+}
+
+/** Linhas do stream NDJSON da mesa (`GET …/game/stream`). Reconectar recomeça pelo `snapshot`. */
+export type MaddoxGameStreamLine =
+    | { type: "snapshot"; live: MaddoxLiveGenerationDto[] }
+    | { type: "live-start"; live: MaddoxLiveGenerationDto }
+    | { type: "delta"; liveId: string; text: string }
+    | { type: "tool"; liveId: string; running: boolean }
+    | { type: "live-end"; liveId: string; messageId: string | null; error: string | null }
+    | { type: "ping" }

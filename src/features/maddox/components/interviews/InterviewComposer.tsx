@@ -1,17 +1,21 @@
 "use client"
 
-import { useLayoutEffect, useRef, useState, type FormEvent, type KeyboardEvent } from "react"
+import { useEffect, useLayoutEffect, useRef, useState, type FormEvent, type KeyboardEvent } from "react"
 import { ArrowUp, Loader2 } from "lucide-react"
 import { Button } from "@/components/ui/opex/button"
 import { Textarea } from "@/components/ui/opex/textarea"
 import { cn } from "@/lib/utils"
 import { MADDOX_INTERVIEW_MESSAGE_MAX } from "../../constants"
+import { focusComposer } from "../composer-focus"
 
 /** Altura máxima (px) do campo antes de rolar, como no chat do Agente Opex. */
 const MAX_HEIGHT = 180
 
-/** Campo de resposta no padrão do chat do Opex: Enter envia, Shift+Enter quebra a linha, cresce até 180px. */
-export function InterviewComposer({ disabled, busy, placeholder, onSend }: { disabled: boolean; busy: boolean; placeholder: string; onSend: (content: string) => Promise<boolean | undefined> }) {
+/**
+ * Campo de resposta no padrão do chat do Opex: Enter envia, Shift+Enter quebra a linha, cresce até 180px. Quando o
+ * Maddox termina de responder (`focusKey` muda ou o campo é liberado), o foco volta ao campo.
+ */
+export function InterviewComposer({ disabled, busy, placeholder, onSend, focusKey = "" }: { disabled: boolean; busy: boolean; placeholder: string; onSend: (content: string) => Promise<boolean | undefined>; focusKey?: string }) {
     const [value, setValue] = useState("")
     const textareaRef = useRef<HTMLTextAreaElement>(null)
     const content = value.trim()
@@ -23,6 +27,10 @@ export function InterviewComposer({ disabled, busy, placeholder, onSend }: { dis
         element.style.height = "auto"
         element.style.height = `${Math.min(element.scrollHeight, MAX_HEIGHT)}px`
     }, [value])
+
+    useEffect(() => {
+        if (!disabled) focusComposer(textareaRef.current)
+    }, [focusKey, disabled])
 
     const submit = async (event?: FormEvent) => {
         event?.preventDefault()

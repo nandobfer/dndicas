@@ -2,10 +2,11 @@
 
 import { Fragment, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react"
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion"
-import { ArrowDown, HelpCircle, Loader2, MinusCircle } from "lucide-react"
+import { AlertCircle, ArrowDown, BookOpen, HelpCircle, Loader2, MinusCircle } from "lucide-react"
 import { Button } from "@/components/ui/opex/button"
 import { Markdown } from "@/components/ui/opex/markdown"
-import type { MaddoxGameMessageDto } from "../../game-types"
+import type { MaddoxGameMessageDto, MaddoxLiveGenerationDto } from "../../game-types"
+import { liveMarkupToBold } from "../../catalog-markup"
 import { MemberAvatar } from "../campaigns/campaign-visuals"
 
 const NEAR_BOTTOM_PX = 80
@@ -18,6 +19,8 @@ interface Props {
     color: string
     /** O Maddox está narrando agora (turno do mestre). */
     narrating: boolean
+    /** Gerações do Maddox ao vivo (e as que acabaram, até a mensagem gravada chegar). */
+    live?: MaddoxLiveGenerationDto[]
     hasMore: boolean
     loadingMore: boolean
     onLoadMore: () => void
@@ -28,7 +31,7 @@ interface Props {
  * à esquerda com o avatar dele; declarações e perguntas com o retrato do personagem (as minhas à direita);
  * "não fez nada" como linha discreta; divisor a cada turno.
  */
-export function GameMessageList({ messages, myMemberId, maddoxAvatarUrl, color, narrating, hasMore, loadingMore, onLoadMore }: Props) {
+export function GameMessageList({ messages, myMemberId, maddoxAvatarUrl, color, narrating, live = [], hasMore, loadingMore, onLoadMore }: Props) {
     const scrollRef = useRef<HTMLDivElement>(null)
     const stickRef = useRef(true)
     const [showJump, setShowJump] = useState(false)
@@ -47,7 +50,9 @@ export function GameMessageList({ messages, myMemberId, maddoxAvatarUrl, color, 
         setShowJump(!near)
     }
 
-    const signature = `${messages.length}:${messages.at(-1)?.id ?? ""}:${narrating ? 1 : 0}`
+    const liveNarration = live.some((item) => item.kind === "narration")
+    const lastTurn = messages.at(-1)?.turnNumber ?? null
+    const signature = `${messages.length}:${messages.at(-1)?.id ?? ""}:${narrating ? 1 : 0}:${live.map((item) => `${item.liveId}:${item.text.length}:${item.tool ? 1 : 0}`).join(",")}`
     useLayoutEffect(() => {
         if (stickRef.current) scrollToEnd()
     }, [signature, scrollToEnd])
@@ -75,7 +80,13 @@ export function GameMessageList({ messages, myMemberId, maddoxAvatarUrl, color, 
                         </Fragment>
                     )
                 })}
-                {narrating && (
+                {live.map((item) => (
+                    <Fragment key={item.liveId}>
+                        {item.kind === "narration" && item.turnNumber !== lastTurn && <TurnDivider number={item.turnNumber} color={color} />}
+                        <LiveGeneration item={item} replyTo={item.replyToId ? (byId.get(item.replyToId) ?? null) : null} maddoxAvatarUrl={maddoxAvatarUrl} color={color} />
+                    </Fragment>
+                ))}
+                {narrating && !liveNarration && (
                     <MaddoxBubble avatarUrl={maddoxAvatarUrl} color={color}>
                         <WritingIndicator color={color} />
                     </MaddoxBubble>
@@ -116,17 +127,51 @@ function TurnDivider({ number, color }: { number: number; color: string }) {
     )
 }
 
+/** Fala do Maddox chegando em streaming: texto parcial (citações em negrito até gravar), cursor e o uso de ferramentas. */
+function LiveGeneration({ item, replyTo, maddoxAvatarUrl, color }: { item: MaddoxLiveGenerationDto; replyTo: MaddoxGameMessageDto | null; maddoxAvatarUrl: string | null; color: string }) {
+    const text = liveMarkupToBold(item.text)
+    return (
+        <MaddoxBubble avatarUrl={maddoxAvatarUrl} color={color} testId={item.kind === "answer" ? "maddox-live-answer" : "maddox-live-narration"}>
+            {item.kind === "answer" && <ReplyTo replyTo={replyTo} color={color} />}
+            {text.trim() ? (
+                <div aria-busy="true">
+                    <Markdown lineAction={null}>{text}</Markdown>
+                    <span className="ml-0.5 inline-block h-3.5 w-1.5 animate-pulse align-middle" style={{ backgroundColor: color }} aria-hidden data-testid="live-cursor" />
+                </div>
+            ) : (
+                !item.tool && <WritingIndicator color={color} label={item.kind === "answer" ? "O Maddox está respondendo…" : "O Maddox está narrando…"} />
+            )}
+            {item.tool && (
+                <p className="flex items-center gap-1.5 text-xs text-muted-foreground" role="status" data-testid="live-tool">
+                    <BookOpen className="h-3.5 w-3.5 animate-pulse" style={{ color }} aria-hidden /> Consultando as anotações da campanha…
+                </p>
+            )}
+        </MaddoxBubble>
+    )
+}
+
+function ReplyTo({ replyTo, color }: { replyTo: MaddoxGameMessageDto | null; color: string }) {
+    if (!replyTo) return null
+    return (
+        <p className="border-l-2 pl-2 text-xs text-white/60" style={{ borderColor: `${color}80` }}>
+            Respondendo a <span className="font-medium text-white/80">{replyTo.characterName ?? "Personagem"}</span>
+        </p>
+    )
+}
+
 function GameMessage({ message, mine, replyTo, maddoxAvatarUrl, color }: { message: MaddoxGameMessageDto; mine: boolean; replyTo: MaddoxGameMessageDto | null; maddoxAvatarUrl: string | null; color: string }) {
     const name = message.characterName ?? "Personagem"
     if (message.kind === "narration" || message.kind === "answer") {
         return (
             <MaddoxBubble avatarUrl={maddoxAvatarUrl} color={color} testId={message.kind === "answer" ? "maddox-answer" : "maddox-narration"}>
-                {message.kind === "answer" && replyTo && (
-                    <p className="border-l-2 pl-2 text-xs text-white/60" style={{ borderColor: `${color}80` }}>
-                        Respondendo a <span className="font-medium text-white/80">{replyTo.characterName ?? "Personagem"}</span>
+                {message.kind === "answer" && <ReplyTo replyTo={replyTo} color={color} />}
+                {message.error ? (
+                    <p className="flex items-center gap-1.5 text-sm text-white/60" role="alert" data-testid="maddox-answer-error">
+                        <AlertCircle className="h-4 w-4 shrink-0 text-amber-400" aria-hidden /> {message.error}
                     </p>
+                ) : (
+                    <Markdown lineAction={null}>{message.content}</Markdown>
                 )}
-                <Markdown lineAction={null}>{message.content}</Markdown>
             </MaddoxBubble>
         )
     }
@@ -173,7 +218,7 @@ function MaddoxBubble({ avatarUrl, color, testId, children }: { avatarUrl: strin
     )
 }
 
-function WritingIndicator({ color }: { color: string }) {
+function WritingIndicator({ color, label = "O Maddox está narrando…" }: { color: string; label?: string }) {
     const reduceMotion = useReducedMotion() ?? false
     return (
         <div className="flex items-center gap-2 text-xs text-muted-foreground" role="status">
@@ -188,7 +233,7 @@ function WritingIndicator({ color }: { color: string }) {
                     />
                 ))}
             </span>
-            O Maddox está narrando…
+            {label}
         </div>
     )
 }

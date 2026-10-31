@@ -5,7 +5,7 @@ documentação cobre a **entrega 0 (DND-8, #200)** — modelos no MongoDB e a co
 **entrega 1 (DND-18, #209)** — lista, criação com rigor, lobby e convite por link (seção "Campanhas").
 A **entrega 2 (DND-12, #206)** — entrevistas de cenário e de personagem — está na seção "Entrevistas
 (Maddox 2)". A **entrega 3 (DND-11, #202)** — motor de turnos e tempo real — está em "Mesa e turnos (Maddox 3)".
-**Ainda não há IA de narração** (Maddox 4): o mestre da mesa responde com texto simulado.
+A **entrega 4 (DND-9, #201)** — o Maddox narrador com ferramentas e streaming — está em "Narrador (Maddox 4)".
 
 Código: `src/features/maddox/` (`constants`, `schemas`, `types`, `script-draft`, `models/`, `server/`,
 `hooks/`, `components/settings/`).
@@ -20,7 +20,7 @@ roteiros e as memórias salvam à parte.
 | --- | --- |
 | Geral | Ativo; **Avatar** (upload/substituição pelo `GlassImageUploader` ou "Gerar com o Gerador de imagens" a partir da persona — 1:1, do peito para cima; só vale depois de salvar); modelo do **Maddox (narrador)** e do **Entrevistador** ("Mesmo do Maddox" = sem provedor próprio); instruções de cada um com "Restaurar padrão" |
 | Entrevista: cenário / Entrevista: personagem | Roteiros versionados (abaixo), cada um com "Salvar nova versão do roteiro" e "Desfazer roteiro" |
-| JEV | Uma chave por decisão (`MADDOX_JEV_DECISIONS`): pergunta ou ação do jogador, validade de ação livre, pedir teste, início/fim de combate, conhecimento do mestre, fim da entrevista, gerar imagem na cena. Em uso: **"Fim da entrevista"** (Maddox 2); as demais ainda sem uso |
+| JEV | Uma chave por decisão (`MADDOX_JEV_DECISIONS`): pergunta ou ação do jogador, validade de ação livre, pedir teste, início/fim de combate, conhecimento do mestre, fim da entrevista, gerar imagem na cena. Em uso: **"Fim da entrevista"** (Maddox 2) e **"Validade de ação livre"** (Maddox 4, só Rigoroso e Fiel ao D&D); as demais ainda sem uso |
 | OpenCode | Política das sessões e lista das sessões ativas com "Excluir" (confirmação) |
 | Memórias | Lista `maddox` de `agent_memories` (mesmo card dos demais agentes, sem limite de quantidade; API `/api/ai/agents/maddox/memories/**`) |
 
@@ -34,8 +34,10 @@ só onde o provedor aceita), confere modelo/variante/agente no catálogo (`asser
 explica o motivo em pt-BR.
 
 **Provedores:** todos os de texto, **inclusive o OpenCode** (com seleção de agente). O OpenCode não aceita
-as ferramentas do app: a narração com ferramentas (Maddox 4) precisará de outro mecanismo nesse caso
-(ex.: MCP do DnDicas exposto ao agente do OpenCode).
+as ferramentas do app pela AI SDK: no narrador (Maddox 4) elas chegam ao agente pelo **MCP do Maddox**
+(`/api/maddox/mcp`, seção "Narrador (Maddox 4)"). A seção OpenCode ganhou a **URL do MCP do Maddox** (`opencode.mcpUrl`,
+vazia = `NEXT_PUBLIC_APP_URL`/`AUTH_URL` + `/api/maddox/mcp`) e o card **"MCP do Maddox"** (situação no OpenCode,
+"Registrar no OpenCode" e o trecho do `opencode.json` para configurar à mão).
 
 ## Roteiros das entrevistas
 
@@ -100,6 +102,8 @@ As memórias **de campanha** são diferentes das memórias **do agente** (lista 
 - `POST /api/ai/features/maddox/avatar` — `{ persona }` → `{ url }` (Gerador de imagens; indisponível = 409).
 - `GET /api/ai/features/maddox/opencode-sessions`, `DELETE …/opencode-sessions/[id]` → `{ deleted }`
   (`false` = ficou pendente para a rotina).
+- `GET /api/ai/features/maddox/opencode-mcp` — situação do MCP do Maddox no OpenCode; `POST` adiciona e conecta se faltar
+  (Maddox 4).
 
 ## Campanhas (Maddox 1)
 
@@ -273,7 +277,7 @@ de convite fica numa linha e "Copiar link"/"Gerar novo link" abaixo.
 ## Mesa e turnos (Maddox 3)
 
 Código: `server/game.ts` (motor), `server/game-presence.ts` (presença), `server/game-master.ts` (interface do
-mestre) e `server/game-mock.ts` (mestre simulado), `game-schemas.ts`, `game-types.ts`, `game-view.ts` (regras puras da
+mestre; desde o Maddox 4 o narrador com IA de `server/narrator.ts`), `game-schemas.ts`, `game-types.ts`, `game-view.ts` (regras puras da
 tela), `hooks/useMaddoxGame.ts`, `components/game/`, coleção `maddox_campaign_messages`.
 
 **Iniciar.** O dono clica **"Iniciar campanha"** no lobby (com confirmação). Exige o cenário `done` (409
@@ -287,24 +291,22 @@ em andamento, o lobby mostra "Em andamento · Turno N · fase" e **"Entrar na me
 | Regra | Comportamento |
 | --- | --- |
 | Numeração | `number` sobe a cada turno do mestre (1 = abertura); o turno dos jogadores seguinte tem o mesmo número |
-| Turno do mestre | Pega a trava `generating { token }`, narra (mock) as declarações do turno anterior, grava a narração e abre o turno dos jogadores. Trava com mais de 2 min (`MADDOX_MASTER_LOCK_STALE_MS`) é retomada no `GET …/game` ou no `check`. Falha do mestre libera a trava, grava `turn.failedAt` e **não avisa a mesa**; a nova tentativa só acontece depois de 30 s (`MADDOX_MASTER_RETRY_MS`), no `GET`/`check` (a tela recarrega nesse intervalo enquanto o mestre está sem geração), sem laço de retomadas. A narração já gravada do turno é reaproveitada (sem duplicar) |
+| Turno do mestre | Pega a trava `generating { token }`, narra (narrador com IA, em segundo plano) as declarações do turno anterior, grava a narração e abre o turno dos jogadores. Trava com mais de 2 min (`MADDOX_MASTER_LOCK_STALE_MS`) é retomada no `GET …/game` ou no `check`. Falha do mestre libera a trava, grava `turn.failedAt` e **não avisa a mesa**; a nova tentativa só acontece depois de 30 s (`MADDOX_MASTER_RETRY_MS`), no `GET`/`check` (a tela recarrega nesse intervalo enquanto o mestre está sem geração), sem laço de retomadas. A narração já gravada do turno é reaproveitada (sem duplicar) |
 | Elegíveis | Fixados ao abrir o turno dos jogadores: membros `joined` com a entrevista concluída. **Quem entra ou conclui a entrevista no meio do turno joga a partir do próximo** (409 `NEXT_TURN`). Se a lista ficar vazia (todos saíram), quem estiver pronto entra no turno atual |
 | Presentes | Jogadores com a **mesa aberta** (canal de presença do Pusher). O turno fecha quando **todos os elegíveis presentes** declararam ou passaram **e** há ao menos uma declaração no turno (mesa toda offline não avança sozinha). Elegível offline não trava; se voltar, passa a contar |
 | Presença desconhecida | Pusher sem configuração ou falha na consulta = **todos os elegíveis** contam (nunca fecha antes da hora), com log. A tela avisa "Sem tempo real…" e recarrega a cada 5 s |
 | Declarar / "Não fazer nada" | Uma por membro e turno (índice único parcial `{ campaignId, turnNumber, memberId }` com `turnAction: true`; repetir = 409 `ALREADY_DECLARED`). Grava a mensagem e conta em `declaredMemberIds` por update condicional; se o turno fechou no meio, apaga a mensagem e responde 409 `TURN_CLOSED`. A declaração é final |
-| Pergunta ao mestre | Escolha explícita ("Perguntar ao mestre"). Só no turno dos jogadores e para elegíveis, mesmo depois de declarar; o mestre responde (mock) na hora, ligado à pergunta (`replyToId`), **sem mudar o turno** |
+| Pergunta ao mestre | Escolha explícita ("Perguntar ao mestre"). Só no turno dos jogadores e para elegíveis, mesmo depois de declarar; o mestre responde em segundo plano (streaming para todos), ligado à pergunta (`replyToId`), **sem mudar o turno** |
 | Turno do mestre em curso | Ações = 409 `MASTER_TURN` |
 | Fechamento | Update condicional (`number`, `phase: players`): só uma chamada vence e roda o mestre — declarações simultâneas e vários `check` geram uma única narração |
 | Pular jogador | Só o dono (403), que também precisa estar pronto para jogar; registra "não fez nada" no lugar de um elegível que ainda não declarou (`skippedBy`), só no turno atual, com confirmação e auditoria |
 | Saída/remoção | `removeMember` grava, audita e avisa a saída e só depois chama `onMemberLeftGame` (o membro sai dos elegíveis e o turno é reavaliado); falha nessa reavaliação é logada e não desfaz a saída |
 | Campanha fora de `active` | Ações = 409 `CAMPAIGN_NOT_ACTIVE` |
 
-Ainda fora do escopo: pausar/encerrar a campanha, editar uma declaração enviada, IA e streaming da narração (Maddox 4).
+Ainda fora do escopo: pausar/encerrar a campanha, editar uma declaração enviada.
 
-**Mestre simulado.** `getMaddoxMaster()` devolve `mockMaddoxMaster` (interface `MaddoxMaster { narrate, answer }`). A
-abertura usa a situação inicial do cenário; os turnos seguintes resumem cada personagem ("**Lyra** — “…”", "preferiu
-esperar") e terminam com "O que vocês fazem?". Todo texto leva o aviso de narração/resposta simulada. O Maddox 4 troca a
-implementação.
+**Mestre.** `getMaddoxMaster()` devolve o narrador com IA (`aiMaddoxMaster`, interface `MaddoxMaster { narrate, answer }`
+com um `sink` para o texto ao vivo). O mestre simulado do Maddox 3 foi removido.
 
 **Presença.** Canal **`presence-maddox-c-{campaignId}`** (`maddoxCampaignPresenceChannel`), assinado só pela tela da mesa.
 `/api/pusher/auth` exige `maddox.play` e confere no banco que o usuário é **membro `joined`** (`isActiveCampaignMember`);
@@ -334,6 +336,84 @@ API (todas com `maddox.play`, usuário efetivo; quem não participa = 404):
 - `POST …/game/actions` — `{ kind: "declaration" | "question", content (1..4.000) }` ou `{ kind: "pass" }`.
 - `POST …/game/skip` — `{ memberId }` (dono).
 - `POST …/game/check` — reavalia o turno.
+- `GET …/game/stream` — NDJSON das gerações do Maddox ao vivo (Maddox 4).
+
+## Narrador (Maddox 4)
+
+Código: `server/narrator.ts` (geração), `server/narrator-prompt.ts` (módulo puro: regras, estado, tarefa, transcrição),
+`server/master-tools.ts` (ferramentas), `server/game-live.ts` (barramento e fila), `server/game-stream.ts` (NDJSON),
+`server/action-validation.ts`, `server/maddox-mcp.ts` + `server/master-turn-token.ts` + `server/opencode-mcp.ts` (OpenCode),
+`hooks/useMaddoxGameStream.ts`, `components/composer-focus.ts`.
+
+**Tom e regras.** As instruções são as da aba ("Maddox (narrador)") + memórias do agente (lista `maddox`) + as regras fixas do
+narrador (`MADDOX_NARRATOR_RULES`, adaptadas do `~/code/roleplay/agente-exemplo.md` para vários jogadores: cada jogador decide
+as ações, falas e escolhas do próprio personagem; o Maddox cuida do mundo, dos NPCs, dos resultados e do involuntário; prosa
+sensorial em segunda pessoa; cada narração desenvolve a situação e termina num ponto de decisão) + **modo narrativo puro**
+(sem dados, números, atributos ou pontos de vida — vale para todos os rigores nesta entrega; testes e mecânica vêm no Maddox 5)
++ rigor + formato (Markdown, negrito, citações `{{Tipo:Nome}}` do catálogo) + rotina de persistência + a campanha: cenário,
+situação inicial, personagens (perfil da entrevista e **condição atual**), **estado atual** (checkpoint) e um índice de NPCs e
+anotações (missões ativas sempre; o que é segredo do mestre marcado `[SÓ O MESTRE]` — os jogadores nunca recebem o prompt).
+A mensagem do turno leva a transcrição recente (até 40.000 caracteres, `MADDOX_NARRATOR_HISTORY_CHARS`) e a tarefa: abertura,
+narração das declarações do turno que fechou, ou resposta a uma pergunta **sem avançar a cena**.
+
+**Ferramentas** (a campanha vem sempre do contexto da geração, nunca do modelo; erro volta ao modelo em pt-BR; cada gravação gera
+log estruturado). **Tamanho:** o prompt orienta anotações consolidadas de até ~3.000 caracteres (`MADDOX_TOOL_TEXT_GUIDE`); o
+corte só acontece no **teto de proteção** `MADDOX_TOOL_TEXT_MAX` = 20.000 (nomes e títulos: 120), nunca invalida a chamada e o
+retorno avisa o modelo (`truncated` com os campos cortados) para ele consolidar e gravar de novo.
+
+| Ferramenta | Grava em |
+| --- | --- |
+| `get_campaign_state` / `update_campaign_state` | `campaign.state` (`scene`, `location`, `situation`, `pendingDecision`, `updatedTurn`) |
+| `list_npcs`, `get_npc`, `save_npc` | `maddox_npcs` pelo nome sem acento e sem caixa (`nameKey`, sem duplicar): descrição pública, `masterNotes`, visibilidade, situação. A grafia gravada é mantida ao atualizar; renomear só com `newName` (nome já usado por outro NPC = erro) |
+| `search_memories`, `save_memory` | `maddox_campaign_memories` por tipo + título (`titleKey`): `local` (locais), `missao` (missões, com `status` ativa/concluída/falhou/abandonada — nasce `ativa`), `evento` (marcos), `relacao`, `fato`, `outro`; `origin: agent`, `createdBy: maddox`, `turnNumber` |
+| `update_character_state` | `character.currentState` (o perfil da entrevista não muda) |
+
+**Provedores.** Gemini, Anthropic, OpenAI e DeepSeek: `streamText` com as ferramentas (até 12 passos,
+`MADDOX_NARRATOR_MAX_STEPS`). **OpenCode:** sessão `narrator` da campanha (`ensureMaddoxSession`), sem ferramentas na chamada;
+antes de narrar, `ensureMaddoxMcp` confere no OpenCode (`mcp.list`, no diretório das sessões) o MCP **`dndicas-maddox`** e, se
+faltar, adiciona (`mcp.add`, remoto, sem OAuth) e conecta; sem conexão = 409 `MADDOX_UNAVAILABLE` (o turno fica com falha e é
+tentado de novo). Um resultado positivo fica em cache por 1 min. **Troca de URL:** a URL registrada vem dos documentos de
+configuração do OpenCode (`config.get`) ou do registro feito por este processo; se for outra que a configurada, o card mostra
+"URL desatualizada" (com a registrada) e narrar ou "Registrar no OpenCode" troca o registro (`mcp.remove` + `mcp.add`). Quando o
+OpenCode não informa a URL registrada, o card avisa e o botão refaz o registro com a URL atual. Use no OpenCode um agente **sem ferramentas de arquivos ou
+terminal**.
+
+**MCP do Maddox** (`/api/maddox/mcp`, Streamable HTTP sem sessão, separado do `/api/mcp` público): as mesmas ferramentas com o
+campo obrigatório **`turno`**, o **token de turno** posto nas instruções da geração — `payload.assinatura` (HMAC-SHA256 com o
+`AUTH_SECRET`), com campanha, job, turno e validade de 20 min. A rota recusa token inválido, adulterado ou expirado e também o
+de uma geração que **já terminou** (o job precisa estar rodando no barramento). Sem login: o token é a autorização.
+
+**Fila e streaming.** O barramento (`globalThis.__maddoxGameHub`, possível pela instância única) mantém por campanha uma **fila em
+série** — uma geração do Maddox por vez (narrações e respostas), o que evita duas gerações na mesma sessão do OpenCode e corridas
+no estado —, as gerações ao vivo e os ouvintes. Fechar o turno, iniciar a campanha ou perguntar **responde logo**; a geração roda
+em segundo plano e não depende da conexão de ninguém. Cada geração tem **teto de duração** de 5 min
+(`MADDOX_MASTER_GENERATION_TIMEOUT_MS`): passado, o provedor é abortado (sinal no `streamText`/`streamAi`) e a geração é tratada como
+falha — mesmo que não respeite o sinal —, então a fila anda e o pulso da trava para; o texto parcial nunca é gravado. Enquanto narra, a trava do turno é renovada a cada 30 s
+(`MADDOX_MASTER_HEARTBEAT_MS`) e a retomada (`GET`/`check`) ignora campanhas com geração ativa no processo. A resposta que falha
+é gravada com `error` ("O Maddox não conseguiu responder agora. Pergunte de novo."); a narração que falha marca `failedAt`
+(`turn.failed` no DTO). Consumo nas origens `maddox-narration` e `maddox-validation`.
+
+Uma falha da narração encerra a geração ao vivo **antes** de gravar `failedAt` (se a gravação falhar, nenhum cliente fica
+com a bolha parada). `GET …/game/stream` (membros; `maddox.play`): `snapshot { live[] }`, `live-start`, `delta { liveId, text }`,
+`tool { liveId, running }`, `live-end { liveId, messageId, error }` e `ping` (15 s). O mesmo fluxo chega a **todos** os
+jogadores com a mesa aberta. O texto ao vivo passa pelo `createMarkupFilter` (marcação do catálogo nunca crua) e, ao gravar, as
+menções são resolvidas com os nomes reservados da campanha **e dos NPCs**.
+
+**Ação livre.** **Rigoroso e Fiel ao D&D** (`MADDOX_DECLARATION_VALIDATION_RIGORS`) validam a declaração **antes de gravar**: com
+a chave JEV "Validade de ação livre" ligada decide o JEV (`noul`, motivo padrão); senão, uma geração curta e efêmera do narrador
+devolve `{ valid, reason }`, com teto de 20 s (`MADDOX_VALIDATION_TIMEOUT_MS`, sinal no provedor e no JEV; passou = aceita).
+Quem já declarou recebe **409 `ALREADY_DECLARED` antes** da validação (sem chamada de IA).
+Inválida = **409 `ACTION_INVALID`** com o motivo: nada é gravado e a vez não é gasta. Falha do
+validador aceita a declaração (aviso no log). **Narrativo, Flexível e Equilibrado** julgam na narração: a ação impossível vira
+uma tentativa frustrada narrada com a causa na ficção. Perguntas e "Não fazer nada" nunca são validadas.
+
+**Tela.** A mesa assina o stream (`useMaddoxGameStream`): reconecta sozinho com espera crescente (3 s, dobrando até 60 s;
+sem linha nem `ping` por 45 s refaz a conexão) e **para** em 401/403/404; a fala do Maddox chega aos poucos numa bolha com
+cursor e "Consultando as anotações da campanha…" enquanto ele usa ferramentas; a resposta ao vivo aparece ligada à pergunta; a
+geração que terminou fica na tela até a mensagem gravada chegar (sem piscar). A faixa mostra "o Maddox teve um problema;
+tentando de novo em instantes…" depois de uma falha. `ACTION_INVALID` aparece acima do campo e o rascunho volta.
+**Foco:** sempre que o Maddox termina de responder — na mesa e na entrevista — o campo de texto recebe o foco
+(`focusComposer`), sem roubá-lo de outro campo editável nem de um diálogo aberto.
 
 ## Testes
 
@@ -347,3 +427,10 @@ meio, presença, pular, saída, concorrência, trava do mestre, paginação), `g
 (API de presença e `/api/pusher/auth`), `tests/backend/integrations/channel-auth.test.ts` e
 `tests/frontend/maddox/maddox-game.test.tsx` (mesa, happy-dom); o lobby com "Iniciar campanha"/"Entrar na mesa" em
 `maddox-campaigns.test.tsx`.
+Maddox 4: `narrator-campaign.test.ts` (**critério de aceite**: campanha narrativa com 2 jogadores e 6 narrações com o narrador
+real sobre um `streamText` roteirizado — persistência de NPCs, locais, missões, checkpoint e condição dos personagens e o estado de
+volta ao prompt; pergunta sem trocar de turno; falha do provedor), `master-tools.test.ts`, `narrator-prompt.test.ts`,
+`narrator-opencode.test.ts`, `opencode-mcp.test.ts`, `maddox-mcp.test.ts` (token e rota), `action-validation.test.ts`,
+`game.test.ts` (fila, streaming no barramento, pergunta em segundo plano, trava com geração ativa, `ACTION_INVALID` por rigor),
+`game-routes.test.ts` (stream), `settings.test.ts` (URL do MCP); na tela, `maddox-game.test.tsx` (ao vivo, falhas, foco),
+`maddox-game-stream.test.ts`, `maddox-interview.test.tsx` (foco) e `maddox-tab.test.tsx` (card do MCP).

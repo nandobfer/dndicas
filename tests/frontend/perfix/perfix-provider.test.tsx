@@ -87,4 +87,14 @@ describe("PerfixProvider", () => {
         render(tree())
         expect(mocks.router.refresh).toHaveBeenCalledTimes(1)
     })
+
+    it("administrador real: nenhuma faixa no fluxo acima do conteúdo (o 'Visualizar como' fica no header)", async () => {
+        mocks.get.mockResolvedValue({ data: { data: { ...session, access: { ...session.access, realIsAdministrator: true } } } })
+        const { container } = render(tree())
+        await waitFor(() => expect(mocks.get).toHaveBeenCalled())
+        await waitFor(() => expect(screen.getByText("Conteúdo do catálogo")).toBeTruthy())
+        // O primeiro elemento renderizado é o próprio conteúdo da página.
+        expect(container.firstElementChild!.textContent).toBe("Conteúdo do catálogo")
+        expect(container.querySelector(".justify-end.px-4.py-2")).toBeNull()
+    })
 })

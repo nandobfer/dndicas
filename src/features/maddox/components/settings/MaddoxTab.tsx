@@ -27,7 +27,7 @@ import { MaddoxAvatarCard } from "./MaddoxAvatarCard"
 import { MaddoxJevCard } from "./MaddoxJevCard"
 import { MaddoxMemoriesSection } from "./MaddoxMemoriesSection"
 import { MaddoxModelCard } from "./MaddoxModelCard"
-import { MaddoxOpencodePolicyCard, MaddoxOpencodeSessionsCard } from "./MaddoxOpencodeCard"
+import { MaddoxOpencodeMcpCard, MaddoxOpencodePolicyCard, MaddoxOpencodeSessionsCard } from "./MaddoxOpencodeCard"
 import { MaddoxScriptCard } from "./MaddoxScriptCard"
 
 type MaddoxSection = "geral" | "entrevista-cenario" | "entrevista-personagem" | "jev" | "opencode" | "memorias"
@@ -211,6 +211,7 @@ export function MaddoxTab({ onDirtyChange }: { onDirtyChange: (dirty: boolean) =
                         <>
                             <MaddoxOpencodePolicyCard form={form} />
                             {footer(go)}
+                            <MaddoxOpencodeMcpCard />
                             <MaddoxOpencodeSessionsCard />
                         </>
                     )}

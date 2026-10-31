@@ -33,6 +33,18 @@ export interface MaddoxGeneratedAvatarDto {
     url: string
 }
 
+/** MCP do Maddox no servidor OpenCode (Maddox 4): ferramentas do narrador quando o provedor é o OpenCode. */
+export interface MaddoxMcpStatusDto {
+    /** URL chamada pelo OpenCode (`null` = sem URL pública do app nem URL configurada). */
+    url: string | null
+    /** URL com que o OpenCode tem o MCP registrado (`null` = o OpenCode não informa). */
+    registeredUrl: string | null
+    server: string
+    /** `missing` = não registrado; `outdated` = registrado com outra URL; `unknown` = não deu para consultar o OpenCode. */
+    status: "connected" | "pending" | "disabled" | "failed" | "needs_auth" | "missing" | "outdated" | "unknown"
+    error: string | null
+}
+
 /** Sessão do OpenCode mantida pelo Maddox (painel da aba). */
 export interface MaddoxOpencodeSessionDto {
     id: string

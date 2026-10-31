@@ -1,12 +1,13 @@
 "use client"
 
-import { useLayoutEffect, useRef, useState, type KeyboardEvent } from "react"
+import { useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent } from "react"
 import { HelpCircle, Loader2, MinusCircle, Send } from "lucide-react"
 import { Button } from "@/components/ui/opex/button"
 import { Textarea } from "@/components/ui/opex/textarea"
 import { cn } from "@/lib/utils"
 import { MADDOX_GAME_MESSAGE_MAX } from "../../constants"
 import type { MaddoxGameActionInput } from "../../game-schemas"
+import { focusComposer } from "../composer-focus"
 
 const MAX_HEIGHT = 180
 
@@ -17,6 +18,10 @@ interface Props {
     declared: boolean
     busy: boolean
     onSend: (input: MaddoxGameActionInput) => Promise<boolean>
+    /** Motivo de a última declaração ter sido recusada pelo Maddox (rigores Rigoroso e Fiel ao D&D). */
+    invalidReason?: string | null
+    /** Muda quando uma fala do Maddox termina: o campo volta a ter foco. */
+    focusKey?: string
 }
 
 /**
@@ -24,7 +29,7 @@ interface Props {
  * "Não fazer nada" (atalho para passar a vez). Ctrl/⌘+Enter declara; Enter sozinho quebra a linha, para
  * uma declaração (que é final) nunca sair por acidente.
  */
-export function GameComposer({ blockedReason, declared, busy, onSend }: Props) {
+export function GameComposer({ blockedReason, declared, busy, onSend, invalidReason = null, focusKey = "" }: Props) {
     const [value, setValue] = useState("")
     const textareaRef = useRef<HTMLTextAreaElement>(null)
     const content = value.trim()
@@ -40,6 +45,11 @@ export function GameComposer({ blockedReason, declared, busy, onSend }: Props) {
         element.style.height = "auto"
         element.style.height = `${Math.min(element.scrollHeight, MAX_HEIGHT)}px`
     }, [value])
+
+    // O Maddox terminou de narrar ou responder (ou o campo acabou de ser liberado): foco no campo.
+    useEffect(() => {
+        if (!blocked) focusComposer(textareaRef.current)
+    }, [focusKey, blocked])
 
     const send = async (kind: "declaration" | "question") => {
         if (kind === "declaration" ? !canDeclare : !canAsk) return
@@ -60,9 +70,15 @@ export function GameComposer({ blockedReason, declared, busy, onSend }: Props) {
 
     return (
         <form onSubmit={(event) => event.preventDefault()} className="border-t bg-background/60 px-3 pb-3 pt-2.5" aria-label="Sua vez na mesa">
-            <p className="px-1 pb-2 text-xs text-white/60" role="status" data-testid="game-composer-hint">
-                {hint}
-            </p>
+            {invalidReason && !blocked ? (
+                <p className="px-1 pb-2 text-xs text-amber-300" role="alert" data-testid="game-composer-invalid">
+                    {invalidReason}
+                </p>
+            ) : (
+                <p className="px-1 pb-2 text-xs text-white/60" role="status" data-testid="game-composer-hint">
+                    {hint}
+                </p>
+            )}
             <div className={cn("rounded-xl border bg-card px-3 py-2 shadow-sm transition-colors focus-within:border-primary/60", blocked && "opacity-70")}>
                 <Textarea
                     ref={textareaRef}

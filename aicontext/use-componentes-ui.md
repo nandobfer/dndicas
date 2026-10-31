@@ -602,6 +602,14 @@ O app **não tem sidebar** (nem o drawer do mobile). Todas as rotas de `src/app/
 inclusive `/sign-in`, `/sign-up` e `/campanhas/convite/[token]`, montam o mesmo header fixo, o conteúdo
 na largura toda (`pt-16` para compensar o header) e o rodapé (`GlassFooter`).
 
+**Espaço do topo igual ao lateral.** Abaixo do header fixo vai **só** a compensação exata da altura dele (`pt-16` =
+`h-16`); o `<main data-dashboard-content>` tem o mesmo padding nos quatro lados (`p-4`, `lg:p-6`), então o título de
+cada página fica a 16px/24px do header, igual à margem lateral. Nada pode entrar no fluxo acima do conteúdo: um
+elemento ali fica escondido atrás do header fixo e empurra a página para baixo (foi o caso da antiga faixa do
+"Visualizar como", 48px). A entrada das páginas só esmaece (`motionConfig.variants.fade`), sem deslocamento vertical.
+O "Visualizar como" do administrador real fica no header (`GlassHeader actions`, `HeaderViewAs`), antes do usuário, e
+a faixa amarela da simulação (`ViewAsBanner`) fica logo abaixo do header, só enquanto simula.
+
 ### Header (`src/components/ui/glass-header.tsx`)
 
 - Vidro escuro fixo no topo (`fixed inset-x-0 top-0 z-40 h-16 bg-black/40 backdrop-blur-sm border-b border-white/10`): o conteúdo passa por baixo ao rolar.
