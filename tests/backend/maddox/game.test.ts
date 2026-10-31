@@ -21,7 +21,8 @@ vi.mock("@/features/maddox/server/game-presence", () => ({ onlineUserIds: vi.fn(
 const { MaddoxCampaignMemberModel, MaddoxCampaignMessageModel, MaddoxCampaignModel, MaddoxCharacterModel } = await import("@/features/maddox/models")
 const campaigns = await import("@/features/maddox/server/campaigns")
 const game = await import("@/features/maddox/server/game")
-const { MADDOX_MASTER_LOCK_STALE_MS } = await import("@/features/maddox/constants")
+const { MADDOX_MASTER_LOCK_STALE_MS, MADDOX_MASTER_RETRY_MS } = await import("@/features/maddox/constants")
+const { mockMaddoxMaster } = await import("@/features/maddox/server/game-mock")
 
 let mongo: MongoMemoryServer
 
@@ -285,6 +286,23 @@ describe("Maddox 3 — dono pula jogador e saídas", () => {
         await expect(game.skipPlayer(id, { memberId: String(new mongoose.Types.ObjectId()) }, owner)).rejects.toMatchObject({ status: 404 })
     })
 
+    it("falha ao reavaliar o turno não desfaz a saída: auditoria e aviso já foram feitos", async () => {
+        const { id, owner, seats } = await table(2)
+        await game.startCampaign(id, owner)
+        recordAudit.mockClear()
+        publishToChannels.mockClear()
+        // A reavaliação do turno (`$pull` dos elegíveis) falha; o resto do banco segue normal.
+        const original = MaddoxCampaignModel.updateOne.bind(MaddoxCampaignModel)
+        const spy = vi.spyOn(MaddoxCampaignModel, "updateOne").mockImplementation(((filter: never, update: Record<string, unknown>, options?: never) =>
+            update && "$pull" in update ? Promise.reject(new Error("banco indisponível")) : original(filter, update as never, options)) as never)
+        await expect(campaigns.removeMember(id, seats[1]!.memberId, seats[1]!.userId)).resolves.toEqual({ left: true })
+        expect(recordAudit).toHaveBeenCalledWith(expect.objectContaining({ depois: { member: seats[1]!.userId, status: "left" } }))
+        expect(publishToChannels).toHaveBeenCalledWith(expect.arrayContaining([`private-maddox-u-${seats[1]!.userId}`]), "maddox.campaign.changed", { campaignId: id })
+        expect(spy).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ $pull: expect.anything() }))
+        spy.mockRestore()
+        expect((await MaddoxCampaignMemberModel.findById(seats[1]!.memberId).lean())!.status).toBe("left")
+    })
+
     it("jogador que sai no meio do turno deixa de contar e o turno fecha", async () => {
         const { id, owner, seats } = await table(3)
         await game.startCampaign(id, owner)
@@ -312,6 +330,51 @@ describe("Maddox 3 — turno do mestre interrompido", () => {
         expect(await narrations(id)).toBe(2)
         await game.getGameState(id, owner)
         expect(await narrations(id)).toBe(2)
+    })
+
+    it("falha do mestre libera a trava sem avisar a mesa; a retomada espera o intervalo e narra uma única vez", async () => {
+        const { id, owner } = await table(1)
+        await game.startCampaign(id, owner)
+        const narrate = vi.spyOn(mockMaddoxMaster, "narrate").mockRejectedValueOnce(new Error("provedor fora do ar"))
+        publishToChannels.mockClear()
+        let state = await declare(id, owner)
+        expect(state.turn).toMatchObject({ number: 2, phase: "master", generating: false })
+        let stored = await MaddoxCampaignModel.findById(id).lean()
+        expect(stored!.turn.generating).toBeNull()
+        expect(stored!.turn.failedAt).toBeInstanceOf(Date)
+        expect(await narrations(id)).toBe(1)
+        // Depois da falha nenhum aviso: os clientes não recarregam em laço.
+        const publishesAfterClose = publishToChannels.mock.calls.length
+        expect(narrate).toHaveBeenCalledTimes(1)
+
+        // Dentro do intervalo, abrir a mesa ou reavaliar não tenta de novo.
+        state = await game.getGameState(id, owner)
+        await game.checkTurn(id, owner)
+        expect(state.turn).toMatchObject({ number: 2, phase: "master" })
+        expect(narrate).toHaveBeenCalledTimes(1)
+        expect(publishToChannels.mock.calls.length).toBe(publishesAfterClose)
+
+        await MaddoxCampaignModel.updateOne({ _id: id }, { $set: { "turn.failedAt": new Date(Date.now() - MADDOX_MASTER_RETRY_MS - 1000) } })
+        state = await game.getGameState(id, owner)
+        expect(state.turn).toMatchObject({ number: 2, phase: "players", generating: false })
+        expect(await narrations(id)).toBe(2)
+        stored = await MaddoxCampaignModel.findById(id).lean()
+        expect(stored!.turn.failedAt).toBeNull()
+        await game.getGameState(id, owner)
+        expect(await narrations(id)).toBe(2)
+        narrate.mockRestore()
+    })
+
+    it("falha ao gravar a narração também deixa o turno no mestre, sem narração órfã", async () => {
+        const { id, owner } = await table(1)
+        await game.startCampaign(id, owner)
+        const original = MaddoxCampaignMessageModel.create.bind(MaddoxCampaignMessageModel)
+        const create = vi.spyOn(MaddoxCampaignMessageModel, "create").mockImplementation(((doc: { kind?: string }) =>
+            doc?.kind === "narration" ? Promise.reject(new Error("banco indisponível")) : original(doc as never)) as never)
+        const state = await declare(id, owner)
+        create.mockRestore()
+        expect(state.turn).toMatchObject({ number: 2, phase: "master", generating: false })
+        expect(await MaddoxCampaignMessageModel.countDocuments({ campaignId: id, kind: "narration", turnNumber: 2 })).toBe(0)
     })
 
     it("trava recente não é retomada", async () => {

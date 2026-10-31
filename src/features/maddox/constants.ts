@@ -140,6 +140,8 @@ export const MADDOX_GAME_MESSAGE_MAX = 4_000
 export const MADDOX_GAME_PAGE_SIZE = 100
 /** Trava do turno do mestre mais antiga que isto é retomada (geração interrompida). */
 export const MADDOX_MASTER_LOCK_STALE_MS = 2 * 60 * 1000
+/** Depois de uma falha do turno do mestre, a próxima tentativa espera este intervalo (sem laço de retomadas). */
+export const MADDOX_MASTER_RETRY_MS = 30 * 1000
 
 export const MADDOX_TURN_PHASE_LABELS: Record<MaddoxTurnPhase, string> = {
     master: "Turno do mestre",

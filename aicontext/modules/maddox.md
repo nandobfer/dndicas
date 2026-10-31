@@ -287,7 +287,7 @@ em andamento, o lobby mostra "Em andamento · Turno N · fase" e **"Entrar na me
 | Regra | Comportamento |
 | --- | --- |
 | Numeração | `number` sobe a cada turno do mestre (1 = abertura); o turno dos jogadores seguinte tem o mesmo número |
-| Turno do mestre | Pega a trava `generating { token }`, narra (mock) as declarações do turno anterior, grava a narração e abre o turno dos jogadores. Trava com mais de 2 min (`MADDOX_MASTER_LOCK_STALE_MS`) ou liberada por falha é retomada no `GET …/game` ou no `check`; a narração já gravada do turno é reaproveitada (sem duplicar) |
+| Turno do mestre | Pega a trava `generating { token }`, narra (mock) as declarações do turno anterior, grava a narração e abre o turno dos jogadores. Trava com mais de 2 min (`MADDOX_MASTER_LOCK_STALE_MS`) é retomada no `GET …/game` ou no `check`. Falha do mestre libera a trava, grava `turn.failedAt` e **não avisa a mesa**; a nova tentativa só acontece depois de 30 s (`MADDOX_MASTER_RETRY_MS`), no `GET`/`check` (a tela recarrega nesse intervalo enquanto o mestre está sem geração), sem laço de retomadas. A narração já gravada do turno é reaproveitada (sem duplicar) |
 | Elegíveis | Fixados ao abrir o turno dos jogadores: membros `joined` com a entrevista concluída. **Quem entra ou conclui a entrevista no meio do turno joga a partir do próximo** (409 `NEXT_TURN`). Se a lista ficar vazia (todos saíram), quem estiver pronto entra no turno atual |
 | Presentes | Jogadores com a **mesa aberta** (canal de presença do Pusher). O turno fecha quando **todos os elegíveis presentes** declararam ou passaram **e** há ao menos uma declaração no turno (mesa toda offline não avança sozinha). Elegível offline não trava; se voltar, passa a contar |
 | Presença desconhecida | Pusher sem configuração ou falha na consulta = **todos os elegíveis** contam (nunca fecha antes da hora), com log. A tela avisa "Sem tempo real…" e recarrega a cada 5 s |
@@ -296,7 +296,7 @@ em andamento, o lobby mostra "Em andamento · Turno N · fase" e **"Entrar na me
 | Turno do mestre em curso | Ações = 409 `MASTER_TURN` |
 | Fechamento | Update condicional (`number`, `phase: players`): só uma chamada vence e roda o mestre — declarações simultâneas e vários `check` geram uma única narração |
 | Pular jogador | Só o dono (403), que também precisa estar pronto para jogar; registra "não fez nada" no lugar de um elegível que ainda não declarou (`skippedBy`), só no turno atual, com confirmação e auditoria |
-| Saída/remoção | `removeMember` chama `onMemberLeftGame`: o membro sai dos elegíveis e o turno é reavaliado |
+| Saída/remoção | `removeMember` grava, audita e avisa a saída e só depois chama `onMemberLeftGame` (o membro sai dos elegíveis e o turno é reavaliado); falha nessa reavaliação é logada e não desfaz a saída |
 | Campanha fora de `active` | Ações = 409 `CAMPAIGN_NOT_ACTIVE` |
 
 Ainda fora do escopo: pausar/encerrar a campanha, editar uma declaração enviada, IA e streaming da narração (Maddox 4).

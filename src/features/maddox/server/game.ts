@@ -6,7 +6,7 @@ import { loggerFor } from "@/lib/logger"
 import { maddoxUserChannel } from "@/lib/pusher/channel-names"
 import { publishToChannels } from "@/lib/pusher/channels"
 import { User } from "@/features/users/models/user"
-import { MADDOX_CAMPAIGN_AUDIT_ENTITY, MADDOX_GAME_CHANGED_EVENT, MADDOX_GAME_PAGE_SIZE, MADDOX_MASTER_LOCK_STALE_MS, type MaddoxTurnPhase } from "../constants"
+import { MADDOX_CAMPAIGN_AUDIT_ENTITY, MADDOX_GAME_CHANGED_EVENT, MADDOX_GAME_PAGE_SIZE, MADDOX_MASTER_LOCK_STALE_MS, MADDOX_MASTER_RETRY_MS, type MaddoxTurnPhase } from "../constants"
 import {
     MaddoxCampaignMemberModel,
     MaddoxCampaignMessageModel,
@@ -116,13 +116,15 @@ async function runMasterTurn(campaignId: Types.ObjectId, token: string, turnNumb
         const eligible = await readyMemberIds(campaignId)
         const opened = await MaddoxCampaignModel.updateOne(
             { _id: campaignId, "turn.generating.token": token },
-            { $set: { "turn.phase": "players", "turn.startedAt": new Date(), "turn.eligibleMemberIds": eligible, "turn.declaredMemberIds": [], "turn.generating": null } },
+            { $set: { "turn.phase": "players", "turn.startedAt": new Date(), "turn.eligibleMemberIds": eligible, "turn.declaredMemberIds": [], "turn.generating": null, "turn.failedAt": null } },
         )
         if (opened.modifiedCount === 0) log.info({ campaignId: String(campaignId), turnNumber }, "[maddox] Turno do mestre já retomado por outra chamada")
     } catch (error) {
-        // Libera a trava: o próximo `GET`/`check` retoma o turno do mestre.
-        log.error({ err: error, campaignId: String(campaignId), turnNumber }, "[maddox] Falha no turno do mestre")
-        await MaddoxCampaignModel.updateOne({ _id: campaignId, "turn.generating.token": token }, { $set: { "turn.generating": null } })
+        // Libera a trava e marca a falha: a retomada só acontece depois de `MADDOX_MASTER_RETRY_MS` (no `GET`/`check`).
+        // Sem aviso aos clientes: o estado não mudou, e recarregar já faria a próxima tentativa sem espera.
+        log.error({ err: error, campaignId: String(campaignId), turnNumber, retryInMs: MADDOX_MASTER_RETRY_MS }, "[maddox] Falha no turno do mestre")
+        await MaddoxCampaignModel.updateOne({ _id: campaignId, "turn.generating.token": token }, { $set: { "turn.generating": null, "turn.failedAt": new Date() } })
+        return
     }
     await publishGameChanged(campaignId)
 }
@@ -132,10 +134,19 @@ async function resumeMasterTurn(campaign: CampaignDoc): Promise<boolean> {
     if (campaign.status !== "active" || campaign.turn?.phase !== "master") return false
     const generating = campaign.turn.generating
     if (generating && Date.now() - new Date(generating.startedAt).getTime() < MADDOX_MASTER_LOCK_STALE_MS) return false
+    const failedAt = campaign.turn.failedAt
+    if (!generating && failedAt && Date.now() - new Date(failedAt).getTime() < MADDOX_MASTER_RETRY_MS) return false
     const token = randomUUID()
     const stale = new Date(Date.now() - MADDOX_MASTER_LOCK_STALE_MS)
+    const retryAfter = new Date(Date.now() - MADDOX_MASTER_RETRY_MS)
     const won = await MaddoxCampaignModel.updateOne(
-        { _id: campaign._id, status: "active", "turn.phase": "master", "turn.number": campaign.turn.number, $or: [{ "turn.generating": null }, { "turn.generating.startedAt": { $lt: stale } }] },
+        {
+            _id: campaign._id,
+            status: "active",
+            "turn.phase": "master",
+            "turn.number": campaign.turn.number,
+            $or: [{ "turn.generating": null, $or: [{ "turn.failedAt": null }, { "turn.failedAt": { $lt: retryAfter } }] }, { "turn.generating.startedAt": { $lt: stale } }],
+        },
         { $set: { "turn.generating": { token, startedAt: new Date() } } },
     )
     if (won.modifiedCount === 0) return false
@@ -183,7 +194,7 @@ async function evaluateTurn(campaignId: Types.ObjectId): Promise<void> {
     const number = campaign.turn.number
     const closed = await MaddoxCampaignModel.updateOne(
         { _id: campaignId, status: "active", "turn.number": number, "turn.phase": "players" },
-        { $set: { "turn.number": number + 1, "turn.phase": "master" as MaddoxTurnPhase, "turn.startedAt": new Date(), "turn.eligibleMemberIds": [], "turn.declaredMemberIds": [], "turn.generating": { token, startedAt: new Date() } } },
+        { $set: { "turn.number": number + 1, "turn.phase": "master" as MaddoxTurnPhase, "turn.startedAt": new Date(), "turn.eligibleMemberIds": [], "turn.declaredMemberIds": [], "turn.generating": { token, startedAt: new Date() }, "turn.failedAt": null } },
     )
     if (closed.modifiedCount === 0) return
     log.info({ campaignId: String(campaignId), turnNumber: number, required: required.length, presence: online ? "pusher" : "unknown" }, "[maddox] Turno dos jogadores fechado")
@@ -243,7 +254,7 @@ export async function startCampaign(campaignId: string, userId: string): Promise
     const now = new Date()
     const started = await MaddoxCampaignModel.updateOne(
         { _id: campaign._id, status: "lobby", "scenarioInterview.status": "done" },
-        { $set: { status: "active", startedAt: now, turn: { number: 1, phase: "master", startedAt: now, eligibleMemberIds: [], declaredMemberIds: [], generating: { token, startedAt: now } } } },
+        { $set: { status: "active", startedAt: now, turn: { number: 1, phase: "master", startedAt: now, eligibleMemberIds: [], declaredMemberIds: [], generating: { token, startedAt: now }, failedAt: null } } },
     )
     if (started.modifiedCount === 0) throw new DomainError(409, "Esta campanha já foi iniciada.", "CAMPAIGN_ALREADY_STARTED")
     await recordAudit({ userId, entidade: MADDOX_CAMPAIGN_AUDIT_ENTITY, entidadeId: campaignId, acao: AcaoAuditoria.ATUALIZAR, antes: { status: campaign.status }, depois: { status: "active", turn: 1 } })

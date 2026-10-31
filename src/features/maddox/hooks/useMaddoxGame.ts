@@ -8,7 +8,7 @@ import { api, apiErrorMessage, unwrapApi } from "@/lib/api"
 import type { ApiResponse } from "@/lib/types/api"
 import { maddoxCampaignPresenceChannel, maddoxUserChannel } from "@/lib/pusher/channel-names"
 import { acquireChannel, isPusherClientAvailable, releaseChannel } from "@/lib/pusher/client"
-import { MADDOX_CAMPAIGN_CHANGED_EVENT, MADDOX_GAME_CHANGED_EVENT } from "../constants"
+import { MADDOX_CAMPAIGN_CHANGED_EVENT, MADDOX_GAME_CHANGED_EVENT, MADDOX_MASTER_RETRY_MS } from "../constants"
 import type { MaddoxGameActionInput } from "../game-schemas"
 import type { MaddoxGameMessagesPageDto, MaddoxGameStateDto } from "../game-types"
 import type { MaddoxCampaignDetailDto } from "../campaign-types"
@@ -29,7 +29,13 @@ export function useMaddoxGame(campaignId: string) {
         queryKey: maddoxGameKey(campaignId),
         queryFn: async () => unwrapApi((await api.get<ApiResponse<MaddoxGameStateDto>>(gamePath(campaignId))).data),
         retry: false,
-        refetchInterval: realtime ? false : MADDOX_GAME_POLL_MS,
+        // Turno do mestre sem geração em andamento = a última tentativa falhou: recarrega no intervalo da nova
+        // tentativa (o servidor só retoma depois dele), para a mesa não ficar parada sem nenhum aviso.
+        refetchInterval: (query) => {
+            if (!realtime) return MADDOX_GAME_POLL_MS
+            const turn = query.state.data?.turn
+            return query.state.data?.status === "active" && turn?.phase === "master" && !turn.generating ? MADDOX_MASTER_RETRY_MS : false
+        },
     })
 }
 

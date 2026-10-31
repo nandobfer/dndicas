@@ -42,6 +42,8 @@ export interface IMaddoxCampaign {
         eligibleMemberIds: Types.ObjectId[]
         declaredMemberIds: Types.ObjectId[]
         generating: { token: string; startedAt: Date } | null
+        /** Última falha do turno do mestre: a retomada espera `MADDOX_MASTER_RETRY_MS` desde ela. */
+        failedAt: Date | null
     }
     /** Quando o dono iniciou a campanha (Maddox 3). */
     startedAt: Date | null
@@ -75,6 +77,7 @@ const MaddoxCampaignSchema = new Schema<IMaddoxCampaign>(
             eligibleMemberIds: { type: [Schema.Types.ObjectId], default: [] },
             declaredMemberIds: { type: [Schema.Types.ObjectId], default: [] },
             generating: { type: new Schema({ token: String, startedAt: Date }, { _id: false }), default: null },
+            failedAt: { type: Date, default: null },
         },
         startedAt: { type: Date, default: null },
         invite: {
