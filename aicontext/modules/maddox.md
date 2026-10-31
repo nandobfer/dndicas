@@ -6,6 +6,7 @@ documentação cobre a **entrega 0 (DND-8, #200)** — modelos no MongoDB e a co
 A **entrega 2 (DND-12, #206)** — entrevistas de cenário e de personagem — está na seção "Entrevistas
 (Maddox 2)". A **entrega 3 (DND-11, #202)** — motor de turnos e tempo real — está em "Mesa e turnos (Maddox 3)".
 A **entrega 4 (DND-9, #201)** — o Maddox narrador com ferramentas e streaming — está em "Narrador (Maddox 4)".
+A **entrega 5 (DND-16, #208)** — fichas e testes de atributo/perícia/resistência pedidos pelo Maddox — está em "Fichas e testes (Maddox 5)".
 
 Código: `src/features/maddox/` (`constants`, `schemas`, `types`, `script-draft`, `models/`, `server/`,
 `hooks/`, `components/settings/`).
@@ -20,7 +21,7 @@ roteiros e as memórias salvam à parte.
 | --- | --- |
 | Geral | Ativo; **Avatar** (upload/substituição pelo `GlassImageUploader` ou "Gerar com o Gerador de imagens" a partir da persona — 1:1, do peito para cima; só vale depois de salvar); modelo do **Maddox (narrador)** e do **Entrevistador** ("Mesmo do Maddox" = sem provedor próprio); instruções de cada um com "Restaurar padrão" |
 | Entrevista: cenário / Entrevista: personagem | Roteiros versionados (abaixo), cada um com "Salvar nova versão do roteiro" e "Desfazer roteiro" |
-| JEV | Uma chave por decisão (`MADDOX_JEV_DECISIONS`): pergunta ou ação do jogador, validade de ação livre, pedir teste, início/fim de combate, conhecimento do mestre, fim da entrevista, gerar imagem na cena. Em uso: **"Fim da entrevista"** (Maddox 2) e **"Validade de ação livre"** (Maddox 4, só Rigoroso e Fiel ao D&D); as demais ainda sem uso |
+| JEV | Uma chave por decisão (`MADDOX_JEV_DECISIONS`): pergunta ou ação do jogador, validade de ação livre, pedir teste, início/fim de combate, conhecimento do mestre, fim da entrevista, gerar imagem na cena. Em uso: **"Fim da entrevista"** (Maddox 2), **"Validade de ação livre"** (Maddox 4, só Rigoroso e Fiel ao D&D) e **"Pedir teste"** (Maddox 5, orientação ao narrador nos graus com testes); as demais ainda sem uso |
 | OpenCode | Política das sessões e lista das sessões ativas com "Excluir" (confirmação) |
 | Memórias | Lista `maddox` de `agent_memories` (mesmo card dos demais agentes, sem limite de quantidade; API `/api/ai/agents/maddox/memories/**`) |
 
@@ -349,7 +350,7 @@ Código: `server/narrator.ts` (geração), `server/narrator-prompt.ts` (módulo 
 narrador (`MADDOX_NARRATOR_RULES`, adaptadas do `~/code/roleplay/agente-exemplo.md` para vários jogadores: cada jogador decide
 as ações, falas e escolhas do próprio personagem; o Maddox cuida do mundo, dos NPCs, dos resultados e do involuntário; prosa
 sensorial em segunda pessoa; cada narração desenvolve a situação e termina num ponto de decisão) + **modo narrativo puro**
-(sem dados, números, atributos ou pontos de vida — vale para todos os rigores nesta entrega; testes e mecânica vêm no Maddox 5)
+(sem dados, números, atributos ou pontos de vida — Narrativo e Flexível; nos graus com ficha a regra é a dos testes, seção "Fichas e testes (Maddox 5)")
 + rigor + formato (Markdown, negrito, citações `{{Tipo:Nome}}` do catálogo) + rotina de persistência + a campanha: cenário,
 situação inicial, personagens (perfil da entrevista e **condição atual**), **estado atual** (checkpoint) e um índice de NPCs e
 anotações (missões ativas sempre; o que é segredo do mestre marcado `[SÓ O MESTRE]` — os jogadores nunca recebem o prompt).
@@ -415,6 +416,88 @@ tentando de novo em instantes…" depois de uma falha. `ACTION_INVALID` aparece 
 **Foco:** sempre que o Maddox termina de responder — na mesa e na entrevista — o campo de texto recebe o foco
 (`focusComposer`), sem roubá-lo de outro campo editável nem de um diálogo aberto.
 
+## Fichas e testes (Maddox 5)
+
+Código: `check-modifier.ts` (módulo PURO, servidor e tela: modificador pela ficha, título, sucesso pela CD, resumo da ficha),
+`server/game-checks.ts` (rolagem, rolar no lugar, fim da rodada, cancelamento), ferramenta `request_check` em
+`server/master-tools.ts`, `server/check-hints.ts` (JEV "Pedir teste"), rodadas em `server/game.ts` (`runMasterTurn`),
+`components/game/GameCheckCard.tsx`, `MySheetButton.tsx`, `NpcPanel.tsx`.
+
+**Graus.** Equilibrado, Rigoroso e Fiel ao D&D (`MADDOX_CHECK_RIGORS`, os mesmos que criam a ficha) trocam o modo narrativo pela
+regra `checksRule(rigor)`: frequência do grau (Equilibrado só nos momentos decisivos; Rigoroso sempre que adequado; Fiel exatamente
+como nas regras), pedir pela ferramenta, **nunca rolar nem inventar resultado**, parar a narração no momento da tentativa, comparar o
+total com a CD e narrar a consequência sem recitar números. Combate continua narrado (iniciativa e turnos mecânicos são do Maddox 7).
+Cada personagem do prompt ganha o **resumo da ficha** (`sheetSummary`: nível, classe, raça, PV, CA, atributos com modificador,
+proficiência, resistências e perícias treinadas). Narrativo e Flexível não recebem a ferramenta nem a regra.
+
+**Turno do mestre em rodadas** (`turn.checkRound`, `turn.awaitingChecks`):
+
+1. Rodada 0 narra as declarações. A ferramenta `request_check` (personagem, `tipo` perícia/atributo/resistência, `pericia` ou
+   `atributo`, `cd` 1–30, `modo`, `motivo` público) guarda o pedido **em memória no job da fila** (`game-live`: `addDraftCheck`,
+   instância única). Só depois de gravar a narração os pedidos viram mensagens `kind: "check"` (mesmo `insertMany`, logo abaixo da
+   narração); se a geração falhar, somem com o job e a nova tentativa não duplica nada.
+2. Com teste pendente, o turno fica em `master` com `awaitingChecks: true` e sem trava (`resumeMasterTurn` ignora). Declarar,
+   perguntar e passar seguem em 409 `MASTER_TURN`: **os testes fazem parte do turno do mestre**.
+3. Rolar (`rollCheck`): o servidor calcula o modificador da ficha na hora (`checkModifier`) e rola o d20 com o **motor de dados**
+   (`rollGeneralDice`, vantagem/desvantagem do pedido; valem as regras de dado — *overrides* — do jogador do personagem). A troca
+   `pending → rolled` é condicional (rolagem dupla = 409 `CHECK_ALREADY_ROLLED`). Grava `check.roll`, as partes do modificador e
+   quem rolou; avisa a mesa e o stream (`check-rolled`).
+4. Sem teste pendente na rodada, uma troca condicional (`awaitingChecks: true` + `checkRound`) faz `checkRound + 1`, pega a trava e
+   põe a **continuação** na fila (uma só, mesmo com rolagens simultâneas). A tarefa leva as declarações e os resultados
+   (`checkResultLine`: total, d20, modificador, vantagem com o descartado, 20/1 natural, "rolado pelo dono", CD e sucesso/falha); o
+   Maddox narra a consequência a partir de onde parou. Narrações da rodada são `segment = checkRound` (as antigas, sem o campo,
+   contam como 0).
+5. Até **3 rodadas** por turno (`MADDOX_CHECK_ROUNDS_MAX`): na última a ferramenta recusa novos pedidos e a narração termina no
+   ponto de decisão. Na rodada sem testes, o turno dos jogadores abre como antes.
+
+A ferramenta recusa (erro em pt-BR ao modelo): campanha narrativa, geração que não é narração (respostas a perguntas), teto de
+rodadas, personagem desconhecido, sem entrevista concluída ou **sem ficha**, perícia/atributo ausente e um segundo teste para o
+mesmo personagem na rodada (índice único parcial `{ campaignId, turnNumber, check.round, memberId }` com `kind: "check"`, garantido
+pela `ensure-maddox-indexes`).
+
+**Quem rola.** O jogador indicado (`assertMemberCanPlay`) ou o **dono, no lugar dele** ("Rolar no lugar", com confirmação e
+auditoria `CampanhaMaddox` `{ turn, check, rolledFor, total }`). Outros = 403 `NOT_CHECK_TARGET`; quem não participa = 404; teste
+cancelado ou fora da rodada = 409 `CHECK_NOT_PENDING`. O membro que sai ou é removido tem os testes pendentes **cancelados**
+(`cancelMemberChecks`, chamado por `onMemberLeftGame`) e a rodada pode terminar; o Maddox recebe "cancelado; resolva sem o teste".
+
+**Visibilidade.** O teste **pendente só chega ao jogador indicado** (filtro no servidor em `messagesDto`, também na paginação). Os
+outros recebem só `turn.pendingChecks` (`checkId`, membro, nome do personagem): a faixa "Turno do mestre — aguardando o teste de
+Lyra", o chip "Rolando teste" no painel e o "Rolar no lugar" do dono. Rolado, todos veem quem rolou, o teste, o motivo, as partes do
+modificador e o total; quem estava com a mesa aberta **vê o dado rolando** (linha `check-rolled` do stream → o `DiceRollerPanel`
+repete a animação com o resultado oficial, sem botão). Recarregar mostra o resultado sem animação. Cancelado vira nota discreta.
+
+**CD.** Configurável por campanha (`showCheckDc`, padrão **secreta**): seletor "CD dos testes: Secreta | Visível" na criação (só nos
+graus com testes) e na edição (dono, a qualquer momento, auditado). Secreta, o DTO nunca traz a CD (`dc: null`, `success: null`);
+visível, o card mostra "CD 15" e, depois da rolagem, "Sucesso"/"Falha". O Maddox sempre recebe a CD.
+
+**JEV "Pedir teste"** (`requires-check`): com a chave ligada, nos graus com testes, a rodada 0 consulta o JEV uma vez (uma pergunta
+`noul` por declaração, teto de 20 s `MADDOX_CHECK_HINT_TIMEOUT_MS`). A declaração marcada ganha na tarefa "(o JEV indica que esta ação
+provavelmente exige teste; você decide)". Chave desligada, falha ou teto: narra sem a orientação (aviso no log).
+
+**Tela.**
+
+- **Card do teste** (`GameCheckCard`): "O Maddox pede um teste para você", "Teste de perícia: Furtividade (Destreza)", motivo, `d20` +
+  as partes do modificador nas cores dos atributos (as do `CalcTooltip`) e "= d20 +5", chip de vantagem/desvantagem e de CD (visível).
+  A prévia usa a ficha ao vivo (`useSheet`). Abaixo, o `DiceRollerPanel` sem controles, com o d20 parado e o botão **"Rolar"**, que
+  chama `POST …/game/checks/[checkId]/roll` (corpo `{}`); depois, "Resultado enviado ao Maddox.".
+- Faixa: "o Maddox pediu um teste para você" (com "e aguarda …" se houver outros) ou "aguardando o teste de …"; o campo de texto
+  fica bloqueado com o motivo; o Maddox não aparece "narrando" enquanto espera.
+- **Minha ficha**: botão no cabeçalho da mesa, só com ficha (`me.sheet`, só a minha chega ao DTO). Abre a janela `maddox-sheet`
+  (`GlassWindow` do `WindowProvider`) com o `SheetForm` editável (auto-save e tempo real da própria ficha) e "Abrir em nova aba".
+- **NPCs conhecidos**: card abaixo de "Na mesa" com nome e foto (ou iniciais) dos NPCs com `visibility: "players"`. Os personagens
+  dos outros já aparecem com nome e retrato em "Na mesa"; a ficha deles não é exposta.
+
+**Painel de dados.** O `DiceRollerPanel` ganhou `rollRequest` (quem faz a rolagem oficial; padrão `requestDiceRoll`),
+`rollButtonLabel` (padrão "JOGAR") e `hideRollButton` (só repete um resultado externo). Ver `dice-roller.md`.
+
+API (`maddox.play`, usuário efetivo):
+
+- `POST /api/maddox/campaigns/[id]/game/checks/[checkId]/roll` — `{}` (estrito: dado ou modificador no corpo = 400) → `{ roll, state }`.
+- `PATCH /api/maddox/campaigns/[id]` e `POST /api/maddox/campaigns` aceitam `showCheckDc`.
+- `GET …/game`: `turn.awaitingChecks`, `turn.pendingChecks`, `showCheckDc`, `npcs`, `me.sheet` e `check` nas mensagens.
+
+Fora do escopo: dano, PV e recursos aplicados pelo Maddox na ficha, iniciativa e combate por botões (Maddox 7), imagens de NPC (Maddox 10).
+
 ## Testes
 
 `tests/backend/maddox/*` (configuração, roteiros, avatar, sessões, rotas, `campaigns.test.ts` com MongoDB em
@@ -434,3 +517,11 @@ volta ao prompt; pergunta sem trocar de turno; falha do provedor), `master-tools
 `game.test.ts` (fila, streaming no barramento, pergunta em segundo plano, trava com geração ativa, `ACTION_INVALID` por rigor),
 `game-routes.test.ts` (stream), `settings.test.ts` (URL do MCP); na tela, `maddox-game.test.tsx` (ao vivo, falhas, foco),
 `maddox-game-stream.test.ts`, `maddox-interview.test.tsx` (foco) e `maddox-tab.test.tsx` (card do MCP).
+Maddox 5: `game-checks.test.ts` (**critério de aceite**: campanha Fiel ao D&D, o narrador real pede Furtividade para a jogadora, só
+ela recebe o pedido, a rolagem usa o motor com uma regra de dado e o modificador da ficha, o resultado volta na continuação e a
+consequência é narrada; rolagem dupla, outro jogador, não membro, dono no lugar, CD visível, duas rolagens na rodada, saída do
+jogador, falha da geração, teto de rodadas, campanha narrativa e o JEV "Pedir teste"), `check-modifier.test.ts`,
+`master-tools.test.ts` e `maddox-mcp.test.ts` (`request_check`), `narrator-prompt.test.ts` (regra dos testes, resumo da ficha,
+continuação), `game-routes.test.ts` (rota de rolagem), `campaigns.test.ts` (`showCheckDc`); na tela, `maddox-game.test.tsx` (card,
+espera, "Rolar no lugar", repetição da rolagem, CD, cancelado, "Minha ficha", NPCs e o teste estático dos controles),
+`maddox-game-stream.test.ts` (`check-rolled`), `maddox-campaigns.test.tsx` e `tests/frontend/dice-roller/dice-roller-panel.test.tsx`.
