@@ -33,7 +33,7 @@ const configured = (patch: Partial<Settings> = {}): Settings => ({
     main: { provider: "opencode", model: "anthropic/claude", agent: "build", variant: "high", temperature: 0.7, maxOutputTokens: 4096 },
     interviewer: { provider: "gemini", model: "gemini-2.5-pro", agent: "build", variant: null },
     avatar: { url: "/api/files/ai/generated/u/maddox.png", persona: "Mestre ancião" },
-    opencode: { sessionScope: "campaign", deleteOnCampaignEnd: false, directory: "  /srv/maddox  " },
+    opencode: { sessionScope: "campaign", deleteOnCampaignEnd: false, directory: "  /srv/maddox  ", mcpUrl: null },
     jev: { ...DEFAULT_MADDOX_SETTINGS.jev, "question-or-action": true, "scene-image": true },
     ...patch,
 })
@@ -61,7 +61,7 @@ describe("configuração do Agente Maddox", () => {
         // Agente só vale no OpenCode.
         expect(reloaded.settings.interviewer).toEqual({ provider: "gemini", model: "gemini-2.5-pro", agent: null, variant: null })
         expect(reloaded.settings.avatar).toEqual({ url: "/api/files/ai/generated/u/maddox.png", persona: "Mestre ancião" })
-        expect(reloaded.settings.opencode).toEqual({ sessionScope: "campaign", deleteOnCampaignEnd: false, directory: "/srv/maddox" })
+        expect(reloaded.settings.opencode).toEqual({ sessionScope: "campaign", deleteOnCampaignEnd: false, directory: "/srv/maddox", mcpUrl: null })
         expect(reloaded.settings.jev["question-or-action"]).toBe(true)
         expect(reloaded.settings.jev["requires-check"]).toBe(false)
         expect(reloaded.availability.available).toBe(true)
@@ -122,6 +122,15 @@ describe("configuração do Agente Maddox", () => {
             const nested = issue.path.reduceRight<unknown>((acc, key) => ({ [String(key)]: acc }), { message: issue.message, type: issue.code })
             expect(firstHiddenFormError(nested)).toBe(message)
         }
+    })
+
+    it("URL do MCP do Maddox: vazia usa a do app; preenchida precisa ser http(s)", () => {
+        const parse = (mcpUrl: string | null) => maddoxSettingsSchema.safeParse({ ...DEFAULT_MADDOX_SETTINGS, opencode: { ...DEFAULT_MADDOX_SETTINGS.opencode, mcpUrl } })
+        expect(parse(null).success).toBe(true)
+        expect(parse("https://dndicas.example/api/maddox/mcp").success).toBe(true)
+        const invalid = parse("dndicas.example/mcp")
+        expect(invalid.success).toBe(false)
+        if (!invalid.success) expect(invalid.error.issues[0]!.message).toBe("Informe uma URL começando com http:// ou https://")
     })
 })
 

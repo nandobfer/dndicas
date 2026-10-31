@@ -15,6 +15,8 @@ export interface IMaddoxCharacter {
     /** Seções narrativas (identidade, origem, personalidade, capacidades, equipamentos, relações, condição…). */
     profile: Record<string, string>
     sheetId: Types.ObjectId | null
+    /** Condição atual na história (ferimentos, recursos, onde está), mantida pelo narrador; o perfil não muda. */
+    currentState: string
     interview: { status: MaddoxInterviewStatus; scriptVersion: number | null }
     status: MaddoxCharacterStatus
     createdAt: Date
@@ -30,6 +32,7 @@ const MaddoxCharacterSchema = new Schema<IMaddoxCharacter>(
         portraitUrl: { type: String, default: null },
         profile: { type: Map, of: String, default: {} },
         sheetId: { type: Schema.Types.ObjectId, ref: "CharacterSheet", default: null },
+        currentState: { type: String, default: "" },
         interview: {
             status: { type: String, enum: MADDOX_INTERVIEW_STATUSES, default: "pending" },
             scriptVersion: { type: Number, default: null },

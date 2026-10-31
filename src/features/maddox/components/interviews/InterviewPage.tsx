@@ -204,7 +204,13 @@ function InterviewConversation({ campaign, kind, userId }: { campaign: MaddoxCam
                     <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> O Maddox está consolidando a entrevista…
                 </p>
             )}
-            <InterviewComposer disabled={busy || complete.isPending} busy={live.streaming} placeholder={proposal ? "Peça ajustes ao Maddox, se quiser…" : "Responda ao Maddox…"} onSend={send} />
+            <InterviewComposer
+                disabled={busy || complete.isPending}
+                busy={live.streaming}
+                placeholder={proposal ? "Peça ajustes ao Maddox, se quiser…" : "Responda ao Maddox…"}
+                onSend={send}
+                focusKey={[...messages].reverse().find((message) => message.role === "maddox")?.id ?? ""}
+            />
         </section>
     )
 }

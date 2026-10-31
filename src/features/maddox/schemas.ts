@@ -49,6 +49,16 @@ export const maddoxOpencodeSchema = z.object({
     deleteOnCampaignEnd: z.boolean({ error: "Informe se as sessões são excluídas ao encerrar a campanha" }),
     /** Diretório das sessões no servidor OpenCode (vazio = o da integração). */
     directory: z.string().trim().max(500, "O diretório é longo demais (até 500 caracteres)").nullable(),
+    /**
+     * URL pública do MCP do Maddox que o OpenCode chama para as ferramentas do narrador (Maddox 4). Vazio = a URL
+     * do app (`NEXT_PUBLIC_APP_URL`/`AUTH_URL`) + `/api/maddox/mcp`.
+     */
+    mcpUrl: z
+        .string()
+        .trim()
+        .max(500, "A URL é longa demais (até 500 caracteres)")
+        .refine((value) => /^https?:\/\/\S+$/i.test(value), "Informe uma URL começando com http:// ou https://")
+        .nullable(),
 })
 export type MaddoxOpencodeSettings = z.infer<typeof maddoxOpencodeSchema>
 
@@ -84,7 +94,7 @@ export const DEFAULT_MADDOX_SETTINGS: MaddoxSettings = {
     instructions: DEFAULT_MADDOX_INSTRUCTIONS,
     interviewerInstructions: DEFAULT_MADDOX_INTERVIEWER_INSTRUCTIONS,
     avatar: { url: null, persona: DEFAULT_MADDOX_PERSONA },
-    opencode: { sessionScope: "campaign-and-interviews", deleteOnCampaignEnd: true, directory: null },
+    opencode: { sessionScope: "campaign-and-interviews", deleteOnCampaignEnd: true, directory: null, mcpUrl: null },
     jev: Object.fromEntries(MADDOX_JEV_DECISIONS.map((decision) => [decision, false])) as MaddoxJevSettings,
 }
 

@@ -1,5 +1,5 @@
-import { MADDOX_MASTER_RETRY_MS } from "./constants"
-import type { MaddoxGameParticipantDto, MaddoxGameStateDto } from "./game-types"
+import { MADDOX_MASTER_RETRY_MS, MADDOX_TURN_PHASE_LABELS } from "./constants"
+import type { MaddoxGameMessageDto, MaddoxGameParticipantDto, MaddoxGameStateDto, MaddoxLiveGenerationDto } from "./game-types"
 
 /** Sem Pusher, a mesa recarrega neste intervalo (os outros jogadores não avisam em tempo real). */
 export const MADDOX_GAME_POLL_MS = 5000
@@ -44,6 +44,20 @@ export function composerBlockReason(state: Pick<MaddoxGameStateDto, "status" | "
     if (state.turn.phase === "master") return "O Maddox está narrando. Aguarde o turno dos jogadores."
     if (!state.me.eligible) return "Você entra no jogo a partir do próximo turno."
     return null
+}
+
+/** Faixa do turno do mestre: narrando ou, depois de uma falha, a espera da nova tentativa. */
+export function masterBannerText(state: Pick<MaddoxGameStateDto, "turn">): string {
+    return state.turn.failed ? `${MADDOX_TURN_PHASE_LABELS.master} — o Maddox teve um problema; tentando de novo em instantes…` : `${MADDOX_TURN_PHASE_LABELS.master} — o Maddox está narrando…`
+}
+
+/**
+ * Gerações do Maddox a mostrar: as ao vivo e as que já terminaram até a mensagem gravada chegar à lista (sem
+ * piscar entre o fim do stream e a recarga da mesa).
+ */
+export function visibleLiveGenerations(stream: { live: MaddoxLiveGenerationDto[]; settled: (MaddoxLiveGenerationDto & { messageId: string })[] }, messages: readonly Pick<MaddoxGameMessageDto, "id">[]): MaddoxLiveGenerationDto[] {
+    const saved = new Set(messages.map((message) => message.id))
+    return [...stream.settled.filter((item) => !saved.has(item.messageId)), ...stream.live]
 }
 
 /**

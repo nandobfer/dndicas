@@ -45,6 +45,11 @@ export interface IMaddoxCampaign {
         /** Última falha do turno do mestre: a retomada espera `MADDOX_MASTER_RETRY_MS` desde ela. */
         failedAt: Date | null
     }
+    /**
+     * Estado atual da história (Maddox 4), o "checkpoint" mantido pelo narrador: cena, local, situação e a
+     * decisão aguardada. Relido a cada turno.
+     */
+    state: { scene: string; location: string; situation: string; pendingDecision: string; updatedTurn: number | null; updatedAt: Date | null }
     /** Quando o dono iniciou a campanha (Maddox 3). */
     startedAt: Date | null
     /** Link de convite (Maddox 1). `select: false`: só o dono o recebe; gerar outro invalida o anterior. */
@@ -78,6 +83,14 @@ const MaddoxCampaignSchema = new Schema<IMaddoxCampaign>(
             declaredMemberIds: { type: [Schema.Types.ObjectId], default: [] },
             generating: { type: new Schema({ token: String, startedAt: Date }, { _id: false }), default: null },
             failedAt: { type: Date, default: null },
+        },
+        state: {
+            scene: { type: String, default: "" },
+            location: { type: String, default: "" },
+            situation: { type: String, default: "" },
+            pendingDecision: { type: String, default: "" },
+            updatedTurn: { type: Number, default: null },
+            updatedAt: { type: Date, default: null },
         },
         startedAt: { type: Date, default: null },
         invite: {

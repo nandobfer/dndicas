@@ -6,7 +6,17 @@ import { loggerFor } from "@/lib/logger"
 import { maddoxUserChannel } from "@/lib/pusher/channel-names"
 import { publishToChannels } from "@/lib/pusher/channels"
 import { User } from "@/features/users/models/user"
-import { MADDOX_CAMPAIGN_AUDIT_ENTITY, MADDOX_GAME_CHANGED_EVENT, MADDOX_GAME_PAGE_SIZE, MADDOX_MASTER_LOCK_STALE_MS, MADDOX_MASTER_RETRY_MS, type MaddoxTurnPhase } from "../constants"
+import {
+    MADDOX_ANSWER_FAILED_MESSAGE,
+    MADDOX_CAMPAIGN_AUDIT_ENTITY,
+    MADDOX_DECLARATION_VALIDATION_RIGORS,
+    MADDOX_GAME_CHANGED_EVENT,
+    MADDOX_GAME_PAGE_SIZE,
+    MADDOX_MASTER_HEARTBEAT_MS,
+    MADDOX_MASTER_LOCK_STALE_MS,
+    MADDOX_MASTER_RETRY_MS,
+    type MaddoxTurnPhase,
+} from "../constants"
 import {
     MaddoxCampaignMemberModel,
     MaddoxCampaignMessageModel,
@@ -21,6 +31,7 @@ import type { MaddoxGameActionInput, MaddoxSkipPlayerInput } from "../game-schem
 import type { MaddoxGameMessageDto, MaddoxGameMessagesPageDto, MaddoxGameParticipantDto, MaddoxGameStateDto } from "../game-types"
 import { assertMemberCanPlay, isMemberReadyToPlay, loadMembership } from "./campaigns"
 import { getMaddoxMaster, type MaddoxMasterDeclaration } from "./game-master"
+import { beginLive, enqueueMaddoxJob, isCampaignBusy } from "./game-live"
 import { onlineUserIds } from "./game-presence"
 
 /**
@@ -33,7 +44,9 @@ import { onlineUserIds } from "./game-presence"
  *   declararam ou passaram, com ao menos uma declaração. Presença desconhecida = todos os elegíveis.
  * - Pergunta ao mestre é respondida na hora e não muda o turno.
  * - Toda ação de jogo chama `assertMemberCanPlay` (entrevista de personagem concluída).
- * - Nesta entrega o mestre é simulado (`game-mock`).
+ * - O mestre é o narrador com IA (Maddox 4). Narrações e respostas entram na FILA da campanha (`game-live`, uma
+ *   geração por vez) e rodam em segundo plano: a requisição que fecha o turno ou pergunta responde logo, e o texto
+ *   chega a todos pelo stream da mesa. Nos rigores Rigoroso e Fiel ao D&D a declaração é validada antes de gravar.
  */
 
 const log = loggerFor({ module: "maddox", feature: "game" })
@@ -96,9 +109,15 @@ async function publishGameChanged(campaignId: Types.ObjectId, extraUserIds: stri
  * Narra o turno `turnNumber` do mestre (com a trava `token`) e abre o turno dos jogadores com a nova
  * lista de elegíveis. Retomada segura: a narração já gravada deste turno é reaproveitada.
  */
-async function runMasterTurn(campaignId: Types.ObjectId, token: string, turnNumber: number): Promise<void> {
+async function runMasterTurn(campaignId: Types.ObjectId, token: string, turnNumber: number, jobId: string): Promise<void> {
     const campaign = await MaddoxCampaignModel.findById(campaignId).lean<CampaignDoc>()
     if (!campaign || campaign.turn?.generating?.token !== token || campaign.turn.number !== turnNumber) return
+    // Pulso da trava: uma narração longa (com ferramentas) não é tomada como trava velha por outra chamada.
+    const heartbeat = setInterval(() => {
+        void MaddoxCampaignModel.updateOne({ _id: campaignId, "turn.generating.token": token }, { $set: { "turn.generating.startedAt": new Date() } }, { timestamps: false }).catch(() => undefined)
+    }, MADDOX_MASTER_HEARTBEAT_MS)
+    heartbeat.unref?.()
+    let live: ReturnType<typeof beginLive> | null = null
     try {
         const existing = await MaddoxCampaignMessageModel.findOne({ campaignId, turnNumber, kind: "narration" }).select("_id").lean()
         if (!existing) {
@@ -109,9 +128,11 @@ async function runMasterTurn(campaignId: Types.ObjectId, token: string, turnNumb
                 content: action.content,
                 skipped: Boolean(action.skippedBy),
             }))
+            live = beginLive(String(campaignId), { kind: "narration", turnNumber, replyToId: null })
             const master = await getMaddoxMaster()
-            const content = await master.narrate({ campaignName: campaign.name, turnNumber, openingSituation: campaign.openingSituation ?? "", declarations })
-            await MaddoxCampaignMessageModel.create({ campaignId, turnNumber, phase: "master", kind: "narration", content })
+            const content = await master.narrate({ campaignId: String(campaignId), jobId, turnNumber, declarations }, live)
+            const message = await MaddoxCampaignMessageModel.create({ campaignId, turnNumber, phase: "master", kind: "narration", content })
+            live.end({ messageId: String(message._id), error: null })
         }
         const eligible = await readyMemberIds(campaignId)
         const opened = await MaddoxCampaignModel.updateOne(
@@ -122,16 +143,26 @@ async function runMasterTurn(campaignId: Types.ObjectId, token: string, turnNumb
     } catch (error) {
         // Libera a trava e marca a falha: a retomada só acontece depois de `MADDOX_MASTER_RETRY_MS` (no `GET`/`check`).
         // Sem aviso aos clientes: o estado não mudou, e recarregar já faria a próxima tentativa sem espera.
-        log.error({ err: error, campaignId: String(campaignId), turnNumber, retryInMs: MADDOX_MASTER_RETRY_MS }, "[maddox] Falha no turno do mestre")
+        log.error({ err: error instanceof Error ? error.message : error, campaignId: String(campaignId), turnNumber, retryInMs: MADDOX_MASTER_RETRY_MS }, "[maddox] Falha no turno do mestre")
         await MaddoxCampaignModel.updateOne({ _id: campaignId, "turn.generating.token": token }, { $set: { "turn.generating": null, "turn.failedAt": new Date() } })
+        live?.end({ messageId: null, error: "O Maddox teve um problema ao narrar. Uma nova tentativa acontece em instantes." })
         return
+    } finally {
+        clearInterval(heartbeat)
     }
     await publishGameChanged(campaignId)
+}
+
+/** Põe o turno do mestre na fila da campanha (roda em segundo plano; a promessa nunca rejeita). */
+function scheduleMasterTurn(campaignId: Types.ObjectId, token: string, turnNumber: number): Promise<void> {
+    return enqueueMaddoxJob(String(campaignId), `narração do turno ${turnNumber}`, ({ jobId }) => runMasterTurn(campaignId, token, turnNumber, jobId))
 }
 
 /** Fase do mestre sem geração em andamento (falha ou trava velha): pega a trava e narra. */
 async function resumeMasterTurn(campaign: CampaignDoc): Promise<boolean> {
     if (campaign.status !== "active" || campaign.turn?.phase !== "master") return false
+    // Geração na fila ou rodando neste processo: a trava é dela (o pulso a mantém), nada a retomar.
+    if (isCampaignBusy(String(campaign._id))) return false
     const generating = campaign.turn.generating
     if (generating && Date.now() - new Date(generating.startedAt).getTime() < MADDOX_MASTER_LOCK_STALE_MS) return false
     const failedAt = campaign.turn.failedAt
@@ -151,7 +182,7 @@ async function resumeMasterTurn(campaign: CampaignDoc): Promise<boolean> {
     )
     if (won.modifiedCount === 0) return false
     log.info({ campaignId: String(campaign._id), turnNumber: campaign.turn.number }, "[maddox] Retomando o turno do mestre")
-    await runMasterTurn(campaign._id, token, campaign.turn.number)
+    void scheduleMasterTurn(campaign._id, token, campaign.turn.number)
     return true
 }
 
@@ -199,7 +230,7 @@ async function evaluateTurn(campaignId: Types.ObjectId): Promise<void> {
     if (closed.modifiedCount === 0) return
     log.info({ campaignId: String(campaignId), turnNumber: number, required: required.length, presence: online ? "pusher" : "unknown" }, "[maddox] Turno dos jogadores fechado")
     await publishGameChanged(campaignId)
-    await runMasterTurn(campaignId, token, number + 1)
+    void scheduleMasterTurn(campaignId, token, number + 1)
 }
 
 /** Grava a declaração/"não fazer nada" de um membro e a conta no turno (409 se o turno fechou no meio). */
@@ -259,7 +290,7 @@ export async function startCampaign(campaignId: string, userId: string): Promise
     if (started.modifiedCount === 0) throw new DomainError(409, "Esta campanha já foi iniciada.", "CAMPAIGN_ALREADY_STARTED")
     await recordAudit({ userId, entidade: MADDOX_CAMPAIGN_AUDIT_ENTITY, entidadeId: campaignId, acao: AcaoAuditoria.ATUALIZAR, antes: { status: campaign.status }, depois: { status: "active", turn: 1 } })
     await publishGameChanged(campaign._id)
-    await runMasterTurn(campaign._id, token, 1)
+    void scheduleMasterTurn(campaign._id, token, 1)
     return getGameState(campaignId, userId)
 }
 
@@ -287,17 +318,50 @@ export async function submitGameAction(campaignId: string, input: MaddoxGameActi
             characterName: character?.name ?? null,
             content: input.content,
         })
-        const master = await getMaddoxMaster()
-        const answer = await master.answer({ campaignName: campaign.name, turnNumber, characterName: character?.name ?? "Personagem", question: input.content })
-        await MaddoxCampaignMessageModel.create({ campaignId: campaign._id, turnNumber, phase: "players", kind: "answer", content: answer, replyToId: question._id })
         await publishGameChanged(campaign._id)
+        void scheduleAnswer(campaign._id, turnNumber, question._id, character?.name ?? "Personagem", input.content)
         return getGameState(campaignId, userId)
+    }
+
+    if (input.kind === "declaration" && MADDOX_DECLARATION_VALIDATION_RIGORS.includes(campaign.rigor)) {
+        const { validateDeclaration } = await import("./action-validation")
+        const verdict = await validateDeclaration({ campaign, character, content: input.content })
+        if (!verdict.valid) throw new DomainError(409, verdict.reason, "ACTION_INVALID")
     }
 
     await recordTurnAction(campaign, member, character, input.kind, input.kind === "declaration" ? input.content : "", null)
     await publishGameChanged(campaign._id)
     await evaluateTurn(campaign._id)
     return getGameState(campaignId, userId)
+}
+
+/** Responde a pergunta na fila da campanha, transmitindo a todos; falha grava a resposta com `error`. */
+function scheduleAnswer(campaignId: Types.ObjectId, turnNumber: number, questionId: Types.ObjectId, characterName: string, question: string): Promise<void> {
+    return enqueueMaddoxJob(String(campaignId), `resposta do turno ${turnNumber}`, async ({ jobId }) => {
+        const live = beginLive(String(campaignId), { kind: "answer", turnNumber, replyToId: String(questionId) })
+        let content = ""
+        let error: string | null = null
+        try {
+            const master = await getMaddoxMaster()
+            content = await master.answer({ campaignId: String(campaignId), jobId, turnNumber, questionId: String(questionId), characterName, question }, live)
+        } catch (failure) {
+            log.warn({ err: failure instanceof Error ? failure.message : String(failure), campaignId: String(campaignId), turnNumber }, "[maddox] Falha ao responder a pergunta")
+            error = MADDOX_ANSWER_FAILED_MESSAGE
+        }
+        try {
+            const message = await MaddoxCampaignMessageModel.create({ campaignId, turnNumber, phase: "players", kind: "answer", content: error ? "" : content, error, replyToId: questionId })
+            live.end({ messageId: String(message._id), error })
+        } catch (failure) {
+            live.end({ messageId: null, error: MADDOX_ANSWER_FAILED_MESSAGE })
+            throw failure
+        }
+        await publishGameChanged(campaignId)
+    })
+}
+
+/** Membro da campanha (404 para quem não participa): acesso ao stream da mesa. */
+export async function assertGameMember(campaignId: string, userId: string): Promise<void> {
+    await loadAsMember(campaignId, userId)
 }
 
 /** Dono registra "não fez nada" no lugar de um jogador ausente (só neste turno). */
@@ -366,6 +430,7 @@ async function messagesDto(messages: MessageDoc[]): Promise<MaddoxGameMessageDto
             content: message.content,
             replyToId: message.replyToId ? String(message.replyToId) : null,
             skippedByName: message.skippedBy ? (userById.get(message.skippedBy) ?? "Dono") : null,
+            error: message.error ?? null,
             createdAt: new Date(message.createdAt).toISOString(),
         }
     })
@@ -432,6 +497,7 @@ export async function getGameState(campaignId: string, userId: string): Promise<
             phase: campaign.turn?.phase ?? "master",
             startedAt: campaign.turn?.startedAt ? new Date(campaign.turn.startedAt).toISOString() : null,
             generating: Boolean(campaign.turn?.generating),
+            failed: campaign.turn?.phase === "master" && !campaign.turn?.generating && Boolean(campaign.turn?.failedAt),
         },
         participants,
         me: { memberId: String(loaded.member._id), isOwner: campaign.ownerId === userId, ready: mine?.ready ?? false, eligible: mine?.eligible ?? false, declared: mine?.declared ?? false },

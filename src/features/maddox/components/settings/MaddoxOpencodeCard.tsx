@@ -3,7 +3,7 @@
 import { useState } from "react"
 import { Controller, type UseFormReturn } from "react-hook-form"
 import { format } from "date-fns"
-import { Loader2, RefreshCw, Trash2 } from "lucide-react"
+import { Loader2, Plug, RefreshCw, Trash2 } from "lucide-react"
 import { Button } from "@/components/ui/opex/button"
 import { GlassCard as Card, GlassCardContent as CardContent, GlassCardDescription as CardDescription, GlassCardHeader as CardHeader, GlassCardTitle as CardTitle } from "@/components/ui/glass-card"
 import { ConfirmDialog } from "@/components/ui/opex/confirm-dialog"
@@ -14,10 +14,10 @@ import { Skeleton } from "@/components/ui/opex/skeleton"
 import { FormToggleCard } from "@/components/ui/opex/toggle-card"
 import { ErrorState } from "@/components/feedback/ErrorState"
 import { apiErrorMessage } from "@/lib/api"
-import { MADDOX_SESSION_PURPOSE_LABELS, MADDOX_SESSION_SCOPE_LABELS, MADDOX_SESSION_SCOPES, type MaddoxSessionScope } from "../../constants"
+import { MADDOX_MCP_PATH, MADDOX_MCP_SERVER_NAME, MADDOX_SESSION_PURPOSE_LABELS, MADDOX_SESSION_SCOPE_LABELS, MADDOX_SESSION_SCOPES, type MaddoxSessionScope } from "../../constants"
 import type { MaddoxSettings } from "../../schemas"
-import type { MaddoxOpencodeSessionDto } from "../../types"
-import { useDeleteMaddoxSession, useMaddoxSessions } from "../../hooks/useMaddoxSettings"
+import type { MaddoxMcpStatusDto, MaddoxOpencodeSessionDto } from "../../types"
+import { useDeleteMaddoxSession, useMaddoxMcpStatus, useMaddoxSessions, useRegisterMaddoxMcp } from "../../hooks/useMaddoxSettings"
 
 /** Política das sessões do OpenCode (salva com a configuração). */
 export function MaddoxOpencodePolicyCard({ form }: { form: UseFormReturn<MaddoxSettings> }) {
@@ -59,6 +59,79 @@ export function MaddoxOpencodePolicyCard({ form }: { form: UseFormReturn<MaddoxS
                         render={({ field }) => <Input id="maddox-opencode-directory" placeholder="Vazio = o diretório da integração OpenCode" value={field.value ?? ""} onChange={(event) => field.onChange(event.target.value || null)} />}
                     />
                 </Field>
+                <Field
+                    id="maddox-opencode-mcp-url"
+                    label="URL do MCP do Maddox"
+                    error={form.formState.errors.opencode?.mcpUrl?.message}
+                >
+                    <Controller
+                        control={form.control}
+                        name="opencode.mcpUrl"
+                        render={({ field }) => <Input id="maddox-opencode-mcp-url" placeholder={`https://seu-dominio${MADDOX_MCP_PATH}`} value={field.value ?? ""} onChange={(event) => field.onChange(event.target.value.trim() || null)} />}
+                    />
+                    <p className="text-xs text-muted-foreground">Endereço que o OpenCode chama para as ferramentas do narrador. Vazio = a URL pública do app + {MADDOX_MCP_PATH}.</p>
+                </Field>
+            </CardContent>
+        </Card>
+    )
+}
+
+const MCP_STATUS_LABELS: Record<MaddoxMcpStatusDto["status"], string> = {
+    connected: "Conectado",
+    pending: "Conectando",
+    disabled: "Desativado no OpenCode",
+    failed: "Falhou",
+    needs_auth: "Pede autenticação",
+    missing: "Não registrado",
+    unknown: "Sem resposta do OpenCode",
+}
+
+/**
+ * MCP do Maddox no OpenCode (Maddox 4): com o OpenCode como narrador, as ferramentas de persistência chegam ao agente
+ * por este MCP. A narração registra e conecta sozinha quando falta; aqui dá para conferir e registrar à mão.
+ */
+export function MaddoxOpencodeMcpCard() {
+    const query = useMaddoxMcpStatus()
+    const register = useRegisterMaddoxMcp()
+    const status = query.data
+    const connected = status?.status === "connected"
+    const snippet = JSON.stringify({ mcp: { [MADDOX_MCP_SERVER_NAME]: { type: "remote", url: status?.url ?? `https://seu-dominio${MADDOX_MCP_PATH}`, oauth: false } } }, null, 2)
+    return (
+        <Card>
+            <CardHeader className="flex flex-row items-start justify-between gap-3">
+                <div className="space-y-1.5">
+                    <CardTitle className="text-base">MCP do Maddox</CardTitle>
+                    <CardDescription>
+                        Com o OpenCode como provedor do Maddox, as ferramentas do narrador (estado da campanha, NPCs, locais, missões e memórias) chegam ao agente pelo MCP <code>{MADDOX_MCP_SERVER_NAME}</code>. Use um agente do OpenCode sem ferramentas de arquivos ou terminal.
+                    </CardDescription>
+                </div>
+                <Button type="button" variant="ghost" size="icon" aria-label="Atualizar situação do MCP" disabled={query.isFetching} onClick={() => void query.refetch()}>
+                    <RefreshCw className={query.isFetching ? "h-4 w-4 animate-spin" : "h-4 w-4"} aria-hidden />
+                </Button>
+            </CardHeader>
+            <CardContent className="space-y-3">
+                {query.isLoading ? (
+                    <Skeleton className="h-16 w-full" />
+                ) : query.isError || !status ? (
+                    <ErrorState title="Não foi possível consultar o MCP" description={apiErrorMessage(query.error, "Tente novamente.")} onRetry={() => void query.refetch()} />
+                ) : (
+                    <>
+                        <p className="flex flex-wrap items-center gap-2 text-sm" data-testid="maddox-mcp-status">
+                            <span className={connected ? "rounded bg-success/15 px-1.5 py-0.5 text-xs text-success" : "rounded bg-warning/15 px-1.5 py-0.5 text-xs text-warning"}>{MCP_STATUS_LABELS[status.status]}</span>
+                            <span className="truncate font-mono text-xs text-muted-foreground">{status.url ?? "sem URL pública do app"}</span>
+                        </p>
+                        {status.error && <p className="text-xs text-destructive">{status.error}</p>}
+                        {!connected && (
+                            <Button type="button" size="sm" variant="outline" disabled={register.isPending || !status.url} onClick={() => register.mutate()}>
+                                {register.isPending ? <Loader2 className="animate-spin" aria-hidden /> : <Plug aria-hidden />} Registrar no OpenCode
+                            </Button>
+                        )}
+                        <details className="text-xs text-muted-foreground">
+                            <summary className="cursor-pointer">Configuração manual (opencode.json)</summary>
+                            <pre className="mt-2 overflow-x-auto rounded-md border bg-background/60 p-2 font-mono text-[11px]">{snippet}</pre>
+                        </details>
+                    </>
+                )}
             </CardContent>
         </Card>
     )

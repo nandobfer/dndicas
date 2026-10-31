@@ -164,6 +164,31 @@ describe("entrevista de cenário", () => {
         await act(async () => stream.end())
     })
 
+    it("quando o Maddox termina de responder, o foco volta ao campo de resposta", async () => {
+        mockGets(campaign(), interview())
+        const stream = streamFetch()
+        renderWithQueryClient(<InterviewPage campaignId="c1" kind="scenario" />)
+        const box = await screen.findByRole("textbox", { name: "Sua resposta" })
+        fireEvent.change(box, { target: { value: "Fantasia sombria" } })
+        fireEvent.keyDown(box, { key: "Enter" })
+        await waitFor(() => expect(screen.getByRole("textbox", { name: "Sua resposta" })).toBeDisabled())
+        // No navegador o campo desabilitado perde o foco; aqui o foco vai para um botão qualquer da página.
+        const elsewhere = document.createElement("button")
+        document.body.appendChild(elsewhere)
+        elsewhere.focus()
+        expect(document.activeElement).not.toBe(screen.getByRole("textbox", { name: "Sua resposta" }))
+        const answered = interview({ messages: [msg("a1", "maddox", "Que **universo** você imagina?"), msg("u1", "user", "Fantasia sombria"), msg("a2", "maddox", "E o tom?")] })
+        mockGets(campaign(), answered)
+        await act(async () => {
+            stream.send({ type: "delta", text: "E o tom?" })
+            stream.send({ type: "done", message: msg("a2", "maddox", "E o tom?"), interview: answered })
+            stream.end()
+        })
+        await waitFor(() => expect(screen.getByRole("textbox", { name: "Sua resposta" })).not.toBeDisabled())
+        await waitFor(() => expect(document.activeElement).toBe(screen.getByRole("textbox", { name: "Sua resposta" })))
+        elsewhere.remove()
+    })
+
     it("Shift+Enter não envia", async () => {
         mockGets(campaign(), interview())
         const stream = streamFetch()

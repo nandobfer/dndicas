@@ -116,6 +116,10 @@ export type MaddoxVisibility = (typeof MADDOX_VISIBILITIES)[number]
 export const MADDOX_CAMPAIGN_MEMORY_KINDS = ["fato", "evento", "local", "missao", "relacao", "outro"] as const
 export type MaddoxCampaignMemoryKind = (typeof MADDOX_CAMPAIGN_MEMORY_KINDS)[number]
 
+/** Situação de uma memória do tipo `missao` (os demais tipos não usam). */
+export const MADDOX_QUEST_STATUSES = ["ativa", "concluida", "falhou", "abandonada"] as const
+export type MaddoxQuestStatus = (typeof MADDOX_QUEST_STATUSES)[number]
+
 export const MADDOX_TURN_PHASES = ["master", "players"] as const
 export type MaddoxTurnPhase = (typeof MADDOX_TURN_PHASES)[number]
 
@@ -147,6 +151,36 @@ export const MADDOX_TURN_PHASE_LABELS: Record<MaddoxTurnPhase, string> = {
     master: "Turno do mestre",
     players: "Turno dos jogadores",
 }
+
+// ── Narrador (Maddox 4) ───────────────────────────────────────────────────────
+
+/**
+ * Graus de rigor que validam a ação livre no momento da declaração (inválida = recusada, o jogador reescreve).
+ * Os demais julgam na narração: a ação impossível vira uma tentativa frustrada narrada na ficção.
+ */
+export const MADDOX_DECLARATION_VALIDATION_RIGORS: readonly MaddoxRigorLevel[] = ["rigoroso", "fiel-dnd"]
+
+/** Enquanto o mestre gera, a trava do turno é renovada neste intervalo (a trava velha só vale para quedas). */
+export const MADDOX_MASTER_HEARTBEAT_MS = 30 * 1000
+/** Passos do laço de ferramentas por geração do narrador. */
+export const MADDOX_NARRATOR_MAX_STEPS = 12
+/** Transcrição recente enviada ao narrador (o estado gravado cobre o que fica de fora). */
+export const MADDOX_NARRATOR_HISTORY_CHARS = 40_000
+/** Itens de cada lista no índice do estado entregue ao narrador. */
+export const MADDOX_NARRATOR_INDEX_ITEMS = 40
+
+/** Origens do consumo de IA do narrador (painel de consumo). */
+export const MADDOX_NARRATION_CONSUMPTION_ORIGIN = "maddox-narration"
+export const MADDOX_VALIDATION_CONSUMPTION_ORIGIN = "maddox-validation"
+
+/** Servidor MCP do Maddox registrado no OpenCode (ferramentas do narrador quando o provedor é o OpenCode). */
+export const MADDOX_MCP_SERVER_NAME = "dndicas-maddox"
+export const MADDOX_MCP_PATH = "/api/maddox/mcp"
+/** Validade do token de turno que o OpenCode envia às ferramentas do MCP. */
+export const MADDOX_TURN_TOKEN_TTL_MS = 20 * 60 * 1000
+
+/** Resposta gravada quando a geração da resposta a uma pergunta falha. */
+export const MADDOX_ANSWER_FAILED_MESSAGE = "O Maddox não conseguiu responder agora. Pergunte de novo."
 
 // ── Entrevistas ───────────────────────────────────────────────────────────────
 

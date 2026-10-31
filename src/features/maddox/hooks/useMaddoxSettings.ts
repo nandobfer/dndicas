@@ -7,13 +7,14 @@ import type { ApiResponse } from "@/lib/types/api"
 import { AI_QUERY_KEY } from "@/features/ai/hooks/useAi"
 import { MADDOX_FEATURE, MADDOX_SCRIPT_KIND_LABELS, type MaddoxScriptKind } from "../constants"
 import type { MaddoxSettings, SaveMaddoxScriptInput } from "../schemas"
-import type { MaddoxGeneratedAvatarDto, MaddoxOpencodeSessionDto, MaddoxScriptStateDto, MaddoxScriptVersionDto, MaddoxSettingsDto } from "../types"
+import type { MaddoxGeneratedAvatarDto, MaddoxOpencodeSessionDto, MaddoxScriptStateDto, MaddoxScriptVersionDto, MaddoxSettingsDto, MaddoxMcpStatusDto } from "../types"
 
 const BASE = `/ai/features/${MADDOX_FEATURE}`
 
 /** Mesma chave das features de IA: o `useAiFeatureRealtime` da página recarrega ao mudar. */
 export const MADDOX_SETTINGS_KEY = [AI_QUERY_KEY, "feature", MADDOX_FEATURE] as const
 export const MADDOX_SESSIONS_KEY = [AI_QUERY_KEY, "feature", MADDOX_FEATURE, "opencode-sessions"] as const
+export const MADDOX_MCP_KEY = [AI_QUERY_KEY, "feature", MADDOX_FEATURE, "opencode-mcp"] as const
 
 export const useMaddoxSettings = () =>
     useQuery({
@@ -77,5 +78,27 @@ export function useDeleteMaddoxSession() {
             else toast.warning("O OpenCode não respondeu: a exclusão ficou pendente e será retomada pela rotina")
         },
         onError: (error) => toast.error(apiErrorMessage(error, "Não foi possível excluir a sessão")),
+    })
+}
+
+/** Situação do MCP do Maddox no servidor OpenCode (ferramentas do narrador com o OpenCode). */
+export const useMaddoxMcpStatus = () =>
+    useQuery({
+        queryKey: MADDOX_MCP_KEY,
+        queryFn: async () => unwrapApi((await api.get<ApiResponse<MaddoxMcpStatusDto>>(`${BASE}/opencode-mcp`)).data),
+        retry: false,
+    })
+
+/** Adiciona e conecta o MCP do Maddox no OpenCode (se faltar). */
+export function useRegisterMaddoxMcp() {
+    const queryClient = useQueryClient()
+    return useMutation({
+        mutationFn: async () => unwrapApi((await api.post<ApiResponse<MaddoxMcpStatusDto>>(`${BASE}/opencode-mcp`)).data),
+        onSuccess: (status) => {
+            queryClient.setQueryData(MADDOX_MCP_KEY, status)
+            if (status.status === "connected") toast.success("MCP do Maddox conectado no OpenCode")
+            else toast.warning(status.error ?? "O MCP do Maddox ainda não está conectado no OpenCode")
+        },
+        onError: (error) => toast.error(apiErrorMessage(error, "Não foi possível registrar o MCP no OpenCode")),
     })
 }

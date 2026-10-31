@@ -18,6 +18,8 @@ export const AI_CONSUMPTION_ORIGIN_LABELS: Record<string, string> = {
     "opex-anonymous-agent": "Agente Opex (visitantes)",
     "opex-title": "Agente Opex (títulos)",
     "maddox-interview": "Agente Maddox (entrevistas)",
+    "maddox-narration": "Agente Maddox (narração)",
+    "maddox-validation": "Agente Maddox (validação de ações)",
 }
 
 export function aiConsumptionOriginLabel(origin: string): string {

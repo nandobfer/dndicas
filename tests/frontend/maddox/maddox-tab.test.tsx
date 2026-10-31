@@ -4,12 +4,14 @@ import { fireEvent, screen, waitFor, within } from "@testing-library/react"
 import { renderWithQueryClient } from "../test-utils"
 import { DEFAULT_MADDOX_SETTINGS } from "@/features/maddox/schemas"
 import { defaultMaddoxScript } from "@/features/maddox/script-draft"
-import type { MaddoxSettingsDto } from "@/features/maddox/types"
+import type { MaddoxSettingsDto, MaddoxMcpStatusDto } from "@/features/maddox/types"
 
 const saveSettings = vi.fn()
 const saveScript = vi.fn()
 const generateAvatar = vi.fn()
 const deleteSession = vi.fn()
+const registerMcp = vi.fn()
+let mcpStatus: MaddoxMcpStatusDto = { url: "https://dndicas.example/api/maddox/mcp", server: "dndicas-maddox", status: "missing", error: null }
 const toastError = vi.fn()
 let sessions: Array<Record<string, unknown>> = []
 
@@ -34,6 +36,8 @@ vi.mock("@/features/maddox/hooks/useMaddoxSettings", () => ({
     useGenerateMaddoxAvatar: () => ({ mutateAsync: generateAvatar, isPending: false }),
     useMaddoxSessions: () => ({ data: sessions, isLoading: false, isError: false, isFetching: false, refetch: vi.fn() }),
     useDeleteMaddoxSession: () => ({ mutate: deleteSession, isPending: false }),
+    useMaddoxMcpStatus: () => ({ data: mcpStatus, isLoading: false, isError: false, isFetching: false, refetch: vi.fn() }),
+    useRegisterMaddoxMcp: () => ({ mutate: registerMcp, isPending: false }),
 }))
 
 /** Integrações falsas; o filtro de provedores é o real (`toProviderStatuses`). */
@@ -185,7 +189,31 @@ describe("aba Agente Maddox", () => {
         fireEvent.change(screen.getByLabelText("Diretório das sessões"), { target: { value: "/srv/maddox" } })
         fireEvent.click(screen.getByRole("button", { name: "Salvar" }))
         await waitFor(() => expect(saveSettings).toHaveBeenCalled())
-        expect(lastSaved().opencode).toEqual({ sessionScope: "campaign", deleteOnCampaignEnd: false, directory: "/srv/maddox" })
+        expect(lastSaved().opencode).toEqual({ sessionScope: "campaign", deleteOnCampaignEnd: false, directory: "/srv/maddox", mcpUrl: null })
+    })
+
+    it("seção OpenCode: MCP do Maddox mostra a situação, registra no OpenCode e salva a URL", async () => {
+        registerMcp.mockClear()
+        mcpStatus = { url: "https://dndicas.example/api/maddox/mcp", server: "dndicas-maddox", status: "missing", error: null }
+        renderTab()
+        fireEvent.click(screen.getByRole("tab", { name: "OpenCode" }))
+        expect(await screen.findByTestId("maddox-mcp-status")).toHaveTextContent("Não registrado")
+        expect(screen.getByTestId("maddox-mcp-status")).toHaveTextContent("https://dndicas.example/api/maddox/mcp")
+        fireEvent.click(screen.getByRole("button", { name: /Registrar no OpenCode/ }))
+        expect(registerMcp).toHaveBeenCalledTimes(1)
+        fireEvent.change(screen.getByLabelText("URL do MCP do Maddox"), { target: { value: "https://outro.example/api/maddox/mcp" } })
+        await waitFor(() => expect((screen.getByRole("button", { name: "Salvar" }) as HTMLButtonElement).disabled).toBe(false))
+        fireEvent.click(screen.getByRole("button", { name: "Salvar" }))
+        await waitFor(() => expect(saveSettings).toHaveBeenCalled())
+        expect(lastSaved().opencode.mcpUrl).toBe("https://outro.example/api/maddox/mcp")
+    })
+
+    it("seção OpenCode: MCP conectado não oferece registrar", async () => {
+        mcpStatus = { url: "https://dndicas.example/api/maddox/mcp", server: "dndicas-maddox", status: "connected", error: null }
+        renderTab()
+        fireEvent.click(screen.getByRole("tab", { name: "OpenCode" }))
+        expect(await screen.findByTestId("maddox-mcp-status")).toHaveTextContent("Conectado")
+        expect(screen.queryByRole("button", { name: /Registrar no OpenCode/ })).not.toBeInTheDocument()
     })
 
     it("seção OpenCode: lista as sessões e exclui só depois de confirmar", async () => {
