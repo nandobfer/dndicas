@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest"
-import { isChannelAuthorized, parseChannel } from "@/lib/pusher/channel-auth"
-import { maddoxUserChannel, opexChannel, opexOwnerKey } from "@/lib/pusher/channel-names"
+import { isChannelAuthorized, parseChannel, requiresCampaignMembership } from "@/lib/pusher/channel-auth"
+import { maddoxCampaignPresenceChannel, maddoxUserChannel, opexChannel, opexOwnerKey } from "@/lib/pusher/channel-names"
 
 const admin = { user: { id: "admin-1", permissions: ["admin.access"] }, anonymousId: null }
 const user = { user: { id: "user-1", permissions: [] }, anonymousId: null }
@@ -29,6 +29,19 @@ describe("autorização dos canais privados do Pusher", () => {
         expect(isChannelAuthorized(channel, admin)).toBe(false)
         expect(isChannelAuthorized(channel, visitor)).toBe(false)
         expect(isChannelAuthorized("private-maddox-u-", user)).toBe(false)
+    })
+
+    it("presença da mesa Maddox: exige maddox.play e pede a checagem de participação na campanha", () => {
+        const campaignId = "6ae556e2cda8c14484b2432f"
+        const channel = maddoxCampaignPresenceChannel(campaignId)
+        expect(channel).toBe(`presence-maddox-c-${campaignId}`)
+        expect(parseChannel(channel)).toEqual({ kind: "maddox-campaign-presence", campaignId })
+        expect(requiresCampaignMembership(channel)).toBe(campaignId)
+        expect(isChannelAuthorized(channel, { user: { id: "user-1", permissions: ["maddox.play"] }, anonymousId: null })).toBe(true)
+        expect(isChannelAuthorized(channel, user)).toBe(false)
+        expect(isChannelAuthorized(channel, visitor)).toBe(false)
+        expect(parseChannel("presence-maddox-c-nao-e-id")).toEqual({ kind: "unknown" })
+        expect(requiresCampaignMembership(maddoxUserChannel("user-1"))).toBeNull()
     })
 
     it("canal do Agente Opex: só o próprio usuário", () => {

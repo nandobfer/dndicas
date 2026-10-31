@@ -29,7 +29,24 @@ export interface IMaddoxCampaign {
     scenarioInterview: { status: MaddoxScenarioStatus; completedAt: Date | null }
     /** Versões dos roteiros com que as entrevistas desta campanha começaram. */
     scriptVersions: { scenario: number | null; character: number | null }
-    turn: { number: number; phase: MaddoxTurnPhase }
+    /**
+     * Turno (Maddox 3). `number` sobe a cada turno do mestre (1 = abertura); o turno dos jogadores é do mesmo
+     * número. `eligibleMemberIds` é fixada ao abrir o turno dos jogadores (membros ativos prontos): quem fica
+     * pronto depois entra no próximo. Fecha quando todos os elegíveis ONLINE declararam. `generating` é a
+     * trava do turno do mestre (token de quem gera).
+     */
+    turn: {
+        number: number
+        phase: MaddoxTurnPhase
+        startedAt: Date | null
+        eligibleMemberIds: Types.ObjectId[]
+        declaredMemberIds: Types.ObjectId[]
+        generating: { token: string; startedAt: Date } | null
+        /** Última falha do turno do mestre: a retomada espera `MADDOX_MASTER_RETRY_MS` desde ela. */
+        failedAt: Date | null
+    }
+    /** Quando o dono iniciou a campanha (Maddox 3). */
+    startedAt: Date | null
     /** Link de convite (Maddox 1). `select: false`: só o dono o recebe; gerar outro invalida o anterior. */
     invite: { token: string | null; rotatedAt: Date | null }
     createdAt: Date
@@ -56,7 +73,13 @@ const MaddoxCampaignSchema = new Schema<IMaddoxCampaign>(
         turn: {
             number: { type: Number, default: 0 },
             phase: { type: String, enum: MADDOX_TURN_PHASES, default: "master" },
+            startedAt: { type: Date, default: null },
+            eligibleMemberIds: { type: [Schema.Types.ObjectId], default: [] },
+            declaredMemberIds: { type: [Schema.Types.ObjectId], default: [] },
+            generating: { type: new Schema({ token: String, startedAt: Date }, { _id: false }), default: null },
+            failedAt: { type: Date, default: null },
         },
+        startedAt: { type: Date, default: null },
         invite: {
             token: { type: String, default: null, select: false },
             rotatedAt: { type: Date, default: null },

@@ -4,7 +4,8 @@
 documentação cobre a **entrega 0 (DND-8, #200)** — modelos no MongoDB e a configuração do agente — e a
 **entrega 1 (DND-18, #209)** — lista, criação com rigor, lobby e convite por link (seção "Campanhas").
 A **entrega 2 (DND-12, #206)** — entrevistas de cenário e de personagem — está na seção "Entrevistas
-(Maddox 2)". **Ainda não há IA de narração** (Maddox 4).
+(Maddox 2)". A **entrega 3 (DND-11, #202)** — motor de turnos e tempo real — está em "Mesa e turnos (Maddox 3)".
+**Ainda não há IA de narração** (Maddox 4): o mestre da mesa responde com texto simulado.
 
 Código: `src/features/maddox/` (`constants`, `schemas`, `types`, `script-draft`, `models/`, `server/`,
 `hooks/`, `components/settings/`).
@@ -172,7 +173,7 @@ grava a versão vigente do roteiro (`campaign.scriptVersions.scenario`), muda a 
 ("Em entrevista") e `scenarioInterview.status` para `in-progress`, e **trava o rigor** (409 `RIGOR_LOCKED` daí em
 diante, mesmo de volta ao lobby). Concluir grava o cenário e volta a campanha a **`lobby`**, com
 `scenarioInterview.status = "done"`. Convites continuam abertos durante a entrevista. O "Iniciar campanha" e o
-status `active` são do Maddox 3.
+status `active` são do Maddox 3 (seção abaixo).
 
 | Regra | Comportamento |
 | --- | --- |
@@ -182,7 +183,7 @@ status `active` são do Maddox 3.
 | Uma geração por vez | Trava `generating` condicional; ocupada = 409 `INTERVIEW_BUSY`; trava com mais de 5 min é retomada |
 | Limite | 200 mensagens (409 `INTERVIEW_TOO_LONG`); cada resposta até 4.000 caracteres (Zod) |
 | Concluída | Não reabre (409 `INTERVIEW_DONE`); nome e retrato seguem editáveis |
-| Pronto para jogar | `isMemberReadyToPlay` (entrevista `done`) → `member.ready` no DTO; `assertMemberCanPlay` responde 409 `INTERVIEW_REQUIRED`. Ainda não há ponto de entrada no jogo: **o Maddox 3 deve chamar `assertMemberCanPlay` em toda ação de jogo** (iniciar a campanha com o jogador, entrar na cena, enviar ação/turno), no servidor; o selo e os botões da tela não bastam |
+| Pronto para jogar | `isMemberReadyToPlay` (entrevista `done`) → `member.ready` no DTO; `assertMemberCanPlay` responde 409 `INTERVIEW_REQUIRED`. **Toda ação de jogo chama `assertMemberCanPlay` no servidor** (iniciar a campanha, declarar, passar, perguntar, pular jogador — `server/game.ts`); o selo e os botões da tela não bastam |
 | Nome e retrato depois da entrevista | Continuam editáveis no lobby; a mudança é propagada à ficha D&D ligada (`name` e, se houver retrato, `photo`). O `result` gravado na entrevista é o registro histórico e não muda |
 | Visibilidade | A conversa é só de quem é entrevistado; cenário, situação inicial e perfis ficam visíveis a todos os membros; o link da ficha só para o dono do personagem |
 
@@ -269,6 +270,71 @@ numa bolha neutra (`rounded-2xl`, borda sutil na cor do rigor) com o nome na cor
 dela; avatar de tamanho fixo alinhado ao topo (`h-7 w-7 self-start shrink-0`), que não estica com a fala. No lobby, o link
 de convite fica numa linha e "Copiar link"/"Gerar novo link" abaixo.
 
+## Mesa e turnos (Maddox 3)
+
+Código: `server/game.ts` (motor), `server/game-presence.ts` (presença), `server/game-master.ts` (interface do
+mestre) e `server/game-mock.ts` (mestre simulado), `game-schemas.ts`, `game-types.ts`, `game-view.ts` (regras puras da
+tela), `hooks/useMaddoxGame.ts`, `components/game/`, coleção `maddox_campaign_messages`.
+
+**Iniciar.** O dono clica **"Iniciar campanha"** no lobby (com confirmação). Exige o cenário `done` (409
+`SCENARIO_PENDING`), a **própria entrevista de personagem concluída** (`assertMemberCanPlay`, 409 `INTERVIEW_REQUIRED`) e a
+campanha no `lobby` (outra fase = 409 `CAMPAIGN_ALREADY_STARTED`; a troca `lobby → active` é condicional, então dois
+cliques não iniciam duas vezes). Só o dono (403). Auditado (`CampanhaMaddox`, `status: active, turn: 1`). Com a campanha
+em andamento, o lobby mostra "Em andamento · Turno N · fase" e **"Entrar na mesa"** para todos.
+
+**Turnos** (estado em `campaign.turn`: `number`, `phase`, `startedAt`, `eligibleMemberIds`, `declaredMemberIds`, `generating`):
+
+| Regra | Comportamento |
+| --- | --- |
+| Numeração | `number` sobe a cada turno do mestre (1 = abertura); o turno dos jogadores seguinte tem o mesmo número |
+| Turno do mestre | Pega a trava `generating { token }`, narra (mock) as declarações do turno anterior, grava a narração e abre o turno dos jogadores. Trava com mais de 2 min (`MADDOX_MASTER_LOCK_STALE_MS`) é retomada no `GET …/game` ou no `check`. Falha do mestre libera a trava, grava `turn.failedAt` e **não avisa a mesa**; a nova tentativa só acontece depois de 30 s (`MADDOX_MASTER_RETRY_MS`), no `GET`/`check` (a tela recarrega nesse intervalo enquanto o mestre está sem geração), sem laço de retomadas. A narração já gravada do turno é reaproveitada (sem duplicar) |
+| Elegíveis | Fixados ao abrir o turno dos jogadores: membros `joined` com a entrevista concluída. **Quem entra ou conclui a entrevista no meio do turno joga a partir do próximo** (409 `NEXT_TURN`). Se a lista ficar vazia (todos saíram), quem estiver pronto entra no turno atual |
+| Presentes | Jogadores com a **mesa aberta** (canal de presença do Pusher). O turno fecha quando **todos os elegíveis presentes** declararam ou passaram **e** há ao menos uma declaração no turno (mesa toda offline não avança sozinha). Elegível offline não trava; se voltar, passa a contar |
+| Presença desconhecida | Pusher sem configuração ou falha na consulta = **todos os elegíveis** contam (nunca fecha antes da hora), com log. A tela avisa "Sem tempo real…" e recarrega a cada 5 s |
+| Declarar / "Não fazer nada" | Uma por membro e turno (índice único parcial `{ campaignId, turnNumber, memberId }` com `turnAction: true`; repetir = 409 `ALREADY_DECLARED`). Grava a mensagem e conta em `declaredMemberIds` por update condicional; se o turno fechou no meio, apaga a mensagem e responde 409 `TURN_CLOSED`. A declaração é final |
+| Pergunta ao mestre | Escolha explícita ("Perguntar ao mestre"). Só no turno dos jogadores e para elegíveis, mesmo depois de declarar; o mestre responde (mock) na hora, ligado à pergunta (`replyToId`), **sem mudar o turno** |
+| Turno do mestre em curso | Ações = 409 `MASTER_TURN` |
+| Fechamento | Update condicional (`number`, `phase: players`): só uma chamada vence e roda o mestre — declarações simultâneas e vários `check` geram uma única narração |
+| Pular jogador | Só o dono (403), que também precisa estar pronto para jogar; registra "não fez nada" no lugar de um elegível que ainda não declarou (`skippedBy`), só no turno atual, com confirmação e auditoria |
+| Saída/remoção | `removeMember` grava, audita e avisa a saída e só depois chama `onMemberLeftGame` (o membro sai dos elegíveis e o turno é reavaliado); falha nessa reavaliação é logada e não desfaz a saída |
+| Campanha fora de `active` | Ações = 409 `CAMPAIGN_NOT_ACTIVE` |
+
+Ainda fora do escopo: pausar/encerrar a campanha, editar uma declaração enviada, IA e streaming da narração (Maddox 4).
+
+**Mestre simulado.** `getMaddoxMaster()` devolve `mockMaddoxMaster` (interface `MaddoxMaster { narrate, answer }`). A
+abertura usa a situação inicial do cenário; os turnos seguintes resumem cada personagem ("**Lyra** — “…”", "preferiu
+esperar") e terminam com "O que vocês fazem?". Todo texto leva o aviso de narração/resposta simulada. O Maddox 4 troca a
+implementação.
+
+**Presença.** Canal **`presence-maddox-c-{campaignId}`** (`maddoxCampaignPresenceChannel`), assinado só pela tela da mesa.
+`/api/pusher/auth` exige `maddox.play` e confere no banco que o usuário é **membro `joined`** (`isActiveCampaignMember`);
+`user_id` = usuário efetivo (várias abas contam uma vez). O servidor consulta quem está online pela API HTTP do Pusher
+(`GET /channels/{canal}/users`, aceita pelo Soketi), nunca pelo cliente. Quando alguém sai (`pusher:member_removed`), os
+outros clientes chamam `POST …/game/check` (debounce de 1,5 s), que reavalia o turno — qualquer membro pode chamá-lo, mesmo
+quem só assiste, porque não grava nada em nome de ninguém.
+
+**Tempo real dos dados.** Cada mudança publica **`maddox.game.changed { campaignId, turnNumber, phase }`** no canal de
+cada membro ativo (`private-maddox-u-{userId}`); mesa e lobby recarregam. Todos recebem os mesmos dados (as declarações
+aparecem para todos na hora); só `me` muda por usuário.
+
+**Tela `/campanhas/[id]/mesa`** (`pageAccess`): cabeçalho com rigor, "Turno N" e a faixa da fase ("Turno dos jogadores — X
+de N jogador(es) online já declararam" / "Turno do mestre — o Maddox está narrando…"); conversa no padrão do chat do Opex
+(divisor por turno, Maddox com avatar e cor do rigor, declarações com o retrato do personagem — as minhas à direita —,
+pergunta e resposta ligadas, "Fulano não fez nada (pulado por …)", "Carregar anteriores" com cursor); campo com
+**Declarar** (Ctrl/⌘+Enter; Enter sozinho só quebra linha), **Perguntar ao mestre** e **Não fazer nada**, bloqueado com o
+motivo em pt-BR (turno do mestre, próximo turno, entrevista pendente com link); painel "Na mesa" com presença (ponto
+online/offline) e a situação em cores de raridade (Declarou, Aguardando, Offline (não conta), Entra no próximo turno,
+Preparando personagem) e **"Pular"** para o dono.
+
+API (todas com `maddox.play`, usuário efetivo; quem não participa = 404):
+
+- `POST /api/maddox/campaigns/[id]/start` — inicia (dono).
+- `GET /api/maddox/campaigns/[id]/game` — estado da mesa (até 100 mensagens mais recentes, `hasMore`).
+- `GET …/game/messages?before=<id>` — mensagens anteriores (cursor inválido = 400).
+- `POST …/game/actions` — `{ kind: "declaration" | "question", content (1..4.000) }` ou `{ kind: "pass" }`.
+- `POST …/game/skip` — `{ memberId }` (dono).
+- `POST …/game/check` — reavalia o turno.
+
 ## Testes
 
 `tests/backend/maddox/*` (configuração, roteiros, avatar, sessões, rotas, `campaigns.test.ts` com MongoDB em
@@ -276,3 +342,8 @@ memória, `campaign-routes.test.ts`, `grant-maddox-play.test.ts`) e `tests/front
 (`maddox-tab.test.tsx`, `maddox-campaigns.test.tsx`, `maddox-campaigns-realtime.test.tsx`; happy-dom).
 Maddox 2: `interview-prompt.test.ts`, `interviews.test.ts` (MongoDB em memória, IA/JEV/OpenCode mockados),
 `interview-routes.test.ts`, `catalog-mentions.test.ts`, `catalog-markup.test.ts` e `tests/frontend/maddox/maddox-interview.test.tsx`.
+Maddox 3: `game.test.ts` (MongoDB em memória, presença mockada: 1/2/5 jogadores, "Não fazer nada", pergunta, entrada no
+meio, presença, pular, saída, concorrência, trava do mestre, paginação), `game-routes.test.ts`, `game-presence-auth.test.ts`
+(API de presença e `/api/pusher/auth`), `tests/backend/integrations/channel-auth.test.ts` e
+`tests/frontend/maddox/maddox-game.test.tsx` (mesa, happy-dom); o lobby com "Iniciar campanha"/"Entrar na mesa" em
+`maddox-campaigns.test.tsx`.

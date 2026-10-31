@@ -1,4 +1,4 @@
-import type { MaddoxCampaignStatus, MaddoxInterviewStatus, MaddoxMemberRole, MaddoxRigorLevel, MaddoxScenarioStatus } from "./constants"
+import type { MaddoxCampaignStatus, MaddoxInterviewStatus, MaddoxMemberRole, MaddoxRigorLevel, MaddoxScenarioStatus, MaddoxTurnPhase } from "./constants"
 
 /** DTOs das Campanhas Maddox (Maddox 1). */
 
@@ -38,6 +38,10 @@ export interface MaddoxCampaignListItemDto {
     myCharacter: MaddoxCampaignCharacterDto | null
     members: MaddoxCampaignMemberDto[]
     turnNumber: number
+    /** Fase do turno atual (Maddox 3; só tem sentido com a campanha em andamento). */
+    turnPhase: MaddoxTurnPhase
+    /** Quando o dono iniciou a campanha (Maddox 3). */
+    startedAt: string | null
     /** Entrevista de cenário (Maddox 2). */
     scenarioStatus: MaddoxScenarioStatus
     createdAt: string

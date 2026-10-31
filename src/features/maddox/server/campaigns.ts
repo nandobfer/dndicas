@@ -2,6 +2,7 @@ import { randomBytes } from "node:crypto"
 import { Types } from "mongoose"
 import { AcaoAuditoria, dbConnect, recordAudit } from "@/lib/db"
 import { DomainError } from "@/lib/api/route"
+import { loggerFor } from "@/lib/logger"
 import { User } from "@/features/users/models/user"
 import { MADDOX_CAMPAIGN_AUDIT_ENTITY, MADDOX_INVITE_CLOSED_STATUSES, type MaddoxCampaignStatus } from "../constants"
 import { MaddoxCampaignMemberModel, MaddoxCampaignModel, MaddoxCharacterModel, type IMaddoxCampaign, type IMaddoxCampaignMember, type IMaddoxCharacter } from "../models"
@@ -17,10 +18,12 @@ import type {
 import { notifyCampaignChanged } from "./campaign-realtime"
 
 /**
- * Campanhas Maddox (Maddox 1 e 2): lista, criação, lobby, link de convite, esboço de personagem e a
+ * Campanhas Maddox (Maddox 1 e 2; a mesa do Maddox 3 fica em `./game`): lista, criação, lobby, link de convite, esboço de personagem e a
  * regra "só entra no jogo quem concluiu a entrevista".
  * SOMENTE servidor. `userId` é sempre o usuário EFETIVO (respeita o "Visualizar como").
  */
+
+const log = loggerFor({ module: "maddox", feature: "campaigns" })
 
 const NOT_FOUND = "Campanha não encontrada"
 const INVITE_NOT_FOUND = "Convite inválido ou expirado. Peça um link novo ao dono da campanha."
@@ -63,6 +66,13 @@ export async function assertMemberCanPlay(campaignId: string, userId: string): P
     const { member } = await loadMembership(campaignId, userId)
     const character = member?.characterId ? await MaddoxCharacterModel.findById(member.characterId).select("interview").lean<CharacterDoc>() : null
     if (!isMemberReadyToPlay(character)) throw new DomainError(409, "Conclua a entrevista de personagem com o Maddox antes de entrar no jogo.", "INTERVIEW_REQUIRED")
+}
+
+/** Membro ativo da campanha (autorização do canal de presença da mesa). */
+export async function isActiveCampaignMember(campaignId: string, userId: string): Promise<boolean> {
+    if (!Types.ObjectId.isValid(campaignId)) return false
+    await dbConnect()
+    return (await MaddoxCampaignMemberModel.exists({ campaignId: new Types.ObjectId(campaignId), userId, status: "joined" })) !== null
 }
 
 /** O rigor só muda no lobby e antes de a entrevista de cenário começar. */
@@ -126,6 +136,8 @@ async function buildDtos(campaigns: CampaignDoc[], userId: string): Promise<(Mad
             myCharacter: myDto?.character ?? null,
             members: dtos,
             turnNumber: campaign.turn?.number ?? 0,
+            turnPhase: campaign.turn?.phase ?? "master",
+            startedAt: iso(campaign.startedAt),
             scenarioStatus: campaign.scenarioInterview?.status ?? "pending",
             createdAt: new Date(campaign.createdAt).toISOString(),
             updatedAt: new Date(campaign.updatedAt).toISOString(),
@@ -319,6 +331,16 @@ export async function removeMember(campaignId: string, memberId: string, userId:
     await MaddoxCampaignMemberModel.updateOne({ _id: target._id, status: "joined" }, { $set: { status } })
     await recordAudit({ userId, entidade: MADDOX_CAMPAIGN_AUDIT_ENTITY, entidadeId: String(campaign._id), acao: self ? AcaoAuditoria.ATUALIZAR : AcaoAuditoria.EXCLUIR, antes: { member: target.userId, status: "joined" }, depois: { member: target.userId, status } })
     await changed(campaign._id, [target.userId])
+    if (campaign.status === "active") {
+        // Sob demanda: `game` importa este módulo. Quem sai deixa de contar no turno dos jogadores. A saída já
+        // foi gravada, auditada e avisada: uma falha ao reavaliar o turno não a desfaz (o `check` refaz depois).
+        try {
+            const { onMemberLeftGame } = await import("./game")
+            await onMemberLeftGame(campaign._id, target._id)
+        } catch (error) {
+            log.warn({ err: error, campaignId: String(campaign._id), memberId: String(target._id) }, "[maddox] Falha ao reavaliar o turno após a saída do membro")
+        }
+    }
     return { left: self }
 }
 
