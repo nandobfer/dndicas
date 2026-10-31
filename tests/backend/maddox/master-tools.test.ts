@@ -2,7 +2,8 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest"
 import mongoose from "mongoose"
 import { MongoMemoryServer } from "mongodb-memory-server"
 
-const { MaddoxCampaignMemoryModel, MaddoxCampaignModel, MaddoxCharacterModel, MaddoxNpcModel } = await import("@/features/maddox/models")
+const { MaddoxCampaignMemberModel, MaddoxCampaignMemoryModel, MaddoxCampaignModel, MaddoxCharacterModel, MaddoxNpcModel } = await import("@/features/maddox/models")
+const { enqueueMaddoxJob, jobDraftChecks, waitForCampaignIdle } = await import("@/features/maddox/server/game-live")
 const { findMaddoxTool, runMaddoxTool, MaddoxToolError } = await import("@/features/maddox/server/master-tools")
 const { MADDOX_TOOL_TEXT_MAX } = await import("@/features/maddox/constants")
 
@@ -111,5 +112,74 @@ describe("ferramentas do Maddox narrador", () => {
     it("entrada inválida vira erro em pt-BR para o modelo", async () => {
         const id = await campaign()
         await expect(run("save_memory", id, { kind: "segredo", title: "x", text: "y" })).rejects.toThrow(/Entrada inválida para save_memory/)
+    })
+})
+
+describe("request_check (Maddox 5)", () => {
+    /** Roda `test` dentro de um job da fila com os metadados dados (como a geração do narrador). */
+    async function inJob(campaignId: mongoose.Types.ObjectId, meta: { kind: "narration" | "answer"; round: number }, test: (jobId: string) => Promise<void>) {
+        let failure: unknown = null
+        await enqueueMaddoxJob(
+            String(campaignId),
+            "teste",
+            async ({ jobId }) => {
+                try {
+                    await test(jobId)
+                } catch (error) {
+                    failure = error
+                }
+            },
+            { ...meta, turnNumber: 2 },
+        )
+        await waitForCampaignIdle(String(campaignId))
+        if (failure) throw failure
+    }
+
+    async function faithful(rigor: "fiel-dnd" | "narrativo" = "fiel-dnd") {
+        const id = (await MaddoxCampaignModel.create({ name: "Cripta", ownerId: "u1", rigor }))._id
+        const member = await MaddoxCampaignMemberModel.create({ campaignId: id, userId: "u2", role: "player", status: "joined" })
+        const sheetId = new mongoose.Types.ObjectId()
+        await MaddoxCharacterModel.create({ campaignId: id, memberId: member._id, userId: "u2", name: "Lyra", sheetId, interview: { status: "done", scriptVersion: 0 } })
+        const other = await MaddoxCampaignMemberModel.create({ campaignId: id, userId: "u3", role: "player", status: "joined" })
+        await MaddoxCharacterModel.create({ campaignId: id, memberId: other._id, userId: "u3", name: "Doran", sheetId: null, interview: { status: "done", scriptVersion: 0 } })
+        return { id, memberId: String(member._id), sheetId: String(sheetId) }
+    }
+
+    const stealth = { personagem: "lyra", tipo: "pericia", pericia: "Furtividade", cd: 15, modo: "vantagem", motivo: "Passar pelos guardas" }
+    const call = (id: mongoose.Types.ObjectId, jobId: string, input: unknown) => runMaddoxTool(findMaddoxTool("request_check")!, { campaignId: id, turnNumber: 2, jobId }, input)
+
+    it("guarda o teste no job (nome sem caixa, atributo da perícia, modo e CD) e recusa um segundo para o mesmo personagem", async () => {
+        const table = await faithful()
+        await inJob(table.id, { kind: "narration", round: 0 }, async (jobId) => {
+            const result = await call(table.id, jobId, stealth)
+            expect(result).toMatchObject({ requested: true, check: "Furtividade (Destreza) para Lyra, CD 15, com vantagem" })
+            expect(jobDraftChecks(String(table.id), jobId)).toEqual([
+                expect.objectContaining({ memberId: table.memberId, characterName: "Lyra", sheetId: table.sheetId, kind: "skill", ability: "dexterity", skill: "Furtividade", dc: 15, mode: "advantage", reason: "Passar pelos guardas" }),
+            ])
+            await expect(call(table.id, jobId, stealth)).rejects.toThrow(/um teste por personagem/)
+            await expect(call(table.id, jobId, { personagem: "Lyra", tipo: "resistencia", atributo: "Constituição", cd: 12, motivo: "Veneno" })).rejects.toThrow(/um teste por personagem/)
+        })
+    })
+
+    it("recusa campanha narrativa, resposta a pergunta, a última rodada, personagem sem ficha, desconhecido e perícia ausente", async () => {
+        const narrative = await faithful("narrativo")
+        await inJob(narrative.id, { kind: "narration", round: 0 }, async (jobId) => {
+            await expect(call(narrative.id, jobId, stealth)).rejects.toThrow(/campanha é narrativa/)
+        })
+        const table = await faithful()
+        await inJob(table.id, { kind: "answer", round: 0 }, async (jobId) => {
+            await expect(call(table.id, jobId, stealth)).rejects.toThrow(/só são pedidos na narração/)
+        })
+        await inJob(table.id, { kind: "narration", round: 2 }, async (jobId) => {
+            await expect(call(table.id, jobId, stealth)).rejects.toThrow(/Limite de testes/)
+        })
+        await inJob(table.id, { kind: "narration", round: 1 }, async (jobId) => {
+            await expect(call(table.id, jobId, { ...stealth, personagem: "Doran" })).rejects.toThrow(/não tem ficha/)
+            await expect(call(table.id, jobId, { ...stealth, personagem: "Ninguém" })).rejects.toThrow(/Nenhum personagem jogador chamado "Ninguém"/)
+            await expect(call(table.id, jobId, { personagem: "Lyra", tipo: "pericia", cd: 10, motivo: "x" })).rejects.toThrow(/Informe a perícia/)
+            await expect(call(table.id, jobId, { personagem: "Lyra", tipo: "atributo", cd: 10, motivo: "x" })).rejects.toThrow(/Informe o atributo/)
+            await expect(call(table.id, jobId, { ...stealth, cd: 40 })).rejects.toThrow(/Entrada inválida/)
+            expect(jobDraftChecks(String(table.id), jobId)).toHaveLength(0)
+        })
     })
 })

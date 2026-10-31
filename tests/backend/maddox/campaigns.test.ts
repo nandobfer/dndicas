@@ -208,6 +208,19 @@ describe("Campanhas Maddox — edição e personagem", () => {
         expect(await service.updateCampaign(campaign.id, { name: "Só o nome" }, ids.owner)).toMatchObject({ name: "Só o nome", rigor: "fiel-dnd" })
     })
 
+    it("CD dos testes (Maddox 5): secreta por padrão, escolhida na criação e editável pelo dono mesmo em andamento (auditado)", async () => {
+        expect(await service.createCampaign({ name: "Padrão", rigor: "fiel-dnd" }, ids.owner)).toMatchObject({ showCheckDc: false })
+        const campaign = await service.createCampaign({ name: "Às claras", rigor: "rigoroso", showCheckDc: true }, ids.owner)
+        expect(campaign.showCheckDc).toBe(true)
+        expect(recordAudit).toHaveBeenCalledWith(expect.objectContaining({ acao: "CRIAR", depois: expect.objectContaining({ showCheckDc: true }) }))
+        await service.joinByInvite(await tokenOf(campaign.id), ids.ana)
+        await expect(service.updateCampaign(campaign.id, { showCheckDc: false }, ids.ana)).rejects.toMatchObject({ status: 403 })
+        await MaddoxCampaignModel.updateOne({ _id: campaign.id }, { $set: { status: "active" } })
+        recordAudit.mockClear()
+        expect(await service.updateCampaign(campaign.id, { showCheckDc: false }, ids.owner)).toMatchObject({ showCheckDc: false })
+        expect(recordAudit).toHaveBeenCalledWith(expect.objectContaining({ acao: "ATUALIZAR", antes: expect.objectContaining({ showCheckDc: true }), depois: { showCheckDc: false } }))
+    })
+
     it("cada jogador cria e edita o próprio esboço, com a entrevista pendente", async () => {
         const campaign = await service.createCampaign({ name: "Heróis", rigor: "equilibrado" }, ids.owner)
         await service.joinByInvite(await tokenOf(campaign.id), ids.ana)

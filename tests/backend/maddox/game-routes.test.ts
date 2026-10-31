@@ -26,6 +26,8 @@ const service = {
     assertGameMember: vi.fn<(id: string, userId: string) => Promise<void>>(async () => undefined),
 }
 vi.doMock("@/features/maddox/server/game", () => service)
+const checksService = { rollCheck: vi.fn(async () => ({ roll: { rollId: "r1", total: 17 }, state })) }
+vi.doMock("@/features/maddox/server/game-checks", () => checksService)
 
 const ctx = (params: { id: string }) => ({ params: Promise.resolve(params) })
 const base = "http://localhost/api/maddox/campaigns/c1"
@@ -36,6 +38,25 @@ describe("rotas da mesa Maddox", () => {
         who = "player"
         permissions.length = 0
         Object.values(service).forEach((fn) => fn.mockClear())
+        checksService.rollCheck.mockClear()
+    })
+
+    it("rolar teste (Maddox 5): exige maddox.play, corpo vazio (sem dado nem modificador) e repassa o usuário efetivo", async () => {
+        type RollRoute = typeof import("@/app/api/maddox/campaigns/[id]/game/checks/[checkId]/roll/route")
+        const path = "@/app/api/maddox/campaigns/[id]/game/checks/[checkId]/roll/route"
+        const params = { params: Promise.resolve({ id: "c1", checkId: "k1" }) }
+        who = "noPermission"
+        expect((await (await importFresh<RollRoute>(path)).POST(post(`${base}/game/checks/k1/roll`, {}), params)).status).toBe(403)
+        expect(checksService.rollCheck).not.toHaveBeenCalled()
+        who = "player"
+        const route = await importFresh<RollRoute>(path)
+        const tampered = await route.POST(post(`${base}/game/checks/k1/roll`, { modifier: 20, total: 30 }), { params: Promise.resolve({ id: "c1", checkId: "k1" }) })
+        expect(tampered.status).toBe(400)
+        expect(checksService.rollCheck).not.toHaveBeenCalled()
+        const res = await route.POST(post(`${base}/game/checks/k1/roll`, {}), { params: Promise.resolve({ id: "c1", checkId: "k1" }) })
+        expect(res.status).toBe(200)
+        expect(await res.json()).toMatchObject({ success: true, data: { roll: { total: 17 }, state: { campaignId: "c1" } } })
+        expect(checksService.rollCheck).toHaveBeenCalledWith("c1", "k1", "user-1")
     })
 
     it("todas exigem maddox.play: sem login 401, sem permissão 403, sem chamar o serviço", async () => {

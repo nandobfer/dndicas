@@ -66,7 +66,7 @@ describe("MCP do Maddox (/api/maddox/mcp)", () => {
     it("lista as ferramentas do narrador, todas exigindo `turno`; o MCP público não as expõe", async () => {
         const list = await rpc(route.POST, "tools/list")
         const names = list.result!.tools!.map((tool) => tool.name)
-        expect(names).toEqual(expect.arrayContaining(["save_npc", "save_memory", "update_campaign_state", "update_character_state", "get_campaign_state"]))
+        expect(names).toEqual(expect.arrayContaining(["save_npc", "save_memory", "update_campaign_state", "update_character_state", "get_campaign_state", "request_check"]))
         for (const tool of list.result!.tools!) expect(tool.inputSchema.properties).toHaveProperty("turno")
         const publicList = await rpc(publicRoute.POST, "tools/list")
         expect(publicList.result!.tools!.map((tool) => tool.name)).not.toContain("save_npc")
@@ -83,6 +83,18 @@ describe("MCP do Maddox (/api/maddox/mcp)", () => {
             expect(String((context as { campaignId: unknown }).campaignId)).toBe(CAMPAIGN)
             expect(context).toMatchObject({ turnNumber: 4 })
             expect(input).toEqual({ name: "Bartolomeu" })
+        })
+    })
+
+    it("request_check pelo MCP recebe o job da geração (os testes ficam nele até a narração ser gravada)", async () => {
+        await withActiveJob(async (jobId) => {
+            const turno = createMaddoxTurnToken({ campaignId: CAMPAIGN, jobId, turnNumber: 2 })
+            const result = await rpc(route.POST, "tools/call", { name: "request_check", arguments: { turno, personagem: "Lyra", tipo: "pericia", pericia: "Furtividade", cd: 15, motivo: "Passar pelos guardas" } })
+            expect(result.result!.isError).toBeFalsy()
+            const [tool, context, input] = runMaddoxTool.mock.calls[0]!
+            expect(tool.name).toBe("request_check")
+            expect(context).toMatchObject({ turnNumber: 2, jobId })
+            expect(input).toMatchObject({ personagem: "Lyra", cd: 15 })
         })
     })
 

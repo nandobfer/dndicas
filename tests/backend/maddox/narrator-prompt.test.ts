@@ -1,5 +1,14 @@
 import { describe, expect, it } from "vitest"
-import { buildNarratorInstructions, judgesFreeActionsInNarration, narratorTaskText, narratorTranscript, type NarratorPromptContext } from "@/features/maddox/server/narrator-prompt"
+import {
+    buildNarratorInstructions,
+    checkResultLine,
+    judgesFreeActionsInNarration,
+    narratorTaskText,
+    narratorTranscript,
+    usesChecks,
+    type NarratorCheckResult,
+    type NarratorPromptContext,
+} from "@/features/maddox/server/narrator-prompt"
 
 const context = (overrides: Partial<NarratorPromptContext> = {}): NarratorPromptContext => ({
     instructions: "Você é Maddox.",
@@ -97,5 +106,72 @@ describe("tarefa e transcrição do narrador", () => {
         const cut = narratorTranscript(messages, 60)
         expect(cut).not.toContain("AAAA")
         expect(cut).toContain("Segue.")
+    })
+})
+
+describe("fichas e testes no prompt (Maddox 5)", () => {
+    const result = (overrides: Partial<NarratorCheckResult> = {}): NarratorCheckResult => ({
+        characterName: "Lyra",
+        title: "Furtividade (Destreza)",
+        reason: "Passar pelos guardas",
+        dc: 15,
+        status: "rolled",
+        mode: "normal",
+        total: 17,
+        d20: 12,
+        discarded: null,
+        modifier: 5,
+        rolledByOwner: false,
+        cancelReason: null,
+        ...overrides,
+    })
+
+    it("graus com ficha trocam o modo narrativo pela regra dos testes, na frequência do grau, e mostram o resumo da ficha", () => {
+        for (const rigor of ["equilibrado", "rigoroso", "fiel-dnd"] as const) {
+            const text = buildNarratorInstructions(context({ rigor, characters: [{ name: "Lyra", playerName: "Ana", profile: {}, currentState: "", sheet: "Nível 1 · Ladina\nPerícias treinadas: Furtividade +5" }] }), { kind: "ai-sdk" })
+            expect(text).toContain("## Fichas e testes")
+            expect(text).toContain("`request_check`")
+            expect(text).toContain("NUNCA role dados nem invente resultados")
+            expect(text).not.toContain("## Modo narrativo")
+            expect(text).toContain("- Ficha D&D:\n  - Nível 1 · Ladina\n  - Perícias treinadas: Furtividade +5")
+        }
+        expect(buildNarratorInstructions(context({ rigor: "equilibrado" }), { kind: "ai-sdk" })).toContain("só nos momentos decisivos")
+        expect(buildNarratorInstructions(context({ rigor: "fiel-dnd" }), { kind: "ai-sdk" })).toContain("exatamente como nas regras do D&D 2024")
+        for (const rigor of ["narrativo", "flexivel"] as const) {
+            const text = buildNarratorInstructions(context({ rigor }), { kind: "ai-sdk" })
+            expect(text).toContain("## Modo narrativo")
+            expect(text).not.toContain("request_check")
+        }
+        expect(usesChecks("flexivel")).toBe(false)
+        expect(usesChecks("equilibrado")).toBe(true)
+    })
+
+    it("no MCP, a lista de ferramentas só inclui request_check quando os testes valem", () => {
+        expect(buildNarratorInstructions(context({ rigor: "fiel-dnd" }), { kind: "mcp", server: "dndicas-maddox", turnToken: "t", checks: true })).toContain("update_character_state, request_check)")
+        expect(buildNarratorInstructions(context(), { kind: "mcp", server: "dndicas-maddox", turnToken: "t", checks: false })).not.toContain("request_check")
+    })
+
+    it("linha do resultado: total, d20, modificador, vantagem, natural, dono no lugar, cancelado e pendente", () => {
+        expect(checkResultLine(result())).toBe("Lyra — Furtividade (Destreza), CD 15: total 17 (d20 12, modificador +5) — sucesso.")
+        expect(checkResultLine(result({ mode: "advantage", d20: 20, discarded: 4, total: 25 }))).toBe("Lyra — Furtividade (Destreza), CD 15: total 25 (d20 20, modificador +5; vantagem: 20 e 4; 20 natural) — sucesso.")
+        expect(checkResultLine(result({ d20: 1, total: 6, modifier: 5, rolledByOwner: true }))).toContain("1 natural; rolado pelo dono no lugar do jogador) — falha.")
+        expect(checkResultLine(result({ status: "cancelled", total: null, cancelReason: "O jogador saiu da campanha" }))).toBe("Lyra — Furtividade (Destreza), CD 15: cancelado (O jogador saiu da campanha); resolva sem o teste.")
+        expect(checkResultLine(result({ status: "pending", total: null }))).toContain("aguardando a rolagem")
+    })
+
+    it("tarefa de continuação: resultados, declarações do turno e, na última rodada, sem novos testes", () => {
+        const declarations = [{ characterName: "Lyra", kind: "declaration" as const, content: "Me esgueiro.", skipped: false, checkHint: true }]
+        const text = narratorTaskText({ kind: "continuation", turnNumber: 3, round: 1, declarations, results: [result()] })
+        expect(text).toContain("# Turno 3 do mestre — resultado dos testes")
+        expect(text).toContain("- **Lyra**: Me esgueiro. _(o JEV indica que esta ação provavelmente exige teste; você decide)_")
+        expect(text).toContain("- Lyra — Furtividade (Destreza), CD 15: total 17")
+        expect(text).toContain("Continue a narração exatamente de onde parou")
+        expect(text).toContain("Se a situação pedir um novo teste")
+        expect(narratorTaskText({ kind: "continuation", turnNumber: 3, round: 2, declarations: [], results: [result()] })).toContain("último pedido de testes deste turno")
+    })
+
+    it("transcrição marca os testes", () => {
+        const text = narratorTranscript([{ turnNumber: 2, kind: "check", characterName: "Lyra", content: "Lyra — Furtividade (Destreza), CD 15: total 17" }], 10_000)
+        expect(text).toBe("[Turno 2 — teste] Lyra — Furtividade (Destreza), CD 15: total 17")
     })
 })
