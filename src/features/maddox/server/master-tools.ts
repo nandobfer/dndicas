@@ -26,6 +26,7 @@ import {
     MADDOX_COMBATANTS_MAX,
     MADDOX_NPC_STATUSES,
     MADDOX_QUEST_STATUSES,
+    MADDOX_SCENE_IMAGE_CAPTION_GUIDE,
     MADDOX_SCENE_IMAGE_CAPTION_MAX,
     MADDOX_SCENE_IMAGE_DESCRIPTION_MAX,
     MADDOX_TOOL_NAME_MAX,
@@ -805,7 +806,7 @@ export const MADDOX_SCENE_IMAGE_TOOLS: readonly MaddoxMasterTool[] = [
         input: z.object({
             situacao: z.string().min(1).describe("Chave da situação ativa (ex.: new-location, climax ou o id de uma personalizada)"),
             descricaoVisual: z.string().min(1).describe("A cena em detalhe para o ilustrador, em português, só o que os jogadores veem"),
-            legenda: z.string().optional().describe(`Uma frase curta para os jogadores (até ${MADDOX_SCENE_IMAGE_CAPTION_MAX} caracteres)`),
+            legenda: z.string().optional().describe(`Uma frase curta para os jogadores (até uns ${MADDOX_SCENE_IMAGE_CAPTION_GUIDE} caracteres)`),
             personagens: z.array(z.string().min(1)).max(10).optional().describe("Nomes exatos dos personagens jogadores que aparecem"),
             npcs: z.array(z.string().min(1)).max(10).optional().describe("Nomes exatos dos NPCs (conhecidos pelos jogadores) que aparecem"),
             catalogo: z

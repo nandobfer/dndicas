@@ -45,8 +45,11 @@ export interface MaddoxGameMessageDto {
     combatReaction?: MaddoxCombatReactionDto | null
     /** "Não fez nada" porque o jogador estava offline na própria vez. */
     offlineSkip?: boolean
-    /** Imagem da cena (Maddox 10) ligada à narração ou ao card de fim de combate. */
-    sceneImage?: MaddoxGameSceneImageDto | null
+    /**
+     * Imagens da cena (Maddox 10) ligadas à narração ou ao card de fim de combate, na ordem do pedido (a do Maddox e a pedida
+     * pelo dono podem dividir a mesma narração). Uma falha nunca aparece no lugar de uma imagem pronta.
+     */
+    sceneImages?: MaddoxGameSceneImageDto[]
     createdAt: string
 }
 

@@ -111,11 +111,13 @@ export function GameMessageList({ messages, myMemberId, maddoxAvatarUrl, color, 
                                     ) : (
                                         <>
                                             <GameCombatCard combat={message.combat} />
-                                            {message.sceneImage && (
+                                            {message.sceneImages?.length ? (
                                                 <div className="pb-4">
-                                                    <GameSceneImage image={message.sceneImage} color={color} />
+                                                    {message.sceneImages.map((image) => (
+                                                        <GameSceneImage key={image.id} image={image} color={color} />
+                                                    ))}
                                                 </div>
-                                            )}
+                                            ) : null}
                                         </>
                                     )
                                 ) : null
@@ -225,7 +227,7 @@ function GameMessage({ message, mine, replyTo, maddoxAvatarUrl, color }: { messa
                 ) : (
                     <Markdown lineAction={null}>{message.content}</Markdown>
                 )}
-                {message.sceneImage && <GameSceneImage image={message.sceneImage} color={color} />}
+                {message.sceneImages?.map((image) => <GameSceneImage key={image.id} image={image} color={color} />)}
             </MaddoxBubble>
         )
     }

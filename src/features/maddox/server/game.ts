@@ -803,7 +803,7 @@ async function messagesPage(campaignId: Types.ObjectId, before: Types.ObjectId |
     const hasMore = docs.length > MADDOX_GAME_PAGE_SIZE
     const page = docs.slice(0, MADDOX_GAME_PAGE_SIZE).reverse()
     const [messages, images] = await Promise.all([messagesDto(page, viewer), sceneImagesOf(page)])
-    return { messages: images.size ? messages.map((message) => (images.has(message.id) ? { ...message, sceneImage: images.get(message.id)! } : message)) : messages, hasMore }
+    return { messages: images.size ? messages.map((message) => (images.has(message.id) ? { ...message, sceneImages: images.get(message.id)! } : message)) : messages, hasMore }
 }
 
 /** Imagens das cenas (Maddox 10) das narrações e cards de fim de combate da página. Falha = sem imagens (aviso no log). */
@@ -814,7 +814,7 @@ async function sceneImagesOf(page: readonly MessageDoc[]) {
         return await sceneImagesByMessage(ids)
     } catch (error) {
         log.warn({ err: error instanceof Error ? error.message : String(error) }, "[maddox] imagens das cenas indisponíveis")
-        return new Map<string, import("../game-types").MaddoxGameSceneImageDto>()
+        return new Map<string, import("../game-types").MaddoxGameSceneImageDto[]>()
     }
 }
 

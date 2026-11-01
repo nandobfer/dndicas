@@ -231,12 +231,14 @@ describe("mesa Maddox — conversa e turno", () => {
         post.mockResolvedValue(ok({ id: "i2", status: "pending", url: null, caption: "", situationLabel: null, source: "manual", error: null }))
         await renderGame(
             gameState({
-                messages: [message("n1", { kind: "narration", phase: "master", content: "O farol apagado.", sceneImage: { id: "i1", status: "done", url: "/api/upload?key=farol.png", caption: "O farol", situationLabel: "Novo local ou cenário", source: "tool", error: null } })],
+                messages: [message("n1", { kind: "narration", phase: "master", content: "O farol apagado.", sceneImages: [{ id: "i1", status: "done", url: "/api/upload?key=farol.png", caption: "O farol", situationLabel: "Novo local ou cenário", source: "tool", error: null }, { id: "i3", status: "generating", url: null, caption: "", situationLabel: null, source: "manual", error: null }] })],
                 npcs: [{ id: "npc1", name: "Varn", portraitUrl: null, status: "active" }],
                 sceneImages: { owner: true, canRequest: true, reason: null, generating: false, remainingToday: 9, campaignEnabled: true, canRequestPortrait: true },
             }),
         )
         expect(within(screen.getByTestId("maddox-narration")).getByRole("img", { name: "O farol" })).toHaveAttribute("src", "/api/upload?key=farol.png")
+        // A imagem do Maddox e a pedida pelo dono dividem a narração: a pronta continua visível enquanto a outra é pintada.
+        expect(within(screen.getByTestId("maddox-narration")).getAllByTestId("scene-image").map((node) => node.dataset.status)).toEqual(["done", "generating"])
         fireEvent.click(screen.getByTestId("scene-image-button"))
         await waitFor(() => expect(post).toHaveBeenCalledWith("/maddox/campaigns/c1/scene-images"))
         fireEvent.click(screen.getByRole("button", { name: "Gerar retrato de Varn" }))

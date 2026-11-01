@@ -217,11 +217,14 @@ export async function reserveSceneImage(request: SceneImageRequest, scene: Maddo
 
 interface SceneImageRuntime {
     running: Map<string, Promise<void>>
+    /** Imagens manuais reservadas que esperam a descrição na fila da campanha (ainda não começaram a gerar). */
+    queued: Set<string>
     active: number
     waiting: (() => void)[]
 }
 const globalRuntime = globalThis as unknown as { __maddoxSceneImages?: SceneImageRuntime }
-const runtime: SceneImageRuntime = (globalRuntime.__maddoxSceneImages ??= { running: new Map(), active: 0, waiting: [] })
+const runtime: SceneImageRuntime = (globalRuntime.__maddoxSceneImages ??= { running: new Map(), queued: new Set(), active: 0, waiting: [] })
+runtime.queued ??= new Set()
 
 async function acquire() {
     if (runtime.active < MADDOX_SCENE_IMAGE_CONCURRENCY) {
@@ -238,6 +241,7 @@ function release() {
 
 /** Dispara a geração (nunca lança). */
 export function startSceneImage(imageId: string): Promise<void> {
+    runtime.queued.delete(imageId)
     const existing = runtime.running.get(imageId)
     if (existing) return existing
     const job = (async () => {
@@ -373,7 +377,8 @@ export async function runSceneImage(imageId: string): Promise<void> {
 export async function expireStaleSceneImages(campaignId: Types.ObjectId): Promise<number> {
     const limit = new Date(Date.now() - MADDOX_SCENE_IMAGE_STALE_MS)
     const stale = await MaddoxSceneImageModel.find({ campaignId, status: { $in: ["pending", "generating"] }, updatedAt: { $lt: limit } }).select("_id").lean<{ _id: Types.ObjectId }[]>()
-    const ids = stale.map((item) => item._id).filter((id) => !runtime.running.has(String(id)))
+    // As que estão gerando ou esperando a vez na fila da campanha (pedido manual) neste processo não estão presas.
+    const ids = stale.map((item) => item._id).filter((id) => !runtime.running.has(String(id)) && !runtime.queued.has(String(id)))
     if (!ids.length) return 0
     const result = await MaddoxSceneImageModel.updateMany({ _id: { $in: ids }, status: { $in: ["pending", "generating"] } }, { $set: { status: "failed", counts: false, error: MADDOX_SCENE_IMAGE_FAILED_MESSAGE, completedAt: new Date() } })
     if (result.modifiedCount) log.warn({ campaignId: String(campaignId), expired: result.modifiedCount }, "[maddox] imagens da cena presas marcadas como falha")
@@ -395,9 +400,16 @@ export function sceneImageDto(image: IMaddoxSceneImage, settings: MaddoxSceneIma
     }
 }
 
-/** Imagem visível de cada mensagem (a mais recente que não foi descartada). */
-export async function sceneImagesByMessage(messageIds: readonly Types.ObjectId[]): Promise<Map<string, MaddoxGameSceneImageDto>> {
-    const out = new Map<string, MaddoxGameSceneImageDto>()
+/**
+ * Imagens visíveis de cada mensagem, na ordem do pedido (uma narração pode ter a do Maddox e a pedida pelo dono). As
+ * descartadas não aparecem e uma falha nunca esconde uma imagem pronta: com alguma `done`, as `failed` saem da lista.
+ */
+export function visibleSceneImages(images: readonly MaddoxGameSceneImageDto[]): MaddoxGameSceneImageDto[] {
+    return images.some((image) => image.status === "done") ? images.filter((image) => image.status !== "failed") : [...images]
+}
+
+export async function sceneImagesByMessage(messageIds: readonly Types.ObjectId[]): Promise<Map<string, MaddoxGameSceneImageDto[]>> {
+    const out = new Map<string, MaddoxGameSceneImageDto[]>()
     if (!messageIds.length) return out
     const images = await MaddoxSceneImageModel.find({ messageId: { $in: messageIds }, status: { $ne: "skipped" } }).sort({ _id: 1 }).lean<IMaddoxSceneImage[]>()
     if (!images.length) return out
@@ -410,8 +422,9 @@ export async function sceneImagesByMessage(messageIds: readonly Types.ObjectId[]
     }
     for (const image of images) {
         const dto = sceneImageDto(image, settings)
-        if (dto) out.set(String(image.messageId), dto)
+        if (dto) out.set(String(image.messageId), [...(out.get(String(image.messageId)) ?? []), dto])
     }
+    for (const [id, list] of out) out.set(id, visibleSceneImages(list))
     return out
 }
 
@@ -483,6 +496,7 @@ export async function requestManualSceneImage(campaignId: string, userId: string
     if (!image) throw new DomainError(409, `Limite de ${env.settings.sceneImages.maxPerDay} imagens por dia desta campanha atingido.`, "SCENE_IMAGE_LIMIT")
     log.info({ campaignId: campaignId, userId, imageId: String(image._id) }, "[maddox] dono pediu imagem da cena")
     const { enqueueMaddoxJob } = await import("./game-live")
+    runtime.queued.add(String(image._id))
     void enqueueMaddoxJob(campaignId, "descrição da imagem da cena", async () => {
         try {
             const { describeCurrentScene } = await import("./scene-image-describer")

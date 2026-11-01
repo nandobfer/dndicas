@@ -19,17 +19,21 @@ const env = {
     model: "gemini-2.5-flash-image",
 }
 const gen = { fail: false, hang: false }
-const jev = { score: 0.9 as number | null, fail: false }
-const describer = { text: "", fail: false }
+const jev = { score: 0.9 as number | null, fail: false, hang: false }
+const describer = { text: "", fail: false, hang: false }
+/** Dependência que nunca responde (os tetos de tempo, reduzidos abaixo, precisam liberar a geração). */
+const never = () => new Promise<never>(() => undefined)
 
 const publishToChannels = vi.fn(async (...args: unknown[]) => void args)
 const generateAndStoreDndImage = vi.fn(async (input: { storageKey?: string; referenceImages?: unknown[]; prompt?: string; consumptionOrigin?: string; preferredAspectRatio?: string }) => {
+    if (gen.hang) return never()
     if (gen.fail) throw new Error("o provedor recusou a imagem")
     const key = `${input.storageKey}.png`
     return { key, url: `/api/upload?key=${encodeURIComponent(key)}`, mimeType: "image/png", referencesUsed: input.referenceImages?.length ?? 0 }
 })
 const askJevSystemOne = vi.fn(async (input: unknown) => {
     void input
+    if (jev.hang) return never()
     if (jev.fail) throw new Error("JEV fora do ar")
     return { answers: { imagem: { type: "noul", noul: jev.score } } }
 })
@@ -44,10 +48,18 @@ const getFile = vi.fn(async (key: string) => ({
 }))
 const generateAiText = vi.fn(async (input: unknown) => {
     void input
+    if (describer.hang) return never()
     if (describer.fail) throw new Error("narrador indisponível")
     return { text: describer.text, usage: null, durationMs: 1 }
 })
 
+// Tetos de tempo curtos: gerador, descrição e JEV que nunca respondem precisam ser abandonados sem travar.
+vi.mock("@/features/maddox/constants", async (importOriginal) => ({
+    ...(await importOriginal<typeof import("@/features/maddox/constants")>()),
+    MADDOX_SCENE_IMAGE_TIMEOUT_MS: 150,
+    MADDOX_SCENE_IMAGE_DESCRIBE_TIMEOUT_MS: 150,
+    MADDOX_SCENE_IMAGE_JEV_TIMEOUT_MS: 150,
+}))
 vi.mock("@/lib/db", () => ({
     dbConnect: vi.fn(async () => undefined),
     recordAudit: vi.fn(async () => undefined),
@@ -89,6 +101,7 @@ const { MaddoxCampaignMemberModel, MaddoxCampaignMessageModel, MaddoxCampaignMod
 const campaigns = await import("@/features/maddox/server/campaigns")
 const images = await import("@/features/maddox/server/scene-images")
 const { enqueueMaddoxJob, jobDraftSceneImage, takeDraftImages, waitForCampaignIdle } = await import("@/features/maddox/server/game-live")
+const { MADDOX_SCENE_IMAGE_CAPTION_GUIDE, MADDOX_SCENE_IMAGE_CAPTION_MAX } = await import("@/features/maddox/constants")
 const { findMaddoxTool, runMaddoxTool } = await import("@/features/maddox/server/master-tools")
 const { onCombatEnded } = await import("@/features/maddox/server/combat-image")
 const { CharacterSheet } = await import("@/features/character-sheets/models/character-sheet")
@@ -176,8 +189,8 @@ beforeEach(async () => {
     ])
     Object.assign(env, { enabled: true, situations: { "new-location": true, climax: false, "combat-end": true, "npc-portrait": true }, custom: [], gap: 3, maxPerDay: 10, jevSceneImage: false, generatorAvailable: true, model: "gemini-2.5-flash-image" })
     Object.assign(gen, { fail: false, hang: false })
-    Object.assign(jev, { score: 0.9, fail: false })
-    Object.assign(describer, { text: "", fail: false })
+    Object.assign(jev, { score: 0.9, fail: false, hang: false })
+    Object.assign(describer, { text: "", fail: false, hang: false })
     vi.clearAllMocks()
 })
 
@@ -317,7 +330,7 @@ describe("geração", () => {
         expect(call.prompt).toContain("pintura a óleo")
         expect(call.prompt).not.toContain("SEGREDO")
         expect(publishToChannels).toHaveBeenCalled()
-        const dto = (await images.sceneImagesByMessage([narrationId])).get(String(narrationId))!
+        const [dto] = (await images.sceneImagesByMessage([narrationId])).get(String(narrationId))!
         expect(dto).toEqual({ id: String(image!._id), status: "done", url: expect.stringContaining("/api/upload?key="), caption: "O farol", situationLabel: "Novo local ou cenário", source: "tool", error: null })
         expect(dto).not.toHaveProperty("description")
     })
@@ -339,7 +352,7 @@ describe("geração", () => {
         const { image } = await images.scheduleSceneImage({ campaignId, source: "tool", turnNumber: 5, messageId: narrationId, situation: "new-location", description: "x", caption: "" })
         await images.waitForSceneImages()
         expect(await MaddoxSceneImageModel.findById(image!._id).lean()).toMatchObject({ status: "failed", counts: false, error: "Não foi possível gerar a imagem desta cena." })
-        expect((await images.sceneImagesByMessage([narrationId])).get(String(narrationId))).toMatchObject({ status: "failed", url: null })
+        expect((await images.sceneImagesByMessage([narrationId])).get(String(narrationId))).toEqual([expect.objectContaining({ status: "failed", url: null })])
     })
 
     it("JEV ligado filtra a imagem do narrador; falha do JEV não impede; não roda nas demais origens", async () => {
@@ -482,5 +495,106 @@ describe("pedidos do dono", () => {
         const off = await inNarration(campaignId, 5, (jobId) => runMaddoxTool(tool("save_npc"), { campaignId, turnNumber: 5, jobId }, { name: "Tobias", publicDescription: "Pescador.", visibility: "players", gerarRetrato: true }))
         expect(off).toMatchObject({ saved: true, retrato: expect.stringContaining("não pedido") })
         expect(await MaddoxNpcModel.exists({ campaignId, name: "Tobias" })).toBeTruthy()
+    })
+})
+
+describe("revisão: várias imagens na mesma narração, legenda, tetos de tempo e fila (Maddox 10)", () => {
+    const scene = () => ({ enabled: true, situations: env.situations as never, custom: [], minNarrationsBetween: env.gap, maxPerDay: env.maxPerDay, aspectRatio: "16:9" as const, style: "" })
+    const manual = async (campaignId: mongoose.Types.ObjectId, messageId: mongoose.Types.ObjectId, turnNumber = 5) => {
+        const image = await images.reserveSceneImage({ campaignId, source: "manual", turnNumber, messageId, situation: null, description: "Cena pedida pelo dono.", caption: "Pedido do dono", byOwner: true }, scene())
+        return image!
+    }
+
+    it("a imagem do Maddox pronta continua na narração quando o dono pede outra; a falha da manual não a esconde", async () => {
+        const { campaignId, narrationId } = await table()
+        const tool = await images.scheduleSceneImage({ campaignId, source: "tool", turnNumber: 5, messageId: narrationId, situation: "new-location", description: "O farol.", caption: "O farol" })
+        await images.waitForSceneImages()
+
+        gen.fail = true
+        const failed = await manual(campaignId, narrationId)
+        await images.startSceneImage(String(failed._id))
+        expect(await MaddoxSceneImageModel.findById(failed._id).lean()).toMatchObject({ status: "failed" })
+        expect((await images.sceneImagesByMessage([narrationId])).get(String(narrationId))).toEqual([expect.objectContaining({ id: String(tool.image!._id), status: "done", caption: "O farol" })])
+
+        // Com a manual pintando, as duas aparecem; quando ela fica pronta, as duas ficam.
+        gen.fail = false
+        gen.hang = true
+        const second = await manual(campaignId, narrationId)
+        void images.startSceneImage(String(second._id))
+        await vi.waitFor(async () => expect((await MaddoxSceneImageModel.findById(second._id).lean())!.status).toBe("generating"))
+        expect((await images.sceneImagesByMessage([narrationId])).get(String(narrationId))!.map((item) => item.status)).toEqual(["done", "generating"])
+        await images.waitForSceneImages()
+        gen.hang = false
+        const third = await manual(campaignId, narrationId)
+        await images.startSceneImage(String(third._id))
+        expect((await images.sceneImagesByMessage([narrationId])).get(String(narrationId))!.map((item) => [item.source, item.status])).toEqual([
+            ["tool", "done"],
+            ["manual", "done"],
+        ])
+        // Sem nenhuma pronta, a falha aparece (o dono sabe que não saiu).
+        expect(images.visibleSceneImages([{ id: "a", status: "failed", url: null, caption: "", situationLabel: null, source: "manual", error: "x" }])).toHaveLength(1)
+    })
+
+    it("legenda acima da orientação e abaixo do teto de proteção é gravada inteira; só passa do teto é cortada", async () => {
+        const { campaignId, narrationId } = await table()
+        expect(MADDOX_SCENE_IMAGE_CAPTION_MAX).toBeGreaterThan(MADDOX_SCENE_IMAGE_CAPTION_GUIDE)
+        const long = "Lyra ergue a lanterna no alto do farol enquanto a tempestade rasga o céu e as ondas quebram contra as pedras do cais, iluminando por um instante o bote de Varn ao longe."
+        expect(long.length).toBeGreaterThan(MADDOX_SCENE_IMAGE_CAPTION_GUIDE)
+        await inNarration(campaignId, 5, async (jobId) => {
+            const output = await sceneTool(campaignId, 5, jobId, { situacao: "new-location", descricaoVisual: "O farol.", legenda: long })
+            expect(output).not.toHaveProperty("truncated")
+            expect(jobDraftSceneImage(String(campaignId), jobId)!.caption).toBe(long)
+            takeDraftImages(String(campaignId), jobId)
+        })
+        const stored = await images.reserveSceneImage({ campaignId, source: "tool", turnNumber: 5, messageId: narrationId, situation: "new-location", description: "x", caption: long }, scene())
+        expect(stored!.caption).toBe(long)
+        const huge = await images.reserveSceneImage({ campaignId, source: "manual", turnNumber: 5, messageId: narrationId, situation: null, description: "x", caption: "a".repeat(MADDOX_SCENE_IMAGE_CAPTION_MAX + 50), byOwner: true }, scene())
+        expect(huge!.caption.length).toBe(MADDOX_SCENE_IMAGE_CAPTION_MAX)
+    })
+
+    it("gerador que nunca responde: as imagens falham pelo teto, liberam a vaga e as vagas de geração, e a próxima sai", async () => {
+        const { campaignId, narrationId } = await table()
+        env.maxPerDay = 3
+        gen.hang = true
+        // Duas presas ocupam as duas vagas de geração do processo.
+        const first = await manual(campaignId, narrationId, 1)
+        const second = await manual(campaignId, narrationId, 2)
+        await Promise.all([images.startSceneImage(String(first._id)), images.startSceneImage(String(second._id))])
+        for (const id of [first._id, second._id]) expect(await MaddoxSceneImageModel.findById(id).lean()).toMatchObject({ status: "failed", counts: false, error: "Não foi possível gerar a imagem desta cena." })
+        expect(await images.sceneImageQuota(campaignId, 9, scene(), "manual")).toMatchObject({ allowed: true, remainingToday: 3 })
+
+        gen.hang = false
+        const next = await manual(campaignId, narrationId, 3)
+        await images.startSceneImage(String(next._id))
+        expect(await MaddoxSceneImageModel.findById(next._id).lean()).toMatchObject({ status: "done" })
+    })
+
+    it("descrição do Maddox e JEV que nunca respondem não travam: a imagem sai mesmo assim", async () => {
+        const { id, owner, campaignId, narrationId } = await table()
+        describer.hang = true
+        await images.requestManualSceneImage(id, owner)
+        await settle(id)
+        expect(await MaddoxSceneImageModel.findOne({ source: "manual" }).lean()).toMatchObject({ status: "done", description: "Vocês chegam ao farol apagado, sob a chuva." })
+
+        env.jevSceneImage = true
+        jev.hang = true
+        const { image } = await images.scheduleSceneImage({ campaignId, source: "tool", turnNumber: 5, messageId: narrationId, situation: "new-location", description: "O farol.", caption: "" })
+        await images.waitForSceneImages()
+        expect(await MaddoxSceneImageModel.findById(image!._id).lean()).toMatchObject({ status: "done", jevScore: null })
+    })
+
+    it("imagem manual esperando a vez na fila da campanha não é expirada como presa", async () => {
+        const { id, owner, campaignId } = await table()
+        let release: () => void = () => undefined
+        // Uma narração longa ocupa a fila da campanha.
+        void enqueueMaddoxJob(id, "narração longa", () => new Promise<void>((resolve) => (release = resolve)))
+        await images.requestManualSceneImage(id, owner)
+        const waiting = await MaddoxSceneImageModel.findOne({ source: "manual" }).lean()
+        await MaddoxSceneImageModel.collection.updateOne({ _id: waiting!._id }, { $set: { updatedAt: new Date(Date.now() - 10 * 60_000) } })
+        expect(await images.expireStaleSceneImages(campaignId)).toBe(0)
+        expect(await MaddoxSceneImageModel.findById(waiting!._id).lean()).toMatchObject({ status: "pending" })
+        release()
+        await settle(id)
+        expect(await MaddoxSceneImageModel.findById(waiting!._id).lean()).toMatchObject({ status: "done" })
     })
 })

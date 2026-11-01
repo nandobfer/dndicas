@@ -177,11 +177,11 @@ describe("Maddox 10 — imagens nas cenas de ponta a ponta", () => {
         const pending = await game.getGameState(id, owner)
         expect(pending.turn.phase).toBe("players")
         const narration = pending.messages.find((message) => message.kind === "narration")!
-        expect(narration.sceneImage).toMatchObject({ status: "generating", url: null, caption: "O farol", situationLabel: "Novo local ou cenário" })
+        expect(narration.sceneImages).toEqual([expect.objectContaining({ status: "generating", url: null, caption: "O farol", situationLabel: "Novo local ou cenário" })])
 
         await releaseImages()
         const done = await game.getGameState(id, owner)
-        expect(done.messages.find((message) => message.kind === "narration")!.sceneImage).toMatchObject({ status: "done", url: expect.stringContaining("scenes") })
+        expect(done.messages.find((message) => message.kind === "narration")!.sceneImages).toEqual([expect.objectContaining({ status: "done", url: expect.stringContaining("scenes") })])
         expect(await MaddoxSceneImageModel.findOne({}).lean()).toMatchObject({ messageId: new mongoose.Types.ObjectId(narration.id), turnNumber: 1, references: { characters: ["Lyra"] } })
     })
 

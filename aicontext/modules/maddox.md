@@ -938,7 +938,9 @@ Gemini `*-image*` e OpenAI `gpt-image-*` (`imageModelSupportsReferences`); nos d
 JEV "Gerar imagem na cena" (só `tool`): abaixo de 0,5 → `skipped` (`jev`); falha ou teto do JEV → gera (aviso no log). Arquivo em
 `maddox/campaigns/{id}/scenes/{imagem}` ou `…/npcs/{npc}-{ts}`; consumo na origem `maddox-scene-image` (assunto: a campanha). Ao
 terminar (ou falhar) avisa a mesa (`publishGameChanged`). Falha = `failed` com "Não foi possível gerar a imagem desta cena.".
-Imagens `pending`/`generating` há mais de 5 min (processo reiniciado) viram `failed` na leitura da mesa.
+Imagens `pending`/`generating` há mais de 5 min (processo reiniciado) viram `failed` na leitura da mesa — menos as que estão gerando ou,
+no pedido manual, esperando a vez na fila da campanha neste processo. Legenda: o prompt orienta ~160 caracteres
+(`MADDOX_SCENE_IMAGE_CAPTION_GUIDE`); o corte só acontece no teto de proteção de 500 (`MADDOX_SCENE_IMAGE_CAPTION_MAX`).
 
 **Pedido manual.** `POST /api/maddox/campaigns/[id]/scene-images` (`maddox.play` + entrevista concluída + dono; 202). Reserva logo
 (o placeholder aparece na última narração) e põe na fila da campanha uma geração curta do narrador (30 s, sem ferramentas) que devolve
@@ -947,8 +949,9 @@ descrição, com todos os personagens. Erros: 403 (não dono), 409 `SCENE_IMAGE_
 `NO_NARRATION`, `CAMPAIGN_NOT_ACTIVE`. **Retrato**: `POST /api/maddox/campaigns/[id]/npcs/[npcId]/portrait` (dono; NPC conhecido dos
 jogadores; 409 `SCENE_IMAGE_BUSY` se o retrato dele já está sendo pintado).
 
-**DTO e tela.** `sceneImage` nas narrações e nos cards de fim de combate (`MaddoxGameSceneImageDto`: status, URL, legenda, rótulo da
-situação, origem; nunca a descrição; `skipped` não chega); `npcs[].portraitGenerating`; `sceneImages` no estado da mesa
+**DTO e tela.** `sceneImages` (lista, na ordem do pedido) nas narrações e nos cards de fim de combate (`MaddoxGameSceneImageDto`:
+status, URL, legenda, rótulo da situação, origem; nunca a descrição; `skipped` não chega). A imagem do Maddox e a pedida pelo dono podem
+dividir a mesma narração; com alguma pronta, as que falharam saem da lista (uma falha nunca esconde uma imagem pronta); `npcs[].portraitGenerating`; `sceneImages` no estado da mesa
 (`MaddoxSceneImageControlDto`: dono, pode pedir, motivo, gerando, restantes hoje, chave da campanha, pode pedir retrato). Na bolha:
 placeholder "O Maddox está pintando a cena…", a imagem com a legenda (clique amplia no `GlassModal`) ou a linha da falha. Cabeçalho da
 mesa: "Gerar imagem da cena" (só o dono; desabilitado com o motivo). "NPCs conhecidos": retrato e "Gerar retrato" (dono). As páginas

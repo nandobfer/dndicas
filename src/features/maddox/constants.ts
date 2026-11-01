@@ -335,8 +335,12 @@ export const MADDOX_SCENE_IMAGE_CUSTOM_MAX = 10
 export const MADDOX_SCENE_IMAGE_CUSTOM_LABEL_MAX = 60
 export const MADDOX_SCENE_IMAGE_CUSTOM_DESCRIPTION_MAX = 300
 export const MADDOX_SCENE_IMAGE_STYLE_MAX = 2000
-/** Legenda pública e descrição visual (o teto de proteção corta e avisa, nunca invalida). */
-export const MADDOX_SCENE_IMAGE_CAPTION_MAX = 160
+/**
+ * Legenda pública: `GUIDE` é o tamanho orientado ao modelo; `MAX` é só o teto de PROTEÇÃO (bem acima da orientação), o único
+ * ponto de corte. Descrição visual: teto de proteção (corta e avisa, nunca invalida).
+ */
+export const MADDOX_SCENE_IMAGE_CAPTION_GUIDE = 160
+export const MADDOX_SCENE_IMAGE_CAPTION_MAX = 500
 export const MADDOX_SCENE_IMAGE_DESCRIPTION_MAX = 4000
 /** Imagens de referência enviadas ao gerador (personagens → NPCs → catálogo). */
 export const MADDOX_SCENE_IMAGE_REFERENCES_MAX = 6
