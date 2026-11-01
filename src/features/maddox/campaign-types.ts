@@ -40,6 +40,8 @@ export interface MaddoxCampaignListItemDto {
     turnNumber: number
     /** Fase do turno atual (Maddox 3; só tem sentido com a campanha em andamento). */
     turnPhase: MaddoxTurnPhase
+    /** Título do combate narrativo em andamento (Maddox 6); `null` = fora de combate. */
+    combatTitle?: string | null
     /** Quando o dono iniciou a campanha (Maddox 3). */
     startedAt: string | null
     /** Entrevista de cenário (Maddox 2). */

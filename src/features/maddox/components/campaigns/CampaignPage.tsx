@@ -140,7 +140,7 @@ function CampaignView({ campaign, userId }: { campaign: MaddoxCampaignDetailDto;
             {active && (
                 <p className="flex items-start gap-2 rounded-lg border border-white/10 bg-white/[0.03] p-3 text-sm text-white/70" data-testid="campaign-active-banner">
                     <Dices className="mt-0.5 h-4 w-4 shrink-0 text-primary" aria-hidden />
-                    {`Em andamento · Turno ${campaign.turnNumber} · ${MADDOX_TURN_PHASE_LABELS[campaign.turnPhase]}. Quem entra agora faz a entrevista de personagem e joga a partir do próximo turno.`}
+                    {`Em andamento · Turno ${campaign.turnNumber} · ${MADDOX_TURN_PHASE_LABELS[campaign.turnPhase]}${campaign.combatTitle ? ` · em combate (${campaign.combatTitle})` : ""}. Quem entra agora faz a entrevista de personagem e joga a partir do próximo turno.`}
                 </p>
             )}
 

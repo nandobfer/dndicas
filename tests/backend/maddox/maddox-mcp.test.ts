@@ -73,6 +73,8 @@ describe("MCP do Maddox (/api/maddox/mcp)", () => {
         const list = await rpc(route.POST, "tools/list")
         const names = list.result!.tools!.map((tool) => tool.name)
         expect(names).toEqual(expect.arrayContaining(["save_npc", "save_memory", "update_campaign_state", "update_character_state", "get_campaign_state", "request_check"]))
+        // Combate narrativo (Maddox 6): as quatro ferramentas no mesmo MCP.
+        expect(names).toEqual(expect.arrayContaining(["get_combat", "start_combat", "update_combat", "end_combat"]))
         for (const tool of list.result!.tools!) expect(tool.inputSchema.properties).toHaveProperty("turno")
         const publicList = await rpc(publicRoute.POST, "tools/list")
         expect(publicList.result!.tools!.map((tool) => tool.name)).not.toContain("save_npc")

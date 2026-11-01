@@ -1,5 +1,5 @@
 import { memoriesSection } from "@/features/ai/memories-prompt"
-import { MADDOX_CATALOG_TOOL_NAMES, MADDOX_CHECK_RIGORS, MADDOX_CHECK_ROUNDS_MAX, MADDOX_DECLARATION_VALIDATION_RIGORS, MADDOX_PROFILE_SECTIONS, MADDOX_TOOL_TEXT_GUIDE, type MaddoxCampaignMemoryKind, type MaddoxGameMessageKind, type MaddoxQuestStatus, type MaddoxRigorLevel, type MaddoxVisibility } from "../constants"
+import { MADDOX_CATALOG_TOOL_NAMES, MADDOX_CHECK_RIGORS, MADDOX_CHECK_ROUNDS_MAX, MADDOX_COMBAT_LONG_TURNS, MADDOX_COMBAT_RIGORS, MADDOX_DECLARATION_VALIDATION_RIGORS, MADDOX_PROFILE_SECTIONS, MADDOX_TOOL_TEXT_GUIDE, type MaddoxCampaignMemoryKind, type MaddoxGameMessageKind, type MaddoxQuestStatus, type MaddoxRigorLevel, type MaddoxVisibility } from "../constants"
 import { CATALOG_CITATION_RULE, rigorBlock } from "./interview-prompt"
 import { checkSucceeded } from "../check-modifier"
 
@@ -62,8 +62,45 @@ export function checksRule(rigor: MaddoxRigorLevel): string {
         "- Para pedir um teste, chame a ferramenta `request_check` (personagem, tipo — perícia, atributo ou resistência —, a perícia ou o atributo, a CD, vantagem ou desvantagem quando houver e um motivo curto). Um teste por personagem a cada narração; vários personagens podem testar ao mesmo tempo.",
         "- NUNCA role dados nem invente resultados: quem rola é o jogador, com os modificadores da ficha, e o resultado real chega na mensagem seguinte. Ao pedir um teste, narre até o momento da tentativa e PARE: não decida o resultado nem termine perguntando o que os jogadores fazem.",
         "- Com o resultado em mãos, compare o total com a CD (20 natural é sempre sucesso e 1 natural sempre falha, qualquer que seja a CD; ambos marcantes) e narre a consequência na ficção, sem recitar números.",
-        "- O combate continua narrado (sem iniciativa nem turnos mecânicos); testes podem aparecer nos momentos decisivos dele. Não aplique dano nem gaste recursos da ficha pelos números.",
+        usesCombat(rigor)
+            ? "- O combate é narrado e registrado pelas ferramentas de combate (seção \"Combate narrativo\"), sem iniciativa nem turnos mecânicos; testes podem aparecer nos golpes decisivos. Não aplique dano nem gaste recursos da ficha pelos números."
+            : "- O combate continua narrado (sem iniciativa nem turnos mecânicos); testes podem aparecer nos momentos decisivos dele. Não aplique dano nem gaste recursos da ficha pelos números.",
     ].join("\n")
+}
+
+/** O grau registra o combate narrativo pelas ferramentas (Maddox 6): Narrativo, Flexível e Equilibrado. */
+export const usesCombat = (rigor: MaddoxRigorLevel) => MADDOX_COMBAT_RIGORS.includes(rigor)
+
+/** Regras do combate narrativo (cinemático, sem iniciativa), só nos graus com combate registrado. */
+export function combatRule(rigor: MaddoxRigorLevel): string {
+    return [
+        "## Combate narrativo",
+        "- Quando a hostilidade de fato começa (um ataque, uma emboscada; não uma ameaça ou uma discussão), chame `start_combat` com um título curto, o local e os adversários (e aliados, se houver). Use `registrarNpc` só para quem tem nome próprio e deve continuar na história; grupos genéricos ficam só no combate.",
+        "- Narre o combate de forma cinemática e simples: sem iniciativa, sem turnos mecânicos, sem pontos de vida nem números. Resolva as declarações de todos entrelaçadas no mesmo momento da luta; cada narração muda o rumo dela (alguém cai, recua, se rende, um reforço chega, o terreno muda).",
+        usesChecks(rigor) ? "- Testes só nos golpes decisivos da luta, pela regra dos testes acima." : "- Nada de dados nem testes: o resultado vem da coerência da ficção.",
+        "- Use `update_combat` quando a condição de um adversário mudar ou alguém entrar na luta. `get_combat` lê o combate em andamento.",
+        "- Quando a luta terminar (vitória, derrota, fuga, rendição ou trégua), chame `end_combat` na mesma narração: resultado, resumo público, o desfecho de cada adversário, as recompensas obtidas (moedas, itens ou outra coisa, com quem recebeu), a condição de cada personagem depois da luta e a cena final descrita visualmente (sem segredos). Narre o desfecho e termine num ponto de decisão.",
+        "- Um personagem jogador não morre por conveniência: a derrota leva a captura, fuga, ferimentos ou outras consequências coerentes, salvo se a ficção já tornou a morte inevitável.",
+    ].join("\n")
+}
+
+export interface NarratorCombat {
+    title: string
+    location: string
+    masterTurns: number
+    combatants: readonly { name: string; side: "inimigo" | "aliado"; quantity: number; condition: string; description: string }[]
+}
+
+function combatBlock(combat: NarratorCombat | null | undefined): string | null {
+    if (!combat) return null
+    const lines = combat.combatants.map((item) => {
+        const count = item.quantity > 1 ? ` (${item.quantity})` : ""
+        const side = item.side === "aliado" ? " [aliado]" : ""
+        const description = item.description.trim() ? `: ${oneLine(item.description, 200)}` : ""
+        return `- **${item.name}**${count}${side}${description} — condição: ${item.condition.trim() ? oneLine(item.condition, 200) : "sem registro"}`
+    })
+    const long = combat.masterTurns >= MADDOX_COMBAT_LONG_TURNS ? [`- A luta já dura ${combat.masterTurns} narrações: conduza-a a um desfecho (vitória, derrota, fuga, rendição ou trégua) e encerre com \`end_combat\`.`] : []
+    return [`## Combate em andamento: ${combat.title}`, ...(combat.location.trim() ? [`- Local: ${combat.location.trim()}`] : []), `- Narrações desde o início: ${combat.masterTurns}`, ...lines, ...long].join("\n")
 }
 
 /** Graus que julgam a validade da ação livre na narração (os demais validam ao declarar). */
@@ -140,6 +177,8 @@ export interface NarratorPromptContext {
     characters: readonly NarratorCharacter[]
     npcs: readonly NarratorNpc[]
     memories: readonly NarratorMemory[]
+    /** Combate em andamento (Maddox 6; só nos graus com combate narrativo). */
+    combat?: NarratorCombat | null
 }
 
 const oneLine = (value: string, max: number) => {
@@ -196,14 +235,14 @@ function memoriesBlock(memories: readonly NarratorMemory[]): string | null {
     return parts.join("\n")
 }
 
-export type NarratorToolMode = { kind: "ai-sdk" } | { kind: "mcp"; server: string; turnToken: string; checks?: boolean }
+export type NarratorToolMode = { kind: "ai-sdk" } | { kind: "mcp"; server: string; turnToken: string; checks?: boolean; combat?: boolean }
 
 /** Bloco das ferramentas: na AI SDK elas vêm na chamada; no OpenCode, pelo MCP com o token de turno. */
 function toolsBlock(mode: NarratorToolMode): string | null {
     if (mode.kind === "ai-sdk") return null
     return [
         "## Ferramentas desta narração",
-        `- As ferramentas de anotações da campanha estão no servidor MCP \`${mode.server}\` (get_campaign_state, update_campaign_state, list_npcs, get_npc, save_npc, search_memories, save_memory, update_character_state${mode.checks ? ", request_check" : ""}, ${MADDOX_CATALOG_TOOL_NAMES.search}, ${MADDOX_CATALOG_TOOL_NAMES.get}).`,
+        `- As ferramentas de anotações da campanha estão no servidor MCP \`${mode.server}\` (get_campaign_state, update_campaign_state, list_npcs, get_npc, save_npc, search_memories, save_memory, update_character_state${mode.checks ? ", request_check" : ""}${mode.combat ? ", get_combat, start_combat, update_combat, end_combat" : ""}, ${MADDOX_CATALOG_TOOL_NAMES.search}, ${MADDOX_CATALOG_TOOL_NAMES.get}).`,
         `- Em TODA chamada a essas ferramentas, envie o campo \`turno\` exatamente com este valor: \`${mode.turnToken}\`.`,
         "- Não use outras ferramentas (arquivos, terminal, web): a campanha vive só nessas anotações.",
     ].join("\n")
@@ -214,6 +253,7 @@ export function buildNarratorInstructions(context: NarratorPromptContext, mode: 
     const memories = memoriesSection(context.agentMemories).trim()
     if (memories) parts.push(memories)
     parts.push(MADDOX_NARRATOR_RULES, usesChecks(context.rigor) ? checksRule(context.rigor) : MADDOX_NARRATIVE_MODE_RULE, rigorBlock(context.rigor))
+    if (usesCombat(context.rigor)) parts.push(combatRule(context.rigor))
     if (judgesFreeActionsInNarration(context.rigor)) parts.push(MADDOX_FREE_ACTION_RULE)
     parts.push(MADDOX_NARRATOR_FORMAT, MADDOX_PERSISTENCE_RULE, narratorCatalogRule(context.rigor))
     const tools = toolsBlock(mode)
@@ -223,6 +263,8 @@ export function buildNarratorInstructions(context: NarratorPromptContext, mode: 
     if (context.openingSituation.trim()) parts.push(`## Situação inicial combinada\n${context.openingSituation.trim()}`)
     parts.push(["## Personagens dos jogadores", ...(context.characters.length ? context.characters.map(characterBlock) : ["(nenhum)"])].join("\n\n"))
     parts.push(stateBlock(context.state))
+    const combat = usesCombat(context.rigor) ? combatBlock(context.combat) : null
+    if (combat) parts.push(combat)
     const npcs = npcsBlock(context.npcs)
     if (npcs) parts.push(npcs)
     const notes = memoriesBlock(context.memories)
@@ -259,7 +301,7 @@ export interface NarratorCheckResult {
 }
 
 export type NarratorTask =
-    | { kind: "narration"; turnNumber: number; declarations: readonly NarratorDeclaration[] }
+    | { kind: "narration"; turnNumber: number; declarations: readonly NarratorDeclaration[]; combatHint?: "start" | "end" | null }
     | { kind: "continuation"; turnNumber: number; round: number; declarations: readonly NarratorDeclaration[]; results: readonly NarratorCheckResult[] }
     | { kind: "answer"; turnNumber: number; characterName: string; question: string; declarations: readonly NarratorDeclaration[] }
 
@@ -317,6 +359,8 @@ export function narratorTaskText(task: NarratorTask): string {
         `# Turno ${task.turnNumber} do mestre`,
         "Declarações do turno dos jogadores que acabou de fechar:",
         ...declarationLines(task.declarations),
+        ...(task.combatHint === "start" ? ["_(o JEV indica que estas ações provavelmente começam um combate; você decide e, se começar, chame `start_combat`)_"] : []),
+        ...(task.combatHint === "end" ? ["_(o JEV indica que estas ações provavelmente encerram o combate; você decide e, se terminar, chame `end_combat`)_"] : []),
         "",
         "Narre o resultado dessas tentativas e as reações do mundo, desenvolva a situação e termine no próximo ponto de decisão. Depois grave o que mudou.",
     ].join("\n")
@@ -349,6 +393,8 @@ export function narratorTranscript(messages: readonly NarratorTranscriptMessage[
                     ? `[Turno ${message.turnNumber} — ${who} pergunta] ${content}`
                     : message.kind === "check"
                       ? `[Turno ${message.turnNumber} — teste] ${content}`
+                      : message.kind === "combat"
+                        ? `[Turno ${message.turnNumber} — ${content}]`
                       : message.kind === "pass"
                         ? `[Turno ${message.turnNumber} — ${who} não fez nada]`
                         : `[Turno ${message.turnNumber} — ${who} declara] ${content}`

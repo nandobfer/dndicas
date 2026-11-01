@@ -1,7 +1,18 @@
 import type { CalcPart } from "@/features/character-sheets/utils/dnd-calculations"
 import type { AttributeType, SkillName } from "@/features/character-sheets/types/character-sheet.types"
 import type { DiceRollResponse } from "@/features/dice-roller/types"
-import type { MaddoxCampaignStatus, MaddoxCheckKind, MaddoxCheckMode, MaddoxCheckStatus, MaddoxGameMessageKind, MaddoxRigorLevel, MaddoxTurnPhase } from "./constants"
+import type {
+    MaddoxCampaignStatus,
+    MaddoxCheckKind,
+    MaddoxCheckMode,
+    MaddoxCheckStatus,
+    MaddoxCombatOutcome,
+    MaddoxCombatantOutcome,
+    MaddoxCombatantSide,
+    MaddoxGameMessageKind,
+    MaddoxRigorLevel,
+    MaddoxTurnPhase,
+} from "./constants"
 
 /** DTOs da mesa (Maddox 3). Todos os membros recebem os mesmos dados; `me` é o que muda por usuário. */
 
@@ -21,7 +32,46 @@ export interface MaddoxGameMessageDto {
     error: string | null
     /** Teste pedido pelo Maddox (`kind: "check"`, Maddox 5). Pendente só chega ao jogador indicado. */
     check: MaddoxGameCheckDto | null
+    /** Card de início ou fim de combate (`kind: "combat"`, Maddox 6). */
+    combat: MaddoxGameCombatEventDto | null
     createdAt: string
+}
+
+/** Adversário ou aliado do combate, como os jogadores o percebem. */
+export interface MaddoxCombatantDto {
+    name: string
+    side: MaddoxCombatantSide
+    quantity: number
+    condition: string
+    outcome: MaddoxCombatantOutcome | null
+}
+
+/** Combate em andamento (Maddox 6). Notas do mestre e a cena final nunca chegam à tela. */
+export interface MaddoxGameCombatDto {
+    id: string
+    title: string
+    location: string
+    startedTurn: number
+    masterTurns: number
+    combatants: MaddoxCombatantDto[]
+}
+
+export interface MaddoxCombatRewardDto {
+    kind: "moedas" | "item" | "outro"
+    description: string
+    characterName: string | null
+    /** Entrou na ficha do personagem (Equilibrado). */
+    applied: boolean
+    warning: string | null
+}
+
+/** Card de início ou fim de combate. No fim, traz o desfecho, os NPCs e as recompensas. */
+export interface MaddoxGameCombatEventDto extends MaddoxGameCombatDto {
+    event: "start" | "end"
+    outcome: MaddoxCombatOutcome | null
+    summary: string
+    rewards: MaddoxCombatRewardDto[]
+    endedTurn: number | null
 }
 
 /** Teste pedido pelo Maddox (Maddox 5). A CD só vem quando a campanha a deixa visível. */
@@ -59,6 +109,8 @@ export interface MaddoxGameNpcDto {
     id: string
     name: string
     portraitUrl: string | null
+    /** Situação do NPC (morto aparece esmaecido; Maddox 6). */
+    status: "active" | "inactive" | "dead" | "unknown"
 }
 
 export interface MaddoxGameParticipantDto {
@@ -98,6 +150,8 @@ export interface MaddoxGameStateDto {
     showCheckDc: boolean
     /** NPCs que os jogadores conhecem. */
     npcs: MaddoxGameNpcDto[]
+    /** Combate narrativo em andamento (Maddox 6). */
+    combat: MaddoxGameCombatDto | null
     participants: MaddoxGameParticipantDto[]
     me: {
         memberId: string | null

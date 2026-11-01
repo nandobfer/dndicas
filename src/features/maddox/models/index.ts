@@ -7,3 +7,4 @@ export { MaddoxInterviewScriptModel, type IMaddoxInterviewScript } from "./maddo
 export { MaddoxOpencodeSessionModel, type IMaddoxOpencodeSession } from "./maddox-opencode-session"
 export { MaddoxInterviewModel, type IMaddoxInterview, type IMaddoxInterviewMessage, type IMaddoxAbilityScoresCard, type IMaddoxAbilityBonus, type IMaddoxAbilityRolls, type MaddoxAbilityScores, type IMaddoxCharacterBuild, type IMaddoxBuildRef, type IMaddoxHitPointsCard } from "./maddox-interview"
 export { MaddoxCampaignMessageModel, type IMaddoxCampaignMessage } from "./maddox-campaign-message"
+export { MaddoxCombatModel, type IMaddoxCombat, type IMaddoxCombatant, type IMaddoxCombatReward } from "./maddox-combat"

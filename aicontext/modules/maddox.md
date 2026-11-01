@@ -7,6 +7,7 @@ A **entrega 2 (DND-12, #206)** — entrevistas de cenário e de personagem — e
 (Maddox 2)". A **entrega 3 (DND-11, #202)** — motor de turnos e tempo real — está em "Mesa e turnos (Maddox 3)".
 A **entrega 4 (DND-9, #201)** — o Maddox narrador com ferramentas e streaming — está em "Narrador (Maddox 4)".
 A **entrega 5 (DND-16, #208)** — fichas e testes de atributo/perícia/resistência pedidos pelo Maddox — está em "Fichas e testes (Maddox 5)".
+A **entrega 6 (DND-13, #205)** — combate narrativo (cinemático, sem iniciativa) — está em "Combate narrativo (Maddox 6)".
 
 Código: `src/features/maddox/` (`constants`, `schemas`, `types`, `script-draft`, `models/`, `server/`,
 `hooks/`, `components/settings/`).
@@ -21,7 +22,7 @@ roteiros e as memórias salvam à parte.
 | --- | --- |
 | Geral | Ativo; **Avatar** (upload/substituição pelo `GlassImageUploader` ou "Gerar com o Gerador de imagens" a partir da persona — 1:1, do peito para cima; só vale depois de salvar); modelo do **Maddox (narrador)** e do **Entrevistador** ("Mesmo do Maddox" = sem provedor próprio); instruções de cada um com "Restaurar padrão" |
 | Entrevista: cenário / Entrevista: personagem | Roteiros versionados (abaixo), cada um com "Salvar nova versão do roteiro" e "Desfazer roteiro" |
-| JEV | Uma chave por decisão (`MADDOX_JEV_DECISIONS`): pergunta ou ação do jogador, validade de ação livre, pedir teste, início/fim de combate, conhecimento do mestre, fim da entrevista, gerar imagem na cena. Em uso: **"Fim da entrevista"** (Maddox 2), **"Validade de ação livre"** (Maddox 4, só Rigoroso e Fiel ao D&D) e **"Pedir teste"** (Maddox 5, orientação ao narrador nos graus com testes); as demais ainda sem uso |
+| JEV | Uma chave por decisão (`MADDOX_JEV_DECISIONS`): pergunta ou ação do jogador, validade de ação livre, pedir teste, início/fim de combate, conhecimento do mestre, fim da entrevista, gerar imagem na cena. Em uso: **"Fim da entrevista"** (Maddox 2), **"Validade de ação livre"** (Maddox 4, só Rigoroso e Fiel ao D&D), **"Pedir teste"** (Maddox 5, orientação ao narrador nos graus com testes) e **"Início ou fim de combate"** (Maddox 6, orientação ao narrador nos graus com combate narrativo); as demais ainda sem uso |
 | OpenCode | Política das sessões e lista das sessões ativas com "Excluir" (confirmação) |
 | Memórias | Lista `maddox` de `agent_memories` (mesmo card dos demais agentes, sem limite de quantidade; API `/api/ai/agents/maddox/memories/**`) |
 
@@ -682,6 +683,73 @@ API (`maddox.play`, usuário efetivo):
 - `GET …/game`: `turn.awaitingChecks`, `turn.pendingChecks`, `showCheckDc`, `npcs`, `me.sheet` e `check` nas mensagens.
 
 Fora do escopo: dano, PV e recursos aplicados pelo Maddox na ficha, iniciativa e combate por botões (Maddox 7), imagens de NPC (Maddox 10).
+(O Maddox 6 passou a aplicar na ficha as **recompensas** de combate — moedas e itens — no Equilibrado; ver "Combate narrativo (Maddox 6)".)
+
+## Combate narrativo (Maddox 6)
+
+Código: `server/combat.ts` (aplicação, efeitos do fim, recompensas, DTOs), ferramentas em `server/master-tools.ts`
+(`MADDOX_COMBAT_TOOLS`), rascunho no job em `server/game-live.ts` (`addDraftCombat`/`takeDraftCombat`), `server/combat-hints.ts`
+(JEV), `server/combat-image.ts` (gancho da imagem), coleção `maddox_combats` (`models/maddox-combat.ts`),
+`components/game/GameCombatCard.tsx`.
+
+**Graus.** Narrativo, Flexível e Equilibrado (`MADDOX_COMBAT_RIGORS`). Rigoroso e Fiel ao D&D ficam como antes (combate narrado,
+sem registro nem ferramentas) até o Maddox 7, que vai reaproveitar o registro. Sem iniciativa nem turnos rígidos: o motor de turnos
+não muda (todos declaram, o Maddox narra); no Equilibrado os testes continuam nos golpes decisivos.
+
+**Ferramentas do narrador** (só nas narrações dos três graus — respostas a perguntas não recebem; pelo MCP `dndicas-maddox` elas existem
+para todos e recusam pelo grau/geração):
+
+| Ferramenta | Comportamento |
+| --- | --- |
+| `start_combat { titulo, local?, adversarios[] }` | Adversário: `nome`, `lado` (inimigo/aliado), `quantidade`, `descricao`, `condicao`, `registrarNpc`. Liga ao NPC já registrado pelo nome; com `registrarNpc` cria o NPC (visível aos jogadores); grupos genéricos ficam só no combate. Combate já ativo = erro |
+| `update_combat { adversarios[] }` | Condição, quantidade, reforços |
+| `end_combat { resultado, resumo, notasMestre?, adversarios[{ nome, desfecho }], recompensas[], estadoPersonagens[], cenaFinal }` | Exige combate ativo; recusa se a narração pediu teste ("resolva os testes antes"); adversário fora do combate e personagem desconhecido = erro com as opções. Recompensa: `tipo` moedas (`po`, `pp`, `pe`, `pc`, `pl`, até 100.000 cada), item (`item`, `quantidade`) ou outro (`descricao`), `personagem` opcional (vazio = o grupo) |
+| `get_combat {}` | Leitura do combate (gravado + o que já foi pedido nesta narração) |
+
+**Rascunho e aplicação.** Como os testes do Maddox 5, os pedidos ficam no job da fila e só são aplicados por `applyCombatDrafts`
+depois que a narração é gerada e **antes** de ela ser gravada: geração que falha não muda nada (nem cria NPC). Os cards são mensagens
+`kind: "combat"` (`combat { event: "start" | "end", combatId }`), gravadas no mesmo `insertMany`: início **antes** da narração, fim
+**depois** dela (e dos testes). O índice único parcial `{ campaignId }` com `status: "active"` (migração `ensure-maddox-indexes`)
+garante um combate ativo por campanha. Cada narração da rodada 0 com combate ativo (ou que o tocou) soma `masterTurns`.
+
+**Fim do combate.** Troca condicional `active → ended` (uma só aplicação vence), com resultado (`vitoria`, `derrota`, `fuga`, `tregua`,
+`interrompido`), resumo, notas do mestre, desfecho de cada adversário (`morto`, `derrotado`, `capturado`, `rendeu-se`, `fugiu`,
+`poupado`, `ileso`), recompensas, condição dos personagens e a cena final. Efeitos (cada um falha sozinho, com aviso no log):
+
+- NPC ligado: `morto` → `dead`, `fugiu` → `unknown`; os demais mantêm a situação;
+- `character.currentState` de cada personagem em `estadoPersonagens`;
+- memória `evento` "Combate: {título}" (visível aos jogadores, tag `combate`) com resultado, resumo, desfechos e recompensas;
+- **recompensas na ficha, só no Equilibrado** (`MADDOX_COMBAT_SHEET_REWARD_RIGORS`) e só para personagem com ficha: cada recompensa troca
+  `applied: false → true` antes de tocar a ficha (retomada não duplica). Moedas: `$inc` em `sheet.coins` (po→gp, pp→sp, pe→ep,
+  pc→cp, pl→pp). Item: do catálogo (busca por id ou nome, ativo; menção e campos de CA como a ficha da entrevista) ou, fora dele,
+  **item próprio** com o aviso `"X" não está no catálogo: entrou como item próprio.`; entra sem equipar. Avisa a ficha aberta
+  (`CharacterSheetPusherService`) e audita (`CampanhaMaddox`, `by: maddox`). Narrativo e Flexível só registram;
+- gancho `onCombatEnded` (`combat-image.ts`): **ponto de extensão da imagem de fim de batalha (Maddox 10)** — hoje só grava
+  `image.status = "awaiting-feature"` (ou `skipped` sem cena final) e loga; `finalScene` fica gravada para a geração.
+
+**Prompt.** Regra fixa "## Combate narrativo" (`combatRule`: quando abrir, narração cinemática sem números, testes só nos golpes
+decisivos no Equilibrado, `update_combat`, quando e como encerrar, personagem não morre por conveniência) e o bloco
+"## Combate em andamento" (título, local, narrações desde o início, participantes e condição); a partir de 6 narrações
+(`MADDOX_COMBAT_LONG_TURNS`) o bloco pede para conduzir a luta a um desfecho. A transcrição mostra os cards ("combate começou: …",
+"combate terminou: Vitória — …"). No OpenCode, a lista do MCP inclui as quatro ferramentas.
+
+**JEV "Início ou fim de combate"** (`combat-boundary`): com a chave ligada, nos três graus, na rodada 0 com declarações, uma pergunta
+`noul` sobre o conjunto: fora de combate, "a cena entra em combate agora?"; em combate, "o combate está terminando?". Positiva (≥ 0,5)
+acrescenta à tarefa a nota "(o JEV indica que … provavelmente começam/encerram …; você decide)". Teto de 20 s
+(`MADDOX_COMBAT_HINT_TIMEOUT_MS`); chave desligada, falha ou teto = narra sem a nota (aviso no log). Quem decide é sempre o Maddox.
+
+**DTO e tela.** `GET …/game` traz `combat` (combate ativo: título, local, turno de início, narrações, participantes com condição) e
+`combat` nas mensagens (`MaddoxGameCombatEventDto`: no fim, resultado, resumo, desfechos e recompensas com `applied`/`warning`);
+`masterNotes` e `finalScene` nunca chegam. `npcs[].status` também. Campanha (`GET /api/maddox/campaigns…`): `combatTitle`.
+
+- **Card** (`GameCombatCard`): início "Combate!" com título, local e chips dos participantes; fim "Fim do combate" com o chip do
+  resultado (vitória verde, derrota vermelha, fuga/trégua âmbar, interrompido neutro — `data-accent`), resumo, desfechos, recompensas
+  ("Na ficha" quando aplicada, aviso do item próprio) e "Durou N narrações (turnos A–B)". O divisor do turno sai antes do card de início.
+- Cabeçalho da mesa: chip **"Em combate · {título}"** enquanto houver combate ativo (vem do estado, atualiza pelo tempo real).
+- "NPCs conhecidos": NPC morto esmaecido com "Morto"; `unknown` com "Paradeiro desconhecido".
+- Lobby: "Em andamento · Turno N · fase · em combate (título)".
+
+Sem rota nova nem permissão nova (`maddox.play` cobre a mesa).
 
 ## Testes
 
@@ -714,6 +782,13 @@ jogador, falha da geração, teto de rodadas, campanha narrativa e o JEV "Pedir 
 continuação), `game-routes.test.ts` (rota de rolagem), `campaigns.test.ts` (`showCheckDc`); na tela, `maddox-game.test.tsx` (card,
 espera, "Rolar no lugar", repetição da rolagem, CD, cancelado, "Minha ficha", NPCs e o teste estático dos controles),
 `maddox-game-stream.test.ts` (`check-rolled`), `maddox-campaigns.test.tsx` e `tests/frontend/dice-roller/dice-roller-panel.test.tsx`.
+Maddox 6: `narrator-combat-campaign.test.ts` (**critério de aceite**: campanha narrativa com o narrador real — inicia, atualiza e encerra o
+combate, conferindo o combate gravado, a ordem dos cards, o NPC morto, a memória `evento`, a condição do personagem, a imagem
+`awaiting-feature`, o DTO sem segredos e o prompt/transcrição; recusas; falha da geração sem gravar; Rigoroso sem ferramentas;
+Equilibrado com moedas e itens na ficha, item próprio com aviso e reaplicação sem duplicar; JEV "Início ou fim de combate"),
+`narrator-prompt.test.ts` (regra, bloco, lembrete, MCP, nota do JEV, transcrição), `maddox-mcp.test.ts` (ferramentas no MCP),
+`ensure-maddox-indexes.test.ts` (índice do combate ativo); na tela, `maddox-game.test.tsx` (cards, chip "Em combate" que aparece e some
+pelo tempo real, NPC morto).
 Atributos na entrevista (Maddox 5): `interview-ability-scores.test.ts` (fluxo completo com o entrevistador real sobre um
 `streamText` roteirizado: card pedido, cinco rolagens no motor, envio, fala interna fora do DTO, bônus recusado/aplicado, consulta e a
 ficha com base + bônus; conjunto padrão/compra de pontos, reiniciar, rolagens simultâneas, trava, entrevistador indisponível,

@@ -27,6 +27,8 @@ export interface MaddoxNarrationContext {
     declarations: MaddoxMasterDeclaration[]
     /** Rodada de testes (Maddox 5): 0 = narração das declarações; acima, continuação com o resultado dos testes da rodada anterior. */
     round?: number
+    /** JEV "Início ou fim de combate" (Maddox 6): as declarações provavelmente começam (`start`) ou encerram (`end`) um combate. */
+    combatHint?: "start" | "end" | null
     /** Abortado quando a geração passa do teto de duração (`MADDOX_MASTER_GENERATION_TIMEOUT_MS`). */
     signal?: AbortSignal
 }

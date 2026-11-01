@@ -10,6 +10,7 @@ import {
     MADDOX_ANSWER_FAILED_MESSAGE,
     MADDOX_CAMPAIGN_AUDIT_ENTITY,
     MADDOX_CHECK_RIGORS,
+    MADDOX_COMBAT_RIGORS,
     MADDOX_DECLARATION_VALIDATION_RIGORS,
     MADDOX_GAME_CHANGED_EVENT,
     MADDOX_GAME_PAGE_SIZE,
@@ -25,8 +26,11 @@ import {
     MaddoxCampaignMessageModel,
     MaddoxCampaignModel,
     MaddoxCharacterModel,
+    MaddoxCombatModel,
     MaddoxNpcModel,
     type IMaddoxCampaign,
+    type IMaddoxCombat,
+    type IMaddoxNpc,
     type IMaddoxCampaignMember,
     type IMaddoxCampaignMessage,
     type IMaddoxCharacter,
@@ -36,7 +40,7 @@ import type { MaddoxGameCheckDto, MaddoxGameMessageDto, MaddoxGameMessagesPageDt
 import { checkSucceeded, keptD20 } from "../check-modifier"
 import { assertMemberCanPlay, isMemberReadyToPlay, loadMembership } from "./campaigns"
 import { getMaddoxMaster, type MaddoxMasterDeclaration } from "./game-master"
-import { beginLive, enqueueMaddoxJob, isCampaignBusy, takeDraftChecks } from "./game-live"
+import { beginLive, enqueueMaddoxJob, isCampaignBusy, takeDraftChecks, takeDraftCombat } from "./game-live"
 import { onlineUserIds } from "./game-presence"
 
 /**
@@ -139,17 +143,36 @@ async function runMasterTurn(campaignId: Types.ObjectId, token: string, turnNumb
                 const { withCheckHints } = await import("./check-hints")
                 declarations = await withCheckHints(campaign, declarations)
             }
+            // Combate narrativo (Maddox 6): o combate ativo antes da narração e a orientação do JEV "Início ou fim de combate".
+            const combatModule = MADDOX_COMBAT_RIGORS.includes(campaign.rigor) ? await import("./combat") : null
+            const combatBefore = combatModule ? await combatModule.findActiveCombat(campaignId) : null
+            let combatHint: "start" | "end" | null = null
+            if (combatModule && round === 0 && declarations.length > 0) {
+                const { combatBoundaryHint } = await import("./combat-hints")
+                combatHint = await combatBoundaryHint(campaign, declarations, combatBefore ? { title: combatBefore.title } : null)
+            }
             live = beginLive(String(campaignId), { kind: "narration", turnNumber, replyToId: null })
             const master = await getMaddoxMaster()
             const sink = live
-            const content = await withGenerationTimeout((signal) => master.narrate({ campaignId: String(campaignId), jobId, turnNumber, round, declarations, signal }, sink))
+            const content = await withGenerationTimeout((signal) => master.narrate({ campaignId: String(campaignId), jobId, turnNumber, round, declarations, combatHint, signal }, sink))
             // Os testes pedidos nesta geração só viram mensagens agora, logo abaixo da narração (ordem dos `_id`).
             const { draftCheckMessage } = await import("./game-checks")
             const drafts = takeDraftChecks(String(campaignId), jobId)
-            const [message] = await MaddoxCampaignMessageModel.insertMany(
-                [{ campaignId, turnNumber, phase: "master", kind: "narration", content, segment: round }, ...drafts.map((draft) => draftCheckMessage(campaignId, turnNumber, round, draft))],
+            // O combate pedido nesta geração é aplicado ANTES de gravar a narração: o card de início vem acima dela, o de fim abaixo.
+            const combatEvents = takeDraftCombat(String(campaignId), jobId)
+            const combat = combatModule && combatEvents.length ? await combatModule.applyCombatDrafts(campaign, turnNumber, combatEvents) : { messages: [], touched: [] }
+            const combatCard = (plan: { event: "start" | "end"; combatId: Types.ObjectId }) => ({ campaignId, turnNumber, phase: "master" as const, kind: "combat" as const, content: "", segment: round, combat: plan })
+            const inserted = await MaddoxCampaignMessageModel.insertMany(
+                [
+                    ...combat.messages.filter((plan) => plan.event === "start").map(combatCard),
+                    { campaignId, turnNumber, phase: "master", kind: "narration", content, segment: round },
+                    ...drafts.map((draft) => draftCheckMessage(campaignId, turnNumber, round, draft)),
+                    ...combat.messages.filter((plan) => plan.event === "end").map(combatCard),
+                ],
                 { ordered: true },
             )
+            const message = inserted.find((item) => item.kind === "narration")
+            if (combatModule && round === 0) await combatModule.countCombatNarration(campaignId, [...(combatBefore ? [combatBefore._id] : []), ...combat.touched])
             live.end({ messageId: String(message!._id), error: null })
             if (drafts.length) log.info({ campaignId: String(campaignId), turnNumber, round, checks: drafts.length }, "[maddox] Maddox pediu testes")
         }
@@ -526,10 +549,13 @@ async function messagesDto(all: MessageDoc[], viewer: MessagesViewer): Promise<M
                 .filter((id): id is string => Boolean(id) && Types.ObjectId.isValid(id!)),
         ),
     ]
-    const [characters, users] = await Promise.all([
+    const combatIds = messages.map((message) => message.combat?.combatId).filter((id): id is Types.ObjectId => Boolean(id))
+    const [characters, users, combats] = await Promise.all([
         characterIds.length ? MaddoxCharacterModel.find({ _id: { $in: characterIds } }).select("name portraitUrl").lean<Pick<CharacterDoc, "_id" | "name" | "portraitUrl">[]>() : Promise.resolve([]),
         skippers.length ? User.find({ _id: { $in: skippers } }).select("name username").lean<{ _id: Types.ObjectId; name?: string; username?: string }[]>() : Promise.resolve([]),
+        combatIds.length ? import("./combat").then(({ loadCombats }) => loadCombats(combatIds)) : Promise.resolve(null),
     ])
+    const { combatEventDto } = combats ? await import("./combat") : { combatEventDto: null }
     const characterById = new Map(characters.map((character) => [String(character._id), character]))
     const userById = new Map(users.map((user) => [String(user._id), user.name?.trim() || user.username || "Dono"]))
     return messages.map((message) => {
@@ -547,6 +573,10 @@ async function messagesDto(all: MessageDoc[], viewer: MessagesViewer): Promise<M
             skippedByName: message.skippedBy ? (userById.get(message.skippedBy) ?? "Dono") : null,
             error: message.error ?? null,
             check: message.check ? checkDto(message, viewer, userById) : null,
+            combat: (() => {
+                const found = message.combat && combats ? combats.get(String(message.combat.combatId)) : undefined
+                return found && combatEventDto ? combatEventDto(found, message.combat!.event) : null
+            })(),
             createdAt: new Date(message.createdAt).toISOString(),
         }
     })
@@ -602,17 +632,18 @@ export async function getGameState(campaignId: string, userId: string): Promise<
         campaign = await fillEmptyTurn(campaign)
     }
     const viewer: MessagesViewer = { memberId: String(loaded.member._id), showCheckDc: Boolean(campaign.showCheckDc) }
-    const [members, page, avatarUrl, npcs, pendingChecks] = await Promise.all([
+    const [members, page, avatarUrl, npcs, pendingChecks, activeCombat] = await Promise.all([
         joinedMembers(campaign._id),
         messagesPage(campaign._id, null, viewer),
         maddoxAvatarUrl(),
-        MaddoxNpcModel.find({ campaignId: campaign._id, visibility: "players" }).sort({ name: 1 }).select("name portraitUrl").lean<{ _id: Types.ObjectId; name: string; portraitUrl: string | null }[]>(),
+        MaddoxNpcModel.find({ campaignId: campaign._id, visibility: "players" }).sort({ name: 1 }).select("name portraitUrl status").lean<{ _id: Types.ObjectId; name: string; portraitUrl: string | null; status?: IMaddoxNpc["status"] }[]>(),
         campaign.status === "active" && campaign.turn?.phase === "master" && campaign.turn.awaitingChecks
             ? MaddoxCampaignMessageModel.find({ campaignId: campaign._id, turnNumber: campaign.turn.number, kind: "check", "check.round": campaign.turn.checkRound ?? 0, "check.status": "pending" })
                   .sort({ _id: 1 })
                   .select("memberId characterName")
                   .lean<{ _id: Types.ObjectId; memberId: Types.ObjectId; characterName: string | null }[]>()
             : Promise.resolve([]),
+        MaddoxCombatModel.findOne({ campaignId: campaign._id, status: "active" }).lean<IMaddoxCombat>(),
     ])
     const userIds = members.map(({ member }) => member.userId).filter((id) => Types.ObjectId.isValid(id))
     const found = userIds.length ? await User.find({ _id: { $in: userIds } }).select("name username").lean<{ _id: Types.ObjectId; name?: string; username?: string }[]>() : []
@@ -651,7 +682,8 @@ export async function getGameState(campaignId: string, userId: string): Promise<
             pendingChecks: pendingChecks.map((check) => ({ checkId: String(check._id), memberId: String(check.memberId), characterName: check.characterName ?? "Personagem" })),
         },
         showCheckDc: Boolean(campaign.showCheckDc),
-        npcs: npcs.map((npc) => ({ id: String(npc._id), name: npc.name, portraitUrl: npc.portraitUrl ?? null })),
+        npcs: npcs.map((npc) => ({ id: String(npc._id), name: npc.name, portraitUrl: npc.portraitUrl ?? null, status: npc.status ?? "active" })),
+        combat: activeCombat ? (await import("./combat")).combatDto(activeCombat) : null,
         participants,
         me: {
             memberId: String(loaded.member._id),
