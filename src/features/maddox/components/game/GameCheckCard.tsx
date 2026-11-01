@@ -11,6 +11,7 @@ import type { CharacterSheet } from "@/features/character-sheets/types/character
 import { DiceRollerPanel } from "@/features/dice-roller/components/dice-roller-panel"
 import type { DiceRollPreset, DiceRollResponse } from "@/features/dice-roller/types"
 import { checkKindLabel, checkModeLabel, checkModifier, checkTitle, signed } from "../../check-modifier"
+import { MADDOX_CHECK_DIE_HIDE_MS } from "../../constants"
 import type { MaddoxGameMessageDto } from "../../game-types"
 import { MemberAvatar, RarityChip } from "../campaigns/campaign-visuals"
 
@@ -53,14 +54,19 @@ export function GameCheckCard({ message, mine, color, replay, onRoll }: Props) {
     // Modificador do painel congelado no clique: o painel se reinicia quando o preset muda, então o resultado do
     // servidor (que pode trazer outro modificador) nunca troca o preset de quem está vendo o dado rolar.
     const [frozenModifier, setFrozenModifier] = useState<number | null>(null)
+    // Fim da animação do dado neste card (local ou repetida): só então a linha do resultado aparece.
+    const [settledRoll, setSettledRoll] = useState<DiceRollResponse | null>(null)
     const pendingMine = check.status === "pending" && mine
     const sheet = useSheet(pendingMine && !localRoll ? check.sheetId : null)
     const preview = useMemo(() => (sheet.data ? checkModifier(sheet.data as CharacterSheet, spec) : null), [sheet.data, spec.kind, spec.ability, spec.skill]) // eslint-disable-line react-hooks/exhaustive-deps
     const roll = localRoll ?? check.roll ?? replay
     const parts = check.modifierParts.length ? check.modifierParts : (preview?.parts ?? [])
     const modifier = roll ? roll.modifier : (preview?.value ?? 0)
-    // Quem rola mantém o próprio painel (a animação local); os outros repetem a rolagem recebida pelo stream da mesa.
+    // Quem rola mantém o próprio painel (a animação local); os outros repetem a rolagem recebida pelo stream da mesa. O
+    // painel fica montado durante toda a rolagem: o palco do dado só aparece nela e sai sozinho depois do fim.
     const showPanel = pendingMine || Boolean(localRoll) || Boolean(replay)
+    const animated = Boolean(localRoll) || Boolean(replay)
+    const resultRoll = animated ? settledRoll : (check.roll ?? null)
     const presetModifier = frozenModifier ?? (pendingMine ? (preview?.value ?? 0) : (replay ?? check.roll)?.modifier ?? 0)
     const preset = useMemo<DiceRollPreset>(() => ({ label: title, terms: [{ dice: "d20", quantity: 1 }], modifier: presetModifier, mode: check.mode, source: "sheet" }), [title, presetModifier, check.mode])
     // A prévia do modificador depende da ficha: "Rolar" espera ela carregar.
@@ -114,6 +120,13 @@ export function GameCheckCard({ message, mine, color, replay, onRoll }: Props) {
                         <DiceRollerPanel
                             preset={preset}
                             hideConfigurationControls
+                            appearance="inline"
+                            stageVariant="bare"
+                            stageSize="compact"
+                            stageVisibility="roll"
+                            stageHideDelayMs={MADDOX_CHECK_DIE_HIDE_MS}
+                            rollButtonClassName="h-9 w-auto px-4 text-xs"
+                            onRollSettled={setSettledRoll}
                             rollButtonLabel="Rolar"
                             hideRollButton={!pendingMine && !localRoll}
                             disableRolling={Boolean(localRoll) || !pendingMine || sheetLoading}
@@ -129,8 +142,8 @@ export function GameCheckCard({ message, mine, color, replay, onRoll }: Props) {
                     </div>
                 )}
 
-                {check.roll && !showPanel && <CheckResultLine roll={check.roll} />}
-                {check.success !== null && (
+                {resultRoll && <CheckResultLine roll={resultRoll} />}
+                {resultRoll && check.success !== null && (
                     <p className="text-xs font-semibold" style={{ color: check.success ? rarityColors.uncommon : rarityColors.artifact }} data-testid="check-outcome">
                         {check.success ? "Sucesso" : "Falha"}
                     </p>

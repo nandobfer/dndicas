@@ -333,8 +333,10 @@ aparecem para todos na hora); só `me` muda por usuário.
 **Tela `/campanhas/[id]/mesa`** (`pageAccess`): cabeçalho com rigor, "Turno N" e a faixa da fase ("Turno dos jogadores — X
 de N jogador(es) online já declararam" / "Turno do mestre — o Maddox está narrando…"); conversa no padrão do chat do Opex
 (divisor por turno, Maddox com avatar e cor do rigor, declarações com o retrato do personagem — as minhas à direita —,
-pergunta e resposta ligadas, "Fulano não fez nada (pulado por …)", "Carregar anteriores" com cursor); campo com
-**Declarar** (Ctrl/⌘+Enter; Enter sozinho só quebra linha), **Perguntar ao mestre** e **Não fazer nada**, bloqueado com o
+pergunta e resposta ligadas, "Fulano não fez nada (pulado por …)", "Carregar anteriores" com cursor); campo no desenho do
+campo da entrevista (`GameComposer`: caixa única `flex items-end`, texto `flex-1`, três botões de ícone redondos `h-8 w-8` à direita,
+na ordem **Perguntar ao mestre**, **Não fazer nada** e **Declarar** (enviar); Enter declara, também Ctrl/⌘+Enter, Shift+Enter quebra
+linha; estado/motivo e contador abaixo da caixa), bloqueado com o
 motivo em pt-BR (turno do mestre, próximo turno, entrevista pendente com link); painel "Na mesa" com presença (ponto
 online/offline) e a situação em cores de raridade (Declarou, Aguardando, Offline (não conta), Entra no próximo turno,
 Preparando personagem) e **"Pular"** para o dono.
@@ -498,8 +500,12 @@ provavelmente exige teste; você decide)". Chave desligada, falha ou teto: narra
   as partes do modificador nas cores dos atributos (as do `CalcTooltip`) e "= d20 +5", chip de vantagem/desvantagem e de CD (visível).
   A prévia usa a ficha ao vivo (`useSheet`); "Rolar" fica desabilitado ("Carregando a ficha…") até ela chegar. O modificador do
   `preset` do painel é congelado no clique: o resultado do servidor (que pode trazer outro modificador) não troca o preset — o painel
-  se reinicia quando o preset muda e o dado/total sumiriam para quem rolou. Abaixo, o `DiceRollerPanel` sem controles, com o d20 parado e o botão **"Rolar"**, que
-  chama `POST …/game/checks/[checkId]/roll` (corpo `{}`); depois, "Resultado enviado ao Maddox.".
+  se reinicia quando o preset muda e o dado/total sumiriam para quem rolou. Abaixo, o `DiceRollerPanel` sem controles e sem palco
+  (`appearance="inline"`, `stageVariant="bare"`, `stageSize="compact"`, `stageVisibility="roll"`): pendente, só o botão **"Rolar"**
+  pequeno, que chama `POST …/game/checks/[checkId]/roll` (corpo `{}`); rolando, o d20 solto no card e "Resultado enviado ao Maddox.";
+  quando o dado para (`onRollSettled`), a linha do resultado (`check-roll-result`) e Sucesso/Falha, e o dado some com animação
+  `MADDOX_CHECK_DIE_HIDE_MS` (1,4 s) depois. Quem assiste vê o mesmo dado pelo `replay`, sem botão. Mesa recarregada depois da
+  rolagem: só a linha. O painel fica montado durante toda a rolagem, para o fim da animação sempre chegar ao card.
 - Faixa: "o Maddox pediu um teste para você" (com "e aguarda …" se houver outros) ou "aguardando o teste de …"; o campo de texto
   fica bloqueado com o motivo; o Maddox não aparece "narrando" enquanto espera.
 - **Minha ficha**: botão no cabeçalho da mesa, só com ficha (`me.sheet`, só a minha chega ao DTO). Abre a janela `maddox-sheet`

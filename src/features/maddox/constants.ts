@@ -224,6 +224,8 @@ export const MADDOX_CHECK_DC_MAX = 30
 export const MADDOX_CHECK_REASON_GUIDE = 200
 /** Consulta do JEV "Pedir teste" (orientação ao narrador): passou disso, a orientação é ignorada. */
 export const MADDOX_CHECK_HINT_TIMEOUT_MS = 20_000
+/** Tempo (ms) que o dado do teste fica no card depois de parar, antes de sumir com animação. */
+export const MADDOX_CHECK_DIE_HIDE_MS = 1_400
 
 // ── Entrevistas ───────────────────────────────────────────────────────────────
 

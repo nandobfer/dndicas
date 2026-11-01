@@ -30,7 +30,8 @@ vi.mock("@/core/hooks/useAuth", () => ({ useAuth: () => ({ userId: "u-owner", is
 const addWindow = vi.fn()
 /**
  * Painel de dados simplificado (o 3D real é testado em tests/frontend/dice-roller): expõe as props que a mesa passa e,
- * como o painel real, ZERA o resultado mostrado quando o `preset` muda (efeito em `[preset]`).
+ * como o painel real, ZERA o resultado mostrado quando o `preset` muda (efeito em `[preset]`) e só avisa o fim da
+ * animação (`onRollSettled`) num passo separado — o botão "fim da animação".
  */
 vi.mock("@/features/dice-roller/components/dice-roller-panel", async () => {
     const { useEffect, useState } = await import("react")
@@ -43,21 +44,53 @@ vi.mock("@/features/dice-roller/components/dice-roller-panel", async () => {
             disabledRollingMessage?: string | null
             rollButtonLabel?: string
             rollRequest?: (input: unknown) => Promise<{ total: number }>
+            onRollSettled?: (result: unknown) => void
+            appearance?: string
+            stageVariant?: string
+            stageSize?: string
+            stageVisibility?: string
+            stageHideDelayMs?: number
+            rollButtonClassName?: string
         }) => {
             const [shown, setShown] = useState<number | null>(null)
-            useEffect(() => setShown(null), [props.preset])
+            const [rolled, setRolled] = useState<unknown>(null)
+            useEffect(() => {
+                setShown(null)
+                setRolled(null)
+            }, [props.preset])
+            const animating = rolled ?? props.externalResult ?? null
             return (
-                <div data-testid="fake-dice-panel" data-modifier={props.preset?.modifier} data-mode={props.preset?.mode} data-external={props.externalResult?.total ?? ""} data-shown={shown ?? ""}>
+                <div
+                    data-testid="fake-dice-panel"
+                    data-modifier={props.preset?.modifier}
+                    data-mode={props.preset?.mode}
+                    data-external={props.externalResult?.total ?? ""}
+                    data-shown={shown ?? ""}
+                    data-appearance={props.appearance ?? ""}
+                    data-stage-variant={props.stageVariant ?? ""}
+                    data-stage-size={props.stageSize ?? ""}
+                    data-stage-visibility={props.stageVisibility ?? ""}
+                    data-stage-hide-delay={props.stageHideDelayMs ?? ""}
+                    data-roll-button-class={props.rollButtonClassName ?? ""}
+                >
                     {!props.hideRollButton && (
                         <button
                             type="button"
                             disabled={props.disableRolling}
                             onClick={async () => {
                                 const result = await props.rollRequest?.({ terms: [{ dice: "d20", quantity: 1 }] })
-                                if (result) setShown(result.total)
+                                if (result) {
+                                    setShown(result.total)
+                                    setRolled(result)
+                                }
                             }}
                         >
                             {props.rollButtonLabel ?? "JOGAR"}
+                        </button>
+                    )}
+                    {animating !== null && (
+                        <button type="button" onClick={() => props.onRollSettled?.(animating)}>
+                            fim da animação
                         </button>
                     )}
                     {props.disabledRollingMessage}
@@ -227,15 +260,48 @@ describe("mesa Maddox — ações do jogador", () => {
         await waitFor(() => expect(post).toHaveBeenCalledWith("/maddox/campaigns/c1/game/actions", { kind: "pass" }))
     })
 
-    it("Ctrl+Enter declara; Enter sozinho não envia", async () => {
+    it("Enter declara; Shift+Enter não envia; texto vazio não envia; Ctrl+Enter também declara", async () => {
         await renderGame(gameState())
         post.mockResolvedValue(ok(gameState()))
         const input = screen.getByLabelText("O que o seu personagem faz")
-        fireEvent.change(input, { target: { value: "Grito por ajuda." } })
         fireEvent.keyDown(input, { key: "Enter" })
+        fireEvent.change(input, { target: { value: "Grito por ajuda." } })
+        fireEvent.keyDown(input, { key: "Enter", shiftKey: true })
         expect(post).not.toHaveBeenCalled()
-        fireEvent.keyDown(input, { key: "Enter", ctrlKey: true })
+        fireEvent.keyDown(input, { key: "Enter" })
         await waitFor(() => expect(post).toHaveBeenCalledWith("/maddox/campaigns/c1/game/actions", { kind: "declaration", content: "Grito por ajuda." }))
+        post.mockClear()
+        fireEvent.change(input, { target: { value: "Corro." } })
+        fireEvent.keyDown(input, { key: "Enter", ctrlKey: true })
+        await waitFor(() => expect(post).toHaveBeenCalledWith("/maddox/campaigns/c1/game/actions", { kind: "declaration", content: "Corro." }))
+    })
+
+    it("campo no desenho da entrevista: caixa única com três botões de ícone, na ordem Perguntar, Não fazer nada, Declarar", async () => {
+        await renderGame(gameState())
+        const box = screen.getByTestId("game-composer-box")
+        for (const cls of ["flex", "items-end", "gap-2", "rounded-xl", "border", "bg-card", "focus-within:border-primary/60"]) expect(box.className.split(" ")).toContain(cls)
+        const input = within(box).getByLabelText("O que o seu personagem faz")
+        expect(input.className.split(" ")).toEqual(expect.arrayContaining(["flex-1", "mb-1", "max-h-[180px]"]))
+        const buttons = within(box).getAllByRole("button")
+        expect(buttons.map((button) => button.getAttribute("aria-label"))).toEqual(["Perguntar ao mestre", "Não fazer nada", "Declarar"])
+        for (const button of buttons) {
+            expect(button.className.split(" ")).toEqual(expect.arrayContaining(["h-8", "w-8", "rounded-full"]))
+            expect(button).toHaveAttribute("title")
+            expect(button.textContent).toBe("")
+        }
+        expect(buttons[2]).toHaveAttribute("type", "submit")
+        expect(buttons[0]).toHaveAttribute("type", "button")
+        // Estado e contador abaixo da caixa, fora dela.
+        expect(within(box).queryByTestId("game-composer-hint")).not.toBeInTheDocument()
+        expect(screen.getByTestId("game-composer-counter")).toHaveTextContent("0/")
+        expect(screen.getByTestId("game-composer-counter")).toHaveTextContent("Enter declara · Shift+Enter quebra linha")
+    })
+
+    it("campo bloqueado (turno do mestre): os três botões desabilitados e a caixa esmaecida", async () => {
+        await renderGame(gameState({ turn: { ...gameState().turn, phase: "master", generating: true } }))
+        const box = screen.getByTestId("game-composer-box")
+        expect(box.className.split(" ")).toContain("opacity-70")
+        for (const button of within(box).getAllByRole("button")) expect(button).toBeDisabled()
     })
 
     it("falha ao enviar devolve o texto ao campo", async () => {
@@ -566,6 +632,14 @@ describe("mesa Maddox — testes pedidos pelo Maddox (Maddox 5)", () => {
         const panel = within(card).getByTestId("fake-dice-panel")
         expect(panel).toHaveAttribute("data-modifier", "5")
         expect(panel).toHaveAttribute("data-mode", "advantage")
+        // Sem palco antes de rolar: dado solto no card, só durante a rolagem, e some depois; botão pequeno.
+        expect(panel).toHaveAttribute("data-appearance", "inline")
+        expect(panel).toHaveAttribute("data-stage-variant", "bare")
+        expect(panel).toHaveAttribute("data-stage-size", "compact")
+        expect(panel).toHaveAttribute("data-stage-visibility", "roll")
+        expect(panel).toHaveAttribute("data-stage-hide-delay", "1400")
+        expect(panel.getAttribute("data-roll-button-class")).toContain("w-auto")
+        expect(within(card).queryByTestId("check-roll-result")).not.toBeInTheDocument()
         expect(screen.getByTestId("turn-banner")).toHaveTextContent("Turno do mestre — o Maddox pediu um teste para você")
         expect(screen.getByText("O Maddox pediu um teste para você: role os dados na conversa.")).toBeInTheDocument()
         // Esperando a rolagem, o Maddox não aparece "narrando".
@@ -574,6 +648,10 @@ describe("mesa Maddox — testes pedidos pelo Maddox (Maddox 5)", () => {
         fireEvent.click(within(panel).getByRole("button", { name: "Rolar" }))
         await waitFor(() => expect(post).toHaveBeenCalledWith("/maddox/campaigns/c1/game/checks/k1/roll", {}))
         expect(await screen.findByText("Resultado enviado ao Maddox.")).toBeInTheDocument()
+        // O resultado só aparece quando o dado para (o card já foi gravado como rolado).
+        expect(screen.queryByTestId("check-roll-result")).not.toBeInTheDocument()
+        fireEvent.click(screen.getByRole("button", { name: "fim da animação" }))
+        expect(await screen.findByTestId("check-roll-result")).toHaveTextContent("17")
     })
 
     it("'Rolar' espera a ficha carregar; o modificador do servidor diferente da prévia não zera o dado de quem rolou", async () => {
@@ -632,9 +710,13 @@ describe("mesa Maddox — testes pedidos pelo Maddox (Maddox 5)", () => {
         const card = await screen.findByTestId("game-check-result")
         const panel = within(card).getByTestId("fake-dice-panel")
         expect(panel).toHaveAttribute("data-external", "17")
-        expect(within(panel).queryByRole("button")).not.toBeInTheDocument()
+        expect(within(panel).queryByRole("button", { name: "Rolar" })).not.toBeInTheDocument()
         expect(card).toHaveTextContent("Lyra rolou")
         expect(within(card).getByTestId("check-modifiers")).toHaveTextContent("Destreza +3")
+        // Quem assiste vê o dado girar; a linha do resultado espera o fim da animação.
+        expect(within(card).queryByTestId("check-roll-result")).not.toBeInTheDocument()
+        fireEvent.click(within(panel).getByRole("button", { name: "fim da animação" }))
+        expect(await within(card).findByTestId("check-roll-total")).toHaveTextContent("17")
     })
 
     it("resultado gravado: total, d20 com o descartado, quem rolou no lugar e, com a CD visível, a CD e o sucesso", async () => {
@@ -646,6 +728,8 @@ describe("mesa Maddox — testes pedidos pelo Maddox (Maddox 5)", () => {
             }),
         )
         const card = screen.getByTestId("game-check-result")
+        // Mesa recarregada depois da rolagem: só a linha, sem painel de dados.
+        expect(within(card).queryByTestId("fake-dice-panel")).not.toBeInTheDocument()
         expect(within(card).getByTestId("check-roll-result")).toHaveTextContent("17d20 12 (descartado 7) +5")
         expect(card).toHaveTextContent("(rolado por Marina no lugar do jogador)")
         expect(card).toHaveTextContent("CD 15")

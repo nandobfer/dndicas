@@ -18,6 +18,10 @@ interface DiceVisualStageProps {
     criticalState: DiceCriticalState | null
     onAnimationStateChange?: (isAnimating: boolean) => void
     onRollComplete?: (result: DiceRollResponse) => void
+    /** `bare`: só a tela do 3D, sem moldura, brilhos, selo de crítico nem etiquetas dos dados (dado solto no card). */
+    variant?: "frame" | "bare"
+    /** `compact`: palco menor, para caber dentro de um card da conversa. */
+    size?: "default" | "compact"
 }
 
 const CRITICAL_STAGE_CONFIG: Record<DiceCriticalState, { color: string, label: string, badgeClassName: string }> = {
@@ -44,7 +48,8 @@ function buildContainerId(reactId: string) {
     return `dice-box-${reactId.replace(/[^a-zA-Z0-9_-]/g, "")}`
 }
 
-export function DiceVisualStage({ terms, result, isRolling, mode, criticalState, onAnimationStateChange, onRollComplete }: DiceVisualStageProps) {
+export function DiceVisualStage({ terms, result, isRolling, mode, criticalState, onAnimationStateChange, onRollComplete, variant = "frame", size = "default" }: DiceVisualStageProps) {
+    const bare = variant === "bare"
     const reactId = React.useId()
     const containerId = React.useMemo(() => buildContainerId(reactId), [reactId])
     const containerRef = React.useRef<HTMLDivElement | null>(null)
@@ -60,7 +65,7 @@ export function DiceVisualStage({ terms, result, isRolling, mode, criticalState,
     const showStageResults = result && showRollResults
     const dice = showStageResults ? expandVisualResult(result) : expandStandbyVisualTerms(terms, mode)
     const stageColor = getStageColor(mode, showStageResults ? criticalState : null)
-    const criticalConfig = showStageResults && criticalState ? CRITICAL_STAGE_CONFIG[criticalState] : null
+    const criticalConfig = !bare && showStageResults && criticalState ? CRITICAL_STAGE_CONFIG[criticalState] : null
 
     React.useEffect(() => {
         let cancelled = false
@@ -204,11 +209,15 @@ export function DiceVisualStage({ terms, result, isRolling, mode, criticalState,
             data-mode={mode}
             data-critical-state={showStageResults && criticalState ? criticalState : "none"}
             data-border-color={stageColor}
+            data-variant={variant}
+            data-size={size}
             className={cn(
-                "relative flex min-h-[260px] w-[450px] max-w-full mx-auto items-center justify-center overflow-hidden rounded-[2rem] border bg-[radial-gradient(circle_at_center,rgba(255,255,255,0.08),rgba(0,0,0,0.08)_46%,rgba(0,0,0,0.38))] p-5 transition-colors duration-500",
-                mode === "normal" ? "border-blue-400/25" : "border-white/10"
+                "relative flex max-w-full mx-auto items-center justify-center overflow-hidden",
+                size === "compact" ? "h-[190px] w-[240px]" : "min-h-[260px] w-[450px]",
+                !bare && "rounded-[2rem] border bg-[radial-gradient(circle_at_center,rgba(255,255,255,0.08),rgba(0,0,0,0.08)_46%,rgba(0,0,0,0.38))] p-5 transition-colors duration-500",
+                !bare && (mode === "normal" ? "border-blue-400/25" : "border-white/10")
             )}
-            style={{
+            style={bare ? undefined : {
                 borderColor: `${stageColor}80`,
                 boxShadow: criticalConfig
                     ? `inset 0 0 36px ${stageColor}30, 0 0 48px ${stageColor}40, 0 0 120px ${stageColor}24`
@@ -258,8 +267,12 @@ export function DiceVisualStage({ terms, result, isRolling, mode, criticalState,
                     </div>
                 </>
             )}
-            <div className="absolute inset-6 rounded-full border border-white/10 blur-sm" />
-            <div className="absolute h-52 w-52 rounded-full blur-3xl" style={{ backgroundColor: `${stageColor}18` }} />
+            {!bare && (
+                <>
+                    <div className="absolute inset-6 rounded-full border border-white/10 blur-sm" />
+                    <div className="absolute h-52 w-52 rounded-full blur-3xl" style={{ backgroundColor: `${stageColor}18` }} />
+                </>
+            )}
             <div
                 ref={containerRef}
                 id={containerId}
@@ -268,7 +281,7 @@ export function DiceVisualStage({ terms, result, isRolling, mode, criticalState,
                 aria-hidden="true"
             />
             {(isRolling || !isReady) && !visualError && (
-                <div className="pointer-events-none absolute inset-0 z-20 flex items-center justify-center bg-black/10 text-xs font-black uppercase tracking-[0.28em] text-white/45">
+                <div className={cn("pointer-events-none absolute inset-0 z-20 flex items-center justify-center text-xs font-black uppercase tracking-[0.28em] text-white/45", !bare && "bg-black/10")}>
                     <span data-testid="dice-loading-ellipsis" aria-label="Preparando dados" className="inline-flex min-w-12 justify-center">
                         <span className="animate-pulse [animation-delay:0ms]">.</span>
                         <span className="animate-pulse [animation-delay:180ms]">.</span>
@@ -277,11 +290,11 @@ export function DiceVisualStage({ terms, result, isRolling, mode, criticalState,
                 </div>
             )}
             {visualError && (
-                <div className="absolute inset-x-5 top-5 z-30 rounded-xl border border-amber-400/20 bg-amber-500/10 px-3 py-2 text-center text-xs font-medium text-amber-100">
+                <div className={cn("absolute z-30 rounded-xl border border-amber-400/20 bg-amber-500/10 text-center font-medium text-amber-100", bare ? "inset-x-2 top-2 px-2 py-1 text-[11px]" : "inset-x-5 top-5 px-3 py-2 text-xs")}>
                     {visualError}
                 </div>
             )}
-            <div className="pointer-events-none absolute inset-x-4 bottom-4 z-30 flex max-w-full flex-wrap items-center justify-center gap-2">
+            {!bare && <div className="pointer-events-none absolute inset-x-4 bottom-4 z-30 flex max-w-full flex-wrap items-center justify-center gap-2">
                 {dice.map((die, index) => {
                     const hasValue = showStageResults || !result
                     return (
@@ -298,7 +311,7 @@ export function DiceVisualStage({ terms, result, isRolling, mode, criticalState,
                         </span>
                     )
                 })}
-            </div>
+            </div>}
         </div>
     )
 }
