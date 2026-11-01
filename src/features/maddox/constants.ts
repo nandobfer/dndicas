@@ -458,7 +458,6 @@ export const MADDOX_INTERVIEW_TOOL_NAMES = {
 /** Nível inicial da mesa (graus com ficha) e estágio de experiência (graus narrativos). */
 export const MADDOX_LEVEL_MIN = 1
 export const MADDOX_LEVEL_MAX = 20
-export const MADDOX_STARTING_STAGE_MAX = 300
 /** Itens, idiomas e ferramentas por ficha montada na entrevista. */
 export const MADDOX_BUILD_EQUIPMENT_MAX = 40
 export const MADDOX_BUILD_LIST_MAX = 12

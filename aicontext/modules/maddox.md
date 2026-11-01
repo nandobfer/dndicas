@@ -608,7 +608,7 @@ API (`maddox.play`, só o próprio membro; `scenario` = 404, grau sem ficha = 40
   iniciantes, 3 para quem conhece); Rigoroso pergunta o número sugerindo 1 ou 3; Equilibrado oferece estágios na ficção do cenário
   com o número de cada um; Flexível e Narrativo perguntam o **estágio de experiência sem número**, adaptado ao cenário ("acabou de
   se tornar aventureiro" na fantasia; "caçador recém-iniciado" num cenário como Supernatural — nunca "aventureiro" fora desse tipo).
-- **Campanha:** `startingLevel` (1–20 ou `null`, graus com ficha) e `startingStage` (texto até 300, graus narrativos), gravados pela
+- **Campanha:** `startingLevel` (1–20 ou `null`, graus com ficha) e `startingStage` (texto do modelo gravado inteiro, sem corte, graus narrativos), gravados pela
   consolidação do cenário (`scenarioConsolidationSchema`: fora de 1–20 vira `null` sem invalidar o resto). DTO da campanha:
   `startingLevel`, `startingStage`; chip "Nível inicial N" no card e no lobby (`StartingLevelChip`, só o número). O estágio narrativo
   (texto do modelo, pode ser longo) aparece inteiro numa linha própria com quebra ("Estágio inicial: …", `StartingStageLine`), nunca com

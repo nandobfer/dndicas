@@ -1,5 +1,5 @@
 import { z } from "zod"
-import { MADDOX_LEVEL_MAX, MADDOX_LEVEL_MIN, MADDOX_STARTING_STAGE_MAX, MADDOX_ABILITY_METHODS, MADDOX_CAMPAIGN_NAME_MAX, MADDOX_CAMPAIGN_NAME_MIN, MADDOX_CHARACTER_NAME_MAX, MADDOX_INTERVIEW_MESSAGE_MAX, MADDOX_PROFILE_SECTIONS, MADDOX_SCRIPT_KINDS, MADDOX_SETTING_SECTIONS } from "./constants"
+import { MADDOX_LEVEL_MAX, MADDOX_LEVEL_MIN, MADDOX_ABILITY_METHODS, MADDOX_CAMPAIGN_NAME_MAX, MADDOX_CAMPAIGN_NAME_MIN, MADDOX_CHARACTER_NAME_MAX, MADDOX_INTERVIEW_MESSAGE_MAX, MADDOX_PROFILE_SECTIONS, MADDOX_SCRIPT_KINDS, MADDOX_SETTING_SECTIONS } from "./constants"
 
 /** Schemas das entrevistas do Maddox (Maddox 2) — módulo PURO (tela, rotas e consolidação). */
 
@@ -53,8 +53,8 @@ export const scenarioConsolidationSchema = z.object({
         .transform((value) => (value && value.length >= MADDOX_CAMPAIGN_NAME_MIN && value.length <= MADDOX_CAMPAIGN_NAME_MAX ? value : null)),
     /** Nível inicial da mesa (graus com ficha); fora de 1–20 ou ausente vira `null` sem invalidar o resto. */
     startingLevel: z.preprocess((value) => (typeof value === "number" && Number.isInteger(value) && value >= MADDOX_LEVEL_MIN && value <= MADDOX_LEVEL_MAX ? value : null), z.number().int().nullable()).optional().transform((value) => value ?? null),
-    /** Estágio de experiência inicial (graus narrativos), cortado no limite. */
-    startingStage: z.string().trim().nullable().optional().transform((value) => (value ? value.slice(0, MADDOX_STARTING_STAGE_MAX) : null)),
+    /** Estágio de experiência inicial (graus narrativos), texto do modelo gravado inteiro (o destino não tem limite). */
+    startingStage: z.string().trim().nullable().optional().transform((value) => value || null),
 })
 export type ScenarioConsolidation = z.infer<typeof scenarioConsolidationSchema>
 

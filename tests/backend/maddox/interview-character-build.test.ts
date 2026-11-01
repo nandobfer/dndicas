@@ -336,6 +336,12 @@ describe("ficha completa pela entrevista de personagem", () => {
         expect(calls.at(-1)!.instructions).toContain("A mesa começa neste estágio: caçadores recém-iniciados.")
         expect(calls.at(-1)!.instructions).not.toContain("## Construção da ficha")
         expect(await errorOf(hitPointsService.rollHitPoint(campaignId, "character", 2, ids.ana))).toMatchObject({ status: 409, code: "SHEET_DISABLED" })
+        // Estágio longo vindo do modelo (bem acima de 300 caracteres): gravado inteiro, sem corte.
+        const longStage = `caçadores recém-iniciados ${"com algumas missões nas costas, uma dívida antiga com a guilda e um mentor desaparecido; ".repeat(12)}`.trim()
+        expect(longStage.length).toBeGreaterThan(1_000)
+        const longCampaign = await characterInterview("narrativo", null, longStage)
+        expect((await MaddoxCampaignModel.findById(longCampaign).lean())!.startingStage).toBe(longStage)
+        expect(calls.at(-1)!.instructions).toContain(`A mesa começa neste estágio: ${longStage}`)
     })
 
     it("conclusão com escolhas faltando responde 409 com a lista, sem consolidar e com a trava livre", async () => {
