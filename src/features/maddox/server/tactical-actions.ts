@@ -4,7 +4,7 @@ import { DomainError } from "@/lib/api/route"
 import { loggerFor } from "@/lib/logger"
 import type { DiceRollResponse } from "@/features/dice-roller/types"
 import type { SkillName } from "@/features/character-sheets/types/character-sheet.types"
-import { MADDOX_CAMPAIGN_AUDIT_ENTITY, MADDOX_COMBAT_OFFLINE_GRACE_MS, MADDOX_DECLARATION_VALIDATION_RIGORS, MADDOX_STANDARD_ACTION_DEFS, type MaddoxStandardAction } from "../constants"
+import { MADDOX_CAMPAIGN_AUDIT_ENTITY, MADDOX_COMBAT_OFFLINE_GRACE_MS, MADDOX_COMBAT_ROLL_CLAIM_STALE_MS, MADDOX_DECLARATION_VALIDATION_RIGORS, MADDOX_STANDARD_ACTION_DEFS, type MaddoxStandardAction } from "../constants"
 import { MADDOX_ABILITY_LABELS } from "../check-modifier"
 import { adjustDamage, attackMode, attackOutcome, autoCritical, criticalExpression, deathSave, exhaustionPenalty, formatDiceExpression, parseDiceExpression, saveMode } from "../combat-rules"
 import { findCombatOption, type CombatOption } from "../combat-options"
@@ -60,6 +60,9 @@ async function writeHp(state: TacticalCharacterState, hp: CharacterHp) {
     const { writeSheetHitPoints } = await import("./combat-sheet")
     await writeSheetHitPoints(state.sheetId, { hp: hp.hp, tempHp: hp.tempHp, deathSaves: hp.deathSaves })
 }
+
+/** Trava de rolagem mais antiga que isto foi abandonada (processo morto entre a reivindicação e a gravação). */
+const staleClaimCutoff = () => new Date(Date.now() - MADDOX_COMBAT_ROLL_CLAIM_STALE_MS)
 
 const newStep = (input: Partial<CombatActionStep> & Pick<CombatActionStep, "kind">): CombatActionStep => ({
     targetKey: null,
@@ -309,15 +312,18 @@ export async function rollCombatAction(campaignId: string, actionId: string, use
     if (!combat || !actor || actor.kind !== "character") throw new DomainError(409, "O combate terminou.", "NO_COMBAT")
 
     // Reivindica o passo ANTES de rolar: duas chamadas no mesmo card (dois cliques, retentativa de rede) não aplicam o
-    // efeito duas vezes — só quem marca `rollingStep` rola; a outra recebe 409.
+    // efeito duas vezes — só quem marca `rollingStep` rola; a outra recebe 409. A trava expira depois de
+    // `MADDOX_COMBAT_ROLL_CLAIM_STALE_MS` (processo morto no meio): a próxima tentativa assume, e só o dono da
+    // reivindicação (`rollingAt`) grava o resultado.
+    const claimedAt = new Date()
     const claimed = await MaddoxCampaignMessageModel.updateOne(
-        { _id: message._id, "combatAction.status": "pending", [`combatAction.steps.${index}.status`]: "pending", "combatAction.rollingStep": null },
-        { $set: { "combatAction.rollingStep": index, "combatAction.cancellable": false } },
+        { _id: message._id, "combatAction.status": "pending", [`combatAction.steps.${index}.status`]: "pending", $or: [{ "combatAction.rollingStep": null }, { "combatAction.rollingAt": { $lt: staleClaimCutoff() } }] },
+        { $set: { "combatAction.rollingStep": index, "combatAction.rollingAt": claimedAt, "combatAction.cancellable": false } },
     )
     if (claimed.modifiedCount === 0) throw new DomainError(409, "Este passo já está sendo rolado.", "ACTION_RESOLVED")
-    const release = () => MaddoxCampaignMessageModel.updateOne({ _id: message._id, "combatAction.rollingStep": index }, { $set: { "combatAction.rollingStep": null, "combatAction.cancellable": action.cancellable ?? false } }).catch(() => undefined)
+    const release = () => MaddoxCampaignMessageModel.updateOne({ _id: message._id, "combatAction.rollingAt": claimedAt }, { $set: { "combatAction.rollingStep": null, "combatAction.rollingAt": null, "combatAction.cancellable": action.cancellable ?? false } }).catch(() => undefined)
     try {
-        return await rollClaimedStep(campaignId, userId, campaign, message, action, index, combat, actor)
+        return await rollClaimedStep(campaignId, userId, campaign, message, action, index, combat, actor, claimedAt)
     } catch (error) {
         await release()
         throw error
@@ -333,6 +339,7 @@ async function rollClaimedStep(
     index: number,
     combat: TacticalCombat,
     actor: Extract<CombatActor, { kind: "character" }>,
+    claimedAt: Date,
 ): Promise<{ roll: DiceRollResponse; state: MaddoxGameStateDto }> {
     const actionId = String(message._id)
     const current = action.steps[index]!
@@ -451,7 +458,7 @@ async function rollClaimedStep(
     const resolved = !steps.some((item) => item.status === "pending")
     const nextAction: IMaddoxCombatAction = { ...action, steps, status: resolved ? "resolved" : "pending" }
     nextAction.summary = actionSummary(nextAction)
-    await MaddoxCampaignMessageModel.updateOne({ _id: message._id, "combatAction.rollingStep": index }, { $set: { combatAction: { ...nextAction, cancellable: false, rollingStep: null } } })
+    await MaddoxCampaignMessageModel.updateOne({ _id: message._id, "combatAction.rollingAt": claimedAt }, { $set: { combatAction: { ...nextAction, cancellable: false, rollingStep: null, rollingAt: null } } })
     for (const write of hpWrites) await writeHp(write.state, write.hp)
     if (extraRolls.length) await MaddoxCampaignMessageModel.insertMany(extraRolls.map((roll) => ({ ...roll, campaignId: campaign._id, turnNumber: message.turnNumber, phase: message.phase })))
     await afterDeaths(campaign._id)
@@ -490,7 +497,7 @@ export async function cancelCombatAction(campaignId: string, actionId: string, u
     const action = message?.combatAction
     if (!message || !action) throw new DomainError(404, "Ação não encontrada", "NOT_FOUND")
     if (action.status !== "pending" || !action.cancellable || action.steps.some((item) => item.status === "done")) throw new DomainError(409, "Esta ação já não pode ser cancelada.", "ACTION_NOT_CANCELLABLE")
-    const cancelled = await MaddoxCampaignMessageModel.updateOne({ _id: message._id, "combatAction.status": "pending", "combatAction.rollingStep": null }, { $set: { "combatAction.status": "cancelled", "combatAction.summary": actionSummary({ ...action, status: "cancelled" }) } })
+    const cancelled = await MaddoxCampaignMessageModel.updateOne({ _id: message._id, "combatAction.status": "pending", $or: [{ "combatAction.rollingStep": null }, { "combatAction.rollingAt": { $lt: staleClaimCutoff() } }] }, { $set: { "combatAction.status": "cancelled", "combatAction.rollingStep": null, "combatAction.rollingAt": null, "combatAction.summary": actionSummary({ ...action, status: "cancelled" }) } })
     if (cancelled.modifiedCount === 0) throw new DomainError(409, "Esta ação já não pode ser cancelada.", "ACTION_NOT_CANCELLABLE")
     // A ação Atacar volta inteira quando nenhum ataque foi rolado nela; senão, só o ataque cancelado volta.
     const rolledAttacks = await MaddoxCampaignMessageModel.exists({ campaignId: campaign._id, turnNumber: message.turnNumber, kind: "combat-action", "combatAction.actorKey": actor.key, "combatAction.category": "weapons", "combatAction.economy": "action", "combatAction.status": "resolved" })
@@ -601,17 +608,21 @@ export async function rollCombatRoll(campaignId: string, rollId: string, userId:
 export async function performCombatRoll(campaign: CampaignDoc, message: MessageDoc, request: IMaddoxCombatRoll, rollerUserId: string | null): Promise<DiceRollResponse> {
     // Reivindica a rolagem ANTES de rolar e aplicar: o dono rolando no lugar ao mesmo tempo que o jogador (ou dois
     // cliques) não aplica o efeito duas vezes — a outra chamada recebe 409.
-    const claimed = await MaddoxCampaignMessageModel.updateOne({ _id: message._id, "combatRoll.status": "pending", "combatRoll.rolling": { $ne: true } }, { $set: { "combatRoll.rolling": true } })
+    const claimedAt = new Date()
+    const claimed = await MaddoxCampaignMessageModel.updateOne(
+        { _id: message._id, "combatRoll.status": "pending", $or: [{ "combatRoll.rolling": { $ne: true } }, { "combatRoll.rollingAt": { $lt: staleClaimCutoff() } }] },
+        { $set: { "combatRoll.rolling": true, "combatRoll.rollingAt": claimedAt } },
+    )
     if (claimed.modifiedCount === 0) throw new DomainError(409, "Esta rolagem já foi feita.", "ROLL_NOT_PENDING")
     try {
-        return await performClaimedRoll(campaign, message, request, rollerUserId)
+        return await performClaimedRoll(campaign, message, request, rollerUserId, claimedAt)
     } catch (error) {
-        await MaddoxCampaignMessageModel.updateOne({ _id: message._id, "combatRoll.status": "pending", "combatRoll.rolling": true }, { $set: { "combatRoll.rolling": false } }).catch(() => undefined)
+        await MaddoxCampaignMessageModel.updateOne({ _id: message._id, "combatRoll.status": "pending", "combatRoll.rollingAt": claimedAt }, { $set: { "combatRoll.rolling": false, "combatRoll.rollingAt": null } }).catch(() => undefined)
         throw error
     }
 }
 
-async function performClaimedRoll(campaign: CampaignDoc, message: MessageDoc, request: IMaddoxCombatRoll, rollerUserId: string | null): Promise<DiceRollResponse> {
+async function performClaimedRoll(campaign: CampaignDoc, message: MessageDoc, request: IMaddoxCombatRoll, rollerUserId: string | null, claimedAt: Date): Promise<DiceRollResponse> {
     const combat = await findActiveTactical(campaign._id)
     const actor = combat && request.targetKey ? findActor(combat, request.targetKey) : null
     const character = actor?.kind === "character" ? actor : combat?.tactical.characters.find((state) => state.memberId === String(message.memberId)) ? (findActor(combat!, combat!.tactical.characters.find((state) => state.memberId === String(message.memberId))!.actorKey) as Extract<CombatActor, { kind: "character" }>) : null
@@ -694,8 +705,8 @@ async function performClaimedRoll(campaign: CampaignDoc, message: MessageDoc, re
         })
     }
     const saved = await MaddoxCampaignMessageModel.updateOne(
-        { _id: message._id, "combatRoll.status": "pending", "combatRoll.rolling": true },
-        { $set: { "combatRoll.rolling": false, "combatRoll.status": "rolled", "combatRoll.roll": roll, "combatRoll.total": roll.total, "combatRoll.success": success, "combatRoll.outcome": outcome || `${roll.total}`, "combatRoll.rolledBy": rollerUserId ?? "server" } },
+        { _id: message._id, "combatRoll.status": "pending", "combatRoll.rollingAt": claimedAt },
+        { $set: { "combatRoll.rolling": false, "combatRoll.rollingAt": null, "combatRoll.status": "rolled", "combatRoll.roll": roll, "combatRoll.total": roll.total, "combatRoll.success": success, "combatRoll.outcome": outcome || `${roll.total}`, "combatRoll.rolledBy": rollerUserId ?? "server" } },
     )
     if (saved.modifiedCount === 0) throw new DomainError(409, "Esta rolagem já foi feita.", "ROLL_NOT_PENDING")
     for (const write of hpWrites) await writeHp(write.state, write.hp)

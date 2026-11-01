@@ -39,6 +39,33 @@ vi.mock("@/features/character-sheets/realtime/character-sheet-pusher-service", (
     CharacterSheetPusherService: { getInstance: () => ({ publishSheetPatched: vi.fn(async () => undefined), publishCollectionChanged: vi.fn(async () => undefined) }) },
 }))
 vi.mock("@/lib/ai/jev", () => ({ askJevSystemOne }))
+/** Ganchos para simular a ficha mudando entre a lista de opções e o gasto (outra aba) e uma opção sem os dados. */
+const hooks = { beforeSpend: null as null | (() => Promise<void>), patchOptions: null as null | ((options: { bonus: { id: string; heal?: unknown }[] }) => void) }
+vi.mock("@/features/maddox/server/combat-sheet", async (importOriginal) => {
+    const actual = await importOriginal<typeof import("@/features/maddox/server/combat-sheet")>()
+    const before = async () => {
+        const hook = hooks.beforeSpend
+        hooks.beforeSpend = null
+        if (hook) await hook()
+    }
+    return {
+        ...actual,
+        spendSpellSlot: async (...args: Parameters<typeof actual.spendSpellSlot>) => (await before(), actual.spendSpellSlot(...args)),
+        spendResourceCharge: async (...args: Parameters<typeof actual.spendResourceCharge>) => (await before(), actual.spendResourceCharge(...args)),
+        consumeSheetItem: async (...args: Parameters<typeof actual.consumeSheetItem>) => (await before(), actual.consumeSheetItem(...args)),
+    }
+})
+vi.mock("@/features/maddox/server/tactical-options", async (importOriginal) => {
+    const actual = await importOriginal<typeof import("@/features/maddox/server/tactical-options")>()
+    return {
+        ...actual,
+        loadCharacterOptions: async (...args: Parameters<typeof actual.loadCharacterOptions>) => {
+            const views = await actual.loadCharacterOptions(...args)
+            if (hooks.patchOptions) for (const view of views.values()) hooks.patchOptions(view.options)
+            return views
+        },
+    }
+})
 vi.mock("@/features/maddox/server/settings", () => ({
     loadMaddoxSettings: vi.fn(async () => ({
         settings: { enabled: true, main: { provider: "gemini", model: "m", agent: null, variant: null, temperature: null, maxOutputTokens: null }, instructions: "Maddox.", avatar: { url: null }, opencode: {}, jev: { ...jev } },
@@ -212,6 +239,8 @@ beforeEach(async () => {
     resetClassifierAttempts()
     script.length = 0
     toolLog.length = 0
+    hooks.beforeSpend = null
+    hooks.patchOptions = null
 })
 
 describe("Maddox 7 — a vez do personagem", () => {
@@ -397,6 +426,65 @@ describe("Maddox 7 — revisão: recursos, concorrência e efeitos", () => {
         await actions.rollCombatAction(id, String(card[0]!._id), kael.userId)
         expect((await CharacterSheet.findById(kael.sheetId).lean())!.hpCurrent).toBe(16)
         expect((await MaddoxCampaignMessageModel.findById(card[0]!._id).lean())!.combatAction).toMatchObject({ status: "resolved", steps: [{ kind: "heal", amount: 6 }] })
+    })
+
+    it("carga esgotada entre a lista e a confirmação: 409 NO_CHARGES, a Ação bônus volta e nada é gravado", async () => {
+        const { id, kael } = await scene({ kaelHp: 10 })
+        await giveTrait(kael.sheetId, "Retomar o Fôlego", "Você pode usar uma Ação Bônus para recuperar Pontos de Vida iguais a 1d10 mais seu nível de Guerreiro.", 1)
+        const heal = (await game.getGameState(id, kael.userId)).me.combat!.options!.bonus.find((option) => option.label === "Retomar o Fôlego")!
+        // Outra aba usa a carga depois da reserva da Ação bônus e antes do gasto.
+        hooks.beforeSpend = async () => {
+            await CharacterSheet.collection.updateOne({ _id: new mongoose.Types.ObjectId(kael.sheetId) }, { $set: { "resourceCharges.0.used": 1 } })
+        }
+        await expect(actions.submitCombatAction(id, { economy: "bonus", optionId: heal.id, targets: [kael.actorKey] }, kael.userId)).rejects.toMatchObject({ code: "NO_CHARGES" })
+        expect((await stateOf(id, kael.actorKey)).economy).toMatchObject({ action: true, bonus: true })
+        expect((await CharacterSheet.findById(kael.sheetId).lean())!.resourceCharges![0]!.used).toBe(1)
+        expect(await MaddoxCampaignMessageModel.countDocuments({ campaignId: id, kind: "combat-action" })).toBe(0)
+    })
+
+    it("opção sem os dados para resolver: 409 OPTION_UNRESOLVABLE antes de reservar ou gastar", async () => {
+        const { id, kael } = await scene({ kaelHp: 10 })
+        await giveTrait(kael.sheetId, "Retomar o Fôlego", "Você pode usar uma Ação Bônus para recuperar Pontos de Vida iguais a 1d10 mais seu nível de Guerreiro.", 1)
+        hooks.patchOptions = (options) => {
+            for (const option of options.bonus) if (option.heal) delete option.heal
+        }
+        const heal = (await game.getGameState(id, kael.userId)).me.combat!.options!.bonus.find((option) => option.label === "Retomar o Fôlego")!
+        await expect(actions.submitCombatAction(id, { economy: "bonus", optionId: heal.id, targets: [kael.actorKey] }, kael.userId)).rejects.toMatchObject({ code: "OPTION_UNRESOLVABLE" })
+        expect((await stateOf(id, kael.actorKey)).economy).toMatchObject({ action: true, bonus: true })
+        expect((await CharacterSheet.findById(kael.sheetId).lean())!.resourceCharges![0]!.used).toBe(0)
+        expect(await MaddoxCampaignMessageModel.countDocuments({ campaignId: id, kind: "combat-action" })).toBe(0)
+    })
+
+    it("trava de rolagem abandonada (processo morto no meio) expira; a recente ainda bloqueia", async () => {
+        const { id, kael } = await scene()
+        const sword = (await game.getGameState(id, kael.userId)).me.combat!.options!.action.find((option) => option.label === "Espada")!
+        await actions.submitCombatAction(id, { economy: "action", optionId: sword.id, targets: ["npc:gob"] }, kael.userId)
+        const card = (await MaddoxCampaignMessageModel.findOne({ campaignId: id, kind: "combat-action" }).lean())!
+        await MaddoxCampaignMessageModel.updateOne({ _id: card._id }, { $set: { "combatAction.rollingStep": 0, "combatAction.rollingAt": new Date() } })
+        await expect(actions.rollCombatAction(id, String(card._id), kael.userId)).rejects.toMatchObject({ code: "ACTION_RESOLVED" })
+        await MaddoxCampaignMessageModel.updateOne({ _id: card._id }, { $set: { "combatAction.rollingAt": new Date(Date.now() - 60_000) } })
+        dice.players.set(kael.userId, [[15]])
+        await actions.rollCombatAction(id, String(card._id), kael.userId)
+        expect((await MaddoxCampaignMessageModel.findById(card._id).lean())!.combatAction).toMatchObject({ rollingStep: null, rollingAt: null, steps: [{ kind: "attack", status: "done", hit: true }, { kind: "damage", status: "pending" }] })
+        // Rolagem avulsa presa do mesmo jeito.
+        const roll = await MaddoxCampaignMessageModel.create({
+            campaignId: id,
+            turnNumber: 2,
+            phase: "players",
+            kind: "combat-roll",
+            memberId: kael.memberId,
+            userId: kael.userId,
+            characterId: kael.characterId,
+            characterName: "Kael",
+            content: "",
+            combatRoll: { combatId: "x", kind: "damage", reason: "Estante", dice: "1d4", mode: "normal", dc: null, status: "pending", targetKey: "npc:gob", effect: { damageType: "concussão" }, waitRound: null, roll: null, total: null, success: null, outcome: null, rolledBy: null, rolling: true, rollingAt: new Date() },
+        })
+        await expect(actions.rollCombatRoll(id, String(roll._id), kael.userId)).rejects.toMatchObject({ code: "ROLL_NOT_PENDING" })
+        await MaddoxCampaignMessageModel.updateOne({ _id: roll._id }, { $set: { "combatRoll.rollingAt": new Date(Date.now() - 60_000) } })
+        dice.players.set(kael.userId, [[2]])
+        await actions.rollCombatRoll(id, String(roll._id), kael.userId)
+        expect((await MaddoxCampaignMessageModel.findById(roll._id).lean())!.combatRoll).toMatchObject({ status: "rolled", rolling: false, rollingAt: null, total: 2 })
+        expect((await goblinOf(id)).stats.hp).toBe(5)
     })
 
     it("duas rolagens do mesmo passo ao mesmo tempo: só uma vence e o dano entra uma vez", async () => {

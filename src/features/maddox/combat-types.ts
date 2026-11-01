@@ -173,6 +173,7 @@ export interface IMaddoxCombatAction {
     /** Gravados no card: pode cancelar; passo reivindicado por uma rolagem em andamento (uma chamada vence). */
     cancellable?: boolean
     rollingStep?: number | null
+    rollingAt?: Date | null
 }
 
 export interface IMaddoxCombatRoll {
