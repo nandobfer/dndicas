@@ -431,7 +431,7 @@ export const MADDOX_ABILITY_ROLL_TOTAL = 72
 export const MADDOX_ABILITY_BONUS_POINTS = 3
 export const MADDOX_ABILITY_BONUS_MAX = 2
 /** Passos do laço de ferramentas do entrevistador (provedores diretos). */
-export const MADDOX_INTERVIEW_MAX_STEPS = 10
+export const MADDOX_INTERVIEW_MAX_STEPS = 14
 /** Graus em que a origem do bônus de atributos precisa existir no catálogo (Equilibrado aceita origem própria). */
 export const MADDOX_CATALOG_ORIGIN_RIGORS: readonly MaddoxRigorLevel[] = ["rigoroso", "fiel-dnd"]
 
@@ -444,7 +444,25 @@ export const MADDOX_CATALOG_SUMMARY_MAX = 300
 /** Cada texto do detalhe da entidade (texto puro); acima disso sai cortado com `truncated`. */
 export const MADDOX_CATALOG_TEXT_MAX = 4000
 
-export const MADDOX_INTERVIEW_TOOL_NAMES = { request: "request_ability_scores", get: "get_ability_scores", bonus: "apply_ability_bonus" } as const
+export const MADDOX_INTERVIEW_TOOL_NAMES = {
+    request: "request_ability_scores",
+    get: "get_ability_scores",
+    bonus: "apply_ability_bonus",
+    build: "update_character_build",
+    getBuild: "get_character_build",
+    hitPoints: "request_hit_points",
+} as const
+
+/** Nível inicial da mesa (graus com ficha) e estágio de experiência (graus narrativos). */
+export const MADDOX_LEVEL_MIN = 1
+export const MADDOX_LEVEL_MAX = 20
+export const MADDOX_STARTING_STAGE_MAX = 300
+/** Itens, idiomas e ferramentas por ficha montada na entrevista. */
+export const MADDOX_BUILD_EQUIPMENT_MAX = 40
+export const MADDOX_BUILD_LIST_MAX = 12
+/** Teto do Aumento de Atributo por talento (Dádiva Épica vai até 30). */
+export const MADDOX_FEAT_ATTRIBUTE_CAP = 20
+export const MADDOX_EPIC_FEAT_ATTRIBUTE_CAP = 30
 
 /** Seções do cenário consolidado (como o `setting.md` do roleplay). */
 export const MADDOX_SETTING_SECTIONS = [

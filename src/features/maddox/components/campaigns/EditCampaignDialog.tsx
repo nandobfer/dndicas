@@ -1,18 +1,19 @@
 "use client"
 
-import { useEffect } from "react"
-import { useForm } from "react-hook-form"
+import { useEffect, useState } from "react"
+import { useForm, useWatch } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { Loader2, Pencil } from "lucide-react"
 import { Button } from "@/components/ui/opex/button"
 import { Field } from "@/components/ui/opex/field"
 import { Input } from "@/components/ui/opex/input"
 import { GlassModal, GlassModalContent, GlassModalDescription, GlassModalFooter, GlassModalHeader, GlassModalTitle } from "@/components/ui/glass-modal"
-import { MADDOX_CAMPAIGN_NAME_MAX } from "../../constants"
+import { MADDOX_CAMPAIGN_NAME_MAX, MADDOX_SHEET_RIGORS } from "../../constants"
 import { createMaddoxCampaignSchema, type CreateMaddoxCampaignInput } from "../../campaign-schemas"
 import type { MaddoxCampaignDetailDto } from "../../campaign-types"
 import { useUpdateMaddoxCampaign } from "../../hooks/useMaddoxCampaigns"
 import { CheckDcField } from "./CheckDcField"
+import { StartingLevelField } from "./StartingLevelField"
 import { RigorCard } from "./RigorCard"
 
 /** Dono edita o nome e, só antes da entrevista de cenário, o grau de rigor. */
@@ -20,23 +21,34 @@ export function EditCampaignDialog({ campaign, open, onOpenChange }: { campaign:
     const form = useForm<CreateMaddoxCampaignInput>({ resolver: zodResolver(createMaddoxCampaignSchema), defaultValues: { name: campaign.name, rigor: campaign.rigor, showCheckDc: campaign.showCheckDc } })
     const update = useUpdateMaddoxCampaign(campaign.id)
     const rigorLocked = campaign.rigorLocked
+    // Rascunho do nível enquanto o diálogo está aberto (`undefined` = o valor atual da campanha).
+    const [levelDraft, setLevelDraft] = useState<number | undefined>(undefined)
+    const startingLevel = levelDraft ?? campaign.startingLevel
+    const formRigor = useWatch({ control: form.control, name: "rigor" })
+    const levelEditable = campaign.status === "lobby" || campaign.status === "interview"
 
     useEffect(() => {
         if (open) form.reset({ name: campaign.name, rigor: campaign.rigor, showCheckDc: campaign.showCheckDc })
     }, [open, campaign.name, campaign.rigor, campaign.showCheckDc, form])
+
+    const close = () => {
+        setLevelDraft(undefined)
+        onOpenChange(false)
+    }
 
     const submit = form.handleSubmit((values) => {
         const changes = {
             ...(values.name !== campaign.name ? { name: values.name } : {}),
             ...(!rigorLocked && values.rigor !== campaign.rigor ? { rigor: values.rigor } : {}),
             ...((values.showCheckDc ?? false) !== campaign.showCheckDc ? { showCheckDc: values.showCheckDc ?? false } : {}),
+            ...(levelEditable && MADDOX_SHEET_RIGORS.includes(values.rigor) && startingLevel !== null && startingLevel !== campaign.startingLevel ? { startingLevel } : {}),
         }
-        if (Object.keys(changes).length === 0) return onOpenChange(false)
-        update.mutate(changes, { onSuccess: () => onOpenChange(false) })
+        if (Object.keys(changes).length === 0) return close()
+        update.mutate(changes, { onSuccess: close })
     })
 
     return (
-        <GlassModal open={open} onOpenChange={(next) => !update.isPending && onOpenChange(next)}>
+        <GlassModal open={open} onOpenChange={(next) => !update.isPending && (next ? onOpenChange(true) : close())}>
             <GlassModalContent size="full">
                 <form onSubmit={submit} className="space-y-5" noValidate>
                     <GlassModalHeader>
@@ -50,8 +62,9 @@ export function EditCampaignDialog({ campaign, open, onOpenChange }: { campaign:
                     </Field>
                     <RigorCard form={form} disabled={rigorLocked} />
                     <CheckDcField form={form} />
+                    {levelEditable && <StartingLevelField rigor={formRigor} value={startingLevel} onChange={setLevelDraft} disabled={update.isPending} />}
                     <GlassModalFooter>
-                        <Button type="button" variant="ghost" onClick={() => onOpenChange(false)} disabled={update.isPending}>
+                        <Button type="button" variant="ghost" onClick={close} disabled={update.isPending}>
                             Cancelar
                         </Button>
                         <Button type="submit" disabled={update.isPending}>

@@ -21,7 +21,7 @@ import {
 } from "../constants"
 import { MaddoxCampaignMemberModel, MaddoxCampaignModel, MaddoxCharacterModel, MaddoxInterviewModel, type IMaddoxCampaign, type IMaddoxCampaignMember, type IMaddoxCharacter, type IMaddoxInterview, type IMaddoxInterviewMessage } from "../models"
 import type { MaddoxSettings } from "../schemas"
-import type { MaddoxAbilityRollsDto, MaddoxAbilityScoresDto, MaddoxInterviewDto, MaddoxInterviewMessageDto, MaddoxInterviewStateDto, MaddoxInterviewStreamLine } from "../interview-types"
+import type { MaddoxAbilityRollsDto, MaddoxAbilityScoresDto, MaddoxHitPointsDto, MaddoxInterviewDto, MaddoxInterviewMessageDto, MaddoxInterviewStateDto, MaddoxInterviewStreamLine } from "../interview-types"
 import type { MaddoxInterviewMessageInput } from "../interview-schemas"
 import { changed, loadMembership } from "./campaigns"
 import { notifyInterviewChanged } from "./campaign-realtime"
@@ -29,7 +29,10 @@ import { createMarkupFilter } from "../catalog-markup"
 import { linkCatalogMentions, mentionsToMarkup } from "./catalog-mentions"
 import { finalScores } from "../interview-scores"
 import { abilityStatusText, takeInterviewDraft } from "./interview-tools"
-import type { IMaddoxAbilityScoresCard } from "../models"
+import type { IMaddoxAbilityScoresCard, IMaddoxHitPointsCard } from "../models"
+import { getLevelOneHpMax } from "@/features/character-sheets/utils/sheet-rules"
+import { hitPointRows, hitPointsTotal } from "../character-build-rules"
+import { buildStatusText, constitutionModifier } from "./character-build"
 import { JEV_PROPOSAL_HINT, buildInterviewInstructions, createMarkerFilter, extractProposal, openingPrompt, transcriptText, type InterviewPromptContext } from "./interview-prompt"
 
 /**
@@ -70,7 +73,25 @@ export function abilityScoresDto(card: IMaddoxAbilityScoresCard): MaddoxAbilityS
     }
 }
 
-function messageDto(message: IMaddoxInterviewMessage): MaddoxInterviewMessageDto {
+/** Card de PV com as linhas calculadas (CON final, rolagens gravadas). */
+export function hitPointsDto(card: IMaddoxHitPointsCard, doc: Pick<InterviewDoc, "messages" | "build" | "hitPointRolls"> | null): MaddoxHitPointsDto {
+    const con = doc ? constitutionModifier(doc) : 0
+    const rolls = doc?.hitPointRolls ?? []
+    return {
+        status: card.status,
+        level: card.level,
+        hitDie: card.hitDie,
+        constitutionModifier: con,
+        levelOne: getLevelOneHpMax(card.hitDie, con),
+        rows: hitPointRows(card.level, card.hitDie, con, rolls),
+        choices: card.choices ?? null,
+        total: card.choices ? hitPointsTotal(card.level, card.hitDie, con, card.choices, rolls) : null,
+        reason: card.reason ?? null,
+        submittedAt: iso(card.submittedAt),
+    }
+}
+
+function messageDto(message: IMaddoxInterviewMessage, doc: Pick<InterviewDoc, "messages" | "build" | "hitPointRolls"> | null = null): MaddoxInterviewMessageDto {
     return {
         id: message.id,
         role: message.role,
@@ -78,6 +99,7 @@ function messageDto(message: IMaddoxInterviewMessage): MaddoxInterviewMessageDto
         proposal: Boolean(message.proposal),
         error: message.error ?? null,
         ...(message.abilityScores ? { abilityScores: abilityScoresDto(message.abilityScores) } : {}),
+        ...(message.hitPoints ? { hitPoints: hitPointsDto(message.hitPoints, doc) } : {}),
         createdAt: new Date(message.createdAt).toISOString(),
     }
 }
@@ -97,7 +119,7 @@ export function interviewDto(doc: InterviewDoc): MaddoxInterviewDto {
         status: doc.status,
         scriptVersion: doc.scriptVersion,
         // Falas internas (sistema) vão ao modelo, nunca à tela.
-        messages: (doc.messages ?? []).filter((message) => !message.internal).map(messageDto),
+        messages: (doc.messages ?? []).filter((message) => !message.internal).map((message) => messageDto(message, doc)),
         generating: Boolean(doc.generating?.token) && Date.now() - lockedAt < MADDOX_INTERVIEW_LOCK_MS,
         abilityRolls: abilityRollsDto(doc),
         completedAt: iso(doc.completedAt),
@@ -196,7 +218,14 @@ export async function promptContext(subject: InterviewSubject, kind: MaddoxScrip
         kind,
         interviewerInstructions: settings.interviewerInstructions,
         script: { version: script.version, guide: script.guide, topics: script.topics },
-        campaign: { name: subject.campaign.name, rigor: subject.campaign.rigor, setting: subject.campaign.setting ?? "", openingSituation: subject.campaign.openingSituation ?? "" },
+        campaign: {
+            name: subject.campaign.name,
+            rigor: subject.campaign.rigor,
+            setting: subject.campaign.setting ?? "",
+            openingSituation: subject.campaign.openingSituation ?? "",
+            startingLevel: subject.campaign.startingLevel ?? null,
+            startingStage: subject.campaign.startingStage ?? "",
+        },
         character: subject.character ? { name: subject.character.name } : null,
         otherCharacters,
     }
@@ -402,6 +431,7 @@ export async function runTurn(turn: PreparedTurn, emit: (line: MaddoxInterviewSt
             const { createMaddoxInterviewToken } = await import("./master-turn-token")
             context = {
                 ...context,
+                build: { status: await buildStatusText(interview, { rigor: turn.subject.campaign.rigor, startingLevel: turn.subject.campaign.startingLevel ?? null }) },
                 abilities: {
                     status: abilityStatusText(interview),
                     tools: viaMcp ? { kind: "mcp", server: MADDOX_MCP_SERVER_NAME, token: createMaddoxInterviewToken({ interviewId: String(interview._id), lockToken: token }) } : { kind: "ai-sdk" },
@@ -444,10 +474,21 @@ export async function runTurn(turn: PreparedTurn, emit: (line: MaddoxInterviewSt
     if (!failure && !content) failure = "O Maddox não respondeu. Tente de novo."
     // Card pedido nesta fala (ferramentas): só existe se a fala for gravada.
     const draft = takeInterviewDraft(token)
-    if (failure && (draft?.card || draft?.resetRolls)) log.info({ campaignId: String(turn.subject.campaign._id) }, "[maddox] card de atributos pedido descartado: a geração falhou")
+    if (failure && (draft?.card || draft?.resetRolls || draft?.hitPoints)) log.info({ campaignId: String(turn.subject.campaign._id) }, "[maddox] card pedido descartado: a geração falhou")
     const card: IMaddoxAbilityScoresCard | null =
         !failure && draft?.card ? { status: "pending", method: null, base: null, prefill: draft.card.prefill, bonus: draft.card.bonus, reason: draft.card.reason, submittedAt: null } : null
-    const message: IMaddoxInterviewMessage = { id: randomUUID(), role: "maddox", content: failure ? "" : content, proposal: !failure && proposal, error: failure, ...(card ? { abilityScores: card } : {}), createdAt: new Date() }
+    const hitPoints: IMaddoxHitPointsCard | null =
+        !failure && draft?.hitPoints ? { status: "pending", level: draft.hitPoints.level, hitDie: draft.hitPoints.hitDie, choices: null, reason: draft.hitPoints.reason, submittedAt: null } : null
+    const message: IMaddoxInterviewMessage = {
+        id: randomUUID(),
+        role: "maddox",
+        content: failure ? "" : content,
+        proposal: !failure && proposal,
+        error: failure,
+        ...(card ? { abilityScores: card } : {}),
+        ...(hitPoints ? { hitPoints } : {}),
+        createdAt: new Date(),
+    }
     const status = message.proposal ? "proposed" : "in-progress"
     const resetRolls = !failure && Boolean(draft?.resetRolls)
     try {
@@ -457,6 +498,14 @@ export async function runTurn(turn: PreparedTurn, emit: (line: MaddoxInterviewSt
                 { _id: interview._id, "generating.token": token },
                 { $set: { "messages.$[old].abilityScores.status": "superseded" } },
                 { arrayFilters: [{ "old.abilityScores.status": { $in: ["submitted", "pending"] } }] },
+            )
+        }
+        if (hitPoints) {
+            // Card de PV reaberto: o anterior fica como histórico.
+            await MaddoxInterviewModel.updateOne(
+                { _id: interview._id, "generating.token": token },
+                { $set: { "messages.$[old].hitPoints.status": "superseded" } },
+                { arrayFilters: [{ "old.hitPoints.status": { $in: ["submitted", "pending"] } }] },
             )
         }
         await MaddoxInterviewModel.updateOne({ _id: interview._id, "generating.token": token }, { $push: { messages: message }, $set: { status, generating: null, ...(resetRolls ? { abilityRolls: null } : {}) } })
@@ -471,7 +520,7 @@ export async function runTurn(turn: PreparedTurn, emit: (line: MaddoxInterviewSt
             log.warn({ campaignId: String(turn.subject.campaign._id), kind, err: failure }, "[maddox] falha ao gerar a resposta da entrevista")
             emit({ type: "error", message: failure, ...(saved ? { interview: interviewDto(saved) } : {}) })
         } else if (saved) {
-            emit({ type: "done", message: messageDto(message), interview: interviewDto(saved) })
+            emit({ type: "done", message: messageDto(message, saved), interview: interviewDto(saved) })
         }
     } catch (error) {
         await releaseLock(interview._id, token).catch(() => undefined)

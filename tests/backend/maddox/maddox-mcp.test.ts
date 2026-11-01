@@ -129,6 +129,27 @@ describe("ferramentas da entrevista no MCP do Maddox (Maddox 5)", () => {
         for (const tool of tools) expect(tool.inputSchema.properties).toHaveProperty("turno")
     })
 
+    it("as ferramentas da ficha (escolhas e card de PV) também estão no MCP, com o esquema de entrada e `turno`", async () => {
+        const list = await rpc(route.POST, "tools/list")
+        const tools = Object.fromEntries(list.result!.tools!.map((tool) => [tool.name, tool]))
+        for (const name of ["update_character_build", "get_character_build", "request_hit_points"]) {
+            expect(tools[name], name).toBeDefined()
+            expect(tools[name]!.inputSchema.properties).toHaveProperty("turno")
+        }
+        expect(tools.update_character_build!.inputSchema.properties).toHaveProperty("periciasClasse")
+        expect(tools.update_character_build!.inputSchema.properties).toHaveProperty("equipamento")
+        const turno = createMaddoxInterviewToken({ interviewId: INTERVIEW, lockToken: "trava-2" })
+        const result = await rpc(route.POST, "tools/call", { name: "update_character_build", arguments: { turno, raca: "Humano" } })
+        expect(result.result!.isError).toBeFalsy()
+        expect(runInterviewTool).toHaveBeenCalledWith(expect.objectContaining({ name: "update_character_build" }), expect.objectContaining({ lockToken: "trava-2" }), { raca: "Humano" })
+        // Token do narrador não grava a ficha.
+        const narrador = createMaddoxTurnToken({ campaignId: CAMPAIGN, jobId: "j1", turnNumber: 1 })
+        runInterviewTool.mockClear()
+        const refused = await rpc(route.POST, "tools/call", { name: "update_character_build", arguments: { turno: narrador, raca: "Humano" } })
+        expect(refused.result!.isError).toBe(true)
+        expect(runInterviewTool).not.toHaveBeenCalled()
+    })
+
     it("token de entrevista chega à ferramenta com a entrevista e a trava do token", async () => {
         const turno = createMaddoxInterviewToken({ interviewId: INTERVIEW, lockToken: "trava-1" })
         const result = await rpc(route.POST, "tools/call", { name: "get_ability_scores", arguments: { turno } })

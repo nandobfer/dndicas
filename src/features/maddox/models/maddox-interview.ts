@@ -39,6 +39,49 @@ export interface IMaddoxAbilityRolls {
     invalid: boolean
 }
 
+/** Referência a uma entidade: id do catálogo (ou `null` quando é própria, só no Equilibrado) e o nome. */
+export interface IMaddoxBuildRef {
+    id: string | null
+    name: string
+}
+
+/**
+ * Escolhas da ficha feitas na entrevista de personagem (graus com ficha), gravadas por `update_character_build` e
+ * validadas contra o catálogo. A ficha é montada no servidor a partir delas (`sheet-builder.ts`).
+ */
+export interface IMaddoxCharacterBuild {
+    level: number | null
+    race: IMaddoxBuildRef | null
+    class: IMaddoxBuildRef | null
+    /** Id `subclass:{classe}:{subclasse}` (o mesmo da busca do catálogo). */
+    subclass: IMaddoxBuildRef | null
+    origin: IMaddoxBuildRef | null
+    classSkills: string[]
+    expertise: string[]
+    fightingStyle: IMaddoxBuildRef | null
+    feats: { level: number; id: string; name: string; attributes: Partial<Record<AttributeType, number>>; cap?: number }[]
+    cantrips: IMaddoxBuildRef[]
+    spells: IMaddoxBuildRef[]
+    equipment: { id: string | null; name: string; quantity: number; equipped: boolean }[]
+    coins: { cp: number; sp: number; ep: number; gp: number; pp: number }
+    languages: string[]
+    tools: string[]
+}
+
+/**
+ * Card de pontos de vida por nível (personagem acima do nível 1), como o assistente de subir de nível da ficha: em cada
+ * nível do 2 ao N, "média" ou "rolar" (1 dado de vida no servidor). Os ganhos sem CON ficam gravados; o total usa o CON
+ * final.
+ */
+export interface IMaddoxHitPointsCard {
+    status: "pending" | "submitted" | "superseded"
+    level: number
+    hitDie: string
+    choices: Record<string, "average" | "roll"> | null
+    reason: string | null
+    submittedAt: Date | null
+}
+
 export interface IMaddoxInterviewMessage {
     id: string
     role: "maddox" | "user"
@@ -50,6 +93,7 @@ export interface IMaddoxInterviewMessage {
     /** Fala do sistema (ex.: atributos enviados): vai ao modelo, nunca à tela. */
     internal?: boolean
     abilityScores?: IMaddoxAbilityScoresCard | null
+    hitPoints?: IMaddoxHitPointsCard | null
     createdAt: Date
 }
 
@@ -69,6 +113,10 @@ export interface IMaddoxInterview {
     /** JSON consolidado gravado ao concluir (cenário ou perfil/ficha). */
     result: unknown
     abilityRolls?: IMaddoxAbilityRolls | null
+    /** Escolhas da ficha (graus com ficha). */
+    build?: IMaddoxCharacterBuild | null
+    /** Dados de vida rolados no card de PV (um por nível; reabrir o card mantém). */
+    hitPointRolls?: { level: number; die: number; rollId: string }[] | null
     completedAt: Date | null
     createdAt: Date
     updatedAt: Date
@@ -83,6 +131,7 @@ const MessageSchema = new Schema<IMaddoxInterviewMessage>(
         error: { type: String, default: null },
         internal: { type: Boolean, default: undefined },
         abilityScores: { type: Schema.Types.Mixed, default: undefined },
+        hitPoints: { type: Schema.Types.Mixed, default: undefined },
         createdAt: { type: Date, default: () => new Date() },
     },
     { _id: false },
@@ -101,6 +150,8 @@ const MaddoxInterviewSchema = new Schema<IMaddoxInterview>(
         generating: { type: new Schema({ token: String, startedAt: Date }, { _id: false }), default: null },
         result: { type: Schema.Types.Mixed, default: null },
         abilityRolls: { type: Schema.Types.Mixed, default: null },
+        build: { type: Schema.Types.Mixed, default: null },
+        hitPointRolls: { type: Schema.Types.Mixed, default: null },
         completedAt: { type: Date, default: null },
     },
     { collection: "maddox_interviews", timestamps: true, versionKey: false },

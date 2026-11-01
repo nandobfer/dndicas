@@ -19,6 +19,7 @@ import { CharacterDraftDialog } from "../campaigns/CharacterDraftDialog"
 import { InterviewChip, RigorChip, rigorColor } from "../campaigns/campaign-visuals"
 import { InterviewComposer } from "./InterviewComposer"
 import { AbilityScoresCard } from "./AbilityScoresCard"
+import { HitPointsCard } from "./HitPointsCard"
 import { InterviewMessageList } from "./InterviewMessageList"
 import { InterviewProposalCard } from "./InterviewProposalCard"
 import { CampaignChatHeader } from "../CampaignChatHeader"
@@ -164,7 +165,7 @@ function ChatShell({ campaign, kind, children }: { campaign: MaddoxCampaignDetai
 
 function InterviewConversation({ campaign, kind, userId, header }: { campaign: MaddoxCampaignDetailDto; kind: MaddoxScriptKind; userId: string | null; header: React.ReactNode }) {
     const router = useRouter()
-    const { query, live, start, send, retry, complete, rollAbility, resetRolls, submitScores } = useMaddoxInterview(campaign.id, kind, userId)
+    const { query, live, start, send, retry, complete, rollAbility, resetRolls, submitScores, rollHitPoint, submitHitPoints } = useMaddoxInterview(campaign.id, kind, userId)
     const color = rigorColor(campaign.rigor)
 
     if (query.isLoading) {
@@ -244,17 +245,24 @@ function InterviewConversation({ campaign, kind, userId, header }: { campaign: M
                 onRetry={() => void retry()}
                 retrying={live.streaming}
                 renderAfter={(message) =>
-                    message.abilityScores ? (
-                        <AbilityScoresCard
-                            card={message.abilityScores}
-                            rolls={interview?.abilityRolls ?? null}
-                            color={color}
-                            disabled={busy || complete.isPending}
-                            onRoll={rollAbility}
-                            onReset={() => resetRolls.mutate()}
-                            resetting={resetRolls.isPending}
-                            onSubmit={(method, scores) => void submitScores(method, scores)}
-                        />
+                    message.abilityScores || message.hitPoints ? (
+                        <>
+                            {message.abilityScores && (
+                                <AbilityScoresCard
+                                    card={message.abilityScores}
+                                    rolls={interview?.abilityRolls ?? null}
+                                    color={color}
+                                    disabled={busy || complete.isPending}
+                                    onRoll={rollAbility}
+                                    onReset={() => resetRolls.mutate()}
+                                    resetting={resetRolls.isPending}
+                                    onSubmit={(method, scores) => void submitScores(method, scores)}
+                                />
+                            )}
+                            {message.hitPoints && (
+                                <HitPointsCard card={message.hitPoints} color={color} disabled={busy || complete.isPending} onRoll={rollHitPoint} onSubmit={(choices) => void submitHitPoints(choices)} />
+                            )}
+                        </>
                     ) : null
                 }
             />

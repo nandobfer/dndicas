@@ -4,6 +4,7 @@ import { MongoMemoryServer } from "mongodb-memory-server"
 import type { AiStreamEvent, AiStreamRequest } from "@/lib/ai/stream"
 import type { MaddoxSettings } from "@/features/maddox/schemas"
 import type { MaddoxInterviewStreamLine } from "@/features/maddox/interview-types"
+import { fighterBuild, seedSheetCatalog, setInterviewBuild } from "./helpers/sheet-catalog"
 
 const recordAudit = vi.fn(async () => undefined)
 const publishToChannels = vi.fn(async () => undefined)
@@ -79,7 +80,6 @@ const { DEFAULT_MADDOX_SETTINGS } = await import("@/features/maddox/schemas")
 const { MADDOX_PROPOSAL_MARKER, MADDOX_INTERVIEW_MESSAGES_MAX } = await import("@/features/maddox/constants")
 const { MaddoxCampaignModel, MaddoxCampaignMemberModel, MaddoxCharacterModel, MaddoxInterviewModel, MaddoxInterviewScriptModel } = await import("@/features/maddox/models")
 const { CharacterSheet } = await import("@/features/character-sheets/models/character-sheet")
-const { RaceModel } = await import("@/features/races/models/race")
 const campaigns = await import("@/features/maddox/server/campaigns")
 const interviews = await import("@/features/maddox/server/interviews")
 const { completeInterview } = await import("@/features/maddox/server/interview-consolidation")
@@ -117,6 +117,20 @@ async function newCampaign(rigor: "narrativo" | "equilibrado" | "fiel-dnd" = "na
 }
 
 /** Cenário inteiro até a conclusão (a consolidação devolve o JSON pedido). */
+/** Card de atributos já enviado (como se o jogador tivesse enviado pelo card). */
+async function giveSubmittedCard(base: Record<string, number>) {
+    await MaddoxInterviewModel.updateOne(
+        { kind: "character" },
+        { $push: { messages: { id: `card-${Date.now()}`, role: "maddox", content: "Card.", proposal: false, error: null, abilityScores: { status: "submitted", method: "standard", base, prefill: null, bonus: null, reason: null, submittedAt: new Date() }, createdAt: new Date() } } },
+    )
+    // A síntese continua sendo a última fala (o card entra antes dela).
+    const doc = (await MaddoxInterviewModel.findOne({ kind: "character" }).lean())!
+    const messages = [...doc.messages]
+    const card = messages.pop()!
+    messages.splice(messages.length - 1, 0, card)
+    await MaddoxInterviewModel.updateOne({ _id: doc._id }, { $set: { messages } })
+}
+
 async function finishScenario(campaignId: string) {
     await startScenario(campaignId)
     scripted.push(proposalReply())
@@ -502,9 +516,8 @@ describe("entrevista de personagem", () => {
         expect((await MaddoxCampaignModel.findById(campaignId).lean())!.scriptVersions.character).toBe(0)
     })
 
-    it("rigor equilibrado: também cria a ficha D&D com atributos e a referência do catálogo por nome", async () => {
-        const raceId = new mongoose.Types.ObjectId()
-        await RaceModel.collection.insertOne({ _id: raceId, name: "Élfo", status: "active" })
+    it("rigor equilibrado: a ficha sai das escolhas gravadas e do card (menções do catálogo), nunca do texto da IA", async () => {
+        const cat = await seedSheetCatalog()
         const campaignId = await newCampaign("equilibrado")
         await finishScenario(campaignId)
         await campaigns.upsertCharacterDraft(campaignId, { name: "Lyra", portraitUrl: "/uploads/lyra.png" }, ids.ana)
@@ -512,52 +525,64 @@ describe("entrevista de personagem", () => {
         await run(turn!)
         expect(streamCalls.at(-1)!.instructions).toContain("ficha do D&D")
         scripted.push(proposalReply())
-        await run(await interviews.sendInterviewMessage(campaignId, "character", { content: "Elfa ladina." }, ids.ana))
+        await run(await interviews.sendInterviewMessage(campaignId, "character", { content: "Humana guerreira." }, ids.ana))
+        await giveSubmittedCard({ strength: 15, dexterity: 13, constitution: 14, intelligence: 8, wisdom: 12, charisma: 10 })
+        await setInterviewBuild({}, fighterBuild(cat))
         generateAiText.mockResolvedValueOnce({
             text: JSON.stringify({
                 name: null,
-                profile: { identidade: "Elfa" },
-                sheet: { race: "elfo", class: "Ladino", origin: "Criminoso", attributes: { strength: 8, dexterity: 17, constitution: 12, intelligence: 13, wisdom: 10, charisma: 99 } },
+                profile: { identidade: "Humana" },
+                sheet: { race: "{{Raça:Elfo}}", class: "Ladino", appearance: "Alta, com uma {{Item:Espada longa}} nas costas.", history: "Cresceu no porto.\n\nVirou **soldada**.", age: "{{Raça:Humano}} de 30 anos", attributes: { strength: 8, dexterity: 17, constitution: 12, intelligence: 13, wisdom: 10, charisma: 99 } },
             }),
         })
         const detail = await completeInterview(campaignId, "character", ids.ana)
         expect(createBlankSheet).toHaveBeenCalledWith(ids.ana, "ana", "Lyra")
         const character = await MaddoxCharacterModel.findOne({ userId: ids.ana }).lean()
         const sheet = await CharacterSheet.findById(character!.sheetId).lean()
-        expect(sheet).toMatchObject({ name: "Lyra", race: "elfo", class: "Ladino", origin: "Criminoso", level: 1, dexterity: 17, strength: 8, photo: "/uploads/lyra.png" })
-        expect(String(sheet!.raceRef)).toBe(String(raceId))
-        // Atributo fora do intervalo (1–30) é descartado.
-        expect(sheet!.charisma).not.toBe(99)
+        expect(sheet).toMatchObject({ name: "Lyra", level: 1, strength: 15, dexterity: 13, constitution: 14, photo: "/uploads/lyra.png", age: "Humano de 30 anos", history: "<p>Cresceu no porto.</p><p>Virou <strong>soldada</strong>.</p>" })
+        expect(sheet!.race).toContain('data-entity-type="Raça"')
+        expect(sheet!.race).toContain(">Humano</span>")
+        expect(String(sheet!.raceRef)).toBe(String(cat.race))
+        expect(sheet!.appearance).toContain("Espada longa")
+        expect(JSON.stringify(sheet)).not.toContain("{{")
         expect(detail.members.find((member) => member.userId === ids.ana)!.character!.sheetSlug).toBe("ana/lyra")
         expect(recordAudit).toHaveBeenCalledWith(expect.objectContaining({ depois: expect.objectContaining({ sheet: "ficha criada" }) }))
     })
 
-    it("campos longos da ficha (idade, peso, olhos) são gravados inteiros; renomear depois propaga à ficha", async () => {
+    it("rigor equilibrado sem as escolhas da ficha: concluir responde 409 com o que falta, sem consolidar", async () => {
         const campaignId = await newCampaign("equilibrado")
         await finishScenario(campaignId)
         await campaigns.upsertCharacterDraft(campaignId, { name: "Lyra" }, ids.ana)
         await run((await interviews.startInterview(campaignId, "character", ids.ana)).turn!)
         scripted.push(proposalReply())
         await run(await interviews.sendInterviewMessage(campaignId, "character", { content: "Pronto." }, ids.ana))
+        const consolidations = generateAiText.mock.calls.length
+        await expect(completeInterview(campaignId, "character", ids.ana)).rejects.toMatchObject({ status: 409, code: "CHARACTER_BUILD_INCOMPLETE", message: "Faltam escolhas na ficha: nível inicial; raça; classe; origem; equipamento inicial; idiomas. Peça ao Maddox para concluir antes de confirmar." })
+        expect(generateAiText.mock.calls.length).toBe(consolidations)
+        expect((await MaddoxInterviewModel.findOne({ campaignId, kind: "character" }).lean())!.generating).toBeNull()
+    })
+
+    it("campos longos da ficha (idade, peso, olhos) são gravados inteiros; renomear depois propaga à ficha", async () => {
+        const cat = await seedSheetCatalog()
+        const campaignId = await newCampaign("equilibrado")
+        await finishScenario(campaignId)
+        await campaigns.upsertCharacterDraft(campaignId, { name: "Lyra" }, ids.ana)
+        await run((await interviews.startInterview(campaignId, "character", ids.ana)).turn!)
+        scripted.push(proposalReply())
+        await run(await interviews.sendInterviewMessage(campaignId, "character", { content: "Pronto." }, ids.ana))
+        await giveSubmittedCard({ strength: 15, dexterity: 14, constitution: 13, intelligence: 12, wisdom: 10, charisma: 8 })
+        await setInterviewBuild({}, fighterBuild(cat))
         const weight = "aproximadamente 85 kg, constituição robusta"
         const eyes = "castanhos escuros com reflexos dourados ao sol"
-        const age = "por volta de cento e vinte anos, jovem para uma elfa"
+        const age = "por volta de cento e vinte anos, jovem para uma elfa ".repeat(10).trim()
         const identidade = "Elfa. ".repeat(1500).trim()
-        const origin = "Criminosa do porto de Valdrenn. ".repeat(80).trim()
-        expect(origin.length).toBeGreaterThan(2500)
-        generateAiText.mockResolvedValueOnce({ text: JSON.stringify({ name: "L".repeat(200), profile: { identidade }, sheet: { race: "Elfo", origin, weight, eyes, age } }) })
+        generateAiText.mockResolvedValueOnce({ text: JSON.stringify({ name: "L".repeat(200), profile: { identidade }, sheet: { weight, eyes, age } }) })
         await completeInterview(campaignId, "character", ids.ana)
-        // Origem acima do limite da ficha: a ficha guarda 2.000 caracteres e o resultado da entrevista, o texto inteiro.
-        const sheetAfter = await CharacterSheet.findById((await MaddoxCharacterModel.findOne({ userId: ids.ana }).lean())!.sheetId).lean()
-        expect(sheetAfter!.origin).toBe(origin.slice(0, 2000))
-        expect(sheetAfter!.origin).toHaveLength(2000)
-        const result = (await MaddoxInterviewModel.findOne({ campaignId, kind: "character" }).lean())!.result as { sheet: { origin: string } }
-        expect(result.sheet.origin).toBe(origin)
         const character = await MaddoxCharacterModel.findOne({ userId: ids.ana }).lean()
         // Nome fora do limite é ignorado (fica o do esboço), sem invalidar o resto.
         expect(character!.name).toBe("Lyra")
         expect((character!.profile as unknown as Record<string, string>).identidade).toBe(identidade)
-        expect(await CharacterSheet.findById(character!.sheetId).lean()).toMatchObject({ weight, eyes, age, race: "Elfo" })
+        expect(await CharacterSheet.findById(character!.sheetId).lean()).toMatchObject({ weight, eyes, age })
 
         await campaigns.upsertCharacterDraft(campaignId, { name: "Lira", portraitUrl: "/uploads/lira.png" }, ids.ana)
         expect(await CharacterSheet.findById(character!.sheetId).lean()).toMatchObject({ name: "Lira", photo: "/uploads/lira.png" })

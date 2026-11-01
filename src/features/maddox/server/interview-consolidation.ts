@@ -1,18 +1,21 @@
-import { Types, type Model } from "mongoose"
+import { Types } from "mongoose"
 import { AcaoAuditoria, dbConnect, recordAudit } from "@/lib/db"
 import { DomainError } from "@/lib/api/route"
 import { loggerFor } from "@/lib/logger"
 import { User } from "@/features/users/models/user"
 import { MADDOX_CAMPAIGN_AUDIT_ENTITY, MADDOX_INTERVIEW_CONSUMPTION_ORIGIN, MADDOX_CATALOG_ORIGIN_RIGORS, MADDOX_PROFILE_SECTIONS, MADDOX_SHEET_RIGORS, type MaddoxScriptKind } from "../constants"
 import { MaddoxCampaignModel, MaddoxCharacterModel, MaddoxInterviewModel, type IMaddoxInterview } from "../models"
-import { characterConsolidationSchema, scenarioConsolidationSchema, type CharacterConsolidation, type CharacterSheetSeed, type ScenarioConsolidation } from "../interview-schemas"
+import { characterConsolidationSchema, scenarioConsolidationSchema, type CharacterConsolidation, type ScenarioConsolidation } from "../interview-schemas"
 import type { MaddoxCampaignDetailDto } from "../campaign-types"
 import { changed, getCampaignDetail } from "./campaigns"
 import { notifyInterviewChanged } from "./campaign-realtime"
 import { linkCatalogMentions } from "./catalog-mentions"
 import { buildConsolidationInstructions, parseJsonObject, settingMarkdown, transcriptText } from "./interview-prompt"
 import { abilityCardAwaitingFirstSubmit, findBackground, submittedAbilityCard } from "./interview-tools"
-import { finalScores } from "../interview-scores"
+import { buildFinalScores, effectiveLevel, emptyBuild, hitPointsSettled, loadBuildCatalog, missingItems, type BuildContext } from "./character-build"
+import { writeCharacterSheet } from "./sheet-builder"
+
+const buildContextOf = (subject: InterviewSubject): BuildContext => ({ rigor: subject.campaign.rigor, startingLevel: subject.campaign.startingLevel ?? null })
 import { acquireInterviewLock, campaignReservedNames, loadInterviewer, loadSubject, promptContext, releaseInterviewLock, type InterviewSubject } from "./interviews"
 
 /**
@@ -23,8 +26,6 @@ import { acquireInterviewLock, campaignReservedNames, loadInterviewer, loadSubje
 
 const log = loggerFor({ module: "maddox", feature: "interview-consolidation" })
 const ATTEMPTS = 2
-/** `maxlength` de raça/classe/subclasse/origem na `CharacterSheet`. */
-const SHEET_NAME_FIELD_MAX = 2000
 
 type InterviewDoc = IMaddoxInterview
 
@@ -54,54 +55,18 @@ async function consolidate<T>(instructions: string, transcript: string, schema: 
     throw new DomainError(502, `O Maddox não conseguiu consolidar a entrevista (${lastError}). Tente concluir de novo.`, "CONSOLIDATION_FAILED")
 }
 
-const escapeRegex = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
-
-/** Referência do catálogo do DnDicas por nome exato (sem acento e sem caixa); sem correspondência = `null`. */
-async function catalogRef(modelName: "Race" | "CharacterClass" | "Background", name: string | null): Promise<Types.ObjectId | null> {
-    if (!name) return null
-    const model = await (async () => {
-        if (modelName === "Race") return (await import("@/features/races/models/race")).RaceModel
-        if (modelName === "CharacterClass") return (await import("@/features/classes/models/character-class")).CharacterClass
-        return (await import("@/features/backgrounds/models/background")).BackgroundModel
-    })()
-    const pattern = new RegExp(`^${escapeRegex(name.trim())}$`, "i")
-    const found = await (model as unknown as Model<{ _id: Types.ObjectId; name: string; originalName?: string }>)
-        .findOne({ $or: [{ name: name.trim() }, { originalName: name.trim() }, { name: pattern }, { originalName: pattern }] })
-        .collation({ locale: "pt", strength: 1 })
-        .select("_id")
-        .lean<{ _id: Types.ObjectId }>()
-    return found?._id ?? null
-}
-
-/** Cria (ou atualiza) a ficha D&D básica do personagem a partir da consolidação. */
-async function seedSheet(subject: InterviewSubject, name: string, portraitUrl: string | null, seed: CharacterSheetSeed | null, abilities: Record<string, number> | null): Promise<{ sheetId: Types.ObjectId; created: boolean }> {
+/** Ficha do personagem: reaproveita a ligada ao personagem ou cria uma em branco (ligada já, para não ficar órfã). */
+async function ensureSheet(subject: InterviewSubject, name: string): Promise<{ sheetId: Types.ObjectId; created: boolean }> {
     const { CharacterSheet } = await import("@/features/character-sheets/models/character-sheet")
-    let sheetId = subject.character?.sheetId ?? null
-    let created = false
-    if (!sheetId || !(await CharacterSheet.exists({ _id: sheetId }))) {
-        const { createBlankSheet } = await import("@/features/character-sheets/api/character-sheets-service")
-        const user = await User.findById(subject.member.userId).select("username").lean<{ username?: string }>()
-        const sheet = await createBlankSheet(subject.member.userId, user?.username ?? "", name)
-        sheetId = new Types.ObjectId(String((sheet as { _id: unknown })._id))
-        created = true
-        // Liga já: uma falha adiante não deixa uma ficha órfã (a nova tentativa reaproveita esta).
-        await MaddoxCharacterModel.updateOne({ _id: subject.character!._id }, { $set: { sheetId } })
-    }
-    const [raceRef, classRef, originRef] = await Promise.all([catalogRef("Race", seed?.race ?? null), catalogRef("CharacterClass", seed?.class ?? null), catalogRef("Background", seed?.origin ?? null)])
-    const set: Record<string, unknown> = { name, ...(portraitUrl ? { photo: portraitUrl } : {}), ...(created ? { level: 1 } : {}) }
-    if (seed) {
-        for (const key of ["appearance", "age", "height", "weight", "eyes", "skin", "hair"] as const) if (seed[key]) set[key] = seed[key]
-        // Raça, classe, subclasse e origem têm 2.000 caracteres na ficha; o texto inteiro segue no resultado da entrevista.
-        for (const key of ["race", "class", "subclass", "origin"] as const) if (seed[key]) set[key] = seed[key]!.slice(0, SHEET_NAME_FIELD_MAX)
-        if (raceRef) set.raceRef = raceRef
-        if (classRef) set.classRef = classRef
-        if (originRef) set.originRef = originRef
-        if (!abilities) for (const [key, value] of Object.entries(seed.attributes ?? {})) if (typeof value === "number") set[key] = value
-    }
-    // Atributos enviados pelo card (Maddox 5): valem sobre qualquer valor extraído da conversa.
-    if (abilities) Object.assign(set, abilities)
-    await CharacterSheet.updateOne({ _id: sheetId }, { $set: set })
-    return { sheetId, created }
+    const current = subject.character?.sheetId ?? null
+    if (current && (await CharacterSheet.exists({ _id: current }))) return { sheetId: current, created: false }
+    const { createBlankSheet } = await import("@/features/character-sheets/api/character-sheets-service")
+    const user = await User.findById(subject.member.userId).select("username").lean<{ username?: string }>()
+    const sheet = await createBlankSheet(subject.member.userId, user?.username ?? "", name)
+    const sheetId = new Types.ObjectId(String((sheet as { _id: unknown })._id))
+    // Liga já: uma falha adiante não deixa uma ficha órfã (a nova tentativa reaproveita esta).
+    await MaddoxCharacterModel.updateOne({ _id: subject.character!._id }, { $set: { sheetId } })
+    return { sheetId, created: true }
 }
 
 async function finishInterview(doc: InterviewDoc, token: string, result: unknown) {
@@ -125,6 +90,8 @@ async function completeScenario(subject: InterviewSubject, doc: InterviewDoc, to
                 "scenarioInterview.completedAt": new Date(),
                 ...(subject.campaign.status === "interview" ? { status: "lobby" } : {}),
                 ...(rename ? { name: rename } : {}),
+                // Nível (graus com ficha) ou estágio (narrativos) da mesa; sem valor combinado, cada personagem informa.
+                ...(MADDOX_SHEET_RIGORS.includes(subject.campaign.rigor) ? { startingLevel: data.startingLevel ?? null } : { startingStage: data.startingStage ?? "" }),
             },
         },
     )
@@ -144,9 +111,13 @@ async function completeCharacter(subject: InterviewSubject, doc: InterviewDoc, t
     const name = data.name ?? character.name
     const withSheet = MADDOX_SHEET_RIGORS.includes(subject.campaign.rigor)
     const card = withSheet ? submittedAbilityCard(doc.messages) : null
-    const final = card?.base ? finalScores(card.base, card.bonus?.parts) : null
-    const sheet = withSheet ? await seedSheet(subject, name, character.portraitUrl ?? null, data.sheet, final) : null
+    const final = withSheet ? buildFinalScores(doc) : null
     const reserved = [...(await campaignReservedNames(subject.campaign)), name]
+    let sheet: { sheetId: Types.ObjectId; created: boolean } | null = null
+    if (withSheet) {
+        sheet = await ensureSheet(subject, name)
+        await writeCharacterSheet({ sheetId: sheet.sheetId, name, portraitUrl: character.portraitUrl ?? null, doc, seed: data.sheet, ctx: buildContextOf(subject), reserved })
+    }
     const profile = Object.fromEntries(
         await Promise.all(MADDOX_PROFILE_SECTIONS.map(async (item) => [item.key, data.profile[item.key] ? await linkCatalogMentions(data.profile[item.key]!, { reserved }) : "a definir durante a história"] as const)),
     )
@@ -155,7 +126,7 @@ async function completeCharacter(subject: InterviewSubject, doc: InterviewDoc, t
         { $set: { name, profile, "interview.status": "done", "interview.scriptVersion": doc.scriptVersion, ...(sheet ? { sheetId: sheet.sheetId } : {}) } },
     )
     // Por último: falha antes daqui mantém a entrevista em `proposed` e confirmar de novo reaplica.
-    await finishInterview(doc, token, card?.base && final ? { ...data, abilityScores: { method: card.method, base: card.base, bonus: card.bonus ?? null, final } } : data)
+    await finishInterview(doc, token, card?.base && final ? { ...data, abilityScores: { method: card.method, base: card.base, bonus: card.bonus ?? null, final }, build: doc.build ?? null } : data)
     await recordAudit({
         userId,
         entidade: MADDOX_CAMPAIGN_AUDIT_ENTITY,
@@ -185,6 +156,19 @@ export async function completeInterview(campaignId: string, kind: MaddoxScriptKi
     const bonusOrigin = kind === "character" && MADDOX_CATALOG_ORIGIN_RIGORS.includes(subject.campaign.rigor) ? submittedAbilityCard(doc.messages)?.bonus?.background : null
     if (bonusOrigin && !(await findBackground(bonusOrigin))) {
         throw new DomainError(409, `O antecedente do bônus (${bonusOrigin}) não está no catálogo. Peça ao Maddox para escolher uma origem do catálogo e reaplicar o bônus.`, "BACKGROUND_NOT_IN_CATALOG")
+    }
+    // Graus com ficha: a ficha só sai completa (escolhas e, acima do nível 1, o card de PV).
+    if (kind === "character" && MADDOX_SHEET_RIGORS.includes(subject.campaign.rigor)) {
+        const ctx = buildContextOf(subject)
+        const build = doc.build ?? emptyBuild()
+        const catalog = await loadBuildCatalog(build)
+        const missing = missingItems(doc, catalog, ctx)
+        const level = effectiveLevel(build, ctx)
+        const hpPending = Boolean(level && level > 1 && catalog.cls && !hitPointsSettled(doc, level, catalog.cls.hitDice))
+        const rest = missing.filter((item) => !item.startsWith("pontos de vida") && !item.startsWith("atributos"))
+        if (rest.length) throw new DomainError(409, `Faltam escolhas na ficha: ${rest.join("; ")}. Peça ao Maddox para concluir antes de confirmar.`, "CHARACTER_BUILD_INCOMPLETE")
+        if (hpPending) throw new DomainError(409, `Defina os pontos de vida dos níveis 2 a ${level} no card de PV antes de concluir. Peça ao Maddox para abrir o card.`, "HIT_POINTS_PENDING")
+        if (!submittedAbilityCard(doc.messages)) throw new DomainError(409, "Envie os atributos pelo card antes de concluir a entrevista.", "ABILITY_SCORES_PENDING")
     }
     const { settings, model } = await loadInterviewer()
     const { doc: locked, token } = await acquireInterviewLock(doc._id)

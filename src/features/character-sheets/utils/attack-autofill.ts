@@ -1,95 +1,15 @@
 "use client"
 
-import type { CharacterAttack } from "../types/character-sheet.types"
-import type { ItemType, Item } from "@/features/items/types/items.types"
-import type { Spell } from "@/features/spells/types/spells.types"
-import { getDiceHex } from "@/features/rules/utils/dice-render-utils"
+import {
+    buildDiceValueHtml,
+    buildSpellAttackAutofill,
+    buildWeaponAttackAutofill,
+    formatBonus,
+    getAutoSpellAttackNotes,
+    getCantripDamageDiceQuantity,
+    hasFinesseProperty,
+    resolveCatalogItemType,
+} from "./sheet-rules"
 
-interface CalcValues {
-    spellAttackBonus: { value: number }
-    profBonus: { value: number }
-    attrMods: {
-        strength: { value: number }
-        dexterity: { value: number }
-    }
-}
-
-export function formatBonus(value: number): string {
-    return value >= 0 ? `+${value}` : `${value}`
-}
-
-function stripHtml(html: string): string {
-    return html.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim()
-}
-
-export function hasFinesseProperty(propertiesHtml: string[]): boolean {
-    return propertiesHtml.some((value) => /acuidade|finesse/i.test(stripHtml(value)))
-}
-
-export function resolveCatalogItemType(item: { type?: string | null; itemType?: string | null }): ItemType | null {
-    const rawType = item.itemType ?? item.type
-    if (rawType === "arma" || rawType === "armadura" || rawType === "escudo" || rawType === "ferramenta" || rawType === "consumível" || rawType === "munição" || rawType === "qualquer") {
-        return rawType
-    }
-    return null
-}
-
-export function buildDiceValueHtml(quantity: number, faces: string, bonus?: number, colorHex?: string): string {
-    const bonusAttr = bonus !== undefined ? ` data-bonus="${bonus}"` : ""
-    const colorAttr = colorHex ? ` data-color-hex="${colorHex}"` : ""
-    return `<span data-type="dice-value" data-qty="${quantity}" data-faces="${faces.replace("d", "")}"${bonusAttr}${colorAttr}></span>`
-}
-
-export function getCantripDamageDiceQuantity(baseQuantity: number, characterLevel: number): number {
-    const multiplier = characterLevel >= 17 ? 4 : characterLevel >= 11 ? 3 : characterLevel >= 5 ? 2 : 1
-    return Math.max(1, baseQuantity) * multiplier
-}
-
-export function buildSpellAttackAutofill(
-    catalogSpell: Pick<Spell, "circle" | "baseDice">,
-    calc: Pick<CalcValues, "spellAttackBonus">,
-    characterLevel: number
-): Pick<CharacterAttack, "attackBonus" | "damageType"> {
-    let damageText = ""
-
-    if (catalogSpell.baseDice) {
-        const { quantidade, tipo } = catalogSpell.baseDice
-        const nextQuantity = catalogSpell.circle === 0
-            ? getCantripDamageDiceQuantity(quantidade, characterLevel)
-            : quantidade
-        damageText = buildDiceValueHtml(nextQuantity, tipo)
-    }
-
-    return {
-        damageType: damageText ? `<p>${damageText}</p>` : "",
-        attackBonus: formatBonus(calc.spellAttackBonus.value),
-    }
-}
-
-export function getAutoSpellAttackNotes(spellId: string): string {
-    return `auto:spell:${spellId}`
-}
-
-export function buildWeaponAttackAutofill(catalogItem: Item, calc: CalcValues): Pick<CharacterAttack, "attackBonus" | "damageType"> {
-    const propertiesHtml = (catalogItem.properties ?? []).map((property) => `${property.name ?? ""} ${property.description ?? ""}`)
-    const hasFinesse = hasFinesseProperty(propertiesHtml)
-    const attrMod = hasFinesse
-        ? Math.max(calc.attrMods.dexterity.value, calc.attrMods.strength.value)
-        : calc.attrMods.strength.value
-    const attackBonusValue = calc.profBonus.value + attrMod
-
-    let damageText = ""
-    if (catalogItem.damageDice) {
-        const { quantidade, tipo } = catalogItem.damageDice
-        const colorHex = getDiceHex(catalogItem.damageType ?? "")
-        damageText = buildDiceValueHtml(quantidade, tipo, attrMod, colorHex)
-        if (catalogItem.damageType) {
-            damageText += ` ${catalogItem.damageType}`
-        }
-    }
-
-    return {
-        damageType: damageText ? `<p>${damageText}</p>` : "",
-        attackBonus: formatBonus(attackBonusValue),
-    }
-}
+// Regras puras em `sheet-rules.ts` (usadas também pelo servidor).
+export { buildDiceValueHtml, buildSpellAttackAutofill, buildWeaponAttackAutofill, formatBonus, getAutoSpellAttackNotes, getCantripDamageDiceQuantity, hasFinesseProperty, resolveCatalogItemType }

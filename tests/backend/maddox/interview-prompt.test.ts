@@ -106,7 +106,12 @@ describe("consolidação", () => {
         expect(scenario).toContain('"openingSituation"')
         expect(scenario).toContain('"campaignName"')
         const withSheet = buildConsolidationInstructions(base({ kind: "character" }), true)
-        expect(withSheet).toContain('"attributes"')
+        // A parte mecânica vem das ferramentas: a consolidação só descreve (aparência, história, personalidade).
+        expect(withSheet).not.toContain('"attributes"')
+        expect(withSheet).not.toContain('"race"')
+        for (const key of ['"appearance"', '"history"', '"personalityTraits"', '"ideals"', '"bonds"', '"flaws"']) expect(withSheet).toContain(key)
+        expect(withSheet).toContain("NÃO a repita")
+        expect(withSheet).toContain("sem a marcação {{Tipo:Nome}}")
         expect(buildConsolidationInstructions(base({ kind: "character" }), false)).toContain('"sheet": null')
     })
 
@@ -193,13 +198,61 @@ describe("atributos na entrevista de personagem (Maddox 5)", () => {
 
     it("pelo MCP, as instruções listam também as ferramentas de catálogo", () => {
         const mcp = character("fiel-dnd", { status: "Card aberto", tools: { kind: "mcp", server: "dndicas-maddox", token: "tok.123" } })
-        expect(mcp).toContain("`request_ability_scores`, `get_ability_scores`, `apply_ability_bonus`, `search_catalog` e `get_catalog_entity` do servidor MCP `dndicas-maddox`")
+        expect(mcp).toContain("`request_ability_scores`, `get_ability_scores`, `apply_ability_bonus`, `update_character_build`, `get_character_build`, `request_hit_points`, `search_catalog` e `get_catalog_entity` do servidor MCP `dndicas-maddox`")
     })
 
     it("a fala interna aparece como SISTEMA na transcrição; a consolidação avisa que os atributos vêm do card", () => {
         expect(transcriptText([{ role: "user", content: "[Sistema] Enviou", internal: true }, { role: "user", content: "Oi" }])).toBe("SISTEMA: [Sistema] Enviou\n\nJOGADOR: Oi")
         const context = base({ kind: "character", campaign: { name: "B", rigor: "fiel-dnd", setting: "", openingSituation: "" } })
-        expect(buildConsolidationInstructions(context, true, true)).toContain("Os atributos já foram definidos pelo card")
-        expect(buildConsolidationInstructions(context, true, false)).not.toContain("Os atributos já foram definidos pelo card")
+        expect(buildConsolidationInstructions(context, true, true)).toContain("Os atributos vêm do card de atributos")
+        expect(buildConsolidationInstructions(context, true, false)).not.toContain("Os atributos vêm do card de atributos")
     })
 })
+
+describe("nível inicial e construção da ficha (Maddox 5)", () => {
+    const scenario = (rigor: InterviewPromptContext["campaign"]["rigor"]) => buildInterviewInstructions(base({ campaign: { name: "B", rigor, setting: "", openingSituation: "" } }))
+    const character = (campaign: Partial<InterviewPromptContext["campaign"]>, build: InterviewPromptContext["build"] = null) =>
+        buildInterviewInstructions(base({ kind: "character", character: { name: "Lyra" }, campaign: { name: "B", rigor: "fiel-dnd", setting: "Aethra", openingSituation: "", ...campaign }, build }))
+
+    it("o cenário pergunta o nível por grau: número direto em Fiel, estágio adaptado ao cenário nos narrativos", () => {
+        const faithful = scenario("fiel-dnd")
+        expect(faithful).toContain("## Nível inicial da mesa")
+        expect(faithful).toContain('Pergunte diretamente: "qual o nível inicial dos personagens (1 a 20)?"')
+        expect(scenario("rigoroso")).toContain("Pergunte o número do nível inicial (1 a 20)")
+        expect(scenario("equilibrado")).toContain("Ofereça estágios descritos na ficção do cenário, cada um com o nível correspondente")
+        for (const rigor of ["narrativo", "flexivel"] as const) {
+            const text = scenario(rigor)
+            expect(text).toContain("## Estágio de experiência inicial da mesa")
+            expect(text).toContain("acabou de se tornar aventureiro")
+            expect(text).toContain("caçador recém-iniciado")
+            expect(text).toContain('Nunca fale em "aventureiro" se o cenário não for desse tipo.')
+            expect(text).not.toContain("1 a 20")
+        }
+    })
+
+    it("a consolidação do cenário pede startingLevel nos graus com ficha e startingStage nos narrativos", () => {
+        expect(buildConsolidationInstructions(base({ campaign: { name: "B", rigor: "fiel-dnd", setting: "", openingSituation: "" } }), false)).toContain('"startingLevel"')
+        const narrative = buildConsolidationInstructions(base({ campaign: { name: "B", rigor: "narrativo", setting: "", openingSituation: "" } }), false)
+        expect(narrative).toContain('"startingStage"')
+        expect(narrative).not.toContain('"startingLevel"')
+    })
+
+    it("o personagem confirma o nível da mesa; sem nível definido, pergunta pelo grau", () => {
+        expect(character({ startingLevel: 3 })).toContain("A mesa começa no nível 3")
+        expect(character({ startingLevel: null })).toContain("A mesa ainda não definiu o nível inicial: pergunte ao jogador.")
+        expect(character({ rigor: "narrativo", startingStage: "caçadores recém-iniciados" })).toContain("A mesa começa neste estágio: caçadores recém-iniciados.")
+    })
+
+    it("graus com ficha recebem a construção da ficha com as ferramentas e a situação; narrativos e cenário não", () => {
+        const text = character({}, { status: "- Já gravado: nada ainda.\n- Falta: raça." })
+        expect(text).toContain("## Construção da ficha")
+        expect(text).toContain("grave com `update_character_build`")
+        expect(text).toContain("`request_hit_points`")
+        expect(text).toContain("consulte `get_character_build`: só apresente a síntese com `faltando` vazio")
+        expect(text).toContain("### Ficha: situação atual\n- Já gravado: nada ainda.\n- Falta: raça.")
+        expect(text.indexOf("## Construção da ficha")).toBeLessThan(text.indexOf("## Atributos do personagem"))
+        expect(character({ rigor: "narrativo" })).not.toContain("## Construção da ficha")
+        expect(scenario("fiel-dnd")).not.toContain("## Construção da ficha")
+    })
+})
+

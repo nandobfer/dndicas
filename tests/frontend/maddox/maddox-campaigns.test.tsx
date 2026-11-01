@@ -51,6 +51,8 @@ const listItem = (over: Partial<MaddoxCampaignListItemDto> = {}): MaddoxCampaign
     startedAt: null,
     scenarioStatus: "pending",
     showCheckDc: false,
+    startingLevel: null,
+    startingStage: "",
     createdAt: "2026-10-30T10:00:00.000Z",
     updatedAt: new Date().toISOString(),
     ...over,
@@ -310,6 +312,36 @@ describe("página da campanha (lobby)", () => {
         fireEvent.click(within(dialog).getByRole("button", { name: "Salvar" }))
         await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument())
         expect(patch).not.toHaveBeenCalled()
+    })
+
+    it("nível inicial: chip no lobby; o dono muda pelo Select glass antes de começar (PATCH só com startingLevel)", async () => {
+        ownerDetail({ rigor: "fiel-dnd", status: "interview", rigorLocked: true, startingLevel: 3 })
+        renderWithQueryClient(<CampaignPage campaignId="c1" />)
+        expect(await screen.findByTestId("starting-level-chip")).toHaveTextContent("Nível inicial 3")
+        const dialog = await openEdit()
+        const field = within(dialog).getByTestId("starting-level-field")
+        expect(field).toHaveTextContent("Fichas já criadas mantêm o nível delas.")
+        const trigger = within(field).getByRole("combobox", { name: "Nível inicial" })
+        expect(trigger).toHaveTextContent("Nível 3")
+        fireEvent.keyDown(trigger, { key: "Enter" })
+        const options = await screen.findAllByRole("option")
+        expect(options).toHaveLength(20)
+        fireEvent.click(screen.getByRole("option", { name: "Nível 5" }))
+        fireEvent.click(within(dialog).getByRole("button", { name: "Salvar" }))
+        await waitFor(() => expect(patch).toHaveBeenCalledWith("/maddox/campaigns/c1", { startingLevel: 5 }))
+    })
+
+    it("nível inicial: some com a campanha em andamento e nos graus narrativos; o estágio narrativo vira o chip", async () => {
+        ownerDetail({ rigor: "fiel-dnd", status: "active", rigorLocked: true, startingLevel: 3 })
+        const view = renderWithQueryClient(<CampaignPage campaignId="c1" />)
+        const dialog = await openEdit()
+        expect(within(dialog).queryByTestId("starting-level-field")).not.toBeInTheDocument()
+        view.unmount()
+        ownerDetail({ rigor: "narrativo", status: "lobby", startingLevel: null, startingStage: "caçadores recém-iniciados" })
+        renderWithQueryClient(<CampaignPage campaignId="c1" />)
+        expect(await screen.findByTestId("starting-level-chip")).toHaveTextContent("caçadores recém-iniciados")
+        const narrative = await openEdit()
+        expect(within(narrative).queryByTestId("starting-level-field")).not.toBeInTheDocument()
     })
 
     it("editar sem alterações fecha sem chamar a API", async () => {

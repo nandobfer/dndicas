@@ -25,6 +25,31 @@ export interface MaddoxAbilityRollsDto {
     invalid: boolean
 }
 
+/** Linha do card de PV: ganho pela média e pelo dado rolado (com CON). */
+export interface MaddoxHitPointLevelDto {
+    level: number
+    average: number
+    die: number | null
+    rolled: number | null
+}
+
+/** Card de pontos de vida por nível (Maddox 5), como o assistente de subir de nível da ficha. */
+export interface MaddoxHitPointsDto {
+    status: "pending" | "submitted" | "superseded"
+    level: number
+    hitDie: string
+    /** Modificador de Constituição final (card de atributos + talentos). */
+    constitutionModifier: number
+    /** PV do nível 1 (máximo do dado + CON). */
+    levelOne: number
+    rows: MaddoxHitPointLevelDto[]
+    choices: Record<string, "average" | "roll"> | null
+    /** PV máximo com as escolhas enviadas (`null` = card ainda não enviado). */
+    total: number | null
+    reason: string | null
+    submittedAt: string | null
+}
+
 export interface MaddoxInterviewMessageDto {
     id: string
     role: "maddox" | "user"
@@ -32,6 +57,7 @@ export interface MaddoxInterviewMessageDto {
     proposal: boolean
     error: string | null
     abilityScores?: MaddoxAbilityScoresDto | null
+    hitPoints?: MaddoxHitPointsDto | null
     createdAt: string
 }
 
@@ -46,6 +72,12 @@ export interface MaddoxInterviewDto {
     generating: boolean
     abilityRolls?: MaddoxAbilityRollsDto | null
     completedAt: string | null
+}
+
+/** Resposta da rolagem do dado de vida de um nível. */
+export interface MaddoxHitPointRollResultDto {
+    roll: DiceRollResponse
+    interview: MaddoxInterviewDto
 }
 
 /** Resposta de uma rolagem de 4d6 dos atributos. */

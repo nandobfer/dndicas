@@ -1,5 +1,5 @@
 import { z } from "zod"
-import { MADDOX_ABILITY_METHODS, MADDOX_CAMPAIGN_NAME_MAX, MADDOX_CAMPAIGN_NAME_MIN, MADDOX_CHARACTER_NAME_MAX, MADDOX_INTERVIEW_MESSAGE_MAX, MADDOX_PROFILE_SECTIONS, MADDOX_SCRIPT_KINDS, MADDOX_SETTING_SECTIONS } from "./constants"
+import { MADDOX_LEVEL_MAX, MADDOX_LEVEL_MIN, MADDOX_STARTING_STAGE_MAX, MADDOX_ABILITY_METHODS, MADDOX_CAMPAIGN_NAME_MAX, MADDOX_CAMPAIGN_NAME_MIN, MADDOX_CHARACTER_NAME_MAX, MADDOX_INTERVIEW_MESSAGE_MAX, MADDOX_PROFILE_SECTIONS, MADDOX_SCRIPT_KINDS, MADDOX_SETTING_SECTIONS } from "./constants"
 
 /** Schemas das entrevistas do Maddox (Maddox 2) — módulo PURO (tela, rotas e consolidação). */
 
@@ -26,6 +26,13 @@ export type MaddoxAbilityScoresSubmitInput = z.infer<typeof maddoxAbilityScoresS
 /** Rolagem e reinício das rolagens: corpo vazio (o servidor rola). */
 export const maddoxAbilityRollSchema = z.strictObject({})
 
+/** Rolagem do dado de vida de um nível no card de PV. */
+export const maddoxHitPointRollSchema = z.strictObject({ nivel: z.number({ error: "Informe o nível" }).int().min(2).max(MADDOX_LEVEL_MAX) })
+
+/** Envio do card de PV: "media" ou "rolagem" em cada nível do 2 ao N. */
+export const maddoxHitPointsSubmitSchema = z.strictObject({ escolhas: z.record(z.string().regex(/^\d+$/), z.enum(["media", "rolagem"], { error: "Escolha média ou rolagem" })) })
+export type MaddoxHitPointsSubmitInput = z.infer<typeof maddoxHitPointsSubmitSchema>
+
 // Texto gerado pelo modelo não tem teto de tamanho: um campo longo nunca invalida a consolidação inteira
 // (limites da ficha são tratados ao gravar, sem perder o texto do perfil).
 const section = z.string().trim().default("")
@@ -44,6 +51,10 @@ export const scenarioConsolidationSchema = z.object({
         .nullable()
         .optional()
         .transform((value) => (value && value.length >= MADDOX_CAMPAIGN_NAME_MIN && value.length <= MADDOX_CAMPAIGN_NAME_MAX ? value : null)),
+    /** Nível inicial da mesa (graus com ficha); fora de 1–20 ou ausente vira `null` sem invalidar o resto. */
+    startingLevel: z.preprocess((value) => (typeof value === "number" && Number.isInteger(value) && value >= MADDOX_LEVEL_MIN && value <= MADDOX_LEVEL_MAX ? value : null), z.number().int().nullable()).optional().transform((value) => value ?? null),
+    /** Estágio de experiência inicial (graus narrativos), cortado no limite. */
+    startingStage: z.string().trim().nullable().optional().transform((value) => (value ? value.slice(0, MADDOX_STARTING_STAGE_MAX) : null)),
 })
 export type ScenarioConsolidation = z.infer<typeof scenarioConsolidationSchema>
 
@@ -63,6 +74,12 @@ export const characterSheetSeedSchema = z.object({
     eyes: optionalText(),
     skin: optionalText(),
     hair: optionalText(),
+    /** História do personagem (Markdown), para o campo "História" da ficha. */
+    history: optionalText(),
+    personalityTraits: optionalText(),
+    ideals: optionalText(),
+    bonds: optionalText(),
+    flaws: optionalText(),
     attributes: z
         .object({ strength: attribute, dexterity: attribute, constitution: attribute, intelligence: attribute, wisdom: attribute, charisma: attribute })
         .nullable()

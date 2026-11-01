@@ -51,6 +51,10 @@ export interface IMaddoxCampaign {
     }
     /** Mostra a CD dos testes aos jogadores (Maddox 5); padrão = secreta. */
     showCheckDc: boolean
+    /** Nível inicial da mesa (graus com ficha), definido na entrevista de cenário; `null` = cada personagem informa. */
+    startingLevel?: number | null
+    /** Estágio de experiência inicial (graus narrativos), adaptado ao cenário. */
+    startingStage?: string
     /**
      * Estado atual da história (Maddox 4), o "checkpoint" mantido pelo narrador: cena, local, situação e a
      * decisão aguardada. Relido a cada turno.
@@ -93,6 +97,8 @@ const MaddoxCampaignSchema = new Schema<IMaddoxCampaign>(
             awaitingChecks: { type: Boolean, default: false },
         },
         showCheckDc: { type: Boolean, default: false },
+        startingLevel: { type: Number, default: null, min: 1, max: 20 },
+        startingStage: { type: String, default: "" },
         state: {
             scene: { type: String, default: "" },
             location: { type: String, default: "" },

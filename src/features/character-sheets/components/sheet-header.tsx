@@ -29,6 +29,7 @@ import { useClass } from "@/features/classes/api/classes-queries"
 import { ClassProgressionTable } from "@/features/classes/components/class-progression-table"
 import { useRace } from "@/features/races/api/races-queries"
 import { HpDicePanel } from "@/features/dice-roller/components/hp-dice-panel"
+import { averageHpGain as averageHpGainFor } from "../utils/sheet-rules"
 import { TraitPreview } from "@/features/rules/components/entity-preview-tooltip"
 import { fetchTraitById } from "@/features/traits/api/traits-api"
 import type { Trait } from "@/features/traits/types/traits.types"
@@ -76,16 +77,6 @@ type LevelUpTraitSource = "Classe" | "Subclasse" | "Raça"
 type LevelUpTraitPreview = { source: LevelUpTraitSource; trait: Trait }
 type LevelUpTraitSeed = { source: LevelUpTraitSource; description: string; fallbackName?: string | null }
 type LevelUpResourceChange = { key: string; name: string; currentTotal: number; nextTotal: number }
-
-const DICE_SIDES_BY_TYPE: Record<DiceType, number> = {
-  d4: 4,
-  d6: 6,
-  d8: 8,
-  d10: 10,
-  d12: 12,
-  d20: 20,
-  d100: 100,
-}
 
 function stripHtml(html: string | null | undefined): string {
   return String(html ?? "").replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim()
@@ -295,7 +286,7 @@ export function useSheetHeaderSections({ sheet, form, items = [], isReadOnly = f
   const requiresFeatSelection = nextLevel === 4
   const constitutionModifier = getAbilityModifier(constitution)
   const hitDieForLevelUp = (currentClass?.hitDice ?? hitDiceValue) as DiceType
-  const averageHpGain = Math.max(1, Math.ceil((DICE_SIDES_BY_TYPE[hitDieForLevelUp] ?? 8) / 2) + constitutionModifier)
+  const averageHpGain = averageHpGainFor(hitDieForLevelUp, constitutionModifier)
   const hpGainPreview = rolledHpGain ?? averageHpGain
   const nextHpMax = Math.max(1, hpMax + hpGainPreview)
 

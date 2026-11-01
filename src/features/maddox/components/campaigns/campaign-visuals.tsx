@@ -47,3 +47,16 @@ export function MemberAvatar({ name, imageUrl, color, className }: { name: strin
 export const InterviewChip = ({ status }: { status: MaddoxInterviewStatus | "proposed" }) => (
     <RarityChip color={rarityColors[MADDOX_INTERVIEW_STATUS_DEFS[status].rarity]}>{MADDOX_INTERVIEW_STATUS_DEFS[status].label}</RarityChip>
 )
+
+/** Nível inicial da mesa (graus com ficha) ou estágio de experiência (graus narrativos). */
+export function StartingLevelChip({ campaign }: { campaign: { startingLevel: number | null; startingStage: string } }) {
+    const stage = campaign.startingStage.trim()
+    if (!campaign.startingLevel && !stage) return null
+    return (
+        <RarityChip color={rarityColors.rare} className="max-w-[16rem]">
+            <span className="truncate" data-testid="starting-level-chip" title={campaign.startingLevel ? undefined : stage}>
+                {campaign.startingLevel ? `Nível inicial ${campaign.startingLevel}` : stage}
+            </span>
+        </RarityChip>
+    )
+}

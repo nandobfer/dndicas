@@ -42,6 +42,11 @@ const scoresService = {
     resetAbilityRolls: vi.fn(async () => ({ id: "i1", abilityRolls: null })),
 }
 vi.doMock("@/features/maddox/server/interview-scores-service", () => scoresService)
+const hitPointsService = {
+    submitHitPoints: vi.fn(async () => turn),
+    rollHitPoint: vi.fn(async () => ({ roll: { rollId: "r2" }, interview: { id: "i1" } })),
+}
+vi.doMock("@/features/maddox/server/interview-hit-points", () => hitPointsService)
 
 const ctx = (params: { id: string; kind: string }) => ({ params: Promise.resolve(params) })
 const base = "@/app/api/maddox/campaigns/[id]/interviews/[kind]"
@@ -53,7 +58,9 @@ describe("rotas das entrevistas do Maddox", () => {
         Object.values(service).forEach((fn) => fn.mockClear())
         completeInterview.mockClear()
         Object.values(scoresService).forEach((fn) => fn.mockClear())
+        Object.values(hitPointsService).forEach((fn) => fn.mockClear())
     })
+
 
     it("exigem maddox.play (403) e tipo de entrevista válido (404)", async () => {
         const route = await importFresh<typeof import("@/app/api/maddox/campaigns/[id]/interviews/[kind]/route")>(`${base}/route`)
@@ -145,5 +152,40 @@ describe("rotas das entrevistas do Maddox", () => {
         const resetRes = await reset.POST(makeJsonRequest(`${url}/ability-scores/reset`, { method: "POST", body: JSON.stringify({}) }), params)
         expect((await resetRes.json()).data).toMatchObject({ interview: { abilityRolls: null } })
         expect(scoresService.rollAbilityScore).toHaveBeenCalledTimes(1)
+    })
+
+    it("card de PV: maddox.play, corpo validado em pt-BR, rolagem por nível e envio em NDJSON; erro de regra padronizado", async () => {
+        const params = ctx({ id: "c1", kind: "character" })
+        const post = (path: string, body: unknown) => makeJsonRequest(`${url}${path}`, { method: "POST", body: JSON.stringify(body) })
+        // Cada import novo recarrega o módulo dos erros: a checagem de permissão vem logo depois do import da rota.
+        who = "noPermission"
+        const guardedSubmit = await importFresh<typeof import("@/app/api/maddox/campaigns/[id]/interviews/[kind]/hit-points/route")>(`${base}/hit-points/route`)
+        expect((await guardedSubmit.POST(post("/hit-points", { escolhas: { "2": "media" } }), params)).status).toBe(403)
+        const guardedRoll = await importFresh<typeof import("@/app/api/maddox/campaigns/[id]/interviews/[kind]/hit-points/roll/route")>(`${base}/hit-points/roll/route`)
+        expect((await guardedRoll.POST(post("/hit-points/roll", { nivel: 2 }), params)).status).toBe(403)
+        who = "player"
+        const submit = await importFresh<typeof import("@/app/api/maddox/campaigns/[id]/interviews/[kind]/hit-points/route")>(`${base}/hit-points/route`)
+        const roll = await importFresh<typeof import("@/app/api/maddox/campaigns/[id]/interviews/[kind]/hit-points/roll/route")>(`${base}/hit-points/roll/route`)
+
+        expect((await roll.POST(post("/hit-points/roll", { nivel: 1 }), params)).status).toBe(400)
+        expect((await roll.POST(post("/hit-points/roll", { nivel: 2, dado: 10 }), params)).status).toBe(400)
+        const rolled = await roll.POST(post("/hit-points/roll", { nivel: 3 }), params)
+        expect(rolled.status).toBe(200)
+        expect(hitPointsService.rollHitPoint).toHaveBeenCalledWith("c1", "character", 3, "user-1")
+
+        const invalid = await submit.POST(post("/hit-points", { escolhas: { "2": "maximo" } }), params)
+        expect(invalid.status).toBe(400)
+        expect(JSON.stringify(await invalid.json())).toContain("Escolha média ou rolagem")
+        expect(hitPointsService.submitHitPoints).not.toHaveBeenCalled()
+        const streamed = await submit.POST(post("/hit-points", { escolhas: { "2": "media", "3": "rolagem" } }), params)
+        expect(streamed.headers.get("content-type")).toContain("application/x-ndjson")
+        expect((await streamed.text()).trim().split("\n").map((line) => JSON.parse(line).type)).toEqual(["delta", "done"])
+        expect(hitPointsService.submitHitPoints).toHaveBeenCalledWith("c1", "character", { escolhas: { "2": "media", "3": "rolagem" } }, "user-1")
+
+        const { DomainError } = await import("@/lib/api/route")
+        hitPointsService.rollHitPoint.mockRejectedValueOnce(new DomainError(409, "O dado de vida do nível 3 já foi rolado.", "HIT_POINT_ROLLED"))
+        const conflict = await roll.POST(post("/hit-points/roll", { nivel: 3 }), params)
+        expect(conflict.status).toBe(409)
+        expect(JSON.stringify(await conflict.json())).toContain("já foi rolado")
     })
 })

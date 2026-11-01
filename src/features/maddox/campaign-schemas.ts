@@ -4,6 +4,8 @@ import {
     MADDOX_CAMPAIGN_NAME_MIN,
     MADDOX_CHARACTER_NAME_MAX,
     MADDOX_CHARACTER_NAME_MIN,
+    MADDOX_LEVEL_MAX,
+    MADDOX_LEVEL_MIN,
     MADDOX_RIGOR_LEVELS,
 } from "./constants"
 
@@ -23,9 +25,12 @@ const showCheckDc = z.boolean({ error: "Escolha se a CD dos testes fica visível
 export const createMaddoxCampaignSchema = z.strictObject({ name: campaignName, rigor, showCheckDc: showCheckDc.optional() })
 export type CreateMaddoxCampaignInput = z.infer<typeof createMaddoxCampaignSchema>
 
+/** Nível inicial da mesa (graus com ficha): o dono ajusta antes de a campanha começar. */
+const startingLevel = z.number({ error: "Escolha o nível inicial" }).int({ error: "Use um número inteiro" }).min(MADDOX_LEVEL_MIN, { error: `O nível vai de ${MADDOX_LEVEL_MIN} a ${MADDOX_LEVEL_MAX}` }).max(MADDOX_LEVEL_MAX, { error: `O nível vai de ${MADDOX_LEVEL_MIN} a ${MADDOX_LEVEL_MAX}` })
+
 export const updateMaddoxCampaignSchema = z
-    .strictObject({ name: campaignName.optional(), rigor: rigor.optional(), showCheckDc: showCheckDc.optional() })
-    .refine((value) => value.name !== undefined || value.rigor !== undefined || value.showCheckDc !== undefined, { error: "Nada para alterar" })
+    .strictObject({ name: campaignName.optional(), rigor: rigor.optional(), showCheckDc: showCheckDc.optional(), startingLevel: startingLevel.optional() })
+    .refine((value) => value.name !== undefined || value.rigor !== undefined || value.showCheckDc !== undefined || value.startingLevel !== undefined, { error: "Nada para alterar" })
 export type UpdateMaddoxCampaignInput = z.infer<typeof updateMaddoxCampaignSchema>
 
 export const maddoxCharacterDraftSchema = z.strictObject({

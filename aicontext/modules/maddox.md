@@ -571,15 +571,15 @@ reiniciar, enviar), `components/interviews/AbilityScoresCard.tsx`. As regras dos
   - Prompts: a entrevista ganha "## Catálogo do DnDicas" antes dos atributos (consultar antes de sugerir raça, classe, subclasse,
     origem, talento ou magia; nunca nomes de memória ou de outras edições; Rigoroso e Fiel exigem raça, classe, subclasse e origem do
     catálogo, Equilibrado prefere o catálogo); o narrador ganha a mesma seção (consultar antes de afirmar mecânica; nos graus sem testes é
-    referência). Tetos de passos: `MADDOX_INTERVIEW_MAX_STEPS = 10`, `MADDOX_NARRATOR_MAX_STEPS = 16`.
+    referência). Tetos de passos: `MADDOX_INTERVIEW_MAX_STEPS = 14` (subiu com as ferramentas da ficha), `MADDOX_NARRATOR_MAX_STEPS = 16`.
 - **Consolidação.** Vale o **último envio** (`submittedAbilityCard`: o card mais novo com valores, enviado ou já `superseded` — um card
   reaberto e não reenviado não apaga o envio anterior nem o bônus). Card aberto e nunca enviado: concluir responde 409
   `ABILITY_SCORES_PENDING` ("Envie os atributos pelo card antes de concluir a entrevista.") sem consolidar. Em Rigoroso e Fiel, um bônus
   de origem fora do catálogo responde 409 `BACKGROUND_NOT_IN_CATALOG` ("O antecedente do bônus (X) não está no catálogo. Peça ao Maddox
   para escolher uma origem do catálogo e reaplicar o bônus.") sem consolidar nem pegar a trava. Com envio, a ficha recebe
   os valores **finais do card** (base + bônus) e ignora os atributos extraídos
-  pela IA (as instruções avisam); o resultado guarda `abilityScores { method, base, bonus, final }`. Entrevistas antigas, sem card,
-  seguem pela extração por IA.
+  pela IA (as instruções avisam); o resultado guarda `abilityScores { method, base, bonus, final }` e o `build`. Nos graus com ficha a
+  ficha inteira sai de `sheet-builder.ts` (veja "Ficha completa pela entrevista").
 - **Tela.** O card aparece abaixo da fala que o abriu: `GlassSelector` do método, grade do conjunto padrão (sem repetir valores),
   `PointBuyControls` com "N/27", painel 4d6 com as pontuações (a nova só aparece quando o dado para) e a sexta calculada,
   distribuição por `GlassSelector`, prévia base/bônus/final e "Enviar atributos" com confirmação ("Depois de enviar, só o Maddox
@@ -592,6 +592,68 @@ API (`maddox.play`, só o próprio membro; `scenario` = 404, grau sem ficha = 40
 - `POST /api/maddox/campaigns/[id]/interviews/character/ability-scores` — `{ method, scores }` → NDJSON.
 - `POST …/ability-scores/roll` — `{}` → `{ roll, interview }` (409 `ROLLS_DONE`, `ROLLS_INVALID`, `ROLL_CONFLICT`).
 - `POST …/ability-scores/reset` — `{}` → `{ interview }` (409 `ROLLS_NOT_RESETTABLE`).
+
+### Nível inicial da mesa (Maddox 5)
+
+- **Definido na entrevista de cenário**, com quem criou a campanha; a pergunta muda por grau (`LEVEL_QUESTION` em
+  `interview-prompt.ts`): Fiel pergunta direto "qual o nível inicial (1 a 20)?" e cita a recomendação do D&D 2024 (1 para
+  iniciantes, 3 para quem conhece); Rigoroso pergunta o número sugerindo 1 ou 3; Equilibrado oferece estágios na ficção do cenário
+  com o número de cada um; Flexível e Narrativo perguntam o **estágio de experiência sem número**, adaptado ao cenário ("acabou de
+  se tornar aventureiro" na fantasia; "caçador recém-iniciado" num cenário como Supernatural — nunca "aventureiro" fora desse tipo).
+- **Campanha:** `startingLevel` (1–20 ou `null`, graus com ficha) e `startingStage` (texto até 300, graus narrativos), gravados pela
+  consolidação do cenário (`scenarioConsolidationSchema`: fora de 1–20 vira `null` sem invalidar o resto). DTO da campanha:
+  `startingLevel`, `startingStage`; chip "Nível inicial N" (ou o estágio) no card e no lobby (`StartingLevelChip`).
+- **Entrevista de personagem:** com nível da mesa, o Maddox só confirma (pedir outro nível = "o nível é da mesa"); sem nível
+  (campanhas antigas), pergunta ao jogador pela regra do grau e grava em `build.level`. Nos graus narrativos o estágio entra na seção
+  "Capacidades e limitações" do perfil.
+- **Edição:** `PATCH /api/maddox/campaigns/[id]` aceita `startingLevel` (dono; só graus com ficha, senão 409 `LEVEL_DISABLED`; só em
+  `lobby`/`interview`, senão 409 `LEVEL_LOCKED`; auditado). O diálogo de edição mostra `StartingLevelField` (`Select` glass de
+  `@/core/ui/select`, níveis 1–20) avisando que fichas já criadas mantêm o nível delas.
+
+### Ficha completa pela entrevista (Maddox 5)
+
+Nos graus com ficha, a entrevista de personagem monta a ficha D&D **inteira** no servidor.
+
+- **Escolhas (`build` na entrevista, `server/character-build.ts`):** `update_character_build` (gravação parcial; tudo ou nada: com um
+  erro, nada é gravado e a mensagem traz o motivo e as opções) e `get_character_build` (só leitura). Ambas devolvem o resumo, as
+  regras da classe no nível e `faltando`. Campos: `nivel` (só sem nível da mesa), `raca`, `classe`, `subclasse`, `origem` (ids do
+  `search_catalog` ou nomes, comparação sem acento/caixa, só ativos), `periciasClasse` (exatamente `skillCount`, de
+  `availableSkills`, sem repetir as da origem), `especialista` (2 por traço "Especialista" até o nível, entre as proficientes),
+  `estiloLuta` (talento "Estilo de Luta", só com o traço), `talentos [{ nivel, talento, atributos? }]` (um por nível de talento da
+  classe: traços "Melhoria de Atributo", "Aumento de Atributo", "Aumento no Valor de Habilidade", "Aperfeiçoamento da pontuação de
+  atributo", "Novo Talento"; "Dádiva Épica" exige a categoria Dádiva Épica; Aumento de Atributo = +2 ou +1/+1 com teto 20, Dádiva
+  até 30; talento com `attributeBonuses` = +1 num dos listados; nível 1 aceita um talento de Origem extra), `truques`/`magias` (pela
+  tabela de progressão da classe ou da subclasse que conjura: quantidade, círculo máximo com espaço e lista de magias),
+  `equipamento [{ item, quantidade, equipado }]` (Fiel/Rigoroso: só itens do catálogo; uma armadura base e um escudo equipados),
+  `moedas { po, pp, pc, pe, pl }`, `idiomas`, `ferramentas`. Trocar a classe apaga as escolhas dependentes (aviso). Equilibrado aceita
+  raça, classe, subclasse, origem, talento e item **próprios** (texto, com aviso) e não cobra o que depende do catálogo. Origem
+  diferente da do bônus de atributos gera aviso para reaplicar o bônus. Regras puras em `character-build-rules.ts`.
+- **Card de PV (`server/interview-hit-points.ts`, `HitPointsCard`):** acima do nível 1, `request_hit_points` abre o card (rascunho até a
+  fala ser gravada; reaberto = anterior `superseded`). Como o assistente de subir de nível da ficha: em cada nível do 2 ao N, "Média"
+  (`averageHpGain` = ⌈lados/2⌉ + CON, mínimo 1) ou "Rolar vida" (1 dado de vida + CON pelo `rollGeneralDice` com as regras de dado do
+  jogador, um por nível, gravado em `hitPointRolls` — só o dado; o CON final entra no total). Nível 1 automático
+  (`getLevelOneHpMax`). Trocar classe ou nível apaga as rolagens. Rotas (`maddox.play`, só o dono da entrevista, `scenario` = 404, grau
+  sem ficha = 409 `SHEET_DISABLED`, sem card = 409 `NO_PENDING_HIT_POINTS`): `POST …/interviews/character/hit-points/roll { nivel }`
+  → `{ roll, interview }` (409 `HIT_POINT_ROLLED`, `ROLL_CONFLICT`) e `POST …/hit-points { escolhas: { "2": "media" | "rolagem" } }` →
+  NDJSON (400 `INVALID_HIT_POINTS` se faltar nível ou "rolagem" sem dado rolado).
+- **Prompt:** seção "## Construção da ficha" (ordem: nível → raça → classe → origem → atributos → bônus → perícias → escolhas de nível →
+  magias → equipamento e moedas pelo D&D 2024 → idiomas e ferramentas; consultar o catálogo antes de sugerir; gravar ao confirmar;
+  não inventar PV, proficiências, deslocamento, tamanho, traços nem espaços; síntese só com `faltando` vazio) e "Ficha: situação
+  atual" a cada turno. MCP: as três ferramentas novas entram no mesmo `dndicas-maddox` com o token da entrevista.
+- **Conclusão:** antes de consolidar e sem pegar a trava — escolhas faltando = 409 `CHARACTER_BUILD_INCOMPLETE` ("Faltam escolhas na
+  ficha: …"); acima do nível 1 sem card de PV válido para o nível e o dado de vida = 409 `HIT_POINTS_PENDING`.
+- **Montagem (`server/sheet-builder.ts`):** campos de raça, classe, subclasse e origem como **HTML de menção** (o formato da criação
+  assistida) com `raceRef`, `classRef`, `subclassRef` (o `_id` da subclasse; a menção usa `subclass:{classe}:{sub}`) e `originRef`;
+  nível; atributos (card + bônus + talentos); tamanho e deslocamento da raça; dado de vida, PV máximo e atual; salvaguardas, armaduras
+  e armas da classe; perícias (origem + classe + Especialista); ferramentas; atributo de conjuração e espaços de magia; traços da
+  classe/subclasse e da raça até o nível (`classFeatures`, `speciesTraits`); talento da origem, estilo e talentos (`featuresNotes`);
+  cargas de traços, talentos e itens (`resourceCharges`); moedas; "Idiomas: …" em `notes`. Coleções: itens (menção, `catalogItemId`,
+  tipo, CA), um ataque por arma equipada (`buildWeaponAttackAutofill`), magias preparadas e o ataque dos truques com dano. As
+  coleções são apagadas e regravadas, então refazer não duplica. A ficha nova é ligada ao personagem logo ao ser criada.
+- **Descritivo (consolidação):** o JSON da síntese não pede mais raça/classe/origem/atributos; pede `appearance` (1–3 parágrafos),
+  `history` (2–5 parágrafos), `personalityTraits`, `ideals`, `bonds`, `flaws`, idade, altura, peso, olhos, pele e cabelo, em texto
+  simples. `textToSheetHtml` converte parágrafos e **negrito** e transforma citações `{{Tipo:Nome}}` em menções do catálogo; os campos
+  curtos saem sem a marcação (`stripCatalogMarkup`). Nenhum campo da ficha guarda `{{…}}`.
 
 API (`maddox.play`, usuário efetivo):
 
@@ -606,6 +668,10 @@ Fora do escopo: dano, PV e recursos aplicados pelo Maddox na ficha, iniciativa e
 `tests/backend/maddox/*` (configuração, roteiros, avatar, sessões, rotas, `campaigns.test.ts` com MongoDB em
 memória, `campaign-routes.test.ts`, `grant-maddox-play.test.ts`) e `tests/frontend/maddox/*`
 (`maddox-tab.test.tsx`, `maddox-campaigns.test.tsx`, `maddox-campaigns-realtime.test.tsx`; happy-dom).
+Maddox 5 (ficha): `interview-character-build.test.ts` (ponta a ponta com o catálogo real em memória: Fiel nível 3 com card de PV e a
+ficha campo a campo, 409 de escolhas e de PV, Mago com magias, refazer sem duplicar, Equilibrado com escolhas próprias, graus
+narrativos), `character-build-rules.test.ts`, `tests/frontend/character-sheets/sheet-rules.test.ts` e
+`tests/frontend/maddox/maddox-interview-hit-points.test.tsx`; fixture do catálogo em `tests/backend/maddox/helpers/sheet-catalog.ts`.
 Maddox 2: `interview-prompt.test.ts`, `interviews.test.ts` (MongoDB em memória, IA/JEV/OpenCode mockados),
 `interview-routes.test.ts`, `catalog-mentions.test.ts`, `catalog-markup.test.ts` e `tests/frontend/maddox/maddox-interview.test.tsx`.
 Maddox 3: `game.test.ts` (MongoDB em memória, presença mockada: 1/2/5 jogadores, "Não fazer nada", pergunta, entrada no

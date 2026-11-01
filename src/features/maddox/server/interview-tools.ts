@@ -5,9 +5,11 @@ import { loggerFor } from "@/lib/logger"
 import type { AttributeType } from "@/features/character-sheets/types/character-sheet.types"
 import { MADDOX_ABILITY_BONUS_MAX, MADDOX_CATALOG_ORIGIN_RIGORS, MADDOX_CATALOG_TOOL_NAMES, MADDOX_INTERVIEW_TOOL_NAMES, MADDOX_SHEET_RIGORS, MADDOX_TOOL_TEXT_MAX, type MaddoxRigorLevel } from "../constants"
 import { normalizeCatalogName } from "../catalog-markup"
-import { MaddoxCampaignModel, MaddoxInterviewModel, type IMaddoxAbilityBonus, type IMaddoxAbilityScoresCard, type IMaddoxInterview, type IMaddoxInterviewMessage } from "../models"
+import { MaddoxCampaignModel, MaddoxInterviewModel, type IMaddoxAbilityBonus, type IMaddoxAbilityScoresCard, type IMaddoxInterview } from "../models"
 import { ABILITY_BY_LABEL, ABILITY_KEYS, ABILITY_LABEL_LIST, abilityMethodLabel, finalScores, rolledScores, scoresLine, validateBonus, type AbilityScores } from "../interview-scores"
 import { MADDOX_ABILITY_LABELS } from "../check-modifier"
+import { latestAbilityCard, latestHitPointsCard } from "./interview-cards"
+import { BUILD_TOOL_DESCRIPTIONS, MaddoxBuildToolError, emptyBuild, getCharacterBuild, loadBuildCatalog, updateBuildInput, updateCharacterBuild, type UpdateBuildInput } from "./character-build"
 
 /**
  * Ferramentas do entrevistador (Maddox 5) — SOMENTE servidor. Atributos do personagem pelo card: abrir/reabrir
@@ -31,6 +33,8 @@ export interface InterviewToolDraft {
     card: { reason: string | null; prefill: IMaddoxAbilityScoresCard["prefill"]; bonus: IMaddoxAbilityBonus | null } | null
     /** O Maddox pediu nova rolagem: as rolagens gravadas são apagadas quando a fala for gravada. */
     resetRolls: boolean
+    /** Card de PV pedido nesta fala (personagem acima do nível 1). */
+    hitPoints?: { reason: string | null; level: number; hitDie: string } | null
 }
 
 const drafts = ((globalThis as unknown as { __maddoxInterviewDrafts?: Map<string, InterviewToolDraft> }).__maddoxInterviewDrafts ??= new Map())
@@ -38,7 +42,7 @@ const drafts = ((globalThis as unknown as { __maddoxInterviewDrafts?: Map<string
 function draftOf(lockToken: string): InterviewToolDraft {
     let draft = drafts.get(lockToken)
     if (!draft) {
-        draft = { card: null, resetRolls: false }
+        draft = { card: null, resetRolls: false, hitPoints: null }
         drafts.set(lockToken, draft)
     }
     return draft
@@ -61,31 +65,7 @@ export interface MaddoxInterviewTool {
     execute: (context: InterviewToolContext, input: never) => Promise<unknown>
 }
 
-/** Último card que vale (o mais novo que não foi substituído). */
-export function latestAbilityCard(messages: readonly IMaddoxInterviewMessage[]): { message: IMaddoxInterviewMessage; card: IMaddoxAbilityScoresCard } | null {
-    for (let index = messages.length - 1; index >= 0; index--) {
-        const card = messages[index]!.abilityScores
-        if (card && card.status !== "superseded") return { message: messages[index]!, card }
-    }
-    return null
-}
-
-/**
- * Último envio do card (o que entra na ficha). Um card reaberto pelo Maddox e não reenviado não apaga o envio anterior:
- * vale o mais novo com valores — enviado ou já substituído (`superseded`) —, com o bônus aplicado a ele.
- */
-export function submittedAbilityCard(messages: readonly IMaddoxInterviewMessage[]): IMaddoxAbilityScoresCard | null {
-    for (let index = messages.length - 1; index >= 0; index--) {
-        const card = messages[index]!.abilityScores
-        if (card && card.base && card.method && (card.status === "submitted" || card.status === "superseded")) return card
-    }
-    return null
-}
-
-/** Card aberto e nenhum envio ainda: os atributos não estão definidos (a conclusão espera o envio). */
-export function abilityCardAwaitingFirstSubmit(messages: readonly IMaddoxInterviewMessage[]): boolean {
-    return latestAbilityCard(messages)?.card.status === "pending" && !submittedAbilityCard(messages)
-}
+export { abilityCardAwaitingFirstSubmit, latestAbilityCard, submittedAbilityCard } from "./interview-cards"
 
 const rollsState = (doc: Pick<IMaddoxInterview, "abilityRolls">) => (doc.abilityRolls ? { scores: doc.abilityRolls.rolls.map((roll) => roll.score), sixth: doc.abilityRolls.sixth, invalid: doc.abilityRolls.invalid } : null)
 
@@ -103,13 +83,13 @@ export function abilityStatusText(doc: Pick<IMaddoxInterview, "messages" | "abil
     return `Atributos enviados (${abilityMethodLabel(card.method!)}): ${scoresLine(base, card.bonus?.parts)}.${bonus}`
 }
 
-async function loadActive(context: InterviewToolContext): Promise<IMaddoxInterview & { rigor: MaddoxRigorLevel }> {
+async function loadActive(context: InterviewToolContext): Promise<IMaddoxInterview & { rigor: MaddoxRigorLevel; startingLevel: number | null }> {
     const doc = await MaddoxInterviewModel.findOne({ _id: context.interviewId, "generating.token": context.lockToken }).lean<IMaddoxInterview>()
     if (!doc) throw new MaddoxInterviewToolError("Esta resposta da entrevista já terminou: as ferramentas só funcionam durante a geração.")
     if (doc.kind !== "character") throw new MaddoxInterviewToolError("Os atributos só existem na entrevista de personagem.")
-    const campaign = await MaddoxCampaignModel.findById(doc.campaignId).select("rigor").lean<{ rigor: (typeof MADDOX_SHEET_RIGORS)[number] }>()
+    const campaign = await MaddoxCampaignModel.findById(doc.campaignId).select("rigor startingLevel").lean<{ rigor: (typeof MADDOX_SHEET_RIGORS)[number]; startingLevel?: number | null }>()
     if (!campaign || !MADDOX_SHEET_RIGORS.includes(campaign.rigor)) throw new MaddoxInterviewToolError("Este grau de rigor não usa atributos: o personagem é só narrativo.")
-    return { ...doc, rigor: campaign.rigor }
+    return { ...doc, rigor: campaign.rigor, startingLevel: campaign.startingLevel ?? null }
 }
 
 interface CatalogOrigin {
@@ -229,6 +209,56 @@ export const MADDOX_INTERVIEW_TOOLS: readonly MaddoxInterviewTool[] = [
                 sugeridos: background?.suggested.map((key) => MADDOX_ABILITY_LABELS[key]) ?? [],
                 final: scoresLine(latest.card.base, parts),
             }
+        },
+    },
+    {
+        name: MADDOX_INTERVIEW_TOOL_NAMES.build,
+        description: BUILD_TOOL_DESCRIPTIONS.update,
+        input: updateBuildInput,
+        readOnly: false,
+        execute: async (context, input: UpdateBuildInput) => {
+            try {
+                return await updateCharacterBuild(context, input)
+            } catch (error) {
+                if (error instanceof MaddoxBuildToolError) throw new MaddoxInterviewToolError(error.message)
+                throw error
+            }
+        },
+    },
+    {
+        name: MADDOX_INTERVIEW_TOOL_NAMES.getBuild,
+        description: BUILD_TOOL_DESCRIPTIONS.get,
+        input: z.object({}),
+        readOnly: true,
+        execute: async (context) => {
+            try {
+                return await getCharacterBuild(context)
+            } catch (error) {
+                if (error instanceof MaddoxBuildToolError) throw new MaddoxInterviewToolError(error.message)
+                throw error
+            }
+        },
+    },
+    {
+        name: MADDOX_INTERVIEW_TOOL_NAMES.hitPoints,
+        description:
+            "Abre, abaixo desta fala, o card de pontos de vida por nível (personagem acima do nível 1), como o assistente de subir de nível da ficha: em cada nível do 2 em diante o jogador escolhe a média ou rola o dado de vida no card. Chame depois de gravar classe e nível. Reabrir mantém as rolagens já feitas.",
+        input: z.object({ motivo: z.string().optional().describe("Frase curta mostrada no card (opcional)") }),
+        readOnly: false,
+        execute: async (context, input: { motivo?: string }) => {
+            const doc = await loadActive(context)
+            const level = doc.startingLevel ?? doc.build?.level ?? null
+            if (!level || level <= 1) throw new MaddoxInterviewToolError("O card de PV só existe acima do nível 1 (no nível 1 os PV são automáticos: máximo do dado + CON).")
+            const catalog = await loadBuildCatalog(doc.build ?? emptyBuild())
+            if (!catalog.cls) throw new MaddoxInterviewToolError("Grave antes uma classe do catálogo (o dado de vida vem dela).")
+            const draft = draftOf(context.lockToken)
+            const latest = latestHitPointsCard(doc.messages)
+            if (draft.hitPoints || (latest?.card.status === "pending" && latest.card.level === level && latest.card.hitDie === catalog.cls.hitDice)) {
+                return { alreadyOpen: true, note: "O card de PV já está aberto para o jogador: aguarde o envio." }
+            }
+            const reason = (input.motivo ?? "").trim()
+            draft.hitPoints = { reason: reason ? reason.slice(0, MADDOX_TOOL_TEXT_MAX) : null, level, hitDie: catalog.cls.hitDice }
+            return { opened: true, niveis: `2 a ${level}`, dadoDeVida: catalog.cls.hitDice, note: "O card aparece abaixo desta fala. Explique em poucas linhas (média ou rolar em cada nível) e aguarde o envio." }
         },
     },
 ]

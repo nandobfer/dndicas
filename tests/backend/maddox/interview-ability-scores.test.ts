@@ -5,6 +5,7 @@ import type { ModelMessage } from "ai"
 import type { AiStreamRequest } from "@/lib/ai/stream"
 import type { MaddoxSettings } from "@/features/maddox/schemas"
 import type { MaddoxInterviewStreamLine } from "@/features/maddox/interview-types"
+import { fighterBuild, seedSheetCatalog, setInterviewBuild } from "./helpers/sheet-catalog"
 
 /**
  * Atributos na entrevista de personagem (Maddox 5), de ponta a ponta: o entrevistador (provedor direto, `streamText`
@@ -190,7 +191,7 @@ describe("atributos pelo card na entrevista de personagem", () => {
         const campaignId = await characterInterview()
         // A entrevista recebe as ferramentas e a seção de atributos (nunca pedir números digitados).
         expect(calls.at(-1)!.via).toBe("tools")
-        expect(calls.at(-1)!.toolNames).toEqual(["request_ability_scores", "get_ability_scores", "apply_ability_bonus", "search_catalog", "get_catalog_entity"])
+        expect(calls.at(-1)!.toolNames).toEqual(["request_ability_scores", "get_ability_scores", "apply_ability_bonus", "update_character_build", "get_character_build", "request_hit_points", "search_catalog", "get_catalog_entity"])
         expect(calls.at(-1)!.instructions).toContain("## Atributos do personagem")
         expect(calls.at(-1)!.instructions).toContain("Nunca peça ao jogador que digite números")
 
@@ -241,8 +242,9 @@ describe("atributos pelo card na entrevista de personagem", () => {
 
         // A consolidação devolve atributos diferentes: valem os do card.
         generateAiText.mockResolvedValueOnce({ text: JSON.stringify({ name: null, profile: { identidade: "Ladra" }, sheet: { race: "Elfo", class: "Ladino", origin: "Criminoso", attributes: { strength: 15, dexterity: 15, constitution: 15, intelligence: 15, wisdom: 15, charisma: 15 } } }) })
+        await setInterviewBuild({}, fighterBuild(await seedSheetCatalog()))
         await completeInterview(campaignId, "character", ids.ana)
-        expect(generateAiText.mock.calls.at(-1)![0].instructions).toContain("Os atributos já foram definidos pelo card")
+        expect(generateAiText.mock.calls.at(-1)![0].instructions).toContain("Os atributos vêm do card de atributos")
         const character = await MaddoxCharacterModel.findOne({ userId: ids.ana }).lean()
         const sheet = await CharacterSheet.findById(character!.sheetId).lean()
         expect(sheet).toMatchObject({ strength: 8, dexterity: 19, constitution: 12, intelligence: 15, wisdom: 9, charisma: 12 })
@@ -365,8 +367,9 @@ describe("atributos pelo card na entrevista de personagem", () => {
         scripted.push([say(PROPOSAL)])
         await run(await interviews.sendInterviewMessage(campaignId, "character", { content: "Deixa como estava. Pode concluir." }, ids.ana))
         generateAiText.mockResolvedValueOnce({ text: JSON.stringify({ name: null, profile: { identidade: "Ladra" }, sheet: { race: "Elfo", class: "Ladino", attributes: { strength: 8, dexterity: 8, constitution: 8, intelligence: 8, wisdom: 8, charisma: 15 } } }) })
+        await setInterviewBuild({}, fighterBuild(await seedSheetCatalog()))
         await completeInterview(campaignId, "character", ids.ana)
-        expect(generateAiText.mock.calls.at(-1)![0].instructions).toContain("Os atributos já foram definidos pelo card")
+        expect(generateAiText.mock.calls.at(-1)![0].instructions).toContain("Os atributos vêm do card de atributos")
         const character = await MaddoxCharacterModel.findOne({ userId: ids.ana }).lean()
         expect(await CharacterSheet.findById(character!.sheetId).lean()).toMatchObject({ strength: 15, dexterity: 16, constitution: 13, intelligence: 13, wisdom: 10, charisma: 8 })
         expect((await interviewDoc()).result).toMatchObject({ abilityScores: { method: "standard", base, bonus: { background: "Criminoso" } } })
@@ -384,6 +387,7 @@ describe("atributos pelo card na entrevista de personagem", () => {
         scripted.push([say(PROPOSAL)])
         await run(await scoresService.submitAbilityScores(campaignId, "character", { method: "point-buy", scores: { strength: 15, dexterity: 15, constitution: 15, intelligence: 8, wisdom: 8, charisma: 8 } }, ids.ana))
         generateAiText.mockResolvedValueOnce({ text: JSON.stringify({ name: null, profile: { identidade: "Guerreira" }, sheet: { race: "Humano", class: "Guerreiro", attributes: null } }) })
+        await setInterviewBuild({}, fighterBuild(await seedSheetCatalog()))
         await completeInterview(campaignId, "character", ids.ana)
         const character = await MaddoxCharacterModel.findOne({ userId: ids.ana }).lean()
         expect(await CharacterSheet.findById(character!.sheetId).lean()).toMatchObject({ strength: 15, dexterity: 15, constitution: 15, intelligence: 8 })
@@ -469,6 +473,7 @@ describe("atributos pelo card na entrevista de personagem", () => {
             scripted.push([call("apply_ability_bonus", { antecedente: "Soldado", bonus: { "Força": 2, "Constituição": 1 } }), say(PROPOSAL)])
             await run(await interviews.sendInterviewMessage(campaignId, "character", { content: "Troca para Soldado." }, ids.ana))
             generateAiText.mockResolvedValueOnce({ text: JSON.stringify({ name: null, profile: { identidade: "Soldada" }, sheet: { race: "Humano", class: "Guerreiro", attributes: null } }) })
+            await setInterviewBuild({}, fighterBuild(await seedSheetCatalog()))
             await completeInterview(campaignId, "character", ids.ana)
             const character = await MaddoxCharacterModel.findOne({ userId: ids.ana }).lean()
             expect(await CharacterSheet.findById(character!.sheetId).lean()).toMatchObject({ strength: 17, constitution: 14 })

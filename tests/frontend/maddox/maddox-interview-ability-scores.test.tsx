@@ -71,6 +71,8 @@ const campaign = (over: Partial<MaddoxCampaignDetailDto> = {}): MaddoxCampaignDe
     startedAt: null,
     scenarioStatus: "in-progress",
     showCheckDc: false,
+    startingLevel: null,
+    startingStage: "",
     createdAt: "2026-10-30T10:00:00.000Z",
     updatedAt: "2026-10-30T10:00:00.000Z",
     myMemberId: "m1",
@@ -278,5 +280,26 @@ describe("card de atributos da entrevista (Maddox 5)", () => {
         const section = await card()
         expect(within(section).getByRole("button", { name: /Enviar atributos/ })).toBeDisabled()
         expect(within(screen.getByTestId("ability-standard-strength")).getByRole("button", { name: "15" })).toBeDisabled()
+    })
+
+    it("card de PV na conversa: rola o nível pela rota da entrevista e envia as escolhas pelo stream", async () => {
+        const hitPoints = { status: "pending" as const, level: 2, hitDie: "d10", constitutionModifier: 1, levelOne: 11, rows: [{ level: 2, average: 6, die: null, rolled: null }], choices: null, total: null, reason: null, submittedAt: null }
+        const state = interview({ kind: "character", messages: [msg("a1", "maddox", "Seus PV:", { hitPoints })] })
+        mockGets(characterCampaign(), state)
+        post.mockImplementation(async () => ok({ roll: { rollId: "r1" }, interview: interview({ kind: "character", messages: [msg("a1", "maddox", "Seus PV:", { hitPoints: { ...hitPoints, rows: [{ level: 2, average: 6, die: 8, rolled: 9 }] } })] }) }))
+        const stream = streamFetch()
+        renderWithQueryClient(<InterviewPage campaignId="c1" kind="character" />)
+        const section = await screen.findByTestId("hit-points-card")
+        fireEvent.click(within(screen.getByTestId("hit-points-row-2")).getByRole("button", { name: "Rolar vida" }))
+        fireEvent.click(within(section).getByRole("button", { name: "Rolar vida do nível 2" }))
+        await waitFor(() => expect(post).toHaveBeenCalledWith("/maddox/campaigns/c1/interviews/character/hit-points/roll", { nivel: 2 }))
+        await waitFor(() => expect(screen.getByTestId("hit-points-total")).toHaveTextContent("PV máximo: 20"))
+        fireEvent.click(screen.getByRole("button", { name: /Enviar pontos de vida/ }))
+        fireEvent.click(await screen.findByRole("button", { name: "Enviar" }))
+        await waitFor(() => expect(stream.fetchMock).toHaveBeenCalled())
+        const [url, init] = stream.fetchMock.mock.calls[0] as unknown as [string, RequestInit]
+        expect(url).toContain("/api/maddox/campaigns/c1/interviews/character/hit-points")
+        expect(JSON.parse(String(init.body))).toEqual({ escolhas: { "2": "rolagem" } })
+        act(() => stream.end())
     })
 })
