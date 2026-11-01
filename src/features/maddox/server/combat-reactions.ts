@@ -105,6 +105,10 @@ async function settleReaction(campaignId: Types.ObjectId, message: MessageDoc, s
         const counterspell = Boolean(option && !failedSlot && /contramagica|counterspell/.test(name))
         const uncanny = Boolean(option && /esquiva sobrenatural|uncanny dodge/.test(name))
         const attackOption = Boolean(option && !failedSlot && option.attack && (option.id === "opportunity" || option.category === "weapons" || (option.category === "spells" && option.resolution === "attack")))
+        const attackSource = attackOption && reaction.sourceKey ? findActor(combat, reaction.sourceKey) : null
+        // Ataque sem alvo (janela aberta sem `fonte`): a reação não sai e não é gasta.
+        const noTarget = attackOption && !attackSource
+        if (noTarget) outcome.push(`Sem o adversário que provocou o ataque, ${option!.label} não saiu (a reação não foi gasta).`)
 
         let counterResult: string | null = null
         if (counterspell && reaction.sourceKey) {
@@ -118,10 +122,18 @@ async function settleReaction(campaignId: Types.ObjectId, message: MessageDoc, s
             }
         }
 
+        // O callback pode rodar de novo num conflito de versão: as linhas, a escrita de PV e o card do ataque saem da
+        // última execução (sem acumular), e o card só é atualizado depois da gravação.
+        let applied: string[] = []
+        let attackCard: { amount: number; note: string | null; hit: boolean } | null = null
         await mutateTactical(campaignId, async (live) => {
+            const lines: string[] = []
+            applied = lines
+            attackCard = null
+            hpWrite = null
             const me = findActor(live, actorKey)
             if (!me || me.kind !== "character") return
-            if (option && !failedSlot) me.state.economy.reaction = false
+            if (option && !failedSlot && !noTarget) me.state.economy.reaction = false
             if (shield) me.state.flags.shield = true
             if (option?.id === "ready") me.state.ready = null
             const attack = reaction.pendingAttack
@@ -132,24 +144,27 @@ async function settleReaction(campaignId: Types.ObjectId, message: MessageDoc, s
                 const ac = (sheet?.armorClass ?? 10) + (me.state.flags.shield ? 5 : 0)
                 const still = attackOutcome(attack.d20, attack.total, ac)
                 if (!still.hit) {
-                    outcome.push(`Com o Escudo (CA ${ac}), o ataque de ${attack.attackerName} (${attack.total}) errou.`)
-                    await settleAttackCard(campaignId, message.turnNumber, attack.attackerKey, actorKey, { amount: 0, note: "errou (Escudo)", hit: false })
+                    lines.push(`Com o Escudo (CA ${ac}), o ataque de ${attack.attackerName} (${attack.total}) errou.`)
+                    attackCard = { amount: 0, note: "errou (Escudo)", hit: false }
                 } else if (sheet) {
                     const amount = uncanny ? Math.floor(attack.damage / 2) : attack.damage
                     const hp: CharacterHp = { ...sheet.hp, deathSaves: { ...sheet.deathSaves } }
                     const result = characterDamage(me.state, hp, amount, attack.critical)
                     hpWrite = { state: me.state, hp }
-                    outcome.push(`${attack.attackerName} acertou mesmo assim: ${amount} de dano${attack.damageType ? ` ${attack.damageType}` : ""}${uncanny ? " (metade, Esquiva Sobrenatural)" : ""}${result.notes.length ? ` (${result.notes.join("; ")})` : ""}.`)
-                    await settleAttackCard(campaignId, message.turnNumber, attack.attackerKey, actorKey, { amount, note: result.notes.join("; ") || null, hit: true })
+                    lines.push(`${attack.attackerName} acertou mesmo assim: ${amount} de dano${attack.damageType ? ` ${attack.damageType}` : ""}${uncanny ? " (metade, Esquiva Sobrenatural)" : ""}${result.notes.length ? ` (${result.notes.join("; ")})` : ""}.`)
+                    attackCard = { amount, note: result.notes.join("; ") || null, hit: true }
                 }
             }
         })
+        outcome.push(...applied)
+        const card = attackCard as { amount: number; note: string | null; hit: boolean } | null
+        if (card && reaction.pendingAttack) await settleAttackCard(campaignId, message.turnNumber, reaction.pendingAttack.attackerKey, actorKey, card)
         if (counterResult) outcome.push(counterResult)
         if (option && !failedSlot && !shield && !counterspell && !attackOption && !uncanny) outcome.push(`${message.characterName ?? "O personagem"} usou ${option.label} como reação (${reaction.description}).`)
         if (shield && !reaction.pendingAttack) outcome.push(`${message.characterName ?? "O personagem"} conjurou Escudo: +5 na CA até o próximo turno.`)
-        if (attackOption && option?.attack && reaction.sourceKey) {
-            const source = findActor(combat, reaction.sourceKey)
-            if (source) {
+        if (attackOption && option?.attack && attackSource) {
+            const source = attackSource
+            {
                 spawnedAction = {
                     combatId: String(combat._id),
                     round: combat.tactical.round,
@@ -164,7 +179,9 @@ async function settleReaction(campaignId: Types.ObjectId, message: MessageDoc, s
                     spellLevel: null,
                     freeText: null,
                     status: "pending",
-                    steps: [attackStep(source.key, source.name, option.attack.bonus)],
+                    // Ataque e dano rolados pelo jogador (o dano só se o ataque acertar), como na Ação.
+                    steps: [attackStep(source.key, source.name, option.attack.bonus), ...(option.attack.damage && option.attack.damage !== "0" ? [damageStep(source.key, source.name, option.attack.damage, option.attack.damageType)] : [])],
+                    ranged: Boolean(option.attack.ranged),
                     summary: `${message.characterName} — Reação: ${option.label} em ${source.name}`,
                     waitRound: reaction.waitRound,
                 }
@@ -226,11 +243,18 @@ const attackStep = (key: string, name: string, bonus: number): CombatActionStep 
     skill: null,
 })
 
+const damageStep = (key: string, name: string, dice: string, damageType: string | null): CombatActionStep => ({ ...attackStep(key, name, 0), kind: "damage", dice, damageType })
+
 /** Sem reação: aplica o dano do golpe que esperava a escolha. */
 async function applyPendingAttack(campaignId: Types.ObjectId, message: MessageDoc, actorKey: string, outcome: string[]) {
     const attack = message.combatReaction.pendingAttack!
     let write: { sheetId: string; hp: CharacterHp } | null = null
+    let line: string | null = null
+    let card: { amount: number; note: string | null; hit: boolean } | null = null
     await mutateTactical(campaignId, async (live) => {
+        write = null
+        line = null
+        card = null
         const me = findActor(live, actorKey)
         if (!me || me.kind !== "character" || !me.state.sheetId) return
         const { loadCombatSheets } = await import("./combat-sheet")
@@ -239,9 +263,11 @@ async function applyPendingAttack(campaignId: Types.ObjectId, message: MessageDo
         const hp: CharacterHp = { ...sheet.hp, deathSaves: { ...sheet.deathSaves } }
         const result = characterDamage(me.state, hp, attack.damage, attack.critical)
         write = { sheetId: me.state.sheetId, hp }
-        outcome.push(`${attack.attackerName} acertou: ${attack.damage} de dano${attack.damageType ? ` ${attack.damageType}` : ""}${result.notes.length ? ` (${result.notes.join("; ")})` : ""}.`)
-        await settleAttackCard(campaignId, message.turnNumber, attack.attackerKey, actorKey, { amount: attack.damage, note: result.notes.join("; ") || null, hit: true })
+        line = `${attack.attackerName} acertou: ${attack.damage} de dano${attack.damageType ? ` ${attack.damageType}` : ""}${result.notes.length ? ` (${result.notes.join("; ")})` : ""}.`
+        card = { amount: attack.damage, note: result.notes.join("; ") || null, hit: true }
     })
+    if (line) outcome.push(line)
+    if (card) await settleAttackCard(campaignId, message.turnNumber, attack.attackerKey, actorKey, card)
     if (write) {
         const { writeSheetHitPoints } = await import("./combat-sheet")
         const done = write as { sheetId: string; hp: CharacterHp }

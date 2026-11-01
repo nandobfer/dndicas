@@ -583,6 +583,8 @@ export async function offerReaction(campaignId: Types.ObjectId, jobId: string, t
     if (!canWait(workspace)) throw new TacticalToolError("Limite de esperas deste turno atingido: siga sem reações.")
     const trigger = TRIGGER_OF[input.gatilho]
     const source = input.fonte ? targetOf(workspace, input.fonte) : null
+    // O ataque de oportunidade precisa do alvo: sem a fonte, o jogador gastaria a reação sem ter em quem bater.
+    if (trigger === "leave-reach" && source?.kind !== "combatant") throw new TacticalToolError("Para o ataque de oportunidade, informe em `fonte` o adversário que saiu do alcance.")
     if (trigger === "leave-reach" && source?.kind === "combatant" && source.state.flags.disengaged) throw new TacticalToolError(`${source.name} se desengajou: não provoca ataque de oportunidade.`)
     const opened: string[] = []
     const skipped: string[] = []

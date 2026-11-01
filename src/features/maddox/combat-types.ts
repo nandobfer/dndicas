@@ -170,6 +170,9 @@ export interface IMaddoxCombatAction {
     save?: { ability: AttributeType; dc: number; halfOnSave: boolean } | null
     /** Ataque à distância (desvantagem contra alvo caído, sem crítico automático). */
     ranged?: boolean
+    /** Gravados no card: pode cancelar; passo reivindicado por uma rolagem em andamento (uma chamada vence). */
+    cancellable?: boolean
+    rollingStep?: number | null
 }
 
 export interface IMaddoxCombatRoll {

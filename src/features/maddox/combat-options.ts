@@ -329,6 +329,21 @@ function spellOption(spell: OptionSpell, sheet: OptionSheet, economy: CombatEcon
 
 const isHealingItem = (item: OptionItem) => Boolean(item.effectDice) && /(cura|curar|pontos de vida|healing)/.test(fold(`${item.name} ${item.description}`))
 
+/** Primeira expressão de dados do texto da habilidade ("1d10 + seu nível" → "1d10"). */
+const firstDice = (text: string) => /\b(\d+)\s*d\s*(\d+)\b/i.exec(text)?.slice(1, 3).join("d") ?? null
+
+/**
+ * Resolução da habilidade pelo servidor só quando o texto dá os números: cura e acerto automático precisam dos dados;
+ * ataque e salvaguarda precisam de bônus/CD que a habilidade não traz. Sem isso, vira utilitária (o Maddox resolve).
+ */
+function abilityResolution(ability: OptionAbility): Pick<CombatOption, "resolution" | "heal" | "attack"> {
+    const resolution = ability.profile?.resolution ?? "utility"
+    const amount = firstDice(ability.description)
+    if (resolution === "heal" && amount) return { resolution, heal: { dice: amount } }
+    if (resolution === "auto" && amount) return { resolution, attack: { bonus: 0, damage: amount, damageType: null, ranged: false, light: false } }
+    return { resolution: "utility" }
+}
+
 function abilityOption(ability: OptionAbility, economy: CombatEconomySlot): CombatOption {
     return {
         id: `ability:${ability.id}`,
@@ -338,7 +353,7 @@ function abilityOption(ability: OptionAbility, economy: CombatEconomySlot): Comb
         detail: ability.profile ? (ability.charge ? `${ability.charge.total - ability.charge.used}/${ability.charge.total} usos` : "Habilidade") : "Custo não identificado: o Maddox confere",
         target: "any",
         multiTarget: false,
-        resolution: ability.profile?.resolution ?? "utility",
+        ...abilityResolution(ability),
         ...(ability.charge ? { charges: { chargeId: ability.charge.id, used: ability.charge.used, total: ability.charge.total } } : {}),
         ...(ability.profile ? {} : { uncertain: true }),
         ...(ability.profile?.trigger ? { trigger: ability.profile.trigger } : {}),
@@ -400,7 +415,10 @@ export function buildCombatOptions(input: CombatOptionsInput): CombatOptions {
     }
     if (economy.bonus && economy.lightAttack) {
         // Propriedade Leve: o ataque extra é com OUTRA arma Leve (ou a mesma, se houver duas).
-        for (const weapon of weapons.filter(isLight)) bonus.push(weaponOption(weapon, sheet, "bonus", true))
+        for (const weapon of weapons.filter(isLight)) {
+            if (economy.lightWeaponId && weapon.id === economy.lightWeaponId && weapon.quantity < 2) continue
+            bonus.push(weaponOption(weapon, sheet, "bonus", true))
+        }
     }
 
     for (const spell of input.spells) {

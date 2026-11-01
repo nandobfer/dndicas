@@ -44,9 +44,11 @@ export interface CombatEconomy {
     slotSpellCast: boolean
     /** Atacou com uma arma Leve na ação Atacar (libera o ataque com a outra arma Leve na Ação bônus). */
     lightAttack: boolean
+    /** Arma Leve usada na ação Atacar: a Ação bônus só oferece OUTRA (ou a mesma, havendo duas). */
+    lightWeaponId?: string | null
 }
 
-export const freshEconomy = (): CombatEconomy => ({ action: true, bonus: true, reaction: true, attacksLeft: 0, attackAction: false, slotSpellCast: false, lightAttack: false })
+export const freshEconomy = (): CombatEconomy => ({ action: true, bonus: true, reaction: true, attacksLeft: 0, attackAction: false, slotSpellCast: false, lightAttack: false, lightWeaponId: null })
 
 export interface CombatSubject {
     conditions: readonly CombatCondition[]

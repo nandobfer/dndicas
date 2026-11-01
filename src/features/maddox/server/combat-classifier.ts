@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto"
 import { loggerFor } from "@/lib/logger"
-import { MADDOX_COMBAT_CLASSIFY_TIMEOUT_MS, MADDOX_COMBAT_COSTS, MADDOX_JEV_MODEL, MADDOX_REACTION_TRIGGERS, type MaddoxCombatCost, type MaddoxReactionTrigger } from "../constants"
+import { MADDOX_COMBAT_CLASSIFY_RETRY_MS, MADDOX_COMBAT_CLASSIFY_TIMEOUT_MS, MADDOX_COMBAT_COSTS, MADDOX_JEV_MODEL, MADDOX_REACTION_TRIGGERS, type MaddoxCombatCost, type MaddoxReactionTrigger } from "../constants"
 import { profileFromText, type CombatProfile } from "../combat-options"
 
 /**
@@ -27,6 +27,17 @@ export const textHashOf = (text: string) => createHash("sha256").update(text.tri
 const keyOf = (entry: ClassifyEntry) => `${entry.entityType}:${entry.entityId}:${textHashOf(entry.text)}`
 
 const inflight = ((globalThis as unknown as { __maddoxClassifying?: Set<string> }).__maddoxClassifying ??= new Set<string>())
+/**
+ * Cache negativo em memória: quando a habilidade já foi mandada ao JEV (ou a chave estava desligada, ou falhou), não
+ * tenta de novo antes de `MADDOX_COMBAT_CLASSIFY_RETRY_MS` — cada leitura da mesa do jogador da vez não refaz chamadas
+ * pagas nem consultas de configuração. Instância única (como o barramento da mesa).
+ */
+const attempted = ((globalThis as unknown as { __maddoxClassifyAttempted?: Map<string, number> }).__maddoxClassifyAttempted ??= new Map<string, number>())
+
+/** Só para testes: esquece as tentativas. */
+export function resetClassifierAttempts(): void {
+    attempted.clear()
+}
 
 /** Perfis em cache ou pelo texto; o que faltar vai para o JEV em segundo plano (quando a chave está ligada). */
 export async function resolveProfiles(entries: readonly ClassifyEntry[], onClassified?: () => void | Promise<void>): Promise<Map<string, CombatProfile | null>> {
@@ -54,7 +65,13 @@ export async function resolveProfiles(entries: readonly ClassifyEntry[], onClass
         result.set(key, null)
         missing.push(entry)
     }
-    if (missing.length) void classifyInBackground(missing, onClassified)
+    const now = Date.now()
+    const due = missing.filter((entry) => {
+        const at = attempted.get(keyOf(entry))
+        return at === undefined || now - at >= MADDOX_COMBAT_CLASSIFY_RETRY_MS
+    })
+    for (const entry of due) attempted.set(keyOf(entry), now)
+    if (due.length) void classifyInBackground(due, onClassified)
     return result
 }
 

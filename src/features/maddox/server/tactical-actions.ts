@@ -126,13 +126,11 @@ export async function submitCombatAction(campaignId: string, input: MaddoxCombat
     const spellLevel = option.spell && option.spell.circle > 0 ? (input.spellLevel ?? option.spell.levels[0]) : null
     if (option.spell && option.spell.circle > 0 && (!spellLevel || !option.spell.levels.includes(spellLevel))) throw new DomainError(409, "Não há espaço de magia livre nesse círculo.", "SPELL_SLOT_UNAVAILABLE")
 
-    // Recursos da ficha: gastos antes de gravar a ação (o servidor já conferiu que existem).
-    const sheetId = actor.state.sheetId!
-    const { spendSpellSlot, spendResourceCharge, consumeSheetItem } = await import("./combat-sheet")
-    if (spellLevel && !(await spendSpellSlot(sheetId, spellLevel))) throw new DomainError(409, "Não há espaço de magia livre nesse círculo.", "SPELL_SLOT_UNAVAILABLE")
-    if (option.charges && !(await spendResourceCharge(sheetId, option.charges.chargeId))) throw new DomainError(409, "Esta habilidade não tem mais usos.", "NO_CHARGES")
-    if (option.category === "items" && option.id.startsWith("item:")) {
-        if (!(await consumeSheetItem(sheetId, option.id.split(":")[1]!))) throw new DomainError(409, "Você não tem mais esse item.", "ITEM_UNAVAILABLE")
+    // Os dados que o servidor precisa para resolver a opção: sem eles, recusa antes de reservar ou gastar qualquer coisa.
+    const unresolvable = option.resolution === "attack" ? !option.attack : option.resolution === "auto" ? !option.attack?.damage : option.resolution === "heal" ? !option.heal?.dice : false
+    if (unresolvable) {
+        log.warn({ campaignId, option: option.id, resolution: option.resolution }, "[maddox] opção de combate sem os dados para resolver")
+        throw new DomainError(409, "Esta opção não tem os dados para o servidor resolver; use \"Outra ação\" e descreva o efeito.", "OPTION_UNRESOLVABLE")
     }
 
     // Passos e efeitos imediatos.
@@ -162,9 +160,13 @@ export async function submitCombatAction(campaignId: string, input: MaddoxCombat
         steps.push(newStep({ kind: "check", skill: input.skill ?? option.skills?.[0] ?? null, dice: "1d20", note: standard === "hide" ? "CD 15" : null }))
     } else status = "resolved"
 
-    const { combat: saved } = await mutateTactical(campaign._id, (current) => {
+    // Reserva a Ação/Ação bônus (troca condicional pela versão do combate) ANTES de gastar recursos da ficha: uma
+    // confirmação concorrente cai em ACTION_ALREADY_USED sem perder espaço, carga ou item.
+    let snapshot: Pick<TacticalCharacterState, "economy" | "concentration" | "flags" | "ready"> | null = null
+    await mutateTactical(campaign._id, (current) => {
         const me = findActor(current, actor.key)
         if (!me || me.kind !== "character") throw new DomainError(409, "Não há combate tático em andamento.", "NO_COMBAT")
+        snapshot = structuredClone({ economy: me.state.economy, concentration: me.state.concentration, flags: me.state.flags, ready: me.state.ready })
         const economy = me.state.economy
         if (option.economy === "bonus") {
             if (!economy.bonus) throw new DomainError(409, "Você já usou a Ação bônus neste turno.", "ACTION_ALREADY_USED")
@@ -176,7 +178,10 @@ export async function submitCombatAction(campaignId: string, input: MaddoxCombat
                 economy.attacksLeft = Math.max(0, view.options.attacksPerAction - 1)
             } else if (economy.attackAction && economy.attacksLeft > 0) economy.attacksLeft -= 1
             else throw new DomainError(409, "Você já usou a Ação neste turno.", "ACTION_ALREADY_USED")
-            if (option.attack?.light) economy.lightAttack = true
+            if (option.attack?.light && !economy.lightAttack) {
+                economy.lightAttack = true
+                economy.lightWeaponId = option.id.slice("weapon:".length)
+            }
         } else {
             if (!economy.action) throw new DomainError(409, "Você já usou a Ação neste turno.", "ACTION_ALREADY_USED")
             economy.action = false
@@ -198,7 +203,31 @@ export async function submitCombatAction(campaignId: string, input: MaddoxCombat
         // Save sem dano: aplica a salvaguarda rolada aos alvos (o efeito, o Maddox narra).
         return null
     })
-    void saved
+
+    // Recursos da ficha, depois da reserva; se um gasto falhar, a economia e os efeitos da reserva voltam.
+    const sheetId = actor.state.sheetId!
+    const { spendSpellSlot, spendResourceCharge, consumeSheetItem } = await import("./combat-sheet")
+    const refund = async () => {
+        const previous = snapshot
+        if (!previous) return
+        await mutateTactical(campaign._id, (live) => {
+            const me = findActor(live, actor.key)
+            if (!me || me.kind !== "character") return
+            Object.assign(me.state, structuredClone(previous))
+        }).catch((error: unknown) => log.warn({ campaignId, actor: actor.name, err: error }, "[maddox] não foi possível devolver a economia depois de um gasto recusado"))
+    }
+    if (spellLevel && !(await spendSpellSlot(sheetId, spellLevel))) {
+        await refund()
+        throw new DomainError(409, "Não há espaço de magia livre nesse círculo.", "SPELL_SLOT_UNAVAILABLE")
+    }
+    if (option.charges && !(await spendResourceCharge(sheetId, option.charges.chargeId))) {
+        await refund()
+        throw new DomainError(409, "Esta habilidade não tem mais usos.", "NO_CHARGES")
+    }
+    if (option.category === "items" && option.id.startsWith("item:") && !(await consumeSheetItem(sheetId, option.id.split(":")[1]!))) {
+        await refund()
+        throw new DomainError(409, "Você não tem mais esse item.", "ITEM_UNAVAILABLE")
+    }
 
     if (standard === "dodge" || standard === "disengage" || standard === "dash") notes.push(MADDOX_STANDARD_ACTION_DEFS[standard].detail)
     if (standard === "ready") notes.push(`Preparou: ${input.readyTrigger?.trim() || freeText || "gatilho descrito"}`)
@@ -275,10 +304,38 @@ export async function rollCombatAction(campaignId: string, actionId: string, use
     if (action.status !== "pending") throw new DomainError(409, "Esta ação já foi resolvida.", "ACTION_RESOLVED")
     const index = action.steps.findIndex((item) => item.status === "pending")
     if (index < 0) throw new DomainError(409, "Esta ação já foi resolvida.", "ACTION_RESOLVED")
-    const current = action.steps[index]!
     const combat = await findActiveTactical(campaign._id)
     const actor = combat ? findActor(combat, action.actorKey) : null
     if (!combat || !actor || actor.kind !== "character") throw new DomainError(409, "O combate terminou.", "NO_COMBAT")
+
+    // Reivindica o passo ANTES de rolar: duas chamadas no mesmo card (dois cliques, retentativa de rede) não aplicam o
+    // efeito duas vezes — só quem marca `rollingStep` rola; a outra recebe 409.
+    const claimed = await MaddoxCampaignMessageModel.updateOne(
+        { _id: message._id, "combatAction.status": "pending", [`combatAction.steps.${index}.status`]: "pending", "combatAction.rollingStep": null },
+        { $set: { "combatAction.rollingStep": index, "combatAction.cancellable": false } },
+    )
+    if (claimed.modifiedCount === 0) throw new DomainError(409, "Este passo já está sendo rolado.", "ACTION_RESOLVED")
+    const release = () => MaddoxCampaignMessageModel.updateOne({ _id: message._id, "combatAction.rollingStep": index }, { $set: { "combatAction.rollingStep": null, "combatAction.cancellable": action.cancellable ?? false } }).catch(() => undefined)
+    try {
+        return await rollClaimedStep(campaignId, userId, campaign, message, action, index, combat, actor)
+    } catch (error) {
+        await release()
+        throw error
+    }
+}
+
+async function rollClaimedStep(
+    campaignId: string,
+    userId: string,
+    campaign: CampaignDoc,
+    message: MessageDoc,
+    action: IMaddoxCombatAction,
+    index: number,
+    combat: TacticalCombat,
+    actor: Extract<CombatActor, { kind: "character" }>,
+): Promise<{ roll: DiceRollResponse; state: MaddoxGameStateDto }> {
+    const actionId = String(message._id)
+    const current = action.steps[index]!
     const { loadCharacterOptions } = await import("./tactical-options")
     const view = (await loadCharacterOptions([actor.state])).get(actor.key)
     const { sheetSkill } = await import("./combat-sheet")
@@ -306,16 +363,32 @@ export async function rollCombatAction(campaignId: string, actionId: string, use
         roll = await rollExpression(expression ? formatDiceExpression(critical ? criticalExpression(expression) : expression) : current.dice, { label: `${action.label} · ${current.kind === "heal" ? "cura" : "dano"}`, userId: message.userId })
     }
 
-    const steps = action.steps.map((item) => ({ ...item }))
-    const done = steps[index]!
-    done.status = "done"
-    done.roll = roll
-    done.total = roll.total
-    done.mode = mode
-    const hpWrites: { state: TacticalCharacterState; hp: CharacterHp }[] = []
-    const extraRolls: Record<string, unknown>[] = []
+    // Magia de salvaguarda: as salvaguardas dos adversários são roladas UMA vez, aqui (o callback abaixo pode rodar de novo).
+    const areaSpell = current.kind === "damage" && action.category === "spells" && action.targets.length > 0 && !action.steps.some((item) => item.kind === "attack")
+    const saveRolls = new Map<string, DiceRollResponse | null>()
+    if (areaSpell && action.save) {
+        for (const ref of action.targets) {
+            const each = findActor(combat, ref.actorKey)
+            if (each?.kind !== "combatant") continue
+            const forced = saveMode(each.state, action.save.ability)
+            saveRolls.set(each.key, forced === "fail" ? null : await rollExpression(d20Expression(each.state.stats.saves[action.save.ability] ?? 0), { mode: forced, label: `${each.name} · salvaguarda` }))
+        }
+    }
+
+    // Cópias de trabalho refeitas a cada execução do callback (conflito de versão = nova execução, sem acumular).
+    let steps: CombatActionStep[] = []
+    let hpWrites: { state: TacticalCharacterState; hp: CharacterHp }[] = []
+    let extraRolls: Record<string, unknown>[] = []
 
     await mutateTactical(campaign._id, async (live) => {
+        steps = action.steps.map((item) => ({ ...item }))
+        hpWrites = []
+        extraRolls = []
+        const done = steps[index]!
+        done.status = "done"
+        done.roll = roll
+        done.total = roll.total
+        done.mode = mode
         const me = findActor(live, actor.key)
         if (!me || me.kind !== "character") return
         if (helpedUsed) me.state.flags.helped = null
@@ -345,8 +418,7 @@ export async function rollCombatAction(campaignId: string, actionId: string, use
                     const each = findActor(live, ref.actorKey)
                     if (!each) continue
                     if (option?.save && each.kind === "combatant") {
-                        const forced = saveMode(each.state, option.save.ability)
-                        const saveRoll = forced === "fail" ? null : await rollExpression(d20Expression(each.state.stats.saves[option.save.ability] ?? 0), { mode: forced, label: `${each.name} · salvaguarda` })
+                        const saveRoll = saveRolls.get(each.key) ?? null
                         const success = saveRoll ? saveRoll.total >= option.save.dc : false
                         const amount = success ? (option.save.halfOnSave ? Math.floor(roll.total / 2) : 0) : roll.total
                         const saveStep = newStep({ kind: "save", targetKey: each.key, targetName: each.name, status: "done", roller: "server", roll: saveRoll, total: saveRoll?.total ?? null, success, amount, damageType: done.damageType, note: saveRoll ? null : "falha automática" })
@@ -379,7 +451,7 @@ export async function rollCombatAction(campaignId: string, actionId: string, use
     const resolved = !steps.some((item) => item.status === "pending")
     const nextAction: IMaddoxCombatAction = { ...action, steps, status: resolved ? "resolved" : "pending" }
     nextAction.summary = actionSummary(nextAction)
-    await MaddoxCampaignMessageModel.updateOne({ _id: message._id, "combatAction.status": "pending" }, { $set: { combatAction: { ...nextAction, cancellable: false } } })
+    await MaddoxCampaignMessageModel.updateOne({ _id: message._id, "combatAction.rollingStep": index }, { $set: { combatAction: { ...nextAction, cancellable: false, rollingStep: null } } })
     for (const write of hpWrites) await writeHp(write.state, write.hp)
     if (extraRolls.length) await MaddoxCampaignMessageModel.insertMany(extraRolls.map((roll) => ({ ...roll, campaignId: campaign._id, turnNumber: message.turnNumber, phase: message.phase })))
     await afterDeaths(campaign._id)
@@ -418,7 +490,7 @@ export async function cancelCombatAction(campaignId: string, actionId: string, u
     const action = message?.combatAction
     if (!message || !action) throw new DomainError(404, "Ação não encontrada", "NOT_FOUND")
     if (action.status !== "pending" || !action.cancellable || action.steps.some((item) => item.status === "done")) throw new DomainError(409, "Esta ação já não pode ser cancelada.", "ACTION_NOT_CANCELLABLE")
-    const cancelled = await MaddoxCampaignMessageModel.updateOne({ _id: message._id, "combatAction.status": "pending" }, { $set: { "combatAction.status": "cancelled", "combatAction.summary": actionSummary({ ...action, status: "cancelled" }) } })
+    const cancelled = await MaddoxCampaignMessageModel.updateOne({ _id: message._id, "combatAction.status": "pending", "combatAction.rollingStep": null }, { $set: { "combatAction.status": "cancelled", "combatAction.summary": actionSummary({ ...action, status: "cancelled" }) } })
     if (cancelled.modifiedCount === 0) throw new DomainError(409, "Esta ação já não pode ser cancelada.", "ACTION_NOT_CANCELLABLE")
     // A ação Atacar volta inteira quando nenhum ataque foi rolado nela; senão, só o ataque cancelado volta.
     const rolledAttacks = await MaddoxCampaignMessageModel.exists({ campaignId: campaign._id, turnNumber: message.turnNumber, kind: "combat-action", "combatAction.actorKey": actor.key, "combatAction.category": "weapons", "combatAction.economy": "action", "combatAction.status": "resolved" })
@@ -429,7 +501,7 @@ export async function cancelCombatAction(campaignId: string, actionId: string, u
         if (action.economy === "bonus") economy.bonus = true
         else if (action.category === "weapons") {
             if (rolledAttacks) economy.attacksLeft += 1
-            else Object.assign(economy, { action: true, attackAction: false, attacksLeft: 0, lightAttack: false })
+            else Object.assign(economy, { action: true, attackAction: false, attacksLeft: 0, lightAttack: false, lightWeaponId: null })
         } else economy.action = true
     })
     await publishGameChanged(campaign._id)
@@ -527,6 +599,19 @@ export async function rollCombatRoll(campaignId: string, rollId: string, userId:
 
 /** Rola e aplica a rolagem avulsa; continua o turno (espera concluída, ou vez encerrada no teste contra a morte). */
 export async function performCombatRoll(campaign: CampaignDoc, message: MessageDoc, request: IMaddoxCombatRoll, rollerUserId: string | null): Promise<DiceRollResponse> {
+    // Reivindica a rolagem ANTES de rolar e aplicar: o dono rolando no lugar ao mesmo tempo que o jogador (ou dois
+    // cliques) não aplica o efeito duas vezes — a outra chamada recebe 409.
+    const claimed = await MaddoxCampaignMessageModel.updateOne({ _id: message._id, "combatRoll.status": "pending", "combatRoll.rolling": { $ne: true } }, { $set: { "combatRoll.rolling": true } })
+    if (claimed.modifiedCount === 0) throw new DomainError(409, "Esta rolagem já foi feita.", "ROLL_NOT_PENDING")
+    try {
+        return await performClaimedRoll(campaign, message, request, rollerUserId)
+    } catch (error) {
+        await MaddoxCampaignMessageModel.updateOne({ _id: message._id, "combatRoll.status": "pending", "combatRoll.rolling": true }, { $set: { "combatRoll.rolling": false } }).catch(() => undefined)
+        throw error
+    }
+}
+
+async function performClaimedRoll(campaign: CampaignDoc, message: MessageDoc, request: IMaddoxCombatRoll, rollerUserId: string | null): Promise<DiceRollResponse> {
     const combat = await findActiveTactical(campaign._id)
     const actor = combat && request.targetKey ? findActor(combat, request.targetKey) : null
     const character = actor?.kind === "character" ? actor : combat?.tactical.characters.find((state) => state.memberId === String(message.memberId)) ? (findActor(combat!, combat!.tactical.characters.find((state) => state.memberId === String(message.memberId))!.actorKey) as Extract<CombatActor, { kind: "character" }>) : null
@@ -534,12 +619,17 @@ export async function performCombatRoll(campaign: CampaignDoc, message: MessageD
     const d20 = keptD20Of(roll)
     let outcome = ""
     let success: boolean | null = null
-    const hpWrites: { state: TacticalCharacterState; hp: CharacterHp }[] = []
-    const extra: Record<string, unknown>[] = []
+    let hpWrites: { state: TacticalCharacterState; hp: CharacterHp }[] = []
+    let extra: Record<string, unknown>[] = []
     let endsTurn = false
 
     if (combat) {
         await mutateTactical(campaign._id, async (live) => {
+            // Nova execução num conflito de versão: começa do zero (sem escritas ou cards repetidos).
+            hpWrites = []
+            extra = []
+            outcome = ""
+            success = null
             const me = character ? findActor(live, character.key) : null
             if (request.kind === "initiative" && me?.kind === "character") {
                 const { setCharacterInitiative } = await import("./tactical-combat")
@@ -604,8 +694,8 @@ export async function performCombatRoll(campaign: CampaignDoc, message: MessageD
         })
     }
     const saved = await MaddoxCampaignMessageModel.updateOne(
-        { _id: message._id, "combatRoll.status": "pending" },
-        { $set: { "combatRoll.status": "rolled", "combatRoll.roll": roll, "combatRoll.total": roll.total, "combatRoll.success": success, "combatRoll.outcome": outcome || `${roll.total}`, "combatRoll.rolledBy": rollerUserId ?? "server" } },
+        { _id: message._id, "combatRoll.status": "pending", "combatRoll.rolling": true },
+        { $set: { "combatRoll.rolling": false, "combatRoll.status": "rolled", "combatRoll.roll": roll, "combatRoll.total": roll.total, "combatRoll.success": success, "combatRoll.outcome": outcome || `${roll.total}`, "combatRoll.rolledBy": rollerUserId ?? "server" } },
     )
     if (saved.modifiedCount === 0) throw new DomainError(409, "Esta rolagem já foi feita.", "ROLL_NOT_PENDING")
     for (const write of hpWrites) await writeHp(write.state, write.hp)

@@ -811,19 +811,19 @@ ela fecha e o turno do mestre segue. Mesa toda offline não avança sozinha (reg
 
 | Rota | Comportamento |
 | --- | --- |
-| `POST …/game/combat/actions` `{ economy, optionId, targets?, spellLevel?, skill?, freeText?, readyOptionId?, readyTrigger? }` | A opção precisa estar na lista recalculada da ficha (`OPTION_UNAVAILABLE`); alvo validado; espaço de magia, carga e item gastos na hora; economia descontada (`ACTION_ALREADY_USED`); uma ação pendente por vez (`ACTION_PENDING`). "Outra ação" (ou habilidade de custo não identificado) passa pelo `validateDeclaration` com o contexto do combate: inválida = 409 `ACTION_INVALID` com o motivo, nada gasto |
-| `POST …/combat/actions/[id]/roll` `{}` | Rola o próximo passo: ataque (vantagem/desvantagem pelas condições; acerto contra a CA do alvo, que não aparece; 20 natural = crítico com dados dobrados), dano (resistências; adversário a 0 PV = `defeated`), cura (sai dos 0 PV), magia de salvaguarda (o servidor rola a salvaguarda de cada alvo; metade no sucesso pelo texto/perfil), teste (Esconder = Furtividade CD 15 → Invisível) |
+| `POST …/game/combat/actions` `{ economy, optionId, targets?, spellLevel?, skill?, freeText?, readyOptionId?, readyTrigger? }` | A opção precisa estar na lista recalculada da ficha (`OPTION_UNAVAILABLE`); alvo validado; opção sem os dados para resolver = 409 `OPTION_UNRESOLVABLE` antes de qualquer gasto; a economia é reservada primeiro (`ACTION_ALREADY_USED`) e só então espaço de magia, carga e item são gastos (gasto recusado devolve a economia); uma ação pendente por vez (`ACTION_PENDING`). "Outra ação" (ou habilidade de custo não identificado) passa pelo `validateDeclaration` com o contexto do combate: inválida = 409 `ACTION_INVALID` com o motivo, nada gasto |
+| `POST …/combat/actions/[id]/roll` `{}` | Reivindica o passo antes de rolar (`combatAction.rollingStep`, troca condicional; a chamada concorrente recebe 409 `ACTION_RESOLVED`). Rola o próximo passo: ataque (vantagem/desvantagem pelas condições; acerto contra a CA do alvo, que não aparece; 20 natural = crítico com dados dobrados), dano (resistências; adversário a 0 PV = `defeated`), cura (sai dos 0 PV), magia de salvaguarda (o servidor rola a salvaguarda de cada alvo; metade no sucesso pelo texto/perfil), teste (Esconder = Furtividade CD 15 → Invisível) |
 | `DELETE …/combat/actions/[id]` | Cancela a ação sem rolagem e sem recurso gasto; a economia volta (`ACTION_NOT_CANCELLABLE`) |
-| `POST …/combat/rolls/[id]/roll` `{}` | Iniciativa, teste contra a morte (encerra a vez), concentração, salvaguarda contra um adversário (aplica o dano pré-rolado), dano pedido pelo Maddox. O dono pode rolar no lugar (auditado) |
+| `POST …/combat/rolls/[id]/roll` `{}` | Reivindicada antes de rolar (`combatRoll.rolling`; concorrente = 409 `ROLL_NOT_PENDING`). Iniciativa, teste contra a morte (encerra a vez), concentração, salvaguarda contra um adversário (aplica o dano pré-rolado), dano pedido pelo Maddox. O dono pode rolar no lugar (auditado) |
 | `POST …/combat/reactions/[id]` `{ escolha }` | A reação escolhida ou `none`; o dono só pode recusar no lugar (auditado) |
 | `POST …/combat/end-turn` `{ movimento? }` | Encerra a vez (409 com ação ou rolagem pendente); grava a declaração da vez com o resumo das ações e o "Movimento e posição" |
 
 **O que o personagem pode usar** (`buildCombatOptions`, revalidado a cada ação): armas equipadas do catálogo (Força; Acuidade = o maior
 entre Força e Destreza; Munição = Destreza) e o ataque desarmado; Ataque Extra pelo nome da habilidade (2/3/4 ataques na mesma Ação);
-a outra arma Leve na Ação bônus depois de atacar com uma Leve (sem o modificador no dano, salvo negativo); magias preparadas (ou
+a outra arma Leve na Ação bônus depois de atacar com uma Leve (sem o modificador no dano, salvo negativo; a mesma arma só com quantidade ≥ 2, por `economy.lightWeaponId`); magias preparadas (ou
 truques) com o custo do tempo de conjuração e espaço livre no círculo ou acima (seletor de círculo), **uma magia com espaço por turno**
 (2024), truques escalando pelo nível; consumíveis com quantidade (poção de cura: Ação bônus em si, Ação em aliado; os demais em
-"Utilizar"); habilidades e talentos pelo **classificador** (sem cargas esgotadas, sem passivas); ações comuns 2024 (Disparada,
+"Utilizar"); habilidades e talentos pelo **classificador** (sem cargas esgotadas, sem passivas; cura e acerto automático só são resolvidos pelo servidor com os dados no texto, ataque/salvaguarda de habilidade viram utilitária para o Maddox); ações comuns 2024 (Disparada,
 Desengajar, Esquivar, Ajudar, Esconder, Influenciar, Preparar, Procurar, Estudar, Utilizar); "Outra ação". Incapacitado = nada; 0 PV =
 só o teste contra a morte. Reações: ataque de oportunidade (arma corpo a corpo ou desarmado), magias de Reação preparadas com espaço,
 habilidades classificadas como Reação e a ação preparada.
@@ -832,7 +832,8 @@ habilidades classificadas como Reação e a ação preparada.
 → regra pelo texto ("como uma Ação Bônus", "usa sua ação", "como Reação, quando…"; "sempre que usar a ação Atacar" = passiva) → JEV
 `combat-option-cost` ("Custo de ação no combate", pergunta tipada: custo e gatilho), **em segundo plano** com teto
 `MADDOX_COMBAT_CLASSIFY_TIMEOUT_MS`; quando classifica, a mesa recebe `maddox.game.changed`. Sem resposta (chave desligada, falha,
-teto) = "Custo não identificado: o Maddox confere" (ação livre validada), com log.
+teto) = "Custo não identificado: o Maddox confere" (ação livre validada), com log. Cache negativo em memória: a mesma habilidade só é
+reenviada (e a configuração relida) depois de `MADDOX_COMBAT_CLASSIFY_RETRY_MS` (10 min).
 
 **Vez dos adversários (ferramentas do narrador, só nos graus táticos):**
 
@@ -841,7 +842,7 @@ teto) = "Custo não identificado: o Maddox confere" (ação livre validada), com
 | `monster_action { combatente, acao, alvos[], modo?, reacao? }` | Só quem está em "agem agora", na ordem (anterior que já passou = erro); ação do próprio bloco, economia e recarga conferidas; Ataques Múltiplos = chamadas seguidas. Ataque: o servidor rola contra a CA da ficha (+5 do Escudo) e o dano; se o alvo tem reação de gatilho "atingido", devolve `aguardando_reacao` (narre até o golpe e pare). Salvaguarda: dano rolado já, card de salvaguarda para cada personagem (espera; falha automática por condição sem card), salvaguarda dos adversários rolada pelo servidor. `reacao: true` = ataque de oportunidade (recusado contra quem se desengajou) |
 | `apply_effect { alvo, condicao?, remover?, duracaoRodadas?, dano?, tipoDano?, cura?, descricao }` | Efeito adjudicado: condição (com duração) e dano/cura em dados rolados pelo servidor |
 | `request_damage_roll { personagem, dados, tipoDano?, alvo, motivo }` | Dano de uma ação livre aceita: o JOGADOR rola (espera) |
-| `offer_reaction { personagens[], gatilho, descricao, fonte? }` | Abre a janela (saiu do alcance, conjura magia, preparada, outro) para quem tem reação disponível |
+| `offer_reaction { personagens[], gatilho, descricao, fonte? }` | Abre a janela (saiu do alcance, conjura magia, preparada, outro) para quem tem reação disponível; `saiu-do-alcance` exige `fonte` (o adversário) |
 | `get_combat` | Ordem, rodada, "agem agora", próxima vez, PV/CA/condições/ações |
 
 Tudo mexe numa **cópia de trabalho** no job da fila (`jobWorkspace`): ferramentas seguintes veem o PV já reduzido, e a cópia só é
@@ -853,7 +854,7 @@ salvaguarda de Constituição (CD max(10, metade), até 30). 3 falhas → `Maddo
 **Reações** (`combat-reactions.ts`): mensagem `combat-reaction` (índice único: uma pendente por personagem) com as opções só para quem
 reage e prazo `MADDOX_REACTION_TIMEOUT_MS` (45 s, contagem na tela). Offline recusa na hora; prazo vencido = não reage (timer no
 processo). Resolução: Escudo (+5 na CA até o próximo turno, reavalia o acerto, gasta o espaço), ataque de oportunidade (abre um card
-de ação com ataque e dano rolados pelo jogador dentro da espera), Contramágica (salvaguarda de Constituição do conjurador contra a CD
+de ação com ataque e dano rolados pelo jogador dentro da espera; sem o adversário, não sai e a reação não é gasta), Contramágica (salvaguarda de Constituição do conjurador contra a CD
 de magia da ficha), Esquiva Sobrenatural (metade do dano), ação preparada; as demais são registradas e o Maddox adjudica. Sem
 reação, o golpe que esperava entra. Esperas por turno do mestre em combate: `MADDOX_COMBAT_WAIT_ROUNDS_MAX` (10); passado o teto,
 novas janelas não abrem.

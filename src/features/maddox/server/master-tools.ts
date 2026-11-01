@@ -741,7 +741,7 @@ export const MADDOX_TACTICAL_TOOLS: readonly MaddoxMasterTool[] = [
             personagens: z.array(z.string().min(1)).min(1).max(MADDOX_COMBAT_TARGETS_MAX),
             gatilho: z.enum(["saiu-do-alcance", "conjura-magia", "preparada", "outro"]),
             descricao: z.string().min(1).describe("O que está acontecendo (os jogadores leem)"),
-            fonte: z.string().optional().describe("Adversário que provocou o gatilho"),
+            fonte: z.string().optional().describe("Adversário que provocou o gatilho (obrigatório em saiu-do-alcance)"),
         }),
         async execute(context, input) {
             return tacticalTool(context, (tactical) => tactical.offerReaction(context.campaignId, context.jobId!, context.turnNumber, input))

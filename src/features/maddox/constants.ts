@@ -358,6 +358,8 @@ export const MADDOX_COMBAT_OFFLINE_GRACE_MS = 30_000
 export const MADDOX_COMBAT_WAIT_ROUNDS_MAX = 10
 /** Classificação do custo de uma habilidade pelo JEV (em segundo plano): passou disso, fica em "Outras habilidades". */
 export const MADDOX_COMBAT_CLASSIFY_TIMEOUT_MS = 20_000
+/** Depois de mandar uma habilidade ao JEV (ou achar a chave desligada), espera isto antes de tentar de novo. */
+export const MADDOX_COMBAT_CLASSIFY_RETRY_MS = 10 * 60_000
 /** Narrações com todos os inimigos (ou todos os personagens) caídos antes de o servidor encerrar o combate sozinho. */
 export const MADDOX_COMBAT_FORCE_END_AFTER = 2
 /** Texto livre ("Outra ação") e o "Movimento e posição" do fim da vez. */

@@ -97,6 +97,33 @@ describe("combate tático — opções do personagem (Maddox 7): só o que ele p
         expect(findCombatOption(noAction, "action", "weapon:w1")).toBeNull()
     })
 
+    it("outra mão: a mesma arma Leve só volta na Ação bônus se houver duas; outra arma Leve aparece", () => {
+        const twoLight = base().weapons.concat({ id: "w4", name: "Machadinha", quantity: 1, damageDice: { quantidade: 1, tipo: "d6" }, damageType: "cortante", properties: ["Leve"] })
+        const afterDagger = { ...freshEconomy(), action: false, attackAction: true, attacksLeft: 0, lightAttack: true, lightWeaponId: "w2" }
+        // Uma adaga só: atacou com ela, não há "Adaga (outra mão)".
+        expect(buildCombatOptions(base({ economy: afterDagger })).bonus.filter((option) => option.category === "weapons")).toEqual([])
+        // Outra arma Leve: só ela.
+        expect(buildCombatOptions(base({ weapons: twoLight, economy: afterDagger })).bonus.filter((option) => option.category === "weapons").map((option) => option.id)).toEqual(["offhand:w4"])
+        // Duas adagas: a mesma arma vale.
+        const twoDaggers = base().weapons.map((weapon) => (weapon.id === "w2" ? { ...weapon, quantity: 2 } : weapon))
+        expect(buildCombatOptions(base({ weapons: twoDaggers, economy: afterDagger })).bonus.filter((option) => option.category === "weapons").map((option) => option.id)).toEqual(["offhand:w2"])
+    })
+
+    it("habilidade com cura/acerto automático só resolve pelo servidor com os dados no texto; ataque e salvaguarda sem números vão para o Maddox", () => {
+        const abilities = [
+            { id: "trait:h", name: "Retomar o Fôlego", description: "Recupera pontos de vida iguais a 1d10 mais seu nível.", profile: { cost: "bonus" as const, trigger: null, resolution: "heal" as const, halfOnSave: false }, charge: null },
+            { id: "trait:h2", name: "Cura Leve", description: "Recupera pontos de vida.", profile: { cost: "bonus" as const, trigger: null, resolution: "heal" as const, halfOnSave: false }, charge: null },
+            { id: "trait:x", name: "Golpe Sombrio", description: "Faça um ataque com arma: 2d6 extra.", profile: { cost: "bonus" as const, trigger: null, resolution: "attack" as const, halfOnSave: false }, charge: null },
+            { id: "trait:y", name: "Raio", description: "Acerta automaticamente: 1d4 de força.", profile: { cost: "bonus" as const, trigger: null, resolution: "auto" as const, halfOnSave: false }, charge: null },
+        ]
+        const bonus = buildCombatOptions(base({ abilities })).bonus.filter((option) => option.category === "abilities")
+        expect(bonus.find((option) => option.id === "ability:trait:h")).toMatchObject({ resolution: "heal", heal: { dice: "1d10" } })
+        expect(bonus.find((option) => option.id === "ability:trait:h2")).toMatchObject({ resolution: "utility" })
+        expect(bonus.find((option) => option.id === "ability:trait:x")).toMatchObject({ resolution: "utility" })
+        expect(bonus.find((option) => option.id === "ability:trait:x")!.attack).toBeUndefined()
+        expect(bonus.find((option) => option.id === "ability:trait:y")).toMatchObject({ resolution: "auto", attack: { damage: "1d4" } })
+    })
+
     it("incapacitado ou com 0 PV não tem opções; reação de oportunidade e magias de reação", () => {
         expect(buildCombatOptions(base({ conditions: [{ key: "stunned", untilRound: null }] }))).toMatchObject({ action: [], bonus: [], reactions: [] })
         expect(buildCombatOptions(base({ dying: true })).action).toEqual([])
