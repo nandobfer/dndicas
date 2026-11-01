@@ -29,8 +29,13 @@ vi.mock("@/lib/db", () => ({
 }))
 vi.mock("@/lib/pusher/channels", () => ({ publishToChannels: vi.fn(async () => undefined) }))
 vi.mock("@/features/maddox/server/game-presence", () => ({ onlineUserIds: vi.fn(async () => null) }))
+const sheetService = { broken: false }
 vi.mock("@/features/character-sheets/realtime/character-sheet-pusher-service", () => ({
-    CharacterSheetPusherService: { getInstance: () => ({ publishSheetPatched, publishCollectionChanged }) },
+    // Getter: simula falha de inicialização do serviço ao carregar o módulo (depois do claim da recompensa).
+    get CharacterSheetPusherService() {
+        if (sheetService.broken) throw new Error("serviço da ficha não inicializou")
+        return { getInstance: () => ({ publishSheetPatched, publishCollectionChanged }) }
+    },
 }))
 vi.mock("@/lib/ai/jev", () => ({ askJevSystemOne }))
 vi.mock("@/features/maddox/server/settings", () => ({
@@ -172,6 +177,7 @@ beforeEach(async () => {
     askJevSystemOne.mockClear()
     publishSheetPatched.mockClear()
     publishCollectionChanged.mockClear()
+    sheetService.broken = false
 })
 
 describe("Maddox 6 — combate narrativo de ponta a ponta", () => {
@@ -467,6 +473,47 @@ describe("Maddox 6 — combate narrativo de ponta a ponta", () => {
         expect(await applyCombatRewards({ _id: new mongoose.Types.ObjectId(id), rigor: "equilibrado", ownerId: owner }, combat!._id)).toBe(1)
         expect((await CharacterSheet.collection.findOne({ _id: lyra.sheetId! }))!.coins).toMatchObject({ gp: 40 })
         expect(await CharacterItem.countDocuments({ sheetId: lyra.sheetId })).toBe(1)
+    })
+
+    it("Equilibrado: falha ao carregar o serviço da ficha depois do claim desfaz a marca e segue para as demais recompensas", async () => {
+        const { id, owner, player, lyra } = await table("equilibrado")
+        script.push(
+            [{ tools: [{ name: "start_combat", input: { titulo: "Ratos", adversarios: [{ nome: "Rato" }] } }], text: "Ratos!" }],
+            [
+                {
+                    tools: [
+                        {
+                            name: "end_combat",
+                            input: {
+                                resultado: "vitoria",
+                                resumo: "Os ratos fogem.",
+                                recompensas: [
+                                    { tipo: "moedas", personagem: "Lyra", moedas: { po: 30 } },
+                                    { tipo: "item", personagem: "Lyra", item: "Corda" },
+                                ],
+                                cenaFinal: "x",
+                            },
+                        },
+                    ],
+                    text: "Silêncio.",
+                },
+            ],
+        )
+        await game.startCampaign(id, owner)
+        await waitForCampaignIdle(id)
+        sheetService.broken = true
+        await playersTurn(id, owner, player, 1)
+        const combat = await MaddoxCombatModel.findOne({ campaignId: id }).lean()
+        expect(combat!.rewards.map((reward) => [reward.kind, reward.applied, reward.sheetId])).toEqual([
+            ["moedas", false, null],
+            ["item", false, null],
+        ])
+        expect((await CharacterSheet.collection.findOne({ _id: lyra.sheetId! }))!.coins).toMatchObject({ gp: 10 })
+        expect(await CharacterItem.countDocuments({ sheetId: lyra.sheetId })).toBe(0)
+        // Com o serviço de volta, uma nova aplicação entrega as duas.
+        sheetService.broken = false
+        expect(await applyCombatRewards({ _id: new mongoose.Types.ObjectId(id), rigor: "equilibrado", ownerId: owner }, combat!._id)).toBe(2)
+        expect((await CharacterSheet.collection.findOne({ _id: lyra.sheetId! }))!.coins).toMatchObject({ gp: 40 })
     })
 
     it("JEV 'Início ou fim de combate': orientação na tarefa, de entrada fora de combate e de saída em combate", async () => {

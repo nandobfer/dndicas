@@ -333,13 +333,14 @@ export async function applyCombatRewards(campaign: CampaignRef, combatId: Types.
         const claimed = await MaddoxCombatModel.updateOne({ _id: combat._id, [`rewards.${index}.applied`]: false }, { $set: { [`rewards.${index}.applied`]: true, [`rewards.${index}.sheetId`]: character.sheetId } })
         if (claimed.modifiedCount === 0) continue
         const sheetId = character.sheetId
-        const [{ CharacterSheet }, { CharacterItem }, { CharacterSheetPusherService }] = await Promise.all([
-            import("@/features/character-sheets/models/character-sheet"),
-            import("@/features/character-sheets/models/character-item"),
-            import("@/features/character-sheets/realtime/character-sheet-pusher-service"),
-        ])
         let publish: (() => Promise<void>) | null = null
         try {
+            // Dentro do try: falha de carga dos módulos depois do claim também desfaz a marca.
+            const [{ CharacterSheet }, { CharacterItem }, { CharacterSheetPusherService }] = await Promise.all([
+                import("@/features/character-sheets/models/character-sheet"),
+                import("@/features/character-sheets/models/character-item"),
+                import("@/features/character-sheets/realtime/character-sheet-pusher-service"),
+            ])
             if (reward.kind === "moedas" && reward.coins) {
                 const inc = Object.fromEntries(MADDOX_COIN_KEYS.filter((key) => (reward.coins?.[key] ?? 0) > 0).map((key) => [`coins.${MADDOX_COIN_SHEET_FIELDS[key]}`, reward.coins![key]!]))
                 const sheet = await CharacterSheet.findByIdAndUpdate(sheetId, { $inc: inc }, { returnDocument: "after" }).lean()
