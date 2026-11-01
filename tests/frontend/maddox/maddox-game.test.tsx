@@ -819,12 +819,16 @@ describe("mesa Maddox — testes pedidos pelo Maddox (Maddox 5)", () => {
         expect(screen.getByText("Ninguém ainda: os NPCs aparecem aqui quando o grupo os conhece.")).toBeInTheDocument()
         view.unmount()
 
-        await renderGame(gameState({ rigor: "fiel-dnd", me: ME({ sheet: { id: "s1", slug: "lyra" } }), npcs: [{ id: "n1", name: "Bartolomeu", portraitUrl: "/api/upload?key=npc.png" }, { id: "n2", name: "Irmã Vela", portraitUrl: null }] }))
+        await renderGame(gameState({ rigor: "fiel-dnd", me: ME({ sheet: { id: "s1", slug: "lyra" } }), npcs: [{ id: "n1", name: "Bartolomeu", portraitUrl: "/api/upload?key=npc.png" }, { id: "n2", name: "Irmã Vela", portraitUrl: null }, { id: "n3", name: "Capitã Seraphine Vael do Porto Cinzento", portraitUrl: null }] }))
         fireEvent.click(screen.getByRole("button", { name: /Minha ficha/ }))
         expect(addWindow).toHaveBeenCalledWith(expect.objectContaining({ id: "maddox-sheet", title: "Minha ficha" }))
         expect(screen.getByTestId("npc-n1")).toHaveTextContent("Bartolomeu")
         expect(screen.getByTestId("npc-n2")).toHaveTextContent("Irmã Vela")
-        expect(screen.getByText("NPCs conhecidos (2)")).toBeInTheDocument()
+        expect(screen.getByText("NPCs conhecidos (3)")).toBeInTheDocument()
+        // Nome gerado pelo modelo: inteiro, quebrando linha em vez de reticências.
+        const longName = within(screen.getByTestId("npc-n3")).getByText("Capitã Seraphine Vael do Porto Cinzento")
+        expect(longName.className.split(" ")).toEqual(expect.arrayContaining(["whitespace-normal", "break-words", "min-w-0"]))
+        expect(longName.className.split(" ")).not.toContain("truncate")
     })
 
     it("regras puras: situação 'Rolando teste', faixa com vários nomes e sem recarga periódica esperando rolagens", () => {

@@ -114,7 +114,7 @@ export async function advanceAfterChecks(campaignId: Types.ObjectId, turnNumber:
     if (pending) return false
     const token = randomUUID()
     const won = await MaddoxCampaignModel.updateOne(
-        { _id: campaignId, status: "active", "turn.number": turnNumber, "turn.phase": "master", "turn.awaitingChecks": true, "turn.checkRound": round },
+        { _id: campaignId, status: "active", "turn.number": turnNumber, "turn.phase": "master", "turn.awaitingChecks": true, "turn.checkRound": round === 0 ? { $in: [0, null] } : round },
         { $set: { "turn.awaitingChecks": false, "turn.checkRound": round + 1, "turn.generating": { token, startedAt: new Date() }, "turn.failedAt": null } },
     )
     if (won.modifiedCount === 0) return false

@@ -238,6 +238,32 @@ describe("Maddox 5 — teste de perícia em campanha fiel (critério de aceite)"
 })
 
 describe("Maddox 5 — regras dos testes", () => {
+    it("campanha anterior ao deploy (sem turn.checkRound): o pedido grava a rodada e a rolagem continua a narração", async () => {
+        const table = await faithfulTable()
+        script.push([{ text: "Os guardas cochilam na entrada da cripta. O que vocês fazem?" }])
+        await game.startCampaign(table.id, table.owner)
+        await waitForCampaignIdle(table.id)
+        // Documento gravado antes do Maddox 5: o campo não existe.
+        await MaddoxCampaignModel.collection.updateOne({ _id: new mongoose.Types.ObjectId(table.id) }, { $unset: { "turn.checkRound": "" } })
+        script.push([{ tools: [stealthCheck], text: "Lyra avança rente à parede…" }])
+        await game.submitGameAction(table.id, { kind: "declaration", content: "Doran espera na esquina." }, table.owner)
+        await game.submitGameAction(table.id, { kind: "declaration", content: "Lyra se esgueira até a porta da cripta." }, table.player)
+        await waitForCampaignIdle(table.id)
+        const raw = await MaddoxCampaignModel.collection.findOne({ _id: new mongoose.Types.ObjectId(table.id) })
+        expect(raw!.turn).toMatchObject({ awaitingChecks: true, checkRound: 0 })
+
+        // Mesmo que a rodada falte no documento enquanto a mesa espera, a rolagem destrava a continuação.
+        await MaddoxCampaignModel.collection.updateOne({ _id: new mongoose.Types.ObjectId(table.id) }, { $unset: { "turn.checkRound": "" } })
+        const checkId = (await game.getGameState(table.id, table.owner)).turn.pendingChecks[0]!.checkId
+        script.push([{ text: "Os guardas não percebem nada. O que vocês fazem?" }])
+        await fixD20(table.player, 12)
+        await checks.rollCheck(table.id, checkId, table.player)
+        await waitForCampaignIdle(table.id)
+        const after = await game.getGameState(table.id, table.owner)
+        expect(after.turn).toMatchObject({ number: 2, phase: "players", awaitingChecks: false })
+        expect(after.messages.some((message) => message.kind === "narration" && message.content.includes("Os guardas não percebem nada"))).toBe(true)
+    })
+
     it("rolar duas vezes = 409; outro jogador = 403; não membro = 404", async () => {
         const table = await faithfulTable()
         await untilCheckRequested(table)

@@ -160,7 +160,7 @@ async function runMasterTurn(campaignId: Types.ObjectId, token: string, turnNumb
         const roundChecks = await MaddoxCampaignMessageModel.exists({ campaignId, turnNumber, kind: "check", "check.round": round })
         if (roundChecks) {
             // Os testes fazem parte do turno do mestre: a mesa espera as rolagens (sem trava de geração).
-            await MaddoxCampaignModel.updateOne({ _id: campaignId, "turn.generating.token": token }, { $set: { "turn.awaitingChecks": true, "turn.generating": null, "turn.failedAt": null } })
+            await MaddoxCampaignModel.updateOne({ _id: campaignId, "turn.generating.token": token }, { $set: { "turn.awaitingChecks": true, "turn.checkRound": round, "turn.generating": null, "turn.failedAt": null } })
             // Nenhum pendente (todos cancelados porque o jogador saiu): a continuação entra na fila logo.
             const { advanceAfterChecks } = await import("./game-checks")
             await advanceAfterChecks(campaignId, turnNumber, round)

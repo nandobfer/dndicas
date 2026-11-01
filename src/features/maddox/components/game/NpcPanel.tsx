@@ -22,7 +22,7 @@ export function NpcPanel({ npcs, color }: { npcs: MaddoxGameNpcDto[]; color: str
                         {npcs.map((npc) => (
                             <li key={npc.id} className="flex min-w-0 items-center gap-2" data-testid={`npc-${npc.id}`}>
                                 <MemberAvatar name={npc.name} imageUrl={npc.portraitUrl} color={color} className="h-8 w-8 shrink-0" />
-                                <span className="truncate text-sm text-white">{npc.name}</span>
+                                <span className="min-w-0 whitespace-normal break-words text-sm text-white">{npc.name}</span>
                             </li>
                         ))}
                     </ul>
