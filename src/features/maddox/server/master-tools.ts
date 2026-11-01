@@ -397,6 +397,16 @@ const toDraftCombatant = (input: z.infer<typeof combatantInput>, fit: ReturnType
     registerNpc: Boolean(input.registrarNpc),
 })
 
+/** Recusa nomes repetidos na mesma lista (o desfecho e as atualizações casam pelo nome). */
+function assertUniqueCombatants(items: readonly { nome: string }[], existing: readonly string[] = []) {
+    const seen = new Set(existing.map(keyOf))
+    for (const item of items) {
+        const key = keyOf(item.nome)
+        if (seen.has(key)) throw new MaddoxToolError(`"${item.nome}" aparece mais de uma vez no combate: use um nome por participante (grupos iguais = um item com \`quantidade\`, ex.: "Lobo" com quantidade 2; ou nomes distintos como "Lobo alfa" e "Lobo cinzento").`)
+        seen.add(key)
+    }
+}
+
 async function playerCharacters(campaignId: Types.ObjectId) {
     return MaddoxCharacterModel.find({ campaignId, status: "active" }).select("name").lean<{ _id: Types.ObjectId; name: string }[]>()
 }
@@ -438,6 +448,7 @@ export const MADDOX_COMBAT_TOOLS: readonly MaddoxMasterTool[] = [
         async execute(context, input) {
             const { state } = await combatContext(context)
             if (state.active) throw new MaddoxToolError(`Já há um combate em andamento ("${state.title}"): use update_combat para mudanças ou end_combat para encerrá-lo.`)
+            assertUniqueCombatants(input.adversarios)
             const fit = fitter()
             const combatants = input.adversarios.map((item) => toDraftCombatant(item, fit))
             const added = addDraftCombat(String(context.campaignId), context.jobId!, { type: "start", title: clip(input.titulo, MADDOX_TOOL_NAME_MAX), location: clip(input.local, MADDOX_TOOL_NAME_MAX), combatants })
@@ -453,6 +464,8 @@ export const MADDOX_COMBAT_TOOLS: readonly MaddoxMasterTool[] = [
         async execute(context, input) {
             const { state } = await combatContext(context)
             if (!state.active) throw new MaddoxToolError("Nenhum combate em andamento: use start_combat quando a luta começar.")
+            // Mesma pessoa duas vezes na lista = recusa; quem já está na luta é atualizado, quem é novo entra uma vez só.
+            assertUniqueCombatants(input.adversarios)
             const fit = fitter()
             const combatants = input.adversarios.map((item) => {
                 const draft = toDraftCombatant(item, fit)

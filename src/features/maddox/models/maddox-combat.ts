@@ -68,6 +68,8 @@ export interface IMaddoxCombat {
     /** Descrição visual da cena final (para a imagem de fim de batalha do Maddox 10). */
     finalScene: string
     image: { status: MaddoxCombatImageStatus; requestedAt: Date | null } | null
+    /** Efeitos do fim (NPCs, personagens, memória, recompensas, imagem) já disparados — rodam depois de gravar os cards. */
+    effectsApplied: boolean
     endedAt: Date | null
     createdAt: Date
     updatedAt: Date
@@ -122,6 +124,7 @@ const MaddoxCombatSchema = new Schema<IMaddoxCombat>(
         },
         finalScene: { type: String, default: "" },
         image: { type: new Schema({ status: { type: String, enum: MADDOX_COMBAT_IMAGE_STATUSES }, requestedAt: Date }, { _id: false }), default: null },
+        effectsApplied: { type: Boolean, default: false },
         endedAt: { type: Date, default: null },
     },
     { collection: "maddox_combats", timestamps: true, versionKey: false },

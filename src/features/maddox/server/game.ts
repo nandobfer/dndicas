@@ -158,7 +158,8 @@ async function runMasterTurn(campaignId: Types.ObjectId, token: string, turnNumb
             // Os testes pedidos nesta geração só viram mensagens agora, logo abaixo da narração (ordem dos `_id`).
             const { draftCheckMessage } = await import("./game-checks")
             const drafts = takeDraftChecks(String(campaignId), jobId)
-            // O combate pedido nesta geração é aplicado ANTES de gravar a narração: o card de início vem acima dela, o de fim abaixo.
+            // O combate pedido nesta geração é aplicado ANTES de gravar a narração (o card precisa do id): o card de início vem acima
+            // dela, o de fim abaixo. Os efeitos do fim só rodam depois (`finishCombatTurn`), que também grava o card que faltar.
             const combatEvents = takeDraftCombat(String(campaignId), jobId)
             const combat = combatModule && combatEvents.length ? await combatModule.applyCombatDrafts(campaign, turnNumber, combatEvents) : { messages: [], touched: [] }
             const combatCard = (plan: { event: "start" | "end"; combatId: Types.ObjectId }) => ({ campaignId, turnNumber, phase: "master" as const, kind: "combat" as const, content: "", segment: round, combat: plan })
@@ -175,6 +176,11 @@ async function runMasterTurn(campaignId: Types.ObjectId, token: string, turnNumb
             if (combatModule && round === 0) await combatModule.countCombatNarration(campaignId, [...(combatBefore ? [combatBefore._id] : []), ...combat.touched])
             live.end({ messageId: String(message!._id), error: null })
             if (drafts.length) log.info({ campaignId: String(campaignId), turnNumber, round, checks: drafts.length }, "[maddox] Maddox pediu testes")
+        }
+        // Combate narrativo (Maddox 6): card que faltar (gravação interrompida) e os efeitos do fim, depois das mensagens.
+        if (MADDOX_COMBAT_RIGORS.includes(campaign.rigor)) {
+            const { finishCombatTurn } = await import("./combat")
+            await finishCombatTurn(campaign, turnNumber, round)
         }
         // Quem saiu da campanha durante a geração não recebe o teste: ele já entra cancelado (o Maddox resolve sem ele).
         const { cancelOrphanChecks } = await import("./game-checks")

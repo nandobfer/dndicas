@@ -710,17 +710,23 @@ para todos e recusam pelo grau/geração):
 depois que a narração é gerada e **antes** de ela ser gravada: geração que falha não muda nada (nem cria NPC). Os cards são mensagens
 `kind: "combat"` (`combat { event: "start" | "end", combatId }`), gravadas no mesmo `insertMany`: início **antes** da narração, fim
 **depois** dela (e dos testes). O índice único parcial `{ campaignId }` com `status: "active"` (migração `ensure-maddox-indexes`)
-garante um combate ativo por campanha. Cada narração da rodada 0 com combate ativo (ou que o tocou) soma `masterTurns`.
+garante um combate ativo por campanha. Os **efeitos do fim só rodam depois** de gravar os cards e a narração (`finishCombatTurn`,
+troca condicional `effectsApplied`): se a gravação das mensagens falhar depois de aplicar o combate, a retomada do turno grava o
+card que faltou e dispara os efeitos uma vez. Nomes repetidos de participantes (mesmo nome sem acento/caixa) são recusados em
+`start_combat`/`update_combat`, com a orientação de usar `quantidade` ou nomes distintos. Cada narração da rodada 0 com combate ativo (ou que o tocou) soma `masterTurns`.
 
 **Fim do combate.** Troca condicional `active → ended` (uma só aplicação vence), com resultado (`vitoria`, `derrota`, `fuga`, `tregua`,
 `interrompido`), resumo, notas do mestre, desfecho de cada adversário (`morto`, `derrotado`, `capturado`, `rendeu-se`, `fugiu`,
 `poupado`, `ileso`), recompensas, condição dos personagens e a cena final. Efeitos (cada um falha sozinho, com aviso no log):
 
-- NPC ligado: `morto` → `dead`, `fugiu` → `unknown`; os demais mantêm a situação;
+- NPC ligado: `morto` → `dead`, `fugiu` → `unknown`; os demais mantêm a situação. Participante sem NPC ligado é religado pelo nome
+  no fim (NPC registrado por `save_npc` depois do início também recebe o desfecho);
 - `character.currentState` de cada personagem em `estadoPersonagens`;
-- memória `evento` "Combate: {título}" (visível aos jogadores, tag `combate`) com resultado, resumo, desfechos e recompensas;
+- memória `evento` "Combate: {título} (turno N)" (visível aos jogadores, tag `combate`) com resultado, resumo, desfechos e
+  recompensas — **uma por combate** (chave `combatId` na memória), então dois combates com o mesmo título não se sobrescrevem;
 - **recompensas na ficha, só no Equilibrado** (`MADDOX_COMBAT_SHEET_REWARD_RIGORS`) e só para personagem com ficha: cada recompensa troca
-  `applied: false → true` antes de tocar a ficha (retomada não duplica). Moedas: `$inc` em `sheet.coins` (po→gp, pp→sp, pe→ep,
+  `applied: false → true` antes de tocar a ficha (retomada não duplica); se a escrita na ficha falhar, a marca volta a `false` (o
+  card não mostra "Na ficha"), com aviso no log, e as recompensas seguintes continuam. Moedas: `$inc` em `sheet.coins` (po→gp, pp→sp, pe→ep,
   pc→cp, pl→pp). Item: do catálogo (busca por id ou nome, ativo; menção e campos de CA como a ficha da entrevista) ou, fora dele,
   **item próprio** com o aviso `"X" não está no catálogo: entrou como item próprio.`; entra sem equipar. Avisa a ficha aberta
   (`CharacterSheetPusherService`) e audita (`CampanhaMaddox`, `by: maddox`). Narrativo e Flexível só registram;

@@ -32,7 +32,9 @@ import { onCombatEnded } from "./combat-image"
 /**
  * Combate narrativo (Maddox 6) — SOMENTE servidor. O narrador abre, atualiza e encerra o combate pelas ferramentas
  * (`start_combat`, `update_combat`, `end_combat`); os pedidos ficam no job da fila (rascunho) e só são aplicados aqui,
- * depois que a narração foi gerada e antes de ela ser gravada. Se a geração falhar, o combate não muda.
+ * depois que a narração foi gerada e antes de ela ser gravada. Se a geração falhar, o combate não muda. Se a gravação das
+ * mensagens falhar depois de aplicar o combate, a retomada do turno grava o card que faltou e dispara os efeitos do fim
+ * (`finishCombatTurn`): os efeitos do fim nunca rodam antes de os cards estarem gravados.
  *
  * O fim do combate grava o desfecho e aplica os efeitos: situação dos NPCs, condição dos personagens, o marco da
  * história (memória `evento`), as recompensas na ficha (só Equilibrado) e o gancho da imagem de fim de batalha.
@@ -178,9 +180,14 @@ async function resolveReward(campaign: CampaignRef, reward: MaddoxDraftCombatRew
 async function applyEnd(campaign: CampaignRef, turnNumber: number, event: Extract<MaddoxDraftCombatEvent, { type: "end" }>): Promise<CombatMessagePlan | null> {
     const active = await findActiveCombat(campaign._id)
     if (!active) return null
+    // NPC registrado depois do início (ex.: `save_npc` numa narração seguinte): liga agora, pelo nome, para receber o desfecho.
+    const unlinked = active.combatants.filter((item) => !item.npcId).map((item) => item.nameKey)
+    const npcs = unlinked.length ? await MaddoxNpcModel.find({ campaignId: campaign._id, nameKey: { $in: unlinked } }).select("_id nameKey").lean<{ _id: Types.ObjectId; nameKey: string }[]>() : []
+    const npcByKey = new Map(npcs.map((npc) => [npc.nameKey, npc._id]))
     const combatants = active.combatants.map((item) => {
         const outcome = event.combatants.find((change) => keyOf(change.name) === item.nameKey)?.outcome
-        return outcome ? { ...item, outcome } : { ...item }
+        const npcId = item.npcId ?? npcByKey.get(item.nameKey) ?? null
+        return outcome ? { ...item, npcId, outcome } : { ...item, npcId }
     })
     const rewards: IMaddoxCombatReward[] = []
     for (const reward of event.rewards) rewards.push(await resolveReward(campaign, reward))
@@ -206,8 +213,30 @@ async function applyEnd(campaign: CampaignRef, turnNumber: number, event: Extrac
     ).lean<IMaddoxCombat>()
     if (!ended) return null
     log.info({ campaignId: String(campaign._id), combatId: String(ended._id), turnNumber, outcome: event.outcome, rewards: rewards.length }, "[maddox] combate terminou")
-    await afterCombatEnded(campaign, ended, turnNumber)
+    // Os efeitos do fim só rodam depois que os cards e a narração forem gravados (`finishCombatTurn`).
     return { event: "end", combatId: ended._id }
+}
+
+/**
+ * Fecha o combate do turno depois de gravar a narração (e na retomada): grava o card que faltar — de um combate aberto ou
+ * encerrado neste turno cujo card não chegou a ser gravado (falha entre aplicar o combate e gravar as mensagens) — e dispara
+ * os efeitos do fim ainda não aplicados (troca condicional `effectsApplied`: uma vez só).
+ */
+export async function finishCombatTurn(campaign: CampaignRef, turnNumber: number, segment: number): Promise<void> {
+    const { MaddoxCampaignMessageModel } = await import("../models")
+    const combats = await MaddoxCombatModel.find({ campaignId: campaign._id, $or: [{ startedTurn: turnNumber }, { endedTurn: turnNumber }] }).lean<IMaddoxCombat[]>()
+    for (const combat of combats) {
+        const wanted: ("start" | "end")[] = [...(combat.startedTurn === turnNumber ? ["start" as const] : []), ...(combat.status === "ended" && combat.endedTurn === turnNumber ? ["end" as const] : [])]
+        for (const event of wanted) {
+            const exists = await MaddoxCampaignMessageModel.exists({ campaignId: campaign._id, kind: "combat", "combat.combatId": combat._id, "combat.event": event })
+            if (exists) continue
+            await MaddoxCampaignMessageModel.create({ campaignId: campaign._id, turnNumber, phase: "master", kind: "combat", content: "", segment, combat: { event, combatId: combat._id } })
+            log.warn({ campaignId: String(campaign._id), combatId: String(combat._id), turnNumber, event }, "[maddox] card do combate faltava (gravação interrompida); gravado na retomada")
+        }
+        if (combat.status !== "ended" || combat.effectsApplied) continue
+        const claimed = await MaddoxCombatModel.findOneAndUpdate({ _id: combat._id, status: "ended", effectsApplied: { $ne: true } }, { $set: { effectsApplied: true } }, { returnDocument: "after" }).lean<IMaddoxCombat>()
+        if (claimed) await afterCombatEnded(campaign, claimed, combat.endedTurn ?? turnNumber)
+    }
 }
 
 /** Efeitos do fim do combate. Cada um falha sozinho (aviso no log) sem desfazer o fim. */
@@ -242,7 +271,7 @@ export function combatantOutcomeLines(combat: Pick<IMaddoxCombat, "combatants">)
 
 /** Marco da história (memória `evento`, visível aos jogadores): o desfecho do combate. */
 async function saveCombatMemory(campaignId: Types.ObjectId, combat: IMaddoxCombat, turnNumber: number): Promise<void> {
-    const title = clip(`Combate: ${combat.title}`, MADDOX_TOOL_NAME_MAX)
+    const title = clip(`Combate: ${combat.title} (turno ${combat.startedTurn})`, MADDOX_TOOL_NAME_MAX)
     const titleKey = keyOf(title)
     const lines = [
         `${MADDOX_COMBAT_OUTCOME_LABELS[combat.outcome ?? "interrompido"]}${combat.location ? ` em ${combat.location}` : ""} (turnos ${combat.startedTurn}–${turnNumber}).`,
@@ -250,10 +279,13 @@ async function saveCombatMemory(campaignId: Types.ObjectId, combat: IMaddoxComba
         ...(combatantOutcomeLines(combat).length ? [`Adversários: ${combatantOutcomeLines(combat).join("; ")}.`] : []),
         ...(combat.rewards.length ? [`Recompensas: ${combat.rewards.map((reward) => rewardText(reward)).join("; ")}.`] : []),
     ].filter(Boolean)
-    const set = { title, text: lines.join("\n"), visibility: "players" as const, turnNumber, tags: ["combate"] }
-    const existing = await MaddoxCampaignMemoryModel.findOne({ campaignId, kind: "evento", titleKey }).select("_id").lean()
-    if (existing) await MaddoxCampaignMemoryModel.updateOne({ _id: existing._id }, { $set: set })
-    else await MaddoxCampaignMemoryModel.create({ campaignId, kind: "evento", titleKey, origin: "agent", createdBy: "maddox", ...set })
+    const set = { title, titleKey, text: lines.join("\n"), visibility: "players" as const, turnNumber, tags: ["combate"] }
+    // Uma memória POR COMBATE (chave `combatId`): dois combates com o mesmo título não se sobrescrevem.
+    await MaddoxCampaignMemoryModel.updateOne(
+        { campaignId, kind: "evento", combatId: combat._id },
+        { $set: set, $setOnInsert: { campaignId, kind: "evento", combatId: combat._id, origin: "agent", createdBy: "maddox" } },
+        { upsert: true },
+    )
 }
 
 const COIN_LABELS: Record<(typeof MADDOX_COIN_KEYS)[number], string> = { po: "po", pp: "pp", pe: "pe", pc: "pc", pl: "pl" }
@@ -306,16 +338,26 @@ export async function applyCombatRewards(campaign: CampaignRef, combatId: Types.
             import("@/features/character-sheets/models/character-item"),
             import("@/features/character-sheets/realtime/character-sheet-pusher-service"),
         ])
-        if (reward.kind === "moedas" && reward.coins) {
-            const inc = Object.fromEntries(MADDOX_COIN_KEYS.filter((key) => (reward.coins?.[key] ?? 0) > 0).map((key) => [`coins.${MADDOX_COIN_SHEET_FIELDS[key]}`, reward.coins![key]!]))
-            const sheet = await CharacterSheet.findByIdAndUpdate(sheetId, { $inc: inc }, { returnDocument: "after" }).lean()
-            if (sheet) await publishSheet(() => CharacterSheetPusherService.getInstance().publishSheetPatched({ sheet: plain({ ...sheet, _id: String(sheet._id) }) }))
-        } else if (reward.kind === "item" && reward.item) {
-            const doc = await buildItemDoc(sheetId, reward.item)
-            const [created] = await CharacterItem.insertMany([doc])
-            const record = plain<CharacterItemRecord>(created!.toObject())
-            await publishSheet(() => CharacterSheetPusherService.getInstance().publishCollectionChanged({ sheetId: String(sheetId), collection: "items", action: "created", recordId: String(created!._id), record }))
+        let publish: (() => Promise<void>) | null = null
+        try {
+            if (reward.kind === "moedas" && reward.coins) {
+                const inc = Object.fromEntries(MADDOX_COIN_KEYS.filter((key) => (reward.coins?.[key] ?? 0) > 0).map((key) => [`coins.${MADDOX_COIN_SHEET_FIELDS[key]}`, reward.coins![key]!]))
+                const sheet = await CharacterSheet.findByIdAndUpdate(sheetId, { $inc: inc }, { returnDocument: "after" }).lean()
+                if (!sheet) throw new Error("ficha não encontrada")
+                publish = () => CharacterSheetPusherService.getInstance().publishSheetPatched({ sheet: plain({ ...sheet, _id: String(sheet._id) }) })
+            } else if (reward.kind === "item" && reward.item) {
+                const doc = await buildItemDoc(sheetId, reward.item)
+                const [created] = await CharacterItem.insertMany([doc])
+                const record = plain<CharacterItemRecord>(created!.toObject())
+                publish = () => CharacterSheetPusherService.getInstance().publishCollectionChanged({ sheetId: String(sheetId), collection: "items", action: "created", recordId: String(created!._id), record })
+            }
+        } catch (error) {
+            // A ficha não recebeu: desfaz a marca (o card não mostra "Na ficha") e segue para as próximas recompensas.
+            await MaddoxCombatModel.updateOne({ _id: combat._id, [`rewards.${index}.applied`]: true }, { $set: { [`rewards.${index}.applied`]: false, [`rewards.${index}.sheetId`]: null } }).catch(() => undefined)
+            log.warn({ err: error instanceof Error ? error.message : String(error), campaignId: String(campaign._id), combatId: String(combat._id), sheetId: String(sheetId), kind: reward.kind }, "[maddox] recompensa do combate não entrou na ficha")
+            continue
         }
+        if (publish) await publishSheet(publish)
         applied += 1
         await recordAudit({
             userId: campaign.ownerId,

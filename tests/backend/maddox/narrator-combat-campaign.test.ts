@@ -280,7 +280,7 @@ describe("Maddox 6 — combate narrativo de ponta a ponta", () => {
         expect((await MaddoxNpcModel.findOne({ campaignId: id }).lean())!.status).toBe("dead")
         expect((await MaddoxCharacterModel.findById(doran.characterId).lean())!.currentState).toBe("Corte fundo no braço.")
         const memory = await MaddoxCampaignMemoryModel.findOne({ campaignId: id, kind: "evento" }).lean()
-        expect(memory).toMatchObject({ title: "Combate: Emboscada no cais", visibility: "players", turnNumber: 4 })
+        expect(memory).toMatchObject({ title: "Combate: Emboscada no cais (turno 2)", visibility: "players", turnNumber: 4, combatId: ended!._id })
         expect(memory!.text).toContain("Varn caiu no cais")
         expect(memory!.text).toContain("Varn, o Cinzento — Morto")
         expect(await kindsInOrder(id, 4)).toEqual(["narration", "combat:end"])
@@ -425,6 +425,50 @@ describe("Maddox 6 — combate narrativo de ponta a ponta", () => {
         ])
     })
 
+    it("Equilibrado: escrita na ficha que falha desfaz a marca 'Na ficha' e não impede as recompensas seguintes", async () => {
+        const { id, owner, player, lyra } = await table("equilibrado")
+        script.push(
+            [{ tools: [{ name: "start_combat", input: { titulo: "Ratos", adversarios: [{ nome: "Rato" }] } }], text: "Ratos!" }],
+            [
+                {
+                    tools: [
+                        {
+                            name: "end_combat",
+                            input: {
+                                resultado: "vitoria",
+                                resumo: "Os ratos fogem.",
+                                recompensas: [
+                                    { tipo: "moedas", personagem: "Lyra", moedas: { po: 30 } },
+                                    { tipo: "item", personagem: "Lyra", item: "Corda" },
+                                ],
+                                cenaFinal: "x",
+                            },
+                        },
+                    ],
+                    text: "Silêncio.",
+                },
+            ],
+        )
+        await game.startCampaign(id, owner)
+        await waitForCampaignIdle(id)
+        const spy = vi.spyOn(CharacterSheet, "findByIdAndUpdate").mockImplementationOnce(() => {
+            throw new Error("banco oscilou")
+        })
+        await playersTurn(id, owner, player, 1)
+        spy.mockRestore()
+        const combat = await MaddoxCombatModel.findOne({ campaignId: id }).lean()
+        expect(combat!.rewards.map((reward) => [reward.kind, reward.applied])).toEqual([
+            ["moedas", false],
+            ["item", true],
+        ])
+        expect((await CharacterSheet.collection.findOne({ _id: lyra.sheetId! }))!.coins).toMatchObject({ gp: 10 })
+        expect(await CharacterItem.countDocuments({ sheetId: lyra.sheetId })).toBe(1)
+        // Uma nova aplicação entrega o que faltou, sem duplicar o item.
+        expect(await applyCombatRewards({ _id: new mongoose.Types.ObjectId(id), rigor: "equilibrado", ownerId: owner }, combat!._id)).toBe(1)
+        expect((await CharacterSheet.collection.findOne({ _id: lyra.sheetId! }))!.coins).toMatchObject({ gp: 40 })
+        expect(await CharacterItem.countDocuments({ sheetId: lyra.sheetId })).toBe(1)
+    })
+
     it("JEV 'Início ou fim de combate': orientação na tarefa, de entrada fora de combate e de saída em combate", async () => {
         const { id, owner, player } = await table("narrativo")
         jev.combatBoundary = true
@@ -439,6 +483,91 @@ describe("Maddox 6 — combate narrativo de ponta a ponta", () => {
         await playersTurn(id, owner, player, 2)
         expect(calls[2]!.userText).toContain("provavelmente encerram o combate")
         expect(JSON.stringify(askJevSystemOne.mock.calls[1]![0])).toContain('O grupo está em combate (\\"Briga\\")')
+    })
+
+    it("dois combates com o mesmo título viram dois marcos da história (um por combate)", async () => {
+        const { id, owner, player } = await table("narrativo")
+        const fight = (resumo: string) => [
+            { tools: [{ name: "start_combat", input: { titulo: "Emboscada de bandidos", adversarios: [{ nome: "Bandido", quantidade: 2 }] } }] },
+            { tools: [{ name: "end_combat", input: { resultado: "vitoria", resumo, cenaFinal: "Estrada vazia." } }], text: "Os bandidos caem." },
+        ]
+        script.push(fight("Primeira emboscada vencida."), fight("Segunda emboscada vencida."))
+        await game.startCampaign(id, owner)
+        await waitForCampaignIdle(id)
+        await playersTurn(id, owner, player, 1)
+        const memories = await MaddoxCampaignMemoryModel.find({ campaignId: id, kind: "evento" }).sort({ turnNumber: 1 }).lean()
+        expect(memories.map((memory) => [memory.title, memory.text.includes("Primeira") ? 1 : memory.text.includes("Segunda") ? 2 : 0])).toEqual([
+            ["Combate: Emboscada de bandidos (turno 1)", 1],
+            ["Combate: Emboscada de bandidos (turno 2)", 2],
+        ])
+    })
+
+    it("NPC registrado depois do início (save_npc) recebe o desfecho no fim do combate", async () => {
+        const { id, owner, player } = await table("narrativo")
+        script.push(
+            [{ tools: [{ name: "start_combat", input: { titulo: "Duelo", adversarios: [{ nome: "Varn" }] } }], text: "Varn saca a espada." }],
+            [{ tools: [{ name: "save_npc", input: { name: "varn", publicDescription: "Espadachim." } }], text: "Varn se revela." }],
+            [{ tools: [{ name: "end_combat", input: { resultado: "vitoria", resumo: "Varn caiu.", adversarios: [{ nome: "Varn", desfecho: "morto" }], cenaFinal: "x" } }], text: "Fim." }],
+        )
+        await game.startCampaign(id, owner)
+        await waitForCampaignIdle(id)
+        await playersTurn(id, owner, player, 1)
+        await playersTurn(id, owner, player, 2)
+        const npc = await MaddoxNpcModel.findOne({ campaignId: id }).lean()
+        expect(npc!.status).toBe("dead")
+        const combat = await MaddoxCombatModel.findOne({ campaignId: id }).lean()
+        expect(String(combat!.combatants[0]!.npcId)).toBe(String(npc!._id))
+    })
+
+    it("nomes repetidos de participantes são recusados (start_combat e update_combat)", async () => {
+        const { id, owner } = await table("narrativo")
+        script.push([
+            { tools: [{ name: "start_combat", input: { titulo: "Matilha", adversarios: [{ nome: "Lobo" }, { nome: "lobo" }] } }] },
+            { tools: [{ name: "start_combat", input: { titulo: "Matilha", adversarios: [{ nome: "Lobo", quantidade: 2 }] } }] },
+            { tools: [{ name: "update_combat", input: { adversarios: [{ nome: "Lobo alfa" }, { nome: "Lobo Alfa" }] } }], text: "Lobos!" },
+        ])
+        await game.startCampaign(id, owner)
+        await waitForCampaignIdle(id)
+        expect(toolLog.map((item) => [item.name, item.error ? "erro" : "ok"])).toEqual([
+            ["start_combat", "erro"],
+            ["start_combat", "ok"],
+            ["update_combat", "erro"],
+        ])
+        expect(toolLog[0]!.error).toContain('"lobo" aparece mais de uma vez no combate')
+        expect(toolLog[0]!.error).toContain("quantidade")
+        const combat = await MaddoxCombatModel.findOne({ campaignId: id }).lean()
+        expect(combat!.combatants.map((item) => [item.name, item.quantity])).toEqual([["Lobo", 2]])
+    })
+
+    it("falha ao gravar as mensagens depois de encerrar: efeitos esperam, e a retomada grava o card que faltou e aplica os efeitos uma vez", async () => {
+        const { id, owner, player } = await table("narrativo")
+        script.push(
+            [{ tools: [{ name: "start_combat", input: { titulo: "Duelo", adversarios: [{ nome: "Varn", registrarNpc: true }] } }], text: "Varn ataca." }],
+            [{ tools: [{ name: "end_combat", input: { resultado: "vitoria", resumo: "Varn caiu.", adversarios: [{ nome: "Varn", desfecho: "morto" }], cenaFinal: "x" } }], text: "Varn cai." }],
+            // Retomada: o combate já está encerrado; o Maddox só narra.
+            [{ text: "Varn está caído no chão." }],
+        )
+        await game.startCampaign(id, owner)
+        await waitForCampaignIdle(id)
+        const spy = vi.spyOn(MaddoxCampaignMessageModel, "insertMany").mockRejectedValueOnce(new Error("banco oscilou"))
+        await playersTurn(id, owner, player, 1)
+        spy.mockRestore()
+
+        // Combate encerrado, mas sem card nem narração: os efeitos do fim ainda não rodaram.
+        expect(await MaddoxCombatModel.findOne({ campaignId: id }).lean()).toMatchObject({ status: "ended", effectsApplied: false })
+        expect((await MaddoxNpcModel.findOne({ campaignId: id }).lean())!.status).toBe("active")
+        expect(await MaddoxCampaignMemoryModel.countDocuments({ campaignId: id, kind: "evento" })).toBe(0)
+        expect(await MaddoxCampaignMessageModel.countDocuments({ campaignId: id, turnNumber: 2, kind: { $in: ["narration", "combat"] } })).toBe(0)
+
+        // Retomada (passado o intervalo de nova tentativa).
+        await MaddoxCampaignModel.updateOne({ _id: id }, { $set: { "turn.failedAt": new Date(Date.now() - 60_000) } })
+        await game.getGameState(id, owner)
+        await waitForCampaignIdle(id)
+        expect(await kindsInOrder(id, 2)).toEqual(["narration", "combat:end"])
+        expect((await MaddoxNpcModel.findOne({ campaignId: id }).lean())!.status).toBe("dead")
+        expect(await MaddoxCampaignMemoryModel.countDocuments({ campaignId: id, kind: "evento" })).toBe(1)
+        expect(await MaddoxCombatModel.findOne({ campaignId: id }).lean()).toMatchObject({ effectsApplied: true })
+        expect((await game.getGameState(id, owner)).turn).toMatchObject({ number: 2, phase: "players" })
     })
 
     it("JEV desligado ou que nega: narra sem a orientação", async () => {

@@ -51,8 +51,8 @@ export function GameCombatCard({ combat }: { combat: MaddoxGameCombatEventDto })
                     <div className="space-y-1">
                         <p className="text-xs font-medium text-white/60">{ended ? "Adversários e aliados" : "Na luta"}</p>
                         <ul className="flex flex-wrap gap-1.5" aria-label={ended ? "Desfecho dos participantes" : "Participantes do combate"}>
-                            {people.map((item) => (
-                                <li key={`${item.side}-${item.name}`} data-testid="combatant">
+                            {people.map((item, index) => (
+                                <li key={index} data-testid="combatant">
                                     <RarityChip color={item.side === "aliado" ? rarityColors.uncommon : COMBAT_COLOR}>
                                         {item.name}
                                         {item.quantity > 1 ? ` (${item.quantity})` : ""}
