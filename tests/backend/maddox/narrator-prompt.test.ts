@@ -147,7 +147,7 @@ describe("fichas e testes no prompt (Maddox 5)", () => {
     })
 
     it("no MCP, a lista de ferramentas só inclui request_check quando os testes valem", () => {
-        expect(buildNarratorInstructions(context({ rigor: "fiel-dnd" }), { kind: "mcp", server: "dndicas-maddox", turnToken: "t", checks: true })).toContain("update_character_state, request_check)")
+        expect(buildNarratorInstructions(context({ rigor: "fiel-dnd" }), { kind: "mcp", server: "dndicas-maddox", turnToken: "t", checks: true })).toContain("update_character_state, request_check, search_catalog, get_catalog_entity)")
         expect(buildNarratorInstructions(context(), { kind: "mcp", server: "dndicas-maddox", turnToken: "t", checks: false })).not.toContain("request_check")
     })
 
@@ -175,3 +175,19 @@ describe("fichas e testes no prompt (Maddox 5)", () => {
         expect(text).toBe("[Turno 2 — teste] Lyra — Furtividade (Destreza), CD 15: total 17")
     })
 })
+
+describe("catálogo do DnDicas no narrador", () => {
+    it("todos os graus têm a seção; nos graus com testes o catálogo decide, no narrativo é referência", () => {
+        for (const rigor of ["narrativo", "flexivel", "equilibrado", "rigoroso", "fiel-dnd"] as const) {
+            const text = buildNarratorInstructions(context({ rigor }), { kind: "ai-sdk" })
+            expect(text).toContain("## Catálogo do DnDicas")
+            expect(text).toContain("consulte `search_catalog` e `get_catalog_entity` antes de afirmar a mecânica")
+            expect(text).toContain(usesChecks(rigor) ? "não invente regras nem entidades" : "a narrativa tem prioridade")
+        }
+    })
+
+    it("no MCP, a lista de ferramentas inclui as de catálogo também sem testes", () => {
+        expect(buildNarratorInstructions(context(), { kind: "mcp", server: "dndicas-maddox", turnToken: "t", checks: false })).toContain("update_character_state, search_catalog, get_catalog_entity)")
+    })
+})
+

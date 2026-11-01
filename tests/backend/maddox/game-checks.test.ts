@@ -13,6 +13,7 @@ type ToolCall = { name: string; input: Record<string, unknown> }
 type Step = { tools?: ToolCall[]; text?: string; during?: () => Promise<void> }
 
 const calls: { instructions: string; userText: string; toolNames: string[] }[] = []
+const toolOutputs: { name: string; output: unknown }[] = []
 /** Roteiro por geração (na ordem em que o narrador é chamado). */
 const script: Step[][] = []
 const failNext = { value: false }
@@ -83,6 +84,7 @@ vi.mock("ai", () => ({
                         yield { type: "tool-call", toolCallId, toolName: call.name, input: call.input }
                         try {
                             const output = await options.tools[call.name]!.execute(call.input, { toolCallId })
+                            toolOutputs.push({ name: call.name, output })
                             yield { type: "tool-result", toolCallId, toolName: call.name, output }
                         } catch (error) {
                             yield { type: "tool-error", toolCallId, toolName: call.name, error }
@@ -408,6 +410,28 @@ describe("Maddox 5 — regras dos testes", () => {
         expect(state.turn).toMatchObject({ phase: "players", awaitingChecks: false })
         expect(await MaddoxCampaignMessageModel.countDocuments({ campaignId: table.id, kind: "check" })).toBe(2)
         expect(calls.at(-1)!.userText).toContain("último pedido de testes deste turno")
+    })
+
+    it("o narrador consulta o catálogo em qualquer grau: ferramentas na chamada, seção no prompt e busca que só lê", async () => {
+        const { BackgroundModel } = await import("@/features/backgrounds/models/background")
+        await BackgroundModel.collection.insertOne({ name: "Soldado", originalName: "Soldier", description: "<p>Treino militar.</p>", source: "LDJ 2024", status: "active", suggestedAttributes: [] })
+        for (const rigor of ["narrativo", "fiel-dnd"] as const) {
+            calls.length = 0
+            toolOutputs.length = 0
+            await Promise.all([mongoose.connection.collection("users").deleteMany({}), MaddoxCampaignModel.deleteMany({}), MaddoxCampaignMemberModel.deleteMany({}), MaddoxCharacterModel.deleteMany({}), MaddoxCampaignMessageModel.deleteMany({}), CharacterSheet.deleteMany({})])
+            const table = await faithfulTable(rigor)
+            script.push([{ tools: [{ name: "search_catalog", input: { consulta: "soldado", tipos: ["Origem"] } }], text: "Abertura. O que vocês fazem?" }])
+            const before = await MaddoxCampaignMessageModel.countDocuments({ campaignId: table.id })
+            await game.startCampaign(table.id, table.owner)
+            await waitForCampaignIdle(table.id)
+            expect(calls[0]!.toolNames).toEqual(expect.arrayContaining(["search_catalog", "get_catalog_entity"]))
+            expect(calls[0]!.instructions).toContain("## Catálogo do DnDicas")
+            expect(calls[0]!.instructions).toContain(rigor === "narrativo" ? "a narrativa tem prioridade" : "não invente regras nem entidades")
+            expect(toolOutputs[0]).toMatchObject({ name: "search_catalog", output: { itens: [expect.objectContaining({ nome: "Soldado", tipo: "Origem" })] } })
+            // Só leitura: a narração grava só a própria mensagem.
+            expect(await MaddoxCampaignMessageModel.countDocuments({ campaignId: table.id })).toBe(before + 1)
+        }
+        await BackgroundModel.collection.deleteMany({})
     })
 
     it("campanha narrativa não oferece request_check ao modelo nem fala de testes", async () => {

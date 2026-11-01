@@ -3,6 +3,8 @@ import { mentionsToMarkup } from "./catalog-mentions"
 import {
     MADDOX_ABILITY_BONUS_MAX,
     MADDOX_ABILITY_BONUS_POINTS,
+    MADDOX_CATALOG_ORIGIN_RIGORS,
+    MADDOX_CATALOG_TOOL_NAMES,
     MADDOX_INTERVIEW_TOOL_NAMES,
     MADDOX_PROFILE_SECTIONS,
     MADDOX_PROPOSAL_MARKER,
@@ -58,6 +60,7 @@ export function buildInterviewInstructions(context: InterviewPromptContext): str
     parts.push(rigorBlock(context.campaign.rigor))
     if (!isScenario && MADDOX_SHEET_RIGORS.includes(context.campaign.rigor)) {
         parts.push("Neste grau de rigor o personagem terá ficha do D&D: combine também raça, classe, origem (antecedente) e os seis atributos (pelo card, veja abaixo).")
+        parts.push(catalogSection(context.campaign.rigor))
         parts.push(abilitiesSection(context.abilities ?? null))
     }
 
@@ -87,6 +90,20 @@ export function buildInterviewInstructions(context: InterviewPromptContext): str
 }
 
 const T = MADDOX_INTERVIEW_TOOL_NAMES
+const C = MADDOX_CATALOG_TOOL_NAMES
+
+/** Seção "Catálogo do DnDicas" (entrevista de personagem nos graus com ficha): consultar antes de sugerir. */
+export function catalogSection(rigor: MaddoxRigorLevel): string {
+    const strict = MADDOX_CATALOG_ORIGIN_RIGORS.includes(rigor)
+    return [
+        "## Catálogo do DnDicas",
+        `- Antes de sugerir ou confirmar raça, classe, subclasse, origem (antecedente), talento ou magia, consulte \`${C.search}\` (para listar todas as opções de um tipo, envie só \`tipos\`, por exemplo { "tipos": ["Origem"] }) e, para os detalhes (atributos sugeridos, perícias, traços), \`${C.get}\`.`,
+        "- Só cite como do catálogo o que a busca devolveu, com o nome exato dela na marcação {{Tipo:Nome}}. Nunca use nomes de memória ou de outras edições do D&D.",
+        strict
+            ? "- Neste grau, a raça, a classe, a subclasse e a origem do personagem precisam ser do catálogo. Se o jogador pedir algo que não existe nele, diga isso e mostre as opções mais próximas da busca."
+            : "- Neste grau, prefira o catálogo. Algo próprio (fora do catálogo) só se o jogador quiser, e diga com clareza que é próprio.",
+    ].join("\n")
+}
 
 /** Seção "Atributos do personagem" (graus com ficha). */
 export function abilitiesSection(abilities: InterviewPromptContext["abilities"]): string {
@@ -95,14 +112,14 @@ export function abilitiesSection(abilities: InterviewPromptContext["abilities"])
         `- Os seis atributos são definidos SÓ pelo card de atributos: chame \`${T.request}\` quando chegar a hora (o card aparece abaixo da sua fala). Nunca peça ao jogador que digite números, nunca role dados nem invente valores por ele.`,
         "- Métodos do card: conjunto padrão (15, 14, 13, 12, 10 e 8, um por atributo); compra de pontos (27 pontos, cada atributo entre 8 e 15); rolagem, feita pelo próprio jogador no card: cinco rolagens de 4d6 descartando o menor dado, e a sexta pontuação é 72 menos a soma das cinco. Explique em poucas linhas e deixe o jogador escolher.",
         "- Quando o jogador enviar, você recebe uma fala do sistema com os valores: comente em poucas linhas e siga a entrevista. Para mudar os valores, reabra o card com a mesma ferramenta (ele vem preenchido com os atuais).",
-        `- Bônus do antecedente (sugira, não é obrigatório): com a origem definida e os atributos enviados, proponha distribuir ${MADDOX_ABILITY_BONUS_POINTS} pontos (no máximo +${MADDOX_ABILITY_BONUS_MAX} por atributo, nos atributos sugeridos pelo antecedente) e aplique com \`${T.bonus}\`.`,
+        `- Bônus do antecedente (sugira, não é obrigatório): com a origem definida e os atributos enviados, proponha distribuir ${MADDOX_ABILITY_BONUS_POINTS} pontos (no máximo +${MADDOX_ABILITY_BONUS_MAX} por atributo, nos atributos sugeridos pelo antecedente) e aplique com \`${T.bonus}\`. Antes de propor os pontos, confira a origem com \`${C.search}\` e os atributos sugeridos com \`${C.get}\`.`,
         `- Antes da síntese, consulte \`${T.get}\` e liste na síntese os valores finais (base + bônus).`,
     ]
     if (abilities) {
         lines.push(`\n### Atributos: situação atual\n${abilities.status}`)
         if (abilities.tools.kind === "mcp") {
             lines.push(
-                `\n### Ferramentas de atributos (MCP)\nUse as ferramentas \`${T.request}\`, \`${T.get}\` e \`${T.bonus}\` do servidor MCP \`${abilities.tools.server}\`. Em TODA chamada envie \`turno\` com este valor exato: ${abilities.tools.token}`,
+                `\n### Ferramentas de atributos (MCP)\nUse as ferramentas \`${T.request}\`, \`${T.get}\`, \`${T.bonus}\`, \`${C.search}\` e \`${C.get}\` do servidor MCP \`${abilities.tools.server}\`. Em TODA chamada envie \`turno\` com este valor exato: ${abilities.tools.token}`,
             )
         }
     }

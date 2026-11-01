@@ -3,7 +3,8 @@ import { Types } from "mongoose"
 import type { ToolSet } from "ai"
 import { loggerFor } from "@/lib/logger"
 import type { AttributeType } from "@/features/character-sheets/types/character-sheet.types"
-import { MADDOX_ABILITY_BONUS_MAX, MADDOX_INTERVIEW_TOOL_NAMES, MADDOX_SHEET_RIGORS, MADDOX_TOOL_TEXT_MAX } from "../constants"
+import { MADDOX_ABILITY_BONUS_MAX, MADDOX_CATALOG_ORIGIN_RIGORS, MADDOX_CATALOG_TOOL_NAMES, MADDOX_INTERVIEW_TOOL_NAMES, MADDOX_SHEET_RIGORS, MADDOX_TOOL_TEXT_MAX, type MaddoxRigorLevel } from "../constants"
+import { normalizeCatalogName } from "../catalog-markup"
 import { MaddoxCampaignModel, MaddoxInterviewModel, type IMaddoxAbilityBonus, type IMaddoxAbilityScoresCard, type IMaddoxInterview, type IMaddoxInterviewMessage } from "../models"
 import { ABILITY_BY_LABEL, ABILITY_KEYS, ABILITY_LABEL_LIST, abilityMethodLabel, finalScores, rolledScores, scoresLine, validateBonus, type AbilityScores } from "../interview-scores"
 import { MADDOX_ABILITY_LABELS } from "../check-modifier"
@@ -102,27 +103,40 @@ export function abilityStatusText(doc: Pick<IMaddoxInterview, "messages" | "abil
     return `Atributos enviados (${abilityMethodLabel(card.method!)}): ${scoresLine(base, card.bonus?.parts)}.${bonus}`
 }
 
-async function loadActive(context: InterviewToolContext): Promise<IMaddoxInterview> {
+async function loadActive(context: InterviewToolContext): Promise<IMaddoxInterview & { rigor: MaddoxRigorLevel }> {
     const doc = await MaddoxInterviewModel.findOne({ _id: context.interviewId, "generating.token": context.lockToken }).lean<IMaddoxInterview>()
     if (!doc) throw new MaddoxInterviewToolError("Esta resposta da entrevista já terminou: as ferramentas só funcionam durante a geração.")
     if (doc.kind !== "character") throw new MaddoxInterviewToolError("Os atributos só existem na entrevista de personagem.")
     const campaign = await MaddoxCampaignModel.findById(doc.campaignId).select("rigor").lean<{ rigor: (typeof MADDOX_SHEET_RIGORS)[number] }>()
     if (!campaign || !MADDOX_SHEET_RIGORS.includes(campaign.rigor)) throw new MaddoxInterviewToolError("Este grau de rigor não usa atributos: o personagem é só narrativo.")
-    return doc
+    return { ...doc, rigor: campaign.rigor }
 }
 
-const escapeRegex = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
+interface CatalogOrigin {
+    name: string
+    originalName?: string
+    suggestedAttributes?: string[]
+}
 
-/** Antecedente do catálogo pelo nome (ou nome original), sem acento e sem caixa. */
-async function findBackground(name: string): Promise<{ name: string; suggested: AttributeType[] } | null> {
+/** Origens ATIVAS do catálogo (são poucas: só nome, nome original e atributos sugeridos). */
+async function activeOrigins(): Promise<CatalogOrigin[]> {
     const { BackgroundModel } = await import("@/features/backgrounds/models/background")
-    const pattern = new RegExp(`^${escapeRegex(name.trim())}$`, "i")
-    const found = await BackgroundModel.findOne({ $or: [{ name: name.trim() }, { originalName: name.trim() }, { name: pattern }, { originalName: pattern }] })
-        .collation({ locale: "pt", strength: 1 })
-        .select("name suggestedAttributes")
-        .lean<{ name: string; suggestedAttributes?: string[] }>()
+    return BackgroundModel.find({ status: "active" }).select("name originalName suggestedAttributes").sort({ name: 1 }).lean<CatalogOrigin[]>()
+}
+
+/** Antecedente do catálogo pelo nome ou nome original, ignorando acento, caixa e espaços. Só origens ativas. */
+export async function findBackground(name: string): Promise<{ name: string; suggested: AttributeType[] } | null> {
+    const wanted = normalizeCatalogName(name)
+    if (!wanted) return null
+    const found = (await activeOrigins()).find((origin) => normalizeCatalogName(origin.name) === wanted || (origin.originalName && normalizeCatalogName(origin.originalName) === wanted))
     if (!found) return null
     return { name: found.name, suggested: (found.suggestedAttributes ?? []).map((label) => ABILITY_BY_LABEL[label]).filter((key): key is AttributeType => Boolean(key)) }
+}
+
+/** Erro de origem fora do catálogo nos graus estritos, com as origens disponíveis. */
+export async function originNotInCatalogMessage(name: string): Promise<string> {
+    const names = (await activeOrigins()).map((origin) => origin.name)
+    return `O antecedente “${name.trim()}” não está no catálogo do DnDicas. Origens disponíveis: ${names.join(", ") || "nenhuma"}. Escolha uma delas com o jogador (consulte ${MADDOX_CATALOG_TOOL_NAMES.search}) e aplique o bônus de novo.`
 }
 
 const bonusShape = Object.fromEntries(ABILITY_LABEL_LIST.map((label) => [label, z.number().int().min(1).max(MADDOX_ABILITY_BONUS_MAX).optional()]))
@@ -185,7 +199,7 @@ export const MADDOX_INTERVIEW_TOOLS: readonly MaddoxInterviewTool[] = [
     },
     {
         name: MADDOX_INTERVIEW_TOOL_NAMES.bonus,
-        description: `Aplica o bônus do antecedente aos atributos enviados: exatamente 3 pontos, no máximo +${MADDOX_ABILITY_BONUS_MAX} por atributo (+2/+1 ou +1/+1/+1), só nos atributos sugeridos pelo antecedente quando ele existe no catálogo. Ex.: { "antecedente": "Criminoso", "bonus": { "Destreza": 2, "Inteligência": 1 } }. Aplicar de novo substitui o bônus anterior.`,
+        description: `Aplica o bônus do antecedente aos atributos enviados: exatamente 3 pontos, no máximo +${MADDOX_ABILITY_BONUS_MAX} por atributo (+2/+1 ou +1/+1/+1), só nos atributos sugeridos pelo antecedente. Confira a origem antes com ${MADDOX_CATALOG_TOOL_NAMES.search} (tipo Origem): nos graus Rigoroso e Fiel ao D&D ela precisa existir no catálogo; no Equilibrado, uma origem própria aceita os pontos livres. Ex.: { "antecedente": "Criminoso", "bonus": { "Destreza": 2, "Inteligência": 1 } }. Aplicar de novo substitui o bônus anterior.`,
         input: z.object({
             antecedente: z.string().min(1).describe("Nome do antecedente (origem) combinado"),
             bonus: z.object(bonusShape).describe("Pontos por atributo (nome em português)"),
@@ -197,6 +211,8 @@ export const MADDOX_INTERVIEW_TOOLS: readonly MaddoxInterviewTool[] = [
             if (latest?.card.status !== "submitted" || !latest.card.base) throw new MaddoxInterviewToolError("O jogador ainda não enviou os atributos pelo card: o bônus é aplicado depois do envio.")
             const parts = Object.fromEntries(Object.entries(input.bonus).filter(([, value]) => typeof value === "number").map(([label, value]) => [ABILITY_BY_LABEL[label], value])) as Partial<Record<AttributeType, number>>
             const background = await findBackground(input.antecedente)
+            // Graus estritos: origem fora do catálogo é recusada sem gravar (nunca cai na regra livre).
+            if (!background && MADDOX_CATALOG_ORIGIN_RIGORS.includes(doc.rigor)) throw new MaddoxInterviewToolError(await originNotInCatalogMessage(input.antecedente))
             const error = validateBonus(parts, background?.suggested ?? [])
             if (error) throw new MaddoxInterviewToolError(error)
             const bonus: IMaddoxAbilityBonus = { background: background?.name ?? input.antecedente.trim().slice(0, 200), parts }
@@ -209,6 +225,7 @@ export const MADDOX_INTERVIEW_TOOLS: readonly MaddoxInterviewTool[] = [
                 applied: true,
                 antecedente: bonus.background,
                 catalogo: Boolean(background),
+                ...(background ? {} : { nota: "Origem própria (fora do catálogo): os pontos são livres." }),
                 sugeridos: background?.suggested.map((key) => MADDOX_ABILITY_LABELS[key]) ?? [],
                 final: scoresLine(latest.card.base, parts),
             }
@@ -242,5 +259,7 @@ export async function buildInterviewAiTools(context: InterviewToolContext): Prom
     for (const def of MADDOX_INTERVIEW_TOOLS) {
         tools[def.name] = dynamicTool({ description: def.description, inputSchema: def.input, execute: async (input: unknown) => runInterviewTool(def, context, input) })
     }
-    return tools
+    // Consulta ao catálogo (só leitura): confirma raça, classe, origem etc. antes de sugerir ou aplicar o bônus.
+    const { buildCatalogAiTools } = await import("./catalog-tools")
+    return { ...tools, ...(await buildCatalogAiTools()) }
 }

@@ -386,5 +386,7 @@ export async function buildMaddoxAiTools(context: MaddoxToolContext, options: { 
             execute: async (input: unknown) => runMaddoxTool(def, context, input),
         })
     }
-    return tools
+    // Consulta ao catálogo (só leitura), em todos os graus.
+    const { buildCatalogAiTools } = await import("./catalog-tools")
+    return { ...tools, ...(await buildCatalogAiTools()) }
 }

@@ -185,7 +185,7 @@ export const MADDOX_TOOL_TAGS_MAX = 12
 /** Tamanho orientado no prompt para cada anotação consolidada. */
 export const MADDOX_TOOL_TEXT_GUIDE = 3_000
 /** Passos do laço de ferramentas por geração do narrador. */
-export const MADDOX_NARRATOR_MAX_STEPS = 12
+export const MADDOX_NARRATOR_MAX_STEPS = 16
 /** Transcrição recente enviada ao narrador (o estado gravado cobre o que fica de fora). */
 export const MADDOX_NARRATOR_HISTORY_CHARS = 40_000
 /** Itens de cada lista no índice do estado entregue ao narrador. */
@@ -431,7 +431,19 @@ export const MADDOX_ABILITY_ROLL_TOTAL = 72
 export const MADDOX_ABILITY_BONUS_POINTS = 3
 export const MADDOX_ABILITY_BONUS_MAX = 2
 /** Passos do laço de ferramentas do entrevistador (provedores diretos). */
-export const MADDOX_INTERVIEW_MAX_STEPS = 6
+export const MADDOX_INTERVIEW_MAX_STEPS = 10
+/** Graus em que a origem do bônus de atributos precisa existir no catálogo (Equilibrado aceita origem própria). */
+export const MADDOX_CATALOG_ORIGIN_RIGORS: readonly MaddoxRigorLevel[] = ["rigoroso", "fiel-dnd"]
+
+/** Consulta ao catálogo do DnDicas (entrevistador e narrador, só leitura). */
+export const MADDOX_CATALOG_TOOL_NAMES = { search: "search_catalog", get: "get_catalog_entity" } as const
+export const MADDOX_CATALOG_SEARCH_LIMIT_MAX = 30
+export const MADDOX_CATALOG_SEARCH_LIMIT_DEFAULT = 15
+/** Resumo de cada item da busca (texto puro). */
+export const MADDOX_CATALOG_SUMMARY_MAX = 300
+/** Cada texto do detalhe da entidade (texto puro); acima disso sai cortado com `truncated`. */
+export const MADDOX_CATALOG_TEXT_MAX = 4000
+
 export const MADDOX_INTERVIEW_TOOL_NAMES = { request: "request_ability_scores", get: "get_ability_scores", bonus: "apply_ability_bonus" } as const
 
 /** Seções do cenário consolidado (como o `setting.md` do roleplay). */

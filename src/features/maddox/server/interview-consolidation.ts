@@ -3,7 +3,7 @@ import { AcaoAuditoria, dbConnect, recordAudit } from "@/lib/db"
 import { DomainError } from "@/lib/api/route"
 import { loggerFor } from "@/lib/logger"
 import { User } from "@/features/users/models/user"
-import { MADDOX_CAMPAIGN_AUDIT_ENTITY, MADDOX_INTERVIEW_CONSUMPTION_ORIGIN, MADDOX_PROFILE_SECTIONS, MADDOX_SHEET_RIGORS, type MaddoxScriptKind } from "../constants"
+import { MADDOX_CAMPAIGN_AUDIT_ENTITY, MADDOX_INTERVIEW_CONSUMPTION_ORIGIN, MADDOX_CATALOG_ORIGIN_RIGORS, MADDOX_PROFILE_SECTIONS, MADDOX_SHEET_RIGORS, type MaddoxScriptKind } from "../constants"
 import { MaddoxCampaignModel, MaddoxCharacterModel, MaddoxInterviewModel, type IMaddoxInterview } from "../models"
 import { characterConsolidationSchema, scenarioConsolidationSchema, type CharacterConsolidation, type CharacterSheetSeed, type ScenarioConsolidation } from "../interview-schemas"
 import type { MaddoxCampaignDetailDto } from "../campaign-types"
@@ -11,7 +11,7 @@ import { changed, getCampaignDetail } from "./campaigns"
 import { notifyInterviewChanged } from "./campaign-realtime"
 import { linkCatalogMentions } from "./catalog-mentions"
 import { buildConsolidationInstructions, parseJsonObject, settingMarkdown, transcriptText } from "./interview-prompt"
-import { abilityCardAwaitingFirstSubmit, submittedAbilityCard } from "./interview-tools"
+import { abilityCardAwaitingFirstSubmit, findBackground, submittedAbilityCard } from "./interview-tools"
 import { finalScores } from "../interview-scores"
 import { acquireInterviewLock, campaignReservedNames, loadInterviewer, loadSubject, promptContext, releaseInterviewLock, type InterviewSubject } from "./interviews"
 
@@ -180,6 +180,11 @@ export async function completeInterview(campaignId: string, kind: MaddoxScriptKi
     // Card de atributos aberto e nunca enviado: a ficha não sai de atributos extraídos da conversa.
     if (kind === "character" && MADDOX_SHEET_RIGORS.includes(subject.campaign.rigor) && abilityCardAwaitingFirstSubmit(doc.messages)) {
         throw new DomainError(409, "Envie os atributos pelo card antes de concluir a entrevista.", "ABILITY_SCORES_PENDING")
+    }
+    // Rigoroso e Fiel: um bônus de origem fora do catálogo não vira ficha (o Maddox reaplica com uma origem do catálogo).
+    const bonusOrigin = kind === "character" && MADDOX_CATALOG_ORIGIN_RIGORS.includes(subject.campaign.rigor) ? submittedAbilityCard(doc.messages)?.bonus?.background : null
+    if (bonusOrigin && !(await findBackground(bonusOrigin))) {
+        throw new DomainError(409, `O antecedente do bônus (${bonusOrigin}) não está no catálogo. Peça ao Maddox para escolher uma origem do catálogo e reaplicar o bônus.`, "BACKGROUND_NOT_IN_CATALOG")
     }
     const { settings, model } = await loadInterviewer()
     const { doc: locked, token } = await acquireInterviewLock(doc._id)

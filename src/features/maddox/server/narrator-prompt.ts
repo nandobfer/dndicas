@@ -1,5 +1,5 @@
 import { memoriesSection } from "@/features/ai/memories-prompt"
-import { MADDOX_CHECK_RIGORS, MADDOX_CHECK_ROUNDS_MAX, MADDOX_DECLARATION_VALIDATION_RIGORS, MADDOX_PROFILE_SECTIONS, MADDOX_TOOL_TEXT_GUIDE, type MaddoxCampaignMemoryKind, type MaddoxGameMessageKind, type MaddoxQuestStatus, type MaddoxRigorLevel, type MaddoxVisibility } from "../constants"
+import { MADDOX_CATALOG_TOOL_NAMES, MADDOX_CHECK_RIGORS, MADDOX_CHECK_ROUNDS_MAX, MADDOX_DECLARATION_VALIDATION_RIGORS, MADDOX_PROFILE_SECTIONS, MADDOX_TOOL_TEXT_GUIDE, type MaddoxCampaignMemoryKind, type MaddoxGameMessageKind, type MaddoxQuestStatus, type MaddoxRigorLevel, type MaddoxVisibility } from "../constants"
 import { CATALOG_CITATION_RULE, rigorBlock } from "./interview-prompt"
 
 /**
@@ -90,6 +90,18 @@ export const MADDOX_PERSISTENCE_RULE = [
     `- Cada anotação é um texto consolidado e conciso, de até uns ${MADDOX_TOOL_TEXT_GUIDE.toLocaleString("pt-BR")} caracteres: ao atualizar, reescreva o essencial em vez de acumular. Se o retorno trouxer \`truncated\`, consolide e grave de novo.`,
     "- Grave antes ou depois de escrever a narração, nunca no meio dela, e não comente as gravações no texto.",
 ].join("\n")
+
+/** Consulta ao catálogo do DnDicas na narração (todos os graus). */
+export function narratorCatalogRule(rigor: MaddoxRigorLevel): string {
+    return [
+        "## Catálogo do DnDicas",
+        `- Para regras, magias, itens, monstros e capacidades de classe, subclasse, raça ou origem, consulte \`${MADDOX_CATALOG_TOOL_NAMES.search}\` e \`${MADDOX_CATALOG_TOOL_NAMES.get}\` antes de afirmar a mecânica. Cite com {{Tipo:Nome}} só o que a busca devolveu, com o nome exato dela.`,
+        usesChecks(rigor)
+            ? "- Use o que o catálogo diz para decidir o que é possível e a dificuldade dos testes; não invente regras nem entidades que a busca não confirmou."
+            : "- A consulta serve de referência: a narrativa tem prioridade e nada vira número na história.",
+        "- Consulte só quando a cena depender disso (poucas buscas por narração).",
+    ].join("\n")
+}
 
 export interface NarratorCharacter {
     name: string
@@ -190,7 +202,7 @@ function toolsBlock(mode: NarratorToolMode): string | null {
     if (mode.kind === "ai-sdk") return null
     return [
         "## Ferramentas desta narração",
-        `- As ferramentas de anotações da campanha estão no servidor MCP \`${mode.server}\` (get_campaign_state, update_campaign_state, list_npcs, get_npc, save_npc, search_memories, save_memory, update_character_state${mode.checks ? ", request_check" : ""}).`,
+        `- As ferramentas de anotações da campanha estão no servidor MCP \`${mode.server}\` (get_campaign_state, update_campaign_state, list_npcs, get_npc, save_npc, search_memories, save_memory, update_character_state${mode.checks ? ", request_check" : ""}, ${MADDOX_CATALOG_TOOL_NAMES.search}, ${MADDOX_CATALOG_TOOL_NAMES.get}).`,
         `- Em TODA chamada a essas ferramentas, envie o campo \`turno\` exatamente com este valor: \`${mode.turnToken}\`.`,
         "- Não use outras ferramentas (arquivos, terminal, web): a campanha vive só nessas anotações.",
     ].join("\n")
@@ -202,7 +214,7 @@ export function buildNarratorInstructions(context: NarratorPromptContext, mode: 
     if (memories) parts.push(memories)
     parts.push(MADDOX_NARRATOR_RULES, usesChecks(context.rigor) ? checksRule(context.rigor) : MADDOX_NARRATIVE_MODE_RULE, rigorBlock(context.rigor))
     if (judgesFreeActionsInNarration(context.rigor)) parts.push(MADDOX_FREE_ACTION_RULE)
-    parts.push(MADDOX_NARRATOR_FORMAT, MADDOX_PERSISTENCE_RULE)
+    parts.push(MADDOX_NARRATOR_FORMAT, MADDOX_PERSISTENCE_RULE, narratorCatalogRule(context.rigor))
     const tools = toolsBlock(mode)
     if (tools) parts.push(tools)
     parts.push(`# Campanha "${context.campaignName}"`)

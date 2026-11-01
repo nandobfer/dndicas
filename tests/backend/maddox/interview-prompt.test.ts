@@ -171,6 +171,31 @@ describe("atributos na entrevista de personagem (Maddox 5)", () => {
         expect(mcp).toContain("envie `turno` com este valor exato: tok.123")
     })
 
+    it("catálogo: consultar antes de sugerir, com a regra de cada grau; fora dos graus com ficha e no cenário não aparece", () => {
+        for (const rigor of ["rigoroso", "fiel-dnd"] as const) {
+            const text = character(rigor)
+            expect(text).toContain("## Catálogo do DnDicas")
+            expect(text).toContain("consulte `search_catalog`")
+            expect(text).toContain("`get_catalog_entity`")
+            expect(text).toContain("Nunca use nomes de memória ou de outras edições do D&D.")
+            expect(text).toContain("a raça, a classe, a subclasse e a origem do personagem precisam ser do catálogo")
+            // O catálogo vem antes dos atributos (a origem é conferida antes do bônus).
+            expect(text.indexOf("## Catálogo do DnDicas")).toBeLessThan(text.indexOf("## Atributos do personagem"))
+            expect(text).toContain("confira a origem com `search_catalog` e os atributos sugeridos com `get_catalog_entity`")
+        }
+        const balanced = character("equilibrado")
+        expect(balanced).toContain("prefira o catálogo")
+        expect(balanced).not.toContain("precisam ser do catálogo")
+        expect(character("narrativo")).not.toContain("## Catálogo do DnDicas")
+        expect(character("flexivel")).not.toContain("## Catálogo do DnDicas")
+        expect(buildInterviewInstructions(base({ campaign: { name: "B", rigor: "fiel-dnd", setting: "", openingSituation: "" } }))).not.toContain("## Catálogo do DnDicas")
+    })
+
+    it("pelo MCP, as instruções listam também as ferramentas de catálogo", () => {
+        const mcp = character("fiel-dnd", { status: "Card aberto", tools: { kind: "mcp", server: "dndicas-maddox", token: "tok.123" } })
+        expect(mcp).toContain("`request_ability_scores`, `get_ability_scores`, `apply_ability_bonus`, `search_catalog` e `get_catalog_entity` do servidor MCP `dndicas-maddox`")
+    })
+
     it("a fala interna aparece como SISTEMA na transcrição; a consolidação avisa que os atributos vêm do card", () => {
         expect(transcriptText([{ role: "user", content: "[Sistema] Enviou", internal: true }, { role: "user", content: "Oi" }])).toBe("SISTEMA: [Sistema] Enviou\n\nJOGADOR: Oi")
         const context = base({ kind: "character", campaign: { name: "B", rigor: "fiel-dnd", setting: "", openingSituation: "" } })

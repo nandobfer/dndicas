@@ -31,6 +31,8 @@ const rollGeneralDice = vi.fn(async (request: { terms: { dice: string; quantity:
     return { rollId: `roll-${Math.random()}`, terms: [{ dice: "d6", quantity: request.terms[0]!.quantity, results }], mode: "normal", diceTotal: 0, modifier: 0, total: 0, createdAt: new Date().toISOString() }
 })
 
+// A consulta ao catálogo conecta pelo `dbConnect` do core: no teste, a conexão já é a do MongoDB em memória.
+vi.mock("@/core/database/db", () => ({ default: vi.fn(async () => undefined) }))
 vi.mock("@/lib/db", () => ({ dbConnect: vi.fn(async () => undefined), recordAudit, AcaoAuditoria: { CRIAR: "CRIAR", ATUALIZAR: "ATUALIZAR", EXCLUIR: "EXCLUIR", ATRIBUIR: "ATRIBUIR" } }))
 vi.mock("@/lib/pusher/channels", () => ({ publishToChannels: vi.fn(async () => undefined) }))
 vi.mock("@/features/maddox/server/settings", () => ({
@@ -81,7 +83,7 @@ vi.mock("@/lib/ai/consumption", () => ({ recordAiConsumption: vi.fn(async () => 
 vi.mock("@/lib/ai/jev", () => ({ askJevSystemOne: vi.fn() }))
 vi.mock("@/features/maddox/server/opencode-sessions", () => ({ ensureMaddoxSession: vi.fn(async () => "ses"), releaseInterviewSession: vi.fn(async () => undefined) }))
 vi.mock("@/features/character-sheets/api/character-sheets-service", () => ({ createBlankSheet }))
-vi.mock("@/features/mcp/server/catalog-entity-service", () => ({ searchCatalogEntities: vi.fn(async () => ({ items: [], limit: 10, offset: 0 })) }))
+// Catálogo real sobre o MongoDB em memória (menções e as ferramentas search_catalog/get_catalog_entity).
 vi.mock("@/features/dice-roller/server/dice-roll-service", () => ({ rollGeneralDice }))
 vi.mock("@/features/dice-roller/server/dice-target", () => ({ resolveGeneralDiceTarget: (input: { userId: string }) => ({ scope: "user", userId: input.userId }) }))
 
@@ -122,7 +124,7 @@ async function run(turn: Awaited<ReturnType<typeof interviews.sendInterviewMessa
 }
 
 /** Campanha com cenário concluído e a entrevista de personagem da Ana aberta (abertura sem card). */
-async function characterInterview(rigor: "narrativo" | "equilibrado" | "fiel-dnd" = "fiel-dnd") {
+async function characterInterview(rigor: "narrativo" | "equilibrado" | "rigoroso" | "fiel-dnd" = "fiel-dnd") {
     const campaign = await campaigns.createCampaign({ name: "Brumas", rigor }, ids.owner)
     const { token } = await campaigns.getInviteLink(campaign.id, ids.owner)
     await campaigns.joinByInvite(token, ids.ana)
@@ -149,6 +151,8 @@ async function rollFive(campaignId: string) {
     for (let index = 0; index < 5; index++) await scoresService.rollAbilityScore(campaignId, "character", ids.ana)
 }
 
+/** Card enviado mais recente (o que entra na ficha). */
+const submittedCard = (doc: { messages: { abilityScores?: { status: string; bonus?: unknown } | null }[] }) => [...doc.messages].reverse().find((message) => message.abilityScores?.status === "submitted")?.abilityScores ?? null
 const interviewDoc = async () => (await MaddoxInterviewModel.findOne({ kind: "character" }).lean())!
 const errorOf = async (promise: Promise<unknown>) => promise.then(() => null, (error: { status?: number; code?: string; message: string }) => error)
 
@@ -186,7 +190,7 @@ describe("atributos pelo card na entrevista de personagem", () => {
         const campaignId = await characterInterview()
         // A entrevista recebe as ferramentas e a seção de atributos (nunca pedir números digitados).
         expect(calls.at(-1)!.via).toBe("tools")
-        expect(calls.at(-1)!.toolNames).toEqual(["request_ability_scores", "get_ability_scores", "apply_ability_bonus"])
+        expect(calls.at(-1)!.toolNames).toEqual(["request_ability_scores", "get_ability_scores", "apply_ability_bonus", "search_catalog", "get_catalog_entity"])
         expect(calls.at(-1)!.instructions).toContain("## Atributos do personagem")
         expect(calls.at(-1)!.instructions).toContain("Nunca peça ao jogador que digite números")
 
@@ -383,6 +387,92 @@ describe("atributos pelo card na entrevista de personagem", () => {
         await completeInterview(campaignId, "character", ids.ana)
         const character = await MaddoxCharacterModel.findOne({ userId: ids.ana }).lean()
         expect(await CharacterSheet.findById(character!.sheetId).lean()).toMatchObject({ strength: 15, dexterity: 15, constitution: 15, intelligence: 8 })
+    })
+
+    describe("origem do bônus e o catálogo", () => {
+        const origins = [
+            { name: "Soldado", originalName: "Soldier", suggestedAttributes: ["Força", "Destreza", "Constituição"], status: "active", description: "<p>Treino militar.</p>", source: "LDJ 2024" },
+            { name: "Acólito", originalName: "Acolyte", suggestedAttributes: ["Inteligência", "Sabedoria", "Carisma"], status: "active", description: "Templo.", source: "LDJ 2024" },
+            { name: "Herói do Povo", originalName: "Folk Hero", suggestedAttributes: ["Força", "Constituição", "Sabedoria"], status: "inactive", description: "Antiga.", source: "LDJ 2014" },
+        ]
+        const base = { strength: 15, dexterity: 14, constitution: 13, intelligence: 12, wisdom: 10, charisma: 8 }
+
+        async function submitted(rigor: "equilibrado" | "rigoroso" | "fiel-dnd") {
+            await BackgroundModel.collection.insertMany(origins.map((origin) => ({ ...origin })))
+            const campaignId = await characterInterview(rigor)
+            await openCard(campaignId)
+            scripted.push([say("Anotado.")])
+            await run(await scoresService.submitAbilityScores(campaignId, "character", { method: "standard", scores: base }, ids.ana))
+            toolResults.length = 0
+            return campaignId
+        }
+
+        it("Fiel: o Maddox lista as origens pelo catálogo e aplica o bônus de uma delas, gravada com o nome oficial", async () => {
+            const campaignId = await submitted("fiel-dnd")
+            expect(calls.at(-1)!.instructions).toContain("## Catálogo do DnDicas")
+            expect(calls.at(-1)!.instructions).toContain("precisam ser do catálogo")
+            scripted.push([call("search_catalog", { tipos: ["Origem"] }), call("apply_ability_bonus", { antecedente: "soldier", bonus: { "Força": 2, "Constituição": 1 } }), say("Bônus aplicado.")])
+            await run(await interviews.sendInterviewMessage(campaignId, "character", { content: "Quais origens existem? Quero soldado." }, ids.ana))
+            const listed = toolResults[0]!.output as { itens: { nome: string }[] }
+            expect(listed.itens.map((item) => item.nome).sort()).toEqual(["Acólito", "Soldado"])
+            expect(toolResults[1]).toMatchObject({ name: "apply_ability_bonus", output: { applied: true, antecedente: "Soldado", catalogo: true } })
+            expect(submittedCard(await interviewDoc())!.bonus).toMatchObject({ background: "Soldado", parts: { strength: 2, constitution: 1 } })
+        })
+
+        it("Fiel e Rigoroso: origem fora do catálogo (ou inativa) é recusada com as origens disponíveis e nada é gravado", async () => {
+            for (const rigor of ["fiel-dnd", "rigoroso"] as const) {
+                await BackgroundModel.collection.deleteMany({})
+                const campaignId = await submitted(rigor)
+                scripted.push([call("apply_ability_bonus", { antecedente: "Herói do Povo", bonus: { "Força": 2, "Constituição": 1 } }), say("Vou conferir.")])
+                await run(await interviews.sendInterviewMessage(campaignId, "character", { content: "Herói do Povo." }, ids.ana))
+                expect(toolResults[0]!.error).toBe("O antecedente “Herói do Povo” não está no catálogo do DnDicas. Origens disponíveis: Acólito, Soldado. Escolha uma delas com o jogador (consulte search_catalog) e aplique o bônus de novo.")
+                expect(submittedCard(await interviewDoc())!.bonus ?? null).toBeNull()
+                await MaddoxCampaignModel.deleteMany({})
+                await MaddoxInterviewModel.deleteMany({})
+                await MaddoxCampaignMemberModel.deleteMany({})
+                await MaddoxCharacterModel.deleteMany({})
+            }
+        })
+
+        it("Equilibrado: origem própria aceita os pontos livres e fica marcada como fora do catálogo", async () => {
+            const campaignId = await submitted("equilibrado")
+            expect(calls.at(-1)!.instructions).toContain("prefira o catálogo")
+            scripted.push([call("apply_ability_bonus", { antecedente: "Órfão da Névoa", bonus: { Destreza: 2, Carisma: 1 } }), say("Origem própria anotada.")])
+            await run(await interviews.sendInterviewMessage(campaignId, "character", { content: "Órfão da Névoa." }, ids.ana))
+            expect(toolResults[0]).toMatchObject({ output: { applied: true, antecedente: "Órfão da Névoa", catalogo: false, nota: "Origem própria (fora do catálogo): os pontos são livres." } })
+            expect(submittedCard(await interviewDoc())!.bonus).toMatchObject({ background: "Órfão da Névoa", parts: { dexterity: 2, charisma: 1 } })
+        })
+
+        it("nome sem acento ou o original encontram a origem do catálogo", async () => {
+            const campaignId = await submitted("fiel-dnd")
+            scripted.push([call("apply_ability_bonus", { antecedente: "acolito", bonus: { "Sabedoria": 2, Carisma: 1 } }), say("Feito.")])
+            await run(await interviews.sendInterviewMessage(campaignId, "character", { content: "Acólito." }, ids.ana))
+            expect(toolResults[0]).toMatchObject({ output: { antecedente: "Acólito", catalogo: true } })
+            toolResults.length = 0
+            scripted.push([call("apply_ability_bonus", { antecedente: "  ACOLYTE ", bonus: { "Inteligência": 1, "Sabedoria": 1, Carisma: 1 } }), say("Feito.")])
+            await run(await interviews.sendInterviewMessage(campaignId, "character", { content: "De novo." }, ids.ana))
+            expect(toolResults[0]).toMatchObject({ output: { antecedente: "Acólito", catalogo: true } })
+        })
+
+        it("Fiel: bônus de origem fora do catálogo já gravado bloqueia a conclusão (409) até ser reaplicado com uma do catálogo", async () => {
+            const campaignId = await submitted("fiel-dnd")
+            const doc = await interviewDoc()
+            const index = doc.messages.findIndex((message) => message.abilityScores?.status === "submitted")
+            await MaddoxInterviewModel.updateOne({ _id: doc._id }, { $set: { [`messages.${index}.abilityScores.bonus`]: { background: "Herói do Povo", parts: { strength: 2, constitution: 1 } } } })
+            scripted.push([say(PROPOSAL)])
+            await run(await interviews.sendInterviewMessage(campaignId, "character", { content: "Pode fechar." }, ids.ana))
+            const consolidations = generateAiText.mock.calls.length
+            expect(await errorOf(completeInterview(campaignId, "character", ids.ana))).toMatchObject({ status: 409, code: "BACKGROUND_NOT_IN_CATALOG", message: "O antecedente do bônus (Herói do Povo) não está no catálogo. Peça ao Maddox para escolher uma origem do catálogo e reaplicar o bônus." })
+            expect(generateAiText.mock.calls.length).toBe(consolidations)
+            expect((await interviewDoc()).generating).toBeNull()
+
+            scripted.push([call("apply_ability_bonus", { antecedente: "Soldado", bonus: { "Força": 2, "Constituição": 1 } }), say(PROPOSAL)])
+            await run(await interviews.sendInterviewMessage(campaignId, "character", { content: "Troca para Soldado." }, ids.ana))
+            generateAiText.mockResolvedValueOnce({ text: JSON.stringify({ name: null, profile: { identidade: "Soldada" }, sheet: { race: "Humano", class: "Guerreiro", attributes: null } }) })
+            await completeInterview(campaignId, "character", ids.ana)
+            const character = await MaddoxCharacterModel.findOne({ userId: ids.ana }).lean()
+            expect(await CharacterSheet.findById(character!.sheetId).lean()).toMatchObject({ strength: 17, constitution: 14 })
+        })
     })
 
     it("graus sem ficha não usam card: sem ferramentas, sem seção, rolagem 409; entrevista de cenário responde 404", async () => {

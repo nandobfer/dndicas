@@ -8,10 +8,14 @@ vi.mock("@/features/maddox/server/master-tools", async (importOriginal) => ({ ..
 const runInterviewTool = vi.fn(async (_tool: { name: string }, _context: unknown, input: unknown) => ({ ok: true, input }))
 vi.mock("@/features/maddox/server/interview-tools", async (importOriginal) => ({ ...(await importOriginal<typeof import("@/features/maddox/server/interview-tools")>()), runInterviewTool }))
 
+const runCatalogTool = vi.fn(async (_tool: { name: string }, input: unknown) => ({ itens: [], input }))
+vi.mock("@/features/maddox/server/catalog-tools", async (importOriginal) => ({ ...(await importOriginal<typeof import("@/features/maddox/server/catalog-tools")>()), runCatalogTool }))
+
 const { createMaddoxTurnToken, verifyMaddoxTurnToken, createMaddoxInterviewToken, verifyMaddoxInterviewToken } = await import("@/features/maddox/server/master-turn-token")
 const { enqueueMaddoxJob, waitForCampaignIdle } = await import("@/features/maddox/server/game-live")
 const route = await import("@/app/api/maddox/mcp/route")
 const publicRoute = await import("@/app/api/mcp/route")
+const { MaddoxInterviewModel } = await import("@/features/maddox/models")
 
 const CAMPAIGN = "6a0000000000000000000001"
 
@@ -144,5 +148,64 @@ describe("ferramentas da entrevista no MCP do Maddox (Maddox 5)", () => {
         expect(asNarrator.result!.isError).toBe(true)
         expect(runInterviewTool).not.toHaveBeenCalled()
         expect(runMaddoxTool).not.toHaveBeenCalled()
+    })
+})
+
+describe("consulta ao catálogo no MCP do Maddox", () => {
+    const INTERVIEW = "6a00000000000000000000bb"
+    beforeEach(() => {
+        runCatalogTool.mockClear()
+        runMaddoxTool.mockClear()
+        runInterviewTool.mockClear()
+        vi.restoreAllMocks()
+    })
+
+    it("search_catalog e get_catalog_entity aparecem uma vez cada, só leitura e exigindo `turno`", async () => {
+        const list = await rpc(route.POST, "tools/list")
+        const tools = list.result!.tools!.filter((tool) => ["search_catalog", "get_catalog_entity"].includes(tool.name))
+        expect(tools.map((tool) => tool.name).sort()).toEqual(["get_catalog_entity", "search_catalog"])
+        for (const tool of tools) expect(tool.inputSchema.properties).toHaveProperty("turno")
+        expect((tools as unknown as { annotations?: { readOnlyHint?: boolean } }[]).every((tool) => tool.annotations?.readOnlyHint === true)).toBe(true)
+    })
+
+    it("funciona com o token do narrador de uma geração ativa", async () => {
+        await withActiveJob(async (jobId) => {
+            const turno = createMaddoxTurnToken({ campaignId: CAMPAIGN, jobId, turnNumber: 3 })
+            const result = await rpc(route.POST, "tools/call", { name: "search_catalog", arguments: { turno, tipos: ["Magia"], consulta: "bola de fogo" } })
+            expect(result.result!.isError).toBeFalsy()
+            expect(runCatalogTool).toHaveBeenCalledWith(expect.objectContaining({ name: "search_catalog" }), { tipos: ["Magia"], consulta: "bola de fogo" })
+        })
+    })
+
+    it("funciona com o token da entrevista enquanto a geração dela roda (trava do token)", async () => {
+        const exists = vi.spyOn(MaddoxInterviewModel, "exists").mockResolvedValue({ _id: INTERVIEW } as never)
+        const turno = createMaddoxInterviewToken({ interviewId: INTERVIEW, lockToken: "trava-9" })
+        const result = await rpc(route.POST, "tools/call", { name: "search_catalog", arguments: { turno, tipos: ["Origem"] } })
+        expect(result.result!.isError).toBeFalsy()
+        expect(exists).toHaveBeenCalledWith({ _id: INTERVIEW, "generating.token": "trava-9" })
+        expect(runCatalogTool).toHaveBeenCalledTimes(1)
+    })
+
+    it("token inválido, de narração encerrada ou de entrevista que já respondeu é recusado sem consultar", async () => {
+        const bad = await rpc(route.POST, "tools/call", { name: "search_catalog", arguments: { turno: "lixo", tipos: ["Origem"] } })
+        expect(bad.result).toMatchObject({ isError: true })
+        const ended = createMaddoxTurnToken({ campaignId: CAMPAIGN, jobId: "job-que-acabou", turnNumber: 1 })
+        const late = await rpc(route.POST, "tools/call", { name: "search_catalog", arguments: { turno: ended, tipos: ["Origem"] } })
+        expect(JSON.stringify(late.result)).toContain("só funcionam durante a geração")
+        vi.spyOn(MaddoxInterviewModel, "exists").mockResolvedValue(null as never)
+        const done = await rpc(route.POST, "tools/call", { name: "get_catalog_entity", arguments: { turno: createMaddoxInterviewToken({ interviewId: INTERVIEW, lockToken: "velha" }), tipo: "Origem", id: "x" } })
+        expect(done.result).toMatchObject({ isError: true })
+        expect(runCatalogTool).not.toHaveBeenCalled()
+    })
+
+    it("as ferramentas que gravam continuam recusando o token do outro tipo", async () => {
+        const entrevista = createMaddoxInterviewToken({ interviewId: INTERVIEW, lockToken: "trava-1" })
+        const asNarrator = await rpc(route.POST, "tools/call", { name: "save_npc", arguments: { turno: entrevista, name: "X" } })
+        expect(asNarrator.result!.isError).toBe(true)
+        const narrador = createMaddoxTurnToken({ campaignId: CAMPAIGN, jobId: "j1", turnNumber: 1 })
+        const asInterview = await rpc(route.POST, "tools/call", { name: "apply_ability_bonus", arguments: { turno: narrador, antecedente: "Soldado", bonus: { "Força": 2, "Constituição": 1 } } })
+        expect(asInterview.result!.isError).toBe(true)
+        expect(runMaddoxTool).not.toHaveBeenCalled()
+        expect(runInterviewTool).not.toHaveBeenCalled()
     })
 })

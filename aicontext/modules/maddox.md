@@ -539,8 +539,12 @@ reiniciar, enviar), `components/interviews/AbilityScoresCard.tsx`. As regras dos
     aberto → `{ alreadyOpen: true }`.
   - `get_ability_scores {}` (leitura): situação, método, base, bônus, final e rolagens.
   - `apply_ability_bonus { antecedente, bonus: { "Destreza": 2, … } }`: exige card enviado; exatamente 3 pontos, +1/+2 por atributo,
-    só nos `suggestedAttributes` do antecedente quando ele existe no catálogo (`BackgroundModel` por nome/nome original). **Só
-    sugerido** (não bloqueia a síntese) e **sem teto de 20**.
+    só nos `suggestedAttributes` da origem do catálogo (`findBackground`: origens **ativas**, por nome ou nome original, ignorando
+    acento, caixa e espaços; grava o nome oficial). **Origem fora do catálogo:** em **Rigoroso e Fiel ao D&D**
+    (`MADDOX_CATALOG_ORIGIN_RIGORS`) é **recusada sem gravar**, com a lista das origens disponíveis; no **Equilibrado** é aceita como
+    origem própria, com os pontos livres (`catalogo: false` e a nota no retorno). **Só sugerido** (não bloqueia a síntese) e **sem teto
+    de 20**.
+  - Consulta ao catálogo (só leitura): `search_catalog` e `get_catalog_entity` (ver "Catálogo do DnDicas" abaixo).
 - **Como chegam ao modelo.** Provedores diretos: `streamText` da AI SDK com as ferramentas (`MADDOX_INTERVIEW_MAX_STEPS`), no mesmo
   formato de eventos do `streamAi` (o `src/lib/ai/stream.ts` não mudou). OpenCode: **o mesmo MCP do narrador** (`dndicas-maddox`,
   `/api/maddox/mcp`) registra também as três ferramentas, com um **token de entrevista** próprio
@@ -554,9 +558,25 @@ reiniciar, enviar), `components/interviews/AbilityScoresCard.tsx`. As regras dos
 - **Prompt.** A seção "Atributos do personagem" troca o antigo "combine … os valores dos seis atributos": card como único caminho,
   nunca pedir números digitados nem rolar/inventar, os três métodos, bônus sugerido e `get_ability_scores` antes da síntese. Cada
   turno leva "Atributos: situação atual" e, no OpenCode, o servidor MCP e o token (`turno`).
+- **Catálogo do DnDicas** (`server/catalog-tools.ts`, mesmo serviço do `search_catalog` do Agente Opex e do MCP público, só
+  entidades ativas). O entrevistador (só na entrevista de personagem dos graus com ficha) e o narrador (todos os graus) recebem:
+  - `search_catalog { consulta?, tipos?: CatalogEntityType[] (até 5), limite?: 1–30 (padrão 15) }` → `{ itens: [{ id, tipo, nome,
+    nomeOriginal, fonte, resumo }] }`, resumo em texto puro de até 300 caracteres. Só `tipos` lista o tipo (ex.: todas as origens);
+    nada encontrado traz a nota "não cite isso como entidade do catálogo". Sem consulta nem tipo: erro.
+  - `get_catalog_entity { tipo, id }` → entidade compacta (`compactCatalogEntity`: sem HTML, sem `_id`/imagem/status/datas, listas até 40,
+    textos até 4.000 caracteres com `truncated`); não encontrada ou inativa: erro que manda buscar o id.
+  - AI SDK: entram junto das ferramentas de cada um (`buildInterviewAiTools`, `buildMaddoxAiTools`). MCP `dndicas-maddox`: registradas
+    **uma vez**, aceitando o token do narrador (job ativo) **ou** o da entrevista (`generating.token` igual ao do token); as ferramentas que
+    gravam continuam só com o token do próprio tipo.
+  - Prompts: a entrevista ganha "## Catálogo do DnDicas" antes dos atributos (consultar antes de sugerir raça, classe, subclasse,
+    origem, talento ou magia; nunca nomes de memória ou de outras edições; Rigoroso e Fiel exigem raça, classe, subclasse e origem do
+    catálogo, Equilibrado prefere o catálogo); o narrador ganha a mesma seção (consultar antes de afirmar mecânica; nos graus sem testes é
+    referência). Tetos de passos: `MADDOX_INTERVIEW_MAX_STEPS = 10`, `MADDOX_NARRATOR_MAX_STEPS = 16`.
 - **Consolidação.** Vale o **último envio** (`submittedAbilityCard`: o card mais novo com valores, enviado ou já `superseded` — um card
   reaberto e não reenviado não apaga o envio anterior nem o bônus). Card aberto e nunca enviado: concluir responde 409
-  `ABILITY_SCORES_PENDING` ("Envie os atributos pelo card antes de concluir a entrevista.") sem consolidar. Com envio, a ficha recebe
+  `ABILITY_SCORES_PENDING` ("Envie os atributos pelo card antes de concluir a entrevista.") sem consolidar. Em Rigoroso e Fiel, um bônus
+  de origem fora do catálogo responde 409 `BACKGROUND_NOT_IN_CATALOG` ("O antecedente do bônus (X) não está no catálogo. Peça ao Maddox
+  para escolher uma origem do catálogo e reaplicar o bônus.") sem consolidar nem pegar a trava. Com envio, a ficha recebe
   os valores **finais do card** (base + bônus) e ignora os atributos extraídos
   pela IA (as instruções avisam); o resultado guarda `abilityScores { method, base, bonus, final }`. Entrevistas antigas, sem card,
   seguem pela extração por IA.
@@ -614,3 +634,8 @@ ficha com base + bônus; conjunto padrão/compra de pontos, reiniciar, rolagens 
 "Tentar de novo", geração que falha, card já aberto, reabrir com `prefill`, `novaRolagem`, grau narrativo e cenário),
 `interview-scores.test.ts`, `interview-prompt.test.ts`, `interview-routes.test.ts` e `maddox-mcp.test.ts` (token de entrevista); na
 tela, `maddox-interview-ability-scores.test.tsx`.
+Catálogo: `catalog-tools.test.ts` (serviço real sobre o MongoDB em memória: lista por tipo sem inativas, acento, limite, resumo e
+detalhe compactos, erros), `interview-ability-scores.test.ts` ("origem do bônus e o catálogo": busca e bônus de origem do catálogo em
+Fiel, recusa em Fiel e Rigoroso com a lista, origem própria no Equilibrado, nome sem acento ou original, 409
+`BACKGROUND_NOT_IN_CATALOG` na conclusão), `game-checks.test.ts` (narrador consulta em Narrativo e Fiel sem gravar),
+`maddox-mcp.test.ts` (catálogo com token do narrador ou da entrevista) e os testes dos prompts.
