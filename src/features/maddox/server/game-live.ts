@@ -48,9 +48,49 @@ export interface MaddoxDraftCheck {
     reason: string
 }
 
+/** Adversário ou aliado informado pelo narrador (`start_combat`/`update_combat`). */
+export interface MaddoxDraftCombatant {
+    name: string
+    side: "inimigo" | "aliado"
+    quantity: number
+    description: string
+    condition: string
+    /** Cria o NPC se ainda não existir (só nomes próprios). */
+    registerNpc: boolean
+}
+
+/** Recompensa informada pelo narrador em `end_combat` (personagem já resolvido pelo nome). */
+export interface MaddoxDraftCombatReward {
+    kind: "moedas" | "item" | "outro"
+    description: string
+    characterId: string | null
+    characterName: string | null
+    coins: Partial<Record<"po" | "pp" | "pe" | "pc" | "pl", number>> | null
+    item: { ref: string; quantity: number } | null
+}
+
+/**
+ * Evento de combate pedido pelo narrador (Maddox 6). Como os testes, fica no job até a narração ser gerada e só então é
+ * aplicado (`applyCombatDrafts`): se a geração falhar, o combate não muda.
+ */
+export type MaddoxDraftCombatEvent =
+    | { type: "start"; title: string; location: string; combatants: MaddoxDraftCombatant[] }
+    | { type: "update"; combatants: (Partial<Omit<MaddoxDraftCombatant, "name">> & { name: string })[] }
+    | {
+          type: "end"
+          outcome: "vitoria" | "derrota" | "fuga" | "tregua" | "interrompido"
+          summary: string
+          masterNotes: string
+          combatants: { name: string; outcome: "morto" | "derrotado" | "capturado" | "rendeu-se" | "fugiu" | "poupado" | "ileso" }[]
+          rewards: MaddoxDraftCombatReward[]
+          characterStates: { characterId: string; characterName: string; condition: string }[]
+          finalScene: string
+      }
+
 interface MaddoxJobState {
     meta: MaddoxJobMeta | null
     checks: MaddoxDraftCheck[]
+    combat: MaddoxDraftCombatEvent[]
 }
 
 const log = loggerFor({ module: "maddox", feature: "game-live" })
@@ -96,7 +136,7 @@ export function enqueueMaddoxJob(campaignId: string, label: string, run: (job: M
     hub.pending += 1
     const jobId = randomUUID()
     const next = hub.tail.then(async () => {
-        hub.jobs.set(jobId, { meta, checks: [] })
+        hub.jobs.set(jobId, { meta, checks: [], combat: [] })
         try {
             await run({ jobId })
         } catch (error) {
@@ -154,6 +194,28 @@ export function takeDraftChecks(campaignId: string, jobId: string): MaddoxDraftC
     const checks = job.checks
     job.checks = []
     return checks
+}
+
+/** Eventos de combate já pedidos neste job (o estado do combate considera banco + rascunho). */
+export function jobDraftCombat(campaignId: string, jobId: string): readonly MaddoxDraftCombatEvent[] {
+    return hubs.get(campaignId)?.jobs.get(jobId)?.combat ?? []
+}
+
+/** Guarda um evento de combate no job em andamento; `false` se o job não está rodando. */
+export function addDraftCombat(campaignId: string, jobId: string, event: MaddoxDraftCombatEvent): boolean {
+    const job = hubs.get(campaignId)?.jobs.get(jobId)
+    if (!job) return false
+    job.combat.push(event)
+    return true
+}
+
+/** Retira os eventos de combate do job (antes de gravar a narração). */
+export function takeDraftCombat(campaignId: string, jobId: string): MaddoxDraftCombatEvent[] {
+    const job = hubs.get(campaignId)?.jobs.get(jobId)
+    if (!job) return []
+    const events = job.combat
+    job.combat = []
+    return events
 }
 
 /** Avisa as mesas abertas que um teste foi rolado (todos repetem a animação com o resultado oficial). */

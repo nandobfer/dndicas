@@ -158,6 +158,7 @@ const message = (id: string, over: Partial<MaddoxGameMessageDto>): MaddoxGameMes
     skippedByName: null,
     error: null,
     check: null,
+    combat: null,
     createdAt: "2026-10-31T10:00:00.000Z",
     ...over,
 })
@@ -173,6 +174,7 @@ const gameState = (over: Partial<MaddoxGameStateDto> = {}): MaddoxGameStateDto =
     participants: [participant("m1", "u-owner", "Kael"), participant("m2", "u-ana", "Lyra"), participant("m3", "u-bia", "Borin")],
     me: { memberId: "m1", isOwner: true, ready: true, eligible: true, declared: false, sheet: null },
     showCheckDc: false,
+    combat: null,
     npcs: [],
     messages: [
         message("n1", { kind: "narration", phase: "master", content: "Uma taverna em **chamas**." }),
@@ -819,7 +821,7 @@ describe("mesa Maddox — testes pedidos pelo Maddox (Maddox 5)", () => {
         expect(screen.getByText("Ninguém ainda: os NPCs aparecem aqui quando o grupo os conhece.")).toBeInTheDocument()
         view.unmount()
 
-        await renderGame(gameState({ rigor: "fiel-dnd", me: ME({ sheet: { id: "s1", slug: "lyra" } }), npcs: [{ id: "n1", name: "Bartolomeu", portraitUrl: "/api/upload?key=npc.png" }, { id: "n2", name: "Irmã Vela", portraitUrl: null }, { id: "n3", name: "Capitã Seraphine Vael do Porto Cinzento", portraitUrl: null }] }))
+        await renderGame(gameState({ rigor: "fiel-dnd", me: ME({ sheet: { id: "s1", slug: "lyra" } }), npcs: [{ id: "n1", name: "Bartolomeu", portraitUrl: "/api/upload?key=npc.png", status: "active" }, { id: "n2", name: "Irmã Vela", portraitUrl: null, status: "active" }, { id: "n3", name: "Capitã Seraphine Vael do Porto Cinzento", portraitUrl: null, status: "active" }] }))
         fireEvent.click(screen.getByRole("button", { name: /Minha ficha/ }))
         expect(addWindow).toHaveBeenCalledWith(expect.objectContaining({ id: "maddox-sheet", title: "Minha ficha" }))
         expect(screen.getByTestId("npc-n1")).toHaveTextContent("Bartolomeu")
@@ -840,6 +842,73 @@ describe("mesa Maddox — testes pedidos pelo Maddox (Maddox 5)", () => {
         expect(masterBannerText({ ...state, me: ME({ memberId: "m2" }) })).toBe("Turno do mestre — o Maddox pediu um teste para você (e aguarda Borin)")
         expect(composerBlockReason({ ...state, me: ME({ memberId: "m3" }) })).toBe("O Maddox pediu um teste para você: role os dados na conversa.")
         expect(gameRefetchInterval(state, true)).toBe(false)
+    })
+})
+
+describe("mesa Maddox — combate narrativo (Maddox 6)", () => {
+    const combat = { id: "cb1", title: "Emboscada no cais", location: "Cais de Brumas", startedTurn: 2, masterTurns: 1, combatants: [{ name: "Varn", side: "inimigo" as const, quantity: 1, condition: "ileso", outcome: null }, { name: "Contrabandista", side: "inimigo" as const, quantity: 3, condition: "", outcome: null }] }
+    const startCard = message("cs", { turnNumber: 2, phase: "master", kind: "combat", combat: { ...combat, event: "start", outcome: null, summary: "", rewards: [], endedTurn: null } })
+    const narration2 = message("n2", { turnNumber: 2, phase: "master", kind: "narration", content: "Facas brilham na névoa." })
+    const narration4 = message("n4", { turnNumber: 4, phase: "master", kind: "narration", content: "O silêncio volta ao cais." })
+    const endCard = message("ce", {
+        turnNumber: 4,
+        phase: "master",
+        kind: "combat",
+        combat: {
+            ...combat,
+            masterTurns: 3,
+            event: "end",
+            outcome: "vitoria",
+            summary: "Varn caiu e os contrabandistas fugiram.",
+            endedTurn: 4,
+            combatants: [{ ...combat.combatants[0]!, outcome: "morto" }, { ...combat.combatants[1]!, outcome: "fugiu" }],
+            rewards: [
+                { kind: "moedas", description: "30 po para Lyra", characterName: "Lyra", applied: true, warning: null },
+                { kind: "item", description: "Amuleto de Osso para Borin", characterName: "Borin", applied: true, warning: '"Amuleto de Osso" não está no catálogo: entrou como item próprio.' },
+                { kind: "outro", description: "Um mapa do farol", characterName: null, applied: false, warning: null },
+            ],
+        },
+    })
+
+    it("card de início antes da narração (com o divisor do turno) e card de fim com desfecho, NPCs e recompensas", async () => {
+        await renderGame(gameState({ messages: [startCard, narration2, narration4, endCard] }))
+        const log = screen.getByRole("log")
+        const order = [...log.querySelectorAll("[data-testid='turn-divider'], [data-testid='combat-start-card'], [data-testid='maddox-narration'], [data-testid='combat-end-card']")].map((node) => node.getAttribute("data-testid"))
+        expect(order).toEqual(["turn-divider", "combat-start-card", "maddox-narration", "turn-divider", "maddox-narration", "combat-end-card"])
+        const start = screen.getByTestId("combat-start-card")
+        expect(start).toHaveTextContent("Combate!")
+        expect(start).toHaveTextContent("Emboscada no cais")
+        expect(start).toHaveTextContent("Cais de Brumas")
+        expect(start).toHaveTextContent("Contrabandista (3)")
+        const end = screen.getByTestId("combat-end-card")
+        expect(within(end).getByTestId("combat-outcome")).toHaveTextContent("Vitória")
+        expect(end.querySelector("[data-accent]")).toHaveAttribute("data-accent", rarityColors.uncommon)
+        expect(within(end).getByTestId("combat-summary")).toHaveTextContent("Varn caiu e os contrabandistas fugiram.")
+        expect(end).toHaveTextContent("Varn · Morto")
+        expect(end).toHaveTextContent("Contrabandista (3) · Fugiu")
+        const rewards = within(end).getAllByTestId("combat-reward")
+        expect(rewards).toHaveLength(3)
+        expect(rewards[0]).toHaveTextContent("30 po para Lyra")
+        expect(within(rewards[0]!).getByTestId("combat-reward-applied")).toHaveTextContent("Na ficha")
+        expect(rewards[1]).toHaveTextContent("não está no catálogo: entrou como item próprio.")
+        expect(within(rewards[2]!).queryByTestId("combat-reward-applied")).not.toBeInTheDocument()
+        expect(end).toHaveTextContent("Durou 3 narrações (turnos 2–4).")
+    })
+
+    it("chip 'Em combate' aparece e some pelo tempo real, sem recarregar a página; NPC morto esmaecido", async () => {
+        await renderGame(gameState())
+        expect(screen.queryByTestId("combat-chip")).not.toBeInTheDocument()
+        get.mockResolvedValue(ok(gameState({ combat, messages: [startCard, narration2] })))
+        emit("maddox.game.changed")
+        expect(await screen.findByTestId("combat-chip")).toHaveTextContent("Em combate · Emboscada no cais")
+        get.mockResolvedValue(ok(gameState({ combat: null, npcs: [{ id: "n1", name: "Varn", portraitUrl: null, status: "dead" }, { id: "n2", name: "Irmã Vela", portraitUrl: null, status: "unknown" }], messages: [startCard, narration2, narration4, endCard] })))
+        emit("maddox.game.changed")
+        await waitFor(() => expect(screen.queryByTestId("combat-chip")).not.toBeInTheDocument())
+        expect(screen.getByTestId("combat-end-card")).toBeInTheDocument()
+        expect(screen.getByTestId("npc-n1")).toHaveAttribute("data-status", "dead")
+        expect(screen.getByTestId("npc-n1").className).toContain("opacity-50")
+        expect(screen.getByTestId("npc-n1")).toHaveTextContent("Morto")
+        expect(screen.getByTestId("npc-n2")).toHaveTextContent("Paradeiro desconhecido")
     })
 })
 

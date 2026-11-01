@@ -6,7 +6,7 @@ import { dbConnect } from "@/lib/db"
 import { jsonContent } from "@/features/mcp/server/mcp-response"
 import { MADDOX_MCP_SERVER_NAME } from "../constants"
 import { isActiveMaddoxJob } from "./game-live"
-import { MADDOX_MASTER_TOOLS, MaddoxToolError, runMaddoxTool, type MaddoxMasterTool } from "./master-tools"
+import { MADDOX_NARRATOR_TOOLS, MaddoxToolError, runMaddoxTool, type MaddoxMasterTool } from "./master-tools"
 import { verifyMaddoxInterviewToken, verifyMaddoxTurnToken } from "./master-turn-token"
 import { MADDOX_INTERVIEW_TOOLS, MaddoxInterviewToolError, runInterviewTool, type MaddoxInterviewTool } from "./interview-tools"
 import { MADDOX_CATALOG_TOOLS, MaddoxCatalogToolError, runCatalogTool, type MaddoxCatalogTool } from "./catalog-tools"
@@ -74,7 +74,7 @@ async function handleCatalog(tool: MaddoxCatalogTool, args: Record<string, unkno
 
 export function createMaddoxMcpServer() {
     const server = new McpServer({ name: MADDOX_MCP_SERVER_NAME, version: APP_VERSION })
-    for (const tool of MADDOX_MASTER_TOOLS) {
+    for (const tool of MADDOX_NARRATOR_TOOLS) {
         server.registerTool(
             tool.name,
             {

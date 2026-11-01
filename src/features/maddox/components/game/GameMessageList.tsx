@@ -10,6 +10,7 @@ import { liveMarkupToBold } from "../../catalog-markup"
 import type { DiceRollResponse } from "@/features/dice-roller/types"
 import { MemberAvatar } from "../campaigns/campaign-visuals"
 import { GameCheckCard } from "./GameCheckCard"
+import { GameCombatCard } from "./GameCombatCard"
 
 const NEAR_BOTTOM_PX = 80
 const bubble = { initial: { opacity: 0, y: 8 }, animate: { opacity: 1, y: 0 }, transition: { duration: 0.2, ease: "easeOut" as const } }
@@ -83,11 +84,14 @@ export function GameMessageList({ messages, myMemberId, maddoxAvatarUrl, color, 
                 )}
                 {messages.map((message, index) => {
                     const previous = messages[index - 1]
-                    const divider = message.kind === "narration" && (!previous || previous.turnNumber !== message.turnNumber)
+                    // O card de início do combate vem antes da narração do turno: o divisor sai antes dele.
+                    const divider = (message.kind === "narration" || message.kind === "combat") && (!previous || previous.turnNumber !== message.turnNumber)
                     return (
                         <Fragment key={message.id}>
                             {divider && <TurnDivider number={message.turnNumber} color={color} />}
-                            {message.kind === "check" && message.check ? (
+                            {message.kind === "combat" ? (
+                                message.combat ? <GameCombatCard combat={message.combat} /> : null
+                            ) : message.kind === "check" && message.check ? (
                                 <GameCheckCard message={message} mine={message.memberId !== null && message.memberId === myMemberId} color={color} replay={replays.get(message.id) ?? null} onRoll={onRollCheck} />
                             ) : (
                                 <GameMessage message={message} mine={message.memberId !== null && message.memberId === myMemberId} replyTo={message.replyToId ? (byId.get(message.replyToId) ?? null) : null} maddoxAvatarUrl={maddoxAvatarUrl} color={color} />

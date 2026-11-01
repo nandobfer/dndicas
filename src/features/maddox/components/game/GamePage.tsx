@@ -28,6 +28,7 @@ import {
 import { RarityChip, RigorChip, rigorColor } from "../campaigns/campaign-visuals"
 import { useMaddoxGameStream, type MaddoxGameStreamState } from "../../hooks/useMaddoxGameStream"
 import { GameComposer } from "./GameComposer"
+import { COMBAT_COLOR } from "./GameCombatCard"
 import { GameMessageList } from "./GameMessageList"
 import { MySheetButton } from "./MySheetButton"
 import { NpcPanel } from "./NpcPanel"
@@ -146,6 +147,12 @@ function GameTable({ state, presence, stream }: { state: MaddoxGameStateDto; pre
                     <>
                         <RigorChip rigor={state.rigor} />
                         <RarityChip color={color}>Turno {state.turn.number}</RarityChip>
+                        {state.combat && (
+                            <RarityChip color={COMBAT_COLOR}>
+                                <Swords className="h-3 w-3" aria-hidden />
+                                <span data-testid="combat-chip">Em combate · {state.combat.title}</span>
+                            </RarityChip>
+                        )}
                     </>
                 }
                 actions={<MySheetButton sheet={state.me.sheet} />}

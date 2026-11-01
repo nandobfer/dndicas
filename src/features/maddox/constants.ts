@@ -130,9 +130,10 @@ export const MADDOX_GAME_CHANGED_EVENT = "maddox.game.changed"
 
 /**
  * Mensagens da mesa: narração do mestre, declaração do jogador, "não fazer nada" (`pass`), pergunta ao
- * mestre (não encerra o turno), a resposta dele e o teste pedido pelo Maddox (`check`, Maddox 5).
+ * mestre (não encerra o turno), a resposta dele, o teste pedido pelo Maddox (`check`, Maddox 5) e o card de
+ * início/fim de combate (`combat`, Maddox 6).
  */
-export const MADDOX_GAME_MESSAGE_KINDS = ["narration", "declaration", "pass", "question", "answer", "check"] as const
+export const MADDOX_GAME_MESSAGE_KINDS = ["narration", "declaration", "pass", "question", "answer", "check", "combat"] as const
 export type MaddoxGameMessageKind = (typeof MADDOX_GAME_MESSAGE_KINDS)[number]
 
 /** O que o jogador envia no próprio turno. */
@@ -227,6 +228,67 @@ export const MADDOX_CHECK_HINT_TIMEOUT_MS = 20_000
 /** Tempo (ms) que o dado do teste fica no card depois de parar, antes de sumir com animação. */
 export const MADDOX_CHECK_DIE_HIDE_MS = 1_400
 
+// ── Combate narrativo (Maddox 6) ───────────────────────────────────────────────
+
+/**
+ * Graus com combate narrativo registrado (início, desfecho e recompensas pelas ferramentas do Maddox). Rigoroso e Fiel ao
+ * D&D ficam de fora até o Maddox 7 (iniciativa e turnos): neles o combate continua narrado, sem registro.
+ */
+export const MADDOX_COMBAT_RIGORS: readonly MaddoxRigorLevel[] = ["narrativo", "flexivel", "equilibrado"]
+/** Graus em que as recompensas do combate entram na ficha D&D (entre os graus com combate, só os que têm ficha). */
+export const MADDOX_COMBAT_SHEET_REWARD_RIGORS: readonly MaddoxRigorLevel[] = ["equilibrado"]
+
+export const MADDOX_COMBAT_STATUSES = ["active", "ended"] as const
+export type MaddoxCombatStatus = (typeof MADDOX_COMBAT_STATUSES)[number]
+
+/** Resultado do combate para o grupo. */
+export const MADDOX_COMBAT_OUTCOMES = ["vitoria", "derrota", "fuga", "tregua", "interrompido"] as const
+export type MaddoxCombatOutcome = (typeof MADDOX_COMBAT_OUTCOMES)[number]
+export const MADDOX_COMBAT_OUTCOME_LABELS: Record<MaddoxCombatOutcome, string> = {
+    vitoria: "Vitória",
+    derrota: "Derrota",
+    fuga: "Fuga",
+    tregua: "Trégua",
+    interrompido: "Interrompido",
+}
+
+/** Lado de quem participa do combate (além dos personagens dos jogadores). */
+export const MADDOX_COMBATANT_SIDES = ["inimigo", "aliado"] as const
+export type MaddoxCombatantSide = (typeof MADDOX_COMBATANT_SIDES)[number]
+
+/** Desfecho de cada adversário ou aliado. */
+export const MADDOX_COMBATANT_OUTCOMES = ["morto", "derrotado", "capturado", "rendeu-se", "fugiu", "poupado", "ileso"] as const
+export type MaddoxCombatantOutcome = (typeof MADDOX_COMBATANT_OUTCOMES)[number]
+export const MADDOX_COMBATANT_OUTCOME_LABELS: Record<MaddoxCombatantOutcome, string> = {
+    morto: "Morto",
+    derrotado: "Derrotado",
+    capturado: "Capturado",
+    "rendeu-se": "Rendeu-se",
+    fugiu: "Fugiu",
+    poupado: "Poupado",
+    ileso: "Ileso",
+}
+
+export const MADDOX_COMBAT_REWARD_KINDS = ["moedas", "item", "outro"] as const
+export type MaddoxCombatRewardKind = (typeof MADDOX_COMBAT_REWARD_KINDS)[number]
+/** Moedas do D&D: po (ouro), pp (prata), pe (electrum), pc (cobre), pl (platina). */
+export const MADDOX_COIN_KEYS = ["po", "pp", "pe", "pc", "pl"] as const
+export type MaddoxCoinKey = (typeof MADDOX_COIN_KEYS)[number]
+/** Campo de `sheet.coins` de cada moeda. */
+export const MADDOX_COIN_SHEET_FIELDS: Record<MaddoxCoinKey, "gp" | "sp" | "ep" | "cp" | "pp"> = { po: "gp", pp: "sp", pe: "ep", pc: "cp", pl: "pp" }
+/** Teto de cada moeda por recompensa (proteção contra número descontrolado). */
+export const MADDOX_COMBAT_COINS_MAX = 100_000
+export const MADDOX_COMBAT_ITEM_QUANTITY_MAX = 999
+export const MADDOX_COMBAT_REWARDS_MAX = 20
+export const MADDOX_COMBATANTS_MAX = 30
+/** A partir de tantas narrações em combate, o prompt lembra o Maddox de conduzir a luta a um desfecho. */
+export const MADDOX_COMBAT_LONG_TURNS = 6
+/** Consulta do JEV "Início ou fim de combate" (orientação ao narrador): passou disso, a orientação é ignorada. */
+export const MADDOX_COMBAT_HINT_TIMEOUT_MS = 20_000
+/** Situação da imagem de fim de batalha (a geração é do Maddox 10). */
+export const MADDOX_COMBAT_IMAGE_STATUSES = ["awaiting-feature", "skipped"] as const
+export type MaddoxCombatImageStatus = (typeof MADDOX_COMBAT_IMAGE_STATUSES)[number]
+
 // ── Entrevistas ───────────────────────────────────────────────────────────────
 
 export const MADDOX_SCRIPT_KINDS = ["scenario", "character"] as const
@@ -263,7 +325,7 @@ export const MADDOX_JEV_DECISION_DEFS: Record<MaddoxJevDecision, { label: string
     "question-or-action": { label: "Pergunta ou ação do jogador", description: "A mensagem do jogador no turno é uma pergunta ao mestre (responde sem trocar de turno) ou uma declaração de ação, intenção ou diálogo." },
     "free-action-validity": { label: "Validade de ação livre", description: "A ação escrita livremente é válida para o grau de rigor da campanha." },
     "requires-check": { label: "Pedir teste", description: "A ação exige um teste de atributo ou perícia." },
-    "combat-boundary": { label: "Início ou fim de combate", description: "A cena entrou ou saiu de combate." },
+    "combat-boundary": { label: "Início ou fim de combate", description: "As declarações levam a cena a um combate ou o encerram (orientação ao narrador nos graus com combate narrativo)." },
     "master-knowledge": { label: "Conhecimento do mestre", description: "Um fato persistido pode ser visto pelos jogadores ou é conhecimento exclusivo do Maddox." },
     "interview-complete": { label: "Fim da entrevista", description: "A entrevista de cenário ou de personagem já tem base suficiente para concluir." },
     "scene-image": { label: "Gerar imagem na cena", description: "A situação é uma das configuradas para gerar imagem na narração." },

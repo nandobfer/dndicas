@@ -14,6 +14,7 @@ vi.mock("@/features/maddox/models", () => ({
     MaddoxInterviewModel: fake("MaddoxInterview"),
     MaddoxOpencodeSessionModel: fake("MaddoxOpencodeSession"),
     MaddoxCampaignMessageModel: fake("MaddoxCampaignMessage"),
+    MaddoxCombatModel: fake("MaddoxCombat"),
 }))
 
 const { ensureMaddoxIndexes } = await import("@/lib/db/migrations/ensure-maddox-indexes")
@@ -22,7 +23,7 @@ const indexes = (model: unknown) => (model as mongoose.Model<unknown>).schema.in
 describe("migração ensure-maddox-indexes", () => {
     it("cria os índices de todas as coleções Maddox e pode rodar de novo", async () => {
         await ensureMaddoxIndexes()
-        expect([...created].sort()).toEqual(["MaddoxCampaign", "MaddoxCampaignMember", "MaddoxCampaignMemory", "MaddoxCampaignMessage", "MaddoxCharacter", "MaddoxInterview", "MaddoxInterviewScript", "MaddoxNpc", "MaddoxOpencodeSession"])
+        expect([...created].sort()).toEqual(["MaddoxCampaign", "MaddoxCampaignMember", "MaddoxCampaignMemory", "MaddoxCampaignMessage", "MaddoxCharacter", "MaddoxCombat", "MaddoxInterview", "MaddoxInterviewScript", "MaddoxNpc", "MaddoxOpencodeSession"])
         await expect(ensureMaddoxIndexes()).resolves.toBeUndefined()
     })
 
@@ -44,5 +45,8 @@ describe("migração ensure-maddox-indexes", () => {
         expect(indexes(MaddoxCampaignMemberModel)).toContainEqual([{ campaignId: 1, userId: 1 }, expect.objectContaining({ unique: true })])
         const { MaddoxCampaignMessageModel } = await vi.importActual<typeof import("@/features/maddox/models/maddox-campaign-message")>("@/features/maddox/models/maddox-campaign-message")
         expect(indexes(MaddoxCampaignMessageModel)).toContainEqual([{ campaignId: 1, turnNumber: 1, memberId: 1 }, expect.objectContaining({ unique: true, partialFilterExpression: { turnAction: true } })])
+        // Maddox 6: no máximo um combate ativo por campanha.
+        const { MaddoxCombatModel } = await vi.importActual<typeof import("@/features/maddox/models/maddox-combat")>("@/features/maddox/models/maddox-combat")
+        expect(indexes(MaddoxCombatModel)).toContainEqual([{ campaignId: 1 }, expect.objectContaining({ unique: true, partialFilterExpression: { status: "active" } })])
     })
 })

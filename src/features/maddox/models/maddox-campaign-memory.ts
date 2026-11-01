@@ -20,6 +20,8 @@ export interface IMaddoxCampaignMemory {
     status: MaddoxQuestStatus | null
     /** Turno em que o Maddox gravou ou atualizou por último (Maddox 4). */
     turnNumber: number | null
+    /** Marco de um combate (Maddox 6): uma memória por combate, mesmo com títulos repetidos. */
+    combatId?: Types.ObjectId | null
     origin: "agent" | "user"
     createdBy: string
     createdAt: Date
@@ -37,6 +39,7 @@ const MaddoxCampaignMemorySchema = new Schema<IMaddoxCampaignMemory>(
         tags: { type: [String], default: [] },
         status: { type: String, enum: MADDOX_QUEST_STATUSES, default: null },
         turnNumber: { type: Number, default: null },
+        combatId: { type: Schema.Types.ObjectId, ref: "MaddoxCombat", default: null },
         origin: { type: String, enum: ["agent", "user"], default: "agent" },
         createdBy: { type: String, required: true },
     },

@@ -6,6 +6,7 @@ import {
     narratorTaskText,
     narratorTranscript,
     usesChecks,
+    usesCombat,
     type NarratorCheckResult,
     type NarratorPromptContext,
 } from "@/features/maddox/server/narrator-prompt"
@@ -194,3 +195,48 @@ describe("catálogo do DnDicas no narrador", () => {
     })
 })
 
+
+describe("combate narrativo no prompt (Maddox 6)", () => {
+    const combat = { title: "Emboscada no cais", location: "Cais", masterTurns: 2, combatants: [{ name: "Varn", side: "inimigo" as const, quantity: 1, condition: "ferido", description: "Líder" }, { name: "Lobo", side: "aliado" as const, quantity: 2, condition: "", description: "" }] }
+
+    it("só Narrativo, Flexível e Equilibrado têm a regra e o bloco do combate em andamento", () => {
+        expect(["narrativo", "flexivel", "equilibrado", "rigoroso", "fiel-dnd"].map((rigor) => usesCombat(rigor as never))).toEqual([true, true, true, false, false])
+        for (const rigor of ["narrativo", "flexivel", "equilibrado"] as const) {
+            const text = buildNarratorInstructions(context({ rigor, combat }), { kind: "ai-sdk" })
+            expect(text).toContain("## Combate narrativo")
+            expect(text).toContain("`start_combat`")
+            expect(text).toContain("## Combate em andamento: Emboscada no cais")
+            expect(text).toContain("- **Varn**: Líder — condição: ferido")
+            expect(text).toContain("- **Lobo** (2) [aliado] — condição: sem registro")
+        }
+        for (const rigor of ["rigoroso", "fiel-dnd"] as const) {
+            const text = buildNarratorInstructions(context({ rigor, combat }), { kind: "ai-sdk" })
+            expect(text).not.toContain("## Combate narrativo")
+            expect(text).not.toContain("## Combate em andamento")
+            expect(text).toContain("O combate continua narrado (sem iniciativa nem turnos mecânicos)")
+        }
+        // Equilibrado: testes nos golpes decisivos; Narrativo: sem dados.
+        expect(buildNarratorInstructions(context({ rigor: "equilibrado" }), { kind: "ai-sdk" })).toContain("Testes só nos golpes decisivos")
+        expect(buildNarratorInstructions(context({ rigor: "narrativo" }), { kind: "ai-sdk" })).toContain("Nada de dados nem testes")
+    })
+
+    it("sem combate não há bloco; luta longa ganha o lembrete de conduzir ao desfecho", () => {
+        expect(buildNarratorInstructions(context({ combat: null }), { kind: "ai-sdk" })).not.toContain("## Combate em andamento")
+        expect(buildNarratorInstructions(context({ combat }), { kind: "ai-sdk" })).not.toContain("conduza-a a um desfecho")
+        expect(buildNarratorInstructions(context({ combat: { ...combat, masterTurns: 6 } }), { kind: "ai-sdk" })).toContain("A luta já dura 6 narrações: conduza-a a um desfecho")
+    })
+
+    it("MCP lista as ferramentas do combate só quando liberadas", () => {
+        expect(buildNarratorInstructions(context(), { kind: "mcp", server: "dndicas-maddox", turnToken: "t", combat: true })).toContain("get_combat, start_combat, update_combat, end_combat")
+        expect(buildNarratorInstructions(context({ rigor: "rigoroso" }), { kind: "mcp", server: "dndicas-maddox", turnToken: "t", combat: false })).not.toContain("start_combat")
+    })
+
+    it("tarefa leva a orientação do JEV e a transcrição mostra os cards do combate", () => {
+        const declarations = [{ characterName: "Lyra", kind: "declaration" as const, content: "Ataco o guarda.", skipped: false }]
+        expect(narratorTaskText({ kind: "narration", turnNumber: 3, declarations, combatHint: "start" })).toContain("provavelmente começam um combate")
+        expect(narratorTaskText({ kind: "narration", turnNumber: 3, declarations, combatHint: "end" })).toContain("provavelmente encerram o combate")
+        expect(narratorTaskText({ kind: "narration", turnNumber: 3, declarations })).not.toContain("JEV")
+        const transcript = narratorTranscript([{ turnNumber: 2, kind: "combat", characterName: null, content: "combate começou: Briga" }], 1000)
+        expect(transcript).toBe("[Turno 2 — combate começou: Briga]")
+    })
+})

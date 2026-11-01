@@ -5,7 +5,7 @@ import { DomainError } from "@/lib/api/route"
 import { loggerFor } from "@/lib/logger"
 import { User } from "@/features/users/models/user"
 import { MADDOX_CAMPAIGN_AUDIT_ENTITY, MADDOX_INVITE_CLOSED_STATUSES, MADDOX_SHEET_RIGORS, type MaddoxCampaignStatus } from "../constants"
-import { MaddoxCampaignMemberModel, MaddoxCampaignModel, MaddoxCharacterModel, type IMaddoxCampaign, type IMaddoxCampaignMember, type IMaddoxCharacter } from "../models"
+import { MaddoxCampaignMemberModel, MaddoxCampaignModel, MaddoxCharacterModel, MaddoxCombatModel, type IMaddoxCampaign, type IMaddoxCampaignMember, type IMaddoxCharacter } from "../models"
 import type { CreateMaddoxCampaignInput, MaddoxCharacterDraftInput, UpdateMaddoxCampaignInput } from "../campaign-schemas"
 import type {
     MaddoxCampaignCharacterDto,
@@ -103,6 +103,10 @@ async function buildDtos(campaigns: CampaignDoc[], userId: string): Promise<(Mad
         for (const sheet of sheets) sheetSlugs.set(String(sheet._id), sheet.slug)
     }
     const characterById = new Map(characters.map((character) => [String(character._id), character]))
+    // Combate narrativo em andamento (Maddox 6): só nas campanhas ativas.
+    const activeIds = campaigns.filter((campaign) => campaign.status === "active").map((campaign) => campaign._id)
+    const combats = activeIds.length ? await MaddoxCombatModel.find({ campaignId: { $in: activeIds }, status: "active" }).select("campaignId title").lean<{ campaignId: Types.ObjectId; title: string }[]>() : []
+    const combatTitle = new Map(combats.map((combat) => [String(combat.campaignId), combat.title]))
     return campaigns.map((campaign) => {
         const own = members.filter((member) => String(member.campaignId) === String(campaign._id))
         const dtos: MaddoxCampaignMemberDto[] = own
@@ -137,6 +141,7 @@ async function buildDtos(campaigns: CampaignDoc[], userId: string): Promise<(Mad
             members: dtos,
             turnNumber: campaign.turn?.number ?? 0,
             turnPhase: campaign.turn?.phase ?? "master",
+            combatTitle: combatTitle.get(String(campaign._id)) ?? null,
             startedAt: iso(campaign.startedAt),
             showCheckDc: Boolean(campaign.showCheckDc),
             startingLevel: campaign.startingLevel ?? null,

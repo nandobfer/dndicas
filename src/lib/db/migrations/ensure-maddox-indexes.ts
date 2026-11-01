@@ -4,6 +4,7 @@ import {
     MaddoxCampaignMemoryModel,
     MaddoxCampaignModel,
     MaddoxCharacterModel,
+    MaddoxCombatModel,
     MaddoxInterviewModel,
     MaddoxInterviewScriptModel,
     MaddoxNpcModel,
@@ -17,7 +18,8 @@ import {
  * sessões do OpenCode, `{ campaignId, userId }` dos membros e `{ campaignId, kind, memberId }` das
  * entrevistas (uma de cenário por campanha, uma de personagem por membro) e `{ campaignId, turnNumber,
  * memberId }` das declarações da mesa (uma por membro e turno) e `{ campaignId, turnNumber, check.round,
- * memberId }` dos testes pedidos pelo Maddox (um por personagem em cada rodada). Idempotente.
+ * memberId }` dos testes pedidos pelo Maddox (um por personagem em cada rodada) e `{ campaignId }` do combate
+ * ativo (Maddox 6: um por campanha). Idempotente.
  */
 export async function ensureMaddoxIndexes(): Promise<void> {
     await Promise.all([
@@ -30,5 +32,6 @@ export async function ensureMaddoxIndexes(): Promise<void> {
         MaddoxInterviewModel.createIndexes(),
         MaddoxOpencodeSessionModel.createIndexes(),
         MaddoxCampaignMessageModel.createIndexes(),
+        MaddoxCombatModel.createIndexes(),
     ])
 }

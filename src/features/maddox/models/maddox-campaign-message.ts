@@ -70,6 +70,8 @@ export interface IMaddoxCampaignMessage {
     segment: number
     /** Teste pedido pelo Maddox (`kind: "check"`). */
     check: IMaddoxCheck | null
+    /** Card de início ou fim de combate (`kind: "combat"`, Maddox 6). */
+    combat: { event: "start" | "end"; combatId: Types.ObjectId } | null
     createdAt: Date
     updatedAt: Date
 }
@@ -110,6 +112,10 @@ const MaddoxCampaignMessageSchema = new Schema<IMaddoxCampaignMessage>(
                 },
                 { _id: false },
             ),
+            default: null,
+        },
+        combat: {
+            type: new Schema({ event: { type: String, enum: ["start", "end"], required: true }, combatId: { type: Schema.Types.ObjectId, ref: "MaddoxCombat", required: true } }, { _id: false }),
             default: null,
         },
     },

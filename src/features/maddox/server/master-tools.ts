@@ -9,6 +9,16 @@ import {
     MADDOX_CHECK_REASON_GUIDE,
     MADDOX_CHECK_RIGORS,
     MADDOX_CHECK_ROUNDS_MAX,
+    MADDOX_COIN_KEYS,
+    MADDOX_COMBAT_COINS_MAX,
+    MADDOX_COMBAT_ITEM_QUANTITY_MAX,
+    MADDOX_COMBAT_OUTCOMES,
+    MADDOX_COMBAT_REWARD_KINDS,
+    MADDOX_COMBAT_REWARDS_MAX,
+    MADDOX_COMBAT_RIGORS,
+    MADDOX_COMBATANT_OUTCOMES,
+    MADDOX_COMBATANT_SIDES,
+    MADDOX_COMBATANTS_MAX,
     MADDOX_NPC_STATUSES,
     MADDOX_QUEST_STATUSES,
     MADDOX_TOOL_NAME_MAX,
@@ -20,7 +30,7 @@ import {
 import { normalizeCatalogName } from "../catalog-markup"
 import { MaddoxCampaignMemberModel, MaddoxCampaignMemoryModel, MaddoxCampaignModel, MaddoxCharacterModel, MaddoxNpcModel, type IMaddoxCampaign, type IMaddoxCampaignMemory, type IMaddoxCharacter, type IMaddoxNpc } from "../models"
 import { MADDOX_ABILITIES, MADDOX_ABILITY_LABELS, MADDOX_SKILLS, checkAbility, checkTitle } from "../check-modifier"
-import { addDraftCheck, jobDraftChecks, maddoxJobMeta } from "./game-live"
+import { addDraftCheck, addDraftCombat, jobDraftChecks, jobDraftCombat, maddoxJobMeta, type MaddoxDraftCombatReward } from "./game-live"
 
 /**
  * Ferramentas de persistência do Maddox narrador (Maddox 4) — SOMENTE servidor. Definidas uma vez e expostas de
@@ -352,8 +362,207 @@ export const MADDOX_MASTER_TOOLS: readonly MaddoxMasterTool[] = [
     }),
 ]
 
+// ── Combate narrativo (Maddox 6) ───────────────────────────────────────────────
+
+/** Ferramentas do combate narrativo: só nas narrações dos graus com combate (Narrativo, Flexível e Equilibrado). */
+export const MADDOX_COMBAT_TOOL_NAMES = ["get_combat", "start_combat", "update_combat", "end_combat"] as const
+
+/** Garante grau e geração certos e devolve o estado efetivo do combate (gravado + rascunho deste job). */
+async function combatContext(context: MaddoxToolContext) {
+    const campaign = await MaddoxCampaignModel.findById(context.campaignId).select("rigor").lean<Pick<IMaddoxCampaign, "rigor">>()
+    if (!campaign || !MADDOX_COMBAT_RIGORS.includes(campaign.rigor))
+        throw new MaddoxToolError("Esta campanha não registra combate narrativo por ferramentas: narre o combate normalmente, sem abrir nem encerrar registro.")
+    const meta = context.jobId ? maddoxJobMeta(String(context.campaignId), context.jobId) : null
+    if (!meta || meta.kind !== "narration") throw new MaddoxToolError("O combate só começa ou termina na narração do turno do mestre. Responda à pergunta sem mexer no combate.")
+    const { findActiveCombat, replayCombat } = await import("./combat")
+    const active = await findActiveCombat(context.campaignId)
+    return { rigor: campaign.rigor, state: replayCombat(active, jobDraftCombat(String(context.campaignId), context.jobId!)) }
+}
+
+const combatantInput = z.object({
+    nome: z.string().min(1).describe("Nome como os jogadores o conhecem (nome próprio ou \"Bandido de capuz\")"),
+    lado: z.enum(MADDOX_COMBATANT_SIDES).optional().describe("inimigo (padrão) ou aliado dos personagens"),
+    quantidade: z.number().int().min(1).max(999).optional().describe("Para grupos iguais (\"3 lobos\")"),
+    descricao: optionalText.describe("Aparência e papel na luta, curto"),
+    condicao: optionalText.describe("Condição atual (\"ileso\", \"ferido no ombro\", \"recuando\")"),
+    registrarNpc: z.boolean().optional().describe("true só para personagens com nome próprio que devem virar NPC da campanha"),
+})
+
+const toDraftCombatant = (input: z.infer<typeof combatantInput>, fit: ReturnType<typeof fitter>) => ({
+    name: clip(input.nome, MADDOX_TOOL_NAME_MAX),
+    side: input.lado ?? ("inimigo" as const),
+    quantity: input.quantidade ?? 1,
+    description: fit.fit("descricao", input.descricao),
+    condition: fit.fit("condicao", input.condicao),
+    registerNpc: Boolean(input.registrarNpc),
+})
+
+/** Recusa nomes repetidos na mesma lista (o desfecho e as atualizações casam pelo nome). */
+function assertUniqueCombatants(items: readonly { nome: string }[], existing: readonly string[] = []) {
+    const seen = new Set(existing.map(keyOf))
+    for (const item of items) {
+        const key = keyOf(item.nome)
+        if (seen.has(key)) throw new MaddoxToolError(`"${item.nome}" aparece mais de uma vez no combate: use um nome por participante (grupos iguais = um item com \`quantidade\`, ex.: "Lobo" com quantidade 2; ou nomes distintos como "Lobo alfa" e "Lobo cinzento").`)
+        seen.add(key)
+    }
+}
+
+async function playerCharacters(campaignId: Types.ObjectId) {
+    return MaddoxCharacterModel.find({ campaignId, status: "active" }).select("name").lean<{ _id: Types.ObjectId; name: string }[]>()
+}
+
+function findCharacter(characters: readonly { _id: Types.ObjectId; name: string }[], name: string) {
+    const target = characters.find((character) => keyOf(character.name) === keyOf(name))
+    if (!target) throw new MaddoxToolError(`Nenhum personagem jogador chamado "${name}". Personagens: ${characters.map((character) => character.name).join(", ") || "nenhum"}.`)
+    return target
+}
+
+const coinsInput = z
+    .object(Object.fromEntries(MADDOX_COIN_KEYS.map((key) => [key, z.number().int().min(0).max(MADDOX_COMBAT_COINS_MAX).optional()])) as Record<(typeof MADDOX_COIN_KEYS)[number], z.ZodOptional<z.ZodNumber>>)
+    .describe("po = ouro, pp = prata, pe = electrum, pc = cobre, pl = platina")
+
+export const MADDOX_COMBAT_TOOLS: readonly MaddoxMasterTool[] = [
+    define({
+        name: "get_combat",
+        description: "Lê o combate em andamento (título, adversários e aliados com a condição de cada um), contando o que já foi pedido nesta narração.",
+        readOnly: true,
+        input: z.object({}),
+        async execute(context) {
+            const { state } = await combatContext(context)
+            return state.active ? { active: true, title: state.title, combatants: state.combatants } : { active: false, note: "Nenhum combate em andamento." }
+        },
+    }),
+    define({
+        name: "start_combat",
+        description: [
+            "Registra o INÍCIO de um combate: chame quando a hostilidade de fato começa (um ataque, uma emboscada), não diante de uma ameaça.",
+            "Informe um título curto, o local e os adversários (e aliados, se houver). Os personagens dos jogadores não entram na lista.",
+            "Depois narre a luta de forma cinemática, sem iniciativa nem turnos mecânicos. Um combate por vez.",
+        ].join(" "),
+        readOnly: false,
+        input: z.object({
+            titulo: z.string().min(1).describe("Título curto do encontro (\"Emboscada na ponte de Varn\")"),
+            local: optionalText.describe("Onde a luta acontece"),
+            adversarios: z.array(combatantInput).min(1).max(MADDOX_COMBATANTS_MAX),
+        }),
+        async execute(context, input) {
+            const { state } = await combatContext(context)
+            if (state.active) throw new MaddoxToolError(`Já há um combate em andamento ("${state.title}"): use update_combat para mudanças ou end_combat para encerrá-lo.`)
+            assertUniqueCombatants(input.adversarios)
+            const fit = fitter()
+            const combatants = input.adversarios.map((item) => toDraftCombatant(item, fit))
+            const added = addDraftCombat(String(context.campaignId), context.jobId!, { type: "start", title: clip(input.titulo, MADDOX_TOOL_NAME_MAX), location: clip(input.local, MADDOX_TOOL_NAME_MAX), combatants })
+            if (!added) throw new MaddoxToolError("Esta narração já terminou.")
+            return { started: true, title: clip(input.titulo, MADDOX_TOOL_NAME_MAX), note: "Narre a luta de forma cinemática. Encerre com end_combat quando houver vitória, derrota, fuga, rendição ou trégua.", ...fit.notice() }
+        },
+    }),
+    define({
+        name: "update_combat",
+        description: "Atualiza o combate em andamento: condição dos adversários e aliados (ferido, recuando, caído) ou reforços que entram na luta. Envie só quem mudou.",
+        readOnly: false,
+        input: z.object({ adversarios: z.array(combatantInput).min(1).max(MADDOX_COMBATANTS_MAX) }),
+        async execute(context, input) {
+            const { state } = await combatContext(context)
+            if (!state.active) throw new MaddoxToolError("Nenhum combate em andamento: use start_combat quando a luta começar.")
+            // Mesma pessoa duas vezes na lista = recusa; quem já está na luta é atualizado, quem é novo entra uma vez só.
+            assertUniqueCombatants(input.adversarios)
+            const fit = fitter()
+            const combatants = input.adversarios.map((item) => {
+                const draft = toDraftCombatant(item, fit)
+                return {
+                    name: draft.name,
+                    ...(item.lado ? { side: draft.side } : {}),
+                    ...(item.quantidade ? { quantity: draft.quantity } : {}),
+                    ...(item.descricao !== undefined ? { description: draft.description } : {}),
+                    ...(item.condicao !== undefined ? { condition: draft.condition } : {}),
+                    registerNpc: draft.registerNpc,
+                }
+            })
+            if (!addDraftCombat(String(context.campaignId), context.jobId!, { type: "update", combatants })) throw new MaddoxToolError("Esta narração já terminou.")
+            return { saved: true, ...fit.notice() }
+        },
+    }),
+    define({
+        name: "end_combat",
+        description: [
+            "Registra o FIM do combate em andamento: o resultado para o grupo, um resumo público do desfecho, o desfecho de cada adversário",
+            "(morto, derrotado, capturado, rendeu-se, fugiu, poupado, ileso), as recompensas obtidas (moedas, itens ou outra coisa, com quem recebeu),",
+            "a condição de cada personagem depois da luta e a cena final descrita visualmente (para uma ilustração; sem segredos).",
+            "Chame na narração em que a luta termina e narre o desfecho.",
+        ].join(" "),
+        readOnly: false,
+        input: z.object({
+            resultado: z.enum(MADDOX_COMBAT_OUTCOMES).describe("vitoria, derrota, fuga, tregua ou interrompido"),
+            resumo: z.string().min(1).describe("O que aconteceu e como terminou (os jogadores leem)"),
+            notasMestre: optionalText.describe("Consequências secretas, só para o mestre"),
+            adversarios: z.array(z.object({ nome: z.string().min(1), desfecho: z.enum(MADDOX_COMBATANT_OUTCOMES) })).max(MADDOX_COMBATANTS_MAX).optional(),
+            recompensas: z
+                .array(
+                    z.object({
+                        tipo: z.enum(MADDOX_COMBAT_REWARD_KINDS).describe("moedas, item ou outro (informação, favor, reputação)"),
+                        descricao: optionalText.describe("Descrição curta (obrigatória para outro)"),
+                        personagem: optionalText.describe("Personagem jogador que recebe (vazio = o grupo)"),
+                        moedas: coinsInput.optional(),
+                        item: optionalText.describe("Nome do item (de preferência o nome do catálogo do DnDicas)"),
+                        quantidade: z.number().int().min(1).max(MADDOX_COMBAT_ITEM_QUANTITY_MAX).optional(),
+                    }),
+                )
+                .max(MADDOX_COMBAT_REWARDS_MAX)
+                .optional(),
+            estadoPersonagens: z.array(z.object({ personagem: z.string().min(1), condicao: z.string().min(1) })).optional().describe("Condição de cada personagem jogador depois da luta"),
+            cenaFinal: z.string().min(1).describe("A cena final descrita visualmente, em poucas frases (luz, lugar, quem está de pé)"),
+        }),
+        async execute(context, input) {
+            const { state } = await combatContext(context)
+            if (!state.active) throw new MaddoxToolError("Nenhum combate em andamento para encerrar.")
+            if (jobDraftChecks(String(context.campaignId), context.jobId!).length > 0) throw new MaddoxToolError("Há teste pedido nesta narração: resolva os testes antes de encerrar o combate.")
+            const known = state.combatants.map((item) => item.name)
+            for (const item of input.adversarios ?? []) {
+                if (!known.some((name) => keyOf(name) === keyOf(item.nome))) throw new MaddoxToolError(`"${item.nome}" não está neste combate. Participantes: ${known.join(", ") || "nenhum"}.`)
+            }
+            const characters = await playerCharacters(context.campaignId)
+            const fit = fitter()
+            const rewards: MaddoxDraftCombatReward[] = []
+            for (const item of input.recompensas ?? []) {
+                const target = item.personagem?.trim() ? findCharacter(characters, item.personagem) : null
+                const coins = item.moedas ? Object.fromEntries(MADDOX_COIN_KEYS.filter((key) => (item.moedas?.[key] ?? 0) > 0).map((key) => [key, item.moedas![key]!])) : null
+                if (item.tipo === "moedas" && (!coins || !Object.keys(coins).length)) throw new MaddoxToolError("Recompensa em moedas sem valor: informe `moedas` (po, pp, pe, pc ou pl).")
+                if (item.tipo === "item" && !item.item?.trim()) throw new MaddoxToolError("Recompensa do tipo item sem `item`: informe o nome do item.")
+                if (item.tipo === "outro" && !item.descricao?.trim()) throw new MaddoxToolError("Recompensa do tipo outro sem `descricao`.")
+                rewards.push({
+                    kind: item.tipo,
+                    description: fit.fit("recompensas.descricao", item.descricao ?? item.item ?? ""),
+                    characterId: target ? String(target._id) : null,
+                    characterName: target?.name ?? null,
+                    coins: item.tipo === "moedas" ? coins : null,
+                    item: item.tipo === "item" ? { ref: clip(item.item, MADDOX_TOOL_NAME_MAX), quantity: item.quantidade ?? 1 } : null,
+                })
+            }
+            const characterStates = (input.estadoPersonagens ?? []).map((item) => {
+                const target = findCharacter(characters, item.personagem)
+                return { characterId: String(target._id), characterName: target.name, condition: fit.fit("estadoPersonagens.condicao", item.condicao) }
+            })
+            const added = addDraftCombat(String(context.campaignId), context.jobId!, {
+                type: "end",
+                outcome: input.resultado,
+                summary: fit.fit("resumo", input.resumo),
+                masterNotes: fit.fit("notasMestre", input.notasMestre),
+                combatants: (input.adversarios ?? []).map((item) => ({ name: item.nome, outcome: item.desfecho })),
+                rewards,
+                characterStates,
+                finalScene: fit.fit("cenaFinal", input.cenaFinal),
+            })
+            if (!added) throw new MaddoxToolError("Esta narração já terminou.")
+            return { ended: true, title: state.title, rewards: rewards.length, note: "Narre o desfecho e termine num ponto de decisão.", ...fit.notice() }
+        },
+    }),
+]
+
+/** Todas as ferramentas do narrador (persistência, testes e combate). */
+export const MADDOX_NARRATOR_TOOLS: readonly MaddoxMasterTool[] = [...MADDOX_MASTER_TOOLS, ...MADDOX_COMBAT_TOOLS]
+
 export function findMaddoxTool(name: string): MaddoxMasterTool | undefined {
-    return MADDOX_MASTER_TOOLS.find((tool) => tool.name === name)
+    return MADDOX_NARRATOR_TOOLS.find((tool) => tool.name === name)
 }
 
 /** Executa uma ferramenta validando a entrada; falha vira `MaddoxToolError` com mensagem em pt-BR. */
@@ -374,12 +583,16 @@ export async function runMaddoxTool(tool: MaddoxMasterTool, context: MaddoxToolC
 /** Ferramenta dos testes (Maddox 5): só oferecida à AI SDK nas narrações dos graus com ficha. */
 export const MADDOX_CHECK_TOOL_NAME = "request_check"
 
-/** Ferramentas no formato da AI SDK (a SDK `ai` entra sob demanda). `checks: false` tira o `request_check`. */
-export async function buildMaddoxAiTools(context: MaddoxToolContext, options: { checks?: boolean } = {}): Promise<ToolSet> {
+/**
+ * Ferramentas no formato da AI SDK (a SDK `ai` entra sob demanda). `checks: false` tira o `request_check`; `combat: false`
+ * tira as do combate narrativo (Maddox 6).
+ */
+export async function buildMaddoxAiTools(context: MaddoxToolContext, options: { checks?: boolean; combat?: boolean } = {}): Promise<ToolSet> {
     const { dynamicTool } = await import("ai")
     const tools: ToolSet = {}
-    for (const def of MADDOX_MASTER_TOOLS) {
+    for (const def of MADDOX_NARRATOR_TOOLS) {
         if (def.name === MADDOX_CHECK_TOOL_NAME && !options.checks) continue
+        if ((MADDOX_COMBAT_TOOL_NAMES as readonly string[]).includes(def.name) && !options.combat) continue
         tools[def.name] = dynamicTool({
             description: def.description,
             inputSchema: def.input,
