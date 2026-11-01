@@ -125,7 +125,8 @@ async function settleReaction(campaignId: Types.ObjectId, message: MessageDoc, s
             if (shield) me.state.flags.shield = true
             if (option?.id === "ready") me.state.ready = null
             const attack = reaction.pendingAttack
-            if (attack) {
+            // Sem reação, o golpe entra depois (`applyPendingAttack`).
+            if (attack && option) {
                 const { loadCombatSheets } = await import("./combat-sheet")
                 const sheet = me.state.sheetId ? (await loadCombatSheets([me.state.sheetId])).get(me.state.sheetId) : null
                 const ac = (sheet?.armorClass ?? 10) + (me.state.flags.shield ? 5 : 0)

@@ -158,9 +158,9 @@ export function profileFromText(text: string): CombatProfile | null {
     if (!value) return null
     // "Sempre que você usar a ação Atacar…" (Ataque Extra, Estilo de Luta): modifica outra ação, não gasta a sua.
     if (/sempre que (voce )?(usa|usar|realiza|realizar|fizer|faz|tomar|toma) (a |sua |a sua )?acao/.test(value)) return { cost: "passive", trigger: null, resolution: null, halfOnSave: false }
-    const bonus = /(como|com|usar|usando|gastar|gasta) (uma |a |sua |a sua )?acao bonus/.test(value)
-    const reaction = /(como|com|usar|usando|gastar|gasta) (uma |a |sua |a sua )?reacao/.test(value)
-    const action = /(como|com|usar|usando|gastar|gasta) (uma |a |sua |a sua )?acao(?! bonus)\b/.test(value) || /\bacao de magia\b/.test(value)
+    const bonus = /(como|com|usa|usar|usando|gastar|gasta) (uma |a |sua |a sua )?acao bonus/.test(value)
+    const reaction = /(como|com|usa|usar|usando|gastar|gasta) (uma |a |sua |a sua )?reacao/.test(value)
+    const action = /(como|com|usa|usar|usando|gastar|gasta) (uma |a |sua |a sua )?acao(?! bonus)\b/.test(value) || /\bacao de magia\b/.test(value)
     const trigger = reaction ? reactionTriggerFromText(value) : null
     const halfOnSave = /metade (do|desse|deste|de) dano/.test(value)
     const resolution = resolutionFromText(value)
