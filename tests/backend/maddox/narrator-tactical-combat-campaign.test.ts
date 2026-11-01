@@ -468,12 +468,26 @@ describe("Maddox 7 — combate fiel ao D&D de ponta a ponta", () => {
         expect(((await CharacterSheet.findById(bruno.sheetId).lean())!.spellSlots as unknown as Record<string, { used: number }>)["1"]!.used).toBe(1)
 
         // ── Fim do combate: todos os inimigos caíram ──
+        // Maddox 8: no Fiel ao D&D, recompensa em item fora do catálogo é recusada sem gravar (com os parecidos).
         script.push([
             {
                 tools: [
                     {
                         name: "end_combat",
-                        input: { resultado: "vitoria", resumo: "Os goblins caíram na cripta.", adversarios: [{ nome: "Goblin 1", desfecho: "morto" }, { nome: "Goblin 2", desfecho: "morto" }], recompensas: [{ tipo: "moedas", personagem: "Kael", moedas: { po: 10 } }], cenaFinal: "A cripta silencia." },
+                        input: { resultado: "vitoria", resumo: "x", adversarios: [{ nome: "Goblin 1", desfecho: "morto" }], recompensas: [{ tipo: "item", personagem: "Kael", item: "Espada Cursada" }], cenaFinal: "x" },
+                    },
+                    {
+                        name: "end_combat",
+                        input: {
+                            resultado: "vitoria",
+                            resumo: "Os goblins caíram na cripta.",
+                            adversarios: [{ nome: "Goblin 1", desfecho: "morto" }, { nome: "Goblin 2", desfecho: "morto" }],
+                            recompensas: [
+                                { tipo: "moedas", personagem: "Kael", moedas: { po: 10 } },
+                                { tipo: "item", personagem: "Kael", item: "espada curta" },
+                            ],
+                            cenaFinal: "A cripta silencia.",
+                        },
                     },
                 ],
                 text: "A cripta silencia. O que vocês fazem?",
@@ -485,6 +499,10 @@ describe("Maddox 7 — combate fiel ao D&D de ponta a ponta", () => {
         combat = (await MaddoxCombatModel.findOne({ campaignId: id }).lean())!
         expect(combat).toMatchObject({ status: "ended", outcome: "vitoria", effectsApplied: true })
         expect(combat.rewards[0]).toMatchObject({ applied: true })
+        expect(combat.rewards[1]).toMatchObject({ kind: "item", applied: true, warning: null })
+        const refused = toolLog.filter((item) => item.name === "end_combat")
+        expect(refused[0]!.error).toContain('No Fiel ao D&D toda recompensa em item vem do catálogo: "Espada Cursada" não está nele. Parecidos no catálogo: Espada Curta.')
+        expect(refused[1]!.error).toBeUndefined()
         expect((await CharacterSheet.findById(kael.sheetId).lean())!.coins.gp).toBe(10)
         campaign = (await MaddoxCampaignModel.findById(id).lean())!
         expect(campaign.turn.phase).toBe("players")
