@@ -39,3 +39,19 @@ describe("stream da mesa (cliente)", () => {
         expect(state.live).toEqual([expect.objectContaining({ liveId: "l2", text: "Já em andamento" })])
     })
 })
+
+describe("rolagens dos testes no stream (Maddox 5)", () => {
+    it("check-rolled guarda a rolagem por mensagem (sem duplicar) para todos repetirem a animação", () => {
+        const roll = (total: number) => ({ rollId: `r${total}`, terms: [{ dice: "d20" as const, quantity: 1, results: [total - 5] }], mode: "normal" as const, diceTotal: total - 5, modifier: 5, total, createdAt: "2026-10-31T10:00:00.000Z" })
+        let state = reduceGameStream(MADDOX_GAME_STREAM_INITIAL, { type: "check-rolled", messageId: "k1", roll: roll(17) })
+        state = reduceGameStream(state, { type: "check-rolled", messageId: "k2", roll: roll(9) })
+        state = reduceGameStream(state, { type: "check-rolled", messageId: "k1", roll: roll(18) })
+        expect(state.rolled).toEqual([
+            { messageId: "k2", roll: expect.objectContaining({ total: 9 }) },
+            { messageId: "k1", roll: expect.objectContaining({ total: 18 }) },
+        ])
+        // Não mexe nas gerações ao vivo.
+        expect(state.live).toEqual([])
+        expect(state.finished).toBe(0)
+    })
+})

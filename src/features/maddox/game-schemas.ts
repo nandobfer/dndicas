@@ -20,3 +20,7 @@ export type MaddoxGameActionInput = z.infer<typeof maddoxGameActionSchema>
 /** Dono registra "não fez nada" no lugar de um jogador ausente. */
 export const maddoxSkipPlayerSchema = z.strictObject({ memberId: z.string({ error: "Informe o jogador" }).trim().min(1, { error: "Informe o jogador" }) })
 export type MaddoxSkipPlayerInput = z.infer<typeof maddoxSkipPlayerSchema>
+
+/** Rolar um teste pedido pelo Maddox: sem campos (dado e modificador são do servidor). */
+export const maddoxRollCheckSchema = z.strictObject({}, { error: "A rolagem não aceita dados nem modificadores." })
+export type MaddoxRollCheckInput = z.infer<typeof maddoxRollCheckSchema>

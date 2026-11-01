@@ -10,7 +10,9 @@ import { maddoxUserChannel } from "@/lib/pusher/channel-names"
 import { acquireChannel, isPusherClientAvailable, releaseChannel } from "@/lib/pusher/client"
 import { MADDOX_INTERVIEW_CHANGED_EVENT, type MaddoxScriptKind } from "../constants"
 import type { MaddoxCampaignDetailDto } from "../campaign-types"
-import type { MaddoxInterviewDto, MaddoxInterviewMessageDto, MaddoxInterviewStateDto, MaddoxInterviewStreamLine } from "../interview-types"
+import type { DiceRollResponse } from "@/features/dice-roller/types"
+import type { MaddoxAbilityMethod } from "../constants"
+import type { MaddoxHitPointRollResultDto, MaddoxAbilityRollResultDto, MaddoxAbilityScoresValues, MaddoxInterviewDto, MaddoxInterviewMessageDto, MaddoxInterviewStateDto, MaddoxInterviewStreamLine } from "../interview-types"
 import { MADDOX_CAMPAIGNS_KEY } from "./useMaddoxCampaigns"
 
 export const maddoxInterviewKey = (campaignId: string, kind: MaddoxScriptKind) => [...MADDOX_CAMPAIGNS_KEY, "interview", campaignId, kind] as const
@@ -139,7 +141,7 @@ export function useMaddoxInterview(campaignId: string, kind: MaddoxScriptKind, u
     }, [queryClient, userId, campaignId, kind])
 
     const run = useCallback(
-        async (suffix: "" | "/messages" | "/retry", body?: unknown, pendingUser?: MaddoxInterviewMessageDto) => {
+        async (suffix: "" | "/messages" | "/retry" | "/ability-scores" | "/hit-points", body?: unknown, pendingUser?: MaddoxInterviewMessageDto) => {
             if (streamingRef.current) return
             streamingRef.current = true
             setLive({ streaming: true, liveText: "", pendingUser: pendingUser ?? null })
@@ -177,6 +179,55 @@ export function useMaddoxInterview(campaignId: string, kind: MaddoxScriptKind, u
         [run],
     )
 
+    const setInterview = useCallback(
+        (interview: MaddoxInterviewDto) => queryClient.setQueryData<MaddoxInterviewStateDto>(key, (current) => ({ maddoxAvatarUrl: current?.maddoxAvatarUrl ?? null, interview })),
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+        [queryClient, campaignId, kind],
+    )
+
+    /** Rola um 4d6 dos atributos no servidor (o painel de dados anima o resultado devolvido). */
+    const rollAbility = useCallback(async (): Promise<DiceRollResponse> => {
+        try {
+            const result = unwrapApi((await api.post<ApiResponse<MaddoxAbilityRollResultDto>>(`${interviewPath(campaignId, kind)}/ability-scores/roll`, {})).data)
+            setInterview(result.interview)
+            return result.roll
+        } catch (error) {
+            toast.error(apiErrorMessage(error, "Não foi possível rolar agora"))
+            void queryClient.invalidateQueries({ queryKey: key })
+            throw error
+        }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [campaignId, kind, queryClient, setInterview])
+
+    const resetRolls = useMutation({
+        mutationFn: async () => unwrapApi((await api.post<ApiResponse<{ interview: MaddoxInterviewDto }>>(`${interviewPath(campaignId, kind)}/ability-scores/reset`, {})).data),
+        onSuccess: (data) => setInterview(data.interview),
+        onError: (error) => toast.error(apiErrorMessage(error, "Não foi possível reiniciar as rolagens")),
+    })
+
+    /** Envia o card de atributos e acompanha a fala seguinte do Maddox. */
+    const submitScores = useCallback((method: MaddoxAbilityMethod, scores: MaddoxAbilityScoresValues) => run("/ability-scores", { method, scores }), [run])
+
+    /** Rola o dado de vida de um nível no servidor (o painel de dados anima o resultado devolvido). */
+    const rollHitPoint = useCallback(
+        async (level: number): Promise<DiceRollResponse> => {
+            try {
+                const result = unwrapApi((await api.post<ApiResponse<MaddoxHitPointRollResultDto>>(`${interviewPath(campaignId, kind)}/hit-points/roll`, { nivel: level })).data)
+                setInterview(result.interview)
+                return result.roll
+            } catch (error) {
+                toast.error(apiErrorMessage(error, "Não foi possível rolar agora"))
+                void queryClient.invalidateQueries({ queryKey: key })
+                throw error
+            }
+        },
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+        [campaignId, kind, queryClient, setInterview],
+    )
+
+    /** Envia o card de pontos de vida e acompanha a fala seguinte do Maddox. */
+    const submitHitPoints = useCallback((choices: Record<string, "media" | "rolagem">) => run("/hit-points", { escolhas: choices }), [run])
+
     const complete = useMutation({
         mutationFn: async () => unwrapApi((await api.post<ApiResponse<MaddoxCampaignDetailDto>>(`${interviewPath(campaignId, kind)}/complete`)).data),
         onSuccess: (campaign) => {
@@ -187,5 +238,5 @@ export function useMaddoxInterview(campaignId: string, kind: MaddoxScriptKind, u
         onError: (error) => toast.error(apiErrorMessage(error, "Não foi possível concluir a entrevista")),
     })
 
-    return { query, live, start, send, retry, complete }
+    return { query, live, start, send, retry, complete, rollAbility, resetRolls, submitScores, rollHitPoint, submitHitPoints }
 }

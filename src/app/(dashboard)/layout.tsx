@@ -22,7 +22,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     return (
         <OpexScopeProvider>
         <DiceRollerProvider>
-        <div className="relative flex min-h-screen w-full bg-background overflow-hidden">
+        {/* `overflow-clip` (não `hidden`): recorta igual, mas não vira contêiner de rolagem — senão nenhum `sticky` das páginas gruda. */}
+        <div className="relative flex min-h-screen w-full bg-background overflow-clip">
             {/* Liquid Glass Background */}
             <LiquidGlassBackground />
 

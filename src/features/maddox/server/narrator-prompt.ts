@@ -1,6 +1,7 @@
 import { memoriesSection } from "@/features/ai/memories-prompt"
-import { MADDOX_DECLARATION_VALIDATION_RIGORS, MADDOX_PROFILE_SECTIONS, MADDOX_TOOL_TEXT_GUIDE, type MaddoxCampaignMemoryKind, type MaddoxGameMessageKind, type MaddoxQuestStatus, type MaddoxRigorLevel, type MaddoxVisibility } from "../constants"
+import { MADDOX_CATALOG_TOOL_NAMES, MADDOX_CHECK_RIGORS, MADDOX_CHECK_ROUNDS_MAX, MADDOX_DECLARATION_VALIDATION_RIGORS, MADDOX_PROFILE_SECTIONS, MADDOX_TOOL_TEXT_GUIDE, type MaddoxCampaignMemoryKind, type MaddoxGameMessageKind, type MaddoxQuestStatus, type MaddoxRigorLevel, type MaddoxVisibility } from "../constants"
 import { CATALOG_CITATION_RULE, rigorBlock } from "./interview-prompt"
+import { checkSucceeded } from "../check-modifier"
 
 /**
  * Instruções do Maddox narrador (Maddox 4) — módulo PURO (sem banco nem IA), testado à parte. As regras de narração
@@ -36,12 +37,34 @@ export const MADDOX_NARRATOR_RULES = [
     "- Ferimentos e desgaste continuam influenciando as cenas seguintes até uma recuperação coerente.",
 ].join("\n")
 
-/** Modo narrativo puro desta entrega: nenhum grau de rigor usa rolagens ou números. */
+/** Modo narrativo puro: Narrativo e Flexível não usam rolagens nem números. */
 export const MADDOX_NARRATIVE_MODE_RULE = [
     "## Modo narrativo",
     "- Toda a experiência é narrativa, inclusive combate, aprendizado e progressão. Não use dados, rolagens, testes numéricos, atributos com pontuação, pontos de vida, barras de recursos nem turnos mecânicos.",
     "- Descreva capacidades, ferimentos, desgaste e recursos qualitativamente. Quantidades concretas do mundo (três flechas, dois dias de viagem) podem aparecer normalmente.",
 ].join("\n")
+
+/** O grau pede testes de atributo/perícia/resistência (Maddox 5). */
+export const usesChecks = (rigor: MaddoxRigorLevel) => MADDOX_CHECK_RIGORS.includes(rigor)
+
+const CHECK_FREQUENCY: Partial<Record<MaddoxRigorLevel, string>> = {
+    equilibrado: "Peça teste só nos momentos decisivos, quando o resultado é incerto e muda a história; ações do dia a dia se resolvem na narrativa.",
+    rigoroso: "Peça teste sempre que for adequado pelas regras do D&D: quando o resultado for incerto e houver consequência relevante.",
+    "fiel-dnd": "Peça testes exatamente como nas regras do D&D 2024: toda tentativa com resultado incerto e consequência relevante pede o teste e a CD adequados.",
+}
+
+/** Regras dos testes nos graus com ficha (substitui o modo narrativo puro). */
+export function checksRule(rigor: MaddoxRigorLevel): string {
+    return [
+        "## Fichas e testes",
+        "- Os personagens dos jogadores têm ficha D&D (resumo em cada personagem abaixo): use atributos, perícias, proficiências, PV e CA para decidir o que é possível e o quanto é difícil.",
+        `- ${CHECK_FREQUENCY[rigor] ?? CHECK_FREQUENCY.rigoroso}`,
+        "- Para pedir um teste, chame a ferramenta `request_check` (personagem, tipo — perícia, atributo ou resistência —, a perícia ou o atributo, a CD, vantagem ou desvantagem quando houver e um motivo curto). Um teste por personagem a cada narração; vários personagens podem testar ao mesmo tempo.",
+        "- NUNCA role dados nem invente resultados: quem rola é o jogador, com os modificadores da ficha, e o resultado real chega na mensagem seguinte. Ao pedir um teste, narre até o momento da tentativa e PARE: não decida o resultado nem termine perguntando o que os jogadores fazem.",
+        "- Com o resultado em mãos, compare o total com a CD (20 natural é sempre sucesso e 1 natural sempre falha, qualquer que seja a CD; ambos marcantes) e narre a consequência na ficção, sem recitar números.",
+        "- O combate continua narrado (sem iniciativa nem turnos mecânicos); testes podem aparecer nos momentos decisivos dele. Não aplique dano nem gaste recursos da ficha pelos números.",
+    ].join("\n")
+}
 
 /** Graus que julgam a validade da ação livre na narração (os demais validam ao declarar). */
 export function judgesFreeActionsInNarration(rigor: MaddoxRigorLevel): boolean {
@@ -69,11 +92,25 @@ export const MADDOX_PERSISTENCE_RULE = [
     "- Grave antes ou depois de escrever a narração, nunca no meio dela, e não comente as gravações no texto.",
 ].join("\n")
 
+/** Consulta ao catálogo do DnDicas na narração (todos os graus). */
+export function narratorCatalogRule(rigor: MaddoxRigorLevel): string {
+    return [
+        "## Catálogo do DnDicas",
+        `- Para regras, magias, itens, monstros e capacidades de classe, subclasse, raça ou origem, consulte \`${MADDOX_CATALOG_TOOL_NAMES.search}\` e \`${MADDOX_CATALOG_TOOL_NAMES.get}\` antes de afirmar a mecânica. Cite com {{Tipo:Nome}} só o que a busca devolveu, com o nome exato dela.`,
+        usesChecks(rigor)
+            ? "- Use o que o catálogo diz para decidir o que é possível e a dificuldade dos testes; não invente regras nem entidades que a busca não confirmou."
+            : "- A consulta serve de referência: a narrativa tem prioridade e nada vira número na história.",
+        "- Consulte só quando a cena depender disso (poucas buscas por narração).",
+    ].join("\n")
+}
+
 export interface NarratorCharacter {
     name: string
     playerName: string
     profile: Record<string, string>
     currentState: string
+    /** Resumo da ficha D&D (graus com testes). */
+    sheet?: string | null
 }
 
 export interface NarratorNpc {
@@ -117,7 +154,8 @@ function characterBlock(character: NarratorCharacter): string {
         const text = character.profile[section.key]?.trim()
         return text ? `- ${section.label}: ${oneLine(text, 1_200)}` : null
     }).filter(Boolean)
-    return [`### ${character.name} (jogador: ${character.playerName})`, ...sections, `- Condição atual na história: ${character.currentState.trim() ? oneLine(character.currentState, 1_200) : "(sem mudanças registradas)"}`].join("\n")
+    const sheet = character.sheet?.trim() ? [`- Ficha D&D:`, ...character.sheet.trim().split("\n").map((line) => `  - ${line}`)] : []
+    return [`### ${character.name} (jogador: ${character.playerName})`, ...sections, `- Condição atual na história: ${character.currentState.trim() ? oneLine(character.currentState, 1_200) : "(sem mudanças registradas)"}`, ...sheet].join("\n")
 }
 
 function stateBlock(state: NarratorPromptContext["state"]): string {
@@ -158,14 +196,14 @@ function memoriesBlock(memories: readonly NarratorMemory[]): string | null {
     return parts.join("\n")
 }
 
-export type NarratorToolMode = { kind: "ai-sdk" } | { kind: "mcp"; server: string; turnToken: string }
+export type NarratorToolMode = { kind: "ai-sdk" } | { kind: "mcp"; server: string; turnToken: string; checks?: boolean }
 
 /** Bloco das ferramentas: na AI SDK elas vêm na chamada; no OpenCode, pelo MCP com o token de turno. */
 function toolsBlock(mode: NarratorToolMode): string | null {
     if (mode.kind === "ai-sdk") return null
     return [
         "## Ferramentas desta narração",
-        `- As ferramentas de anotações da campanha estão no servidor MCP \`${mode.server}\` (get_campaign_state, update_campaign_state, list_npcs, get_npc, save_npc, search_memories, save_memory, update_character_state).`,
+        `- As ferramentas de anotações da campanha estão no servidor MCP \`${mode.server}\` (get_campaign_state, update_campaign_state, list_npcs, get_npc, save_npc, search_memories, save_memory, update_character_state${mode.checks ? ", request_check" : ""}, ${MADDOX_CATALOG_TOOL_NAMES.search}, ${MADDOX_CATALOG_TOOL_NAMES.get}).`,
         `- Em TODA chamada a essas ferramentas, envie o campo \`turno\` exatamente com este valor: \`${mode.turnToken}\`.`,
         "- Não use outras ferramentas (arquivos, terminal, web): a campanha vive só nessas anotações.",
     ].join("\n")
@@ -175,9 +213,9 @@ export function buildNarratorInstructions(context: NarratorPromptContext, mode: 
     const parts: string[] = [context.instructions.trim()]
     const memories = memoriesSection(context.agentMemories).trim()
     if (memories) parts.push(memories)
-    parts.push(MADDOX_NARRATOR_RULES, MADDOX_NARRATIVE_MODE_RULE, rigorBlock(context.rigor))
+    parts.push(MADDOX_NARRATOR_RULES, usesChecks(context.rigor) ? checksRule(context.rigor) : MADDOX_NARRATIVE_MODE_RULE, rigorBlock(context.rigor))
     if (judgesFreeActionsInNarration(context.rigor)) parts.push(MADDOX_FREE_ACTION_RULE)
-    parts.push(MADDOX_NARRATOR_FORMAT, MADDOX_PERSISTENCE_RULE)
+    parts.push(MADDOX_NARRATOR_FORMAT, MADDOX_PERSISTENCE_RULE, narratorCatalogRule(context.rigor))
     const tools = toolsBlock(mode)
     if (tools) parts.push(tools)
     parts.push(`# Campanha "${context.campaignName}"`)
@@ -199,16 +237,67 @@ export interface NarratorDeclaration {
     kind: "declaration" | "pass"
     content: string
     skipped: boolean
+    /** JEV "Pedir teste": a ação provavelmente exige teste (orientação; o Maddox decide). */
+    checkHint?: boolean
+}
+
+/** Resultado de um teste pedido pelo Maddox (Maddox 5), para a continuação e a transcrição. */
+export interface NarratorCheckResult {
+    characterName: string
+    /** "Furtividade (Destreza)". */
+    title: string
+    reason: string
+    dc: number
+    status: "pending" | "rolled" | "cancelled"
+    mode: "normal" | "advantage" | "disadvantage"
+    total: number | null
+    d20: number | null
+    discarded: number | null
+    modifier: number | null
+    rolledByOwner: boolean
+    cancelReason: string | null
 }
 
 export type NarratorTask =
     | { kind: "narration"; turnNumber: number; declarations: readonly NarratorDeclaration[] }
+    | { kind: "continuation"; turnNumber: number; round: number; declarations: readonly NarratorDeclaration[]; results: readonly NarratorCheckResult[] }
     | { kind: "answer"; turnNumber: number; characterName: string; question: string; declarations: readonly NarratorDeclaration[] }
 
 const declarationLines = (declarations: readonly NarratorDeclaration[]) =>
-    declarations.map((item) => (item.kind === "pass" ? `- **${item.characterName}**: não fez nada${item.skipped ? " (o dono pulou a vez do jogador)" : ""}.` : `- **${item.characterName}**: ${item.content.trim()}`))
+    declarations.map((item) =>
+        item.kind === "pass"
+            ? `- **${item.characterName}**: não fez nada${item.skipped ? " (o dono pulou a vez do jogador)" : ""}.`
+            : `- **${item.characterName}**: ${item.content.trim()}${item.checkHint ? " _(o JEV indica que esta ação provavelmente exige teste; você decide)_" : ""}`,
+    )
+
+const signedNumber = (value: number) => (value >= 0 ? `+${value}` : String(value))
+
+/** "Lyra — Furtividade (Destreza), CD 15: total 17 (d20 12, modificador +5; vantagem: 12 e 7)". */
+export function checkResultLine(result: NarratorCheckResult): string {
+    const head = `${result.characterName} — ${result.title}, CD ${result.dc}`
+    if (result.status === "cancelled") return `${head}: cancelado (${result.cancelReason ?? "o jogador saiu da campanha"}); resolva sem o teste.`
+    if (result.status === "pending" || result.total === null) return `${head}: aguardando a rolagem.`
+    const mode = result.mode !== "normal" && result.discarded !== null ? `; ${result.mode === "advantage" ? "vantagem" : "desvantagem"}: ${result.d20} e ${result.discarded}` : ""
+    const natural = result.d20 === 20 ? "; 20 natural" : result.d20 === 1 ? "; 1 natural" : ""
+    const owner = result.rolledByOwner ? "; rolado pelo dono no lugar do jogador" : ""
+    return `${head}: total ${result.total} (d20 ${result.d20}, modificador ${signedNumber(result.modifier ?? 0)}${mode}${natural}${owner}) — ${checkSucceeded(result.total, result.dc, result.d20) ? "sucesso" : "falha"}.`
+}
 
 export function narratorTaskText(task: NarratorTask): string {
+    if (task.kind === "continuation") {
+        const last = task.round >= MADDOX_CHECK_ROUNDS_MAX - 1
+        return [
+            `# Turno ${task.turnNumber} do mestre — resultado dos testes`,
+            ...(task.declarations.length ? ["Declarações do turno dos jogadores que está sendo resolvido:", ...declarationLines(task.declarations), ""] : []),
+            "Resultado dos testes que você pediu (rolagens reais dos jogadores):",
+            ...task.results.map((result) => `- ${checkResultLine(result)}`),
+            "",
+            "Continue a narração exatamente de onde parou: narre a consequência de cada teste na ficção, sem recitar números e sem repetir o que já foi narrado, e as reações do mundo.",
+            last
+                ? "Este é o último pedido de testes deste turno: resolva o que faltar sem novos testes, termine no próximo ponto de decisão e grave o que mudou."
+                : "Se a situação pedir um novo teste, peça-o e pare de novo; senão, termine no próximo ponto de decisão. Depois grave o que mudou.",
+        ].join("\n")
+    }
     if (task.kind === "answer") {
         return [
             `# Pergunta ao mestre (turno ${task.turnNumber}, turno dos jogadores)`,
@@ -258,9 +347,11 @@ export function narratorTranscript(messages: readonly NarratorTranscriptMessage[
                   ? `[Turno ${message.turnNumber} — Maddox responde]\n${content}`
                   : message.kind === "question"
                     ? `[Turno ${message.turnNumber} — ${who} pergunta] ${content}`
-                    : message.kind === "pass"
-                      ? `[Turno ${message.turnNumber} — ${who} não fez nada]`
-                      : `[Turno ${message.turnNumber} — ${who} declara] ${content}`
+                    : message.kind === "check"
+                      ? `[Turno ${message.turnNumber} — teste] ${content}`
+                      : message.kind === "pass"
+                        ? `[Turno ${message.turnNumber} — ${who} não fez nada]`
+                        : `[Turno ${message.turnNumber} — ${who} declara] ${content}`
         if (size + line.length > maxChars && lines.length > 0) break
         lines.unshift(line)
         size += line.length + 2

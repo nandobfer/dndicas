@@ -8,6 +8,8 @@ export interface MaddoxMasterDeclaration {
     kind: "declaration" | "pass"
     content: string
     skipped: boolean
+    /** JEV "Pedir teste" (Maddox 5): a ação provavelmente exige teste. */
+    checkHint?: boolean
 }
 
 /** Recebe a geração ao vivo: texto (já sem marcação crua do catálogo) e o uso de ferramentas. */
@@ -23,6 +25,8 @@ export interface MaddoxNarrationContext {
     turnNumber: number
     /** Declarações do turno dos jogadores que acabou de fechar (vazio na abertura). */
     declarations: MaddoxMasterDeclaration[]
+    /** Rodada de testes (Maddox 5): 0 = narração das declarações; acima, continuação com o resultado dos testes da rodada anterior. */
+    round?: number
     /** Abortado quando a geração passa do teto de duração (`MADDOX_MASTER_GENERATION_TIMEOUT_MS`). */
     signal?: AbortSignal
 }

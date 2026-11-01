@@ -1,7 +1,7 @@
 "use client"
 
-import { useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent } from "react"
-import { HelpCircle, Loader2, MinusCircle, Send } from "lucide-react"
+import { useEffect, useLayoutEffect, useRef, useState, type FormEvent, type KeyboardEvent } from "react"
+import { ArrowUp, HelpCircle, Loader2, MinusCircle } from "lucide-react"
 import { Button } from "@/components/ui/opex/button"
 import { Textarea } from "@/components/ui/opex/textarea"
 import { cn } from "@/lib/utils"
@@ -25,9 +25,9 @@ interface Props {
 }
 
 /**
- * Campo da mesa: "Declarar" (intenção, ação ou diálogo), "Perguntar ao mestre" (não encerra o turno) e
- * "Não fazer nada" (atalho para passar a vez). Ctrl/⌘+Enter declara; Enter sozinho quebra a linha, para
- * uma declaração (que é final) nunca sair por acidente.
+ * Campo da mesa, no desenho do campo da entrevista: "Perguntar ao mestre" (não encerra o turno), "Não fazer nada"
+ * (atalho para passar a vez) e "Declarar" (intenção, ação ou diálogo) como botões de ícone à direita do texto.
+ * Enter declara (também Ctrl/⌘+Enter); Shift+Enter quebra a linha.
  */
 export function GameComposer({ blockedReason, declared, busy, onSend, invalidReason = null, focusKey = "" }: Props) {
     const [value, setValue] = useState("")
@@ -60,26 +60,22 @@ export function GameComposer({ blockedReason, declared, busy, onSend, invalidRea
     }
 
     const onKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
-        if (event.key === "Enter" && (event.ctrlKey || event.metaKey) && !event.nativeEvent.isComposing) {
+        if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) {
             event.preventDefault()
             void send("declaration")
         }
     }
 
+    const submit = (event: FormEvent) => {
+        event.preventDefault()
+        void send("declaration")
+    }
+
     const hint = blockedReason ?? (declared ? "Você já declarou. Aguardando os outros jogadores — ainda dá para perguntar ao mestre." : "Declare o que o seu personagem faz, diz ou pretende. Perguntas ao mestre não encerram o seu turno.")
 
     return (
-        <form onSubmit={(event) => event.preventDefault()} className="border-t bg-background/60 px-3 pb-3 pt-2.5" aria-label="Sua vez na mesa">
-            {invalidReason && !blocked ? (
-                <p className="px-1 pb-2 text-xs text-amber-300" role="alert" data-testid="game-composer-invalid">
-                    {invalidReason}
-                </p>
-            ) : (
-                <p className="px-1 pb-2 text-xs text-white/60" role="status" data-testid="game-composer-hint">
-                    {hint}
-                </p>
-            )}
-            <div className={cn("rounded-xl border bg-card px-3 py-2 shadow-sm transition-colors focus-within:border-primary/60", blocked && "opacity-70")}>
+        <form onSubmit={submit} className="border-t bg-background/60 px-3 pb-3 pt-2.5" aria-label="Sua vez na mesa">
+            <div className={cn("flex items-end gap-2 rounded-xl border bg-card px-3 py-2 shadow-sm transition-colors focus-within:border-primary/60", blocked && "opacity-70")} data-testid="game-composer-box">
                 <Textarea
                     ref={textareaRef}
                     aria-label="O que o seu personagem faz"
@@ -90,22 +86,31 @@ export function GameComposer({ blockedReason, declared, busy, onSend, invalidRea
                     disabled={blocked}
                     maxLength={MADDOX_GAME_MESSAGE_MAX}
                     rows={1}
-                    className="max-h-[180px] min-h-[24px] w-full resize-none border-0 bg-transparent p-0 text-sm shadow-none focus-visible:ring-0"
+                    className="mb-1 max-h-[180px] min-h-[24px] flex-1 resize-none border-0 bg-transparent p-0 text-sm shadow-none focus-visible:ring-0"
                 />
-                <div className="mt-2 flex flex-wrap items-center gap-2">
-                    <Button type="button" size="sm" onClick={() => void send("declaration")} disabled={!canDeclare}>
-                        {busy ? <Loader2 className="animate-spin" aria-hidden /> : <Send aria-hidden />} Declarar
-                    </Button>
-                    <Button type="button" size="sm" variant="outline" onClick={() => void send("question")} disabled={!canAsk}>
-                        <HelpCircle aria-hidden /> Perguntar ao mestre
-                    </Button>
-                    <Button type="button" size="sm" variant="ghost" onClick={() => void onSend({ kind: "pass" })} disabled={!canPass}>
-                        <MinusCircle aria-hidden /> Não fazer nada
-                    </Button>
-                    <span className="ml-auto text-[10px] text-muted-foreground/70">
-                        {value.length.toLocaleString("pt-BR")}/{MADDOX_GAME_MESSAGE_MAX.toLocaleString("pt-BR")} · Ctrl+Enter declara
-                    </span>
-                </div>
+                <Button type="button" size="icon" variant="ghost" className="h-8 w-8 shrink-0 rounded-full" onClick={() => void send("question")} disabled={!canAsk} aria-label="Perguntar ao mestre" title="Perguntar ao mestre">
+                    <HelpCircle className="h-4 w-4" aria-hidden />
+                </Button>
+                <Button type="button" size="icon" variant="ghost" className="h-8 w-8 shrink-0 rounded-full" onClick={() => void onSend({ kind: "pass" })} disabled={!canPass} aria-label="Não fazer nada" title="Não fazer nada">
+                    <MinusCircle className="h-4 w-4" aria-hidden />
+                </Button>
+                <Button type="submit" size="icon" className="h-8 w-8 shrink-0 rounded-full" disabled={!canDeclare} aria-label="Declarar" title="Declarar (Enter)">
+                    {busy ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : <ArrowUp className="h-4 w-4" aria-hidden />}
+                </Button>
+            </div>
+            <div className="mt-1.5 flex items-start gap-3 px-1">
+                {invalidReason && !blocked ? (
+                    <p className="min-w-0 flex-1 text-xs text-amber-300" role="alert" data-testid="game-composer-invalid">
+                        {invalidReason}
+                    </p>
+                ) : (
+                    <p className="min-w-0 flex-1 text-xs text-white/60" role="status" data-testid="game-composer-hint">
+                        {hint}
+                    </p>
+                )}
+                <span className="shrink-0 text-[10px] text-muted-foreground/70" data-testid="game-composer-counter">
+                    {value.length.toLocaleString("pt-BR")}/{MADDOX_GAME_MESSAGE_MAX.toLocaleString("pt-BR")} · Enter declara · Shift+Enter quebra linha
+                </span>
             </div>
         </form>
     )

@@ -44,6 +44,12 @@ export interface MaddoxCampaignListItemDto {
     startedAt: string | null
     /** Entrevista de cenário (Maddox 2). */
     scenarioStatus: MaddoxScenarioStatus
+    /** CD dos testes visível aos jogadores (Maddox 5). */
+    showCheckDc: boolean
+    /** Nível inicial da mesa (graus com ficha; `null` = cada personagem informa). */
+    startingLevel: number | null
+    /** Estágio de experiência inicial (graus narrativos). */
+    startingStage: string
     createdAt: string
     updatedAt: string
 }

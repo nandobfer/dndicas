@@ -50,6 +50,9 @@ const listItem = (over: Partial<MaddoxCampaignListItemDto> = {}): MaddoxCampaign
     turnPhase: "master",
     startedAt: null,
     scenarioStatus: "pending",
+    showCheckDc: false,
+    startingLevel: null,
+    startingStage: "",
     createdAt: "2026-10-30T10:00:00.000Z",
     updatedAt: new Date().toISOString(),
     ...over,
@@ -88,6 +91,18 @@ describe("lista de campanhas", () => {
         expect(get).toHaveBeenCalledWith("/maddox/campaigns")
     })
 
+    it("card da lista: chip do nível nos graus com ficha; estágio narrativo longo aparece inteiro, sem reticências", async () => {
+        const stageText = "caçadores recém-iniciados, com algumas missões nas costas e uma dívida antiga com a guilda"
+        get.mockResolvedValue(ok([listItem({ rigor: "fiel-dnd", startingLevel: 3 }), listItem({ id: "c2", name: "Mar de Cinzas", rigor: "narrativo", startingLevel: null, startingStage: stageText })]))
+        renderWithQueryClient(<CampaignsPage />)
+        expect(await screen.findByTestId("starting-level-chip")).toHaveTextContent("Nível inicial 3")
+        const stage = screen.getByTestId("starting-stage")
+        expect(stage).toHaveTextContent(`Estágio inicial: ${stageText}`)
+        expect(stage.className).toContain("whitespace-normal")
+        for (const element of [stage, ...stage.querySelectorAll("*")]) expect(element.className).not.toContain("truncate")
+        expect(screen.getAllByTestId("starting-level-chip")).toHaveLength(1)
+    })
+
     it("sem campanhas mostra o estado vazio em pt-BR", async () => {
         get.mockResolvedValue(ok([]))
         renderWithQueryClient(<CampaignsPage />)
@@ -117,8 +132,39 @@ describe("lista de campanhas", () => {
 
         fireEvent.change(screen.getByLabelText("Nome da campanha"), { target: { value: "Nova Mesa" } })
         fireEvent.click(screen.getByRole("button", { name: "Criar campanha" }))
-        await waitFor(() => expect(post).toHaveBeenCalledWith("/maddox/campaigns", { name: "Nova Mesa", rigor: "fiel-dnd" }))
+        await waitFor(() => expect(post).toHaveBeenCalledWith("/maddox/campaigns", { name: "Nova Mesa", rigor: "fiel-dnd", showCheckDc: false }))
         await waitFor(() => expect(push).toHaveBeenCalledWith("/campanhas/c9/entrevista/cenario"))
+    })
+
+    it("CD dos testes na criação: 'Visível' vai no POST nos graus com testes; em grau narrativo o campo some e não é enviado", async () => {
+        post.mockResolvedValue(ok(detail({ id: "c9", name: "Nova Mesa", rigor: "rigoroso", showCheckDc: true })))
+        renderWithQueryClient(<CampaignsPage />)
+        fireEvent.click(await screen.findByRole("button", { name: /Nova campanha/ }))
+        const slider = await screen.findByRole("slider", { name: "Grau de rigor da campanha" })
+        // Equilibrado (padrão) usa testes: o campo aparece com a CD secreta.
+        const field = screen.getByTestId("check-dc-field")
+        expect(field).toHaveTextContent("o Maddox define a CD em segredo")
+        fireEvent.click(within(field).getByRole("button", { name: "Visível" }))
+        await waitFor(() => expect(screen.getByTestId("check-dc-field")).toHaveTextContent("Os jogadores veem a classe de dificuldade"))
+        fireEvent.keyDown(slider, { key: "ArrowRight" })
+        await waitFor(() => expect(slider).toHaveAttribute("aria-valuetext", "Rigoroso"))
+        fireEvent.change(screen.getByLabelText("Nome da campanha"), { target: { value: "Nova Mesa" } })
+        fireEvent.click(screen.getByRole("button", { name: "Criar campanha" }))
+        await waitFor(() => expect(post).toHaveBeenCalledWith("/maddox/campaigns", { name: "Nova Mesa", rigor: "rigoroso", showCheckDc: true }))
+    })
+
+    it("CD dos testes na criação: grau narrativo esconde o campo e não envia showCheckDc", async () => {
+        post.mockResolvedValue(ok(detail({ id: "c9", name: "Só História", rigor: "narrativo" })))
+        renderWithQueryClient(<CampaignsPage />)
+        fireEvent.click(await screen.findByRole("button", { name: /Nova campanha/ }))
+        const slider = await screen.findByRole("slider", { name: "Grau de rigor da campanha" })
+        fireEvent.click(within(screen.getByTestId("check-dc-field")).getByRole("button", { name: "Visível" }))
+        fireEvent.keyDown(slider, { key: "Home" })
+        await waitFor(() => expect(slider).toHaveAttribute("aria-valuetext", "Narrativo"))
+        expect(screen.queryByTestId("check-dc-field")).not.toBeInTheDocument()
+        fireEvent.change(screen.getByLabelText("Nome da campanha"), { target: { value: "Só História" } })
+        fireEvent.click(screen.getByRole("button", { name: "Criar campanha" }))
+        await waitFor(() => expect(post).toHaveBeenCalledWith("/maddox/campaigns", { name: "Só História", rigor: "narrativo" }))
     })
 
     it("Maddox indisponível: mostra o motivo no diálogo", async () => {
@@ -250,6 +296,69 @@ describe("página da campanha (lobby)", () => {
         fireEvent.click(within(dialog).getByRole("button", { name: "Salvar" }))
         await waitFor(() => expect(patch).toHaveBeenCalledTimes(1))
         expect(patch).toHaveBeenCalledWith("/maddox/campaigns/c1", { name: "Em andamento" })
+    })
+
+    it("editar a CD dos testes (mesmo em andamento) envia só showCheckDc; voltar ao valor original não chama a API", async () => {
+        // Servidor com estado: o PATCH grava e a recarga da campanha devolve o valor novo.
+        let current = detail({ rigor: "fiel-dnd", status: "active", rigorLocked: true, showCheckDc: false })
+        get.mockImplementation(async (url: string) => (url.endsWith("/invite") ? ok({ token: TOKEN, rotatedAt: null }) : ok(current)))
+        patch.mockImplementation(async (_url: string, body: Record<string, unknown>) => {
+            current = { ...current, ...body }
+            return ok(current)
+        })
+        renderWithQueryClient(<CampaignPage campaignId="c1" />)
+        let dialog = await openEdit()
+        const field = within(dialog).getByTestId("check-dc-field")
+        expect(field).toHaveTextContent("o Maddox define a CD em segredo")
+        fireEvent.click(within(field).getByRole("button", { name: "Visível" }))
+        fireEvent.click(within(dialog).getByRole("button", { name: "Salvar" }))
+        await waitFor(() => expect(patch).toHaveBeenCalledWith("/maddox/campaigns/c1", { showCheckDc: true }))
+        await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument())
+
+        patch.mockClear()
+        dialog = await openEdit()
+        await waitFor(() => expect(within(dialog).getByTestId("check-dc-field")).toHaveTextContent("Os jogadores veem a classe de dificuldade"))
+        const again = within(dialog).getByTestId("check-dc-field")
+        fireEvent.click(within(again).getByRole("button", { name: "Secreta" }))
+        fireEvent.click(within(again).getByRole("button", { name: "Visível" }))
+        fireEvent.click(within(dialog).getByRole("button", { name: "Salvar" }))
+        await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument())
+        expect(patch).not.toHaveBeenCalled()
+    })
+
+    it("nível inicial: chip no lobby; o dono muda pelo Select glass antes de começar (PATCH só com startingLevel)", async () => {
+        ownerDetail({ rigor: "fiel-dnd", status: "interview", rigorLocked: true, startingLevel: 3 })
+        renderWithQueryClient(<CampaignPage campaignId="c1" />)
+        expect(await screen.findByTestId("starting-level-chip")).toHaveTextContent("Nível inicial 3")
+        const dialog = await openEdit()
+        const field = within(dialog).getByTestId("starting-level-field")
+        expect(field).toHaveTextContent("Fichas já criadas mantêm o nível delas.")
+        const trigger = within(field).getByRole("combobox", { name: "Nível inicial" })
+        expect(trigger).toHaveTextContent("Nível 3")
+        fireEvent.keyDown(trigger, { key: "Enter" })
+        const options = await screen.findAllByRole("option")
+        expect(options).toHaveLength(20)
+        fireEvent.click(screen.getByRole("option", { name: "Nível 5" }))
+        fireEvent.click(within(dialog).getByRole("button", { name: "Salvar" }))
+        await waitFor(() => expect(patch).toHaveBeenCalledWith("/maddox/campaigns/c1", { startingLevel: 5 }))
+    })
+
+    it("nível inicial: some com a campanha em andamento e nos graus narrativos; o estágio narrativo vira o chip", async () => {
+        ownerDetail({ rigor: "fiel-dnd", status: "active", rigorLocked: true, startingLevel: 3 })
+        const view = renderWithQueryClient(<CampaignPage campaignId="c1" />)
+        const dialog = await openEdit()
+        expect(within(dialog).queryByTestId("starting-level-field")).not.toBeInTheDocument()
+        view.unmount()
+        ownerDetail({ rigor: "narrativo", status: "lobby", startingLevel: null, startingStage: "caçadores recém-iniciados" })
+        renderWithQueryClient(<CampaignPage campaignId="c1" />)
+        // Estágio narrativo (texto do modelo): linha própria, inteira e com quebra de linha — sem chip nem reticências.
+        const stage = await screen.findByTestId("starting-stage")
+        expect(stage).toHaveTextContent("Estágio inicial: caçadores recém-iniciados")
+        expect(stage.className).toContain("whitespace-normal")
+        expect(stage.className).not.toContain("truncate")
+        expect(screen.queryByTestId("starting-level-chip")).not.toBeInTheDocument()
+        const narrative = await openEdit()
+        expect(within(narrative).queryByTestId("starting-level-field")).not.toBeInTheDocument()
     })
 
     it("editar sem alterações fecha sem chamar a API", async () => {

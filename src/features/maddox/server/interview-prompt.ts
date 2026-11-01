@@ -1,6 +1,11 @@
 import { catalogEntityTypes } from "@/features/mcp/server/catalog-schemas"
 import { mentionsToMarkup } from "./catalog-mentions"
 import {
+    MADDOX_ABILITY_BONUS_MAX,
+    MADDOX_ABILITY_BONUS_POINTS,
+    MADDOX_CATALOG_ORIGIN_RIGORS,
+    MADDOX_CATALOG_TOOL_NAMES,
+    MADDOX_INTERVIEW_TOOL_NAMES,
     MADDOX_PROFILE_SECTIONS,
     MADDOX_PROPOSAL_MARKER,
     MADDOX_RIGOR_LEVEL_DEFS,
@@ -20,10 +25,67 @@ export interface InterviewPromptContext {
     kind: MaddoxScriptKind
     interviewerInstructions: string
     script: { version: number; guide: string; topics: readonly MaddoxScriptTopic[] }
-    campaign: { name: string; rigor: MaddoxRigorLevel; setting: string; openingSituation: string }
+    campaign: { name: string; rigor: MaddoxRigorLevel; setting: string; openingSituation: string; startingLevel?: number | null; startingStage?: string }
     /** Entrevista de personagem: nome do esboço e dos outros personagens da mesa. */
     character?: { name: string } | null
     otherCharacters?: string[]
+    /**
+     * Atributos pelo card (Maddox 5, entrevista de personagem nos graus com ficha): situação atual e como as
+     * ferramentas chegam (AI SDK ou MCP do Maddox com o token da entrevista).
+     */
+    abilities?: { status: string; tools: { kind: "ai-sdk" } | { kind: "mcp"; server: string; token: string } } | null
+    /** Escolhas da ficha (graus com ficha): situação atual (o que já foi gravado e o que falta). */
+    build?: { status: string } | null
+}
+
+/** Como perguntar o nível (graus com ficha) ou o estágio de experiência (graus narrativos), por grau. */
+const LEVEL_QUESTION: Record<MaddoxRigorLevel, string> = {
+    "fiel-dnd":
+        "Pergunte diretamente: \"qual o nível inicial dos personagens (1 a 20)?\". Comente que o D&D 2024 recomenda o nível 1 para quem está começando e o 3 para quem já conhece o jogo.",
+    rigoroso: "Pergunte o número do nível inicial (1 a 20), sugerindo o 1 (começo da jornada) ou o 3 (já com subclasse).",
+    equilibrado:
+        "Ofereça estágios descritos na ficção do cenário, cada um com o nível correspondente (por exemplo: recém-saído do treinamento, nível 1; com algumas missões nas costas, nível 3; veterano reconhecido, nível 5), e confirme o número escolhido (1 a 20).",
+    flexivel:
+        "Pergunte o estágio de experiência, sem números, com opções adaptadas ao cenário: numa fantasia clássica, algo como \"acabou de se tornar aventureiro\" ou \"aventureiro novato\"; num cenário como o da série Supernatural, \"caçador recém-iniciado\" ou \"caçador com alguns anos de estrada\". Nunca fale em \"aventureiro\" se o cenário não for desse tipo.",
+    narrativo:
+        "Pergunte o estágio de experiência, sem números, com opções adaptadas ao cenário: numa fantasia clássica, algo como \"acabou de se tornar aventureiro\" ou \"aventureiro novato\"; num cenário como o da série Supernatural, \"caçador recém-iniciado\" ou \"caçador com alguns anos de estrada\". Nunca fale em \"aventureiro\" se o cenário não for desse tipo.",
+}
+
+/** Seção do nível inicial: o cenário define para a mesa; o personagem só confirma. */
+export function startingLevelSection(context: Pick<InterviewPromptContext, "kind" | "campaign">): string {
+    const { rigor, startingLevel, startingStage } = context.campaign
+    const sheet = MADDOX_SHEET_RIGORS.includes(rigor)
+    if (context.kind === "scenario") {
+        return [
+            sheet ? "## Nível inicial da mesa" : "## Estágio de experiência inicial da mesa",
+            `- Antes da síntese, defina com quem criou a campanha ${sheet ? "o nível inicial dos personagens (todos começam nele)" : "o estágio de experiência em que os personagens começam (todos começam nele)"}. ${LEVEL_QUESTION[rigor]}`,
+            `- Inclua ${sheet ? "o nível" : "o estágio"} na síntese.`,
+        ].join("\n")
+    }
+    if (sheet) {
+        return startingLevel
+            ? `## Nível do personagem\n- A mesa começa no nível ${startingLevel} (definido na entrevista de cenário). Confirme isso com o jogador sem perguntar outro número; se ele pedir outro nível, explique que o nível é da mesa e só quem criou a campanha muda.`
+            : `## Nível do personagem\n- A mesa ainda não definiu o nível inicial: pergunte ao jogador. ${LEVEL_QUESTION[rigor]} Grave com \`${MADDOX_INTERVIEW_TOOL_NAMES.build}\` (\`nivel\`).`
+    }
+    return startingStage?.trim()
+        ? `## Experiência do personagem\n- A mesa começa neste estágio: ${startingStage.trim()}. Confirme com o jogador e adapte ao personagem; inclua na seção "Capacidades e limitações" da síntese.`
+        : `## Experiência do personagem\n- ${LEVEL_QUESTION[rigor]} Inclua o estágio na seção "Capacidades e limitações" da síntese.`
+}
+
+/** Seção "Construção da ficha" (entrevista de personagem nos graus com ficha). */
+export function buildSection(build: InterviewPromptContext["build"]): string {
+    const B = MADDOX_INTERVIEW_TOOL_NAMES
+    const lines = [
+        "## Construção da ficha",
+        "- Você monta a ficha D&D COMPLETA do personagem junto com o jogador. Conduza nesta ordem, uma etapa por vez: nível (o da mesa) → raça → classe → origem → atributos (card) → bônus da origem → perícias da classe → escolhas de nível (subclasse, estilo de luta, Especialista, talentos de cada nível de talento) → truques e magias (se conjurar) → equipamento inicial e moedas → idiomas e ferramentas.",
+        `- Antes de cada sugestão, consulte o catálogo (\`${MADDOX_CATALOG_TOOL_NAMES.search}\` e \`${MADDOX_CATALOG_TOOL_NAMES.get}\`) e ofereça só o que existe nele. Assim que o jogador confirmar uma escolha, grave com \`${B.build}\`; o retorno diz o que falta (\`faltando\`) e as regras da classe no nível (perícias, nível da subclasse, níveis de talento, quantidade de magias, dado de vida).`,
+        "- Equipamento inicial pelo D&D 2024: a opção A ou B da classe e da origem (ou o ouro equivalente), com cada item procurado no catálogo (tipo Item); marque `equipado` na armadura, no escudo e nas armas em uso, e grave as moedas restantes.",
+        `- Personagem acima do nível 1: depois de gravar classe e nível, abra o card de pontos de vida com \`${B.hitPoints}\` (média ou rolagem em cada nível, como o assistente de subir de nível da ficha). No nível 1 os PV são automáticos.`,
+        `- Pontos de vida, dado de vida, salvaguardas, proficiências, deslocamento, tamanho, traços e espaços de magia são preenchidos pelo sistema a partir do catálogo: não pergunte nem invente esses números.`,
+        `- Antes da síntese, consulte \`${B.getBuild}\`: só apresente a síntese com \`faltando\` vazio, e liste nela as escolhas da ficha.`,
+    ]
+    if (build) lines.push(`\n### Ficha: situação atual\n${build.status}`)
+    return lines.join("\n")
 }
 
 export function activeTopics(topics: readonly MaddoxScriptTopic[]): MaddoxScriptTopic[] {
@@ -48,8 +110,12 @@ export function buildInterviewInstructions(context: InterviewPromptContext): str
             : `## Entrevista atual\nEntrevista de PERSONAGEM da campanha "${context.campaign.name}". Personagem do jogador: "${context.character?.name ?? "a definir"}".`,
     )
     parts.push(rigorBlock(context.campaign.rigor))
+    parts.push(startingLevelSection(context))
     if (!isScenario && MADDOX_SHEET_RIGORS.includes(context.campaign.rigor)) {
-        parts.push("Neste grau de rigor o personagem terá ficha do D&D: combine também raça, classe, origem (antecedente) e os valores dos seis atributos.")
+        parts.push("Neste grau de rigor o personagem terá ficha do D&D completa: combine também raça, classe, origem (antecedente), os seis atributos (pelo card) e as escolhas de ficha (veja abaixo).")
+        parts.push(catalogSection(context.campaign.rigor))
+        parts.push(buildSection(context.build ?? null))
+        parts.push(abilitiesSection(context.abilities ?? null))
     }
 
     if (!isScenario) {
@@ -75,6 +141,43 @@ export function buildInterviewInstructions(context: InterviewPromptContext): str
         ].join("\n"),
     )
     return parts.join("\n\n")
+}
+
+const T = MADDOX_INTERVIEW_TOOL_NAMES
+const C = MADDOX_CATALOG_TOOL_NAMES
+
+/** Seção "Catálogo do DnDicas" (entrevista de personagem nos graus com ficha): consultar antes de sugerir. */
+export function catalogSection(rigor: MaddoxRigorLevel): string {
+    const strict = MADDOX_CATALOG_ORIGIN_RIGORS.includes(rigor)
+    return [
+        "## Catálogo do DnDicas",
+        `- Antes de sugerir ou confirmar raça, classe, subclasse, origem (antecedente), talento ou magia, consulte \`${C.search}\` (para listar todas as opções de um tipo, envie só \`tipos\`, por exemplo { "tipos": ["Origem"] }) e, para os detalhes (atributos sugeridos, perícias, traços), \`${C.get}\`.`,
+        "- Só cite como do catálogo o que a busca devolveu, com o nome exato dela na marcação {{Tipo:Nome}}. Nunca use nomes de memória ou de outras edições do D&D.",
+        strict
+            ? "- Neste grau, a raça, a classe, a subclasse e a origem do personagem precisam ser do catálogo. Se o jogador pedir algo que não existe nele, diga isso e mostre as opções mais próximas da busca."
+            : "- Neste grau, prefira o catálogo. Algo próprio (fora do catálogo) só se o jogador quiser, e diga com clareza que é próprio.",
+    ].join("\n")
+}
+
+/** Seção "Atributos do personagem" (graus com ficha). */
+export function abilitiesSection(abilities: InterviewPromptContext["abilities"]): string {
+    const lines = [
+        "## Atributos do personagem",
+        `- Os seis atributos são definidos SÓ pelo card de atributos: chame \`${T.request}\` quando chegar a hora (o card aparece abaixo da sua fala). Nunca peça ao jogador que digite números, nunca role dados nem invente valores por ele.`,
+        "- Métodos do card: conjunto padrão (15, 14, 13, 12, 10 e 8, um por atributo); compra de pontos (27 pontos, cada atributo entre 8 e 15); rolagem, feita pelo próprio jogador no card: cinco rolagens de 4d6 descartando o menor dado, e a sexta pontuação é 72 menos a soma das cinco. Explique em poucas linhas e deixe o jogador escolher.",
+        "- Quando o jogador enviar, você recebe uma fala do sistema com os valores: comente em poucas linhas e siga a entrevista. Para mudar os valores, reabra o card com a mesma ferramenta (ele vem preenchido com os atuais).",
+        `- Bônus do antecedente (sugira, não é obrigatório): com a origem definida e os atributos enviados, proponha distribuir ${MADDOX_ABILITY_BONUS_POINTS} pontos (no máximo +${MADDOX_ABILITY_BONUS_MAX} por atributo, nos atributos sugeridos pelo antecedente) e aplique com \`${T.bonus}\`. Antes de propor os pontos, confira a origem com \`${C.search}\` e os atributos sugeridos com \`${C.get}\`.`,
+        `- Antes da síntese, consulte \`${T.get}\` e liste na síntese os valores finais (base + bônus).`,
+    ]
+    if (abilities) {
+        lines.push(`\n### Atributos: situação atual\n${abilities.status}`)
+        if (abilities.tools.kind === "mcp") {
+            lines.push(
+                `\n### Ferramentas de atributos (MCP)\nUse as ferramentas \`${T.request}\`, \`${T.get}\`, \`${T.bonus}\`, \`${T.build}\`, \`${T.getBuild}\`, \`${T.hitPoints}\`, \`${C.search}\` e \`${C.get}\` do servidor MCP \`${abilities.tools.server}\`. Em TODA chamada envie \`turno\` com este valor exato: ${abilities.tools.token}`,
+            )
+        }
+    }
+    return lines.join("\n")
 }
 
 /** Como citar uma entidade do catálogo (marcação explícita com tipo, resolvida em menção pelo servidor). */
@@ -146,14 +249,15 @@ export function createMarkerFilter() {
 export interface TranscriptMessage {
     role: "maddox" | "user"
     content: string
+    internal?: boolean
 }
 
 export function transcriptText(messages: readonly TranscriptMessage[]): string {
-    return messages.map((message) => `${message.role === "maddox" ? "MADDOX" : "JOGADOR"}: ${mentionsToMarkup(message.content)}`).join("\n\n")
+    return messages.map((message) => `${message.internal ? "SISTEMA" : message.role === "maddox" ? "MADDOX" : "JOGADOR"}: ${mentionsToMarkup(message.content)}`).join("\n\n")
 }
 
 /** Instruções da consolidação (JSON estrito) do cenário ou do personagem. */
-export function buildConsolidationInstructions(context: InterviewPromptContext, withSheet: boolean): string {
+export function buildConsolidationInstructions(context: InterviewPromptContext, withSheet: boolean, abilitiesDefined = false): string {
     const base = [
         "Você consolida uma entrevista de preparação de campanha de RPG em JSON. Responda SOMENTE com um objeto JSON válido, sem texto antes ou depois e sem bloco de código.",
         "Use apenas o que foi combinado e confirmado na conversa; não invente fatos. O que não foi definido fica como \"a definir durante a história\". Escreva em português do Brasil, em Markdown dentro das strings. Cite entidades do catálogo de D&D (raças, classes, subclasses, origens, magias, talentos, itens, monstros) como {{Tipo:Nome oficial}}, como na conversa; personagens, lugares e tudo o que foi criado na campanha vão em **negrito**, nunca nessa marcação.",
@@ -161,14 +265,27 @@ export function buildConsolidationInstructions(context: InterviewPromptContext, 
     ]
     if (context.kind === "scenario") {
         const keys = MADDOX_SETTING_SECTIONS.map((item) => `    "${item.key}": "<${item.label}>"`).join(",\n")
+        const sheet = MADDOX_SHEET_RIGORS.includes(context.campaign.rigor)
+        const start = sheet
+            ? ',\n  "startingLevel": <nível inicial combinado, de 1 a 20, ou null se não foi combinado>'
+            : ',\n  "startingStage": "<estágio de experiência inicial combinado, em uma frase, adaptado ao cenário; ou null>"'
         base.push(
-            `Formato:\n{\n  "setting": {\n${keys}\n  },\n  "openingSituation": "<onde e quando a história começa, a condição inicial e o que coloca a narrativa em movimento>",\n  "campaignName": "<nome da campanha combinado na conversa, ou null se nenhum foi combinado>"\n}`,
+            `Formato:\n{\n  "setting": {\n${keys}\n  },\n  "openingSituation": "<onde e quando a história começa, a condição inicial e o que coloca a narrativa em movimento>",\n  "campaignName": "<nome da campanha combinado na conversa, ou null se nenhum foi combinado>"${start}\n}`,
         )
     } else {
         const keys = MADDOX_PROFILE_SECTIONS.map((item) => `    "${item.key}": "<${item.label}>"`).join(",\n")
         const sheet = withSheet
-            ? `,\n  "sheet": {\n    "race": "<raça>", "class": "<classe>", "subclass": "<subclasse ou null>", "origin": "<origem/antecedente>",\n    "appearance": "<aparência>", "age": "<idade>", "height": "<altura>", "weight": "<peso>", "eyes": "<olhos>", "skin": "<pele>", "hair": "<cabelo>",\n    "attributes": { "strength": <1-30 ou null>, "dexterity": <...>, "constitution": <...>, "intelligence": <...>, "wisdom": <...>, "charisma": <...> }\n  }`
+            ? `,\n  "sheet": {\n    "appearance": "<aparência completa: físico, rosto, roupas, marcas, postura e jeito, em 1 a 3 parágrafos>",\n    "history": "<história completa do personagem: origem, família, como chegou até aqui, eventos marcantes, motivações e ganchos, em 2 a 5 parágrafos>",\n    "personalityTraits": "<traços de personalidade>", "ideals": "<ideais>", "bonds": "<vínculos>", "flaws": "<defeitos>",\n    "age": "<idade>", "height": "<altura>", "weight": "<peso>", "eyes": "<olhos>", "skin": "<pele>", "hair": "<cabelo>"\n  }`
             : ',\n  "sheet": null'
+        if (withSheet) {
+            base.push(
+                [
+                    "A parte mecânica da ficha (raça, classe, subclasse, origem, nível, atributos, perícias, talentos, magias e equipamento) já foi gravada pelas ferramentas da entrevista e entra na ficha direto: NÃO a repita em \"sheet\".",
+                    "Em \"sheet\", preencha a aparência e a história com riqueza de detalhes, usando tudo o que foi dito na conversa (sem inventar fatos novos). Nesses campos e nos de aparência física (idade, altura etc.), escreva texto simples: sem a marcação {{Tipo:Nome}} e sem Markdown além de parágrafos e **negrito**.",
+                ].join(" "),
+            )
+            if (abilitiesDefined) base.push("Os atributos vêm do card de atributos.")
+        }
         base.push(`Cenário da campanha:\n${context.campaign.setting.trim() || "(sem cenário)"}`)
         base.push(`Formato:\n{\n  "name": "<nome do personagem combinado, ou null>",\n  "profile": {\n${keys}\n  }${sheet}\n}`)
     }

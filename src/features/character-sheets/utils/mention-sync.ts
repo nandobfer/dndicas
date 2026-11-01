@@ -1,21 +1,25 @@
 "use client"
 
 import type { Background } from "@/features/backgrounds/types/backgrounds.types"
-import type { AttributeType as CatalogAttributeType, CharacterClass, ClassTrait, HitDiceType, Subclass } from "@/features/classes/types/classes.types"
+import type { CharacterClass, ClassTrait, Subclass } from "@/features/classes/types/classes.types"
 import type { Feat } from "@/features/feats/types/feats.types"
 import type { Race, RaceTrait } from "@/features/races/types/races.types"
-import type { AttributeType as SheetAttributeType, PatchSheetBody, SkillName } from "../types/character-sheet.types"
+import type { PatchSheetBody, SkillName } from "../types/character-sheet.types"
+import {
+    buildMentionHtml,
+    dedupeMentions,
+    mapCatalogAttributeToSheetAttribute,
+    mapHitDiceToSheetHitDice,
+    mapSpellSlotsForLevel,
+    parseSubclassSearchId,
+    toMentionKey,
+    type ParsedMention,
+    type SpellcastingSource,
+} from "./sheet-rules"
 
-export interface ParsedMention {
-    id: string
-    entityType: string
-    label: string
-}
-
-export interface SpellcastingSource {
-    spellcastingAttribute?: CatalogAttributeType | null
-    progressionTable?: CharacterClass["progressionTable"]
-}
+// Regras puras (sem DOM) vivem em `sheet-rules.ts`, usado também pelo servidor.
+export { buildMentionHtml, dedupeMentions, mapCatalogAttributeToSheetAttribute, mapHitDiceToSheetHitDice, mapSpellSlotsForLevel, parseSubclassSearchId, toMentionKey }
+export type { ParsedMention, SpellcastingSource }
 
 export interface ResolvedSubclass {
     id: string
@@ -30,15 +34,6 @@ export interface MentionDiff {
 }
 
 const EMPTY_HTML_VALUES = new Set(["", "<p></p>"])
-
-const CATALOG_TO_SHEET_ATTRIBUTE: Record<CatalogAttributeType, SheetAttributeType> = {
-    Força: "strength",
-    Destreza: "dexterity",
-    Constituição: "constitution",
-    Inteligência: "intelligence",
-    Sabedoria: "wisdom",
-    Carisma: "charisma",
-}
 
 export function normalizeHtml(html: string | null | undefined): string {
     const value = String(html ?? "").trim()
@@ -57,18 +52,6 @@ export function extractMentionsFromHtml(html: string | null | undefined): Parsed
         entityType: node.getAttribute("data-entity-type") || "Regra",
         label: node.getAttribute("data-label") || node.textContent || "",
     })).filter((mention) => mention.id)
-}
-
-export function buildMentionHtml(mention: ParsedMention): string {
-    const attrs = [
-        `data-type="mention"`,
-        `data-id="${escapeHtmlAttr(mention.id)}"`,
-        `data-entity-type="${escapeHtmlAttr(mention.entityType)}"`,
-        `data-label="${escapeHtmlAttr(mention.label)}"`,
-        `class="mention"`,
-    ].join(" ")
-
-    return `<span ${attrs}>${escapeHtmlText(mention.label)}</span>`
 }
 
 export function removeMentionsFromHtml(html: string | null | undefined, mentionsToRemove: ParsedMention[]): string {
@@ -147,25 +130,6 @@ export function extractFeatMention(feat: Feat | null | undefined): ParsedMention
     return [{ id: feat._id, entityType: "Talento", label: feat.name }]
 }
 
-export function mapSpellSlotsForLevel(
-    level: number,
-    source?: SpellcastingSource | null,
-    currentSlots?: Record<string, { total: number; used: number }>
-): PatchSheetBody["spellSlots"] {
-    const levelData = source?.progressionTable?.spellSlots?.[level]
-    const mapped: Record<string, { total: number; used: number }> = {}
-
-    for (let slotLevel = 1; slotLevel <= 9; slotLevel += 1) {
-        const key = String(slotLevel)
-        const total = levelData?.slots?.[slotLevel as 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9] ?? 0
-        if (total <= 0) continue
-        const used = Math.min(currentSlots?.[key]?.used ?? 0, total)
-        mapped[key] = { total, used }
-    }
-
-    return mapped
-}
-
 export function applySkillProficiencies(
     currentSkills: PatchSheetBody["skills"] | undefined,
     skillsToMark: SkillName[]
@@ -182,26 +146,6 @@ export function applySkillProficiencies(
     return nextSkills as PatchSheetBody["skills"]
 }
 
-export function parseSubclassSearchId(id: string): { parentClassId: string; subclassId: string } | null {
-    const match = /^subclass:([^:]+):(.+)$/.exec(id)
-    if (!match) return null
-    return { parentClassId: match[1], subclassId: match[2] }
-}
-
-export function dedupeMentions(mentions: ParsedMention[]): ParsedMention[] {
-    const seen = new Set<string>()
-    const result: ParsedMention[] = []
-
-    for (const mention of mentions) {
-        const key = toMentionKey(mention)
-        if (seen.has(key)) continue
-        seen.add(key)
-        result.push(mention)
-    }
-
-    return result
-}
-
 export function diffMentions(previousMentions: ParsedMention[], nextMentions: ParsedMention[]): MentionDiff {
     const previous = dedupeMentions(previousMentions)
     const next = dedupeMentions(nextMentions)
@@ -213,21 +157,6 @@ export function diffMentions(previousMentions: ParsedMention[], nextMentions: Pa
         removed: previous.filter((mention) => !nextKeys.has(toMentionKey(mention))),
         kept: next.filter((mention) => previousKeys.has(toMentionKey(mention))),
     }
-}
-
-export function toMentionKey(mention: Pick<ParsedMention, "id" | "entityType">): string {
-    return `${mention.entityType}:${mention.id}`
-}
-
-export function mapCatalogAttributeToSheetAttribute(
-    attribute: CatalogAttributeType | null | undefined
-): SheetAttributeType | null {
-    if (!attribute) return null
-    return CATALOG_TO_SHEET_ATTRIBUTE[attribute] ?? null
-}
-
-export function mapHitDiceToSheetHitDice(hitDice: HitDiceType | null | undefined): string | null {
-    return hitDice ?? null
 }
 
 function cleanupEmptyBlocks(root: HTMLElement) {
@@ -242,21 +171,6 @@ function cleanupEmptyBlocks(root: HTMLElement) {
     if (!root.children.length && !(root.textContent?.trim())) {
         root.innerHTML = ""
     }
-}
-
-function escapeHtmlAttr(value: string): string {
-    return value
-        .replaceAll("&", "&amp;")
-        .replaceAll('"', "&quot;")
-        .replaceAll("<", "&lt;")
-        .replaceAll(">", "&gt;")
-}
-
-function escapeHtmlText(value: string): string {
-    return value
-        .replaceAll("&", "&amp;")
-        .replaceAll("<", "&lt;")
-        .replaceAll(">", "&gt;")
 }
 
 function createMentionElement(doc: Document, mention: ParsedMention): HTMLElement {

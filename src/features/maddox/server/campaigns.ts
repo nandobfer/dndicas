@@ -4,7 +4,7 @@ import { AcaoAuditoria, dbConnect, recordAudit } from "@/lib/db"
 import { DomainError } from "@/lib/api/route"
 import { loggerFor } from "@/lib/logger"
 import { User } from "@/features/users/models/user"
-import { MADDOX_CAMPAIGN_AUDIT_ENTITY, MADDOX_INVITE_CLOSED_STATUSES, type MaddoxCampaignStatus } from "../constants"
+import { MADDOX_CAMPAIGN_AUDIT_ENTITY, MADDOX_INVITE_CLOSED_STATUSES, MADDOX_SHEET_RIGORS, type MaddoxCampaignStatus } from "../constants"
 import { MaddoxCampaignMemberModel, MaddoxCampaignModel, MaddoxCharacterModel, type IMaddoxCampaign, type IMaddoxCampaignMember, type IMaddoxCharacter } from "../models"
 import type { CreateMaddoxCampaignInput, MaddoxCharacterDraftInput, UpdateMaddoxCampaignInput } from "../campaign-schemas"
 import type {
@@ -138,6 +138,9 @@ async function buildDtos(campaigns: CampaignDoc[], userId: string): Promise<(Mad
             turnNumber: campaign.turn?.number ?? 0,
             turnPhase: campaign.turn?.phase ?? "master",
             startedAt: iso(campaign.startedAt),
+            showCheckDc: Boolean(campaign.showCheckDc),
+            startingLevel: campaign.startingLevel ?? null,
+            startingStage: campaign.startingStage ?? "",
             scenarioStatus: campaign.scenarioInterview?.status ?? "pending",
             createdAt: new Date(campaign.createdAt).toISOString(),
             updatedAt: new Date(campaign.updatedAt).toISOString(),
@@ -212,7 +215,7 @@ export async function createCampaign(input: CreateMaddoxCampaignInput, userId: s
     const availability = await maddoxAvailability(settings)
     if (!availability.available) throw new DomainError(409, availability.reason ?? 'O "Agente Maddox" não está disponível. Fale com um administrador.', "MADDOX_UNAVAILABLE")
 
-    const campaign = await MaddoxCampaignModel.create({ name: input.name, ownerId: userId, rigor: input.rigor, status: "lobby", invite: { token: newToken(), rotatedAt: new Date() } })
+    const campaign = await MaddoxCampaignModel.create({ name: input.name, ownerId: userId, rigor: input.rigor, showCheckDc: input.showCheckDc ?? false, status: "lobby", invite: { token: newToken(), rotatedAt: new Date() } })
     try {
         await MaddoxCampaignMemberModel.create({ campaignId: campaign._id, userId, role: "owner", status: "joined", invitedBy: null, joinedAt: new Date() })
     } catch (error) {
@@ -220,7 +223,7 @@ export async function createCampaign(input: CreateMaddoxCampaignInput, userId: s
         await MaddoxCampaignModel.deleteOne({ _id: campaign._id }).catch(() => undefined)
         throw error
     }
-    await recordAudit({ userId, entidade: MADDOX_CAMPAIGN_AUDIT_ENTITY, entidadeId: String(campaign._id), acao: AcaoAuditoria.CRIAR, depois: { name: input.name, rigor: input.rigor, status: "lobby" } })
+    await recordAudit({ userId, entidade: MADDOX_CAMPAIGN_AUDIT_ENTITY, entidadeId: String(campaign._id), acao: AcaoAuditoria.CRIAR, depois: { name: input.name, rigor: input.rigor, showCheckDc: input.showCheckDc ?? false, status: "lobby" } })
     await notifyCampaignChanged(String(campaign._id), [userId])
     return getCampaignDetail(String(campaign._id), userId)
 }
@@ -231,9 +234,26 @@ export async function updateCampaign(campaignId: string, input: UpdateMaddoxCamp
     if (input.rigor !== undefined && input.rigor !== campaign.rigor && rigorLocked(campaign)) {
         throw new DomainError(409, "O grau de rigor só pode mudar no lobby, antes da entrevista de cenário.", "RIGOR_LOCKED")
     }
-    const next = { ...(input.name !== undefined ? { name: input.name } : {}), ...(input.rigor !== undefined ? { rigor: input.rigor } : {}) }
+    if (input.startingLevel !== undefined && input.startingLevel !== (campaign.startingLevel ?? null)) {
+        if (!MADDOX_SHEET_RIGORS.includes(input.rigor ?? campaign.rigor)) throw new DomainError(409, "O nível inicial só existe nos graus com ficha (Equilibrado, Rigoroso e Fiel ao D&D).", "LEVEL_DISABLED")
+        if (campaign.status !== "lobby" && campaign.status !== "interview") throw new DomainError(409, "O nível inicial só pode mudar antes de a campanha começar.", "LEVEL_LOCKED")
+    }
+    const next = {
+        ...(input.name !== undefined ? { name: input.name } : {}),
+        ...(input.rigor !== undefined ? { rigor: input.rigor } : {}),
+        // A CD dos testes pode mudar a qualquer momento, inclusive com a campanha em andamento.
+        ...(input.showCheckDc !== undefined ? { showCheckDc: input.showCheckDc } : {}),
+        ...(input.startingLevel !== undefined ? { startingLevel: input.startingLevel } : {}),
+    }
     await MaddoxCampaignModel.updateOne({ _id: campaign._id }, { $set: next })
-    await recordAudit({ userId, entidade: MADDOX_CAMPAIGN_AUDIT_ENTITY, entidadeId: String(campaign._id), acao: AcaoAuditoria.ATUALIZAR, antes: { name: campaign.name, rigor: campaign.rigor }, depois: next })
+    await recordAudit({
+        userId,
+        entidade: MADDOX_CAMPAIGN_AUDIT_ENTITY,
+        entidadeId: String(campaign._id),
+        acao: AcaoAuditoria.ATUALIZAR,
+        antes: { name: campaign.name, rigor: campaign.rigor, showCheckDc: Boolean(campaign.showCheckDc), startingLevel: campaign.startingLevel ?? null },
+        depois: next,
+    })
     await changed(campaign._id)
     return getCampaignDetail(campaignId, userId)
 }

@@ -44,7 +44,17 @@ export interface IMaddoxCampaign {
         generating: { token: string; startedAt: Date } | null
         /** Última falha do turno do mestre: a retomada espera `MADDOX_MASTER_RETRY_MS` desde ela. */
         failedAt: Date | null
+        /** Rodada de testes do turno do mestre (Maddox 5): 0 = narração das declarações; cada continuação soma 1. */
+        checkRound: number
+        /** O turno do mestre espera as rolagens dos testes pedidos na rodada atual (sem geração em andamento). */
+        awaitingChecks: boolean
     }
+    /** Mostra a CD dos testes aos jogadores (Maddox 5); padrão = secreta. */
+    showCheckDc: boolean
+    /** Nível inicial da mesa (graus com ficha), definido na entrevista de cenário; `null` = cada personagem informa. */
+    startingLevel?: number | null
+    /** Estágio de experiência inicial (graus narrativos), adaptado ao cenário. */
+    startingStage?: string
     /**
      * Estado atual da história (Maddox 4), o "checkpoint" mantido pelo narrador: cena, local, situação e a
      * decisão aguardada. Relido a cada turno.
@@ -83,7 +93,12 @@ const MaddoxCampaignSchema = new Schema<IMaddoxCampaign>(
             declaredMemberIds: { type: [Schema.Types.ObjectId], default: [] },
             generating: { type: new Schema({ token: String, startedAt: Date }, { _id: false }), default: null },
             failedAt: { type: Date, default: null },
+            checkRound: { type: Number, default: 0 },
+            awaitingChecks: { type: Boolean, default: false },
         },
+        showCheckDc: { type: Boolean, default: false },
+        startingLevel: { type: Number, default: null, min: 1, max: 20 },
+        startingStage: { type: String, default: "" },
         state: {
             scene: { type: String, default: "" },
             location: { type: String, default: "" },

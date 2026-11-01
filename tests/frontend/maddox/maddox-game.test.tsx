@@ -4,6 +4,7 @@ import { act, fireEvent, screen, waitFor, within } from "@testing-library/react"
 import { renderWithQueryClient } from "../test-utils"
 import type { MaddoxGameMessageDto, MaddoxGameParticipantDto, MaddoxGameStateDto, MaddoxLiveGenerationDto } from "@/features/maddox/game-types"
 import { rarityColors } from "@/lib/config/colors"
+import { rigorColor } from "@/features/maddox/components/campaigns/campaign-visuals"
 import type { MaddoxGameStreamState } from "@/features/maddox/hooks/useMaddoxGameStream"
 
 const get = vi.fn()
@@ -27,9 +28,89 @@ const releaseChannel = vi.fn()
 vi.mock("sonner", () => ({ toast: { error: vi.fn(), success: vi.fn(), warning: vi.fn() } }))
 vi.mock("next/navigation", () => ({ useRouter: () => ({ push: vi.fn(), replace: vi.fn(), refresh: vi.fn() }), usePathname: () => "/campanhas/c1/mesa" }))
 vi.mock("@/core/hooks/useAuth", () => ({ useAuth: () => ({ userId: "u-owner", isSignedIn: true, isLoaded: true, can: () => true }) }))
+const addWindow = vi.fn()
+/**
+ * Painel de dados simplificado (o 3D real é testado em tests/frontend/dice-roller): expõe as props que a mesa passa e,
+ * como o painel real, ZERA o resultado mostrado quando o `preset` muda (efeito em `[preset]`) e só avisa o fim da
+ * animação (`onRollSettled`) num passo separado — o botão "fim da animação".
+ */
+vi.mock("@/features/dice-roller/components/dice-roller-panel", async () => {
+    const { useEffect, useState } = await import("react")
+    return {
+        DiceRollerPanel: (props: {
+            preset?: { modifier?: number; mode?: string } | null
+            externalResult?: { total: number } | null
+            hideRollButton?: boolean
+            disableRolling?: boolean
+            disabledRollingMessage?: string | null
+            rollButtonLabel?: string
+            rollRequest?: (input: unknown) => Promise<{ total: number }>
+            onRollSettled?: (result: unknown) => void
+            appearance?: string
+            stageVariant?: string
+            stageSize?: string
+            stageVisibility?: string
+            stageHideDelayMs?: number
+            rollButtonClassName?: string
+        }) => {
+            const [shown, setShown] = useState<number | null>(null)
+            const [rolled, setRolled] = useState<unknown>(null)
+            useEffect(() => {
+                setShown(null)
+                setRolled(null)
+            }, [props.preset])
+            const animating = rolled ?? props.externalResult ?? null
+            return (
+                <div
+                    data-testid="fake-dice-panel"
+                    data-modifier={props.preset?.modifier}
+                    data-mode={props.preset?.mode}
+                    data-external={props.externalResult?.total ?? ""}
+                    data-shown={shown ?? ""}
+                    data-appearance={props.appearance ?? ""}
+                    data-stage-variant={props.stageVariant ?? ""}
+                    data-stage-size={props.stageSize ?? ""}
+                    data-stage-visibility={props.stageVisibility ?? ""}
+                    data-stage-hide-delay={props.stageHideDelayMs ?? ""}
+                    data-roll-button-class={props.rollButtonClassName ?? ""}
+                >
+                    {!props.hideRollButton && (
+                        <button
+                            type="button"
+                            disabled={props.disableRolling}
+                            onClick={async () => {
+                                const result = await props.rollRequest?.({ terms: [{ dice: "d20", quantity: 1 }] })
+                                if (result) {
+                                    setShown(result.total)
+                                    setRolled(result)
+                                }
+                            }}
+                        >
+                            {props.rollButtonLabel ?? "JOGAR"}
+                        </button>
+                    )}
+                    {animating !== null && (
+                        <button type="button" onClick={() => props.onRollSettled?.(animating)}>
+                            fim da animação
+                        </button>
+                    )}
+                    {props.disabledRollingMessage}
+                </div>
+            )
+        },
+    }
+})
+const sheetPreview = { strength: 10, dexterity: 16, constitution: 10, intelligence: 10, wisdom: 10, charisma: 10, level: 1, proficiencyBonusOverride: null, savingThrows: {}, skills: { Furtividade: { proficient: true, expertise: false } } }
+/** Ficha da prévia controlada pelo teste (`loading` = ainda carregando; `data` troca a ficha). */
+const sheetQuery: { loading: boolean; data: typeof sheetPreview } = { loading: false, data: sheetPreview }
+vi.mock("@/features/character-sheets/api/character-sheets-queries", () => ({
+    useSheet: (id: string | null) => ({ data: id && !sheetQuery.loading ? sheetQuery.data : undefined, isLoading: Boolean(id) && sheetQuery.loading, isError: false }),
+}))
+vi.mock("@/features/character-sheets/components/sheet-form", () => ({ SheetForm: () => <div data-testid="sheet-form" /> }))
+vi.mock("@/core/context/window-context", () => ({ useWindows: () => ({ addWindow, removeWindow: vi.fn() }) }))
 vi.mock("@/lib/pusher/client", () => ({ isPusherClientAvailable: () => pusherAvailable, acquireChannel, releaseChannel }))
 /** Stream da mesa controlado pelo teste (sem rede): `setStream` re-renderiza quem usa o hook. */
-let streamSnapshot: MaddoxGameStreamState = { live: [], settled: [], finished: 0, connected: true }
+let streamSnapshot: MaddoxGameStreamState = { live: [], settled: [], finished: 0, connected: true, rolled: [] }
 const streamListeners = new Set<() => void>()
 const setStream = (patch: Partial<MaddoxGameStreamState>) => {
     streamSnapshot = { ...streamSnapshot, ...patch }
@@ -76,6 +157,7 @@ const message = (id: string, over: Partial<MaddoxGameMessageDto>): MaddoxGameMes
     replyToId: null,
     skippedByName: null,
     error: null,
+    check: null,
     createdAt: "2026-10-31T10:00:00.000Z",
     ...over,
 })
@@ -87,9 +169,11 @@ const gameState = (over: Partial<MaddoxGameStateDto> = {}): MaddoxGameStateDto =
     status: "active",
     ownerId: "u-owner",
     maddoxAvatarUrl: null,
-    turn: { number: 1, phase: "players", startedAt: null, generating: false, failed: false },
+    turn: { number: 1, phase: "players", startedAt: null, generating: false, failed: false, awaitingChecks: false, pendingChecks: [] },
     participants: [participant("m1", "u-owner", "Kael"), participant("m2", "u-ana", "Lyra"), participant("m3", "u-bia", "Borin")],
-    me: { memberId: "m1", isOwner: true, ready: true, eligible: true, declared: false },
+    me: { memberId: "m1", isOwner: true, ready: true, eligible: true, declared: false, sheet: null },
+    showCheckDc: false,
+    npcs: [],
     messages: [
         message("n1", { kind: "narration", phase: "master", content: "Uma taverna em **chamas**." }),
         message("d1", { kind: "declaration", memberId: "m2", characterName: "Lyra", content: "Corro até a porta." }),
@@ -102,10 +186,12 @@ const gameState = (over: Partial<MaddoxGameStateDto> = {}): MaddoxGameStateDto =
 })
 
 const { GamePage } = await import("@/features/maddox/components/game/GamePage")
-const { seatStatus, turnProgress, composerBlockReason, gameRefetchInterval, MADDOX_GAME_POLL_MS } = await import("@/features/maddox/game-view")
+const { seatStatus, turnProgress, composerBlockReason, gameRefetchInterval, masterBannerText, MADDOX_GAME_POLL_MS } = await import("@/features/maddox/game-view")
 const { MADDOX_MASTER_RETRY_MS } = await import("@/features/maddox/constants")
 
 beforeEach(() => {
+    sheetQuery.loading = false
+    sheetQuery.data = sheetPreview
     get.mockReset()
     post.mockReset()
     handlers.clear()
@@ -113,7 +199,7 @@ beforeEach(() => {
     pusherAvailable = true
     acquireChannel.mockClear()
     releaseChannel.mockClear()
-    streamSnapshot = { live: [], settled: [], finished: 0, connected: true }
+    streamSnapshot = { live: [], settled: [], finished: 0, connected: true, rolled: [] }
 })
 
 async function renderGame(state: MaddoxGameStateDto) {
@@ -123,7 +209,7 @@ async function renderGame(state: MaddoxGameStateDto) {
     return view
 }
 
-const ME = (over: Partial<MaddoxGameStateDto["me"]>) => ({ memberId: "m1", isOwner: true, ready: true, eligible: true, declared: false, ...over })
+const ME = (over: Partial<MaddoxGameStateDto["me"]>): MaddoxGameStateDto["me"] => ({ memberId: "m1", isOwner: true, ready: true, eligible: true, declared: false, sheet: null, ...over })
 
 describe("mesa Maddox — conversa e turno", () => {
     it("mostra narração, declaração, pergunta com a resposta ligada, 'não fez nada' e a faixa do turno", async () => {
@@ -140,7 +226,7 @@ describe("mesa Maddox — conversa e turno", () => {
     })
 
     it("turno do mestre: o campo fica bloqueado e o Maddox aparece narrando", async () => {
-        await renderGame(gameState({ turn: { number: 2, phase: "master", startedAt: null, generating: true, failed: false } }))
+        await renderGame(gameState({ turn: { number: 2, phase: "master", startedAt: null, generating: true, failed: false, awaitingChecks: false, pendingChecks: [] } }))
         expect(screen.getByTestId("turn-banner")).toHaveTextContent("Turno do mestre — o Maddox está narrando…")
         expect(screen.getByTestId("game-composer-hint")).toHaveTextContent("O Maddox está narrando. Aguarde o turno dos jogadores.")
         expect(screen.getByLabelText("O que o seu personagem faz")).toBeDisabled()
@@ -175,15 +261,48 @@ describe("mesa Maddox — ações do jogador", () => {
         await waitFor(() => expect(post).toHaveBeenCalledWith("/maddox/campaigns/c1/game/actions", { kind: "pass" }))
     })
 
-    it("Ctrl+Enter declara; Enter sozinho não envia", async () => {
+    it("Enter declara; Shift+Enter não envia; texto vazio não envia; Ctrl+Enter também declara", async () => {
         await renderGame(gameState())
         post.mockResolvedValue(ok(gameState()))
         const input = screen.getByLabelText("O que o seu personagem faz")
-        fireEvent.change(input, { target: { value: "Grito por ajuda." } })
         fireEvent.keyDown(input, { key: "Enter" })
+        fireEvent.change(input, { target: { value: "Grito por ajuda." } })
+        fireEvent.keyDown(input, { key: "Enter", shiftKey: true })
         expect(post).not.toHaveBeenCalled()
-        fireEvent.keyDown(input, { key: "Enter", ctrlKey: true })
+        fireEvent.keyDown(input, { key: "Enter" })
         await waitFor(() => expect(post).toHaveBeenCalledWith("/maddox/campaigns/c1/game/actions", { kind: "declaration", content: "Grito por ajuda." }))
+        post.mockClear()
+        fireEvent.change(input, { target: { value: "Corro." } })
+        fireEvent.keyDown(input, { key: "Enter", ctrlKey: true })
+        await waitFor(() => expect(post).toHaveBeenCalledWith("/maddox/campaigns/c1/game/actions", { kind: "declaration", content: "Corro." }))
+    })
+
+    it("campo no desenho da entrevista: caixa única com três botões de ícone, na ordem Perguntar, Não fazer nada, Declarar", async () => {
+        await renderGame(gameState())
+        const box = screen.getByTestId("game-composer-box")
+        for (const cls of ["flex", "items-end", "gap-2", "rounded-xl", "border", "bg-card", "focus-within:border-primary/60"]) expect(box.className.split(" ")).toContain(cls)
+        const input = within(box).getByLabelText("O que o seu personagem faz")
+        expect(input.className.split(" ")).toEqual(expect.arrayContaining(["flex-1", "mb-1", "max-h-[180px]"]))
+        const buttons = within(box).getAllByRole("button")
+        expect(buttons.map((button) => button.getAttribute("aria-label"))).toEqual(["Perguntar ao mestre", "Não fazer nada", "Declarar"])
+        for (const button of buttons) {
+            expect(button.className.split(" ")).toEqual(expect.arrayContaining(["h-8", "w-8", "rounded-full"]))
+            expect(button).toHaveAttribute("title")
+            expect(button.textContent).toBe("")
+        }
+        expect(buttons[2]).toHaveAttribute("type", "submit")
+        expect(buttons[0]).toHaveAttribute("type", "button")
+        // Estado e contador abaixo da caixa, fora dela.
+        expect(within(box).queryByTestId("game-composer-hint")).not.toBeInTheDocument()
+        expect(screen.getByTestId("game-composer-counter")).toHaveTextContent("0/")
+        expect(screen.getByTestId("game-composer-counter")).toHaveTextContent("Enter declara · Shift+Enter quebra linha")
+    })
+
+    it("campo bloqueado (turno do mestre): os três botões desabilitados e a caixa esmaecida", async () => {
+        await renderGame(gameState({ turn: { ...gameState().turn, phase: "master", generating: true } }))
+        const box = screen.getByTestId("game-composer-box")
+        expect(box.className.split(" ")).toContain("opacity-70")
+        for (const button of within(box).getAllByRole("button")) expect(button).toBeDisabled()
     })
 
     it("falha ao enviar devolve o texto ao campo", async () => {
@@ -261,7 +380,7 @@ describe("mesa Maddox — participantes e presença", () => {
 
     it("quando alguém sai da mesa, pede ao servidor que reavalie o turno", async () => {
         await renderGame(gameState())
-        post.mockResolvedValue(ok(gameState({ turn: { number: 2, phase: "players", startedAt: null, generating: false, failed: false } })))
+        post.mockResolvedValue(ok(gameState({ turn: { number: 2, phase: "players", startedAt: null, generating: false, failed: false, awaitingChecks: false, pendingChecks: [] } })))
         presenceIds = ["u-owner"]
         emit("pusher:member_removed")
         await waitFor(() => expect(post).toHaveBeenCalledWith("/maddox/campaigns/c1/game/check"), { timeout: 3000 })
@@ -292,7 +411,7 @@ describe("mesa Maddox — participantes e presença", () => {
 const liveItem = (over: Partial<MaddoxLiveGenerationDto> = {}): MaddoxLiveGenerationDto => ({ liveId: "l1", kind: "narration", turnNumber: 2, replyToId: null, text: "", tool: false, startedAt: "2026-10-31T10:00:00.000Z", ...over })
 
 describe("Maddox 4 — narração ao vivo, falhas e foco", () => {
-    const masterTurn = { number: 2, phase: "master" as const, startedAt: null, generating: true, failed: false }
+    const masterTurn = { number: 2, phase: "master" as const, startedAt: null, generating: true, failed: false, awaitingChecks: false, pendingChecks: [] }
 
     it("narração chegando em streaming: texto parcial com citação em negrito, cursor, aviso de ferramenta e divisor do turno", async () => {
         await renderGame(gameState({ turn: masterTurn }))
@@ -401,8 +520,8 @@ describe("regras de exibição da mesa", () => {
 })
 
 describe("mesa Maddox — recarga depois de falha do mestre", () => {
-    const master = (generating: boolean) => ({ number: 2, phase: "master" as const, startedAt: null, generating, failed: false })
-    const players = { number: 2, phase: "players" as const, startedAt: null, generating: false, failed: false }
+    const master = (generating: boolean) => ({ number: 2, phase: "master" as const, startedAt: null, generating, failed: false, awaitingChecks: false, pendingChecks: [] })
+    const players = { number: 2, phase: "players" as const, startedAt: null, generating: false, failed: false, awaitingChecks: false, pendingChecks: [] }
 
     it("gameRefetchInterval: com tempo real só recarrega no turno do mestre sem geração; sem Pusher recarrega sempre", () => {
         expect(gameRefetchInterval({ status: "active", turn: master(false) }, true)).toBe(MADDOX_MASTER_RETRY_MS)
@@ -441,5 +560,299 @@ describe("mesa Maddox — recarga depois de falha do mestre", () => {
     it("sem Pusher: recarrega a cada MADDOX_GAME_POLL_MS", async () => {
         pusherAvailable = false
         expect(await countGetsAfter(gameState({ turn: players }), MADDOX_GAME_POLL_MS * 2 + 100)).toBeGreaterThanOrEqual(2)
+    })
+})
+
+// ── Maddox 5: testes pedidos pelo Maddox, ficha e NPCs ─────────────────────────
+
+/** Compara cores declaradas sem depender da caixa do hex. */
+const sameHex = (a: string | null | undefined, b: string) => (a ?? "").toLowerCase() === b.toLowerCase()
+
+const roll17 = { rollId: "r1", label: "Furtividade (Destreza)", terms: [{ dice: "d20" as const, quantity: 1, results: [12] }], mode: "advantage" as const, selectedD20: { kept: 12, discarded: 7, reason: "advantage" as const }, diceTotal: 12, modifier: 5, total: 17, createdAt: "2026-10-31T10:00:00.000Z" }
+
+const checkDto = (over: Partial<NonNullable<MaddoxGameMessageDto["check"]>> = {}): NonNullable<MaddoxGameMessageDto["check"]> => ({
+    status: "pending",
+    round: 0,
+    kind: "skill",
+    ability: "dexterity",
+    skill: "Furtividade",
+    mode: "advantage",
+    reason: "Esgueirar-se entre os guardas",
+    dc: null,
+    sheetId: "s-lyra",
+    roll: null,
+    modifierParts: [],
+    rolledByName: null,
+    success: null,
+    cancelReason: null,
+    ...over,
+})
+
+const awaitingTurn = { number: 2, phase: "master" as const, startedAt: null, generating: false, failed: false, awaitingChecks: true, pendingChecks: [{ checkId: "k1", memberId: "m2", characterName: "Lyra" }] }
+const checkMessage = (over: Partial<NonNullable<MaddoxGameMessageDto["check"]>> = {}) => message("k1", { kind: "check", phase: "master", turnNumber: 2, memberId: "m2", characterName: "Lyra", check: checkDto(over) })
+
+describe("mesa Maddox — layout em tela inteira", () => {
+    it("coluna com a altura da área útil; cabeçalho compacto fixo com turno, 'Minha ficha' à direita e a faixa; chat e ferramentas ocupam o resto", async () => {
+        await renderGame(gameState({ rigor: "fiel-dnd", me: ME({ sheet: { id: "s1", slug: "lyra" } }) }))
+        const page = screen.getByTestId("game-page")
+        expect(page).toHaveAttribute("data-layout", "fill")
+        for (const cls of ["flex", "flex-col", "lg:h-[calc(100dvh_-_7rem_-_var(--view-as-banner-height,0px))]", "lg:min-h-[640px]"]) expect(page.className.split(" ")).toContain(cls)
+        const header = screen.getByTestId("campaign-chat-header")
+        for (const cls of ["sticky", "top-16", "z-20", "shrink-0"]) expect(header.className.split(" ")).toContain(cls)
+        expect(within(header).getByRole("heading", { level: 1 })).toHaveTextContent("Brumas")
+        expect(header).toHaveTextContent("Turno 1")
+        expect(within(header).getByRole("link", { name: "Voltar à campanha" })).toHaveAttribute("href", "/campanhas/c1")
+        expect(header).toContainElement(screen.getByTestId("turn-banner"))
+        const sheetButton = within(header).getByRole("button", { name: /Minha ficha/ })
+        expect(sheetButton.closest("div")!.className.split(" ")).toContain("ml-auto")
+        const grid = screen.getByTestId("game-grid")
+        expect(grid.className.split(" ")).toEqual(expect.arrayContaining(["lg:min-h-0", "lg:flex-1"]))
+        const panel = screen.getByTestId("game-panel")
+        expect(panel.className.split(" ")).toEqual(expect.arrayContaining(["h-[80dvh]", "min-h-[480px]", "lg:h-full", "lg:min-h-0"]))
+        expect(panel.className).not.toContain("18rem")
+        const tools = screen.getByTestId("game-tools")
+        expect(tools.className.split(" ")).toEqual(expect.arrayContaining(["lg:min-h-0", "lg:overflow-y-auto"]))
+        expect(grid).toContainElement(panel)
+        expect(grid).toContainElement(tools)
+    })
+})
+
+describe("mesa Maddox — testes pedidos pelo Maddox (Maddox 5)", () => {
+    it("o jogador indicado vê o pedido com o d20, as partes do modificador e 'Rolar'; a rolagem vai ao servidor sem dado nem modificador", async () => {
+        post.mockResolvedValue(ok({ roll: roll17, state: gameState({ me: ME({ memberId: "m2", isOwner: false }), turn: { ...awaitingTurn, awaitingChecks: false, pendingChecks: [], generating: true }, messages: [checkMessage({ status: "rolled", roll: roll17 })] }) }))
+        await renderGame(gameState({ rigor: "fiel-dnd", me: ME({ memberId: "m2", isOwner: false }), turn: awaitingTurn, messages: [message("n2", { kind: "narration", phase: "master", turnNumber: 2, content: "Lyra avança…" }), checkMessage()] }))
+        const card = screen.getByTestId("game-check-request")
+        expect(card).toHaveTextContent("O Maddox pede um teste para você")
+        expect(within(card).getByTestId("check-title")).toHaveTextContent("Teste de perícia: Furtividade (Destreza)")
+        expect(card).toHaveTextContent("Esgueirar-se entre os guardas")
+        // Prévia pela ficha: DES 16 (+3) + proficiência +2.
+        const modifiers = within(card).getByTestId("check-modifiers")
+        expect(modifiers).toHaveTextContent("d20")
+        expect(modifiers).toHaveTextContent("Destreza +3")
+        expect(modifiers).toHaveTextContent("Prof. +2")
+        expect(within(card).getByTestId("check-modifier-total")).toHaveTextContent("= d20 +5")
+        expect(modifiers).toHaveTextContent("Vantagem")
+        expect(modifiers).not.toHaveTextContent("CD")
+        const panel = within(card).getByTestId("fake-dice-panel")
+        expect(panel).toHaveAttribute("data-modifier", "5")
+        expect(panel).toHaveAttribute("data-mode", "advantage")
+        // Sem palco antes de rolar: dado solto no card, só durante a rolagem, e some depois; botão pequeno.
+        expect(panel).toHaveAttribute("data-appearance", "inline")
+        expect(panel).toHaveAttribute("data-stage-variant", "bare")
+        expect(panel).toHaveAttribute("data-stage-size", "compact")
+        expect(panel).toHaveAttribute("data-stage-visibility", "roll")
+        expect(panel).toHaveAttribute("data-stage-hide-delay", "1400")
+        expect(panel.getAttribute("data-roll-button-class")).toContain("w-auto")
+        expect(panel.getAttribute("data-roll-button-class")!.split(" ")).toEqual(expect.arrayContaining(["h-11", "px-6", "text-sm"]))
+        // "Rolar" numa coluna à direita do texto, centralizada nos dois eixos (no celular, abaixo).
+        const column = within(card).getByTestId("check-roll-column")
+        expect(column).toContainElement(panel)
+        expect(column.className.split(" ")).toEqual(expect.arrayContaining(["flex", "flex-col", "items-center", "justify-center", "shrink-0"]))
+        expect(column.parentElement!.className.split(" ")).toEqual(expect.arrayContaining(["flex", "flex-col", "sm:flex-row"]))
+        expect(column.parentElement).toContainElement(within(card).getByTestId("check-title"))
+        // Pendente: cor do rigor, sem desfecho nem crítico.
+        const cardBox = within(card).getByTestId("check-card")
+        expect(sameHex(cardBox.getAttribute("data-accent"), rigorColor("fiel-dnd"))).toBe(true)
+        expect(cardBox).toHaveAttribute("data-outcome", "none")
+        expect(within(card).queryByTestId("check-roll-result")).not.toBeInTheDocument()
+        expect(screen.getByTestId("turn-banner")).toHaveTextContent("Turno do mestre — o Maddox pediu um teste para você")
+        expect(screen.getByText("O Maddox pediu um teste para você: role os dados na conversa.")).toBeInTheDocument()
+        // Esperando a rolagem, o Maddox não aparece "narrando".
+        expect(screen.queryByTestId("maddox-writing")).not.toBeInTheDocument()
+
+        fireEvent.click(within(panel).getByRole("button", { name: "Rolar" }))
+        await waitFor(() => expect(post).toHaveBeenCalledWith("/maddox/campaigns/c1/game/checks/k1/roll", {}))
+        expect(await screen.findByText("Resultado enviado ao Maddox.")).toBeInTheDocument()
+        // O resultado só aparece quando o dado para (o card já foi gravado como rolado).
+        expect(screen.queryByTestId("check-roll-result")).not.toBeInTheDocument()
+        // Enquanto rola, a cor do card não adianta o desfecho.
+        expect(screen.getByTestId("check-card")).toHaveAttribute("data-outcome", "none")
+        fireEvent.click(screen.getByRole("button", { name: "fim da animação" }))
+        expect(await screen.findByTestId("check-roll-result")).toHaveTextContent("17")
+        // Parado: o botão e o aviso saem; o resultado fica.
+        expect(screen.queryByRole("button", { name: "Rolar" })).not.toBeInTheDocument()
+        expect(screen.queryByText("Resultado enviado ao Maddox.")).not.toBeInTheDocument()
+    })
+
+    it("'Rolar' espera a ficha carregar; o modificador do servidor diferente da prévia não zera o dado de quem rolou", async () => {
+        sheetQuery.loading = true
+        // Servidor calcula +7 (ficha editada em outra janela); a prévia mostrava +5.
+        const roll19 = { ...roll17, modifier: 7, total: 19 }
+        post.mockResolvedValue(ok({ roll: roll19, state: gameState({ me: ME({ memberId: "m2", isOwner: false }), turn: { ...awaitingTurn, awaitingChecks: false, pendingChecks: [], generating: true }, messages: [checkMessage({ status: "rolled", roll: roll19 })] }) }))
+        const view = await renderGame(gameState({ rigor: "fiel-dnd", me: ME({ memberId: "m2", isOwner: false }), turn: awaitingTurn, messages: [checkMessage()] }))
+        let panel = within(screen.getByTestId("game-check-request")).getByTestId("fake-dice-panel")
+        expect(within(panel).getByRole("button", { name: "Rolar" })).toBeDisabled()
+        expect(panel).toHaveTextContent("Carregando a ficha…")
+        sheetQuery.loading = false
+        view.rerender(<GamePage campaignId="c1" />)
+        panel = await waitFor(() => {
+            const current = within(screen.getByTestId("game-check-request")).getByTestId("fake-dice-panel")
+            expect(within(current).getByRole("button", { name: "Rolar" })).toBeEnabled()
+            return current
+        })
+        expect(panel).toHaveAttribute("data-modifier", "5")
+        fireEvent.click(within(panel).getByRole("button", { name: "Rolar" }))
+        expect(await screen.findByText("Resultado enviado ao Maddox.")).toBeInTheDocument()
+        const after = screen.getByTestId("fake-dice-panel")
+        // O preset fica com o modificador do clique e o painel mantém o total mostrado.
+        expect(after).toHaveAttribute("data-modifier", "5")
+        await waitFor(() => expect(after).toHaveAttribute("data-shown", "19"))
+        expect(screen.getByTestId("check-modifier-total")).toHaveTextContent("= d20 +7")
+    })
+
+    it("os outros não recebem o pedido: veem a espera com o nome; o dono pode 'Rolar no lugar' com confirmação", async () => {
+        post.mockResolvedValue(ok({ roll: roll17, state: gameState({ turn: { ...awaitingTurn, awaitingChecks: false, pendingChecks: [], generating: true } }) }))
+        await renderGame(gameState({ rigor: "fiel-dnd", turn: awaitingTurn, messages: [message("n2", { kind: "narration", phase: "master", turnNumber: 2, content: "Lyra avança…" })] }))
+        expect(screen.queryByTestId("game-check-request")).not.toBeInTheDocument()
+        expect(screen.getByTestId("turn-banner")).toHaveTextContent("Turno do mestre — aguardando o teste de Lyra")
+        expect(screen.getByText("O Maddox aguarda os testes pedidos. Aguarde o turno dos jogadores.")).toBeInTheDocument()
+        const seat = screen.getByTestId("seat-m2")
+        expect(seat).toHaveTextContent("Rolando teste")
+        expect(within(screen.getByTestId("seat-m1")).queryByRole("button", { name: /Rolar no lugar/ })).not.toBeInTheDocument()
+        fireEvent.click(within(seat).getByRole("button", { name: "Rolar no lugar de Lyra" }))
+        const dialog = await screen.findByRole("alertdialog")
+        expect(dialog).toHaveTextContent("Rolar o teste no lugar de Lyra?")
+        expect(post).not.toHaveBeenCalled()
+        fireEvent.click(within(dialog).getByRole("button", { name: "Rolar no lugar" }))
+        await waitFor(() => expect(post).toHaveBeenCalledWith("/maddox/campaigns/c1/game/checks/k1/roll", {}))
+    })
+
+    it("um jogador que não é o dono não tem 'Rolar no lugar'", async () => {
+        await renderGame(gameState({ rigor: "fiel-dnd", me: ME({ memberId: "m3", isOwner: false }), turn: awaitingTurn }))
+        expect(screen.getByTestId("turn-banner")).toHaveTextContent("aguardando o teste de Lyra")
+        expect(screen.queryByRole("button", { name: /Rolar no lugar/ })).not.toBeInTheDocument()
+    })
+
+    it("rolagem recebida pelo stream: todos repetem o dado com o resultado oficial, sem botão", async () => {
+        await renderGame(gameState({ rigor: "fiel-dnd", turn: { ...awaitingTurn, awaitingChecks: false, pendingChecks: [], generating: true }, messages: [checkMessage({ status: "rolled", roll: roll17, modifierParts: [{ label: "Destreza", value: "+3", color: "dexterity" }, { label: "Prof.", value: "+2", color: "prof" }] })] }))
+        expect(screen.getByTestId("check-roll-total")).toHaveTextContent("17")
+        act(() => setStream({ rolled: [{ messageId: "k1", roll: roll17 }] }))
+        const card = await screen.findByTestId("game-check-result")
+        const panel = within(card).getByTestId("fake-dice-panel")
+        expect(panel).toHaveAttribute("data-external", "17")
+        expect(within(panel).queryByRole("button", { name: "Rolar" })).not.toBeInTheDocument()
+        expect(card).toHaveTextContent("Lyra rolou")
+        expect(within(card).getByTestId("check-modifiers")).toHaveTextContent("Destreza +3")
+        // Quem assiste vê o dado girar; a linha do resultado espera o fim da animação.
+        expect(within(card).queryByTestId("check-roll-result")).not.toBeInTheDocument()
+        fireEvent.click(within(panel).getByRole("button", { name: "fim da animação" }))
+        expect(await within(card).findByTestId("check-roll-total")).toHaveTextContent("17")
+    })
+
+    it("resultado gravado: total, d20 com o descartado, quem rolou no lugar e, com a CD visível, a CD e o sucesso", async () => {
+        await renderGame(
+            gameState({
+                rigor: "fiel-dnd",
+                showCheckDc: true,
+                messages: [checkMessage({ status: "rolled", roll: roll17, dc: 15, success: true, rolledByName: "Marina", modifierParts: [{ label: "Destreza", value: "+3", color: "dexterity" }] })],
+            }),
+        )
+        const card = screen.getByTestId("game-check-result")
+        // Mesa recarregada depois da rolagem: só a linha, sem painel de dados.
+        expect(within(card).queryByTestId("fake-dice-panel")).not.toBeInTheDocument()
+        expect(within(card).getByTestId("check-roll-result")).toHaveTextContent("17d20 12 (descartado 7) +5")
+        expect(card).toHaveTextContent("(rolado por Marina no lugar do jogador)")
+        expect(card).toHaveTextContent("CD 15")
+        expect(within(card).getByTestId("check-outcome")).toHaveTextContent("Sucesso")
+        // O desfecho fica na mesma linha do total, e o card fica verde.
+        expect(within(card).getByTestId("check-roll-result")).toContainElement(within(card).getByTestId("check-outcome"))
+        const box = within(card).getByTestId("check-card")
+        expect(box).toHaveAttribute("data-outcome", "success")
+        expect(sameHex(box.getAttribute("data-accent"), rarityColors.uncommon)).toBe(true)
+        expect(box).toHaveAttribute("data-critical", "none")
+        expect(within(card).queryByTestId("critical-highlight")).not.toBeInTheDocument()
+    })
+
+    it("falha com a CD visível: bolha 'Falha' na linha do total e card vermelho", async () => {
+        const roll9 = { ...roll17, rollId: "r9", mode: "normal" as const, terms: [{ dice: "d20" as const, quantity: 1, results: [4] }], selectedD20: { kept: 4, reason: "normal" as const }, diceTotal: 4, total: 9 }
+        await renderGame(gameState({ rigor: "fiel-dnd", showCheckDc: true, messages: [checkMessage({ status: "rolled", mode: "normal", roll: roll9, dc: 15, success: false })] }))
+        const box = screen.getByTestId("check-card")
+        expect(box).toHaveAttribute("data-outcome", "failure")
+        expect(sameHex(box.getAttribute("data-accent"), rarityColors.artifact)).toBe(true)
+        expect(within(screen.getByTestId("check-roll-result")).getByTestId("check-outcome")).toHaveTextContent("Falha")
+    })
+
+    it("CD secreta sem crítico: cor do rigor e nenhuma bolha de desfecho", async () => {
+        await renderGame(gameState({ rigor: "fiel-dnd", messages: [checkMessage({ status: "rolled", roll: roll17 })] }))
+        const box = screen.getByTestId("check-card")
+        expect(box).toHaveAttribute("data-outcome", "none")
+        expect(sameHex(box.getAttribute("data-accent"), rigorColor("fiel-dnd"))).toBe(true)
+        expect(screen.queryByTestId("check-outcome")).not.toBeInTheDocument()
+        expect(screen.queryByTestId("check-critical")).not.toBeInTheDocument()
+    })
+
+    it("20 natural recém-rolado com a CD secreta: destaque animado verde, bolha '20 natural' e card verde", async () => {
+        const roll20 = { ...roll17, rollId: "r20", selectedD20: { kept: 20, discarded: 3, reason: "advantage" as const }, terms: [{ dice: "d20" as const, quantity: 1, results: [20] }], diceTotal: 20, total: 25 }
+        await renderGame(gameState({ rigor: "fiel-dnd", turn: { ...awaitingTurn, awaitingChecks: false, pendingChecks: [], generating: true }, messages: [checkMessage({ status: "rolled", roll: roll20 })] }))
+        act(() => setStream({ rolled: [{ messageId: "k1", roll: roll20 }] }))
+        const card = await screen.findByTestId("game-check-result")
+        expect(within(card).getByTestId("check-card")).toHaveAttribute("data-critical", "none")
+        fireEvent.click(within(card).getByRole("button", { name: "fim da animação" }))
+        const box = await within(card).findByTestId("check-card")
+        await waitFor(() => expect(box).toHaveAttribute("data-critical", "critical-success"))
+        expect(sameHex(box.getAttribute("data-accent"), rarityColors.uncommon)).toBe(true)
+        expect(within(card).getByTestId("critical-highlight")).toHaveAttribute("data-critical-state", "critical-success")
+        expect(within(card).getByTestId("check-critical")).toHaveTextContent("20 natural")
+        expect(within(card).queryByTestId("check-outcome")).not.toBeInTheDocument()
+    })
+
+    it("1 natural na desvantagem com a CD visível: falha mesmo acima da CD, destaque vermelho também no histórico", async () => {
+        const roll1 = { ...roll17, rollId: "r1n", mode: "disadvantage" as const, terms: [{ dice: "d20" as const, quantity: 1, results: [1] }], selectedD20: { kept: 1, discarded: 15, reason: "disadvantage" as const }, diceTotal: 1, modifier: 15, total: 16 }
+        await renderGame(gameState({ rigor: "fiel-dnd", showCheckDc: true, messages: [checkMessage({ status: "rolled", mode: "disadvantage", roll: roll1, dc: 15, success: false })] }))
+        const box = screen.getByTestId("check-card")
+        expect(box).toHaveAttribute("data-critical", "critical-failure")
+        expect(box).toHaveAttribute("data-outcome", "failure")
+        expect(sameHex(box.getAttribute("data-accent"), rarityColors.artifact)).toBe(true)
+        expect(within(box).getByTestId("critical-highlight")).toHaveAttribute("data-critical-state", "critical-failure")
+        expect(within(box).getByTestId("check-critical")).toHaveTextContent("1 natural")
+        expect(within(box).getByTestId("check-outcome")).toHaveTextContent("Falha")
+    })
+
+    it("teste cancelado vira uma nota discreta", async () => {
+        await renderGame(gameState({ rigor: "fiel-dnd", messages: [checkMessage({ status: "cancelled", cancelReason: "O jogador saiu da campanha" })] }))
+        expect(screen.getByTestId("game-check-cancelled")).toHaveTextContent("Teste de Lyra cancelado (o jogador saiu da campanha).")
+    })
+
+    it("'Minha ficha' só aparece com ficha e abre a janela da ficha; NPCs conhecidos com nome e foto", async () => {
+        const view = await renderGame(gameState({ npcs: [] }))
+        expect(screen.queryByRole("button", { name: /Minha ficha/ })).not.toBeInTheDocument()
+        expect(screen.getByText("Ninguém ainda: os NPCs aparecem aqui quando o grupo os conhece.")).toBeInTheDocument()
+        view.unmount()
+
+        await renderGame(gameState({ rigor: "fiel-dnd", me: ME({ sheet: { id: "s1", slug: "lyra" } }), npcs: [{ id: "n1", name: "Bartolomeu", portraitUrl: "/api/upload?key=npc.png" }, { id: "n2", name: "Irmã Vela", portraitUrl: null }, { id: "n3", name: "Capitã Seraphine Vael do Porto Cinzento", portraitUrl: null }] }))
+        fireEvent.click(screen.getByRole("button", { name: /Minha ficha/ }))
+        expect(addWindow).toHaveBeenCalledWith(expect.objectContaining({ id: "maddox-sheet", title: "Minha ficha" }))
+        expect(screen.getByTestId("npc-n1")).toHaveTextContent("Bartolomeu")
+        expect(screen.getByTestId("npc-n2")).toHaveTextContent("Irmã Vela")
+        expect(screen.getByText("NPCs conhecidos (3)")).toBeInTheDocument()
+        // Nome gerado pelo modelo: inteiro, quebrando linha em vez de reticências.
+        const longName = within(screen.getByTestId("npc-n3")).getByText("Capitã Seraphine Vael do Porto Cinzento")
+        expect(longName.className.split(" ")).toEqual(expect.arrayContaining(["whitespace-normal", "break-words", "min-w-0"]))
+        expect(longName.className.split(" ")).not.toContain("truncate")
+    })
+
+    it("regras puras: situação 'Rolando teste', faixa com vários nomes e sem recarga periódica esperando rolagens", () => {
+        const state = gameState({ turn: { ...awaitingTurn, pendingChecks: [{ checkId: "k1", memberId: "m2", characterName: "Lyra" }, { checkId: "k2", memberId: "m3", characterName: "Borin" }] } })
+        const presence = { available: true, online: new Set(["u-owner", "u-ana", "u-bia"]) }
+        expect(seatStatus(participant("m2", "u-ana", "Lyra"), state, presence)).toBe("rolling")
+        expect(seatStatus(participant("m1", "u-owner", "Kael"), state, presence)).toBe("watching")
+        expect(masterBannerText(state)).toBe("Turno do mestre — aguardando o teste de Lyra e Borin")
+        expect(masterBannerText({ ...state, me: ME({ memberId: "m2" }) })).toBe("Turno do mestre — o Maddox pediu um teste para você (e aguarda Borin)")
+        expect(composerBlockReason({ ...state, me: ME({ memberId: "m3" }) })).toBe("O Maddox pediu um teste para você: role os dados na conversa.")
+        expect(gameRefetchInterval(state, true)).toBe(false)
+    })
+})
+
+describe("controles da mesa usam os componentes do projeto", () => {
+    it("components/game não importa @/core/ui/tabs nem usa select/checkbox nativos", async () => {
+        const { readdirSync, readFileSync } = await import("node:fs")
+        const { join } = await import("node:path")
+        const dir = join(process.cwd(), "src/features/maddox/components/game")
+        for (const file of readdirSync(dir).filter((name) => name.endsWith(".tsx"))) {
+            const source = readFileSync(join(dir, file), "utf8")
+            expect(source, file).not.toContain("@/core/ui/tabs")
+            expect(source, file).not.toMatch(/<select[\s>]/)
+            expect(source, file).not.toMatch(/type=["']checkbox["']/)
+        }
     })
 })

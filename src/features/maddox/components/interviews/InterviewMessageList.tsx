@@ -1,6 +1,6 @@
 "use client"
 
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react"
+import { Fragment, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react"
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion"
 import { AlertTriangle, ArrowDown, Loader2, RotateCcw } from "lucide-react"
 import { Button } from "@/components/ui/opex/button"
@@ -22,13 +22,15 @@ interface Props {
     color: string
     onRetry?: () => void
     retrying?: boolean
+    /** Conteúdo abaixo de uma fala do Maddox (ex.: o card de atributos). */
+    renderAfter?: (message: MaddoxInterviewMessageDto) => React.ReactNode
 }
 
 /**
  * Conversa da entrevista no padrão do chat do Agente Opex: área com rolagem própria que acompanha o fim enquanto
  * a pessoa não sobe para reler ("Ir para o fim"). Maddox à esquerda com o Markdown colorido; respostas à direita.
  */
-export function InterviewMessageList({ messages, liveText, maddoxAvatarUrl, color, onRetry, retrying }: Props) {
+export function InterviewMessageList({ messages, liveText, maddoxAvatarUrl, color, onRetry, retrying, renderAfter }: Props) {
     const scrollRef = useRef<HTMLDivElement>(null)
     const stickRef = useRef(true)
     const [showJump, setShowJump] = useState(false)
@@ -60,7 +62,8 @@ export function InterviewMessageList({ messages, liveText, maddoxAvatarUrl, colo
             <div ref={scrollRef} onScroll={onScroll} className="h-full overflow-y-auto px-4 pb-2 pt-4" role="log" aria-live="polite" aria-label="Conversa com o Maddox">
                 {messages.map((message, index) =>
                     message.role === "maddox" ? (
-                        <MaddoxMessage key={message.id} avatarUrl={maddoxAvatarUrl} color={color}>
+                        <Fragment key={message.id}>
+                        <MaddoxMessage avatarUrl={maddoxAvatarUrl} color={color}>
                             {message.error ? (
                                 <div role="alert" className="flex flex-wrap items-center gap-2 rounded-md border border-destructive/40 bg-destructive/10 px-2.5 py-1.5 text-xs text-destructive">
                                     <AlertTriangle className="h-3.5 w-3.5 shrink-0" aria-hidden />
@@ -75,6 +78,8 @@ export function InterviewMessageList({ messages, liveText, maddoxAvatarUrl, colo
                                 <Markdown lineAction={null}>{message.content}</Markdown>
                             )}
                         </MaddoxMessage>
+                        {renderAfter?.(message) && <div className="pb-4 pl-9">{renderAfter(message)}</div>}
+                        </Fragment>
                     ) : (
                         <motion.div key={message.id} {...bubble} className="flex justify-end pb-3">
                             <div className="max-w-[85%] whitespace-pre-wrap break-words rounded-2xl rounded-br-sm border border-primary/30 bg-primary/15 px-3.5 py-2 text-sm text-foreground">{message.content}</div>

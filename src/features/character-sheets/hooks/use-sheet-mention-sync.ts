@@ -35,6 +35,7 @@ import {
 } from "../utils/mention-sync"
 import { useCharacterCalculations } from "./use-character-calculations"
 import { buildBoundResourceCharge, syncResourceChargeRows } from "../utils/resource-charges"
+import { getLevelOneHpMax } from "../utils/sheet-rules"
 
 interface UseSheetMentionSyncProps {
     sheet: CharacterSheet
@@ -561,11 +562,7 @@ function dedupeStrings(items: string[]): string[] {
     return Array.from(new Set(items))
 }
 
-export function getLevelOneHpMax(hitDice: string, constitutionModifier: number): number {
-    const dieValue = parseInt(hitDice.replace(/^d/i, ""), 10)
-    if (!Number.isFinite(dieValue)) return Math.max(1, constitutionModifier + 1)
-    return Math.max(1, dieValue + constitutionModifier)
-}
+export { getLevelOneHpMax }
 
 function dedupeSkillNames(skills: string[]): SkillName[] {
     return Array.from(new Set(skills)) as SkillName[]

@@ -6,6 +6,7 @@ documentação cobre a **entrega 0 (DND-8, #200)** — modelos no MongoDB e a co
 A **entrega 2 (DND-12, #206)** — entrevistas de cenário e de personagem — está na seção "Entrevistas
 (Maddox 2)". A **entrega 3 (DND-11, #202)** — motor de turnos e tempo real — está em "Mesa e turnos (Maddox 3)".
 A **entrega 4 (DND-9, #201)** — o Maddox narrador com ferramentas e streaming — está em "Narrador (Maddox 4)".
+A **entrega 5 (DND-16, #208)** — fichas e testes de atributo/perícia/resistência pedidos pelo Maddox — está em "Fichas e testes (Maddox 5)".
 
 Código: `src/features/maddox/` (`constants`, `schemas`, `types`, `script-draft`, `models/`, `server/`,
 `hooks/`, `components/settings/`).
@@ -20,7 +21,7 @@ roteiros e as memórias salvam à parte.
 | --- | --- |
 | Geral | Ativo; **Avatar** (upload/substituição pelo `GlassImageUploader` ou "Gerar com o Gerador de imagens" a partir da persona — 1:1, do peito para cima; só vale depois de salvar); modelo do **Maddox (narrador)** e do **Entrevistador** ("Mesmo do Maddox" = sem provedor próprio); instruções de cada um com "Restaurar padrão" |
 | Entrevista: cenário / Entrevista: personagem | Roteiros versionados (abaixo), cada um com "Salvar nova versão do roteiro" e "Desfazer roteiro" |
-| JEV | Uma chave por decisão (`MADDOX_JEV_DECISIONS`): pergunta ou ação do jogador, validade de ação livre, pedir teste, início/fim de combate, conhecimento do mestre, fim da entrevista, gerar imagem na cena. Em uso: **"Fim da entrevista"** (Maddox 2) e **"Validade de ação livre"** (Maddox 4, só Rigoroso e Fiel ao D&D); as demais ainda sem uso |
+| JEV | Uma chave por decisão (`MADDOX_JEV_DECISIONS`): pergunta ou ação do jogador, validade de ação livre, pedir teste, início/fim de combate, conhecimento do mestre, fim da entrevista, gerar imagem na cena. Em uso: **"Fim da entrevista"** (Maddox 2), **"Validade de ação livre"** (Maddox 4, só Rigoroso e Fiel ao D&D) e **"Pedir teste"** (Maddox 5, orientação ao narrador nos graus com testes); as demais ainda sem uso |
 | OpenCode | Política das sessões e lista das sessões ativas com "Excluir" (confirmação) |
 | Memórias | Lista `maddox` de `agent_memories` (mesmo card dos demais agentes, sem limite de quantidade; API `/api/ai/agents/maddox/memories/**`) |
 
@@ -268,6 +269,16 @@ original — por `[Nome](#mention:Tipo:id)`, que o `Markdown` mostra como o badg
   (`mentionsToMarkup`). A consolidação pede a mesma marcação; cenário, situação inicial e perfil passam pela mesma
   resolução com os nomes reservados. Até 25 citações por texto.
 
+**Chat em tela inteira (entrevista e mesa).** A tela do chat é uma coluna com a altura da área útil
+(`lg:h-[calc(100dvh_-_7rem_-_var(--view-as-banner-height,0px))] lg:min-h-[640px]`; no celular, a entrevista usa 6rem e
+`min-h-[480px]`; a faixa "Visualizar como", só durante a simulação, publica a altura real em `--view-as-banner-height`) com o
+**cabeçalho compacto e fixo** `CampaignChatHeader` (`components/CampaignChatHeader.tsx`: `sticky top-16 z-20`, quase opaco,
+seta "Voltar à campanha", título, subtítulo, chips, ações à direita com `ml-auto` e, na mesa, a faixa do turno
+`turn-banner` na segunda linha) e o chat em `min-h-0 flex-1`. Na mesa, a grade chat + ferramentas é `lg:flex-1`; o painel
+do chat é `h-[80dvh] min-h-[480px] lg:h-full` e a coluna lateral ("Na mesa", "NPCs conhecidos") rola sozinha
+(`lg:overflow-y-auto`). A entrada só esmaece (sem deslocamento vertical). As telas sem chat (antes de começar,
+aguardando, sem personagem, concluída, mesa fora de jogo) mantêm o cabeçalho grande e o link "Voltar à campanha".
+
 **Tela da entrevista.** Largura total (sem `mx-auto`/`max-w-*`), painel de altura própria no padrão do chat do
 Opex (conversa com rolagem interna e "Ir para o fim", proposta e campo de resposta no rodapé), fala do Maddox
 numa bolha neutra (`rounded-2xl`, borda sutil na cor do rigor) com o nome na cor do rigor, pontinhos e cursor dentro
@@ -322,8 +333,10 @@ aparecem para todos na hora); só `me` muda por usuário.
 **Tela `/campanhas/[id]/mesa`** (`pageAccess`): cabeçalho com rigor, "Turno N" e a faixa da fase ("Turno dos jogadores — X
 de N jogador(es) online já declararam" / "Turno do mestre — o Maddox está narrando…"); conversa no padrão do chat do Opex
 (divisor por turno, Maddox com avatar e cor do rigor, declarações com o retrato do personagem — as minhas à direita —,
-pergunta e resposta ligadas, "Fulano não fez nada (pulado por …)", "Carregar anteriores" com cursor); campo com
-**Declarar** (Ctrl/⌘+Enter; Enter sozinho só quebra linha), **Perguntar ao mestre** e **Não fazer nada**, bloqueado com o
+pergunta e resposta ligadas, "Fulano não fez nada (pulado por …)", "Carregar anteriores" com cursor); campo no desenho do
+campo da entrevista (`GameComposer`: caixa única `flex items-end`, texto `flex-1`, três botões de ícone redondos `h-8 w-8` à direita,
+na ordem **Perguntar ao mestre**, **Não fazer nada** e **Declarar** (enviar); Enter declara, também Ctrl/⌘+Enter, Shift+Enter quebra
+linha; estado/motivo e contador abaixo da caixa), bloqueado com o
 motivo em pt-BR (turno do mestre, próximo turno, entrevista pendente com link); painel "Na mesa" com presença (ponto
 online/offline) e a situação em cores de raridade (Declarou, Aguardando, Offline (não conta), Entra no próximo turno,
 Preparando personagem) e **"Pular"** para o dono.
@@ -349,7 +362,7 @@ Código: `server/narrator.ts` (geração), `server/narrator-prompt.ts` (módulo 
 narrador (`MADDOX_NARRATOR_RULES`, adaptadas do `~/code/roleplay/agente-exemplo.md` para vários jogadores: cada jogador decide
 as ações, falas e escolhas do próprio personagem; o Maddox cuida do mundo, dos NPCs, dos resultados e do involuntário; prosa
 sensorial em segunda pessoa; cada narração desenvolve a situação e termina num ponto de decisão) + **modo narrativo puro**
-(sem dados, números, atributos ou pontos de vida — vale para todos os rigores nesta entrega; testes e mecânica vêm no Maddox 5)
+(sem dados, números, atributos ou pontos de vida — Narrativo e Flexível; nos graus com ficha a regra é a dos testes, seção "Fichas e testes (Maddox 5)")
 + rigor + formato (Markdown, negrito, citações `{{Tipo:Nome}}` do catálogo) + rotina de persistência + a campanha: cenário,
 situação inicial, personagens (perfil da entrevista e **condição atual**), **estado atual** (checkpoint) e um índice de NPCs e
 anotações (missões ativas sempre; o que é segredo do mestre marcado `[SÓ O MESTRE]` — os jogadores nunca recebem o prompt).
@@ -415,11 +428,270 @@ tentando de novo em instantes…" depois de uma falha. `ACTION_INVALID` aparece 
 **Foco:** sempre que o Maddox termina de responder — na mesa e na entrevista — o campo de texto recebe o foco
 (`focusComposer`), sem roubá-lo de outro campo editável nem de um diálogo aberto.
 
+## Fichas e testes (Maddox 5)
+
+Código: `check-modifier.ts` (módulo PURO, servidor e tela: modificador pela ficha, título, sucesso pela CD, resumo da ficha),
+`server/game-checks.ts` (rolagem, rolar no lugar, fim da rodada, cancelamento), ferramenta `request_check` em
+`server/master-tools.ts`, `server/check-hints.ts` (JEV "Pedir teste"), rodadas em `server/game.ts` (`runMasterTurn`),
+`components/game/GameCheckCard.tsx`, `MySheetButton.tsx`, `NpcPanel.tsx`.
+
+**Graus.** Equilibrado, Rigoroso e Fiel ao D&D (`MADDOX_CHECK_RIGORS`, os mesmos que criam a ficha) trocam o modo narrativo pela
+regra `checksRule(rigor)`: frequência do grau (Equilibrado só nos momentos decisivos; Rigoroso sempre que adequado; Fiel exatamente
+como nas regras), pedir pela ferramenta, **nunca rolar nem inventar resultado**, parar a narração no momento da tentativa, comparar o
+total com a CD e narrar a consequência sem recitar números. Combate continua narrado (iniciativa e turnos mecânicos são do Maddox 7).
+Cada personagem do prompt ganha o **resumo da ficha** (`sheetSummary`: nível, classe, raça, PV, CA, atributos com modificador,
+proficiência, resistências e perícias treinadas). Classe, subclasse e raça entram em texto puro (os campos guardam HTML de menção);
+a CA não é gravada na ficha: `loadSheetSummaries` a calcula dos itens equipados com `computeSheetArmorClass`
+(`character-sheets/utils/armor-class.ts`, a mesma conta da listagem de fichas). Narrativo e Flexível não recebem a ferramenta nem a regra.
+
+**Turno do mestre em rodadas** (`turn.checkRound`, `turn.awaitingChecks`):
+
+1. Rodada 0 narra as declarações. A ferramenta `request_check` (personagem, `tipo` perícia/atributo/resistência, `pericia` ou
+   `atributo`, `cd` 1–30, `modo`, `motivo` público — curto por orientação, sem corte abaixo do teto de proteção
+   `MADDOX_TOOL_TEXT_MAX`, com `truncated` no retorno se passar) guarda o pedido **em memória no job da fila** (`game-live`: `addDraftCheck`,
+   instância única). Só depois de gravar a narração os pedidos viram mensagens `kind: "check"` (mesmo `insertMany`, logo abaixo da
+   narração); se a geração falhar, somem com o job e a nova tentativa não duplica nada.
+2. Com teste pendente, o turno fica em `master` com `awaitingChecks: true` e sem trava (`resumeMasterTurn` ignora). Declarar,
+   perguntar e passar seguem em 409 `MASTER_TURN`: **os testes fazem parte do turno do mestre**.
+3. Rolar (`rollCheck`): o servidor calcula o modificador da ficha na hora (`checkModifier`) e rola o d20 com o **motor de dados**
+   (`rollGeneralDice`, vantagem/desvantagem do pedido; valem as regras de dado — *overrides* — do jogador do personagem). A troca
+   `pending → rolled` é condicional (rolagem dupla = 409 `CHECK_ALREADY_ROLLED`). Grava `check.roll`, as partes do modificador e
+   quem rolou; avisa a mesa e o stream (`check-rolled`).
+4. Sem teste pendente na rodada, uma troca condicional (`awaitingChecks: true` + `checkRound`) faz `checkRound + 1`, pega a trava e
+   põe a **continuação** na fila (uma só, mesmo com rolagens simultâneas). Se a rolagem foi gravada mas a continuação não chegou a
+   ser agendada (queda do banco ou do processo), o `GET …/game`/`check` seguinte vê `awaitingChecks` sem teste pendente e retoma pela
+   mesma troca condicional (`resumeMasterTurn` → `advanceAfterChecks`). A tarefa leva as declarações e os resultados
+   (`checkResultLine`: total, d20, modificador, vantagem com o descartado, 20/1 natural, "rolado pelo dono", CD e sucesso/falha); o
+   Maddox narra a consequência a partir de onde parou. Narrações da rodada são `segment = checkRound` (as antigas, sem o campo,
+   contam como 0).
+5. Até **3 rodadas** por turno (`MADDOX_CHECK_ROUNDS_MAX`): na última a ferramenta recusa novos pedidos e a narração termina no
+   ponto de decisão. Na rodada sem testes, o turno dos jogadores abre como antes.
+
+A ferramenta recusa (erro em pt-BR ao modelo): campanha narrativa, geração que não é narração (respostas a perguntas), teto de
+rodadas, personagem desconhecido, sem entrevista concluída ou **sem ficha**, perícia/atributo ausente e um segundo teste para o
+mesmo personagem na rodada (índice único parcial `{ campaignId, turnNumber, check.round, memberId }` com `kind: "check"`, garantido
+pela `ensure-maddox-indexes`).
+
+**Quem rola.** O jogador indicado (`assertMemberCanPlay`) ou o **dono, no lugar dele** ("Rolar no lugar", com confirmação e
+auditoria `CampanhaMaddox` `{ turn, check, rolledFor, total }`). Outros = 403 `NOT_CHECK_TARGET`; quem não participa = 404; teste
+cancelado ou fora da rodada = 409 `CHECK_NOT_PENDING`. O membro que sai ou é removido tem os testes pendentes **cancelados**
+(`cancelMemberChecks`, chamado por `onMemberLeftGame`) e a rodada pode terminar; o Maddox recebe "cancelado; resolva sem o teste".
+Quem sai **durante a geração** (o pedido ainda estava em memória) é coberto por `cancelOrphanChecks`: ao gravar a narração e em
+`advanceAfterChecks` (também na retomada do `GET`), testes pendentes de membros que não estão mais `joined` viram `cancelled`; se a
+rodada ficar sem pendentes, a continuação entra na fila na hora.
+
+**Visibilidade.** O teste **pendente só chega ao jogador indicado** (filtro no servidor em `messagesDto`, também na paginação). Os
+outros recebem só `turn.pendingChecks` (`checkId`, membro, nome do personagem): a faixa "Turno do mestre — aguardando o teste de
+Lyra", o chip "Rolando teste" no painel e o "Rolar no lugar" do dono. Rolado, todos veem quem rolou, o teste, o motivo, as partes do
+modificador e o total; quem estava com a mesa aberta **vê o dado rolando** (linha `check-rolled` do stream → o `DiceRollerPanel`
+repete a animação com o resultado oficial, sem botão). Recarregar mostra o resultado sem animação. Cancelado vira nota discreta.
+
+**CD.** Configurável por campanha (`showCheckDc`, padrão **secreta**): seletor "CD dos testes: Secreta | Visível" na criação (só nos
+graus com testes) e na edição (dono, a qualquer momento, auditado). Secreta, o DTO nunca traz a CD (`dc: null`, `success: null`);
+visível, o card mostra "CD 15" e, depois da rolagem, "Sucesso"/"Falha". O Maddox sempre recebe a CD.
+
+**JEV "Pedir teste"** (`requires-check`): com a chave ligada, nos graus com testes, a rodada 0 consulta o JEV uma vez (uma pergunta
+`noul` por declaração, teto de 20 s `MADDOX_CHECK_HINT_TIMEOUT_MS`). A declaração marcada ganha na tarefa "(o JEV indica que esta ação
+provavelmente exige teste; você decide)". Chave desligada, falha ou teto: narra sem a orientação (aviso no log).
+
+**Tela.**
+
+- **Card do teste** (`GameCheckCard`): "O Maddox pede um teste para você", "Teste de perícia: Furtividade (Destreza)", motivo, `d20` +
+  as partes do modificador nas cores dos atributos (as do `CalcTooltip`) e "= d20 +5", chip de vantagem/desvantagem e de CD (visível).
+  A prévia usa a ficha ao vivo (`useSheet`); "Rolar" fica desabilitado ("Carregando a ficha…") até ela chegar. O modificador do
+  `preset` do painel é congelado no clique: o resultado do servidor (que pode trazer outro modificador) não troca o preset — o painel
+  se reinicia quando o preset muda e o dado/total sumiriam para quem rolou. Abaixo, o `DiceRollerPanel` sem controles e sem palco
+  (`appearance="inline"`, `stageVariant="bare"`, `stageSize="compact"`, `stageVisibility="roll"`): pendente, só o botão **"Rolar"**
+  pequeno, que chama `POST …/game/checks/[checkId]/roll` (corpo `{}`); rolando, o d20 solto no card e "Resultado enviado ao Maddox.";
+  quando o dado para (`onRollSettled`), a linha do resultado (`check-roll-result`) e Sucesso/Falha, e o dado some com animação
+  `MADDOX_CHECK_DIE_HIDE_MS` (1,4 s) depois. Quem assiste vê o mesmo dado pelo `replay`, sem botão. Mesa recarregada depois da
+  rolagem: só a linha. O painel fica montado durante toda a rolagem, para o fim da animação sempre chegar ao card.
+  O painel fica numa coluna à direita do texto (`check-roll-column`, centralizada nos dois eixos; no celular, abaixo), com o
+  "Rolar" maior (`h-11 px-6 text-sm`); quando o dado para, o botão e o aviso saem. A linha do resultado traz, ao lado do total, a
+  bolha **Sucesso**/**Falha** (CD visível) e a bolha **20 natural**/**1 natural**. Cor do card (`data-accent`): verde/vermelho do
+  desfecho com a CD visível; com a CD secreta, só o crítico pinta (verde no 20, vermelho no 1); senão, a cor do rigor — e só depois
+  que o dado para. No crítico, borda e fundo ganham o destaque animado sem fim da rolagem flutuante (`CriticalHighlight`), também
+  nos cards antigos.
+- **Regra do d20:** 20 natural no d20 mantido é sempre sucesso e 1 natural sempre falha, qualquer que seja a CD
+  (`checkSucceeded(total, cd, d20)` em `check-modifier.ts`, usado no DTO da mesa e na linha "resultado dos testes" do narrador).
+- Faixa: "o Maddox pediu um teste para você" (com "e aguarda …" se houver outros) ou "aguardando o teste de …"; o campo de texto
+  fica bloqueado com o motivo; o Maddox não aparece "narrando" enquanto espera.
+- **Minha ficha**: botão no cabeçalho da mesa, só com ficha (`me.sheet`, só a minha chega ao DTO). Abre a janela `maddox-sheet`
+  (`GlassWindow` do `WindowProvider`) com o `SheetForm` editável (auto-save e tempo real da própria ficha) e "Abrir em nova aba".
+- **NPCs conhecidos**: card abaixo de "Na mesa" com nome e foto (ou iniciais) dos NPCs com `visibility: "players"`. Os personagens
+  dos outros já aparecem com nome e retrato em "Na mesa"; a ficha deles não é exposta.
+
+**Painel de dados.** O `DiceRollerPanel` ganhou `rollRequest` (quem faz a rolagem oficial; padrão `requestDiceRoll`),
+`rollButtonLabel` (padrão "JOGAR") e `hideRollButton` (só repete um resultado externo). Ver `dice-roller.md`.
+
+### Atributos na entrevista de personagem (Maddox 5)
+
+Escopo acrescentado à DND-16 depois da prévia: na entrevista, o Maddox pedia ao jogador que rolasse 4d6 "por fora" e digitasse os
+números (improviso do modelo — a entrevista não tinha ferramenta de dados e a consolidação gravava os atributos extraídos pela IA).
+Agora, nos graus com ficha (Equilibrado, Rigoroso e Fiel ao D&D), os seis atributos só entram pelo **card de atributos**. Narrativo e
+Flexível seguem sem atributos.
+
+Código: `interview-scores.ts` (PURO: validação por método, sexta = 72 − soma, bônus, final = base + bônus, `scoresLine`),
+`server/interview-tools.ts` (ferramentas, rascunho em memória, situação para o prompt), `server/interview-scores-service.ts` (rolar,
+reiniciar, enviar), `components/interviews/AbilityScoresCard.tsx`. As regras dos métodos ficam em
+`src/features/character-sheets/utils/ability-score-rules.ts` (sem "use client", importável pelo servidor) e são reexportadas por
+`assisted-creation.ts`; o `PointBuyControls` saiu do modal de criação assistida para
+`src/features/character-sheets/components/point-buy-controls.tsx` (o modal e o card usam o mesmo).
+
+- **Métodos.** Conjunto padrão (15, 14, 13, 12, 10, 8, um por atributo); compra de pontos (27 pontos, 8–15, tabela da ficha);
+  rolagem: **cinco 4d6 descartando o menor + a sexta = 72 − soma** (a regra da ficha, `calculateFinalDiceScore`).
+- **Quem rola.** O jogador, no `DiceRollerPanel` do card (4d6, "Rolar 4d6"), mas cada rolagem acontece **no servidor da entrevista**
+  (`POST …/ability-scores/roll`, corpo `{}`): `rollGeneralDice` com as regras de dado do jogador, gravada em
+  `maddox_interviews.abilityRolls` (`rolls[{ dice, score, rollId }]`, `sixth`, `invalid`) por troca condicional (dois cliques = uma
+  rolagem; o outro 409 `ROLL_CONFLICT`). O envio só aceita exatamente as pontuações roladas. "Reiniciar" (`…/reset`) só existe com a
+  sexta fora de 3–18; rolar tudo de novo é decisão do Maddox (`novaRolagem`). As rolagens pertencem à entrevista: reabrir o card
+  mantém os mesmos dados.
+- **Card** (`messages[].abilityScores`, numa fala do Maddox): `pending` → `submitted` (travado) → `superseded` quando o Maddox reabre
+  (o novo card vem com `prefill` — método e valores do último envio — e herda o bônus). O final é sempre derivado (base + bônus).
+- **Ferramentas do entrevistador** (só entrevista de personagem nos graus com ficha; valem só enquanto a geração que as recebeu
+  roda — a trava `generating.token`):
+  - `request_ability_scores { motivo?, novaRolagem? }` abre/reabre o card. O pedido fica num rascunho em memória
+    (`globalThis.__maddoxInterviewDrafts`, pela trava) e só vira card quando a fala é gravada; falha da geração descarta. Card já
+    aberto → `{ alreadyOpen: true }`.
+  - `get_ability_scores {}` (leitura): situação, método, base, bônus, final e rolagens.
+  - `apply_ability_bonus { antecedente, bonus: { "Destreza": 2, … } }`: exige card enviado; exatamente 3 pontos, +1/+2 por atributo,
+    só nos `suggestedAttributes` da origem do catálogo (`findBackground`: origens **ativas**, por nome ou nome original, ignorando
+    acento, caixa e espaços; grava o nome oficial). **Origem fora do catálogo:** em **Rigoroso e Fiel ao D&D**
+    (`MADDOX_CATALOG_ORIGIN_RIGORS`) é **recusada sem gravar**, com a lista das origens disponíveis; no **Equilibrado** é aceita como
+    origem própria, com os pontos livres (`catalogo: false` e a nota no retorno). **Só sugerido** (não bloqueia a síntese) e **sem teto
+    de 20**.
+  - Consulta ao catálogo (só leitura): `search_catalog` e `get_catalog_entity` (ver "Catálogo do DnDicas" abaixo).
+- **Como chegam ao modelo.** Provedores diretos: `streamText` da AI SDK com as ferramentas (`MADDOX_INTERVIEW_MAX_STEPS`), no mesmo
+  formato de eventos do `streamAi` (o `src/lib/ai/stream.ts` não mudou). OpenCode: **o mesmo MCP do narrador** (`dndicas-maddox`,
+  `/api/maddox/mcp`) registra também as três ferramentas, com um **token de entrevista** próprio
+  (`createMaddoxInterviewToken`, HMAC no domínio `maddox-interview:` com `{ interviewId, lockToken }`): o token do narrador não serve na
+  entrevista e vice-versa. `prepareTurn` garante o MCP (`ensureMaddoxMcp`) antes de gravar qualquer coisa.
+- **Envio** (`POST …/interviews/character/ability-scores`, `{ method, scores }` estrito → NDJSON da fala seguinte): valida o
+  método, pega a trava (409 `INTERVIEW_BUSY`), prepara o turno **antes de gravar** (falha de preparação deixa card e conversa
+  intactos) e grava o card `submitted` + uma **fala interna** (`internal: true`, "[Sistema] O jogador enviou os atributos…"), que vai
+  ao modelo e à transcrição ("SISTEMA:") mas nunca ao DTO. Uma proposta pendente é desfeita. Auditoria `CampanhaMaddox` com método
+  e base. Falha do provedor: "Tentar de novo" (a rota de sempre) gera a fala seguinte com o card já enviado.
+- **Prompt.** A seção "Atributos do personagem" troca o antigo "combine … os valores dos seis atributos": card como único caminho,
+  nunca pedir números digitados nem rolar/inventar, os três métodos, bônus sugerido e `get_ability_scores` antes da síntese. Cada
+  turno leva "Atributos: situação atual" e, no OpenCode, o servidor MCP e o token (`turno`).
+- **Catálogo do DnDicas** (`server/catalog-tools.ts`, mesmo serviço do `search_catalog` do Agente Opex e do MCP público, só
+  entidades ativas). O entrevistador (só na entrevista de personagem dos graus com ficha) e o narrador (todos os graus) recebem:
+  - `search_catalog { consulta?, tipos?: CatalogEntityType[] (até 5), limite?: 1–30 (padrão 15) }` → `{ itens: [{ id, tipo, nome,
+    nomeOriginal, fonte, resumo }] }`, resumo em texto puro de até 300 caracteres. Só `tipos` lista o tipo (ex.: todas as origens);
+    nada encontrado traz a nota "não cite isso como entidade do catálogo". Sem consulta nem tipo: erro.
+  - `get_catalog_entity { tipo, id }` → entidade compacta (`compactCatalogEntity`: sem HTML, sem `_id`/imagem/status/datas, listas até 40,
+    textos até 4.000 caracteres com `truncated`); não encontrada ou inativa: erro que manda buscar o id.
+  - AI SDK: entram junto das ferramentas de cada um (`buildInterviewAiTools`, `buildMaddoxAiTools`). MCP `dndicas-maddox`: registradas
+    **uma vez**, aceitando o token do narrador (job ativo) **ou** o da entrevista (`generating.token` igual ao do token); as ferramentas que
+    gravam continuam só com o token do próprio tipo.
+  - Prompts: a entrevista ganha "## Catálogo do DnDicas" antes dos atributos (consultar antes de sugerir raça, classe, subclasse,
+    origem, talento ou magia; nunca nomes de memória ou de outras edições; Rigoroso e Fiel exigem raça, classe, subclasse e origem do
+    catálogo, Equilibrado prefere o catálogo); o narrador ganha a mesma seção (consultar antes de afirmar mecânica; nos graus sem testes é
+    referência). Tetos de passos: `MADDOX_INTERVIEW_MAX_STEPS = 14` (subiu com as ferramentas da ficha), `MADDOX_NARRATOR_MAX_STEPS = 16`.
+- **Consolidação.** Vale o **último envio** (`submittedAbilityCard`: o card mais novo com valores, enviado ou já `superseded` — um card
+  reaberto e não reenviado não apaga o envio anterior nem o bônus). Card aberto e nunca enviado: concluir responde 409
+  `ABILITY_SCORES_PENDING` ("Envie os atributos pelo card antes de concluir a entrevista.") sem consolidar. Em Rigoroso e Fiel, um bônus
+  de origem fora do catálogo responde 409 `BACKGROUND_NOT_IN_CATALOG` ("O antecedente do bônus (X) não está no catálogo. Peça ao Maddox
+  para escolher uma origem do catálogo e reaplicar o bônus.") sem consolidar nem pegar a trava. Com envio, a ficha recebe
+  os valores **finais do card** (base + bônus) e ignora os atributos extraídos
+  pela IA (as instruções avisam); o resultado guarda `abilityScores { method, base, bonus, final }` e o `build`. Nos graus com ficha a
+  ficha inteira sai de `sheet-builder.ts` (veja "Ficha completa pela entrevista").
+- **Tela.** O card aparece abaixo da fala que o abriu: `GlassSelector` do método, grade do conjunto padrão (sem repetir valores),
+  `PointBuyControls` com "N/27", painel 4d6 com as pontuações (a nova só aparece quando o dado para) e a sexta calculada,
+  distribuição por `GlassSelector`, prévia base/bônus/final e "Enviar atributos" com confirmação ("Depois de enviar, só o Maddox
+  pode reabrir o card."). Desabilitado enquanto o Maddox responde. Enviado: somente leitura (método, base, bônus, final); substituído:
+  "Reaberto abaixo". O campo de mensagem continua livre com o card aberto.
+
+API (`maddox.play`, só o próprio membro; `scenario` = 404, grau sem ficha = 409 `ABILITIES_DISABLED`, sem card pendente = 409
+`NO_PENDING_SCORES`):
+
+- `POST /api/maddox/campaigns/[id]/interviews/character/ability-scores` — `{ method, scores }` → NDJSON.
+- `POST …/ability-scores/roll` — `{}` → `{ roll, interview }` (409 `ROLLS_DONE`, `ROLLS_INVALID`, `ROLL_CONFLICT`).
+- `POST …/ability-scores/reset` — `{}` → `{ interview }` (409 `ROLLS_NOT_RESETTABLE`).
+
+### Nível inicial da mesa (Maddox 5)
+
+- **Definido na entrevista de cenário**, com quem criou a campanha; a pergunta muda por grau (`LEVEL_QUESTION` em
+  `interview-prompt.ts`): Fiel pergunta direto "qual o nível inicial (1 a 20)?" e cita a recomendação do D&D 2024 (1 para
+  iniciantes, 3 para quem conhece); Rigoroso pergunta o número sugerindo 1 ou 3; Equilibrado oferece estágios na ficção do cenário
+  com o número de cada um; Flexível e Narrativo perguntam o **estágio de experiência sem número**, adaptado ao cenário ("acabou de
+  se tornar aventureiro" na fantasia; "caçador recém-iniciado" num cenário como Supernatural — nunca "aventureiro" fora desse tipo).
+- **Campanha:** `startingLevel` (1–20 ou `null`, graus com ficha) e `startingStage` (texto do modelo gravado inteiro, sem corte, graus narrativos), gravados pela
+  consolidação do cenário (`scenarioConsolidationSchema`: fora de 1–20 vira `null` sem invalidar o resto). DTO da campanha:
+  `startingLevel`, `startingStage`; chip "Nível inicial N" no card e no lobby (`StartingLevelChip`, só o número). O estágio narrativo
+  (texto do modelo, pode ser longo) aparece inteiro numa linha própria com quebra ("Estágio inicial: …", `StartingStageLine`), nunca com
+  reticências.
+- **Entrevista de personagem:** com nível da mesa, o Maddox só confirma (pedir outro nível = "o nível é da mesa"); sem nível
+  (campanhas antigas), pergunta ao jogador pela regra do grau e grava em `build.level`. Nos graus narrativos o estágio entra na seção
+  "Capacidades e limitações" do perfil.
+- **Edição:** `PATCH /api/maddox/campaigns/[id]` aceita `startingLevel` (dono; só graus com ficha, senão 409 `LEVEL_DISABLED`; só em
+  `lobby`/`interview`, senão 409 `LEVEL_LOCKED`; auditado). O diálogo de edição mostra `StartingLevelField` (`Select` glass de
+  `@/core/ui/select`, níveis 1–20) avisando que fichas já criadas mantêm o nível delas.
+
+### Ficha completa pela entrevista (Maddox 5)
+
+Nos graus com ficha, a entrevista de personagem monta a ficha D&D **inteira** no servidor.
+
+- **Escolhas (`build` na entrevista, `server/character-build.ts`):** `update_character_build` (gravação parcial; tudo ou nada: com um
+  erro, nada é gravado e a mensagem traz o motivo e as opções) e `get_character_build` (só leitura). Ambas devolvem o resumo, as
+  regras da classe no nível e `faltando`. Campos: `nivel` (só sem nível da mesa), `raca`, `classe`, `subclasse`, `origem` (ids do
+  `search_catalog` ou nomes, comparação sem acento/caixa, só ativos), `periciasClasse` (exatamente `skillCount`, de
+  `availableSkills`, sem repetir as da origem), `especialista` (2 por traço "Especialista" até o nível, entre as proficientes),
+  `estiloLuta` (talento "Estilo de Luta", só com o traço), `talentos [{ nivel, talento, atributos? }]` (um por nível de talento da
+  classe: traços "Melhoria de Atributo", "Aumento de Atributo", "Aumento no Valor de Habilidade", "Aperfeiçoamento da pontuação de
+  atributo", "Novo Talento"; "Dádiva Épica" exige a categoria Dádiva Épica; Aumento de Atributo = +2 ou +1/+1 com teto 20, Dádiva
+  até 30; talento com `attributeBonuses` = +1 num dos listados; nível 1 aceita um talento de Origem extra), `truques`/`magias` (pela
+  tabela de progressão da classe ou da subclasse que conjura: quantidade, círculo máximo com espaço e lista de magias),
+  `equipamento [{ item, quantidade, equipado }]` (Fiel/Rigoroso: só itens do catálogo; uma armadura base e um escudo equipados),
+  `moedas { po, pp, pc, pe, pl }`, `idiomas`, `ferramentas`. Trocar a classe apaga as escolhas dependentes (aviso). Equilibrado aceita
+  raça, classe, subclasse, origem, talento e item **próprios** (texto, com aviso) e não cobra o que depende do catálogo. Origem
+  diferente da do bônus de atributos gera aviso para reaplicar o bônus. Regras puras em `character-build-rules.ts`.
+- **Card de PV (`server/interview-hit-points.ts`, `HitPointsCard`):** acima do nível 1, `request_hit_points` abre o card (rascunho até a
+  fala ser gravada; reaberto = anterior `superseded`). Como o assistente de subir de nível da ficha: em cada nível do 2 ao N, "Média"
+  (`averageHpGain` = ⌈lados/2⌉ + CON, mínimo 1) ou "Rolar vida" (1 dado de vida + CON pelo `rollGeneralDice` com as regras de dado do
+  jogador, um por nível, gravado em `hitPointRolls` — só o dado; o CON final entra no total). Na tela, o nível em rolagem mantém o
+  painel de dados montado (e o mesmo preset) até o fim da animação (`onRollResolved`), mesmo que a rota já tenha devolvido a linha com
+  o dado; só então o ganho aparece e o painel passa ao próximo nível marcado. Nível 1 automático
+  (`getLevelOneHpMax`). Trocar classe ou nível apaga as rolagens. Rotas (`maddox.play`, só o dono da entrevista, `scenario` = 404, grau
+  sem ficha = 409 `SHEET_DISABLED`, sem card = 409 `NO_PENDING_HIT_POINTS`): `POST …/interviews/character/hit-points/roll { nivel }`
+  → `{ roll, interview }` (409 `HIT_POINT_ROLLED`, `ROLL_CONFLICT`) e `POST …/hit-points { escolhas: { "2": "media" | "rolagem" } }` →
+  NDJSON (400 `INVALID_HIT_POINTS` se faltar nível ou "rolagem" sem dado rolado).
+- **Prompt:** seção "## Construção da ficha" (ordem: nível → raça → classe → origem → atributos → bônus → perícias → escolhas de nível →
+  magias → equipamento e moedas pelo D&D 2024 → idiomas e ferramentas; consultar o catálogo antes de sugerir; gravar ao confirmar;
+  não inventar PV, proficiências, deslocamento, tamanho, traços nem espaços; síntese só com `faltando` vazio) e "Ficha: situação
+  atual" a cada turno. MCP: as três ferramentas novas entram no mesmo `dndicas-maddox` com o token da entrevista.
+- **Conclusão:** antes de consolidar e sem pegar a trava — escolhas faltando = 409 `CHARACTER_BUILD_INCOMPLETE` ("Faltam escolhas na
+  ficha: …"); acima do nível 1 sem card de PV válido para o nível e o dado de vida = 409 `HIT_POINTS_PENDING`.
+- **Montagem (`server/sheet-builder.ts`):** campos de raça, classe, subclasse e origem como **HTML de menção** (o formato da criação
+  assistida) com `raceRef`, `classRef`, `subclassRef` (o `_id` da subclasse; a menção usa `subclass:{classe}:{sub}`) e `originRef`;
+  nível; atributos (card + bônus + talentos); tamanho e deslocamento da raça; dado de vida, PV máximo e atual; salvaguardas, armaduras
+  e armas da classe; perícias (origem + classe + Especialista); ferramentas; atributo de conjuração e espaços de magia; traços da
+  classe/subclasse e da raça até o nível (`classFeatures`, `speciesTraits`); talento da origem, estilo e talentos (`featuresNotes`);
+  cargas de traços, talentos e itens (`resourceCharges`); moedas; "Idiomas: …" em `notes`. Coleções: itens (menção, `catalogItemId`,
+  tipo, CA), um ataque por arma equipada (`buildWeaponAttackAutofill`), magias preparadas e o ataque dos truques com dano. As
+  coleções são apagadas e regravadas, então refazer não duplica. A ficha nova é ligada ao personagem logo ao ser criada.
+- **Descritivo (consolidação):** o JSON da síntese não pede mais raça/classe/origem/atributos; pede `appearance` (1–3 parágrafos),
+  `history` (2–5 parágrafos), `personalityTraits`, `ideals`, `bonds`, `flaws`, idade, altura, peso, olhos, pele e cabelo, em texto
+  simples. `textToSheetHtml` converte parágrafos e **negrito** e transforma citações `{{Tipo:Nome}}` em menções do catálogo; os campos
+  curtos saem sem a marcação (`stripCatalogMarkup`). Nenhum campo da ficha guarda `{{…}}`.
+
+API (`maddox.play`, usuário efetivo):
+
+- `POST /api/maddox/campaigns/[id]/game/checks/[checkId]/roll` — `{}` (estrito: dado ou modificador no corpo = 400) → `{ roll, state }`.
+- `PATCH /api/maddox/campaigns/[id]` e `POST /api/maddox/campaigns` aceitam `showCheckDc`.
+- `GET …/game`: `turn.awaitingChecks`, `turn.pendingChecks`, `showCheckDc`, `npcs`, `me.sheet` e `check` nas mensagens.
+
+Fora do escopo: dano, PV e recursos aplicados pelo Maddox na ficha, iniciativa e combate por botões (Maddox 7), imagens de NPC (Maddox 10).
+
 ## Testes
 
 `tests/backend/maddox/*` (configuração, roteiros, avatar, sessões, rotas, `campaigns.test.ts` com MongoDB em
 memória, `campaign-routes.test.ts`, `grant-maddox-play.test.ts`) e `tests/frontend/maddox/*`
 (`maddox-tab.test.tsx`, `maddox-campaigns.test.tsx`, `maddox-campaigns-realtime.test.tsx`; happy-dom).
+Maddox 5 (ficha): `interview-character-build.test.ts` (ponta a ponta com o catálogo real em memória: Fiel nível 3 com card de PV e a
+ficha campo a campo, 409 de escolhas e de PV, Mago com magias, refazer sem duplicar, Equilibrado com escolhas próprias, graus
+narrativos), `character-build-rules.test.ts`, `tests/frontend/character-sheets/sheet-rules.test.ts` e
+`tests/frontend/maddox/maddox-interview-hit-points.test.tsx`; fixture do catálogo em `tests/backend/maddox/helpers/sheet-catalog.ts`.
 Maddox 2: `interview-prompt.test.ts`, `interviews.test.ts` (MongoDB em memória, IA/JEV/OpenCode mockados),
 `interview-routes.test.ts`, `catalog-mentions.test.ts`, `catalog-markup.test.ts` e `tests/frontend/maddox/maddox-interview.test.tsx`.
 Maddox 3: `game.test.ts` (MongoDB em memória, presença mockada: 1/2/5 jogadores, "Não fazer nada", pergunta, entrada no
@@ -434,3 +706,22 @@ volta ao prompt; pergunta sem trocar de turno; falha do provedor), `master-tools
 `game.test.ts` (fila, streaming no barramento, pergunta em segundo plano, trava com geração ativa, `ACTION_INVALID` por rigor),
 `game-routes.test.ts` (stream), `settings.test.ts` (URL do MCP); na tela, `maddox-game.test.tsx` (ao vivo, falhas, foco),
 `maddox-game-stream.test.ts`, `maddox-interview.test.tsx` (foco) e `maddox-tab.test.tsx` (card do MCP).
+Maddox 5: `game-checks.test.ts` (**critério de aceite**: campanha Fiel ao D&D, o narrador real pede Furtividade para a jogadora, só
+ela recebe o pedido, a rolagem usa o motor com uma regra de dado e o modificador da ficha, o resultado volta na continuação e a
+consequência é narrada; rolagem dupla, outro jogador, não membro, dono no lugar, CD visível, duas rolagens na rodada, saída do
+jogador, falha da geração, teto de rodadas, campanha narrativa e o JEV "Pedir teste"), `check-modifier.test.ts`,
+`master-tools.test.ts` e `maddox-mcp.test.ts` (`request_check`), `narrator-prompt.test.ts` (regra dos testes, resumo da ficha,
+continuação), `game-routes.test.ts` (rota de rolagem), `campaigns.test.ts` (`showCheckDc`); na tela, `maddox-game.test.tsx` (card,
+espera, "Rolar no lugar", repetição da rolagem, CD, cancelado, "Minha ficha", NPCs e o teste estático dos controles),
+`maddox-game-stream.test.ts` (`check-rolled`), `maddox-campaigns.test.tsx` e `tests/frontend/dice-roller/dice-roller-panel.test.tsx`.
+Atributos na entrevista (Maddox 5): `interview-ability-scores.test.ts` (fluxo completo com o entrevistador real sobre um
+`streamText` roteirizado: card pedido, cinco rolagens no motor, envio, fala interna fora do DTO, bônus recusado/aplicado, consulta e a
+ficha com base + bônus; conjunto padrão/compra de pontos, reiniciar, rolagens simultâneas, trava, entrevistador indisponível,
+"Tentar de novo", geração que falha, card já aberto, reabrir com `prefill`, `novaRolagem`, grau narrativo e cenário),
+`interview-scores.test.ts`, `interview-prompt.test.ts`, `interview-routes.test.ts` e `maddox-mcp.test.ts` (token de entrevista); na
+tela, `maddox-interview-ability-scores.test.tsx`.
+Catálogo: `catalog-tools.test.ts` (serviço real sobre o MongoDB em memória: lista por tipo sem inativas, acento, limite, resumo e
+detalhe compactos, erros), `interview-ability-scores.test.ts` ("origem do bônus e o catálogo": busca e bônus de origem do catálogo em
+Fiel, recusa em Fiel e Rigoroso com a lista, origem própria no Equilibrado, nome sem acento ou original, 409
+`BACKGROUND_NOT_IN_CATALOG` na conclusão), `game-checks.test.ts` (narrador consulta em Narrativo e Fiel sem gravar),
+`maddox-mcp.test.ts` (catálogo com token do narrador ou da entrevista) e os testes dos prompts.

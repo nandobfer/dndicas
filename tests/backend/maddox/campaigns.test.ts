@@ -208,6 +208,38 @@ describe("Campanhas Maddox — edição e personagem", () => {
         expect(await service.updateCampaign(campaign.id, { name: "Só o nome" }, ids.owner)).toMatchObject({ name: "Só o nome", rigor: "fiel-dnd" })
     })
 
+    it("CD dos testes (Maddox 5): secreta por padrão, escolhida na criação e editável pelo dono mesmo em andamento (auditado)", async () => {
+        expect(await service.createCampaign({ name: "Padrão", rigor: "fiel-dnd" }, ids.owner)).toMatchObject({ showCheckDc: false })
+        const campaign = await service.createCampaign({ name: "Às claras", rigor: "rigoroso", showCheckDc: true }, ids.owner)
+        expect(campaign.showCheckDc).toBe(true)
+        expect(recordAudit).toHaveBeenCalledWith(expect.objectContaining({ acao: "CRIAR", depois: expect.objectContaining({ showCheckDc: true }) }))
+        await service.joinByInvite(await tokenOf(campaign.id), ids.ana)
+        await expect(service.updateCampaign(campaign.id, { showCheckDc: false }, ids.ana)).rejects.toMatchObject({ status: 403 })
+        await MaddoxCampaignModel.updateOne({ _id: campaign.id }, { $set: { status: "active" } })
+        recordAudit.mockClear()
+        expect(await service.updateCampaign(campaign.id, { showCheckDc: false }, ids.owner)).toMatchObject({ showCheckDc: false })
+        expect(recordAudit).toHaveBeenCalledWith(expect.objectContaining({ acao: "ATUALIZAR", antes: expect.objectContaining({ showCheckDc: true }), depois: { showCheckDc: false } }))
+    })
+
+    it("nível inicial (Maddox 5): só nos graus com ficha, o dono muda antes de começar (auditado), e o detalhe mostra nível e estágio", async () => {
+        const campaign = await service.createCampaign({ name: "Mesa", rigor: "fiel-dnd" }, ids.owner)
+        expect(campaign).toMatchObject({ startingLevel: null, startingStage: "" })
+        await service.joinByInvite(await tokenOf(campaign.id), ids.ana)
+        await expect(service.updateCampaign(campaign.id, { startingLevel: 3 }, ids.ana)).rejects.toMatchObject({ status: 403 })
+        await MaddoxCampaignModel.updateOne({ _id: campaign.id }, { $set: { status: "interview" } })
+        expect(await service.updateCampaign(campaign.id, { startingLevel: 3 }, ids.owner)).toMatchObject({ startingLevel: 3 })
+        expect(recordAudit).toHaveBeenCalledWith(expect.objectContaining({ acao: "ATUALIZAR", antes: expect.objectContaining({ startingLevel: null }), depois: { startingLevel: 3 } }))
+        await MaddoxCampaignModel.updateOne({ _id: campaign.id }, { $set: { status: "active" } })
+        await expect(service.updateCampaign(campaign.id, { startingLevel: 5 }, ids.owner)).rejects.toMatchObject({ status: 409, code: "LEVEL_LOCKED", message: "O nível inicial só pode mudar antes de a campanha começar." })
+        // O mesmo valor não é mudança: não bloqueia outras edições.
+        expect(await service.updateCampaign(campaign.id, { startingLevel: 3, name: "Mesa 2" }, ids.owner)).toMatchObject({ name: "Mesa 2", startingLevel: 3 })
+
+        const narrative = await service.createCampaign({ name: "Contos", rigor: "narrativo" }, ids.owner)
+        await expect(service.updateCampaign(narrative.id, { startingLevel: 2 }, ids.owner)).rejects.toMatchObject({ status: 409, code: "LEVEL_DISABLED" })
+        await MaddoxCampaignModel.updateOne({ _id: narrative.id }, { $set: { startingStage: "caçadores recém-iniciados" } })
+        expect(await service.getCampaignDetail(narrative.id, ids.owner)).toMatchObject({ startingLevel: null, startingStage: "caçadores recém-iniciados" })
+    })
+
     it("cada jogador cria e edita o próprio esboço, com a entrevista pendente", async () => {
         const campaign = await service.createCampaign({ name: "Heróis", rigor: "equilibrado" }, ids.owner)
         await service.joinByInvite(await tokenOf(campaign.id), ids.ana)

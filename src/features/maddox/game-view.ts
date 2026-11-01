@@ -6,7 +6,7 @@ export const MADDOX_GAME_POLL_MS = 5000
 
 /** Regras de exibição da mesa (Maddox 3) — módulo PURO, sem React. */
 
-export type MaddoxSeatStatus = "declared" | "waiting" | "offline" | "next-turn" | "preparing" | "watching"
+export type MaddoxSeatStatus = "declared" | "waiting" | "offline" | "next-turn" | "preparing" | "watching" | "rolling"
 
 export const MADDOX_SEAT_LABELS: Record<MaddoxSeatStatus, string> = {
     declared: "Declarou",
@@ -15,6 +15,7 @@ export const MADDOX_SEAT_LABELS: Record<MaddoxSeatStatus, string> = {
     "next-turn": "Entra no próximo turno",
     preparing: "Preparando personagem",
     watching: "Na mesa",
+    rolling: "Rolando teste",
 }
 
 /**
@@ -24,6 +25,7 @@ export const MADDOX_SEAT_LABELS: Record<MaddoxSeatStatus, string> = {
  */
 export function seatStatus(participant: MaddoxGameParticipantDto, state: Pick<MaddoxGameStateDto, "status" | "turn">, presence: { available: boolean; online: ReadonlySet<string> }): MaddoxSeatStatus {
     if (!participant.ready) return "preparing"
+    if (state.status === "active" && state.turn.phase === "master" && state.turn.awaitingChecks && state.turn.pendingChecks.some((check) => check.memberId === participant.memberId)) return "rolling"
     if (state.status !== "active" || state.turn.phase !== "players") return "watching"
     if (!participant.eligible) return "next-turn"
     if (participant.declared) return "declared"
@@ -41,13 +43,25 @@ export function turnProgress(state: Pick<MaddoxGameStateDto, "participants">, pr
 export function composerBlockReason(state: Pick<MaddoxGameStateDto, "status" | "turn" | "me">): string | null {
     if (state.status !== "active") return "A campanha não está em andamento."
     if (!state.me.ready) return "Conclua a entrevista de personagem com o Maddox para entrar no jogo."
+    if (state.turn.phase === "master" && state.turn.awaitingChecks) {
+        return state.turn.pendingChecks.some((check) => check.memberId === state.me.memberId) ? "O Maddox pediu um teste para você: role os dados na conversa." : "O Maddox aguarda os testes pedidos. Aguarde o turno dos jogadores."
+    }
     if (state.turn.phase === "master") return "O Maddox está narrando. Aguarde o turno dos jogadores."
     if (!state.me.eligible) return "Você entra no jogo a partir do próximo turno."
     return null
 }
 
-/** Faixa do turno do mestre: narrando ou, depois de uma falha, a espera da nova tentativa. */
-export function masterBannerText(state: Pick<MaddoxGameStateDto, "turn">): string {
+/** Nomes em lista pt-BR ("Lyra", "Lyra e Doran", "Lyra, Doran e Mira"). */
+const listNames = (names: readonly string[]) => (names.length <= 1 ? (names[0] ?? "") : `${names.slice(0, -1).join(", ")} e ${names[names.length - 1]}`)
+
+/** Faixa do turno do mestre: narrando, esperando os testes (Maddox 5) ou, depois de uma falha, a espera da nova tentativa. */
+export function masterBannerText(state: Pick<MaddoxGameStateDto, "turn"> & { me?: Pick<MaddoxGameStateDto["me"], "memberId"> }): string {
+    if (state.turn.awaitingChecks) {
+        const mine = state.turn.pendingChecks.some((check) => check.memberId === state.me?.memberId)
+        const others = state.turn.pendingChecks.filter((check) => check.memberId !== state.me?.memberId).map((check) => check.characterName)
+        if (mine) return `${MADDOX_TURN_PHASE_LABELS.master} — o Maddox pediu um teste para você${others.length ? ` (e aguarda ${listNames(others)})` : ""}`
+        return `${MADDOX_TURN_PHASE_LABELS.master} — aguardando o teste de ${listNames(others) || "um jogador"}`
+    }
     return state.turn.failed ? `${MADDOX_TURN_PHASE_LABELS.master} — o Maddox teve um problema; tentando de novo em instantes…` : `${MADDOX_TURN_PHASE_LABELS.master} — o Maddox está narrando…`
 }
 
@@ -67,5 +81,5 @@ export function visibleLiveGenerations(stream: { live: MaddoxLiveGenerationDto[]
  */
 export function gameRefetchInterval(state: Pick<MaddoxGameStateDto, "status" | "turn"> | undefined, realtime: boolean): number | false {
     if (!realtime) return MADDOX_GAME_POLL_MS
-    return state?.status === "active" && state.turn.phase === "master" && !state.turn.generating ? MADDOX_MASTER_RETRY_MS : false
+    return state?.status === "active" && state.turn.phase === "master" && !state.turn.generating && !state.turn.awaitingChecks ? MADDOX_MASTER_RETRY_MS : false
 }

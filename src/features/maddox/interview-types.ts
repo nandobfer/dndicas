@@ -1,6 +1,54 @@
-import type { MaddoxInterviewRunStatus, MaddoxScriptKind } from "./constants"
+import type { AttributeType } from "@/features/character-sheets/types/character-sheet.types"
+import type { DiceRollResponse } from "@/features/dice-roller/types"
+import type { MaddoxAbilityMethod, MaddoxInterviewRunStatus, MaddoxScriptKind } from "./constants"
 
 /** DTOs das entrevistas do Maddox (Maddox 2). */
+
+export type MaddoxAbilityScoresValues = Record<AttributeType, number>
+
+/** Card de atributos (Maddox 5) numa fala do Maddox; `final` = base + bônus (derivado). */
+export interface MaddoxAbilityScoresDto {
+    status: "pending" | "submitted" | "superseded"
+    method: MaddoxAbilityMethod | null
+    base: MaddoxAbilityScoresValues | null
+    prefill: { method: MaddoxAbilityMethod; base: MaddoxAbilityScoresValues } | null
+    bonus: { background: string; parts: Partial<Record<AttributeType, number>> } | null
+    final: MaddoxAbilityScoresValues | null
+    reason: string | null
+    submittedAt: string | null
+}
+
+/** Rolagens do método de rolagem (cinco 4d6, a sexta = 72 − soma). */
+export interface MaddoxAbilityRollsDto {
+    rolls: { dice: number[]; score: number }[]
+    sixth: number | null
+    invalid: boolean
+}
+
+/** Linha do card de PV: ganho pela média e pelo dado rolado (com CON). */
+export interface MaddoxHitPointLevelDto {
+    level: number
+    average: number
+    die: number | null
+    rolled: number | null
+}
+
+/** Card de pontos de vida por nível (Maddox 5), como o assistente de subir de nível da ficha. */
+export interface MaddoxHitPointsDto {
+    status: "pending" | "submitted" | "superseded"
+    level: number
+    hitDie: string
+    /** Modificador de Constituição final (card de atributos + talentos). */
+    constitutionModifier: number
+    /** PV do nível 1 (máximo do dado + CON). */
+    levelOne: number
+    rows: MaddoxHitPointLevelDto[]
+    choices: Record<string, "average" | "roll"> | null
+    /** PV máximo com as escolhas enviadas (`null` = card ainda não enviado). */
+    total: number | null
+    reason: string | null
+    submittedAt: string | null
+}
 
 export interface MaddoxInterviewMessageDto {
     id: string
@@ -8,6 +56,8 @@ export interface MaddoxInterviewMessageDto {
     content: string
     proposal: boolean
     error: string | null
+    abilityScores?: MaddoxAbilityScoresDto | null
+    hitPoints?: MaddoxHitPointsDto | null
     createdAt: string
 }
 
@@ -20,7 +70,20 @@ export interface MaddoxInterviewDto {
     messages: MaddoxInterviewMessageDto[]
     /** Há uma resposta do Maddox sendo gerada agora. */
     generating: boolean
+    abilityRolls?: MaddoxAbilityRollsDto | null
     completedAt: string | null
+}
+
+/** Resposta da rolagem do dado de vida de um nível. */
+export interface MaddoxHitPointRollResultDto {
+    roll: DiceRollResponse
+    interview: MaddoxInterviewDto
+}
+
+/** Resposta de uma rolagem de 4d6 dos atributos. */
+export interface MaddoxAbilityRollResultDto {
+    roll: DiceRollResponse
+    interview: MaddoxInterviewDto
 }
 
 /** Estado da tela antes de começar: a entrevista ainda não existe. */

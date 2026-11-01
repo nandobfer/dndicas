@@ -130,9 +130,9 @@ export const MADDOX_GAME_CHANGED_EVENT = "maddox.game.changed"
 
 /**
  * Mensagens da mesa: narração do mestre, declaração do jogador, "não fazer nada" (`pass`), pergunta ao
- * mestre (não encerra o turno) e a resposta dele.
+ * mestre (não encerra o turno), a resposta dele e o teste pedido pelo Maddox (`check`, Maddox 5).
  */
-export const MADDOX_GAME_MESSAGE_KINDS = ["narration", "declaration", "pass", "question", "answer"] as const
+export const MADDOX_GAME_MESSAGE_KINDS = ["narration", "declaration", "pass", "question", "answer", "check"] as const
 export type MaddoxGameMessageKind = (typeof MADDOX_GAME_MESSAGE_KINDS)[number]
 
 /** O que o jogador envia no próprio turno. */
@@ -185,7 +185,7 @@ export const MADDOX_TOOL_TAGS_MAX = 12
 /** Tamanho orientado no prompt para cada anotação consolidada. */
 export const MADDOX_TOOL_TEXT_GUIDE = 3_000
 /** Passos do laço de ferramentas por geração do narrador. */
-export const MADDOX_NARRATOR_MAX_STEPS = 12
+export const MADDOX_NARRATOR_MAX_STEPS = 16
 /** Transcrição recente enviada ao narrador (o estado gravado cobre o que fica de fora). */
 export const MADDOX_NARRATOR_HISTORY_CHARS = 40_000
 /** Itens de cada lista no índice do estado entregue ao narrador. */
@@ -203,6 +203,29 @@ export const MADDOX_TURN_TOKEN_TTL_MS = 20 * 60 * 1000
 
 /** Resposta gravada quando a geração da resposta a uma pergunta falha. */
 export const MADDOX_ANSWER_FAILED_MESSAGE = "O Maddox não conseguiu responder agora. Pergunte de novo."
+
+// ── Fichas e testes (Maddox 5) ─────────────────────────────────────────────────
+
+/** Graus em que o Maddox pede testes de atributo, perícia ou resistência (os mesmos que criam a ficha D&D). */
+export const MADDOX_CHECK_RIGORS: readonly MaddoxRigorLevel[] = ["equilibrado", "rigoroso", "fiel-dnd"]
+/** Rodadas de teste por turno do mestre (a última narração não pode pedir novos testes). */
+export const MADDOX_CHECK_ROUNDS_MAX = 3
+export const MADDOX_CHECK_KINDS = ["skill", "ability", "save"] as const
+export type MaddoxCheckKind = (typeof MADDOX_CHECK_KINDS)[number]
+export const MADDOX_CHECK_KIND_LABELS: Record<MaddoxCheckKind, string> = { skill: "Teste de perícia", ability: "Teste de atributo", save: "Teste de resistência" }
+export const MADDOX_CHECK_STATUSES = ["pending", "rolled", "cancelled"] as const
+export type MaddoxCheckStatus = (typeof MADDOX_CHECK_STATUSES)[number]
+export const MADDOX_CHECK_MODES = ["normal", "advantage", "disadvantage"] as const
+export type MaddoxCheckMode = (typeof MADDOX_CHECK_MODES)[number]
+export const MADDOX_CHECK_MODE_LABELS: Record<MaddoxCheckMode, string> = { normal: "Normal", advantage: "Vantagem", disadvantage: "Desvantagem" }
+export const MADDOX_CHECK_DC_MIN = 1
+export const MADDOX_CHECK_DC_MAX = 30
+/** Tamanho orientado do motivo público do teste (só orientação: o corte é o teto de proteção `MADDOX_TOOL_TEXT_MAX`). */
+export const MADDOX_CHECK_REASON_GUIDE = 200
+/** Consulta do JEV "Pedir teste" (orientação ao narrador): passou disso, a orientação é ignorada. */
+export const MADDOX_CHECK_HINT_TIMEOUT_MS = 20_000
+/** Tempo (ms) que o dado do teste fica no card depois de parar, antes de sumir com animação. */
+export const MADDOX_CHECK_DIE_HIDE_MS = 1_400
 
 // ── Entrevistas ───────────────────────────────────────────────────────────────
 
@@ -398,6 +421,49 @@ export const MADDOX_JEV_MODEL = "jev-latest"
 
 /** Rigores em que a entrevista de personagem também cria a ficha D&D (`CharacterSheet`). */
 export const MADDOX_SHEET_RIGORS: readonly MaddoxRigorLevel[] = ["equilibrado", "rigoroso", "fiel-dnd"]
+
+/** Atributos na entrevista de personagem (Maddox 5): métodos aceitos pelo card. */
+export const MADDOX_ABILITY_METHODS = ["standard", "point-buy", "roll"] as const
+export type MaddoxAbilityMethod = (typeof MADDOX_ABILITY_METHODS)[number]
+export const MADDOX_ABILITY_METHOD_LABELS: Record<MaddoxAbilityMethod, string> = { standard: "Conjunto padrão", "point-buy": "Compra de pontos", roll: "Rolagem" }
+/** Rolagens de 4d6 do método de rolagem; a sexta pontuação é 72 − a soma delas. */
+export const MADDOX_ABILITY_ROLLS = 5
+export const MADDOX_ABILITY_ROLL_TOTAL = 72
+/** Bônus do antecedente: pontos a distribuir e o máximo por atributo. */
+export const MADDOX_ABILITY_BONUS_POINTS = 3
+export const MADDOX_ABILITY_BONUS_MAX = 2
+/** Passos do laço de ferramentas do entrevistador (provedores diretos). */
+export const MADDOX_INTERVIEW_MAX_STEPS = 14
+/** Graus em que a origem do bônus de atributos precisa existir no catálogo (Equilibrado aceita origem própria). */
+export const MADDOX_CATALOG_ORIGIN_RIGORS: readonly MaddoxRigorLevel[] = ["rigoroso", "fiel-dnd"]
+
+/** Consulta ao catálogo do DnDicas (entrevistador e narrador, só leitura). */
+export const MADDOX_CATALOG_TOOL_NAMES = { search: "search_catalog", get: "get_catalog_entity" } as const
+export const MADDOX_CATALOG_SEARCH_LIMIT_MAX = 30
+export const MADDOX_CATALOG_SEARCH_LIMIT_DEFAULT = 15
+/** Resumo de cada item da busca (texto puro). */
+export const MADDOX_CATALOG_SUMMARY_MAX = 300
+/** Cada texto do detalhe da entidade (texto puro); acima disso sai cortado com `truncated`. */
+export const MADDOX_CATALOG_TEXT_MAX = 4000
+
+export const MADDOX_INTERVIEW_TOOL_NAMES = {
+    request: "request_ability_scores",
+    get: "get_ability_scores",
+    bonus: "apply_ability_bonus",
+    build: "update_character_build",
+    getBuild: "get_character_build",
+    hitPoints: "request_hit_points",
+} as const
+
+/** Nível inicial da mesa (graus com ficha) e estágio de experiência (graus narrativos). */
+export const MADDOX_LEVEL_MIN = 1
+export const MADDOX_LEVEL_MAX = 20
+/** Itens, idiomas e ferramentas por ficha montada na entrevista. */
+export const MADDOX_BUILD_EQUIPMENT_MAX = 40
+export const MADDOX_BUILD_LIST_MAX = 12
+/** Teto do Aumento de Atributo por talento (Dádiva Épica vai até 30). */
+export const MADDOX_FEAT_ATTRIBUTE_CAP = 20
+export const MADDOX_EPIC_FEAT_ATTRIBUTE_CAP = 30
 
 /** Seções do cenário consolidado (como o `setting.md` do roleplay). */
 export const MADDOX_SETTING_SECTIONS = [

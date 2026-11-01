@@ -57,3 +57,21 @@ A rota `/sheets` é protegida por guard server-side usando `getCurrentUserFromDb
 
 ### Métricas de uso no dashboard
 O dashboard usa `GET /api/stats/entity-usage?entityType=...` para exibir uso real de entidades em vez de crescimento temporal nos cards do catálogo. A rota deriva uso em fichas a partir de `classRef`, `raceRef`, `originRef`, `catalogSpellId`, `catalogFeatId`, `catalogTraitId`, `catalogItemId` e `resourceCharges.source.entityType`, retornando `{ active, usage }` para preservar o contrato visual do `EntityCard`.
+
+## Regras dos métodos de atributos
+
+`src/features/character-sheets/utils/ability-score-rules.ts` (módulo puro, sem "use client") concentra o conjunto padrão
+(15, 14, 13, 12, 10, 8), a compra de pontos (27 pontos, 8–15, `POINT_BUY_COSTS`) e a rolagem (4d6 descartando o menor; a sexta
+pontuação é 72 − a soma das cinco). `assisted-creation.ts` reexporta essas funções para a criação assistida, e a entrevista de
+personagem do Maddox as usa no servidor. O `PointBuyControls` (`components/point-buy-controls.tsx`) é compartilhado pelo modal de
+criação assistida e pelo card de atributos do Maddox.
+
+## Regras puras da ficha (`utils/sheet-rules.ts`)
+
+Módulo sem DOM e sem "use client", usado pela ficha no navegador e pelo servidor (a ficha montada pela entrevista do Maddox):
+menções (`buildMentionHtml`, `parseMentionsFromHtml` — mesmo resultado do `extractMentionsFromHtml` com DOMParser —,
+`collectTraitMentionsUpTo`), `mapSpellSlotsForLevel`, `mapHitDiceToSheetHitDice`, `mapCatalogAttributeToSheetAttribute`,
+`getLevelOneHpMax`, `averageHpGain` (média do assistente de subir de nível: ⌈lados/2⌉ + CON, mínimo 1), `rolledHpGain`,
+`resolveCatalogItemType`, `buildWeaponAttackAutofill`, `buildSpellAttackAutofill` e as cargas (`buildBoundResourceCharge`,
+`resolveChargesTotal`). `mention-sync.ts`, `attack-autofill.ts`, `resource-charges.ts`, o hook `use-sheet-mention-sync.ts` e o
+cabeçalho (subir de nível) reexportam/usam daqui, para a regra existir em um lugar só.

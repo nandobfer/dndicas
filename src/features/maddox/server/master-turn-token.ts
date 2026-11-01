@@ -46,3 +46,38 @@ export function verifyMaddoxTurnToken(token: string | null | undefined, now = Da
         return null
     }
 }
+
+/**
+ * Token de turno da ENTREVISTA (Maddox 5): mesmo MCP do Maddox, domínio de assinatura próprio — um token do narrador
+ * não serve nas ferramentas da entrevista, e vice-versa. O payload leva a entrevista e a trava da geração; a rota
+ * exige ainda que essa trava (`generating.token`) continue gravada na entrevista.
+ */
+export interface MaddoxInterviewTokenPayload {
+    interviewId: string
+    lockToken: string
+    exp: number
+}
+
+const signInterview = (payload: string) => createHmac("sha256", signingKey()).update(`maddox-interview:${payload}`).digest("base64url")
+
+export function createMaddoxInterviewToken(input: Omit<MaddoxInterviewTokenPayload, "exp">, now = Date.now()): string {
+    const payload = Buffer.from(JSON.stringify({ ...input, exp: now + MADDOX_TURN_TOKEN_TTL_MS } satisfies MaddoxInterviewTokenPayload)).toString("base64url")
+    return `${payload}.${signInterview(payload)}`
+}
+
+export function verifyMaddoxInterviewToken(token: string | null | undefined, now = Date.now()): MaddoxInterviewTokenPayload | null {
+    if (!token || typeof token !== "string") return null
+    const [payload, signature] = token.trim().split(".")
+    if (!payload || !signature) return null
+    const expected = Buffer.from(signInterview(payload))
+    const received = Buffer.from(signature)
+    if (expected.length !== received.length || !timingSafeEqual(expected, received)) return null
+    try {
+        const parsed = JSON.parse(Buffer.from(payload, "base64url").toString("utf8")) as Partial<MaddoxInterviewTokenPayload>
+        if (typeof parsed.interviewId !== "string" || typeof parsed.lockToken !== "string" || typeof parsed.exp !== "number") return null
+        if (parsed.exp < now) return null
+        return parsed as MaddoxInterviewTokenPayload
+    } catch {
+        return null
+    }
+}

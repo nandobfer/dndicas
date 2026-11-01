@@ -15,6 +15,7 @@ import { RacePreview } from "@/features/races/components/race-preview"
 import { BackgroundPreview } from "@/features/backgrounds/components/background-preview"
 import { ClassPreview } from "@/features/classes/components/class-preview"
 import { DiceRollerPanel } from "@/features/dice-roller/components/dice-roller-panel"
+import { PointBuyControls } from "@/features/character-sheets/components/point-buy-controls"
 import { RaceFilters } from "@/features/races/components/race-filters"
 import { BackgroundFilters } from "@/features/backgrounds/components/background-filters"
 import { ClassesFilters } from "@/features/classes/components/classes-filters"
@@ -33,7 +34,6 @@ import {
     ASSISTED_ATTRIBUTE_KEYS,
     ASSISTED_SKILLS,
     CATALOG_TO_SHEET_ATTRIBUTE,
-    POINT_BUY_COSTS,
     STANDARD_ARRAY_VALUES,
     applyBackgroundToSheet,
     applyClassToSheet,
@@ -43,7 +43,6 @@ import {
     calculateFinalDiceScore,
     createEmptySkills,
     createTemporaryAssistedSheet,
-    getPointBuyCost,
     isValidPointBuy,
     type AssistedAttributeKey,
 } from "@/features/character-sheets/utils/assisted-creation"
@@ -117,64 +116,6 @@ function buildTabIcon(isComplete: boolean) {
 
 function getAttributeColor(attr: AttributeType) {
     return attributeColors[ATTRIBUTE_COLOR_KEY[attr]]
-}
-
-function PointBuyControls({
-    scores,
-    onChange,
-}: {
-    scores: Record<AttributeType, number>
-    onChange: (attr: AttributeType, value: number) => void
-}) {
-    const spent = getPointBuyCost(scores)
-    const remaining = Math.max(0, 27 - spent)
-
-    return (
-        <div className="space-y-3">
-            <div className="rounded-lg border border-white/10 bg-white/[0.03] px-3 py-2 text-sm text-white/70">
-                Pontos disponíveis: <span className="font-bold text-white">{remaining}</span>/27
-            </div>
-            <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
-                {ASSISTED_ATTRIBUTE_KEYS.map((attr) => {
-                    const value = scores[attr]
-                    const colors = getAttributeColor(attr)
-                    const decrementDisabled = value <= 8
-                    const nextCost = POINT_BUY_COSTS[value + 1]
-                    const incrementDisabled = value >= 15 || nextCost == null || spent - POINT_BUY_COSTS[value] + nextCost > 27
-
-                    return (
-                        <div key={attr} className={cn("rounded-lg border p-3", colors.border, colors.bgAlpha)}>
-                            <div className="mb-2 flex items-center justify-between gap-3">
-                                <span className={cn("text-[10px] font-black uppercase tracking-[0.2em]", colors.text)}>{ATTRIBUTE_LABELS[attr]}</span>
-                                <span className="text-[10px] text-white/45">custo {POINT_BUY_COSTS[value]}</span>
-                            </div>
-                            <div className="grid grid-cols-[40px_minmax(0,1fr)_40px] items-center gap-2">
-                                <button
-                                    type="button"
-                                    disabled={decrementDisabled}
-                                    onClick={() => onChange(attr, value - 1)}
-                                    className="h-10 rounded-lg border border-white/10 bg-white/[0.04] text-lg font-bold text-white/70 transition-colors hover:bg-white/[0.08] disabled:cursor-not-allowed disabled:opacity-35"
-                                >
-                                    -
-                                </button>
-                                <div className="rounded-lg border border-white/10 bg-black/20 px-3 py-2 text-center text-2xl font-black text-white">
-                                    {value}
-                                </div>
-                                <button
-                                    type="button"
-                                    disabled={incrementDisabled}
-                                    onClick={() => onChange(attr, value + 1)}
-                                    className="h-10 rounded-lg border border-white/10 bg-white/[0.04] text-lg font-bold text-white/70 transition-colors hover:bg-white/[0.08] disabled:cursor-not-allowed disabled:opacity-35"
-                                >
-                                    +
-                                </button>
-                            </div>
-                        </div>
-                    )
-                })}
-            </div>
-        </div>
-    )
 }
 
 export function AssistedSheetCreationModal({ open, onOpenChange, onCreated }: AssistedSheetCreationModalProps) {

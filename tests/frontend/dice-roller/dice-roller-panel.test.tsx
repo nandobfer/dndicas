@@ -199,6 +199,109 @@ describe("DiceRollerPanel", () => {
         })
     })
 
+    it("uses a custom roll request and button label (Maddox check) and can hide the roll button for replays", async () => {
+        const rollRequest = vi.fn(async () => ({
+            rollId: "check-1",
+            label: "Furtividade (Destreza)",
+            terms: [{ dice: "d20" as const, quantity: 1, results: [12] }],
+            mode: "advantage" as const,
+            selectedD20: { kept: 12, discarded: 7, reason: "advantage" as const },
+            diceTotal: 12,
+            modifier: 5,
+            total: 17,
+            createdAt: "2026-01-01T00:00:00.000Z",
+        }))
+        const preset = { label: "Furtividade (Destreza)", terms: [{ dice: "d20" as const, quantity: 1 }], modifier: 5, mode: "advantage" as const, source: "sheet" as const }
+        const { unmount } = render(<DiceRollerPanel preset={preset} hideConfigurationControls rollButtonLabel="Rolar" rollRequest={rollRequest} />)
+
+        expect(screen.queryByRole("button", { name: "JOGAR" })).not.toBeInTheDocument()
+        fireEvent.click(screen.getByRole("button", { name: "Rolar" }))
+        await waitFor(() => expect(rollRequest).toHaveBeenCalledWith(expect.objectContaining({ terms: [{ dice: "d20", quantity: 1 }], modifier: 5, mode: "advantage" })))
+        expect(requestDiceRollMock).not.toHaveBeenCalled()
+        unmount()
+
+        render(<DiceRollerPanel preset={preset} hideConfigurationControls hideRollButton />)
+        expect(screen.queryByRole("button", { name: "Rolar" })).not.toBeInTheDocument()
+        expect(screen.queryByRole("button", { name: "JOGAR" })).not.toBeInTheDocument()
+    })
+
+    it("by default keeps the framed stage, the full-width roll button and the result summary (unchanged layout)", async () => {
+        render(<DiceRollerPanel />)
+        const stage = screen.getByTestId("dice-visual-stage")
+        expect(stage).toHaveAttribute("data-variant", "frame")
+        expect(stage).toHaveAttribute("data-size", "default")
+        expect(stage.className.split(" ")).toEqual(expect.arrayContaining(["min-h-[260px]", "w-[450px]", "border", "rounded-[2rem]"]))
+        expect(screen.getByRole("button", { name: "JOGAR" }).className.split(" ")).toContain("w-full")
+        expect(screen.queryByTestId("dice-roller-inline")).not.toBeInTheDocument()
+        fireEvent.click(screen.getByRole("button", { name: "JOGAR" }))
+        expect(await screen.findByTestId("dice-result-summary")).toBeInTheDocument()
+    })
+
+    it("inline check die: no stage before rolling; a bare compact die while rolling that leaves after the hide delay", async () => {
+        const settled = vi.fn()
+        const rollRequest = vi.fn(async () => ({
+            rollId: "check-crit",
+            label: "Furtividade",
+            terms: [{ dice: "d20" as const, quantity: 1, results: [20] }],
+            mode: "normal" as const,
+            selectedD20: { kept: 20, reason: "normal" as const },
+            diceTotal: 20,
+            modifier: 5,
+            total: 25,
+            createdAt: "2026-01-01T00:00:00.000Z",
+        }))
+        const preset = { label: "Furtividade", terms: [{ dice: "d20" as const, quantity: 1 }], modifier: 5, mode: "normal" as const, source: "sheet" as const }
+        render(
+            <DiceRollerPanel
+                preset={preset}
+                hideConfigurationControls
+                appearance="inline"
+                stageVariant="bare"
+                stageSize="compact"
+                stageVisibility="roll"
+                stageHideDelayMs={40}
+                rollButtonClassName="h-9 w-auto px-4 text-xs"
+                rollButtonLabel="Rolar"
+                rollRequest={rollRequest}
+                onRollSettled={settled}
+            />,
+        )
+        expect(screen.getByTestId("dice-roller-inline")).toBeInTheDocument()
+        expect(screen.queryByTestId("dice-visual-stage")).not.toBeInTheDocument()
+        expect(screen.getByRole("button", { name: "Rolar" }).className.split(" ")).toEqual(expect.arrayContaining(["h-9", "w-auto", "px-4", "text-xs"]))
+
+        fireEvent.click(screen.getByRole("button", { name: "Rolar" }))
+        const stage = await screen.findByTestId("dice-visual-stage")
+        expect(stage).toHaveAttribute("data-variant", "bare")
+        expect(stage).toHaveAttribute("data-size", "compact")
+        expect(stage.className.split(" ")).toEqual(expect.arrayContaining(["h-[190px]", "w-[240px]"]))
+        for (const cls of ["border", "rounded-[2rem]", "min-h-[260px]"]) expect(stage.className.split(" ")).not.toContain(cls)
+        expect(stage.getAttribute("style") ?? "").not.toContain("box-shadow")
+
+        await waitFor(() => expect(settled).toHaveBeenCalledWith(expect.objectContaining({ rollId: "check-crit" })))
+        // Sem selo de crítico, sem etiquetas dos dados e sem o resumo (o card mostra o resultado).
+        expect(screen.queryByTestId("dice-critical-banner")).not.toBeInTheDocument()
+        expect(screen.queryByTestId("dice-visual-die")).not.toBeInTheDocument()
+        expect(screen.queryByTestId("dice-result-summary")).not.toBeInTheDocument()
+        await waitFor(() => expect(screen.queryByTestId("dice-visual-stage")).not.toBeInTheDocument())
+        // Não volta para o mesmo resultado.
+        await new Promise((resolve) => setTimeout(resolve, 60))
+        expect(screen.queryByTestId("dice-visual-stage")).not.toBeInTheDocument()
+    })
+
+    it("inline replay: the stage appears only with the external result and leaves after the delay", async () => {
+        const settled = vi.fn()
+        const preset = { label: "Furtividade", terms: [{ dice: "d20" as const, quantity: 1 }], modifier: 5, mode: "normal" as const, source: "sheet" as const }
+        const external = { rollId: "replay-1", label: "Furtividade", terms: [{ dice: "d20" as const, quantity: 1, results: [12] }], mode: "normal" as const, selectedD20: { kept: 12, reason: "normal" as const }, diceTotal: 12, modifier: 5, total: 17, createdAt: "2026-01-01T00:00:00.000Z" }
+        const props = { preset, hideConfigurationControls: true, hideRollButton: true, appearance: "inline" as const, stageVariant: "bare" as const, stageSize: "compact" as const, stageVisibility: "roll" as const, stageHideDelayMs: 40, onRollSettled: settled }
+        const view = render(<DiceRollerPanel {...props} externalResult={null} />)
+        expect(screen.queryByTestId("dice-visual-stage")).not.toBeInTheDocument()
+        view.rerender(<DiceRollerPanel {...props} externalResult={external} />)
+        expect(await screen.findByTestId("dice-visual-stage")).toHaveAttribute("data-variant", "bare")
+        await waitFor(() => expect(settled).toHaveBeenCalledWith(expect.objectContaining({ rollId: "replay-1" })))
+        await waitFor(() => expect(screen.queryByTestId("dice-visual-stage")).not.toBeInTheDocument())
+    })
+
     it("renders one visual die per selected die", async () => {
         render(
             <DiceRollerPanel

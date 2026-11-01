@@ -84,6 +84,8 @@ logo abaixo do header, no layout `(dashboard)`; nas extensões do Owlbear (fora 
 same-origin (incluindo RSC), sem enviar o cabeçalho para terceiros. Cabeçalho `none` explicitamente
 ignora os cookies. Trocas cancelam/limpam queries, reconectam Pusher e atualizam componentes de
 servidor. A sessão não reutiliza dados da identidade anterior durante carregamento/logout.
+Enquanto aparece, o banner publica a própria altura no `<html>` como `--view-as-banner-height` (`ResizeObserver`;
+sem simulação a variável não existe): telas de altura fixa, como o chat em tela inteira das Campanhas Maddox, a descontam.
 
 ## APIs e telas
 

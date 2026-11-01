@@ -30,17 +30,7 @@ export const ASSISTED_SKILLS = [
     "Sobrevivência",
 ] as const satisfies SkillName[]
 
-export const STANDARD_ARRAY_VALUES = [15, 14, 13, 12, 10, 8] as const
-export const POINT_BUY_COSTS: Record<number, number> = {
-    8: 0,
-    9: 1,
-    10: 2,
-    11: 3,
-    12: 4,
-    13: 5,
-    14: 7,
-    15: 9,
-}
+export { STANDARD_ARRAY_VALUES, POINT_BUY_COSTS } from "./ability-score-rules"
 
 export const CATALOG_TO_SHEET_ATTRIBUTE: Record<CatalogAttributeType, AttributeType> = {
     Força: "strength",
@@ -209,28 +199,7 @@ export function applyClassToSheet(sheet: CharacterSheetFull, characterClass: Cha
     }
 }
 
-export function getPointBuyCost(scores: Partial<Record<AttributeType, number>>) {
-    return ASSISTED_ATTRIBUTE_KEYS.reduce((total, attr) => total + (POINT_BUY_COSTS[scores[attr] ?? 8] ?? Number.POSITIVE_INFINITY), 0)
-}
-
-export function isValidPointBuy(scores: Partial<Record<AttributeType, number>>) {
-    return ASSISTED_ATTRIBUTE_KEYS.every((attr) => {
-        const value = scores[attr]
-        return typeof value === "number" && value >= 8 && value <= 15 && Number.isFinite(POINT_BUY_COSTS[value])
-    }) && getPointBuyCost(scores) <= 27
-}
-
-export function calculateDropLowestScore(results: number[]) {
-    if (results.length !== 4) return null
-    const sorted = [...results].sort((a, b) => a - b)
-    return sorted.slice(1).reduce((total, value) => total + value, 0)
-}
-
-export function calculateFinalDiceScore(firstFiveScores: number[]) {
-    if (firstFiveScores.length !== 5) return null
-    const finalScore = 72 - firstFiveScores.reduce((total, value) => total + value, 0)
-    return finalScore >= 3 && finalScore <= 18 ? finalScore : null
-}
+export { getPointBuyCost, isValidPointBuy, calculateDropLowestScore, calculateFinalDiceScore } from "./ability-score-rules"
 
 export function buildAssistedSheetPayload(sheet: CharacterSheetFull): PatchSheetBody {
     const {

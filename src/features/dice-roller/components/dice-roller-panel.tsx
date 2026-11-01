@@ -1,7 +1,7 @@
 "use client"
 
 import * as React from "react"
-import { motion } from "framer-motion"
+import { AnimatePresence, motion } from "framer-motion"
 import { Minus, Plus, RotateCcw } from "lucide-react"
 import { GlassButton } from "@/components/ui/glass-button"
 import { GlassCard } from "@/components/ui/glass-card"
@@ -44,6 +44,25 @@ interface DiceRollerPanelProps {
     disabledRollingMessage?: string | null
     hideConfigurationControls?: boolean
     forceCombinationModifierInline?: boolean
+    /** Quem faz a rolagem oficial (padrão: `requestDiceRoll`). Ex.: o teste do Maddox rola no servidor da campanha. */
+    rollRequest?: (input: Omit<DiceRollRequest, "diceSessionId">) => Promise<DiceRollResponse>
+    /** Rótulo do botão de rolar (padrão "JOGAR"). */
+    rollButtonLabel?: string
+    /** Esconde o botão de rolar (só repete um resultado externo). */
+    hideRollButton?: boolean
+    /** `inline`: sem o cartão de vidro, o gradiente e o padding, e sem o resumo do resultado (o card de quem usa já mostra). */
+    appearance?: "card" | "inline"
+    /** Aparência e tamanho do palco 3D (padrão: moldura, tamanho normal). */
+    stageVariant?: "frame" | "bare"
+    stageSize?: "default" | "compact"
+    /** `roll`: o palco só existe enquanto há uma rolagem ou um resultado (local ou externo) na tela. */
+    stageVisibility?: "always" | "roll"
+    /** Com `stageVisibility="roll"`: N ms depois do fim da animação o palco sai com animação e não volta para aquele resultado. */
+    stageHideDelayMs?: number
+    /** Classes extras do botão de rolar (ex.: botão pequeno num card). */
+    rollButtonClassName?: string
+    /** Fim da animação de qualquer rolagem (local ou externa); `onRollResolved` só avisa as locais. */
+    onRollSettled?: (result: DiceRollResponse) => void
 }
 
 export function DiceRollerPanel({
@@ -57,7 +76,27 @@ export function DiceRollerPanel({
     disabledRollingMessage = null,
     hideConfigurationControls = false,
     forceCombinationModifierInline = false,
+    rollRequest,
+    rollButtonLabel = "JOGAR",
+    hideRollButton = false,
+    appearance = "card",
+    stageVariant = "frame",
+    stageSize = "default",
+    stageVisibility = "always",
+    stageHideDelayMs,
+    rollButtonClassName,
+    onRollSettled,
 }: DiceRollerPanelProps) {
+    const inline = appearance === "inline"
+    const [hiddenStageRollId, setHiddenStageRollId] = React.useState<string | null>(null)
+    const stageHideTimeoutRef = React.useRef<number | null>(null)
+    const onRollSettledRef = React.useRef(onRollSettled)
+    React.useEffect(() => {
+        onRollSettledRef.current = onRollSettled
+    }, [onRollSettled])
+    React.useEffect(() => () => {
+        if (stageHideTimeoutRef.current) window.clearTimeout(stageHideTimeoutRef.current)
+    }, [])
     const [terms, setTerms] = React.useState<DiceTerm[]>(() => getInitialState(preset).terms)
     const [modifier, setModifier] = React.useState<number | "">(() => getInitialState(preset).modifier)
     const [mode, setMode] = React.useState<DiceRollMode>(() => getInitialState(preset).mode)
@@ -235,11 +274,19 @@ export function DiceRollerPanel({
 
     const handleRollComplete = React.useCallback((completedResult: DiceRollResponse) => {
         setShowResults(true)
+        onRollSettledRef.current?.(completedResult)
+        if (stageVisibility === "roll" && stageHideDelayMs !== undefined) {
+            if (stageHideTimeoutRef.current) window.clearTimeout(stageHideTimeoutRef.current)
+            stageHideTimeoutRef.current = window.setTimeout(() => {
+                stageHideTimeoutRef.current = null
+                setHiddenStageRollId(completedResult.rollId)
+            }, stageHideDelayMs)
+        }
         if (isLocalRollRef.current) {
             onRollResolvedRef.current?.(completedResult)
             isLocalRollRef.current = false
         }
-    }, [])
+    }, [stageHideDelayMs, stageVisibility])
 
     const handleRoll = async () => {
         const nextTerms = normalizedTerms
@@ -252,7 +299,7 @@ export function DiceRollerPanel({
         setShowResults(false)
         setErrorMessage(null)
         try {
-            const nextResult = await requestDiceRoll({
+            const nextResult = await (rollRequest ?? requestDiceRoll)({
                 terms: nextTerms,
                 modifier: modifier === "" ? 0 : modifier,
                 mode: activeMode,
@@ -273,11 +320,24 @@ export function DiceRollerPanel({
         }
     }
 
-    return (
-        <GlassCard ref={containerRef} className={cn("w-full max-w-full relative overflow-hidden border-white/10 bg-black/35 p-0", className)}>
-            <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(59,130,246,0.18),transparent_32%),radial-gradient(circle_at_bottom_right,rgba(245,158,11,0.12),transparent_30%)]" />
+    const stageMounted = stageVisibility === "always" || isRolling || (result !== null && hiddenStageRollId !== result.rollId)
+    const stage = (
+        <DiceVisualStage
+            terms={normalizedTerms}
+            result={result}
+            isRolling={isRolling}
+            mode={displayedMode}
+            criticalState={criticalState}
+            onAnimationStateChange={handleAnimationStateChange}
+            onRollComplete={handleRollComplete}
+            variant={stageVariant}
+            size={stageSize}
+        />
+    )
+
+    const content = (
             <div className={cn(
-                "relative grid gap-5 p-5 md:p-7",
+                inline ? "relative grid gap-3" : "relative grid gap-5 p-5 md:p-7",
                 hideConfigurationControls
                     ? "grid-cols-1"
                     : containerWidth === 0
@@ -286,30 +346,42 @@ export function DiceRollerPanel({
                         ? "grid-cols-[minmax(0,1fr)_minmax(420px,0.8fr)]"
                         : "grid-cols-1"
             )}>
-                <div className="space-y-5">
-                    <GlassButton
-                        type="button"
-                        size="lg"
-                        onClick={handleRoll}
-                        disabled={isRollButtonDisabled}
-                        className="w-full border-blue-400/20 bg-blue-500/20 text-blue-100 hover:bg-blue-500/30"
-                    >
-                        {isRolling || isAnimatingDice ? "Rolando..." : "JOGAR"}
-                    </GlassButton>
-                    <DiceVisualStage
-                        terms={normalizedTerms}
-                        result={result}
-                        isRolling={isRolling}
-                        mode={displayedMode}
-                        criticalState={criticalState}
-                        onAnimationStateChange={handleAnimationStateChange}
-                        onRollComplete={handleRollComplete}
-                    />
-                    <DiceResultSummary result={showResults ? result : null} criticalState={showResults ? criticalState : null} />
+                <div className={inline ? "space-y-3" : "space-y-5"}>
+                    {!hideRollButton && (
+                        <GlassButton
+                            type="button"
+                            size={rollButtonClassName ? "sm" : "lg"}
+                            onClick={handleRoll}
+                            disabled={isRollButtonDisabled}
+                            className={cn("w-full border-blue-400/20 bg-blue-500/20 text-blue-100 hover:bg-blue-500/30", rollButtonClassName)}
+                        >
+                            {isRolling || isAnimatingDice ? "Rolando..." : rollButtonLabel}
+                        </GlassButton>
+                    )}
+                    {stageVisibility === "always" ? (
+                        stage
+                    ) : (
+                        <AnimatePresence initial={false}>
+                            {stageMounted && (
+                                <motion.div
+                                    key="dice-stage"
+                                    data-testid="dice-stage-presence"
+                                    initial={{ opacity: 0, height: 0 }}
+                                    animate={{ opacity: 1, height: "auto" }}
+                                    exit={{ opacity: 0, height: 0 }}
+                                    transition={{ duration: 0.35, ease: "easeOut" }}
+                                    className="overflow-hidden"
+                                >
+                                    {stage}
+                                </motion.div>
+                            )}
+                        </AnimatePresence>
+                    )}
+                    {!inline && <DiceResultSummary result={showResults ? result : null} criticalState={showResults ? criticalState : null} />}
                 </div>
 
                 {(!hideConfigurationControls || errorMessage || disabledRollingMessage) && (
-                <div className="space-y-4">
+                <div className={inline ? "space-y-2" : "space-y-4"}>
                     {!hideConfigurationControls && (
                         <>
                             <div className="rounded-2xl border border-white/10 bg-black/25 p-4">
@@ -410,7 +482,7 @@ export function DiceRollerPanel({
 
                     {(errorMessage || disabledRollingMessage) && (
                         <p className={cn(
-                            "rounded-xl px-3 py-2 text-sm",
+                            inline ? "rounded-lg px-2.5 py-1.5 text-xs" : "rounded-xl px-3 py-2 text-sm",
                             errorMessage
                                 ? "border border-red-500/20 bg-red-500/10 text-red-100"
                                 : "border border-amber-500/20 bg-amber-500/10 text-amber-100"
@@ -422,6 +494,20 @@ export function DiceRollerPanel({
                 </div>
                 )}
             </div>
+    )
+
+    if (inline) {
+        return (
+            <div ref={containerRef} data-testid="dice-roller-inline" className={cn("relative w-full max-w-full", className)}>
+                {content}
+            </div>
+        )
+    }
+
+    return (
+        <GlassCard ref={containerRef} className={cn("w-full max-w-full relative overflow-hidden border-white/10 bg-black/35 p-0", className)}>
+            <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(59,130,246,0.18),transparent_32%),radial-gradient(circle_at_bottom_right,rgba(245,158,11,0.12),transparent_30%)]" />
+            {content}
         </GlassCard>
     )
 }

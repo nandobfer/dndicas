@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react"
 import { useQueryClient } from "@tanstack/react-query"
 import { withBasePath } from "@/lib/base-path"
+import type { DiceRollResponse } from "@/features/dice-roller/types"
 import type { MaddoxGameStreamLine, MaddoxLiveGenerationDto } from "../game-types"
 import { MADDOX_CAMPAIGNS_KEY } from "./useMaddoxCampaigns"
 
@@ -27,9 +28,19 @@ export interface MaddoxGameStreamState {
     /** Sobe a cada geração do Maddox que termina (o campo de texto volta a ter foco). */
     finished: number
     connected: boolean
+    /** Testes rolados enquanto a mesa estava aberta (Maddox 5): todos repetem a animação com o resultado oficial. */
+    rolled: MaddoxRolledCheck[]
 }
 
-export const MADDOX_GAME_STREAM_INITIAL: MaddoxGameStreamState = { live: [], settled: [], finished: 0, connected: false }
+export interface MaddoxRolledCheck {
+    messageId: string
+    roll: DiceRollResponse
+}
+
+/** Rolagens recentes guardadas para repetir a animação (as mais antigas saem). */
+const ROLLED_KEEP = 20
+
+export const MADDOX_GAME_STREAM_INITIAL: MaddoxGameStreamState = { live: [], settled: [], finished: 0, connected: false, rolled: [] }
 
 /** Divide o buffer NDJSON em linhas completas. */
 export function splitGameStreamLines(buffer: string): { lines: MaddoxGameStreamLine[]; rest: string } {
@@ -64,6 +75,8 @@ export function reduceGameStream(state: MaddoxGameStreamState, line: MaddoxGameS
             const settled = ended && line.messageId && !line.error ? [...state.settled, { ...ended, tool: false, messageId: line.messageId }] : state.settled
             return { ...state, live: state.live.filter((item) => item.liveId !== line.liveId), settled, finished: state.finished + 1 }
         }
+        case "check-rolled":
+            return { ...state, rolled: [...state.rolled.filter((item) => item.messageId !== line.messageId), { messageId: line.messageId, roll: line.roll }].slice(-ROLLED_KEEP) }
         default:
             return state
     }
@@ -117,7 +130,7 @@ export function useMaddoxGameStream(campaignId: string, enabled: boolean): Maddo
                     buffer = parsed.rest
                     if (!parsed.lines.length) continue
                     setState((state) => ({ id: campaignId, value: parsed.lines.reduce(reduceGameStream, current(state)) }))
-                    if (parsed.lines.some((line) => line.type === "live-end") || (first && parsed.lines.some((line) => line.type === "snapshot"))) refresh()
+                    if (parsed.lines.some((line) => line.type === "live-end" || line.type === "check-rolled") || (first && parsed.lines.some((line) => line.type === "snapshot"))) refresh()
                     first = false
                 }
             } catch (error) {

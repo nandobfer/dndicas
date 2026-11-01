@@ -11,6 +11,7 @@ import { acquireChannel, isPusherClientAvailable, releaseChannel } from "@/lib/p
 import { MADDOX_CAMPAIGN_CHANGED_EVENT, MADDOX_GAME_CHANGED_EVENT } from "../constants"
 import { gameRefetchInterval, MADDOX_GAME_POLL_MS } from "../game-view"
 import type { MaddoxGameActionInput } from "../game-schemas"
+import type { DiceRollResponse } from "@/features/dice-roller/types"
 import type { MaddoxGameMessagesPageDto, MaddoxGameStateDto } from "../game-types"
 import type { MaddoxCampaignDetailDto } from "../campaign-types"
 import { MADDOX_CAMPAIGNS_KEY } from "./useMaddoxCampaigns"
@@ -145,6 +146,35 @@ export const useSendMaddoxGameAction = (campaignId: string) =>
 /** Dono pula a vez de um jogador ausente. */
 export const useSkipMaddoxPlayer = (campaignId: string) =>
     useGameMutation<string>(campaignId, async (memberId) => unwrapApi((await api.post<ApiResponse<MaddoxGameStateDto>>(`${gamePath(campaignId)}/skip`, { memberId })).data), "Não foi possível pular o jogador", () => "Vez do jogador pulada")
+
+/** Resultado da rolagem de um teste pedido pelo Maddox (Maddox 5): o resultado oficial e a mesa atualizada. */
+export interface MaddoxCheckRollResult {
+    roll: DiceRollResponse
+    state: MaddoxGameStateDto
+}
+
+/** Rola o teste no servidor (o motor de dados e o modificador da ficha; o corpo vai vazio). */
+export async function requestMaddoxCheckRoll(campaignId: string, checkId: string): Promise<MaddoxCheckRollResult> {
+    return unwrapApi((await api.post<ApiResponse<MaddoxCheckRollResult>>(`${gamePath(campaignId)}/checks/${checkId}/roll`, {})).data)
+}
+
+/**
+ * Rolar um teste: o jogador indicado (pelo painel de dados) ou o dono, no lugar dele. O estado da mesa volta junto e
+ * entra no cache; erros viram aviso.
+ */
+export function useRollMaddoxCheck(campaignId: string) {
+    const queryClient = useQueryClient()
+    return useMutation({
+        mutationFn: async (checkId: string) => requestMaddoxCheckRoll(campaignId, checkId),
+        onSuccess: (result) => {
+            queryClient.setQueryData(maddoxGameKey(campaignId), result.state)
+        },
+        onError: (error) => {
+            toast.error(apiErrorMessage(error, "Não foi possível rolar o teste"))
+            refreshGame(queryClient)
+        },
+    })
+}
 
 /** Dono inicia a campanha (lobby → em andamento). */
 export function useStartMaddoxCampaign(campaignId: string) {

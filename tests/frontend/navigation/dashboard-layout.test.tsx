@@ -43,6 +43,15 @@ describe("DashboardLayout", () => {
         expect(screen.getByText("Conteúdo").closest("main")).toHaveAttribute("data-dashboard-content")
     })
 
+    it("nenhum ancestral do conteúdo vira contêiner de rolagem (o cabeçalho sticky das páginas gruda ao rolar o documento)", () => {
+        render(<DashboardLayout><p>Conteúdo</p></DashboardLayout>)
+        const scrollers = /(^|\s)(overflow|overflow-x|overflow-y)-(hidden|auto|scroll)(\s|$)/
+        for (let node = screen.getByText("Conteúdo").parentElement; node && node !== document.body; node = node.parentElement) {
+            expect(node.className, node.tagName).not.toMatch(scrollers)
+        }
+        expect(screen.getByText("Conteúdo").closest("main")!.parentElement!.parentElement!.className.split(" ")).toContain("overflow-clip")
+    })
+
     it("no catálogo dentro do Owlbear mostra só o conteúdo, também após navegar sem o parâmetro", async () => {
         nav.search = "owlbearCatalogEmbed=1"
         const { rerender } = render(<DashboardLayout><p>Conteúdo</p></DashboardLayout>)
