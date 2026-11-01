@@ -1,5 +1,5 @@
 import { memoriesSection } from "@/features/ai/memories-prompt"
-import { MADDOX_CATALOG_TOOL_NAMES, MADDOX_CHECK_RIGORS, MADDOX_CHECK_ROUNDS_MAX, MADDOX_COMBAT_LONG_TURNS, MADDOX_COMBAT_RIGORS, MADDOX_DECLARATION_VALIDATION_RIGORS, MADDOX_PROFILE_SECTIONS, MADDOX_TOOL_TEXT_GUIDE, type MaddoxCampaignMemoryKind, type MaddoxGameMessageKind, type MaddoxQuestStatus, type MaddoxRigorLevel, type MaddoxVisibility } from "../constants"
+import { MADDOX_CATALOG_TOOL_NAMES, MADDOX_CHECK_RIGORS, MADDOX_CHECK_ROUNDS_MAX, MADDOX_COMBAT_LONG_TURNS, MADDOX_COMBAT_RIGORS, MADDOX_DECLARATION_VALIDATION_RIGORS, MADDOX_PROFILE_SECTIONS, MADDOX_TACTICAL_COMBAT_RIGORS, MADDOX_TOOL_TEXT_GUIDE, type MaddoxCampaignMemoryKind, type MaddoxGameMessageKind, type MaddoxQuestStatus, type MaddoxRigorLevel, type MaddoxVisibility } from "../constants"
 import { CATALOG_CITATION_RULE, rigorBlock } from "./interview-prompt"
 import { checkSucceeded } from "../check-modifier"
 
@@ -62,7 +62,9 @@ export function checksRule(rigor: MaddoxRigorLevel): string {
         "- Para pedir um teste, chame a ferramenta `request_check` (personagem, tipo — perícia, atributo ou resistência —, a perícia ou o atributo, a CD, vantagem ou desvantagem quando houver e um motivo curto). Um teste por personagem a cada narração; vários personagens podem testar ao mesmo tempo.",
         "- NUNCA role dados nem invente resultados: quem rola é o jogador, com os modificadores da ficha, e o resultado real chega na mensagem seguinte. Ao pedir um teste, narre até o momento da tentativa e PARE: não decida o resultado nem termine perguntando o que os jogadores fazem.",
         "- Com o resultado em mãos, compare o total com a CD (20 natural é sempre sucesso e 1 natural sempre falha, qualquer que seja a CD; ambos marcantes) e narre a consequência na ficção, sem recitar números.",
-        usesCombat(rigor)
+        usesTacticalCombat(rigor)
+            ? "- O combate é TÁTICO (seção \"Combate tático\"): iniciativa, turnos por combatente e os dados rolados pelos jogadores e pelo servidor; você conduz os adversários pelas ferramentas e narra os resultados."
+            : usesCombat(rigor)
             ? "- O combate é narrado e registrado pelas ferramentas de combate (seção \"Combate narrativo\"), sem iniciativa nem turnos mecânicos; testes podem aparecer nos golpes decisivos. Não aplique dano nem gaste recursos da ficha pelos números."
             : "- O combate continua narrado (sem iniciativa nem turnos mecânicos); testes podem aparecer nos momentos decisivos dele. Não aplique dano nem gaste recursos da ficha pelos números.",
     ].join("\n")
@@ -101,6 +103,26 @@ function combatBlock(combat: NarratorCombat | null | undefined): string | null {
     })
     const long = combat.masterTurns >= MADDOX_COMBAT_LONG_TURNS ? [`- A luta já dura ${combat.masterTurns} narrações: conduza-a a um desfecho (vitória, derrota, fuga, rendição ou trégua) e encerre com \`end_combat\`.`] : []
     return [`## Combate em andamento: ${combat.title}`, ...(combat.location.trim() ? [`- Local: ${combat.location.trim()}`] : []), `- Narrações desde o início: ${combat.masterTurns}`, ...lines, ...long].join("\n")
+}
+
+/** O grau usa o combate tático (Maddox 7): Rigoroso e Fiel ao D&D. */
+export const usesTacticalCombat = (rigor: MaddoxRigorLevel) => MADDOX_TACTICAL_COMBAT_RIGORS.includes(rigor)
+
+/** Regras do combate tático (iniciativa e turnos), só nos graus Rigoroso e Fiel ao D&D. */
+export function tacticalCombatRule(rigor: MaddoxRigorLevel): string {
+    return [
+        "## Combate tático",
+        "- Quando a hostilidade de fato começa, chame `start_combat` com o bloco de estatísticas de cada adversário: `monstro` do catálogo de Monstros (confirme com `search_catalog`, tipo Monstro)" +
+            (rigor === "fiel-dnd" ? " — no Fiel ao D&D, SÓ monstros do catálogo." : " ou, no Rigoroso, `estatisticas` próprias quando não houver um monstro adequado.") +
+            " Indique `surpresa` quando um lado for pego desprevenido. Narre o começo da luta e PARE: os jogadores rolam a iniciativa.",
+        "- A ordem de iniciativa é do servidor. Na vez de um personagem, o JOGADOR age pelos botões (Ação, Ação bônus, reações) e rola os próprios dados; o resultado chega pronto na tarefa. Você narra o que aconteceu com base nesses números, sem mudá-los.",
+        "- Na vez dos adversários, conduza cada um da lista \"agem agora\", na ordem, com `monster_action` (ataque, salvaguarda ou outra ação do bloco; Ataques Múltiplos = uma chamada por ataque). O SERVIDOR rola e aplica: nunca invente acertos, dano ou PV. Use os números do retorno na narração com moderação (o golpe, o ferimento), sem virar planilha.",
+        "- Quando o retorno disser que alguém pode reagir ou precisa rolar (salvaguarda, reação, concentração), narre até aquele instante e PARE; a continuação chega com o resultado e você segue com os adversários que faltarem.",
+        "- Quando um adversário sair do alcance de um personagem, ou conjurar uma magia diante de quem tem Contramágica, chame `offer_reaction`. Efeitos que você adjudica (ambiente, magia utilitária, ação livre aceita) usam `apply_effect` (condição, dano ou cura em dados rolados pelo servidor); dano de uma ação livre de personagem usa `request_damage_roll`.",
+        "- \"Outra ação\" de um jogador já foi validada pelo rigor; resolva-a pelas regras (peça teste com `request_check` quando couber).",
+        "- Personagem com 0 PV fica Inconsciente e faz testes contra a morte na vez dele; ninguém morre por conveniência da história, só pelas regras.",
+        "- Quando todos os inimigos caírem, fugirem ou se renderem (ou o grupo cair), chame `end_combat` na mesma narração: resultado, resumo, desfecho de cada adversário, recompensas e a cena final.",
+    ].join("\n")
 }
 
 /** Graus que julgam a validade da ação livre na narração (os demais validam ao declarar). */
@@ -179,6 +201,8 @@ export interface NarratorPromptContext {
     memories: readonly NarratorMemory[]
     /** Combate em andamento (Maddox 6; só nos graus com combate narrativo). */
     combat?: NarratorCombat | null
+    /** Combate tático em andamento (Maddox 7): bloco já montado (ordem, PV, CA, condições, quem age). */
+    tacticalCombat?: string | null
 }
 
 const oneLine = (value: string, max: number) => {
@@ -235,14 +259,14 @@ function memoriesBlock(memories: readonly NarratorMemory[]): string | null {
     return parts.join("\n")
 }
 
-export type NarratorToolMode = { kind: "ai-sdk" } | { kind: "mcp"; server: string; turnToken: string; checks?: boolean; combat?: boolean }
+export type NarratorToolMode = { kind: "ai-sdk" } | { kind: "mcp"; server: string; turnToken: string; checks?: boolean; combat?: boolean; tactical?: boolean }
 
 /** Bloco das ferramentas: na AI SDK elas vêm na chamada; no OpenCode, pelo MCP com o token de turno. */
 function toolsBlock(mode: NarratorToolMode): string | null {
     if (mode.kind === "ai-sdk") return null
     return [
         "## Ferramentas desta narração",
-        `- As ferramentas de anotações da campanha estão no servidor MCP \`${mode.server}\` (get_campaign_state, update_campaign_state, list_npcs, get_npc, save_npc, search_memories, save_memory, update_character_state${mode.checks ? ", request_check" : ""}${mode.combat ? ", get_combat, start_combat, update_combat, end_combat" : ""}, ${MADDOX_CATALOG_TOOL_NAMES.search}, ${MADDOX_CATALOG_TOOL_NAMES.get}).`,
+        `- As ferramentas de anotações da campanha estão no servidor MCP \`${mode.server}\` (get_campaign_state, update_campaign_state, list_npcs, get_npc, save_npc, search_memories, save_memory, update_character_state${mode.checks ? ", request_check" : ""}${mode.combat ? ", get_combat, start_combat, update_combat, end_combat" : ""}${mode.tactical ? ", monster_action, apply_effect, request_damage_roll, offer_reaction" : ""}, ${MADDOX_CATALOG_TOOL_NAMES.search}, ${MADDOX_CATALOG_TOOL_NAMES.get}).`,
         `- Em TODA chamada a essas ferramentas, envie o campo \`turno\` exatamente com este valor: \`${mode.turnToken}\`.`,
         "- Não use outras ferramentas (arquivos, terminal, web): a campanha vive só nessas anotações.",
     ].join("\n")
@@ -254,6 +278,7 @@ export function buildNarratorInstructions(context: NarratorPromptContext, mode: 
     if (memories) parts.push(memories)
     parts.push(MADDOX_NARRATOR_RULES, usesChecks(context.rigor) ? checksRule(context.rigor) : MADDOX_NARRATIVE_MODE_RULE, rigorBlock(context.rigor))
     if (usesCombat(context.rigor)) parts.push(combatRule(context.rigor))
+    if (usesTacticalCombat(context.rigor)) parts.push(tacticalCombatRule(context.rigor))
     if (judgesFreeActionsInNarration(context.rigor)) parts.push(MADDOX_FREE_ACTION_RULE)
     parts.push(MADDOX_NARRATOR_FORMAT, MADDOX_PERSISTENCE_RULE, narratorCatalogRule(context.rigor))
     const tools = toolsBlock(mode)
@@ -265,6 +290,7 @@ export function buildNarratorInstructions(context: NarratorPromptContext, mode: 
     parts.push(stateBlock(context.state))
     const combat = usesCombat(context.rigor) ? combatBlock(context.combat) : null
     if (combat) parts.push(combat)
+    if (usesTacticalCombat(context.rigor) && context.tacticalCombat) parts.push(context.tacticalCombat)
     const npcs = npcsBlock(context.npcs)
     if (npcs) parts.push(npcs)
     const notes = memoriesBlock(context.memories)
@@ -300,9 +326,20 @@ export interface NarratorCheckResult {
     cancelReason: string | null
 }
 
+/** Combate tático (Maddox 7): quem age nesta narração e o que fechar. */
+export interface NarratorTacticalTask {
+    phase: "initiative" | "running"
+    /** Adversários que agem agora, em ordem. */
+    queue: readonly string[]
+    /** O personagem da vez seguinte. */
+    next: string | null
+    enemiesDown: boolean
+    charactersDown: boolean
+}
+
 export type NarratorTask =
-    | { kind: "narration"; turnNumber: number; declarations: readonly NarratorDeclaration[]; combatHint?: "start" | "end" | null }
-    | { kind: "continuation"; turnNumber: number; round: number; declarations: readonly NarratorDeclaration[]; results: readonly NarratorCheckResult[] }
+    | { kind: "narration"; turnNumber: number; declarations: readonly NarratorDeclaration[]; combatHint?: "start" | "end" | null; tactical?: NarratorTacticalTask | null }
+    | { kind: "continuation"; turnNumber: number; round: number; declarations: readonly NarratorDeclaration[]; results: readonly NarratorCheckResult[]; combatResults?: readonly string[]; tactical?: NarratorTacticalTask | null; lastRound?: boolean }
     | { kind: "answer"; turnNumber: number; characterName: string; question: string; declarations: readonly NarratorDeclaration[] }
 
 const declarationLines = (declarations: readonly NarratorDeclaration[]) =>
@@ -325,14 +362,30 @@ export function checkResultLine(result: NarratorCheckResult): string {
     return `${head}: total ${result.total} (d20 ${result.d20}, modificador ${signedNumber(result.modifier ?? 0)}${mode}${natural}${owner}) — ${checkSucceeded(result.total, result.dc, result.d20) ? "sucesso" : "falha"}.`
 }
 
+/** O que a vez dos adversários pede nesta narração (combate tático). */
+export function tacticalTaskLines(tactical: NarratorTacticalTask | null | undefined): string[] {
+    if (!tactical) return []
+    if (tactical.phase === "initiative") return ["", "Combate tático: os jogadores ainda rolam a iniciativa. Não conduza ataques; narre o instante antes da luta e pare."]
+    if (tactical.enemiesDown) return ["", "Combate tático: TODOS os inimigos estão fora de combate. Narre o desfecho e chame `end_combat` nesta narração."]
+    if (tactical.charactersDown) return ["", "Combate tático: nenhum personagem está de pé. Narre o desfecho e chame `end_combat` nesta narração (derrota, captura ou o que fizer sentido)."]
+    return [
+        "",
+        tactical.queue.length
+            ? `Combate tático — agem agora, nesta ordem: ${tactical.queue.join(", ")}. Conduza cada um com \`monster_action\` (veja get_combat para as ações e os alvos) e narre os resultados.`
+            : "Combate tático — nenhum adversário age antes da próxima vez.",
+        tactical.next ? `Depois deles é a vez de **${tactical.next}**: termine a narração passando a vez a esse personagem (sem decidir o que ele faz).` : "",
+    ].filter(Boolean)
+}
+
 export function narratorTaskText(task: NarratorTask): string {
     if (task.kind === "continuation") {
-        const last = task.round >= MADDOX_CHECK_ROUNDS_MAX - 1
+        const last = task.lastRound ?? task.round >= MADDOX_CHECK_ROUNDS_MAX - 1
         return [
-            `# Turno ${task.turnNumber} do mestre — resultado dos testes`,
+            `# Turno ${task.turnNumber} do mestre — resultado ${task.combatResults?.length && !task.results.length ? "das rolagens" : "dos testes"}`,
             ...(task.declarations.length ? ["Declarações do turno dos jogadores que está sendo resolvido:", ...declarationLines(task.declarations), ""] : []),
-            "Resultado dos testes que você pediu (rolagens reais dos jogadores):",
-            ...task.results.map((result) => `- ${checkResultLine(result)}`),
+            ...(task.results.length ? ["Resultado dos testes que você pediu (rolagens reais dos jogadores):", ...task.results.map((result) => `- ${checkResultLine(result)}`)] : []),
+            ...(task.combatResults?.length ? ["Resultado das rolagens e reações do combate (já aplicados pelo servidor):", ...task.combatResults.map((line) => `- ${line}`)] : []),
+            ...tacticalTaskLines(task.tactical),
             "",
             "Continue a narração exatamente de onde parou: narre a consequência de cada teste na ficção, sem recitar números e sem repetir o que já foi narrado, e as reações do mundo.",
             last
@@ -349,6 +402,9 @@ export function narratorTaskText(task: NarratorTask): string {
             "Responda diretamente, em poucas frases, só com o que o personagem pode perceber, lembrar ou saber. NÃO avance a cena, não resolva declarações e não atribua ações a ninguém: o turno continua aberto. Se a resposta estabelecer um fato novo do mundo, grave-o.",
         ].join("\n")
     }
+    if (task.declarations.length === 0 && task.tactical?.phase === "running") {
+        return [`# Turno ${task.turnNumber} do mestre — vez dos adversários`, ...tacticalTaskLines(task.tactical), "", "Depois grave o que mudou."].join("\n")
+    }
     if (task.declarations.length === 0) {
         return [
             `# Abertura da campanha (turno ${task.turnNumber})`,
@@ -361,6 +417,7 @@ export function narratorTaskText(task: NarratorTask): string {
         ...declarationLines(task.declarations),
         ...(task.combatHint === "start" ? ["_(o JEV indica que estas ações provavelmente começam um combate; você decide e, se começar, chame `start_combat`)_"] : []),
         ...(task.combatHint === "end" ? ["_(o JEV indica que estas ações provavelmente encerram o combate; você decide e, se terminar, chame `end_combat`)_"] : []),
+        ...tacticalTaskLines(task.tactical),
         "",
         "Narre o resultado dessas tentativas e as reações do mundo, desenvolva a situação e termine no próximo ponto de decisão. Depois grave o que mudou.",
     ].join("\n")
@@ -395,6 +452,8 @@ export function narratorTranscript(messages: readonly NarratorTranscriptMessage[
                       ? `[Turno ${message.turnNumber} — teste] ${content}`
                       : message.kind === "combat"
                         ? `[Turno ${message.turnNumber} — ${content}]`
+                      : message.kind === "combat-action" || message.kind === "combat-roll" || message.kind === "combat-reaction"
+                        ? `[Turno ${message.turnNumber} — combate] ${content}`
                       : message.kind === "pass"
                         ? `[Turno ${message.turnNumber} — ${who} não fez nada]`
                         : `[Turno ${message.turnNumber} — ${who} declara] ${content}`

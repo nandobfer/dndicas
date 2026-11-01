@@ -25,7 +25,7 @@ export const MADDOX_SEAT_LABELS: Record<MaddoxSeatStatus, string> = {
  */
 export function seatStatus(participant: MaddoxGameParticipantDto, state: Pick<MaddoxGameStateDto, "status" | "turn">, presence: { available: boolean; online: ReadonlySet<string> }): MaddoxSeatStatus {
     if (!participant.ready) return "preparing"
-    if (state.status === "active" && state.turn.phase === "master" && state.turn.awaitingChecks && state.turn.pendingChecks.some((check) => check.memberId === participant.memberId)) return "rolling"
+    if (state.status === "active" && state.turn.phase === "master" && state.turn.awaitingChecks && [...state.turn.pendingChecks, ...(state.turn.pendingCombat ?? [])].some((check) => check.memberId === participant.memberId)) return "rolling"
     if (state.status !== "active" || state.turn.phase !== "players") return "watching"
     if (!participant.eligible) return "next-turn"
     if (participant.declared) return "declared"
@@ -54,11 +54,25 @@ export function composerBlockReason(state: Pick<MaddoxGameStateDto, "status" | "
 /** Nomes em lista pt-BR ("Lyra", "Lyra e Doran", "Lyra, Doran e Mira"). */
 const listNames = (names: readonly string[]) => (names.length <= 1 ? (names[0] ?? "") : `${names.slice(0, -1).join(", ")} e ${names[names.length - 1]}`)
 
+/** Faixa do turno dos jogadores no combate tático (Maddox 7): de quem é a vez. */
+export function combatBannerText(state: Pick<MaddoxGameStateDto, "turn" | "combat"> & { me?: Pick<MaddoxGameStateDto["me"], "memberId"> }): string {
+    const actor = state.turn.combatActor
+    if (!actor) return MADDOX_TURN_PHASE_LABELS.players
+    const round = state.combat?.tactical?.round ?? 1
+    return actor.memberId === state.me?.memberId ? `Combate — rodada ${round}: é a sua vez (${actor.characterName})` : `Combate — rodada ${round}: vez de ${actor.characterName}`
+}
+
 /** Faixa do turno do mestre: narrando, esperando os testes (Maddox 5) ou, depois de uma falha, a espera da nova tentativa. */
 export function masterBannerText(state: Pick<MaddoxGameStateDto, "turn"> & { me?: Pick<MaddoxGameStateDto["me"], "memberId"> }): string {
     if (state.turn.awaitingChecks) {
-        const mine = state.turn.pendingChecks.some((check) => check.memberId === state.me?.memberId)
-        const others = state.turn.pendingChecks.filter((check) => check.memberId !== state.me?.memberId).map((check) => check.characterName)
+        // Combate tático: as rolagens e reações pendentes contam junto com os testes.
+        const waits = [...state.turn.pendingChecks.map((check) => ({ memberId: check.memberId, characterName: check.characterName })), ...(state.turn.pendingCombat ?? []).map((item) => ({ memberId: item.memberId, characterName: item.characterName }))]
+        const mine = waits.some((check) => check.memberId === state.me?.memberId)
+        const others = [...new Set(waits.filter((check) => check.memberId !== state.me?.memberId).map((check) => check.characterName))]
+        if ((state.turn.pendingCombat ?? []).length && !state.turn.pendingChecks.length) {
+            if (mine) return `${MADDOX_TURN_PHASE_LABELS.master} — o combate espera uma rolagem ou reação sua${others.length ? ` (e de ${listNames(others)})` : ""}`
+            return `${MADDOX_TURN_PHASE_LABELS.master} — aguardando ${listNames(others) || "um jogador"} no combate`
+        }
         if (mine) return `${MADDOX_TURN_PHASE_LABELS.master} — o Maddox pediu um teste para você${others.length ? ` (e aguarda ${listNames(others)})` : ""}`
         return `${MADDOX_TURN_PHASE_LABELS.master} — aguardando o teste de ${listNames(others) || "um jogador"}`
     }

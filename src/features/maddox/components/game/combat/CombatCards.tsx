@@ -1,0 +1,294 @@
+"use client"
+
+import { useEffect, useMemo, useState } from "react"
+import { motion } from "framer-motion"
+import { Ban, Crosshair, Heart, HeartPulse, ListOrdered, ShieldAlert, Skull, Swords, Timer, X } from "lucide-react"
+import { Button } from "@/components/ui/opex/button"
+import { rarityColors } from "@/lib/config/colors"
+import { DiceRollerPanel } from "@/features/dice-roller/components/dice-roller-panel"
+import { CRITICAL_STAGE_CONFIG, CriticalHighlight, criticalBoxShadow } from "@/features/dice-roller/components/critical-highlight"
+import { getDiceCriticalState } from "@/features/dice-roller/critical-state"
+import type { DiceRollPreset, DiceRollResponse } from "@/features/dice-roller/types"
+import { parseDiceExpression } from "../../../combat-rules"
+import type { CombatActionStep } from "../../../combat-types"
+import { MADDOX_CHECK_DIE_HIDE_MS } from "../../../constants"
+import type { MaddoxGameCombatEventDto, MaddoxGameMessageDto } from "../../../game-types"
+import { MemberAvatar, RarityChip } from "../../campaigns/campaign-visuals"
+import { COMBAT_COLOR } from "../GameCombatCard"
+import { ECONOMY_COLORS, ECONOMY_LABELS, HP_BAND_COLORS } from "./combat-visuals"
+
+/**
+ * Cards do combate tático (Maddox 7) entre as falas da mesa: a ação de um combatente (com o dado rolado inline, como o
+ * card do teste), a rolagem avulsa (iniciativa, teste contra a morte, concentração, salvaguarda, dano pedido), a janela
+ * de reação (só quem reage vê as opções e a contagem) e a ordem de iniciativa.
+ */
+
+const STEP_LABELS: Record<CombatActionStep["kind"], string> = { attack: "Ataque", damage: "Dano", heal: "Cura", save: "Salvaguarda", check: "Teste" }
+
+const presetOf = (dice: string, label: string, mode: DiceRollPreset["mode"] = "normal"): DiceRollPreset => {
+    const parsed = parseDiceExpression(dice) ?? { terms: [{ dice: "d20" as const, quantity: 1 }], modifier: 0 }
+    return { label, terms: parsed.terms.length ? parsed.terms : [{ dice: "d4", quantity: 1 }], modifier: parsed.modifier, mode, source: "sheet" }
+}
+
+interface RollerProps {
+    rollId: string
+    dice: string
+    label: string
+    mode?: DiceRollPreset["mode"]
+    mine: boolean
+    replay: DiceRollResponse | null
+    onRoll: (id: string) => Promise<DiceRollResponse>
+    buttonLabel: string
+}
+
+/** Painel de dados inline: quem rola clica "Rolar"; os outros repetem a animação recebida pelo stream. */
+function InlineRoller({ rollId, dice, label, mode, mine, replay, onRoll, buttonLabel }: RollerProps) {
+    const [local, setLocal] = useState<DiceRollResponse | null>(null)
+    const preset = useMemo(() => presetOf(dice, label, mode), [dice, label, mode])
+    if (!mine && !replay) return null
+    return (
+        <div className="flex shrink-0 flex-col items-center justify-center gap-2 sm:min-w-[9rem]" data-testid="combat-roll-panel">
+            <DiceRollerPanel
+                preset={preset}
+                hideConfigurationControls
+                appearance="inline"
+                stageVariant="bare"
+                stageSize="compact"
+                stageVisibility="roll"
+                stageHideDelayMs={MADDOX_CHECK_DIE_HIDE_MS}
+                rollButtonClassName="h-11 w-auto min-w-[7.5rem] px-6 text-sm font-semibold"
+                rollButtonLabel={buttonLabel}
+                hideRollButton={!mine || Boolean(local)}
+                disableRolling={Boolean(local) || !mine}
+                externalResult={mine ? null : replay}
+                rollRequest={async () => {
+                    const result = await onRoll(rollId)
+                    setLocal(result)
+                    return result
+                }}
+            />
+        </div>
+    )
+}
+
+function StepLine({ step }: { step: CombatActionStep }) {
+    const critical = step.roll && step.kind === "attack" ? getDiceCriticalState(step.roll) : null
+    const verdict =
+        step.kind === "attack" && step.hit !== null
+            ? { label: step.critical ? "Crítico!" : step.hit ? "Acertou" : "Errou", color: step.hit ? (step.critical ? CRITICAL_STAGE_CONFIG["critical-success"].color : rarityColors.uncommon) : rarityColors.artifact }
+            : step.kind === "save" && step.success !== null
+              ? { label: step.success ? "Passou" : "Falhou", color: step.success ? rarityColors.uncommon : rarityColors.artifact }
+              : step.kind === "check" && step.success !== null
+                ? { label: step.success ? "Sucesso" : "Falha", color: step.success ? rarityColors.uncommon : rarityColors.artifact }
+                : null
+    return (
+        <li className="flex flex-wrap items-center gap-2 text-xs text-white/80" data-testid="combat-step" data-kind={step.kind} data-status={step.status}>
+            <span className="font-semibold text-white/60">{STEP_LABELS[step.kind]}</span>
+            {step.targetName && <span className="text-white/70">→ {step.targetName}</span>}
+            {step.status === "pending" && <span className="text-white/50">{step.roller === "player" ? "aguardando a rolagem" : "aguardando"}</span>}
+            {step.status === "skipped" && <span className="text-white/40">não se aplica</span>}
+            {step.total !== null && step.status === "done" && (
+                <span className="text-base font-black text-white" data-testid="combat-step-total">
+                    {step.total}
+                </span>
+            )}
+            {critical && <span className="text-[11px]" style={{ color: CRITICAL_STAGE_CONFIG[critical].color }}>{critical === "critical-success" ? "20 natural" : "1 natural"}</span>}
+            {verdict && (
+                <span data-testid="combat-step-verdict">
+                    <RarityChip color={verdict.color} className="text-[11px] font-semibold">
+                        {verdict.label}
+                    </RarityChip>
+                </span>
+            )}
+            {step.amount !== null && step.kind !== "attack" && step.status === "done" && (
+                <span className="font-semibold" style={{ color: step.kind === "heal" ? rarityColors.uncommon : rarityColors.artifact }} data-testid="combat-step-amount">
+                    {step.kind === "heal" ? `+${step.amount} PV` : `${step.amount} de dano${step.damageType ? ` ${step.damageType}` : ""}`}
+                </span>
+            )}
+            {step.note && <span className="text-white/50">({step.note})</span>}
+        </li>
+    )
+}
+
+interface ActionCardProps {
+    message: MaddoxGameMessageDto
+    mine: boolean
+    replay: DiceRollResponse | null
+    onRoll: (actionId: string) => Promise<DiceRollResponse>
+    onCancel: (actionId: string) => void
+}
+
+export function CombatActionCard({ message, mine, replay, onRoll, onCancel }: ActionCardProps) {
+    const action = message.combatAction!
+    const accent = action.actorKind === "character" ? ECONOMY_COLORS[action.economy] : COMBAT_COLOR
+    const next = action.steps.find((step) => step.status === "pending" && step.roller === "player")
+    const critical = action.steps.some((step) => step.kind === "attack" && step.critical)
+    const cancelled = action.status === "cancelled"
+    const Icon = action.actorKind === "character" ? (action.category === "spells" ? HeartPulse : Swords) : Crosshair
+    return (
+        <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="pb-4" data-testid="combat-action-card" data-status={action.status}>
+            <div className="relative space-y-2.5 overflow-hidden rounded-2xl border bg-white/[0.03] p-3.5" style={{ borderColor: `${accent}55`, boxShadow: critical ? `inset 3px 0 0 ${accent}, ${criticalBoxShadow(CRITICAL_STAGE_CONFIG["critical-success"].color)}` : `inset 3px 0 0 ${accent}`, opacity: cancelled ? 0.6 : 1 }}>
+                {critical && <CriticalHighlight state="critical-success" rounded={{ inner: "rounded-xl", border: "rounded-xl" }} />}
+                <div className="relative z-10 flex flex-col gap-3 sm:flex-row sm:items-stretch">
+                    <div className="flex min-w-0 flex-1 items-start gap-2.5">
+                        {action.actorKind === "character" ? <MemberAvatar name={action.actorName} imageUrl={message.portraitUrl} color={accent} className="mt-0.5 h-8 w-8 shrink-0" /> : <Icon className="mt-1 h-5 w-5 shrink-0" style={{ color: accent }} aria-hidden />}
+                        <div className="min-w-0 flex-1 space-y-1.5">
+                            <p className="flex flex-wrap items-center gap-1.5 text-xs text-white/60">
+                                <RarityChip color={accent}>{action.actorKind === "character" ? ECONOMY_LABELS[action.economy] : "Adversário"}</RarityChip>
+                                <span className="font-semibold text-white/80">{action.actorName}</span>
+                                {action.targets.length > 0 && <span>→ {action.targets.map((target) => target.name).join(", ")}</span>}
+                            </p>
+                            <p className="text-sm font-semibold text-white" data-testid="combat-action-label">
+                                {action.label}
+                                {action.spellLevel ? <span className="font-normal text-white/60"> · {action.spellLevel}º círculo</span> : null}
+                                {cancelled ? <span className="font-normal text-white/50"> (cancelada)</span> : null}
+                            </p>
+                            {action.freeText && <p className="text-xs italic text-white/70">“{action.freeText}”</p>}
+                            {action.steps.length > 0 && <ul className="space-y-1">{action.steps.map((step, index) => <StepLine key={index} step={step} />)}</ul>}
+                        </div>
+                    </div>
+                    {next && !cancelled && (
+                        <InlineRoller key={`${message.id}:${action.steps.indexOf(next)}`} rollId={message.id} dice={next.dice} label={`${action.label} · ${STEP_LABELS[next.kind]}`} mode={next.mode} mine={mine} replay={mine ? null : replay} onRoll={onRoll} buttonLabel={`Rolar ${STEP_LABELS[next.kind].toLowerCase()}`} />
+                    )}
+                </div>
+                {mine && action.cancellable && (
+                    <div className="relative z-10 flex justify-end">
+                        <Button size="sm" variant="ghost" onClick={() => onCancel(message.id)} data-testid="combat-action-cancel">
+                            <X aria-hidden /> Cancelar ação
+                        </Button>
+                    </div>
+                )}
+            </div>
+        </motion.div>
+    )
+}
+
+const ROLL_TITLES = { initiative: "Iniciativa", "death-save": "Teste contra a morte", concentration: "Concentração", save: "Salvaguarda", damage: "Dano" } as const
+
+export function CombatRollCard({ message, mine, replay, onRoll }: { message: MaddoxGameMessageDto; mine: boolean; replay: DiceRollResponse | null; onRoll: (rollId: string) => Promise<DiceRollResponse> }) {
+    const roll = message.combatRoll!
+    const name = message.characterName ?? "Personagem"
+    if (roll.status === "cancelled") {
+        return (
+            <p className="flex items-center justify-center gap-1.5 pb-3 text-xs text-white/50" data-testid="combat-roll-cancelled">
+                <Ban className="h-3.5 w-3.5" aria-hidden /> {ROLL_TITLES[roll.kind]} de {name} cancelado{roll.outcome ? ` (${roll.outcome.toLowerCase()})` : ""}.
+            </p>
+        )
+    }
+    const accent = roll.success === true ? rarityColors.uncommon : roll.success === false ? rarityColors.artifact : roll.kind === "death-save" ? rarityColors.artifact : rarityColors.legendary
+    const Icon = roll.kind === "death-save" ? Skull : roll.kind === "initiative" ? ListOrdered : roll.kind === "damage" ? Swords : ShieldAlert
+    const pendingMine = roll.status === "pending" && mine
+    return (
+        <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="pb-4" data-testid="combat-roll-card" data-kind={roll.kind} data-status={roll.status}>
+            <div className="flex flex-col gap-3 rounded-2xl border bg-white/[0.03] p-3.5 sm:flex-row sm:items-center" style={{ borderColor: `${accent}55`, boxShadow: `inset 3px 0 0 ${accent}` }}>
+                <div className="flex min-w-0 flex-1 items-start gap-2.5">
+                    <MemberAvatar name={name} imageUrl={message.portraitUrl} color={accent} className="mt-0.5 h-8 w-8 shrink-0" />
+                    <div className="min-w-0 flex-1 space-y-1">
+                        <p className="flex items-center gap-1.5 text-xs text-white/60">
+                            <Icon className="h-3.5 w-3.5" style={{ color: accent }} aria-hidden />
+                            {pendingMine ? `Role ${ROLL_TITLES[roll.kind].toLowerCase()}` : `${ROLL_TITLES[roll.kind]} de ${name}`}
+                            {roll.rolledByName && <span>(rolado por {roll.rolledByName})</span>}
+                        </p>
+                        <p className="text-sm font-semibold text-white">{roll.reason}</p>
+                        <div className="flex flex-wrap items-center gap-1.5">
+                            <span className="rounded-md border border-white/20 bg-white/10 px-1.5 py-0.5 text-[11px] font-semibold text-white/80">{roll.dice}</span>
+                            {roll.dc !== null && roll.kind !== "death-save" && <RarityChip color={rarityColors.rare}>CD {roll.dc}</RarityChip>}
+                            {roll.mode !== "normal" && <RarityChip color={roll.mode === "advantage" ? rarityColors.uncommon : rarityColors.artifact}>{roll.mode === "advantage" ? "Vantagem" : "Desvantagem"}</RarityChip>}
+                        </div>
+                        {roll.status === "rolled" && (
+                            <p className="flex flex-wrap items-center gap-2 text-sm text-white/80" data-testid="combat-roll-outcome">
+                                <span className="text-2xl font-black text-white">{roll.total}</span>
+                                {roll.outcome && <span>{roll.outcome}</span>}
+                            </p>
+                        )}
+                    </div>
+                </div>
+                {roll.status === "pending" && <InlineRoller rollId={message.id} dice={roll.dice} label={ROLL_TITLES[roll.kind]} mode={roll.mode} mine={pendingMine} replay={mine ? null : replay} onRoll={onRoll} buttonLabel="Rolar" />}
+            </div>
+        </motion.div>
+    )
+}
+
+/** Segundos que faltam até o prazo (atualiza a cada segundo). */
+export function useCountdown(deadline: string, active: boolean): number {
+    const target = new Date(deadline).getTime()
+    const [now, setNow] = useState(() => Date.now())
+    useEffect(() => {
+        if (!active) return
+        const timer = setInterval(() => setNow(Date.now()), 1000)
+        return () => clearInterval(timer)
+    }, [active])
+    return Math.max(0, Math.ceil((target - now) / 1000))
+}
+
+export function CombatReactionCard({ message, mine, isOwner, busy, onDecide }: { message: MaddoxGameMessageDto; mine: boolean; isOwner: boolean; busy: boolean; onDecide: (reactionId: string, choice: string) => void }) {
+    const reaction = message.combatReaction!
+    const pending = reaction.status === "pending"
+    const seconds = useCountdown(reaction.deadline, pending)
+    const name = message.characterName ?? "Personagem"
+    const accent = ECONOMY_COLORS.reaction
+    return (
+        <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="pb-4" data-testid="combat-reaction-card" data-status={reaction.status}>
+            <div className="space-y-2.5 rounded-2xl border bg-white/[0.03] p-3.5" style={{ borderColor: `${accent}55`, boxShadow: `inset 3px 0 0 ${accent}` }}>
+                <p className="flex flex-wrap items-center gap-1.5 text-xs text-white/60">
+                    <RarityChip color={accent}>Reação</RarityChip>
+                    <span className="font-semibold text-white/80">{name}</span>
+                    {pending && (
+                        <span className="ml-auto flex items-center gap-1 font-semibold" style={{ color: seconds <= 10 ? rarityColors.artifact : accent }} data-testid="reaction-countdown">
+                            <Timer className="h-3.5 w-3.5" aria-hidden /> {seconds}s
+                        </span>
+                    )}
+                </p>
+                <p className="text-sm text-white">{reaction.description}</p>
+                {pending && mine && (
+                    <div className="flex flex-wrap gap-2" data-testid="reaction-options">
+                        {reaction.options.map((option) => (
+                            <Button key={option.id} size="sm" disabled={busy} onClick={() => onDecide(message.id, option.id)} title={option.detail}>
+                                <ShieldAlert aria-hidden /> {option.label}
+                            </Button>
+                        ))}
+                        <Button size="sm" variant="outline" disabled={busy} onClick={() => onDecide(message.id, "none")} data-testid="reaction-decline">
+                            Não reagir
+                        </Button>
+                    </div>
+                )}
+                {pending && !mine && (
+                    <div className="flex flex-wrap items-center gap-2 text-xs text-white/60">
+                        <span>Aguardando a reação de {name}…</span>
+                        {isOwner && (
+                            <Button size="sm" variant="ghost" disabled={busy} onClick={() => onDecide(message.id, "none")} data-testid="reaction-decline-for">
+                                Não reagir no lugar
+                            </Button>
+                        )}
+                    </div>
+                )}
+                {!pending && <p className="text-xs text-white/70" data-testid="reaction-outcome">{reaction.outcome ?? (reaction.status === "expired" ? "O prazo passou." : "Sem reação.")}</p>}
+            </div>
+        </motion.div>
+    )
+}
+
+/** Card "Ordem de iniciativa" (na conversa, no momento em que a ordem fechou). */
+export function CombatOrderCard({ combat }: { combat: MaddoxGameCombatEventDto }) {
+    const order = combat.tactical?.order ?? []
+    return (
+        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="pb-4" data-testid="combat-order-card">
+            <div className="space-y-2 rounded-2xl border bg-white/[0.03] p-3.5" style={{ borderColor: `${COMBAT_COLOR}55`, boxShadow: `inset 3px 0 0 ${COMBAT_COLOR}` }}>
+                <p className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide" style={{ color: COMBAT_COLOR }}>
+                    <ListOrdered className="h-3.5 w-3.5" aria-hidden /> Ordem de iniciativa · {combat.title}
+                </p>
+                <ol className="flex flex-wrap gap-1.5">
+                    {order.map((slot, index) => (
+                        <li key={slot.actorKey} className="flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs text-white/80" style={{ borderColor: `${slot.kind === "character" ? rarityColors.rare : HP_BAND_COLORS.ileso}55` }}>
+                            <span className="text-white/40">{index + 1}.</span>
+                            {slot.kind === "character" ? <Heart className="h-3 w-3 text-sky-300" aria-hidden /> : <Swords className="h-3 w-3 text-red-300" aria-hidden />}
+                            {slot.name}
+                            <span className="font-semibold text-white">{slot.initiative ?? "—"}</span>
+                        </li>
+                    ))}
+                </ol>
+            </div>
+        </motion.div>
+    )
+}
+

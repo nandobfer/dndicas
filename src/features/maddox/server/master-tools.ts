@@ -16,7 +16,12 @@ import {
     MADDOX_COMBAT_REWARD_KINDS,
     MADDOX_COMBAT_REWARDS_MAX,
     MADDOX_COMBAT_RIGORS,
+    MADDOX_COMBAT_TARGETS_MAX,
+    MADDOX_COMBAT_WAIT_ROUNDS_MAX,
     MADDOX_COMBATANT_OUTCOMES,
+    MADDOX_CONDITION_LABELS,
+    MADDOX_CONDITIONS,
+    MADDOX_TACTICAL_COMBAT_RIGORS,
     MADDOX_COMBATANT_SIDES,
     MADDOX_COMBATANTS_MAX,
     MADDOX_NPC_STATUSES,
@@ -30,7 +35,8 @@ import {
 import { normalizeCatalogName } from "../catalog-markup"
 import { MaddoxCampaignMemberModel, MaddoxCampaignMemoryModel, MaddoxCampaignModel, MaddoxCharacterModel, MaddoxNpcModel, type IMaddoxCampaign, type IMaddoxCampaignMemory, type IMaddoxCharacter, type IMaddoxNpc } from "../models"
 import { MADDOX_ABILITIES, MADDOX_ABILITY_LABELS, MADDOX_SKILLS, checkAbility, checkTitle } from "../check-modifier"
-import { addDraftCheck, addDraftCombat, jobDraftChecks, jobDraftCombat, maddoxJobMeta, type MaddoxDraftCombatReward } from "./game-live"
+import { addDraftCheck, addDraftCombat, jobDraftChecks, jobDraftCombat, jobWorkspace, maddoxJobMeta, type MaddoxDraftCombatReward } from "./game-live"
+import type { TacticalDraftCombatant } from "./tactical-combat"
 
 /**
  * Ferramentas de persistência do Maddox narrador (Maddox 4) — SOMENTE servidor. Definidas uma vez e expostas de
@@ -318,7 +324,9 @@ export const MADDOX_MASTER_TOOLS: readonly MaddoxMasterTool[] = [
             if (!campaign || !MADDOX_CHECK_RIGORS.includes(campaign.rigor)) throw new MaddoxToolError("Esta campanha é narrativa: não peça testes nem dados, resolva pela história.")
             const meta = context.jobId ? maddoxJobMeta(String(context.campaignId), context.jobId) : null
             if (!meta || meta.kind !== "narration") throw new MaddoxToolError("Testes só são pedidos na narração do turno do mestre. Responda à pergunta sem pedir teste.")
-            if (meta.round >= MADDOX_CHECK_ROUNDS_MAX - 1) throw new MaddoxToolError("Limite de testes deste turno atingido: conclua a narração resolvendo a situação sem novos testes.")
+            const { findActiveTactical } = await import("./tactical-combat")
+            const inTactical = MADDOX_TACTICAL_COMBAT_RIGORS.includes(campaign.rigor) && Boolean(await findActiveTactical(context.campaignId))
+            if (meta.round >= (inTactical ? MADDOX_COMBAT_WAIT_ROUNDS_MAX : MADDOX_CHECK_ROUNDS_MAX) - 1) throw new MaddoxToolError("Limite de testes deste turno atingido: conclua a narração resolvendo a situação sem novos testes.")
             const kind = input.tipo === "pericia" ? "skill" : input.tipo === "resistencia" ? "save" : "ability"
             const skill = kind === "skill" ? ((input.pericia ?? null) as (typeof MADDOX_SKILLS)[number] | null) : null
             if (kind === "skill" && !skill) throw new MaddoxToolError(`Informe a perícia do teste. Perícias: ${MADDOX_SKILLS.join(", ")}.`)
@@ -364,19 +372,87 @@ export const MADDOX_MASTER_TOOLS: readonly MaddoxMasterTool[] = [
 
 // ── Combate narrativo (Maddox 6) ───────────────────────────────────────────────
 
-/** Ferramentas do combate narrativo: só nas narrações dos graus com combate (Narrativo, Flexível e Equilibrado). */
+/** Ferramentas do combate (narrativo no Maddox 6; também as do combate tático no Maddox 7). */
 export const MADDOX_COMBAT_TOOL_NAMES = ["get_combat", "start_combat", "update_combat", "end_combat"] as const
+/** Ferramentas da vez dos adversários no combate tático (Rigoroso e Fiel ao D&D). */
+export const MADDOX_TACTICAL_TOOL_NAMES = ["monster_action", "apply_effect", "request_damage_roll", "offer_reaction"] as const
 
 /** Garante grau e geração certos e devolve o estado efetivo do combate (gravado + rascunho deste job). */
 async function combatContext(context: MaddoxToolContext) {
     const campaign = await MaddoxCampaignModel.findById(context.campaignId).select("rigor").lean<Pick<IMaddoxCampaign, "rigor">>()
-    if (!campaign || !MADDOX_COMBAT_RIGORS.includes(campaign.rigor))
-        throw new MaddoxToolError("Esta campanha não registra combate narrativo por ferramentas: narre o combate normalmente, sem abrir nem encerrar registro.")
+    const tactical = Boolean(campaign && MADDOX_TACTICAL_COMBAT_RIGORS.includes(campaign.rigor))
+    if (!campaign || (!MADDOX_COMBAT_RIGORS.includes(campaign.rigor) && !tactical))
+        throw new MaddoxToolError("Esta campanha não registra combate por ferramentas: narre o combate normalmente, sem abrir nem encerrar registro.")
     const meta = context.jobId ? maddoxJobMeta(String(context.campaignId), context.jobId) : null
     if (!meta || meta.kind !== "narration") throw new MaddoxToolError("O combate só começa ou termina na narração do turno do mestre. Responda à pergunta sem mexer no combate.")
     const { findActiveCombat, replayCombat } = await import("./combat")
     const active = await findActiveCombat(context.campaignId)
-    return { rigor: campaign.rigor, state: replayCombat(active, jobDraftCombat(String(context.campaignId), context.jobId!)) }
+    return { rigor: campaign.rigor, tactical, state: replayCombat(active, jobDraftCombat(String(context.campaignId), context.jobId!)) }
+}
+
+const customStatsInput = z
+    .object({
+        ca: z.number().int().min(1).max(40),
+        pv: z.number().int().min(1).max(2000),
+        iniciativa: z.number().int().min(-10).max(20).optional(),
+        destreza: z.number().int().min(1).max(30).optional(),
+        salvaguardas: z.object(Object.fromEntries(MADDOX_ABILITIES.map((ability) => [ability, z.number().int().min(-10).max(25).optional()])) as Record<string, z.ZodOptional<z.ZodNumber>>).optional(),
+        resistencias: z.array(z.string()).max(15).optional(),
+        imunidades: z.array(z.string()).max(15).optional(),
+        vulnerabilidades: z.array(z.string()).max(15).optional(),
+        ataquesMultiplos: z.number().int().min(1).max(5).optional(),
+        acoes: z
+            .array(
+                z.object({
+                    nome: z.string().min(1),
+                    tipo: z.enum(["ataque", "salvaguarda", "outro"]),
+                    bonus: z.number().int().min(-5).max(25).optional(),
+                    cd: z.number().int().min(5).max(30).optional(),
+                    atributo: z.string().optional(),
+                    dano: z.string().optional().describe("Dados de dano (\"1d6+2\")"),
+                    tipoDano: z.string().optional(),
+                    metadeNoSucesso: z.boolean().optional(),
+                    distancia: z.boolean().optional(),
+                    recarga: z.string().optional(),
+                    economia: z.enum(["acao", "bonus", "reacao"]).optional(),
+                }),
+            )
+            .min(1)
+            .max(10),
+    })
+    .describe("Bloco de estatísticas próprio (só no Rigoroso, quando o monstro não está no catálogo)")
+
+const tacticalCombatantFields = {
+    monstro: z.string().optional().describe("Combate tático: nome ou id do monstro no catálogo de Monstros do DnDicas (obrigatório no Fiel ao D&D; confirme com search_catalog)"),
+    estatisticas: customStatsInput.optional(),
+}
+
+/** Bloco de estatísticas de cada adversário do combate tático: catálogo (restritivo) ou próprio (só no Rigoroso, explícito). */
+async function tacticalDrafts(rigor: IMaddoxCampaign["rigor"], items: readonly (z.infer<typeof combatantInput> & { monstro?: string; estatisticas?: z.infer<typeof customStatsInput> })[], fit: ReturnType<typeof fitter>): Promise<TacticalDraftCombatant[]> {
+    const { findCatalogMonster, monsterStatsFromCatalog, monsterStatsFromCustom } = await import("./combat-monsters")
+    const drafts: TacticalDraftCombatant[] = []
+    for (const item of items) {
+        const base = toDraftCombatant(item, fit)
+        if (item.monstro?.trim()) {
+            const { doc, suggestions } = await findCatalogMonster(item.monstro)
+            if (!doc) {
+                const options = suggestions.length ? ` Parecidos no catálogo: ${suggestions.join(", ")}.` : " Use search_catalog (tipo Monstro) para achar o nome."
+                throw new MaddoxToolError(`"${item.monstro}" não está no catálogo de Monstros.${options}${rigor === "rigoroso" ? " No Rigoroso, um adversário fora do catálogo entra só com `estatisticas` próprias (sem `monstro`)." : ""}`)
+            }
+            drafts.push({ ...base, stats: monsterStatsFromCatalog(doc) })
+            continue
+        }
+        if (rigor === "fiel-dnd") throw new MaddoxToolError(`No Fiel ao D&D todo adversário vem do catálogo de Monstros: informe \`monstro\` para "${item.nome}" (confirme o nome com search_catalog, tipo Monstro).`)
+        if (!item.estatisticas) throw new MaddoxToolError(`Informe \`monstro\` (catálogo) ou \`estatisticas\` (bloco próprio) para "${item.nome}": o combate tático precisa de CA, PV e ações.`)
+        drafts.push({ ...base, stats: monsterStatsFromCustom(item.estatisticas as Parameters<typeof monsterStatsFromCustom>[0]) })
+    }
+    return drafts
+}
+
+/** O que a cópia de trabalho do combate tático deste job deixou pendente (salvaguardas, reações, rolagens). */
+const tacticalWaitsInJob = (context: MaddoxToolContext) => {
+    const workspace = context.jobId ? jobWorkspace<{ messages: { kind?: string }[] }>(String(context.campaignId), context.jobId) : null
+    return (workspace?.messages ?? []).filter((message) => message.kind === "combat-roll" || message.kind === "combat-reaction").length
 }
 
 const combatantInput = z.object({
@@ -387,6 +463,8 @@ const combatantInput = z.object({
     condicao: optionalText.describe("Condição atual (\"ileso\", \"ferido no ombro\", \"recuando\")"),
     registrarNpc: z.boolean().optional().describe("true só para personagens com nome próprio que devem virar NPC da campanha"),
 })
+
+const tacticalCombatantInput = combatantInput.extend(tacticalCombatantFields)
 
 const toDraftCombatant = (input: z.infer<typeof combatantInput>, fit: ReturnType<typeof fitter>) => ({
     name: clip(input.nome, MADDOX_TOOL_NAME_MAX),
@@ -428,7 +506,12 @@ export const MADDOX_COMBAT_TOOLS: readonly MaddoxMasterTool[] = [
         readOnly: true,
         input: z.object({}),
         async execute(context) {
-            const { state } = await combatContext(context)
+            const { state, tactical } = await combatContext(context)
+            if (tactical) {
+                const { tacticalView } = await import("./tactical-master")
+                const view = await tacticalView(context.campaignId, context.jobId)
+                if (view) return { active: true, ...view }
+            }
             return state.active ? { active: true, title: state.title, combatants: state.combatants } : { active: false, note: "Nenhum combate em andamento." }
         },
     }),
@@ -437,22 +520,35 @@ export const MADDOX_COMBAT_TOOLS: readonly MaddoxMasterTool[] = [
         description: [
             "Registra o INÍCIO de um combate: chame quando a hostilidade de fato começa (um ataque, uma emboscada), não diante de uma ameaça.",
             "Informe um título curto, o local e os adversários (e aliados, se houver). Os personagens dos jogadores não entram na lista.",
-            "Depois narre a luta de forma cinemática, sem iniciativa nem turnos mecânicos. Um combate por vez.",
+            "Narrativo, Flexível e Equilibrado: depois narre a luta de forma cinemática, sem iniciativa nem turnos mecânicos.",
+            "Rigoroso e Fiel ao D&D (combate tático): cada adversário precisa do bloco de estatísticas — `monstro` do catálogo (obrigatório no Fiel) ou `estatisticas` próprias (só no Rigoroso);",
+            "os jogadores rolam a iniciativa e o combate segue por turnos. Um combate por vez.",
         ].join(" "),
         readOnly: false,
         input: z.object({
             titulo: z.string().min(1).describe("Título curto do encontro (\"Emboscada na ponte de Varn\")"),
             local: optionalText.describe("Onde a luta acontece"),
-            adversarios: z.array(combatantInput).min(1).max(MADDOX_COMBATANTS_MAX),
+            adversarios: z.array(tacticalCombatantInput).min(1).max(MADDOX_COMBATANTS_MAX),
+            surpresa: z.enum(["personagens", "adversarios"]).optional().describe("Combate tático: quem foi surpreendido (rola a iniciativa com desvantagem)"),
         }),
         async execute(context, input) {
-            const { state } = await combatContext(context)
+            const { state, tactical, rigor } = await combatContext(context)
             if (state.active) throw new MaddoxToolError(`Já há um combate em andamento ("${state.title}"): use update_combat para mudanças ou end_combat para encerrá-lo.`)
             assertUniqueCombatants(input.adversarios)
             const fit = fitter()
             const combatants = input.adversarios.map((item) => toDraftCombatant(item, fit))
-            const added = addDraftCombat(String(context.campaignId), context.jobId!, { type: "start", title: clip(input.titulo, MADDOX_TOOL_NAME_MAX), location: clip(input.local, MADDOX_TOOL_NAME_MAX), combatants })
+            const tacticalPlan = tactical ? { surprise: input.surpresa ?? null, combatants: await tacticalDrafts(rigor, input.adversarios, fit) } : undefined
+            const added = addDraftCombat(String(context.campaignId), context.jobId!, { type: "start", title: clip(input.titulo, MADDOX_TOOL_NAME_MAX), location: clip(input.local, MADDOX_TOOL_NAME_MAX), combatants, ...(tacticalPlan ? { tactical: tacticalPlan } : {}) })
             if (!added) throw new MaddoxToolError("Esta narração já terminou.")
+            if (tactical) {
+                return {
+                    started: true,
+                    title: clip(input.titulo, MADDOX_TOOL_NAME_MAX),
+                    adversarios: tacticalPlan!.combatants.map((item) => ({ nome: item.name, quantidade: item.quantity, ca: item.stats.ac, pv: item.stats.hpMax, acoes: item.stats.actions.map((action) => action.name) })),
+                    note: "Combate tático: narre o começo da luta até o momento em que todos sacam as armas e PARE. Os jogadores rolam a iniciativa; a ordem e a vez de cada um chegam na próxima mensagem. Não conduza ataques ainda.",
+                    ...fit.notice(),
+                }
+            }
             return { started: true, title: clip(input.titulo, MADDOX_TOOL_NAME_MAX), note: "Narre a luta de forma cinemática. Encerre com end_combat quando houver vitória, derrota, fuga, rendição ou trégua.", ...fit.notice() }
         },
     }),
@@ -460,9 +556,9 @@ export const MADDOX_COMBAT_TOOLS: readonly MaddoxMasterTool[] = [
         name: "update_combat",
         description: "Atualiza o combate em andamento: condição dos adversários e aliados (ferido, recuando, caído) ou reforços que entram na luta. Envie só quem mudou.",
         readOnly: false,
-        input: z.object({ adversarios: z.array(combatantInput).min(1).max(MADDOX_COMBATANTS_MAX) }),
+        input: z.object({ adversarios: z.array(tacticalCombatantInput).min(1).max(MADDOX_COMBATANTS_MAX) }),
         async execute(context, input) {
-            const { state } = await combatContext(context)
+            const { state, tactical, rigor } = await combatContext(context)
             if (!state.active) throw new MaddoxToolError("Nenhum combate em andamento: use start_combat quando a luta começar.")
             // Mesma pessoa duas vezes na lista = recusa; quem já está na luta é atualizado, quem é novo entra uma vez só.
             assertUniqueCombatants(input.adversarios)
@@ -478,8 +574,12 @@ export const MADDOX_COMBAT_TOOLS: readonly MaddoxMasterTool[] = [
                     registerNpc: draft.registerNpc,
                 }
             })
-            if (!addDraftCombat(String(context.campaignId), context.jobId!, { type: "update", combatants })) throw new MaddoxToolError("Esta narração já terminou.")
-            return { saved: true, ...fit.notice() }
+            // Combate tático: quem é novo (reforço) precisa do bloco de estatísticas e rola a iniciativa ao entrar.
+            const known = state.combatants.map((item) => keyOf(item.name))
+            const fresh = input.adversarios.filter((item) => !known.includes(keyOf(item.nome)) && !known.some((name) => name.startsWith(`${keyOf(item.nome)} `)))
+            const reinforcements = tactical && fresh.length ? await tacticalDrafts(rigor, fresh, fit) : undefined
+            if (!addDraftCombat(String(context.campaignId), context.jobId!, { type: "update", combatants, ...(reinforcements ? { tactical: reinforcements } : {}) })) throw new MaddoxToolError("Esta narração já terminou.")
+            return { saved: true, ...(reinforcements ? { reforcos: reinforcements.map((item) => item.name), nota: "Os reforços entram na ordem de iniciativa (rolada pelo servidor) a partir da próxima vez." } : {}), ...fit.notice() }
         },
     }),
     define({
@@ -513,9 +613,11 @@ export const MADDOX_COMBAT_TOOLS: readonly MaddoxMasterTool[] = [
             cenaFinal: z.string().min(1).describe("A cena final descrita visualmente, em poucas frases (luz, lugar, quem está de pé)"),
         }),
         async execute(context, input) {
-            const { state } = await combatContext(context)
+            const { state, tactical } = await combatContext(context)
             if (!state.active) throw new MaddoxToolError("Nenhum combate em andamento para encerrar.")
+            void tactical
             if (jobDraftChecks(String(context.campaignId), context.jobId!).length > 0) throw new MaddoxToolError("Há teste pedido nesta narração: resolva os testes antes de encerrar o combate.")
+            if (tacticalWaitsInJob(context) > 0) throw new MaddoxToolError("Há salvaguarda, reação ou rolagem esperando nesta narração: resolva antes de encerrar o combate.")
             const known = state.combatants.map((item) => item.name)
             for (const item of input.adversarios ?? []) {
                 if (!known.some((name) => keyOf(name) === keyOf(item.nome))) throw new MaddoxToolError(`"${item.nome}" não está neste combate. Participantes: ${known.join(", ") || "nenhum"}.`)
@@ -558,8 +660,97 @@ export const MADDOX_COMBAT_TOOLS: readonly MaddoxMasterTool[] = [
     }),
 ]
 
-/** Todas as ferramentas do narrador (persistência, testes e combate). */
-export const MADDOX_NARRATOR_TOOLS: readonly MaddoxMasterTool[] = [...MADDOX_MASTER_TOOLS, ...MADDOX_COMBAT_TOOLS]
+// ── Combate tático (Maddox 7) ──────────────────────────────────────────────────
+
+/** Só nas narrações dos graus táticos; erro do combate vira mensagem em pt-BR para o modelo. */
+async function tacticalTool<T>(context: MaddoxToolContext, run: (tactical: typeof import("./tactical-master")) => Promise<T>): Promise<T> {
+    const campaign = await MaddoxCampaignModel.findById(context.campaignId).select("rigor").lean<Pick<IMaddoxCampaign, "rigor">>()
+    if (!campaign || !MADDOX_TACTICAL_COMBAT_RIGORS.includes(campaign.rigor)) throw new MaddoxToolError("Esta campanha não usa combate tático: narre o combate sem rolagens dos adversários.")
+    if (!context.jobId) throw new MaddoxToolError("A vez dos adversários só acontece na narração do turno do mestre.")
+    const tactical = await import("./tactical-master")
+    try {
+        return await run(tactical)
+    } catch (error) {
+        if (error instanceof tactical.TacticalToolError) throw new MaddoxToolError(error.message)
+        throw error
+    }
+}
+
+const conditionNames = MADDOX_CONDITIONS.map((key) => MADDOX_CONDITION_LABELS[key]).join(", ")
+
+export const MADDOX_TACTICAL_TOOLS: readonly MaddoxMasterTool[] = [
+    define({
+        name: "monster_action",
+        description: [
+            "Combate tático: um adversário age na vez dele usando uma ação do PRÓPRIO bloco (veja get_combat). O SERVIDOR rola o ataque contra a CA do alvo e o dano,",
+            "ou o dano e as salvaguardas (os jogadores rolam as deles), e aplica o resultado. Nunca invente números: narre o que o retorno disser.",
+            "Conduza os adversários na ordem de \"agemAgora\"; Ataques Múltiplos = chame de novo com o mesmo adversário. `reacao: true` = ataque de oportunidade (fora da vez).",
+            "Se o retorno disser que alguém pode reagir ou precisa rolar, narre até ali e PARE.",
+        ].join(" "),
+        readOnly: false,
+        input: z.object({
+            combatente: z.string().min(1).describe("Nome do adversário (como em get_combat)"),
+            acao: z.string().min(1).describe("Nome da ação do bloco"),
+            alvos: z.array(z.string().min(1)).max(MADDOX_COMBAT_TARGETS_MAX).describe("Alvo(s): um para ataque; vários para área"),
+            modo: z.enum(["normal", "vantagem", "desvantagem"]).optional().describe("Vantagem ou desvantagem pela situação (as das condições o servidor já aplica)"),
+            reacao: z.boolean().optional().describe("Ataque de oportunidade ou outra reação, fora da vez do adversário"),
+        }),
+        async execute(context, input) {
+            return tacticalTool(context, (tactical) => tactical.monsterAction(context.campaignId, context.jobId!, context.turnNumber, input))
+        },
+    }),
+    define({
+        name: "apply_effect",
+        description: `Combate tático: aplica um efeito que você adjudicou (ambiente, magia utilitária, ação livre aceita, fim de uma condição). Condição (${conditionNames}) com duração em rodadas, ou dano/cura em DADOS que o servidor rola. Dano causado por um personagem jogador usa request_damage_roll (o jogador rola).`,
+        readOnly: false,
+        input: z.object({
+            alvo: z.string().min(1),
+            condicao: z.string().optional().describe("Condição a aplicar (ou remover com `remover: true`)"),
+            remover: z.boolean().optional(),
+            duracaoRodadas: z.number().int().min(1).max(100).optional(),
+            dano: z.string().optional().describe("Dados de dano (\"2d6\")"),
+            tipoDano: z.string().optional(),
+            cura: z.string().optional().describe("Dados de cura (\"1d8+3\")"),
+            descricao: z.string().min(1).describe("O que causa o efeito (os jogadores leem)"),
+        }),
+        async execute(context, input) {
+            return tacticalTool(context, (tactical) => tactical.applyEffect(context.campaignId, context.jobId!, context.turnNumber, input))
+        },
+    }),
+    define({
+        name: "request_damage_roll",
+        description: "Combate tático: pede ao JOGADOR a rolagem de dano de uma ação livre que você aceitou (os dados pelas regras). O resultado entra no alvo e chega na próxima mensagem; narre até o golpe e PARE.",
+        readOnly: false,
+        input: z.object({
+            personagem: z.string().min(1),
+            dados: z.string().min(1).describe("Dados de dano (\"1d8+3\")"),
+            tipoDano: z.string().optional(),
+            alvo: z.string().min(1).describe("Adversário que recebe o dano"),
+            motivo: z.string().min(1).describe("O que o personagem fez, curto (os jogadores leem)"),
+        }),
+        async execute(context, input) {
+            return tacticalTool(context, (tactical) => tactical.requestDamageRoll(context.campaignId, context.jobId!, context.turnNumber, input))
+        },
+    }),
+    define({
+        name: "offer_reaction",
+        description:
+            "Combate tático: abre a janela de reação dos personagens quando o gatilho acontece — um adversário sai do alcance deles (ataque de oportunidade), conjura uma magia (Contramágica) ou dispara uma ação preparada. Narre até o gatilho e PARE; a escolha chega na próxima mensagem. (Ataques que atingem um personagem já abrem a reação sozinhos.)",
+        readOnly: false,
+        input: z.object({
+            personagens: z.array(z.string().min(1)).min(1).max(MADDOX_COMBAT_TARGETS_MAX),
+            gatilho: z.enum(["saiu-do-alcance", "conjura-magia", "preparada", "outro"]),
+            descricao: z.string().min(1).describe("O que está acontecendo (os jogadores leem)"),
+            fonte: z.string().optional().describe("Adversário que provocou o gatilho (obrigatório em saiu-do-alcance)"),
+        }),
+        async execute(context, input) {
+            return tacticalTool(context, (tactical) => tactical.offerReaction(context.campaignId, context.jobId!, context.turnNumber, input))
+        },
+    }),
+]
+
+/** Todas as ferramentas do narrador (persistência, testes, combate e a vez dos adversários). */
+export const MADDOX_NARRATOR_TOOLS: readonly MaddoxMasterTool[] = [...MADDOX_MASTER_TOOLS, ...MADDOX_COMBAT_TOOLS, ...MADDOX_TACTICAL_TOOLS]
 
 export function findMaddoxTool(name: string): MaddoxMasterTool | undefined {
     return MADDOX_NARRATOR_TOOLS.find((tool) => tool.name === name)
@@ -585,14 +776,15 @@ export const MADDOX_CHECK_TOOL_NAME = "request_check"
 
 /**
  * Ferramentas no formato da AI SDK (a SDK `ai` entra sob demanda). `checks: false` tira o `request_check`; `combat: false`
- * tira as do combate narrativo (Maddox 6).
+ * tira as do combate (Maddox 6); `tactical: false` tira as da vez dos adversários (Maddox 7).
  */
-export async function buildMaddoxAiTools(context: MaddoxToolContext, options: { checks?: boolean; combat?: boolean } = {}): Promise<ToolSet> {
+export async function buildMaddoxAiTools(context: MaddoxToolContext, options: { checks?: boolean; combat?: boolean; tactical?: boolean } = {}): Promise<ToolSet> {
     const { dynamicTool } = await import("ai")
     const tools: ToolSet = {}
     for (const def of MADDOX_NARRATOR_TOOLS) {
         if (def.name === MADDOX_CHECK_TOOL_NAME && !options.checks) continue
         if ((MADDOX_COMBAT_TOOL_NAMES as readonly string[]).includes(def.name) && !options.combat) continue
+        if ((MADDOX_TACTICAL_TOOL_NAMES as readonly string[]).includes(def.name) && !options.tactical) continue
         tools[def.name] = dynamicTool({
             description: def.description,
             inputSchema: def.input,

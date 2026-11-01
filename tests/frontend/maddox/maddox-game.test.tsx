@@ -512,7 +512,8 @@ describe("regras de exibição da mesa", () => {
         const { readdirSync, readFileSync } = await import("node:fs")
         const { join } = await import("node:path")
         const dir = join(process.cwd(), "src/features/maddox/components/game")
-        for (const file of readdirSync(dir)) {
+        // Inclui as subpastas (o combate tático fica em `combat/`).
+        for (const file of readdirSync(dir, { recursive: true }).map(String).filter((name) => name.endsWith(".tsx") || name.endsWith(".ts"))) {
             const source = readFileSync(join(dir, file), "utf8")
             expect(source, file).not.toMatch(/@\/core\/ui\/tabs/)
             expect(source, file).not.toMatch(/<select[\s>]/)

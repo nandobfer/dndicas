@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto"
 import { loggerFor } from "@/lib/logger"
 import type { DiceRollResponse } from "@/features/dice-roller/types"
 import type { MaddoxGameStreamLine, MaddoxLiveGenerationDto } from "../game-types"
+import type { TacticalDraftCombatant } from "./tactical-combat"
 
 /**
  * Barramento em memória da mesa do Maddox (Maddox 4) — SOMENTE servidor, em `globalThis` (o app roda num processo
@@ -74,8 +75,8 @@ export interface MaddoxDraftCombatReward {
  * aplicado (`applyCombatDrafts`): se a geração falhar, o combate não muda.
  */
 export type MaddoxDraftCombatEvent =
-    | { type: "start"; title: string; location: string; combatants: MaddoxDraftCombatant[] }
-    | { type: "update"; combatants: (Partial<Omit<MaddoxDraftCombatant, "name">> & { name: string })[] }
+    | { type: "start"; title: string; location: string; combatants: MaddoxDraftCombatant[]; tactical?: { surprise: "personagens" | "adversarios" | null; combatants: TacticalDraftCombatant[] } }
+    | { type: "update"; combatants: (Partial<Omit<MaddoxDraftCombatant, "name">> & { name: string })[]; tactical?: TacticalDraftCombatant[] }
     | {
           type: "end"
           outcome: "vitoria" | "derrota" | "fuga" | "tregua" | "interrompido"
@@ -91,6 +92,8 @@ interface MaddoxJobState {
     meta: MaddoxJobMeta | null
     checks: MaddoxDraftCheck[]
     combat: MaddoxDraftCombatEvent[]
+    /** Combate tático (Maddox 7): cópia de trabalho do combate e das fichas mexida pelas ferramentas dos adversários. */
+    workspace: unknown
 }
 
 const log = loggerFor({ module: "maddox", feature: "game-live" })
@@ -136,7 +139,7 @@ export function enqueueMaddoxJob(campaignId: string, label: string, run: (job: M
     hub.pending += 1
     const jobId = randomUUID()
     const next = hub.tail.then(async () => {
-        hub.jobs.set(jobId, { meta, checks: [], combat: [] })
+        hub.jobs.set(jobId, { meta, checks: [], combat: [], workspace: null })
         try {
             await run({ jobId })
         } catch (error) {
@@ -216,6 +219,32 @@ export function takeDraftCombat(campaignId: string, jobId: string): MaddoxDraftC
     const events = job.combat
     job.combat = []
     return events
+}
+
+/** Cópia de trabalho do combate tático deste job (`null` = ainda não carregada ou o job terminou). */
+export function jobWorkspace<T>(campaignId: string, jobId: string): T | null {
+    return (hubs.get(campaignId)?.jobs.get(jobId)?.workspace as T | undefined) ?? null
+}
+
+export function setJobWorkspace(campaignId: string, jobId: string, workspace: unknown): boolean {
+    const job = hubs.get(campaignId)?.jobs.get(jobId)
+    if (!job) return false
+    job.workspace = workspace
+    return true
+}
+
+/** Retira a cópia de trabalho do job (aplicada depois de a narração ser gerada). */
+export function takeJobWorkspace<T>(campaignId: string, jobId: string): T | null {
+    const job = hubs.get(campaignId)?.jobs.get(jobId)
+    if (!job) return null
+    const workspace = job.workspace as T | null
+    job.workspace = null
+    return workspace
+}
+
+/** Avisa as mesas abertas que uma rolagem do combate tático saiu (todos repetem a animação). */
+export function emitCombatRolled(campaignId: string, messageId: string, roll: DiceRollResponse): void {
+    emit(campaignId, { type: "combat-rolled", messageId, roll })
 }
 
 /** Avisa as mesas abertas que um teste foi rolado (todos repetem a animação com o resultado oficial). */

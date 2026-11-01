@@ -14,7 +14,11 @@ import { apiErrorCode, apiErrorMessage } from "@/lib/api"
 import { MADDOX_TURN_PHASE_LABELS } from "../../constants"
 import type { MaddoxGameMessageDto, MaddoxGameStateDto } from "../../game-types"
 import type { MaddoxGameActionInput } from "../../game-schemas"
-import { composerBlockReason, masterBannerText, turnProgress, visibleLiveGenerations } from "../../game-view"
+import { combatBannerText, composerBlockReason, masterBannerText, turnProgress, visibleLiveGenerations } from "../../game-view"
+import type { MaddoxCombatActionInput } from "../../combat-schemas"
+import { useCancelCombatAction, useDecideReaction, useEndCombatTurn, useRollCombatStep, useSubmitCombatAction } from "../../hooks/useMaddoxCombat"
+import { CombatActionBar, CombatWaitBar } from "./combat/CombatActionBar"
+import { InitiativeTracker } from "./combat/InitiativeTracker"
 import {
     fetchOlderGameMessages,
     useMaddoxGame,
@@ -88,6 +92,14 @@ function BackLink({ campaignId }: { campaignId: string }) {
 function GameTable({ state, presence, stream }: { state: MaddoxGameStateDto; presence: MaddoxGamePresence; stream: MaddoxGameStreamState }) {
     const color = rigorColor(state.rigor)
     const send = useSendMaddoxGameAction(state.campaignId)
+    const combatAct = useSubmitCombatAction(state.campaignId)
+    const combatCancel = useCancelCombatAction(state.campaignId)
+    const combatEnd = useEndCombatTurn(state.campaignId)
+    const combatRoll = useRollCombatStep(state.campaignId)
+    const combatReact = useDecideReaction(state.campaignId)
+    const [asking, setAsking] = useState(false)
+    const [combatInvalid, setCombatInvalid] = useState<string | null>(null)
+    const tactical = state.combat?.tactical ?? null
     const skip = useSkipMaddoxPlayer(state.campaignId)
     const rollCheck = useRollMaddoxCheck(state.campaignId)
     const replays = useMemo(() => new Map(stream.rolled.map((item) => [item.messageId, item.roll])), [stream.rolled])
@@ -131,6 +143,22 @@ function GameTable({ state, presence, stream }: { state: MaddoxGameStateDto; pre
         }
     }
 
+    const onCombatAct = async (input: MaddoxCombatActionInput) => {
+        setCombatInvalid(null)
+        try {
+            await combatAct.mutateAsync(input)
+            return true
+        } catch (error) {
+            if (apiErrorCode(error) === "ACTION_INVALID") setCombatInvalid(apiErrorMessage(error, "Essa ação não é possível para o seu personagem."))
+            else toast.error(apiErrorMessage(error, "Não foi possível agir"))
+            return false
+        }
+    }
+    const myCombatTurn = Boolean(tactical && state.me.combat?.myTurn && state.turn.phase === "players")
+    const combatBusy = combatAct.isPending || combatEnd.isPending || combatCancel.isPending
+    // Em combate tático o campo de texto só pergunta ao mestre (a vez é pelos botões).
+    const questionBlock = state.status !== "active" ? "A campanha não está em andamento." : !state.me.ready ? "Conclua a entrevista de personagem com o Maddox para entrar no jogo." : state.turn.phase !== "players" ? "Perguntas ao mestre ficam para a vez de um personagem." : null
+
     const progress = turnProgress(state, presence)
     const masterTurn = state.turn.phase === "master"
 
@@ -157,12 +185,17 @@ function GameTable({ state, presence, stream }: { state: MaddoxGameStateDto; pre
                 }
                 actions={<MySheetButton sheet={state.me.sheet} />}
                 banner={
+                    <>
                     <p className="flex items-center gap-2 text-xs text-white/80" role="status" data-testid="turn-banner">
                         {masterTurn ? <Dices className="h-3.5 w-3.5 shrink-0" style={{ color }} aria-hidden /> : <MessageCircle className="h-3.5 w-3.5 shrink-0" style={{ color }} aria-hidden />}
                         {masterTurn
                             ? masterBannerText(state)
-                            : `${MADDOX_TURN_PHASE_LABELS.players} — ${progress.declared} de ${progress.total} ${presence.available ? "jogador(es) online" : "jogador(es)"} já declararam`}
+                            : state.turn.combatActor
+                              ? combatBannerText(state)
+                              : `${MADDOX_TURN_PHASE_LABELS.players} — ${progress.declared} de ${progress.total} ${presence.available ? "jogador(es) online" : "jogador(es)"} já declararam`}
                     </p>
+                    {tactical && state.combat && <InitiativeTracker combat={tactical} title={state.combat.title} color={color} compact />}
+                    </>
                 }
             />
 
@@ -185,8 +218,36 @@ function GameTable({ state, presence, stream }: { state: MaddoxGameStateDto; pre
                         onLoadMore={() => void loadMore()}
                         replays={replays}
                         onRollCheck={async (checkId) => (await rollCheck.mutateAsync(checkId)).roll}
+                        combat={{
+                            isOwner: state.me.isOwner,
+                            reacting: combatReact.isPending,
+                            onRollAction: async (actionId) => (await combatRoll.mutateAsync({ kind: "action", id: actionId })).roll,
+                            onRollCombat: async (rollId) => (await combatRoll.mutateAsync({ kind: "roll", id: rollId })).roll,
+                            onCancelAction: (actionId) => combatCancel.mutate(actionId),
+                            onDecideReaction: (reactionId, escolha) => combatReact.mutate({ id: reactionId, escolha }),
+                        }}
                     />
-                    <GameComposer blockedReason={composerBlockReason(state)} declared={state.me.declared} busy={send.isPending} onSend={onSend} invalidReason={invalidReason} focusKey={focusKey} />
+                    {tactical && state.me.combat ? (
+                        <>
+                            {myCombatTurn ? (
+                                <CombatActionBar
+                                    me={state.me.combat}
+                                    combat={tactical}
+                                    color={color}
+                                    busy={combatBusy}
+                                    invalidReason={combatInvalid}
+                                    onAct={onCombatAct}
+                                    onEndTurn={(movimento) => combatEnd.mutate(movimento.trim() ? { movimento: movimento.trim() } : {})}
+                                    onAsk={() => setAsking((value) => !value)}
+                                />
+                            ) : (
+                                <CombatWaitBar combat={tactical} canAsk={questionBlock === null} onAsk={() => setAsking((value) => !value)} />
+                            )}
+                            {asking && <GameComposer blockedReason={questionBlock} declared busy={send.isPending} onSend={onSend} invalidReason={null} focusKey={focusKey} />}
+                        </>
+                    ) : (
+                        <GameComposer blockedReason={composerBlockReason(state)} declared={state.me.declared} busy={send.isPending} onSend={onSend} invalidReason={invalidReason} focusKey={focusKey} />
+                    )}
                     {!state.me.ready && (
                         <div className="border-t px-4 py-2.5">
                             <Button size="sm" asChild>
@@ -198,6 +259,7 @@ function GameTable({ state, presence, stream }: { state: MaddoxGameStateDto; pre
                     )}
                 </section>
                 <div className="space-y-6 lg:min-h-0 lg:overflow-y-auto" data-testid="game-tools">
+                    {tactical && state.combat && <InitiativeTracker combat={tactical} title={state.combat.title} color={color} />}
                     <TurnPanel
                         state={state}
                         presence={presence}

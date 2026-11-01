@@ -209,12 +209,18 @@ describe("combate narrativo no prompt (Maddox 6)", () => {
             expect(text).toContain("- **Varn**: Líder — condição: ferido")
             expect(text).toContain("- **Lobo** (2) [aliado] — condição: sem registro")
         }
+        // Rigoroso e Fiel ao D&D: combate tático (Maddox 7), sem a regra nem o bloco do combate narrativo.
         for (const rigor of ["rigoroso", "fiel-dnd"] as const) {
-            const text = buildNarratorInstructions(context({ rigor, combat }), { kind: "ai-sdk" })
+            const text = buildNarratorInstructions(context({ rigor, combat, tacticalCombat: "## Combate tático em andamento: Cripta" }), { kind: "ai-sdk" })
             expect(text).not.toContain("## Combate narrativo")
-            expect(text).not.toContain("## Combate em andamento")
-            expect(text).toContain("O combate continua narrado (sem iniciativa nem turnos mecânicos)")
+            expect(text).not.toContain("## Combate em andamento:")
+            expect(text).toContain("## Combate tático\n")
+            expect(text).toContain("## Combate tático em andamento: Cripta")
+            expect(text).toContain("O combate é TÁTICO")
+            expect(text).toContain("`monster_action`")
         }
+        expect(buildNarratorInstructions(context({ rigor: "fiel-dnd" }), { kind: "ai-sdk" })).toContain("SÓ monstros do catálogo")
+        expect(buildNarratorInstructions(context({ rigor: "rigoroso" }), { kind: "ai-sdk" })).toContain("`estatisticas` próprias")
         // Equilibrado: testes nos golpes decisivos; Narrativo: sem dados.
         expect(buildNarratorInstructions(context({ rigor: "equilibrado" }), { kind: "ai-sdk" })).toContain("Testes só nos golpes decisivos")
         expect(buildNarratorInstructions(context({ rigor: "narrativo" }), { kind: "ai-sdk" })).toContain("Nada de dados nem testes")
@@ -228,7 +234,10 @@ describe("combate narrativo no prompt (Maddox 6)", () => {
 
     it("MCP lista as ferramentas do combate só quando liberadas", () => {
         expect(buildNarratorInstructions(context(), { kind: "mcp", server: "dndicas-maddox", turnToken: "t", combat: true })).toContain("get_combat, start_combat, update_combat, end_combat")
-        expect(buildNarratorInstructions(context({ rigor: "rigoroso" }), { kind: "mcp", server: "dndicas-maddox", turnToken: "t", combat: false })).not.toContain("start_combat")
+        const toolsLine = (text: string) => text.split("\n").find((line) => line.includes("servidor MCP")) ?? ""
+        expect(toolsLine(buildNarratorInstructions(context({ rigor: "rigoroso" }), { kind: "mcp", server: "dndicas-maddox", turnToken: "t", combat: false }))).not.toContain("start_combat")
+        const tactical = toolsLine(buildNarratorInstructions(context({ rigor: "fiel-dnd" }), { kind: "mcp", server: "dndicas-maddox", turnToken: "t", combat: true, tactical: true }))
+        expect(tactical).toContain("get_combat, start_combat, update_combat, end_combat, monster_action, apply_effect, request_damage_roll, offer_reaction")
     })
 
     it("tarefa leva a orientação do JEV e a transcrição mostra os cards do combate", () => {

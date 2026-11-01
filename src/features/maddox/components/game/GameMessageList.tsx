@@ -11,6 +11,7 @@ import type { DiceRollResponse } from "@/features/dice-roller/types"
 import { MemberAvatar } from "../campaigns/campaign-visuals"
 import { GameCheckCard } from "./GameCheckCard"
 import { GameCombatCard } from "./GameCombatCard"
+import { CombatActionCard, CombatOrderCard, CombatReactionCard, CombatRollCard } from "./combat/CombatCards"
 
 const NEAR_BOTTOM_PX = 80
 const bubble = { initial: { opacity: 0, y: 8 }, animate: { opacity: 1, y: 0 }, transition: { duration: 0.2, ease: "easeOut" as const } }
@@ -31,6 +32,17 @@ interface Props {
     replays?: ReadonlyMap<string, DiceRollResponse>
     /** Rola um teste pedido pelo Maddox (Maddox 5). */
     onRollCheck?: (checkId: string) => Promise<DiceRollResponse>
+    /** Combate tático (Maddox 7): rolar passos e rolagens, cancelar a ação e escolher a reação. */
+    combat?: CombatHandlers
+}
+
+export interface CombatHandlers {
+    isOwner: boolean
+    reacting: boolean
+    onRollAction: (actionId: string) => Promise<DiceRollResponse>
+    onRollCombat: (rollId: string) => Promise<DiceRollResponse>
+    onCancelAction: (actionId: string) => void
+    onDecideReaction: (reactionId: string, choice: string) => void
 }
 
 /**
@@ -43,7 +55,9 @@ const noRoll = async (): Promise<DiceRollResponse> => {
     throw new Error("Rolagem indisponível")
 }
 
-export function GameMessageList({ messages, myMemberId, maddoxAvatarUrl, color, narrating, live = [], hasMore, loadingMore, onLoadMore, replays = NO_REPLAYS, onRollCheck = noRoll }: Props) {
+const NO_COMBAT: CombatHandlers = { isOwner: false, reacting: false, onRollAction: noRoll, onRollCombat: noRoll, onCancelAction: () => undefined, onDecideReaction: () => undefined }
+
+export function GameMessageList({ messages, myMemberId, maddoxAvatarUrl, color, narrating, live = [], hasMore, loadingMore, onLoadMore, replays = NO_REPLAYS, onRollCheck = noRoll, combat = NO_COMBAT }: Props) {
     const scrollRef = useRef<HTMLDivElement>(null)
     const stickRef = useRef(true)
     const [showJump, setShowJump] = useState(false)
@@ -90,7 +104,13 @@ export function GameMessageList({ messages, myMemberId, maddoxAvatarUrl, color, 
                         <Fragment key={message.id}>
                             {divider && <TurnDivider number={message.turnNumber} color={color} />}
                             {message.kind === "combat" ? (
-                                message.combat ? <GameCombatCard combat={message.combat} /> : null
+                                message.combat ? message.combat.event === "order" ? <CombatOrderCard combat={message.combat} /> : <GameCombatCard combat={message.combat} /> : null
+                            ) : message.kind === "combat-action" && message.combatAction ? (
+                                <CombatActionCard message={message} mine={message.memberId !== null && message.memberId === myMemberId} replay={replays.get(message.id) ?? null} onRoll={combat.onRollAction} onCancel={combat.onCancelAction} />
+                            ) : message.kind === "combat-roll" && message.combatRoll ? (
+                                <CombatRollCard message={message} mine={message.memberId !== null && message.memberId === myMemberId} replay={replays.get(message.id) ?? null} onRoll={combat.onRollCombat} />
+                            ) : message.kind === "combat-reaction" && message.combatReaction ? (
+                                <CombatReactionCard message={message} mine={message.memberId !== null && message.memberId === myMemberId} isOwner={combat.isOwner} busy={combat.reacting} onDecide={combat.onDecideReaction} />
                             ) : message.kind === "check" && message.check ? (
                                 <GameCheckCard message={message} mine={message.memberId !== null && message.memberId === myMemberId} color={color} replay={replays.get(message.id) ?? null} onRoll={onRollCheck} />
                             ) : (

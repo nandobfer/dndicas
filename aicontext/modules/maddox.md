@@ -439,7 +439,7 @@ Código: `check-modifier.ts` (módulo PURO, servidor e tela: modificador pela fi
 **Graus.** Equilibrado, Rigoroso e Fiel ao D&D (`MADDOX_CHECK_RIGORS`, os mesmos que criam a ficha) trocam o modo narrativo pela
 regra `checksRule(rigor)`: frequência do grau (Equilibrado só nos momentos decisivos; Rigoroso sempre que adequado; Fiel exatamente
 como nas regras), pedir pela ferramenta, **nunca rolar nem inventar resultado**, parar a narração no momento da tentativa, comparar o
-total com a CD e narrar a consequência sem recitar números. Combate continua narrado (iniciativa e turnos mecânicos são do Maddox 7).
+total com a CD e narrar a consequência sem recitar números. No Rigoroso e no Fiel ao D&D o combate é tático (Maddox 7).
 Cada personagem do prompt ganha o **resumo da ficha** (`sheetSummary`: nível, classe, raça, PV, CA, atributos com modificador,
 proficiência, resistências e perícias treinadas). Classe, subclasse e raça entram em texto puro (os campos guardam HTML de menção);
 a CA não é gravada na ficha: `loadSheetSummaries` a calcula dos itens equipados com `computeSheetArmorClass`
@@ -692,8 +692,8 @@ Código: `server/combat.ts` (aplicação, efeitos do fim, recompensas, DTOs), fe
 (JEV), `server/combat-image.ts` (gancho da imagem), coleção `maddox_combats` (`models/maddox-combat.ts`),
 `components/game/GameCombatCard.tsx`.
 
-**Graus.** Narrativo, Flexível e Equilibrado (`MADDOX_COMBAT_RIGORS`). Rigoroso e Fiel ao D&D ficam como antes (combate narrado,
-sem registro nem ferramentas) até o Maddox 7, que vai reaproveitar o registro. Sem iniciativa nem turnos rígidos: o motor de turnos
+**Graus.** Narrativo, Flexível e Equilibrado (`MADDOX_COMBAT_RIGORS`). Rigoroso e Fiel ao D&D usam o **combate tático** (seção
+"Combate tático (Maddox 7)"), que reaproveita o registro, os cards e o fim descritos aqui. Sem iniciativa nem turnos rígidos: o motor de turnos
 não muda (todos declaram, o Maddox narra); no Equilibrado os testes continuam nos golpes decisivos.
 
 **Ferramentas do narrador** (só nas narrações dos três graus — respostas a perguntas não recebem; pelo MCP `dndicas-maddox` elas existem
@@ -724,7 +724,7 @@ card que faltou e dispara os efeitos uma vez. Nomes repetidos de participantes (
 - `character.currentState` de cada personagem em `estadoPersonagens`;
 - memória `evento` "Combate: {título} (turno N)" (visível aos jogadores, tag `combate`) com resultado, resumo, desfechos e
   recompensas — **uma por combate** (chave `combatId` na memória), então dois combates com o mesmo título não se sobrescrevem;
-- **recompensas na ficha, só no Equilibrado** (`MADDOX_COMBAT_SHEET_REWARD_RIGORS`) e só para personagem com ficha: cada recompensa troca
+- **recompensas na ficha no Equilibrado, no Rigoroso e no Fiel ao D&D** (`MADDOX_COMBAT_SHEET_REWARD_RIGORS`) e só para personagem com ficha: cada recompensa troca
   `applied: false → true` antes de tocar a ficha (retomada não duplica); se a escrita na ficha falhar, a marca volta a `false` (o
   card não mostra "Na ficha"), com aviso no log, e as recompensas seguintes continuam. Moedas: `$inc` em `sheet.coins` (po→gp, pp→sp, pe→ep,
   pc→cp, pl→pp). Item: do catálogo (busca por id ou nome, ativo; menção e campos de CA como a ficha da entrevista) ou, fora dele,
@@ -757,6 +757,131 @@ acrescenta à tarefa a nota "(o JEV indica que … provavelmente começam/encerr
 
 Sem rota nova nem permissão nova (`maddox.play` cobre a mesa).
 
+## Combate tático (Maddox 7)
+
+Graus **Rigoroso e Fiel ao D&D** (`MADDOX_TACTICAL_COMBAT_RIGORS`): iniciativa, turnos por combatente, Ação e Ação bônus por botões,
+dados rolados pelos jogadores (personagens) e pelo servidor (adversários) e dano/efeitos aplicados e persistidos.
+
+Código: regras puras em `combat-rules.ts` (vantagem/desvantagem por condição, crítico, dano com resistência/imunidade/vulnerabilidade,
+PV temporários, 0 PV, morte instantânea, testes contra a morte 2024, CD da concentração, desempate da iniciativa, expressões de dados)
+e `combat-options.ts` (o que o personagem PODE usar); tipos em `combat-types.ts`; Zod das rotas em `combat-schemas.ts`. Servidor:
+`server/tactical-combat.ts` (estado, início, ordem, fila dos adversários, abertura da vez, ausência), `server/tactical-actions.ts`
+(vez do jogador, rolagens, cancelar, encerrar, pular, morte), `server/tactical-master.ts` (ferramentas da vez dos adversários sobre
+uma cópia de trabalho), `server/combat-reactions.ts` (janelas de reação), `server/combat-monsters.ts` (bloco de estatísticas),
+`server/combat-classifier.ts` (custo das habilidades), `server/combat-sheet.ts` (leitura e escritas atômicas na ficha),
+`server/tactical-options.ts`, `server/tactical-dto.ts`. Tela em `components/game/combat/` e `hooks/useMaddoxCombat.ts`.
+
+**Estado (`maddox_combats`).** `mode: "tactical"`, `tactical { phase: initiative|running, round, activeIndex, order[], characters[],
+surprise, queue[], nextKey, queueTurn, staleEndNarrations }` e `rev` (cada gravação é condicional à versão: clique duplo e corridas
+viram 409 `COMBAT_CHANGED`, com até 3 tentativas internas). Cada adversário vira um **indivíduo** ("Goblin 1", "Goblin 2", PV próprios,
+iniciativa compartilhada pelo grupo) com `combatants[].tactical { actorKey, stats, conditions, flags, economy, concentration, defeated }`.
+`characters[]` guarda condições, flags (Esquivando, Desengajado, Disparada, Escudo, Ajudado), economia, concentração, `hpZero`,
+`stable`, `dead`, `left` e a ação preparada. **PV, PV temporários, testes contra a morte, espaços de magia e cargas ficam na ficha**
+(fonte da verdade), escritos com `$set`/`$inc` atômicos e aviso `publishSheetPatched` para a ficha aberta. O schema usa
+`minimize: false` (objetos vazios do estado ficam gravados).
+
+**Bloco dos adversários** (`start_combat`/`update_combat` estendidos com `monstro` e `estatisticas`): **Fiel** = só monstros ATIVOS do
+catálogo (nome desconhecido é recusado sem gravar nada, com sugestões pelo começo do nome e a dica de `search_catalog`; bloco próprio
+recusado); **Rigoroso** = catálogo ou bloco próprio explícito (`ca`, `pv`, `iniciativa`, `salvaguardas`, resistências, `acoes[]`).
+Do catálogo: PV = média de `hitPointsFormula`, CA = primeiro número de `armorClass`, salvaguardas pelos atributos e a proficiência do
+ND (ou `override`), ações com `attackRoll`/`hitRoll` (dados somados, primeiro tipo de dano), salvaguarda lida do texto ("Salvaguarda de
+Destreza CD 15", "metade do dano"), recarga rolada em d6 no começo do turno, Ataques Múltiplos pelo texto. Ações lendárias, de covil
+e efeitos regionais ficam fora (o Maddox só narra).
+
+**Iniciativa.** A narração que chama `start_combat` grava o card "Combate!" e um card `combat-roll` de iniciativa por personagem
+pronto com ficha (espera do turno do mestre, como os testes do Maddox 5; só quem rola o vê pendente). O servidor rola a dos
+adversários (desvantagem se `surpresa: "adversarios"`; a dos personagens com `surpresa: "personagens"`). O modificador vem da ficha.
+Depois da última rolagem, a ordem fecha (total → Destreza → personagens antes → entrada), grava o card `combat { event: "order" }`
+("Ordem de iniciativa") e a continuação narra o começo.
+
+**Motor da vez.** O motor do Maddox 3 continua: em combate, o **turno dos jogadores é a vez de UM personagem** (`turn.combatActor`,
+`eligibleMemberIds` = só o membro dele) e o **turno do mestre** narra a vez que fechou e conduz, na ordem, os adversários até o próximo
+personagem (`prepareMonsterQueue`, uma vez por turno do mestre, com o começo do turno de cada um: economia nova, flags e condições
+vencidas, recarga; rodada nova quando a ordem volta ao topo). Sem esperas, `openCombatTurn` abre a vez do próximo personagem (começo do
+turno dele; com 0 PV, o card do teste contra a morte). Personagem morto, estável ou que saiu é pulado; se o personagem da vez cair
+durante a vez dos adversários, os seguintes agem num novo turno do mestre. Perguntas ao mestre continuam livres para qualquer membro
+pronto durante a vez de outro (não mudam o turno); declarações de texto livre no combate respondem 409 `COMBAT_USE_ACTIONS`.
+
+**Ausência.** Jogador da vez offline: `offlineSince` é marcado e a vez passa depois de `MADDOX_COMBAT_OFFLINE_GRACE_MS` (30 s; timer no
+processo e retomada no `check`), com "Não agiu: o jogador estava offline" (`offlineSkip`). O dono pode pular a vez (`/game/skip`, com
+auditoria). Saída do membro: o personagem sai da ordem (`left`), rolagens/reações/ações pendentes são canceladas e, se era a vez dele,
+ela fecha e o turno do mestre segue. Mesa toda offline não avança sozinha (regra do Maddox 3).
+
+**Vez do jogador (rotas, todas com `maddox.play`, membro `joined`, `assertMemberCanPlay` e "é a sua vez" no servidor):**
+
+| Rota | Comportamento |
+| --- | --- |
+| `POST …/game/combat/actions` `{ economy, optionId, targets?, spellLevel?, skill?, freeText?, readyOptionId?, readyTrigger? }` | A opção precisa estar na lista recalculada da ficha (`OPTION_UNAVAILABLE`); alvo validado; opção sem os dados para resolver = 409 `OPTION_UNRESOLVABLE` antes de qualquer gasto; a economia é reservada primeiro (`ACTION_ALREADY_USED`) e só então espaço de magia, carga e item são gastos (gasto recusado devolve a economia); uma ação pendente por vez (`ACTION_PENDING`). "Outra ação" (ou habilidade de custo não identificado) passa pelo `validateDeclaration` com o contexto do combate: inválida = 409 `ACTION_INVALID` com o motivo, nada gasto |
+| `POST …/combat/actions/[id]/roll` `{}` | Reivindica o passo antes de rolar (`combatAction.rollingStep`/`rollingAt`, troca condicional; a chamada concorrente recebe 409 `ACTION_RESOLVED`; trava mais velha que `MADDOX_COMBAT_ROLL_CLAIM_STALE_MS` (30 s) é tida como abandonada e a próxima tentativa assume; só o dono da reivindicação grava). Rola o próximo passo: ataque (vantagem/desvantagem pelas condições; acerto contra a CA do alvo, que não aparece; 20 natural = crítico com dados dobrados), dano (resistências; adversário a 0 PV = `defeated`), cura (sai dos 0 PV), magia de salvaguarda (o servidor rola a salvaguarda de cada alvo; metade no sucesso pelo texto/perfil), teste (Esconder = Furtividade CD 15 → Invisível) |
+| `DELETE …/combat/actions/[id]` | Cancela a ação sem rolagem e sem recurso gasto; a economia volta (`ACTION_NOT_CANCELLABLE`) |
+| `POST …/combat/rolls/[id]/roll` `{}` | Reivindicada antes de rolar (`combatRoll.rolling`/`rollingAt`, mesma expiração; concorrente = 409 `ROLL_NOT_PENDING`). Iniciativa, teste contra a morte (encerra a vez), concentração, salvaguarda contra um adversário (aplica o dano pré-rolado), dano pedido pelo Maddox. O dono pode rolar no lugar (auditado) |
+| `POST …/combat/reactions/[id]` `{ escolha }` | A reação escolhida ou `none`; o dono só pode recusar no lugar (auditado) |
+| `POST …/combat/end-turn` `{ movimento? }` | Encerra a vez (409 com ação ou rolagem pendente); grava a declaração da vez com o resumo das ações e o "Movimento e posição" |
+
+**O que o personagem pode usar** (`buildCombatOptions`, revalidado a cada ação): armas equipadas do catálogo (Força; Acuidade = o maior
+entre Força e Destreza; Munição = Destreza) e o ataque desarmado; Ataque Extra pelo nome da habilidade (2/3/4 ataques na mesma Ação);
+a outra arma Leve na Ação bônus depois de atacar com uma Leve (sem o modificador no dano, salvo negativo; a mesma arma só com quantidade ≥ 2, por `economy.lightWeaponId`); magias preparadas (ou
+truques) com o custo do tempo de conjuração e espaço livre no círculo ou acima (seletor de círculo), **uma magia com espaço por turno**
+(2024), truques escalando pelo nível; consumíveis com quantidade (poção de cura: Ação bônus em si, Ação em aliado; os demais em
+"Utilizar"); habilidades e talentos pelo **classificador** (sem cargas esgotadas, sem passivas; cura e acerto automático só são resolvidos pelo servidor com os dados no texto, ataque/salvaguarda de habilidade viram utilitária para o Maddox); ações comuns 2024 (Disparada,
+Desengajar, Esquivar, Ajudar, Esconder, Influenciar, Preparar, Procurar, Estudar, Utilizar); "Outra ação". Incapacitado = nada; 0 PV =
+só o teste contra a morte. Reações: ataque de oportunidade (arma corpo a corpo ou desarmado), magias de Reação preparadas com espaço,
+habilidades classificadas como Reação e a ação preparada.
+
+**Classificador do custo** (`combat-classifier.ts`): cache `maddox_combat_option_profiles` (`{ entityType, entityId, textHash }` único)
+→ regra pelo texto ("como uma Ação Bônus", "usa sua ação", "como Reação, quando…"; "sempre que usar a ação Atacar" = passiva) → JEV
+`combat-option-cost` ("Custo de ação no combate", pergunta tipada: custo e gatilho), **em segundo plano** com teto
+`MADDOX_COMBAT_CLASSIFY_TIMEOUT_MS`; quando classifica, a mesa recebe `maddox.game.changed`. Sem resposta (chave desligada, falha,
+teto) = "Custo não identificado: o Maddox confere" (ação livre validada), com log. Cache negativo em memória: a mesma habilidade só é
+reenviada (e a configuração relida) depois de `MADDOX_COMBAT_CLASSIFY_RETRY_MS` (10 min).
+
+**Vez dos adversários (ferramentas do narrador, só nos graus táticos):**
+
+| Ferramenta | Comportamento |
+| --- | --- |
+| `monster_action { combatente, acao, alvos[], modo?, reacao? }` | Só quem está em "agem agora", na ordem (anterior que já passou = erro); ação do próprio bloco, economia e recarga conferidas; Ataques Múltiplos = chamadas seguidas. Ataque: o servidor rola contra a CA da ficha (+5 do Escudo) e o dano; se o alvo tem reação de gatilho "atingido", devolve `aguardando_reacao` (narre até o golpe e pare). Salvaguarda: dano rolado já, card de salvaguarda para cada personagem (espera; falha automática por condição sem card), salvaguarda dos adversários rolada pelo servidor. `reacao: true` = ataque de oportunidade (recusado contra quem se desengajou) |
+| `apply_effect { alvo, condicao?, remover?, duracaoRodadas?, dano?, tipoDano?, cura?, descricao }` | Efeito adjudicado: condição (com duração) e dano/cura em dados rolados pelo servidor |
+| `request_damage_roll { personagem, dados, tipoDano?, alvo, motivo }` | Dano de uma ação livre aceita: o JOGADOR rola (espera) |
+| `offer_reaction { personagens[], gatilho, descricao, fonte? }` | Abre a janela (saiu do alcance, conjura magia, preparada, outro) para quem tem reação disponível; `saiu-do-alcance` exige `fonte` (o adversário) |
+| `get_combat` | Ordem, rodada, "agem agora", próxima vez, PV/CA/condições/ações |
+
+Tudo mexe numa **cópia de trabalho** no job da fila (`jobWorkspace`): ferramentas seguintes veem o PV já reduzido, e a cópia só é
+gravada (`commitTacticalWorkspace`: combate pela versão, PV e testes contra a morte na ficha, mortes) depois que a narração foi gerada,
+antes do fim do combate. Geração que falha não muda nada; a nova tentativa rola de novo (log). Dano a 0 PV: Inconsciente, perde a
+concentração; dano a 0 PV = falha (crítico = duas); excedente ≥ PV máximo = morte instantânea. Dano em quem concentra abre a
+salvaguarda de Constituição (CD max(10, metade), até 30). 3 falhas → `MaddoxCharacter.status = "dead"` (auditado), fora da ordem.
+
+**Reações** (`combat-reactions.ts`): mensagem `combat-reaction` (índice único: uma pendente por personagem) com as opções só para quem
+reage e prazo `MADDOX_REACTION_TIMEOUT_MS` (45 s, contagem na tela). Offline recusa na hora; prazo vencido = não reage (timer no
+processo). Resolução: Escudo (+5 na CA até o próximo turno, reavalia o acerto, gasta o espaço), ataque de oportunidade (abre um card
+de ação com ataque e dano rolados pelo jogador dentro da espera; sem o adversário, não sai e a reação não é gasta), Contramágica (salvaguarda de Constituição do conjurador contra a CD
+de magia da ficha), Esquiva Sobrenatural (metade do dano), ação preparada; as demais são registradas e o Maddox adjudica. Sem
+reação, o golpe que esperava entra. Esperas por turno do mestre em combate: `MADDOX_COMBAT_WAIT_ROUNDS_MAX` (10); passado o teto,
+novas janelas não abrem.
+
+**Fim.** `end_combat` como no Maddox 6 (recusado com salvaguarda/reação/rolagem esperando). A tarefa manda encerrar quando todos os
+inimigos caem ou nenhum personagem fica de pé; se o Maddox não encerrar em `MADDOX_COMBAT_FORCE_END_AFTER` (2) narrações (ou
+imediatamente quando o grupo caiu), o servidor encerra como `vitoria`/`derrota` (log de aviso) e a mesa volta ao turno normal com todos
+os elegíveis.
+
+**Prompt.** Regra "## Combate tático" (`tacticalCombatRule`), bloco "## Combate tático em andamento" (estado do `get_combat`), tarefa
+com "agem agora, nesta ordem: …" e a vez seguinte (`tacticalTaskLines`), resultados das esperas na continuação
+(`waitRoundResults`) e a transcrição com os resumos dos cards. No OpenCode, a lista do MCP inclui `monster_action`, `apply_effect`,
+`request_damage_roll`, `offer_reaction`.
+
+**DTO e tela.** `combat.tactical` (ordem com PV dos personagens, faixa "Ileso/Ferido/Muito ferido/Caído" dos adversários — sem PV nem
+CA —, condições, concentração, morrendo/estável/morto, quem age), `turn.combatActor`, `turn.pendingCombat`, `me.combat` (vez, economia,
+opções de Ação/Ação bônus, morrendo) e `combatAction`/`combatRoll`/`combatReaction` nas mensagens (rolagem pendente só para quem rola;
+opções da reação só para quem reage). Stream: `combat-rolled` (todos repetem o dado). Tela: `InitiativeTracker` (coluna da direita e
+faixa compacta no cabeçalho em telas pequenas), `CombatActionBar` (na minha vez substitui o campo: Ação, Ação bônus, economia,
+"Movimento e posição", Encerrar turno, "Perguntar ao mestre"; um único painel ancorado ao botão que o abriu, `anchorLeft` limita ao
+contêiner e à janela; categorias em `OptionTabs`, alvos/círculo/perícia em `GlassSelector`), `CombatWaitBar` ("Vez de Kael
+(iniciativa 17) · Rodada 2"), cards `CombatActionCard` (dado inline, Acertou/Errou/Crítico, dano), `CombatRollCard`,
+`CombatReactionCard` (contagem, "Não reagir", "Não reagir no lugar" do dono) e `CombatOrderCard`.
+
+Sem permissão nova (`maddox.play` cobre). Fora do escopo: grid e alcance medido (o movimento é texto), ações lendárias e de covil,
+XP e subida de nível, reações dos adversários além do ataque de oportunidade conduzido pelo Maddox, novo personagem depois da morte.
+
 ## Testes
 
 `tests/backend/maddox/*` (configuração, roteiros, avatar, sessões, rotas, `campaigns.test.ts` com MongoDB em
@@ -773,6 +898,11 @@ meio, presença, pular, saída, concorrência, trava do mestre, paginação), `g
 (API de presença e `/api/pusher/auth`), `tests/backend/integrations/channel-auth.test.ts` e
 `tests/frontend/maddox/maddox-game.test.tsx` (mesa, happy-dom); o lobby com "Iniciar campanha"/"Entrar na mesa" em
 `maddox-campaigns.test.tsx`.
+Maddox 7: `narrator-tactical-combat-campaign.test.ts` (critério de aceite: Fiel com 3 personagens, iniciativa, Ação com Ataque Extra,
+Ação bônus com a outra arma Leve e Palavra Curativa, Goblin com Ataques Múltiplos, Escudo, fim com recompensa na ficha, estado
+conferido no banco), `tactical-combat.test.ts` (Outra ação pelo rigor, cancelar, pular/ausência, teste contra a morte, reações,
+classificador), `combat-rules.test.ts`, `combat-options.test.ts`, `combat-monsters.test.ts` e
+`tests/frontend/maddox/maddox-tactical-combat.test.tsx` (barra, menu ancorado, rastreador, cards; happy-dom).
 Maddox 4: `narrator-campaign.test.ts` (**critério de aceite**: campanha narrativa com 2 jogadores e 6 narrações com o narrador
 real sobre um `streamText` roteirizado — persistência de NPCs, locais, missões, checkpoint e condição dos personagens e o estado de
 volta ao prompt; pergunta sem trocar de turno; falha do provedor), `master-tools.test.ts`, `narrator-prompt.test.ts`,

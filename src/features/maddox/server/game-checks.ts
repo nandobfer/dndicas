@@ -110,8 +110,7 @@ async function loadSheet(sheetId: Types.ObjectId): Promise<MaddoxCheckSheet | nu
  */
 export async function advanceAfterChecks(campaignId: Types.ObjectId, turnNumber: number, round: number): Promise<boolean> {
     await cancelOrphanChecks(campaignId, turnNumber, round)
-    const pending = await MaddoxCampaignMessageModel.exists({ campaignId, turnNumber, kind: "check", "check.round": round, "check.status": "pending" })
-    if (pending) return false
+    if (await hasRoundWaits(campaignId, turnNumber, round, true)) return false
     const token = randomUUID()
     const won = await MaddoxCampaignModel.updateOne(
         { _id: campaignId, status: "active", "turn.number": turnNumber, "turn.phase": "master", "turn.awaitingChecks": true, "turn.checkRound": round === 0 ? { $in: [0, null] } : round },
@@ -122,6 +121,24 @@ export async function advanceAfterChecks(campaignId: Types.ObjectId, turnNumber:
     void scheduleMasterTurn(campaignId, token, turnNumber, round + 1)
     await publishGameChanged(campaignId)
     return true
+}
+
+/**
+ * A rodada `round` do turno do mestre tem esperas: testes (Maddox 5) e, no combate tático (Maddox 7), rolagens avulsas,
+ * janelas de reação e ações de reação (ataque de oportunidade). `pendingOnly` = só as que ainda esperam o jogador.
+ */
+export async function hasRoundWaits(campaignId: Types.ObjectId, turnNumber: number, round: number, pendingOnly = false): Promise<boolean> {
+    const found = await MaddoxCampaignMessageModel.exists({
+        campaignId,
+        turnNumber,
+        $or: [
+            { kind: "check", "check.round": round, ...(pendingOnly ? { "check.status": "pending" } : {}) },
+            { kind: "combat-roll", "combatRoll.waitRound": round, ...(pendingOnly ? { "combatRoll.status": "pending" } : {}) },
+            { kind: "combat-reaction", "combatReaction.waitRound": round, ...(pendingOnly ? { "combatReaction.status": "pending" } : {}) },
+            { kind: "combat-action", "combatAction.waitRound": round, ...(pendingOnly ? { "combatAction.status": "pending" } : {}) },
+        ],
+    })
+    return Boolean(found)
 }
 
 /**

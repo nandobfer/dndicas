@@ -1,12 +1,12 @@
 import { loggerFor } from "@/lib/logger"
-import { MADDOX_COMBAT_HINT_TIMEOUT_MS, MADDOX_COMBAT_RIGORS, MADDOX_JEV_MODEL } from "../constants"
+import { MADDOX_COMBAT_HINT_TIMEOUT_MS, MADDOX_COMBAT_RIGORS, MADDOX_JEV_MODEL, MADDOX_TACTICAL_COMBAT_RIGORS } from "../constants"
 import type { IMaddoxCampaign } from "../models"
 import type { MaddoxMasterDeclaration } from "./game-master"
 import { rigorBlock } from "./interview-prompt"
 
 /**
  * JEV "Início ou fim de combate" (Maddox 6): com a chave `combat-boundary` ligada, nos graus com combate narrativo, antes
- * da narração das declarações o JEV avalia numa só pergunta se elas levam a cena a um combate (fora de combate) ou o
+ * da narração das declarações (também nos graus táticos do Maddox 7) o JEV avalia numa só pergunta se elas levam a cena a um combate (fora de combate) ou o
  * encerram (em combate). A resposta é só ORIENTAÇÃO na tarefa: quem abre e fecha o combate é o Maddox, pelas ferramentas.
  * Chave desligada, falha ou teto do JEV: narra sem a orientação (aviso no log).
  */
@@ -18,7 +18,7 @@ export async function combatBoundaryHint(
     declarations: readonly MaddoxMasterDeclaration[],
     inCombat: { title: string } | null,
 ): Promise<"start" | "end" | null> {
-    if (!MADDOX_COMBAT_RIGORS.includes(campaign.rigor)) return null
+    if (!MADDOX_COMBAT_RIGORS.includes(campaign.rigor) && !MADDOX_TACTICAL_COMBAT_RIGORS.includes(campaign.rigor)) return null
     const actions = declarations.filter((item) => item.kind === "declaration" && item.content.trim())
     if (actions.length === 0) return null
     try {

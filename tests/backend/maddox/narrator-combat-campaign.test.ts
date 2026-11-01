@@ -348,17 +348,17 @@ describe("Maddox 6 — combate narrativo de ponta a ponta", () => {
         expect((await game.getGameState(id, owner)).turn.failed).toBe(true)
     })
 
-    it("Rigoroso e Fiel ao D&D ficam fora do combate narrativo (Maddox 7): sem ferramentas nem regra", async () => {
+    it("Rigoroso e Fiel ao D&D usam o combate tático (Maddox 7): ferramentas e regra táticas, sem o combate narrativo", async () => {
         const { id, owner } = await table("rigoroso")
         script.push([{ text: "Abertura." }])
         await game.startCampaign(id, owner)
         await waitForCampaignIdle(id)
-        expect(calls[0]!.toolNames).not.toContain("start_combat")
+        expect(calls[0]!.toolNames).toEqual(expect.arrayContaining(["start_combat", "monster_action", "offer_reaction"]))
         expect(calls[0]!.instructions).not.toContain("## Combate narrativo")
+        expect(calls[0]!.instructions).toContain("## Combate tático")
         const { findMaddoxTool, runMaddoxTool } = await import("@/features/maddox/server/master-tools")
-        await expect(runMaddoxTool(findMaddoxTool("start_combat")!, { campaignId: new mongoose.Types.ObjectId(id), turnNumber: 1, jobId: "x" }, { titulo: "Briga", adversarios: [{ nome: "Guarda" }] })).rejects.toThrow(
-            "Esta campanha não registra combate narrativo",
-        )
+        // Fora de uma narração (job inexistente) a ferramenta recusa; no tático, adversário sem bloco também.
+        await expect(runMaddoxTool(findMaddoxTool("start_combat")!, { campaignId: new mongoose.Types.ObjectId(id), turnNumber: 1, jobId: "x" }, { titulo: "Briga", adversarios: [{ nome: "Guarda" }] })).rejects.toThrow("O combate só começa ou termina na narração")
     })
 
     it("Equilibrado: moedas e itens entram na ficha de quem recebeu, uma vez só; item fora do catálogo vira item próprio com aviso", async () => {

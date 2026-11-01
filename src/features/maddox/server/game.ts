@@ -19,6 +19,8 @@ import {
     MADDOX_MASTER_TIMEOUT_MESSAGE,
     MADDOX_MASTER_LOCK_STALE_MS,
     MADDOX_MASTER_RETRY_MS,
+    MADDOX_COMBAT_FORCE_END_AFTER,
+    MADDOX_TACTICAL_COMBAT_RIGORS,
     type MaddoxTurnPhase,
 } from "../constants"
 import {
@@ -72,7 +74,7 @@ export function assertActive(campaign: CampaignDoc) {
     if (campaign.status !== "active") throw new DomainError(409, "A campanha não está em andamento.", "CAMPAIGN_NOT_ACTIVE")
 }
 
-function assertPlayersTurn(campaign: CampaignDoc) {
+export function assertPlayersTurn(campaign: CampaignDoc) {
     if (campaign.turn?.phase !== "players") throw new DomainError(409, "O Maddox está narrando. Aguarde o turno dos jogadores.", "MASTER_TURN")
 }
 
@@ -143,8 +145,15 @@ async function runMasterTurn(campaignId: Types.ObjectId, token: string, turnNumb
                 const { withCheckHints } = await import("./check-hints")
                 declarations = await withCheckHints(campaign, declarations)
             }
-            // Combate narrativo (Maddox 6): o combate ativo antes da narração e a orientação do JEV "Início ou fim de combate".
-            const combatModule = MADDOX_COMBAT_RIGORS.includes(campaign.rigor) ? await import("./combat") : null
+            // Combate (Maddox 6 e 7): o combate ativo antes da narração e a orientação do JEV "Início ou fim de combate".
+            const tacticalRigor = MADDOX_TACTICAL_COMBAT_RIGORS.includes(campaign.rigor)
+            const combatModule = MADDOX_COMBAT_RIGORS.includes(campaign.rigor) || tacticalRigor ? await import("./combat") : null
+            if (tacticalRigor) {
+                // Combate tático: a iniciativa que acabou de fechar vira a ordem; a fila dos adversários deste turno é preparada.
+                const tactical = await import("./tactical-combat")
+                if (round > 0) await tactical.finishInitiativeIfReady(campaignId, turnNumber, round)
+                await tactical.prepareMonsterQueue(campaignId, turnNumber)
+            }
             const combatBefore = combatModule ? await combatModule.findActiveCombat(campaignId) : null
             let combatHint: "start" | "end" | null = null
             if (combatModule && round === 0 && declarations.length > 0) {
@@ -161,13 +170,17 @@ async function runMasterTurn(campaignId: Types.ObjectId, token: string, turnNumb
             // O combate pedido nesta geração é aplicado ANTES de gravar a narração (o card precisa do id): o card de início vem acima
             // dela, o de fim abaixo. Os efeitos do fim só rodam depois (`finishCombatTurn`), que também grava o card que faltar.
             const combatEvents = takeDraftCombat(String(campaignId), jobId)
-            const combat = combatModule && combatEvents.length ? await combatModule.applyCombatDrafts(campaign, turnNumber, combatEvents) : { messages: [], touched: [] }
+            // Combate tático: a vez dos adversários (cópia de trabalho do job) é gravada antes do fim do combate.
+            const tacticalMessages = tacticalRigor ? await (await import("./tactical-master")).commitTacticalWorkspace(campaignId, jobId) : []
+            const combat = combatModule && combatEvents.length ? await combatModule.applyCombatDrafts(campaign, turnNumber, combatEvents, round) : { messages: [], touched: [], extraMessages: [] }
             const combatCard = (plan: { event: "start" | "end"; combatId: Types.ObjectId }) => ({ campaignId, turnNumber, phase: "master" as const, kind: "combat" as const, content: "", segment: round, combat: plan })
             const inserted = await MaddoxCampaignMessageModel.insertMany(
                 [
                     ...combat.messages.filter((plan) => plan.event === "start").map(combatCard),
                     { campaignId, turnNumber, phase: "master", kind: "narration", content, segment: round },
                     ...drafts.map((draft) => draftCheckMessage(campaignId, turnNumber, round, draft)),
+                    ...tacticalMessages,
+                    ...combat.extraMessages,
                     ...combat.messages.filter((plan) => plan.event === "end").map(combatCard),
                 ],
                 { ordered: true },
@@ -177,17 +190,26 @@ async function runMasterTurn(campaignId: Types.ObjectId, token: string, turnNumb
             live.end({ messageId: String(message!._id), error: null })
             if (drafts.length) log.info({ campaignId: String(campaignId), turnNumber, round, checks: drafts.length }, "[maddox] Maddox pediu testes")
         }
-        // Combate narrativo (Maddox 6): card que faltar (gravação interrompida) e os efeitos do fim, depois das mensagens.
-        if (MADDOX_COMBAT_RIGORS.includes(campaign.rigor)) {
+        // Combate (Maddox 6 e 7): card que faltar (gravação interrompida) e os efeitos do fim, depois das mensagens.
+        const tacticalCampaign = MADDOX_TACTICAL_COMBAT_RIGORS.includes(campaign.rigor)
+        if (MADDOX_COMBAT_RIGORS.includes(campaign.rigor) || tacticalCampaign) {
             const { finishCombatTurn } = await import("./combat")
             await finishCombatTurn(campaign, turnNumber, round)
+        }
+        if (tacticalCampaign) {
+            const { armReactionWindows } = await import("./combat-reactions")
+            await armReactionWindows(campaignId)
         }
         // Quem saiu da campanha durante a geração não recebe o teste: ele já entra cancelado (o Maddox resolve sem ele).
         const { cancelOrphanChecks } = await import("./game-checks")
         await cancelOrphanChecks(campaignId, turnNumber, round)
 
-        const roundChecks = await MaddoxCampaignMessageModel.exists({ campaignId, turnNumber, kind: "check", "check.round": round })
-        if (roundChecks) {
+        const { hasRoundWaits } = await import("./game-checks")
+        const roundChecks = await hasRoundWaits(campaignId, turnNumber, round)
+        const opened = roundChecks ? null : tacticalCampaign ? await openCombatTurn(campaign, token, turnNumber) : null
+        if (opened === "done") {
+            // A vez seguinte do combate tático já foi aberta (ou outro turno do mestre agendado).
+        } else if (roundChecks) {
             // Os testes fazem parte do turno do mestre: a mesa espera as rolagens (sem trava de geração).
             await MaddoxCampaignModel.updateOne({ _id: campaignId, "turn.generating.token": token }, { $set: { "turn.awaitingChecks": true, "turn.checkRound": round, "turn.generating": null, "turn.failedAt": null } })
             // Nenhum pendente (todos cancelados porque o jogador saiu): a continuação entra na fila logo.
@@ -195,7 +217,7 @@ async function runMasterTurn(campaignId: Types.ObjectId, token: string, turnNumb
             await advanceAfterChecks(campaignId, turnNumber, round)
         } else {
             const eligible = await readyMemberIds(campaignId)
-            const opened = await MaddoxCampaignModel.updateOne(
+            const reopened = await MaddoxCampaignModel.updateOne(
                 { _id: campaignId, "turn.generating.token": token },
                 {
                     $set: {
@@ -207,10 +229,11 @@ async function runMasterTurn(campaignId: Types.ObjectId, token: string, turnNumb
                         "turn.failedAt": null,
                         "turn.awaitingChecks": false,
                         "turn.checkRound": 0,
+                        "turn.combatActor": null,
                     },
                 },
             )
-            if (opened.modifiedCount === 0) log.info({ campaignId: String(campaignId), turnNumber }, "[maddox] Turno do mestre já retomado por outra chamada")
+            if (reopened.modifiedCount === 0) log.info({ campaignId: String(campaignId), turnNumber }, "[maddox] Turno do mestre já retomado por outra chamada")
         }
     } catch (error) {
         // Libera a trava e marca a falha: a retomada só acontece depois de `MADDOX_MASTER_RETRY_MS` (no `GET`/`check`).
@@ -229,6 +252,93 @@ async function runMasterTurn(campaignId: Types.ObjectId, token: string, turnNumb
         clearInterval(heartbeat)
     }
     await publishGameChanged(campaignId)
+}
+
+/**
+ * Combate tático (Maddox 7), depois da narração sem esperas: abre a vez do próximo personagem (só o membro dele é
+ * elegível), põe outro turno do mestre na fila quando os adversários seguem agindo, ou encerra o combate pelo servidor
+ * quando o Maddox deixou passar o fim (todos os inimigos ou todos os personagens fora de combate). `null` = sem combate
+ * tático (o turno dos jogadores abre como antes).
+ */
+async function openCombatTurn(campaign: CampaignDoc, token: string, turnNumber: number): Promise<"done" | null> {
+    const tactical = await import("./tactical-combat")
+    let combat = await tactical.findActiveTactical(campaign._id)
+    if (!combat || combat.tactical.phase !== "running") return null
+    const enemies = tactical.livingEnemies(combat).length
+    const standing = combat.tactical.characters.some(tactical.takesTurn)
+    if (enemies === 0 || !standing) {
+        const stale = (combat.tactical.staleEndNarrations ?? 0) + 1
+        if (stale >= MADDOX_COMBAT_FORCE_END_AFTER || !standing) {
+            const { applyCombatDrafts, finishCombatTurn } = await import("./combat")
+            const outcome = enemies === 0 ? "vitoria" : "derrota"
+            const applied = await applyCombatDrafts(campaign, turnNumber, [
+                {
+                    type: "end",
+                    outcome,
+                    summary: enemies === 0 ? "Todos os inimigos caíram." : "Nenhum personagem ficou de pé.",
+                    masterNotes: "Encerrado pelo servidor: o Maddox não chamou end_combat.",
+                    combatants: combat.combatants.map((item) => ({ name: item.name, outcome: item.tactical?.defeated ? ("derrotado" as const) : ("ileso" as const) })),
+                    rewards: [],
+                    characterStates: [],
+                    finalScene: "",
+                },
+            ])
+            for (const plan of applied.messages) await MaddoxCampaignMessageModel.create({ campaignId: campaign._id, turnNumber, phase: "master", kind: "combat", content: "", segment: 0, combat: plan })
+            await finishCombatTurn(campaign, turnNumber, 0)
+            log.warn({ campaignId: String(campaign._id), combatId: String(combat._id), outcome }, "[maddox] combate tático encerrado pelo servidor")
+            return null
+        }
+        await tactical.mutateTactical(campaign._id, (live) => {
+            live.tactical.staleEndNarrations = stale
+        })
+        combat = await tactical.findActiveTactical(campaign._id)
+        if (!combat) return null
+    }
+    const next = await tactical.advanceToNextCharacter(campaign._id, turnNumber)
+    if (next.kind === "none") return null
+    if (next.kind === "monsters") {
+        // O personagem da vez caiu: os adversários seguintes agem num novo turno do mestre (sem declarações).
+        const nextToken = randomUUID()
+        const moved = await MaddoxCampaignModel.updateOne(
+            { _id: campaign._id, "turn.generating.token": token },
+            { $set: { "turn.number": turnNumber + 1, "turn.phase": "master", "turn.startedAt": new Date(), "turn.eligibleMemberIds": [], "turn.declaredMemberIds": [], "turn.generating": { token: nextToken, startedAt: new Date() }, "turn.failedAt": null, "turn.awaitingChecks": false, "turn.checkRound": 0, "turn.combatActor": null } },
+        )
+        if (moved.modifiedCount > 0) void scheduleMasterTurn(campaign._id, nextToken, turnNumber + 1)
+        return "done"
+    }
+    const opened = await MaddoxCampaignModel.updateOne(
+        { _id: campaign._id, "turn.generating.token": token },
+        {
+            $set: {
+                "turn.phase": "players",
+                "turn.startedAt": new Date(),
+                "turn.eligibleMemberIds": [next.memberId],
+                "turn.declaredMemberIds": [],
+                "turn.generating": null,
+                "turn.failedAt": null,
+                "turn.awaitingChecks": false,
+                "turn.checkRound": 0,
+                ...tactical.combatActorSet(combat!._id, next.actorKey, next.memberId, next.offline),
+            },
+        },
+    )
+    if (opened.modifiedCount > 0 && next.offline) tactical.scheduleAbsenceCheck(String(campaign._id))
+    return "done"
+}
+
+/** Fecha a vez do personagem sem declaração (o jogador da vez saiu da campanha): o turno do mestre segue. */
+export async function forceCloseCombatTurn(campaignId: Types.ObjectId): Promise<void> {
+    const campaign = await MaddoxCampaignModel.findById(campaignId).lean<CampaignDoc>()
+    if (!campaign || campaign.status !== "active" || campaign.turn?.phase !== "players" || !campaign.turn.combatActor) return
+    const token = randomUUID()
+    const number = campaign.turn.number
+    const closed = await MaddoxCampaignModel.updateOne(
+        { _id: campaignId, status: "active", "turn.number": number, "turn.phase": "players" },
+        { $set: { "turn.number": number + 1, "turn.phase": "master" as MaddoxTurnPhase, "turn.startedAt": new Date(), "turn.eligibleMemberIds": [], "turn.declaredMemberIds": [], "turn.generating": { token, startedAt: new Date() }, "turn.failedAt": null, "turn.checkRound": 0, "turn.awaitingChecks": false, "turn.combatActor": null } },
+    )
+    if (closed.modifiedCount === 0) return
+    await publishGameChanged(campaignId)
+    void scheduleMasterTurn(campaignId, token, number + 1)
 }
 
 /** Narração da rodada `round` (as gravadas antes do Maddox 5 não têm `segment` e contam como a rodada 0). */
@@ -302,7 +412,7 @@ async function resumeMasterTurn(campaign: CampaignDoc): Promise<boolean> {
 
 /** Turno sem nenhum elegível (todos saíram): quem estiver pronto entra no turno atual — não há ninguém esperando. */
 async function fillEmptyTurn(campaign: CampaignDoc): Promise<CampaignDoc> {
-    if (campaign.status !== "active" || campaign.turn?.phase !== "players" || (campaign.turn.eligibleMemberIds ?? []).length > 0) return campaign
+    if (campaign.status !== "active" || campaign.turn?.phase !== "players" || (campaign.turn.eligibleMemberIds ?? []).length > 0 || campaign.turn.combatActor) return campaign
     const ready = await readyMemberIds(campaign._id)
     if (ready.length === 0) return campaign
     await MaddoxCampaignModel.updateOne(
@@ -316,7 +426,7 @@ async function fillEmptyTurn(campaign: CampaignDoc): Promise<CampaignDoc> {
  * Fecha o turno dos jogadores se todos os elegíveis presentes já declararam (ao menos uma declaração).
  * A transição é condicional: só uma chamada vence e roda o turno do mestre.
  */
-async function evaluateTurn(campaignId: Types.ObjectId): Promise<void> {
+export async function evaluateTurn(campaignId: Types.ObjectId): Promise<void> {
     const campaign = await MaddoxCampaignModel.findById(campaignId).lean<CampaignDoc>()
     if (!campaign || campaign.status !== "active") return
     if (campaign.turn?.phase === "master") {
@@ -337,7 +447,7 @@ async function evaluateTurn(campaignId: Types.ObjectId): Promise<void> {
     const number = campaign.turn.number
     const closed = await MaddoxCampaignModel.updateOne(
         { _id: campaignId, status: "active", "turn.number": number, "turn.phase": "players" },
-        { $set: { "turn.number": number + 1, "turn.phase": "master" as MaddoxTurnPhase, "turn.startedAt": new Date(), "turn.eligibleMemberIds": [], "turn.declaredMemberIds": [], "turn.generating": { token, startedAt: new Date() }, "turn.failedAt": null, "turn.checkRound": 0, "turn.awaitingChecks": false } },
+        { $set: { "turn.number": number + 1, "turn.phase": "master" as MaddoxTurnPhase, "turn.startedAt": new Date(), "turn.eligibleMemberIds": [], "turn.declaredMemberIds": [], "turn.generating": { token, startedAt: new Date() }, "turn.failedAt": null, "turn.checkRound": 0, "turn.awaitingChecks": false, "turn.combatActor": null } },
     )
     if (closed.modifiedCount === 0) return
     log.info({ campaignId: String(campaignId), turnNumber: number, required: required.length, presence: online ? "pusher" : "unknown" }, "[maddox] Turno dos jogadores fechado")
@@ -353,7 +463,7 @@ async function assertNotDeclared(campaign: CampaignDoc, target: MemberDoc): Prom
 }
 
 /** Grava a declaração/"não fazer nada" de um membro e a conta no turno (409 se o turno fechou no meio). */
-async function recordTurnAction(campaign: CampaignDoc, target: MemberDoc, character: CharacterDoc | null, kind: "declaration" | "pass", content: string, skippedBy: string | null) {
+export async function recordTurnAction(campaign: CampaignDoc, target: MemberDoc, character: CharacterDoc | null, kind: "declaration" | "pass", content: string, skippedBy: string | null, extra: { offlineSkip?: boolean } = {}) {
     const turnNumber = campaign.turn.number
     if (idSet(campaign.turn.declaredMemberIds).has(String(target._id))) throw new DomainError(409, "Este jogador já declarou neste turno.", "ALREADY_DECLARED")
     let message
@@ -370,6 +480,7 @@ async function recordTurnAction(campaign: CampaignDoc, target: MemberDoc, charac
             content,
             skippedBy,
             turnAction: true,
+            ...(extra.offlineSkip ? { offlineSkip: true } : {}),
         })
     } catch (error) {
         if (isDuplicateKey(error)) throw new DomainError(409, "Este jogador já declarou neste turno.", "ALREADY_DECLARED")
@@ -385,7 +496,7 @@ async function recordTurnAction(campaign: CampaignDoc, target: MemberDoc, charac
     }
 }
 
-const characterOf = async (member: MemberDoc) => (member.characterId ? MaddoxCharacterModel.findById(member.characterId).lean<CharacterDoc>() : null)
+export const characterOf = async (member: MemberDoc) => (member.characterId ? MaddoxCharacterModel.findById(member.characterId).lean<CharacterDoc>() : null)
 
 // ── API do serviço ─────────────────────────────────────────────────────────────
 
@@ -421,7 +532,15 @@ export async function submitGameAction(campaignId: string, input: MaddoxGameActi
     assertPlayersTurn(loaded.campaign)
     const campaign = await fillEmptyTurn(loaded.campaign)
     const member = loaded.member
-    if (!idSet(campaign.turn.eligibleMemberIds).has(String(member._id))) throw new DomainError(409, "Você entra no jogo a partir do próximo turno.", "NEXT_TURN")
+    // Combate tático (Maddox 7): a vez é de um personagem só; perguntas ao mestre continuam livres para quem está pronto.
+    const inCombatTurn = Boolean(campaign.turn.combatActor)
+    if (inCombatTurn && input.kind !== "question") {
+        if (String(campaign.turn.combatActor!.memberId) !== String(member._id)) throw new DomainError(409, "Não é a vez do seu personagem no combate.", "NOT_YOUR_COMBAT_TURN")
+        if (input.kind === "declaration") throw new DomainError(409, "No combate, use os botões de Ação e Ação bônus (ou \"Outra ação\" para texto livre).", "COMBAT_USE_ACTIONS")
+        const { endCombatTurn } = await import("./tactical-actions")
+        return endCombatTurn(campaignId, {}, userId)
+    }
+    if (!inCombatTurn && !idSet(campaign.turn.eligibleMemberIds).has(String(member._id))) throw new DomainError(409, "Você entra no jogo a partir do próximo turno.", "NEXT_TURN")
     const character = await characterOf(member)
 
     if (input.kind === "question") {
@@ -502,6 +621,13 @@ export async function skipPlayer(campaignId: string, input: MaddoxSkipPlayerInpu
     const target = await MaddoxCampaignMemberModel.findOne({ _id: new Types.ObjectId(input.memberId), campaignId: campaign._id, status: "joined" }).lean<MemberDoc>()
     if (!target) throw new DomainError(404, "Jogador não encontrado", "NOT_FOUND")
     if (!idSet(campaign.turn.eligibleMemberIds).has(String(target._id))) throw new DomainError(409, "Este jogador entra no jogo a partir do próximo turno.", "NEXT_TURN")
+    if (campaign.turn.combatActor) {
+        // Combate tático: pula a vez do personagem ativo (ações e rolagens pendentes são canceladas).
+        const { skipCombatTurn } = await import("./tactical-actions")
+        await skipCombatTurn(campaign, target, userId, false)
+        await recordAudit({ userId, entidade: MADDOX_CAMPAIGN_AUDIT_ENTITY, entidadeId: campaignId, acao: AcaoAuditoria.ATUALIZAR, depois: { turn: campaign.turn.number, skipped: target.userId, combat: true } })
+        return getGameState(campaignId, userId)
+    }
     const character = await characterOf(target)
     await recordTurnAction(campaign, target, character, "pass", "", userId)
     await recordAudit({ userId, entidade: MADDOX_CAMPAIGN_AUDIT_ENTITY, entidadeId: campaignId, acao: AcaoAuditoria.ATUALIZAR, depois: { turn: campaign.turn.number, skipped: target.userId } })
@@ -519,6 +645,10 @@ export async function checkTurn(campaignId: string, userId: string): Promise<Mad
     const { campaign } = await loadAsMember(campaignId, userId)
     if (campaign.status === "active") {
         await fillEmptyTurn(campaign)
+        if (campaign.turn?.combatActor) {
+            const { evaluateCombatAbsence } = await import("./tactical-actions")
+            await evaluateCombatAbsence(campaign._id)
+        }
         await evaluateTurn(campaign._id)
     }
     return getGameState(campaignId, userId)
@@ -529,6 +659,15 @@ export async function onMemberLeftGame(campaignId: Types.ObjectId, memberId: Typ
     // Testes pendentes dele são cancelados (Maddox 5): a rodada pode terminar e o Maddox continuar sem eles.
     const { cancelMemberChecks } = await import("./game-checks")
     await cancelMemberChecks(campaignId, memberId)
+    // Combate tático (Maddox 7): o personagem sai da ordem; se era a vez dele, ela fecha e o turno do mestre segue.
+    const { onMemberLeftCombat } = await import("./tactical-actions")
+    await onMemberLeftCombat(campaignId, memberId)
+    const before = await MaddoxCampaignModel.findById(campaignId).select("turn").lean<Pick<CampaignDoc, "turn">>()
+    if (before?.turn?.combatActor && String(before.turn.combatActor.memberId) === String(memberId)) {
+        await MaddoxCampaignModel.updateOne({ _id: campaignId }, { $pull: { "turn.eligibleMemberIds": memberId } })
+        await forceCloseCombatTurn(campaignId)
+        return
+    }
     const pulled = await MaddoxCampaignModel.updateOne({ _id: campaignId, status: "active" }, { $pull: { "turn.eligibleMemberIds": memberId } })
     if (pulled.modifiedCount === 0) return
     await publishGameChanged(campaignId)
@@ -543,7 +682,9 @@ interface MessagesViewer {
     showCheckDc: boolean
 }
 
-const visibleTo = (viewer: MessagesViewer) => (message: MessageDoc) => !(message.kind === "check" && message.check?.status === "pending" && String(message.memberId) !== viewer.memberId)
+const visibleTo = (viewer: MessagesViewer) => (message: MessageDoc) =>
+    !(message.kind === "check" && message.check?.status === "pending" && String(message.memberId) !== viewer.memberId) &&
+    !(message.kind === "combat-roll" && message.combatRoll?.status === "pending" && String(message.memberId) !== viewer.memberId)
 
 async function messagesDto(all: MessageDoc[], viewer: MessagesViewer): Promise<MaddoxGameMessageDto[]> {
     const messages = all.filter(visibleTo(viewer))
@@ -551,7 +692,11 @@ async function messagesDto(all: MessageDoc[], viewer: MessagesViewer): Promise<M
     const skippers = [
         ...new Set(
             messages
-                .flatMap((message) => [message.skippedBy, message.check?.rolledBy && message.check.rolledBy !== message.userId ? message.check.rolledBy : null])
+                .flatMap((message) => [
+                    message.skippedBy,
+                    message.check?.rolledBy && message.check.rolledBy !== message.userId ? message.check.rolledBy : null,
+                    message.combatRoll?.rolledBy && message.combatRoll.rolledBy !== message.userId ? message.combatRoll.rolledBy : null,
+                ])
                 .filter((id): id is string => Boolean(id) && Types.ObjectId.isValid(id!)),
         ),
     ]
@@ -562,6 +707,7 @@ async function messagesDto(all: MessageDoc[], viewer: MessagesViewer): Promise<M
         combatIds.length ? import("./combat").then(({ loadCombats }) => loadCombats(combatIds)) : Promise.resolve(null),
     ])
     const { combatEventDto } = combats ? await import("./combat") : { combatEventDto: null }
+    const tacticalDto = messages.some((message) => message.combatAction || message.combatRoll || message.combatReaction) ? await import("./tactical-dto") : null
     const characterById = new Map(characters.map((character) => [String(character._id), character]))
     const userById = new Map(users.map((user) => [String(user._id), user.name?.trim() || user.username || "Dono"]))
     return messages.map((message) => {
@@ -576,13 +722,20 @@ async function messagesDto(all: MessageDoc[], viewer: MessagesViewer): Promise<M
             portraitUrl: character?.portraitUrl ?? null,
             content: message.content,
             replyToId: message.replyToId ? String(message.replyToId) : null,
-            skippedByName: message.skippedBy ? (userById.get(message.skippedBy) ?? "Dono") : null,
+            skippedByName: message.skippedBy ? (userById.get(message.skippedBy) ?? "Dono") : message.offlineSkip ? "ausência (offline)" : null,
             error: message.error ?? null,
             check: message.check ? checkDto(message, viewer, userById) : null,
             combat: (() => {
                 const found = message.combat && combats ? combats.get(String(message.combat.combatId)) : undefined
                 return found && combatEventDto ? combatEventDto(found, message.combat!.event) : null
             })(),
+            combatAction: message.combatAction && tacticalDto ? tacticalDto.combatActionDto(message.combatAction) : null,
+            combatRoll:
+                message.combatRoll && tacticalDto
+                    ? tacticalDto.combatRollDto(message.combatRoll, message.combatRoll.rolledBy && message.combatRoll.rolledBy !== message.userId ? (message.combatRoll.rolledBy === "server" ? "o servidor" : (userById.get(message.combatRoll.rolledBy) ?? "Dono")) : null)
+                    : null,
+            combatReaction: message.combatReaction && tacticalDto ? tacticalDto.combatReactionDto(message.combatReaction, String(message.memberId) === viewer.memberId) : null,
+            offlineSkip: Boolean(message.offlineSkip),
             createdAt: new Date(message.createdAt).toISOString(),
         }
     })
@@ -651,6 +804,17 @@ export async function getGameState(campaignId: string, userId: string): Promise<
             : Promise.resolve([]),
         MaddoxCombatModel.findOne({ campaignId: campaign._id, status: "active" }).lean<IMaddoxCombat>(),
     ])
+    // Combate tático (Maddox 7): ordem com os PV do grupo, a minha vez e o que o turno do mestre espera.
+    const tacticalCombat = activeCombat && activeCombat.mode === "tactical" && activeCombat.tactical ? (activeCombat as import("./tactical-combat").TacticalCombat) : null
+    const tacticalModule = tacticalCombat ? await import("./tactical-dto") : null
+    const combatActor = campaign.status === "active" && campaign.turn?.phase === "players" ? (campaign.turn.combatActor ?? null) : null
+    const pendingCombat =
+        tacticalCombat && campaign.turn?.phase === "master"
+            ? await MaddoxCampaignMessageModel.find({ campaignId: campaign._id, turnNumber: campaign.turn.number, $or: [{ kind: "combat-roll", "combatRoll.status": "pending" }, { kind: "combat-reaction", "combatReaction.status": "pending" }] })
+                  .sort({ _id: 1 })
+                  .select("kind memberId characterName combatRoll.reason combatReaction.description")
+                  .lean<{ _id: Types.ObjectId; kind: string; memberId: Types.ObjectId; characterName: string | null; combatRoll?: { reason: string }; combatReaction?: { description: string } }[]>()
+            : []
     const userIds = members.map(({ member }) => member.userId).filter((id) => Types.ObjectId.isValid(id))
     const found = userIds.length ? await User.find({ _id: { $in: userIds } }).select("name username").lean<{ _id: Types.ObjectId; name?: string; username?: string }[]>() : []
     const users = new Map(found.map((user) => [String(user._id), user.name?.trim() || user.username || "Usuário"]))
@@ -686,10 +850,21 @@ export async function getGameState(campaignId: string, userId: string): Promise<
             failed: campaign.turn?.phase === "master" && !campaign.turn?.generating && !campaign.turn?.awaitingChecks && Boolean(campaign.turn?.failedAt),
             awaitingChecks: campaign.turn?.phase === "master" && Boolean(campaign.turn?.awaitingChecks),
             pendingChecks: pendingChecks.map((check) => ({ checkId: String(check._id), memberId: String(check.memberId), characterName: check.characterName ?? "Personagem" })),
+            combatActor:
+                combatActor && tacticalCombat
+                    ? { actorKey: combatActor.actorKey, memberId: String(combatActor.memberId), characterName: tacticalCombat.tactical.characters.find((item) => item.actorKey === combatActor.actorKey)?.name ?? "Personagem" }
+                    : null,
+            pendingCombat: pendingCombat.map((item) => ({
+                id: String(item._id),
+                kind: item.kind === "combat-reaction" ? ("reaction" as const) : ("roll" as const),
+                memberId: String(item.memberId),
+                characterName: item.characterName ?? "Personagem",
+                label: item.combatRoll?.reason ?? item.combatReaction?.description ?? "",
+            })),
         },
         showCheckDc: Boolean(campaign.showCheckDc),
         npcs: npcs.map((npc) => ({ id: String(npc._id), name: npc.name, portraitUrl: npc.portraitUrl ?? null, status: npc.status ?? "active" })),
-        combat: activeCombat ? (await import("./combat")).combatDto(activeCombat) : null,
+        combat: activeCombat ? { ...(await import("./combat")).combatDto(activeCombat), ...(tacticalCombat && tacticalModule ? { tactical: await tacticalModule.loadTacticalDto(tacticalCombat) } : {}) } : null,
         participants,
         me: {
             memberId: String(loaded.member._id),
@@ -698,6 +873,7 @@ export async function getGameState(campaignId: string, userId: string): Promise<
             eligible: mine?.eligible ?? false,
             declared: mine?.declared ?? false,
             sheet: await mySheet(members.find(({ member }) => String(member._id) === String(loaded.member._id))?.character ?? null),
+            combat: tacticalCombat && tacticalModule ? await tacticalModule.myCombatDto(tacticalCombat, String(loaded.member._id), Boolean(combatActor && String(combatActor.memberId) === String(loaded.member._id)), campaign._id) : null,
         },
         messages: page.messages,
         hasMore: page.hasMore,
