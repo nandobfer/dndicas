@@ -227,6 +227,34 @@ describe("mesa Maddox — conversa e turno", () => {
         expect(acquireChannel).toHaveBeenCalledWith("private-maddox-u-u-owner")
     })
 
+    it("imagens nas cenas (Maddox 10): a imagem fica na bolha da narração; o dono pede a imagem da cena e o retrato do NPC", async () => {
+        post.mockResolvedValue(ok({ id: "i2", status: "pending", url: null, caption: "", situationLabel: null, source: "manual", error: null }))
+        await renderGame(
+            gameState({
+                messages: [message("n1", { kind: "narration", phase: "master", content: "O farol apagado.", sceneImage: { id: "i1", status: "done", url: "/api/upload?key=farol.png", caption: "O farol", situationLabel: "Novo local ou cenário", source: "tool", error: null } })],
+                npcs: [{ id: "npc1", name: "Varn", portraitUrl: null, status: "active" }],
+                sceneImages: { owner: true, canRequest: true, reason: null, generating: false, remainingToday: 9, campaignEnabled: true, canRequestPortrait: true },
+            }),
+        )
+        expect(within(screen.getByTestId("maddox-narration")).getByRole("img", { name: "O farol" })).toHaveAttribute("src", "/api/upload?key=farol.png")
+        fireEvent.click(screen.getByTestId("scene-image-button"))
+        await waitFor(() => expect(post).toHaveBeenCalledWith("/maddox/campaigns/c1/scene-images"))
+        fireEvent.click(screen.getByRole("button", { name: "Gerar retrato de Varn" }))
+        await waitFor(() => expect(post).toHaveBeenCalledWith("/maddox/campaigns/c1/npcs/npc1/portrait"))
+    })
+
+    it("imagens nas cenas: jogador não vê o botão da imagem nem o do retrato", async () => {
+        await renderGame(
+            gameState({
+                me: ME({ memberId: "m2", isOwner: false }),
+                npcs: [{ id: "npc1", name: "Varn", portraitUrl: null, status: "active" }],
+                sceneImages: { owner: false, canRequest: false, reason: null, generating: false, remainingToday: 0, campaignEnabled: true, canRequestPortrait: false },
+            }),
+        )
+        expect(screen.queryByTestId("scene-image-button")).not.toBeInTheDocument()
+        expect(screen.queryByRole("button", { name: /Gerar retrato/ })).not.toBeInTheDocument()
+    })
+
     it("turno do mestre: o campo fica bloqueado e o Maddox aparece narrando", async () => {
         await renderGame(gameState({ turn: { number: 2, phase: "master", startedAt: null, generating: true, failed: false, awaitingChecks: false, pendingChecks: [] } }))
         expect(screen.getByTestId("turn-banner")).toHaveTextContent("Turno do mestre — o Maddox está narrando…")

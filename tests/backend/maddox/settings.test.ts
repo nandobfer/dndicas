@@ -98,6 +98,34 @@ describe("configuração do Agente Maddox", () => {
         }
     })
 
+    it("imagens nas cenas (Maddox 10): configuração antiga recebe o bloco desligado e as situações novas, sem perder as gravadas", () => {
+        const old = maddoxSettingsSchema.safeParse(withMaddoxDefaults({ enabled: false }))
+        expect(old.success).toBe(true)
+        if (old.success) {
+            expect(old.data.sceneImages).toEqual(DEFAULT_MADDOX_SETTINGS.sceneImages)
+            expect(old.data.sceneImages).toMatchObject({ enabled: false, minNarrationsBetween: 3, maxPerDay: 10, aspectRatio: "16:9", custom: [] })
+            expect(Object.values(old.data.sceneImages.situations).every((value) => value === false)).toBe(true)
+        }
+        const partial = maddoxSettingsSchema.safeParse(withMaddoxDefaults({ enabled: false, sceneImages: { enabled: true, situations: { climax: true } } }))
+        expect(partial.success).toBe(true)
+        if (partial.success) expect(partial.data.sceneImages).toMatchObject({ enabled: true, maxPerDay: 10, situations: { climax: true, "new-location": false } })
+    })
+
+    it("imagens nas cenas: limites da frequência e situação personalizada exige nome e descrição", () => {
+        const base = DEFAULT_MADDOX_SETTINGS.sceneImages
+        const invalid = maddoxSettingsSchema.safeParse({
+            ...DEFAULT_MADDOX_SETTINGS,
+            sceneImages: { ...base, minNarrationsBetween: -1, maxPerDay: 0, custom: [{ id: "a", label: "", description: "", active: true }] },
+        })
+        expect(invalid.success).toBe(false)
+        if (!invalid.success) {
+            expect(invalid.error.issues.map((issue) => issue.path.join("."))).toEqual(expect.arrayContaining(["sceneImages.minNarrationsBetween", "sceneImages.maxPerDay", "sceneImages.custom.0.label", "sceneImages.custom.0.description"]))
+        }
+        const duplicated = maddoxSettingsSchema.safeParse({ ...DEFAULT_MADDOX_SETTINGS, sceneImages: { ...base, custom: [{ id: "a", label: "A", description: "a", active: true }, { id: "a", label: "B", description: "b", active: true }] } })
+        expect(duplicated.success).toBe(false)
+        expect(normalizeMaddoxSettings(configured({ sceneImages: { ...base, style: "  óleo  " } })).sceneImages.style).toBe("óleo")
+    })
+
     it("ativo exige provedor e modelo; entrevistador com provedor exige modelo", () => {
         const result = maddoxSettingsSchema.safeParse({ ...DEFAULT_MADDOX_SETTINGS, enabled: true, interviewer: { provider: "gemini", model: null, agent: null, variant: null } })
         expect(result.success).toBe(false)

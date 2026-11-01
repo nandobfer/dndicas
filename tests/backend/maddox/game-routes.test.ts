@@ -29,6 +29,14 @@ vi.doMock("@/features/maddox/server/game", () => service)
 const checksService = { rollCheck: vi.fn(async () => ({ roll: { rollId: "r1", total: 17 }, state })) }
 vi.doMock("@/features/maddox/server/game-checks", () => checksService)
 
+const sceneImagesService = {
+    requestManualSceneImage: vi.fn(async () => ({ id: "i1", status: "pending" })),
+    requestNpcPortrait: vi.fn(async () => ({ npcId: "n1", status: "pending" })),
+}
+vi.doMock("@/features/maddox/server/scene-images", () => sceneImagesService)
+const campaignsService = { assertMemberCanPlay: vi.fn(async () => undefined) }
+vi.doMock("@/features/maddox/server/campaigns", () => campaignsService)
+
 const ctx = (params: { id: string }) => ({ params: Promise.resolve(params) })
 const base = "http://localhost/api/maddox/campaigns/c1"
 const post = (url: string, body: unknown) => makeJsonRequest(url, { method: "POST", body: JSON.stringify(body) })
@@ -39,6 +47,26 @@ describe("rotas da mesa Maddox", () => {
         permissions.length = 0
         Object.values(service).forEach((fn) => fn.mockClear())
         checksService.rollCheck.mockClear()
+    })
+
+    it("imagem da cena e retrato (Maddox 10): exigem maddox.play e a entrevista concluída; respondem 202 com o pedido", async () => {
+        type SceneRoute = typeof import("@/app/api/maddox/campaigns/[id]/scene-images/route")
+        type PortraitRoute = typeof import("@/app/api/maddox/campaigns/[id]/npcs/[npcId]/portrait/route")
+        const scenePath = "@/app/api/maddox/campaigns/[id]/scene-images/route"
+        const portraitPath = "@/app/api/maddox/campaigns/[id]/npcs/[npcId]/portrait/route"
+        who = "noPermission"
+        expect((await (await importFresh<SceneRoute>(scenePath)).POST(post(`${base}/scene-images`, {}), ctx({ id: "c1" }))).status).toBe(403)
+        expect(sceneImagesService.requestManualSceneImage).not.toHaveBeenCalled()
+        who = "player"
+        const scene = await (await importFresh<SceneRoute>(scenePath)).POST(post(`${base}/scene-images`, {}), ctx({ id: "c1" }))
+        expect(scene.status).toBe(202)
+        expect(await scene.json()).toMatchObject({ success: true, data: { id: "i1", status: "pending" } })
+        expect(campaignsService.assertMemberCanPlay).toHaveBeenCalledWith("c1", "user-1")
+        expect(sceneImagesService.requestManualSceneImage).toHaveBeenCalledWith("c1", "user-1")
+        const portrait = await (await importFresh<PortraitRoute>(portraitPath)).POST(post(`${base}/npcs/n1/portrait`, {}), { params: Promise.resolve({ id: "c1", npcId: "n1" }) })
+        expect(portrait.status).toBe(202)
+        expect(sceneImagesService.requestNpcPortrait).toHaveBeenCalledWith("c1", "n1", "user-1")
+        expect(permissions.every((permission) => permission === "maddox.play")).toBe(true)
     })
 
     it("rolar teste (Maddox 5): exige maddox.play, corpo vazio (sem dado nem modificador) e repassa o usuário efetivo", async () => {

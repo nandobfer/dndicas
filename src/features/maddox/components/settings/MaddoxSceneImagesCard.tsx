@@ -32,7 +32,8 @@ const newId = () => `custom-${Date.now().toString(36)}${Math.random().toString(3
 export function sceneImagesGeneratorNotice(generator: ImageGeneratorSettingsDto | undefined): string | null {
     if (!generator) return null
     if (!generator.availability.available) return `${generator.availability.reason ?? "O Gerador de imagens não está disponível."} As imagens só são geradas depois que ele estiver configurado.`
-    const { provider, model } = generator.settings
+    const provider = generator.settings?.provider
+    const model = generator.settings?.model
     if (provider && model && isAiImageProviderId(provider) && !imageModelSupportsReferences(provider, model)) {
         return `O modelo do Gerador de imagens (${model}) não aceita imagens de referência: a aparência de personagens e NPCs entra só pelos dados (perfil, ficha e descrição).`
     }
