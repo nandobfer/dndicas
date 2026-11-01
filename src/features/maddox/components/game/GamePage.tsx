@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react"
 import Link from "next/link"
 import { motion } from "framer-motion"
-import { ArrowLeft, Dices, Hourglass, MessageCircle, Swords } from "lucide-react"
+import { ArrowLeft, BookOpen, Dices, Hourglass, MessageCircle, Swords } from "lucide-react"
 import { toast } from "sonner"
 import { Button } from "@/components/ui/opex/button"
 import { Skeleton } from "@/components/ui/opex/skeleton"
@@ -38,6 +38,8 @@ import { MySheetButton } from "./MySheetButton"
 import { NpcPanel } from "./NpcPanel"
 import { TurnPanel } from "./TurnPanel"
 import { CampaignChatHeader } from "../CampaignChatHeader"
+import { JournalSearchDialog } from "../journal/JournalSearchDialog"
+import { journalHref } from "../journal/journal-links"
 
 const errorStatus = (error: unknown) => (error as { response?: { status?: number } } | null)?.response?.status
 
@@ -183,7 +185,17 @@ function GameTable({ state, presence, stream }: { state: MaddoxGameStateDto; pre
                         )}
                     </>
                 }
-                actions={<MySheetButton sheet={state.me.sheet} />}
+                actions={
+                    <>
+                        <JournalSearchDialog campaignId={state.campaignId} color={color} />
+                        <Button size="sm" variant="outline" asChild>
+                            <Link href={journalHref(state.campaignId)} data-testid="journal-link">
+                                <BookOpen aria-hidden /> Diário
+                            </Link>
+                        </Button>
+                        <MySheetButton sheet={state.me.sheet} />
+                    </>
+                }
                 banner={
                     <>
                     <p className="flex items-center gap-2 text-xs text-white/80" role="status" data-testid="turn-banner">
@@ -269,7 +281,7 @@ function GameTable({ state, presence, stream }: { state: MaddoxGameStateDto; pre
                         rollingFor={rollCheck.isPending}
                         onRollFor={(checkId, characterName) => rollCheck.mutate(checkId, { onSuccess: () => toast.success(`Teste rolado no lugar de ${characterName}`) })}
                     />
-                    <NpcPanel npcs={state.npcs} color={color} />
+                    <NpcPanel npcs={state.npcs} color={color} campaignId={state.campaignId} />
                 </div>
             </div>
         </motion.div>

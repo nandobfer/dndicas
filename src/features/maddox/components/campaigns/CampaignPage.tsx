@@ -4,7 +4,7 @@ import { useState } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { motion } from "framer-motion"
-import { ArrowLeft, CheckCircle2, Crown, Dices, DoorOpen, Hourglass, MessageCircle, Pencil, Play, ScrollText, Swords, UserMinus, UserRound, Users } from "lucide-react"
+import { ArrowLeft, BookOpen, CheckCircle2, Crown, Dices, DoorOpen, Hourglass, MessageCircle, Pencil, Play, ScrollText, Swords, UserMinus, UserRound, Users } from "lucide-react"
 import { Button } from "@/components/ui/opex/button"
 import { ConfirmDialog } from "@/components/ui/opex/confirm-dialog"
 import { Skeleton } from "@/components/ui/opex/skeleton"
@@ -20,6 +20,7 @@ import { CharacterDraftDialog } from "./CharacterDraftDialog"
 import { EditCampaignDialog } from "./EditCampaignDialog"
 import { InvitePanel } from "./InvitePanel"
 import { CharacterProfileDialog } from "./CharacterProfileDialog"
+import { journalHref } from "../journal/journal-links"
 import { ScenarioCard } from "./ScenarioCard"
 import { InterviewChip, MemberAvatar, RarityChip, RigorChip, StartingLevelChip, StartingStageLine, StatusChip, rigorColor } from "./campaign-visuals"
 import { rarityColors } from "@/lib/config/colors"
@@ -107,6 +108,13 @@ function CampaignView({ campaign, userId }: { campaign: MaddoxCampaignDetailDto;
                             <Button asChild>
                                 <Link href={`/campanhas/${campaign.id}/mesa`}>
                                     <Dices aria-hidden /> Entrar na mesa
+                                </Link>
+                            </Button>
+                        )}
+                        {campaign.status !== "lobby" && campaign.status !== "interview" && (
+                            <Button variant="outline" asChild>
+                                <Link href={journalHref(campaign.id)}>
+                                    <BookOpen aria-hidden /> Diário
                                 </Link>
                             </Button>
                         )}

@@ -550,11 +550,14 @@ describe("lobby com a mesa (Maddox 3)", () => {
         const view = renderWithQueryClient(<CampaignPage campaignId="c1" />)
         await screen.findByRole("list", { name: "Participantes" })
         expect(screen.queryByRole("button", { name: /Iniciar campanha/ })).not.toBeInTheDocument()
+        // Diário da campanha (Maddox 9): só depois que a campanha começa.
+        expect(screen.queryByRole("link", { name: /Diário/ })).not.toBeInTheDocument()
         view.unmount()
 
         get.mockImplementation(async (url: string) => invite(url, detail({ status: "active", turnNumber: 3, turnPhase: "players", scenarioStatus: "done", rigorLocked: true, members: readyMembers() })))
         renderWithQueryClient(<CampaignPage campaignId="c1" />)
         expect(await screen.findByRole("link", { name: /Entrar na mesa/ })).toHaveAttribute("href", "/campanhas/c1/mesa")
+        expect(screen.getByRole("link", { name: /Diário/ })).toHaveAttribute("href", "/campanhas/c1/diario")
         expect(screen.getByTestId("campaign-active-banner")).toHaveTextContent("Em andamento · Turno 3 · Turno dos jogadores")
         expect(screen.queryByRole("button", { name: /Iniciar campanha/ })).not.toBeInTheDocument()
     })

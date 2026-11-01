@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest"
 import mongoose from "mongoose"
 import { MongoMemoryServer } from "mongodb-memory-server"
+import type { MaddoxCampaignMemoryKind, MaddoxGameMessageKind } from "@/features/maddox/constants"
 
 vi.mock("@/lib/db", () => ({
     dbConnect: vi.fn(async () => undefined),
@@ -37,10 +38,11 @@ async function giveCharacter(campaignId: string, userId: string, name: string, e
     return String(member!._id)
 }
 
-const memory = (campaignId: string, kind: string, title: string, text: string, extra: Record<string, unknown> = {}) =>
-    MaddoxCampaignMemoryModel.create({ campaignId, kind, title, titleKey: title.toLowerCase(), text, origin: "agent", createdBy: "maddox", ...extra })
+const memory = (campaignId: string, kind: MaddoxCampaignMemoryKind, title: string, text: string, extra: Record<string, unknown> = {}) =>
+    MaddoxCampaignMemoryModel.create({ campaignId: new mongoose.Types.ObjectId(campaignId), kind, title, titleKey: title.toLowerCase(), text, origin: "agent", createdBy: "maddox", ...extra })
 
-const message = (campaignId: string, kind: string, content: string, extra: Record<string, unknown> = {}) => MaddoxCampaignMessageModel.create({ campaignId, turnNumber: 1, phase: kind === "narration" || kind === "answer" ? "master" : "players", kind, content, ...extra })
+const message = (campaignId: string, kind: MaddoxGameMessageKind, content: string, extra: Record<string, unknown> = {}) =>
+    MaddoxCampaignMessageModel.create({ campaignId: new mongoose.Types.ObjectId(campaignId), turnNumber: 1, phase: kind === "narration" || kind === "answer" ? "master" : "players", kind, content, ...extra })
 
 /** Campanha em andamento com o dono e uma jogadora, NPCs, locais, missões, anotações (umas só do mestre) e falas da mesa. */
 async function campaignWithJournal() {

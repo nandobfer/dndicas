@@ -85,7 +85,7 @@ sessão por campanha", a entrevista usou a do narrador, que continua.
 | `maddox_campaign_members` | campanha, usuário, papel (dono/jogador), status (convidado, entrou, saiu, removido), personagem; único por campanha+usuário |
 | `maddox_characters` | personagem jogável: perfil narrativo (seções), retrato, ficha (`CharacterSheet`) no modo fiel, situação da entrevista |
 | `maddox_npcs` | NPC: descrição pública, notas exclusivas do mestre, visibilidade |
-| `maddox_campaign_memories` | memórias da campanha (fato, evento, local, missão, relação), visibilidade jogadores/mestre, índice de texto para a busca |
+| `maddox_campaign_memories` | memórias da campanha (fato, evento, local, missão, relação), visibilidade jogadores/mestre; listadas e buscadas no Diário da campanha (Maddox 9) |
 | `maddox_interview_scripts` | versões dos roteiros |
 | `maddox_interviews` | entrevistas (Maddox 2): conversa (`messages`), versão do roteiro, status, trava `generating`, resultado consolidado; única por `{ campaignId, kind, memberId }` |
 | `maddox_opencode_sessions` | sessões do OpenCode do Maddox |
@@ -882,6 +882,55 @@ contêiner e à janela; categorias em `OptionTabs`, alvos/círculo/perícia em `
 Sem permissão nova (`maddox.play` cobre). Fora do escopo: grid e alcance medido (o movimento é texto), ações lendárias e de covil,
 XP e subida de nível, reações dos adversários além do ataque de oportunidade conduzido pelo Maddox, novo personagem depois da morte.
 
+## Diário da campanha (Maddox 9)
+
+Código: `server/journal.ts` (serviço), `journal-search.ts` (módulo puro: regex sem acento, trecho, texto corrido),
+`journal-schemas.ts`, `journal-types.ts`, `hooks/useMaddoxJournal.ts`, `components/journal/`.
+
+**O que os jogadores consultam.** Só o que eles sabem: NPCs e memórias com `visibility: "players"`, a descrição pública dos
+NPCs (o `masterNotes` nunca é lido, buscado nem existe nos DTOs), o histórico da mesa (o mesmo `messagesDto` da mesa, que esconde
+a CD secreta), a situação atual (`campaign.state`), o cenário e a situação inicial, e o grupo (perfil da entrevista e
+`currentState` de cada personagem; a ficha D&D continua só do dono dela). O filtro `PLAYER_VISIBLE` vai em toda consulta de NPC
+e memória, junto do `campaignId`, e os DTOs são montados campo a campo. O dono da campanha é jogador e vê o mesmo que os outros.
+Acesso: membro `joined` com `maddox.play` (quem saiu ou não participa = 404). Só leitura: sem auditoria.
+
+**Narrador.** Como o estado da história e a condição dos personagens passaram a ser públicos, o `MADDOX_PERSISTENCE_RULE` e as
+descrições de `update_campaign_state`/`update_character_state` avisam que os jogadores os leem no diário e que segredo vai em
+`masterNotes` ou em `save_memory` com `visibility: master`. Registros gravados antes do Maddox 9 não são revisados.
+
+**Busca.** Regex que ignora acentos e caixa (`accentInsensitivePattern`: cada vogal/ç/ñ vira a classe das variantes; o resto é
+escapado), também por pedaço de palavra, sempre filtrada pela campanha — o índice de texto antigo das memórias não é usado (não
+começa por `campaignId` e só acha palavras inteiras). Procura em NPCs (nome e descrição pública), memórias (título, texto e tags),
+falas da mesa (`narration`, `declaration`, `question`, `answer`, sem as respostas que falharam), grupo (nome, perfil e condição) e
+situação atual. Termo de 2 a 100 caracteres (fora disso, 400). Até 20 por grupo (`hasMore`), cada um com um trecho de ~160
+caracteres em texto corrido (sem `{{Tipo:Nome}}` nem ênfase do Markdown). O `search_memories` do narrador usa o mesmo regex.
+
+API (todas `GET`, `maddox.play`, usuário efetivo):
+
+- `GET /api/maddox/campaigns/[id]/journal` — resumo: situação atual, cenário, missões ativas, contagens, `myMemberId` e avatar do Maddox.
+- `GET …/journal/npcs?cursor=` e `GET …/journal/memories?kind=&status=&cursor=` — página de 30, do mais recente (cursor `_id`;
+  inválido = 400; `kind` inválido = 400 com as opções). Missão sem situação gravada conta como `ativa`.
+- `GET …/journal/party` — personagens do grupo.
+- `GET …/journal/search?q=` — busca.
+- O histórico usa `GET …/game/messages` (sem `before` = página mais recente).
+
+Índices novos (pela `ensure-maddox-indexes`): `{ campaignId, visibility, _id: -1 }` em `maddox_npcs` e
+`{ campaignId, visibility, kind, _id: -1 }` em `maddox_campaign_memories`.
+
+**Tela `/campanhas/[id]/diario`** (`pageAccess`): cabeçalho da campanha (`CampaignChatHeader`, cor do rigor, "Voltar à mesa"),
+card de busca com espera de 300 ms e resultados agrupados (Situação atual, NPCs, Locais, Missões, Outras anotações, Grupo,
+Histórico da mesa) com o termo destacado; abas `IntegrationTabs` (`?aba=historico|npcs|locais|missoes|anotacoes|grupo`):
+histórico em modo leitura (`GameMessageList readOnly`: nenhum card é "meu", então nada de rolar, cancelar ou reagir;
+`?msg=<id>` carrega até 10 páginas atrás da mensagem e a destaca, depois avisa "Mensagem muito antiga"), NPCs (morto esmaecido),
+locais, missões (filtro por situação em `GlassSelector` com as cores de raridade), anotações (`?tipo=evento|relacao|fato|outro`) e
+grupo. Ao lado, "Situação atual" (com "atualizada no turno N" e as missões ativas) e o cenário recolhível. Cada item tem âncora
+(`#npc-…`, `#anotacao-…`, `#personagem-…`) e fica em destaque quando aberto por link. Em dia pelo `maddox.game.changed`
+(as chaves ficam sob `MADDOX_CAMPAIGNS_KEY`).
+
+**Pontos de entrada.** Na mesa, "Buscar no diário" (diálogo com a mesma busca; o resultado leva ao diário na aba e no item) e
+"Diário" no cabeçalho; cada NPC do painel "NPCs conhecidos" abre o NPC no diário. No lobby, "Diário" depois que a campanha começa.
+Sem atalho de teclado: Ctrl/⌘+K já é a busca global do app.
+
 ## Testes
 
 `tests/backend/maddox/*` (configuração, roteiros, avatar, sessões, rotas, `campaigns.test.ts` com MongoDB em
@@ -936,3 +985,9 @@ detalhe compactos, erros), `interview-ability-scores.test.ts` ("origem do bônus
 Fiel, recusa em Fiel e Rigoroso com a lista, origem própria no Equilibrado, nome sem acento ou original, 409
 `BACKGROUND_NOT_IN_CATALOG` na conclusão), `game-checks.test.ts` (narrador consulta em Narrativo e Fiel sem gravar),
 `maddox-mcp.test.ts` (catálogo com token do narrador ou da entrevista) e os testes dos prompts.
+Maddox 9: `journal.test.ts` (**critério de aceite**: NPCs, locais e um fato só do mestre, NPC público com `masterNotes`; nenhuma
+resposta do diário traz o segredo e buscar por ele não acha nada; a busca acha local, NPC e narração sem acento, por pedaço e
+pelas tags; grupo, missões, paginação, 400 e 404), `journal-search.test.ts`, `journal-routes.test.ts`, `master-tools.test.ts`
+(`search_memories` sem acento, aviso de estado público), `narrator-prompt.test.ts`; na tela, `maddox-journal.test.tsx` (abas,
+busca, estados vazios, histórico só leitura e destaque, grupo, links e o teste estático dos controles), `maddox-game.test.tsx`
+(botões, NPC com link e busca rápida) e `maddox-campaigns.test.tsx` (botão do lobby).

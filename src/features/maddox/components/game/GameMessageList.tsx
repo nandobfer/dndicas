@@ -34,6 +34,10 @@ interface Props {
     onRollCheck?: (checkId: string) => Promise<DiceRollResponse>
     /** Combate tático (Maddox 7): rolar passos e rolagens, cancelar a ação e escolher a reação. */
     combat?: CombatHandlers
+    /** Diário da campanha (Maddox 9): só leitura, sem rolar testes, agir no combate nem reagir. */
+    readOnly?: boolean
+    /** Mensagem aberta pela busca do diário: recebe destaque e a rolagem vai até ela. */
+    highlightId?: string | null
 }
 
 export interface CombatHandlers {
@@ -57,7 +61,10 @@ const noRoll = async (): Promise<DiceRollResponse> => {
 
 const NO_COMBAT: CombatHandlers = { isOwner: false, reacting: false, onRollAction: noRoll, onRollCombat: noRoll, onCancelAction: () => undefined, onDecideReaction: () => undefined }
 
-export function GameMessageList({ messages, myMemberId, maddoxAvatarUrl, color, narrating, live = [], hasMore, loadingMore, onLoadMore, replays = NO_REPLAYS, onRollCheck = noRoll, combat = NO_COMBAT }: Props) {
+export function GameMessageList({ messages, myMemberId, maddoxAvatarUrl, color, narrating, live = [], hasMore, loadingMore, onLoadMore, replays = NO_REPLAYS, onRollCheck = noRoll, combat: handlers = NO_COMBAT, readOnly = false, highlightId = null }: Props) {
+    const combat = readOnly ? NO_COMBAT : handlers
+    // Só leitura: nenhum card é "meu", então nenhum mostra botão de rolar, cancelar ou reagir.
+    const actsAs = (message: MaddoxGameMessageDto) => !readOnly && message.memberId !== null && message.memberId === myMemberId
     const scrollRef = useRef<HTMLDivElement>(null)
     const stickRef = useRef(true)
     const [showJump, setShowJump] = useState(false)
@@ -79,16 +86,22 @@ export function GameMessageList({ messages, myMemberId, maddoxAvatarUrl, color, 
     const liveNarration = live.some((item) => item.kind === "narration")
     const lastTurn = messages.at(-1)?.turnNumber ?? null
     const signature = `${messages.length}:${messages.at(-1)?.id ?? ""}:${narrating ? 1 : 0}:${live.map((item) => `${item.liveId}:${item.text.length}:${item.tool ? 1 : 0}`).join(",")}`
+    const highlightLoaded = highlightId !== null && byId.has(highlightId)
     useLayoutEffect(() => {
-        if (stickRef.current) scrollToEnd()
-    }, [signature, scrollToEnd])
+        if (stickRef.current && !highlightId) scrollToEnd()
+    }, [signature, scrollToEnd, highlightId])
     useEffect(() => {
-        scrollToEnd()
-    }, [scrollToEnd])
+        if (!highlightId) scrollToEnd()
+    }, [scrollToEnd, highlightId])
+    useEffect(() => {
+        if (!highlightLoaded) return
+        stickRef.current = false
+        scrollRef.current?.querySelector(`[data-message-id="${highlightId}"]`)?.scrollIntoView?.({ block: "center" })
+    }, [highlightId, highlightLoaded])
 
     return (
         <div className="relative min-h-0 flex-1">
-            <div ref={scrollRef} onScroll={onScroll} className="h-full overflow-y-auto px-4 pb-2 pt-4" role="log" aria-live="polite" aria-label="Mesa da campanha">
+            <div ref={scrollRef} onScroll={onScroll} className="h-full overflow-y-auto px-4 pb-2 pt-4" role="log" aria-live={readOnly ? "off" : "polite"} aria-label={readOnly ? "Histórico da campanha" : "Mesa da campanha"}>
                 {hasMore && (
                     <div className="flex justify-center pb-3">
                         <Button type="button" size="sm" variant="ghost" onClick={onLoadMore} disabled={loadingMore}>
@@ -100,22 +113,29 @@ export function GameMessageList({ messages, myMemberId, maddoxAvatarUrl, color, 
                     const previous = messages[index - 1]
                     // O card de início do combate vem antes da narração do turno: o divisor sai antes dele.
                     const divider = (message.kind === "narration" || message.kind === "combat") && (!previous || previous.turnNumber !== message.turnNumber)
+                    const highlighted = message.id === highlightId
                     return (
                         <Fragment key={message.id}>
                             {divider && <TurnDivider number={message.turnNumber} color={color} />}
-                            {message.kind === "combat" ? (
-                                message.combat ? message.combat.event === "order" ? <CombatOrderCard combat={message.combat} /> : <GameCombatCard combat={message.combat} /> : null
-                            ) : message.kind === "combat-action" && message.combatAction ? (
-                                <CombatActionCard message={message} mine={message.memberId !== null && message.memberId === myMemberId} replay={replays.get(message.id) ?? null} onRoll={combat.onRollAction} onCancel={combat.onCancelAction} />
-                            ) : message.kind === "combat-roll" && message.combatRoll ? (
-                                <CombatRollCard message={message} mine={message.memberId !== null && message.memberId === myMemberId} replay={replays.get(message.id) ?? null} onRoll={combat.onRollCombat} />
-                            ) : message.kind === "combat-reaction" && message.combatReaction ? (
-                                <CombatReactionCard message={message} mine={message.memberId !== null && message.memberId === myMemberId} isOwner={combat.isOwner} busy={combat.reacting} onDecide={combat.onDecideReaction} />
-                            ) : message.kind === "check" && message.check ? (
-                                <GameCheckCard message={message} mine={message.memberId !== null && message.memberId === myMemberId} color={color} replay={replays.get(message.id) ?? null} onRoll={onRollCheck} />
-                            ) : (
-                                <GameMessage message={message} mine={message.memberId !== null && message.memberId === myMemberId} replyTo={message.replyToId ? (byId.get(message.replyToId) ?? null) : null} maddoxAvatarUrl={maddoxAvatarUrl} color={color} />
-                            )}
+                            <div
+                                data-message-id={message.id}
+                                data-highlighted={highlighted ? "true" : undefined}
+                                className={highlighted ? "-mx-2 rounded-xl px-2 pt-2 ring-2 ring-primary/70" : undefined}
+                            >
+                                {message.kind === "combat" ? (
+                                    message.combat ? message.combat.event === "order" ? <CombatOrderCard combat={message.combat} /> : <GameCombatCard combat={message.combat} /> : null
+                                ) : message.kind === "combat-action" && message.combatAction ? (
+                                    <CombatActionCard message={message} mine={actsAs(message)} replay={replays.get(message.id) ?? null} onRoll={combat.onRollAction} onCancel={combat.onCancelAction} />
+                                ) : message.kind === "combat-roll" && message.combatRoll ? (
+                                    <CombatRollCard message={message} mine={actsAs(message)} replay={replays.get(message.id) ?? null} onRoll={combat.onRollCombat} />
+                                ) : message.kind === "combat-reaction" && message.combatReaction ? (
+                                    <CombatReactionCard message={message} mine={actsAs(message)} isOwner={combat.isOwner} busy={combat.reacting} onDecide={combat.onDecideReaction} />
+                                ) : message.kind === "check" && message.check ? (
+                                    <GameCheckCard message={message} mine={actsAs(message)} color={color} replay={replays.get(message.id) ?? null} onRoll={onRollCheck} />
+                                ) : (
+                                    <GameMessage message={message} mine={message.memberId !== null && message.memberId === myMemberId} replyTo={message.replyToId ? (byId.get(message.replyToId) ?? null) : null} maddoxAvatarUrl={maddoxAvatarUrl} color={color} />
+                                )}
+                            </div>
                         </Fragment>
                     )
                 })}
