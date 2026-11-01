@@ -1,0 +1,59 @@
+"use client"
+
+import { useMutation, useQueryClient } from "@tanstack/react-query"
+import { toast } from "sonner"
+import { api, apiErrorMessage, unwrapApi } from "@/lib/api"
+import type { ApiResponse } from "@/lib/types/api"
+import type { DiceRollResponse } from "@/features/dice-roller/types"
+import type { MaddoxCombatActionInput, MaddoxEndCombatTurnInput } from "../combat-schemas"
+import type { MaddoxGameStateDto } from "../game-types"
+import { MADDOX_CAMPAIGNS_KEY } from "./useMaddoxCampaigns"
+import { maddoxGameKey } from "./useMaddoxGame"
+
+/**
+ * Combate tático (Maddox 7) na mesa: Ação/Ação bônus da minha vez, cancelar, encerrar a vez, rolar os passos da ação e as
+ * rolagens avulsas (iniciativa, teste contra a morte, concentração, salvaguarda, dano pedido) e escolher a reação. Cada
+ * resposta traz a mesa atualizada, que entra no cache.
+ */
+
+const combatPath = (campaignId: string) => `/maddox/campaigns/${campaignId}/game/combat`
+
+export interface MaddoxCombatRollResult {
+    roll: DiceRollResponse
+    state: MaddoxGameStateDto
+}
+
+function useCombatMutation<TInput, TResult extends MaddoxGameStateDto | MaddoxCombatRollResult>(campaignId: string, request: (input: TInput) => Promise<TResult>, fallback: string, toastOnError = true) {
+    const queryClient = useQueryClient()
+    return useMutation({
+        mutationFn: request,
+        onSuccess: (result) => {
+            queryClient.setQueryData(maddoxGameKey(campaignId), "state" in result ? result.state : result)
+        },
+        onError: (error) => {
+            if (toastOnError) toast.error(apiErrorMessage(error, fallback))
+            void queryClient.invalidateQueries({ queryKey: MADDOX_CAMPAIGNS_KEY })
+        },
+    })
+}
+
+/** Ação ou Ação bônus (o erro `ACTION_INVALID` da "Outra ação" fica para a tela mostrar no próprio menu). */
+export const useSubmitCombatAction = (campaignId: string) =>
+    useCombatMutation<MaddoxCombatActionInput, MaddoxGameStateDto>(campaignId, async (input) => unwrapApi((await api.post<ApiResponse<MaddoxGameStateDto>>(`${combatPath(campaignId)}/actions`, input)).data), "Não foi possível agir", false)
+
+export const useCancelCombatAction = (campaignId: string) =>
+    useCombatMutation<string, MaddoxGameStateDto>(campaignId, async (actionId) => unwrapApi((await api.delete<ApiResponse<MaddoxGameStateDto>>(`${combatPath(campaignId)}/actions/${actionId}`)).data), "Não foi possível cancelar a ação")
+
+export const useEndCombatTurn = (campaignId: string) =>
+    useCombatMutation<MaddoxEndCombatTurnInput, MaddoxGameStateDto>(campaignId, async (input) => unwrapApi((await api.post<ApiResponse<MaddoxGameStateDto>>(`${combatPath(campaignId)}/end-turn`, input)).data), "Não foi possível encerrar a vez")
+
+/** Rola o próximo passo da ação (`actionId`) ou a rolagem avulsa (`rollId`). */
+export const useRollCombatStep = (campaignId: string) =>
+    useCombatMutation<{ kind: "action" | "roll"; id: string }, MaddoxCombatRollResult>(
+        campaignId,
+        async ({ kind, id }) => unwrapApi((await api.post<ApiResponse<MaddoxCombatRollResult>>(kind === "action" ? `${combatPath(campaignId)}/actions/${id}/roll` : `${combatPath(campaignId)}/rolls/${id}/roll`, {})).data),
+        "Não foi possível rolar",
+    )
+
+export const useDecideReaction = (campaignId: string) =>
+    useCombatMutation<{ id: string; escolha: string }, MaddoxGameStateDto>(campaignId, async ({ id, escolha }) => unwrapApi((await api.post<ApiResponse<MaddoxGameStateDto>>(`${combatPath(campaignId)}/reactions/${id}`, { escolha })).data), "Não foi possível escolher a reação")

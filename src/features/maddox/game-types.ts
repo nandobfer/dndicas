@@ -40,11 +40,11 @@ export interface MaddoxGameMessageDto {
     /** Card de início ou fim de combate (`kind: "combat"`, Maddox 6) ou a ordem de iniciativa (Maddox 7). */
     combat: MaddoxGameCombatEventDto | null
     /** Combate tático (Maddox 7): ação de um combatente, rolagem avulsa e janela de reação (pendente só para o indicado). */
-    combatAction: MaddoxCombatActionDto | null
-    combatRoll: MaddoxCombatRollDto | null
-    combatReaction: MaddoxCombatReactionDto | null
+    combatAction?: MaddoxCombatActionDto | null
+    combatRoll?: MaddoxCombatRollDto | null
+    combatReaction?: MaddoxCombatReactionDto | null
     /** "Não fez nada" porque o jogador estava offline na própria vez. */
-    offlineSkip: boolean
+    offlineSkip?: boolean
     createdAt: string
 }
 
@@ -66,9 +66,9 @@ export interface MaddoxGameCombatDto {
     masterTurns: number
     combatants: MaddoxCombatantDto[]
     /** Narrativo (Maddox 6) ou tático (Maddox 7). */
-    mode: "narrative" | "tactical"
+    mode?: "narrative" | "tactical"
     /** Ordem de iniciativa, rodada e quem age (combate tático). */
-    tactical: MaddoxTacticalCombatDto | null
+    tactical?: MaddoxTacticalCombatDto | null
 }
 
 // ── Combate tático (Maddox 7) ─────────────────────────────────────────────────
@@ -245,9 +245,9 @@ export interface MaddoxGameStateDto {
         awaitingChecks: boolean
         pendingChecks: MaddoxPendingCheckDto[]
         /** Combate tático: de quem é a vez neste turno dos jogadores. */
-        combatActor: { actorKey: string; memberId: string; characterName: string } | null
+        combatActor?: { actorKey: string; memberId: string; characterName: string } | null
         /** Combate tático: rolagens e reações que o turno do mestre espera (para a faixa e o "no lugar" do dono). */
-        pendingCombat: { id: string; kind: "roll" | "reaction"; memberId: string; characterName: string; label: string }[]
+        pendingCombat?: { id: string; kind: "roll" | "reaction"; memberId: string; characterName: string; label: string }[]
     }
     /** Mostra a CD dos testes aos jogadores. */
     showCheckDc: boolean
@@ -265,7 +265,7 @@ export interface MaddoxGameStateDto {
         /** Minha ficha D&D (só a minha; graus com ficha). */
         sheet: { id: string; slug: string } | null
         /** Combate tático (Maddox 7). */
-        combat: MaddoxMyCombatDto | null
+        combat?: MaddoxMyCombatDto | null
     }
     /** Mensagens mais recentes, em ordem cronológica. */
     messages: MaddoxGameMessageDto[]

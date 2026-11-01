@@ -332,7 +332,7 @@ describe("Maddox 7 — combate fiel ao D&D de ponta a ponta", () => {
         // A iniciativa pendente só chega a quem rola.
         const lyraView = await game.getGameState(id, lyra.userId)
         expect(lyraView.messages.filter((message) => message.combatRoll?.kind === "initiative")).toHaveLength(1)
-        expect(lyraView.turn.pendingCombat.map((item) => item.characterName).sort()).toEqual(["Bruno", "Kael", "Lyra"])
+        expect((lyraView.turn.pendingCombat ?? []).map((item) => item.characterName).sort()).toEqual(["Bruno", "Kael", "Lyra"])
 
         // ── Iniciativa: Kael 15+3, Lyra 10+2, Bruno 3+0; goblins 10 ──
         playerDice(kael.userId, [15])
