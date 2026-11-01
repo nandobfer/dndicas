@@ -36,7 +36,7 @@ num provedor fixo.
 
 | Aba | Feature | Onde é usado |
 | --- | --- | --- |
-| Gerador de imagens | `image-generator` | Botão "Gerar com IA" do `GlassImageUploader` (`POST /api/core/ai/image`, login obrigatório) e imagens da importação do 5etools. Provedor Gemini/OpenAI, modelo de imagem, instruções e proporção padrão |
+| Gerador de imagens | `image-generator` | Botão "Gerar com IA" do `GlassImageUploader` (`POST /api/core/ai/image`, login obrigatório), imagens da importação do 5etools, avatar do Maddox e as imagens nas cenas das Campanhas Maddox (Maddox 10: `generateAndStoreDndImage` aceita imagens de referência — só nos modelos Gemini `*-image*` e OpenAI `gpt-image-*` —, chave do storage, origem do consumo e sinal de cancelamento). Provedor Gemini/OpenAI, modelo de imagem, instruções e proporção padrão |
 | Entender com IA | `entity-understanding` | Chat por entidade (`POST /api/entity-understanding/chat`, SSE) com as ferramentas `searchCatalogEntities`/`getCatalogEntity`; o formato HTML com menções é fixo |
 | Importador 5etools | `entity-import` | Tradução das entidades importadas (`AiTranslator`, telas de geração e scripts de seed) |
 | Agente Opex | `opex-agent` | Ver `opex-agent.md` |

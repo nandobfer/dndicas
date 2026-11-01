@@ -8,6 +8,8 @@ A **entrega 2 (DND-12, #206)** — entrevistas de cenário e de personagem — e
 A **entrega 4 (DND-9, #201)** — o Maddox narrador com ferramentas e streaming — está em "Narrador (Maddox 4)".
 A **entrega 5 (DND-16, #208)** — fichas e testes de atributo/perícia/resistência pedidos pelo Maddox — está em "Fichas e testes (Maddox 5)".
 A **entrega 6 (DND-13, #205)** — combate narrativo (cinemático, sem iniciativa) — está em "Combate narrativo (Maddox 6)".
+A **entrega 10 (DND-10, #203)** — imagens nas cenas (situações e frequência configuráveis, pedido manual do dono e retrato de NPC) — está
+em "Imagens nas cenas (Maddox 10)".
 
 Código: `src/features/maddox/` (`constants`, `schemas`, `types`, `script-draft`, `models/`, `server/`,
 `hooks/`, `components/settings/`).
@@ -22,7 +24,8 @@ roteiros e as memórias salvam à parte.
 | --- | --- |
 | Geral | Ativo; **Avatar** (upload/substituição pelo `GlassImageUploader` ou "Gerar com o Gerador de imagens" a partir da persona — 1:1, do peito para cima; só vale depois de salvar); modelo do **Maddox (narrador)** e do **Entrevistador** ("Mesmo do Maddox" = sem provedor próprio); instruções de cada um com "Restaurar padrão" |
 | Entrevista: cenário / Entrevista: personagem | Roteiros versionados (abaixo), cada um com "Salvar nova versão do roteiro" e "Desfazer roteiro" |
-| JEV | Uma chave por decisão (`MADDOX_JEV_DECISIONS`): pergunta ou ação do jogador, validade de ação livre, pedir teste, início/fim de combate, conhecimento do mestre, fim da entrevista, gerar imagem na cena. Em uso: **"Fim da entrevista"** (Maddox 2), **"Validade de ação livre"** (Maddox 4, só Rigoroso e Fiel ao D&D), **"Pedir teste"** (Maddox 5, orientação ao narrador nos graus com testes) e **"Início ou fim de combate"** (Maddox 6, orientação ao narrador nos graus com combate narrativo); as demais ainda sem uso |
+| Imagens | Imagens nas cenas (Maddox 10): chave geral, situações fixas e personalizadas, intervalo, teto diário, proporção e estilo (seção "Imagens nas cenas (Maddox 10)") |
+| JEV | Uma chave por decisão (`MADDOX_JEV_DECISIONS`): pergunta ou ação do jogador, validade de ação livre, pedir teste, início/fim de combate, conhecimento do mestre, fim da entrevista, gerar imagem na cena. Em uso: **"Fim da entrevista"** (Maddox 2), **"Validade de ação livre"** (Maddox 4, só Rigoroso e Fiel ao D&D), **"Pedir teste"** (Maddox 5, orientação ao narrador nos graus com testes) e **"Início ou fim de combate"** (Maddox 6, orientação ao narrador nos graus com combate narrativo), **"Custo de ação no combate"** (Maddox 7) e **"Gerar imagem na cena"** (Maddox 10, filtro da imagem pedida pelo narrador); as demais ainda sem uso |
 | OpenCode | Política das sessões e lista das sessões ativas com "Excluir" (confirmação) |
 | Memórias | Lista `maddox` de `agent_memories` (mesmo card dos demais agentes, sem limite de quantidade; API `/api/ai/agents/maddox/memories/**`) |
 
@@ -89,6 +92,7 @@ sessão por campanha", a entrevista usou a do narrador, que continua.
 | `maddox_interview_scripts` | versões dos roteiros |
 | `maddox_interviews` | entrevistas (Maddox 2): conversa (`messages`), versão do roteiro, status, trava `generating`, resultado consolidado; única por `{ campaignId, kind, memberId }` |
 | `maddox_opencode_sessions` | sessões do OpenCode do Maddox |
+| `maddox_scene_images` | imagens nas cenas (Maddox 10): origem, vaga (`auto`/`manual`/`portrait`), situação, descrição (só servidor), legenda, referências, situação da geração, `counts` (ocupa a cota), URL; uma automática por turno (índice único parcial) |
 
 Os índices (inclusive os únicos que sustentam regras: `{ kind, version }` dos roteiros, uma sessão `active`
 por campanha/finalidade/membro, `sessionId`, `{ campaignId, userId }` dos membros) são garantidos pela migração
@@ -730,8 +734,9 @@ card que faltou e dispara os efeitos uma vez. Nomes repetidos de participantes (
   pc→cp, pl→pp). Item: do catálogo (busca por id ou nome, ativo; menção e campos de CA como a ficha da entrevista) ou, fora dele,
   **item próprio** com o aviso `"X" não está no catálogo: entrou como item próprio.`; entra sem equipar. Avisa a ficha aberta
   (`CharacterSheetPusherService`) e audita (`CampanhaMaddox`, `by: maddox`). Narrativo e Flexível só registram;
-- gancho `onCombatEnded` (`combat-image.ts`): **ponto de extensão da imagem de fim de batalha (Maddox 10)** — hoje só grava
-  `image.status = "awaiting-feature"` (ou `skipped` sem cena final) e loga; `finalScene` fica gravada para a geração.
+- `onCombatEnded` (`combat-image.ts`): **imagem de fim de batalha (Maddox 10)** — com a situação "Fim de batalha" ativa, a `finalScene`
+  vira imagem ligada ao card "Fim do combate" (`image.status = "requested"`); sem cena final ou fora das regras, `skipped`. Combates
+  encerrados antes do Maddox 10 ficaram com `awaiting-feature`.
 
 **Prompt.** Regra fixa "## Combate narrativo" (`combatRule`: quando abrir, narração cinemática sem números, testes só nos golpes
 decisivos no Equilibrado, `update_combat`, quando e como encerrar, personagem não morre por conveniência) e o bloco
@@ -882,6 +887,76 @@ contêiner e à janela; categorias em `OptionTabs`, alvos/círculo/perícia em `
 Sem permissão nova (`maddox.play` cobre). Fora do escopo: grid e alcance medido (o movimento é texto), ações lendárias e de covil,
 XP e subida de nível, reações dos adversários além do ataque de oportunidade conduzido pelo Maddox, novo personagem depois da morte.
 
+## Imagens nas cenas (Maddox 10)
+
+Código: `server/scene-images.ts` (regras, cota, reserva, geração em segundo plano, pedidos do dono, DTO), `server/scene-image-references.ts`
+(aparência), `server/scene-image-hints.ts` (JEV), `server/scene-image-describer.ts` (descrição para o pedido manual),
+`server/combat-image.ts` (fim de batalha), ferramenta `request_scene_image` e `save_npc.gerarRetrato` em `server/master-tools.ts`,
+coleção `maddox_scene_images` (`models/maddox-scene-image.ts`), `components/game/GameSceneImage.tsx`, `SceneImageButton.tsx`,
+`NpcPanel.tsx`, `components/campaigns/SceneImagesField.tsx`, `components/settings/MaddoxSceneImagesCard.tsx`,
+`hooks/useMaddoxSceneImages.ts`. Usa o **Gerador de imagens** já integrado (`generateAndStoreDndImage`).
+
+**Configuração** (`settings.sceneImages`, seção "Imagens" da aba; padrão tudo desligado; configuração antiga recebe o padrão):
+`enabled`, `situations` (fixas, `MADDOX_SCENE_IMAGE_SITUATIONS`: abertura da campanha, novo local ou cenário, fim de batalha, clímax ou
+cena importante, primeiro encontro com NPC importante, missão concluída, retrato de NPC), `custom` (até 10 personalizadas: nome,
+"quando acontece" — orienta o Maddox e o JEV —, ativa), `minNarrationsBetween` (0–50, padrão 3), `maxPerDay` (1–100, padrão 10),
+`aspectRatio` (padrão 16:9; retrato sempre 1:1) e `style` (estilo visual). A aba avisa quando o Gerador está indisponível ou o modelo
+dele não aceita imagens de entrada. **Chave por campanha**: `campaign.sceneImages` (padrão ligada; "Imagens nas cenas: Ligadas |
+Desligadas" na criação e na edição, muda a qualquer momento) — desligada, nada automático; o pedido manual continua.
+
+**Origens** (`source`):
+
+| Origem | Quem dispara | Regras | Ligada a |
+| --- | --- | --- | --- |
+| `tool` | `request_scene_image { situacao, descricaoVisual, legenda?, personagens?, npcs?, catalogo? }` | Só nas narrações; situação ativa (fixa ou personalizada) e chave da campanha; intervalo, uma por turno e teto; JEV opcional | Narração |
+| `combat-end` | `onCombatEnded` com a `finalScene` | Situação "Fim de batalha" ativa e chave da campanha; intervalo, uma por turno e teto | Card "Fim do combate" |
+| `manual` | Botão **"Gerar imagem da cena"** do dono | Só o teto diário e uma manual por vez (ignora situações, chaves e intervalo) | Última narração |
+| `npc-portrait` | `save_npc { gerarRetrato: true }` ou **"Gerar retrato"** do dono | Automático: situação "Retrato de NPC", chave da campanha, NPC conhecido dos jogadores e sem retrato (uma vez). Dono: só o teto | `npc.portraitUrl` |
+
+**Ferramenta.** Validação restritiva: situação inexistente ou inativa, personagem desconhecido, NPC desconhecido ou só do mestre e
+entidade fora do catálogo recusam com a lista das opções e nada é guardado; `combat-end`/`npc-portrait` pela ferramenta, segunda imagem
+na narração, resposta a pergunta, cota esgotada e Gerador indisponível também recusam com o motivo. O pedido fica no job (como os
+testes) e só vira imagem **depois** que a narração é gravada (`scheduleDraftImages` em `runMasterTurn`): narração que falha não gera
+nada. Oferecida à AI SDK só quando há situação ativa pedida pelo narrador; no MCP `dndicas-maddox` existe sempre e recusa pelo
+contexto. A regra **"## Imagens da cena"** (`sceneImagesRule`) lista as situações ativas e, fora da cota, avisa "AGORA: … Não peça
+imagem nesta narração."; com "Retrato de NPC" ativa, orienta o `gerarRetrato`. `save_npc` salva o NPC de qualquer jeito: o retorno
+`retrato` diz se o retrato foi pedido ou por quê não.
+
+**Frequência.** Contam as imagens com `counts: true` (`pending`, `generating`, `done`); `failed` e `skipped` liberam a vaga. Intervalo
+(só automáticas): a última automática precisa estar `minNarrationsBetween` turnos do mestre antes. Uma automática por turno: índice
+único parcial `{ campaignId, turnNumber, slot }` com `counts: true, slot: "auto"` (a duplicata vira `skipped`). Teto: todas as origens
+nas últimas 24 h; a reserva reconta depois de gravar e descarta (`skipped`, `daily-limit`) o que passou em pedidos simultâneos.
+
+**Referências de aparência.** Como na imagem da ficha (`formData`), os **dados** de quem aparece vão em JSON (perfil da entrevista e
+campos visuais da ficha D&D dos personagens; descrição pública dos NPCs — nunca `masterNotes` —; entidades do catálogo compactas;
+cenário e local), e as **imagens cadastradas** vão como referência ao gerador (`prompt: { text, images }` da SDK `ai`), até 6, na
+ordem personagens (retrato da campanha ou, sem ele, a foto da ficha) → NPCs (retrato) → catálogo (`image`). Imagens do storage são lidas
+pela chave (`/api/upload?key=`), externas por `fetch` (10 s, 5 MB); a que falha sai com aviso. Modelos que aceitam imagens de entrada:
+Gemini `*-image*` e OpenAI `gpt-image-*` (`imageModelSupportsReferences`); nos demais (Imagen, `dall-e-*`), só os dados, com aviso no log.
+
+**Geração.** Em segundo plano, **fora da fila da campanha** (o turno não espera), no máximo 2 simultâneas no processo, teto de 120 s.
+JEV "Gerar imagem na cena" (só `tool`): abaixo de 0,5 → `skipped` (`jev`); falha ou teto do JEV → gera (aviso no log). Arquivo em
+`maddox/campaigns/{id}/scenes/{imagem}` ou `…/npcs/{npc}-{ts}`; consumo na origem `maddox-scene-image` (assunto: a campanha). Ao
+terminar (ou falhar) avisa a mesa (`publishGameChanged`). Falha = `failed` com "Não foi possível gerar a imagem desta cena.".
+Imagens `pending`/`generating` há mais de 5 min (processo reiniciado) viram `failed` na leitura da mesa.
+
+**Pedido manual.** `POST /api/maddox/campaigns/[id]/scene-images` (`maddox.play` + entrevista concluída + dono; 202). Reserva logo
+(o placeholder aparece na última narração) e põe na fila da campanha uma geração curta do narrador (30 s, sem ferramentas) que devolve
+`{ descricaoVisual, legenda, personagens, npcs }` (nomes fora da campanha são ignorados, com aviso); falhou → a última narração vira a
+descrição, com todos os personagens. Erros: 403 (não dono), 409 `SCENE_IMAGE_BUSY`, `SCENE_IMAGE_LIMIT`, `AI_IMAGE_UNAVAILABLE`,
+`NO_NARRATION`, `CAMPAIGN_NOT_ACTIVE`. **Retrato**: `POST /api/maddox/campaigns/[id]/npcs/[npcId]/portrait` (dono; NPC conhecido dos
+jogadores; 409 `SCENE_IMAGE_BUSY` se o retrato dele já está sendo pintado).
+
+**DTO e tela.** `sceneImage` nas narrações e nos cards de fim de combate (`MaddoxGameSceneImageDto`: status, URL, legenda, rótulo da
+situação, origem; nunca a descrição; `skipped` não chega); `npcs[].portraitGenerating`; `sceneImages` no estado da mesa
+(`MaddoxSceneImageControlDto`: dono, pode pedir, motivo, gerando, restantes hoje, chave da campanha, pode pedir retrato). Na bolha:
+placeholder "O Maddox está pintando a cena…", a imagem com a legenda (clique amplia no `GlassModal`) ou a linha da falha. Cabeçalho da
+mesa: "Gerar imagem da cena" (só o dono; desabilitado com o motivo). "NPCs conhecidos": retrato e "Gerar retrato" (dono). As páginas
+de mensagens já carregadas com "Carregar anteriores" só mostram a imagem nova depois de recarregar (as imagens novas são das narrações
+recentes, que vêm no estado da mesa).
+
+Sem permissão nova (`maddox.play` cobre a mesa e os dois pedidos; a configuração é da aba de IA, só administradores).
+
 ## Testes
 
 `tests/backend/maddox/*` (configuração, roteiros, avatar, sessões, rotas, `campaigns.test.ts` com MongoDB em
@@ -920,7 +995,7 @@ espera, "Rolar no lugar", repetição da rolagem, CD, cancelado, "Minha ficha", 
 `maddox-game-stream.test.ts` (`check-rolled`), `maddox-campaigns.test.tsx` e `tests/frontend/dice-roller/dice-roller-panel.test.tsx`.
 Maddox 6: `narrator-combat-campaign.test.ts` (**critério de aceite**: campanha narrativa com o narrador real — inicia, atualiza e encerra o
 combate, conferindo o combate gravado, a ordem dos cards, o NPC morto, a memória `evento`, a condição do personagem, a imagem
-`awaiting-feature`, o DTO sem segredos e o prompt/transcrição; recusas; falha da geração sem gravar; Rigoroso sem ferramentas;
+`skipped` (imagens desligadas), o DTO sem segredos e o prompt/transcrição; recusas; falha da geração sem gravar; Rigoroso sem ferramentas;
 Equilibrado com moedas e itens na ficha, item próprio com aviso e reaplicação sem duplicar; JEV "Início ou fim de combate"),
 `narrator-prompt.test.ts` (regra, bloco, lembrete, MCP, nota do JEV, transcrição), `maddox-mcp.test.ts` (ferramentas no MCP),
 `ensure-maddox-indexes.test.ts` (índice do combate ativo); na tela, `maddox-game.test.tsx` (cards, chip "Em combate" que aparece e some
@@ -936,3 +1011,11 @@ detalhe compactos, erros), `interview-ability-scores.test.ts` ("origem do bônus
 Fiel, recusa em Fiel e Rigoroso com a lista, origem própria no Equilibrado, nome sem acento ou original, 409
 `BACKGROUND_NOT_IN_CATALOG` na conclusão), `game-checks.test.ts` (narrador consulta em Narrativo e Fiel sem gravar),
 `maddox-mcp.test.ts` (catálogo com token do narrador ou da entrevista) e os testes dos prompts.
+Maddox 10: `scene-images.test.ts` (ferramenta com recusas e nomes canônicos, intervalo, teto, uma por turno e concorrência, referências
+de aparência com imagens e dados, modelo sem imagens de entrada, falha do gerador, JEV, imagens presas, fim de batalha, pedido manual,
+descrição indisponível, retrato pelo dono e pelo `save_npc`), `narrator-scene-image-campaign.test.ts` (**critério de aceite**: narrador
+real pede a imagem do novo local, ela fica ligada à narração e o turno abre sem esperar; intervalo respeitado; situação inativa ou campanha
+desligada sem a ferramenta; narração que falha sem imagem; resposta sem a ferramenta), `settings.test.ts`, `narrator-prompt.test.ts`,
+`maddox-mcp.test.ts`, `game-routes.test.ts`, `ensure-maddox-indexes.test.ts`, `tests/backend/ai/image-lazy-providers.test.ts`
+(referências só nos modelos que aceitam); na tela, `maddox-scene-images.test.tsx`, `maddox-game.test.tsx`, `maddox-tab.test.tsx` e
+`maddox-campaigns.test.tsx`.
