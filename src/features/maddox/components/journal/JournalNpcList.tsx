@@ -6,14 +6,18 @@ import { useMaddoxJournalNpcs } from "../../hooks/useMaddoxJournal"
 import { MemberAvatar } from "../campaigns/campaign-visuals"
 import { cn } from "@/lib/utils"
 import { journalAnchor } from "./journal-links"
-import { JournalItemCard, JournalListState, JournalText, LoadMore } from "./JournalLists"
-import { useJournalHashTarget } from "./use-journal-hash-target"
+import { JournalItemCard, JournalListState, JournalText, LoadMore, SeekNotice } from "./JournalLists"
+import { useJournalHash, useScrollToAnchor, useSeekAnchor } from "./use-journal-hash-target"
 
 /** NPCs que o grupo conhece: retrato, nome, situação e descrição pública (as notas do mestre nunca chegam aqui). */
 export function JournalNpcList({ campaignId, color }: { campaignId: string; color: string }) {
     const npcs = useMaddoxJournalNpcs(campaignId)
     const items = npcs.data?.pages.flatMap((page) => page.items) ?? []
-    const target = useJournalHashTarget(items.length > 0)
+    const anchors = new Set(items.map((npc) => journalAnchor.npc(npc.id)))
+    const target = useJournalHash()
+    const found = anchors.has(target)
+    useScrollToAnchor(target, found)
+    const seek = useSeekAnchor({ wanted: target.startsWith("npc-"), found, hasNextPage: Boolean(npcs.hasNextPage), isFetchingNextPage: npcs.isFetchingNextPage, fetchNextPage: npcs.fetchNextPage, pages: npcs.data?.pages.length ?? 0 })
     const state = (
         <JournalListState
             loading={npcs.isLoading}
@@ -27,6 +31,7 @@ export function JournalNpcList({ campaignId, color }: { campaignId: string; colo
     if (npcs.isLoading || npcs.isError || items.length === 0) return state
     return (
         <div className="space-y-4">
+            <SeekNotice {...seek} />
             <div className="grid gap-3 md:grid-cols-2" aria-label="NPCs conhecidos">
                 {items.map((npc) => {
                     const anchor = journalAnchor.npc(npc.id)

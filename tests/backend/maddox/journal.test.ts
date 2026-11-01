@@ -61,12 +61,12 @@ async function campaignWithJournal() {
                 setting: "Um reino coberto de brumas.",
                 openingSituation: "Uma taverna em chamas.",
                 "turn.number": 3,
-                state: { scene: "O grupo discute no porão da Taverna do Javali.", location: "Porão da taverna", situation: "Bartolomeu observa a escada.", pendingDecision: "Descer ao túnel?", updatedTurn: 3, updatedAt: new Date() },
+                state: { scene: "O grupo discute no porão da Taverna do Javali.", location: "Porão da taverna", situation: "Bartolomeu observa a escada.", pendingDecision: "Descer ao túnel?", updatedTurn: 3, updatedAt: new Date(), publicFields: ["scene", "location", "situation", "pendingDecision"] },
             },
         },
     )
-    const ownerMember = await giveCharacter(id, owner, "Aldric", { profile: { identidade: "Cavaleiro de cabelos grisalhos." }, currentState: "Ferido no ombro." })
-    const playerMember = await giveCharacter(id, player, "Lyra", { profile: { origem: "Criada entre os elfos da floresta." }, currentState: "Sem flechas." })
+    const ownerMember = await giveCharacter(id, owner, "Aldric", { profile: { identidade: "Cavaleiro de cabelos grisalhos." }, currentState: "Ferido no ombro.", currentStatePublic: true })
+    const playerMember = await giveCharacter(id, player, "Lyra", { profile: { origem: "Criada entre os elfos da floresta." }, currentState: "Sem flechas.", currentStatePublic: true })
 
     const bartolomeu = await MaddoxNpcModel.create({ campaignId: id, name: "Bartolomeu", nameKey: "bartolomeu", publicDescription: "Taverneiro gordo e simpático.", masterNotes: SECRET_NOTE, visibility: "players" })
     await MaddoxNpcModel.create({ campaignId: id, name: SECRET_NPC, nameKey: "sombra velada", publicDescription: "Uma figura encapuzada.", masterNotes: "Líder dos cultistas.", visibility: "master" })
@@ -145,6 +145,33 @@ describe("Maddox 9 — o que é só do mestre não chega aos jogadores (critéri
             expect(result.memories.items, q).toEqual([])
             expect(result.messages.items, q).toEqual([])
         }
+    })
+
+    it("estado e condição gravados antes do Maddox 9 (rascunho do mestre) ficam ocultos até o Maddox regravá-los", async () => {
+        const c = await campaignWithJournal()
+        await MaddoxCampaignModel.updateOne({ _id: c.id }, { $set: { "state.situation": "Bartolomeu é o traidor.", "state.publicFields": [] } })
+        await MaddoxCharacterModel.updateMany({ campaignId: c.id }, { $set: { currentState: "Amaldiçoada sem saber.", currentStatePublic: false } })
+        const legacy = [await journal.getJournalSummary(c.id, c.player), await journal.listJournalParty(c.id, c.player), await journal.searchJournal(c.id, { q: "traidor" }, c.player), await journal.searchJournal(c.id, { q: "amaldiçoada" }, c.player)]
+        for (const response of legacy) {
+            // Sem o termo ecoado em `query` da busca.
+            const json = JSON.stringify(response, (key, value) => (key === "query" ? undefined : value))
+            expect(json).not.toContain("traidor")
+            expect(json).not.toContain("Amaldiçoada")
+        }
+        expect(legacy[0]).toMatchObject({ state: { scene: "", location: "", situation: "", pendingDecision: "", updatedTurn: null } })
+        expect((legacy[2] as Awaited<ReturnType<typeof journal.searchJournal>>).state).toBeNull()
+        expect((legacy[3] as Awaited<ReturnType<typeof journal.searchJournal>>).party.items).toEqual([])
+
+        // O Maddox regrava só o local e a condição da Lyra, já sabendo que é público: só isso aparece.
+        const { findMaddoxTool, runMaddoxTool } = await import("@/features/maddox/server/master-tools")
+        const context = { campaignId: new mongoose.Types.ObjectId(c.id), turnNumber: 4 }
+        await runMaddoxTool(findMaddoxTool("update_campaign_state")!, context, { location: "Túnel sob a vila" })
+        await runMaddoxTool(findMaddoxTool("update_character_state")!, context, { characterName: "Lyra", currentState: "Com uma tocha." })
+        const summary = await journal.getJournalSummary(c.id, c.player)
+        expect(summary.state).toEqual({ scene: "", location: "Túnel sob a vila", situation: "", pendingDecision: "", updatedTurn: 4 })
+        const party = await journal.listJournalParty(c.id, c.player)
+        expect(party.map((member) => [member.characterName, member.currentState])).toEqual([["Aldric", ""], ["Lyra", "Com uma tocha."]])
+        expect(JSON.stringify([summary, party])).not.toContain("traidor")
     })
 
     it("o dono da campanha é jogador: vê o mesmo que os outros", async () => {

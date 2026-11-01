@@ -6,13 +6,14 @@ import { MemberAvatar } from "../campaigns/campaign-visuals"
 import { CharacterProfileSections } from "../campaigns/CharacterProfileDialog"
 import { journalAnchor } from "./journal-links"
 import { JournalItemCard, JournalListState, JournalText } from "./JournalLists"
-import { useJournalHashTarget } from "./use-journal-hash-target"
+import { useJournalHash, useScrollToAnchor } from "./use-journal-hash-target"
 
 /** Personagens do grupo: perfil da entrevista e condição atual (a ficha D&D continua só do dono dela). */
 export function JournalPartyList({ campaignId, color, myMemberId }: { campaignId: string; color: string; myMemberId: string }) {
     const party = useMaddoxJournalParty(campaignId)
     const items = party.data ?? []
-    const target = useJournalHashTarget(items.length > 0)
+    const target = useJournalHash()
+    useScrollToAnchor(target, items.some((member) => journalAnchor.member(member.memberId) === target))
     if (party.isLoading || party.isError || items.length === 0) {
         return <JournalListState loading={party.isLoading} error={party.isError} empty={items.length === 0} emptyText="Nenhum personagem pronto ainda." icon={Users} onRetry={() => void party.refetch()} />
     }

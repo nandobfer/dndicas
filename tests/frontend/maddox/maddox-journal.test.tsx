@@ -130,6 +130,7 @@ beforeEach(() => {
 
 const { JournalPage } = await import("@/features/maddox/components/journal/JournalPage")
 const { journalHref, parseJournalTab } = await import("@/features/maddox/components/journal/journal-links")
+const { MADDOX_JOURNAL_SEEK_PAGES } = await import("@/features/maddox/components/journal/use-journal-hash-target")
 
 async function renderJournal(params = "") {
     search = new URLSearchParams(params)
@@ -191,16 +192,63 @@ describe("Diário da campanha (Maddox 9) — tela", () => {
         expect(screen.getByTestId("journal-npc-n1")).toHaveAttribute("id", "npc-n1")
     })
 
-    it("missões: chips de situação e filtro pela situação", async () => {
-        await renderJournal("aba=missoes")
+    it("missões: chips de situação e filtro pela situação na URL (?situacao=)", async () => {
+        const view = await renderJournal("aba=missoes")
         const quest = await screen.findByTestId("journal-memory-q2")
         expect(within(quest).getByTestId("journal-quest-status")).toHaveAttribute("data-status", "concluida")
         expect(within(quest).getByTestId("journal-quest-status")).toHaveTextContent("Concluída")
         fireEvent.click(screen.getByRole("button", { name: "Concluída" }))
-        await waitFor(() => expect(screen.queryByTestId("journal-memory-q1")).not.toBeInTheDocument())
+        expect(replace).toHaveBeenCalledWith("/campanhas/c1/diario?aba=missoes&situacao=concluida", { scroll: false })
+        view.unmount()
+
+        const filtered = await renderJournal("aba=missoes&situacao=concluida")
+        expect(await screen.findByTestId("journal-memory-q2")).toBeInTheDocument()
+        expect(screen.queryByTestId("journal-memory-q1")).not.toBeInTheDocument()
         expect(get).toHaveBeenCalledWith("/maddox/campaigns/c1/journal/memories", { params: { kind: "missao", status: "concluida" } })
-        fireEvent.click(screen.getByRole("button", { name: "Falhou" }))
+        filtered.unmount()
+
+        await renderJournal("aba=missoes&situacao=falhou")
         expect(await screen.findByTestId("journal-empty")).toHaveTextContent("Nenhuma missão falhou.")
+    })
+
+    it("o link de uma missão vindo da busca zera o filtro de situação", () => {
+        const href = journalHref("c1", { memoryId: "q2", kind: "missao" })
+        expect(href).toBe("/campanhas/c1/diario?aba=missoes#anotacao-q2")
+        expect(new URL(href, "http://x").searchParams.get("situacao")).toBeNull()
+    })
+
+    it("NPC aberto por link além da primeira página: a lista carrega as páginas seguintes até ele e o destaca", async () => {
+        const npc = (index: number) => ({ id: `n${index}`, name: `NPC ${index}`, portraitUrl: null, status: "active", publicDescription: "", updatedAt: "2026-10-31T10:00:00.000Z" })
+        routes["/maddox/campaigns/c1/journal/npcs"] = (params) =>
+            params.cursor ? { items: Array.from({ length: 5 }, (_, index) => npc(30 + index)), nextCursor: null } : { items: Array.from({ length: 30 }, (_, index) => npc(index)), nextCursor: "n29" }
+        window.location.hash = "#npc-n33"
+        try {
+            await renderJournal("aba=npcs")
+            const card = await screen.findByTestId("journal-npc-n33")
+            expect(card).toHaveAttribute("data-highlighted", "true")
+            expect(get).toHaveBeenCalledWith("/maddox/campaigns/c1/journal/npcs", { params: { cursor: "n29" } })
+            expect(screen.queryByTestId("journal-too-far")).not.toBeInTheDocument()
+        } finally {
+            window.location.hash = ""
+        }
+    })
+
+    it("anotação aberta por link além do limite de páginas: avisa para usar 'Carregar mais'", async () => {
+        let calls = 0
+        routes["/maddox/campaigns/c1/journal/memories"] = (params) => {
+            calls++
+            const page = Number(params.cursor ?? 0)
+            return { items: [memory(`e${page}`, "evento", `Marco ${page}`)], nextCursor: String(page + 1) }
+        }
+        window.location.hash = "#anotacao-inexistente"
+        try {
+            await renderJournal("aba=anotacoes&tipo=evento")
+            expect(await screen.findByTestId("journal-too-far", {}, { timeout: 3000 })).toHaveTextContent("Item muito antigo: use “Carregar mais” para chegar até ele.")
+            expect(calls).toBe(MADDOX_JOURNAL_SEEK_PAGES)
+            expect(screen.getByRole("button", { name: "Carregar mais" })).toBeInTheDocument()
+        } finally {
+            window.location.hash = ""
+        }
     })
 
     it("locais e anotações: estados vazios em pt-BR e filtro por tipo pela URL", async () => {

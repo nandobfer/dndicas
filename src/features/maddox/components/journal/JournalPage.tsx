@@ -14,6 +14,7 @@ import { ErrorState } from "@/components/feedback/ErrorState"
 import { IntegrationTabs, type IntegrationTabDef } from "@/features/integrations/components/tabs/IntegrationTabs"
 import { useAuth } from "@/core/hooks/useAuth"
 import { cn } from "@/lib/utils"
+import { MADDOX_QUEST_STATUSES } from "../../constants"
 import type { MaddoxJournalSummaryDto } from "../../journal-types"
 import { useMaddoxJournalSummary } from "../../hooks/useMaddoxJournal"
 import { useMaddoxGameRealtime } from "../../hooks/useMaddoxGame"
@@ -70,7 +71,9 @@ function Journal({ summary }: { summary: MaddoxJournalSummaryDto }) {
     const noteParam = params.get("tipo")
     const noteKind: MaddoxJournalNoteKind = (MADDOX_JOURNAL_NOTE_KINDS as readonly string[]).includes(noteParam ?? "") ? (noteParam as MaddoxJournalNoteKind) : "evento"
     const highlightId = params.get("msg")
-    const [questFilter, setQuestFilter] = useState<QuestFilter>("todas")
+    // Filtro das missões na URL (`?situacao=`): o link de um resultado da busca (`?aba=missoes#…`) o zera.
+    const questParam = params.get("situacao")
+    const questFilter: QuestFilter = (MADDOX_QUEST_STATUSES as readonly string[]).includes(questParam ?? "") ? (questParam as QuestFilter) : "todas"
     const [term, setTerm] = useState("")
 
     const navigate = (next: Record<string, string | null>) => {
@@ -135,13 +138,13 @@ function Journal({ summary }: { summary: MaddoxJournalSummaryDto }) {
                         </CardContent>
                     </Card>
 
-                    <IntegrationTabs tabs={tabs} active={tab} onSelect={(next) => navigate({ aba: next === "historico" ? null : next, msg: null, tipo: null })} pendingTab={null} onConfirmDiscard={() => undefined} onCancelDiscard={() => undefined} label="Seções do diário">
+                    <IntegrationTabs tabs={tabs} active={tab} onSelect={(next) => navigate({ aba: next === "historico" ? null : next, msg: null, tipo: null, situacao: null })} pendingTab={null} onConfirmDiscard={() => undefined} onCancelDiscard={() => undefined} label="Seções do diário">
                         {tab === "historico" && <JournalHistory campaignId={summary.campaignId} color={color} myMemberId={summary.myMemberId} maddoxAvatarUrl={summary.maddoxAvatarUrl} highlightId={highlightId} />}
                         {tab === "npcs" && <JournalNpcList campaignId={summary.campaignId} color={color} />}
                         {tab === "locais" && <JournalMemoryList campaignId={summary.campaignId} color={color} kind="local" />}
                         {tab === "missoes" && (
                             <div className="space-y-4">
-                                <QuestStatusFilter value={questFilter} onChange={setQuestFilter} />
+                                <QuestStatusFilter value={questFilter} onChange={(next) => navigate({ situacao: next === "todas" ? null : next })} />
                                 <JournalMemoryList campaignId={summary.campaignId} color={color} kind="missao" status={questFilter === "todas" ? null : questFilter} />
                             </div>
                         )}

@@ -894,9 +894,14 @@ a CD secreta), a situação atual (`campaign.state`), o cenário e a situação 
 e memória, junto do `campaignId`, e os DTOs são montados campo a campo. O dono da campanha é jogador e vê o mesmo que os outros.
 Acesso: membro `joined` com `maddox.play` (quem saiu ou não participa = 404). Só leitura: sem auditoria.
 
-**Narrador.** Como o estado da história e a condição dos personagens passaram a ser públicos, o `MADDOX_PERSISTENCE_RULE` e as
-descrições de `update_campaign_state`/`update_character_state` avisam que os jogadores os leem no diário e que segredo vai em
-`masterNotes` ou em `save_memory` com `visibility: master`. Registros gravados antes do Maddox 9 não são revisados.
+**Estado e condição públicos.** Esses campos não têm `visibility`: até o Maddox 9 o narrador os tratava como rascunho interno
+e pode ter gravado neles uma pista ou um segredo. Por isso só aparece (no resumo, na aba Grupo e na busca) o que foi
+**regravado desde o Maddox 9**, já com o aviso de que é público: `update_campaign_state` acrescenta os campos que escreveu a
+`campaign.state.publicFields` e o diário mostra só esses; `update_character_state` (e as condições de fim de combate e de morte
+no combate tático, que já são públicas) marca `currentStatePublic: true`. Estado e condição antigos ficam vazios até o Maddox
+regravá-los. O aviso está no `MADDOX_PERSISTENCE_RULE`, nas descrições das duas ferramentas e, a cada turno, logo abaixo do
+título do estado no prompt (`MADDOX_PUBLIC_STATE_NOTE`). Risco residual: em campanhas novas, a proteção depende de o modelo
+obedecer ao prompt; o segredo tem lugar próprio (`masterNotes` ou `save_memory` com `visibility: master`).
 
 **Busca.** Regex que ignora acentos e caixa (`accentInsensitivePattern`: cada vogal/ç/ñ vira a classe das variantes; o resto é
 escapado), também por pedaço de palavra, sempre filtrada pela campanha — o índice de texto antigo das memórias não é usado (não
@@ -922,8 +927,10 @@ card de busca com espera de 300 ms e resultados agrupados (Situação atual, NPC
 Histórico da mesa) com o termo destacado; abas `IntegrationTabs` (`?aba=historico|npcs|locais|missoes|anotacoes|grupo`):
 histórico em modo leitura (`GameMessageList readOnly`: nenhum card é "meu", então nada de rolar, cancelar ou reagir;
 `?msg=<id>` carrega até 10 páginas atrás da mensagem e a destaca, depois avisa "Mensagem muito antiga"), NPCs (morto esmaecido),
-locais, missões (filtro por situação em `GlassSelector` com as cores de raridade), anotações (`?tipo=evento|relacao|fato|outro`) e
-grupo. Ao lado, "Situação atual" (com "atualizada no turno N" e as missões ativas) e o cenário recolhível. Cada item tem âncora
+locais, missões (filtro por situação em `GlassSelector` com as cores de raridade, na URL `?situacao=` — o link de um resultado
+da busca o zera), anotações (`?tipo=evento|relacao|fato|outro`) e grupo. NPCs e anotações abertos por link fora da primeira
+página: a lista carrega as páginas seguintes até o item (até 10, `MADDOX_JOURNAL_SEEK_PAGES`) e depois avisa "Item muito antigo:
+use “Carregar mais”". Ao lado, "Situação atual" (com "atualizada no turno N" e as missões ativas) e o cenário recolhível. Cada item tem âncora
 (`#npc-…`, `#anotacao-…`, `#personagem-…`) e fica em destaque quando aberto por link. Em dia pelo `maddox.game.changed`
 (as chaves ficam sob `MADDOX_CAMPAIGNS_KEY`).
 

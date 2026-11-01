@@ -222,6 +222,13 @@ function characterBlock(character: NarratorCharacter): string {
     return [`### ${character.name} (jogador: ${character.playerName})`, ...sections, `- Condição atual na história: ${character.currentState.trim() ? oneLine(character.currentState, 1_200) : "(sem mudanças registradas)"}`, ...sheet].join("\n")
 }
 
+/**
+ * Lembrete de cada turno (Maddox 9): o estado e a condição dos personagens aparecem no Diário da campanha. Fica junto do
+ * próprio estado, além da regra de persistência, para o modelo não tratá-los como rascunho do mestre.
+ */
+export const MADDOX_PUBLIC_STATE_NOTE =
+    "_Os jogadores leem este estado e a condição de cada personagem no Diário da campanha: ao gravar com `update_campaign_state` ou `update_character_state`, escreva só o que os personagens sabem; segredo vai em `masterNotes` (`save_npc`) ou em `save_memory` com `visibility: master`._"
+
 function stateBlock(state: NarratorPromptContext["state"]): string {
     const lines = [
         ["Cena", state.scene],
@@ -231,7 +238,7 @@ function stateBlock(state: NarratorPromptContext["state"]): string {
     ]
         .filter(([, value]) => value?.trim())
         .map(([label, value]) => `- ${label}: ${value!.trim()}`)
-    return ["## Estado atual da história", lines.length ? lines.join("\n") : "- (ainda não registrado: a história está começando)"].join("\n")
+    return ["## Estado atual da história", MADDOX_PUBLIC_STATE_NOTE, lines.length ? lines.join("\n") : "- (ainda não registrado: a história está começando)"].join("\n")
 }
 
 function npcsBlock(npcs: readonly NarratorNpc[]): string | null {

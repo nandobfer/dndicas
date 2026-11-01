@@ -120,6 +120,10 @@ export type MaddoxCampaignMemoryKind = (typeof MADDOX_CAMPAIGN_MEMORY_KINDS)[num
 export const MADDOX_QUEST_STATUSES = ["ativa", "concluida", "falhou", "abandonada"] as const
 export type MaddoxQuestStatus = (typeof MADDOX_QUEST_STATUSES)[number]
 
+/** Campos do estado atual da história (`campaign.state`) que o Maddox mantém e o Diário da campanha mostra. */
+export const MADDOX_CAMPAIGN_STATE_FIELDS = ["scene", "location", "situation", "pendingDecision"] as const
+export type MaddoxCampaignStateField = (typeof MADDOX_CAMPAIGN_STATE_FIELDS)[number]
+
 /** Rótulos dos tipos de memória da campanha (Diário da campanha, Maddox 9). */
 export const MADDOX_CAMPAIGN_MEMORY_KIND_LABELS: Record<MaddoxCampaignMemoryKind, string> = {
     fato: "Fato",

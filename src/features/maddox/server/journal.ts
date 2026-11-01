@@ -4,7 +4,7 @@ import { dbConnect } from "@/lib/db"
 import { DomainError } from "@/lib/api/route"
 import { loggerFor } from "@/lib/logger"
 import { User } from "@/features/users/models/user"
-import { MADDOX_CAMPAIGN_MEMORY_KINDS, type MaddoxCampaignMemoryKind } from "../constants"
+import { MADDOX_CAMPAIGN_MEMORY_KINDS, type MaddoxCampaignMemoryKind, type MaddoxCampaignStateField } from "../constants"
 import { MaddoxCampaignMemberModel, MaddoxCampaignMemoryModel, MaddoxCampaignMessageModel, MaddoxCharacterModel, MaddoxNpcModel, type IMaddoxCampaignMemory, type IMaddoxCharacter, type IMaddoxNpc } from "../models"
 import { accentInsensitivePattern, excerptAround } from "../journal-search"
 import { maddoxJournalMemoriesSchema, maddoxJournalNpcsSchema, maddoxJournalSearchSchema } from "../journal-schemas"
@@ -91,8 +91,14 @@ function memoryDto(memory: MemoryDoc): MaddoxJournalMemoryDto {
     }
 }
 
-function stateDto(state: Partial<MaddoxJournalStateDto> | null | undefined): MaddoxJournalStateDto {
-    return { scene: state?.scene ?? "", location: state?.location ?? "", situation: state?.situation ?? "", pendingDecision: state?.pendingDecision ?? "", updatedTurn: state?.updatedTurn ?? null }
+/**
+ * Só os campos que o Maddox regravou desde que o estado passou a ser público (`publicFields`, Maddox 9); o que foi gravado
+ * antes era rascunho interno do mestre e pode ter segredo, então fica vazio até ser regravado.
+ */
+function stateDto(state: (Partial<MaddoxJournalStateDto> & { publicFields?: readonly string[] | null }) | null | undefined): MaddoxJournalStateDto {
+    const visible = new Set(state?.publicFields ?? [])
+    const field = (key: MaddoxCampaignStateField) => (visible.has(key) ? (state?.[key] ?? "") : "")
+    return { scene: field("scene"), location: field("location"), situation: field("situation"), pendingDecision: field("pendingDecision"), updatedTurn: visible.size ? (state?.updatedTurn ?? null) : null }
 }
 
 function page<T extends { _id: Types.ObjectId }, D>(docs: T[], map: (doc: T) => D): MaddoxJournalPageDto<D> {
@@ -165,7 +171,7 @@ export async function listJournalMemories(campaignId: string, input: unknown, us
     return page(docs, memoryDto)
 }
 
-type PartyCharacter = Pick<IMaddoxCharacter, "_id" | "name" | "portraitUrl" | "profile" | "currentState">
+type PartyCharacter = Pick<IMaddoxCharacter, "_id" | "name" | "portraitUrl" | "profile" | "currentState" | "currentStatePublic">
 
 async function partyMembers(campaignId: Types.ObjectId): Promise<MaddoxJournalPartyMemberDto[]> {
     const members = await MaddoxCampaignMemberModel.find({ campaignId, status: "joined", characterId: { $ne: null } })
@@ -176,7 +182,7 @@ async function partyMembers(campaignId: Types.ObjectId): Promise<MaddoxJournalPa
     const userIds = members.map((member) => member.userId).filter((id) => Types.ObjectId.isValid(id))
     const [characters, users] = await Promise.all([
         MaddoxCharacterModel.find({ _id: { $in: members.map((member) => member.characterId) } })
-            .select("name portraitUrl profile currentState")
+            .select("name portraitUrl profile currentState currentStatePublic")
             .lean<PartyCharacter[]>(),
         userIds.length ? User.find({ _id: { $in: userIds } }).select("name username").lean<{ _id: Types.ObjectId; name?: string; username?: string }[]>() : Promise.resolve([]),
     ])
@@ -194,7 +200,8 @@ async function partyMembers(campaignId: Types.ObjectId): Promise<MaddoxJournalPa
                 characterName: character.name,
                 portraitUrl: character.portraitUrl ?? null,
                 profile,
-                currentState: character.currentState ?? "",
+                // Condição antiga (antes do Maddox 9, rascunho interno do mestre) só aparece depois de regravada.
+                currentState: character.currentStatePublic ? (character.currentState ?? "") : "",
             },
         ]
     })

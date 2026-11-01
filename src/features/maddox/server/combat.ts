@@ -300,7 +300,7 @@ async function afterCombatEnded(campaign: CampaignRef, combat: IMaddoxCombat, tu
         }
     })
     await step("characters", async () => {
-        for (const state of combat.characterOutcomes) await MaddoxCharacterModel.updateOne({ _id: state.characterId, campaignId: campaign._id }, { $set: { currentState: state.condition } })
+        for (const state of combat.characterOutcomes) await MaddoxCharacterModel.updateOne({ _id: state.characterId, campaignId: campaign._id }, { $set: { currentState: state.condition, currentStatePublic: true } })
     })
     await step("memory", () => saveCombatMemory(campaign._id, combat, turnNumber))
     await step("rewards", () => applyCombatRewards(campaign, combat._id))

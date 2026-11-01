@@ -11,11 +11,8 @@ export function announceJournalHash() {
     if (typeof window !== "undefined") setTimeout(() => window.dispatchEvent(new Event(MADDOX_JOURNAL_HASH_EVENT)), 0)
 }
 
-/**
- * Item aberto pela âncora (`#npc-…`, `#anotacao-…`, `#personagem-…`): quando a lista carrega, a rolagem vai até ele
- * e ele fica em destaque. Acompanha a troca de âncora sem recarregar a página.
- */
-export function useJournalHashTarget(ready: boolean, key: unknown = null): string {
+/** Âncora atual (`#npc-…`, `#anotacao-…`, `#personagem-…`); acompanha a troca de âncora sem recarregar a página. */
+export function useJournalHash(key: unknown = null): string {
     const [hash, setHash] = useState(currentHash)
     useEffect(() => {
         const sync = () => setHash(currentHash())
@@ -27,9 +24,29 @@ export function useJournalHashTarget(ready: boolean, key: unknown = null): strin
             window.removeEventListener(MADDOX_JOURNAL_HASH_EVENT, sync)
         }
     }, [key])
-    useEffect(() => {
-        if (!ready || !hash) return
-        document.getElementById(hash)?.scrollIntoView?.({ block: "center", behavior: "smooth" })
-    }, [ready, hash])
     return hash
+}
+
+/** Quando o item da âncora está na lista (`found`), a rolagem vai até ele (o card fica em destaque). */
+export function useScrollToAnchor(hash: string, found: boolean) {
+    useEffect(() => {
+        if (!found || !hash) return
+        document.getElementById(hash)?.scrollIntoView?.({ block: "center", behavior: "smooth" })
+    }, [found, hash])
+}
+
+/** Quantas páginas uma lista do diário carrega sozinha atrás do item aberto por link (30 por página). */
+export const MADDOX_JOURNAL_SEEK_PAGES = 10
+
+/**
+ * O item da âncora pode estar além da primeira página (a busca não segue a ordem da lista): carrega as páginas seguintes
+ * até achá-lo ou até `MADDOX_JOURNAL_SEEK_PAGES`. Devolve `tooFar` quando passou do limite sem achar.
+ */
+export function useSeekAnchor({ wanted, found, hasNextPage, isFetchingNextPage, fetchNextPage, pages }: { wanted: boolean; found: boolean; hasNextPage: boolean; isFetchingNextPage: boolean; fetchNextPage: () => unknown; pages: number }): { seeking: boolean; tooFar: boolean } {
+    const missing = wanted && !found && pages > 0 && hasNextPage
+    const seeking = missing && pages < MADDOX_JOURNAL_SEEK_PAGES
+    useEffect(() => {
+        if (seeking && !isFetchingNextPage) void fetchNextPage()
+    }, [seeking, isFetchingNextPage, fetchNextPage, pages])
+    return { seeking, tooFar: missing && !seeking }
 }

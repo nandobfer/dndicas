@@ -7,8 +7,8 @@ import { MADDOX_CAMPAIGN_MEMORY_KIND_LABELS, MADDOX_QUEST_STATUSES, MADDOX_QUEST
 import { useMaddoxJournalMemories } from "../../hooks/useMaddoxJournal"
 import { RarityChip } from "../campaigns/campaign-visuals"
 import { journalAnchor, MADDOX_JOURNAL_NOTE_KINDS, type MaddoxJournalNoteKind } from "./journal-links"
-import { JournalItemCard, JournalListState, JournalText, LoadMore } from "./JournalLists"
-import { useJournalHashTarget } from "./use-journal-hash-target"
+import { JournalItemCard, JournalListState, JournalText, LoadMore, SeekNotice } from "./JournalLists"
+import { useJournalHash, useScrollToAnchor, useSeekAnchor } from "./use-journal-hash-target"
 
 const EMPTY_TEXTS: Record<MaddoxCampaignMemoryKind, string> = {
     local: "Nenhum local anotado ainda: o Maddox registra os lugares conforme o grupo os descobre.",
@@ -41,7 +41,10 @@ export function NoteKindFilter({ value, counts, onChange }: { value: MaddoxJourn
 export function JournalMemoryList({ campaignId, color, kind, status = null }: { campaignId: string; color: string; kind: MaddoxCampaignMemoryKind; status?: MaddoxQuestStatus | null }) {
     const memories = useMaddoxJournalMemories(campaignId, kind, status)
     const items = memories.data?.pages.flatMap((page) => page.items) ?? []
-    const target = useJournalHashTarget(items.length > 0, `${kind}:${status}`)
+    const target = useJournalHash(`${kind}:${status}`)
+    const found = items.some((memory) => journalAnchor.memory(memory.id) === target)
+    useScrollToAnchor(target, found)
+    const seek = useSeekAnchor({ wanted: target.startsWith("anotacao-"), found, hasNextPage: Boolean(memories.hasNextPage), isFetchingNextPage: memories.isFetchingNextPage, fetchNextPage: memories.fetchNextPage, pages: memories.data?.pages.length ?? 0 })
     if (memories.isLoading || memories.isError || items.length === 0) {
         return (
             <JournalListState
@@ -56,6 +59,7 @@ export function JournalMemoryList({ campaignId, color, kind, status = null }: { 
     }
     return (
         <div className="space-y-4">
+            <SeekNotice {...seek} />
             <div className="grid gap-3 md:grid-cols-2" aria-label={MADDOX_CAMPAIGN_MEMORY_KIND_LABELS[kind]}>
                 {items.map((memory) => {
                     const anchor = journalAnchor.memory(memory.id)

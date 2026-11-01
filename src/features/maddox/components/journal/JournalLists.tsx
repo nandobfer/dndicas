@@ -56,6 +56,23 @@ export function JournalListState({ loading, error, empty, emptyText, icon: Icon,
     return null
 }
 
+/** Aviso das listas quando o item aberto por link ainda está sendo procurado ou ficou além do limite. */
+export function SeekNotice({ seeking, tooFar }: { seeking: boolean; tooFar: boolean }) {
+    if (seeking) {
+        return (
+            <p className="flex items-center gap-1.5 text-xs text-white/60" role="status" data-testid="journal-seeking">
+                <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden /> Procurando o item na lista…
+            </p>
+        )
+    }
+    if (!tooFar) return null
+    return (
+        <p className="text-xs text-amber-300" role="status" data-testid="journal-too-far">
+            Item muito antigo: use “Carregar mais” para chegar até ele.
+        </p>
+    )
+}
+
 export function LoadMore({ hasMore, loading, onLoad }: { hasMore: boolean; loading: boolean; onLoad: () => void }) {
     if (!hasMore) return null
     return (
