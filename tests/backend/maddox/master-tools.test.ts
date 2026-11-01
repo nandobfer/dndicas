@@ -76,6 +76,17 @@ describe("ferramentas do Maddox narrador", () => {
         expect(await run("search_memories", id, { kind: "local" })).toMatchObject({ memories: [{ kind: "local" }] })
     })
 
+    it("search_memories (Maddox 9): ignora acentos e caixa e acha por pedaço da palavra", async () => {
+        const id = await campaign()
+        await run("save_memory", id, { kind: "local", title: "Tavérna do Javali", text: "À beira da estrada." })
+        for (const query of ["taverna", "TAVÉRNA", "javal", "a beira"]) expect(await run("search_memories", id, { query }), query).toMatchObject({ memories: [{ title: "Tavérna do Javali" }] })
+        expect(await run("search_memories", id, { query: ".*" })).toEqual({ memories: [] })
+    })
+
+    it("estado e condição dos personagens avisam que os jogadores os leem (Maddox 9)", async () => {
+        for (const name of ["update_campaign_state", "update_character_state"]) expect(findMaddoxTool(name)!.description, name).toContain("nunca grave segredos do mestre aqui")
+    })
+
     it("teto de proteção: no limite grava inteiro; acima corta, não invalida a chamada e avisa o modelo (`truncated`)", async () => {
         const id = await campaign()
         const atLimit = await run("save_memory", id, { kind: "fato", title: "No limite", text: "x".repeat(MADDOX_TOOL_TEXT_MAX) })

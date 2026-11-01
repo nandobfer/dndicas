@@ -37,6 +37,7 @@ import { MaddoxCampaignMemberModel, MaddoxCampaignMemoryModel, MaddoxCampaignMod
 import { MADDOX_ABILITIES, MADDOX_ABILITY_LABELS, MADDOX_SKILLS, checkAbility, checkTitle } from "../check-modifier"
 import { addDraftCheck, addDraftCombat, jobDraftChecks, jobDraftCombat, jobWorkspace, maddoxJobMeta, type MaddoxDraftCombatReward } from "./game-live"
 import type { TacticalDraftCombatant } from "./tactical-combat"
+import { accentInsensitivePattern } from "../journal-search"
 
 /**
  * Ferramentas de persistência do Maddox narrador (Maddox 4) — SOMENTE servidor. Definidas uma vez e expostas de
@@ -121,7 +122,8 @@ const memoryDto = (memory: IMaddoxCampaignMemory) => ({
     turnNumber: memory.turnNumber ?? null,
 })
 
-const escapeRegex = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
+/** Busca sem acento e sem caixa, também por pedaço de palavra (a mesma do Diário da campanha). */
+const textMatch = (query: string) => ({ $regex: accentInsensitivePattern(query), $options: "i" })
 
 export const MADDOX_MASTER_TOOLS: readonly MaddoxMasterTool[] = [
     define({
@@ -140,7 +142,7 @@ export const MADDOX_MASTER_TOOLS: readonly MaddoxMasterTool[] = [
     define({
         name: "update_campaign_state",
         description:
-            "Atualiza o estado atual da história (checkpoint): cena, local, situação imediata e a decisão aguardada dos jogadores. Envie só os campos que mudaram; use ao fim de cada narração em que a situação mudou.",
+            "Atualiza o estado atual da história (checkpoint): cena, local, situação imediata e a decisão aguardada dos jogadores. Envie só os campos que mudaram; use ao fim de cada narração em que a situação mudou. Os jogadores leem este estado no Diário da campanha: nunca grave segredos do mestre aqui (use save_npc ou save_memory com visibility master).",
         readOnly: false,
         input: z.object({
             scene: optionalText.describe("Cena atual, em uma ou duas frases"),
@@ -235,7 +237,7 @@ export const MADDOX_MASTER_TOOLS: readonly MaddoxMasterTool[] = [
             const filter = {
                 campaignId: context.campaignId,
                 ...(input.kind ? { kind: input.kind } : {}),
-                ...(query ? { $or: [{ title: { $regex: escapeRegex(query), $options: "i" } }, { text: { $regex: escapeRegex(query), $options: "i" } }, { tags: { $regex: escapeRegex(query), $options: "i" } }] } : {}),
+                ...(query ? { $or: [{ title: textMatch(query) }, { text: textMatch(query) }, { tags: textMatch(query) }] } : {}),
             }
             const memories = await MaddoxCampaignMemoryModel.find(filter)
                 .sort({ updatedAt: -1 })
@@ -290,7 +292,7 @@ export const MADDOX_MASTER_TOOLS: readonly MaddoxMasterTool[] = [
     define({
         name: "update_character_state",
         description:
-            "Atualiza a condição atual de um personagem jogador na história (ferimentos, cansaço, recursos e equipamentos que mudaram, onde está). Substitui a condição anterior; o perfil da entrevista não muda.",
+            "Atualiza a condição atual de um personagem jogador na história (ferimentos, cansaço, recursos e equipamentos que mudaram, onde está). Substitui a condição anterior; o perfil da entrevista não muda. Todos os jogadores leem esta condição no Diário da campanha: nunca grave segredos do mestre aqui.",
         readOnly: false,
         input: z.object({ characterName: z.string().min(1), currentState: z.string().describe("Condição atual consolidada") }),
         async execute(context, input) {
