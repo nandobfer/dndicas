@@ -3,22 +3,41 @@ import { describe, expect, it, vi } from "vitest"
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react"
 import type { MaddoxHitPointsDto } from "@/features/maddox/interview-types"
 
-vi.mock("@/features/dice-roller/components/dice-roller-panel", () => ({
-    DiceRollerPanel: (props: { preset?: { terms?: { dice: string; quantity: number }[]; modifier?: number } | null; rollButtonLabel?: string; disableRolling?: boolean; rollRequest?: (input: unknown) => Promise<unknown>; onRollResolved?: (result: unknown) => void }) => (
-        <div data-testid="fake-dice-panel" data-dice={props.preset?.terms?.map((term) => `${term.quantity}${term.dice}`).join("+")} data-modifier={props.preset?.modifier}>
-            <button
-                type="button"
-                disabled={props.disableRolling}
-                onClick={async () => {
-                    const result = await props.rollRequest?.({})
-                    props.onRollResolved?.(result)
-                }}
-            >
-                {props.rollButtonLabel}
-            </button>
-        </div>
-    ),
-}))
+vi.mock("@/features/dice-roller/components/dice-roller-panel", async () => {
+    const { useEffect, useState } = await import("react")
+    type PanelProps = { preset?: { terms?: { dice: string; quantity: number }[]; modifier?: number } | null; rollButtonLabel?: string; disableRolling?: boolean; rollRequest?: (input: unknown) => Promise<unknown>; onRollResolved?: (result: unknown) => void }
+    return {
+        // Ciclo de vida do painel real: o resultado zera quando o preset muda, e `onRollResolved` só chega no fim da
+        // animação (aqui, o botão "fim da animação"); se o painel desmontar antes, o fim nunca chega.
+        DiceRollerPanel: (props: PanelProps) => {
+            const [result, setResult] = useState<unknown>(null)
+            useEffect(() => setResult(null), [props.preset])
+            return (
+                <div data-testid="fake-dice-panel" data-dice={props.preset?.terms?.map((term) => `${term.quantity}${term.dice}`).join("+")} data-modifier={props.preset?.modifier}>
+                    <button
+                        type="button"
+                        disabled={props.disableRolling}
+                        onClick={async () => {
+                            // Como o painel real: o erro da rota vira mensagem no painel, sem rejeição solta.
+                            try {
+                                setResult(await props.rollRequest?.({}))
+                            } catch {
+                                setResult(null)
+                            }
+                        }}
+                    >
+                        {props.rollButtonLabel}
+                    </button>
+                    {result !== null && (
+                        <button type="button" onClick={() => props.onRollResolved?.(result)}>
+                            fim da animação
+                        </button>
+                    )}
+                </div>
+            )
+        },
+    }
+})
 
 const { HitPointsCard } = await import("@/features/maddox/components/interviews/HitPointsCard")
 
@@ -72,8 +91,13 @@ describe("card de pontos de vida da entrevista", () => {
         expect(screen.getByTestId("hit-points-total")).toHaveTextContent("PV máximo: —")
         expect(screen.getByRole("button", { name: /Enviar pontos de vida/ })).toBeDisabled()
         fireEvent.click(screen.getByRole("button", { name: "Rolar vida do nível 3" }))
-        await waitFor(() => expect(screen.getByTestId("hit-points-gain-3")).toHaveTextContent("+9"))
+        // A rota já devolveu (e o cache já trouxe) o dado: enquanto o dado gira, o painel continua montado e o ganho espera.
+        const end = await screen.findByRole("button", { name: "fim da animação" })
         expect(onRoll).toHaveBeenCalledWith(3)
+        expect(screen.getByTestId("hit-points-gain-3")).toHaveTextContent("—")
+        expect(screen.getByRole("button", { name: "Rolar vida do nível 3" })).toBeDisabled()
+        fireEvent.click(end)
+        await waitFor(() => expect(screen.getByTestId("hit-points-gain-3")).toHaveTextContent("+9"))
         expect(screen.getByTestId("hit-points-total")).toHaveTextContent("PV máximo: 28")
         expect(screen.queryByTestId("hit-points-roller")).not.toBeInTheDocument()
         fireEvent.click(screen.getByRole("button", { name: /Enviar pontos de vida/ }))
@@ -95,5 +119,42 @@ describe("card de pontos de vida da entrevista", () => {
     it("com o Maddox respondendo, nada pode ser escolhido nem enviado", () => {
         render(<HitPointsCard card={pending()} color="#a855f7" disabled onRoll={vi.fn()} onSubmit={vi.fn()} />)
         expect(screen.getByRole("button", { name: /Enviar pontos de vida/ })).toBeDisabled()
+    })
+
+    it("dois níveis em 'Rolar vida': o painel termina a animação do primeiro e só então passa ao segundo; os dois ganhos entram no total", async () => {
+        const onSubmit = vi.fn()
+        let card = pending()
+        const dice: Record<number, number> = { 2: 4, 3: 10 }
+        const onRoll = vi.fn(async (level: number) => {
+            card = pending({ rows: card.rows.map((row) => (row.level === level ? { ...row, die: dice[level]!, rolled: dice[level]! + 2 } : row)) })
+            view.rerender(<HitPointsCard card={card} color="#a855f7" disabled={false} onRoll={onRoll} onSubmit={onSubmit} />)
+            return { rollId: `r${level}` } as never
+        })
+        const view = render(<HitPointsCard card={card} color="#a855f7" disabled={false} onRoll={onRoll} onSubmit={onSubmit} />)
+        for (const level of [2, 3]) fireEvent.click(within(screen.getByTestId(`hit-points-row-${level}`)).getByRole("button", { name: "Rolar vida" }))
+        fireEvent.click(screen.getByRole("button", { name: "Rolar vida do nível 2" }))
+        fireEvent.click(await screen.findByRole("button", { name: "fim da animação" }))
+        await waitFor(() => expect(screen.getByTestId("hit-points-gain-2")).toHaveTextContent("+6"))
+        fireEvent.click(screen.getByRole("button", { name: "Rolar vida do nível 3" }))
+        fireEvent.click(await screen.findByRole("button", { name: "fim da animação" }))
+        await waitFor(() => expect(screen.getByTestId("hit-points-gain-3")).toHaveTextContent("+12"))
+        expect(screen.getByTestId("hit-points-total")).toHaveTextContent("PV máximo: 30")
+        expect(screen.queryByTestId("hit-points-roller")).not.toBeInTheDocument()
+        fireEvent.click(screen.getByRole("button", { name: /Enviar pontos de vida/ }))
+        fireEvent.click(await screen.findByRole("button", { name: "Enviar" }))
+        expect(onSubmit).toHaveBeenCalledWith({ "2": "rolagem", "3": "rolagem" })
+    })
+
+    it("falha na rota: o painel volta a permitir a rolagem e o ganho segue em aberto", async () => {
+        const onRoll = vi.fn(async () => {
+            throw new Error("Falhou")
+        })
+        render(<HitPointsCard card={pending()} color="#a855f7" disabled={false} onRoll={onRoll} onSubmit={vi.fn()} />)
+        fireEvent.click(within(screen.getByTestId("hit-points-row-3")).getByRole("button", { name: "Rolar vida" }))
+        const button = screen.getByRole("button", { name: "Rolar vida do nível 3" })
+        fireEvent.click(button)
+        await waitFor(() => expect(onRoll).toHaveBeenCalled())
+        await waitFor(() => expect(screen.getByRole("button", { name: "Rolar vida do nível 3" })).toBeEnabled())
+        expect(screen.getByTestId("hit-points-gain-3")).toHaveTextContent("—")
     })
 })

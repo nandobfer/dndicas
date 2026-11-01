@@ -81,11 +81,26 @@ export const checkModeLabel = (mode: MaddoxCheckMode) => MADDOX_CHECK_MODE_LABEL
 /** Sucesso quando o total alcança a CD (regra do D&D). */
 export const checkSucceeded = (total: number, dc: number) => total >= dc
 
+/** Texto puro de um campo da ficha que guarda HTML de menção (classe, subclasse, raça): só os nomes. */
+function plainField(value: string | null | undefined): string {
+    return String(value ?? "")
+        .replace(/<[^>]*>/g, " ")
+        .replace(/&nbsp;/g, " ")
+        .replace(/&lt;/g, "<")
+        .replace(/&gt;/g, ">")
+        .replace(/&quot;/g, '"')
+        .replace(/&#39;/g, "'")
+        .replace(/&amp;/g, "&")
+        .replace(/\s+/g, " ")
+        .trim()
+}
+
 /** Resumo da ficha para o prompt do narrador (uma linha por bloco). */
 export function sheetSummary(sheet: MaddoxCheckSheet): string {
     const attributes = attributesOf(sheet)
     const prof = proficiencyOf(sheet)
-    const identity = [sheet.level ? `Nível ${sheet.level}` : null, [sheet.class, sheet.subclass ? `(${sheet.subclass})` : null].filter(Boolean).join(" ") || null, sheet.race || null].filter(Boolean).join(" · ")
+    const [cls, subclass, race] = [plainField(sheet.class), plainField(sheet.subclass), plainField(sheet.race)]
+    const identity = [sheet.level ? `Nível ${sheet.level}` : null, [cls, subclass ? `(${subclass})` : null].filter(Boolean).join(" ") || null, race || null].filter(Boolean).join(" · ")
     const hp = sheet.hpMax != null ? `PV ${sheet.hpCurrent ?? sheet.hpMax}/${sheet.hpMax}${sheet.hpTemp ? ` (+${sheet.hpTemp} temporários)` : ""}` : null
     const ac = sheet.computedArmorClass != null ? `CA ${sheet.computedArmorClass}` : null
     const abilities = MADDOX_ABILITIES.map((ability) => `${MADDOX_ABILITY_ABBR[ability]} ${attributes[ability]} (${signed(getAttributeModifier(attributes[ability]).value)})`).join(", ")

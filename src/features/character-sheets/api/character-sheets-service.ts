@@ -9,7 +9,7 @@ import { CharacterFeat } from "../models/character-feat"
 import { CharacterAttack } from "../models/character-attack"
 import { User } from "@/features/users/models/user"
 import { generateSlug } from "../utils/slug"
-import { getArmorClass } from "../utils/dnd-calculations"
+import { computeSheetArmorClass } from "../utils/armor-class"
 import type {
     AdminSheetsListResponse,
     CharacterItem as CharacterItemType,
@@ -799,62 +799,9 @@ function toPlainSheet(doc: any) {
     return obj
 }
 
-function stripHtml(html: string | null | undefined) {
-    return String(html ?? "").replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim()
-}
-
-function getArmorClassBonusValue(item: CharacterItemType): number | null {
-    if (item.catalogAcType === "bonus" && item.catalogAc != null) {
-        return item.catalogAc
-    }
-
-    if (item.catalogAcBonus != null) {
-        return item.catalogAcBonus
-    }
-
-    return null
-}
-
 function withComputedArmorClass(sheet: CharacterSheetType, items: CharacterItemType[]) {
     const sheetItems = items.filter((item) => String(item.sheetId) === String(sheet._id))
-    const equippedArmor = sheetItems.find(
-        (item) => item.equipped && item.catalogItemType === "armadura" && item.catalogAcType === "base" && item.catalogAc != null
-    ) ?? null
-    const armorClassBonusSources = sheetItems
-        .filter((item) => item.equipped)
-        .map((item) => ({
-            name: stripHtml(item.name) || "Item",
-            acBonus: getArmorClassBonusValue(item),
-        }))
-        .filter((item): item is { name: string; acBonus: number } => item.acBonus != null)
-        .map((item) => ({
-            name: item.name,
-            acBonus: item.acBonus,
-        }))
-
-    return {
-        ...sheet,
-        computedArmorClass: getArmorClass(
-            sheet.dexterity,
-            sheet.armorClassOverride ?? null,
-            equippedArmor ? {
-                name: stripHtml(equippedArmor.name) || "Armadura",
-                ac: equippedArmor.catalogAc ?? null,
-                armorType: equippedArmor.catalogArmorType ?? null,
-            } : null,
-            armorClassBonusSources,
-            sheet.armorClassBonus ?? null,
-            sheet.unarmoredDefense ?? null,
-            {
-                strength: sheet.strength,
-                dexterity: sheet.dexterity,
-                constitution: sheet.constitution,
-                intelligence: sheet.intelligence,
-                wisdom: sheet.wisdom,
-                charisma: sheet.charisma,
-            },
-        ).value,
-    }
+    return { ...sheet, computedArmorClass: computeSheetArmorClass(sheet, sheetItems) }
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────

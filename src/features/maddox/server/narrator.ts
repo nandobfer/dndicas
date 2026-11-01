@@ -122,8 +122,19 @@ async function loadSheetSummaries(campaign: IMaddoxCampaign, characters: readonl
     if (!usesChecks(campaign.rigor) || sheetIds.length === 0) return summaries
     try {
         const { CharacterSheet } = await import("@/features/character-sheets/models/character-sheet")
-        const sheets = await CharacterSheet.find({ _id: { $in: sheetIds } }).lean<(MaddoxCheckSheet & { _id: Types.ObjectId })[]>()
-        for (const sheet of sheets) summaries.set(String(sheet._id), sheetSummary(sheet))
+        const { CharacterItem } = await import("@/features/character-sheets/models/character-item")
+        const { computeSheetArmorClass } = await import("@/features/character-sheets/utils/armor-class")
+        type StoredSheet = MaddoxCheckSheet & Parameters<typeof computeSheetArmorClass>[0] & { _id: Types.ObjectId }
+        type StoredItem = Parameters<typeof computeSheetArmorClass>[1][number] & { sheetId: Types.ObjectId }
+        const [sheets, items] = await Promise.all([
+            CharacterSheet.find({ _id: { $in: sheetIds } }).lean<StoredSheet[]>(),
+            CharacterItem.find({ sheetId: { $in: sheetIds }, equipped: true }).lean<StoredItem[]>(),
+        ])
+        // A CA não é gravada na ficha: é calculada dos itens equipados, como na listagem de fichas.
+        for (const sheet of sheets) {
+            const own = items.filter((item) => String(item.sheetId) === String(sheet._id))
+            summaries.set(String(sheet._id), sheetSummary({ ...sheet, computedArmorClass: computeSheetArmorClass(sheet, own) }))
+        }
     } catch (error) {
         log.warn({ err: error instanceof Error ? error.message : String(error), campaignId: String(campaign._id) }, "[maddox] fichas indisponíveis; narrando sem os resumos")
     }

@@ -7,7 +7,7 @@ import { ptBR } from "date-fns/locale"
 import { Crown, Swords, UserRound, Users } from "lucide-react"
 import { rarityColors } from "@/lib/config/colors"
 import type { MaddoxCampaignListItemDto } from "../../campaign-types"
-import { MemberAvatar, RarityChip, RigorChip, StartingLevelChip, StatusChip, rigorColor } from "./campaign-visuals"
+import { MemberAvatar, RarityChip, RigorChip, StartingLevelChip, StartingStageLine, StatusChip, rigorColor } from "./campaign-visuals"
 
 const VISIBLE_AVATARS = 5
 
@@ -42,6 +42,7 @@ export function CampaignCard({ campaign, index = 0 }: { campaign: MaddoxCampaign
                             <p className="text-xs text-white/60">
                                 Mestre: Maddox · criada por {campaign.ownerName}
                             </p>
+                            <StartingStageLine campaign={campaign} className="mt-1 text-xs" />
                         </div>
                         <div className="flex flex-wrap items-center gap-1.5">
                             <RigorChip rigor={campaign.rigor} />

@@ -36,10 +36,13 @@ function PendingHitPoints({ card, color, disabled, onRoll, onSubmit }: Props) {
     const [choices, setChoices] = useState<Record<string, Choice>>(() => Object.fromEntries(card.rows.map((row) => [String(row.level), row.die !== null ? "roll" : "average"])))
     const [animating, setAnimating] = useState<number | null>(null)
     const [confirming, setConfirming] = useState(false)
-    const rolling = card.rows.find((row) => choices[String(row.level)] === "roll" && row.die === null) ?? null
+    const nextToRoll = card.rows.find((row) => choices[String(row.level)] === "roll" && row.die === null) ?? null
+    // O nível em animação mantém o painel montado (e o mesmo preset) até o dado parar: a rota já devolve a linha com o
+    // dado preenchido, e o painel só avisa o fim no `onRollResolved`.
+    const rollingLevel = animating ?? nextToRoll?.level ?? null
     const preset = useMemo<DiceRollPreset | null>(
-        () => (rolling ? { label: `PV do nível ${rolling.level}`, terms: [{ dice: card.hitDie as DiceType, quantity: 1 }], modifier: card.constitutionModifier, mode: "normal", source: "sheet" } : null),
-        [rolling, card.hitDie, card.constitutionModifier],
+        () => (rollingLevel !== null ? { label: `PV do nível ${rollingLevel}`, terms: [{ dice: card.hitDie as DiceType, quantity: 1 }], modifier: card.constitutionModifier, mode: "normal", source: "sheet" } : null),
+        [rollingLevel, card.hitDie, card.constitutionModifier],
     )
     const gain = (row: MaddoxHitPointsDto["rows"][number]) => (choices[String(row.level)] === "roll" ? (animating === row.level ? null : row.rolled) : row.average)
     const gains = card.rows.map(gain)
@@ -81,17 +84,22 @@ function PendingHitPoints({ card, color, disabled, onRoll, onSubmit }: Props) {
                     )
                 })}
             </div>
-            {rolling && preset && (
+            {rollingLevel !== null && preset && (
                 <div className="rounded-lg border border-white/10 bg-black/10 p-3" data-testid="hit-points-roller">
                     <DiceRollerPanel
                         preset={preset}
                         hideConfigurationControls
-                        rollButtonLabel={`Rolar vida do nível ${rolling.level}`}
-                        disableRolling={disabled}
+                        rollButtonLabel={`Rolar vida do nível ${rollingLevel}`}
+                        disableRolling={disabled || animating !== null}
                         rollRequest={async () => {
-                            const result = await onRoll(rolling.level)
-                            setAnimating(rolling.level)
-                            return result
+                            const level = rollingLevel
+                            setAnimating(level)
+                            try {
+                                return await onRoll(level)
+                            } catch (error) {
+                                setAnimating(null)
+                                throw error
+                            }
                         }}
                         onRollResolved={() => setAnimating(null)}
                     />

@@ -91,6 +91,18 @@ describe("lista de campanhas", () => {
         expect(get).toHaveBeenCalledWith("/maddox/campaigns")
     })
 
+    it("card da lista: chip do nível nos graus com ficha; estágio narrativo longo aparece inteiro, sem reticências", async () => {
+        const stageText = "caçadores recém-iniciados, com algumas missões nas costas e uma dívida antiga com a guilda"
+        get.mockResolvedValue(ok([listItem({ rigor: "fiel-dnd", startingLevel: 3 }), listItem({ id: "c2", name: "Mar de Cinzas", rigor: "narrativo", startingLevel: null, startingStage: stageText })]))
+        renderWithQueryClient(<CampaignsPage />)
+        expect(await screen.findByTestId("starting-level-chip")).toHaveTextContent("Nível inicial 3")
+        const stage = screen.getByTestId("starting-stage")
+        expect(stage).toHaveTextContent(`Estágio inicial: ${stageText}`)
+        expect(stage.className).toContain("whitespace-normal")
+        for (const element of [stage, ...stage.querySelectorAll("*")]) expect(element.className).not.toContain("truncate")
+        expect(screen.getAllByTestId("starting-level-chip")).toHaveLength(1)
+    })
+
     it("sem campanhas mostra o estado vazio em pt-BR", async () => {
         get.mockResolvedValue(ok([]))
         renderWithQueryClient(<CampaignsPage />)
@@ -339,7 +351,12 @@ describe("página da campanha (lobby)", () => {
         view.unmount()
         ownerDetail({ rigor: "narrativo", status: "lobby", startingLevel: null, startingStage: "caçadores recém-iniciados" })
         renderWithQueryClient(<CampaignPage campaignId="c1" />)
-        expect(await screen.findByTestId("starting-level-chip")).toHaveTextContent("caçadores recém-iniciados")
+        // Estágio narrativo (texto do modelo): linha própria, inteira e com quebra de linha — sem chip nem reticências.
+        const stage = await screen.findByTestId("starting-stage")
+        expect(stage).toHaveTextContent("Estágio inicial: caçadores recém-iniciados")
+        expect(stage.className).toContain("whitespace-normal")
+        expect(stage.className).not.toContain("truncate")
+        expect(screen.queryByTestId("starting-level-chip")).not.toBeInTheDocument()
         const narrative = await openEdit()
         expect(within(narrative).queryByTestId("starting-level-field")).not.toBeInTheDocument()
     })

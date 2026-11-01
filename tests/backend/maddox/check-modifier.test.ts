@@ -50,5 +50,8 @@ describe("modificador dos testes pedidos pelo Maddox (Maddox 5)", () => {
         expect(summary).toContain("DES 16 (+3)")
         expect(summary).toContain("Resistências com proficiência: FOR, CON")
         expect(summary).toContain("Perícias treinadas: Arcanismo +7, Furtividade +6, Percepção +7")
+        // Campos com HTML de menção (como a ficha grava) saem só com o nome; entidades decodificadas.
+        const mentioned = sheetSummary(sheet({ class: '<p><span data-type="mention" data-id="c1" data-entity-type="Classe" data-label="Guerreiro" class="mention">Guerreiro</span></p>', subclass: '<span data-type="mention" data-id="s1" data-entity-type="Subclasse">Campeão</span>', race: "<p>Meio &amp; Elfo</p>" }))
+        expect(mentioned.split("\n")[0]).toBe("Nível 5 · Guerreiro (Campeão) · Meio & Elfo · Proficiência +3")
     })
 })

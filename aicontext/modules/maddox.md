@@ -438,7 +438,9 @@ regra `checksRule(rigor)`: frequência do grau (Equilibrado só nos momentos dec
 como nas regras), pedir pela ferramenta, **nunca rolar nem inventar resultado**, parar a narração no momento da tentativa, comparar o
 total com a CD e narrar a consequência sem recitar números. Combate continua narrado (iniciativa e turnos mecânicos são do Maddox 7).
 Cada personagem do prompt ganha o **resumo da ficha** (`sheetSummary`: nível, classe, raça, PV, CA, atributos com modificador,
-proficiência, resistências e perícias treinadas). Narrativo e Flexível não recebem a ferramenta nem a regra.
+proficiência, resistências e perícias treinadas). Classe, subclasse e raça entram em texto puro (os campos guardam HTML de menção);
+a CA não é gravada na ficha: `loadSheetSummaries` a calcula dos itens equipados com `computeSheetArmorClass`
+(`character-sheets/utils/armor-class.ts`, a mesma conta da listagem de fichas). Narrativo e Flexível não recebem a ferramenta nem a regra.
 
 **Turno do mestre em rodadas** (`turn.checkRound`, `turn.awaitingChecks`):
 
@@ -602,7 +604,9 @@ API (`maddox.play`, só o próprio membro; `scenario` = 404, grau sem ficha = 40
   se tornar aventureiro" na fantasia; "caçador recém-iniciado" num cenário como Supernatural — nunca "aventureiro" fora desse tipo).
 - **Campanha:** `startingLevel` (1–20 ou `null`, graus com ficha) e `startingStage` (texto até 300, graus narrativos), gravados pela
   consolidação do cenário (`scenarioConsolidationSchema`: fora de 1–20 vira `null` sem invalidar o resto). DTO da campanha:
-  `startingLevel`, `startingStage`; chip "Nível inicial N" (ou o estágio) no card e no lobby (`StartingLevelChip`).
+  `startingLevel`, `startingStage`; chip "Nível inicial N" no card e no lobby (`StartingLevelChip`, só o número). O estágio narrativo
+  (texto do modelo, pode ser longo) aparece inteiro numa linha própria com quebra ("Estágio inicial: …", `StartingStageLine`), nunca com
+  reticências.
 - **Entrevista de personagem:** com nível da mesa, o Maddox só confirma (pedir outro nível = "o nível é da mesa"); sem nível
   (campanhas antigas), pergunta ao jogador pela regra do grau e grava em `build.level`. Nos graus narrativos o estágio entra na seção
   "Capacidades e limitações" do perfil.
@@ -631,7 +635,9 @@ Nos graus com ficha, a entrevista de personagem monta a ficha D&D **inteira** no
 - **Card de PV (`server/interview-hit-points.ts`, `HitPointsCard`):** acima do nível 1, `request_hit_points` abre o card (rascunho até a
   fala ser gravada; reaberto = anterior `superseded`). Como o assistente de subir de nível da ficha: em cada nível do 2 ao N, "Média"
   (`averageHpGain` = ⌈lados/2⌉ + CON, mínimo 1) ou "Rolar vida" (1 dado de vida + CON pelo `rollGeneralDice` com as regras de dado do
-  jogador, um por nível, gravado em `hitPointRolls` — só o dado; o CON final entra no total). Nível 1 automático
+  jogador, um por nível, gravado em `hitPointRolls` — só o dado; o CON final entra no total). Na tela, o nível em rolagem mantém o
+  painel de dados montado (e o mesmo preset) até o fim da animação (`onRollResolved`), mesmo que a rota já tenha devolvido a linha com
+  o dado; só então o ganho aparece e o painel passa ao próximo nível marcado. Nível 1 automático
   (`getLevelOneHpMax`). Trocar classe ou nível apaga as rolagens. Rotas (`maddox.play`, só o dono da entrevista, `scenario` = 404, grau
   sem ficha = 409 `SHEET_DISABLED`, sem card = 409 `NO_PENDING_HIT_POINTS`): `POST …/interviews/character/hit-points/roll { nivel }`
   → `{ roll, interview }` (409 `HIT_POINT_ROLLED`, `ROLL_CONFLICT`) e `POST …/hit-points { escolhas: { "2": "media" | "rolagem" } }` →

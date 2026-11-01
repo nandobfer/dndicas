@@ -434,6 +434,28 @@ describe("Maddox 5 — regras dos testes", () => {
         await BackgroundModel.collection.deleteMany({})
     })
 
+    it("resumo da ficha no prompt: nomes em texto (não o HTML das menções) e a CA calculada dos itens equipados", async () => {
+        const { CharacterItem } = await import("@/features/character-sheets/models/character-item")
+        const table = await faithfulTable()
+        // Ficha como a entrevista grava: classe, subclasse e raça em HTML de menção; a CA não existe no documento.
+        const mention = (type: string, label: string) => `<p><span data-type="mention" data-id="${new mongoose.Types.ObjectId()}" data-entity-type="${type}" data-label="${label}" class="mention">${label}</span></p>`
+        await CharacterSheet.updateOne({ _id: table.doran.sheetId }, { $set: { level: 3, class: mention("Classe", "Guerreiro"), subclass: mention("Subclasse", "Campeão"), race: mention("Raça", "Humano"), dexterity: 12, hpMax: 28, hpCurrent: 28 } })
+        expect((await CharacterSheet.findById(table.doran.sheetId).lean()) as unknown as Record<string, unknown>).not.toHaveProperty("computedArmorClass")
+        await CharacterItem.insertMany([
+            { sheetId: table.doran.sheetId, name: "<p>Cota de malha</p>", equipped: true, catalogItemType: "armadura", catalogAcType: "base", catalogAc: 16, catalogArmorType: "pesada" },
+            { sheetId: table.doran.sheetId, name: "Escudo", equipped: true, catalogItemType: "escudo", catalogAcType: "bonus", catalogAc: 2 },
+            { sheetId: table.doran.sheetId, name: "Escudo reserva", equipped: false, catalogItemType: "escudo", catalogAcType: "bonus", catalogAc: 2 },
+        ])
+        script.push([{ text: "Abertura. O que vocês fazem?" }])
+        await game.startCampaign(table.id, table.owner)
+        await waitForCampaignIdle(table.id)
+        const instructions = calls[0]!.instructions
+        expect(instructions).toContain("Nível 3 · Guerreiro (Campeão) · Humano · PV 28/28 · CA 18 · Proficiência +2")
+        expect(instructions).not.toContain("data-entity-type")
+        // Sem itens equipados: CA de 10 + DES (Lyra, DES 16 = 13).
+        expect(instructions).toContain("· CA 13 ·")
+    })
+
     it("campanha narrativa não oferece request_check ao modelo nem fala de testes", async () => {
         const table = await faithfulTable("narrativo")
         script.push([{ text: "Abertura. O que vocês fazem?" }])
