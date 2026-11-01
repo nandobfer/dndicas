@@ -1,8 +1,13 @@
 import type { CalcPart } from "@/features/character-sheets/utils/dnd-calculations"
 import type { AttributeType, SkillName } from "@/features/character-sheets/types/character-sheet.types"
 import type { DiceRollResponse } from "@/features/dice-roller/types"
+import type { CombatEconomy, HpBand } from "./combat-rules"
+import type { CombatOption } from "./combat-options"
+import type { CombatActionStep, IMaddoxCombatReaction } from "./combat-types"
 import type {
     MaddoxCampaignStatus,
+    MaddoxConditionKey,
+    MaddoxReactionTrigger,
     MaddoxCheckKind,
     MaddoxCheckMode,
     MaddoxCheckStatus,
@@ -32,8 +37,14 @@ export interface MaddoxGameMessageDto {
     error: string | null
     /** Teste pedido pelo Maddox (`kind: "check"`, Maddox 5). Pendente só chega ao jogador indicado. */
     check: MaddoxGameCheckDto | null
-    /** Card de início ou fim de combate (`kind: "combat"`, Maddox 6). */
+    /** Card de início ou fim de combate (`kind: "combat"`, Maddox 6) ou a ordem de iniciativa (Maddox 7). */
     combat: MaddoxGameCombatEventDto | null
+    /** Combate tático (Maddox 7): ação de um combatente, rolagem avulsa e janela de reação (pendente só para o indicado). */
+    combatAction: MaddoxCombatActionDto | null
+    combatRoll: MaddoxCombatRollDto | null
+    combatReaction: MaddoxCombatReactionDto | null
+    /** "Não fez nada" porque o jogador estava offline na própria vez. */
+    offlineSkip: boolean
     createdAt: string
 }
 
@@ -54,6 +65,94 @@ export interface MaddoxGameCombatDto {
     startedTurn: number
     masterTurns: number
     combatants: MaddoxCombatantDto[]
+    /** Narrativo (Maddox 6) ou tático (Maddox 7). */
+    mode: "narrative" | "tactical"
+    /** Ordem de iniciativa, rodada e quem age (combate tático). */
+    tactical: MaddoxTacticalCombatDto | null
+}
+
+// ── Combate tático (Maddox 7) ─────────────────────────────────────────────────
+
+/** Posição na ordem de iniciativa, como todos a veem. CA e PV dos adversários ficam com o mestre (só a faixa). */
+export interface MaddoxTacticalSlotDto {
+    actorKey: string
+    kind: "character" | "combatant"
+    side: "personagem" | "inimigo" | "aliado"
+    name: string
+    portraitUrl: string | null
+    memberId: string | null
+    /** `null` = ainda não rolou. */
+    initiative: number | null
+    active: boolean
+    /** PV dos personagens (o grupo vê). */
+    hp: { current: number; max: number; temp: number } | null
+    /** Faixa de PV dos adversários. */
+    band: HpBand | null
+    conditions: { key: MaddoxConditionKey; label: string }[]
+    concentration: string | null
+    defeated: boolean
+    dead: boolean
+    stable: boolean
+    dying: boolean
+}
+
+export interface MaddoxTacticalCombatDto {
+    phase: "initiative" | "running"
+    round: number
+    activeKey: string | null
+    order: MaddoxTacticalSlotDto[]
+}
+
+export interface MaddoxCombatActionDto {
+    actorKey: string
+    actorName: string
+    actorKind: "character" | "combatant"
+    economy: "action" | "bonus" | "reaction"
+    category: string
+    label: string
+    targets: { actorKey: string; name: string }[]
+    spellLevel: number | null
+    freeText: string | null
+    status: "pending" | "resolved" | "cancelled"
+    steps: CombatActionStep[]
+    summary: string
+    cancellable: boolean
+    round: number
+}
+
+export interface MaddoxCombatRollDto {
+    kind: "initiative" | "death-save" | "concentration" | "save" | "damage"
+    status: "pending" | "rolled" | "cancelled"
+    reason: string
+    dice: string
+    mode: "normal" | "advantage" | "disadvantage"
+    dc: number | null
+    roll: DiceRollResponse | null
+    total: number | null
+    success: boolean | null
+    outcome: string | null
+    rolledByName: string | null
+}
+
+export interface MaddoxCombatReactionDto {
+    status: IMaddoxCombatReaction["status"]
+    trigger: MaddoxReactionTrigger
+    description: string
+    /** Só chegam ao jogador indicado (pendente). */
+    options: Pick<CombatOption, "id" | "label" | "detail">[]
+    choice: string | null
+    deadline: string
+    outcome: string | null
+}
+
+/** A minha vez no combate tático: economia e o que posso usar (recalculado da ficha a cada leitura). */
+export interface MaddoxMyCombatDto {
+    myTurn: boolean
+    actorKey: string | null
+    economy: CombatEconomy | null
+    attacksPerAction: number
+    options: { action: CombatOption[]; bonus: CombatOption[] } | null
+    dying: boolean
 }
 
 export interface MaddoxCombatRewardDto {
@@ -67,7 +166,7 @@ export interface MaddoxCombatRewardDto {
 
 /** Card de início ou fim de combate. No fim, traz o desfecho, os NPCs e as recompensas. */
 export interface MaddoxGameCombatEventDto extends MaddoxGameCombatDto {
-    event: "start" | "end"
+    event: "start" | "end" | "order"
     outcome: MaddoxCombatOutcome | null
     summary: string
     rewards: MaddoxCombatRewardDto[]
@@ -145,6 +244,10 @@ export interface MaddoxGameStateDto {
         /** O turno do mestre espera as rolagens dos testes pedidos (Maddox 5). */
         awaitingChecks: boolean
         pendingChecks: MaddoxPendingCheckDto[]
+        /** Combate tático: de quem é a vez neste turno dos jogadores. */
+        combatActor: { actorKey: string; memberId: string; characterName: string } | null
+        /** Combate tático: rolagens e reações que o turno do mestre espera (para a faixa e o "no lugar" do dono). */
+        pendingCombat: { id: string; kind: "roll" | "reaction"; memberId: string; characterName: string; label: string }[]
     }
     /** Mostra a CD dos testes aos jogadores. */
     showCheckDc: boolean
@@ -161,6 +264,8 @@ export interface MaddoxGameStateDto {
         declared: boolean
         /** Minha ficha D&D (só a minha; graus com ficha). */
         sheet: { id: string; slug: string } | null
+        /** Combate tático (Maddox 7). */
+        combat: MaddoxMyCombatDto | null
     }
     /** Mensagens mais recentes, em ordem cronológica. */
     messages: MaddoxGameMessageDto[]
@@ -197,4 +302,5 @@ export type MaddoxGameStreamLine =
     | { type: "tool"; liveId: string; running: boolean }
     | { type: "live-end"; liveId: string; messageId: string | null; error: string | null }
     | { type: "check-rolled"; messageId: string; roll: DiceRollResponse }
+    | { type: "combat-rolled"; messageId: string; roll: DiceRollResponse }
     | { type: "ping" }

@@ -14,6 +14,7 @@ import {
     type MaddoxGameMessageKind,
     type MaddoxTurnPhase,
 } from "../constants"
+import type { IMaddoxCombatAction, IMaddoxCombatReaction, IMaddoxCombatRoll } from "../combat-types"
 
 /**
  * Teste pedido pelo Maddox (Maddox 5) para o personagem da mensagem (`memberId`/`characterId`). A CD é sempre gravada
@@ -71,7 +72,13 @@ export interface IMaddoxCampaignMessage {
     /** Teste pedido pelo Maddox (`kind: "check"`). */
     check: IMaddoxCheck | null
     /** Card de início ou fim de combate (`kind: "combat"`, Maddox 6). */
-    combat: { event: "start" | "end"; combatId: Types.ObjectId } | null
+    combat: { event: "start" | "end" | "order"; combatId: Types.ObjectId } | null
+    /** Combate tático (Maddox 7): ação de um combatente, rolagem avulsa e janela de reação. */
+    combatAction: IMaddoxCombatAction | null
+    combatRoll: IMaddoxCombatRoll | null
+    combatReaction: IMaddoxCombatReaction | null
+    /** "Não fez nada" registrado porque o jogador estava offline na própria vez (combate tático). */
+    offlineSkip: boolean
     createdAt: Date
     updatedAt: Date
 }
@@ -115,9 +122,13 @@ const MaddoxCampaignMessageSchema = new Schema<IMaddoxCampaignMessage>(
             default: null,
         },
         combat: {
-            type: new Schema({ event: { type: String, enum: ["start", "end"], required: true }, combatId: { type: Schema.Types.ObjectId, ref: "MaddoxCombat", required: true } }, { _id: false }),
+            type: new Schema({ event: { type: String, enum: ["start", "end", "order"], required: true }, combatId: { type: Schema.Types.ObjectId, ref: "MaddoxCombat", required: true } }, { _id: false }),
             default: null,
         },
+        combatAction: { type: Schema.Types.Mixed, default: null },
+        combatRoll: { type: Schema.Types.Mixed, default: null },
+        combatReaction: { type: Schema.Types.Mixed, default: null },
+        offlineSkip: { type: Boolean, default: false },
     },
     { collection: "maddox_campaign_messages", timestamps: true, versionKey: false },
 )
@@ -129,6 +140,10 @@ MaddoxCampaignMessageSchema.index({ campaignId: 1, turnNumber: 1, memberId: 1 },
 
 // Um teste por personagem em cada rodada do turno do mestre (Maddox 5).
 MaddoxCampaignMessageSchema.index({ campaignId: 1, turnNumber: 1, "check.round": 1, memberId: 1 }, { unique: true, partialFilterExpression: { kind: "check" } })
+
+// Combate tático (Maddox 7): uma janela de reação pendente por personagem; a lista das pendências da espera.
+MaddoxCampaignMessageSchema.index({ campaignId: 1, memberId: 1 }, { unique: true, partialFilterExpression: { kind: "combat-reaction", "combatReaction.status": "pending" }, name: "combat_reaction_pending_unique" })
+MaddoxCampaignMessageSchema.index({ campaignId: 1, turnNumber: 1, kind: 1 })
 
 export const MaddoxCampaignMessageModel: Model<IMaddoxCampaignMessage> =
     (mongoose.models.MaddoxCampaignMessage as Model<IMaddoxCampaignMessage>) || mongoose.model<IMaddoxCampaignMessage>("MaddoxCampaignMessage", MaddoxCampaignMessageSchema)

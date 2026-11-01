@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto"
 import { Types } from "mongoose"
 import { AcaoAuditoria, recordAudit } from "@/lib/db"
 import { loggerFor } from "@/lib/logger"
@@ -9,6 +10,7 @@ import {
     MADDOX_COMBAT_RIGORS,
     MADDOX_COMBAT_SHEET_REWARD_RIGORS,
     MADDOX_COMBATANT_OUTCOME_LABELS,
+    MADDOX_TACTICAL_COMBAT_RIGORS,
     MADDOX_TOOL_NAME_MAX,
     type MaddoxCombatantOutcome,
     type MaddoxNpcStatus,
@@ -28,6 +30,8 @@ import {
 import type { MaddoxCombatRewardDto, MaddoxGameCombatDto, MaddoxGameCombatEventDto } from "../game-types"
 import type { MaddoxDraftCombatEvent, MaddoxDraftCombatReward, MaddoxDraftCombatant } from "./game-live"
 import { onCombatEnded } from "./combat-image"
+import { tacticalSnapshot } from "./tactical-dto"
+import type { TacticalCombat } from "./tactical-combat"
 
 /**
  * Combate narrativo (Maddox 6) — SOMENTE servidor. O narrador abre, atualiza e encerra o combate pelas ferramentas
@@ -50,6 +54,8 @@ const clip = (value: string | undefined | null, max: number) => {
 
 /** O grau registra o combate narrativo (Narrativo, Flexível e Equilibrado). */
 export const usesCombat = (rigor: MaddoxRigorLevel) => MADDOX_COMBAT_RIGORS.includes(rigor)
+/** O grau registra o combate: narrativo (Maddox 6) ou tático (Maddox 7, Rigoroso e Fiel ao D&D). */
+export const registersCombat = (rigor: MaddoxRigorLevel) => usesCombat(rigor) || MADDOX_TACTICAL_COMBAT_RIGORS.includes(rigor)
 /** O grau aplica as recompensas do combate na ficha D&D. */
 export const appliesCombatRewards = (rigor: MaddoxRigorLevel) => MADDOX_COMBAT_SHEET_REWARD_RIGORS.includes(rigor)
 
@@ -101,6 +107,8 @@ export interface AppliedCombat {
     messages: CombatMessagePlan[]
     /** Combates tocados por esta narração (contam mais um turno do mestre). */
     touched: Types.ObjectId[]
+    /** Combate tático: cards de iniciativa dos personagens, gravados logo depois da narração. */
+    extraMessages: Record<string, unknown>[]
 }
 
 /** NPC ligado ao adversário: o já registrado pelo nome ou, com `registerNpc`, um novo (visível aos jogadores). */
@@ -117,7 +125,16 @@ async function linkCombatant(campaignId: Types.ObjectId, combatant: MaddoxDraftC
     return { name, nameKey, side: combatant.side, quantity: combatant.quantity, description: combatant.description, condition: combatant.condition, npcId, outcome: null }
 }
 
-async function applyStart(campaign: CampaignRef, turnNumber: number, event: Extract<MaddoxDraftCombatEvent, { type: "start" }>): Promise<CombatMessagePlan | null> {
+async function applyStart(campaign: CampaignRef, turnNumber: number, event: Extract<MaddoxDraftCombatEvent, { type: "start" }>, round: number, extra: Record<string, unknown>[]): Promise<CombatMessagePlan | null> {
+    if (event.tactical) {
+        const { createTacticalCombat } = await import("./tactical-combat")
+        const plan = await createTacticalCombat(campaign, turnNumber, round, { title: event.title, location: event.location, surprise: event.tactical.surprise, combatants: event.tactical.combatants }, async (item) =>
+            (await linkCombatant(campaign._id, { ...item, name: item.individual, quantity: 1, registerNpc: item.registerNpc && item.quantity <= 1 })).npcId,
+        )
+        if (!plan) return null
+        extra.push(...plan.initiativeMessages)
+        return { event: "start", combatId: plan.combatId }
+    }
     const combatants: IMaddoxCombatant[] = []
     for (const item of event.combatants) combatants.push(await linkCombatant(campaign._id, item))
     try {
@@ -137,6 +154,7 @@ async function applyStart(campaign: CampaignRef, turnNumber: number, event: Extr
 async function applyUpdate(campaign: CampaignRef, event: Extract<MaddoxDraftCombatEvent, { type: "update" }>): Promise<Types.ObjectId | null> {
     const active = await findActiveCombat(campaign._id)
     if (!active) return null
+    if (active.mode === "tactical") return applyTacticalUpdate(campaign, active, event)
     const combatants = active.combatants.map((item) => ({ ...item }))
     for (const change of event.combatants) {
         const existing = combatants.find((item) => item.nameKey === keyOf(change.name))
@@ -151,6 +169,33 @@ async function applyUpdate(campaign: CampaignRef, event: Extract<MaddoxDraftComb
         }
     }
     await MaddoxCombatModel.updateOne({ _id: active._id, status: "active" }, { $set: { combatants } })
+    return active._id
+}
+
+/** Combate tático: condição narrativa dos que já lutam e os reforços (com iniciativa rolada ao entrar). */
+async function applyTacticalUpdate(campaign: CampaignRef, active: IMaddoxCombat, event: Extract<MaddoxDraftCombatEvent, { type: "update" }>): Promise<Types.ObjectId | null> {
+    const tactical = await import("./tactical-combat")
+    const fresh = event.tactical ?? []
+    const individuals = tactical.expandCombatants(fresh, active.combatants.map((item) => item.name))
+    const added: IMaddoxCombatant[] = []
+    for (const item of individuals) {
+        const linked = await linkCombatant(campaign._id, { ...item, name: item.individual, quantity: 1, registerNpc: item.registerNpc && item.quantity <= 1 })
+        added.push({ ...linked, tactical: tactical.combatantState(`npc:${randomUUID().slice(0, 8)}`, item.groupKey, item.stats) })
+    }
+    await tactical.mutateTactical(campaign._id, async (combat) => {
+        for (const change of event.combatants) {
+            const existing = combat.combatants.find((item) => item.nameKey === keyOf(change.name))
+            if (existing && change.condition !== undefined) existing.condition = change.condition
+        }
+        if (!added.length) return
+        const activeKey = combat.tactical.order[combat.tactical.activeIndex]?.actorKey ?? null
+        const slots = await tactical.rollMonsterInitiative(added.map((item) => ({ actorKey: item.tactical!.actorKey, name: item.name, groupKey: item.tactical!.groupKey, stats: item.tactical!.stats })), "normal", combat.tactical.order.length)
+        combat.combatants.push(...added)
+        const { sortInitiative } = await import("../combat-rules")
+        combat.tactical.order = sortInitiative([...combat.tactical.order, ...slots].map((slot) => ({ ...slot, total: slot.total ?? 0 })))
+        if (activeKey) combat.tactical.activeIndex = combat.tactical.order.findIndex((slot) => slot.actorKey === activeKey)
+    })
+    log.info({ campaignId: String(campaign._id), combatId: String(active._id), reinforcements: added.length }, "[maddox] combate tático atualizado")
     return active._id
 }
 
@@ -404,12 +449,13 @@ async function buildItemDoc(sheetId: Types.ObjectId, item: NonNullable<IMaddoxCo
  * Aplica os eventos de combate pedidos na narração, na ordem. Devolve os cards a gravar com a narração e os combates
  * tocados (para contar o turno do mestre).
  */
-export async function applyCombatDrafts(campaign: CampaignRef, turnNumber: number, events: readonly MaddoxDraftCombatEvent[]): Promise<AppliedCombat> {
+export async function applyCombatDrafts(campaign: CampaignRef, turnNumber: number, events: readonly MaddoxDraftCombatEvent[], round = 0): Promise<AppliedCombat> {
     const messages: CombatMessagePlan[] = []
     const touched: Types.ObjectId[] = []
+    const extraMessages: Record<string, unknown>[] = []
     for (const event of events) {
         if (event.type === "start") {
-            const plan = await applyStart(campaign, turnNumber, event)
+            const plan = await applyStart(campaign, turnNumber, event, round, extraMessages)
             if (plan) {
                 messages.push(plan)
                 touched.push(plan.combatId)
@@ -425,7 +471,7 @@ export async function applyCombatDrafts(campaign: CampaignRef, turnNumber: numbe
             }
         }
     }
-    return { messages, touched }
+    return { messages, touched, extraMessages }
 }
 
 /** Mais uma narração do turno do mestre com o combate (ativo antes dela ou tocado por ela). */
@@ -445,14 +491,21 @@ export function combatDto(combat: IMaddoxCombat): MaddoxGameCombatDto {
         startedTurn: combat.startedTurn,
         masterTurns: combat.masterTurns ?? 0,
         combatants: (combat.combatants ?? []).map((item) => ({ name: item.name, side: item.side, quantity: item.quantity ?? 1, condition: item.condition ?? "", outcome: item.outcome ?? null })),
+        mode: combat.mode === "tactical" ? "tactical" : "narrative",
+        tactical: null,
     }
 }
 
 const rewardDto = (reward: IMaddoxCombatReward): MaddoxCombatRewardDto => ({ kind: reward.kind, description: rewardText(reward), characterName: reward.characterName ?? null, applied: Boolean(reward.applied), warning: reward.warning ?? null })
 
 /** Card do combate: o início mostra o encontro; o fim, o desfecho (sem notas do mestre nem a cena final). */
-export function combatEventDto(combat: IMaddoxCombat, event: "start" | "end"): MaddoxGameCombatEventDto {
+export function combatEventDto(combat: IMaddoxCombat, event: "start" | "end" | "order"): MaddoxGameCombatEventDto {
     const base = combatDto(combat)
+    if (event === "order") {
+        // Ordem de iniciativa: o retrato da ordem como está (sem PV, que a tela lê do combate ativo).
+        const tactical = combat.mode === "tactical" && combat.tactical ? tacticalSnapshot(combat as TacticalCombat) : null
+        return { ...base, tactical, event, outcome: null, summary: "", rewards: [], endedTurn: null }
+    }
     if (event === "start") return { ...base, event, outcome: null, summary: "", rewards: [], endedTurn: null, combatants: base.combatants.map((item) => ({ ...item, outcome: null })) }
     return { ...base, event, outcome: combat.outcome ?? null, summary: combat.summary ?? "", rewards: (combat.rewards ?? []).map(rewardDto), endedTurn: combat.endedTurn ?? null }
 }

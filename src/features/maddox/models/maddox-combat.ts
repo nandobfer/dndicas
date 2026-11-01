@@ -14,6 +14,7 @@ import {
     type MaddoxCombatantOutcome,
     type MaddoxCombatantSide,
 } from "../constants"
+import type { TacticalCombatState, TacticalCombatantState } from "../combat-types"
 
 /** Adversário ou aliado do combate (os personagens dos jogadores não entram aqui). */
 export interface IMaddoxCombatant {
@@ -27,6 +28,8 @@ export interface IMaddoxCombatant {
     /** NPC ligado (nome próprio já registrado ou `registrarNpc`). */
     npcId: Types.ObjectId | null
     outcome: MaddoxCombatantOutcome | null
+    /** Combate tático (Maddox 7): estatísticas e estado de luta deste adversário (um por indivíduo). */
+    tactical?: TacticalCombatantState | null
 }
 
 /** Recompensa do combate. No Equilibrado, moedas e itens entram na ficha do personagem (`applied`). */
@@ -70,6 +73,12 @@ export interface IMaddoxCombat {
     image: { status: MaddoxCombatImageStatus; requestedAt: Date | null } | null
     /** Efeitos do fim (NPCs, personagens, memória, recompensas, imagem) já disparados — rodam depois de gravar os cards. */
     effectsApplied: boolean
+    /** Combate narrativo (Maddox 6) ou tático (Maddox 7: iniciativa e turnos, Rigoroso e Fiel ao D&D). */
+    mode: "narrative" | "tactical"
+    /** Estado do combate tático (ordem, rodada, personagens); `null` no narrativo. */
+    tactical: TacticalCombatState | null
+    /** Versão do estado tático: cada gravação é condicional a ela (clique duplo, corridas). */
+    rev: number
     endedAt: Date | null
     createdAt: Date
     updatedAt: Date
@@ -85,6 +94,7 @@ const CombatantSchema = new Schema<IMaddoxCombatant>(
         condition: { type: String, default: "" },
         npcId: { type: Schema.Types.ObjectId, ref: "MaddoxNpc", default: null },
         outcome: { type: String, enum: [...MADDOX_COMBATANT_OUTCOMES, null], default: null },
+        tactical: { type: Schema.Types.Mixed, default: null },
     },
     { _id: false },
 )
@@ -125,6 +135,9 @@ const MaddoxCombatSchema = new Schema<IMaddoxCombat>(
         finalScene: { type: String, default: "" },
         image: { type: new Schema({ status: { type: String, enum: MADDOX_COMBAT_IMAGE_STATUSES }, requestedAt: Date }, { _id: false }), default: null },
         effectsApplied: { type: Boolean, default: false },
+        mode: { type: String, enum: ["narrative", "tactical"], default: "narrative" },
+        tactical: { type: Schema.Types.Mixed, default: null },
+        rev: { type: Number, default: 0 },
         endedAt: { type: Date, default: null },
     },
     { collection: "maddox_combats", timestamps: true, versionKey: false },

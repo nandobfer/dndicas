@@ -31,7 +31,7 @@ import {
 import type { MaddoxSettings } from "../schemas"
 import type { MaddoxAnswerContext, MaddoxMaster, MaddoxMasterSink, MaddoxNarrationContext } from "./game-master"
 import { checkTitle, sheetSummary, type MaddoxCheckSheet } from "../check-modifier"
-import { buildNarratorInstructions, checkResultLine, narratorTaskText, narratorTranscript, usesChecks, usesCombat, type NarratorCheckResult, type NarratorDeclaration, type NarratorPromptContext, type NarratorTask } from "./narrator-prompt"
+import { buildNarratorInstructions, checkResultLine, narratorTaskText, narratorTranscript, usesChecks, usesCombat, usesTacticalCombat, type NarratorCheckResult, type NarratorDeclaration, type NarratorPromptContext, type NarratorTacticalTask, type NarratorTask } from "./narrator-prompt"
 
 /**
  * Maddox narrador (Maddox 4) — SOMENTE servidor. Monta as instruções com o estado gravado da campanha, gera em
@@ -89,6 +89,7 @@ async function loadContext(campaignId: Types.ObjectId): Promise<LoadedContext> {
         MaddoxCampaignMessageModel.find({ campaignId }).sort({ _id: -1 }).limit(200).lean<IMaddoxCampaignMessage[]>(),
     ])
     const sheets = await loadSheetSummaries(campaign, characters)
+    const tacticalCombat = usesTacticalCombat(campaign.rigor) ? await tacticalCombatBlock(campaignId) : null
     // Combate narrativo (Maddox 6): o ativo vai ao prompt; os dos cards, à transcrição.
     const combatIds = recent.map((message) => message.combat?.combatId).filter((id): id is Types.ObjectId => Boolean(id))
     const [activeCombat, cardCombats] = await Promise.all([
@@ -131,7 +132,35 @@ async function loadContext(campaignId: Types.ObjectId): Promise<LoadedContext> {
                       combatants: (activeCombat.combatants ?? []).map((item) => ({ name: item.name, side: item.side, quantity: item.quantity ?? 1, condition: item.condition ?? "", description: item.description ?? "" })),
                   }
                 : null,
+            tacticalCombat,
         },
+    }
+}
+
+/** Bloco "Combate tático em andamento" (ordem, PV, CA, condições e quem age) para as instruções. */
+async function tacticalCombatBlock(campaignId: Types.ObjectId): Promise<string | null> {
+    try {
+        const { tacticalView } = await import("./tactical-master")
+        const view = await tacticalView(campaignId, undefined)
+        if (!view) return null
+        return [`## Combate tático em andamento: ${String(view.titulo)}`, "Estado (o servidor mantém; consulte de novo com get_combat):", "```json", JSON.stringify(view, null, 1), "```"].join("\n")
+    } catch (error) {
+        log.warn({ err: error instanceof Error ? error.message : String(error), campaignId: String(campaignId) }, "[maddox] estado do combate tático indisponível; narrando sem o bloco")
+        return null
+    }
+}
+
+/** Quem age nesta narração do combate tático (`null` = sem combate tático). */
+async function tacticalTask(campaignId: Types.ObjectId): Promise<NarratorTacticalTask | null> {
+    const tactical = await import("./tactical-combat")
+    const combat = await tactical.findActiveTactical(campaignId)
+    if (!combat) return null
+    return {
+        phase: combat.tactical.phase,
+        queue: combat.tactical.queue.map((key) => tactical.findActor(combat, key)?.name).filter((name): name is string => Boolean(name)),
+        next: combat.tactical.nextKey ? (tactical.findActor(combat, combat.tactical.nextKey)?.name ?? null) : null,
+        enemiesDown: tactical.livingEnemies(combat).length === 0,
+        charactersDown: !combat.tactical.characters.some(tactical.takesTurn),
     }
 }
 
@@ -164,6 +193,7 @@ async function loadSheetSummaries(campaign: IMaddoxCampaign, characters: readonl
 /** Card de combate → linha da transcrição ("combate começou: …" / "combate terminou: Vitória — …"). */
 export function combatTranscriptLine(message: Pick<IMaddoxCampaignMessage, "combat">, combat: IMaddoxCombat | undefined): string {
     if (!message.combat || !combat) return ""
+    if (message.combat.event === "order") return `ordem de iniciativa: ${(combat.tactical?.order ?? []).map((slot) => `${slot.name} (${slot.total ?? "?"})`).join(", ")}`
     if (message.combat.event === "start") {
         const foes = combat.combatants.map((item) => `${item.name}${item.quantity > 1 ? ` (${item.quantity})` : ""}${item.side === "aliado" ? " [aliado]" : ""}`).join(", ")
         return `combate começou: ${combat.title}${combat.location ? ` (${combat.location})` : ""}${foes ? `; participantes: ${foes}` : ""}`
@@ -243,6 +273,9 @@ async function generate(args: GenerateArgs, sink: MaddoxMasterSink): Promise<str
             .map((message) => {
                 const check = checkResultOf(message)
                 if (message.kind === "combat") return { turnNumber: message.turnNumber, kind: message.kind, characterName: null, content: combatTranscriptLine(message, context.combats.get(String(message.combat?.combatId))) }
+                if (message.combatAction) return { turnNumber: message.turnNumber, kind: message.kind, characterName: null, content: message.combatAction.status === "cancelled" ? "" : message.combatAction.summary }
+                if (message.combatRoll) return { turnNumber: message.turnNumber, kind: message.kind, characterName: null, content: `${message.characterName ?? "Personagem"} — ${message.combatRoll.reason}: ${message.combatRoll.outcome ?? message.combatRoll.status}` }
+                if (message.combatReaction) return { turnNumber: message.turnNumber, kind: message.kind, characterName: null, content: `${message.characterName ?? "Personagem"} — reação (${message.combatReaction.description}): ${message.combatReaction.outcome ?? message.combatReaction.status}` }
                 return { turnNumber: message.turnNumber, kind: message.kind, characterName: message.characterName, content: check ? checkResultLine(check) : message.content }
             }),
         MADDOX_NARRATOR_HISTORY_CHARS,
@@ -255,14 +288,15 @@ async function generate(args: GenerateArgs, sink: MaddoxMasterSink): Promise<str
     // Testes só nas narrações do turno do mestre dos graus com ficha (respostas a perguntas nunca pedem teste).
     const checks = usesChecks(context.campaign.rigor) && args.task.kind !== "answer"
     // Combate narrativo (Maddox 6): ferramentas só nas narrações dos graus com combate registrado.
-    const combat = usesCombat(context.campaign.rigor) && args.task.kind !== "answer"
+    const tactical = usesTacticalCombat(context.campaign.rigor) && args.task.kind !== "answer"
+    const combat = (usesCombat(context.campaign.rigor) || tactical) && args.task.kind !== "answer"
 
     if (model.provider === "opencode") {
         const [{ ensureMaddoxMcp }, { ensureMaddoxSession }, { createMaddoxTurnToken }, { streamAi }] = await Promise.all([import("./opencode-mcp"), import("./opencode-sessions"), import("./master-turn-token"), import("@/lib/ai/stream")])
         await ensureMaddoxMcp(settings)
         const sessionId = await ensureMaddoxSession({ campaignId: args.campaignId, purpose: "narrator", agent: model.agent, title: `Maddox · narrador · ${context.campaign.name}` })
         const turnToken = createMaddoxTurnToken({ campaignId: args.campaignId, jobId: args.jobId, turnNumber: args.turnNumber })
-        const instructions = buildNarratorInstructions(promptContext, { kind: "mcp", server: MADDOX_MCP_SERVER_NAME, turnToken, checks, combat })
+        const instructions = buildNarratorInstructions(promptContext, { kind: "mcp", server: MADDOX_MCP_SERVER_NAME, turnToken, checks, combat, tactical })
         for await (const event of streamAi({
             provider: "opencode",
             model: model.model,
@@ -281,7 +315,7 @@ async function generate(args: GenerateArgs, sink: MaddoxMasterSink): Promise<str
         }
     } else {
         failure = await generateWithTools(
-            { model, instructions: buildNarratorInstructions(promptContext, { kind: "ai-sdk" }), userText, campaignId, turnNumber: args.turnNumber, jobId: args.jobId, checks, combat, signal: args.signal },
+            { model, instructions: buildNarratorInstructions(promptContext, { kind: "ai-sdk" }), userText, campaignId, turnNumber: args.turnNumber, jobId: args.jobId, checks, combat, tactical, signal: args.signal },
             stream,
             sink,
         )
@@ -306,6 +340,7 @@ interface ToolGeneration {
     jobId: string
     checks: boolean
     combat: boolean
+    tactical: boolean
     signal?: AbortSignal
 }
 
@@ -326,7 +361,7 @@ async function generateWithTools(input: ToolGeneration, stream: ReturnType<typeo
             model: prepared.model,
             instructions: input.instructions,
             messages: [{ role: "user", content: input.userText }],
-            tools: await buildMaddoxAiTools({ campaignId: input.campaignId, turnNumber: input.turnNumber, jobId: input.jobId }, { checks: input.checks, combat: input.combat }),
+            tools: await buildMaddoxAiTools({ campaignId: input.campaignId, turnNumber: input.turnNumber, jobId: input.jobId }, { checks: input.checks, combat: input.combat, tactical: input.tactical }),
             stopWhen: stepCountIs(MADDOX_NARRATOR_MAX_STEPS),
             abortSignal: input.signal,
             providerOptions: prepared.providerOptions,
@@ -403,14 +438,24 @@ export const aiMaddoxMaster: MaddoxMaster = {
         // Continuação (Maddox 5): os testes da rodada anterior vão na tarefa, não na transcrição.
         const checks = round > 0 ? await MaddoxCampaignMessageModel.find({ campaignId, turnNumber: context.turnNumber, kind: "check", "check.round": round - 1 }).sort({ _id: 1 }).lean<IMaddoxCampaignMessage[]>() : []
         const results = checks.map(checkResultOf).filter((result): result is NarratorCheckResult => Boolean(result))
-        const task: NarratorTask = round > 0 ? { kind: "continuation", turnNumber: context.turnNumber, round, declarations: context.declarations, results } : { kind: "narration", turnNumber: context.turnNumber, declarations: context.declarations, combatHint: context.combatHint ?? null }
+        // Combate tático (Maddox 7): quem age agora e o resultado das rolagens/reações da espera anterior.
+        const campaignDoc = await MaddoxCampaignModel.findById(campaignId).select("rigor").lean<Pick<IMaddoxCampaign, "rigor">>()
+        const tacticalRigor = Boolean(campaignDoc && usesTacticalCombat(campaignDoc.rigor))
+        const tactical = tacticalRigor ? await tacticalTask(campaignId) : null
+        const waitDocs = tacticalRigor && round > 0 ? await MaddoxCampaignMessageModel.find({ campaignId, turnNumber: context.turnNumber, $or: [{ "combatRoll.waitRound": round - 1 }, { "combatReaction.waitRound": round - 1 }, { "combatAction.waitRound": round - 1 }] }).select("_id").lean<{ _id: Types.ObjectId }[]>() : []
+        const combatResults = tacticalRigor && round > 0 ? await (await import("./combat-reactions")).waitRoundResults(campaignId, context.turnNumber, round - 1) : []
+        const { MADDOX_COMBAT_WAIT_ROUNDS_MAX } = await import("../constants")
+        const task: NarratorTask =
+            round > 0
+                ? { kind: "continuation", turnNumber: context.turnNumber, round, declarations: context.declarations, results, combatResults, tactical, ...(tactical ? { lastRound: round >= MADDOX_COMBAT_WAIT_ROUNDS_MAX - 1 } : {}) }
+                : { kind: "narration", turnNumber: context.turnNumber, declarations: context.declarations, combatHint: context.combatHint ?? null, tactical }
         return generate(
             {
                 campaignId: context.campaignId,
                 jobId: context.jobId,
                 turnNumber: context.turnNumber,
                 task,
-                excludeIds: new Set([...previous.map((item) => String(item._id)), ...checks.map((item) => String(item._id))]),
+                excludeIds: new Set([...previous.map((item) => String(item._id)), ...checks.map((item) => String(item._id)), ...waitDocs.map((item) => String(item._id))]),
                 title: round > 0 ? `Maddox · narração · turno ${context.turnNumber} · testes ${round}` : `Maddox · narração · turno ${context.turnNumber}`,
                 signal: context.signal,
             },

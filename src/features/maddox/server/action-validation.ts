@@ -23,6 +23,12 @@ export interface ValidateDeclarationInput {
     campaign: Pick<IMaddoxCampaign, "_id" | "name" | "rigor" | "setting" | "state">
     character: Pick<IMaddoxCharacter, "name" | "profile" | "currentState"> | null
     content: string
+    /**
+     * Combate tático (Maddox 7): a "Outra ação" da vez do personagem — o que ela gasta (Ação ou Ação bônus), as condições
+     * dele e o que a ficha permite. No Fiel ao D&D a ação só vale se as regras permitirem; no Rigoroso o mestre decide as
+     * lacunas.
+     */
+    combat?: string | null
 }
 
 const verdictSchema = z.object({ valid: z.boolean(), reason: z.string().optional().default("") })
@@ -57,6 +63,7 @@ async function viaJev(input: ValidateDeclarationInput, signal: AbortSignal): Pro
             situacao: input.campaign.state?.situation ?? "",
             personagem: characterText(input.character),
             acao: input.content,
+            ...(input.combat ? { combate: input.combat } : {}),
         },
         questions: {
             valid: {
@@ -80,6 +87,7 @@ async function viaNarrator(input: ValidateDeclarationInput, signal: AbortSignal)
         `## Cenário\n${input.campaign.setting?.trim() || "(sem cenário registrado)"}`,
         `## Situação atual\n${input.campaign.state?.situation?.trim() || "(não registrada)"}`,
         `## ${characterText(input.character)}`,
+        ...(input.combat ? [`## Combate (vez do personagem)\n${input.combat}\n- ${input.campaign.rigor === "fiel-dnd" ? "Fiel ao D&D: a ação só vale se as regras do D&D a permitirem com o custo indicado (Ação ou Ação bônus) e os recursos da ficha." : "Rigoroso: siga as regras do D&D; o que elas não cobrem, você decide com bom senso."}`] : []),
         'Responda SOMENTE com um objeto JSON: {"valid": true|false, "reason": "quando inválida, explique em uma ou duas frases em português do Brasil, falando com o jogador, o que impede a ação e o que ele poderia tentar"}.',
     ].join("\n\n")
     const { text } = await generateAiText({

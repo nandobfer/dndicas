@@ -130,10 +130,12 @@ export const MADDOX_GAME_CHANGED_EVENT = "maddox.game.changed"
 
 /**
  * Mensagens da mesa: narração do mestre, declaração do jogador, "não fazer nada" (`pass`), pergunta ao
- * mestre (não encerra o turno), a resposta dele, o teste pedido pelo Maddox (`check`, Maddox 5) e o card de
- * início/fim de combate (`combat`, Maddox 6).
+ * mestre (não encerra o turno), a resposta dele, o teste pedido pelo Maddox (`check`, Maddox 5), o card de
+ * início/fim de combate (`combat`, Maddox 6) e, no combate tático (Maddox 7), a ação de um combatente (`combat-action`),
+ * uma rolagem avulsa (`combat-roll`: iniciativa, salvaguarda, teste contra a morte, concentração, dano) e a janela de
+ * reação (`combat-reaction`).
  */
-export const MADDOX_GAME_MESSAGE_KINDS = ["narration", "declaration", "pass", "question", "answer", "check", "combat"] as const
+export const MADDOX_GAME_MESSAGE_KINDS = ["narration", "declaration", "pass", "question", "answer", "check", "combat", "combat-action", "combat-roll", "combat-reaction"] as const
 export type MaddoxGameMessageKind = (typeof MADDOX_GAME_MESSAGE_KINDS)[number]
 
 /** O que o jogador envia no próprio turno. */
@@ -232,11 +234,13 @@ export const MADDOX_CHECK_DIE_HIDE_MS = 1_400
 
 /**
  * Graus com combate narrativo registrado (início, desfecho e recompensas pelas ferramentas do Maddox). Rigoroso e Fiel ao
- * D&D ficam de fora até o Maddox 7 (iniciativa e turnos): neles o combate continua narrado, sem registro.
+ * D&D usam o combate tático do Maddox 7 (`MADDOX_TACTICAL_COMBAT_RIGORS`), que reaproveita o mesmo registro.
  */
 export const MADDOX_COMBAT_RIGORS: readonly MaddoxRigorLevel[] = ["narrativo", "flexivel", "equilibrado"]
-/** Graus em que as recompensas do combate entram na ficha D&D (entre os graus com combate, só os que têm ficha). */
-export const MADDOX_COMBAT_SHEET_REWARD_RIGORS: readonly MaddoxRigorLevel[] = ["equilibrado"]
+/** Graus com combate tático (Maddox 7): iniciativa, turnos por combatente, Ação e Ação bônus por botões. */
+export const MADDOX_TACTICAL_COMBAT_RIGORS: readonly MaddoxRigorLevel[] = ["rigoroso", "fiel-dnd"]
+/** Graus em que as recompensas do combate entram na ficha D&D (todos os graus com ficha). */
+export const MADDOX_COMBAT_SHEET_REWARD_RIGORS: readonly MaddoxRigorLevel[] = ["equilibrado", "rigoroso", "fiel-dnd"]
 
 export const MADDOX_COMBAT_STATUSES = ["active", "ended"] as const
 export type MaddoxCombatStatus = (typeof MADDOX_COMBAT_STATUSES)[number]
@@ -289,6 +293,80 @@ export const MADDOX_COMBAT_HINT_TIMEOUT_MS = 20_000
 export const MADDOX_COMBAT_IMAGE_STATUSES = ["awaiting-feature", "skipped"] as const
 export type MaddoxCombatImageStatus = (typeof MADDOX_COMBAT_IMAGE_STATUSES)[number]
 
+// ── Combate tático (Maddox 7) ──────────────────────────────────────────────────
+
+/** Condições do D&D (chaves do catálogo de Monstros) e os nomes em pt-BR. */
+export const MADDOX_CONDITIONS = ["blinded", "charmed", "deafened", "exhaustion", "frightened", "grappled", "incapacitated", "invisible", "paralyzed", "petrified", "poisoned", "prone", "restrained", "stunned", "unconscious"] as const
+export type MaddoxConditionKey = (typeof MADDOX_CONDITIONS)[number]
+export const MADDOX_CONDITION_LABELS: Record<MaddoxConditionKey, string> = {
+    blinded: "Cego",
+    charmed: "Enfeitiçado",
+    deafened: "Surdo",
+    exhaustion: "Exausto",
+    frightened: "Amedrontado",
+    grappled: "Agarrado",
+    incapacitated: "Incapacitado",
+    invisible: "Invisível",
+    paralyzed: "Paralisado",
+    petrified: "Petrificado",
+    poisoned: "Envenenado",
+    prone: "Caído",
+    restrained: "Contido",
+    stunned: "Atordoado",
+    unconscious: "Inconsciente",
+}
+
+/** Ações comuns do D&D (PHB 2024) oferecidas no menu "Ações comuns". "Atacar" e "Magia" abrem Armas e Magias. */
+export const MADDOX_STANDARD_ACTIONS = ["dash", "disengage", "dodge", "help", "hide", "influence", "ready", "search", "study", "utilize"] as const
+export type MaddoxStandardAction = (typeof MADDOX_STANDARD_ACTIONS)[number]
+export const MADDOX_STANDARD_ACTION_DEFS: Record<MaddoxStandardAction, { label: string; detail: string }> = {
+    dash: { label: "Disparada", detail: "Movimento extra igual ao seu deslocamento neste turno." },
+    disengage: { label: "Desengajar", detail: "Seu movimento não provoca ataques de oportunidade neste turno." },
+    dodge: { label: "Esquivar", detail: "Até o seu próximo turno, ataques contra você têm desvantagem e você tem vantagem em salvaguardas de Destreza." },
+    help: { label: "Ajudar", detail: "Um aliado tem vantagem no próximo ataque contra um inimigo a até 1,5 m de você." },
+    hide: { label: "Esconder", detail: "Teste de Destreza (Furtividade) CD 15; no sucesso, você fica Invisível." },
+    influence: { label: "Influenciar", detail: "Teste de Carisma (Enganação, Intimidação, Atuação ou Persuasão) para influenciar uma criatura." },
+    ready: { label: "Preparar", detail: "Escolha uma ação e o gatilho: ela vira a sua reação quando o gatilho acontecer." },
+    search: { label: "Procurar", detail: "Teste de Sabedoria (Intuição, Medicina, Percepção ou Sobrevivência)." },
+    study: { label: "Estudar", detail: "Teste de Inteligência (Arcanismo, História, Investigação, Natureza ou Religião)." },
+    utilize: { label: "Utilizar", detail: "Usar um objeto que não é arma nem consumível (alavanca, porta, corda)." },
+}
+
+/** Custo de uma habilidade, talento ou magia no combate (classificador: texto + JEV). */
+export const MADDOX_COMBAT_COSTS = ["action", "bonus", "reaction", "passive", "other"] as const
+export type MaddoxCombatCost = (typeof MADDOX_COMBAT_COSTS)[number]
+/** Gatilho de uma reação. */
+export const MADDOX_REACTION_TRIGGERS = ["hit", "damaged", "leave-reach", "spell", "ready", "other"] as const
+export type MaddoxReactionTrigger = (typeof MADDOX_REACTION_TRIGGERS)[number]
+export const MADDOX_REACTION_TRIGGER_LABELS: Record<MaddoxReactionTrigger, string> = {
+    hit: "atingido por um ataque",
+    damaged: "sofreu dano",
+    "leave-reach": "inimigo saindo do alcance",
+    spell: "inimigo conjurando uma magia",
+    ready: "gatilho da ação preparada",
+    other: "outro gatilho",
+}
+/** Como uma magia (ou habilidade) é resolvida pelo servidor; `utility` vai para o Maddox. */
+export const MADDOX_COMBAT_RESOLUTIONS = ["attack", "save", "heal", "auto", "utility"] as const
+export type MaddoxCombatResolution = (typeof MADDOX_COMBAT_RESOLUTIONS)[number]
+
+/** Janela de reação: passado o prazo, o personagem não reage. Jogador offline recusa na hora. */
+export const MADDOX_REACTION_TIMEOUT_MS = 45_000
+/** Jogador offline na própria vez: a vez passa depois desta carência (recarregar a página não perde a vez). */
+export const MADDOX_COMBAT_OFFLINE_GRACE_MS = 30_000
+/** Esperas (testes, rolagens e reações) por turno do mestre em combate; acima disso, o ataque se resolve sem reação. */
+export const MADDOX_COMBAT_WAIT_ROUNDS_MAX = 10
+/** Classificação do custo de uma habilidade pelo JEV (em segundo plano): passou disso, fica em "Outras habilidades". */
+export const MADDOX_COMBAT_CLASSIFY_TIMEOUT_MS = 20_000
+/** Narrações com todos os inimigos (ou todos os personagens) caídos antes de o servidor encerrar o combate sozinho. */
+export const MADDOX_COMBAT_FORCE_END_AFTER = 2
+/** Texto livre ("Outra ação") e o "Movimento e posição" do fim da vez. */
+export const MADDOX_COMBAT_FREE_TEXT_MAX = 1_000
+/** Alvos de uma magia de área. */
+export const MADDOX_COMBAT_TARGETS_MAX = 12
+/** Ataques por ação "Atacar" de um adversário com Ataques Múltiplos. */
+export const MADDOX_MONSTER_MULTIATTACK_MAX = 4
+
 // ── Entrevistas ───────────────────────────────────────────────────────────────
 
 export const MADDOX_SCRIPT_KINDS = ["scenario", "character"] as const
@@ -318,14 +396,15 @@ export interface MaddoxScriptTopic {
 // ── JEV ───────────────────────────────────────────────────────────────────────
 
 /** Decisões que poderão usar o JEV (System One) nas próximas entregas. Por enquanto só configuráveis. */
-export const MADDOX_JEV_DECISIONS = ["question-or-action", "free-action-validity", "requires-check", "combat-boundary", "master-knowledge", "interview-complete", "scene-image"] as const
+export const MADDOX_JEV_DECISIONS = ["question-or-action", "free-action-validity", "requires-check", "combat-boundary", "combat-option-cost", "master-knowledge", "interview-complete", "scene-image"] as const
 export type MaddoxJevDecision = (typeof MADDOX_JEV_DECISIONS)[number]
 
 export const MADDOX_JEV_DECISION_DEFS: Record<MaddoxJevDecision, { label: string; description: string }> = {
     "question-or-action": { label: "Pergunta ou ação do jogador", description: "A mensagem do jogador no turno é uma pergunta ao mestre (responde sem trocar de turno) ou uma declaração de ação, intenção ou diálogo." },
     "free-action-validity": { label: "Validade de ação livre", description: "A ação escrita livremente é válida para o grau de rigor da campanha." },
     "requires-check": { label: "Pedir teste", description: "A ação exige um teste de atributo ou perícia." },
-    "combat-boundary": { label: "Início ou fim de combate", description: "As declarações levam a cena a um combate ou o encerram (orientação ao narrador nos graus com combate narrativo)." },
+    "combat-boundary": { label: "Início ou fim de combate", description: "As declarações levam a cena a um combate ou o encerram (orientação ao narrador nos graus com combate)." },
+    "combat-option-cost": { label: "Custo de ação no combate", description: "Se uma habilidade ou talento da ficha gasta Ação, Ação bônus ou Reação (e o gatilho da reação), quando o texto não deixa claro. O resultado fica em cache." },
     "master-knowledge": { label: "Conhecimento do mestre", description: "Um fato persistido pode ser visto pelos jogadores ou é conhecimento exclusivo do Maddox." },
     "interview-complete": { label: "Fim da entrevista", description: "A entrevista de cenário ou de personagem já tem base suficiente para concluir." },
     "scene-image": { label: "Gerar imagem na cena", description: "A situação é uma das configuradas para gerar imagem na narração." },

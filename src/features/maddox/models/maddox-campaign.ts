@@ -48,6 +48,11 @@ export interface IMaddoxCampaign {
         checkRound: number
         /** O turno do mestre espera as rolagens dos testes pedidos na rodada atual (sem geração em andamento). */
         awaitingChecks: boolean
+        /**
+         * Combate tático (Maddox 7): a vez do personagem neste turno dos jogadores (só o membro dele é elegível).
+         * `offlineSince` marca quando o jogador da vez foi visto offline (a vez passa depois da carência).
+         */
+        combatActor?: { combatId: Types.ObjectId; actorKey: string; memberId: Types.ObjectId; offlineSince: Date | null } | null
     }
     /** Mostra a CD dos testes aos jogadores (Maddox 5); padrão = secreta. */
     showCheckDc: boolean
@@ -95,6 +100,7 @@ const MaddoxCampaignSchema = new Schema<IMaddoxCampaign>(
             failedAt: { type: Date, default: null },
             checkRound: { type: Number, default: 0 },
             awaitingChecks: { type: Boolean, default: false },
+            combatActor: { type: new Schema({ combatId: Schema.Types.ObjectId, actorKey: String, memberId: Schema.Types.ObjectId, offlineSince: { type: Date, default: null } }, { _id: false }), default: null },
         },
         showCheckDc: { type: Boolean, default: false },
         startingLevel: { type: Number, default: null, min: 1, max: 20 },
