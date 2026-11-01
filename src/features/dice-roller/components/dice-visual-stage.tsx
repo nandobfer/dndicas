@@ -1,12 +1,12 @@
 "use client"
 
 import * as React from "react"
-import { motion } from "framer-motion"
 import { colors } from "@/lib/config/colors"
 import { cn } from "@/core/utils"
 import { getSharedDiceBox, releaseSharedDiceBox, type SharedDiceBox } from "../dice-box-loader"
 import { buildDiceBoxNotation, buildDiceBoxStandbyNotation, expandStandbyVisualTerms, expandVisualResult } from "../dice-box-notation"
 import { renderStaticDiceBoxStandby } from "../dice-box-static-standby"
+import { CRITICAL_STAGE_CONFIG, CriticalHighlight, criticalBoxShadow } from "./critical-highlight"
 import type { DiceCriticalState, DiceRollMode, DiceRollResponse, DiceTerm } from "../types"
 import type DiceBox from "@3d-dice/dice-box-threejs"
 
@@ -22,19 +22,6 @@ interface DiceVisualStageProps {
     variant?: "frame" | "bare"
     /** `compact`: palco menor, para caber dentro de um card da conversa. */
     size?: "default" | "compact"
-}
-
-const CRITICAL_STAGE_CONFIG: Record<DiceCriticalState, { color: string, label: string, badgeClassName: string }> = {
-    "critical-success": {
-        color: colors.rarity.uncommon,
-        label: "Sucesso crítico",
-        badgeClassName: "border-emerald-300/40 bg-emerald-400/18 text-emerald-50 shadow-[0_0_24px_rgba(16,185,129,0.4)]",
-    },
-    "critical-failure": {
-        color: colors.rarity.artifact,
-        label: "Falha crítica",
-        badgeClassName: "border-red-300/40 bg-red-400/18 text-red-50 shadow-[0_0_24px_rgba(239,68,68,0.38)]",
-    },
 }
 
 function getStageColor(mode: DiceRollMode, criticalState: DiceCriticalState | null) {
@@ -220,40 +207,13 @@ export function DiceVisualStage({ terms, result, isRolling, mode, criticalState,
             style={bare ? undefined : {
                 borderColor: `${stageColor}80`,
                 boxShadow: criticalConfig
-                    ? `inset 0 0 36px ${stageColor}30, 0 0 48px ${stageColor}40, 0 0 120px ${stageColor}24`
+                    ? criticalBoxShadow(stageColor)
                     : `inset 0 0 32px ${stageColor}16, 0 0 42px ${stageColor}12`,
             }}
         >
-            {criticalConfig && (
+            {criticalConfig && criticalState && (
                 <>
-                    <motion.div
-                        aria-hidden="true"
-                        className="pointer-events-none absolute inset-[-12%] z-0 rounded-full blur-3xl"
-                        style={{ background: `radial-gradient(circle, ${stageColor}55 0%, ${stageColor}18 35%, transparent 72%)` }}
-                        animate={{ opacity: [0.5, 0.95, 0.6], scale: [0.94, 1.08, 0.97] }}
-                        transition={{ duration: 1.45, repeat: Infinity, ease: "easeInOut" }}
-                    />
-                    <motion.div
-                        aria-hidden="true"
-                        className="pointer-events-none absolute inset-2 z-0 rounded-[1.9rem]"
-                        style={{
-                            background: `conic-gradient(from 0deg, transparent 0deg, ${stageColor} 60deg, transparent 132deg, ${stageColor} 220deg, transparent 290deg, ${stageColor} 360deg)`,
-                            opacity: 0.2,
-                            filter: "blur(10px)",
-                        }}
-                        animate={{ rotate: [0, 360] }}
-                        transition={{ duration: 5.8, repeat: Infinity, ease: "linear" }}
-                    />
-                    <motion.div
-                        aria-hidden="true"
-                        className="pointer-events-none absolute inset-3 z-0 rounded-[1.8rem] border"
-                        style={{
-                            borderColor: `${stageColor}cc`,
-                            boxShadow: `0 0 40px ${stageColor}70, inset 0 0 22px ${stageColor}50`,
-                        }}
-                        animate={{ opacity: [0.45, 1, 0.55], scale: [0.985, 1.01, 0.99] }}
-                        transition={{ duration: 1.05, repeat: Infinity, ease: "easeInOut" }}
-                    />
+                    <CriticalHighlight state={criticalState} />
                     <div className="pointer-events-none absolute inset-x-5 top-5 z-30 flex justify-center">
                         <span
                             data-testid="dice-critical-banner"

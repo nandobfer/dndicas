@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { checkModifier, checkSucceeded, checkTitle, sheetSummary, type MaddoxCheckSheet } from "@/features/maddox/check-modifier"
+import { checkModifier, checkSucceeded, keptD20, checkTitle, sheetSummary, type MaddoxCheckSheet } from "@/features/maddox/check-modifier"
 
 const skill = (proficient = false, expertise = false, override?: number) => ({ proficient, expertise, ...(override !== undefined ? { override } : {}) })
 
@@ -45,6 +45,12 @@ describe("modificador dos testes pedidos pelo Maddox (Maddox 5)", () => {
         expect(checkTitle({ kind: "ability", ability: "strength", skill: null })).toBe("Força")
         expect(checkSucceeded(15, 15)).toBe(true)
         expect(checkSucceeded(14, 15)).toBe(false)
+        // 20 natural sempre passa e 1 natural sempre falha, qualquer que seja a CD.
+        expect(checkSucceeded(24, 30, 20)).toBe(true)
+        expect(checkSucceeded(26, 15, 1)).toBe(false)
+        expect(checkSucceeded(15, 15, 12)).toBe(true)
+        expect(keptD20({ selectedD20: { kept: 1 }, terms: [{ results: [1] }] })).toBe(1)
+        expect(keptD20({ selectedD20: null, terms: [{ results: [14] }] })).toBe(14)
         const summary = sheetSummary(sheet({ class: "Ladino", race: "Elfo", hpMax: 30, hpCurrent: 22, computedArmorClass: 15 }))
         expect(summary).toContain("Nível 5 · Ladino · Elfo · PV 22/30 · CA 15 · Proficiência +3")
         expect(summary).toContain("DES 16 (+3)")

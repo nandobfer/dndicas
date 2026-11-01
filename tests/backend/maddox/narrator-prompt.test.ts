@@ -155,6 +155,9 @@ describe("fichas e testes no prompt (Maddox 5)", () => {
         expect(checkResultLine(result())).toBe("Lyra — Furtividade (Destreza), CD 15: total 17 (d20 12, modificador +5) — sucesso.")
         expect(checkResultLine(result({ mode: "advantage", d20: 20, discarded: 4, total: 25 }))).toBe("Lyra — Furtividade (Destreza), CD 15: total 25 (d20 20, modificador +5; vantagem: 20 e 4; 20 natural) — sucesso.")
         expect(checkResultLine(result({ d20: 1, total: 6, modifier: 5, rolledByOwner: true }))).toContain("1 natural; rolado pelo dono no lugar do jogador) — falha.")
+        // 20 natural abaixo da CD ainda passa; 1 natural acima dela ainda falha.
+        expect(checkResultLine(result({ d20: 20, total: 24, modifier: 4, dc: 30 }))).toMatch(/20 natural\) — sucesso\.$/)
+        expect(checkResultLine(result({ d20: 1, total: 16, modifier: 15 }))).toMatch(/1 natural\) — falha\.$/)
         expect(checkResultLine(result({ status: "cancelled", total: null, cancelReason: "O jogador saiu da campanha" }))).toBe("Lyra — Furtividade (Destreza), CD 15: cancelado (O jogador saiu da campanha); resolva sem o teste.")
         expect(checkResultLine(result({ status: "pending", total: null }))).toContain("aguardando a rolagem")
     })

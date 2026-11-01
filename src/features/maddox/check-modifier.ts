@@ -78,8 +78,14 @@ export function checkTitle(check: MaddoxCheckSpec): string {
 export const checkKindLabel = (kind: MaddoxCheckKind) => MADDOX_CHECK_KIND_LABELS[kind]
 export const checkModeLabel = (mode: MaddoxCheckMode) => MADDOX_CHECK_MODE_LABELS[mode]
 
-/** Sucesso quando o total alcança a CD (regra do D&D). */
-export const checkSucceeded = (total: number, dc: number) => total >= dc
+/**
+ * Sucesso quando o total alcança a CD. Regra da mesa do Maddox: 20 natural no d20 mantido é sempre sucesso e 1 natural
+ * sempre falha, qualquer que seja a CD.
+ */
+export const checkSucceeded = (total: number, dc: number, d20?: number | null) => (d20 === 20 ? true : d20 === 1 ? false : total >= dc)
+
+/** d20 que conta numa rolagem de teste (o mantido na vantagem/desvantagem). */
+export const keptD20 = (roll: { selectedD20?: { kept: number } | null; terms: Array<{ results: number[] }> }): number | null => roll.selectedD20?.kept ?? roll.terms[0]?.results[0] ?? null
 
 /** Texto puro de um campo da ficha que guarda HTML de menção (classe, subclasse, raça): só os nomes. */
 function plainField(value: string | null | undefined): string {

@@ -1,6 +1,7 @@
 import { memoriesSection } from "@/features/ai/memories-prompt"
 import { MADDOX_CATALOG_TOOL_NAMES, MADDOX_CHECK_RIGORS, MADDOX_CHECK_ROUNDS_MAX, MADDOX_DECLARATION_VALIDATION_RIGORS, MADDOX_PROFILE_SECTIONS, MADDOX_TOOL_TEXT_GUIDE, type MaddoxCampaignMemoryKind, type MaddoxGameMessageKind, type MaddoxQuestStatus, type MaddoxRigorLevel, type MaddoxVisibility } from "../constants"
 import { CATALOG_CITATION_RULE, rigorBlock } from "./interview-prompt"
+import { checkSucceeded } from "../check-modifier"
 
 /**
  * Instruções do Maddox narrador (Maddox 4) — módulo PURO (sem banco nem IA), testado à parte. As regras de narração
@@ -60,7 +61,7 @@ export function checksRule(rigor: MaddoxRigorLevel): string {
         `- ${CHECK_FREQUENCY[rigor] ?? CHECK_FREQUENCY.rigoroso}`,
         "- Para pedir um teste, chame a ferramenta `request_check` (personagem, tipo — perícia, atributo ou resistência —, a perícia ou o atributo, a CD, vantagem ou desvantagem quando houver e um motivo curto). Um teste por personagem a cada narração; vários personagens podem testar ao mesmo tempo.",
         "- NUNCA role dados nem invente resultados: quem rola é o jogador, com os modificadores da ficha, e o resultado real chega na mensagem seguinte. Ao pedir um teste, narre até o momento da tentativa e PARE: não decida o resultado nem termine perguntando o que os jogadores fazem.",
-        "- Com o resultado em mãos, compare o total com a CD (20 natural é sucesso marcante e 1 natural, falha marcante) e narre a consequência na ficção, sem recitar números.",
+        "- Com o resultado em mãos, compare o total com a CD (20 natural é sempre sucesso e 1 natural sempre falha, qualquer que seja a CD; ambos marcantes) e narre a consequência na ficção, sem recitar números.",
         "- O combate continua narrado (sem iniciativa nem turnos mecânicos); testes podem aparecer nos momentos decisivos dele. Não aplique dano nem gaste recursos da ficha pelos números.",
     ].join("\n")
 }
@@ -279,7 +280,7 @@ export function checkResultLine(result: NarratorCheckResult): string {
     const mode = result.mode !== "normal" && result.discarded !== null ? `; ${result.mode === "advantage" ? "vantagem" : "desvantagem"}: ${result.d20} e ${result.discarded}` : ""
     const natural = result.d20 === 20 ? "; 20 natural" : result.d20 === 1 ? "; 1 natural" : ""
     const owner = result.rolledByOwner ? "; rolado pelo dono no lugar do jogador" : ""
-    return `${head}: total ${result.total} (d20 ${result.d20}, modificador ${signedNumber(result.modifier ?? 0)}${mode}${natural}${owner}) — ${result.total >= result.dc ? "sucesso" : "falha"}.`
+    return `${head}: total ${result.total} (d20 ${result.d20}, modificador ${signedNumber(result.modifier ?? 0)}${mode}${natural}${owner}) — ${checkSucceeded(result.total, result.dc, result.d20) ? "sucesso" : "falha"}.`
 }
 
 export function narratorTaskText(task: NarratorTask): string {

@@ -4,6 +4,7 @@ import { act, fireEvent, screen, waitFor, within } from "@testing-library/react"
 import { renderWithQueryClient } from "../test-utils"
 import type { MaddoxGameMessageDto, MaddoxGameParticipantDto, MaddoxGameStateDto, MaddoxLiveGenerationDto } from "@/features/maddox/game-types"
 import { rarityColors } from "@/lib/config/colors"
+import { rigorColor } from "@/features/maddox/components/campaigns/campaign-visuals"
 import type { MaddoxGameStreamState } from "@/features/maddox/hooks/useMaddoxGameStream"
 
 const get = vi.fn()
@@ -564,6 +565,9 @@ describe("mesa Maddox — recarga depois de falha do mestre", () => {
 
 // ── Maddox 5: testes pedidos pelo Maddox, ficha e NPCs ─────────────────────────
 
+/** Compara cores declaradas sem depender da caixa do hex. */
+const sameHex = (a: string | null | undefined, b: string) => (a ?? "").toLowerCase() === b.toLowerCase()
+
 const roll17 = { rollId: "r1", label: "Furtividade (Destreza)", terms: [{ dice: "d20" as const, quantity: 1, results: [12] }], mode: "advantage" as const, selectedD20: { kept: 12, discarded: 7, reason: "advantage" as const }, diceTotal: 12, modifier: 5, total: 17, createdAt: "2026-10-31T10:00:00.000Z" }
 
 const checkDto = (over: Partial<NonNullable<MaddoxGameMessageDto["check"]>> = {}): NonNullable<MaddoxGameMessageDto["check"]> => ({
@@ -639,6 +643,17 @@ describe("mesa Maddox — testes pedidos pelo Maddox (Maddox 5)", () => {
         expect(panel).toHaveAttribute("data-stage-visibility", "roll")
         expect(panel).toHaveAttribute("data-stage-hide-delay", "1400")
         expect(panel.getAttribute("data-roll-button-class")).toContain("w-auto")
+        expect(panel.getAttribute("data-roll-button-class")!.split(" ")).toEqual(expect.arrayContaining(["h-11", "px-6", "text-sm"]))
+        // "Rolar" numa coluna à direita do texto, centralizada nos dois eixos (no celular, abaixo).
+        const column = within(card).getByTestId("check-roll-column")
+        expect(column).toContainElement(panel)
+        expect(column.className.split(" ")).toEqual(expect.arrayContaining(["flex", "flex-col", "items-center", "justify-center", "shrink-0"]))
+        expect(column.parentElement!.className.split(" ")).toEqual(expect.arrayContaining(["flex", "flex-col", "sm:flex-row"]))
+        expect(column.parentElement).toContainElement(within(card).getByTestId("check-title"))
+        // Pendente: cor do rigor, sem desfecho nem crítico.
+        const cardBox = within(card).getByTestId("check-card")
+        expect(sameHex(cardBox.getAttribute("data-accent"), rigorColor("fiel-dnd"))).toBe(true)
+        expect(cardBox).toHaveAttribute("data-outcome", "none")
         expect(within(card).queryByTestId("check-roll-result")).not.toBeInTheDocument()
         expect(screen.getByTestId("turn-banner")).toHaveTextContent("Turno do mestre — o Maddox pediu um teste para você")
         expect(screen.getByText("O Maddox pediu um teste para você: role os dados na conversa.")).toBeInTheDocument()
@@ -650,8 +665,13 @@ describe("mesa Maddox — testes pedidos pelo Maddox (Maddox 5)", () => {
         expect(await screen.findByText("Resultado enviado ao Maddox.")).toBeInTheDocument()
         // O resultado só aparece quando o dado para (o card já foi gravado como rolado).
         expect(screen.queryByTestId("check-roll-result")).not.toBeInTheDocument()
+        // Enquanto rola, a cor do card não adianta o desfecho.
+        expect(screen.getByTestId("check-card")).toHaveAttribute("data-outcome", "none")
         fireEvent.click(screen.getByRole("button", { name: "fim da animação" }))
         expect(await screen.findByTestId("check-roll-result")).toHaveTextContent("17")
+        // Parado: o botão e o aviso saem; o resultado fica.
+        expect(screen.queryByRole("button", { name: "Rolar" })).not.toBeInTheDocument()
+        expect(screen.queryByText("Resultado enviado ao Maddox.")).not.toBeInTheDocument()
     })
 
     it("'Rolar' espera a ficha carregar; o modificador do servidor diferente da prévia não zera o dado de quem rolou", async () => {
@@ -734,6 +754,58 @@ describe("mesa Maddox — testes pedidos pelo Maddox (Maddox 5)", () => {
         expect(card).toHaveTextContent("(rolado por Marina no lugar do jogador)")
         expect(card).toHaveTextContent("CD 15")
         expect(within(card).getByTestId("check-outcome")).toHaveTextContent("Sucesso")
+        // O desfecho fica na mesma linha do total, e o card fica verde.
+        expect(within(card).getByTestId("check-roll-result")).toContainElement(within(card).getByTestId("check-outcome"))
+        const box = within(card).getByTestId("check-card")
+        expect(box).toHaveAttribute("data-outcome", "success")
+        expect(sameHex(box.getAttribute("data-accent"), rarityColors.uncommon)).toBe(true)
+        expect(box).toHaveAttribute("data-critical", "none")
+        expect(within(card).queryByTestId("critical-highlight")).not.toBeInTheDocument()
+    })
+
+    it("falha com a CD visível: bolha 'Falha' na linha do total e card vermelho", async () => {
+        const roll9 = { ...roll17, rollId: "r9", mode: "normal" as const, terms: [{ dice: "d20" as const, quantity: 1, results: [4] }], selectedD20: { kept: 4, reason: "normal" as const }, diceTotal: 4, total: 9 }
+        await renderGame(gameState({ rigor: "fiel-dnd", showCheckDc: true, messages: [checkMessage({ status: "rolled", mode: "normal", roll: roll9, dc: 15, success: false })] }))
+        const box = screen.getByTestId("check-card")
+        expect(box).toHaveAttribute("data-outcome", "failure")
+        expect(sameHex(box.getAttribute("data-accent"), rarityColors.artifact)).toBe(true)
+        expect(within(screen.getByTestId("check-roll-result")).getByTestId("check-outcome")).toHaveTextContent("Falha")
+    })
+
+    it("CD secreta sem crítico: cor do rigor e nenhuma bolha de desfecho", async () => {
+        await renderGame(gameState({ rigor: "fiel-dnd", messages: [checkMessage({ status: "rolled", roll: roll17 })] }))
+        const box = screen.getByTestId("check-card")
+        expect(box).toHaveAttribute("data-outcome", "none")
+        expect(sameHex(box.getAttribute("data-accent"), rigorColor("fiel-dnd"))).toBe(true)
+        expect(screen.queryByTestId("check-outcome")).not.toBeInTheDocument()
+        expect(screen.queryByTestId("check-critical")).not.toBeInTheDocument()
+    })
+
+    it("20 natural recém-rolado com a CD secreta: destaque animado verde, bolha '20 natural' e card verde", async () => {
+        const roll20 = { ...roll17, rollId: "r20", selectedD20: { kept: 20, discarded: 3, reason: "advantage" as const }, terms: [{ dice: "d20" as const, quantity: 1, results: [20] }], diceTotal: 20, total: 25 }
+        await renderGame(gameState({ rigor: "fiel-dnd", turn: { ...awaitingTurn, awaitingChecks: false, pendingChecks: [], generating: true }, messages: [checkMessage({ status: "rolled", roll: roll20 })] }))
+        act(() => setStream({ rolled: [{ messageId: "k1", roll: roll20 }] }))
+        const card = await screen.findByTestId("game-check-result")
+        expect(within(card).getByTestId("check-card")).toHaveAttribute("data-critical", "none")
+        fireEvent.click(within(card).getByRole("button", { name: "fim da animação" }))
+        const box = await within(card).findByTestId("check-card")
+        await waitFor(() => expect(box).toHaveAttribute("data-critical", "critical-success"))
+        expect(sameHex(box.getAttribute("data-accent"), rarityColors.uncommon)).toBe(true)
+        expect(within(card).getByTestId("critical-highlight")).toHaveAttribute("data-critical-state", "critical-success")
+        expect(within(card).getByTestId("check-critical")).toHaveTextContent("20 natural")
+        expect(within(card).queryByTestId("check-outcome")).not.toBeInTheDocument()
+    })
+
+    it("1 natural na desvantagem com a CD visível: falha mesmo acima da CD, destaque vermelho também no histórico", async () => {
+        const roll1 = { ...roll17, rollId: "r1n", mode: "disadvantage" as const, terms: [{ dice: "d20" as const, quantity: 1, results: [1] }], selectedD20: { kept: 1, discarded: 15, reason: "disadvantage" as const }, diceTotal: 1, modifier: 15, total: 16 }
+        await renderGame(gameState({ rigor: "fiel-dnd", showCheckDc: true, messages: [checkMessage({ status: "rolled", mode: "disadvantage", roll: roll1, dc: 15, success: false })] }))
+        const box = screen.getByTestId("check-card")
+        expect(box).toHaveAttribute("data-critical", "critical-failure")
+        expect(box).toHaveAttribute("data-outcome", "failure")
+        expect(sameHex(box.getAttribute("data-accent"), rarityColors.artifact)).toBe(true)
+        expect(within(box).getByTestId("critical-highlight")).toHaveAttribute("data-critical-state", "critical-failure")
+        expect(within(box).getByTestId("check-critical")).toHaveTextContent("1 natural")
+        expect(within(box).getByTestId("check-outcome")).toHaveTextContent("Falha")
     })
 
     it("teste cancelado vira uma nota discreta", async () => {

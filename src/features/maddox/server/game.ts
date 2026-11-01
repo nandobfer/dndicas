@@ -33,7 +33,7 @@ import {
 } from "../models"
 import type { MaddoxGameActionInput, MaddoxSkipPlayerInput } from "../game-schemas"
 import type { MaddoxGameCheckDto, MaddoxGameMessageDto, MaddoxGameMessagesPageDto, MaddoxGameParticipantDto, MaddoxGameStateDto } from "../game-types"
-import { checkSucceeded } from "../check-modifier"
+import { checkSucceeded, keptD20 } from "../check-modifier"
 import { assertMemberCanPlay, isMemberReadyToPlay, loadMembership } from "./campaigns"
 import { getMaddoxMaster, type MaddoxMasterDeclaration } from "./game-master"
 import { beginLive, enqueueMaddoxJob, isCampaignBusy, takeDraftChecks } from "./game-live"
@@ -568,7 +568,7 @@ function checkDto(message: MessageDoc, viewer: MessagesViewer, userById: Map<str
         roll: check.roll ?? null,
         modifierParts: check.modifierParts ?? [],
         rolledByName: byOwner ? (userById.get(check.rolledBy!) ?? "Dono") : null,
-        success: viewer.showCheckDc && check.roll ? checkSucceeded(check.roll.total, check.dc) : null,
+        success: viewer.showCheckDc && check.roll ? checkSucceeded(check.roll.total, check.dc, keptD20(check.roll)) : null,
         cancelReason: check.cancelReason ?? null,
     }
 }

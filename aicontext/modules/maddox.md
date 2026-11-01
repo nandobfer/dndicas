@@ -506,6 +506,14 @@ provavelmente exige teste; você decide)". Chave desligada, falha ou teto: narra
   quando o dado para (`onRollSettled`), a linha do resultado (`check-roll-result`) e Sucesso/Falha, e o dado some com animação
   `MADDOX_CHECK_DIE_HIDE_MS` (1,4 s) depois. Quem assiste vê o mesmo dado pelo `replay`, sem botão. Mesa recarregada depois da
   rolagem: só a linha. O painel fica montado durante toda a rolagem, para o fim da animação sempre chegar ao card.
+  O painel fica numa coluna à direita do texto (`check-roll-column`, centralizada nos dois eixos; no celular, abaixo), com o
+  "Rolar" maior (`h-11 px-6 text-sm`); quando o dado para, o botão e o aviso saem. A linha do resultado traz, ao lado do total, a
+  bolha **Sucesso**/**Falha** (CD visível) e a bolha **20 natural**/**1 natural**. Cor do card (`data-accent`): verde/vermelho do
+  desfecho com a CD visível; com a CD secreta, só o crítico pinta (verde no 20, vermelho no 1); senão, a cor do rigor — e só depois
+  que o dado para. No crítico, borda e fundo ganham o destaque animado sem fim da rolagem flutuante (`CriticalHighlight`), também
+  nos cards antigos.
+- **Regra do d20:** 20 natural no d20 mantido é sempre sucesso e 1 natural sempre falha, qualquer que seja a CD
+  (`checkSucceeded(total, cd, d20)` em `check-modifier.ts`, usado no DTO da mesa e na linha "resultado dos testes" do narrador).
 - Faixa: "o Maddox pediu um teste para você" (com "e aguarda …" se houver outros) ou "aguardando o teste de …"; o campo de texto
   fica bloqueado com o motivo; o Maddox não aparece "narrando" enquanto espera.
 - **Minha ficha**: botão no cabeçalho da mesa, só com ficha (`me.sheet`, só a minha chega ao DTO). Abre a janela `maddox-sheet`

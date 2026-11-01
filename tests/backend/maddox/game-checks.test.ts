@@ -306,6 +306,25 @@ describe("Maddox 5 — regras dos testes", () => {
         expect(rolled.check).toMatchObject({ dc: 15, success: false, roll: expect.objectContaining({ total: 7 }) })
     })
 
+    it("20 natural sempre passa e 1 natural sempre falha, qualquer que seja a CD (mesa e linha do Maddox)", async () => {
+        const table = await faithfulTable("fiel-dnd", true)
+        await untilCheckRequested(table)
+        const pending = (await game.getGameState(table.id, table.player)).messages.find((message) => message.kind === "check")!
+        // CD fora de alcance: 20 + 5 = 25 < 30.
+        await MaddoxCampaignMessageModel.updateOne({ _id: pending.id }, { $set: { "check.dc": 30 } })
+        script.push([{ text: "Lyra passa como uma sombra. O que vocês fazem?" }])
+        await fixD20(table.player, 20)
+        await checks.rollCheck(table.id, pending.id, table.player)
+        await waitForCampaignIdle(table.id)
+        const rolled = (await game.getGameState(table.id, table.owner)).messages.find((message) => message.kind === "check")!
+        expect(rolled.check).toMatchObject({ dc: 30, success: true, roll: expect.objectContaining({ total: 25 }) })
+        expect(calls.at(-1)!.userText).toMatch(/CD 30: total 25 \(d20 20, modificador \+5; vantagem: 20 e \d+; 20 natural\) — sucesso\./)
+        // 1 natural com a CD ao alcance do modificador: falha.
+        await MaddoxCampaignMessageModel.updateOne({ _id: pending.id }, { $set: { "check.dc": 5, "check.roll.selectedD20.kept": 1, "check.roll.terms.0.results": [1], "check.roll.total": 6 } })
+        const fumble = (await game.getGameState(table.id, table.owner)).messages.find((message) => message.kind === "check")!
+        expect(fumble.check).toMatchObject({ dc: 5, success: false })
+    })
+
     it("dois testes na mesma rodada: a continuação só começa depois do último (uma única vez)", async () => {
         const table = await faithfulTable()
         await untilCheckRequested(table, { tools: [{ name: "request_check", input: { personagem: "Doran", tipo: "resistencia", atributo: "Força", cd: 12, motivo: "Segurar a porta" } }] })
