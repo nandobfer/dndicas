@@ -26,6 +26,8 @@ import {
     MADDOX_COMBATANTS_MAX,
     MADDOX_NPC_STATUSES,
     MADDOX_QUEST_STATUSES,
+    MADDOX_SCENE_IMAGE_CAPTION_MAX,
+    MADDOX_SCENE_IMAGE_DESCRIPTION_MAX,
     MADDOX_TOOL_NAME_MAX,
     MADDOX_TOOL_TAG_MAX,
     MADDOX_TOOL_TAGS_MAX,
@@ -35,7 +37,8 @@ import {
 import { normalizeCatalogName } from "../catalog-markup"
 import { MaddoxCampaignMemberModel, MaddoxCampaignMemoryModel, MaddoxCampaignModel, MaddoxCharacterModel, MaddoxNpcModel, type IMaddoxCampaign, type IMaddoxCampaignMemory, type IMaddoxCharacter, type IMaddoxNpc } from "../models"
 import { MADDOX_ABILITIES, MADDOX_ABILITY_LABELS, MADDOX_SKILLS, checkAbility, checkTitle } from "../check-modifier"
-import { addDraftCheck, addDraftCombat, jobDraftChecks, jobDraftCombat, jobWorkspace, maddoxJobMeta, type MaddoxDraftCombatReward } from "./game-live"
+import { addDraftCheck, addDraftCombat, addDraftNpcPortrait, jobDraftChecks, jobDraftCombat, jobDraftSceneImage, jobWorkspace, maddoxJobMeta, setDraftSceneImage, type MaddoxDraftCombatReward } from "./game-live"
+import { catalogEntityTypeSchema } from "@/features/mcp/server/catalog-schemas"
 import type { TacticalDraftCombatant } from "./tactical-combat"
 
 /**
@@ -123,6 +126,53 @@ const memoryDto = (memory: IMaddoxCampaignMemory) => ({
 
 const escapeRegex = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
 
+type SaveNpcInput = { name: string; newName?: string; publicDescription?: string; masterNotes?: string; visibility?: (typeof MADDOX_VISIBILITIES)[number]; status?: (typeof MADDOX_NPC_STATUSES)[number] }
+
+async function saveNpc(context: MaddoxToolContext, input: SaveNpcInput): Promise<{ saved: true; created: boolean; name: string; truncated?: string[]; note?: string }> {
+    const fit = fitter()
+    const name = clip(input.name, MADDOX_TOOL_NAME_MAX)
+    const nameKey = keyOf(name)
+    if (!nameKey) throw new MaddoxToolError("Informe o nome do NPC.")
+    const set: Record<string, unknown> = {}
+    if (input.publicDescription !== undefined) set.publicDescription = fit.fit("publicDescription", input.publicDescription)
+    if (input.masterNotes !== undefined) set.masterNotes = fit.fit("masterNotes", input.masterNotes)
+    if (input.visibility) set.visibility = input.visibility
+    if (input.status) set.status = input.status
+    const existing = await MaddoxNpcModel.findOne({ campaignId: context.campaignId, nameKey }).select("_id name").lean<{ _id: Types.ObjectId; name: string }>()
+    if (existing) {
+        // A grafia gravada é a canônica: só muda com `newName` explícito.
+        const newName = input.newName?.trim() ? clip(input.newName, MADDOX_TOOL_NAME_MAX) : null
+        if (newName && keyOf(newName) !== nameKey) {
+            const taken = await MaddoxNpcModel.exists({ campaignId: context.campaignId, nameKey: keyOf(newName), _id: { $ne: existing._id } })
+            if (taken) throw new MaddoxToolError(`Já existe um NPC chamado "${newName}" nesta campanha.`)
+        }
+        if (newName) Object.assign(set, { name: newName, nameKey: keyOf(newName) })
+        await MaddoxNpcModel.updateOne({ _id: existing._id }, { $set: set })
+        return { saved: true, created: false, name: newName ?? existing.name, ...fit.notice() }
+    }
+    await MaddoxNpcModel.create({ campaignId: context.campaignId, name, nameKey, ...set })
+    return { saved: true, created: true, name, ...fit.notice() }
+}
+
+/**
+ * Retrato pedido em `save_npc { gerarRetrato }` (Maddox 10): só na narração, com a situação "Retrato de NPC" ativa e a
+ * chave da campanha ligada, para NPC que os jogadores conhecem e ainda sem retrato. Fica no job e só é pedido depois que a
+ * narração é gravada. O NPC é salvo de qualquer jeito: o retorno explica por que o retrato não foi pedido.
+ */
+async function requestNpcPortraitDraft(context: MaddoxToolContext, name: string): Promise<string> {
+    const meta = context.jobId ? maddoxJobMeta(String(context.campaignId), context.jobId) : null
+    if (!meta || meta.kind !== "narration") return "não pedido: retratos só são pedidos na narração do turno do mestre."
+    const npc = await MaddoxNpcModel.findOne({ campaignId: context.campaignId, nameKey: keyOf(name) }).select("_id visibility portraitUrl").lean<Pick<IMaddoxNpc, "_id" | "visibility" | "portraitUrl">>()
+    if (!npc) return "não pedido: NPC não encontrado."
+    if (npc.visibility !== "players") return "não pedido: só NPCs que os jogadores já conhecem ganham retrato."
+    if (npc.portraitUrl) return "não pedido: este NPC já tem retrato."
+    const { checkSceneImageRequest, loadSceneImageEnvironment } = await import("./scene-images")
+    const decision = await checkSceneImageRequest({ campaignId: context.campaignId, source: "npc-portrait", turnNumber: context.turnNumber, situation: "npc-portrait" }, await loadSceneImageEnvironment())
+    if (!decision.ok) return `não pedido: ${decision.reason}`
+    if (!addDraftNpcPortrait(String(context.campaignId), context.jobId!, String(npc._id))) return "não pedido: esta narração já terminou."
+    return "pedido: o retrato é pintado depois que a narração for gravada."
+}
+
 export const MADDOX_MASTER_TOOLS: readonly MaddoxMasterTool[] = [
     define({
         name: "get_campaign_state",
@@ -193,33 +243,15 @@ export const MADDOX_MASTER_TOOLS: readonly MaddoxMasterTool[] = [
             masterNotes: optionalText.describe("Conhecimento exclusivo do mestre"),
             visibility: z.enum(MADDOX_VISIBILITIES).optional().describe("players = os jogadores já conhecem; master = só o mestre"),
             status: z.enum(MADDOX_NPC_STATUSES).optional(),
+            gerarRetrato: z.boolean().optional().describe("true = NPC importante que os jogadores conhecem: ganha um retrato (uma vez), se a situação \"Retrato de NPC\" estiver ativa"),
         }),
         async execute(context, input) {
-            const fit = fitter()
-            const name = clip(input.name, MADDOX_TOOL_NAME_MAX)
-            const nameKey = keyOf(name)
-            if (!nameKey) throw new MaddoxToolError("Informe o nome do NPC.")
-            const set: Record<string, unknown> = {}
-            if (input.publicDescription !== undefined) set.publicDescription = fit.fit("publicDescription", input.publicDescription)
-            if (input.masterNotes !== undefined) set.masterNotes = fit.fit("masterNotes", input.masterNotes)
-            if (input.visibility) set.visibility = input.visibility
-            if (input.status) set.status = input.status
-            const existing = await MaddoxNpcModel.findOne({ campaignId: context.campaignId, nameKey }).select("_id name").lean<{ _id: Types.ObjectId; name: string }>()
-            if (existing) {
-                // A grafia gravada é a canônica: só muda com `newName` explícito.
-                const newName = input.newName?.trim() ? clip(input.newName, MADDOX_TOOL_NAME_MAX) : null
-                if (newName && keyOf(newName) !== nameKey) {
-                    const taken = await MaddoxNpcModel.exists({ campaignId: context.campaignId, nameKey: keyOf(newName), _id: { $ne: existing._id } })
-                    if (taken) throw new MaddoxToolError(`Já existe um NPC chamado "${newName}" nesta campanha.`)
-                }
-                if (newName) Object.assign(set, { name: newName, nameKey: keyOf(newName) })
-                await MaddoxNpcModel.updateOne({ _id: existing._id }, { $set: set })
-                return { saved: true, created: false, name: newName ?? existing.name, ...fit.notice() }
-            }
-            await MaddoxNpcModel.create({ campaignId: context.campaignId, name, nameKey, ...set })
-            return { saved: true, created: true, name, ...fit.notice() }
+            const saved = await saveNpc(context, input)
+            if (!input.gerarRetrato) return saved
+            return { ...saved, retrato: await requestNpcPortraitDraft(context, saved.name) }
         },
     }),
+
     define({
         name: "search_memories",
         description:
@@ -749,8 +781,81 @@ export const MADDOX_TACTICAL_TOOLS: readonly MaddoxMasterTool[] = [
     }),
 ]
 
-/** Todas as ferramentas do narrador (persistência, testes, combate e a vez dos adversários). */
-export const MADDOX_NARRATOR_TOOLS: readonly MaddoxMasterTool[] = [...MADDOX_MASTER_TOOLS, ...MADDOX_COMBAT_TOOLS, ...MADDOX_TACTICAL_TOOLS]
+// ── Imagens nas cenas (Maddox 10) ──────────────────────────────────────────────
+
+export const MADDOX_SCENE_IMAGE_TOOL_NAME = "request_scene_image"
+
+const keyList = (values: readonly string[]) => values.join(", ") || "nenhum"
+
+/**
+ * Ferramenta da imagem da cena: o Maddox pede quando a narração é uma das situações ativas. O servidor confere situação,
+ * chave da campanha, Gerador e frequência (recusa com o motivo, sem gravar) e quem aparece (nome desconhecido = erro com as
+ * opções). O pedido fica no job e só vira imagem depois que a narração é gravada.
+ */
+export const MADDOX_SCENE_IMAGE_TOOLS: readonly MaddoxMasterTool[] = [
+    define({
+        name: MADDOX_SCENE_IMAGE_TOOL_NAME,
+        description: [
+            'Pede uma ILUSTRAÇÃO da cena desta narração, quando ela for uma das situações de imagem ativas (lista nas instruções, seção "Imagens da cena").',
+            "Uma por narração. Descreva o que os jogadores VEEM (lugar, luz, clima, quem aparece, posições, ação), sem segredos do mestre.",
+            "Informe quem aparece (personagens e NPCs pelo nome exato; entidades do catálogo por tipo e id): a aparência cadastrada deles entra como referência.",
+            "Fim de batalha gera imagem sozinho (pela cenaFinal do end_combat) e retrato de NPC é pelo save_npc { gerarRetrato }.",
+        ].join(" "),
+        readOnly: false,
+        input: z.object({
+            situacao: z.string().min(1).describe("Chave da situação ativa (ex.: new-location, climax ou o id de uma personalizada)"),
+            descricaoVisual: z.string().min(1).describe("A cena em detalhe para o ilustrador, em português, só o que os jogadores veem"),
+            legenda: z.string().optional().describe(`Uma frase curta para os jogadores (até ${MADDOX_SCENE_IMAGE_CAPTION_MAX} caracteres)`),
+            personagens: z.array(z.string().min(1)).max(10).optional().describe("Nomes exatos dos personagens jogadores que aparecem"),
+            npcs: z.array(z.string().min(1)).max(10).optional().describe("Nomes exatos dos NPCs (conhecidos pelos jogadores) que aparecem"),
+            catalogo: z
+                .array(z.object({ tipo: catalogEntityTypeSchema, id: z.string().trim().min(1).max(200) }))
+                .max(6)
+                .optional()
+                .describe("Entidades do catálogo que aparecem (monstros, itens…), por tipo e id de search_catalog"),
+        }),
+        async execute(context, input) {
+            const meta = context.jobId ? maddoxJobMeta(String(context.campaignId), context.jobId) : null
+            if (!meta || meta.kind !== "narration") throw new MaddoxToolError("Imagens só são pedidas na narração do turno do mestre.")
+            if (jobDraftSceneImage(String(context.campaignId), context.jobId!)) throw new MaddoxToolError("Já existe uma imagem pedida nesta narração: uma por narração.")
+            if (input.situacao === "combat-end") throw new MaddoxToolError("O fim de batalha gera imagem sozinho pela cenaFinal do end_combat: não peça por aqui.")
+            if (input.situacao === "npc-portrait") throw new MaddoxToolError("Retrato de NPC é pedido pelo save_npc com gerarRetrato: true.")
+            const { checkSceneImageRequest, loadSceneImageEnvironment } = await import("./scene-images")
+            const decision = await checkSceneImageRequest({ campaignId: context.campaignId, source: "tool", turnNumber: context.turnNumber, situation: input.situacao }, await loadSceneImageEnvironment())
+            if (!decision.ok) throw new MaddoxToolError(`Imagem não pedida: ${decision.reason} Continue a narração sem ela.`)
+
+            const characters = await MaddoxCharacterModel.find({ campaignId: context.campaignId, status: "active", "interview.status": "done" }).select("name").lean<{ name: string }[]>()
+            const knownCharacters = new Map(characters.map((item) => [keyOf(item.name), item.name]))
+            const missingCharacters = (input.personagens ?? []).filter((name) => !knownCharacters.has(keyOf(name)))
+            if (missingCharacters.length) throw new MaddoxToolError(`Personagem desconhecido: ${missingCharacters.join(", ")}. Personagens: ${keyList(characters.map((item) => item.name))}.`)
+            const npcs = await MaddoxNpcModel.find({ campaignId: context.campaignId, visibility: "players" }).select("name").lean<{ name: string }[]>()
+            const knownNpcs = new Map(npcs.map((item) => [keyOf(item.name), item.name]))
+            const missingNpcs = (input.npcs ?? []).filter((name) => !knownNpcs.has(keyOf(name)))
+            if (missingNpcs.length) throw new MaddoxToolError(`NPC desconhecido dos jogadores: ${missingNpcs.join(", ")}. NPCs conhecidos: ${keyList(npcs.map((item) => item.name))}. Registre com save_npc (visibility players) antes, se for o caso.`)
+            const catalog = input.catalogo ?? []
+            if (catalog.length) {
+                const { getCatalogEntity } = await import("@/features/mcp/server/catalog-entity-service")
+                for (const ref of catalog) {
+                    if (!(await getCatalogEntity({ type: ref.tipo, id: ref.id }))) throw new MaddoxToolError(`${ref.tipo} "${ref.id}" não está no catálogo. Confirme o id com search_catalog.`)
+                }
+            }
+            const fit = fitter()
+            const stored = setDraftSceneImage(String(context.campaignId), context.jobId!, {
+                situation: input.situacao,
+                description: fit.fit("descricaoVisual", input.descricaoVisual, MADDOX_SCENE_IMAGE_DESCRIPTION_MAX),
+                caption: fit.fit("legenda", input.legenda, MADDOX_SCENE_IMAGE_CAPTION_MAX),
+                characters: [...new Set((input.personagens ?? []).map((name) => knownCharacters.get(keyOf(name))!))],
+                npcs: [...new Set((input.npcs ?? []).map((name) => knownNpcs.get(keyOf(name))!))],
+                catalog: catalog.map((ref) => ({ type: ref.tipo, id: ref.id })),
+            })
+            if (!stored) throw new MaddoxToolError("Esta narração já terminou.")
+            return { requested: true, note: "A imagem é pintada depois que a narração for gravada. Continue a narração normalmente, sem citar a imagem.", ...fit.notice() }
+        },
+    }),
+]
+
+/** Todas as ferramentas do narrador (persistência, testes, combate, a vez dos adversários e a imagem da cena). */
+export const MADDOX_NARRATOR_TOOLS: readonly MaddoxMasterTool[] = [...MADDOX_MASTER_TOOLS, ...MADDOX_COMBAT_TOOLS, ...MADDOX_TACTICAL_TOOLS, ...MADDOX_SCENE_IMAGE_TOOLS]
 
 export function findMaddoxTool(name: string): MaddoxMasterTool | undefined {
     return MADDOX_NARRATOR_TOOLS.find((tool) => tool.name === name)
@@ -776,15 +881,17 @@ export const MADDOX_CHECK_TOOL_NAME = "request_check"
 
 /**
  * Ferramentas no formato da AI SDK (a SDK `ai` entra sob demanda). `checks: false` tira o `request_check`; `combat: false`
- * tira as do combate (Maddox 6); `tactical: false` tira as da vez dos adversários (Maddox 7).
+ * tira as do combate (Maddox 6); `tactical: false` tira as da vez dos adversários (Maddox 7); `sceneImages: false` tira a da
+ * imagem da cena (Maddox 10).
  */
-export async function buildMaddoxAiTools(context: MaddoxToolContext, options: { checks?: boolean; combat?: boolean; tactical?: boolean } = {}): Promise<ToolSet> {
+export async function buildMaddoxAiTools(context: MaddoxToolContext, options: { checks?: boolean; combat?: boolean; tactical?: boolean; sceneImages?: boolean } = {}): Promise<ToolSet> {
     const { dynamicTool } = await import("ai")
     const tools: ToolSet = {}
     for (const def of MADDOX_NARRATOR_TOOLS) {
         if (def.name === MADDOX_CHECK_TOOL_NAME && !options.checks) continue
         if ((MADDOX_COMBAT_TOOL_NAMES as readonly string[]).includes(def.name) && !options.combat) continue
         if ((MADDOX_TACTICAL_TOOL_NAMES as readonly string[]).includes(def.name) && !options.tactical) continue
+        if (def.name === MADDOX_SCENE_IMAGE_TOOL_NAME && !options.sceneImages) continue
         tools[def.name] = dynamicTool({
             description: def.description,
             inputSchema: def.input,

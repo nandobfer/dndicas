@@ -289,9 +289,71 @@ export const MADDOX_COMBATANTS_MAX = 30
 export const MADDOX_COMBAT_LONG_TURNS = 6
 /** Consulta do JEV "Início ou fim de combate" (orientação ao narrador): passou disso, a orientação é ignorada. */
 export const MADDOX_COMBAT_HINT_TIMEOUT_MS = 20_000
-/** Situação da imagem de fim de batalha (a geração é do Maddox 10). */
-export const MADDOX_COMBAT_IMAGE_STATUSES = ["awaiting-feature", "skipped"] as const
+/**
+ * Situação da imagem de fim de batalha: `requested` = imagem pedida (Maddox 10, `maddox_scene_images`), `skipped` = sem
+ * situação ativa, sem cena final ou fora da frequência; `awaiting-feature` = combates encerrados antes do Maddox 10.
+ */
+export const MADDOX_COMBAT_IMAGE_STATUSES = ["awaiting-feature", "requested", "skipped"] as const
 export type MaddoxCombatImageStatus = (typeof MADDOX_COMBAT_IMAGE_STATUSES)[number]
+
+// ── Imagens nas cenas (Maddox 10) ──────────────────────────────────────────────
+
+/** Situações fixas em que o Maddox gera imagem (cada uma com chave ativa na aba). */
+export const MADDOX_SCENE_IMAGE_SITUATIONS = ["campaign-opening", "new-location", "combat-end", "climax", "important-npc", "quest-completed", "npc-portrait"] as const
+export type MaddoxSceneImageSituation = (typeof MADDOX_SCENE_IMAGE_SITUATIONS)[number]
+
+export const MADDOX_SCENE_IMAGE_SITUATION_DEFS: Record<MaddoxSceneImageSituation, { label: string; description: string }> = {
+    "campaign-opening": { label: "Abertura da campanha", description: "A primeira narração da campanha, que apresenta o cenário e a situação inicial." },
+    "new-location": { label: "Novo local ou cenário", description: "O grupo chega a um lugar que ainda não apareceu na história ou o cenário muda de forma marcante." },
+    "combat-end": { label: "Fim de batalha", description: "Automática: quando um combate termina, a cena final escrita pelo Maddox vira imagem." },
+    climax: { label: "Clímax ou cena importante", description: "Um momento decisivo, uma revelação ou uma virada da história." },
+    "important-npc": { label: "Primeiro encontro com NPC importante", description: "Um NPC que vai ter peso na história aparece pela primeira vez diante do grupo." },
+    "quest-completed": { label: "Missão concluída", description: "Uma missão termina (com sucesso ou não) e a cena mostra o desfecho." },
+    "npc-portrait": { label: "Retrato de NPC", description: "Quando o Maddox marca um NPC como importante, ele ganha um retrato (uma vez) que aparece em \"NPCs conhecidos\"." },
+}
+
+/** Origem da imagem: ferramenta do narrador, fim de combate, botão do dono ou retrato de NPC. */
+export const MADDOX_SCENE_IMAGE_SOURCES = ["tool", "combat-end", "manual", "npc-portrait"] as const
+export type MaddoxSceneImageSource = (typeof MADDOX_SCENE_IMAGE_SOURCES)[number]
+
+/** Vaga ocupada: só as automáticas (`auto`) respeitam o intervalo e a regra de uma por turno. */
+export const MADDOX_SCENE_IMAGE_SLOTS = ["auto", "manual", "portrait"] as const
+export type MaddoxSceneImageSlot = (typeof MADDOX_SCENE_IMAGE_SLOTS)[number]
+
+export const MADDOX_SCENE_IMAGE_STATUSES = ["pending", "generating", "done", "failed", "skipped"] as const
+export type MaddoxSceneImageStatus = (typeof MADDOX_SCENE_IMAGE_STATUSES)[number]
+
+/** Intervalo mínimo entre imagens automáticas, em turnos do mestre (0 = sem intervalo). */
+export const MADDOX_SCENE_IMAGE_GAP_MAX = 50
+export const MADDOX_SCENE_IMAGE_GAP_DEFAULT = 3
+/** Teto de imagens por campanha em 24 h (todas as origens). */
+export const MADDOX_SCENE_IMAGE_DAILY_MAX = 100
+export const MADDOX_SCENE_IMAGE_DAILY_DEFAULT = 10
+export const MADDOX_SCENE_IMAGE_WINDOW_MS = 24 * 60 * 60 * 1000
+/** Situações personalizadas criadas pelo admin. */
+export const MADDOX_SCENE_IMAGE_CUSTOM_MAX = 10
+export const MADDOX_SCENE_IMAGE_CUSTOM_LABEL_MAX = 60
+export const MADDOX_SCENE_IMAGE_CUSTOM_DESCRIPTION_MAX = 300
+export const MADDOX_SCENE_IMAGE_STYLE_MAX = 2000
+/** Legenda pública e descrição visual (o teto de proteção corta e avisa, nunca invalida). */
+export const MADDOX_SCENE_IMAGE_CAPTION_MAX = 160
+export const MADDOX_SCENE_IMAGE_DESCRIPTION_MAX = 4000
+/** Imagens de referência enviadas ao gerador (personagens → NPCs → catálogo). */
+export const MADDOX_SCENE_IMAGE_REFERENCES_MAX = 6
+export const MADDOX_SCENE_IMAGE_REFERENCE_BYTES_MAX = 5 * 1024 * 1024
+export const MADDOX_SCENE_IMAGE_REFERENCE_TIMEOUT_MS = 10_000
+/** Teto de uma geração de imagem; passado, a imagem falha. */
+export const MADDOX_SCENE_IMAGE_TIMEOUT_MS = 120_000
+/** Imagem `pending`/`generating` há mais que isso (processo reiniciado) vira falha. */
+export const MADDOX_SCENE_IMAGE_STALE_MS = 5 * 60 * 1000
+/** Gerações de imagem simultâneas no processo. */
+export const MADDOX_SCENE_IMAGE_CONCURRENCY = 2
+/** Descrição da cena pelo narrador no pedido manual (geração curta e efêmera). */
+export const MADDOX_SCENE_IMAGE_DESCRIBE_TIMEOUT_MS = 30_000
+/** JEV "Gerar imagem na cena": passou disso, gera sem o filtro. */
+export const MADDOX_SCENE_IMAGE_JEV_TIMEOUT_MS = 20_000
+export const MADDOX_SCENE_IMAGE_CONSUMPTION_ORIGIN = "maddox-scene-image"
+export const MADDOX_SCENE_IMAGE_FAILED_MESSAGE = "Não foi possível gerar a imagem desta cena."
 
 // ── Combate tático (Maddox 7) ──────────────────────────────────────────────────
 
@@ -411,7 +473,7 @@ export const MADDOX_JEV_DECISION_DEFS: Record<MaddoxJevDecision, { label: string
     "combat-option-cost": { label: "Custo de ação no combate", description: "Se uma habilidade ou talento da ficha gasta Ação, Ação bônus ou Reação (e o gatilho da reação), quando o texto não deixa claro. O resultado fica em cache." },
     "master-knowledge": { label: "Conhecimento do mestre", description: "Um fato persistido pode ser visto pelos jogadores ou é conhecimento exclusivo do Maddox." },
     "interview-complete": { label: "Fim da entrevista", description: "A entrevista de cenário ou de personagem já tem base suficiente para concluir." },
-    "scene-image": { label: "Gerar imagem na cena", description: "A situação é uma das configuradas para gerar imagem na narração." },
+    "scene-image": { label: "Gerar imagem na cena", description: "Antes de gerar a imagem pedida pelo Maddox, o JEV confere se a narração corresponde mesmo à situação configurada (filtro contra excesso)." },
 }
 
 // ── OpenCode ──────────────────────────────────────────────────────────────────

@@ -51,6 +51,7 @@ const listItem = (over: Partial<MaddoxCampaignListItemDto> = {}): MaddoxCampaign
     startedAt: null,
     scenarioStatus: "pending",
     showCheckDc: false,
+    sceneImages: true,
     startingLevel: null,
     startingStage: "",
     createdAt: "2026-10-30T10:00:00.000Z",

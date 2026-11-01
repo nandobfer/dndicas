@@ -13,12 +13,13 @@ import { createMaddoxCampaignSchema, type CreateMaddoxCampaignInput } from "../.
 import type { MaddoxCampaignDetailDto } from "../../campaign-types"
 import { useUpdateMaddoxCampaign } from "../../hooks/useMaddoxCampaigns"
 import { CheckDcField } from "./CheckDcField"
+import { SceneImagesField } from "./SceneImagesField"
 import { StartingLevelField } from "./StartingLevelField"
 import { RigorCard } from "./RigorCard"
 
 /** Dono edita o nome e, só antes da entrevista de cenário, o grau de rigor. */
 export function EditCampaignDialog({ campaign, open, onOpenChange }: { campaign: MaddoxCampaignDetailDto; open: boolean; onOpenChange: (open: boolean) => void }) {
-    const form = useForm<CreateMaddoxCampaignInput>({ resolver: zodResolver(createMaddoxCampaignSchema), defaultValues: { name: campaign.name, rigor: campaign.rigor, showCheckDc: campaign.showCheckDc } })
+    const form = useForm<CreateMaddoxCampaignInput>({ resolver: zodResolver(createMaddoxCampaignSchema), defaultValues: { name: campaign.name, rigor: campaign.rigor, showCheckDc: campaign.showCheckDc, sceneImages: campaign.sceneImages } })
     const update = useUpdateMaddoxCampaign(campaign.id)
     const rigorLocked = campaign.rigorLocked
     // Rascunho do nível enquanto o diálogo está aberto (`undefined` = o valor atual da campanha).
@@ -28,8 +29,8 @@ export function EditCampaignDialog({ campaign, open, onOpenChange }: { campaign:
     const levelEditable = campaign.status === "lobby" || campaign.status === "interview"
 
     useEffect(() => {
-        if (open) form.reset({ name: campaign.name, rigor: campaign.rigor, showCheckDc: campaign.showCheckDc })
-    }, [open, campaign.name, campaign.rigor, campaign.showCheckDc, form])
+        if (open) form.reset({ name: campaign.name, rigor: campaign.rigor, showCheckDc: campaign.showCheckDc, sceneImages: campaign.sceneImages })
+    }, [open, campaign.name, campaign.rigor, campaign.showCheckDc, campaign.sceneImages, form])
 
     const close = () => {
         setLevelDraft(undefined)
@@ -41,6 +42,7 @@ export function EditCampaignDialog({ campaign, open, onOpenChange }: { campaign:
             ...(values.name !== campaign.name ? { name: values.name } : {}),
             ...(!rigorLocked && values.rigor !== campaign.rigor ? { rigor: values.rigor } : {}),
             ...((values.showCheckDc ?? false) !== campaign.showCheckDc ? { showCheckDc: values.showCheckDc ?? false } : {}),
+            ...((values.sceneImages ?? true) !== campaign.sceneImages ? { sceneImages: values.sceneImages ?? true } : {}),
             ...(levelEditable && MADDOX_SHEET_RIGORS.includes(values.rigor) && startingLevel !== null && startingLevel !== campaign.startingLevel ? { startingLevel } : {}),
         }
         if (Object.keys(changes).length === 0) return close()
@@ -62,6 +64,7 @@ export function EditCampaignDialog({ campaign, open, onOpenChange }: { campaign:
                     </Field>
                     <RigorCard form={form} disabled={rigorLocked} />
                     <CheckDcField form={form} />
+                    <SceneImagesField form={form} />
                     {levelEditable && <StartingLevelField rigor={formRigor} value={startingLevel} onChange={setLevelDraft} disabled={update.isPending} />}
                     <GlassModalFooter>
                         <Button type="button" variant="ghost" onClick={close} disabled={update.isPending}>

@@ -50,6 +50,7 @@ const campaign = (over: Partial<MaddoxCampaignDetailDto> = {}): MaddoxCampaignDe
     startedAt: null,
     scenarioStatus: "in-progress",
     showCheckDc: false,
+    sceneImages: true,
     startingLevel: null,
     startingStage: "",
     createdAt: "2026-10-30T10:00:00.000Z",

@@ -290,13 +290,19 @@ async function generate(args: GenerateArgs, sink: MaddoxMasterSink): Promise<str
     // Combate narrativo (Maddox 6): ferramentas só nas narrações dos graus com combate registrado.
     const tactical = usesTacticalCombat(context.campaign.rigor) && args.task.kind !== "answer"
     const combat = (usesCombat(context.campaign.rigor) || tactical) && args.task.kind !== "answer"
+    // Imagens nas cenas (Maddox 10): só nas narrações; respostas a perguntas não pedem imagem.
+    if (args.task.kind !== "answer") {
+        const { narratorSceneImageContext } = await import("./scene-images")
+        promptContext.sceneImages = await narratorSceneImageContext(context.campaign, args.turnNumber)
+    }
+    const sceneImages = Boolean(promptContext.sceneImages?.situations.length)
 
     if (model.provider === "opencode") {
         const [{ ensureMaddoxMcp }, { ensureMaddoxSession }, { createMaddoxTurnToken }, { streamAi }] = await Promise.all([import("./opencode-mcp"), import("./opencode-sessions"), import("./master-turn-token"), import("@/lib/ai/stream")])
         await ensureMaddoxMcp(settings)
         const sessionId = await ensureMaddoxSession({ campaignId: args.campaignId, purpose: "narrator", agent: model.agent, title: `Maddox · narrador · ${context.campaign.name}` })
         const turnToken = createMaddoxTurnToken({ campaignId: args.campaignId, jobId: args.jobId, turnNumber: args.turnNumber })
-        const instructions = buildNarratorInstructions(promptContext, { kind: "mcp", server: MADDOX_MCP_SERVER_NAME, turnToken, checks, combat, tactical })
+        const instructions = buildNarratorInstructions(promptContext, { kind: "mcp", server: MADDOX_MCP_SERVER_NAME, turnToken, checks, combat, tactical, sceneImages })
         for await (const event of streamAi({
             provider: "opencode",
             model: model.model,
@@ -315,7 +321,7 @@ async function generate(args: GenerateArgs, sink: MaddoxMasterSink): Promise<str
         }
     } else {
         failure = await generateWithTools(
-            { model, instructions: buildNarratorInstructions(promptContext, { kind: "ai-sdk" }), userText, campaignId, turnNumber: args.turnNumber, jobId: args.jobId, checks, combat, tactical, signal: args.signal },
+            { model, instructions: buildNarratorInstructions(promptContext, { kind: "ai-sdk" }), userText, campaignId, turnNumber: args.turnNumber, jobId: args.jobId, checks, combat, tactical, sceneImages, signal: args.signal },
             stream,
             sink,
         )
@@ -341,6 +347,7 @@ interface ToolGeneration {
     checks: boolean
     combat: boolean
     tactical: boolean
+    sceneImages: boolean
     signal?: AbortSignal
 }
 
@@ -361,7 +368,7 @@ async function generateWithTools(input: ToolGeneration, stream: ReturnType<typeo
             model: prepared.model,
             instructions: input.instructions,
             messages: [{ role: "user", content: input.userText }],
-            tools: await buildMaddoxAiTools({ campaignId: input.campaignId, turnNumber: input.turnNumber, jobId: input.jobId }, { checks: input.checks, combat: input.combat, tactical: input.tactical }),
+            tools: await buildMaddoxAiTools({ campaignId: input.campaignId, turnNumber: input.turnNumber, jobId: input.jobId }, { checks: input.checks, combat: input.combat, tactical: input.tactical, sceneImages: input.sceneImages }),
             stopWhen: stepCountIs(MADDOX_NARRATOR_MAX_STEPS),
             abortSignal: input.signal,
             providerOptions: prepared.providerOptions,

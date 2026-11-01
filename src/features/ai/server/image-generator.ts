@@ -1,5 +1,5 @@
 import { DomainError } from "@/lib/api/route"
-import { generateAiImage } from "@/lib/ai/image"
+import { generateAiImage, type AiReferenceImage } from "@/lib/ai/image"
 import { AiProviderError } from "@/lib/ai/errors"
 import { isAiImageProviderId } from "@/lib/ai/providers"
 import { loggerFor } from "@/lib/logger"
@@ -28,6 +28,8 @@ export interface StoredGeneratedImage {
     key: string
     url: string
     mimeType: string
+    /** Imagens de referência que chegaram ao modelo (0 = só texto). */
+    referencesUsed?: number
 }
 
 export interface GenerateDndImageInput {
@@ -37,6 +39,15 @@ export interface GenerateDndImageInput {
     preferredAspectRatio?: string
     formData?: unknown
     userId: string
+    /** Imagens de referência (aparência de personagens, NPCs etc.); ignoradas se o modelo não aceitar. */
+    referenceImages?: readonly AiReferenceImage[]
+    /** Chave no storage (padrão `ai/generated/{usuário}/{ts}`); a extensão vem do tipo da imagem. */
+    storageKey?: string
+    /** Origem no painel de consumo (padrão: Gerador de imagens). */
+    consumptionOrigin?: string
+    /** Assunto no painel de consumo (padrão: o rótulo da entidade). */
+    consumptionSubject?: string | null
+    signal?: AbortSignal
 }
 
 const log = loggerFor({ module: "ai", feature: "image-generator" })
@@ -85,7 +96,9 @@ export async function generateAndStoreDndImage(input: GenerateDndImageInput): Pr
             model: settings.model,
             prompt,
             aspectRatio,
-            consumption: { origin: IMAGE_GENERATOR_CONSUMPTION_ORIGIN, subject: input.entityLabel ?? null },
+            referenceImages: input.referenceImages,
+            signal: input.signal,
+            consumption: { origin: input.consumptionOrigin ?? IMAGE_GENERATOR_CONSUMPTION_ORIGIN, subject: input.consumptionSubject !== undefined ? input.consumptionSubject : (input.entityLabel ?? null) },
         })
     } catch (error) {
         if (error instanceof AiProviderError) {
@@ -97,8 +110,8 @@ export async function generateAndStoreDndImage(input: GenerateDndImageInput): Pr
 
     if (generated.buffer.byteLength > MAX_GENERATED_IMAGE_SIZE_BYTES) throw new GeneratedImageTooLargeError()
 
-    const key = `ai/generated/${input.userId}/${Date.now()}.${getImageExtensionFromMimeType(generated.mimeType)}`
+    const key = `${input.storageKey ?? `ai/generated/${input.userId}/${Date.now()}`}.${getImageExtensionFromMimeType(generated.mimeType)}`
     await uploadFile(key, generated.buffer, generated.mimeType)
     log.info({ userId: input.userId, key, provider: settings.provider, model: settings.model, durationMs: generated.durationMs }, "[ai] imagem gerada")
-    return { key, url: buildFileProxyUrl(key), mimeType: generated.mimeType }
+    return { key, url: buildFileProxyUrl(key), mimeType: generated.mimeType, referencesUsed: generated.referencesUsed }
 }

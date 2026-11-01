@@ -56,6 +56,8 @@ export interface IMaddoxCampaign {
     }
     /** Mostra a CD dos testes aos jogadores (Maddox 5); padrão = secreta. */
     showCheckDc: boolean
+    /** Imagens automáticas nas cenas (Maddox 10): o dono desliga na campanha; o pedido manual continua. */
+    sceneImages: boolean
     /** Nível inicial da mesa (graus com ficha), definido na entrevista de cenário; `null` = cada personagem informa. */
     startingLevel?: number | null
     /** Estágio de experiência inicial (graus narrativos), adaptado ao cenário. */
@@ -103,6 +105,7 @@ const MaddoxCampaignSchema = new Schema<IMaddoxCampaign>(
             combatActor: { type: new Schema({ combatId: Schema.Types.ObjectId, actorKey: String, memberId: Schema.Types.ObjectId, offlineSince: { type: Date, default: null } }, { _id: false }), default: null },
         },
         showCheckDc: { type: Boolean, default: false },
+        sceneImages: { type: Boolean, default: true },
         startingLevel: { type: Number, default: null, min: 1, max: 20 },
         startingStage: { type: String, default: "" },
         state: {

@@ -88,10 +88,26 @@ export type MaddoxDraftCombatEvent =
           finalScene: string
       }
 
+/**
+ * Imagem da cena pedida pelo narrador (`request_scene_image`, Maddox 10): como os testes, só vira pedido depois que a
+ * narração é gravada (ligada a ela); se a geração falhar, some com o job.
+ */
+export interface MaddoxDraftSceneImage {
+    situation: string
+    description: string
+    caption: string
+    characters: string[]
+    npcs: string[]
+    catalog: { type: string; id: string }[]
+}
+
 interface MaddoxJobState {
     meta: MaddoxJobMeta | null
     checks: MaddoxDraftCheck[]
     combat: MaddoxDraftCombatEvent[]
+    sceneImage: MaddoxDraftSceneImage | null
+    /** NPCs marcados para retrato (`save_npc { gerarRetrato }`), pelo id. */
+    npcPortraits: string[]
     /** Combate tático (Maddox 7): cópia de trabalho do combate e das fichas mexida pelas ferramentas dos adversários. */
     workspace: unknown
 }
@@ -139,7 +155,7 @@ export function enqueueMaddoxJob(campaignId: string, label: string, run: (job: M
     hub.pending += 1
     const jobId = randomUUID()
     const next = hub.tail.then(async () => {
-        hub.jobs.set(jobId, { meta, checks: [], combat: [], workspace: null })
+        hub.jobs.set(jobId, { meta, checks: [], combat: [], sceneImage: null, npcPortraits: [], workspace: null })
         try {
             await run({ jobId })
         } catch (error) {
@@ -219,6 +235,37 @@ export function takeDraftCombat(campaignId: string, jobId: string): MaddoxDraftC
     const events = job.combat
     job.combat = []
     return events
+}
+
+/** Imagem da cena já pedida neste job (uma por narração). */
+export function jobDraftSceneImage(campaignId: string, jobId: string): MaddoxDraftSceneImage | null {
+    return hubs.get(campaignId)?.jobs.get(jobId)?.sceneImage ?? null
+}
+
+/** Guarda a imagem pedida pelo narrador no job em andamento; `false` se o job não está rodando. */
+export function setDraftSceneImage(campaignId: string, jobId: string, image: MaddoxDraftSceneImage): boolean {
+    const job = hubs.get(campaignId)?.jobs.get(jobId)
+    if (!job) return false
+    job.sceneImage = image
+    return true
+}
+
+/** Marca um NPC para retrato no job em andamento; `false` se o job não está rodando. */
+export function addDraftNpcPortrait(campaignId: string, jobId: string, npcId: string): boolean {
+    const job = hubs.get(campaignId)?.jobs.get(jobId)
+    if (!job) return false
+    if (!job.npcPortraits.includes(npcId)) job.npcPortraits.push(npcId)
+    return true
+}
+
+/** Retira a imagem e os retratos pedidos no job (depois de gravar a narração). */
+export function takeDraftImages(campaignId: string, jobId: string): { sceneImage: MaddoxDraftSceneImage | null; npcPortraits: string[] } {
+    const job = hubs.get(campaignId)?.jobs.get(jobId)
+    if (!job) return { sceneImage: null, npcPortraits: [] }
+    const taken = { sceneImage: job.sceneImage, npcPortraits: job.npcPortraits }
+    job.sceneImage = null
+    job.npcPortraits = []
+    return taken
 }
 
 /** Cópia de trabalho do combate tático deste job (`null` = ainda não carregada ou o job terminou). */

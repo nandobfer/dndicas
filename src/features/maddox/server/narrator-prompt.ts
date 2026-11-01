@@ -203,6 +203,34 @@ export interface NarratorPromptContext {
     combat?: NarratorCombat | null
     /** Combate tático em andamento (Maddox 7): bloco já montado (ordem, PV, CA, condições, quem age). */
     tacticalCombat?: string | null
+    /** Imagens nas cenas (Maddox 10): situações que o narrador pode pedir e a cota agora. `null` = desligadas. */
+    sceneImages?: NarratorSceneImages | null
+}
+
+export interface NarratorSceneImages {
+    /** Situações ativas pedidas pela ferramenta (sem fim de batalha e retrato). */
+    situations: readonly { key: string; label: string; description: string }[]
+    /** Situação "Retrato de NPC" ativa (`save_npc { gerarRetrato }`). */
+    portraits: boolean
+    /** Motivo pelo qual não cabe imagem automática agora (intervalo, teto do dia). */
+    blocked: string | null
+}
+
+/** Regra "## Imagens da cena" (Maddox 10): só com alguma situação pedida pelo narrador ativa. */
+export function sceneImagesRule(images: NarratorSceneImages | null | undefined): string | null {
+    if (!images || (!images.situations.length && !images.portraits)) return null
+    const lines = ["## Imagens da cena"]
+    if (images.situations.length) {
+        lines.push(
+            "Você pode pedir UMA ilustração por narração com request_scene_image, só quando a narração for de fato uma destas situações (use a chave entre crases):",
+            ...images.situations.map((item) => `- \`${item.key}\` — ${item.label}: ${item.description}`),
+            "- Descreva só o que os jogadores veem (lugar, luz, clima, quem aparece e a ação), sem segredos do mestre; informe os personagens, os NPCs conhecidos e as entidades do catálogo que aparecem, para a aparência deles ser respeitada.",
+            "- Não mencione a imagem no texto da narração. Fim de batalha gera imagem sozinho pela cenaFinal do end_combat.",
+        )
+        if (images.blocked) lines.push(`- AGORA: ${images.blocked} Não peça imagem nesta narração.`)
+    }
+    if (images.portraits) lines.push("- Retrato de NPC: ao apresentar aos jogadores um NPC importante para a história, salve-o com save_npc { gerarRetrato: true } (uma vez por NPC).")
+    return lines.join("\n")
 }
 
 const oneLine = (value: string, max: number) => {
@@ -259,14 +287,14 @@ function memoriesBlock(memories: readonly NarratorMemory[]): string | null {
     return parts.join("\n")
 }
 
-export type NarratorToolMode = { kind: "ai-sdk" } | { kind: "mcp"; server: string; turnToken: string; checks?: boolean; combat?: boolean; tactical?: boolean }
+export type NarratorToolMode = { kind: "ai-sdk" } | { kind: "mcp"; server: string; turnToken: string; checks?: boolean; combat?: boolean; tactical?: boolean; sceneImages?: boolean }
 
 /** Bloco das ferramentas: na AI SDK elas vêm na chamada; no OpenCode, pelo MCP com o token de turno. */
 function toolsBlock(mode: NarratorToolMode): string | null {
     if (mode.kind === "ai-sdk") return null
     return [
         "## Ferramentas desta narração",
-        `- As ferramentas de anotações da campanha estão no servidor MCP \`${mode.server}\` (get_campaign_state, update_campaign_state, list_npcs, get_npc, save_npc, search_memories, save_memory, update_character_state${mode.checks ? ", request_check" : ""}${mode.combat ? ", get_combat, start_combat, update_combat, end_combat" : ""}${mode.tactical ? ", monster_action, apply_effect, request_damage_roll, offer_reaction" : ""}, ${MADDOX_CATALOG_TOOL_NAMES.search}, ${MADDOX_CATALOG_TOOL_NAMES.get}).`,
+        `- As ferramentas de anotações da campanha estão no servidor MCP \`${mode.server}\` (get_campaign_state, update_campaign_state, list_npcs, get_npc, save_npc, search_memories, save_memory, update_character_state${mode.checks ? ", request_check" : ""}${mode.combat ? ", get_combat, start_combat, update_combat, end_combat" : ""}${mode.tactical ? ", monster_action, apply_effect, request_damage_roll, offer_reaction" : ""}${mode.sceneImages ? ", request_scene_image" : ""}, ${MADDOX_CATALOG_TOOL_NAMES.search}, ${MADDOX_CATALOG_TOOL_NAMES.get}).`,
         `- Em TODA chamada a essas ferramentas, envie o campo \`turno\` exatamente com este valor: \`${mode.turnToken}\`.`,
         "- Não use outras ferramentas (arquivos, terminal, web): a campanha vive só nessas anotações.",
     ].join("\n")
@@ -281,6 +309,8 @@ export function buildNarratorInstructions(context: NarratorPromptContext, mode: 
     if (usesTacticalCombat(context.rigor)) parts.push(tacticalCombatRule(context.rigor))
     if (judgesFreeActionsInNarration(context.rigor)) parts.push(MADDOX_FREE_ACTION_RULE)
     parts.push(MADDOX_NARRATOR_FORMAT, MADDOX_PERSISTENCE_RULE, narratorCatalogRule(context.rigor))
+    const images = sceneImagesRule(context.sceneImages)
+    if (images) parts.push(images)
     const tools = toolsBlock(mode)
     if (tools) parts.push(tools)
     parts.push(`# Campanha "${context.campaignName}"`)

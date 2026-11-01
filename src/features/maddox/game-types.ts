@@ -45,7 +45,39 @@ export interface MaddoxGameMessageDto {
     combatReaction?: MaddoxCombatReactionDto | null
     /** "Não fez nada" porque o jogador estava offline na própria vez. */
     offlineSkip?: boolean
+    /** Imagem da cena (Maddox 10) ligada à narração ou ao card de fim de combate. */
+    sceneImage?: MaddoxGameSceneImageDto | null
     createdAt: string
+}
+
+/** Imagem gerada pelo Maddox numa cena (Maddox 10). A descrição enviada ao gerador nunca chega à tela. */
+export interface MaddoxGameSceneImageDto {
+    id: string
+    /** `skipped` nunca chega: imagem descartada não aparece. */
+    status: "pending" | "generating" | "done" | "failed"
+    url: string | null
+    caption: string
+    /** Rótulo da situação ("Novo local ou cenário"); `null` no pedido manual. */
+    situationLabel: string | null
+    source: "tool" | "combat-end" | "manual" | "npc-portrait"
+    error: string | null
+}
+
+/** Botão "Gerar imagem da cena" e "Gerar retrato" (só o dono): pode pedir agora ou por que não. */
+export interface MaddoxSceneImageControlDto {
+    /** O usuário é o dono (só ele vê os botões). */
+    owner: boolean
+    canRequest: boolean
+    /** Motivo em pt-BR quando não pode pedir. */
+    reason: string | null
+    /** Há uma imagem manual sendo gerada. */
+    generating: boolean
+    /** Imagens que ainda cabem no teto das últimas 24 h. */
+    remainingToday: number
+    /** Imagens automáticas ligadas nesta campanha (chave do dono). */
+    campaignEnabled: boolean
+    /** Pode pedir retrato de NPC agora (Gerador disponível e teto do dia com folga). */
+    canRequestPortrait: boolean
 }
 
 /** Adversário ou aliado do combate, como os jogadores o percebem. */
@@ -210,6 +242,8 @@ export interface MaddoxGameNpcDto {
     portraitUrl: string | null
     /** Situação do NPC (morto aparece esmaecido; Maddox 6). */
     status: "active" | "inactive" | "dead" | "unknown"
+    /** Retrato sendo gerado (Maddox 10). */
+    portraitGenerating?: boolean
 }
 
 export interface MaddoxGameParticipantDto {
@@ -253,6 +287,8 @@ export interface MaddoxGameStateDto {
     showCheckDc: boolean
     /** NPCs que os jogadores conhecem. */
     npcs: MaddoxGameNpcDto[]
+    /** Imagens nas cenas (Maddox 10): situação do pedido manual e do retrato para o dono. */
+    sceneImages?: MaddoxSceneImageControlDto
     /** Combate narrativo em andamento (Maddox 6). */
     combat: MaddoxGameCombatDto | null
     participants: MaddoxGameParticipantDto[]

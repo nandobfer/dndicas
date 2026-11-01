@@ -10,6 +10,7 @@ import {
     MaddoxInterviewScriptModel,
     MaddoxNpcModel,
     MaddoxOpencodeSessionModel,
+    MaddoxSceneImageModel,
 } from "@/features/maddox/models"
 
 /**
@@ -21,7 +22,7 @@ import {
  * memberId }` das declarações da mesa (uma por membro e turno) e `{ campaignId, turnNumber, check.round,
  * memberId }` dos testes pedidos pelo Maddox (um por personagem em cada rodada) e `{ campaignId }` do combate
  * ativo (Maddox 6: um por campanha), a janela de reação pendente por personagem e o cache do classificador de custo
- * (Maddox 7). Idempotente.
+ * (Maddox 7) e uma imagem automática por turno do mestre (Maddox 10). Idempotente.
  */
 export async function ensureMaddoxIndexes(): Promise<void> {
     await Promise.all([
@@ -36,5 +37,6 @@ export async function ensureMaddoxIndexes(): Promise<void> {
         MaddoxCampaignMessageModel.createIndexes(),
         MaddoxCombatModel.createIndexes(),
         MaddoxCombatOptionProfileModel.createIndexes(),
+        MaddoxSceneImageModel.createIndexes(),
     ])
 }

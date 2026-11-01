@@ -5,7 +5,7 @@ import { AnimatePresence, motion } from "framer-motion"
 import { useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { toast } from "sonner"
-import { Brain, Info, Loader2, MapPinned, RotateCcw, Save, ScanEye, Server, Settings2, Undo2, UserRound } from "lucide-react"
+import { Brain, ImageIcon, Info, Loader2, MapPinned, RotateCcw, Save, ScanEye, Server, Settings2, Undo2, UserRound } from "lucide-react"
 import { Button } from "@/components/ui/opex/button"
 import { GlassCard as Card, GlassCardContent as CardContent, GlassCardDescription as CardDescription, GlassCardHeader as CardHeader, GlassCardTitle as CardTitle } from "@/components/ui/glass-card"
 import { Field } from "@/components/ui/opex/field"
@@ -28,13 +28,15 @@ import { MaddoxJevCard } from "./MaddoxJevCard"
 import { MaddoxMemoriesSection } from "./MaddoxMemoriesSection"
 import { MaddoxModelCard } from "./MaddoxModelCard"
 import { MaddoxOpencodeMcpCard, MaddoxOpencodePolicyCard, MaddoxOpencodeSessionsCard } from "./MaddoxOpencodeCard"
+import { MaddoxSceneImagesCard } from "./MaddoxSceneImagesCard"
 import { MaddoxScriptCard } from "./MaddoxScriptCard"
 
-type MaddoxSection = "geral" | "entrevista-cenario" | "entrevista-personagem" | "jev" | "opencode" | "memorias"
+type MaddoxSection = "geral" | "entrevista-cenario" | "entrevista-personagem" | "imagens" | "jev" | "opencode" | "memorias"
 const SECTIONS: IntegrationTabDef<MaddoxSection>[] = [
     { id: "geral", label: "Geral", icon: Settings2 },
     { id: "entrevista-cenario", label: "Entrevista: cenário", icon: MapPinned },
     { id: "entrevista-personagem", label: "Entrevista: personagem", icon: UserRound },
+    { id: "imagens", label: "Imagens", icon: ImageIcon },
     { id: "jev", label: "JEV", icon: ScanEye },
     { id: "opencode", label: "OpenCode", icon: Server },
     { id: "memorias", label: "Memórias", icon: Brain },
@@ -48,8 +50,8 @@ type ScriptDrafts = Record<MaddoxScriptKind, { draft: MaddoxScriptDraft; baselin
 /**
  * Aba "Agente Maddox" de `/integracoes/ia`, em seções: Geral (ativo, avatar, modelos do Maddox e do
  * entrevistador, instruções), Entrevista: cenário e Entrevista: personagem (roteiros versionados,
- * salvos à parte), JEV (chaves por decisão), OpenCode (política e sessões) e Memórias. Um único
- * formulário para Geral, JEV e OpenCode: trocar de seção mantém o rascunho.
+ * salvos à parte), Imagens (situações e frequência das imagens nas cenas), JEV (chaves por decisão), OpenCode (política e sessões) e Memórias. Um único
+ * formulário para Geral, Imagens, JEV e OpenCode: trocar de seção mantém o rascunho.
  */
 export function MaddoxTab({ onDirtyChange }: { onDirtyChange: (dirty: boolean) => void }) {
     const query = useMaddoxSettings()
@@ -97,7 +99,7 @@ export function MaddoxTab({ onDirtyChange }: { onDirtyChange: (dirty: boolean) =
                 if (saved) form.reset(saved.settings)
             },
             (fieldErrors) => {
-                go(fieldErrors.opencode ? "opencode" : "geral")
+                go(fieldErrors.opencode ? "opencode" : fieldErrors.sceneImages ? "imagens" : "geral")
                 // Campos sem mensagem própria na tela (ex.: URL do avatar) não podem falhar em silêncio.
                 const hidden = firstHiddenFormError(fieldErrors)
                 if (hidden) toast.error(`Não foi possível salvar: ${hidden}`)
@@ -201,6 +203,12 @@ export function MaddoxTab({ onDirtyChange }: { onDirtyChange: (dirty: boolean) =
                     )}
                     {section === SCRIPT_SECTION.scenario && scriptSection("scenario")}
                     {section === SCRIPT_SECTION.character && scriptSection("character")}
+                    {section === "imagens" && (
+                        <>
+                            <MaddoxSceneImagesCard form={form} generator={imageGenerator.data} />
+                            {footer(go)}
+                        </>
+                    )}
                     {section === "jev" && (
                         <>
                             <MaddoxJevCard form={form} jev={jevStatus} />

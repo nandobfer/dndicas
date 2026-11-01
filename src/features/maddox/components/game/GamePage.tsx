@@ -36,6 +36,8 @@ import { COMBAT_COLOR } from "./GameCombatCard"
 import { GameMessageList } from "./GameMessageList"
 import { MySheetButton } from "./MySheetButton"
 import { NpcPanel } from "./NpcPanel"
+import { SceneImageButton } from "./SceneImageButton"
+import { useRequestMaddoxNpcPortrait, useRequestMaddoxSceneImage } from "../../hooks/useMaddoxSceneImages"
 import { TurnPanel } from "./TurnPanel"
 import { CampaignChatHeader } from "../CampaignChatHeader"
 
@@ -102,6 +104,8 @@ function GameTable({ state, presence, stream }: { state: MaddoxGameStateDto; pre
     const tactical = state.combat?.tactical ?? null
     const skip = useSkipMaddoxPlayer(state.campaignId)
     const rollCheck = useRollMaddoxCheck(state.campaignId)
+    const sceneImage = useRequestMaddoxSceneImage(state.campaignId)
+    const portrait = useRequestMaddoxNpcPortrait(state.campaignId)
     const replays = useMemo(() => new Map(stream.rolled.map((item) => [item.messageId, item.roll])), [stream.rolled])
     const [older, setOlder] = useState<MaddoxGameMessageDto[]>([])
     const [olderHasMore, setOlderHasMore] = useState<boolean | null>(null)
@@ -183,7 +187,12 @@ function GameTable({ state, presence, stream }: { state: MaddoxGameStateDto; pre
                         )}
                     </>
                 }
-                actions={<MySheetButton sheet={state.me.sheet} />}
+                actions={
+                    <>
+                        <SceneImageButton control={state.sceneImages} busy={sceneImage.isPending} onRequest={() => sceneImage.mutate()} />
+                        <MySheetButton sheet={state.me.sheet} />
+                    </>
+                }
                 banner={
                     <>
                     <p className="flex items-center gap-2 text-xs text-white/80" role="status" data-testid="turn-banner">
@@ -269,7 +278,11 @@ function GameTable({ state, presence, stream }: { state: MaddoxGameStateDto; pre
                         rollingFor={rollCheck.isPending}
                         onRollFor={(checkId, characterName) => rollCheck.mutate(checkId, { onSuccess: () => toast.success(`Teste rolado no lugar de ${characterName}`) })}
                     />
-                    <NpcPanel npcs={state.npcs} color={color} />
+                    <NpcPanel
+                        npcs={state.npcs}
+                        color={color}
+                        portraits={state.sceneImages?.owner ? { canRequest: state.sceneImages.canRequestPortrait, requesting: portrait.isPending ? (portrait.variables ?? null) : null, onRequest: (npcId) => portrait.mutate(npcId) } : null}
+                    />
                 </div>
             </div>
         </motion.div>

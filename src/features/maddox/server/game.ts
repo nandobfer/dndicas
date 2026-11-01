@@ -42,7 +42,7 @@ import type { MaddoxGameCheckDto, MaddoxGameMessageDto, MaddoxGameMessagesPageDt
 import { checkSucceeded, keptD20 } from "../check-modifier"
 import { assertMemberCanPlay, isMemberReadyToPlay, loadMembership } from "./campaigns"
 import { getMaddoxMaster, type MaddoxMasterDeclaration } from "./game-master"
-import { beginLive, enqueueMaddoxJob, isCampaignBusy, takeDraftChecks, takeDraftCombat } from "./game-live"
+import { beginLive, enqueueMaddoxJob, isCampaignBusy, takeDraftChecks, takeDraftCombat, takeDraftImages } from "./game-live"
 import { onlineUserIds } from "./game-presence"
 
 /**
@@ -188,6 +188,8 @@ async function runMasterTurn(campaignId: Types.ObjectId, token: string, turnNumb
             const message = inserted.find((item) => item.kind === "narration")
             if (combatModule && round === 0) await combatModule.countCombatNarration(campaignId, [...(combatBefore ? [combatBefore._id] : []), ...combat.touched])
             live.end({ messageId: String(message!._id), error: null })
+            // Imagens nas cenas (Maddox 10): a pedida nesta narração fica ligada a ela; os retratos marcados, aos NPCs.
+            await scheduleDraftImages(campaignId, jobId, turnNumber, round, message!._id)
             if (drafts.length) log.info({ campaignId: String(campaignId), turnNumber, round, checks: drafts.length }, "[maddox] Maddox pediu testes")
         }
         // Combate (Maddox 6 e 7): card que faltar (gravação interrompida) e os efeitos do fim, depois das mensagens.
@@ -252,6 +254,37 @@ async function runMasterTurn(campaignId: Types.ObjectId, token: string, turnNumb
         clearInterval(heartbeat)
     }
     await publishGameChanged(campaignId)
+}
+
+/** Pede a imagem e os retratos que o narrador deixou no job. Falha não derruba o turno (aviso no log). */
+async function scheduleDraftImages(campaignId: Types.ObjectId, jobId: string, turnNumber: number, round: number, narrationId: Types.ObjectId): Promise<void> {
+    const { sceneImage, npcPortraits } = takeDraftImages(String(campaignId), jobId)
+    if (!sceneImage && !npcPortraits.length) return
+    try {
+        const images = await import("./scene-images")
+        const env = await images.loadSceneImageEnvironment()
+        if (sceneImage) {
+            await images.scheduleSceneImage(
+                {
+                    campaignId,
+                    source: "tool",
+                    turnNumber,
+                    segment: round,
+                    messageId: narrationId,
+                    situation: sceneImage.situation,
+                    description: sceneImage.description,
+                    caption: sceneImage.caption,
+                    characters: sceneImage.characters,
+                    npcs: sceneImage.npcs,
+                    catalog: sceneImage.catalog,
+                },
+                env,
+            )
+        }
+        await images.scheduleNpcPortraits(campaignId, npcPortraits, env)
+    } catch (error) {
+        log.warn({ err: error instanceof Error ? error.message : String(error), campaignId: String(campaignId), turnNumber }, "[maddox] falha ao pedir a imagem da cena")
+    }
 }
 
 /**
@@ -768,7 +801,21 @@ async function messagesPage(campaignId: Types.ObjectId, before: Types.ObjectId |
         .limit(MADDOX_GAME_PAGE_SIZE + 1)
         .lean<MessageDoc[]>()
     const hasMore = docs.length > MADDOX_GAME_PAGE_SIZE
-    return { messages: await messagesDto(docs.slice(0, MADDOX_GAME_PAGE_SIZE).reverse(), viewer), hasMore }
+    const page = docs.slice(0, MADDOX_GAME_PAGE_SIZE).reverse()
+    const [messages, images] = await Promise.all([messagesDto(page, viewer), sceneImagesOf(page)])
+    return { messages: images.size ? messages.map((message) => (images.has(message.id) ? { ...message, sceneImage: images.get(message.id)! } : message)) : messages, hasMore }
+}
+
+/** Imagens das cenas (Maddox 10) das narrações e cards de fim de combate da página. Falha = sem imagens (aviso no log). */
+async function sceneImagesOf(page: readonly MessageDoc[]) {
+    const ids = page.filter((message) => message.kind === "narration" || (message.kind === "combat" && message.combat?.event === "end")).map((message) => message._id)
+    try {
+        const { sceneImagesByMessage } = await import("./scene-images")
+        return await sceneImagesByMessage(ids)
+    } catch (error) {
+        log.warn({ err: error instanceof Error ? error.message : String(error) }, "[maddox] imagens das cenas indisponíveis")
+        return new Map<string, import("../game-types").MaddoxGameSceneImageDto>()
+    }
 }
 
 async function maddoxAvatarUrl(): Promise<string | null> {
@@ -791,7 +838,10 @@ export async function getGameState(campaignId: string, userId: string): Promise<
         campaign = await fillEmptyTurn(campaign)
     }
     const viewer: MessagesViewer = { memberId: String(loaded.member._id), showCheckDc: Boolean(campaign.showCheckDc) }
-    const [members, page, avatarUrl, npcs, pendingChecks, activeCombat] = await Promise.all([
+    // Imagens nas cenas (Maddox 10): as presas (processo reiniciado) viram falha antes da leitura.
+    const sceneImages = await import("./scene-images")
+    await sceneImages.expireStaleSceneImages(campaign._id).catch((error) => log.warn({ err: error instanceof Error ? error.message : String(error) }, "[maddox] falha ao expirar imagens presas"))
+    const [members, page, avatarUrl, npcs, pendingChecks, activeCombat, sceneImageControl, portraitsGenerating] = await Promise.all([
         joinedMembers(campaign._id),
         messagesPage(campaign._id, null, viewer),
         maddoxAvatarUrl(),
@@ -803,6 +853,8 @@ export async function getGameState(campaignId: string, userId: string): Promise<
                   .lean<{ _id: Types.ObjectId; memberId: Types.ObjectId; characterName: string | null }[]>()
             : Promise.resolve([]),
         MaddoxCombatModel.findOne({ campaignId: campaign._id, status: "active" }).lean<IMaddoxCombat>(),
+        sceneImages.sceneImageControl(campaign, userId),
+        sceneImages.generatingPortraitNpcIds(campaign._id).catch(() => new Set<string>()),
     ])
     // Combate tático (Maddox 7): ordem com os PV do grupo, a minha vez e o que o turno do mestre espera.
     const tacticalCombat = activeCombat && activeCombat.mode === "tactical" && activeCombat.tactical ? (activeCombat as import("./tactical-combat").TacticalCombat) : null
@@ -863,7 +915,8 @@ export async function getGameState(campaignId: string, userId: string): Promise<
             })),
         },
         showCheckDc: Boolean(campaign.showCheckDc),
-        npcs: npcs.map((npc) => ({ id: String(npc._id), name: npc.name, portraitUrl: npc.portraitUrl ?? null, status: npc.status ?? "active" })),
+        npcs: npcs.map((npc) => ({ id: String(npc._id), name: npc.name, portraitUrl: npc.portraitUrl ?? null, status: npc.status ?? "active", portraitGenerating: portraitsGenerating.has(String(npc._id)) })),
+        sceneImages: sceneImageControl,
         combat: activeCombat ? { ...(await import("./combat")).combatDto(activeCombat), ...(tacticalCombat && tacticalModule ? { tactical: await tacticalModule.loadTacticalDto(tacticalCombat) } : {}) } : null,
         participants,
         me: {

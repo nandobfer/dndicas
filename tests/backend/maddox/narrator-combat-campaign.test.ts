@@ -276,7 +276,8 @@ describe("Maddox 6 — combate narrativo de ponta a ponta", () => {
             ["Contrabandista", "fugiu"],
             ["Capanga gigante", "rendeu-se"],
         ])
-        expect(ended!.image).toMatchObject({ status: "awaiting-feature" })
+        // Maddox 10: imagens nas cenas desligadas na configuração → a cena final fica gravada e a imagem não é pedida.
+        expect(ended!.image).toMatchObject({ status: "skipped" })
         expect(ended!.finalScene).toContain("cais vazio")
         // Grau narrativo: recompensas só registradas.
         expect(ended!.rewards.map((reward) => [reward.kind, reward.applied])).toEqual([

@@ -4,7 +4,7 @@ import { getIntegrationConfig } from "@/lib/integrations/config"
 import { debugFetch, integrationDebug } from "@/lib/integrations/debug"
 import { recordAiConsumption } from "./consumption"
 import { AiProviderError } from "./errors"
-import type { AiImageProviderId, AiModelDto } from "./providers"
+import { imageModelSupportsReferences, type AiImageProviderId, type AiModelDto } from "./providers"
 
 /**
  * Geração de IMAGEM pela Vercel AI SDK (`generateImage`) — SOMENTE servidor. Extensão do DnDicas
@@ -14,7 +14,7 @@ import type { AiImageProviderId, AiModelDto } from "./providers"
  * A SDK `ai` e os clientes dos provedores entram sob demanda (`await import`), como em `stream.ts`.
  */
 
-export { AI_IMAGE_PROVIDER_IDS, isAiImageProviderId, type AiImageProviderId } from "./providers"
+export { AI_IMAGE_PROVIDER_IDS, imageModelSupportsReferences, isAiImageProviderId, type AiImageProviderId } from "./providers"
 
 /** Modelos de imagem do Gemini: os `gemini-*-image*` (nano banana) e o Imagen. */
 export function isGeminiImageModel(id: string): boolean {
@@ -79,10 +79,19 @@ export const IMAGE_MODEL_LISTERS: Record<AiImageProviderId, (signal?: AbortSigna
     openai: listOpenaiImageModels,
 }
 
+
+/** Imagem de referência enviada ao modelo junto do texto. */
+export interface AiReferenceImage {
+    data: Uint8Array
+    mediaType: string
+}
+
 export interface AiImageRequest {
     provider: AiImageProviderId
     model: string
     prompt: string
+    /** Imagens de referência: só vão ao modelo quando ele aceita (`imageModelSupportsReferences`). */
+    referenceImages?: readonly AiReferenceImage[]
     /** `largura:altura` (ex.: `1:1`, `16:9`). */
     aspectRatio?: `${number}:${number}`
     signal?: AbortSignal
@@ -94,6 +103,8 @@ export interface AiImageResult {
     buffer: Buffer
     mimeType: string
     durationMs: number
+    /** Quantas imagens de referência foram enviadas ao modelo (0 quando ele não aceita ou não havia). */
+    referencesUsed: number
 }
 
 async function imageModelFor(request: AiImageRequest) {
@@ -104,12 +115,13 @@ async function imageModelFor(request: AiImageRequest) {
 /** Gera UMA imagem. Lança `AiProviderError` com mensagem pt-BR quando o provedor falha. */
 export async function generateAiImage(request: AiImageRequest): Promise<AiImageResult> {
     const startedAt = Date.now()
+    const references = request.referenceImages?.length && imageModelSupportsReferences(request.provider, request.model) ? request.referenceImages : []
     let result: Awaited<ReturnType<typeof generateImage>>
     try {
         const { generateImage } = await import("ai")
         result = await generateImage({
             model: await imageModelFor(request),
-            prompt: request.prompt,
+            prompt: references.length ? { text: request.prompt, images: references.map((image) => image.data) } : request.prompt,
             n: 1,
             // A OpenAI aceita tamanhos; os demais, proporção.
             ...(request.aspectRatio && request.provider !== "openai" ? { aspectRatio: request.aspectRatio } : {}),
@@ -135,5 +147,5 @@ export async function generateAiImage(request: AiImageRequest): Promise<AiImageR
             costUsd: null,
         })
     }
-    return { buffer: Buffer.from(image.uint8Array), mimeType: image.mediaType || "image/png", durationMs: Date.now() - startedAt }
+    return { buffer: Buffer.from(image.uint8Array), mimeType: image.mediaType || "image/png", durationMs: Date.now() - startedAt, referencesUsed: references.length }
 }
