@@ -1,3 +1,4 @@
+import type { WorldCatalog } from "./world-catalog"
 import type { MaddoxCampaignStatus, MaddoxInterviewStatus, MaddoxMemberRole, MaddoxRigorLevel, MaddoxScenarioStatus, MaddoxTurnPhase } from "./constants"
 
 /** DTOs das Campanhas Maddox (Maddox 1). */
@@ -52,6 +53,8 @@ export interface MaddoxCampaignListItemDto {
     startingLevel: number | null
     /** Estágio de experiência inicial (graus narrativos). */
     startingStage: string
+    /** Povos e classes do mundo (Maddox 8, Fiel ao D&D); listas vazias = todo o catálogo. */
+    worldCatalog: WorldCatalog
     createdAt: string
     updatedAt: string
 }

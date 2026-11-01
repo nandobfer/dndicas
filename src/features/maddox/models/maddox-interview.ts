@@ -46,6 +46,15 @@ export interface IMaddoxBuildRef {
 }
 
 /**
+ * Povos (raças) e classes que existem no mundo da campanha (Maddox 8, cenário do Fiel ao D&D): só entidades do
+ * catálogo. Lista vazia = todo o catálogo.
+ */
+export interface IMaddoxWorldCatalog {
+    races: { id: string; name: string }[]
+    classes: { id: string; name: string }[]
+}
+
+/**
  * Escolhas da ficha feitas na entrevista de personagem (graus com ficha), gravadas por `update_character_build` e
  * validadas contra o catálogo. A ficha é montada no servidor a partir delas (`sheet-builder.ts`).
  */
@@ -115,6 +124,8 @@ export interface IMaddoxInterview {
     abilityRolls?: IMaddoxAbilityRolls | null
     /** Escolhas da ficha (graus com ficha). */
     build?: IMaddoxCharacterBuild | null
+    /** Povos e classes do mundo combinados na entrevista de cenário do Fiel ao D&D (Maddox 8). */
+    world?: IMaddoxWorldCatalog | null
     /** Dados de vida rolados no card de PV (um por nível; reabrir o card mantém). */
     hitPointRolls?: { level: number; die: number; rollId: string }[] | null
     completedAt: Date | null
@@ -151,6 +162,7 @@ const MaddoxInterviewSchema = new Schema<IMaddoxInterview>(
         result: { type: Schema.Types.Mixed, default: null },
         abilityRolls: { type: Schema.Types.Mixed, default: null },
         build: { type: Schema.Types.Mixed, default: null },
+        world: { type: Schema.Types.Mixed, default: null },
         hitPointRolls: { type: Schema.Types.Mixed, default: null },
         completedAt: { type: Date, default: null },
     },

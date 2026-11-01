@@ -60,7 +60,7 @@ export const MADDOX_RIGOR_LEVEL_DEFS: Record<MaddoxRigorLevel, { label: string; 
         label: "Fiel ao D&D",
         description: "Estritamente de acordo com as regras e o catálogo do DnDicas.",
         rarity: "legendary",
-        rules: ["Ficha completa do D&D", "Testes, iniciativa, ação e ação bônus exatamente como nas regras", "Só raças, classes, magias e itens cadastrados no DnDicas", "Ação livre só vale se as regras permitirem"],
+        rules: ["Ficha completa do D&D", "Testes, iniciativa, ação e ação bônus exatamente como nas regras", "Mundo de fantasia D&D, oficial ou próprio, com povos e classes do catálogo do DnDicas", "Só magias e itens cadastrados no DnDicas", "Ação livre só vale se as regras permitirem"],
         free: ["Somente o que as regras não cobrem, decidido pelo mestre"],
     },
 }
@@ -582,6 +582,18 @@ export const MADDOX_INTERVIEW_MAX_STEPS = 14
 /** Graus em que a origem do bônus de atributos precisa existir no catálogo (Equilibrado aceita origem própria). */
 export const MADDOX_CATALOG_ORIGIN_RIGORS: readonly MaddoxRigorLevel[] = ["rigoroso", "fiel-dnd"]
 
+// ── Modo fiel ao D&D (Maddox 8) ──────────────────────────────────────────────────
+
+/**
+ * Graus em que o mundo é de fantasia D&D (oficial ou próprio) com povos e classes SÓ do catálogo: a entrevista de
+ * cenário grava a lista do mundo (`update_world_options`) e a ficha só aceita raça e classe dessa lista.
+ */
+export const MADDOX_WORLD_CATALOG_RIGORS: readonly MaddoxRigorLevel[] = ["fiel-dnd"]
+/** Graus em que a recompensa em item precisa existir no catálogo (fora dele, `end_combat` recusa sem gravar). */
+export const MADDOX_CATALOG_REWARD_RIGORS: readonly MaddoxRigorLevel[] = ["fiel-dnd"]
+/** Teto de povos e de classes na lista do mundo. */
+export const MADDOX_WORLD_OPTIONS_MAX = 60
+
 /** Consulta ao catálogo do DnDicas (entrevistador e narrador, só leitura). */
 export const MADDOX_CATALOG_TOOL_NAMES = { search: "search_catalog", get: "get_catalog_entity" } as const
 export const MADDOX_CATALOG_SEARCH_LIMIT_MAX = 30
@@ -592,6 +604,8 @@ export const MADDOX_CATALOG_SUMMARY_MAX = 300
 export const MADDOX_CATALOG_TEXT_MAX = 4000
 
 export const MADDOX_INTERVIEW_TOOL_NAMES = {
+    world: "update_world_options",
+    getWorld: "get_world_options",
     request: "request_ability_scores",
     get: "get_ability_scores",
     bonus: "apply_ability_bonus",
