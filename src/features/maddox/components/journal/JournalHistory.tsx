@@ -15,7 +15,8 @@ export function JournalHistory({ campaignId, color, myMemberId, maddoxAvatarUrl,
     const pages = history.data?.pages ?? []
     const messages = [...pages].reverse().flatMap((page) => page.messages)
     const found = highlightId !== null && messages.some((message) => message.id === highlightId)
-    const seeking = highlightId !== null && !found && Boolean(history.hasNextPage) && pages.length < MADDOX_JOURNAL_HISTORY_SEEK_PAGES
+    // Com a consulta em erro, para de procurar (cada falha reabriria a busca da mesma página, sem fim).
+    const seeking = highlightId !== null && !found && !history.isError && Boolean(history.hasNextPage) && pages.length < MADDOX_JOURNAL_HISTORY_SEEK_PAGES
     const tooOld = highlightId !== null && !found && Boolean(history.hasNextPage) && pages.length >= MADDOX_JOURNAL_HISTORY_SEEK_PAGES
 
     const { isFetchingNextPage, fetchNextPage } = history

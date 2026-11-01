@@ -40,10 +40,11 @@ export const MADDOX_JOURNAL_SEEK_PAGES = 10
 
 /**
  * O item da âncora pode estar além da primeira página (a busca não segue a ordem da lista): carrega as páginas seguintes
- * até achá-lo ou até `MADDOX_JOURNAL_SEEK_PAGES`. Devolve `tooFar` quando passou do limite sem achar.
+ * até achá-lo ou até `MADDOX_JOURNAL_SEEK_PAGES`. Devolve `tooFar` quando passou do limite sem achar. Com a consulta em erro
+ * (`failed`), para de procurar: senão cada falha reabriria a busca da mesma página, sem fim.
  */
-export function useSeekAnchor({ wanted, found, hasNextPage, isFetchingNextPage, fetchNextPage, pages }: { wanted: boolean; found: boolean; hasNextPage: boolean; isFetchingNextPage: boolean; fetchNextPage: () => unknown; pages: number }): { seeking: boolean; tooFar: boolean } {
-    const missing = wanted && !found && pages > 0 && hasNextPage
+export function useSeekAnchor({ wanted, found, hasNextPage, isFetchingNextPage, fetchNextPage, pages, failed }: { wanted: boolean; found: boolean; hasNextPage: boolean; isFetchingNextPage: boolean; fetchNextPage: () => unknown; pages: number; failed: boolean }): { seeking: boolean; tooFar: boolean } {
+    const missing = wanted && !found && pages > 0 && hasNextPage && !failed
     const seeking = missing && pages < MADDOX_JOURNAL_SEEK_PAGES
     useEffect(() => {
         if (seeking && !isFetchingNextPage) void fetchNextPage()

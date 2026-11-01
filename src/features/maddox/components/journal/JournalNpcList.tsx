@@ -17,7 +17,7 @@ export function JournalNpcList({ campaignId, color }: { campaignId: string; colo
     const target = useJournalHash()
     const found = anchors.has(target)
     useScrollToAnchor(target, found)
-    const seek = useSeekAnchor({ wanted: target.startsWith("npc-"), found, hasNextPage: Boolean(npcs.hasNextPage), isFetchingNextPage: npcs.isFetchingNextPage, fetchNextPage: npcs.fetchNextPage, pages: npcs.data?.pages.length ?? 0 })
+    const seek = useSeekAnchor({ wanted: target.startsWith("npc-"), found, hasNextPage: Boolean(npcs.hasNextPage), isFetchingNextPage: npcs.isFetchingNextPage, fetchNextPage: npcs.fetchNextPage, pages: npcs.data?.pages.length ?? 0, failed: npcs.isError })
     const state = (
         <JournalListState
             loading={npcs.isLoading}

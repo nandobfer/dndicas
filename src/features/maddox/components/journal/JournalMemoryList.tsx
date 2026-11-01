@@ -44,7 +44,7 @@ export function JournalMemoryList({ campaignId, color, kind, status = null }: { 
     const target = useJournalHash(`${kind}:${status}`)
     const found = items.some((memory) => journalAnchor.memory(memory.id) === target)
     useScrollToAnchor(target, found)
-    const seek = useSeekAnchor({ wanted: target.startsWith("anotacao-"), found, hasNextPage: Boolean(memories.hasNextPage), isFetchingNextPage: memories.isFetchingNextPage, fetchNextPage: memories.fetchNextPage, pages: memories.data?.pages.length ?? 0 })
+    const seek = useSeekAnchor({ wanted: target.startsWith("anotacao-"), found, hasNextPage: Boolean(memories.hasNextPage), isFetchingNextPage: memories.isFetchingNextPage, fetchNextPage: memories.fetchNextPage, pages: memories.data?.pages.length ?? 0, failed: memories.isError })
     if (memories.isLoading || memories.isError || items.length === 0) {
         return (
             <JournalListState

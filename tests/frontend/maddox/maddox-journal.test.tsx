@@ -124,7 +124,7 @@ beforeEach(() => {
     get.mockImplementation(async (url: string, config?: { params?: Record<string, string> }) => {
         const route = routes[url]
         if (!route) throw Object.assign(new Error(`rota inesperada ${url}`), { response: { status: 500 } })
-        return ok(route(config?.params ?? {}))
+        return ok(await route(config?.params ?? {}))
     })
 })
 
@@ -231,6 +231,38 @@ describe("Diário da campanha (Maddox 9) — tela", () => {
         } finally {
             window.location.hash = ""
         }
+    })
+
+    it("falha ao carregar a página seguinte para a procura do item (sem refazer a requisição em laço)", async () => {
+        // Falha com atraso, como a rede: a tela passa por "carregando a próxima página" antes do erro.
+        const failLater = () => new Promise<never>((_, reject) => setTimeout(() => reject(Object.assign(new Error("falha"), { response: { status: 500 } })), 30))
+        let npcCalls = 0
+        routes["/maddox/campaigns/c1/journal/npcs"] = (params) => {
+            npcCalls++
+            if (params.cursor) return failLater()
+            return { items: [{ id: "n1", name: "NPC 1", portraitUrl: null, status: "active", publicDescription: "", updatedAt: "2026-10-31T10:00:00.000Z" }], nextCursor: "n1" }
+        }
+        let historyCalls = 0
+        routes["/maddox/campaigns/c1/game/messages"] = (params) => {
+            historyCalls++
+            if (params.before) return failLater()
+            return { messages: [message("m1", { kind: "narration", phase: "master", content: "Agora." })], hasMore: true }
+        }
+        window.location.hash = "#npc-n99"
+        try {
+            const view = await renderJournal("aba=npcs")
+            expect(await screen.findByText("Não foi possível carregar esta parte do diário.")).toBeInTheDocument()
+            await new Promise((resolve) => setTimeout(resolve, 500))
+            expect(npcCalls).toBe(2)
+            view.unmount()
+        } finally {
+            window.location.hash = ""
+        }
+
+        await renderJournal("msg=antiga")
+        expect(await screen.findByText("Não foi possível carregar esta parte do diário.")).toBeInTheDocument()
+        await new Promise((resolve) => setTimeout(resolve, 500))
+        expect(historyCalls).toBe(2)
     })
 
     it("anotação aberta por link além do limite de páginas: avisa para usar 'Carregar mais'", async () => {
