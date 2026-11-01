@@ -104,7 +104,7 @@ async function settleReaction(campaignId: Types.ObjectId, message: MessageDoc, s
         const shield = Boolean(option && !failedSlot && /escudo|shield/.test(name) && option.category === "spells")
         const counterspell = Boolean(option && !failedSlot && /contramagica|counterspell/.test(name))
         const uncanny = Boolean(option && /esquiva sobrenatural|uncanny dodge/.test(name))
-        const attackOption = Boolean(option && !failedSlot && (option.id === "opportunity" || (option.resolution === "attack" && option.attack)))
+        const attackOption = Boolean(option && !failedSlot && option.attack && (option.id === "opportunity" || option.category === "weapons" || (option.category === "spells" && option.resolution === "attack")))
 
         let counterResult: string | null = null
         if (counterspell && reaction.sourceKey) {

@@ -219,7 +219,8 @@ export async function findCatalogMonster(ref: string): Promise<{ doc: CatalogMon
     const all = await MonsterModel.find({ status: "active" }).select("_id name originalName").lean<{ _id: unknown; name: string; originalName?: string }[]>()
     const hit = all.find((doc) => fold(doc.name).trim() === wanted || (doc.originalName && fold(doc.originalName).trim() === wanted))
     if (hit) return { doc: await MonsterModel.findById(hit._id).lean<CatalogMonsterDoc>(), suggestions: [] }
-    const first = wanted.split(/\s+/)[0] ?? ""
-    const suggestions = first.length >= 3 ? all.filter((doc) => fold(doc.name).includes(first)).map((doc) => doc.name).slice(0, 10) : []
+    // Sugestões pelo começo da primeira palavra (pega erros de digitação no fim: "Goblim" → "Goblin").
+    const stem = (wanted.split(/\s+/)[0] ?? "").slice(0, 4)
+    const suggestions = stem.length >= 3 ? all.filter((doc) => fold(doc.name).split(/\s+/).some((word) => word.startsWith(stem))).map((doc) => doc.name).slice(0, 10) : []
     return { doc: null, suggestions }
 }

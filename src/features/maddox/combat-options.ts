@@ -156,6 +156,8 @@ const withModifier = (expression: string, modifier: number) => (expression ? `${
 export function profileFromText(text: string): CombatProfile | null {
     const value = fold(text)
     if (!value) return null
+    // "Sempre que você usar a ação Atacar…" (Ataque Extra, Estilo de Luta): modifica outra ação, não gasta a sua.
+    if (/sempre que (voce )?(usa|usar|realiza|realizar|fizer|faz|tomar|toma) (a |sua |a sua )?acao/.test(value)) return { cost: "passive", trigger: null, resolution: null, halfOnSave: false }
     const bonus = /(como|com|usar|usando|gastar|gasta) (uma |a |sua |a sua )?acao bonus/.test(value)
     const reaction = /(como|com|usar|usando|gastar|gasta) (uma |a |sua |a sua )?reacao/.test(value)
     const action = /(como|com|usar|usando|gastar|gasta) (uma |a |sua |a sua )?acao(?! bonus)\b/.test(value) || /\bacao de magia\b/.test(value)
@@ -178,7 +180,7 @@ function reactionTriggerFromText(value: string): MaddoxReactionTrigger {
 
 function resolutionFromText(value: string): MaddoxCombatResolution | null {
     if (/salvaguarda|teste de resistencia/.test(value)) return "save"
-    if (/(jogada de ataque|ataque (corpo a corpo|a distancia) (de|com) magia)/.test(value)) return "attack"
+    if (/((faca|faz|realize|realiza|fazer|faca) (um|uma) (jogada de )?ataque|ataque (corpo a corpo|a distancia) (de|com) magia)/.test(value)) return "attack"
     if (/(acerta|atinge) automaticamente/.test(value)) return "auto"
     if (/(recupera|recuperam|restaura|cura)[^.]{0,40}pontos de vida/.test(value)) return "heal"
     return null

@@ -53,9 +53,24 @@ export const takesTurn = (state: TacticalCharacterState) => !state.dead && !stat
 const consciousOrDying = (combat: TacticalCombat) => combat.tactical.characters.some(takesTurn)
 export const consciousCharacters = (combat: TacticalCombat) => combat.tactical.characters.filter((item) => !item.dead && !item.left && !item.hpZero)
 
+/** Completa campos que o banco pode ter omitido (objetos vazios, gravações antigas). */
+export function normalizeTactical(combat: TacticalCombat): TacticalCombat {
+    const fix = (state: { conditions?: unknown; flags?: unknown; economy?: unknown }) => {
+        state.conditions = Array.isArray(state.conditions) ? state.conditions : []
+        state.flags = state.flags && typeof state.flags === "object" ? state.flags : {}
+        state.economy = state.economy && typeof state.economy === "object" ? { ...freshEconomy(), ...(state.economy as object) } : freshEconomy()
+    }
+    combat.tactical.characters = combat.tactical.characters ?? []
+    combat.tactical.order = combat.tactical.order ?? []
+    combat.tactical.queue = combat.tactical.queue ?? []
+    for (const state of combat.tactical.characters) fix(state)
+    for (const combatant of combat.combatants) if (combatant.tactical) fix(combatant.tactical)
+    return combat
+}
+
 export async function findActiveTactical(campaignId: Types.ObjectId): Promise<TacticalCombat | null> {
     const combat = await MaddoxCombatModel.findOne({ campaignId, status: "active" }).lean<IMaddoxCombat>()
-    return isTactical(combat) ? combat : null
+    return isTactical(combat) ? normalizeTactical(combat) : null
 }
 
 /** Grava o estado tático (troca condicional pela versão `rev`): outro clique ou outra gravação no meio = 409. */
@@ -66,7 +81,7 @@ export async function saveTactical(combat: TacticalCombat): Promise<TacticalComb
         { returnDocument: "after" },
     ).lean<IMaddoxCombat>()
     if (!saved || !isTactical(saved)) throw new DomainError(409, "O combate mudou enquanto você agia. Tente de novo.", "COMBAT_CHANGED")
-    return saved
+    return normalizeTactical(saved)
 }
 
 /** Carrega, muda e grava (até 3 tentativas em corrida). `mutate` só muda o objeto; efeitos fora do combate vêm depois. */

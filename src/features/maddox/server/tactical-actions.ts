@@ -140,7 +140,11 @@ export async function submitCombatAction(campaignId: string, input: MaddoxCombat
     const notes: string[] = []
     let status: IMaddoxCombatAction["status"] = "pending"
     const standard = option.id.startsWith("standard:") ? (option.id.slice("standard:".length) as MaddoxStandardAction) : null
-    if (option.resolution === "attack") steps.push(newStep({ kind: "attack", targetKey: targets[0]!.key, targetName: targets[0]!.name, dice: d20Expression(option.attack!.bonus + exhaustionPenalty(actor.state)) }))
+    if (option.resolution === "attack") {
+        steps.push(newStep({ kind: "attack", targetKey: targets[0]!.key, targetName: targets[0]!.name, dice: d20Expression(option.attack!.bonus + exhaustionPenalty(actor.state)) }))
+        // O dano já fica no card: rolado só se o ataque acertar (o erro o marca como pulado).
+        if (option.attack!.damage && option.attack!.damage !== "0") steps.push(newStep({ kind: "damage", targetKey: targets[0]!.key, targetName: targets[0]!.name, dice: option.attack!.damage, damageType: option.attack!.damageType }))
+    }
     else if (option.resolution === "auto") steps.push(newStep({ kind: "damage", targetKey: targets[0]?.key ?? null, targetName: targets[0]?.name ?? null, dice: option.attack!.damage, damageType: option.attack!.damageType }))
     else if (option.resolution === "heal") steps.push(newStep({ kind: "heal", targetKey: targets[0]!.key, targetName: targets[0]!.name, dice: option.heal!.dice }))
     else if (option.resolution === "save" && option.save) {
@@ -217,6 +221,8 @@ export async function submitCombatAction(campaignId: string, input: MaddoxCombat
         steps,
         summary: "",
         waitRound: null,
+        save: option.save ? { ability: option.save.ability, dc: option.save.dc, halfOnSave: option.save.halfOnSave } : null,
+        ranged: Boolean(option.attack?.ranged),
     }
     doc.summary = actionSummary(doc, notes)
     const message = await MaddoxCampaignMessageModel.create({
@@ -284,7 +290,7 @@ export async function rollCombatAction(campaignId: string, actionId: string, use
     const target = current.targetKey ? findActor(combat, current.targetKey) : null
     if (current.kind === "attack") {
         if (!target) throw new DomainError(409, "O alvo saiu do combate.", "INVALID_TARGET")
-        const ranged = /distância/.test(action.label) || action.category === "spells"
+        const ranged = Boolean(action.ranged)
         const helped = Boolean(actor.state.flags.helped)
         mode = attackMode({ attacker: actor.state, target: target.state, ranged, helped }).mode
         helpedUsed = helped
@@ -316,25 +322,25 @@ export async function rollCombatAction(campaignId: string, actionId: string, use
         const liveTarget = done.targetKey ? findActor(live, done.targetKey) : null
         if (done.kind === "attack" && liveTarget) {
             const ac = liveTarget.kind === "combatant" ? liveTarget.state.stats.ac : 10
-            const ranged = /distância/.test(action.label) || action.category === "spells"
+            const ranged = Boolean(action.ranged)
             const outcome = attackOutcome(keptD20Of(roll), roll.total, ac, autoCritical(liveTarget.state, ranged))
             done.hit = outcome.hit
             done.critical = outcome.critical
-            const option = view ? findCombatOption(view.options, action.economy, action.optionId) : null
-            const damage = option?.attack?.damage ?? steps.find((item) => item.kind === "damage")?.dice ?? null
-            if (outcome.hit && damage && damage !== "0") steps.splice(index + 1, 0, newStep({ kind: "damage", targetKey: liveTarget.key, targetName: liveTarget.name, dice: damage, damageType: option?.attack?.damageType ?? null }))
-            // Sem dados no dano (ataque desarmado): aplica o valor fixo direto.
             const next = steps[index + 1]
-            if (next && next.kind === "damage" && !parseDiceExpression(next.dice)?.terms.length) {
-                const amount = Number.parseInt(next.dice, 10) || 0
-                next.status = "done"
-                next.total = amount
-                applyDamageTo(live, liveTarget, next, amount, outcome.critical, hpWrites, extraRolls)
+            if (next && next.kind === "damage") {
+                if (!outcome.hit) next.status = "skipped"
+                else if (!parseDiceExpression(next.dice)?.terms.length) {
+                    // Sem dados no dano (ataque desarmado): o valor fixo entra direto.
+                    const amount = Number.parseInt(next.dice, 10) || 0
+                    next.status = "done"
+                    next.total = amount
+                    applyDamageTo(live, liveTarget, next, amount, outcome.critical, hpWrites, extraRolls)
+                }
             }
         } else if (done.kind === "damage") {
             if (action.category === "spells" && action.steps.some((item) => item.kind === "damage") && action.targets.length && !action.steps.some((item) => item.kind === "attack")) {
                 // Magia de salvaguarda (ou acerto automático): cada alvo.
-                const option = view ? findCombatOption(view.options, action.economy, action.optionId) : null
+                const option = { save: action.save ?? null }
                 for (const ref of action.targets) {
                     const each = findActor(live, ref.actorKey)
                     if (!each) continue

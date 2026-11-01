@@ -140,7 +140,8 @@ const MaddoxCombatSchema = new Schema<IMaddoxCombat>(
         rev: { type: Number, default: 0 },
         endedAt: { type: Date, default: null },
     },
-    { collection: "maddox_combats", timestamps: true, versionKey: false },
+    // `minimize: false`: o estado tático guarda objetos vazios de propósito (flags, economia).
+    { collection: "maddox_combats", timestamps: true, versionKey: false, minimize: false },
 )
 
 // No máximo um combate ativo por campanha: dois `start_combat` concorrentes abrem um só.

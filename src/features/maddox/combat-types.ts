@@ -166,6 +166,10 @@ export interface IMaddoxCombatAction {
     summary: string
     /** Em uma espera do turno do mestre (reação, ataque de oportunidade): a rodada de espera. */
     waitRound: number | null
+    /** Magia de salvaguarda: atributo, CD e "metade no sucesso" (fixados ao lançar). */
+    save?: { ability: AttributeType; dc: number; halfOnSave: boolean } | null
+    /** Ataque à distância (desvantagem contra alvo caído, sem crítico automático). */
+    ranged?: boolean
 }
 
 export interface IMaddoxCombatRoll {
