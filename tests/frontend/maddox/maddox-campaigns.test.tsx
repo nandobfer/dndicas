@@ -54,6 +54,7 @@ const listItem = (over: Partial<MaddoxCampaignListItemDto> = {}): MaddoxCampaign
     sceneImages: true,
     startingLevel: null,
     startingStage: "",
+    worldCatalog: { races: [], classes: [] },
     createdAt: "2026-10-30T10:00:00.000Z",
     updatedAt: new Date().toISOString(),
     ...over,
@@ -126,6 +127,9 @@ describe("lista de campanhas", () => {
         expect(screen.getByText("• Nenhuma: sem rolagens e sem números")).toBeInTheDocument()
         fireEvent.click(screen.getByRole("button", { name: "Fiel ao D&D", hidden: true }))
         await waitFor(() => expect(slider).toHaveAttribute("aria-valuetext", "Fiel ao D&D"))
+        // Maddox 8: o Fiel ao D&D diz que o mundo é de fantasia D&D com povos e classes do catálogo.
+        expect(screen.getByText("• Mundo de fantasia D&D, oficial ou próprio, com povos e classes do catálogo do DnDicas")).toBeInTheDocument()
+        expect(screen.getByText("• Só magias e itens cadastrados no DnDicas")).toBeInTheDocument()
 
         fireEvent.click(screen.getByRole("button", { name: "Criar campanha" }))
         expect(await screen.findByText(/ao menos 3 caracteres/)).toBeInTheDocument()
@@ -387,6 +391,18 @@ describe("página da campanha (lobby)", () => {
         expect(screen.queryByTestId("starting-level-chip")).not.toBeInTheDocument()
         const narrative = await openEdit()
         expect(within(narrative).queryByTestId("starting-level-field")).not.toBeInTheDocument()
+    })
+
+    it("povos e classes do mundo (Maddox 8): aparecem no lobby só quando o cenário gravou alguma lista", async () => {
+        ownerDetail({ rigor: "fiel-dnd", worldCatalog: { races: [{ id: "r1", name: "Humano" }, { id: "r2", name: "Anão" }], classes: [] } })
+        const view = renderWithQueryClient(<CampaignPage campaignId="c1" />)
+        expect(await screen.findByTestId("world-catalog-races")).toHaveTextContent("Povos deste mundo: Humano, Anão")
+        expect(screen.queryByTestId("world-catalog-classes")).not.toBeInTheDocument()
+        view.unmount()
+        ownerDetail({ rigor: "fiel-dnd", worldCatalog: { races: [], classes: [] } })
+        renderWithQueryClient(<CampaignPage campaignId="c1" />)
+        expect(await screen.findByRole("heading", { name: "Brumas de Valdrenn" })).toBeInTheDocument()
+        await waitFor(() => expect(screen.queryByTestId("world-catalog")).not.toBeInTheDocument())
     })
 
     it("editar sem alterações fecha sem chamar a API", async () => {

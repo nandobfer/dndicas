@@ -3,7 +3,8 @@ import { AcaoAuditoria, dbConnect, recordAudit } from "@/lib/db"
 import { DomainError } from "@/lib/api/route"
 import { loggerFor } from "@/lib/logger"
 import { User } from "@/features/users/models/user"
-import { MADDOX_CAMPAIGN_AUDIT_ENTITY, MADDOX_INTERVIEW_CONSUMPTION_ORIGIN, MADDOX_CATALOG_ORIGIN_RIGORS, MADDOX_PROFILE_SECTIONS, MADDOX_SHEET_RIGORS, type MaddoxScriptKind } from "../constants"
+import { MADDOX_CAMPAIGN_AUDIT_ENTITY, MADDOX_INTERVIEW_CONSUMPTION_ORIGIN, MADDOX_CATALOG_ORIGIN_RIGORS, MADDOX_PROFILE_SECTIONS, MADDOX_SHEET_RIGORS, MADDOX_WORLD_CATALOG_RIGORS, type MaddoxScriptKind } from "../constants"
+import { worldCatalogOf, type WorldCatalog } from "../world-catalog"
 import { MaddoxCampaignModel, MaddoxCharacterModel, MaddoxInterviewModel, type IMaddoxInterview } from "../models"
 import { characterConsolidationSchema, scenarioConsolidationSchema, type CharacterConsolidation, type ScenarioConsolidation } from "../interview-schemas"
 import type { MaddoxCampaignDetailDto } from "../campaign-types"
@@ -12,10 +13,18 @@ import { notifyInterviewChanged } from "./campaign-realtime"
 import { linkCatalogMentions } from "./catalog-mentions"
 import { buildConsolidationInstructions, parseJsonObject, settingMarkdown, transcriptText } from "./interview-prompt"
 import { abilityCardAwaitingFirstSubmit, findBackground, submittedAbilityCard } from "./interview-tools"
-import { buildFinalScores, effectiveLevel, emptyBuild, hitPointsSettled, loadBuildCatalog, missingItems, type BuildContext } from "./character-build"
+import { buildContextOfCampaign, buildFinalScores, effectiveLevel, emptyBuild, findCatalogEntity, hitPointsSettled, loadBuildCatalog, missingItems, outOfWorldItems, type BuildContext } from "./character-build"
 import { writeCharacterSheet } from "./sheet-builder"
 
-const buildContextOf = (subject: InterviewSubject): BuildContext => ({ rigor: subject.campaign.rigor, startingLevel: subject.campaign.startingLevel ?? null })
+const buildContextOf = (subject: InterviewSubject): BuildContext => buildContextOfCampaign(subject.campaign)
+
+/** Povos e classes do mundo gravados no cenário que deixaram de existir (ou foram inativados) no catálogo. */
+async function missingWorldEntries(world: WorldCatalog): Promise<string[]> {
+    const missing: string[] = []
+    for (const race of world.races) if (!(await findCatalogEntity("race", race.id))) missing.push(race.name)
+    for (const cls of world.classes) if (!(await findCatalogEntity("class", cls.id))) missing.push(cls.name)
+    return missing
+}
 import { acquireInterviewLock, campaignReservedNames, loadInterviewer, loadSubject, promptContext, releaseInterviewLock, type InterviewSubject } from "./interviews"
 
 /**
@@ -78,6 +87,7 @@ async function completeScenario(subject: InterviewSubject, doc: InterviewDoc, to
     const rename = data.campaignName && data.campaignName !== subject.campaign.name ? data.campaignName : null
     const reserved = [...(await campaignReservedNames(subject.campaign)), ...(rename ? [rename] : [])]
     const [setting, openingSituation] = await Promise.all([linkCatalogMentions(settingMarkdown(data.setting), { reserved }), linkCatalogMentions(data.openingSituation, { reserved })])
+    const world = MADDOX_WORLD_CATALOG_RIGORS.includes(subject.campaign.rigor) ? worldCatalogOf(doc.world) : null
     // Grava o cenário antes de marcar a entrevista como concluída: uma falha no meio deixa a entrevista em
     // `proposed`, e confirmar de novo reaplica (idempotente).
     await MaddoxCampaignModel.updateOne(
@@ -92,6 +102,8 @@ async function completeScenario(subject: InterviewSubject, doc: InterviewDoc, to
                 ...(rename ? { name: rename } : {}),
                 // Nível (graus com ficha) ou estágio (narrativos) da mesa; sem valor combinado, cada personagem informa.
                 ...(MADDOX_SHEET_RIGORS.includes(subject.campaign.rigor) ? { startingLevel: data.startingLevel ?? null } : { startingStage: data.startingStage ?? "" }),
+                // Fiel ao D&D: povos e classes do mundo (gravados pela ferramenta na entrevista; vazio = todo o catálogo).
+                ...(world ? { worldCatalog: world } : {}),
             },
         },
     )
@@ -102,7 +114,13 @@ async function completeScenario(subject: InterviewSubject, doc: InterviewDoc, to
         entidadeId: String(subject.campaign._id),
         acao: AcaoAuditoria.ATUALIZAR,
         antes: { status: subject.campaign.status, ...(rename ? { name: subject.campaign.name } : {}) },
-        depois: { interview: "cenário concluído", scriptVersion: doc.scriptVersion, status: "lobby", ...(rename ? { name: rename } : {}) },
+        depois: {
+            interview: "cenário concluído",
+            scriptVersion: doc.scriptVersion,
+            status: "lobby",
+            ...(rename ? { name: rename } : {}),
+            ...(world ? { povos: world.races.map((item) => item.name), classes: world.classes.map((item) => item.name) } : {}),
+        },
     })
 }
 
@@ -157,10 +175,18 @@ export async function completeInterview(campaignId: string, kind: MaddoxScriptKi
     if (bonusOrigin && !(await findBackground(bonusOrigin))) {
         throw new DomainError(409, `O antecedente do bônus (${bonusOrigin}) não está no catálogo. Peça ao Maddox para escolher uma origem do catálogo e reaplicar o bônus.`, "BACKGROUND_NOT_IN_CATALOG")
     }
+    // Fiel ao D&D: os povos e as classes do mundo precisam continuar no catálogo (podem ter sido inativados depois).
+    if (kind === "scenario" && MADDOX_WORLD_CATALOG_RIGORS.includes(subject.campaign.rigor)) {
+        const missing = await missingWorldEntries(worldCatalogOf(doc.world))
+        if (missing.length) throw new DomainError(409, `Estes povos ou classes do mundo não estão mais no catálogo: ${missing.join(", ")}. Peça ao Maddox para ajustar a lista do mundo antes de concluir.`, "WORLD_OPTIONS_INVALID")
+    }
     // Graus com ficha: a ficha só sai completa (escolhas e, acima do nível 1, o card de PV).
     if (kind === "character" && MADDOX_SHEET_RIGORS.includes(subject.campaign.rigor)) {
         const ctx = buildContextOf(subject)
         const build = doc.build ?? emptyBuild()
+        // Fiel ao D&D: raça e classe só dos povos e classes do mundo combinado no cenário.
+        const outOfWorld = outOfWorldItems(build, ctx)
+        if (outOfWorld.length) throw new DomainError(409, `O personagem não cabe no mundo da campanha: ${outOfWorld.join("; ")}. Peça ao Maddox para ajustar a ficha antes de confirmar.`, "CHARACTER_NOT_IN_WORLD")
         const catalog = await loadBuildCatalog(build)
         const missing = missingItems(doc, catalog, ctx)
         const level = effectiveLevel(build, ctx)

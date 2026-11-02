@@ -53,6 +53,7 @@ const campaign = (over: Partial<MaddoxCampaignDetailDto> = {}): MaddoxCampaignDe
     sceneImages: true,
     startingLevel: null,
     startingStage: "",
+    worldCatalog: { races: [], classes: [] },
     createdAt: "2026-10-30T10:00:00.000Z",
     updatedAt: "2026-10-30T10:00:00.000Z",
     myMemberId: "m1",

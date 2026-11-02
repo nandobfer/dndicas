@@ -31,6 +31,7 @@ import {
 import type { MaddoxSettings } from "../schemas"
 import type { MaddoxAnswerContext, MaddoxMaster, MaddoxMasterSink, MaddoxNarrationContext } from "./game-master"
 import { checkTitle, sheetSummary, type MaddoxCheckSheet } from "../check-modifier"
+import { worldCatalogOf } from "../world-catalog"
 import { buildNarratorInstructions, checkResultLine, narratorTaskText, narratorTranscript, usesChecks, usesCombat, usesTacticalCombat, type NarratorCheckResult, type NarratorDeclaration, type NarratorPromptContext, type NarratorTacticalTask, type NarratorTask } from "./narrator-prompt"
 
 /**
@@ -112,6 +113,7 @@ async function loadContext(campaignId: Types.ObjectId): Promise<LoadedContext> {
             campaignName: campaign.name,
             setting: campaign.setting ?? "",
             openingSituation: campaign.openingSituation ?? "",
+            worldCatalog: worldCatalogOf(campaign.worldCatalog),
             state: { scene: campaign.state?.scene ?? "", location: campaign.state?.location ?? "", situation: campaign.state?.situation ?? "", pendingDecision: campaign.state?.pendingDecision ?? "" },
             characters: characters
                 .filter((character) => character.interview?.status === "done")

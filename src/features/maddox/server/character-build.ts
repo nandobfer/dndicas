@@ -11,8 +11,10 @@ import {
     MADDOX_LEVEL_MAX,
     MADDOX_LEVEL_MIN,
     MADDOX_SHEET_RIGORS,
+    MADDOX_WORLD_CATALOG_RIGORS,
     type MaddoxRigorLevel,
 } from "../constants"
+import { worldAllows, worldCatalogOf, worldNames, type WorldCatalog } from "../world-catalog"
 import { normalizeCatalogName } from "../catalog-markup"
 import { MADDOX_ABILITY_LABELS, MADDOX_SKILLS } from "../check-modifier"
 import { ABILITY_BY_LABEL, ABILITY_LABEL_LIST, finalScores, type AbilityScores } from "../interview-scores"
@@ -30,7 +32,7 @@ import {
     type SpellLimits,
     validateFeatAttributes,
 } from "../character-build-rules"
-import { MaddoxCampaignModel, MaddoxInterviewModel, type IMaddoxBuildRef, type IMaddoxCharacterBuild, type IMaddoxInterview } from "../models"
+import { MaddoxCampaignModel, MaddoxInterviewModel, type IMaddoxCampaign, type IMaddoxBuildRef, type IMaddoxCharacterBuild, type IMaddoxInterview } from "../models"
 import { submittedAbilityCard, submittedHitPointsCard } from "./interview-cards"
 
 /**
@@ -113,7 +115,7 @@ export interface CatalogItem extends NamedDoc {
     charges?: unknown
 }
 
-type CatalogKind = "race" | "class" | "background" | "feat" | "spell" | "item"
+export type CatalogKind = "race" | "class" | "background" | "feat" | "spell" | "item"
 
 const KIND_LABEL: Record<CatalogKind, string> = { race: "Raça", class: "Classe", background: "Origem", feat: "Talento", spell: "Magia", item: "Item" }
 
@@ -144,10 +146,22 @@ export async function findCatalogEntity<T extends NamedDoc>(kind: CatalogKind, r
     return hit ? model.findOne({ _id: hit._id }).lean<T>() : null
 }
 
-async function catalogNames(kind: CatalogKind, limit = 40): Promise<string[]> {
+export async function catalogNames(kind: CatalogKind, limit = 40): Promise<string[]> {
     const model = await modelOf(kind)
     const all = await model.find({ status: "active" }).select("name").lean<NamedDoc[]>()
     return all.map((doc) => doc.name).sort((a, b) => a.localeCompare(b, "pt-BR")).slice(0, limit)
+}
+
+/** Nomes ATIVOS parecidos (mesmo começo de palavra), para sugerir quando um nome não está no catálogo. */
+export async function similarCatalogNames(kind: CatalogKind, ref: string, limit = 10): Promise<string[]> {
+    const stem = normalizeCatalogName(ref.trim().split(/\s+/)[0] ?? "").slice(0, 4)
+    if (stem.length < 3) return []
+    const model = await modelOf(kind)
+    const all = await model.find({ status: "active" }).select("name").lean<NamedDoc[]>()
+    return all
+        .filter((doc) => doc.name.split(/\s+/).some((word) => normalizeCatalogName(word).startsWith(stem)))
+        .map((doc) => doc.name)
+        .slice(0, limit)
 }
 
 export const subclassRefId = (cls: Pick<CatalogClass, "_id">, sub: CatalogSubclass) => `subclass:${String(cls._id)}:${String(sub._id || sub.name)}`
@@ -182,6 +196,26 @@ export interface BuildContext {
     rigor: MaddoxRigorLevel
     /** Nível da mesa (definido no cenário); `null` = o personagem informa. */
     startingLevel: number | null
+    /** Povos e classes do mundo (Fiel ao D&D, Maddox 8); listas vazias ou ausente = todo o catálogo. */
+    world?: WorldCatalog | null
+}
+
+/** Contexto da ficha a partir da campanha (rigor, nível da mesa e povos/classes do mundo). */
+export function buildContextOfCampaign(campaign: Pick<IMaddoxCampaign, "rigor" | "startingLevel" | "worldCatalog">): BuildContext {
+    return { rigor: campaign.rigor, startingLevel: campaign.startingLevel ?? null, world: MADDOX_WORLD_CATALOG_RIGORS.includes(campaign.rigor) ? worldCatalogOf(campaign.worldCatalog) : null }
+}
+
+/** Lista do mundo que restringe a raça ou a classe (só no Fiel ao D&D com lista gravada). */
+const worldListOf = (ctx: BuildContext, kind: "race" | "class") => (ctx.world ? (kind === "race" ? ctx.world.races : ctx.world.classes) : [])
+
+/** Raça e classe fora dos povos e classes do mundo (Fiel ao D&D): mensagens para a conclusão. */
+export function outOfWorldItems(build: Pick<IMaddoxCharacterBuild, "race" | "class"> | null | undefined, ctx: BuildContext): string[] {
+    const out: string[] = []
+    const races = worldListOf(ctx, "race")
+    const classes = worldListOf(ctx, "class")
+    if (build?.race && !worldAllows(races, build.race.id)) out.push(`o povo ${build.race.name} não existe neste mundo (povos: ${worldNames(races)})`)
+    if (build?.class && !worldAllows(classes, build.class.id)) out.push(`a classe ${build.class.name} não existe neste mundo (classes: ${worldNames(classes)})`)
+    return out
 }
 
 export const effectiveLevel = (build: IMaddoxCharacterBuild | null | undefined, ctx: BuildContext) => ctx.startingLevel ?? build?.level ?? null
@@ -331,6 +365,8 @@ export function buildSummary(doc: Pick<IMaddoxInterview, "messages" | "build">, 
             dadoDeVida: catalog.cls?.hitDice ?? null,
         },
         faltando: missingItems(doc, catalog, ctx),
+        ...(outOfWorldItems(build, ctx).length ? { foraDoMundo: outOfWorldItems(build, ctx) } : {}),
+        ...(ctx.world && (ctx.world.races.length || ctx.world.classes.length) ? { mundo: { povos: ctx.world.races.map((item) => item.name), classes: ctx.world.classes.map((item) => item.name) } } : {}),
     }
 }
 
@@ -407,6 +443,14 @@ export async function applyBuildInput(doc: Pick<IMaddoxInterview, "messages" | "
     const resolveMain = async (kind: "race" | "class" | "background", value: string | undefined): Promise<IMaddoxBuildRef | null | undefined> => {
         if (value === undefined) return undefined
         const found = await findCatalogEntity(kind, value)
+        if (found && kind !== "background") {
+            // Fiel ao D&D: além do catálogo, a raça e a classe precisam existir no mundo combinado no cenário.
+            const world = worldListOf(ctx, kind)
+            if (!worldAllows(world, String(found._id))) {
+                errors.push(`${kind === "race" ? "O povo" : "A classe"} “${found.name}” não existe no mundo desta campanha. Opções deste mundo: ${worldNames(world)}.`)
+                return undefined
+            }
+        }
         if (found) return { id: String(found._id), name: found.name }
         if (strict) {
             errors.push(`${KIND_LABEL[kind]} “${value}” não está no catálogo do DnDicas. Opções: ${(await catalogNames(kind)).join(", ")}.`)
@@ -622,9 +666,9 @@ async function loadForBuild(context: BuildToolContext): Promise<{ doc: IMaddoxIn
     const doc = await MaddoxInterviewModel.findOne({ _id: context.interviewId, "generating.token": context.lockToken }).lean<IMaddoxInterview>()
     if (!doc) throw new MaddoxBuildToolError("Esta resposta da entrevista já terminou: as ferramentas só funcionam durante a geração.")
     if (doc.kind !== "character") throw new MaddoxBuildToolError("A ficha só existe na entrevista de personagem.")
-    const campaign = await MaddoxCampaignModel.findById(doc.campaignId).select("rigor startingLevel").lean<{ rigor: MaddoxRigorLevel; startingLevel?: number | null }>()
+    const campaign = await MaddoxCampaignModel.findById(doc.campaignId).select("rigor startingLevel worldCatalog").lean<Pick<IMaddoxCampaign, "rigor" | "startingLevel" | "worldCatalog">>()
     if (!campaign || !MADDOX_SHEET_RIGORS.includes(campaign.rigor)) throw new MaddoxBuildToolError("Este grau de rigor não usa ficha: o personagem é só narrativo.")
-    return { doc, ctx: { rigor: campaign.rigor, startingLevel: campaign.startingLevel ?? null } }
+    return { doc, ctx: buildContextOfCampaign(campaign) }
 }
 
 export async function updateCharacterBuild(context: BuildToolContext, input: UpdateBuildInput) {

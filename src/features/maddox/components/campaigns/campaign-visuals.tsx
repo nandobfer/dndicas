@@ -5,6 +5,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/opex/avatar
 import { rarityColors } from "@/lib/config/colors"
 import { cn } from "@/lib/utils"
 import { MADDOX_CAMPAIGN_STATUS_DEFS, MADDOX_INTERVIEW_STATUS_DEFS, MADDOX_RIGOR_LEVEL_DEFS, type MaddoxCampaignStatus, type MaddoxInterviewStatus, type MaddoxRigorLevel } from "../../constants"
+import { worldNames, type WorldCatalog } from "../../world-catalog"
 
 /** Cor de raridade do nível de rigor (comum → lendário). */
 export const rigorColor = (rigor: MaddoxRigorLevel) => rarityColors[MADDOX_RIGOR_LEVEL_DEFS[rigor].rarity]
@@ -72,5 +73,27 @@ export function StartingStageLine({ campaign, className }: { campaign: { startin
             </span>{" "}
             {stage}
         </p>
+    )
+}
+
+/** Povos e classes do mundo (Maddox 8, Fiel ao D&D): só aparece quando o cenário gravou alguma lista. */
+export function WorldCatalogLines({ campaign, className }: { campaign: { worldCatalog?: WorldCatalog | null }; className?: string }) {
+    const world = campaign.worldCatalog
+    if (!world || (!world.races.length && !world.classes.length)) return null
+    const rows = [
+        { key: "races", label: "Povos deste mundo:", items: world.races },
+        { key: "classes", label: "Classes deste mundo:", items: world.classes },
+    ].filter((row) => row.items.length)
+    return (
+        <div className={cn("space-y-1", className)} data-testid="world-catalog">
+            {rows.map((row) => (
+                <p key={row.key} className="whitespace-normal break-words text-sm text-white/70" data-testid={`world-catalog-${row.key}`}>
+                    <span className="font-medium" style={{ color: rarityColors.legendary }}>
+                        {row.label}
+                    </span>{" "}
+                    {worldNames(row.items)}
+                </p>
+            ))}
+        </div>
     )
 }

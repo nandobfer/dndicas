@@ -191,6 +191,21 @@ describe("catálogo do DnDicas no narrador", () => {
         }
     })
 
+    it("Fiel ao D&D (Maddox 8): catálogo como fonte de verdade, NPCs só dos povos e classes do mundo; os demais graus não", () => {
+        const world = { races: [{ id: "r1", name: "Humano" }, { id: "r2", name: "Anão" }], classes: [{ id: "c1", name: "Guerreiro" }] }
+        const faithful = buildNarratorInstructions(context({ rigor: "fiel-dnd", worldCatalog: world }), { kind: "ai-sdk" })
+        expect(faithful).toContain("Fiel ao D&D: as entidades de regras do catálogo são a fonte de verdade")
+        expect(faithful).toContain("Onde não houver regra clara, você decide pelo seu julgamento.")
+        expect(faithful).toContain("- Povos (raças) deste mundo: Humano, Anão.")
+        expect(faithful).toContain("- Classes deste mundo: Guerreiro.")
+        expect(buildNarratorInstructions(context({ rigor: "fiel-dnd" }), { kind: "ai-sdk" })).toContain("- Povos (raças) deste mundo: todos os do catálogo do DnDicas.")
+        for (const rigor of ["narrativo", "flexivel", "equilibrado", "rigoroso"] as const) {
+            const text = buildNarratorInstructions(context({ rigor, worldCatalog: world }), { kind: "ai-sdk" })
+            expect(text).not.toContain("Fiel ao D&D: as entidades de regras")
+            expect(text).not.toContain("deste mundo")
+        }
+    })
+
     it("no MCP, a lista de ferramentas inclui as de catálogo também sem testes", () => {
         expect(buildNarratorInstructions(context(), { kind: "mcp", server: "dndicas-maddox", turnToken: "t", checks: false })).toContain("update_character_state, search_catalog, get_catalog_entity)")
     })
