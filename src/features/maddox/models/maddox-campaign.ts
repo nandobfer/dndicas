@@ -10,6 +10,7 @@ import {
     type MaddoxScenarioStatus,
     type MaddoxTurnPhase,
 } from "../constants"
+import type { IMaddoxWorldCatalog } from "./maddox-interview"
 
 /**
  * Campanha Maddox — `maddox_campaigns`. Nasce no lobby (Maddox 1), passa pela entrevista de cenário
@@ -61,6 +62,11 @@ export interface IMaddoxCampaign {
     startingLevel?: number | null
     /** Estágio de experiência inicial (graus narrativos), adaptado ao cenário. */
     startingStage?: string
+    /**
+     * Povos e classes do mundo (Maddox 8, Fiel ao D&D), gravados na conclusão do cenário: só entidades do catálogo.
+     * Listas vazias = todo o catálogo.
+     */
+    worldCatalog?: IMaddoxWorldCatalog | null
     /**
      * Estado atual da história (Maddox 4), o "checkpoint" mantido pelo narrador: cena, local, situação e a
      * decisão aguardada. Relido a cada turno.
@@ -118,6 +124,7 @@ const MaddoxCampaignSchema = new Schema<IMaddoxCampaign>(
         showCheckDc: { type: Boolean, default: false },
         startingLevel: { type: Number, default: null, min: 1, max: 20 },
         startingStage: { type: String, default: "" },
+        worldCatalog: { type: Schema.Types.Mixed, default: null },
         state: {
             scene: { type: String, default: "" },
             location: { type: String, default: "" },

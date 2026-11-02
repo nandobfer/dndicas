@@ -8,7 +8,7 @@ import { MADDOX_MCP_SERVER_NAME } from "../constants"
 import { isActiveMaddoxJob } from "./game-live"
 import { MADDOX_NARRATOR_TOOLS, MaddoxToolError, runMaddoxTool, type MaddoxMasterTool } from "./master-tools"
 import { verifyMaddoxInterviewToken, verifyMaddoxTurnToken } from "./master-turn-token"
-import { MADDOX_INTERVIEW_TOOLS, MaddoxInterviewToolError, runInterviewTool, type MaddoxInterviewTool } from "./interview-tools"
+import { MADDOX_ALL_INTERVIEW_TOOLS, MaddoxInterviewToolError, runInterviewTool, type MaddoxInterviewTool } from "./interview-tools"
 import { MADDOX_CATALOG_TOOLS, MaddoxCatalogToolError, runCatalogTool, type MaddoxCatalogTool } from "./catalog-tools"
 import { MaddoxInterviewModel } from "../models"
 
@@ -86,12 +86,12 @@ export function createMaddoxMcpServer() {
             async (args: Record<string, unknown>) => handle(tool, args),
         )
     }
-    for (const tool of MADDOX_INTERVIEW_TOOLS) {
+    for (const tool of MADDOX_ALL_INTERVIEW_TOOLS) {
         server.registerTool(
             tool.name,
             {
                 title: tool.name,
-                description: `${tool.description} Só na entrevista de personagem. Sempre envie \`${TURN_FIELD}\` com o token de turno das instruções da entrevista.`,
+                description: `${tool.description} ${tool.scope === "scenario" ? "Só na entrevista de cenário do Fiel ao D&D." : "Só na entrevista de personagem."} Sempre envie \`${TURN_FIELD}\` com o token de turno das instruções da entrevista.`,
                 inputSchema: { [TURN_FIELD]: z.string().describe("Token de turno informado nas instruções da entrevista"), ...tool.input.shape },
                 annotations: { readOnlyHint: tool.readOnly, openWorldHint: false },
             },

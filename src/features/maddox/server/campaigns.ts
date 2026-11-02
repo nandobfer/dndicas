@@ -15,6 +15,7 @@ import type {
     MaddoxInviteLinkDto,
     MaddoxInvitePreviewDto,
 } from "../campaign-types"
+import { worldCatalogOf } from "../world-catalog"
 import { notifyCampaignChanged } from "./campaign-realtime"
 
 /**
@@ -146,6 +147,7 @@ async function buildDtos(campaigns: CampaignDoc[], userId: string): Promise<(Mad
             showCheckDc: Boolean(campaign.showCheckDc),
             startingLevel: campaign.startingLevel ?? null,
             startingStage: campaign.startingStage ?? "",
+            worldCatalog: worldCatalogOf(campaign.worldCatalog),
             scenarioStatus: campaign.scenarioInterview?.status ?? "pending",
             createdAt: new Date(campaign.createdAt).toISOString(),
             updatedAt: new Date(campaign.updatedAt).toISOString(),

@@ -23,6 +23,7 @@ import {
     MADDOX_CONDITION_LABELS,
     MADDOX_CONDITIONS,
     MADDOX_TACTICAL_COMBAT_RIGORS,
+    MADDOX_CATALOG_REWARD_RIGORS,
     MADDOX_COMBATANT_SIDES,
     MADDOX_COMBATANTS_MAX,
     MADDOX_NPC_STATUSES,
@@ -608,7 +609,7 @@ export const MADDOX_COMBAT_TOOLS: readonly MaddoxMasterTool[] = [
                         descricao: optionalText.describe("Descrição curta (obrigatória para outro)"),
                         personagem: optionalText.describe("Personagem jogador que recebe (vazio = o grupo)"),
                         moedas: coinsInput.optional(),
-                        item: optionalText.describe("Nome do item (de preferência o nome do catálogo do DnDicas)"),
+                        item: optionalText.describe("Nome do item (de preferência o nome do catálogo do DnDicas; no Fiel ao D&D, obrigatoriamente do catálogo)"),
                         quantidade: z.number().int().min(1).max(MADDOX_COMBAT_ITEM_QUANTITY_MAX).optional(),
                     }),
                 )
@@ -618,7 +619,7 @@ export const MADDOX_COMBAT_TOOLS: readonly MaddoxMasterTool[] = [
             cenaFinal: z.string().min(1).describe("A cena final descrita visualmente, em poucas frases (luz, lugar, quem está de pé)"),
         }),
         async execute(context, input) {
-            const { state, tactical } = await combatContext(context)
+            const { state, tactical, rigor } = await combatContext(context)
             if (!state.active) throw new MaddoxToolError("Nenhum combate em andamento para encerrar.")
             void tactical
             if (jobDraftChecks(String(context.campaignId), context.jobId!).length > 0) throw new MaddoxToolError("Há teste pedido nesta narração: resolva os testes antes de encerrar o combate.")
@@ -629,6 +630,16 @@ export const MADDOX_COMBAT_TOOLS: readonly MaddoxMasterTool[] = [
             }
             const characters = await playerCharacters(context.campaignId)
             const fit = fitter()
+            // Fiel ao D&D: recompensa em item só do catálogo (restritivo: nada é gravado e o retorno sugere parecidos).
+            if (MADDOX_CATALOG_REWARD_RIGORS.includes(rigor)) {
+                const { findCatalogEntity, similarCatalogNames } = await import("./character-build")
+                for (const item of input.recompensas ?? []) {
+                    if (item.tipo !== "item" || !item.item?.trim()) continue
+                    if (await findCatalogEntity("item", item.item)) continue
+                    const similar = await similarCatalogNames("item", item.item)
+                    throw new MaddoxToolError(`No Fiel ao D&D toda recompensa em item vem do catálogo: "${item.item.trim()}" não está nele.${similar.length ? ` Parecidos no catálogo: ${similar.join(", ")}.` : ""} Confirme o nome com search_catalog (tipo Item) e chame end_combat de novo.`)
+                }
+            }
             const rewards: MaddoxDraftCombatReward[] = []
             for (const item of input.recompensas ?? []) {
                 const target = item.personagem?.trim() ? findCharacter(characters, item.personagem) : null

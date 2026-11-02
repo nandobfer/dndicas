@@ -8,6 +8,7 @@ A **entrega 2 (DND-12, #206)** — entrevistas de cenário e de personagem — e
 A **entrega 4 (DND-9, #201)** — o Maddox narrador com ferramentas e streaming — está em "Narrador (Maddox 4)".
 A **entrega 5 (DND-16, #208)** — fichas e testes de atributo/perícia/resistência pedidos pelo Maddox — está em "Fichas e testes (Maddox 5)".
 A **entrega 6 (DND-13, #205)** — combate narrativo (cinemático, sem iniciativa) — está em "Combate narrativo (Maddox 6)".
+A **entrega 8 (DND-14, #204)** — modo fiel ao D&D: mundo, povos e classes restritos ao catálogo — está em "Modo fiel ao D&D (Maddox 8)".
 
 Código: `src/features/maddox/` (`constants`, `schemas`, `types`, `script-draft`, `models/`, `server/`,
 `hooks/`, `components/settings/`).
@@ -81,13 +82,13 @@ sessão por campanha", a entrevista usou a do narrador, que continua.
 
 | Coleção | Conteúdo |
 | --- | --- |
-| `maddox_campaigns` | nome, dono, `rigor` (`narrativo`, `flexivel`, `equilibrado`, `rigoroso`, `fiel-dnd` — cores de raridade de comum a lendário em `MADDOX_RIGOR_LEVEL_DEFS`), status (`lobby`…`archived`), capa, cenário consolidado, versões dos roteiros, turno (número e fase mestre/jogadores) |
+| `maddox_campaigns` | nome, dono, `rigor` (`narrativo`, `flexivel`, `equilibrado`, `rigoroso`, `fiel-dnd` — cores de raridade de comum a lendário em `MADDOX_RIGOR_LEVEL_DEFS`), status (`lobby`…`archived`), capa, cenário consolidado, `worldCatalog` (povos e classes do mundo no Fiel ao D&D, Maddox 8), versões dos roteiros, turno (número e fase mestre/jogadores) |
 | `maddox_campaign_members` | campanha, usuário, papel (dono/jogador), status (convidado, entrou, saiu, removido), personagem; único por campanha+usuário |
 | `maddox_characters` | personagem jogável: perfil narrativo (seções), retrato, ficha (`CharacterSheet`) no modo fiel, situação da entrevista |
 | `maddox_npcs` | NPC: descrição pública, notas exclusivas do mestre, visibilidade |
 | `maddox_campaign_memories` | memórias da campanha (fato, evento, local, missão, relação), visibilidade jogadores/mestre; listadas e buscadas no Diário da campanha (Maddox 9) |
 | `maddox_interview_scripts` | versões dos roteiros |
-| `maddox_interviews` | entrevistas (Maddox 2): conversa (`messages`), versão do roteiro, status, trava `generating`, resultado consolidado; única por `{ campaignId, kind, memberId }` |
+| `maddox_interviews` | entrevistas (Maddox 2): conversa (`messages`), versão do roteiro, status, trava `generating`, resultado consolidado, `build` (ficha) e `world` (povos e classes do cenário no Fiel); única por `{ campaignId, kind, memberId }` |
 | `maddox_opencode_sessions` | sessões do OpenCode do Maddox |
 
 Os índices (inclusive os únicos que sustentam regras: `{ kind, version }` dos roteiros, uma sessão `active`
@@ -882,6 +883,49 @@ contêiner e à janela; categorias em `OptionTabs`, alvos/círculo/perícia em `
 Sem permissão nova (`maddox.play` cobre). Fora do escopo: grid e alcance medido (o movimento é texto), ações lendárias e de covil,
 XP e subida de nível, reações dos adversários além do ataque de oportunidade conduzido pelo Maddox, novo personagem depois da morte.
 
+## Modo fiel ao D&D (Maddox 8)
+
+Entrega 8 (DND-14, #204). No **rigor máximo (Fiel ao D&D)** o mundo é de fantasia D&D — um cenário oficial (Reinos Esquecidos,
+Eberron…) ou um mundo **próprio** no estilo do D&D — e os **povos (raças) e as classes do mundo são só os do catálogo**. Nos graus
+menores essas restrições não se aplicam: Narrativo e Flexível aceitam qualquer universo, setting, estilo, raça ou classe, conforme o
+roteiro; Equilibrado prefere o catálogo e aceita criações próprias; o **Rigoroso continua como no Maddox 5** (ambientação livre, raça,
+classe, subclasse, origem e itens da ficha só do catálogo).
+
+Código: `world-catalog.ts` (PURO: `worldAllows` — lista vazia = todo o catálogo —, `worldCatalogOf`, `worldCatalogLines`),
+`server/interview-tools.ts` (`MADDOX_WORLD_TOOLS`), `server/character-build.ts` (`buildContextOfCampaign`, `outOfWorldItems`,
+`similarCatalogNames`), constantes `MADDOX_WORLD_CATALOG_RIGORS` e `MADDOX_CATALOG_REWARD_RIGORS` (`["fiel-dnd"]`).
+
+- **Seção fixa por grau** (`universeSection` em `interview-prompt.ts`): entra em toda entrevista, depois do bloco do rigor, e vale
+  mesmo quando as instruções do entrevistador ou o guia do roteiro (editáveis) não falam de universo. No Fiel: recusar com gentileza
+  universos de fora do D&D (anime, série, ficção científica, mundo moderno) e propor uma alternativa; nunca inventar povos, classes ou
+  subclasses; o catálogo é a fonte de verdade e, onde não houver regra clara, o Maddox decide. O universo é texto livre: a trava real
+  no servidor fica nos povos e classes.
+- **Cenário do Fiel** (`usesWorldTools`): a entrevista de cenário passa a usar o caminho com ferramentas (`usesInterviewTools`; AI SDK
+  ou o MCP `dndicas-maddox` com o token da entrevista) e recebe `search_catalog`, `get_catalog_entity` e:
+  - `update_world_options { racas?, classes? }` — **restritiva**: cada nome (ou id, sem acento/caixa, só ativos) é resolvido no
+    catálogo; um único nome fora dele recusa a chamada inteira ("Nada foi gravado. Povos (raças) fora do catálogo do DnDicas: “Kitsune”.
+    Opções: …") sem gravar. Cada lista enviada substitui a anterior; grava `maddox_interviews.world` pela trava da geração.
+  - `get_world_options {}` (leitura). As duas recusam fora do cenário do Fiel (`scope: "scenario"`; as ferramentas da ficha têm
+    `scope: "character"` e `buildInterviewAiTools(context, kind)` só entrega as do tipo da entrevista).
+  - Prompt: "## Povos e classes do mundo" (consultar o catálogo, combinar e gravar, lista vazia = todo o catálogo, conferir antes da
+    síntese) e "### Mundo: situação atual" a cada turno.
+  - **Conclusão:** antes de consolidar e sem pegar a trava, revalida cada povo/classe gravado; um inativado depois responde 409
+    `WORLD_OPTIONS_INVALID`. Concluir grava `campaign.worldCatalog { races, classes }` (`[{ id, name }]`) e audita as listas. Sem
+    lista, a conclusão não é bloqueada: todo o catálogo vale.
+- **Personagem do Fiel:** o prompt lista "Povos (raças) deste mundo" e "Classes deste mundo" dentro de "## Catálogo do DnDicas";
+  `update_character_build` recusa raça ou classe do catálogo que não estejam no mundo ("A classe “Mago” não existe no mundo desta
+  campanha. Opções deste mundo: Guerreiro."), e o retorno traz `mundo` (e `foraDoMundo`, se houver). A conclusão responde 409
+  `CHARACTER_NOT_IN_WORLD` se a ficha gravada tiver raça ou classe fora do mundo.
+- **Narrador do Fiel:** `narratorCatalogRule(rigor, worldCatalog)` acrescenta que as entidades de regras do catálogo são a fonte de
+  verdade, NPCs só dos povos e classes do mundo, magias/itens/criaturas/recompensas só do catálogo, e as listas do mundo.
+  `end_combat` **recusa** recompensa em item fora do catálogo ("No Fiel ao D&D toda recompensa em item vem do catálogo: … Parecidos no
+  catálogo: …"), sem gravar; Equilibrado e Rigoroso seguem com o item próprio com aviso.
+- **Tela:** o card do Fiel no slider troca "Só raças, classes, magias e itens…" por "Mundo de fantasia D&D, oficial ou próprio, com
+  povos e classes do catálogo do DnDicas" + "Só magias e itens cadastrados no DnDicas". O lobby mostra "Povos deste mundo: …" e
+  "Classes deste mundo: …" (`WorldCatalogLines`, só quando há lista). DTO da campanha: `worldCatalog`.
+
+Campanhas Fiel antigas ficam sem lista (todo o catálogo), sem migração. Sem permissão nova (`maddox.play` cobre).
+
 ## Diário da campanha (Maddox 9)
 
 Código: `server/journal.ts` (serviço), `journal-search.ts` (módulo puro: regex sem acento, trecho, texto corrido),
@@ -947,6 +991,11 @@ Maddox 5 (ficha): `interview-character-build.test.ts` (ponta a ponta com o catá
 ficha campo a campo, 409 de escolhas e de PV, Mago com magias, refazer sem duplicar, Equilibrado com escolhas próprias, graus
 narrativos), `character-build-rules.test.ts`, `tests/frontend/character-sheets/sheet-rules.test.ts` e
 `tests/frontend/maddox/maddox-interview-hit-points.test.tsx`; fixture do catálogo em `tests/backend/maddox/helpers/sheet-catalog.ts`.
+Maddox 8: `faithful-mode.test.ts` (**critério de aceite**: Fiel com povo inventado recusado, lista do mundo gravada,
+`WORLD_OPTIONS_INVALID`, personagem só com raça/classe do mundo e `CHARACTER_NOT_IN_WORLD`; lista vazia = todo o catálogo; Narrativo
+com cenário de anime e personagem inventado sem ferramentas nem recusas), `world-catalog.test.ts`, `interview-prompt.test.ts` e
+`narrator-prompt.test.ts` (seção por grau), `maddox-mcp.test.ts` (ferramentas do mundo), `narrator-tactical-combat-campaign.test.ts`
+(recompensa fora do catálogo recusada no Fiel) e `maddox-campaigns.test.tsx` (card do slider e linhas do mundo no lobby).
 Maddox 2: `interview-prompt.test.ts`, `interviews.test.ts` (MongoDB em memória, IA/JEV/OpenCode mockados),
 `interview-routes.test.ts`, `catalog-mentions.test.ts`, `catalog-markup.test.ts` e `tests/frontend/maddox/maddox-interview.test.tsx`.
 Maddox 3: `game.test.ts` (MongoDB em memória, presença mockada: 1/2/5 jogadores, "Não fazer nada", pergunta, entrada no

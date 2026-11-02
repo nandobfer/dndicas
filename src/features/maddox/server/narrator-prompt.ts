@@ -1,7 +1,8 @@
 import { memoriesSection } from "@/features/ai/memories-prompt"
-import { MADDOX_CATALOG_TOOL_NAMES, MADDOX_CHECK_RIGORS, MADDOX_CHECK_ROUNDS_MAX, MADDOX_COMBAT_LONG_TURNS, MADDOX_COMBAT_RIGORS, MADDOX_DECLARATION_VALIDATION_RIGORS, MADDOX_PROFILE_SECTIONS, MADDOX_TACTICAL_COMBAT_RIGORS, MADDOX_TOOL_TEXT_GUIDE, type MaddoxCampaignMemoryKind, type MaddoxGameMessageKind, type MaddoxQuestStatus, type MaddoxRigorLevel, type MaddoxVisibility } from "../constants"
+import { MADDOX_CATALOG_TOOL_NAMES, MADDOX_CHECK_RIGORS, MADDOX_CHECK_ROUNDS_MAX, MADDOX_COMBAT_LONG_TURNS, MADDOX_COMBAT_RIGORS, MADDOX_DECLARATION_VALIDATION_RIGORS, MADDOX_PROFILE_SECTIONS, MADDOX_TACTICAL_COMBAT_RIGORS, MADDOX_TOOL_TEXT_GUIDE, MADDOX_WORLD_CATALOG_RIGORS, type MaddoxCampaignMemoryKind, type MaddoxGameMessageKind, type MaddoxQuestStatus, type MaddoxRigorLevel, type MaddoxVisibility } from "../constants"
 import { CATALOG_CITATION_RULE, rigorBlock } from "./interview-prompt"
 import { checkSucceeded } from "../check-modifier"
+import { worldCatalogLines, type WorldCatalog } from "../world-catalog"
 
 /**
  * Instruções do Maddox narrador (Maddox 4) — módulo PURO (sem banco nem IA), testado à parte. As regras de narração
@@ -153,13 +154,20 @@ export const MADDOX_PERSISTENCE_RULE = [
 ].join("\n")
 
 /** Consulta ao catálogo do DnDicas na narração (todos os graus). */
-export function narratorCatalogRule(rigor: MaddoxRigorLevel): string {
+export function narratorCatalogRule(rigor: MaddoxRigorLevel, world: WorldCatalog | null = null): string {
+    const faithful = MADDOX_WORLD_CATALOG_RIGORS.includes(rigor)
     return [
         "## Catálogo do DnDicas",
         `- Para regras, magias, itens, monstros e capacidades de classe, subclasse, raça ou origem, consulte \`${MADDOX_CATALOG_TOOL_NAMES.search}\` e \`${MADDOX_CATALOG_TOOL_NAMES.get}\` antes de afirmar a mecânica. Cite com {{Tipo:Nome}} só o que a busca devolveu, com o nome exato dela.`,
         usesChecks(rigor)
             ? "- Use o que o catálogo diz para decidir o que é possível e a dificuldade dos testes; não invente regras nem entidades que a busca não confirmou."
             : "- A consulta serve de referência: a narrativa tem prioridade e nada vira número na história.",
+        ...(faithful
+            ? [
+                  "- Fiel ao D&D: as entidades de regras do catálogo são a fonte de verdade. NPCs só dos povos (raças) e classes deste mundo; magias, itens, criaturas e recompensas só do catálogo, confirmados com a busca antes de entrarem na história. Nunca invente povos, classes, magias ou itens. Onde não houver regra clara, você decide pelo seu julgamento.",
+                  ...worldCatalogLines(world ?? { races: [], classes: [] }),
+              ]
+            : []),
         "- Consulte só quando a cena depender disso (poucas buscas por narração).",
     ].join("\n")
 }
@@ -196,6 +204,8 @@ export interface NarratorPromptContext {
     campaignName: string
     setting: string
     openingSituation: string
+    /** Povos e classes do mundo (Maddox 8, Fiel ao D&D); vazio = todo o catálogo. */
+    worldCatalog?: WorldCatalog | null
     state: { scene: string; location: string; situation: string; pendingDecision: string }
     characters: readonly NarratorCharacter[]
     npcs: readonly NarratorNpc[]
@@ -288,7 +298,7 @@ export function buildNarratorInstructions(context: NarratorPromptContext, mode: 
     if (usesCombat(context.rigor)) parts.push(combatRule(context.rigor))
     if (usesTacticalCombat(context.rigor)) parts.push(tacticalCombatRule(context.rigor))
     if (judgesFreeActionsInNarration(context.rigor)) parts.push(MADDOX_FREE_ACTION_RULE)
-    parts.push(MADDOX_NARRATOR_FORMAT, MADDOX_PERSISTENCE_RULE, narratorCatalogRule(context.rigor))
+    parts.push(MADDOX_NARRATOR_FORMAT, MADDOX_PERSISTENCE_RULE, narratorCatalogRule(context.rigor, context.worldCatalog ?? null))
     const tools = toolsBlock(mode)
     if (tools) parts.push(tools)
     parts.push(`# Campanha "${context.campaignName}"`)

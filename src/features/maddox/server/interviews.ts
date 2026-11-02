@@ -15,6 +15,7 @@ import {
     MADDOX_JEV_MODEL,
     MADDOX_MCP_SERVER_NAME,
     MADDOX_SHEET_RIGORS,
+    MADDOX_WORLD_CATALOG_RIGORS,
     isMaddoxScriptKind,
     type MaddoxScriptKind,
     type MaddoxSessionPurpose,
@@ -28,11 +29,12 @@ import { notifyInterviewChanged } from "./campaign-realtime"
 import { createMarkupFilter } from "../catalog-markup"
 import { linkCatalogMentions, mentionsToMarkup } from "./catalog-mentions"
 import { finalScores } from "../interview-scores"
-import { abilityStatusText, takeInterviewDraft } from "./interview-tools"
+import { abilityStatusText, takeInterviewDraft, worldStatusText } from "./interview-tools"
+import { worldCatalogOf } from "../world-catalog"
 import type { IMaddoxAbilityScoresCard, IMaddoxHitPointsCard } from "../models"
 import { getLevelOneHpMax } from "@/features/character-sheets/utils/sheet-rules"
 import { hitPointRows, hitPointsTotal } from "../character-build-rules"
-import { buildStatusText, constitutionModifier } from "./character-build"
+import { buildContextOfCampaign, buildStatusText, constitutionModifier } from "./character-build"
 import { JEV_PROPOSAL_HINT, buildInterviewInstructions, createMarkerFilter, extractProposal, openingPrompt, transcriptText, type InterviewPromptContext } from "./interview-prompt"
 
 /**
@@ -225,6 +227,7 @@ export async function promptContext(subject: InterviewSubject, kind: MaddoxScrip
             openingSituation: subject.campaign.openingSituation ?? "",
             startingLevel: subject.campaign.startingLevel ?? null,
             startingStage: subject.campaign.startingStage ?? "",
+            worldCatalog: worldCatalogOf(subject.campaign.worldCatalog),
         },
         character: subject.character ? { name: subject.character.name } : null,
         otherCharacters,
@@ -269,6 +272,12 @@ export interface PreparedTurn {
 /** Entrevista de personagem num grau com ficha: atributos pelo card, com as ferramentas do entrevistador. */
 export const usesAbilityCard = (subject: InterviewSubject, kind: MaddoxScriptKind) => kind === "character" && MADDOX_SHEET_RIGORS.includes(subject.campaign.rigor)
 
+/** Entrevista de cenário do Fiel ao D&D (Maddox 8): povos e classes do mundo pelo catálogo, com ferramentas. */
+export const usesWorldTools = (subject: InterviewSubject, kind: MaddoxScriptKind) => kind === "scenario" && MADDOX_WORLD_CATALOG_RIGORS.includes(subject.campaign.rigor)
+
+/** O turno recebe as ferramentas do entrevistador (AI SDK ou MCP do Maddox). */
+export const usesInterviewTools = (subject: InterviewSubject, kind: MaddoxScriptKind) => usesAbilityCard(subject, kind) || usesWorldTools(subject, kind)
+
 /** Resolve modelo, roteiro e sessão do OpenCode; qualquer falha libera a trava e propaga (erro JSON). */
 export async function prepareTurn(subject: InterviewSubject, kind: MaddoxScriptKind, userId: string, interview: InterviewDoc, token: string, userMessage: IMaddoxInterviewMessage | null): Promise<PreparedTurn> {
     try {
@@ -276,8 +285,8 @@ export async function prepareTurn(subject: InterviewSubject, kind: MaddoxScriptK
         const context = await promptContext(subject, kind, interview.scriptVersion, settings)
         let opencodeSessionId: string | null = null
         if (model.provider === "opencode") {
-            // As ferramentas de atributos chegam pelo MCP do Maddox: sem ele, o turno não começa (nada é gravado).
-            if (usesAbilityCard(subject, kind)) {
+            // As ferramentas do entrevistador chegam pelo MCP do Maddox: sem ele, o turno não começa (nada é gravado).
+            if (usesInterviewTools(subject, kind)) {
                 const { ensureMaddoxMcp } = await import("./opencode-mcp")
                 await ensureMaddoxMcp(settings)
             }
@@ -344,6 +353,7 @@ type InterviewStreamEvent = { type: "delta"; text: string } | { type: "error"; m
 async function* streamWithInterviewTools(
     request: { provider: InterviewerModel["provider"]; model: string; variant: string | null; temperature: number | null; maxOutputTokens: number | null; instructions: string; messages: ModelMessage[]; consumption: { origin: string; subject: string } },
     context: { interviewId: Types.ObjectId; lockToken: string },
+    kind: MaddoxScriptKind,
 ): AsyncGenerator<InterviewStreamEvent> {
     const [{ streamText, stepCountIs }, { prepareModel, samplingOptions, describeAiError }, { buildInterviewAiTools }, { recordAiConsumption }] = await Promise.all([
         import("ai"),
@@ -363,7 +373,7 @@ async function* streamWithInterviewTools(
             model: prepared.model,
             instructions: request.instructions,
             messages: request.messages,
-            tools: await buildInterviewAiTools(context),
+            tools: await buildInterviewAiTools(context, kind),
             stopWhen: stepCountIs(MADDOX_INTERVIEW_MAX_STEPS),
             providerOptions: prepared.providerOptions,
             ...(prepared.reasoning ? { reasoning: prepared.reasoning } : {}),
@@ -425,13 +435,25 @@ export async function runTurn(turn: PreparedTurn, emit: (line: MaddoxInterviewSt
         // Depois do marcador de proposta: as citações `{{Tipo:Nome}}` saem em negrito (nunca cruas) até gravar.
         const markup = createMarkupFilter()
         const abilities = usesAbilityCard(turn.subject, kind)
-        const viaMcp = abilities && turn.model.provider === "opencode"
+        const world = usesWorldTools(turn.subject, kind)
+        const withTools = abilities || world
+        const viaMcp = withTools && turn.model.provider === "opencode"
         let context = turn.context
+        if (world) {
+            const { createMaddoxInterviewToken } = await import("./master-turn-token")
+            context = {
+                ...context,
+                world: {
+                    status: worldStatusText(interview.world),
+                    tools: viaMcp ? { kind: "mcp", server: MADDOX_MCP_SERVER_NAME, token: createMaddoxInterviewToken({ interviewId: String(interview._id), lockToken: token }) } : { kind: "ai-sdk" },
+                },
+            }
+        }
         if (abilities) {
             const { createMaddoxInterviewToken } = await import("./master-turn-token")
             context = {
                 ...context,
-                build: { status: await buildStatusText(interview, { rigor: turn.subject.campaign.rigor, startingLevel: turn.subject.campaign.startingLevel ?? null }) },
+                build: { status: await buildStatusText(interview, buildContextOfCampaign(turn.subject.campaign)) },
                 abilities: {
                     status: abilityStatusText(interview),
                     tools: viaMcp ? { kind: "mcp", server: MADDOX_MCP_SERVER_NAME, token: createMaddoxInterviewToken({ interviewId: String(interview._id), lockToken: token }) } : { kind: "ai-sdk" },
@@ -453,7 +475,7 @@ export async function runTurn(turn: PreparedTurn, emit: (line: MaddoxInterviewSt
             title: `Maddox · entrevista · ${turn.subject.campaign.name}`,
             consumption: { origin: MADDOX_INTERVIEW_CONSUMPTION_ORIGIN, subject: String(turn.subject.campaign._id) },
         }
-        const source = abilities && !viaMcp ? streamWithInterviewTools(request, { interviewId: interview._id, lockToken: token }) : streamAi(request)
+        const source = withTools && !viaMcp ? streamWithInterviewTools(request, { interviewId: interview._id, lockToken: token }, kind) : streamAi(request)
         for await (const event of source) {
             if (event.type === "delta") {
                 text += event.text

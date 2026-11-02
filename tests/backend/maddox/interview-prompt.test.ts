@@ -43,8 +43,38 @@ describe("instruções da entrevista", () => {
     it("leva o grau de rigor com as colunas das regras e do livre", () => {
         const text = buildInterviewInstructions(base({ campaign: { name: "X", rigor: "fiel-dnd", setting: "", openingSituation: "" } }))
         expect(text).toContain("Grau de rigor da campanha: Fiel ao D&D")
-        expect(text).toContain("Só raças, classes, magias e itens cadastrados no DnDicas")
+        expect(text).toContain("Mundo de fantasia D&D, oficial ou próprio, com povos e classes do catálogo do DnDicas")
         expect(buildInterviewInstructions(base())).toContain("nenhuma: jogo puramente narrativo")
+    })
+
+    it("seção fixa de universo por grau (Maddox 8), mesmo com instruções e guia editados sem a regra", () => {
+        const of = (rigor: "narrativo" | "flexivel" | "equilibrado" | "rigoroso" | "fiel-dnd") => buildInterviewInstructions(base({ interviewerInstructions: "Sem regras.", script: { version: 1, guide: "Livre.", topics: [] }, campaign: { name: "X", rigor, setting: "", openingSituation: "" } }))
+        expect(of("fiel-dnd")).toContain("## Universo, povos e classes")
+        expect(of("fiel-dnd")).toContain("Os povos (raças) e as classes do mundo são SÓ os do catálogo do DnDicas")
+        expect(of("rigoroso")).toContain("a ambientação pode ser própria, mas as raças, as classes, as subclasses e as origens dos personagens vêm do catálogo")
+        for (const rigor of ["narrativo", "flexivel"] as const) expect(of(rigor)).toContain("qualquer universo, setting, estilo, raça ou classe vale, conforme o roteiro")
+        expect(of("equilibrado")).toContain("qualquer universo, setting ou estilo vale, conforme o roteiro")
+        for (const rigor of ["narrativo", "flexivel", "equilibrado", "rigoroso"] as const) expect(of(rigor)).not.toContain("## Povos e classes do mundo")
+    })
+
+    it("cenário do Fiel: seção dos povos e classes do mundo com a situação e, no OpenCode, o MCP e o token", () => {
+        const text = buildInterviewInstructions(base({ campaign: { name: "X", rigor: "fiel-dnd", setting: "", openingSituation: "" }, world: { status: "- Povos (raças) deste mundo: Humano.", tools: { kind: "mcp", server: "dndicas-maddox", token: "tok-1" } } }))
+        expect(text).toContain("## Povos e classes do mundo")
+        expect(text).toContain("`update_world_options`")
+        expect(text).toContain("### Mundo: situação atual\n- Povos (raças) deste mundo: Humano.")
+        expect(text).toContain("do servidor MCP `dndicas-maddox`. Em TODA chamada envie `turno` com este valor exato: tok-1")
+        // A entrevista de cenário nunca recebe a ficha.
+        expect(text).not.toContain("## Construção da ficha")
+    })
+
+    it("personagem do Fiel lista os povos e as classes do mundo; o Rigoroso não", () => {
+        const world = { races: [{ id: "r1", name: "Humano" }], classes: [] }
+        const faithful = buildInterviewInstructions(base({ kind: "character", character: { name: "Lyra" }, campaign: { name: "X", rigor: "fiel-dnd", setting: "", openingSituation: "", worldCatalog: world } }))
+        expect(faithful).toContain("O mundo desta campanha (definido na entrevista de cenário) só tem estes povos e classes")
+        expect(faithful).toContain("  - Povos (raças) deste mundo: Humano.")
+        expect(faithful).toContain("  - Classes deste mundo: todas as do catálogo do DnDicas.")
+        const strict = buildInterviewInstructions(base({ kind: "character", character: { name: "Lyra" }, campaign: { name: "X", rigor: "rigoroso", setting: "", openingSituation: "", worldCatalog: world } }))
+        expect(strict).not.toContain("deste mundo")
     })
 
     it("na entrevista de personagem inclui o cenário salvo, a situação inicial e os outros personagens", () => {
