@@ -834,6 +834,34 @@ describe("mesa Maddox — testes pedidos pelo Maddox (Maddox 5)", () => {
         expect(longName.className.split(" ")).not.toContain("truncate")
     })
 
+    it("Diário (Maddox 9): botões no cabeçalho, NPC do painel abre o diário e a busca rápida leva ao item", async () => {
+        const search = {
+            query: "bart",
+            npcs: { items: [{ id: "n1", name: "Bartolomeu", portraitUrl: null, status: "active", excerpt: "Taverneiro gordo." }], hasMore: false },
+            memories: { items: [], hasMore: false },
+            messages: { items: [{ id: "msg-9", kind: "narration", turnNumber: 4, characterName: null, excerpt: "Bartolomeu grita por água.", createdAt: "2026-10-31T10:00:00.000Z" }], hasMore: false },
+            party: { items: [], hasMore: false },
+            state: null,
+        }
+        const state = gameState({ npcs: [{ id: "n1", name: "Bartolomeu", portraitUrl: null, status: "active" }] })
+        get.mockImplementation(async (url: string) => (url.endsWith("/journal/search") ? ok(search) : ok(state)))
+        renderWithQueryClient(<GamePage campaignId="c1" />)
+        await screen.findByTestId("game-page")
+
+        expect(screen.getByTestId("journal-link")).toHaveAttribute("href", "/campanhas/c1/diario")
+        expect(within(screen.getByTestId("npc-n1")).getByRole("link")).toHaveAttribute("href", "/campanhas/c1/diario?aba=npcs#npc-n1")
+
+        fireEvent.click(screen.getByTestId("journal-search-open"))
+        const dialog = await screen.findByRole("dialog")
+        fireEvent.change(within(dialog).getByRole("searchbox", { name: "Buscar no diário" }), { target: { value: "bart" } })
+        const hits = await within(dialog).findAllByTestId("journal-search-hit", {}, { timeout: 2000 })
+        expect(hits.map((hit) => hit.getAttribute("href"))).toEqual(["/campanhas/c1/diario?aba=npcs#npc-n1", "/campanhas/c1/diario?aba=historico&msg=msg-9"])
+        expect(get).toHaveBeenCalledWith("/maddox/campaigns/c1/journal/search", { params: { q: "bart" } })
+        expect(within(dialog).getByTestId("search-group-messages")).toHaveTextContent("Turno 4")
+        fireEvent.click(hits[0]!)
+        await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument())
+    })
+
     it("regras puras: situação 'Rolando teste', faixa com vários nomes e sem recarga periódica esperando rolagens", () => {
         const state = gameState({ turn: { ...awaitingTurn, pendingChecks: [{ checkId: "k1", memberId: "m2", characterName: "Lyra" }, { checkId: "k2", memberId: "m3", characterName: "Borin" }] } })
         const presence = { available: true, online: new Set(["u-owner", "u-ana", "u-bia"]) }

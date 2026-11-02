@@ -120,6 +120,31 @@ export type MaddoxCampaignMemoryKind = (typeof MADDOX_CAMPAIGN_MEMORY_KINDS)[num
 export const MADDOX_QUEST_STATUSES = ["ativa", "concluida", "falhou", "abandonada"] as const
 export type MaddoxQuestStatus = (typeof MADDOX_QUEST_STATUSES)[number]
 
+/** Campos do estado atual da história (`campaign.state`) que o Maddox mantém e o Diário da campanha mostra. */
+export const MADDOX_CAMPAIGN_STATE_FIELDS = ["scene", "location", "situation", "pendingDecision"] as const
+export type MaddoxCampaignStateField = (typeof MADDOX_CAMPAIGN_STATE_FIELDS)[number]
+
+/** Rótulos dos tipos de memória da campanha (Diário da campanha, Maddox 9). */
+export const MADDOX_CAMPAIGN_MEMORY_KIND_LABELS: Record<MaddoxCampaignMemoryKind, string> = {
+    fato: "Fato",
+    evento: "Evento",
+    local: "Local",
+    missao: "Missão",
+    relacao: "Relação",
+    outro: "Outro",
+}
+
+/** Situação das missões com a cor de raridade (Diário da campanha). */
+export const MADDOX_QUEST_STATUS_DEFS: Record<MaddoxQuestStatus, { label: string; rarity: MaddoxRarity }> = {
+    ativa: { label: "Ativa", rarity: "rare" },
+    concluida: { label: "Concluída", rarity: "uncommon" },
+    falhou: { label: "Falhou", rarity: "legendary" },
+    abandonada: { label: "Abandonada", rarity: "common" },
+}
+
+/** Situação dos NPCs para os jogadores. */
+export const MADDOX_NPC_STATUS_LABELS: Record<MaddoxNpcStatus, string> = { active: "Ativo", inactive: "Inativo", dead: "Morto", unknown: "Paradeiro desconhecido" }
+
 export const MADDOX_TURN_PHASES = ["master", "players"] as const
 export type MaddoxTurnPhase = (typeof MADDOX_TURN_PHASES)[number]
 

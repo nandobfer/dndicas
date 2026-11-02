@@ -49,7 +49,9 @@ const MaddoxCampaignMemorySchema = new Schema<IMaddoxCampaignMemory>(
 MaddoxCampaignMemorySchema.index({ campaignId: 1, kind: 1, createdAt: -1 })
 // Gravação por tipo + título (as ferramentas do narrador atualizam em vez de duplicar).
 MaddoxCampaignMemorySchema.index({ campaignId: 1, kind: 1, titleKey: 1 })
-// Busca por texto da campanha (Maddox 9).
+// Diário da campanha (Maddox 9): memórias públicas por tipo, da mais recente (cursor `_id`).
+MaddoxCampaignMemorySchema.index({ campaignId: 1, visibility: 1, kind: 1, _id: -1 })
+// Índice de texto legado; a busca do Diário (Maddox 9) usa regex sem acento filtrado pela campanha.
 MaddoxCampaignMemorySchema.index({ title: "text", text: "text", tags: "text" }, { default_language: "portuguese" })
 
 export const MaddoxCampaignMemoryModel: Model<IMaddoxCampaignMemory> =

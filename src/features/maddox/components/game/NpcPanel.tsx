@@ -1,16 +1,18 @@
 "use client"
 
+import Link from "next/link"
 import { UserRound } from "lucide-react"
 import { GlassCard as Card, GlassCardContent as CardContent, GlassCardHeader as CardHeader, GlassCardTitle as CardTitle } from "@/components/ui/glass-card"
 import type { MaddoxGameNpcDto } from "../../game-types"
 import { cn } from "@/lib/utils"
 import { MemberAvatar } from "../campaigns/campaign-visuals"
+import { journalHref } from "../journal/journal-links"
 
 /** Situação que aparece sob o nome (Maddox 6: o combate pode matar ou pôr NPCs em fuga). */
 const NPC_STATUS_NOTES: Partial<Record<MaddoxGameNpcDto["status"], string>> = { dead: "Morto", unknown: "Paradeiro desconhecido" }
 
-/** NPCs que os jogadores conhecem: nome e foto (ou as iniciais). Os segredos do mestre nunca chegam aqui. */
-export function NpcPanel({ npcs, color }: { npcs: MaddoxGameNpcDto[]; color: string }) {
+/** NPCs que os jogadores conhecem: nome e foto (ou as iniciais); cada um abre o NPC no Diário da campanha. Os segredos do mestre nunca chegam aqui. */
+export function NpcPanel({ npcs, color, campaignId }: { npcs: MaddoxGameNpcDto[]; color: string; campaignId: string }) {
     return (
         <Card className="h-fit">
             <CardHeader>
@@ -24,12 +26,14 @@ export function NpcPanel({ npcs, color }: { npcs: MaddoxGameNpcDto[]; color: str
                 ) : (
                     <ul className="grid grid-cols-2 gap-2.5" aria-label="NPCs conhecidos">
                         {npcs.map((npc) => (
-                            <li key={npc.id} className={cn("flex min-w-0 items-center gap-2", npc.status === "dead" && "opacity-50")} data-testid={`npc-${npc.id}`} data-status={npc.status}>
-                                <MemberAvatar name={npc.name} imageUrl={npc.portraitUrl} color={color} className={cn("h-8 w-8 shrink-0", npc.status === "dead" && "grayscale")} />
-                                <span className="min-w-0 whitespace-normal break-words text-sm text-white">
-                                    {npc.name}
-                                    {NPC_STATUS_NOTES[npc.status] && <span className="block text-[11px] text-white/60">{NPC_STATUS_NOTES[npc.status]}</span>}
-                                </span>
+                            <li key={npc.id} className={cn("min-w-0", npc.status === "dead" && "opacity-50")} data-testid={`npc-${npc.id}`} data-status={npc.status}>
+                                <Link href={journalHref(campaignId, { npcId: npc.id })} className="-m-1 flex min-w-0 items-center gap-2 rounded-lg p-1 transition-colors hover:bg-white/[0.05]" title={`Ver ${npc.name} no diário`}>
+                                    <MemberAvatar name={npc.name} imageUrl={npc.portraitUrl} color={color} className={cn("h-8 w-8 shrink-0", npc.status === "dead" && "grayscale")} />
+                                    <span className="min-w-0 whitespace-normal break-words text-sm text-white">
+                                        {npc.name}
+                                        {NPC_STATUS_NOTES[npc.status] && <span className="block text-[11px] text-white/60">{NPC_STATUS_NOTES[npc.status]}</span>}
+                                    </span>
+                                </Link>
                             </li>
                         ))}
                     </ul>

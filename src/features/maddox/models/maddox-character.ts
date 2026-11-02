@@ -17,6 +17,11 @@ export interface IMaddoxCharacter {
     sheetId: Types.ObjectId | null
     /** Condição atual na história (ferimentos, recursos, onde está), mantida pelo narrador; o perfil não muda. */
     currentState: string
+    /**
+     * A condição foi regravada desde o Maddox 9, quando passou a aparecer no Diário da campanha (o prompt avisa que ela é
+     * pública). Sem isso, a condição antiga — gravada como rascunho interno do mestre — não chega aos jogadores.
+     */
+    currentStatePublic?: boolean
     interview: { status: MaddoxInterviewStatus; scriptVersion: number | null }
     status: MaddoxCharacterStatus
     createdAt: Date
@@ -33,6 +38,7 @@ const MaddoxCharacterSchema = new Schema<IMaddoxCharacter>(
         profile: { type: Map, of: String, default: {} },
         sheetId: { type: Schema.Types.ObjectId, ref: "CharacterSheet", default: null },
         currentState: { type: String, default: "" },
+        currentStatePublic: { type: Boolean, default: false },
         interview: {
             status: { type: String, enum: MADDOX_INTERVIEW_STATUSES, default: "pending" },
             scriptVersion: { type: Number, default: null },
