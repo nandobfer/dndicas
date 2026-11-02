@@ -5,6 +5,7 @@ import {
     judgesFreeActionsInNarration,
     narratorTaskText,
     narratorTranscript,
+    sceneImagesRule,
     usesChecks,
     usesCombat,
     type NarratorCheckResult,
@@ -271,5 +272,32 @@ describe("combate narrativo no prompt (Maddox 6)", () => {
         expect(narratorTaskText({ kind: "narration", turnNumber: 3, declarations })).not.toContain("JEV")
         const transcript = narratorTranscript([{ turnNumber: 2, kind: "combat", characterName: null, content: "combate começou: Briga" }], 1000)
         expect(transcript).toBe("[Turno 2 — combate começou: Briga]")
+    })
+})
+
+describe("regra das imagens da cena (Maddox 10)", () => {
+    const situations = [{ key: "new-location", label: "Novo local ou cenário", description: "O grupo chega a um lugar novo." }, { key: "ritual", label: "Ritual", description: "Um ritual grandioso." }]
+
+    it("lista só as situações ativas, avisa a cota e o retrato; ausente sem situações", () => {
+        const rule = sceneImagesRule({ situations, portraits: true, blocked: "Intervalo entre imagens: a próxima pode sair a partir do turno 6." })!
+        expect(rule).toContain("## Imagens da cena")
+        expect(rule).toContain("`new-location` — Novo local ou cenário: O grupo chega a um lugar novo.")
+        expect(rule).toContain("`ritual` — Ritual")
+        expect(rule).toContain("AGORA: Intervalo entre imagens: a próxima pode sair a partir do turno 6. Não peça imagem nesta narração.")
+        expect(rule).toContain("save_npc { gerarRetrato: true }")
+        expect(sceneImagesRule(null)).toBeNull()
+        expect(sceneImagesRule({ situations: [], portraits: false, blocked: null })).toBeNull()
+        const portraitsOnly = sceneImagesRule({ situations: [], portraits: true, blocked: null })!
+        expect(portraitsOnly).not.toContain("request_scene_image")
+        expect(portraitsOnly).toContain("gerarRetrato")
+    })
+
+    it("entra nas instruções e, no OpenCode, a ferramenta aparece na lista do MCP", () => {
+        const withImages = buildNarratorInstructions(context({ sceneImages: { situations, portraits: false, blocked: null } }), { kind: "mcp", server: "dndicas-maddox", turnToken: "t", sceneImages: true })
+        expect(withImages).toContain("## Imagens da cena")
+        expect(withImages).toContain(", request_scene_image,")
+        const without = buildNarratorInstructions(context(), { kind: "mcp", server: "dndicas-maddox", turnToken: "t" })
+        expect(without).not.toContain("## Imagens da cena")
+        expect(without).not.toContain("request_scene_image")
     })
 })

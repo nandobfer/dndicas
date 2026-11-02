@@ -49,6 +49,8 @@ export interface MaddoxCampaignListItemDto {
     scenarioStatus: MaddoxScenarioStatus
     /** CD dos testes visível aos jogadores (Maddox 5). */
     showCheckDc: boolean
+    /** Imagens automáticas nas cenas (Maddox 10). */
+    sceneImages: boolean
     /** Nível inicial da mesa (graus com ficha; `null` = cada personagem informa). */
     startingLevel: number | null
     /** Estágio de experiência inicial (graus narrativos). */

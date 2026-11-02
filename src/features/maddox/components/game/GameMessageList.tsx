@@ -10,6 +10,7 @@ import { liveMarkupToBold } from "../../catalog-markup"
 import type { DiceRollResponse } from "@/features/dice-roller/types"
 import { MemberAvatar } from "../campaigns/campaign-visuals"
 import { GameCheckCard } from "./GameCheckCard"
+import { GameSceneImage } from "./GameSceneImage"
 import { GameCombatCard } from "./GameCombatCard"
 import { CombatActionCard, CombatOrderCard, CombatReactionCard, CombatRollCard } from "./combat/CombatCards"
 
@@ -123,7 +124,22 @@ export function GameMessageList({ messages, myMemberId, maddoxAvatarUrl, color, 
                                 className={highlighted ? "-mx-2 rounded-xl px-2 pt-2 ring-2 ring-primary/70" : undefined}
                             >
                                 {message.kind === "combat" ? (
-                                    message.combat ? message.combat.event === "order" ? <CombatOrderCard combat={message.combat} /> : <GameCombatCard combat={message.combat} /> : null
+                                    message.combat ? (
+                                        message.combat.event === "order" ? (
+                                            <CombatOrderCard combat={message.combat} />
+                                        ) : (
+                                            <>
+                                                <GameCombatCard combat={message.combat} />
+                                                {message.sceneImages?.length ? (
+                                                    <div className="pb-4">
+                                                        {message.sceneImages.map((image) => (
+                                                            <GameSceneImage key={image.id} image={image} color={color} />
+                                                        ))}
+                                                    </div>
+                                                ) : null}
+                                            </>
+                                        )
+                                    ) : null
                                 ) : message.kind === "combat-action" && message.combatAction ? (
                                     <CombatActionCard message={message} mine={actsAs(message)} replay={replays.get(message.id) ?? null} onRoll={combat.onRollAction} onCancel={combat.onCancelAction} />
                                 ) : message.kind === "combat-roll" && message.combatRoll ? (
@@ -231,6 +247,7 @@ function GameMessage({ message, mine, replyTo, maddoxAvatarUrl, color }: { messa
                 ) : (
                     <Markdown lineAction={null}>{message.content}</Markdown>
                 )}
+                {message.sceneImages?.map((image) => <GameSceneImage key={image.id} image={image} color={color} />)}
             </MaddoxBubble>
         )
     }

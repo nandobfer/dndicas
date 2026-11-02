@@ -19,7 +19,7 @@ vi.mock('@/lib/integrations/debug', () => ({ debugFetch: mocks.debugFetch, integ
 vi.mock('ai', () => ({ generateImage: mocks.generateImage }));
 
 import { AiProviderError } from '@/lib/ai/errors';
-import { IMAGE_MODEL_LISTERS, generateAiImage } from '@/lib/ai/image';
+import { IMAGE_MODEL_LISTERS, generateAiImage, imageModelSupportsReferences } from '@/lib/ai/image';
 
 const providerFor = (provider: string) => ({ image: (modelId: string) => ({ provider, modelId }) });
 const imageResult = { image: { uint8Array: new Uint8Array([1, 2, 3]), mediaType: 'image/webp' }, usage: { inputTokens: 4, outputTokens: 1, totalTokens: 5 } };
@@ -82,5 +82,20 @@ describe('lib/ai/image — provedores sob demanda', () => {
         await expect(IMAGE_MODEL_LISTERS.openai()).resolves.toEqual([expect.objectContaining({ id: 'gpt-image-1' })]);
         expect(mocks.debugFetch.mock.calls[0][2]).toMatch(/^https:\/\/gemini\.test\/v1beta\/models\?/);
         expect(mocks.debugFetch.mock.calls[1][2]).toBe('https://openai.test/v1/models');
+    });
+
+    it('imagens de referência vão no prompt só quando o modelo aceita imagens de entrada', async () => {
+        const references = [{ data: new Uint8Array([7]), mediaType: 'image/png' }];
+        const withRefs = await generateAiImage({ provider: 'gemini', model: 'gemini-2.5-flash-image', prompt: 'a taverna', referenceImages: references });
+        expect(mocks.generateImage.mock.calls.at(-1)![0].prompt).toEqual({ text: 'a taverna', images: [references[0]!.data] });
+        expect(withRefs.referencesUsed).toBe(1);
+
+        const imagen = await generateAiImage({ provider: 'gemini', model: 'imagen-4.0-generate-001', prompt: 'a taverna', referenceImages: references });
+        expect(mocks.generateImage.mock.calls.at(-1)![0].prompt).toBe('a taverna');
+        expect(imagen.referencesUsed).toBe(0);
+
+        expect(imageModelSupportsReferences('openai', 'gpt-image-1')).toBe(true);
+        expect(imageModelSupportsReferences('openai', 'dall-e-3')).toBe(false);
+        expect(imageModelSupportsReferences('gemini', 'imagen-4.0-generate-001')).toBe(false);
     });
 });

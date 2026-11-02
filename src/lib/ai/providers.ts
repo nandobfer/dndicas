@@ -100,3 +100,12 @@ export type AiReasoningLevel = (typeof AI_REASONING_LEVELS)[number]
 export function isAiReasoningLevel(value: string): value is AiReasoningLevel {
     return (AI_REASONING_LEVELS as readonly string[]).includes(value)
 }
+
+/**
+ * Modelos de imagem que aceitam imagens de entrada (referência/edição): Gemini `*-image*` (nano banana) e OpenAI
+ * `gpt-image-*`. Imagen e `dall-e-*` só geram a partir de texto. Módulo puro (usado também na tela).
+ */
+export function imageModelSupportsReferences(provider: AiImageProviderId, model: string): boolean {
+    if (provider === "gemini") return /^gemini-.*image/i.test(model)
+    return /^gpt-image/i.test(model)
+}

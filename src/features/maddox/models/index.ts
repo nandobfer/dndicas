@@ -9,3 +9,4 @@ export { MaddoxInterviewModel, type IMaddoxInterview, type IMaddoxInterviewMessa
 export { MaddoxCampaignMessageModel, type IMaddoxCampaignMessage } from "./maddox-campaign-message"
 export { MaddoxCombatModel, type IMaddoxCombat, type IMaddoxCombatant, type IMaddoxCombatReward } from "./maddox-combat"
 export { MaddoxCombatOptionProfileModel, type IMaddoxCombatOptionProfile } from "./maddox-combat-option-profile"
+export { MaddoxSceneImageModel, type IMaddoxSceneImage, type IMaddoxSceneImageCatalogRef } from "./maddox-scene-image"

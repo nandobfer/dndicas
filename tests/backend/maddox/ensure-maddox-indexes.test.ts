@@ -16,6 +16,7 @@ vi.mock("@/features/maddox/models", () => ({
     MaddoxCampaignMessageModel: fake("MaddoxCampaignMessage"),
     MaddoxCombatModel: fake("MaddoxCombat"),
     MaddoxCombatOptionProfileModel: fake("MaddoxCombatOptionProfile"),
+    MaddoxSceneImageModel: fake("MaddoxSceneImage"),
 }))
 
 const { ensureMaddoxIndexes } = await import("@/lib/db/migrations/ensure-maddox-indexes")
@@ -24,7 +25,7 @@ const indexes = (model: unknown) => (model as mongoose.Model<unknown>).schema.in
 describe("migração ensure-maddox-indexes", () => {
     it("cria os índices de todas as coleções Maddox e pode rodar de novo", async () => {
         await ensureMaddoxIndexes()
-        expect([...created].sort()).toEqual(["MaddoxCampaign", "MaddoxCampaignMember", "MaddoxCampaignMemory", "MaddoxCampaignMessage", "MaddoxCharacter", "MaddoxCombat", "MaddoxCombatOptionProfile", "MaddoxInterview", "MaddoxInterviewScript", "MaddoxNpc", "MaddoxOpencodeSession"])
+        expect([...created].sort()).toEqual(["MaddoxCampaign", "MaddoxCampaignMember", "MaddoxCampaignMemory", "MaddoxCampaignMessage", "MaddoxCharacter", "MaddoxCombat", "MaddoxCombatOptionProfile", "MaddoxInterview", "MaddoxInterviewScript", "MaddoxNpc", "MaddoxOpencodeSession", "MaddoxSceneImage"])
         await expect(ensureMaddoxIndexes()).resolves.toBeUndefined()
     })
 
@@ -54,5 +55,8 @@ describe("migração ensure-maddox-indexes", () => {
         expect(indexes(Messages)).toContainEqual([{ campaignId: 1, memberId: 1 }, expect.objectContaining({ unique: true, partialFilterExpression: { kind: "combat-reaction", "combatReaction.status": "pending" } })])
         const { MaddoxCombatOptionProfileModel } = await vi.importActual<typeof import("@/features/maddox/models/maddox-combat-option-profile")>("@/features/maddox/models/maddox-combat-option-profile")
         expect(indexes(MaddoxCombatOptionProfileModel)).toContainEqual([{ entityType: 1, entityId: 1, textHash: 1 }, expect.objectContaining({ unique: true })])
+        // Maddox 10: uma imagem automática por turno do mestre (as que falharam ou foram descartadas não ocupam a vaga).
+        const { MaddoxSceneImageModel } = await vi.importActual<typeof import("@/features/maddox/models/maddox-scene-image")>("@/features/maddox/models/maddox-scene-image")
+        expect(indexes(MaddoxSceneImageModel)).toContainEqual([{ campaignId: 1, turnNumber: 1, slot: 1 }, expect.objectContaining({ unique: true, partialFilterExpression: { counts: true, slot: "auto" } })])
     })
 })

@@ -9,13 +9,13 @@ import type { AiProviderStatusDto } from "@/lib/ai/providers"
 import { MADDOX_JEV_DECISION_DEFS, MADDOX_JEV_DECISIONS } from "../../constants"
 import type { MaddoxSettings } from "../../schemas"
 
-/** Chaves do JEV (System One) por tipo de decisão. Por enquanto só configuráveis: entram nas próximas entregas. */
+/** Chaves do JEV (System One) por tipo de decisão. As que ainda não têm uso passam a valer nas próximas entregas. */
 export function MaddoxJevCard({ form, jev }: { form: UseFormReturn<MaddoxSettings>; jev: AiProviderStatusDto | undefined }) {
     return (
         <Card>
             <CardHeader>
                 <CardTitle className="text-base">Decisões com o JEV</CardTitle>
-                <CardDescription>Classificações e decisões que o Maddox poderá delegar ao JEV para ganhar precisão e reduzir custo. Ainda sem uso: as chaves passam a valer nas próximas entregas das Campanhas Maddox.</CardDescription>
+                <CardDescription>Classificações e decisões que o Maddox delega ao JEV para ganhar precisão e reduzir custo. Em uso: fim da entrevista, validade de ação livre, pedir teste, início ou fim de combate, custo de ação no combate e gerar imagem na cena; as demais passam a valer nas próximas entregas.</CardDescription>
             </CardHeader>
             <CardContent className="space-y-3">
                 {!jev?.connected && (

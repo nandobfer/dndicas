@@ -91,6 +91,14 @@ async function toggleOn(name: string) {
     await waitFor(() => expect((screen.getByRole("button", { name: "Salvar" }) as HTMLButtonElement).disabled).toBe(false))
 }
 
+/** Interruptor sem nome acessível próprio (o `ToggleCard` usa o rótulo pelo `id`): liga pelo id quando o painel estabiliza. */
+async function turnOnById(id: string) {
+    await waitFor(() => expect(document.getElementById(id)).toBeTruthy())
+    await new Promise((resolve) => setTimeout(resolve, 60))
+    fireEvent.click(document.getElementById(id)!)
+    await waitFor(() => expect((document.getElementById(id) as HTMLInputElement).checked).toBe(true))
+}
+
 const lastSaved = () => saveSettings.mock.calls.at(-1)![0] as typeof DEFAULT_MADDOX_SETTINGS
 
 describe("aba Agente Maddox", () => {
@@ -109,7 +117,7 @@ describe("aba Agente Maddox", () => {
     it("mostra as seções e o aviso de disponibilidade", () => {
         renderTab()
         const tabs = screen.getByRole("tablist", { name: "Seções do Agente Maddox" })
-        expect(within(tabs).getAllByRole("tab").map((tab) => tab.textContent)).toEqual(["Geral", "Entrevista: cenário", "Entrevista: personagem", "JEV", "OpenCode", "Memórias"])
+        expect(within(tabs).getAllByRole("tab").map((tab) => tab.textContent)).toEqual(["Geral", "Entrevista: cenário", "Entrevista: personagem", "Imagens", "JEV", "OpenCode", "Memórias"])
         expect(screen.getByText(/está desativada/)).toBeTruthy()
         expect(screen.getByText("Avatar")).toBeTruthy()
     })
@@ -143,6 +151,36 @@ describe("aba Agente Maddox", () => {
         await waitFor(() => expect(saveSettings).toHaveBeenCalled())
         expect(lastSaved().jev["requires-check"]).toBe(true)
         expect(lastSaved().jev["scene-image"]).toBe(false)
+    })
+
+    it("Imagens: liga a geração e uma situação, cria uma personalizada e ajusta a frequência; tudo vai no mesmo Salvar", async () => {
+        renderTab()
+        fireEvent.click(screen.getByRole("tab", { name: "Imagens" }))
+        await turnOnById("maddox-scene-images-enabled")
+        await toggleOn("Novo local ou cenário")
+        fireEvent.click(screen.getByRole("button", { name: /Adicionar situação/ }))
+        fireEvent.change(await screen.findByLabelText("Nome"), { target: { value: "Ritual mágico" } })
+        fireEvent.change(screen.getByLabelText("Quando acontece"), { target: { value: "Um ritual grandioso diante do grupo." } })
+        fireEvent.change(screen.getByLabelText("Intervalo mínimo (turnos do mestre)"), { target: { value: "5" } })
+        fireEvent.change(screen.getByLabelText("Máximo por campanha em 24 h"), { target: { value: "4" } })
+        await waitFor(() => expect((screen.getByRole("button", { name: "Salvar" }) as HTMLButtonElement).disabled).toBe(false))
+        fireEvent.click(screen.getByRole("button", { name: "Salvar" }))
+        await waitFor(() => expect(saveSettings).toHaveBeenCalled())
+        const saved = lastSaved().sceneImages
+        expect(saved).toMatchObject({ enabled: true, minNarrationsBetween: 5, maxPerDay: 4, aspectRatio: "16:9" })
+        expect(saved.situations["new-location"]).toBe(true)
+        expect(saved.situations.climax).toBe(false)
+        expect(saved.custom).toEqual([expect.objectContaining({ label: "Ritual mágico", description: "Um ritual grandioso diante do grupo.", active: true })])
+    })
+
+    it("Imagens: situação personalizada sem nome não salva e o erro aparece na seção", async () => {
+        renderTab()
+        fireEvent.click(screen.getByRole("tab", { name: "Imagens" }))
+        await turnOnById("maddox-scene-images-enabled")
+        fireEvent.click(screen.getByRole("button", { name: /Adicionar situação/ }))
+        fireEvent.click(screen.getByRole("button", { name: "Salvar" }))
+        expect(await screen.findByText("Dê um nome à situação")).toBeTruthy()
+        expect(saveSettings).not.toHaveBeenCalled()
     })
 
     it("JEV configurado e testado não mostra o aviso de desconectado", async () => {

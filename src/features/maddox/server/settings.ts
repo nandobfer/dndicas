@@ -20,6 +20,11 @@ export function withMaddoxDefaults(saved: unknown): unknown {
         avatar: { ...DEFAULT_MADDOX_SETTINGS.avatar, ...(value.avatar ?? {}) },
         opencode: { ...DEFAULT_MADDOX_SETTINGS.opencode, ...(value.opencode ?? {}) },
         jev: { ...DEFAULT_MADDOX_SETTINGS.jev, ...(value.jev ?? {}) },
+        sceneImages: {
+            ...DEFAULT_MADDOX_SETTINGS.sceneImages,
+            ...(value.sceneImages ?? {}),
+            situations: { ...DEFAULT_MADDOX_SETTINGS.sceneImages.situations, ...(value.sceneImages?.situations ?? {}) },
+        },
     }
 }
 
@@ -48,6 +53,7 @@ export function normalizeMaddoxSettings(input: MaddoxSettings): MaddoxSettings {
         interviewer: { provider: interviewer.provider, model: interviewer.model, agent: interviewer.agent, variant: interviewer.variant } as MaddoxSettings["interviewer"],
         avatar: { url: input.avatar.url?.trim() || null, persona: input.avatar.persona },
         opencode: { ...input.opencode, directory: input.opencode.directory?.trim() || null },
+        sceneImages: { ...input.sceneImages, style: input.sceneImages.style.trim() },
     }
 }
 

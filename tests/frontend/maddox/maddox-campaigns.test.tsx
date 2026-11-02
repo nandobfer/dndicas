@@ -51,6 +51,7 @@ const listItem = (over: Partial<MaddoxCampaignListItemDto> = {}): MaddoxCampaign
     startedAt: null,
     scenarioStatus: "pending",
     showCheckDc: false,
+    sceneImages: true,
     startingLevel: null,
     startingStage: "",
     worldCatalog: { races: [], classes: [] },
@@ -169,6 +170,19 @@ describe("lista de campanhas", () => {
         fireEvent.change(screen.getByLabelText("Nome da campanha"), { target: { value: "Só História" } })
         fireEvent.click(screen.getByRole("button", { name: "Criar campanha" }))
         await waitFor(() => expect(post).toHaveBeenCalledWith("/maddox/campaigns", { name: "Só História", rigor: "narrativo" }))
+    })
+
+    it("imagens nas cenas na criação: ligadas por padrão (não vão no POST); desligadas enviam sceneImages: false", async () => {
+        post.mockResolvedValue(ok(detail({ id: "c9", name: "Sem Imagens", rigor: "narrativo" })))
+        renderWithQueryClient(<CampaignsPage />)
+        fireEvent.click(await screen.findByRole("button", { name: /Nova campanha/ }))
+        const field = await screen.findByTestId("scene-images-field")
+        expect(field).toHaveTextContent("O Maddox ilustra os momentos marcantes")
+        fireEvent.click(within(field).getByRole("button", { name: "Desligadas" }))
+        await waitFor(() => expect(screen.getByTestId("scene-images-field")).toHaveTextContent("Sem imagens automáticas"))
+        fireEvent.change(screen.getByLabelText("Nome da campanha"), { target: { value: "Sem Imagens" } })
+        fireEvent.click(screen.getByRole("button", { name: "Criar campanha" }))
+        await waitFor(() => expect(post).toHaveBeenCalledWith("/maddox/campaigns", expect.objectContaining({ name: "Sem Imagens", sceneImages: false })))
     })
 
     it("Maddox indisponível: mostra o motivo no diálogo", async () => {
@@ -328,6 +342,20 @@ describe("página da campanha (lobby)", () => {
         fireEvent.click(within(dialog).getByRole("button", { name: "Salvar" }))
         await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument())
         expect(patch).not.toHaveBeenCalled()
+    })
+
+    it("editar as imagens nas cenas (mesmo em andamento) envia só sceneImages", async () => {
+        let current = detail({ status: "active", rigorLocked: true, sceneImages: true })
+        get.mockImplementation(async (url: string) => (url.endsWith("/invite") ? ok({ token: TOKEN, rotatedAt: null }) : ok(current)))
+        patch.mockImplementation(async (_url: string, body: Record<string, unknown>) => {
+            current = { ...current, ...body }
+            return ok(current)
+        })
+        renderWithQueryClient(<CampaignPage campaignId="c1" />)
+        const dialog = await openEdit()
+        fireEvent.click(within(within(dialog).getByTestId("scene-images-field")).getByRole("button", { name: "Desligadas" }))
+        fireEvent.click(within(dialog).getByRole("button", { name: "Salvar" }))
+        await waitFor(() => expect(patch).toHaveBeenCalledWith("/maddox/campaigns/c1", { sceneImages: false }))
     })
 
     it("nível inicial: chip no lobby; o dono muda pelo Select glass antes de começar (PATCH só com startingLevel)", async () => {

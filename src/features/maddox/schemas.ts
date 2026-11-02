@@ -1,5 +1,6 @@
 import { z } from "zod"
 import { AI_TEXT_PROVIDER_IDS } from "@/lib/ai/providers"
+import { IMAGE_ASPECT_RATIOS } from "@/features/ai/constants"
 import {
     DEFAULT_MADDOX_INSTRUCTIONS,
     DEFAULT_MADDOX_INTERVIEWER_INSTRUCTIONS,
@@ -12,8 +13,18 @@ import {
     MADDOX_SCRIPT_NOTES_MAX,
     MADDOX_SCRIPT_TOPIC_MAX,
     MADDOX_SCRIPT_TOPICS_MAX,
+    MADDOX_SCENE_IMAGE_CUSTOM_DESCRIPTION_MAX,
+    MADDOX_SCENE_IMAGE_CUSTOM_LABEL_MAX,
+    MADDOX_SCENE_IMAGE_CUSTOM_MAX,
+    MADDOX_SCENE_IMAGE_DAILY_DEFAULT,
+    MADDOX_SCENE_IMAGE_DAILY_MAX,
+    MADDOX_SCENE_IMAGE_GAP_DEFAULT,
+    MADDOX_SCENE_IMAGE_GAP_MAX,
+    MADDOX_SCENE_IMAGE_SITUATIONS,
+    MADDOX_SCENE_IMAGE_STYLE_MAX,
     MADDOX_SESSION_SCOPES,
     type MaddoxJevDecision,
+    type MaddoxSceneImageSituation,
 } from "./constants"
 
 const providerFields = {
@@ -65,6 +76,48 @@ export type MaddoxOpencodeSettings = z.infer<typeof maddoxOpencodeSchema>
 export const maddoxJevSchema = z.object(Object.fromEntries(MADDOX_JEV_DECISIONS.map((decision) => [decision, z.boolean({ error: "Chave do JEV inválida" })])) as Record<MaddoxJevDecision, z.ZodBoolean>)
 export type MaddoxJevSettings = z.infer<typeof maddoxJevSchema>
 
+/** Situação personalizada (texto livre do admin): a descrição orienta o Maddox e o JEV. */
+export const maddoxSceneImageCustomSchema = z.object({
+    id: z.string().trim().min(1).max(64),
+    label: z.string().trim().min(1, "Dê um nome à situação").max(MADDOX_SCENE_IMAGE_CUSTOM_LABEL_MAX, `Até ${MADDOX_SCENE_IMAGE_CUSTOM_LABEL_MAX} caracteres`),
+    description: z.string().trim().min(1, "Descreva quando a situação acontece").max(MADDOX_SCENE_IMAGE_CUSTOM_DESCRIPTION_MAX, `Até ${MADDOX_SCENE_IMAGE_CUSTOM_DESCRIPTION_MAX} caracteres`),
+    active: z.boolean(),
+})
+export type MaddoxSceneImageCustom = z.infer<typeof maddoxSceneImageCustomSchema>
+
+/** Imagens nas cenas (Maddox 10): situações, frequência, proporção e estilo. */
+export const maddoxSceneImagesSchema = z.object({
+    enabled: z.boolean({ error: "Informe se as imagens nas cenas estão ligadas" }),
+    situations: z.object(Object.fromEntries(MADDOX_SCENE_IMAGE_SITUATIONS.map((situation) => [situation, z.boolean({ error: "Chave da situação inválida" })])) as Record<MaddoxSceneImageSituation, z.ZodBoolean>),
+    custom: z
+        .array(maddoxSceneImageCustomSchema)
+        .max(MADDOX_SCENE_IMAGE_CUSTOM_MAX, `Até ${MADDOX_SCENE_IMAGE_CUSTOM_MAX} situações personalizadas`)
+        .refine((items) => new Set(items.map((item) => item.id)).size === items.length, "Cada situação aparece uma vez"),
+    minNarrationsBetween: z
+        .number({ error: "Informe um número" })
+        .int("Use um número inteiro")
+        .min(0, "Mínimo 0")
+        .max(MADDOX_SCENE_IMAGE_GAP_MAX, `Máximo ${MADDOX_SCENE_IMAGE_GAP_MAX}`),
+    maxPerDay: z
+        .number({ error: "Informe um número" })
+        .int("Use um número inteiro")
+        .min(1, "Mínimo 1")
+        .max(MADDOX_SCENE_IMAGE_DAILY_MAX, `Máximo ${MADDOX_SCENE_IMAGE_DAILY_MAX}`),
+    aspectRatio: z.enum(IMAGE_ASPECT_RATIOS, { error: "Escolha a proporção" }),
+    style: z.string().trim().max(MADDOX_SCENE_IMAGE_STYLE_MAX, `Até ${MADDOX_SCENE_IMAGE_STYLE_MAX.toLocaleString("pt-BR")} caracteres`),
+})
+export type MaddoxSceneImagesSettings = z.infer<typeof maddoxSceneImagesSchema>
+
+export const DEFAULT_MADDOX_SCENE_IMAGES: MaddoxSceneImagesSettings = {
+    enabled: false,
+    situations: Object.fromEntries(MADDOX_SCENE_IMAGE_SITUATIONS.map((situation) => [situation, false])) as MaddoxSceneImagesSettings["situations"],
+    custom: [],
+    minNarrationsBetween: MADDOX_SCENE_IMAGE_GAP_DEFAULT,
+    maxPerDay: MADDOX_SCENE_IMAGE_DAILY_DEFAULT,
+    aspectRatio: "16:9",
+    style: "",
+}
+
 const instructionsField = z.string().trim().min(1, "Informe as instruções").max(MADDOX_INSTRUCTIONS_MAX, `Até ${MADDOX_INSTRUCTIONS_MAX.toLocaleString("pt-BR")} caracteres`)
 
 /** Configuração do Agente Maddox — mesmo schema na tela e na API. */
@@ -78,6 +131,7 @@ export const maddoxSettingsSchema = z
         avatar: maddoxAvatarSchema,
         opencode: maddoxOpencodeSchema,
         jev: maddoxJevSchema,
+        sceneImages: maddoxSceneImagesSchema,
     })
     .superRefine((value, ctx) => {
         if (value.interviewer.provider && !value.interviewer.model) ctx.addIssue({ code: "custom", path: ["interviewer", "model"], message: "Selecione o modelo" })
@@ -96,6 +150,7 @@ export const DEFAULT_MADDOX_SETTINGS: MaddoxSettings = {
     avatar: { url: null, persona: DEFAULT_MADDOX_PERSONA },
     opencode: { sessionScope: "campaign-and-interviews", deleteOnCampaignEnd: true, directory: null, mcpUrl: null },
     jev: Object.fromEntries(MADDOX_JEV_DECISIONS.map((decision) => [decision, false])) as MaddoxJevSettings,
+    sceneImages: DEFAULT_MADDOX_SCENE_IMAGES,
 }
 
 // ── Roteiros ─────────────────────────────────────────────────────────────────

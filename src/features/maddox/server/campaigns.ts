@@ -145,6 +145,7 @@ async function buildDtos(campaigns: CampaignDoc[], userId: string): Promise<(Mad
             combatTitle: combatTitle.get(String(campaign._id)) ?? null,
             startedAt: iso(campaign.startedAt),
             showCheckDc: Boolean(campaign.showCheckDc),
+            sceneImages: campaign.sceneImages !== false,
             startingLevel: campaign.startingLevel ?? null,
             startingStage: campaign.startingStage ?? "",
             worldCatalog: worldCatalogOf(campaign.worldCatalog),
@@ -222,7 +223,7 @@ export async function createCampaign(input: CreateMaddoxCampaignInput, userId: s
     const availability = await maddoxAvailability(settings)
     if (!availability.available) throw new DomainError(409, availability.reason ?? 'O "Agente Maddox" não está disponível. Fale com um administrador.', "MADDOX_UNAVAILABLE")
 
-    const campaign = await MaddoxCampaignModel.create({ name: input.name, ownerId: userId, rigor: input.rigor, showCheckDc: input.showCheckDc ?? false, status: "lobby", invite: { token: newToken(), rotatedAt: new Date() } })
+    const campaign = await MaddoxCampaignModel.create({ name: input.name, ownerId: userId, rigor: input.rigor, showCheckDc: input.showCheckDc ?? false, sceneImages: input.sceneImages ?? true, status: "lobby", invite: { token: newToken(), rotatedAt: new Date() } })
     try {
         await MaddoxCampaignMemberModel.create({ campaignId: campaign._id, userId, role: "owner", status: "joined", invitedBy: null, joinedAt: new Date() })
     } catch (error) {
@@ -230,7 +231,7 @@ export async function createCampaign(input: CreateMaddoxCampaignInput, userId: s
         await MaddoxCampaignModel.deleteOne({ _id: campaign._id }).catch(() => undefined)
         throw error
     }
-    await recordAudit({ userId, entidade: MADDOX_CAMPAIGN_AUDIT_ENTITY, entidadeId: String(campaign._id), acao: AcaoAuditoria.CRIAR, depois: { name: input.name, rigor: input.rigor, showCheckDc: input.showCheckDc ?? false, status: "lobby" } })
+    await recordAudit({ userId, entidade: MADDOX_CAMPAIGN_AUDIT_ENTITY, entidadeId: String(campaign._id), acao: AcaoAuditoria.CRIAR, depois: { name: input.name, rigor: input.rigor, showCheckDc: input.showCheckDc ?? false, sceneImages: input.sceneImages ?? true, status: "lobby" } })
     await notifyCampaignChanged(String(campaign._id), [userId])
     return getCampaignDetail(String(campaign._id), userId)
 }
@@ -251,6 +252,8 @@ export async function updateCampaign(campaignId: string, input: UpdateMaddoxCamp
         // A CD dos testes pode mudar a qualquer momento, inclusive com a campanha em andamento.
         ...(input.showCheckDc !== undefined ? { showCheckDc: input.showCheckDc } : {}),
         ...(input.startingLevel !== undefined ? { startingLevel: input.startingLevel } : {}),
+        // As imagens automáticas (Maddox 10) também mudam a qualquer momento.
+        ...(input.sceneImages !== undefined ? { sceneImages: input.sceneImages } : {}),
     }
     await MaddoxCampaignModel.updateOne({ _id: campaign._id }, { $set: next })
     await recordAudit({
@@ -258,7 +261,7 @@ export async function updateCampaign(campaignId: string, input: UpdateMaddoxCamp
         entidade: MADDOX_CAMPAIGN_AUDIT_ENTITY,
         entidadeId: String(campaign._id),
         acao: AcaoAuditoria.ATUALIZAR,
-        antes: { name: campaign.name, rigor: campaign.rigor, showCheckDc: Boolean(campaign.showCheckDc), startingLevel: campaign.startingLevel ?? null },
+        antes: { name: campaign.name, rigor: campaign.rigor, showCheckDc: Boolean(campaign.showCheckDc), startingLevel: campaign.startingLevel ?? null, sceneImages: campaign.sceneImages !== false },
         depois: next,
     })
     await changed(campaign._id)
