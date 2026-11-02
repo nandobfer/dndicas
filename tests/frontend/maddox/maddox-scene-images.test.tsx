@@ -72,7 +72,7 @@ describe("NpcPanel — retrato", () => {
 
     it("dono pede o retrato; o NPC que está sendo pintado mostra o andamento e não aceita outro pedido", () => {
         const onRequest = vi.fn()
-        render(<NpcPanel npcs={npcs} color="#3b82f6" portraits={{ canRequest: true, requesting: null, onRequest }} />)
+        render(<NpcPanel npcs={npcs} color="#3b82f6" campaignId="c1" portraits={{ canRequest: true, requesting: null, onRequest }} />)
         fireEvent.click(screen.getByRole("button", { name: "Gerar retrato de Varn" }))
         expect(onRequest).toHaveBeenCalledWith("n1")
         expect((screen.getByRole("button", { name: "Gerar novo retrato de Mira" }) as HTMLButtonElement).disabled).toBe(true)
@@ -80,7 +80,7 @@ describe("NpcPanel — retrato", () => {
     })
 
     it("jogador não vê o botão", () => {
-        render(<NpcPanel npcs={npcs} color="#3b82f6" />)
+        render(<NpcPanel npcs={npcs} color="#3b82f6" campaignId="c1" />)
         expect(screen.queryByRole("button", { name: /Gerar retrato/ })).toBeNull()
     })
 })

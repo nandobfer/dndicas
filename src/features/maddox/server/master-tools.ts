@@ -4,6 +4,7 @@ import type { ToolSet } from "ai"
 import { loggerFor } from "@/lib/logger"
 import {
     MADDOX_CAMPAIGN_MEMORY_KINDS,
+    MADDOX_CAMPAIGN_STATE_FIELDS,
     MADDOX_CHECK_DC_MAX,
     MADDOX_CHECK_DC_MIN,
     MADDOX_CHECK_REASON_GUIDE,
@@ -42,6 +43,7 @@ import { MADDOX_ABILITIES, MADDOX_ABILITY_LABELS, MADDOX_SKILLS, checkAbility, c
 import { addDraftCheck, addDraftCombat, addDraftNpcPortrait, jobDraftChecks, jobDraftCombat, jobDraftSceneImage, jobWorkspace, maddoxJobMeta, setDraftSceneImage, type MaddoxDraftCombatReward } from "./game-live"
 import { catalogEntityTypeSchema } from "@/features/mcp/server/catalog-schemas"
 import type { TacticalDraftCombatant } from "./tactical-combat"
+import { accentInsensitivePattern } from "../journal-search"
 
 /**
  * Ferramentas de persistência do Maddox narrador (Maddox 4) — SOMENTE servidor. Definidas uma vez e expostas de
@@ -126,7 +128,8 @@ const memoryDto = (memory: IMaddoxCampaignMemory) => ({
     turnNumber: memory.turnNumber ?? null,
 })
 
-const escapeRegex = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
+/** Busca sem acento e sem caixa, também por pedaço de palavra (a mesma do Diário da campanha). */
+const textMatch = (query: string) => ({ $regex: accentInsensitivePattern(query), $options: "i" })
 
 type SaveNpcInput = { name: string; newName?: string; publicDescription?: string; masterNotes?: string; visibility?: (typeof MADDOX_VISIBILITIES)[number]; status?: (typeof MADDOX_NPC_STATUSES)[number] }
 
@@ -192,7 +195,7 @@ export const MADDOX_MASTER_TOOLS: readonly MaddoxMasterTool[] = [
     define({
         name: "update_campaign_state",
         description:
-            "Atualiza o estado atual da história (checkpoint): cena, local, situação imediata e a decisão aguardada dos jogadores. Envie só os campos que mudaram; use ao fim de cada narração em que a situação mudou.",
+            "Atualiza o estado atual da história (checkpoint): cena, local, situação imediata e a decisão aguardada dos jogadores. Envie só os campos que mudaram; use ao fim de cada narração em que a situação mudou. Os jogadores leem este estado no Diário da campanha: nunca grave segredos do mestre aqui (use save_npc ou save_memory com visibility master).",
         readOnly: false,
         input: z.object({
             scene: optionalText.describe("Cena atual, em uma ou duas frases"),
@@ -203,8 +206,10 @@ export const MADDOX_MASTER_TOOLS: readonly MaddoxMasterTool[] = [
         async execute(context, input) {
             const fit = fitter()
             const set: Record<string, unknown> = { "state.updatedTurn": context.turnNumber, "state.updatedAt": new Date() }
-            for (const field of ["scene", "location", "situation", "pendingDecision"] as const) if (input[field] !== undefined) set[`state.${field}`] = fit.fit(field, input[field])
-            await MaddoxCampaignModel.updateOne({ _id: context.campaignId }, { $set: set }, { timestamps: false })
+            const written = MADDOX_CAMPAIGN_STATE_FIELDS.filter((field) => input[field] !== undefined)
+            for (const field of written) set[`state.${field}`] = fit.fit(field, input[field]!)
+            // Regravado com o aviso de que é público: passa a aparecer no Diário da campanha (Maddox 9).
+            await MaddoxCampaignModel.updateOne({ _id: context.campaignId }, { $set: set, ...(written.length ? { $addToSet: { "state.publicFields": { $each: written } } } : {}) }, { timestamps: false })
             const campaign = await MaddoxCampaignModel.findById(context.campaignId).select("state").lean<Pick<IMaddoxCampaign, "state">>()
             return { saved: true, state: stateShape(campaign), ...fit.notice() }
         },
@@ -269,7 +274,7 @@ export const MADDOX_MASTER_TOOLS: readonly MaddoxMasterTool[] = [
             const filter = {
                 campaignId: context.campaignId,
                 ...(input.kind ? { kind: input.kind } : {}),
-                ...(query ? { $or: [{ title: { $regex: escapeRegex(query), $options: "i" } }, { text: { $regex: escapeRegex(query), $options: "i" } }, { tags: { $regex: escapeRegex(query), $options: "i" } }] } : {}),
+                ...(query ? { $or: [{ title: textMatch(query) }, { text: textMatch(query) }, { tags: textMatch(query) }] } : {}),
             }
             const memories = await MaddoxCampaignMemoryModel.find(filter)
                 .sort({ updatedAt: -1 })
@@ -324,7 +329,7 @@ export const MADDOX_MASTER_TOOLS: readonly MaddoxMasterTool[] = [
     define({
         name: "update_character_state",
         description:
-            "Atualiza a condição atual de um personagem jogador na história (ferimentos, cansaço, recursos e equipamentos que mudaram, onde está). Substitui a condição anterior; o perfil da entrevista não muda.",
+            "Atualiza a condição atual de um personagem jogador na história (ferimentos, cansaço, recursos e equipamentos que mudaram, onde está). Substitui a condição anterior; o perfil da entrevista não muda. Todos os jogadores leem esta condição no Diário da campanha: nunca grave segredos do mestre aqui.",
         readOnly: false,
         input: z.object({ characterName: z.string().min(1), currentState: z.string().describe("Condição atual consolidada") }),
         async execute(context, input) {
@@ -332,7 +337,7 @@ export const MADDOX_MASTER_TOOLS: readonly MaddoxMasterTool[] = [
             const target = characters.find((character) => keyOf(character.name) === keyOf(input.characterName))
             if (!target) throw new MaddoxToolError(`Nenhum personagem jogador chamado "${input.characterName}". Personagens: ${characters.map((character) => character.name).join(", ") || "nenhum"}.`)
             const fit = fitter()
-            await MaddoxCharacterModel.updateOne({ _id: target._id }, { $set: { currentState: fit.fit("currentState", input.currentState) } })
+            await MaddoxCharacterModel.updateOne({ _id: target._id }, { $set: { currentState: fit.fit("currentState", input.currentState), currentStatePublic: true } })
             return { saved: true, characterName: target.name, ...fit.notice() }
         },
     }),

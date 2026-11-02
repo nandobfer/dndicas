@@ -8,6 +8,24 @@ import { MADDOX_PROFILE_SECTIONS } from "../../constants"
 import type { MaddoxCampaignCharacterDto } from "../../campaign-types"
 import { MemberAvatar } from "./campaign-visuals"
 
+/** Seções do perfil narrativo (as vazias ficam de fora); também usadas na aba Grupo do Diário da campanha. */
+export function CharacterProfileSections({ profile, color }: { profile: Record<string, string>; color: string }) {
+    return (
+        <>
+            {MADDOX_PROFILE_SECTIONS.map((item) =>
+                profile[item.key] ? (
+                    <section key={item.key} className="space-y-1">
+                        <h3 className="text-sm font-semibold" style={{ color }}>
+                            {item.label}
+                        </h3>
+                        <Markdown lineAction={null}>{profile[item.key]!}</Markdown>
+                    </section>
+                ) : null,
+            )}
+        </>
+    )
+}
+
 /** Perfil narrativo consolidado pela entrevista de personagem e, quando houver, o link da ficha D&D. */
 export function CharacterProfileDialog({ character, playerName, color, own, onOpenChange }: { character: MaddoxCampaignCharacterDto | null; playerName: string; color: string; own: boolean; onOpenChange: (open: boolean) => void }) {
     return (
@@ -25,16 +43,7 @@ export function CharacterProfileDialog({ character, playerName, color, own, onOp
                             </GlassModalDescription>
                         </GlassModalHeader>
                         <div className="max-h-[60vh] space-y-4 overflow-y-auto pr-1">
-                            {MADDOX_PROFILE_SECTIONS.map((item) =>
-                                character.profile[item.key] ? (
-                                    <section key={item.key} className="space-y-1">
-                                        <h3 className="text-sm font-semibold" style={{ color }}>
-                                            {item.label}
-                                        </h3>
-                                        <Markdown lineAction={null}>{character.profile[item.key]!}</Markdown>
-                                    </section>
-                                ) : null,
-                            )}
+                            <CharacterProfileSections profile={character.profile} color={color} />
                         </div>
                         {own && character.sheetSlug && (
                             <Link href={`/sheets/${character.sheetSlug}`} className="inline-flex items-center gap-1 text-sm font-medium text-primary hover:underline">

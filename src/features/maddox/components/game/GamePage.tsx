@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react"
 import Link from "next/link"
 import { motion } from "framer-motion"
-import { ArrowLeft, Dices, Hourglass, MessageCircle, Swords } from "lucide-react"
+import { ArrowLeft, BookOpen, Dices, Hourglass, MessageCircle, Swords } from "lucide-react"
 import { toast } from "sonner"
 import { Button } from "@/components/ui/opex/button"
 import { Skeleton } from "@/components/ui/opex/skeleton"
@@ -40,6 +40,8 @@ import { SceneImageButton } from "./SceneImageButton"
 import { useRequestMaddoxNpcPortrait, useRequestMaddoxSceneImage } from "../../hooks/useMaddoxSceneImages"
 import { TurnPanel } from "./TurnPanel"
 import { CampaignChatHeader } from "../CampaignChatHeader"
+import { JournalSearchDialog } from "../journal/JournalSearchDialog"
+import { journalHref } from "../journal/journal-links"
 
 const errorStatus = (error: unknown) => (error as { response?: { status?: number } } | null)?.response?.status
 
@@ -190,6 +192,12 @@ function GameTable({ state, presence, stream }: { state: MaddoxGameStateDto; pre
                 actions={
                     <>
                         <SceneImageButton control={state.sceneImages} busy={sceneImage.isPending} onRequest={() => sceneImage.mutate()} />
+                        <JournalSearchDialog campaignId={state.campaignId} color={color} />
+                        <Button size="sm" variant="outline" asChild>
+                            <Link href={journalHref(state.campaignId)} data-testid="journal-link">
+                                <BookOpen aria-hidden /> Diário
+                            </Link>
+                        </Button>
                         <MySheetButton sheet={state.me.sheet} />
                     </>
                 }
@@ -281,6 +289,7 @@ function GameTable({ state, presence, stream }: { state: MaddoxGameStateDto; pre
                     <NpcPanel
                         npcs={state.npcs}
                         color={color}
+                        campaignId={state.campaignId}
                         portraits={state.sceneImages?.owner ? { canRequest: state.sceneImages.canRequestPortrait, requesting: portrait.isPending ? (portrait.variables ?? null) : null, onRequest: (npcId) => portrait.mutate(npcId) } : null}
                     />
                 </div>

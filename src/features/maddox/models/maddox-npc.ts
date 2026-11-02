@@ -33,5 +33,7 @@ const MaddoxNpcSchema = new Schema<IMaddoxNpc>(
 
 MaddoxNpcSchema.index({ campaignId: 1, name: 1 })
 MaddoxNpcSchema.index({ campaignId: 1, nameKey: 1 })
+// Diário da campanha (Maddox 9): NPCs que os jogadores conhecem, do mais recente (cursor `_id`).
+MaddoxNpcSchema.index({ campaignId: 1, visibility: 1, _id: -1 })
 
 export const MaddoxNpcModel: Model<IMaddoxNpc> = (mongoose.models.MaddoxNpc as Model<IMaddoxNpc>) || mongoose.model<IMaddoxNpc>("MaddoxNpc", MaddoxNpcSchema)

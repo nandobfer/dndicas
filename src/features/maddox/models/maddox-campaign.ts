@@ -4,6 +4,7 @@ import {
     MADDOX_RIGOR_LEVELS,
     MADDOX_SCENARIO_STATUSES,
     MADDOX_TURN_PHASES,
+    type MaddoxCampaignStateField,
     type MaddoxCampaignStatus,
     type MaddoxRigorLevel,
     type MaddoxScenarioStatus,
@@ -72,7 +73,19 @@ export interface IMaddoxCampaign {
      * Estado atual da história (Maddox 4), o "checkpoint" mantido pelo narrador: cena, local, situação e a
      * decisão aguardada. Relido a cada turno.
      */
-    state: { scene: string; location: string; situation: string; pendingDecision: string; updatedTurn: number | null; updatedAt: Date | null }
+    state: {
+        scene: string
+        location: string
+        situation: string
+        pendingDecision: string
+        updatedTurn: number | null
+        updatedAt: Date | null
+        /**
+         * Campos regravados pelo Maddox desde o Maddox 9, quando o estado passou a aparecer no Diário da campanha (o prompt
+         * avisa que ele é público). Só esses chegam aos jogadores: o que foi gravado antes, como rascunho interno, fica oculto.
+         */
+        publicFields?: MaddoxCampaignStateField[]
+    }
     /** Quando o dono iniciou a campanha (Maddox 3). */
     startedAt: Date | null
     /** Link de convite (Maddox 1). `select: false`: só o dono o recebe; gerar outro invalida o anterior. */
@@ -122,6 +135,7 @@ const MaddoxCampaignSchema = new Schema<IMaddoxCampaign>(
             pendingDecision: { type: String, default: "" },
             updatedTurn: { type: Number, default: null },
             updatedAt: { type: Date, default: null },
+            publicFields: { type: [String], default: [] },
         },
         startedAt: { type: Date, default: null },
         invite: {

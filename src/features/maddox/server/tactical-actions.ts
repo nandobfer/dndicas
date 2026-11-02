@@ -735,7 +735,7 @@ async function performClaimedRoll(campaign: CampaignDoc, message: MessageDoc, re
 /** Personagens mortos no combate: o personagem da campanha fica `dead` (sai da mesa), com auditoria. */
 export async function markDeadCharacters(campaignId: Types.ObjectId, combat: TacticalCombat): Promise<void> {
     for (const state of combat.tactical.characters.filter((item) => item.dead)) {
-        const updated = await MaddoxCharacterModel.updateOne({ _id: new Types.ObjectId(state.characterId), campaignId, status: { $ne: "dead" } }, { $set: { status: "dead", currentState: `Morreu em combate (${combat.title}).` } })
+        const updated = await MaddoxCharacterModel.updateOne({ _id: new Types.ObjectId(state.characterId), campaignId, status: { $ne: "dead" } }, { $set: { status: "dead", currentState: `Morreu em combate (${combat.title}).`, currentStatePublic: true } })
         if (updated.modifiedCount === 0) continue
         log.info({ campaignId: String(campaignId), characterId: state.characterId, combatId: String(combat._id) }, "[maddox] personagem morreu em combate")
         const campaign = await MaddoxCampaignModel.findById(campaignId).select("ownerId").lean<{ ownerId: string }>()

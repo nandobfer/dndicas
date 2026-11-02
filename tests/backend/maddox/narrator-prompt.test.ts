@@ -49,6 +49,15 @@ describe("instruções do Maddox narrador", () => {
         expect(text).not.toContain("servidor MCP")
     })
 
+    it("avisa que estado, condição dos personagens e anotações públicas aparecem no Diário da campanha (Maddox 9)", () => {
+        const text = buildNarratorInstructions(context(), { kind: "ai-sdk" })
+        expect(text).toContain("Os jogadores consultam no Diário da campanha o estado da história (`update_campaign_state`), a condição dos personagens (`update_character_state`)")
+        expect(text).toContain("Nunca ponha segredos nesses campos")
+        // Lembrete a cada turno, junto do próprio estado (além da regra de persistência).
+        const stateBlock = text.slice(text.indexOf("## Estado atual da história"))
+        expect(stateBlock.split("\n")[1]).toContain("Os jogadores leem este estado e a condição de cada personagem no Diário da campanha")
+    })
+
     it("memórias do agente entram logo depois das instruções da aba", () => {
         const text = buildNarratorInstructions(context({ agentMemories: ["Nunca mate um personagem sem aviso."] }), { kind: "ai-sdk" })
         expect(text).toContain("- Nunca mate um personagem sem aviso.")
