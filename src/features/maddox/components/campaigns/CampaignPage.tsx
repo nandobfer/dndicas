@@ -21,7 +21,7 @@ import { EditCampaignDialog } from "./EditCampaignDialog"
 import { InvitePanel } from "./InvitePanel"
 import { CharacterProfileDialog } from "./CharacterProfileDialog"
 import { ScenarioCard } from "./ScenarioCard"
-import { InterviewChip, MemberAvatar, RarityChip, RigorChip, StartingLevelChip, StartingStageLine, StatusChip, rigorColor } from "./campaign-visuals"
+import { InterviewChip, MemberAvatar, RarityChip, RigorChip, StartingLevelChip, StartingStageLine, StatusChip, WorldCatalogLines, rigorColor } from "./campaign-visuals"
 import { rarityColors } from "@/lib/config/colors"
 
 const errorStatus = (error: unknown) => (error as { response?: { status?: number } } | null)?.response?.status
@@ -101,6 +101,7 @@ function CampaignView({ campaign, userId }: { campaign: MaddoxCampaignDetailDto;
                         </div>
                         <p className="text-sm text-white/60">{MADDOX_RIGOR_LEVEL_DEFS[campaign.rigor].description}</p>
                         <StartingStageLine campaign={campaign} />
+                        <WorldCatalogLines campaign={campaign} />
                     </div>
                     <div className="flex flex-wrap gap-2">
                         {active && (

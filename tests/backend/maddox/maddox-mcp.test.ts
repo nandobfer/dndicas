@@ -152,6 +152,26 @@ describe("ferramentas da entrevista no MCP do Maddox (Maddox 5)", () => {
         expect(runInterviewTool).not.toHaveBeenCalled()
     })
 
+    it("as ferramentas do mundo (Maddox 8, cenário do Fiel) estão no MCP: valem com o token da entrevista, nunca com o do narrador", async () => {
+        const list = await rpc(route.POST, "tools/list")
+        const tools = Object.fromEntries(list.result!.tools!.map((tool) => [tool.name, tool]))
+        for (const name of ["update_world_options", "get_world_options"]) {
+            expect(tools[name], name).toBeDefined()
+            expect(tools[name]!.inputSchema.properties).toHaveProperty("turno")
+        }
+        expect(tools.update_world_options!.inputSchema.properties).toHaveProperty("racas")
+        expect(tools.update_world_options!.inputSchema.properties).toHaveProperty("classes")
+        const turno = createMaddoxInterviewToken({ interviewId: INTERVIEW, lockToken: "trava-3" })
+        const result = await rpc(route.POST, "tools/call", { name: "update_world_options", arguments: { turno, racas: ["Humano"] } })
+        expect(result.result!.isError).toBeFalsy()
+        expect(runInterviewTool).toHaveBeenCalledWith(expect.objectContaining({ name: "update_world_options", scope: "scenario" }), expect.objectContaining({ lockToken: "trava-3" }), { racas: ["Humano"] })
+        runInterviewTool.mockClear()
+        const narrador = createMaddoxTurnToken({ campaignId: CAMPAIGN, jobId: "j1", turnNumber: 1 })
+        const refused = await rpc(route.POST, "tools/call", { name: "update_world_options", arguments: { turno: narrador, racas: ["Humano"] } })
+        expect(refused.result!.isError).toBe(true)
+        expect(runInterviewTool).not.toHaveBeenCalled()
+    })
+
     it("token de entrevista chega à ferramenta com a entrevista e a trava do token", async () => {
         const turno = createMaddoxInterviewToken({ interviewId: INTERVIEW, lockToken: "trava-1" })
         const result = await rpc(route.POST, "tools/call", { name: "get_ability_scores", arguments: { turno } })

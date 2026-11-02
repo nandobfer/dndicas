@@ -11,10 +11,12 @@ import {
     MADDOX_RIGOR_LEVEL_DEFS,
     MADDOX_SETTING_SECTIONS,
     MADDOX_SHEET_RIGORS,
+    MADDOX_WORLD_CATALOG_RIGORS,
     type MaddoxRigorLevel,
     type MaddoxScriptKind,
     type MaddoxScriptTopic,
 } from "../constants"
+import { worldCatalogLines, type WorldCatalog } from "../world-catalog"
 
 /**
  * Instruções das entrevistas do Maddox — módulo PURO (sem banco nem IA), testado à parte. O roteiro
@@ -25,7 +27,7 @@ export interface InterviewPromptContext {
     kind: MaddoxScriptKind
     interviewerInstructions: string
     script: { version: number; guide: string; topics: readonly MaddoxScriptTopic[] }
-    campaign: { name: string; rigor: MaddoxRigorLevel; setting: string; openingSituation: string; startingLevel?: number | null; startingStage?: string }
+    campaign: { name: string; rigor: MaddoxRigorLevel; setting: string; openingSituation: string; startingLevel?: number | null; startingStage?: string; worldCatalog?: WorldCatalog | null }
     /** Entrevista de personagem: nome do esboço e dos outros personagens da mesa. */
     character?: { name: string } | null
     otherCharacters?: string[]
@@ -36,6 +38,47 @@ export interface InterviewPromptContext {
     abilities?: { status: string; tools: { kind: "ai-sdk" } | { kind: "mcp"; server: string; token: string } } | null
     /** Escolhas da ficha (graus com ficha): situação atual (o que já foi gravado e o que falta). */
     build?: { status: string } | null
+    /**
+     * Povos e classes do mundo (Maddox 8, entrevista de cenário do Fiel ao D&D): situação atual e como as ferramentas
+     * chegam (AI SDK ou MCP do Maddox com o token da entrevista).
+     */
+    world?: { status: string; tools: { kind: "ai-sdk" } | { kind: "mcp"; server: string; token: string } } | null
+}
+
+/**
+ * Universo, povos e classes por grau (Maddox 8): seção FIXA, que vale mesmo quando as instruções do entrevistador ou o
+ * guia do roteiro (editáveis) não falam disso.
+ */
+const UNIVERSE_RULE: Record<MaddoxRigorLevel, string> = {
+    "fiel-dnd":
+        "- Fiel ao D&D: o mundo é de fantasia D&D — um cenário oficial (como Reinos Esquecidos, Eberron ou Greyhawk) ou um mundo próprio no estilo do D&D. Recuse com gentileza universos de fora do D&D (animes, séries, filmes, livros, ficção científica, mundo moderno) e proponha uma alternativa de fantasia D&D.\n- Os povos (raças) e as classes do mundo são SÓ os do catálogo do DnDicas; nunca invente povos, classes ou subclasses nem traga de outras edições. As regras do catálogo são a fonte de verdade; onde não houver regra clara, você decide.",
+    rigoroso: "- Rigoroso: a ambientação pode ser própria, mas as raças, as classes, as subclasses e as origens dos personagens vêm do catálogo do DnDicas.",
+    equilibrado: "- Equilibrado: qualquer universo, setting ou estilo vale, conforme o roteiro, inspirado no D&D; raças e classes do catálogo são preferidas, mas criações próprias são aceitas.",
+    flexivel: "- Flexível: qualquer universo, setting, estilo, raça ou classe vale, conforme o roteiro (inclusive animes, séries, filmes, livros e jogos). O D&D é só inspiração.",
+    narrativo: "- Narrativo: qualquer universo, setting, estilo, raça ou classe vale, conforme o roteiro (inclusive animes, séries, filmes, livros e jogos). Nada de regras do D&D.",
+}
+
+export function universeSection(rigor: MaddoxRigorLevel): string {
+    return `## Universo, povos e classes\n${UNIVERSE_RULE[rigor]}`
+}
+
+/** Seção "Povos e classes do mundo" (entrevista de cenário do Fiel ao D&D). */
+export function worldSection(world: InterviewPromptContext["world"]): string {
+    const lines = [
+        "## Povos e classes do mundo",
+        `- Antes de sugerir ou confirmar povos e classes do mundo, consulte o catálogo com \`${MADDOX_CATALOG_TOOL_NAMES.search}\` (para listar todas as opções de um tipo, envie só \`tipos\`, por exemplo { "tipos": ["Raça"] } ou { "tipos": ["Classe"] }) e \`${MADDOX_CATALOG_TOOL_NAMES.get}\` para os detalhes. Só cite como do catálogo o que a busca devolveu, com o nome exato dela.`,
+        `- Combine com quem criou a campanha quais povos e quais classes existem neste mundo e grave com \`${MADDOX_INTERVIEW_TOOL_NAMES.world}\` (\`racas\` e \`classes\`) assim que a pessoa concordar. Um nome fora do catálogo é recusado: mostre as opções mais próximas. Se a pessoa não quiser limitar, deixe a lista vazia: todo o catálogo vale.`,
+        "- A criação de personagem só vai oferecer os povos e as classes gravados. Antes da síntese, confira com " + `\`${MADDOX_INTERVIEW_TOOL_NAMES.getWorld}\` e liste-os na síntese.`,
+    ]
+    if (world) {
+        lines.push(`\n### Mundo: situação atual\n${world.status}`)
+        if (world.tools.kind === "mcp") {
+            lines.push(
+                `\n### Ferramentas do mundo (MCP)\nUse as ferramentas \`${MADDOX_INTERVIEW_TOOL_NAMES.world}\`, \`${MADDOX_INTERVIEW_TOOL_NAMES.getWorld}\`, \`${MADDOX_CATALOG_TOOL_NAMES.search}\` e \`${MADDOX_CATALOG_TOOL_NAMES.get}\` do servidor MCP \`${world.tools.server}\`. Em TODA chamada envie \`turno\` com este valor exato: ${world.tools.token}`,
+            )
+        }
+    }
+    return lines.join("\n")
 }
 
 /** Como perguntar o nível (graus com ficha) ou o estágio de experiência (graus narrativos), por grau. */
@@ -110,10 +153,12 @@ export function buildInterviewInstructions(context: InterviewPromptContext): str
             : `## Entrevista atual\nEntrevista de PERSONAGEM da campanha "${context.campaign.name}". Personagem do jogador: "${context.character?.name ?? "a definir"}".`,
     )
     parts.push(rigorBlock(context.campaign.rigor))
+    parts.push(universeSection(context.campaign.rigor))
     parts.push(startingLevelSection(context))
+    if (isScenario && MADDOX_WORLD_CATALOG_RIGORS.includes(context.campaign.rigor)) parts.push(worldSection(context.world ?? null))
     if (!isScenario && MADDOX_SHEET_RIGORS.includes(context.campaign.rigor)) {
         parts.push("Neste grau de rigor o personagem terá ficha do D&D completa: combine também raça, classe, origem (antecedente), os seis atributos (pelo card) e as escolhas de ficha (veja abaixo).")
-        parts.push(catalogSection(context.campaign.rigor))
+        parts.push(catalogSection(context.campaign.rigor, context.campaign.worldCatalog ?? null))
         parts.push(buildSection(context.build ?? null))
         parts.push(abilitiesSection(context.abilities ?? null))
     }
@@ -147,8 +192,14 @@ const T = MADDOX_INTERVIEW_TOOL_NAMES
 const C = MADDOX_CATALOG_TOOL_NAMES
 
 /** Seção "Catálogo do DnDicas" (entrevista de personagem nos graus com ficha): consultar antes de sugerir. */
-export function catalogSection(rigor: MaddoxRigorLevel): string {
+export function catalogSection(rigor: MaddoxRigorLevel, world: WorldCatalog | null = null): string {
     const strict = MADDOX_CATALOG_ORIGIN_RIGORS.includes(rigor)
+    const worldLines = MADDOX_WORLD_CATALOG_RIGORS.includes(rigor)
+        ? [
+              "- O mundo desta campanha (definido na entrevista de cenário) só tem estes povos e classes. Ofereça e aceite somente eles; o sistema recusa os demais.",
+              ...worldCatalogLines(world ?? { races: [], classes: [] }).map((line) => `  ${line}`),
+          ]
+        : []
     return [
         "## Catálogo do DnDicas",
         `- Antes de sugerir ou confirmar raça, classe, subclasse, origem (antecedente), talento ou magia, consulte \`${C.search}\` (para listar todas as opções de um tipo, envie só \`tipos\`, por exemplo { "tipos": ["Origem"] }) e, para os detalhes (atributos sugeridos, perícias, traços), \`${C.get}\`.`,
@@ -156,6 +207,7 @@ export function catalogSection(rigor: MaddoxRigorLevel): string {
         strict
             ? "- Neste grau, a raça, a classe, a subclasse e a origem do personagem precisam ser do catálogo. Se o jogador pedir algo que não existe nele, diga isso e mostre as opções mais próximas da busca."
             : "- Neste grau, prefira o catálogo. Algo próprio (fora do catálogo) só se o jogador quiser, e diga com clareza que é próprio.",
+        ...worldLines,
     ].join("\n")
 }
 

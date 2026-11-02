@@ -3,13 +3,25 @@ import { Types } from "mongoose"
 import type { ToolSet } from "ai"
 import { loggerFor } from "@/lib/logger"
 import type { AttributeType } from "@/features/character-sheets/types/character-sheet.types"
-import { MADDOX_ABILITY_BONUS_MAX, MADDOX_CATALOG_ORIGIN_RIGORS, MADDOX_CATALOG_TOOL_NAMES, MADDOX_INTERVIEW_TOOL_NAMES, MADDOX_SHEET_RIGORS, MADDOX_TOOL_TEXT_MAX, type MaddoxRigorLevel } from "../constants"
+import {
+    MADDOX_ABILITY_BONUS_MAX,
+    MADDOX_CATALOG_ORIGIN_RIGORS,
+    MADDOX_CATALOG_TOOL_NAMES,
+    MADDOX_INTERVIEW_TOOL_NAMES,
+    MADDOX_SHEET_RIGORS,
+    MADDOX_TOOL_TEXT_MAX,
+    MADDOX_WORLD_CATALOG_RIGORS,
+    MADDOX_WORLD_OPTIONS_MAX,
+    type MaddoxRigorLevel,
+    type MaddoxScriptKind,
+} from "../constants"
 import { normalizeCatalogName } from "../catalog-markup"
 import { MaddoxCampaignModel, MaddoxInterviewModel, type IMaddoxAbilityBonus, type IMaddoxAbilityScoresCard, type IMaddoxInterview } from "../models"
 import { ABILITY_BY_LABEL, ABILITY_KEYS, ABILITY_LABEL_LIST, abilityMethodLabel, finalScores, rolledScores, scoresLine, validateBonus, type AbilityScores } from "../interview-scores"
 import { MADDOX_ABILITY_LABELS } from "../check-modifier"
 import { latestAbilityCard, latestHitPointsCard } from "./interview-cards"
-import { BUILD_TOOL_DESCRIPTIONS, MaddoxBuildToolError, emptyBuild, getCharacterBuild, loadBuildCatalog, updateBuildInput, updateCharacterBuild, type UpdateBuildInput } from "./character-build"
+import { BUILD_TOOL_DESCRIPTIONS, MaddoxBuildToolError, catalogNames, emptyBuild, findCatalogEntity, getCharacterBuild, loadBuildCatalog, updateBuildInput, updateCharacterBuild, type UpdateBuildInput } from "./character-build"
+import { worldCatalogLines, worldCatalogOf, type WorldCatalog, type WorldCatalogRef } from "../world-catalog"
 
 /**
  * Ferramentas do entrevistador (Maddox 5) — SOMENTE servidor. Atributos do personagem pelo card: abrir/reabrir
@@ -62,6 +74,8 @@ export interface MaddoxInterviewTool {
     description: string
     input: z.ZodObject<z.ZodRawShape>
     readOnly: boolean
+    /** Entrevista em que a ferramenta vale: personagem (graus com ficha) ou cenário (Fiel ao D&D). */
+    scope: MaddoxScriptKind
     execute: (context: InterviewToolContext, input: never) => Promise<unknown>
 }
 
@@ -131,6 +145,7 @@ export const MADDOX_INTERVIEW_TOOLS: readonly MaddoxInterviewTool[] = [
             novaRolagem: z.boolean().optional().describe("Apaga as rolagens de 4d6 já feitas"),
         }),
         readOnly: false,
+        scope: "character",
         execute: async (context, input: { motivo?: string; novaRolagem?: boolean }) => {
             const doc = await loadActive(context)
             const draft = draftOf(context.lockToken)
@@ -160,6 +175,7 @@ export const MADDOX_INTERVIEW_TOOLS: readonly MaddoxInterviewTool[] = [
         description: "Consulta os atributos do personagem: situação do card, método, valores-base, bônus do antecedente, valores finais e rolagens. Use antes da síntese.",
         input: z.object({}),
         readOnly: true,
+        scope: "character",
         execute: async (context) => {
             const doc = await loadActive(context)
             const latest = latestAbilityCard(doc.messages)
@@ -185,6 +201,7 @@ export const MADDOX_INTERVIEW_TOOLS: readonly MaddoxInterviewTool[] = [
             bonus: z.object(bonusShape).describe("Pontos por atributo (nome em português)"),
         }),
         readOnly: false,
+        scope: "character",
         execute: async (context, input: { antecedente: string; bonus: Record<string, number | undefined> }) => {
             const doc = await loadActive(context)
             const latest = latestAbilityCard(doc.messages)
@@ -216,6 +233,7 @@ export const MADDOX_INTERVIEW_TOOLS: readonly MaddoxInterviewTool[] = [
         description: BUILD_TOOL_DESCRIPTIONS.update,
         input: updateBuildInput,
         readOnly: false,
+        scope: "character",
         execute: async (context, input: UpdateBuildInput) => {
             try {
                 return await updateCharacterBuild(context, input)
@@ -230,6 +248,7 @@ export const MADDOX_INTERVIEW_TOOLS: readonly MaddoxInterviewTool[] = [
         description: BUILD_TOOL_DESCRIPTIONS.get,
         input: z.object({}),
         readOnly: true,
+        scope: "character",
         execute: async (context) => {
             try {
                 return await getCharacterBuild(context)
@@ -245,6 +264,7 @@ export const MADDOX_INTERVIEW_TOOLS: readonly MaddoxInterviewTool[] = [
             "Abre, abaixo desta fala, o card de pontos de vida por nível (personagem acima do nível 1), como o assistente de subir de nível da ficha: em cada nível do 2 em diante o jogador escolhe a média ou rola o dado de vida no card. Chame depois de gravar classe e nível. Reabrir mantém as rolagens já feitas.",
         input: z.object({ motivo: z.string().optional().describe("Frase curta mostrada no card (opcional)") }),
         readOnly: false,
+        scope: "character",
         execute: async (context, input: { motivo?: string }) => {
             const doc = await loadActive(context)
             const level = doc.startingLevel ?? doc.build?.level ?? null
@@ -263,8 +283,87 @@ export const MADDOX_INTERVIEW_TOOLS: readonly MaddoxInterviewTool[] = [
     },
 ]
 
+// ── Povos e classes do mundo (Maddox 8, cenário do Fiel ao D&D) ─────────────────────
+
+/** Entrevista de cenário ativa (trava da geração) num grau com mundo restrito ao catálogo. */
+async function loadScenarioActive(context: InterviewToolContext): Promise<IMaddoxInterview & { rigor: MaddoxRigorLevel }> {
+    const doc = await MaddoxInterviewModel.findOne({ _id: context.interviewId, "generating.token": context.lockToken }).lean<IMaddoxInterview>()
+    if (!doc) throw new MaddoxInterviewToolError("Esta resposta da entrevista já terminou: as ferramentas só funcionam durante a geração.")
+    if (doc.kind !== "scenario") throw new MaddoxInterviewToolError("Os povos e as classes do mundo são definidos só na entrevista de cenário.")
+    const campaign = await MaddoxCampaignModel.findById(doc.campaignId).select("rigor").lean<{ rigor: MaddoxRigorLevel }>()
+    if (!campaign || !MADDOX_WORLD_CATALOG_RIGORS.includes(campaign.rigor)) throw new MaddoxInterviewToolError("Neste grau de rigor o mundo é livre: não há lista de povos e classes para gravar.")
+    return { ...doc, rigor: campaign.rigor }
+}
+
+/** Situação dos povos e classes do mundo para o prompt de cada turno. */
+export function worldStatusText(world: Partial<WorldCatalog> | null | undefined): string {
+    const current = worldCatalogOf(world)
+    const lines = worldCatalogLines(current)
+    if (!current.races.length && !current.classes.length) lines.push(`- Nada gravado ainda: combine com a pessoa e grave com \`${MADDOX_INTERVIEW_TOOL_NAMES.world}\` (lista vazia = todo o catálogo).`)
+    return lines.join("\n")
+}
+
+const worldList = z.array(z.string().trim().min(1).max(200)).max(MADDOX_WORLD_OPTIONS_MAX)
+
+/** Resolve cada nome (ou id) no catálogo; um único nome fora dele recusa a lista inteira. */
+async function resolveWorldList(kind: "race" | "class", values: readonly string[], errors: string[]): Promise<WorldCatalogRef[]> {
+    const refs: WorldCatalogRef[] = []
+    const missing: string[] = []
+    for (const value of values) {
+        const found = await findCatalogEntity(kind, value)
+        if (!found) missing.push(value.trim())
+        else if (!refs.some((ref) => ref.id === String(found._id))) refs.push({ id: String(found._id), name: found.name })
+    }
+    if (missing.length) {
+        const label = kind === "race" ? "Povos (raças)" : "Classes"
+        errors.push(`${label} fora do catálogo do DnDicas: ${missing.map((name) => `“${name}”`).join(", ")}. Opções: ${(await catalogNames(kind, MADDOX_WORLD_OPTIONS_MAX)).join(", ")}.`)
+    }
+    return refs
+}
+
+export const MADDOX_WORLD_TOOLS: readonly MaddoxInterviewTool[] = [
+    {
+        name: MADDOX_INTERVIEW_TOOL_NAMES.world,
+        description: `Grava os povos (raças) e as classes que existem no mundo da campanha (Fiel ao D&D). Só entidades do catálogo do DnDicas: confirme os nomes com ${MADDOX_CATALOG_TOOL_NAMES.search} (tipos Raça e Classe). Cada lista enviada substitui a anterior; lista vazia = todo o catálogo vale. Um nome fora do catálogo recusa a chamada inteira (nada é gravado) e o retorno lista as opções.`,
+        input: z.object({
+            racas: worldList.optional().describe("Povos (raças) do mundo, pelo nome do catálogo ou id"),
+            classes: worldList.optional().describe("Classes do mundo, pelo nome do catálogo ou id"),
+        }),
+        readOnly: false,
+        scope: "scenario",
+        execute: async (context, input: { racas?: string[]; classes?: string[] }) => {
+            const doc = await loadScenarioActive(context)
+            if (input.racas === undefined && input.classes === undefined) throw new MaddoxInterviewToolError("Envie `racas`, `classes` ou as duas listas.")
+            const current = worldCatalogOf(doc.world)
+            const errors: string[] = []
+            const races = input.racas === undefined ? current.races : await resolveWorldList("race", input.racas, errors)
+            const classes = input.classes === undefined ? current.classes : await resolveWorldList("class", input.classes, errors)
+            if (errors.length) throw new MaddoxInterviewToolError(`Nada foi gravado. ${errors.join(" ")}`)
+            const next: WorldCatalog = { races, classes }
+            const saved = await MaddoxInterviewModel.updateOne({ _id: context.interviewId, "generating.token": context.lockToken }, { $set: { world: next } })
+            if (saved.matchedCount === 0) throw new MaddoxInterviewToolError("Esta resposta da entrevista já terminou: as ferramentas só funcionam durante a geração.")
+            return { saved: true, povos: races.map((item) => item.name), classes: classes.map((item) => item.name), situacao: worldStatusText(next) }
+        },
+    },
+    {
+        name: MADDOX_INTERVIEW_TOOL_NAMES.getWorld,
+        description: "Consulta os povos (raças) e as classes gravados para o mundo da campanha (Fiel ao D&D). Lista vazia = todo o catálogo vale.",
+        input: z.object({}),
+        readOnly: true,
+        scope: "scenario",
+        execute: async (context) => {
+            const doc = await loadScenarioActive(context)
+            const world = worldCatalogOf(doc.world)
+            return { povos: world.races.map((item) => item.name), classes: world.classes.map((item) => item.name), situacao: worldStatusText(world) }
+        },
+    },
+]
+
+/** Todas as ferramentas do entrevistador (personagem e cenário). */
+export const MADDOX_ALL_INTERVIEW_TOOLS: readonly MaddoxInterviewTool[] = [...MADDOX_INTERVIEW_TOOLS, ...MADDOX_WORLD_TOOLS]
+
 export function findInterviewTool(name: string): MaddoxInterviewTool | undefined {
-    return MADDOX_INTERVIEW_TOOLS.find((tool) => tool.name === name)
+    return MADDOX_ALL_INTERVIEW_TOOLS.find((tool) => tool.name === name)
 }
 
 /** Executa uma ferramenta validando a entrada; falha vira `MaddoxInterviewToolError` com mensagem em pt-BR. */
@@ -273,7 +372,7 @@ export async function runInterviewTool(tool: MaddoxInterviewTool, context: Inter
     if (!parsed.success) throw new MaddoxInterviewToolError(`Entrada inválida para ${tool.name}: ${parsed.error.issues.map((issue) => `${issue.path.join(".") || "entrada"}: ${issue.message}`).join("; ")}`)
     try {
         const output = await tool.execute(context, parsed.data as never)
-        if (!tool.readOnly) log.info({ tool: tool.name, interviewId: String(context.interviewId) }, "[maddox] entrevistador usou a ferramenta de atributos")
+        if (!tool.readOnly) log.info({ tool: tool.name, interviewId: String(context.interviewId) }, "[maddox] entrevistador usou uma ferramenta da entrevista")
         return output
     } catch (error) {
         if (error instanceof MaddoxInterviewToolError) throw error
@@ -283,10 +382,10 @@ export async function runInterviewTool(tool: MaddoxInterviewTool, context: Inter
 }
 
 /** Ferramentas no formato da AI SDK (a SDK `ai` entra sob demanda). */
-export async function buildInterviewAiTools(context: InterviewToolContext): Promise<ToolSet> {
+export async function buildInterviewAiTools(context: InterviewToolContext, kind: MaddoxScriptKind = "character"): Promise<ToolSet> {
     const { dynamicTool } = await import("ai")
     const tools: ToolSet = {}
-    for (const def of MADDOX_INTERVIEW_TOOLS) {
+    for (const def of MADDOX_ALL_INTERVIEW_TOOLS.filter((tool) => tool.scope === kind)) {
         tools[def.name] = dynamicTool({ description: def.description, inputSchema: def.input, execute: async (input: unknown) => runInterviewTool(def, context, input) })
     }
     // Consulta ao catálogo (só leitura): confirma raça, classe, origem etc. antes de sugerir ou aplicar o bônus.
