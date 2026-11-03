@@ -163,6 +163,8 @@ beforeEach(async () => {
 const imageTool = (descricao: string) => ({ name: "request_scene_image", input: { situacao: "new-location", descricaoVisual: descricao, legenda: "O farol", personagens: ["Lyra"] } })
 
 describe("Maddox 10 — imagens nas cenas de ponta a ponta", () => {
+    // Provas de ponta a ponta (narração, fila das imagens e estado): o teto de 5 s não segura quando o shard do CI roda
+    // vários arquivos com MongoDB em paralelo, então as duas têm teto próprio (as verificações não mudam).
     it("o Maddox pede a imagem do novo local: fica ligada à narração gravada e o turno abre sem esperar a pintura", async () => {
         const { id, owner } = await table()
         script.push([{ tools: [imageTool("O farol apagado na chuva, Lyra na escada.")], text: "Vocês chegam ao farol. O que fazem?" }])
@@ -183,7 +185,7 @@ describe("Maddox 10 — imagens nas cenas de ponta a ponta", () => {
         const done = await game.getGameState(id, owner)
         expect(done.messages.find((message) => message.kind === "narration")!.sceneImages).toEqual([expect.objectContaining({ status: "done", url: expect.stringContaining("scenes") })])
         expect(await MaddoxSceneImageModel.findOne({}).lean()).toMatchObject({ messageId: new mongoose.Types.ObjectId(narration.id), turnNumber: 1, references: { characters: ["Lyra"] } })
-    })
+    }, 30_000)
 
     it("frequência: dentro do intervalo o prompt avisa e a ferramenta recusa; depois dele, a imagem volta", async () => {
         const { id, owner } = await table()
@@ -202,7 +204,7 @@ describe("Maddox 10 — imagens nas cenas de ponta a ponta", () => {
         expect(toolLog[2]).toMatchObject({ output: { requested: true } })
         await images.waitForSceneImages()
         expect((await MaddoxSceneImageModel.find({ counts: true }).sort({ turnNumber: 1 }).lean()).map((image) => image.turnNumber)).toEqual([1, 3])
-    })
+    }, 30_000)
 
     it("situação inativa ou imagens desligadas: a ferramenta nem é oferecida e o prompt não fala de imagens", async () => {
         const { id, owner } = await table()
