@@ -301,3 +301,42 @@ describe("regra das imagens da cena (Maddox 10)", () => {
         expect(without).not.toContain("request_scene_image")
     })
 })
+
+describe("densidade das narrações (DND-22)", () => {
+    const declarations = [{ characterName: "Lyra", kind: "declaration" as const, content: "Abro a porta.", skipped: false }]
+    const result: NarratorCheckResult = { characterName: "Lyra", title: "Furtividade (Destreza)", dc: 12, status: "rolled", total: 15, d20: 12, modifier: 3, mode: "normal", discarded: null, rolledByOwner: false, cancelReason: null } as unknown as NarratorCheckResult
+
+    it("a narração, a abertura, a continuação e a vez dos adversários recebem o tamanho do nível escolhido", () => {
+        const tasks = [
+            narratorTaskText({ kind: "narration", turnNumber: 1, declarations: [] }, { density: "breve" }),
+            narratorTaskText({ kind: "narration", turnNumber: 3, declarations }, { density: "breve" }),
+            narratorTaskText({ kind: "continuation", turnNumber: 3, round: 1, declarations, results: [result] }, { density: "breve" }),
+            narratorTaskText({ kind: "narration", turnNumber: 4, declarations: [], tactical: { phase: "running", queue: ["Goblin"], next: "Lyra", enemiesDown: false, charactersDown: false } }, { density: "breve" }),
+        ]
+        for (const text of tasks) {
+            expect(text).toContain("densidade **Breve**")
+            expect(text).toContain("1 a 2 parágrafos, umas 60 a 120 palavras")
+        }
+    })
+
+    it("a resposta a uma pergunta não recebe a densidade (continua em poucas frases)", () => {
+        const answer = narratorTaskText({ kind: "answer", turnNumber: 3, characterName: "Lyra", question: "Há guardas?", declarations: [] }, { density: "extensa" })
+        expect(answer).not.toContain("densidade")
+        expect(answer).toContain("em poucas frases")
+    })
+
+    it("cada nível pede um tamanho diferente e sem densidade a tarefa fica como antes", () => {
+        const task = { kind: "narration" as const, turnNumber: 3, declarations }
+        const texts = (["concisa", "breve", "equilibrada", "detalhada", "extensa"] as const).map((density) => narratorTaskText(task, { density }))
+        expect(new Set(texts).size).toBe(5)
+        expect(texts[0]).toContain("até umas 60 palavras")
+        expect(texts[4]).toContain("4 a 7 parágrafos")
+        expect(narratorTaskText(task)).not.toContain("Tamanho desta narração")
+    })
+
+    it("o formato das instruções não fixa mais parágrafos curtos (o tamanho vem da tarefa)", () => {
+        const instructions = buildNarratorInstructions(context(), { kind: "ai-sdk" })
+        expect(instructions).not.toContain("parágrafos curtos")
+        expect(instructions).toContain("no tamanho pedido na tarefa")
+    })
+})

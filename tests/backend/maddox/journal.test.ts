@@ -14,7 +14,7 @@ vi.mock("@/features/maddox/server/settings", () => ({
     maddoxAvailability: vi.fn(async () => ({ available: true, reason: null })),
 }))
 
-const { MaddoxCampaignMemberModel, MaddoxCampaignMemoryModel, MaddoxCampaignMessageModel, MaddoxCampaignModel, MaddoxCharacterModel, MaddoxNpcModel } = await import("@/features/maddox/models")
+const { MaddoxCampaignMemberModel, MaddoxCampaignMemoryModel, MaddoxCampaignMessageModel, MaddoxCampaignModel, MaddoxCharacterModel, MaddoxNpcModel, MaddoxSceneImageModel } = await import("@/features/maddox/models")
 const campaigns = await import("@/features/maddox/server/campaigns")
 const journal = await import("@/features/maddox/server/journal")
 
@@ -112,6 +112,7 @@ beforeEach(async () => {
         MaddoxCampaignMessageModel.deleteMany({}),
         MaddoxNpcModel.deleteMany({}),
         MaddoxCampaignMemoryModel.deleteMany({}),
+        MaddoxSceneImageModel.deleteMany({}),
     ])
 })
 
@@ -305,5 +306,76 @@ describe("Maddox 9 — consulta do diário", () => {
         const summary = await journal.getJournalSummary(created.id, owner)
         expect(summary).toMatchObject({ status: "lobby", counts: { npcs: 0, party: 0 }, state: { scene: "", location: "" }, activeQuests: [] })
         expect((await journal.searchJournal(created.id, { q: "taverna" }, owner)).state).toBeNull()
+    })
+})
+
+/** Imagens da campanha (DND-22): prontas, com falha, descartadas, gerando, e retratos de NPC público e secreto. */
+async function withImages(c: Awaited<ReturnType<typeof campaignWithJournal>>) {
+    const campaignId = new mongoose.Types.ObjectId(c.id)
+    const secretNpc = await MaddoxNpcModel.findOne({ campaignId, visibility: "master" }).lean()
+    const base = { campaignId, description: "PEDIDO INTERNO AO GERADOR", references: { characters: ["Lyra"], npcs: [], catalog: [] }, key: "maddox/chave-interna.png" }
+    const scene = await MaddoxSceneImageModel.create({ ...base, turnNumber: 1, messageId: new mongoose.Types.ObjectId(c.narrationId), source: "tool", slot: "auto", situation: "new-location", caption: "A Taverna do Javali em chamas", status: "done", url: "https://cdn/taverna.png" })
+    const manual = await MaddoxSceneImageModel.create({ ...base, turnNumber: 2, messageId: new mongoose.Types.ObjectId(c.narrationId), source: "manual", slot: "manual", caption: "O porão escuro", status: "done", url: "https://cdn/porao.png" })
+    const portrait = await MaddoxSceneImageModel.create({ ...base, turnNumber: 2, npcId: new mongoose.Types.ObjectId(c.bartolomeuId), source: "npc-portrait", slot: "portrait", caption: "Bartolomeu na porta da taverna", status: "done", url: "https://cdn/bartolomeu.png" })
+    await MaddoxSceneImageModel.create({ ...base, turnNumber: 2, npcId: secretNpc!._id, source: "npc-portrait", slot: "portrait", caption: "Retrato da figura encapuzada", status: "done", url: "https://cdn/sombra.png" })
+    await MaddoxSceneImageModel.create({ ...base, turnNumber: 3, source: "tool", slot: "auto", caption: "Imagem com falha na taverna", status: "failed", counts: false })
+    await MaddoxSceneImageModel.create({ ...base, turnNumber: 4, source: "tool", slot: "auto", caption: "Imagem descartada da taverna", status: "skipped", counts: false })
+    await MaddoxSceneImageModel.create({ ...base, turnNumber: 5, source: "tool", slot: "auto", caption: "Imagem gerando na taverna", status: "generating" })
+    return { sceneId: String(scene._id), manualId: String(manual._id), portraitId: String(portrait._id) }
+}
+
+describe("DND-22 — imagens do Maddox no diário", () => {
+    it("a aba Imagens traz só as prontas, sem o retrato do NPC secreto e sem a descrição e as referências do gerador", async () => {
+        const c = await campaignWithJournal()
+        const ids = await withImages(c)
+        const page = await journal.listJournalImages(c.id, {}, c.player)
+        expect(page.items.map((item) => item.id)).toEqual([ids.portraitId, ids.manualId, ids.sceneId])
+        expect(page.items.find((item) => item.id === ids.sceneId)).toMatchObject({ url: "https://cdn/taverna.png", caption: "A Taverna do Javali em chamas", situationLabel: "Novo local ou cenário", source: "tool", turnNumber: 1, messageId: c.narrationId, npc: null })
+        expect(page.items.find((item) => item.id === ids.portraitId)).toMatchObject({ source: "npc-portrait", messageId: null, npc: { id: c.bartolomeuId, name: "Bartolomeu" } })
+        const json = JSON.stringify(page)
+        for (const hidden of ["PEDIDO INTERNO AO GERADOR", "chave-interna", "figura encapuzada", "sombra.png", "falha", "descartada", "gerando"]) expect(json).not.toContain(hidden)
+        expectNoSecrets(page)
+        expect((await journal.getJournalSummary(c.id, c.player)).counts.images).toBe(3)
+    })
+
+    it("filtro cenas/retratos e paginação por cursor", async () => {
+        const c = await campaignWithJournal()
+        const ids = await withImages(c)
+        expect((await journal.listJournalImages(c.id, { kind: "cenas" }, c.player)).items.map((item) => item.id)).toEqual([ids.manualId, ids.sceneId])
+        expect((await journal.listJournalImages(c.id, { kind: "retratos" }, c.player)).items.map((item) => item.id)).toEqual([ids.portraitId])
+        const campaignId = new mongoose.Types.ObjectId(c.id)
+        await MaddoxSceneImageModel.insertMany(Array.from({ length: 30 }, (_, index) => ({ campaignId, turnNumber: 10 + index, source: "manual", slot: "manual", caption: `Cena ${index}`, status: "done", url: `https://cdn/${index}.png` })))
+        const first = await journal.listJournalImages(c.id, {}, c.player)
+        expect(first.items).toHaveLength(30)
+        expect(first.nextCursor).not.toBeNull()
+        const second = await journal.listJournalImages(c.id, { cursor: first.nextCursor! }, c.player)
+        expect(second.items.map((item) => item.id)).toEqual([ids.portraitId, ids.manualId, ids.sceneId])
+        expect(second.nextCursor).toBeNull()
+    })
+
+    it("o retrato some quando o NPC volta a ser só do mestre", async () => {
+        const c = await campaignWithJournal()
+        await withImages(c)
+        await MaddoxNpcModel.updateOne({ _id: c.bartolomeuId }, { $set: { visibility: "master" } })
+        expect((await journal.listJournalImages(c.id, { kind: "retratos" }, c.player)).items).toEqual([])
+        expect((await journal.getJournalSummary(c.id, c.player)).counts.images).toBe(2)
+    })
+
+    it("a busca encontra a legenda das imagens visíveis, nunca a do retrato secreto nem as não prontas", async () => {
+        const c = await campaignWithJournal()
+        const ids = await withImages(c)
+        const result = await journal.searchJournal(c.id, { q: "taverna" }, c.player)
+        expect(result.images.items.map((item) => item.id)).toEqual([ids.portraitId, ids.sceneId])
+        expect(result.images.items.find((item) => item.id === ids.portraitId)).toMatchObject({ npcName: "Bartolomeu", url: "https://cdn/bartolomeu.png" })
+        expect(result.images.items.find((item) => item.id === ids.sceneId)).toMatchObject({ npcName: null, turnNumber: 1, excerpt: expect.stringContaining("Taverna do Javali") })
+        expect((await journal.searchJournal(c.id, { q: "encapuzada" }, c.player)).images.items).toEqual([])
+        expect((await journal.searchJournal(c.id, { q: "descartada" }, c.player)).images.items).toEqual([])
+    })
+
+    it("filtro inválido = 400 com as opções; quem não participa = 404", async () => {
+        const c = await campaignWithJournal()
+        await expect(journal.listJournalImages(c.id, { kind: "segredos" }, c.player)).rejects.toMatchObject({ status: 400, message: expect.stringContaining("todas, cenas, retratos") })
+        await expect(journal.listJournalImages(c.id, { cursor: "x" }, c.player)).rejects.toMatchObject({ status: 400 })
+        await expect(journal.listJournalImages(c.id, {}, c.outsider)).rejects.toMatchObject({ status: 404 })
     })
 })

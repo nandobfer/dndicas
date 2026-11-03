@@ -8,18 +8,19 @@ import { Button } from "@/components/ui/opex/button"
 import { Field } from "@/components/ui/opex/field"
 import { Input } from "@/components/ui/opex/input"
 import { GlassModal, GlassModalContent, GlassModalDescription, GlassModalFooter, GlassModalHeader, GlassModalTitle } from "@/components/ui/glass-modal"
-import { MADDOX_CAMPAIGN_NAME_MAX, MADDOX_SHEET_RIGORS } from "../../constants"
+import { MADDOX_CAMPAIGN_NAME_MAX, MADDOX_DEFAULT_DENSITY, MADDOX_SHEET_RIGORS } from "../../constants"
 import { createMaddoxCampaignSchema, type CreateMaddoxCampaignInput } from "../../campaign-schemas"
 import type { MaddoxCampaignDetailDto } from "../../campaign-types"
 import { useUpdateMaddoxCampaign } from "../../hooks/useMaddoxCampaigns"
 import { CheckDcField } from "./CheckDcField"
 import { SceneImagesField } from "./SceneImagesField"
 import { StartingLevelField } from "./StartingLevelField"
+import { DensityCard } from "./DensityCard"
 import { RigorCard } from "./RigorCard"
 
-/** Dono edita o nome e, só antes da entrevista de cenário, o grau de rigor. */
+/** Dono edita o nome, a densidade (a qualquer momento) e, só antes da entrevista de cenário, o grau de rigor. */
 export function EditCampaignDialog({ campaign, open, onOpenChange }: { campaign: MaddoxCampaignDetailDto; open: boolean; onOpenChange: (open: boolean) => void }) {
-    const form = useForm<CreateMaddoxCampaignInput>({ resolver: zodResolver(createMaddoxCampaignSchema), defaultValues: { name: campaign.name, rigor: campaign.rigor, showCheckDc: campaign.showCheckDc, sceneImages: campaign.sceneImages } })
+    const form = useForm<CreateMaddoxCampaignInput>({ resolver: zodResolver(createMaddoxCampaignSchema), defaultValues: { name: campaign.name, rigor: campaign.rigor, showCheckDc: campaign.showCheckDc, sceneImages: campaign.sceneImages, density: campaign.density ?? MADDOX_DEFAULT_DENSITY } })
     const update = useUpdateMaddoxCampaign(campaign.id)
     const rigorLocked = campaign.rigorLocked
     // Rascunho do nível enquanto o diálogo está aberto (`undefined` = o valor atual da campanha).
@@ -29,8 +30,8 @@ export function EditCampaignDialog({ campaign, open, onOpenChange }: { campaign:
     const levelEditable = campaign.status === "lobby" || campaign.status === "interview"
 
     useEffect(() => {
-        if (open) form.reset({ name: campaign.name, rigor: campaign.rigor, showCheckDc: campaign.showCheckDc, sceneImages: campaign.sceneImages })
-    }, [open, campaign.name, campaign.rigor, campaign.showCheckDc, campaign.sceneImages, form])
+        if (open) form.reset({ name: campaign.name, rigor: campaign.rigor, showCheckDc: campaign.showCheckDc, sceneImages: campaign.sceneImages, density: campaign.density ?? MADDOX_DEFAULT_DENSITY })
+    }, [open, campaign.name, campaign.rigor, campaign.showCheckDc, campaign.sceneImages, campaign.density, form])
 
     const close = () => {
         setLevelDraft(undefined)
@@ -43,6 +44,7 @@ export function EditCampaignDialog({ campaign, open, onOpenChange }: { campaign:
             ...(!rigorLocked && values.rigor !== campaign.rigor ? { rigor: values.rigor } : {}),
             ...((values.showCheckDc ?? false) !== campaign.showCheckDc ? { showCheckDc: values.showCheckDc ?? false } : {}),
             ...((values.sceneImages ?? true) !== campaign.sceneImages ? { sceneImages: values.sceneImages ?? true } : {}),
+            ...(values.density !== undefined && values.density !== (campaign.density ?? MADDOX_DEFAULT_DENSITY) ? { density: values.density } : {}),
             ...(levelEditable && MADDOX_SHEET_RIGORS.includes(values.rigor) && startingLevel !== null && startingLevel !== campaign.startingLevel ? { startingLevel } : {}),
         }
         if (Object.keys(changes).length === 0) return close()
@@ -63,6 +65,7 @@ export function EditCampaignDialog({ campaign, open, onOpenChange }: { campaign:
                         <Input id="maddox-campaign-edit-name" maxLength={MADDOX_CAMPAIGN_NAME_MAX} {...form.register("name")} />
                     </Field>
                     <RigorCard form={form} disabled={rigorLocked} />
+                    <DensityCard form={form} disabled={update.isPending} />
                     <CheckDcField form={form} />
                     <SceneImagesField form={form} />
                     {levelEditable && <StartingLevelField rigor={formRigor} value={startingLevel} onChange={setLevelDraft} disabled={update.isPending} />}

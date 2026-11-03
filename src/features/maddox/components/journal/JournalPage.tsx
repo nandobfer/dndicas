@@ -4,7 +4,7 @@ import { useState } from "react"
 import Link from "next/link"
 import { usePathname, useRouter, useSearchParams } from "next/navigation"
 import { motion } from "framer-motion"
-import { ArrowLeft, BookOpen, ChevronDown, Dices, MapPin, MessageCircle, ScrollText, Search, UserRound, Users } from "lucide-react"
+import { ArrowLeft, BookOpen, ChevronDown, Dices, Image as ImageIcon, MapPin, MessageCircle, ScrollText, Search, UserRound, Users } from "lucide-react"
 import { Button } from "@/components/ui/opex/button"
 import { Markdown } from "@/components/ui/opex/markdown"
 import { Skeleton } from "@/components/ui/opex/skeleton"
@@ -15,6 +15,7 @@ import { IntegrationTabs, type IntegrationTabDef } from "@/features/integrations
 import { useAuth } from "@/core/hooks/useAuth"
 import { cn } from "@/lib/utils"
 import { MADDOX_QUEST_STATUSES } from "../../constants"
+import { MADDOX_JOURNAL_IMAGE_KINDS, type MaddoxJournalImageKind } from "../../journal-schemas"
 import type { MaddoxJournalSummaryDto } from "../../journal-types"
 import { useMaddoxJournalSummary } from "../../hooks/useMaddoxJournal"
 import { useMaddoxGameRealtime } from "../../hooks/useMaddoxGame"
@@ -22,6 +23,7 @@ import { RarityChip, RigorChip, rigorColor } from "../campaigns/campaign-visuals
 import { CampaignChatHeader } from "../CampaignChatHeader"
 import { MADDOX_JOURNAL_NOTE_KINDS, parseJournalTab, type MaddoxJournalNoteKind, type MaddoxJournalTab } from "./journal-links"
 import { JournalHistory } from "./JournalHistory"
+import { JournalImageFilter, JournalImageGallery } from "./JournalImageGallery"
 import { JournalMemoryList, NoteKindFilter, QuestStatusFilter, type QuestFilter } from "./JournalMemoryList"
 import { JournalNpcList } from "./JournalNpcList"
 import { JournalPartyList } from "./JournalPartyList"
@@ -31,7 +33,7 @@ import { announceJournalHash } from "./use-journal-hash-target"
 
 const errorStatus = (error: unknown) => (error as { response?: { status?: number } } | null)?.response?.status
 
-/** `/campanhas/[id]/diario`: histórico, NPCs, locais, missões, anotações, o grupo e a busca — só o que os jogadores sabem. */
+/** `/campanhas/[id]/diario`: histórico, imagens, NPCs, locais, missões, anotações, o grupo e a busca — só o que os jogadores sabem. */
 export function JournalPage({ campaignId }: { campaignId: string }) {
     const { userId } = useAuth()
     const summary = useMaddoxJournalSummary(campaignId)
@@ -74,6 +76,9 @@ function Journal({ summary }: { summary: MaddoxJournalSummaryDto }) {
     // Filtro das missões na URL (`?situacao=`): o link de um resultado da busca (`?aba=missoes#…`) o zera.
     const questParam = params.get("situacao")
     const questFilter: QuestFilter = (MADDOX_QUEST_STATUSES as readonly string[]).includes(questParam ?? "") ? (questParam as QuestFilter) : "todas"
+    // Filtro das imagens na URL (`?imagens=`), como o das missões.
+    const imageParam = params.get("imagens")
+    const imageKind: MaddoxJournalImageKind = (MADDOX_JOURNAL_IMAGE_KINDS as readonly string[]).includes(imageParam ?? "") ? (imageParam as MaddoxJournalImageKind) : "todas"
     const [term, setTerm] = useState("")
 
     const navigate = (next: Record<string, string | null>) => {
@@ -90,6 +95,7 @@ function Journal({ summary }: { summary: MaddoxJournalSummaryDto }) {
     const notes = MADDOX_JOURNAL_NOTE_KINDS.reduce((sum, kind) => sum + counts.memories[kind], 0)
     const tabs: IntegrationTabDef<MaddoxJournalTab>[] = [
         { id: "historico", label: "Histórico", icon: MessageCircle },
+        { id: "imagens", label: "Imagens", icon: ImageIcon, badge: counts.images ?? 0 },
         { id: "npcs", label: "NPCs", icon: UserRound, badge: counts.npcs },
         { id: "locais", label: "Locais", icon: MapPin, badge: counts.memories.local },
         { id: "missoes", label: "Missões", icon: ScrollText, badge: counts.memories.missao },
@@ -138,8 +144,14 @@ function Journal({ summary }: { summary: MaddoxJournalSummaryDto }) {
                         </CardContent>
                     </Card>
 
-                    <IntegrationTabs tabs={tabs} active={tab} onSelect={(next) => navigate({ aba: next === "historico" ? null : next, msg: null, tipo: null, situacao: null })} pendingTab={null} onConfirmDiscard={() => undefined} onCancelDiscard={() => undefined} label="Seções do diário">
+                    <IntegrationTabs tabs={tabs} active={tab} onSelect={(next) => navigate({ aba: next === "historico" ? null : next, msg: null, tipo: null, situacao: null, imagens: null })} pendingTab={null} onConfirmDiscard={() => undefined} onCancelDiscard={() => undefined} label="Seções do diário">
                         {tab === "historico" && <JournalHistory campaignId={summary.campaignId} color={color} myMemberId={summary.myMemberId} maddoxAvatarUrl={summary.maddoxAvatarUrl} highlightId={highlightId} />}
+                        {tab === "imagens" && (
+                            <div className="space-y-4">
+                                <JournalImageFilter value={imageKind} onChange={(next) => navigate({ imagens: next === "todas" ? null : next })} />
+                                <JournalImageGallery campaignId={summary.campaignId} color={color} kind={imageKind} />
+                            </div>
+                        )}
                         {tab === "npcs" && <JournalNpcList campaignId={summary.campaignId} color={color} />}
                         {tab === "locais" && <JournalMemoryList campaignId={summary.campaignId} color={color} kind="local" />}
                         {tab === "missoes" && (

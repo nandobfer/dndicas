@@ -10,7 +10,8 @@ A **entrega 5 (DND-16, #208)** — fichas e testes de atributo/perícia/resistê
 A **entrega 6 (DND-13, #205)** — combate narrativo (cinemático, sem iniciativa) — está em "Combate narrativo (Maddox 6)".
 A **entrega 8 (DND-14, #204)** — modo fiel ao D&D: mundo, povos e classes restritos ao catálogo — está em "Modo fiel ao D&D (Maddox 8)".
 A **entrega 10 (DND-10, #203)** — imagens nas cenas (situações e frequência configuráveis, pedido manual do dono e retrato de NPC) — está
-em "Imagens nas cenas (Maddox 10)".
+em "Imagens nas cenas (Maddox 10)". A **DND-22 (#230)** — densidade das narrações e a aba Imagens no diário — está em "Densidade
+das narrações e imagens no diário (DND-22)".
 
 Código: `src/features/maddox/` (`constants`, `schemas`, `types`, `script-draft`, `models/`, `server/`,
 `hooks/`, `components/settings/`).
@@ -987,6 +988,8 @@ use “Carregar mais”". Ao lado, "Situação atual" (com "atualizada no turno 
 "Diário" no cabeçalho; cada NPC do painel "NPCs conhecidos" abre o NPC no diário. No lobby, "Diário" depois que a campanha começa.
 Sem atalho de teclado: Ctrl/⌘+K já é a busca global do app.
 
+**Aba Imagens e legendas na busca (DND-22).** Ver "Densidade das narrações e imagens no diário (DND-22)".
+
 ## Imagens nas cenas (Maddox 10)
 
 Código: `server/scene-images.ts` (regras, cota, reserva, geração em segundo plano, pedidos do dono, DTO), `server/scene-image-references.ts`
@@ -1059,6 +1062,42 @@ de mensagens já carregadas com "Carregar anteriores" só mostram a imagem nova 
 recentes, que vêm no estado da mesa).
 
 Sem permissão nova (`maddox.play` cobre a mesa e os dois pedidos; a configuração é da aba de IA, só administradores).
+
+## Densidade das narrações e imagens no diário (DND-22)
+
+**Densidade.** `campaign.density` (`MADDOX_DENSITY_LEVELS`: `concisa`, `breve`, `equilibrada` — padrão —, `detalhada`, `extensa`;
+`MADDOX_DENSITY_LEVEL_DEFS` com rótulo, descrição, raridade, tamanho orientado e o que muda). Campanha antiga sem o campo é lida como
+`equilibrada` (default do Mongoose e do DTO; sem migração). `POST /api/maddox/campaigns` e `PATCH /api/maddox/campaigns/[id]` aceitam
+`density` (inválido = 400 "Escolha uma densidade válida"); o dono muda **a qualquer momento**, inclusive em andamento e com o rigor
+travado (como `showCheckDc` e `sceneImages`), com auditoria (antes/depois). Vale a partir da próxima geração: o narrador relê a
+campanha a cada tarefa; uma geração em curso termina com o valor anterior.
+
+No prompt, a linha de tamanho (`narrationDensityLine`) vai no **texto da tarefa** (`narratorTaskText(task, { density })`), não nas
+instruções: entra na abertura, na narração do turno, nas continuações (testes e rolagens) e na vez dos adversários, e **nunca** na
+resposta a uma pergunta (que continua "em poucas frases") nem nas entrevistas. Assim a mudança vale no turno seguinte mesmo com a
+sessão do OpenCode reaproveitada. O `MADDOX_NARRATOR_FORMAT` passou a pedir "parágrafos de prosa, no tamanho pedido na tarefa".
+É orientação ao modelo, sem corte por `maxOutputTokens` (cortaria a narração e as chamadas de ferramenta): o modelo pode sair um pouco
+da faixa.
+
+Tela: `DensityCard` (cópia estrutural do `RigorCard`: slider com marcas, cor de raridade, descrição animada e duas colunas
+"Tamanho por narração" e "O que muda") na criação (`CreateCampaignDialog`, sempre envia `density`) e na edição (`EditCampaignDialog`,
+sempre habilitado; envia só se mudou). `DensityChip` ("Narração breve") na página e no card da campanha.
+
+**Aba Imagens do diário.** `GET …/journal/images?kind=todas|cenas|retratos&cursor=` (`listJournalImages`; `maddox.play`, membro
+ativo, página de 30 do mais recente, cursor `_id`; `kind` inválido = 400 com as opções). Só imagens `done` com URL: cenas
+(`tool`, `combat-end`, `manual`; as mensagens da mesa são públicas) e retratos (`npc-portrait`) **só de NPCs com
+`visibility: "players"`** — o retrato some se o NPC voltar a ser só do mestre. O DTO (`MaddoxJournalImageDto`: URL, legenda, rótulo da
+situação, origem, turno, `messageId`, NPC) nunca traz a descrição enviada ao gerador, as referências nem a chave do storage. O resumo
+ganha `counts.images` (badge da aba), com o mesmo filtro. A busca do diário procura também na **legenda** das imagens visíveis (grupo
+"Imagens", com miniatura, link `?aba=imagens#imagem-<id>`).
+
+Tela: aba `imagens` (`?aba=imagens`, filtro `GlassSelector` "Todas | Cenas | Retratos" em `?imagens=`), `JournalImageGallery`: grade
+de cards com "Turno N", a origem (situação, "Pedido do dono", "Fim de batalha" ou "Retrato de <NPC>"), a figura da mesa
+(`GameSceneImage`: legenda e ampliar) e "Ver no histórico" (`?aba=historico&msg=`) ou "Ver NPC"; âncora `#imagem-<id>` com destaque
+e procura nas páginas seguintes, como as outras listas. Atualiza pelo `maddox.game.changed` (chaves sob `MADDOX_CAMPAIGNS_KEY`).
+Imagens pendentes ou com falha continuam só na mesa e no histórico.
+
+Sem permissão nova: criar/editar já exigem `maddox.play` e ser o dono; o diário exige `maddox.play` e ser membro ativo.
 
 ## Testes
 
@@ -1133,3 +1172,8 @@ desligada sem a ferramenta; narração que falha sem imagem; resposta sem a ferr
 `maddox-mcp.test.ts`, `game-routes.test.ts`, `ensure-maddox-indexes.test.ts`, `tests/backend/ai/image-lazy-providers.test.ts`
 (referências só nos modelos que aceitam); na tela, `maddox-scene-images.test.tsx`, `maddox-game.test.tsx`, `maddox-tab.test.tsx` e
 `maddox-campaigns.test.tsx`.
+DND-22: `campaigns.test.ts` (densidade padrão, na criação, editada em andamento com auditoria, campanha antiga e schema),
+`narrator-prompt.test.ts` (linha de tamanho nas narrações e não na resposta), `narrator-campaign.test.ts` (narrador real: densidade
+editada vale na narração seguinte e não na resposta), `journal.test.ts` (aba Imagens: só prontas, sem retrato de NPC secreto nem dados
+do gerador, filtro, paginação, contagem e busca pela legenda), `journal-routes.test.ts`; na tela, `maddox-campaigns.test.tsx` (slider
+na criação e na edição, chip) e `maddox-journal.test.tsx` (galeria, links, filtro, vazio, destaque e busca).

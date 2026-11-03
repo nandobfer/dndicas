@@ -38,7 +38,7 @@ const summary = (over: Partial<MaddoxJournalSummaryDto> = {}): MaddoxJournalSumm
     openingSituation: "Uma taverna em chamas.",
     state: { scene: "O porão da taverna.", location: "Porão", situation: "", pendingDecision: "Descer ao túnel?", updatedTurn: 3 },
     activeQuests: [memory("q1", "missao", "Resgatar a filha do moleiro", { status: "ativa" })],
-    counts: { npcs: 2, party: 2, memories: { local: 1, missao: 2, evento: 1, relacao: 0, fato: 0, outro: 0 } },
+    counts: { npcs: 2, party: 2, images: 0, memories: { local: 1, missao: 2, evento: 1, relacao: 0, fato: 0, outro: 0 } },
     ...over,
 })
 
@@ -64,7 +64,7 @@ const message = (id: string, over: Partial<MaddoxGameMessageDto>): MaddoxGameMes
     ...over,
 })
 
-const emptySearch = (query: string): MaddoxJournalSearchDto => ({ query, npcs: { items: [], hasMore: false }, memories: { items: [], hasMore: false }, messages: { items: [], hasMore: false }, party: { items: [], hasMore: false }, state: null })
+const emptySearch = (query: string): MaddoxJournalSearchDto => ({ query, npcs: { items: [], hasMore: false }, memories: { items: [], hasMore: false }, messages: { items: [], hasMore: false }, party: { items: [], hasMore: false }, images: { items: [], hasMore: false }, state: null })
 
 const pendingCheck = message("k1", {
     kind: "check",
@@ -153,7 +153,7 @@ describe("Diário da campanha (Maddox 9) — tela", () => {
         expect(screen.getByTestId("journal-setting")).toHaveTextContent("Um reino coberto de brumas.")
 
         const tabs = screen.getAllByRole("tab")
-        expect(tabs.map((tab) => tab.textContent)).toEqual(["Histórico", "NPCs2", "Locais1", "Missões2", "Anotações1", "Grupo2"])
+        expect(tabs.map((tab) => tab.textContent)).toEqual(["Histórico", "Imagens", "NPCs2", "Locais1", "Missões2", "Anotações1", "Grupo2"])
         const active = screen.getByRole("tab", { selected: true })
         expect(active).toHaveTextContent("Histórico")
         expect(active.className).toContain("aria-selected:bg-primary")
@@ -335,6 +335,84 @@ describe("Diário da campanha (Maddox 9) — tela", () => {
         }
         renderWithQueryClient(<JournalPage campaignId="c1" />)
         expect(await screen.findByText("Campanha não encontrada")).toBeInTheDocument()
+    })
+})
+
+const journalImage = (id: string, over: Record<string, unknown> = {}) => ({
+    id,
+    url: `https://cdn/${id}.png`,
+    caption: `Legenda ${id}`,
+    situationLabel: null,
+    source: "tool",
+    turnNumber: 2,
+    messageId: null,
+    npc: null,
+    createdAt: "2026-10-31T10:00:00.000Z",
+    ...over,
+})
+
+describe("Diário da campanha — imagens (DND-22)", () => {
+    it("aba Imagens: badge com a contagem, galeria com turno, origem, legenda e links para a narração ou o NPC", async () => {
+        routes["/maddox/campaigns/c1/journal"] = () => summary({ counts: { npcs: 2, party: 2, images: 2, memories: { local: 1, missao: 2, evento: 1, relacao: 0, fato: 0, outro: 0 } } })
+        routes["/maddox/campaigns/c1/journal/images"] = () => ({
+            items: [
+                journalImage("i1", { caption: "A taverna em chamas", situationLabel: "Novo local ou cenário", turnNumber: 3, messageId: "n1" }),
+                journalImage("i2", { caption: "Bartolomeu sorri", source: "npc-portrait", turnNumber: 2, npc: { id: "npc1", name: "Bartolomeu" } }),
+            ],
+            nextCursor: null,
+        })
+        await renderJournal("aba=imagens")
+        expect(screen.getByRole("tab", { name: /Imagens/ })).toHaveTextContent("Imagens2")
+        const scene = await screen.findByTestId("journal-image-i1")
+        expect(scene).toHaveTextContent("Turno 3")
+        expect(scene).toHaveTextContent("Novo local ou cenário")
+        expect(scene).toHaveTextContent("A taverna em chamas")
+        expect(within(scene).getByRole("img", { name: "A taverna em chamas" })).toHaveAttribute("src", "https://cdn/i1.png")
+        expect(within(scene).getByTestId("journal-image-message-link")).toHaveAttribute("href", "/campanhas/c1/diario?aba=historico&msg=n1")
+        const portrait = screen.getByTestId("journal-image-i2")
+        expect(portrait).toHaveTextContent("Retrato de Bartolomeu")
+        expect(within(portrait).getByTestId("journal-image-npc-link")).toHaveAttribute("href", "/campanhas/c1/diario?aba=npcs#npc-npc1")
+        fireEvent.click(within(scene).getByRole("button", { name: "Ampliar: A taverna em chamas" }))
+        expect(await screen.findByRole("dialog")).toBeInTheDocument()
+    })
+
+    it("filtro cenas/retratos pela URL (?imagens=) e estados vazios em pt-BR", async () => {
+        routes["/maddox/campaigns/c1/journal/images"] = () => ({ items: [], nextCursor: null })
+        const view = await renderJournal("aba=imagens")
+        expect(await screen.findByTestId("journal-empty")).toHaveTextContent("O Maddox ainda não gerou imagens nesta campanha.")
+        fireEvent.click(screen.getByRole("button", { name: "Retratos" }))
+        expect(replace).toHaveBeenCalledWith("/campanhas/c1/diario?aba=imagens&imagens=retratos", { scroll: false })
+        view.unmount()
+
+        await renderJournal("aba=imagens&imagens=retratos")
+        expect(await screen.findByTestId("journal-empty")).toHaveTextContent("Nenhum retrato de NPC conhecido ainda.")
+        expect(get).toHaveBeenCalledWith("/maddox/campaigns/c1/journal/images", { params: { kind: "retratos" } })
+    })
+
+    it("a busca traz as imagens pela legenda, com miniatura, e leva à imagem na aba Imagens", async () => {
+        routes["/maddox/campaigns/c1/journal/search"] = (params) => ({
+            ...emptySearch(params.q ?? ""),
+            images: { items: [{ id: "i1", url: "https://cdn/i1.png", turnNumber: 3, npcName: null, excerpt: "A taverna em chamas" }, { id: "i2", url: "https://cdn/i2.png", turnNumber: 2, npcName: "Bartolomeu", excerpt: "Bartolomeu na taverna" }], hasMore: false },
+        })
+        await renderJournal()
+        fireEvent.change(screen.getByRole("searchbox", { name: "Buscar no diário" }), { target: { value: "taverna" } })
+        const group = await screen.findByTestId("search-group-images", {}, { timeout: 2000 })
+        expect(group).toHaveTextContent("Imagens (2)")
+        expect(group).toHaveTextContent("Imagem da cena")
+        expect(group).toHaveTextContent("Retrato de Bartolomeu")
+        expect(within(group).getAllByTestId("journal-search-hit").map((hit) => hit.getAttribute("href"))).toEqual(["/campanhas/c1/diario?aba=imagens#imagem-i1", "/campanhas/c1/diario?aba=imagens#imagem-i2"])
+        expect(group.querySelector("img")).toHaveAttribute("src", "https://cdn/i1.png")
+    })
+
+    it("imagem aberta por link (#imagem-…) fica em destaque", async () => {
+        routes["/maddox/campaigns/c1/journal/images"] = () => ({ items: [journalImage("i1"), journalImage("i2")], nextCursor: null })
+        window.location.hash = "#imagem-i2"
+        await renderJournal("aba=imagens")
+        await waitFor(() => expect(screen.getByTestId("journal-image-i2")).toHaveAttribute("data-highlighted", "true"))
+        expect(screen.getByTestId("journal-image-i1")).not.toHaveAttribute("data-highlighted")
+        window.location.hash = ""
+        expect(journalHref("c1", { imageId: "i9" })).toBe("/campanhas/c1/diario?aba=imagens#imagem-i9")
+        expect(parseJournalTab("imagens")).toBe("imagens")
     })
 })
 

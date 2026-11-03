@@ -22,7 +22,7 @@ import { InvitePanel } from "./InvitePanel"
 import { CharacterProfileDialog } from "./CharacterProfileDialog"
 import { journalHref } from "../journal/journal-links"
 import { ScenarioCard } from "./ScenarioCard"
-import { InterviewChip, MemberAvatar, RarityChip, RigorChip, StartingLevelChip, StartingStageLine, StatusChip, WorldCatalogLines, rigorColor } from "./campaign-visuals"
+import { InterviewChip, MemberAvatar, DensityChip, RarityChip, RigorChip, StartingLevelChip, StartingStageLine, StatusChip, WorldCatalogLines, rigorColor } from "./campaign-visuals"
 import { rarityColors } from "@/lib/config/colors"
 
 const errorStatus = (error: unknown) => (error as { response?: { status?: number } } | null)?.response?.status
@@ -96,6 +96,7 @@ function CampaignView({ campaign, userId }: { campaign: MaddoxCampaignDetailDto;
                         </h1>
                         <div className="flex flex-wrap items-center gap-1.5">
                             <RigorChip rigor={campaign.rigor} />
+                            <DensityChip density={campaign.density} />
                             <StatusChip status={campaign.status} />
                             <StartingLevelChip campaign={campaign} />
                             <RarityChip color={isOwner ? rarityColors.legendary : rarityColors.veryRare}>{isOwner ? "Você é o dono" : "Você é jogador"}</RarityChip>

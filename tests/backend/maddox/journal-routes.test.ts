@@ -19,6 +19,7 @@ const service = {
     listJournalNpcs: vi.fn(async () => ({ items: [], nextCursor: null })),
     listJournalMemories: vi.fn(async () => ({ items: [], nextCursor: null })),
     listJournalParty: vi.fn(async () => []),
+    listJournalImages: vi.fn(async () => ({ items: [], nextCursor: null })),
     searchJournal: vi.fn(async () => ({ query: "taverna" })),
 }
 vi.doMock("@/features/maddox/server/journal", () => service)
@@ -54,12 +55,25 @@ describe("rotas do Diário da campanha (Maddox 9)", () => {
         await get("@/app/api/maddox/campaigns/[id]/journal/memories/route", `${base}/memories?kind=missao&status=concluida`)
         expect(service.listJournalMemories).toHaveBeenCalledWith("c1", { kind: "missao", status: "concluida", cursor: undefined }, "user-1")
 
+        await get("@/app/api/maddox/campaigns/[id]/journal/images/route", `${base}/images?kind=retratos&cursor=abc`)
+        expect(service.listJournalImages).toHaveBeenCalledWith("c1", { kind: "retratos", cursor: "abc" }, "user-1")
+        await get("@/app/api/maddox/campaigns/[id]/journal/images/route", `${base}/images`)
+        expect(service.listJournalImages).toHaveBeenLastCalledWith("c1", { kind: undefined, cursor: undefined }, "user-1")
+
         await get("@/app/api/maddox/campaigns/[id]/journal/party/route", `${base}/party`)
         expect(service.listJournalParty).toHaveBeenCalledWith("c1", "user-1")
 
         const search = await get("@/app/api/maddox/campaigns/[id]/journal/search/route", `${base}/search?q=tav%C3%A9rna`)
         expect(search.status).toBe(200)
         expect(service.searchJournal).toHaveBeenCalledWith("c1", { q: "tavérna" }, "user-1")
+    })
+
+    it("imagens (DND-22): sem maddox.play = 403 e o serviço não é chamado", async () => {
+        who = "noPermission"
+        const res = await get("@/app/api/maddox/campaigns/[id]/journal/images/route", `${base}/images`)
+        expect(res.status).toBe(403)
+        expect(service.listJournalImages).not.toHaveBeenCalled()
+        expect(permissions).toEqual(["maddox.play"])
     })
 
     it("erro de validação do serviço vira 400 com a mensagem", async () => {

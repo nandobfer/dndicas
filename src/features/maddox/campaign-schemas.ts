@@ -4,6 +4,7 @@ import {
     MADDOX_CAMPAIGN_NAME_MIN,
     MADDOX_CHARACTER_NAME_MAX,
     MADDOX_CHARACTER_NAME_MIN,
+    MADDOX_DENSITY_LEVELS,
     MADDOX_LEVEL_MAX,
     MADDOX_LEVEL_MIN,
     MADDOX_RIGOR_LEVELS,
@@ -25,15 +26,18 @@ const showCheckDc = z.boolean({ error: "Escolha se a CD dos testes fica visível
 /** Imagens automáticas nas cenas (Maddox 10): `true` = valem as situações da aba do Maddox; `false` = só o pedido manual. */
 const sceneImages = z.boolean({ error: "Escolha se as imagens nas cenas ficam ligadas" })
 
-export const createMaddoxCampaignSchema = z.strictObject({ name: campaignName, rigor, showCheckDc: showCheckDc.optional(), sceneImages: sceneImages.optional() })
+/** Densidade das narrações (DND-22): quanto texto o narrador escreve a cada narração. */
+const density = z.enum(MADDOX_DENSITY_LEVELS, { error: "Escolha uma densidade válida" })
+
+export const createMaddoxCampaignSchema = z.strictObject({ name: campaignName, rigor, showCheckDc: showCheckDc.optional(), sceneImages: sceneImages.optional(), density: density.optional() })
 export type CreateMaddoxCampaignInput = z.infer<typeof createMaddoxCampaignSchema>
 
 /** Nível inicial da mesa (graus com ficha): o dono ajusta antes de a campanha começar. */
 const startingLevel = z.number({ error: "Escolha o nível inicial" }).int({ error: "Use um número inteiro" }).min(MADDOX_LEVEL_MIN, { error: `O nível vai de ${MADDOX_LEVEL_MIN} a ${MADDOX_LEVEL_MAX}` }).max(MADDOX_LEVEL_MAX, { error: `O nível vai de ${MADDOX_LEVEL_MIN} a ${MADDOX_LEVEL_MAX}` })
 
 export const updateMaddoxCampaignSchema = z
-    .strictObject({ name: campaignName.optional(), rigor: rigor.optional(), showCheckDc: showCheckDc.optional(), startingLevel: startingLevel.optional(), sceneImages: sceneImages.optional() })
-    .refine((value) => value.name !== undefined || value.rigor !== undefined || value.showCheckDc !== undefined || value.startingLevel !== undefined || value.sceneImages !== undefined, { error: "Nada para alterar" })
+    .strictObject({ name: campaignName.optional(), rigor: rigor.optional(), showCheckDc: showCheckDc.optional(), startingLevel: startingLevel.optional(), sceneImages: sceneImages.optional(), density: density.optional() })
+    .refine((value) => value.name !== undefined || value.rigor !== undefined || value.showCheckDc !== undefined || value.startingLevel !== undefined || value.sceneImages !== undefined || value.density !== undefined, { error: "Nada para alterar" })
 export type UpdateMaddoxCampaignInput = z.infer<typeof updateMaddoxCampaignSchema>
 
 export const maddoxCharacterDraftSchema = z.strictObject({

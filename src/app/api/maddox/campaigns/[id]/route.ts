@@ -14,7 +14,7 @@ export const GET = withRoute<{ id: string }>(async ({ params }) => {
     return ok(await getCampaignDetail(params.id, actor.id))
 })
 
-/** PATCH /api/maddox/campaigns/[id] — dono altera nome e (só no lobby) o rigor. */
+/** PATCH /api/maddox/campaigns/[id] — dono altera nome, CD, imagens, densidade (a qualquer momento) e (só no lobby) o rigor. */
 export const PATCH = withRoute<{ id: string }>(async ({ req, params }) => {
     const actor = await requirePermissionActor(MADDOX_PLAY_PERMISSION)
     const body = await parseBody(req, updateMaddoxCampaignSchema)

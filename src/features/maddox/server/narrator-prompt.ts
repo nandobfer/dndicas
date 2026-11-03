@@ -1,5 +1,5 @@
 import { memoriesSection } from "@/features/ai/memories-prompt"
-import { MADDOX_CATALOG_TOOL_NAMES, MADDOX_CHECK_RIGORS, MADDOX_CHECK_ROUNDS_MAX, MADDOX_COMBAT_LONG_TURNS, MADDOX_COMBAT_RIGORS, MADDOX_DECLARATION_VALIDATION_RIGORS, MADDOX_PROFILE_SECTIONS, MADDOX_TACTICAL_COMBAT_RIGORS, MADDOX_TOOL_TEXT_GUIDE, MADDOX_WORLD_CATALOG_RIGORS, type MaddoxCampaignMemoryKind, type MaddoxGameMessageKind, type MaddoxQuestStatus, type MaddoxRigorLevel, type MaddoxVisibility } from "../constants"
+import { MADDOX_CATALOG_TOOL_NAMES, MADDOX_DEFAULT_DENSITY, MADDOX_DENSITY_LEVEL_DEFS, MADDOX_CHECK_RIGORS, MADDOX_CHECK_ROUNDS_MAX, MADDOX_COMBAT_LONG_TURNS, MADDOX_COMBAT_RIGORS, MADDOX_DECLARATION_VALIDATION_RIGORS, MADDOX_PROFILE_SECTIONS, MADDOX_TACTICAL_COMBAT_RIGORS, MADDOX_TOOL_TEXT_GUIDE, MADDOX_WORLD_CATALOG_RIGORS, type MaddoxCampaignMemoryKind, type MaddoxDensityLevel, type MaddoxGameMessageKind, type MaddoxQuestStatus, type MaddoxRigorLevel, type MaddoxVisibility } from "../constants"
 import { CATALOG_CITATION_RULE, rigorBlock } from "./interview-prompt"
 import { checkSucceeded } from "../check-modifier"
 import { worldCatalogLines, type WorldCatalog } from "../world-catalog"
@@ -138,7 +138,7 @@ export const MADDOX_FREE_ACTION_RULE = [
 
 export const MADDOX_NARRATOR_FORMAT = [
     "## Formato da resposta",
-    "- Markdown em parágrafos curtos de prosa. Use **negrito** para nomes próprios do mundo (personagens, lugares, facções, NPCs) e para ênfase, e citação (`>`) para falas e trechos marcantes quando ajudar.",
+    "- Markdown em parágrafos de prosa, no tamanho pedido na tarefa. Use **negrito** para nomes próprios do mundo (personagens, lugares, facções, NPCs) e para ênfase, e citação (`>`) para falas e trechos marcantes quando ajudar.",
     CATALOG_CITATION_RULE,
     "- Não use títulos de turno, tabelas nem listas de regras; a narração é uma cena.",
 ].join("\n")
@@ -425,7 +425,23 @@ export function tacticalTaskLines(tactical: NarratorTacticalTask | null | undefi
     ].filter(Boolean)
 }
 
-export function narratorTaskText(task: NarratorTask): string {
+/**
+ * Linha de tamanho das narrações (DND-22), pela densidade da campanha. Vai no texto da tarefa (não nas instruções) para
+ * valer só nas narrações, nunca nas respostas às perguntas, e para a mudança valer já na próxima narração mesmo com a
+ * sessão do OpenCode reaproveitada.
+ */
+export function narrationDensityLine(density: MaddoxDensityLevel): string {
+    const def = MADDOX_DENSITY_LEVEL_DEFS[density] ?? MADDOX_DENSITY_LEVEL_DEFS[MADDOX_DEFAULT_DENSITY]
+    return `Tamanho desta narração (densidade **${def.label}**): ${def.size}. Ajuste o nível de detalhe a esse tamanho, sem deixar de narrar a consequência de cada declaração e sem cortar a cena no meio.`
+}
+
+/** Texto da tarefa da geração; com `density`, as narrações (não as respostas) recebem a linha de tamanho. */
+export function narratorTaskText(task: NarratorTask, options: { density?: MaddoxDensityLevel | null } = {}): string {
+    const text = taskBody(task)
+    return options.density && task.kind !== "answer" ? `${text}\n\n${narrationDensityLine(options.density)}` : text
+}
+
+function taskBody(task: NarratorTask): string {
     if (task.kind === "continuation") {
         const last = task.lastRound ?? task.round >= MADDOX_CHECK_ROUNDS_MAX - 1
         return [

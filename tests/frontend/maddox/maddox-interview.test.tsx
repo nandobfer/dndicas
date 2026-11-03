@@ -51,6 +51,7 @@ const campaign = (over: Partial<MaddoxCampaignDetailDto> = {}): MaddoxCampaignDe
     scenarioStatus: "in-progress",
     showCheckDc: false,
     sceneImages: true,
+    density: "equilibrada",
     startingLevel: null,
     startingStage: "",
     worldCatalog: { races: [], classes: [] },

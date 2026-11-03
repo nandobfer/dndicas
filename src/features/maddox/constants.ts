@@ -65,6 +65,56 @@ export const MADDOX_RIGOR_LEVEL_DEFS: Record<MaddoxRigorLevel, { label: string; 
     },
 }
 
+// ── Densidade das narrações ──────────────────────────────────────────────────
+
+/**
+ * Densidade das narrações da campanha (DND-22): quanto texto o narrador escreve a cada narração do turno do mestre
+ * (abertura, narração, continuações e vez dos adversários). Não vale para as respostas às perguntas nem para as
+ * entrevistas. É orientação ao modelo, sem corte por tokens (cortar truncaria a narração e as ferramentas).
+ */
+export const MADDOX_DENSITY_LEVELS = ["concisa", "breve", "equilibrada", "detalhada", "extensa"] as const
+export type MaddoxDensityLevel = (typeof MADDOX_DENSITY_LEVELS)[number]
+export const MADDOX_DEFAULT_DENSITY: MaddoxDensityLevel = "equilibrada"
+
+/** Passo do slider de densidade: `size` vai na tela e no pedido ao narrador; `focus` resume o que muda. */
+export const MADDOX_DENSITY_LEVEL_DEFS: Record<MaddoxDensityLevel, { label: string; description: string; rarity: MaddoxRarity; size: string; focus: string[] }> = {
+    concisa: {
+        label: "Concisa",
+        description: "Direto ao ponto: só o essencial de cada cena.",
+        rarity: "common",
+        size: "1 parágrafo, até umas 60 palavras",
+        focus: ["Só a consequência das ações e a próxima decisão", "Sem descrições de ambiente além do necessário"],
+    },
+    breve: {
+        label: "Breve",
+        description: "Narrações curtas, com um toque de ambientação.",
+        rarity: "uncommon",
+        size: "1 a 2 parágrafos, umas 60 a 120 palavras",
+        focus: ["Consequências e reações do mundo em poucas frases", "Um detalhe marcante da cena"],
+    },
+    equilibrada: {
+        label: "Equilibrada",
+        description: "Ação e ambientação na medida.",
+        rarity: "rare",
+        size: "2 a 3 parágrafos, umas 120 a 220 palavras",
+        focus: ["Consequências, reações e falas dos NPCs", "Ambientação que situa a cena"],
+    },
+    detalhada: {
+        label: "Detalhada",
+        description: "Cenas ricas, com mais ambiente, falas e sensações.",
+        rarity: "veryRare",
+        size: "3 a 5 parágrafos, umas 220 a 380 palavras",
+        focus: ["Descrição sensorial do lugar e das pessoas", "Mais falas e reações dos NPCs"],
+    },
+    extensa: {
+        label: "Extensa",
+        description: "Narração longa, como um capítulo de livro.",
+        rarity: "legendary",
+        size: "4 a 7 parágrafos, umas 380 a 600 palavras",
+        focus: ["Cenas desenvolvidas com calma, como prosa literária", "Detalhes do mundo, diálogos e bastidores visíveis"],
+    },
+}
+
 /** Permissão Perfix das Campanhas Maddox (criar, participar, convidar). */
 export const MADDOX_PLAY_PERMISSION = "maddox.play"
 

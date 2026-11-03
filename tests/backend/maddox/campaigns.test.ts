@@ -221,6 +221,32 @@ describe("Campanhas Maddox — edição e personagem", () => {
         expect(recordAudit).toHaveBeenCalledWith(expect.objectContaining({ acao: "ATUALIZAR", antes: expect.objectContaining({ showCheckDc: true }), depois: { showCheckDc: false } }))
     })
 
+    it("densidade das narrações (DND-22): Equilibrada por padrão, escolhida na criação, editável pelo dono a qualquer momento (auditado)", async () => {
+        expect(await service.createCampaign({ name: "Padrão", rigor: "fiel-dnd" }, ids.owner)).toMatchObject({ density: "equilibrada" })
+        const campaign = await service.createCampaign({ name: "Curtinha", rigor: "narrativo", density: "concisa" }, ids.owner)
+        expect(campaign.density).toBe("concisa")
+        expect(recordAudit).toHaveBeenCalledWith(expect.objectContaining({ acao: "CRIAR", depois: expect.objectContaining({ density: "concisa" }) }))
+        await service.joinByInvite(await tokenOf(campaign.id), ids.ana)
+        await expect(service.updateCampaign(campaign.id, { density: "extensa" }, ids.ana)).rejects.toMatchObject({ status: 403 })
+        // Em andamento, com o rigor já travado, a densidade continua editável.
+        await MaddoxCampaignModel.updateOne({ _id: campaign.id }, { $set: { status: "active", "scenarioInterview.status": "done" } })
+        recordAudit.mockClear()
+        expect(await service.updateCampaign(campaign.id, { density: "extensa" }, ids.owner)).toMatchObject({ density: "extensa", rigorLocked: true })
+        expect(recordAudit).toHaveBeenCalledWith(expect.objectContaining({ acao: "ATUALIZAR", antes: expect.objectContaining({ density: "concisa" }), depois: { density: "extensa" } }))
+        expect((await MaddoxCampaignModel.findById(campaign.id).lean())?.density).toBe("extensa")
+    })
+
+    it("densidade (DND-22): campanha antiga sem o campo é lida como Equilibrada; valor inválido é recusado pelo schema", async () => {
+        const campaign = await service.createCampaign({ name: "Antiga", rigor: "equilibrado" }, ids.owner)
+        await MaddoxCampaignModel.collection.updateOne({ _id: new mongoose.Types.ObjectId(campaign.id) }, { $unset: { density: "" } })
+        expect((await service.getCampaignDetail(campaign.id, ids.owner)).density).toBe("equilibrada")
+        const { createMaddoxCampaignSchema, updateMaddoxCampaignSchema } = await import("@/features/maddox/campaign-schemas")
+        const invalid = createMaddoxCampaignSchema.safeParse({ name: "Mesa", rigor: "narrativo", density: "enorme" })
+        expect(invalid.success).toBe(false)
+        expect(invalid.error?.issues[0]?.message).toBe("Escolha uma densidade válida")
+        expect(updateMaddoxCampaignSchema.safeParse({ density: "breve" }).success).toBe(true)
+    })
+
     it("nível inicial (Maddox 5): só nos graus com ficha, o dono muda antes de começar (auditado), e o detalhe mostra nível e estágio", async () => {
         const campaign = await service.createCampaign({ name: "Mesa", rigor: "fiel-dnd" }, ids.owner)
         expect(campaign).toMatchObject({ startingLevel: null, startingStage: "" })

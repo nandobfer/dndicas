@@ -1,4 +1,4 @@
-import type { MaddoxCampaignMemoryKind, MaddoxNpcStatus, MaddoxQuestStatus, MaddoxRigorLevel, MaddoxCampaignStatus } from "./constants"
+import type { MaddoxCampaignMemoryKind, MaddoxNpcStatus, MaddoxQuestStatus, MaddoxRigorLevel, MaddoxCampaignStatus, MaddoxSceneImageSource } from "./constants"
 
 /**
  * DTOs do Diário da campanha (Maddox 9). Só chegam aqui informações que os jogadores conhecem: nada com
@@ -59,7 +59,26 @@ export interface MaddoxJournalSummaryDto {
     openingSituation: string
     state: MaddoxJournalStateDto
     activeQuests: MaddoxJournalMemoryDto[]
-    counts: { npcs: number; party: number; memories: Record<MaddoxCampaignMemoryKind, number> }
+    /** `images`: imagens prontas que os jogadores veem (aba Imagens, DND-22). */
+    counts: { npcs: number; party: number; images: number; memories: Record<MaddoxCampaignMemoryKind, number> }
+}
+
+/**
+ * Imagem pronta gerada pelo Maddox (aba Imagens do diário, DND-22): cenas da narração, fim de batalha, pedido manual do
+ * dono e retratos de NPCs que os jogadores conhecem. A descrição enviada ao gerador e as referências nunca chegam aqui.
+ */
+export interface MaddoxJournalImageDto {
+    id: string
+    url: string
+    caption: string
+    situationLabel: string | null
+    source: MaddoxSceneImageSource
+    turnNumber: number
+    /** Narração (ou card de fim de combate) da imagem; `null` no retrato. */
+    messageId: string | null
+    /** NPC do retrato. */
+    npc: { id: string; name: string } | null
+    createdAt: string
 }
 
 export interface MaddoxJournalPageDto<T> {
@@ -99,6 +118,15 @@ export interface MaddoxJournalSearchMessageHit {
     createdAt: string
 }
 
+export interface MaddoxJournalSearchImageHit {
+    id: string
+    url: string
+    turnNumber: number
+    /** NPC do retrato (`null` nas cenas). */
+    npcName: string | null
+    excerpt: string
+}
+
 export interface MaddoxJournalSearchPartyHit {
     memberId: string
     characterName: string
@@ -112,6 +140,8 @@ export interface MaddoxJournalSearchDto {
     memories: MaddoxJournalSearchGroup<MaddoxJournalSearchMemoryHit>
     messages: MaddoxJournalSearchGroup<MaddoxJournalSearchMessageHit>
     party: MaddoxJournalSearchGroup<MaddoxJournalSearchPartyHit>
+    /** Imagens cuja legenda contém o termo (DND-22). */
+    images: MaddoxJournalSearchGroup<MaddoxJournalSearchImageHit>
     /** Trecho da situação atual, quando ela contém o termo. */
     state: { excerpt: string } | null
 }

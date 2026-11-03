@@ -16,10 +16,15 @@ const calls: { instructions: string; userText: string; toolNames: string[] }[] =
 const script: Step[][] = []
 const toolLog: { name: string; output?: unknown; error?: string }[] = []
 const scene = { enabled: true, situations: { "new-location": true } as Record<string, boolean>, gap: 2 }
-const gate = { release: null as null | (() => void) }
+/**
+ * Portão da geração das imagens. Fechado, a geração espera a liberação da prova; aberto, gera direto. O estado é lido pela
+ * própria geração, e não só a função de liberar: a fila começa em segundo plano e, conforme a carga da máquina, a geração só
+ * chega ao gerador depois de `releaseImages()` — antes isso deixava o portão preso em quem liberou e travava a prova.
+ */
+const gate = { open: false, release: null as null | (() => void) }
 
 const generateAndStoreDndImage = vi.fn(async (input: { storageKey?: string }) => {
-    if (gate.release === null) await new Promise<void>((resolve) => (gate.release = resolve))
+    if (!gate.open) await new Promise<void>((resolve) => (gate.release = resolve))
     const key = `${input.storageKey}.png`
     return { key, url: `/api/upload?key=${encodeURIComponent(key)}`, mimeType: "image/png", referencesUsed: 0 }
 })
@@ -125,6 +130,7 @@ const declare = async (id: string, owner: string, content: string) => {
     await waitForCampaignIdle(id)
 }
 const releaseImages = async () => {
+    gate.open = true
     gate.release?.()
     await images.waitForSceneImages()
 }
@@ -137,6 +143,7 @@ beforeAll(async () => {
 }, 180_000)
 
 afterAll(async () => {
+    gate.open = true
     gate.release?.()
     await mongoose.disconnect()
     await mongo?.stop()
@@ -156,6 +163,7 @@ beforeEach(async () => {
     script.length = 0
     toolLog.length = 0
     Object.assign(scene, { enabled: true, situations: { "new-location": true }, gap: 2 })
+    gate.open = false
     gate.release = null
     generateAndStoreDndImage.mockClear()
 })
@@ -187,7 +195,7 @@ describe("Maddox 10 — imagens nas cenas de ponta a ponta", () => {
 
     it("frequência: dentro do intervalo o prompt avisa e a ferramenta recusa; depois dele, a imagem volta", async () => {
         const { id, owner } = await table()
-        gate.release = () => undefined
+        gate.open = true
         script.push(
             [{ tools: [imageTool("Turno 1.")], text: "Abertura. O que fazem?" }],
             [{ tools: [imageTool("Turno 2.")], text: "Turno 2. O que fazem?" }],
@@ -228,7 +236,7 @@ describe("Maddox 10 — imagens nas cenas de ponta a ponta", () => {
 
     it("resposta a pergunta não recebe a ferramenta nem a regra das imagens", async () => {
         const { id, owner } = await table()
-        gate.release = () => undefined
+        gate.open = true
         await game.startCampaign(id, owner)
         await waitForCampaignIdle(id)
         script.push([{ text: "Há dois guardas." }])

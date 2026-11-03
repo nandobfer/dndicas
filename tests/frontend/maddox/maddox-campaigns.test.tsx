@@ -52,6 +52,7 @@ const listItem = (over: Partial<MaddoxCampaignListItemDto> = {}): MaddoxCampaign
     scenarioStatus: "pending",
     showCheckDc: false,
     sceneImages: true,
+    density: "equilibrada",
     startingLevel: null,
     startingStage: "",
     worldCatalog: { races: [], classes: [] },
@@ -137,7 +138,7 @@ describe("lista de campanhas", () => {
 
         fireEvent.change(screen.getByLabelText("Nome da campanha"), { target: { value: "Nova Mesa" } })
         fireEvent.click(screen.getByRole("button", { name: "Criar campanha" }))
-        await waitFor(() => expect(post).toHaveBeenCalledWith("/maddox/campaigns", { name: "Nova Mesa", rigor: "fiel-dnd", showCheckDc: false }))
+        await waitFor(() => expect(post).toHaveBeenCalledWith("/maddox/campaigns", { name: "Nova Mesa", rigor: "fiel-dnd", density: "equilibrada", showCheckDc: false }))
         await waitFor(() => expect(push).toHaveBeenCalledWith("/campanhas/c9/entrevista/cenario"))
     })
 
@@ -155,7 +156,7 @@ describe("lista de campanhas", () => {
         await waitFor(() => expect(slider).toHaveAttribute("aria-valuetext", "Rigoroso"))
         fireEvent.change(screen.getByLabelText("Nome da campanha"), { target: { value: "Nova Mesa" } })
         fireEvent.click(screen.getByRole("button", { name: "Criar campanha" }))
-        await waitFor(() => expect(post).toHaveBeenCalledWith("/maddox/campaigns", { name: "Nova Mesa", rigor: "rigoroso", showCheckDc: true }))
+        await waitFor(() => expect(post).toHaveBeenCalledWith("/maddox/campaigns", { name: "Nova Mesa", rigor: "rigoroso", density: "equilibrada", showCheckDc: true }))
     })
 
     it("CD dos testes na criação: grau narrativo esconde o campo e não envia showCheckDc", async () => {
@@ -169,7 +170,7 @@ describe("lista de campanhas", () => {
         expect(screen.queryByTestId("check-dc-field")).not.toBeInTheDocument()
         fireEvent.change(screen.getByLabelText("Nome da campanha"), { target: { value: "Só História" } })
         fireEvent.click(screen.getByRole("button", { name: "Criar campanha" }))
-        await waitFor(() => expect(post).toHaveBeenCalledWith("/maddox/campaigns", { name: "Só História", rigor: "narrativo" }))
+        await waitFor(() => expect(post).toHaveBeenCalledWith("/maddox/campaigns", { name: "Só História", rigor: "narrativo", density: "equilibrada" }))
     })
 
     it("imagens nas cenas na criação: ligadas por padrão (não vão no POST); desligadas enviam sceneImages: false", async () => {
@@ -183,6 +184,29 @@ describe("lista de campanhas", () => {
         fireEvent.change(screen.getByLabelText("Nome da campanha"), { target: { value: "Sem Imagens" } })
         fireEvent.click(screen.getByRole("button", { name: "Criar campanha" }))
         await waitFor(() => expect(post).toHaveBeenCalledWith("/maddox/campaigns", expect.objectContaining({ name: "Sem Imagens", sceneImages: false })))
+    })
+
+    it("densidade na criação (DND-22): slider no modelo do rigor, com descrição e tamanho por passo, e o valor vai no POST", async () => {
+        post.mockResolvedValue(ok(detail({ id: "c9", name: "Mesa Curta", density: "breve" })))
+        renderWithQueryClient(<CampaignsPage />)
+        fireEvent.click(await screen.findByRole("button", { name: /Nova campanha/ }))
+        const slider = await screen.findByRole("slider", { name: "Densidade das narrações da campanha" })
+        expect(slider).toHaveAttribute("aria-valuetext", "Equilibrada")
+        expect(screen.getByTestId("maddox-density-size")).toHaveTextContent("2 a 3 parágrafos")
+        for (const label of ["Concisa", "Breve", "Detalhada", "Extensa"]) expect(screen.getByRole("button", { name: label, hidden: true })).toBeInTheDocument()
+        fireEvent.keyDown(slider, { key: "ArrowLeft" })
+        await waitFor(() => expect(slider).toHaveAttribute("aria-valuetext", "Breve"))
+        expect(screen.getByTestId("maddox-density-description")).toHaveTextContent("Breve: Narrações curtas")
+        expect(screen.getByTestId("maddox-density-size")).toHaveTextContent("1 a 2 parágrafos")
+        fireEvent.click(screen.getByRole("button", { name: "Extensa", hidden: true }))
+        await waitFor(() => expect(slider).toHaveAttribute("aria-valuetext", "Extensa"))
+        fireEvent.keyDown(slider, { key: "Home" })
+        await waitFor(() => expect(slider).toHaveAttribute("aria-valuetext", "Concisa"))
+        fireEvent.keyDown(slider, { key: "ArrowRight" })
+        await waitFor(() => expect(slider).toHaveAttribute("aria-valuetext", "Breve"))
+        fireEvent.change(screen.getByLabelText("Nome da campanha"), { target: { value: "Mesa Curta" } })
+        fireEvent.click(screen.getByRole("button", { name: "Criar campanha" }))
+        await waitFor(() => expect(post).toHaveBeenCalledWith("/maddox/campaigns", expect.objectContaining({ name: "Mesa Curta", density: "breve" })))
     })
 
     it("Maddox indisponível: mostra o motivo no diálogo", async () => {
@@ -356,6 +380,26 @@ describe("página da campanha (lobby)", () => {
         fireEvent.click(within(within(dialog).getByTestId("scene-images-field")).getByRole("button", { name: "Desligadas" }))
         fireEvent.click(within(dialog).getByRole("button", { name: "Salvar" }))
         await waitFor(() => expect(patch).toHaveBeenCalledWith("/maddox/campaigns/c1", { sceneImages: false }))
+    })
+
+    it("editar a densidade (DND-22) com a campanha em andamento e o rigor travado envia só density; o chip mostra o nível", async () => {
+        let current = detail({ status: "active", rigorLocked: true, density: "equilibrada" })
+        get.mockImplementation(async (url: string) => (url.endsWith("/invite") ? ok({ token: TOKEN, rotatedAt: null }) : ok(current)))
+        patch.mockImplementation(async (_url: string, body: Record<string, unknown>) => {
+            current = { ...current, ...body }
+            return ok(current)
+        })
+        renderWithQueryClient(<CampaignPage campaignId="c1" />)
+        expect(await screen.findByTestId("maddox-density-chip")).toHaveTextContent("Narração equilibrada")
+        const dialog = await openEdit()
+        expect(within(dialog).getByRole("slider", { name: "Grau de rigor da campanha" })).toHaveAttribute("data-disabled")
+        const slider = within(dialog).getByRole("slider", { name: "Densidade das narrações da campanha" })
+        expect(slider).not.toHaveAttribute("data-disabled")
+        fireEvent.keyDown(slider, { key: "ArrowRight" })
+        await waitFor(() => expect(slider).toHaveAttribute("aria-valuetext", "Detalhada"))
+        fireEvent.click(within(dialog).getByRole("button", { name: "Salvar" }))
+        await waitFor(() => expect(patch).toHaveBeenCalledWith("/maddox/campaigns/c1", { density: "detalhada" }))
+        await waitFor(() => expect(screen.getByTestId("maddox-density-chip")).toHaveTextContent("Narração detalhada"))
     })
 
     it("nível inicial: chip no lobby; o dono muda pelo Select glass antes de começar (PATCH só com startingLevel)", async () => {

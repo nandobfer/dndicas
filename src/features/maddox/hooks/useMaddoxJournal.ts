@@ -6,8 +6,8 @@ import type { ApiResponse } from "@/lib/types/api"
 import { useDebounce } from "@/core/hooks/useDebounce"
 import type { MaddoxCampaignMemoryKind, MaddoxQuestStatus } from "../constants"
 import type { MaddoxGameMessagesPageDto } from "../game-types"
-import { MADDOX_JOURNAL_QUERY_MIN } from "../journal-schemas"
-import type { MaddoxJournalMemoryDto, MaddoxJournalNpcDto, MaddoxJournalPageDto, MaddoxJournalPartyMemberDto, MaddoxJournalSearchDto, MaddoxJournalSummaryDto } from "../journal-types"
+import { MADDOX_JOURNAL_QUERY_MIN, type MaddoxJournalImageKind } from "../journal-schemas"
+import type { MaddoxJournalImageDto, MaddoxJournalMemoryDto, MaddoxJournalNpcDto, MaddoxJournalPageDto, MaddoxJournalPartyMemberDto, MaddoxJournalSearchDto, MaddoxJournalSummaryDto } from "../journal-types"
 import { MADDOX_CAMPAIGNS_KEY } from "./useMaddoxCampaigns"
 
 /**
@@ -60,6 +60,24 @@ export function useMaddoxJournalParty(campaignId: string, enabled = true) {
     return useQuery({
         queryKey: [...maddoxJournalKey(campaignId), "party"],
         queryFn: async () => unwrapApi((await api.get<ApiResponse<MaddoxJournalPartyMemberDto[]>>(`${journalPath(campaignId)}/party`)).data),
+        enabled,
+    })
+}
+
+/** Imagens prontas da campanha (aba Imagens, DND-22), da mais recente para a mais antiga, com filtro cenas/retratos. */
+export function useMaddoxJournalImages(campaignId: string, kind: MaddoxJournalImageKind = "todas", enabled = true) {
+    return useInfiniteQuery({
+        queryKey: [...maddoxJournalKey(campaignId), "images", kind],
+        initialPageParam: null as string | null,
+        queryFn: async ({ pageParam }) =>
+            unwrapApi(
+                (
+                    await api.get<ApiResponse<MaddoxJournalPageDto<MaddoxJournalImageDto>>>(`${journalPath(campaignId)}/images`, {
+                        params: { ...(kind !== "todas" ? { kind } : {}), ...(pageParam ? { cursor: pageParam } : {}) },
+                    })
+                ).data,
+            ),
+        getNextPageParam: (last) => last.nextCursor,
         enabled,
     })
 }
