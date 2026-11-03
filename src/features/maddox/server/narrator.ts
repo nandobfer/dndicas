@@ -11,6 +11,7 @@ import {
     MADDOX_NARRATOR_INDEX_ITEMS,
     MADDOX_NARRATOR_MAX_STEPS,
     MADDOX_COMBAT_OUTCOME_LABELS,
+    MADDOX_DEFAULT_DENSITY,
 } from "../constants"
 import { createMarkupFilter } from "../catalog-markup"
 import {
@@ -283,7 +284,7 @@ async function generate(args: GenerateArgs, sink: MaddoxMasterSink): Promise<str
         MADDOX_NARRATOR_HISTORY_CHARS,
     )
     const { mentionsToMarkup } = await import("./catalog-mentions")
-    const userText = [transcript ? `# Últimos acontecimentos\n\n${mentionsToMarkup(transcript)}` : null, narratorTaskText(args.task)].filter(Boolean).join("\n\n")
+    const userText = [transcript ? `# Últimos acontecimentos\n\n${mentionsToMarkup(transcript)}` : null, narratorTaskText(args.task, { density: context.campaign.density ?? MADDOX_DEFAULT_DENSITY })].filter(Boolean).join("\n\n")
     const promptContext: NarratorPromptContext = { instructions: settings.instructions, agentMemories: memories, ...context.prompt }
     const stream = liveText(sink)
     let failure: string | null = null

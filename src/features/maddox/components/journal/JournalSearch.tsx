@@ -2,7 +2,7 @@
 
 import { Fragment, useMemo, useState, type ReactNode } from "react"
 import Link from "next/link"
-import { BookOpen, Loader2, MapPin, MessageCircle, Search, ScrollText, Target, UserRound, Users } from "lucide-react"
+import { BookOpen, Image as ImageIcon, Loader2, MapPin, MessageCircle, Search, ScrollText, Target, UserRound, Users } from "lucide-react"
 import { Input } from "@/components/ui/opex/input"
 import { rarityColors } from "@/lib/config/colors"
 import { cn } from "@/lib/utils"
@@ -64,7 +64,7 @@ export function JournalSearch({ campaignId, color, onNavigate, autoFocus, term: 
                     type="search"
                     value={term}
                     onChange={(event) => setTerm(event.target.value)}
-                    placeholder="Buscar NPCs, locais, missões, anotações e falas da mesa…"
+                    placeholder="Buscar NPCs, locais, missões, anotações, falas e imagens…"
                     aria-label="Buscar no diário"
                     className="pl-9"
                     autoFocus={autoFocus}
@@ -82,7 +82,7 @@ export function JournalSearch({ campaignId, color, onNavigate, autoFocus, term: 
 }
 
 function total(result: MaddoxJournalSearchDto) {
-    return result.npcs.items.length + result.memories.items.length + result.messages.items.length + result.party.items.length + (result.state ? 1 : 0)
+    return result.npcs.items.length + result.memories.items.length + result.messages.items.length + result.party.items.length + (result.images?.items.length ?? 0) + (result.state ? 1 : 0)
 }
 
 export function JournalSearchResults({ campaignId, color, result, onNavigate }: { campaignId: string; color: string; result: MaddoxJournalSearchDto; onNavigate?: () => void }) {
@@ -150,6 +150,23 @@ export function JournalSearchResults({ campaignId, color, result, onNavigate }: 
                     />
                 )}
             </Group>
+            {result.images && (
+                <Group group={result.images} title="Imagens" icon={ImageIcon} color={color} testId="search-group-images">
+                    {(image) => (
+                        <ResultLink
+                            key={image.id}
+                            href={journalHref(campaignId, { imageId: image.id })}
+                            onNavigate={onNavigate}
+                            title={image.npcName ? `Retrato de ${image.npcName}` : "Imagem da cena"}
+                            badge={image.turnNumber > 0 ? `Turno ${image.turnNumber}` : null}
+                            excerpt={image.excerpt}
+                            query={q}
+                            // eslint-disable-next-line @next/next/no-img-element -- miniatura do storage pelo proxy do app
+                            avatar={<img src={image.url} alt="" className="h-9 w-14 shrink-0 rounded object-cover" loading="lazy" />}
+                        />
+                    )}
+                </Group>
+            )}
             <Group group={result.messages} title="Histórico da mesa" icon={MessageCircle} color={color} testId="search-group-messages">
                 {(message) => (
                     <ResultLink

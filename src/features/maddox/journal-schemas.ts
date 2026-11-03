@@ -26,4 +26,13 @@ export const maddoxJournalMemoriesSchema = z.object({
     cursor,
 })
 
+/** Filtro da aba Imagens do diário (DND-22): cenas (narração, fim de batalha e pedido manual) ou retratos de NPC. */
+export const MADDOX_JOURNAL_IMAGE_KINDS = ["todas", "cenas", "retratos"] as const
+export type MaddoxJournalImageKind = (typeof MADDOX_JOURNAL_IMAGE_KINDS)[number]
+
+export const maddoxJournalImagesSchema = z.object({
+    kind: z.enum(MADDOX_JOURNAL_IMAGE_KINDS, { message: `Filtro inválido. Use um destes: ${MADDOX_JOURNAL_IMAGE_KINDS.join(", ")}.` }).optional(),
+    cursor,
+})
+
 export type MaddoxJournalMemoriesQuery = z.infer<typeof maddoxJournalMemoriesSchema>

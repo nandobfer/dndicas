@@ -1,5 +1,5 @@
 import type { WorldCatalog } from "./world-catalog"
-import type { MaddoxCampaignStatus, MaddoxInterviewStatus, MaddoxMemberRole, MaddoxRigorLevel, MaddoxScenarioStatus, MaddoxTurnPhase } from "./constants"
+import type { MaddoxCampaignStatus, MaddoxDensityLevel, MaddoxInterviewStatus, MaddoxMemberRole, MaddoxRigorLevel, MaddoxScenarioStatus, MaddoxTurnPhase } from "./constants"
 
 /** DTOs das Campanhas Maddox (Maddox 1). */
 
@@ -51,6 +51,8 @@ export interface MaddoxCampaignListItemDto {
     showCheckDc: boolean
     /** Imagens automáticas nas cenas (Maddox 10). */
     sceneImages: boolean
+    /** Densidade das narrações (DND-22). */
+    density: MaddoxDensityLevel
     /** Nível inicial da mesa (graus com ficha; `null` = cada personagem informa). */
     startingLevel: number | null
     /** Estágio de experiência inicial (graus narrativos). */

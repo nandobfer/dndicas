@@ -1,11 +1,14 @@
 import mongoose, { Schema, type Model, type Types } from "mongoose"
 import {
     MADDOX_CAMPAIGN_STATUSES,
+    MADDOX_DEFAULT_DENSITY,
+    MADDOX_DENSITY_LEVELS,
     MADDOX_RIGOR_LEVELS,
     MADDOX_SCENARIO_STATUSES,
     MADDOX_TURN_PHASES,
     type MaddoxCampaignStateField,
     type MaddoxCampaignStatus,
+    type MaddoxDensityLevel,
     type MaddoxRigorLevel,
     type MaddoxScenarioStatus,
     type MaddoxTurnPhase,
@@ -60,6 +63,8 @@ export interface IMaddoxCampaign {
     showCheckDc: boolean
     /** Imagens automáticas nas cenas (Maddox 10): o dono desliga na campanha; o pedido manual continua. */
     sceneImages: boolean
+    /** Densidade das narrações (DND-22): o dono muda a qualquer momento; vale a partir da próxima narração. */
+    density: MaddoxDensityLevel
     /** Nível inicial da mesa (graus com ficha), definido na entrevista de cenário; `null` = cada personagem informa. */
     startingLevel?: number | null
     /** Estágio de experiência inicial (graus narrativos), adaptado ao cenário. */
@@ -125,6 +130,7 @@ const MaddoxCampaignSchema = new Schema<IMaddoxCampaign>(
         },
         showCheckDc: { type: Boolean, default: false },
         sceneImages: { type: Boolean, default: true },
+        density: { type: String, enum: MADDOX_DENSITY_LEVELS, default: MADDOX_DEFAULT_DENSITY },
         startingLevel: { type: Number, default: null, min: 1, max: 20 },
         startingStage: { type: String, default: "" },
         worldCatalog: { type: Schema.Types.Mixed, default: null },

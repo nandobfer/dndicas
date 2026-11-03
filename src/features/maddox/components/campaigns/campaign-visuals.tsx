@@ -4,11 +4,15 @@ import type { ReactNode } from "react"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/opex/avatar"
 import { rarityColors } from "@/lib/config/colors"
 import { cn } from "@/lib/utils"
-import { MADDOX_CAMPAIGN_STATUS_DEFS, MADDOX_INTERVIEW_STATUS_DEFS, MADDOX_RIGOR_LEVEL_DEFS, type MaddoxCampaignStatus, type MaddoxInterviewStatus, type MaddoxRigorLevel } from "../../constants"
+import { MADDOX_CAMPAIGN_STATUS_DEFS, MADDOX_DEFAULT_DENSITY, MADDOX_DENSITY_LEVEL_DEFS, MADDOX_INTERVIEW_STATUS_DEFS, MADDOX_RIGOR_LEVEL_DEFS, type MaddoxCampaignStatus, type MaddoxDensityLevel, type MaddoxInterviewStatus, type MaddoxRigorLevel } from "../../constants"
 import { worldNames, type WorldCatalog } from "../../world-catalog"
 
 /** Cor de raridade do nível de rigor (comum → lendário). */
 export const rigorColor = (rigor: MaddoxRigorLevel) => rarityColors[MADDOX_RIGOR_LEVEL_DEFS[rigor].rarity]
+/** Definição do nível de densidade (DND-22); campanha sem o campo = a padrão. */
+export const densityDef = (density: MaddoxDensityLevel | null | undefined) => MADDOX_DENSITY_LEVEL_DEFS[density ?? MADDOX_DEFAULT_DENSITY] ?? MADDOX_DENSITY_LEVEL_DEFS[MADDOX_DEFAULT_DENSITY]
+/** Cor de raridade do nível de densidade (comum → lendário). */
+export const densityColor = (density: MaddoxDensityLevel | null | undefined) => rarityColors[densityDef(density).rarity]
 export const statusColor = (status: MaddoxCampaignStatus) => rarityColors[MADDOX_CAMPAIGN_STATUS_DEFS[status].rarity]
 
 /** Chip com a cor de raridade (borda, fundo translúcido e texto). */
@@ -24,6 +28,11 @@ export function RarityChip({ color, children, className }: { color: string; chil
 }
 
 export const RigorChip = ({ rigor }: { rigor: MaddoxRigorLevel }) => <RarityChip color={rigorColor(rigor)}>{MADDOX_RIGOR_LEVEL_DEFS[rigor].label}</RarityChip>
+export const DensityChip = ({ density }: { density: MaddoxDensityLevel | null | undefined }) => (
+    <RarityChip color={densityColor(density)}>
+        <span data-testid="maddox-density-chip">Narração {densityDef(density).label.toLowerCase()}</span>
+    </RarityChip>
+)
 export const StatusChip = ({ status }: { status: MaddoxCampaignStatus }) => <RarityChip color={statusColor(status)}>{MADDOX_CAMPAIGN_STATUS_DEFS[status].label}</RarityChip>
 
 const initials = (name: string) =>

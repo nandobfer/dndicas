@@ -246,6 +246,21 @@ describe("Maddox 4 — campanha narrativa de ponta a ponta", () => {
         expect(calls[1]!.userText).toContain("**Lyra**: Lyra observa.")
     })
 
+    it("densidade (DND-22): a narração segue a densidade da campanha; editada em andamento, vale na narração seguinte e não nas respostas", async () => {
+        const { id, owner, player } = await narrativeTable()
+        script.push([{ text: "Abertura." }], [{ text: "Há dois guardas." }], [{ text: "Turno 1 narrado." }])
+        await game.startCampaign(id, owner)
+        await waitForCampaignIdle(id)
+        expect(calls[0]!.userText).toContain("densidade **Equilibrada**")
+        await campaigns.updateCampaign(id, { density: "concisa" }, owner)
+        await game.submitGameAction(id, { kind: "question", content: "Quantos guardas há?" }, player)
+        await waitForCampaignIdle(id)
+        expect(calls[1]!.userText).not.toContain("densidade")
+        await playersTurn(id, owner, player, 1)
+        expect(calls[2]!.userText).toContain("densidade **Concisa**")
+        expect(calls[2]!.userText).toContain("até umas 60 palavras")
+    })
+
     it("ferramenta com entrada inválida volta ao modelo como erro e a narração continua", async () => {
         const { id, owner } = await narrativeTable()
         script.push([{ tools: [{ name: "update_character_state", input: { characterName: "Ninguém", currentState: "x" } }], text: "A história começa." }])

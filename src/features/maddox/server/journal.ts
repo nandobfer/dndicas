@@ -5,16 +5,19 @@ import { DomainError } from "@/lib/api/route"
 import { loggerFor } from "@/lib/logger"
 import { User } from "@/features/users/models/user"
 import { MADDOX_CAMPAIGN_MEMORY_KINDS, type MaddoxCampaignMemoryKind, type MaddoxCampaignStateField } from "../constants"
-import { MaddoxCampaignMemberModel, MaddoxCampaignMemoryModel, MaddoxCampaignMessageModel, MaddoxCharacterModel, MaddoxNpcModel, type IMaddoxCampaignMemory, type IMaddoxCharacter, type IMaddoxNpc } from "../models"
+import type { MaddoxSceneImagesSettings } from "../schemas"
+import { MaddoxCampaignMemberModel, MaddoxCampaignMemoryModel, MaddoxCampaignMessageModel, MaddoxCharacterModel, MaddoxNpcModel, MaddoxSceneImageModel, type IMaddoxCampaignMemory, type IMaddoxCharacter, type IMaddoxNpc, type IMaddoxSceneImage } from "../models"
 import { accentInsensitivePattern, excerptAround } from "../journal-search"
-import { maddoxJournalMemoriesSchema, maddoxJournalNpcsSchema, maddoxJournalSearchSchema } from "../journal-schemas"
+import { maddoxJournalImagesSchema, maddoxJournalMemoriesSchema, maddoxJournalNpcsSchema, maddoxJournalSearchSchema, type MaddoxJournalImageKind } from "../journal-schemas"
 import type {
+    MaddoxJournalImageDto,
     MaddoxJournalMemoryDto,
     MaddoxJournalNpcDto,
     MaddoxJournalPageDto,
     MaddoxJournalPartyMemberDto,
     MaddoxJournalSearchDto,
     MaddoxJournalSearchGroup,
+    MaddoxJournalSearchImageHit,
     MaddoxJournalSearchMessageHit,
     MaddoxJournalStateDto,
     MaddoxJournalSummaryDto,
@@ -111,7 +114,7 @@ function page<T extends { _id: Types.ObjectId }, D>(docs: T[], map: (doc: T) => 
 
 export async function getJournalSummary(campaignId: string, userId: string): Promise<MaddoxJournalSummaryDto> {
     const { campaign, member } = await loadJournalMembership(campaignId, userId)
-    const [npcs, party, byKind, activeQuests, avatarUrl] = await Promise.all([
+    const [npcs, party, byKind, activeQuests, avatarUrl, images] = await Promise.all([
         MaddoxNpcModel.countDocuments({ campaignId: campaign._id, ...PLAYER_VISIBLE }),
         MaddoxCampaignMemberModel.countDocuments({ campaignId: campaign._id, status: "joined", characterId: { $ne: null } }),
         MaddoxCampaignMemoryModel.aggregate<{ _id: MaddoxCampaignMemoryKind; count: number }>([{ $match: { campaignId: campaign._id, ...PLAYER_VISIBLE } }, { $group: { _id: "$kind", count: { $sum: 1 } } }]),
@@ -121,6 +124,7 @@ export async function getJournalSummary(campaignId: string, userId: string): Pro
             .select(MEMORY_FIELDS)
             .lean<MemoryDoc[]>(),
         maddoxAvatarUrl(),
+        visibleImagesFilter(campaign._id, "todas").then((filter) => MaddoxSceneImageModel.countDocuments(filter)),
     ])
     const memories = Object.fromEntries(MADDOX_CAMPAIGN_MEMORY_KINDS.map((kind) => [kind, 0])) as Record<MaddoxCampaignMemoryKind, number>
     for (const item of byKind) if (item._id in memories) memories[item._id] = item.count
@@ -136,7 +140,7 @@ export async function getJournalSummary(campaignId: string, userId: string): Pro
         openingSituation: campaign.openingSituation ?? "",
         state: stateDto(campaign.state),
         activeQuests: activeQuests.map(memoryDto),
-        counts: { npcs, party, memories },
+        counts: { npcs, party, images, memories },
     }
 }
 
@@ -208,6 +212,70 @@ async function partyMembers(campaignId: Types.ObjectId): Promise<MaddoxJournalPa
 }
 
 /** Personagens do grupo: perfil da entrevista e condição atual (a ficha D&D de cada um continua só do dono dela). */
+// ── Imagens (DND-22) ───────────────────────────────────────────────────────────
+
+/** Origens das imagens de cena (as que ficam numa mensagem da mesa); o retrato é `npc-portrait`. */
+const SCENE_IMAGE_SOURCES = ["tool", "combat-end", "manual"] as const
+type ImageDoc = Pick<IMaddoxSceneImage, "_id" | "url" | "caption" | "situation" | "source" | "turnNumber" | "messageId" | "npcId" | "createdAt">
+const IMAGE_FIELDS = "url caption situation source turnNumber messageId npcId createdAt"
+
+/**
+ * Imagens prontas que os jogadores veem: as cenas (as mensagens da mesa são públicas) e os retratos só de NPCs públicos —
+ * o retrato de um NPC secreto, ou que voltou a ser secreto, não aparece.
+ */
+async function visibleImagesFilter(campaignId: Types.ObjectId, kind: MaddoxJournalImageKind): Promise<Record<string, unknown>> {
+    const base = { campaignId, status: "done", url: { $nin: [null, ""] } }
+    const scenes = { source: { $in: SCENE_IMAGE_SOURCES } }
+    if (kind === "cenas") return { ...base, ...scenes }
+    const publicNpcIds = await MaddoxNpcModel.find({ campaignId, ...PLAYER_VISIBLE }).distinct("_id")
+    const portraits = { source: "npc-portrait", npcId: { $in: publicNpcIds } }
+    return kind === "retratos" ? { ...base, ...portraits } : { ...base, $or: [scenes, portraits] }
+}
+
+async function sceneImageSettings(): Promise<MaddoxSceneImagesSettings | null> {
+    try {
+        const { loadMaddoxSettings } = await import("./settings")
+        return (await loadMaddoxSettings()).settings.sceneImages ?? null
+    } catch (error) {
+        log.warn({ err: error }, "[maddox] Falha ao carregar as situações das imagens para o diário")
+        return null
+    }
+}
+
+async function npcNames(campaignId: Types.ObjectId, images: readonly ImageDoc[]): Promise<Map<string, string>> {
+    const ids = [...new Set(images.filter((image) => image.npcId).map((image) => String(image.npcId)))]
+    if (!ids.length) return new Map()
+    const npcs = await MaddoxNpcModel.find({ campaignId, ...PLAYER_VISIBLE, _id: { $in: ids.map((id) => new Types.ObjectId(id)) } })
+        .select("name")
+        .lean<{ _id: Types.ObjectId; name: string }[]>()
+    return new Map(npcs.map((npc) => [String(npc._id), npc.name]))
+}
+
+/** Imagens prontas da campanha, da mais recente para a mais antiga (cursor = `_id`), com filtro cenas/retratos. */
+export async function listJournalImages(campaignId: string, input: unknown, userId: string): Promise<MaddoxJournalPageDto<MaddoxJournalImageDto>> {
+    const query = parse(maddoxJournalImagesSchema, input)
+    const campaign = await loadJournalCampaign(campaignId, userId)
+    const filter = await visibleImagesFilter(campaign._id, query.kind ?? "todas")
+    const docs = await MaddoxSceneImageModel.find({ ...filter, ...cursorFilter(query.cursor) })
+        .sort({ _id: -1 })
+        .limit(MADDOX_JOURNAL_PAGE_SIZE + 1)
+        .select(IMAGE_FIELDS)
+        .lean<ImageDoc[]>()
+    const [settings, names] = await Promise.all([docs.length ? sceneImageSettings() : Promise.resolve(null), npcNames(campaign._id, docs)])
+    const { situationLabel } = await import("./scene-images")
+    return page(docs, (image) => ({
+        id: String(image._id),
+        url: image.url ?? "",
+        caption: image.caption ?? "",
+        situationLabel: situationLabel(settings, image.situation),
+        source: image.source,
+        turnNumber: image.turnNumber ?? 0,
+        messageId: image.messageId ? String(image.messageId) : null,
+        npc: image.npcId && names.has(String(image.npcId)) ? { id: String(image.npcId), name: names.get(String(image.npcId))! } : null,
+        createdAt: iso(image.createdAt),
+    }))
+}
+
 export async function listJournalParty(campaignId: string, userId: string): Promise<MaddoxJournalPartyMemberDto[]> {
     const campaign = await loadJournalCampaign(campaignId, userId)
     return partyMembers(campaign._id)
@@ -221,7 +289,8 @@ function group<T>(items: T[]): MaddoxJournalSearchGroup<T> {
 
 /**
  * Busca por texto (sem acento e sem caixa, também por pedaço de palavra) no que os jogadores sabem: NPCs (nome e
- * descrição pública), memórias públicas (título, texto e tags), falas da mesa, personagens do grupo e situação atual.
+ * descrição pública), memórias públicas (título, texto e tags), falas da mesa, personagens do grupo, situação atual e a
+ * legenda das imagens (DND-22).
  */
 export async function searchJournal(campaignId: string, input: unknown, userId: string): Promise<MaddoxJournalSearchDto> {
     const { q } = parse(maddoxJournalSearchSchema, input)
@@ -231,7 +300,7 @@ export async function searchJournal(campaignId: string, input: unknown, userId: 
     const regex = new RegExp(pattern, "i")
     const take = MADDOX_JOURNAL_SEARCH_LIMIT + 1
 
-    const [npcs, memories, messages, party] = await Promise.all([
+    const [npcs, memories, messages, party, images] = await Promise.all([
         MaddoxNpcModel.find({ campaignId: campaign._id, ...PLAYER_VISIBLE, $or: [{ name: match }, { publicDescription: match }] })
             .sort({ name: 1 })
             .limit(take)
@@ -248,7 +317,22 @@ export async function searchJournal(campaignId: string, input: unknown, userId: 
             .select("kind turnNumber characterName content createdAt")
             .lean<{ _id: Types.ObjectId; kind: MaddoxJournalSearchMessageHit["kind"]; turnNumber: number; characterName: string | null; content: string; createdAt: Date }[]>(),
         partyMembers(campaign._id),
+        visibleImagesFilter(campaign._id, "todas").then((filter) =>
+            MaddoxSceneImageModel.find({ ...filter, caption: match })
+                .sort({ _id: -1 })
+                .limit(take)
+                .select(IMAGE_FIELDS)
+                .lean<ImageDoc[]>(),
+        ),
     ])
+    const imageNpcNames = await npcNames(campaign._id, images)
+    const imageHits: MaddoxJournalSearchImageHit[] = images.map((image) => ({
+        id: String(image._id),
+        url: image.url ?? "",
+        turnNumber: image.turnNumber ?? 0,
+        npcName: image.npcId ? (imageNpcNames.get(String(image.npcId)) ?? null) : null,
+        excerpt: excerptAround(image.caption ?? "", q),
+    }))
 
     const partyHits = party.flatMap((member) => {
         const texts = [member.characterName, member.currentState, ...Object.values(member.profile)]
@@ -286,6 +370,7 @@ export async function searchJournal(campaignId: string, input: unknown, userId: 
             })),
         ),
         party: group(partyHits),
+        images: group(imageHits),
         state: stateHit ? { excerpt: excerptAround(stateHit, q) } : null,
     }
 }

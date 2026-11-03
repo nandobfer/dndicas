@@ -8,17 +8,18 @@ import { Field } from "@/components/ui/opex/field"
 import { Input } from "@/components/ui/opex/input"
 import { GlassModal, GlassModalContent, GlassModalDescription, GlassModalFooter, GlassModalHeader, GlassModalTitle } from "@/components/ui/glass-modal"
 import { apiErrorMessage } from "@/lib/api"
-import { MADDOX_CAMPAIGN_NAME_MAX, MADDOX_CHECK_RIGORS } from "../../constants"
+import { MADDOX_CAMPAIGN_NAME_MAX, MADDOX_CHECK_RIGORS, MADDOX_DEFAULT_DENSITY } from "../../constants"
 import { createMaddoxCampaignSchema, type CreateMaddoxCampaignInput } from "../../campaign-schemas"
 import type { MaddoxCampaignDetailDto } from "../../campaign-types"
 import { useCreateMaddoxCampaign } from "../../hooks/useMaddoxCampaigns"
 import { CheckDcField } from "./CheckDcField"
 import { SceneImagesField } from "./SceneImagesField"
+import { DensityCard } from "./DensityCard"
 import { RigorCard } from "./RigorCard"
 
-const DEFAULTS: CreateMaddoxCampaignInput = { name: "", rigor: "equilibrado", showCheckDc: false, sceneImages: true }
+const DEFAULTS: CreateMaddoxCampaignInput = { name: "", rigor: "equilibrado", showCheckDc: false, sceneImages: true, density: MADDOX_DEFAULT_DENSITY }
 
-/** Criação da campanha: nome e grau de rigor. Nasce no lobby, com o criador como dono. */
+/** Criação da campanha: nome, grau de rigor e densidade das narrações. Nasce no lobby, com o criador como dono. */
 export function CreateCampaignDialog({ open, onOpenChange, onCreated }: { open: boolean; onOpenChange: (open: boolean) => void; onCreated: (campaign: MaddoxCampaignDetailDto) => void }) {
     const form = useForm<CreateMaddoxCampaignInput>({ resolver: zodResolver(createMaddoxCampaignSchema), defaultValues: DEFAULTS })
     const create = useCreateMaddoxCampaign()
@@ -33,7 +34,7 @@ export function CreateCampaignDialog({ open, onOpenChange, onCreated }: { open: 
     }
 
     const submit = form.handleSubmit((values) =>
-        create.mutate({ name: values.name, rigor: values.rigor, ...(MADDOX_CHECK_RIGORS.includes(values.rigor) ? { showCheckDc: values.showCheckDc ?? false } : {}), ...(values.sceneImages === false ? { sceneImages: false } : {}) }, {
+        create.mutate({ name: values.name, rigor: values.rigor, density: values.density ?? MADDOX_DEFAULT_DENSITY, ...(MADDOX_CHECK_RIGORS.includes(values.rigor) ? { showCheckDc: values.showCheckDc ?? false } : {}), ...(values.sceneImages === false ? { sceneImages: false } : {}) }, {
             onSuccess: (campaign) => {
                 form.reset(DEFAULTS)
                 onCreated(campaign)
@@ -57,6 +58,7 @@ export function CreateCampaignDialog({ open, onOpenChange, onCreated }: { open: 
                     </Field>
 
                     <RigorCard form={form} />
+                    <DensityCard form={form} />
                     <CheckDcField form={form} />
                     <SceneImagesField form={form} />
 
