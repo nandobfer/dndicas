@@ -134,5 +134,33 @@ describe('lib/ai/stream — provedores sob demanda', () => {
             expect(withPrompt.prompt).toBe('oi');
             expect(withPrompt).not.toHaveProperty('messages');
         });
+
+        const failedStep = (error: Record<string, unknown>) => ({
+            fullStream: (async function* () {
+                yield { type: 'finish-step', providerMetadata: { opencode: { cost: 0, error } } };
+                yield { type: 'finish', finishReason: 'error', totalUsage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 } };
+            })(),
+        });
+
+        it('erro de cota/plano do OpenCode (provider.quota) diz qual modelo foi recusado e o que fazer', async () => {
+            mocks.streamText.mockReset().mockReturnValue(failedStep({ type: 'provider.quota', status: 402, message: 'Upstream request failed: Endpoint is unavailable.' }));
+
+            const events = await collect(streamAi({ provider: 'opencode', model: 'opencode-go/hy4', instructions: 'i', prompt: 'oi', opencodeSessionId: 'ses_x' }));
+
+            expect(events).toHaveLength(1);
+            expect(events[0]).toEqual({
+                type: 'error',
+                message:
+                    'O provedor recusou o modelo opencode-go/hy4 por cota ou plano (HTTP 402): Upstream request failed: Endpoint is unavailable. Troque o modelo nas configurações do agente ou confira o plano do provedor no OpenCode.',
+            });
+        });
+
+        it('outros erros do passo mantêm a mensagem original do OpenCode', async () => {
+            mocks.streamText.mockReset().mockReturnValue(failedStep({ type: 'provider.transport', status: 200, message: 'Connection lost while reading the response' }));
+
+            const events = await collect(streamAi({ provider: 'opencode', model: 'opencode-go/deepseek-v4.1-flash', instructions: 'i', prompt: 'oi' }));
+
+            expect(events).toEqual([{ type: 'error', message: 'Connection lost while reading the response' }]);
+        });
     });
 });

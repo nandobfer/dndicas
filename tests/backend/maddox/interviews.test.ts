@@ -331,10 +331,11 @@ describe("entrevista de cenário — conversa", () => {
     })
 
     it("OpenCode: usa a sessão gerenciada da entrevista com o agente do entrevistador", async () => {
-        state.settings = { ...state.settings!, interviewer: { provider: "opencode", model: "anthropic/claude", agent: "maddox", variant: null } }
+        state.settings = { ...state.settings!, interviewer: { provider: "opencode", model: "anthropic/claude", agent: "maddox", variant: "high" } }
         const campaignId = await newCampaign()
         await startScenario(campaignId)
-        expect(ensureMaddoxSession).toHaveBeenCalledWith(expect.objectContaining({ campaignId, purpose: "scenario-interview", agent: "maddox" }))
+        // O modelo e a variante do entrevistador vão para a sessão (estado da sessão no OpenCode 2).
+        expect(ensureMaddoxSession).toHaveBeenCalledWith(expect.objectContaining({ campaignId, purpose: "scenario-interview", agent: "maddox", model: "anthropic/claude", variant: "high" }))
         expect(streamCalls[0]).toMatchObject({ provider: "opencode", model: "anthropic/claude", opencodeSessionId: "ses_entrevista", temperature: null })
     })
 })

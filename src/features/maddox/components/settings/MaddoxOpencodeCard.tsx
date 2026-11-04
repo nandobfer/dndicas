@@ -9,12 +9,11 @@ import { GlassCard as Card, GlassCardContent as CardContent, GlassCardDescriptio
 import { ConfirmDialog } from "@/components/ui/opex/confirm-dialog"
 import { Field } from "@/components/ui/opex/field"
 import { Input } from "@/components/ui/opex/input"
-import { OptionTabs } from "@/components/ui/opex/option-tabs"
 import { Skeleton } from "@/components/ui/opex/skeleton"
 import { FormToggleCard } from "@/components/ui/opex/toggle-card"
 import { ErrorState } from "@/components/feedback/ErrorState"
 import { apiErrorMessage } from "@/lib/api"
-import { MADDOX_MCP_PATH, MADDOX_MCP_SERVER_NAME, MADDOX_SESSION_PURPOSE_LABELS, MADDOX_SESSION_SCOPE_LABELS, MADDOX_SESSION_SCOPES, type MaddoxSessionScope } from "../../constants"
+import { MADDOX_MCP_PATH, MADDOX_MCP_SERVER_NAME, MADDOX_SESSION_PURPOSE_LABELS } from "../../constants"
 import type { MaddoxSettings } from "../../schemas"
 import type { MaddoxMcpStatusDto, MaddoxOpencodeSessionDto } from "../../types"
 import { useDeleteMaddoxSession, useMaddoxMcpStatus, useMaddoxSessions, useRegisterMaddoxMcp } from "../../hooks/useMaddoxSettings"
@@ -25,30 +24,17 @@ export function MaddoxOpencodePolicyCard({ form }: { form: UseFormReturn<MaddoxS
         <Card>
             <CardHeader>
                 <CardTitle className="text-base">Sessões do OpenCode</CardTitle>
-                <CardDescription>Com o OpenCode como provedor, o Maddox cria e mantém sessões no servidor para cada campanha. Os demais provedores ignoram estas opções.</CardDescription>
+                <CardDescription>
+                    Com o OpenCode como provedor, cada campanha tem a sua sessão do narrador (recriada se for excluída) e cada entrevista tem uma sessão própria, excluída ao concluir. Os demais provedores ignoram estas opções.
+                </CardDescription>
             </CardHeader>
             <CardContent className="space-y-5">
-                <Field id="maddox-opencode-scope" label="Sessões por campanha">
-                    <Controller
-                        control={form.control}
-                        name="opencode.sessionScope"
-                        render={({ field }) => (
-                            <OptionTabs<MaddoxSessionScope>
-                                id="maddox-opencode-scope"
-                                options={MADDOX_SESSION_SCOPES.map((scope) => ({ value: scope, label: MADDOX_SESSION_SCOPE_LABELS[scope] }))}
-                                value={field.value}
-                                onChange={field.onChange}
-                                className="w-full flex-wrap"
-                            />
-                        )}
-                    />
-                </Field>
                 <FormToggleCard<MaddoxSettings>
                     control={form.control}
                     name="opencode.deleteOnCampaignEnd"
                     id="maddox-opencode-delete"
                     label="Excluir ao encerrar a campanha"
-                    description="Quando a campanha termina ou é arquivada, as sessões dela são excluídas do OpenCode (o histórico da campanha no DnDicas é mantido)."
+                    description="Quando a campanha termina, é arquivada ou é excluída, a rotina de limpeza das sessões exclui as sessões dela do OpenCode (o histórico da campanha no DnDicas é mantido)."
                     onLabel="Sim"
                     offLabel="Não"
                 />

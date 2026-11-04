@@ -22,7 +22,6 @@ import {
     MADDOX_SCENE_IMAGE_GAP_MAX,
     MADDOX_SCENE_IMAGE_SITUATIONS,
     MADDOX_SCENE_IMAGE_STYLE_MAX,
-    MADDOX_SESSION_SCOPES,
     type MaddoxJevDecision,
     type MaddoxSceneImageSituation,
 } from "./constants"
@@ -55,8 +54,10 @@ export const maddoxAvatarSchema = z.object({
 export type MaddoxAvatar = z.infer<typeof maddoxAvatarSchema>
 
 export const maddoxOpencodeSchema = z.object({
-    sessionScope: z.enum(MADDOX_SESSION_SCOPES, { error: "Escolha como as sessões do OpenCode são criadas" }),
-    /** Exclui as sessões da campanha no OpenCode quando ela termina ou é arquivada. */
+    /**
+     * Exclui as sessões da campanha no OpenCode quando ela termina, é arquivada ou deixa de existir (pela rotina
+     * `maddox-opencode-sessions-cleanup`).
+     */
     deleteOnCampaignEnd: z.boolean({ error: "Informe se as sessões são excluídas ao encerrar a campanha" }),
     /** Diretório das sessões no servidor OpenCode (vazio = o da integração). */
     directory: z.string().trim().max(500, "O diretório é longo demais (até 500 caracteres)").nullable(),
@@ -148,7 +149,7 @@ export const DEFAULT_MADDOX_SETTINGS: MaddoxSettings = {
     instructions: DEFAULT_MADDOX_INSTRUCTIONS,
     interviewerInstructions: DEFAULT_MADDOX_INTERVIEWER_INSTRUCTIONS,
     avatar: { url: null, persona: DEFAULT_MADDOX_PERSONA },
-    opencode: { sessionScope: "campaign-and-interviews", deleteOnCampaignEnd: true, directory: null, mcpUrl: null },
+    opencode: { deleteOnCampaignEnd: true, directory: null, mcpUrl: null },
     jev: Object.fromEntries(MADDOX_JEV_DECISIONS.map((decision) => [decision, false])) as MaddoxJevSettings,
     sceneImages: DEFAULT_MADDOX_SCENE_IMAGES,
 }

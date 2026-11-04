@@ -137,6 +137,23 @@ export function describeAiError(error: unknown): string {
     return message || "Falha desconhecida do provedor de IA"
 }
 
+/** Erro de um passo do OpenCode (`providerMetadata.opencode.error`), classificado pelo `type`/`status` estruturados. */
+export interface OpencodeStepError {
+    type?: unknown
+    message?: unknown
+    status?: unknown
+}
+
+/** Mensagem acionável do erro de um passo do OpenCode; tipos sem tratamento próprio mantêm a mensagem original. */
+export function describeOpencodeStepError(error: OpencodeStepError, model: string): string {
+    const message = typeof error.message === "string" && error.message ? error.message : "O modelo terminou com erro"
+    if (error.type === "provider.quota") {
+        const status = typeof error.status === "number" ? ` (HTTP ${error.status})` : ""
+        return `O provedor recusou o modelo ${model} por cota ou plano${status}: ${message} Troque o modelo nas configurações do agente ou confira o plano do provedor no OpenCode.`
+    }
+    return message
+}
+
 /** Gera em streaming; nunca lança — falhas viram um evento `error` final. */
 export async function* streamAi(request: AiStreamRequest): AsyncGenerator<AiStreamEvent> {
     const startedAt = Date.now()
@@ -153,7 +170,7 @@ export async function* streamAi(request: AiStreamRequest): AsyncGenerator<AiStre
     let failed = false
     let costUsd: number | null = null
     // OpenCode informa falhas do modelo só nos metadados do passo (`outcome: failed`), sem parte `error`.
-    let stepError: string | null = null
+    let stepError: OpencodeStepError | null = null
     try {
         const { streamText } = await import("ai")
         const result = streamText({
@@ -189,10 +206,10 @@ export async function* streamAi(request: AiStreamRequest): AsyncGenerator<AiStre
                     yield { type: "notice", message: "O agente pediu aprovação para usar uma ferramenta; aprovações não são suportadas aqui. Ajuste as permissões do agente no OpenCode." }
                     break
                 case "finish-step": {
-                    const meta = part.providerMetadata?.opencode as { cost?: unknown; error?: { message?: unknown } } | undefined
+                    const meta = part.providerMetadata?.opencode as { cost?: unknown; error?: OpencodeStepError } | undefined
                     const cost = numberOrNull(meta?.cost)
                     if (cost !== null) costUsd = (costUsd ?? 0) + cost
-                    if (typeof meta?.error?.message === "string") stepError = meta.error.message
+                    if (meta?.error && typeof meta.error === "object") stepError = meta.error
                     break
                 }
                 case "error":
@@ -205,7 +222,7 @@ export async function* streamAi(request: AiStreamRequest): AsyncGenerator<AiStre
                 case "finish":
                     if (!failed && part.finishReason === "error") {
                         failed = true
-                        yield { type: "error", message: describeAiError(new Error(stepError ?? "O modelo terminou com erro")) }
+                        yield { type: "error", message: describeAiError(new Error(stepError ? describeOpencodeStepError(stepError, request.model) : "O modelo terminou com erro")) }
                     } else if (!failed) {
                         const usage = {
                             inputTokens: numberOrNull(part.totalUsage.inputTokens),

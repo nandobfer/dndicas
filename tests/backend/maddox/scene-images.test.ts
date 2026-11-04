@@ -74,7 +74,7 @@ vi.mock("@/features/maddox/server/settings", () => ({
             main: { provider: "gemini", model: "gemini-test", agent: null, variant: null, temperature: null, maxOutputTokens: null },
             instructions: "Você é Maddox.",
             avatar: { url: null },
-            opencode: { sessionScope: "campaign", deleteOnCampaignEnd: true, directory: null, mcpUrl: null },
+            opencode: { deleteOnCampaignEnd: true, directory: null, mcpUrl: null },
             jev: { "scene-image": env.jevSceneImage },
             sceneImages: { enabled: env.enabled, situations: env.situations, custom: env.custom, minNarrationsBetween: env.gap, maxPerDay: env.maxPerDay, aspectRatio: "16:9", style: "pintura a óleo" },
         },

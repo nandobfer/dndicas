@@ -33,7 +33,7 @@ const configured = (patch: Partial<Settings> = {}): Settings => ({
     main: { provider: "opencode", model: "anthropic/claude", agent: "build", variant: "high", temperature: 0.7, maxOutputTokens: 4096 },
     interviewer: { provider: "gemini", model: "gemini-2.5-pro", agent: "build", variant: null },
     avatar: { url: "/api/files/ai/generated/u/maddox.png", persona: "Mestre ancião" },
-    opencode: { sessionScope: "campaign", deleteOnCampaignEnd: false, directory: "  /srv/maddox  ", mcpUrl: null },
+    opencode: { deleteOnCampaignEnd: false, directory: "  /srv/maddox  ", mcpUrl: null },
     jev: { ...DEFAULT_MADDOX_SETTINGS.jev, "question-or-action": true, "scene-image": true },
     ...patch,
 })
@@ -61,7 +61,7 @@ describe("configuração do Agente Maddox", () => {
         // Agente só vale no OpenCode.
         expect(reloaded.settings.interviewer).toEqual({ provider: "gemini", model: "gemini-2.5-pro", agent: null, variant: null })
         expect(reloaded.settings.avatar).toEqual({ url: "/api/files/ai/generated/u/maddox.png", persona: "Mestre ancião" })
-        expect(reloaded.settings.opencode).toEqual({ sessionScope: "campaign", deleteOnCampaignEnd: false, directory: "/srv/maddox", mcpUrl: null })
+        expect(reloaded.settings.opencode).toEqual({ deleteOnCampaignEnd: false, directory: "/srv/maddox", mcpUrl: null })
         expect(reloaded.settings.jev["question-or-action"]).toBe(true)
         expect(reloaded.settings.jev["requires-check"]).toBe(false)
         expect(reloaded.availability.available).toBe(true)
@@ -138,7 +138,7 @@ describe("configuração do Agente Maddox", () => {
             [{ avatar: { url: `/${"x".repeat(2001)}`, persona: "p" } }, "A URL do avatar é longa demais (até 2.000 caracteres)"],
             [{ main: { ...DEFAULT_MADDOX_SETTINGS.main, agent: "a".repeat(101) } }, "O nome do agente do OpenCode é longo demais (até 100 caracteres)"],
             [{ interviewer: { ...DEFAULT_MADDOX_SETTINGS.interviewer, variant: "v".repeat(51) } }, "O nome da variante é longo demais (até 50 caracteres)"],
-            [{ opencode: { ...DEFAULT_MADDOX_SETTINGS.opencode, sessionScope: "global" as never } }, "Escolha como as sessões do OpenCode são criadas"],
+            [{ opencode: { ...DEFAULT_MADDOX_SETTINGS.opencode, deleteOnCampaignEnd: "sim" as never } }, "Informe se as sessões são excluídas ao encerrar a campanha"],
         ]
         for (const [patch, message] of cases) {
             const result = maddoxSettingsSchema.safeParse({ ...DEFAULT_MADDOX_SETTINGS, ...patch })
@@ -150,6 +150,13 @@ describe("configuração do Agente Maddox", () => {
             const nested = issue.path.reduceRight<unknown>((acc, key) => ({ [String(key)]: acc }), { message: issue.message, type: issue.code })
             expect(firstHiddenFormError(nested)).toBe(message)
         }
+    })
+
+    it("configuração antiga com sessionScope carrega sem o campo (sessões nunca compartilhadas)", () => {
+        const legacy = { ...DEFAULT_MADDOX_SETTINGS, opencode: { ...DEFAULT_MADDOX_SETTINGS.opencode, sessionScope: "campaign" } }
+        const result = maddoxSettingsSchema.safeParse(withMaddoxDefaults(legacy))
+        expect(result.success).toBe(true)
+        if (result.success) expect(result.data.opencode).not.toHaveProperty("sessionScope")
     })
 
     it("URL do MCP do Maddox: vazia usa a do app; preenchida precisa ser http(s)", () => {

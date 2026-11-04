@@ -34,7 +34,7 @@ roteiros e as memórias salvam à parte.
 A configuração fica em `ai_feature_settings` (feature `maddox`) com o schema `maddoxSettingsSchema`:
 `enabled`, `main` (provedor, modelo, agente, variante, temperatura, tokens), `interviewer` (provedor,
 modelo, agente, variante), `instructions`, `interviewerInstructions`, `avatar { url, persona }`,
-`opencode { sessionScope, deleteOnCampaignEnd, directory }`, `jev { [decisão]: boolean }`. Campos novos
+`opencode { deleteOnCampaignEnd, directory, mcpUrl }`, `jev { [decisão]: boolean }`. Campos novos
 recebem o padrão ao carregar (`withMaddoxDefaults`). Salvar normaliza (agente só no OpenCode, amostragem
 só onde o provedor aceita), confere modelo/variante/agente no catálogo (`assertCatalog`), audita
 (`FeatureIA`) e avisa em tempo real (`ai-feature-updated`). Sem configuração ativa, a disponibilidade
@@ -62,25 +62,37 @@ entrevista (Maddox 2) usa a versão com que começou (`campaign.scriptVersions`,
 `server/opencode-sessions.ts` (copiado da limpeza de sessões do refinamento do Opex), coleção
 `maddox_opencode_sessions`:
 
+- **Sessões nunca compartilhadas** (DND-24): o narrador tem uma por campanha, a entrevista de cenário uma por
+  campanha e a de **personagem uma por membro** (respostas privadas e entrevistas simultâneas não podem dividir o
+  histórico do OpenCode). Não há política de escopo (o antigo `sessionScope` é descartado ao carregar).
 - `ensureMaddoxSession` reaproveita a sessão ativa da campanha/finalidade se ela ainda existir no
-  OpenCode, senão cria (diretório da política ou o da integração). Com `sessionScope = "campaign"`, a
-  entrevista de cenário usa a sessão do narrador; a entrevista de **personagem tem sempre sessão própria por
-  membro** (respostas privadas e entrevistas simultâneas não podem dividir o histórico do OpenCode); com
-  `campaign-and-interviews`, cada entrevista tem a sua.
+  OpenCode, senão cria (diretório da política ou o da integração). A sessão do narrador nunca é excluída por uma
+  entrevista; se sumir do OpenCode, é recriada no próximo turno.
   Só uma sessão **comprovadamente inexistente** no OpenCode é substituída: outras falhas (timeout, 401,
   rede) respondem 502 sem tocar no registro. A nova sessão é criada antes de trocar o registro, e o
   índice único parcial (uma `active` por campanha/finalidade/membro) resolve chamadas concorrentes — a
   sessão criada pela chamada perdedora é excluída.
-- `releaseCampaignSessions` (fim/arquivamento, se `deleteOnCampaignEnd`) e o "Excluir" do painel marcam
-  `pending-deletion` e tentam excluir na hora; sessão inexistente conta como excluída.
-- Rotina interna **`maddox-opencode-sessions-cleanup`** (a cada 60 min) retoma as exclusões pendentes.
+- **Modelo, variante e agente são estado da sessão** no OpenCode 2, e o `ai-sdk-provider-opencode-sdk` não os
+  reenvia no modo `existing`: sem eles, a sessão gera com o modelo padrão do servidor (causa do DND-24, em que o
+  gateway recusava um modelo que ninguém configurou). `ensureMaddoxSession` recebe `model`/`variant`/`agent`, envia
+  `model: { providerID, id, variant? }` (`opencodeModelRef`, divide na primeira `/`) no `session.create` e, na
+  reutilização, compara o `model`/`agent` do `session.get` e chama `session.switchModel`/`switchAgent` quando
+  diferem (agente vazio na configuração não troca). Falha na troca = 502 `OPENCODE_SESSION_UNAVAILABLE` com o modelo
+  na mensagem, sem gerar.
+- `releaseCampaignSessions` e o "Excluir" do painel marcam `pending-deletion` e tentam excluir na hora; sessão
+  inexistente conta como excluída.
+- Rotina interna **`maddox-opencode-sessions-cleanup`** (a cada 60 min): com `deleteOnCampaignEnd`, põe na fila as
+  sessões ativas de campanhas `ended`/`archived` ou que já não existem; depois retoma as exclusões pendentes.
+- **Agente `maddox` no servidor OpenCode** (recomendado nos dois cards de modelo): `~/.config/opencode/agents/maddox.md`
+  na máquina do OpenCode, `mode: primary`, permissões negando tudo e liberando só as ferramentas do MCP
+  `dndicas-maddox`. Sem agente, a sessão usa o padrão do servidor (`build`, com bash e edição de arquivos).
 - Cliente: `src/lib/ai/opencode-client.ts` (`@opencode/client`, importado sob demanda).
 
 As entrevistas (Maddox 2) são o primeiro uso: com o OpenCode como provedor do entrevistador, cada turno fixa
 a sessão gerenciada (`sessionId`, modo `existing` no `ai-sdk-provider-opencode-sdk`; o OpenCode guarda o
 histórico e só a última fala é enviada). `ensureMaddoxSession` recebe o `agent` (no OpenCode 2 o agente é
-estado da sessão). Ao concluir, `releaseInterviewSession` libera a sessão própria da entrevista; com "uma
-sessão por campanha", a entrevista usou a do narrador, que continua.
+estado da sessão). Ao concluir, `releaseInterviewSession` exclui a sessão própria da entrevista; a do narrador
+continua.
 
 ## Modelos (`src/features/maddox/models/`)
 

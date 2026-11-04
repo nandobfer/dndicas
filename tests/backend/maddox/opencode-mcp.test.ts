@@ -24,7 +24,7 @@ vi.mock("@/lib/ai/opencode", () => ({ getOpencodeConnection: vi.fn(async () => (
 
 const { ensureMaddoxMcp, maddoxMcpStatus, maddoxMcpUrl } = await import("@/features/maddox/server/opencode-mcp")
 
-const settings = (mcpUrl: string | null = null) => ({ opencode: { sessionScope: "campaign" as const, deleteOnCampaignEnd: true, directory: null, mcpUrl } })
+const settings = (mcpUrl: string | null = null) => ({ opencode: { deleteOnCampaignEnd: true, directory: null, mcpUrl } })
 
 beforeEach(() => {
     servers.length = 0

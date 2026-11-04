@@ -303,7 +303,7 @@ async function generate(args: GenerateArgs, sink: MaddoxMasterSink): Promise<str
     if (model.provider === "opencode") {
         const [{ ensureMaddoxMcp }, { ensureMaddoxSession }, { createMaddoxTurnToken }, { streamAi }] = await Promise.all([import("./opencode-mcp"), import("./opencode-sessions"), import("./master-turn-token"), import("@/lib/ai/stream")])
         await ensureMaddoxMcp(settings)
-        const sessionId = await ensureMaddoxSession({ campaignId: args.campaignId, purpose: "narrator", agent: model.agent, title: `Maddox · narrador · ${context.campaign.name}` })
+        const sessionId = await ensureMaddoxSession({ campaignId: args.campaignId, purpose: "narrator", agent: model.agent, model: model.model, variant: model.variant, title: `Maddox · narrador · ${context.campaign.name}` })
         const turnToken = createMaddoxTurnToken({ campaignId: args.campaignId, jobId: args.jobId, turnNumber: args.turnNumber })
         const instructions = buildNarratorInstructions(promptContext, { kind: "mcp", server: MADDOX_MCP_SERVER_NAME, turnToken, checks, combat, tactical, sceneImages })
         for await (const event of streamAi({
