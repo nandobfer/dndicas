@@ -3,7 +3,7 @@ import { NextRequest } from "next/server"
 import { DomainError } from "@/lib/api/route"
 
 const mocks = vi.hoisted(() => ({ signupRoleIds: vi.fn(), create: vi.fn(), findOne: vi.fn() }))
-vi.mock("@/core/database/db", () => ({ default: vi.fn().mockResolvedValue(undefined) }))
+vi.mock("@/lib/db", () => ({ dbConnect: vi.fn().mockResolvedValue(undefined) }))
 vi.mock("@/features/perfix/server/settings", () => ({ signupRoleIds: mocks.signupRoleIds }))
 vi.mock("@/features/users/models/user", () => ({ User: { findOne: mocks.findOne, create: mocks.create } }))
 vi.mock("bcryptjs", () => ({ hash: vi.fn().mockResolvedValue("hash") }))
