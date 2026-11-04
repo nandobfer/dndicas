@@ -17,7 +17,8 @@ vi.mock("@/features/maddox/server/settings", () => ({ loadMaddoxSettings: vi.fn(
 vi.mock("@/features/maddox/models/maddox-campaign", () => ({ MaddoxCampaignModel: { find: () => ({ select: () => ({ lean: async () => campaigns }) }) } }))
 vi.mock("@/features/maddox/models/maddox-opencode-session", () => ({
     MaddoxOpencodeSessionModel: {
-        findOne: (filter: Record<string, unknown>) => ({ lean: async () => rows.find((row) => matches(row, filter)) ?? null }),
+        // Cópia, como o `lean()` real: um documento lido não muda quando outra chamada atualiza o registro.
+        findOne: (filter: Record<string, unknown>) => ({ lean: async () => { const row = rows.find((item) => matches(item, filter)); return row ? { ...row } : null } }),
         findById: (id: string) => ({ lean: async () => rows.find((row) => String(row._id) === id) ?? null }),
         find: (filter: Record<string, unknown> = {}) => {
             const result = () => rows.filter((row) => matches(row, filter))
@@ -115,6 +116,63 @@ describe("sessões do OpenCode do Maddox", () => {
         expect(client.session.create).toHaveBeenCalledTimes(2)
         expect(client.session.remove).toHaveBeenCalledTimes(1)
         expect(client.session.remove.mock.calls[0]![0]).not.toEqual({ sessionID: a })
+    })
+
+    it("corrida: a perdedora é excluída e a sessão vencedora sem o modelo configurado é realinhada", async () => {
+        const input = { campaignId: String(CAMPAIGN), purpose: "narrator" as const, title: "x", model: "opencode-go/deepseek-v4.1-flash", agent: "maddox" }
+        const [a, b] = await Promise.all([ensureMaddoxSession(input), ensureMaddoxSession(input)])
+        expect(a).toBe(b)
+        expect(client.session.remove).toHaveBeenCalledTimes(1)
+        expect(client.session.remove.mock.calls[0]![0]).not.toEqual({ sessionID: a })
+        // A vencedora (consultada pela perdedora) veio sem modelo e com outro agente: recebe os configurados.
+        expect(client.session.get).toHaveBeenCalledWith({ sessionID: a })
+        expect(client.session.switchModel).toHaveBeenCalledWith({ sessionID: a, model: { providerID: "opencode-go", id: "deepseek-v4.1-flash" } })
+        expect(client.session.switchAgent).toHaveBeenCalledWith({ sessionID: a, agent: "maddox" })
+    })
+
+    it("corrida: vencedora já com o modelo e o agente configurados não é trocada", async () => {
+        client.session.get.mockImplementation(async ({ sessionID }) => ({ id: sessionID, model: { providerID: "opencode-go", id: "deepseek-v4.1-flash" }, agent: "maddox" }))
+        const input = { campaignId: String(CAMPAIGN), purpose: "narrator" as const, title: "x", model: "opencode-go/deepseek-v4.1-flash", agent: "maddox" }
+        const [a, b] = await Promise.all([ensureMaddoxSession(input), ensureMaddoxSession(input)])
+        expect(a).toBe(b)
+        expect(client.session.switchModel).not.toHaveBeenCalled()
+        expect(client.session.switchAgent).not.toHaveBeenCalled()
+    })
+
+    it("corrida: se a consulta da vencedora falha, o modelo e o agente são reaplicados assim mesmo", async () => {
+        client.session.get.mockRejectedValue(new Error("timeout"))
+        const input = { campaignId: String(CAMPAIGN), purpose: "narrator" as const, title: "x", model: "opencode-go/deepseek-v4.1-flash", agent: "maddox" }
+        const [a, b] = await Promise.all([ensureMaddoxSession(input), ensureMaddoxSession(input)])
+        expect(a).toBe(b)
+        expect(client.session.switchModel).toHaveBeenCalledWith({ sessionID: a, model: { providerID: "opencode-go", id: "deepseek-v4.1-flash" } })
+        expect(client.session.switchAgent).toHaveBeenCalledWith({ sessionID: a, agent: "maddox" })
+    })
+
+    it("corrida: falha ao realinhar a vencedora vira 502 e não gera com o modelo errado", async () => {
+        client.session.switchModel.mockRejectedValue(new Error("ECONNRESET"))
+        const input = { campaignId: String(CAMPAIGN), purpose: "narrator" as const, title: "x", model: "opencode-go/deepseek-v4.1-flash" }
+        const results = await Promise.allSettled([ensureMaddoxSession(input), ensureMaddoxSession(input)])
+        const rejected = results.filter((result) => result.status === "rejected")
+        expect(rejected).toHaveLength(1)
+        expect((rejected[0] as PromiseRejectedResult).reason).toMatchObject({ status: 502, code: "OPENCODE_SESSION_UNAVAILABLE" })
+        expect(rows.filter((row) => row.status === "active")).toHaveLength(1)
+    })
+
+    it("corrida no registro sumido (troca condicional sem efeito): a perdedora é excluída e a vencedora realinhada", async () => {
+        const old = await ensureMaddoxSession({ campaignId: String(CAMPAIGN), purpose: "narrator", title: "x" })
+        // Duas chamadas veem a sessão antiga sumida; as duas criam e só uma troca o registro.
+        client.session.get.mockImplementation(async ({ sessionID }) => {
+            if (sessionID === old) throw new Error("not-found")
+            return { id: sessionID }
+        })
+        const input = { campaignId: String(CAMPAIGN), purpose: "narrator" as const, title: "x", model: "opencode-go/deepseek-v4.1-flash" }
+        const [a, b] = await Promise.all([ensureMaddoxSession(input), ensureMaddoxSession(input)])
+        expect(a).toBe(b)
+        expect(a).not.toBe(old)
+        expect(rows.filter((row) => row.status === "active").map((row) => row.sessionId)).toEqual([a])
+        expect(client.session.remove).toHaveBeenCalledTimes(1)
+        expect(client.session.remove.mock.calls[0]![0]).not.toEqual({ sessionID: a })
+        expect(client.session.switchModel).toHaveBeenCalledWith({ sessionID: a, model: { providerID: "opencode-go", id: "deepseek-v4.1-flash" } })
     })
 
     it("sessões nunca compartilhadas: narrador, cenário e cada membro têm a sua", async () => {

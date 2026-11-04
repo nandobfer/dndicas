@@ -89,10 +89,17 @@ async function alignSession(opencode: OpencodeClient, sessionId: string, info: S
     }
 }
 
-/** Sessão vencedora de uma corrida: confere o estado dela e realinha como uma reaproveitada. */
+/**
+ * Sessão vencedora de uma corrida: confere o estado dela e realinha como uma reaproveitada. Se a consulta falhar, o
+ * estado é tratado como desconhecido e o modelo e o agente configurados são aplicados assim mesmo (nunca gera com o
+ * padrão do servidor por omissão).
+ */
 async function alignWinner(opencode: OpencodeClient, sessionId: string, input: EnsureMaddoxSessionInput): Promise<string> {
-    const info = await opencode.session.get({ sessionID: sessionId }).catch(() => null)
-    if (info) await alignSession(opencode, sessionId, info, input)
+    const info = await opencode.session.get({ sessionID: sessionId }).catch((error: unknown) => {
+        log.warn({ err: errorText(error), sessionId }, "[maddox] falha ao consultar a sessão vencedora do OpenCode: o modelo e o agente são reaplicados")
+        return {}
+    })
+    await alignSession(opencode, sessionId, info, input)
     return sessionId
 }
 
