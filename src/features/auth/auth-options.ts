@@ -10,6 +10,8 @@ const PERSISTENT_SESSION_MAX_AGE_SECONDS = 60 * 60 * 24 * 365 * 20
 const USERNAME_SUFFIX_MAX_ATTEMPTS = 50
 /** Código de erro da tela de login quando o cadastro está bloqueado por falta de perfil padrão. */
 export const SIGNUP_UNAVAILABLE_ERROR = "SignupUnavailable"
+/** Código de erro da tela de login quando o primeiro acesso com Google falha no servidor. */
+export const GOOGLE_SIGNIN_FAILED_ERROR = "GoogleSignInFailed"
 
 function normalizeIdentifier(identifier: string) {
     return identifier.trim().toLowerCase()
@@ -76,6 +78,18 @@ export function buildAuthProviders(google: GoogleOAuthCredentials | null = null)
     }
 
     return providers
+}
+
+/** Metadados seguros do erro para o log: nome, código e nomes dos campos do índice, nunca valores. */
+function errorMetadata(error: unknown) {
+    const record = error && typeof error === "object" ? (error as { code?: unknown; keyPattern?: unknown; name?: unknown }) : null
+    const fields = record?.keyPattern && typeof record.keyPattern === "object" ? Object.keys(record.keyPattern) : undefined
+
+    return {
+        errorName: typeof record?.name === "string" ? record.name : typeof error,
+        code: record?.code ?? null,
+        ...(fields?.length ? { fields } : {}),
+    }
 }
 
 function normalizeEmail(email: string) {
@@ -167,7 +181,11 @@ export const authOptions: NextAuthOptions = {
                     logger.warn({ code: "SIGNUP_UNAVAILABLE", provider: "google" }, "Primeiro login Google bloqueado: perfil padrão Perfix indisponível")
                     return `/sign-in?error=${SIGNUP_UNAVAILABLE_ERROR}`
                 }
-                throw error
+                // O NextAuth engole o erro lançado aqui e cai na página genérica de erro dele. Loga
+                // só metadados (o E11000 carrega o valor duplicado, que pode ser o email) e devolve
+                // o usuário para a nossa tela de login com uma mensagem em pt-BR.
+                logger.error({ provider: "google", ...errorMetadata(error) }, "Falha no login com Google")
+                return `/sign-in?error=${GOOGLE_SIGNIN_FAILED_ERROR}`
             }
 
             if (!localUser) return false

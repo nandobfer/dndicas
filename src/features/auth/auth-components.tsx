@@ -79,6 +79,17 @@ function GoogleIcon() {
     )
 }
 
+/** Mensagens em pt-BR para os códigos que o servidor devolve em `?error=` na tela de login. */
+function signInErrorMessage(code: string | null): string | null {
+    if (code === "SignupUnavailable") {
+        return "Cadastro indisponível no momento: nenhum perfil padrão válido está configurado. Peça a um administrador para configurar a integração Perfix."
+    }
+    if (code === "GoogleSignInFailed") {
+        return "Não foi possível entrar com o Google agora. Tente novamente em instantes; se persistir, avise um administrador."
+    }
+    return null
+}
+
 export function SignIn({ fallbackRedirectUrl, forceRedirectUrl }: { routing?: string; fallbackRedirectUrl?: string; forceRedirectUrl?: string }) {
     const router = useRouter()
     const searchParams = useSearchParams()
@@ -86,11 +97,7 @@ export function SignIn({ fallbackRedirectUrl, forceRedirectUrl }: { routing?: st
     const [password, setPassword] = React.useState("")
     const [isSubmitting, setIsSubmitting] = React.useState(false)
     const callbackUrl = forceRedirectUrl || searchParams.get("callbackUrl") || fallbackRedirectUrl || "/"
-    const [error, setError] = React.useState<string | null>(() =>
-        searchParams.get("error") === "SignupUnavailable"
-            ? "Cadastro indisponível no momento: nenhum perfil padrão válido está configurado. Peça a um administrador para configurar a integração Perfix."
-            : null,
-    )
+    const [error, setError] = React.useState<string | null>(() => signInErrorMessage(searchParams.get("error")))
 
     async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
         event.preventDefault()

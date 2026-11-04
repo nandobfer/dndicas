@@ -9,6 +9,7 @@ const save = vi.fn();
 const findOne = vi.fn();
 const create = vi.fn();
 const signupRoleIds = vi.fn();
+const loggerError = vi.fn();
 
 vi.mock('@/lib/db', () => ({
     dbConnect,
@@ -27,6 +28,10 @@ vi.mock('@/features/users/models/user', () => ({
 
 vi.mock('@/features/perfix/server/settings', () => ({ signupRoleIds }));
 
+vi.mock('@/lib/logger', () => ({
+    logger: { error: loggerError, warn: vi.fn(), info: vi.fn(), child: vi.fn() },
+}));
+
 describe('Auth.js options', () => {
     beforeEach(() => {
         dbConnect.mockResolvedValue(undefined);
@@ -35,6 +40,7 @@ describe('Auth.js options', () => {
         findOne.mockReset();
         create.mockReset();
         signupRoleIds.mockReset();
+        loggerError.mockReset();
     });
 
     it('authenticates credentials against an imported bcrypt hash', async () => {
@@ -129,6 +135,22 @@ describe('Auth.js options', () => {
         expect(create).toHaveBeenCalledWith(expect.objectContaining({ email: 'novo@example.com', roles: ['role-user'] }));
         expect(create.mock.calls[0]![0]).not.toHaveProperty('role');
         expect(nextAuthUser.id).toBe('new-user');
+    });
+
+    it('devolve o usuário para a tela de login quando o primeiro acesso Google falha no servidor', async () => {
+        findOne.mockImplementation(() => ({ select: vi.fn().mockReturnValue({ lean: vi.fn().mockResolvedValue(null) }), then: (resolve: (value: null) => unknown) => resolve(null) }));
+        signupRoleIds.mockResolvedValue(['role-user']);
+        create.mockRejectedValue(Object.assign(
+            new Error('E11000 duplicate key error dup key: { email: "novo@example.com" }'),
+            { name: 'MongoServerError', code: 11000, keyPattern: { email: 1 }, keyValue: { email: 'novo@example.com' } },
+        ));
+
+        await expect(googleSignIn({ id: 'g-new', email: 'novo@example.com', name: 'Novo', image: '' })).resolves.toBe('/sign-in?error=GoogleSignInFailed');
+        expect(loggerError).toHaveBeenCalledWith(
+            { provider: 'google', errorName: 'MongoServerError', code: 11000, fields: ['email'] },
+            'Falha no login com Google',
+        );
+        expect(JSON.stringify(loggerError.mock.calls)).not.toContain('novo@example.com');
     });
 
     it('bloqueia o primeiro login Google com mensagem acionável quando falta perfil padrão', async () => {
