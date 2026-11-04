@@ -220,14 +220,16 @@ describe("aba Agente Maddox", () => {
     it("seção OpenCode: muda a política e salva", async () => {
         renderTab()
         fireEvent.click(screen.getByRole("tab", { name: "OpenCode" }))
-        fireEvent.click(await screen.findByRole("radio", { name: "Uma sessão por campanha" }))
+        await screen.findByLabelText("Diretório das sessões")
+        // Sessões nunca compartilhadas: não há mais escolha de política.
+        expect(screen.queryByRole("radio", { name: "Uma sessão por campanha" })).toBeNull()
         const remove = document.getElementById("maddox-opencode-delete") as HTMLInputElement
         fireEvent.click(remove)
         await waitFor(() => expect(remove.checked).toBe(false))
         fireEvent.change(screen.getByLabelText("Diretório das sessões"), { target: { value: "/srv/maddox" } })
         fireEvent.click(screen.getByRole("button", { name: "Salvar" }))
         await waitFor(() => expect(saveSettings).toHaveBeenCalled())
-        expect(lastSaved().opencode).toEqual({ sessionScope: "campaign", deleteOnCampaignEnd: false, directory: "/srv/maddox", mcpUrl: null })
+        expect(lastSaved().opencode).toEqual({ deleteOnCampaignEnd: false, directory: "/srv/maddox", mcpUrl: null })
     })
 
     it("seção OpenCode: MCP do Maddox mostra a situação, registra no OpenCode e salva a URL", async () => {

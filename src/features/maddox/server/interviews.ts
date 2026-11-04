@@ -296,6 +296,8 @@ export async function prepareTurn(subject: InterviewSubject, kind: MaddoxScriptK
                 purpose: sessionPurpose(kind),
                 memberId: String(subject.member._id),
                 agent: model.agent,
+                model: model.model,
+                variant: model.variant,
                 title: kind === "scenario" ? `Maddox · cenário · ${subject.campaign.name}` : `Maddox · personagem ${subject.character?.name ?? ""} · ${subject.campaign.name}`,
             })
         }

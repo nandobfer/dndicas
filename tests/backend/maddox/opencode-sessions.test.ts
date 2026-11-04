@@ -5,7 +5,8 @@ type Row = { _id: Types.ObjectId; campaignId: Types.ObjectId; purpose: string; m
 const rows: Row[] = []
 let created = 0
 const recordAudit = vi.fn(async () => undefined)
-const policy = { sessionScope: "campaign-and-interviews", deleteOnCampaignEnd: true, directory: null as string | null }
+const policy = { deleteOnCampaignEnd: true, directory: null as string | null }
+const campaigns: Array<{ _id: Types.ObjectId; name: string; status: string }> = []
 
 const same = (a: unknown, b: unknown) => String(a ?? null) === String(b ?? null)
 const matches = (row: Row, filter: Record<string, unknown>) => Object.entries(filter).every(([key, value]) => same(row[key as keyof Row], value))
@@ -13,10 +14,11 @@ const matches = (row: Row, filter: Record<string, unknown>) => Object.entries(fi
 vi.mock("@/lib/db", () => ({ dbConnect: vi.fn(async () => undefined), recordAudit, AcaoAuditoria: { EXCLUIR: "EXCLUIR" } }))
 vi.mock("@/lib/ai/opencode", () => ({ getOpencodeConnection: vi.fn(async () => ({ baseUrl: "http://oc", headers: {}, directory: "/srv/default" })) }))
 vi.mock("@/features/maddox/server/settings", () => ({ loadMaddoxSettings: vi.fn(async () => ({ settings: { opencode: policy } })) }))
-vi.mock("@/features/maddox/models/maddox-campaign", () => ({ MaddoxCampaignModel: { find: () => ({ select: () => ({ lean: async () => [{ _id: CAMPAIGN, name: "A Torre" }] }) }) } }))
+vi.mock("@/features/maddox/models/maddox-campaign", () => ({ MaddoxCampaignModel: { find: () => ({ select: () => ({ lean: async () => campaigns }) }) } }))
 vi.mock("@/features/maddox/models/maddox-opencode-session", () => ({
     MaddoxOpencodeSessionModel: {
-        findOne: (filter: Record<string, unknown>) => ({ lean: async () => rows.find((row) => matches(row, filter)) ?? null }),
+        // Cópia, como o `lean()` real: um documento lido não muda quando outra chamada atualiza o registro.
+        findOne: (filter: Record<string, unknown>) => ({ lean: async () => { const row = rows.find((item) => matches(item, filter)); return row ? { ...row } : null } }),
         findById: (id: string) => ({ lean: async () => rows.find((row) => String(row._id) === id) ?? null }),
         find: (filter: Record<string, unknown> = {}) => {
             const result = () => rows.filter((row) => matches(row, filter))
@@ -42,8 +44,10 @@ vi.mock("@/features/maddox/models/maddox-opencode-session", () => ({
 
 const client = {
     session: {
-        get: vi.fn(async ({ sessionID }: { sessionID: string }) => ({ id: sessionID })),
-        create: vi.fn(async () => ({ id: `ses_${++created}` })),
+        get: vi.fn(async ({ sessionID }: { sessionID: string }): Promise<{ id: string; model?: { providerID: string; id: string; variant?: string }; agent?: string }> => ({ id: sessionID })),
+        create: vi.fn(async (_input: Record<string, unknown>) => ({ id: `ses_${++created}` })),
+        switchModel: vi.fn(async (_input: { sessionID: string; model: { providerID: string; id: string; variant?: string } }) => undefined),
+        switchAgent: vi.fn(async (_input: { sessionID: string; agent: string }) => undefined),
         remove: vi.fn<(input: { sessionID: string }, options?: unknown) => Promise<void>>(async () => undefined),
     },
 }
@@ -51,17 +55,21 @@ const getOpencodeClient = vi.fn(async () => client)
 vi.mock("@/lib/ai/opencode-client", () => ({ getOpencodeClient, isOpencodeSessionNotFound: vi.fn(async (error: unknown) => error instanceof Error && error.message === "not-found") }))
 
 const CAMPAIGN = new Types.ObjectId()
-const { deleteMaddoxSession, ensureMaddoxSession, listMaddoxSessions, processPendingMaddoxSessionDeletions, releaseCampaignSessions, releaseInterviewSession, sessionPurposeFor } = await import("@/features/maddox/server/opencode-sessions")
+const { deleteMaddoxSession, ensureMaddoxSession, listMaddoxSessions, processPendingMaddoxSessionDeletions, opencodeModelRef, releaseCampaignSessions, releaseInterviewSession } = await import("@/features/maddox/server/opencode-sessions")
 
 describe("sessões do OpenCode do Maddox", () => {
     beforeEach(() => {
         rows.length = 0
         recordAudit.mockClear()
-        client.session.get.mockClear()
+        client.session.get.mockReset().mockImplementation(async ({ sessionID }) => ({ id: sessionID }))
         client.session.create.mockClear()
+        client.session.switchModel.mockReset().mockResolvedValue(undefined)
+        client.session.switchAgent.mockReset().mockResolvedValue(undefined)
         client.session.remove.mockReset().mockResolvedValue(undefined)
         getOpencodeClient.mockReset().mockResolvedValue(client)
-        Object.assign(policy, { sessionScope: "campaign-and-interviews", deleteOnCampaignEnd: true, directory: null })
+        Object.assign(policy, { deleteOnCampaignEnd: true, directory: null })
+        campaigns.length = 0
+        campaigns.push({ _id: CAMPAIGN, name: "A Torre", status: "active" })
     })
 
     it("cria uma sessão no diretório da integração e a reaproveita enquanto existir", async () => {
@@ -110,30 +118,134 @@ describe("sessões do OpenCode do Maddox", () => {
         expect(client.session.remove.mock.calls[0]![0]).not.toEqual({ sessionID: a })
     })
 
-    it("com 'uma sessão por campanha', a entrevista de cenário usa a do narrador", async () => {
-        policy.sessionScope = "campaign"
-        expect(sessionPurposeFor(policy as never, "scenario-interview")).toBe("narrator")
-        const narrator = await ensureMaddoxSession({ campaignId: String(CAMPAIGN), purpose: "narrator", title: "x" })
-        const interview = await ensureMaddoxSession({ campaignId: String(CAMPAIGN), purpose: "scenario-interview", title: "x" })
-        expect(interview).toBe(narrator)
+    it("corrida: a perdedora é excluída e a sessão vencedora sem o modelo configurado é realinhada", async () => {
+        const input = { campaignId: String(CAMPAIGN), purpose: "narrator" as const, title: "x", model: "opencode-go/deepseek-v4.1-flash", agent: "maddox" }
+        const [a, b] = await Promise.all([ensureMaddoxSession(input), ensureMaddoxSession(input)])
+        expect(a).toBe(b)
+        expect(client.session.remove).toHaveBeenCalledTimes(1)
+        expect(client.session.remove.mock.calls[0]![0]).not.toEqual({ sessionID: a })
+        // A vencedora (consultada pela perdedora) veio sem modelo e com outro agente: recebe os configurados.
+        expect(client.session.get).toHaveBeenCalledWith({ sessionID: a })
+        expect(client.session.switchModel).toHaveBeenCalledWith({ sessionID: a, model: { providerID: "opencode-go", id: "deepseek-v4.1-flash" } })
+        expect(client.session.switchAgent).toHaveBeenCalledWith({ sessionID: a, agent: "maddox" })
     })
 
-    it("entrevista de personagem tem sempre sessão própria por membro, mesmo com 'uma sessão por campanha'", async () => {
-        policy.sessionScope = "campaign"
-        expect(sessionPurposeFor(policy as never, "character-interview")).toBe("character-interview")
+    it("corrida: vencedora já com o modelo e o agente configurados não é trocada", async () => {
+        client.session.get.mockImplementation(async ({ sessionID }) => ({ id: sessionID, model: { providerID: "opencode-go", id: "deepseek-v4.1-flash" }, agent: "maddox" }))
+        const input = { campaignId: String(CAMPAIGN), purpose: "narrator" as const, title: "x", model: "opencode-go/deepseek-v4.1-flash", agent: "maddox" }
+        const [a, b] = await Promise.all([ensureMaddoxSession(input), ensureMaddoxSession(input)])
+        expect(a).toBe(b)
+        expect(client.session.switchModel).not.toHaveBeenCalled()
+        expect(client.session.switchAgent).not.toHaveBeenCalled()
+    })
+
+    it("corrida: se a consulta da vencedora falha, o modelo e o agente são reaplicados assim mesmo", async () => {
+        client.session.get.mockRejectedValue(new Error("timeout"))
+        const input = { campaignId: String(CAMPAIGN), purpose: "narrator" as const, title: "x", model: "opencode-go/deepseek-v4.1-flash", agent: "maddox" }
+        const [a, b] = await Promise.all([ensureMaddoxSession(input), ensureMaddoxSession(input)])
+        expect(a).toBe(b)
+        expect(client.session.switchModel).toHaveBeenCalledWith({ sessionID: a, model: { providerID: "opencode-go", id: "deepseek-v4.1-flash" } })
+        expect(client.session.switchAgent).toHaveBeenCalledWith({ sessionID: a, agent: "maddox" })
+    })
+
+    it("corrida: falha ao realinhar a vencedora vira 502 e não gera com o modelo errado", async () => {
+        client.session.switchModel.mockRejectedValue(new Error("ECONNRESET"))
+        const input = { campaignId: String(CAMPAIGN), purpose: "narrator" as const, title: "x", model: "opencode-go/deepseek-v4.1-flash" }
+        const results = await Promise.allSettled([ensureMaddoxSession(input), ensureMaddoxSession(input)])
+        const rejected = results.filter((result) => result.status === "rejected")
+        expect(rejected).toHaveLength(1)
+        expect((rejected[0] as PromiseRejectedResult).reason).toMatchObject({ status: 502, code: "OPENCODE_SESSION_UNAVAILABLE" })
+        expect(rows.filter((row) => row.status === "active")).toHaveLength(1)
+    })
+
+    it("corrida no registro sumido (troca condicional sem efeito): a perdedora é excluída e a vencedora realinhada", async () => {
+        const old = await ensureMaddoxSession({ campaignId: String(CAMPAIGN), purpose: "narrator", title: "x" })
+        // Duas chamadas veem a sessão antiga sumida; as duas criam e só uma troca o registro.
+        client.session.get.mockImplementation(async ({ sessionID }) => {
+            if (sessionID === old) throw new Error("not-found")
+            return { id: sessionID }
+        })
+        const input = { campaignId: String(CAMPAIGN), purpose: "narrator" as const, title: "x", model: "opencode-go/deepseek-v4.1-flash" }
+        const [a, b] = await Promise.all([ensureMaddoxSession(input), ensureMaddoxSession(input)])
+        expect(a).toBe(b)
+        expect(a).not.toBe(old)
+        expect(rows.filter((row) => row.status === "active").map((row) => row.sessionId)).toEqual([a])
+        expect(client.session.remove).toHaveBeenCalledTimes(1)
+        expect(client.session.remove.mock.calls[0]![0]).not.toEqual({ sessionID: a })
+        expect(client.session.switchModel).toHaveBeenCalledWith({ sessionID: a, model: { providerID: "opencode-go", id: "deepseek-v4.1-flash" } })
+    })
+
+    it("sessões nunca compartilhadas: narrador, cenário e cada membro têm a sua", async () => {
         const memberA = String(new Types.ObjectId())
         const memberB = String(new Types.ObjectId())
         const narrator = await ensureMaddoxSession({ campaignId: String(CAMPAIGN), purpose: "narrator", title: "x" })
+        const scenario = await ensureMaddoxSession({ campaignId: String(CAMPAIGN), purpose: "scenario-interview", title: "x" })
         const a = await ensureMaddoxSession({ campaignId: String(CAMPAIGN), purpose: "character-interview", memberId: memberA, title: "x" })
         const b = await ensureMaddoxSession({ campaignId: String(CAMPAIGN), purpose: "character-interview", memberId: memberB, title: "x" })
-        expect(new Set([narrator, a, b]).size).toBe(3)
+        expect(new Set([narrator, scenario, a, b]).size).toBe(4)
         expect(await ensureMaddoxSession({ campaignId: String(CAMPAIGN), purpose: "character-interview", memberId: memberA, title: "x" })).toBe(a)
+        expect(await ensureMaddoxSession({ campaignId: String(CAMPAIGN), purpose: "narrator", title: "x" })).toBe(narrator)
         expect(rows.filter((row) => row.purpose === "character-interview").map((row) => String(row.memberId)).sort()).toEqual([memberA, memberB].sort())
     })
 
-    it("o agente configurado chega ao session.create", async () => {
+    it("o agente, o modelo e a variante configurados chegam ao session.create", async () => {
+        await ensureMaddoxSession({ campaignId: String(CAMPAIGN), purpose: "narrator", title: "x", agent: "maddox", model: "opencode-go/deepseek-v4.1-flash", variant: "high" })
+        expect(client.session.create.mock.calls[0]).toEqual([expect.objectContaining({ agent: "maddox", model: { providerID: "opencode-go", id: "deepseek-v4.1-flash", variant: "high" } })])
+    })
+
+    it("modelo sem provedor: a sessão é criada sem model (padrão do servidor)", async () => {
+        await ensureMaddoxSession({ campaignId: String(CAMPAIGN), purpose: "narrator", title: "x", model: "deepseek" })
+        expect(client.session.create.mock.calls[0]![0]).not.toHaveProperty("model")
+    })
+
+    it("sessão reaproveitada sem modelo (ou com outro) é trocada para o configurado; igual não troca", async () => {
+        const id = await ensureMaddoxSession({ campaignId: String(CAMPAIGN), purpose: "scenario-interview", title: "x" })
+        client.session.get.mockResolvedValueOnce({ id })
+        await ensureMaddoxSession({ campaignId: String(CAMPAIGN), purpose: "scenario-interview", title: "x", model: "opencode-go/deepseek-v4.1-flash" })
+        expect(client.session.switchModel).toHaveBeenCalledWith({ sessionID: id, model: { providerID: "opencode-go", id: "deepseek-v4.1-flash" } })
+
+        client.session.switchModel.mockClear()
+        client.session.get.mockResolvedValueOnce({ id, model: { providerID: "opencode-go", id: "hy4" } })
+        await ensureMaddoxSession({ campaignId: String(CAMPAIGN), purpose: "scenario-interview", title: "x", model: "opencode-go/deepseek-v4.1-flash" })
+        expect(client.session.switchModel).toHaveBeenCalledTimes(1)
+
+        client.session.switchModel.mockClear()
+        client.session.get.mockResolvedValueOnce({ id, model: { providerID: "opencode-go", id: "deepseek-v4.1-flash" } })
+        await ensureMaddoxSession({ campaignId: String(CAMPAIGN), purpose: "scenario-interview", title: "x", model: "opencode-go/deepseek-v4.1-flash" })
+        expect(client.session.switchModel).not.toHaveBeenCalled()
+        expect(client.session.create).toHaveBeenCalledTimes(1)
+    })
+
+    it("agente diferente na sessão reaproveitada é trocado; agente vazio na configuração não troca", async () => {
+        const id = await ensureMaddoxSession({ campaignId: String(CAMPAIGN), purpose: "narrator", title: "x" })
+        client.session.get.mockResolvedValueOnce({ id, agent: "build" })
         await ensureMaddoxSession({ campaignId: String(CAMPAIGN), purpose: "narrator", title: "x", agent: "maddox" })
-        expect(client.session.create.mock.calls[0]).toEqual([expect.objectContaining({ agent: "maddox" })])
+        expect(client.session.switchAgent).toHaveBeenCalledWith({ sessionID: id, agent: "maddox" })
+        client.session.switchAgent.mockClear()
+        client.session.get.mockResolvedValueOnce({ id, agent: "build" })
+        await ensureMaddoxSession({ campaignId: String(CAMPAIGN), purpose: "narrator", title: "x", agent: null })
+        expect(client.session.switchAgent).not.toHaveBeenCalled()
+    })
+
+    it("falha ao trocar o modelo vira 502 com o modelo na mensagem e mantém o registro", async () => {
+        const id = await ensureMaddoxSession({ campaignId: String(CAMPAIGN), purpose: "narrator", title: "x" })
+        client.session.switchModel.mockRejectedValueOnce(new Error("timeout"))
+        await expect(ensureMaddoxSession({ campaignId: String(CAMPAIGN), purpose: "narrator", title: "x", model: "opencode-go/deepseek-v4.1-flash" })).rejects.toMatchObject({
+            status: 502,
+            code: "OPENCODE_SESSION_UNAVAILABLE",
+            message: expect.stringContaining("opencode-go/deepseek-v4.1-flash"),
+        })
+        expect(client.session.create).toHaveBeenCalledTimes(1)
+        expect(rows).toEqual([expect.objectContaining({ sessionId: id, status: "active" })])
+    })
+
+    it("opencodeModelRef divide na primeira barra e recusa id sem provedor", () => {
+        expect(opencodeModelRef("opencode-go/deepseek-v4.1-flash")).toEqual({ providerID: "opencode-go", id: "deepseek-v4.1-flash" })
+        expect(opencodeModelRef("openrouter/qwen/qwen3", "max")).toEqual({ providerID: "openrouter", id: "qwen/qwen3", variant: "max" })
+        expect(opencodeModelRef("deepseek")).toBeNull()
+        expect(opencodeModelRef("/x")).toBeNull()
+        expect(opencodeModelRef("x/")).toBeNull()
+        expect(opencodeModelRef(null)).toBeNull()
     })
 
     it("releaseInterviewSession libera só a sessão daquela entrevista/membro", async () => {
@@ -151,14 +263,6 @@ describe("sessões do OpenCode do Maddox", () => {
         await releaseInterviewSession(String(CAMPAIGN), "scenario-interview", null)
         expect(client.session.remove.mock.calls.map(([input]) => input.sessionID)).toEqual([a, scenario])
         expect(rows.map((row) => row.sessionId).sort()).toEqual([narrator, b].sort())
-    })
-
-    it("releaseInterviewSession com 'uma sessão por campanha' não toca a sessão do narrador (cenário compartilhado)", async () => {
-        policy.sessionScope = "campaign"
-        const narrator = await ensureMaddoxSession({ campaignId: String(CAMPAIGN), purpose: "scenario-interview", title: "x" })
-        await releaseInterviewSession(String(CAMPAIGN), "scenario-interview", null)
-        expect(client.session.remove).not.toHaveBeenCalled()
-        expect(rows.map((row) => row.sessionId)).toEqual([narrator])
     })
 
     it("releaseInterviewSession nunca lança: falha no OpenCode fica registrada e a sessão segue pendente", async () => {
@@ -203,6 +307,27 @@ describe("sessões do OpenCode do Maddox", () => {
         policy.deleteOnCampaignEnd = true
         expect(await releaseCampaignSessions(String(CAMPAIGN))).toBe(1)
         expect(rows).toHaveLength(0)
+    })
+
+    it("a rotina põe na fila e exclui as sessões de campanhas terminadas, arquivadas ou excluídas", async () => {
+        const ended = new Types.ObjectId()
+        const archived = new Types.ObjectId()
+        const gone = new Types.ObjectId()
+        campaigns.push({ _id: ended, name: "Fim", status: "ended" }, { _id: archived, name: "Arquivo", status: "archived" })
+        const keep = await ensureMaddoxSession({ campaignId: String(CAMPAIGN), purpose: "narrator", title: "x" })
+        for (const id of [ended, archived, gone]) await ensureMaddoxSession({ campaignId: String(id), purpose: "narrator", title: "x" })
+        expect(await processPendingMaddoxSessionDeletions()).toBe("3 sessão(ões) de campanhas encerradas na fila · 3 sessão(ões) excluída(s)")
+        expect(rows.map((row) => row.sessionId)).toEqual([keep])
+    })
+
+    it("a rotina não toca as sessões de campanhas encerradas com a política desligada", async () => {
+        campaigns.push({ _id: new Types.ObjectId(), name: "Fim", status: "ended" })
+        await ensureMaddoxSession({ campaignId: String(campaigns[1]!._id), purpose: "narrator", title: "x" })
+        await ensureMaddoxSession({ campaignId: String(new Types.ObjectId()), purpose: "narrator", title: "x" })
+        policy.deleteOnCampaignEnd = false
+        expect(await processPendingMaddoxSessionDeletions()).toBe("Nenhuma sessão pendente")
+        expect(rows.filter((row) => row.status === "active")).toHaveLength(2)
+        expect(client.session.remove).not.toHaveBeenCalled()
     })
 
     it("lista com o nome da campanha e 404 para id inválido", async () => {

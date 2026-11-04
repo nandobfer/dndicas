@@ -557,15 +557,10 @@ export const MADDOX_JEV_DECISION_DEFS: Record<MaddoxJevDecision, { label: string
 
 // ── OpenCode ──────────────────────────────────────────────────────────────────
 
-/** Sessões do OpenCode: uma por campanha (narrador) ou também uma por entrevista. A entrevista de personagem tem sempre sessão própria por membro. */
-export const MADDOX_SESSION_SCOPES = ["campaign", "campaign-and-interviews"] as const
-export type MaddoxSessionScope = (typeof MADDOX_SESSION_SCOPES)[number]
-
-export const MADDOX_SESSION_SCOPE_LABELS: Record<MaddoxSessionScope, string> = {
-    campaign: "Uma sessão por campanha",
-    "campaign-and-interviews": "Uma por campanha e uma por entrevista",
-}
-
+/**
+ * Sessões do OpenCode, nunca compartilhadas: uma do narrador por campanha (recriada se sumir), uma da entrevista de cenário
+ * e uma por membro na entrevista de personagem (as das entrevistas são excluídas ao concluir).
+ */
 export const MADDOX_SESSION_PURPOSES = ["narrator", "scenario-interview", "character-interview"] as const
 export type MaddoxSessionPurpose = (typeof MADDOX_SESSION_PURPOSES)[number]
 

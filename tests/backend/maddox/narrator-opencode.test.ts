@@ -17,7 +17,7 @@ vi.mock("@/features/maddox/server/settings", () => ({
             main: { provider: "opencode", model: "anthropic/claude", agent: "maddox", variant: null, temperature: null, maxOutputTokens: null },
             instructions: "Você é Maddox.",
             avatar: { url: null },
-            opencode: { sessionScope: "campaign", deleteOnCampaignEnd: true, directory: null, mcpUrl: null },
+            opencode: { deleteOnCampaignEnd: true, directory: null, mcpUrl: null },
             jev: {},
         },
         isDefault: false,
@@ -72,7 +72,7 @@ describe("Maddox narrador no OpenCode", () => {
         expect(tools.slice(0, 2)).toEqual([true, false])
         expect(tools.at(-1)).toBe(false)
         expect(ensureMaddoxMcp).toHaveBeenCalledTimes(1)
-        expect(ensureMaddoxSession).toHaveBeenCalledWith(expect.objectContaining({ campaignId: String(campaign._id), purpose: "narrator", agent: "maddox" }))
+        expect(ensureMaddoxSession).toHaveBeenCalledWith(expect.objectContaining({ campaignId: String(campaign._id), purpose: "narrator", agent: "maddox", model: "anthropic/claude", variant: null }))
         const request = requests[0]!
         expect(request).toMatchObject({ provider: "opencode", opencodeSessionId: "ses_narrador", consumption: { origin: "maddox-narration", subject: String(campaign._id) } })
         expect(request).not.toHaveProperty("tools")
