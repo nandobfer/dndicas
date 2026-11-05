@@ -30,7 +30,9 @@ export interface CampaignSyncRecord {
 
 export interface IEngramindState {
     _id: string
-    bootstrap: { ranAt: Date; ok: boolean; steps: BootstrapStepRecord[]; agentTokenIds: Record<string, string> } | null
+    bootstrap: { ranAt: Date; ok: boolean; steps: BootstrapStepRecord[] } | null
+    /** Id (não o segredo) do token em uso de cada agente. */
+    agentTokenIds: Record<string, string>
     memoryContext: { lastOkAt: Date | null; unavailableSince: Date | null; lastError: string | null } | null
     campaignSync: CampaignSyncRecord | null
     /** Categorias que não puderam ser criadas (conflito ou lista cheia). */
@@ -59,6 +61,7 @@ const stateSchema = new Schema<IEngramindState>(
     {
         _id: { type: String, required: true },
         bootstrap: { type: Schema.Types.Mixed, default: null },
+        agentTokenIds: { type: Schema.Types.Mixed, default: () => ({}) },
         memoryContext: { type: Schema.Types.Mixed, default: null },
         campaignSync: { type: Schema.Types.Mixed, default: null },
         categoryWarnings: { type: [String], default: [] },

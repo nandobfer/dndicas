@@ -171,7 +171,7 @@ async function ensureAgentTokens(client: EngramindClient, connection: EngramindC
         }
         await auditEngramind(actorId, "issue_token", AcaoAuditoria.CRIAR, { agente: agentSlug(identity), token: result.token.id, anterior: current?.id ?? null, escopos: [...AGENT_TOKEN_SCOPES] })
     }
-    await EngramindState.updateOne({ _id: ENGRAMIND_STATE_ID }, { $set: { "bootstrap.agentTokenIds": ids } }, { upsert: true }).catch(() => undefined)
+    await EngramindState.updateOne({ _id: ENGRAMIND_STATE_ID }, { $set: { agentTokenIds: ids } }, { upsert: true }).catch(() => undefined)
     return { status: "ok", message: issued ? `${issued} token(s) emitido(s); ${MEMORY_IDENTITIES.length - issued} em uso` : `${MEMORY_IDENTITIES.length} tokens em uso` }
 }
 
@@ -216,7 +216,7 @@ async function execute(actorId: string): Promise<BootstrapDto> {
     const connection = await engramindConnection()
     const steps: BootstrapStepRecord[] = BOOTSTRAP_STEPS.map((step) => ({ ...step, status: "pending", message: "", at: new Date() }))
     const save = async (ok: boolean) => {
-        await EngramindState.updateOne({ _id: ENGRAMIND_STATE_ID }, { $set: { "bootstrap.ranAt": new Date(), "bootstrap.ok": ok, "bootstrap.steps": steps } }, { upsert: true })
+        await EngramindState.updateOne({ _id: ENGRAMIND_STATE_ID }, { $set: { bootstrap: { ranAt: new Date(), ok, steps } } }, { upsert: true })
         await publishEngramind({ type: "bootstrap.updated" })
     }
     if (!connection) {
