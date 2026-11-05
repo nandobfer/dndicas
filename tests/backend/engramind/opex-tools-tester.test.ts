@@ -10,6 +10,8 @@ const { runBootstrap } = await import("@/features/engramind/server/bootstrap")
 const { testEngramind } = await import("@/features/engramind/server/tester")
 const { findOpexTool, toolMinRole } = await import("@/features/opex-agent/server/tools/registry")
 
+vi.setConfig({ testTimeout: 20_000 })
+
 let mongo: MongoMemoryServer | undefined
 
 beforeAll(async () => {

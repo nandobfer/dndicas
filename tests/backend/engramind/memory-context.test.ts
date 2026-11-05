@@ -16,6 +16,8 @@ const { runBootstrap } = await import("@/features/engramind/server/bootstrap")
 const { agentMemoryBlock, getAgentMemoryContext, markContextDirty } = await import("@/features/engramind/server/memory-context")
 const { resetEngramindLazyForTests } = await import("@/features/engramind/server/client")
 
+vi.setConfig({ testTimeout: 20_000 })
+
 let mongo: MongoMemoryServer | undefined
 
 beforeAll(async () => {

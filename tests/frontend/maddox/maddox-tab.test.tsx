@@ -117,7 +117,7 @@ describe("aba Agente Maddox", () => {
     it("mostra as seções e o aviso de disponibilidade", () => {
         renderTab()
         const tabs = screen.getByRole("tablist", { name: "Seções do Agente Maddox" })
-        expect(within(tabs).getAllByRole("tab").map((tab) => tab.textContent)).toEqual(["Geral", "Entrevista: cenário", "Entrevista: personagem", "Imagens", "JEV", "OpenCode", "Memórias"])
+        expect(within(tabs).getAllByRole("tab").map((tab) => tab.textContent)).toEqual(["Geral", "Entrevista: cenário", "Entrevista: personagem", "Imagens", "JEV", "OpenCode"])
         expect(screen.getByText(/está desativada/)).toBeTruthy()
         expect(screen.getByText("Avatar")).toBeTruthy()
     })

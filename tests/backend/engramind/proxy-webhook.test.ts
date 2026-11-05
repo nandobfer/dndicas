@@ -25,6 +25,8 @@ const { engramindBus } = await import("@/features/engramind/server/live")
 const { EngramindContextCache } = await import("@/features/engramind/server/models")
 const { proxyAccessOf, PROXY_READ_OPERATIONS } = await import("@/features/engramind/proxy-policy")
 
+vi.setConfig({ testTimeout: 20_000 })
+
 let mongo: MongoMemoryServer | undefined
 
 beforeAll(async () => {

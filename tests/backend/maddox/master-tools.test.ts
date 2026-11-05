@@ -1,6 +1,8 @@
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest"
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest"
 import mongoose from "mongoose"
 import { MongoMemoryServer } from "mongodb-memory-server"
+
+vi.mock("@/features/engramind/server/campaign-mirror", () => ({ mirrorCampaignMemoryLater: vi.fn(), searchCampaignMemories: vi.fn(async () => null) }))
 
 const { MaddoxCampaignMemberModel, MaddoxCampaignMemoryModel, MaddoxCampaignModel, MaddoxCharacterModel, MaddoxNpcModel } = await import("@/features/maddox/models")
 const { enqueueMaddoxJob, jobDraftChecks, waitForCampaignIdle } = await import("@/features/maddox/server/game-live")

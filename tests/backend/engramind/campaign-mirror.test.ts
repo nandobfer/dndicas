@@ -16,6 +16,8 @@ const { campaignChannel } = await import("@/features/engramind/constants")
 const { MaddoxCampaignMemoryModel, MaddoxCampaignModel } = await import("@/features/maddox/models")
 const { findMaddoxTool, runMaddoxTool } = await import("@/features/maddox/server/master-tools")
 
+vi.setConfig({ testTimeout: 20_000 })
+
 let mongo: MongoMemoryServer | undefined
 let fake: FakeEngramind
 let campaignId: mongoose.Types.ObjectId

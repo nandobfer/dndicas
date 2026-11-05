@@ -13,6 +13,8 @@ const { engramindConnection } = await import("@/features/engramind/server/client
 const { FIXED_CHANNELS, MEMORY_IDENTITIES, campaignChannels } = await import("@/features/engramind/constants")
 const { MaddoxCampaignModel } = await import("@/features/maddox/models")
 
+vi.setConfig({ testTimeout: 20_000 })
+
 let mongo: MongoMemoryServer | undefined
 
 beforeAll(async () => {

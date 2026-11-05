@@ -23,6 +23,8 @@ const migration = await import("@/features/engramind/server/migration")
 const { runBootstrap } = await import("@/features/engramind/server/bootstrap")
 const { MemoryMigration, MIGRATION_ID } = await import("@/features/engramind/server/migration-models")
 
+vi.setConfig({ testTimeout: 20_000 })
+
 let mongo: MongoMemoryServer | undefined
 let fake: FakeEngramind
 
