@@ -29,7 +29,6 @@ roteiros e as memórias salvam à parte.
 | Imagens | Imagens nas cenas (Maddox 10): chave geral, situações fixas e personalizadas, intervalo, teto diário, proporção e estilo (seção "Imagens nas cenas (Maddox 10)") |
 | JEV | Uma chave por decisão (`MADDOX_JEV_DECISIONS`): pergunta ou ação do jogador, validade de ação livre, pedir teste, início/fim de combate, conhecimento do mestre, fim da entrevista, gerar imagem na cena. Em uso: **"Fim da entrevista"** (Maddox 2), **"Validade de ação livre"** (Maddox 4, só Rigoroso e Fiel ao D&D), **"Pedir teste"** (Maddox 5, orientação ao narrador nos graus com testes) e **"Início ou fim de combate"** (Maddox 6, orientação ao narrador nos graus com combate narrativo), **"Custo de ação no combate"** (Maddox 7) e **"Gerar imagem na cena"** (Maddox 10, filtro da imagem pedida pelo narrador); as demais ainda sem uso |
 | OpenCode | Política das sessões e lista das sessões ativas com "Excluir" (confirmação) |
-| Memórias | Lista `maddox` de `agent_memories` (mesmo card dos demais agentes, sem limite de quantidade; API `/api/ai/agents/maddox/memories/**`) |
 
 A configuração fica em `ai_feature_settings` (feature `maddox`) com o schema `maddoxSettingsSchema`:
 `enabled`, `main` (provedor, modelo, agente, variante, temperatura, tokens), `interviewer` (provedor,
@@ -113,7 +112,22 @@ por campanha/finalidade/membro, `sessionId`, `{ campaignId, userId }` dos membro
 **`ensure-maddox-indexes`** (`src/lib/db/migrations/`), já que o autoIndex não roda em models compilados antes
 da conexão.
 
-As memórias **de campanha** são diferentes das memórias **do agente** (lista `maddox`, escritas pelo admin).
+As memórias **de campanha** são diferentes das memórias **do agente** (canal `dndicas/maddox` no Engramind, lido
+pelo narrador e pelo entrevistador; a aba mostra só o link para `/memorias`).
+
+### Memórias de campanha no Engramind (DND-21)
+
+O MongoDB continua sendo a fonte do jogo e do Diário; cada memória de campanha tem um **espelho em mão dupla**
+no Engramind (`src/features/engramind/server/campaign-mirror.ts`, detalhes em `engramind.md`):
+
+- canais `dndicas/maddox/campanhas/<campaignId>/jogadores` e `…/mestre` (`visibility`), criados **na criação
+  da campanha** junto com as categorias `FATO`, `EVENTO`, `LOCAL`, `MISSAO`, `RELACAO` e `OUTRO` (`kind`);
+- campos novos: `engramindMemoryId`, `engramindVersion` (anti-laço), `hiddenAt` (arquivada na rede: fora do
+  Diário, do contexto e da busca do narrador), `engramindSyncPending` e `engramindSyncError` (o cron reenvia);
+- `save_memory` espelha sem esperar e reexibe uma escondida com o mesmo tipo + título; o marco do combate
+  também espelha; `search_memories` busca no Engramind (os dois canais) e cai para a busca do Mongo;
+- campanha `archived` arquiva os dois canais; saindo de `archived`, restaura.
+
 
 ## API (administradores)
 
@@ -377,7 +391,7 @@ Código: `server/narrator.ts` (geração), `server/narrator-prompt.ts` (módulo 
 `server/action-validation.ts`, `server/maddox-mcp.ts` + `server/master-turn-token.ts` + `server/opencode-mcp.ts` (OpenCode),
 `hooks/useMaddoxGameStream.ts`, `components/composer-focus.ts`.
 
-**Tom e regras.** As instruções são as da aba ("Maddox (narrador)") + memórias do agente (lista `maddox`) + as regras fixas do
+**Tom e regras.** As instruções são as da aba ("Maddox (narrador)") + memórias do agente (canal `dndicas/maddox` no Engramind) + as regras fixas do
 narrador (`MADDOX_NARRATOR_RULES`, adaptadas do `~/code/roleplay/agente-exemplo.md` para vários jogadores: cada jogador decide
 as ações, falas e escolhas do próprio personagem; o Maddox cuida do mundo, dos NPCs, dos resultados e do involuntário; prosa
 sensorial em segunda pessoa; cada narração desenvolve a situação e termina num ponto de decisão) + **modo narrativo puro**

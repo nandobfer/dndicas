@@ -41,29 +41,32 @@ num provedor fixo.
 | Importador 5etools | `entity-import` | Tradução das entidades importadas (`AiTranslator`, telas de geração e scripts de seed) |
 | Agente Opex | `opex-agent` | Ver `opex-agent.md` |
 | Agente Maddox | `maddox` | Mestre das Campanhas Maddox (aceita o OpenCode, com sessões próprias). Ver `maddox.md` |
-| Resumo de memórias | `memory-summary` | Revisa e resume cada memória antes de salvar |
 
-Servidor: `src/features/ai/server/{settings,image-generator,entity-understanding,entity-import,memory-summary}.ts`.
+Servidor: `src/features/ai/server/{settings,image-generator,entity-understanding,entity-import,memory-block}.ts`.
 A rota genérica `/api/core/ai` (sem consumidor) foi removida.
 
 ## Memórias
 
-Instruções permanentes por lista (`agent_memories`), injetadas no fim das instruções de cada agente
-(`memoriesSection`). Sem limite de quantidade por lista; **3–2.000 caracteres** cada; o texto passa pelo Resumo
-de memórias (sem ele, grava como veio). Criar/editar/excluir é auditado e avisa em tempo real.
+Desde a DND-21 as memórias dos agentes ficam no **Engramind** (ver `engramind.md`). Cada lista antiga de
+`agent_memories` virou um canal fixo, e cada consumidor recebe o bloco de contexto pronto do Engramind no fim
+das instruções (`memoriesSection(block)`, `src/features/ai/memories-prompt.ts`), pelo token do próprio agente:
 
-| Lista | Aplicada em |
-| --- | --- |
-| `opex-global` | Todo turno do Agente Opex |
-| `opex-admin` | Só turnos de administradores |
-| `opex-user` | Turnos de usuários e visitantes |
-| `image-generator` | Toda imagem gerada |
-| `entity-understanding` | Toda resposta do Entender com IA |
-| `entity-import` | Toda tradução do Importador 5etools |
-| `maddox` | Agente Maddox (narrador e entrevistador), a partir das próximas entregas |
+| Lista (antiga) | Canal | Aplicada em |
+| --- | --- | --- |
+| `opex-global` | `dndicas/opex/global` | Todo turno do Agente Opex |
+| `opex-admin` | `dndicas/opex/admin` | Só turnos de administradores |
+| `opex-user` | `dndicas/opex/user` | Turnos de usuários e visitantes |
+| `image-generator` | `dndicas/image-generator` | Toda imagem gerada |
+| `entity-understanding` | `dndicas/entity-understanding` | Toda resposta do Entender com IA |
+| `entity-import` | `dndicas/entity-import` | Toda tradução do Importador 5etools |
+| `maddox` | `dndicas/maddox` | Agente Maddox (narrador e entrevistador) |
 
-Catálogo das listas: `src/features/ai/agents.ts`. API: `/api/ai/agents/[agentId]/memories/**` (admin).
-O Agente Opex gerencia as memórias com ferramentas (só em turnos de administradores).
+Mapa lista → agente/canal: `src/features/ai/agents.ts` (`contextChannelsFor`). O bloco vem de
+`memoryBlock(identity, role?)` (`src/features/ai/server/memory-block.ts`, import sob demanda), que nunca lança:
+com o Engramind fora do ar o turno usa o último bloco em cache ou segue sem memórias. As abas dos agentes em
+`/integracoes/ia` só mostram o link "As memórias deste agente ficam em Memórias" (`/memorias`). O "Resumo de
+memórias" (feature `memory-summary`) foi removido; o documento antigo em `ai_feature_settings` e a coleção
+`agent_memories` ficam intactos (só o backup da migração lê a coleção).
 
 ## Testes
 

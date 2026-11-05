@@ -49,9 +49,9 @@ revalidado no banco (`loadActor`). Cada ferramenta declara `minRole` (ou herda d
 | Catálogo (administração) | `set_catalog_entity_status` |
 | Arquivos do chat | `list_chat_files`, `read_chat_file` |
 | Jobs | `list_jobs`, `schedule_job`, `update_job`, `cancel_job` |
-| Memórias | `list/get/create/update/delete_agent_memory` (todas as listas de `agents.ts`) |
+| Memórias | `search_memories`, `get_memory`, `create_memory` (da lib `@engramind/client/ai`), `list_memory_categories`, `create_memory_category`: token do agente `dndicas/opex`; alcança `dndicas/opex/*` e os outros canais fixos em `manage` (citando o canal). Permissões `memories.view`/`memories.edit` |
 | Integrações e rotinas | `list/get/update/test_integration`, `list_routines`, `run_routine` (segredos nunca são lidos) |
-| Agentes de IA | `get/update_ai_feature_settings` (Gerador de imagens, Entender com IA, Importador 5etools, Resumo de memórias) |
+| Agentes de IA | `get/update_ai_feature_settings` (Gerador de imagens, Entender com IA, Importador 5etools) |
 
 As entidades citadas usam a menção `<span data-type="mention" ...>` e aparecem como badges
 (`MentionContent`). Destrutivas e marcadas com `confirmByDefault` pedem Confirmar/Cancelar no chat.
