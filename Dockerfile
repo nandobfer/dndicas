@@ -8,7 +8,10 @@ ENV PNPM_HOME="/pnpm"
 ENV PATH="$PNPM_HOME:$PATH"
 RUN corepack enable
 
-COPY package.json pnpm-lock.yaml* ./
+# O pnpm-workspace.yaml carrega a configuração de instalação (política de idade mínima de release, com
+# `minimumReleaseAgeExclude`, e allowBuilds): sem ele o `pnpm install` do build recusa dependências
+# recém-publicadas que o projeto libera explicitamente (ex.: @engramind/client).
+COPY package.json pnpm-lock.yaml* pnpm-workspace.yaml* ./
 # Montando o cache do pnpm para acelerar a instalação
 RUN --mount=type=cache,id=pnpm,target=/pnpm/store pnpm install --frozen-lockfile --ignore-scripts
 
