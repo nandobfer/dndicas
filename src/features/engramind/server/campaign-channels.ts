@@ -115,12 +115,6 @@ export async function syncCampaignChannelLifecycle(campaign: CampaignNetworkInpu
     }
 }
 
-/** Mudança de status da campanha (fire-and-forget seguro: nunca rejeita). */
-export function onCampaignStatusChanged(campaign: CampaignNetworkInput, from: string, to: string): void {
-    if (from === to || (from !== "archived" && to !== "archived")) return
-    void syncCampaignChannelLifecycle({ ...campaign, status: to })
-}
-
 /** Bootstrap e cron: rede de todas as campanhas (força a conferência). */
 export async function provisionAllCampaignNetworks(actorId: string): Promise<{ total: number; ok: number; failed: number }> {
     await dbConnect()

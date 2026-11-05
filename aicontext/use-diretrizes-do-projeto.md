@@ -102,7 +102,7 @@ Anthropic, OpenAI, DeepSeek e JEV configurados em `/integracoes/ia`. O antigo
 **Razão**:
 - Trocar de provedor ou modelo sem deploy
 - Um agente por uso (Gerador de imagens, Entender com IA, Importador 5etools, Agente Opex,
-  Resumo de memórias), cada um com instruções e memórias próprias
+  Agente Maddox), cada um com instruções próprias e memórias no Engramind
 - Consumo registrado por origem
 
 **Implementação**:

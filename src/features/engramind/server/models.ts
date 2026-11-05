@@ -33,6 +33,8 @@ export interface IEngramindState {
     bootstrap: { ranAt: Date; ok: boolean; steps: BootstrapStepRecord[] } | null
     /** Id (não o segredo) do token em uso de cada agente. */
     agentTokenIds: Record<string, string>
+    /** Registro do webhook começado e não concluído (segredo local e remoto podem divergir): impede o pulo do passo. */
+    webhookPending: boolean
     memoryContext: { lastOkAt: Date | null; unavailableSince: Date | null; lastError: string | null } | null
     campaignSync: CampaignSyncRecord | null
     /** Categorias que não puderam ser criadas (conflito ou lista cheia). */
@@ -62,6 +64,7 @@ const stateSchema = new Schema<IEngramindState>(
         _id: { type: String, required: true },
         bootstrap: { type: Schema.Types.Mixed, default: null },
         agentTokenIds: { type: Schema.Types.Mixed, default: () => ({}) },
+        webhookPending: { type: Boolean, default: false },
         memoryContext: { type: Schema.Types.Mixed, default: null },
         campaignSync: { type: Schema.Types.Mixed, default: null },
         categoryWarnings: { type: [String], default: [] },

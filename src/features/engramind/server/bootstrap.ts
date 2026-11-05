@@ -179,10 +179,15 @@ async function ensureWebhook(client: EngramindClient, connection: EngramindConne
     if (!connection.publicAppUrl) return { status: "warn", message: "Sem URL pública do dndicas (nem NEXT_PUBLIC_APP_URL): sem tempo real; o cron reconcilia as campanhas." }
     const url = webhookUrlOf(connection.publicAppUrl)
     const app = await client.apps.get(ENGRAMIND_APP)
-    if (app.webhook?.url === url && app.webhook.secret.configured && connection.webhookSecret) return { status: "skipped", message: `Já registrado em ${url}` }
+    const state = await EngramindState.findById(ENGRAMIND_STATE_ID).select({ webhookPending: 1 }).lean()
+    if (!state?.webhookPending && app.webhook?.url === url && app.webhook.secret.configured && connection.webhookSecret) return { status: "skipped", message: `Já registrado em ${url}` }
     const secret = randomBytes(48).toString("base64url")
-    await writeEngramindSecrets({ webhookSecret: secret }, actorId)
+    // Marcador antes de mexer: se o registro remoto ou a gravação local falhar no meio, a próxima execução
+    // não pula o passo (o segredo do Engramind e o local podem estar diferentes).
+    await EngramindState.updateOne({ _id: ENGRAMIND_STATE_ID }, { $set: { webhookPending: true } }, { upsert: true })
     await client.apps.updateWebhook(ENGRAMIND_APP, { url, secret })
+    await writeEngramindSecrets({ webhookSecret: secret }, actorId)
+    await EngramindState.updateOne({ _id: ENGRAMIND_STATE_ID }, { $set: { webhookPending: false } })
     await auditEngramind(actorId, "update_app_webhook", AcaoAuditoria.ATUALIZAR, { url })
     return { status: "ok", message: `Registrado em ${url}` }
 }
@@ -249,6 +254,7 @@ async function execute(actorId: string): Promise<BootstrapDto> {
             const message = engramindCodeOf(error) === "AUTH_INVALID" ? "O Engramind recusou o token do app (ENGRAMIND_AUTH_INVALID): emita outro no Opex e reconfigure a integração." : messageOf(error)
             steps[index] = { ...step, status: "error", message, at: new Date() }
             engramindLog.warn({ step: step.id, err: message }, `[engramind] bootstrap parou em: ${step.label}`)
+            await auditEngramind(actorId, `bootstrap.${step.id}`, AcaoAuditoria.EXECUTAR, { status: "error", mensagem: message }).catch(() => undefined)
             break
         }
         await auditEngramind(actorId, `bootstrap.${step.id}`, AcaoAuditoria.EXECUTAR, { status: steps[index]!.status, mensagem: steps[index]!.message })

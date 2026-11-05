@@ -35,7 +35,7 @@ Idempotente, auditada passo a passo (`entidade: "Engramind"`), uma por vez. Com 
    citando o canal, fora do contexto); `dndicas/maddox` → `dndicas/maddox/campanhas/*` (`search`);
 5. um token `agent` `read+write+delete` por agente (reemitido quando falta, revogado, expirado ou com outros
    escopos; o anterior é revogado depois de o novo ser gravado);
-6. webhook `<URL pública>/api/engramind/webhook` com segredo novo (pulado se já está igual);
+6. webhook `<URL pública>/api/engramind/webhook` com segredo novo (pulado se já está igual; o marcador `webhookPending` impede o pulo depois de um registro interrompido, e o segredo local só é gravado depois de o Engramind aceitar o novo);
 7. categorias das campanhas e a rede das campanhas existentes.
 
 Uma falha para no passo e mantém os anteriores. Sem token de agente gravado, o primeiro turno dispara a
@@ -88,7 +88,11 @@ tipo e a linha `Status: …` só nas missões (ausente/inválida mantém o statu
   `engramindMemoryId` evita duplicar com cron e webhook juntos.
 - **Cron** `engramind-campaign-memories-sync` (15 min) e "Sincronizar agora": rede das campanhas, pendentes,
   alteradas desde a última execução e varredura de ids para exclusões perdidas.
-- **Ciclo de vida**: campanha `archived` arquiva os dois canais; saindo, restaura (melhor esforço, auditado).
+- **Ciclo de vida**: campanha `archived` arquiva os dois canais; fora de `archived`, restaura (melhor esforço,
+  auditado). Nenhum fluxo do dndicas muda o status para `archived` nem exclui campanha hoje, então quem aplica
+  isso é a reconciliação (cron e "Sincronizar agora"), que confere os canais de toda campanha.
+- **Movida para fora das campanhas** com o webhook perdido: a varredura de ids do cron relê a memória e a remove
+  do jogo.
 
 **Redator.** O Engramind só aceita `redator.rewrite_text` por canal com token admin. O dndicas tenta desligar a
 reescrita nos canais das campanhas; com `403` marca "não suportado" (`engramind_state.channelSettings`, aviso na

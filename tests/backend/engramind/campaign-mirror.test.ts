@@ -195,6 +195,15 @@ describe("Engramind → jogo (webhook)", () => {
         expect(await MaddoxCampaignMemoryModel.findById(memory._id).lean()).toBeNull()
         expect(await getCampaignSync()).toMatchObject({ lastError: null, lastResult: expect.objectContaining({ removed: 1 }) })
     })
+
+    it("o cron remove do jogo a memória movida para fora das campanhas quando o webhook se perdeu", async () => {
+        const memory = await gameMemory({})
+        await net("POST", `/v1/memories/${memory.engramindMemoryId}/move`, { channel: "dndicas/maddox" })
+        fake.takeEvents()
+        await reconcileCampaignMemories("admin-1")
+        expect(await MaddoxCampaignMemoryModel.findById(memory._id).lean()).toBeNull()
+        expect(await getCampaignSync()).toMatchObject({ lastError: null, lastResult: expect.objectContaining({ removed: 1 }) })
+    })
 })
 
 describe("busca do narrador, ciclo de vida e histórico", () => {
@@ -208,6 +217,20 @@ describe("busca do narrador, ciclo de vida e histórico", () => {
         expect(await searchCampaignMemories(campaignId, { query: "farol", limit: 10 })).toBeNull()
         const viaTool = (await tool("search_memories", { query: "farol" })) as { memories: { title: string }[] }
         expect(viaTool.memories.map((item) => item.title).sort()).toEqual(["Farol", "Segredo"])
+    })
+
+    it("a reconciliação arquiva os canais da campanha arquivada e os restaura quando ela sai de archived", async () => {
+        await MaddoxCampaignModel.updateOne({ _id: campaignId }, { $set: { status: "archived" } })
+        await reconcileCampaignMemories("admin-1")
+        expect(fake.state.channels.get(players())!.archived_at).not.toBeNull()
+        expect(fake.state.channels.get(master())!.archived_at).not.toBeNull()
+        await MaddoxCampaignModel.updateOne({ _id: campaignId }, { $set: { status: "active" } })
+        await reconcileCampaignMemories("admin-1")
+        expect(fake.state.channels.get(players())!.archived_at).toBeNull()
+        expect(fake.state.channels.get(master())!.archived_at).toBeNull()
+        const memory = await gameMemory({ title: "Depois", titleKey: "depois" })
+        expect(memory).toMatchObject({ engramindSyncPending: false })
+        expect(memory.engramindMemoryId).toBeTruthy()
     })
 
     it("campanha arquivada arquiva os dois canais; saindo de archived, restaura; falha não lança", async () => {

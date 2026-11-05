@@ -9,7 +9,7 @@ vi.mock("@/lib/db", async (importOriginal) => (await import("./helpers")).libDbM
 vi.mock("@/lib/pusher/channels", () => ({ publishToChannels: vi.fn(async () => undefined) }))
 
 const { runBootstrap } = await import("@/features/engramind/server/bootstrap")
-const { engramindConnection } = await import("@/features/engramind/server/client")
+const { engramindConnection, writeEngramindSecrets } = await import("@/features/engramind/server/client")
 const { FIXED_CHANNELS, MEMORY_IDENTITIES, campaignChannels } = await import("@/features/engramind/constants")
 const { MaddoxCampaignModel } = await import("@/features/maddox/models")
 
@@ -117,6 +117,32 @@ describe("configuração automática do Engramind", () => {
         const retried = await runBootstrap("admin-1")
         expect(retried.ok).toBe(true)
         expect(fake.state.agents.size).toBe(5)
+    })
+
+    it("registro do webhook interrompido: o passo que falha é auditado e a repetição não pula (segredo local = remoto)", async () => {
+        const fake = await configureEngramind()
+        expect((await runBootstrap("admin-1")).ok).toBe(true)
+        const remoteBefore = fake.state.apps.get("dndicas")!.webhook!.secret
+        // Mesma URL e segredo local perdido: o passo precisa registrar de novo.
+        await writeEngramindSecrets({ webhookSecret: null }, "admin-1")
+        const original = fake.fetch
+        let failures = 0
+        vi.stubGlobal("fetch", (async (input: RequestInfo | URL, init?: RequestInit) => {
+            const url = String(input instanceof Request ? input.url : input)
+            if (url.endsWith("/v1/apps/dndicas/webhook") && init?.method === "PUT" && failures++ === 0) return new Response(JSON.stringify({ error: { code: "INTERNAL", message: "falhou" } }), { status: 500, headers: { "Content-Type": "application/json" } })
+            return original(input as string, init)
+        }) as typeof fetch)
+        recordAudit.mockClear()
+        const failed = await runBootstrap("admin-1")
+        expect(failed.steps.find((step) => step.id === "webhook")?.status).toBe("error")
+        const audits = recordAudit.mock.calls.map((args) => JSON.stringify(args))
+        expect(audits.some((call) => call.includes("bootstrap.webhook") && call.includes('"error"'))).toBe(true)
+        expect(fake.state.apps.get("dndicas")!.webhook!.secret).toBe(remoteBefore)
+        const retried = await runBootstrap("admin-1")
+        expect(retried.steps.find((step) => step.id === "webhook")?.status).toBe("ok")
+        expect((await engramindConnection())!.webhookSecret).toBe(fake.state.apps.get("dndicas")!.webhook!.secret)
+        expect(fake.state.apps.get("dndicas")!.webhook!.secret).not.toBe(remoteBefore)
+        expect((await runBootstrap("admin-1")).steps.find((step) => step.id === "webhook")?.status).toBe("skipped")
     })
 
     it("categoria em conflito ou lista cheia vira aviso (amarelo), sem falhar", async () => {

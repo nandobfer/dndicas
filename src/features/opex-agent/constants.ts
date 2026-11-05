@@ -45,7 +45,7 @@ export const OPEX_TOOL_GROUP_LABELS: Record<OpexToolGroup, { label: string; desc
     memories: { label: "Memórias dos agentes", description: "Buscar, ler e criar memórias e categorias na rede de memórias (Engramind) com o token do Agente Opex (só administradores)" },
     integrations: { label: "Integrações", description: "Ler (sem segredos), configurar e testar integrações (só administradores)" },
     routines: { label: "Rotinas", description: "Crons do agendador interno (só administradores)" },
-    "ai-settings": { label: "Agentes de IA", description: "Configuração dos agentes de IA do DnDicas (Gerador de imagens, Entender com IA, Importador 5etools, Resumo de memórias) (só administradores)" },
+    "ai-settings": { label: "Agentes de IA", description: "Configuração dos agentes de IA do DnDicas (Gerador de imagens, Entender com IA, Importador 5etools) (só administradores)" },
 }
 
 /** Papel mínimo de cada grupo (o servidor também confere por ferramenta). Sem papel: vale para visitantes. */

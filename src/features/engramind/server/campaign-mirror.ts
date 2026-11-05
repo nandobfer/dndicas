@@ -274,7 +274,8 @@ async function reconcile(actorId: string): Promise<string> {
     const state = await EngramindState.findById(ENGRAMIND_STATE_ID).select({ campaignSync: 1 }).lean()
     const result = { pushed: 0, pulled: 0, removed: 0, failed: 0, channels: 0 }
     try {
-        // 1. Rede das campanhas (cache por processo) e o ciclo de vida das arquivadas.
+        // 1. Rede das campanhas (cache por processo) e o ciclo de vida dos canais: arquivados para campanhas
+        // `archived`, restaurados para as demais (não há outro ponto do código que mude o status da campanha).
         const campaigns = await MaddoxCampaignModel.find({}).select({ name: 1, status: 1 }).lean<{ _id: Types.ObjectId; name: string; status: string }[]>()
         for (const campaign of campaigns) {
             const input = { id: String(campaign._id), name: campaign.name, status: campaign.status }
@@ -283,7 +284,7 @@ async function reconcile(actorId: string): Promise<string> {
             } catch (error) {
                 engramindLog.warn({ campaignId: input.id, err: messageOf(error) }, "[engramind] canais da campanha ainda sem configurar")
             }
-            if (campaign.status === "archived") await syncCampaignChannelLifecycle(input, actorId)
+            await syncCampaignChannelLifecycle(input, actorId)
         }
         // 2. Pendentes do jogo.
         const pending = await MaddoxCampaignMemoryModel.find({ engramindSyncPending: true }).select({ _id: 1 }).limit(500).lean<{ _id: Types.ObjectId }[]>()
@@ -310,13 +311,17 @@ async function reconcile(actorId: string): Promise<string> {
             const mirrored = await MaddoxCampaignMemoryModel.find({ engramindMemoryId: { $ne: null }, engramindSyncPending: { $ne: true } }).select({ engramindMemoryId: 1 }).lean<{ _id: Types.ObjectId; engramindMemoryId: string }[]>()
             const gone = mirrored.filter((item) => !remoteIds.has(item.engramindMemoryId))
             for (const item of gone) {
+                let remote: RemoteMemory
                 try {
-                    await client.memories.get(item.engramindMemoryId)
+                    remote = (await client.memories.get(item.engramindMemoryId)) as RemoteMemory
                 } catch (error) {
                     if (engramindCodeOf(error) !== "MEMORY_NOT_FOUND") continue
                     await MaddoxCampaignMemoryModel.deleteOne({ _id: item._id })
                     result.removed++
+                    continue
                 }
+                // Movida para fora dos canais de campanha (webhook perdido): a regra de aplicação remove do jogo.
+                if (!parseCampaignChannel(remote.channel) && (await applyRemoteMemory(remote, categories)) === "removed") result.removed++
             }
         }
         await EngramindState.updateOne(
