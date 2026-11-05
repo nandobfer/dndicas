@@ -8,7 +8,7 @@ describe("ferramentas do Agente Opex por papel", () => {
     it("visitantes recebem só o catálogo, a documentação e o contexto", () => {
         const tools = names("anonymous")
         expect(tools).toEqual(expect.arrayContaining(["get_app_overview", "search_catalog", "get_entity", "list_app_docs", "search_app_docs", "read_app_doc"]))
-        for (const blocked of ["list_my_sheets", "read_chat_file", "schedule_job", "create_feedback", "list_integrations", "create_agent_memory", "set_catalog_entity_status", "update_ai_feature_settings"]) {
+        for (const blocked of ["list_my_sheets", "read_chat_file", "schedule_job", "create_feedback", "list_integrations", "create_memory", "search_memories", "create_memory_category", "set_catalog_entity_status", "update_ai_feature_settings"]) {
             expect(tools).not.toContain(blocked)
         }
     })
@@ -16,7 +16,7 @@ describe("ferramentas do Agente Opex por papel", () => {
     it("usuários logados ganham as próprias fichas e NPCs, arquivos e jobs, sem administração", () => {
         const tools = names("user")
         expect(tools).toEqual(expect.arrayContaining(["list_my_sheets", "update_sheet", "list_my_npcs", "read_chat_file", "schedule_job"]))
-        for (const blocked of ["list_integrations", "update_integration", "run_routine", "create_agent_memory", "set_catalog_entity_status", "update_ai_feature_settings"]) {
+        for (const blocked of ["list_integrations", "update_integration", "run_routine", "create_memory", "get_memory", "list_memory_categories", "set_catalog_entity_status", "update_ai_feature_settings"]) {
             expect(tools).not.toContain(blocked)
         }
     })
@@ -58,7 +58,7 @@ describe("ferramentas do Agente Opex por papel", () => {
         it("perfil com só admin.access não usa ferramentas de integração, catálogo, memórias nem IA", () => {
             const moderador = scopeWith(["admin.access", "users.view"])
             const names = enabledOpexTools([], "admin", moderador).map((tool) => tool.name)
-            for (const name of ["list_integrations", "list_routines", "run_routine", "list_agent_memories", "create_agent_memory", "update_ai_feature_settings", "set_catalog_entity_status"]) expect(names).not.toContain(name)
+            for (const name of ["list_integrations", "list_routines", "run_routine", "search_memories", "create_memory", "create_memory_category", "update_ai_feature_settings", "set_catalog_entity_status"]) expect(names).not.toContain(name)
             expect(toolPermittedFor(findOpexTool("update_integration")!, moderador, { id: "pusher" })).toBe(false)
             expect(toolPermittedFor(findOpexTool("test_integration")!, moderador, { id: "pusher" })).toBe(false)
             expect(toolPermittedFor(findOpexTool("set_catalog_entity_status")!, moderador, { type: "spell", id: "x", status: "inactive" })).toBe(false)
