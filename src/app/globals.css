@@ -1,4 +1,8 @@
 @import "tailwindcss";
+/* Rede de memórias (`/memorias`, @engramind/client): folhas do React Flow e do react-day-picker e as classes da lib. */
+@import "@xyflow/react/dist/style.css";
+@import "react-day-picker/style.css";
+@source "../../node_modules/@engramind/client/dist";
 
 :root {
   --chart-1: #8000ff;

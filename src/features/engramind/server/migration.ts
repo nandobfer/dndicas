@@ -537,15 +537,11 @@ export async function mirrorHistory(actorId: string): Promise<MemoryMigrationDto
 
 // ── Leitura ─────────────────────────────────────────────────────────────────
 
-async function budgetOf(state: IMemoryMigration) {
+async function budgetOf(state: IMemoryMigration, settings?: MigrationSettings | null) {
     const entries = state.items.filter((item) => item.channel && included(item)).map((item) => ({ channel: item.channel!, text: finalOf(item).texto }))
-    let budget = 4000
-    try {
-        budget = (await migrationSettings()).budgetTokens
-    } catch {
-        // Sem o Engramind, a estimativa usa o padrão.
-    }
-    return estimateBudgets(entries, budgetCombinations(), budget)
+    const current = settings === undefined ? await migrationSettings().catch(() => null) : settings
+    // Sem o Engramind, a estimativa usa o padrão.
+    return estimateBudgets(entries, budgetCombinations(), current?.budgetTokens ?? 4000)
 }
 
 const stepDto = (step: IMigrationStep): MigrationStepDto => ({ status: step.status, error: step.error, startedAt: iso(step.startedAt), finishedAt: iso(step.finishedAt), progress: step.progress })
@@ -596,6 +592,7 @@ export async function getMigration(): Promise<MemoryMigrationDto> {
         byList.set(item.list, row)
     }
     const { campaignHistoryCounts } = await import("./campaign-mirror")
+    const settings = await migrationSettings().catch(() => null)
     return {
         legacyCount: await legacyMemoryCount().catch(() => state.items.length),
         backup: backup ? { id: backup._id, createdAt: new Date(backup.createdAt).toISOString(), count: backup.count, sha256: backup.sha256 } : null,
@@ -604,9 +601,11 @@ export async function getMigration(): Promise<MemoryMigrationDto> {
         items: state.items.map(itemDto),
         report: triaged.length ? { byDecision, byList: [...byList.values()] } : null,
         importReport: importReport(state.items),
-        budget: triaged.length ? await budgetOf(state) : [],
+        budget: triaged.length ? await budgetOf(state, settings) : [],
         campaigns: await campaignHistoryCounts().catch(() => []),
         categoryNotices: state.categoryNotices,
+        categories: settings?.categories ?? [],
+        textMax: settings?.textMax ?? 4000,
         firstCompletedAt: iso(state.firstCompletedAt),
         lastImportAt: iso(state.lastImportAt),
     }

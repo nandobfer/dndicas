@@ -401,7 +401,7 @@ export function createFakeEngramind() {
                         const existing = [...state.memories.values()].find((memory) => memory.channel === channel && memory.key === item.key)
                         if (existing) return duplicates.push({ index, existing_id: existing.id })
                     }
-                    const written = writeMemory(token, { ...(item as never), channel })
+                    const written = writeMemory(token, { ...(item as Record<string, unknown>), channel } as never)
                     if (written.duplicate) duplicates.push({ index, existing_id: written.memory.id })
                     else created.push({ index, id: written.memory.id })
                 })

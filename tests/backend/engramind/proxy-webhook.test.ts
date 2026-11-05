@@ -98,7 +98,7 @@ describe("proxy da rede (/api/engramind/[...path])", () => {
         permissions.granted = new Set(["memories.view", "memories.edit"])
         const response = await call("POST", "memories/import", body)
         expect(response.status).toBe(200)
-        const audit = recordAudit.mock.calls.map((args) => args[0] as { entidadeId: string }).find((item) => item.entidadeId === "import_memories")
+        const audit = (recordAudit.mock.calls as unknown as [{ entidadeId: string }][]).map((args) => args[0]).find((item) => item.entidadeId === "import_memories")
         expect(audit).toMatchObject({ depois: { canal: "dndicas/maddox", memorias: 1 } })
         expect(JSON.stringify(recordAudit.mock.calls)).not.toContain("Texto secreto")
     })

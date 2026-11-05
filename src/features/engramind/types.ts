@@ -110,6 +110,9 @@ export interface MemoryMigrationDto {
     budget: { key: string; label: string; tokens: number; budget: number; over: boolean; memories: number }[]
     campaigns: CampaignHistoryCountDto[]
     categoryNotices: string[]
+    /** Categorias e limite de texto do Engramind (vazio/padrão quando ele não responde). */
+    categories: { key: string; label: string }[]
+    textMax: number
     firstCompletedAt: string | null
     lastImportAt: string | null
 }
