@@ -43,3 +43,73 @@ export interface CampaignHistoryCountDto {
     source: number
     mirrored: number
 }
+
+// ── Migração das listas (aba Migração) ──────────────────────────────────────
+
+export type CuratorDecisionKey = "migrar" | "migrar_reescrevendo" | "descartar" | "revisar_dono"
+
+export interface MigrationStepDto {
+    status: "idle" | "running" | "failed" | "done"
+    error: string | null
+    startedAt: string | null
+    finishedAt: string | null
+    progress: { done: number; total: number } | null
+}
+
+export interface MigrationDecisionDto {
+    decisao: CuratorDecisionKey
+    motivo: string
+    textoProposto: string | null
+    categoriaProposta: string | null
+    /** Categoria nova sugerida pelo curador (criada na importação). */
+    novaCategoria: { key: string; label: string } | null
+    canalDestino: string
+    duplicataDe: string | null
+    confianca: number | null
+}
+
+export interface MigrationItemDto {
+    id: string
+    list: string
+    listTitle: string
+    texto: string
+    resumo: string
+    channel: string | null
+    criadaEm: string
+    decision: MigrationDecisionDto | null
+    review: { status: "pendente" | "aprovada" | "rejeitada"; texto: string | null; categoria: string | null }
+    /** Texto e categoria que serão importados (edição do admin > proposta > original). */
+    final: { texto: string; categoria: string | null }
+    /** Pede ação explícita (`descartar`/`revisar_dono`). */
+    needsAttention: boolean
+    imported: { engramindId: string; at: string; duplicate: boolean } | null
+}
+
+export interface MigrationReportDto {
+    byDecision: Record<CuratorDecisionKey, number>
+    byList: { list: string; title: string; total: number; counts: Record<CuratorDecisionKey, number> }[]
+}
+
+export interface MigrationImportReportDto {
+    list: string
+    title: string
+    source: number
+    approved: number
+    imported: number
+    duplicates: number
+}
+
+export interface MemoryMigrationDto {
+    legacyCount: number
+    backup: { id: string; createdAt: string; count: number; sha256: string } | null
+    steps: { backup: MigrationStepDto; triage: MigrationStepDto; compact: MigrationStepDto; import: MigrationStepDto; history: MigrationStepDto }
+    curator: { provider: string; model: string; variant: string | null; ranAt: string } | null
+    items: MigrationItemDto[]
+    report: MigrationReportDto | null
+    importReport: MigrationImportReportDto[]
+    budget: { key: string; label: string; tokens: number; budget: number; over: boolean; memories: number }[]
+    campaigns: CampaignHistoryCountDto[]
+    categoryNotices: string[]
+    firstCompletedAt: string | null
+    lastImportAt: string | null
+}
