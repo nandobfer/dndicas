@@ -66,8 +66,9 @@ MaddoxCampaignMemorySchema.index({ campaignId: 1, kind: 1, createdAt: -1 })
 MaddoxCampaignMemorySchema.index({ campaignId: 1, kind: 1, titleKey: 1 })
 // Diário da campanha (Maddox 9): memórias públicas por tipo, da mais recente (cursor `_id`).
 MaddoxCampaignMemorySchema.index({ campaignId: 1, visibility: 1, kind: 1, _id: -1 })
-// Espelho no Engramind (DND-21): webhook acha a memória pelo id da rede; o cron, as pendentes.
-MaddoxCampaignMemorySchema.index({ engramindMemoryId: 1 }, { sparse: true })
+// Espelho no Engramind (DND-21): webhook acha a memória pelo id da rede (único: o cron e o webhook ao mesmo
+// tempo nunca criam duas); o cron, as pendentes.
+MaddoxCampaignMemorySchema.index({ engramindMemoryId: 1 }, { unique: true, partialFilterExpression: { engramindMemoryId: { $type: "string" } } })
 MaddoxCampaignMemorySchema.index({ engramindSyncPending: 1 })
 // Índice de texto legado; a busca do Diário (Maddox 9) usa regex sem acento filtrado pela campanha.
 MaddoxCampaignMemorySchema.index({ title: "text", text: "text", tags: "text" }, { default_language: "portuguese" })

@@ -7,7 +7,7 @@ import { MaddoxCampaignMemoryModel, MaddoxCampaignModel, type IMaddoxCampaignMem
 import { CAMPAIGN_CHANNEL_PREFIX, campaignChannel, campaignChannels, parseCampaignChannel } from "../constants"
 import { engramindTextOf, kindOfCategory, memoryIdOfKey, mirrorKey, parseEngramindText, resolveCategory } from "../campaign-mirror-format"
 import type { CampaignHistoryCountDto, CampaignSyncDto } from "../types"
-import { listCategoryKeys } from "./categories"
+import { invalidateCategoryCache, listCategoryKeys } from "./categories"
 import { engramindAgentClient, engramindAppClient, engramindConnection } from "./client"
 import { provisionCampaignMemoryNetwork, provisionCampaignMemoryNetworkSafely, syncCampaignChannelLifecycle } from "./campaign-channels"
 import { ENGRAMIND_STATE_ID, EngramindState } from "./models"
@@ -74,7 +74,15 @@ async function pushMemory(client: EngramindClient, memory: LeanMemory, categorie
         origin: { source: "maddox", label: memory.origin === "agent" ? "Maddox" : "Jogo" },
         ...(title ? { title } : {}),
     }
-    const written = (await client.call("POST", "/v1/memories", { body })) as { memory: RemoteMemory }
+    let written: { memory: RemoteMemory }
+    try {
+        written = (await client.call("POST", "/v1/memories", { body })) as { memory: RemoteMemory }
+    } catch (error) {
+        // Categoria removida no Opex depois do cache: relê a lista e tenta uma vez com a de fallback.
+        if (engramindCodeOf(error) !== "CATEGORY_NOT_FOUND") throw error
+        invalidateCategoryCache()
+        written = (await client.call("POST", "/v1/memories", { body: { ...body, category: resolveCategory(memory.kind, await listCategoryKeys()) } })) as { memory: RemoteMemory }
+    }
     let version = written.memory.version
     if (memory.hiddenAt && written.memory.status !== "archived") version = ((await client.memories.archive(written.memory.id)) as RemoteMemory).version
     return { id: written.memory.id, version }
@@ -121,7 +129,7 @@ async function findLocal(remote: Pick<RemoteMemory, "id" | "key">): Promise<Lean
 export type ApplyOutcome = "created" | "updated" | "removed" | "ignored"
 
 /** Aplica no Mongo uma memória lida da rede (webhook e cron). Idempotente pela versão. */
-export async function applyRemoteMemory(remote: RemoteMemory, categories?: readonly string[] | null): Promise<ApplyOutcome> {
+export async function applyRemoteMemory(remote: RemoteMemory, categories?: readonly string[] | null, retried = false): Promise<ApplyOutcome> {
     await dbConnect()
     const local = await findLocal(remote)
     const target = parseCampaignChannel(remote.channel)
@@ -164,7 +172,13 @@ export async function applyRemoteMemory(remote: RemoteMemory, categories?: reado
         return result.modifiedCount ? "updated" : "ignored"
     }
     const createdBy = remote.author?.agent ?? remote.author?.app ?? "engramind"
-    await MaddoxCampaignMemoryModel.create({ ...set, tags: [], origin: "user", createdBy })
+    try {
+        await MaddoxCampaignMemoryModel.create({ ...set, tags: [], origin: "user", createdBy })
+    } catch (error) {
+        // O cron e o webhook criaram a mesma memória ao mesmo tempo: o índice único segura; aplica por cima.
+        if ((error as { code?: number }).code === 11000 && !retried) return applyRemoteMemory(remote, available, true)
+        throw error
+    }
     return "created"
 }
 

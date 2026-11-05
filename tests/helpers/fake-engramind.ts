@@ -38,6 +38,7 @@ export const CONTRACT_ROUTES: readonly (readonly [string, string])[] = [
     ["POST", "/v1/memories/import"],
     ["POST", "/v1/memories/search"],
     ["GET", "/v1/memories/{memory}"],
+    ["PATCH", "/v1/memories/{memory}"],
     ["DELETE", "/v1/memories/{memory}"],
     ["POST", "/v1/memories/{memory}/archive"],
     ["POST", "/v1/memories/{memory}/restore"],
@@ -423,6 +424,21 @@ export function createFakeEngramind() {
                 const memory = memoryOrFail(params[0]!)
                 assertRead(token, memory.channel)
                 return { status: 200, body: memory }
+            }
+            case "PATCH /v1/memories/{memory}": {
+                const memory = memoryOrFail(params[0]!)
+                assertWrite(token, memory.channel)
+                if (body.expected_version !== undefined && body.expected_version !== memory.version) fail(409, "MEMORY_VERSION_CONFLICT", { current_version: memory.version })
+                if (body.category !== undefined && !state.categories.some((item) => item.key === body.category)) fail(400, "CATEGORY_NOT_FOUND")
+                Object.assign(memory, {
+                    ...(body.text !== undefined ? { text: String(body.text) } : {}),
+                    ...(body.category !== undefined ? { category: String(body.category) } : {}),
+                    ...(body.title !== undefined ? { title: String(body.title), title_state: "ready" } : {}),
+                    version: memory.version + 1,
+                    updated_at: tick(),
+                })
+                emit("memory.updated", memory.channel, [memory.id])
+                return { status: 200, body: { memory, duplicate: false, similar: [] } }
             }
             case "DELETE /v1/memories/{memory}": {
                 const memory = memoryOrFail(params[0]!)
