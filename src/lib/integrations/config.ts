@@ -67,6 +67,17 @@ export interface IntegrationConfigMap {
         googleApiKey?: string
         libretranslateApiKey?: string
     }
+    engramind: {
+        baseUrl?: string
+        publicAppUrl?: string
+        appToken?: string
+        webhookSecret?: string
+        agentTokenOpex?: string
+        agentTokenImageGenerator?: string
+        agentTokenEntityUnderstanding?: string
+        agentTokenEntityImport?: string
+        agentTokenMaddox?: string
+    }
 }
 
 export type SecretSource = "db" | "env" | "none"

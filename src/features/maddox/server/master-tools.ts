@@ -271,14 +271,22 @@ export const MADDOX_MASTER_TOOLS: readonly MaddoxMasterTool[] = [
         }),
         async execute(context, input) {
             const query = input.query?.trim()
+            const limit = input.limit ?? 20
+            // Busca híbrida no Engramind (os dois canais da campanha); sem ele, a busca sem acento no Mongo.
+            if (query) {
+                const { searchCampaignMemories } = await import("@/features/engramind/server/campaign-mirror")
+                const found = await searchCampaignMemories(context.campaignId, { query, kind: input.kind, limit })
+                if (found) return { memories: found.map(memoryDto) }
+            }
             const filter = {
                 campaignId: context.campaignId,
+                hiddenAt: null,
                 ...(input.kind ? { kind: input.kind } : {}),
                 ...(query ? { $or: [{ title: textMatch(query) }, { text: textMatch(query) }, { tags: textMatch(query) }] } : {}),
             }
             const memories = await MaddoxCampaignMemoryModel.find(filter)
                 .sort({ updatedAt: -1 })
-                .limit(input.limit ?? 20)
+                .limit(limit)
                 .lean<IMaddoxCampaignMemory[]>()
             return { memories: memories.map(memoryDto) }
         },
@@ -309,12 +317,15 @@ export const MADDOX_MASTER_TOOLS: readonly MaddoxMasterTool[] = [
             if (input.visibility) set.visibility = input.visibility
             if (input.tags) set.tags = input.tags.map((tag) => clip(tag, MADDOX_TOOL_TAG_MAX)).filter(Boolean).slice(0, MADDOX_TOOL_TAGS_MAX)
             if (input.kind === "missao" && input.status) set.status = input.status
-            const existing = await MaddoxCampaignMemoryModel.findOne({ campaignId: context.campaignId, kind: input.kind, titleKey }).select("_id").lean()
+            // Prefere a visível; uma escondida (arquivada na rede) com o mesmo tipo + título volta a aparecer.
+            const existing = await MaddoxCampaignMemoryModel.findOne({ campaignId: context.campaignId, kind: input.kind, titleKey }).sort({ hiddenAt: 1, updatedAt: -1 }).select("_id hiddenAt").lean<{ _id: Types.ObjectId; hiddenAt?: Date | null }>()
+            const { mirrorCampaignMemoryLater } = await import("@/features/engramind/server/campaign-mirror")
             if (existing) {
-                await MaddoxCampaignMemoryModel.updateOne({ _id: existing._id }, { $set: set })
-                return { saved: true, created: false, kind: input.kind, title, ...fit.notice() }
+                await MaddoxCampaignMemoryModel.updateOne({ _id: existing._id }, { $set: { ...set, hiddenAt: null } })
+                mirrorCampaignMemoryLater(existing._id)
+                return { saved: true, created: false, kind: input.kind, title, ...(existing.hiddenAt ? { restored: true } : {}), ...fit.notice() }
             }
-            await MaddoxCampaignMemoryModel.create({
+            const created = await MaddoxCampaignMemoryModel.create({
                 campaignId: context.campaignId,
                 kind: input.kind,
                 titleKey,
@@ -323,6 +334,7 @@ export const MADDOX_MASTER_TOOLS: readonly MaddoxMasterTool[] = [
                 ...set,
                 ...(input.kind === "missao" ? { status: input.status ?? "ativa" } : {}),
             })
+            mirrorCampaignMemoryLater(created._id)
             return { saved: true, created: true, kind: input.kind, title, ...fit.notice() }
         },
     }),

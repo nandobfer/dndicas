@@ -1,10 +1,12 @@
 /**
- * Seção das memórias dos agentes nas instruções de sistema (módulo PURO, compartilhado pelo Agente
- * Opex e pelo Agente Adversário).
+ * Seção das memórias dos agentes nas instruções de sistema (módulo PURO). O bloco vem pronto do
+ * Engramind (`src/features/engramind/server/memory-context.ts`) e entra sem alteração depois do
+ * cabeçalho curto.
  */
 
-/** Seção das memórias para as instruções de sistema (vazia sem memórias). */
-export function memoriesSection(texts: readonly string[]): string {
-    if (!texts.length) return ""
-    return ["", "## Memórias e instruções permanentes", "Siga sempre estas memórias, cadastradas pelos administradores do DnDicas:", ...texts.map((text) => `- ${text.replace(/\n+/g, " ")}`)].join("\n")
+/** Seção das memórias para as instruções de sistema (vazia sem bloco). */
+export function memoriesSection(block: string | null | undefined): string {
+    const content = block?.trim()
+    if (!content) return ""
+    return ["", "## Memórias e instruções permanentes", "Siga sempre estas memórias, cadastradas na rede de memórias do dndicas:", "", content].join("\n")
 }

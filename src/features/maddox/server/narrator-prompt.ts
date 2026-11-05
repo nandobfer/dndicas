@@ -199,7 +199,7 @@ export interface NarratorMemory {
 
 export interface NarratorPromptContext {
     instructions: string
-    agentMemories: readonly string[]
+    agentMemories: string
     rigor: MaddoxRigorLevel
     campaignName: string
     setting: string

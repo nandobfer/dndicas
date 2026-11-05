@@ -3,8 +3,10 @@ import { MADDOX_CAMPAIGN_MEMORY_KINDS, MADDOX_QUEST_STATUSES, MADDOX_VISIBILITIE
 
 /**
  * Memória de uma campanha (fatos, eventos, locais, missões, relações) — `maddox_campaign_memories`.
- * Diferente das memórias de administrador do agente (`agent_memories`, lista `maddox`): estas são da
- * história de uma campanha e, quando `visibility = players`, os jogadores podem consultá-las e buscá-las.
+ * Diferente das memórias do agente (canal `dndicas/maddox` no Engramind): estas são da história de uma
+ * campanha e, quando `visibility = players`, os jogadores podem consultá-las e buscá-las. O Mongo é a
+ * fonte do jogo e do Diário; o Engramind guarda um espelho em mão dupla (`server/campaign-mirror.ts`
+ * em `src/features/engramind`).
  */
 export interface IMaddoxCampaignMemory {
     _id: Types.ObjectId
@@ -24,6 +26,14 @@ export interface IMaddoxCampaignMemory {
     combatId?: Types.ObjectId | null
     origin: "agent" | "user"
     createdBy: string
+    /** Espelho no Engramind (DND-21): id da memória na rede (`m_…`) e a última versão sincronizada. */
+    engramindMemoryId?: string | null
+    engramindVersion?: number | null
+    /** Escondida (arquivada na rede): some do Diário, do contexto e da busca do narrador. */
+    hiddenAt?: Date | null
+    /** Gravação no Engramind pendente (o cron reenvia) e o motivo da última falha. */
+    engramindSyncPending?: boolean
+    engramindSyncError?: string | null
     createdAt: Date
     updatedAt: Date
 }
@@ -42,6 +52,11 @@ const MaddoxCampaignMemorySchema = new Schema<IMaddoxCampaignMemory>(
         combatId: { type: Schema.Types.ObjectId, ref: "MaddoxCombat", default: null },
         origin: { type: String, enum: ["agent", "user"], default: "agent" },
         createdBy: { type: String, required: true },
+        engramindMemoryId: { type: String, default: null },
+        engramindVersion: { type: Number, default: null },
+        hiddenAt: { type: Date, default: null },
+        engramindSyncPending: { type: Boolean, default: false },
+        engramindSyncError: { type: String, default: null },
     },
     { collection: "maddox_campaign_memories", timestamps: true, versionKey: false },
 )
@@ -51,6 +66,9 @@ MaddoxCampaignMemorySchema.index({ campaignId: 1, kind: 1, createdAt: -1 })
 MaddoxCampaignMemorySchema.index({ campaignId: 1, kind: 1, titleKey: 1 })
 // Diário da campanha (Maddox 9): memórias públicas por tipo, da mais recente (cursor `_id`).
 MaddoxCampaignMemorySchema.index({ campaignId: 1, visibility: 1, kind: 1, _id: -1 })
+// Espelho no Engramind (DND-21): webhook acha a memória pelo id da rede; o cron, as pendentes.
+MaddoxCampaignMemorySchema.index({ engramindMemoryId: 1 }, { sparse: true })
+MaddoxCampaignMemorySchema.index({ engramindSyncPending: 1 })
 // Índice de texto legado; a busca do Diário (Maddox 9) usa regex sem acento filtrado pela campanha.
 MaddoxCampaignMemorySchema.index({ title: "text", text: "text", tags: "text" }, { default_language: "portuguese" })
 

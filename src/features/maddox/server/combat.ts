@@ -326,11 +326,15 @@ async function saveCombatMemory(campaignId: Types.ObjectId, combat: IMaddoxComba
     ].filter(Boolean)
     const set = { title, titleKey, text: lines.join("\n"), visibility: "players" as const, turnNumber, tags: ["combate"] }
     // Uma memória POR COMBATE (chave `combatId`): dois combates com o mesmo título não se sobrescrevem.
-    await MaddoxCampaignMemoryModel.updateOne(
+    const saved = await MaddoxCampaignMemoryModel.findOneAndUpdate(
         { campaignId, kind: "evento", combatId: combat._id },
         { $set: set, $setOnInsert: { campaignId, kind: "evento", combatId: combat._id, origin: "agent", createdBy: "maddox" } },
-        { upsert: true },
-    )
+        { upsert: true, returnDocument: "after", projection: { _id: 1 } },
+    ).lean<{ _id: Types.ObjectId }>()
+    if (saved) {
+        const { mirrorCampaignMemoryLater } = await import("@/features/engramind/server/campaign-mirror")
+        mirrorCampaignMemoryLater(saved._id)
+    }
 }
 
 const COIN_LABELS: Record<(typeof MADDOX_COIN_KEYS)[number], string> = { po: "po", pp: "pp", pe: "pe", pc: "pc", pl: "pl" }

@@ -18,8 +18,8 @@ import { claimOpexFiles, fileMarkers, resolveFileMarkers } from "./files"
 import { loadSession, loadSessionRaw, opexDb, publishSessionUpdated, toMessageDto } from "./sessions"
 import { loadOpexSettings, opexAvailability } from "./settings"
 import { refreshSessionTitle } from "./titler"
-import { agentMemoryTexts, memoriesSection } from "@/features/ai/server/agent-memory-service"
-import { opexMemoryAgentsFor } from "@/features/ai/agents"
+import { memoriesSection } from "@/features/ai/memories-prompt"
+import { memoryBlock } from "@/features/ai/server/memory-block"
 import { buildToolRuntime, stringifyForDisplay } from "./tool-runtime"
 import { assertAnonymousTurnAllowed } from "./rate-limit"
 import { actorIdOf, actorNameOf, loadActor, roleOf, sessionScopeOf, userOpexScope, type OpexServerScope } from "./scope"
@@ -41,7 +41,7 @@ const ROLE_DESCRIPTIONS = {
  * Estável entre os turnos: o raciocínio assinado e o cache do provedor dependem do prompt de sistema.
  * O papel (visitante, usuário ou administrador) entra no prompt e decide as memórias e as ferramentas.
  */
-export function instructionsFor(settings: OpexAgentSettings, scope: OpexServerScope, memories: readonly string[] = [], options: { docs?: boolean } = {}): string {
+export function instructionsFor(settings: OpexAgentSettings, scope: OpexServerScope, memories = "", options: { docs?: boolean } = {}): string {
     const role = roleOf(scope)
     return [
         settings.instructions,
@@ -261,7 +261,7 @@ async function executeTurn(args: TurnArgs): Promise<void> {
         prepared = await prepareModel({ provider: main.provider!, model: main.model!, variant: main.variant })
         const result = streamText({
             model: prepared.model,
-            instructions: instructionsFor(settings, scope, await agentMemoryTexts(opexMemoryAgentsFor(roleOf(scope))), { docs: tools.some((tool) => tool.group === "docs") }),
+            instructions: instructionsFor(settings, scope, await memoryBlock("opex", roleOf(scope)), { docs: tools.some((tool) => tool.group === "docs") }),
             messages: history,
             tools: runtime.tools,
             stopWhen: isLoopFinished(),

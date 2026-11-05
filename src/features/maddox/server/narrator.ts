@@ -87,7 +87,7 @@ async function loadContext(campaignId: Types.ObjectId): Promise<LoadedContext> {
         characterIds.length ? MaddoxCharacterModel.find({ _id: { $in: characterIds } }).lean<IMaddoxCharacter[]>() : Promise.resolve([]),
         userIds.length ? User.find({ _id: { $in: userIds } }).select("name username").lean<{ _id: Types.ObjectId; name?: string; username?: string }[]>() : Promise.resolve([]),
         MaddoxNpcModel.find({ campaignId }).sort({ updatedAt: -1 }).limit(MADDOX_NARRATOR_INDEX_ITEMS).lean<IMaddoxNpc[]>(),
-        MaddoxCampaignMemoryModel.find({ campaignId }).sort({ updatedAt: -1 }).limit(MADDOX_NARRATOR_INDEX_ITEMS * 2).lean<IMaddoxCampaignMemory[]>(),
+        MaddoxCampaignMemoryModel.find({ campaignId, hiddenAt: null }).sort({ updatedAt: -1 }).limit(MADDOX_NARRATOR_INDEX_ITEMS * 2).lean<IMaddoxCampaignMemory[]>(),
         MaddoxCampaignMessageModel.find({ campaignId }).sort({ _id: -1 }).limit(200).lean<IMaddoxCampaignMessage[]>(),
     ])
     const sheets = await loadSheetSummaries(campaign, characters)
@@ -225,13 +225,14 @@ export function checkResultOf(message: IMaddoxCampaignMessage): NarratorCheckRes
     }
 }
 
-async function agentMemories(): Promise<string[]> {
+/** Memórias do agente (canal `dndicas/maddox` no Engramind); sem elas, o Maddox narra assim mesmo. */
+async function agentMemories(): Promise<string> {
     try {
-        const { agentMemoryTexts } = await import("@/features/ai/server/agent-memory-service")
-        return await agentMemoryTexts(["maddox"])
+        const { memoryBlock } = await import("@/features/ai/server/memory-block")
+        return await memoryBlock("maddox")
     } catch (error) {
         log.warn({ err: error instanceof Error ? error.message : String(error) }, "[maddox] memórias do agente indisponíveis; narrando sem elas")
-        return []
+        return ""
     }
 }
 

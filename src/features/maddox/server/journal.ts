@@ -36,6 +36,8 @@ import { loadMembership } from "./campaigns"
 const log = loggerFor({ module: "maddox", feature: "journal" })
 
 const PLAYER_VISIBLE = { visibility: "players" } as const
+/** Memórias visíveis no Diário: dos jogadores e não escondidas (arquivadas na rede de memórias). */
+const MEMORY_VISIBLE = { ...PLAYER_VISIBLE, hiddenAt: null } as const
 const NPC_FIELDS = "name portraitUrl status publicDescription updatedAt"
 const MEMORY_FIELDS = "kind title text tags status turnNumber updatedAt"
 
@@ -117,8 +119,8 @@ export async function getJournalSummary(campaignId: string, userId: string): Pro
     const [npcs, party, byKind, activeQuests, avatarUrl, images] = await Promise.all([
         MaddoxNpcModel.countDocuments({ campaignId: campaign._id, ...PLAYER_VISIBLE }),
         MaddoxCampaignMemberModel.countDocuments({ campaignId: campaign._id, status: "joined", characterId: { $ne: null } }),
-        MaddoxCampaignMemoryModel.aggregate<{ _id: MaddoxCampaignMemoryKind; count: number }>([{ $match: { campaignId: campaign._id, ...PLAYER_VISIBLE } }, { $group: { _id: "$kind", count: { $sum: 1 } } }]),
-        MaddoxCampaignMemoryModel.find({ campaignId: campaign._id, ...PLAYER_VISIBLE, kind: "missao", status: ACTIVE_QUEST } as Record<string, unknown>)
+        MaddoxCampaignMemoryModel.aggregate<{ _id: MaddoxCampaignMemoryKind; count: number }>([{ $match: { campaignId: campaign._id, ...MEMORY_VISIBLE } }, { $group: { _id: "$kind", count: { $sum: 1 } } }]),
+        MaddoxCampaignMemoryModel.find({ campaignId: campaign._id, ...MEMORY_VISIBLE, kind: "missao", status: ACTIVE_QUEST } as Record<string, unknown>)
             .sort({ updatedAt: -1 })
             .limit(10)
             .select(MEMORY_FIELDS)
@@ -166,7 +168,7 @@ export async function listJournalMemories(campaignId: string, input: unknown, us
     const campaign = await loadJournalCampaign(campaignId, userId)
     // Missão sem situação gravada conta como ativa (a gravação do Maddox já nasce `ativa`).
     const status = query.kind === "missao" && query.status ? { status: query.status === "ativa" ? ACTIVE_QUEST : query.status } : {}
-    const filter: Record<string, unknown> = { campaignId: campaign._id, ...PLAYER_VISIBLE, kind: query.kind, ...status, ...cursorFilter(query.cursor) }
+    const filter: Record<string, unknown> = { campaignId: campaign._id, ...MEMORY_VISIBLE, kind: query.kind, ...status, ...cursorFilter(query.cursor) }
     const docs = await MaddoxCampaignMemoryModel.find(filter)
         .sort({ _id: -1 })
         .limit(MADDOX_JOURNAL_PAGE_SIZE + 1)
@@ -306,7 +308,7 @@ export async function searchJournal(campaignId: string, input: unknown, userId: 
             .limit(take)
             .select(NPC_FIELDS)
             .lean<NpcDoc[]>(),
-        MaddoxCampaignMemoryModel.find({ campaignId: campaign._id, ...PLAYER_VISIBLE, $or: [{ title: match }, { text: match }, { tags: match }] })
+        MaddoxCampaignMemoryModel.find({ campaignId: campaign._id, ...MEMORY_VISIBLE, $or: [{ title: match }, { text: match }, { tags: match }] })
             .sort({ updatedAt: -1 })
             .limit(take)
             .select(MEMORY_FIELDS)

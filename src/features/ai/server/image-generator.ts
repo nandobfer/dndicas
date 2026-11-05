@@ -7,8 +7,9 @@ import { buildFileProxyUrl, getImageExtensionFromMimeType, uploadFile } from "@/
 import { IMAGE_ASPECT_RATIOS, IMAGE_GENERATOR_CONSUMPTION_ORIGIN, MAX_GENERATED_IMAGE_SIZE_BYTES, type ImageAspectRatio } from "../constants"
 import { memoriesSection } from "../memories-prompt"
 import type { ImageGeneratorSettings } from "../schemas"
-import { agentMemoryTexts } from "./agent-memory-service"
 import { availabilityOfImageGenerator, loadImageGeneratorSettings } from "./settings"
+import { memoryBlock } from "./memory-block"
+
 
 /**
  * Agente "Gerador de imagens" (Integrações › Provedores de IA › Gerador de imagens): gera a arte de
@@ -59,7 +60,7 @@ function aspectRatioOf(value: string | undefined, fallback: ImageAspectRatio): I
 /** Prompt final: instruções configuradas + memórias do agente + contexto (JSON) da entidade. Módulo testável. */
 export function buildImagePrompt(
     settings: Pick<ImageGeneratorSettings, "instructions">,
-    memories: readonly string[],
+    memories: string,
     input: Pick<GenerateDndImageInput, "prompt" | "entityLabel" | "formData">,
     aspectRatio: ImageAspectRatio,
 ): string {
@@ -87,7 +88,7 @@ export async function generateAndStoreDndImage(input: GenerateDndImageInput): Pr
         throw new DomainError(409, availability.reason ?? "O Gerador de imagens não está configurado em Integrações › Provedores de IA.", "AI_IMAGE_UNAVAILABLE")
     }
     const aspectRatio = aspectRatioOf(input.preferredAspectRatio, settings.defaultAspectRatio)
-    const prompt = buildImagePrompt(settings, await agentMemoryTexts(["image-generator"]), input, aspectRatio)
+    const prompt = buildImagePrompt(settings, await memoryBlock("image-generator"), input, aspectRatio)
 
     let generated: Awaited<ReturnType<typeof generateAiImage>>
     try {
