@@ -4,7 +4,7 @@ import { useEffect } from "react"
 import { AnimatePresence, motion } from "framer-motion"
 import { useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
-import { Brain, Info, Loader2, RotateCcw, Save, Settings2, Undo2, Wrench } from "lucide-react"
+import { Info, Loader2, RotateCcw, Save, Settings2, Undo2, Wrench } from "lucide-react"
 import { Button } from "@/components/ui/opex/button"
 import { GlassCard as Card, GlassCardContent as CardContent, GlassCardDescription as CardDescription, GlassCardHeader as CardHeader, GlassCardTitle as CardTitle } from "@/components/ui/glass-card"
 import { Field } from "@/components/ui/opex/field"
@@ -23,13 +23,12 @@ import { OpexModelCard } from "./OpexModelCard"
 import { OpexFilesCard } from "./OpexFilesCard"
 import { OpexAnonymousCard } from "./OpexAnonymousCard"
 import { OpexToolsCard } from "./OpexToolsCard"
-import { OpexMemoriesSection } from "./OpexMemoriesSection"
+import { AgentMemoriesLink } from "@/features/engramind/components/AgentMemoriesLink"
 
-type OpexSection = "geral" | "ferramentas" | "memorias"
+type OpexSection = "geral" | "ferramentas"
 const SECTIONS: IntegrationTabDef<OpexSection>[] = [
     { id: "geral", label: "Geral", icon: Settings2 },
     { id: "ferramentas", label: "Ferramentas", icon: Wrench },
-    { id: "memorias", label: "Memórias", icon: Brain },
 ]
 
 const noticeMotion = { initial: { opacity: 0, height: 0 }, animate: { opacity: 1, height: "auto" }, exit: { opacity: 0, height: 0 }, transition: { duration: 0.2 } }
@@ -148,8 +147,7 @@ export function OpexAgentTab({ onDirtyChange }: { onDirtyChange: (dirty: boolean
                             {footer(go)}
                         </>
                     )}
-                    {/* Salva sozinho (cada memória grava na hora). */}
-                    {section === "memorias" && <OpexMemoriesSection />}
+                    <AgentMemoriesLink />
                 </>
             )}
         </AgentSettingsTabs>

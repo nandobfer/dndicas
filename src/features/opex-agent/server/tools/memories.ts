@@ -1,107 +1,127 @@
 import { z } from "zod"
-import { AI_AGENT_IDS, AI_AGENTS, type AiAgentId } from "@/features/ai/agents"
-import { MEMORY_TEXT_MAX } from "@/features/ai/schemas"
-import { createAgentMemory, deleteAgentMemory, getAgentMemory, listAgentMemories, updateAgentMemory } from "@/features/ai/server/agent-memory-service"
-import type { MemoryDto } from "@/features/ai/types"
-import { defineTool } from "./define"
-import { isObjectId } from "./json"
+import type { Tool } from "ai"
+import { FIXED_CHANNELS, MEMORIES_EDIT_PERMISSION, MEMORIES_VIEW_PERMISSION, normalizeCategoryKey } from "@/features/engramind/constants"
+import { defineTool, OpexToolError } from "./define"
 
 /**
- * Memórias dos agentes (copiadas do Opex): chamam o serviço real (`agent-memory-service`). A lista é
- * um enum do catálogo `src/features/ai/agents.ts` (globais, de administradores e de usuários do Agente
- * Opex e as dos agentes Gerador de imagens, Entender com IA e Importador 5etools), então listas
- * futuras entram sozinhas. Só administradores recebem estas ferramentas.
+ * Memórias do Agente Opex no Engramind (DND-21): as ferramentas da lib (`engramindTools` de
+ * `@engramind/client/ai`: `search_memories`, `get_memory`, `create_memory`) mais as categorias, todas com
+ * o token do agente `dndicas/opex` (o consumo aparece na rede como dele). O agente alcança
+ * `dndicas/opex/*` (no contexto) e os outros canais fixos em `manage` (só quando cita o canal). Só
+ * administradores recebem estas ferramentas.
  */
 
-const AGENT_LIST = AI_AGENT_IDS.map((id) => `${id} = ${AI_AGENTS[id].title}`).join("; ")
-const agent = z.enum(AI_AGENT_IDS).describe(`Lista de memórias: ${AGENT_LIST}`)
-const memoryId = z.string().trim().refine(isObjectId, "Id inválido (24 caracteres hexadecimais)").describe("Id da memória (de list_agent_memories)")
-const text = z.string().trim().min(3, "Escreva a memória").max(MEMORY_TEXT_MAX, "Até 2.000 caracteres").describe("Texto livre da memória (instrução ou fato permanente)")
+const OWN = FIXED_CHANNELS.filter((channel) => channel.owner === "opex").map((channel) => `${channel.slug} (${channel.name})`).join("; ")
+const MANAGED = FIXED_CHANNELS.filter((channel) => channel.owner !== "opex").map((channel) => `${channel.slug} (${channel.name})`).join("; ")
+const CHANNELS_HELP = `Canais do Agente Opex: ${OWN}. Também alcança, citando o canal pelo slug: ${MANAGED}.`
 
-const view = (agentId: AiAgentId, memory: MemoryDto) => ({
-    agent: agentId,
-    agentLabel: AI_AGENTS[agentId].title,
-    id: memory.id,
-    summary: memory.resumo,
-    text: memory.texto,
-    author: memory.autor,
-    createdAt: memory.criadaEm,
-    updatedAt: memory.atualizadaEm,
-})
+type LibToolName = "search_memories" | "get_memory" | "create_memory"
+
+async function agentTools(): Promise<Record<LibToolName, Tool>> {
+    const [{ engramindAgentClient }, { engramindTools }] = await Promise.all([import("@/features/engramind/server/client"), import("@engramind/client/ai")])
+    const client = await engramindAgentClient("opex")
+    if (!client) throw new OpexToolError("Engramind indisponível: configure a integração em /integracoes/engramind (configuração automática).")
+    return engramindTools({ client, write: true, excludeContext: false }) as Record<LibToolName, Tool>
+}
+
+async function runLibTool(name: LibToolName, input: unknown, toolCallId: string): Promise<unknown> {
+    const tool = (await agentTools())[name]
+    if (!tool?.execute) throw new OpexToolError("Ferramenta de memória indisponível.")
+    const result = (await tool.execute(input as never, { toolCallId, messages: [], context: undefined } as never)) as { error?: string } | undefined
+    if (result && typeof result === "object" && "error" in result && typeof result.error === "string") throw new OpexToolError(result.error)
+    return result
+}
+
 const short = (value: string) => (value.length > 80 ? `${value.slice(0, 79)}…` : value)
+
+const searchInput = z.object({
+    query: z.string().trim().min(1).max(500).describe("O que procurar"),
+    channels: z.array(z.string().trim().min(1).max(160)).max(50).optional().describe("Canais (slugs) para restringir a busca"),
+    limit: z.number().int().min(1).max(20).optional(),
+})
+const getInput = z.object({ id: z.string().trim().min(1).max(60).describe("Id da memória (m_…)") })
+const createInput = z.object({
+    channel: z.string().trim().min(1).max(160).describe("Canal (slug) em que o agente escreve"),
+    text: z.string().trim().min(1).describe("O fato, escrito para quem não tem o contexto da conversa"),
+    category: z.string().trim().min(1).max(64).optional().describe("Chave da categoria (list_memory_categories)"),
+})
+const categoryInput = z.object({
+    key: z.string().trim().min(1).max(40).describe("Chave em maiúsculas, dígitos e _ (ex.: GLOSSARIO)"),
+    label: z.string().trim().min(1).max(80).describe("Rótulo em pt-BR (ex.: Glossário)"),
+    priority: z.number().int().min(-1000).max(1000).optional().describe("Maior entra antes no contexto (padrão 0)"),
+})
 
 export const memoryTools = [
     defineTool({
-        name: "list_agent_memories",
+        name: "search_memories",
         group: "memories",
         minRole: "admin",
-        permission: "integrations.ai.view",
-        label: "Listar memórias",
+        permission: MEMORIES_VIEW_PERMISSION,
+        label: "Buscar memórias",
         risk: "read",
-        description: `Memórias (instruções permanentes) do Agente Opex e do Agente Adversário (${AGENT_LIST}), com id, resumo, texto, autor e datas. Sem agent, lista as de todas as listas.`,
-        input: z.object({ agent: agent.optional() }),
-        async execute(input) {
-            const agents = input.agent ? [input.agent] : [...AI_AGENT_IDS]
-            const lists = await Promise.all(agents.map(async (id) => ({ agent: id, agentLabel: AI_AGENTS[id].title, items: (await listAgentMemories(id)).map((memory) => view(id, memory)) })))
-            return { agents: lists, total: lists.reduce((sum, list) => sum + list.items.length, 0) }
-        },
+        description: `Busca memórias do Engramind (rede de memórias do dndicas) por sentido e por texto. Devolve id, título, canal, categoria e um trecho. ${CHANNELS_HELP}`,
+        input: searchInput,
+        execute: (input, { sessionId }) => runLibTool("search_memories", input, `${sessionId}:search`),
     }),
     defineTool({
-        name: "get_agent_memory",
+        name: "get_memory",
         group: "memories",
         minRole: "admin",
-        permission: "integrations.ai.view",
+        permission: MEMORIES_VIEW_PERMISSION,
         label: "Ler memória",
         risk: "read",
-        description: "Uma memória (texto completo, resumo, autor e datas).",
-        input: z.object({ agent, memoryId }),
-        async execute(input) {
-            return view(input.agent, await getAgentMemory(input.agent, input.memoryId))
-        },
+        description: "Lê uma memória do Engramind pelo id (texto completo, título, canal e categoria).",
+        input: getInput,
+        execute: (input, { sessionId }) => runLibTool("get_memory", input, `${sessionId}:get`),
     }),
     defineTool({
-        name: "create_agent_memory",
+        name: "create_memory",
         group: "memories",
         minRole: "admin",
-        permission: "integrations.ai.edit",
+        permission: MEMORIES_EDIT_PERMISSION,
         label: "Criar memória",
         risk: "write",
-        description: `Cria uma memória (instrução ou fato permanente, de 3 a 2.000 caracteres) numa lista do Agente Opex ou do Agente Adversário (${AGENT_LIST}). O texto é revisado e resumido pelo uso "Resumo de memórias" (formattedByAi=false quando ele está indisponível). Sem limite de quantidade por lista.`,
-        input: z.object({ agent, text }),
-        summarize: (input) => `Criar a memória (${AI_AGENTS[input.agent].title}): "${short(input.text)}"`,
-        async execute(input, { actorId }) {
-            const result = await createAgentMemory(input.agent, input.text, actorId)
-            return { ok: true, ...view(input.agent, result.memoria), formattedByAi: result.formatadaPorIa }
+        description: `Grava uma memória durável no Engramind: um fato ou instrução autossuficiente. Escolha a categoria adequada em list_memory_categories; se nenhuma servir, crie uma com create_memory_category. ${CHANNELS_HELP}`,
+        input: createInput,
+        summarize: (input) => `Criar a memória em ${input.channel}: "${short(input.text)}"`,
+        execute: (input, { sessionId }) => runLibTool("create_memory", input, `${sessionId}:create`),
+    }),
+    defineTool({
+        name: "list_memory_categories",
+        group: "memories",
+        minRole: "admin",
+        permission: MEMORIES_VIEW_PERMISSION,
+        label: "Listar categorias de memória",
+        risk: "read",
+        description: "Categorias da rede de memórias (chave, rótulo e prioridade; a primeira é a padrão). Reaproveite uma existente antes de criar outra.",
+        input: z.object({}),
+        async execute() {
+            const { engramindAgentClient } = await import("@/features/engramind/server/client")
+            const client = await engramindAgentClient("opex")
+            if (!client) throw new OpexToolError("Engramind indisponível: configure a integração em /integracoes/engramind.")
+            return client.categories.list()
         },
     }),
     defineTool({
-        name: "update_agent_memory",
+        name: "create_memory_category",
         group: "memories",
         minRole: "admin",
-        permission: "integrations.ai.edit",
-        label: "Editar memória",
+        permission: MEMORIES_EDIT_PERMISSION,
+        label: "Criar categoria de memória",
         risk: "write",
-        description: "Substitui o texto de uma memória (revisado e resumido de novo pelo Resumo de memórias).",
-        input: z.object({ agent, memoryId, text }),
-        summarize: (input) => `Editar a memória (${AI_AGENTS[input.agent].title}): "${short(input.text)}"`,
-        async execute(input, { actorId }) {
-            const result = await updateAgentMemory(input.agent, input.memoryId, input.text, actorId)
-            return { ok: true, ...view(input.agent, result.memoria), formattedByAi: result.formatadaPorIa }
-        },
-    }),
-    defineTool({
-        name: "delete_agent_memory",
-        group: "memories",
-        minRole: "admin",
-        permission: "integrations.ai.edit",
-        label: "Excluir memória",
-        risk: "destructive",
-        description: "Exclui uma memória: o agente deixa de segui-la a partir da próxima resposta.",
-        input: z.object({ agent, memoryId }),
-        summarize: (input) => `Excluir a memória ${input.memoryId} (${AI_AGENTS[input.agent].title})`,
-        async execute(input, { actorId }) {
-            const removed = await deleteAgentMemory(input.agent, input.memoryId, actorId)
-            return { ok: true, deleted: view(input.agent, removed) }
+        description:
+            "Cria uma categoria na rede de memórias quando nenhuma das existentes serve. As categorias são globais na rede (valem para todos os apps) e só um administrador do Opex edita ou remove: prefira reaproveitar. Repetir com os mesmos campos não duplica.",
+        input: categoryInput,
+        summarize: (input) => `Criar a categoria ${input.key} (${input.label})`,
+        async execute(input) {
+            const key = normalizeCategoryKey(input.key)
+            if (!key) throw new OpexToolError(`Chave inválida (${input.key}): use maiúsculas, dígitos e _, começando por letra.`)
+            const [{ engramindAgentClient }, { createCategory }] = await Promise.all([import("@/features/engramind/server/client"), import("@/features/engramind/server/categories")])
+            const client = await engramindAgentClient("opex")
+            if (!client) throw new OpexToolError("Engramind indisponível: configure a integração em /integracoes/engramind.")
+            const outcome = await createCategory(client, { key, label: input.label, priority: input.priority ?? 0 })
+            if (outcome.status === "created" || outcome.status === "exists") return { ok: true, key, created: outcome.status === "created" }
+            throw new OpexToolError(outcome.message)
         },
     }),
 ]

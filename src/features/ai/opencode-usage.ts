@@ -13,7 +13,7 @@ export const AI_CONSUMPTION_ORIGIN_LABELS: Record<string, string> = {
     "image-generator": "Gerador de imagens",
     "entity-understanding": "Entender com IA",
     "entity-import": "Importador 5etools",
-    "memory-summary": "Resumo de memórias",
+    "memory-curator": "Curador de memórias (migração para o Engramind)",
     "opex-agent": "Agente Opex",
     "opex-anonymous-agent": "Agente Opex (visitantes)",
     "opex-title": "Agente Opex (títulos)",

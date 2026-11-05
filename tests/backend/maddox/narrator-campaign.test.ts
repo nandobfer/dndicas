@@ -39,7 +39,7 @@ vi.mock("@/features/maddox/server/settings", () => ({
     maddoxAvailability: vi.fn(async () => ({ available: true, reason: null })),
 }))
 vi.mock("@/features/ai/server/settings", () => ({ availability: vi.fn(async () => ({ available: true, reason: null })) }))
-vi.mock("@/features/ai/server/agent-memory-service", () => ({ agentMemoryTexts: vi.fn(async () => ["Narre sempre com calma."]) }))
+vi.mock("@/features/ai/server/memory-block", () => ({ memoryBlock: vi.fn(async () => "- Narre sempre com calma.") }))
 vi.mock("@/lib/ai/consumption", () => ({ recordAiConsumption: vi.fn(async () => undefined) }))
 vi.mock("@/lib/ai/stream", () => ({
     prepareModel: vi.fn(async () => ({ model: {}, dispose: async () => undefined })),

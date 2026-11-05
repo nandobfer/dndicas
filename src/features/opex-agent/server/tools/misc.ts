@@ -1,6 +1,6 @@
 import { z } from "zod"
 import type { ZodType } from "zod"
-import { entityImportSettingsSchema, entityUnderstandingSettingsSchema, imageGeneratorSettingsSchema, memorySummarySettingsSchema } from "@/features/ai/schemas"
+import { entityImportSettingsSchema, entityUnderstandingSettingsSchema, imageGeneratorSettingsSchema } from "@/features/ai/schemas"
 import {
     getEntityImportSettings,
     getEntityUnderstandingSettings,
@@ -9,7 +9,6 @@ import {
     saveEntityUnderstandingSettings,
     saveImageGeneratorSettings,
 } from "@/features/ai/server/settings"
-import { getMemorySummarySettings, saveMemorySummarySettings } from "@/features/ai/server/memory-summary"
 import { defineTool } from "./define"
 import { deepMerge, parseJsonObject } from "./json"
 
@@ -24,7 +23,6 @@ const AI_FEATURES = {
     "image-generator": { schema: imageGeneratorSettingsSchema, get: getImageGeneratorSettings, save: saveImageGeneratorSettings },
     "entity-understanding": { schema: entityUnderstandingSettingsSchema, get: getEntityUnderstandingSettings, save: saveEntityUnderstandingSettings },
     "entity-import": { schema: entityImportSettingsSchema, get: getEntityImportSettings, save: saveEntityImportSettings },
-    "memory-summary": { schema: memorySummarySettingsSchema, get: getMemorySummarySettings, save: saveMemorySummarySettings },
 } satisfies Record<string, FeatureSettingsHandler>
 
 const AI_FEATURE_KEYS = Object.keys(AI_FEATURES) as [keyof typeof AI_FEATURES, ...(keyof typeof AI_FEATURES)[]]
@@ -38,7 +36,7 @@ export const aiSettingsTools = [
         minRole: "admin",
         permission: "integrations.ai.view",
         description:
-            'Configuração de um agente de IA do DnDicas (provedor, modelo, instruções...) e se ele pode ser usado agora: image-generator = "Gerador de imagens", entity-understanding = "Entender com IA", entity-import = "Importador 5etools", memory-summary = "Resumo de memórias".',
+            'Configuração de um agente de IA do DnDicas (provedor, modelo, instruções...) e se ele pode ser usado agora: image-generator = "Gerador de imagens", entity-understanding = "Entender com IA", entity-import = "Importador 5etools".',
         input: z.object({ feature: z.enum(AI_FEATURE_KEYS) }),
         execute: async ({ feature }) => AI_FEATURES[feature].get(),
     }),

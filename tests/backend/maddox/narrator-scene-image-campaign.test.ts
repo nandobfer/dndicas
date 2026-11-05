@@ -59,7 +59,7 @@ vi.mock("@/features/ai/server/settings", () => ({
     availabilityOfImageGenerator: vi.fn(async () => ({ available: true, reason: null })),
 }))
 vi.mock("@/features/ai/server/image-generator", () => ({ generateAndStoreDndImage }))
-vi.mock("@/features/ai/server/agent-memory-service", () => ({ agentMemoryTexts: vi.fn(async () => []) }))
+vi.mock("@/features/ai/server/memory-block", () => ({ memoryBlock: vi.fn(async () => "") }))
 vi.mock("@/lib/ai/consumption", () => ({ recordAiConsumption: vi.fn(async () => undefined) }))
 vi.mock("@/lib/ai/stream", () => ({
     prepareModel: vi.fn(async () => ({ model: {}, dispose: async () => undefined })),

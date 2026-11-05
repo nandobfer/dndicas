@@ -13,7 +13,7 @@ import { DEFAULT_ENTITY_IMPORT_INSTRUCTIONS } from "../../constants"
 import { DEFAULT_ENTITY_IMPORT_SETTINGS, entityImportSettingsSchema, type EntityImportSettings } from "../../schemas"
 import { useAiProviderStatuses, useEntityImportSettings, useSaveEntityImportSettings } from "../../hooks/useAi"
 import { FeatureFormShell } from "../FeatureFormShell"
-import { AgentMemoriesSection } from "../memories/AgentMemoriesSection"
+import { AgentMemoriesLink } from "@/features/engramind/components/AgentMemoriesLink"
 import { ProviderModelCard } from "./ProviderModelCard"
 import { InstructionsCard } from "./InstructionsCard"
 
@@ -108,7 +108,7 @@ export function EntityImportTab({ onDirtyChange }: { onDirtyChange: (dirty: bool
                     )}
                 </InstructionsCard>
             </FeatureFormShell>
-            <AgentMemoriesSection tab="importador-5etools" />
+            <AgentMemoriesLink />
         </>
     )
 }

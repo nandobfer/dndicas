@@ -42,7 +42,7 @@ export const OPEX_TOOL_GROUP_LABELS: Record<OpexToolGroup, { label: string; desc
     "catalog-admin": { label: "Catálogo (administração)", description: "Criar, editar e excluir entidades do catálogo (só administradores)" },
     files: { label: "Arquivos do chat", description: "Ler os arquivos enviados no chat (usuários logados)" },
     jobs: { label: "Jobs agendados", description: "Agendar prompts para o próprio agente executar sozinho (agora, daqui a um tempo ou numa data e hora), listar, editar e cancelar (usuários logados)" },
-    memories: { label: "Memórias dos agentes", description: "Listar, ler, criar, editar e excluir as memórias (instruções permanentes) dos agentes do DnDicas (só administradores)" },
+    memories: { label: "Memórias dos agentes", description: "Buscar, ler e criar memórias e categorias na rede de memórias (Engramind) com o token do Agente Opex (só administradores)" },
     integrations: { label: "Integrações", description: "Ler (sem segredos), configurar e testar integrações (só administradores)" },
     routines: { label: "Rotinas", description: "Crons do agendador interno (só administradores)" },
     "ai-settings": { label: "Agentes de IA", description: "Configuração dos agentes de IA do DnDicas (Gerador de imagens, Entender com IA, Importador 5etools, Resumo de memórias) (só administradores)" },

@@ -89,7 +89,7 @@ vi.mock("@/features/ai/server/settings", () => ({
     availabilityOfImageGenerator: vi.fn(async () => (env.generatorAvailable ? { available: true, reason: null } : { available: false, reason: 'O "Gerador de imagens" está desativado.' })),
 }))
 vi.mock("@/features/ai/server/image-generator", () => ({ generateAndStoreDndImage }))
-vi.mock("@/features/ai/server/agent-memory-service", () => ({ agentMemoryTexts: vi.fn(async () => []) }))
+vi.mock("@/features/ai/server/memory-block", () => ({ memoryBlock: vi.fn(async () => "") }))
 vi.mock("@/lib/ai/jev", () => ({ askJevSystemOne }))
 vi.mock("@/lib/ai/stream", () => ({ generateAiText }))
 vi.mock("@/core/storage/s3", () => ({ getFile }))

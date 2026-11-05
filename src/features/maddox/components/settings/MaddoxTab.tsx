@@ -5,7 +5,7 @@ import { AnimatePresence, motion } from "framer-motion"
 import { useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { toast } from "sonner"
-import { Brain, ImageIcon, Info, Loader2, MapPinned, RotateCcw, Save, ScanEye, Server, Settings2, Undo2, UserRound } from "lucide-react"
+import { ImageIcon, Info, Loader2, MapPinned, RotateCcw, Save, ScanEye, Server, Settings2, Undo2, UserRound } from "lucide-react"
 import { Button } from "@/components/ui/opex/button"
 import { GlassCard as Card, GlassCardContent as CardContent, GlassCardDescription as CardDescription, GlassCardHeader as CardHeader, GlassCardTitle as CardTitle } from "@/components/ui/glass-card"
 import { Field } from "@/components/ui/opex/field"
@@ -25,13 +25,13 @@ import type { MaddoxScriptVersionDto } from "../../types"
 import { useMaddoxSettings, useSaveMaddoxScript, useSaveMaddoxSettings } from "../../hooks/useMaddoxSettings"
 import { MaddoxAvatarCard } from "./MaddoxAvatarCard"
 import { MaddoxJevCard } from "./MaddoxJevCard"
-import { MaddoxMemoriesSection } from "./MaddoxMemoriesSection"
+import { AgentMemoriesLink } from "@/features/engramind/components/AgentMemoriesLink"
 import { MaddoxModelCard } from "./MaddoxModelCard"
 import { MaddoxOpencodeMcpCard, MaddoxOpencodePolicyCard, MaddoxOpencodeSessionsCard } from "./MaddoxOpencodeCard"
 import { MaddoxSceneImagesCard } from "./MaddoxSceneImagesCard"
 import { MaddoxScriptCard } from "./MaddoxScriptCard"
 
-type MaddoxSection = "geral" | "entrevista-cenario" | "entrevista-personagem" | "imagens" | "jev" | "opencode" | "memorias"
+type MaddoxSection = "geral" | "entrevista-cenario" | "entrevista-personagem" | "imagens" | "jev" | "opencode"
 const SECTIONS: IntegrationTabDef<MaddoxSection>[] = [
     { id: "geral", label: "Geral", icon: Settings2 },
     { id: "entrevista-cenario", label: "Entrevista: cenário", icon: MapPinned },
@@ -39,7 +39,6 @@ const SECTIONS: IntegrationTabDef<MaddoxSection>[] = [
     { id: "imagens", label: "Imagens", icon: ImageIcon },
     { id: "jev", label: "JEV", icon: ScanEye },
     { id: "opencode", label: "OpenCode", icon: Server },
-    { id: "memorias", label: "Memórias", icon: Brain },
 ]
 const SCRIPT_SECTION: Record<MaddoxScriptKind, MaddoxSection> = { scenario: "entrevista-cenario", character: "entrevista-personagem" }
 
@@ -223,8 +222,7 @@ export function MaddoxTab({ onDirtyChange }: { onDirtyChange: (dirty: boolean) =
                             <MaddoxOpencodeSessionsCard />
                         </>
                     )}
-                    {/* Salva sozinho (cada memória grava na hora). */}
-                    {section === "memorias" && <MaddoxMemoriesSection />}
+                    <AgentMemoriesLink />
                 </>
             )}
         </AgentSettingsTabs>

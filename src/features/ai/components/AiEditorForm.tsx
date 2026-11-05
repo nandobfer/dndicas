@@ -2,7 +2,7 @@
 
 import { useState, type Dispatch, type SetStateAction } from "react"
 import { motion } from "framer-motion"
-import { BrainCircuit, Bot, Dices, ImagePlus, Languages, ScrollText, Sparkles } from "lucide-react"
+import { BrainCircuit, Bot, Dices, ImagePlus, Languages, Sparkles } from "lucide-react"
 import type { IntegrationDef } from "@/lib/integrations/catalog"
 import type { IntegrationDetailDto } from "@/features/integrations/types"
 import { DetailActions } from "@/features/integrations/components/detail/DetailActions"
@@ -19,7 +19,6 @@ import { EntityUnderstandingTab } from "./agents/EntityUnderstandingTab"
 import { EntityImportTab } from "./agents/EntityImportTab"
 import { OpexAgentTab } from "@/features/opex-agent/components/settings/OpexAgentTab"
 import { MaddoxTab } from "@/features/maddox/components/settings/MaddoxTab"
-import { MemorySummaryTab } from "./memory-summary/MemorySummaryTab"
 
 interface AiEditorFormProps {
     def: IntegrationDef
@@ -39,7 +38,6 @@ const TABS: IntegrationTabDef<AiTab>[] = [
     { id: "importador-5etools", label: "Importador 5etools", icon: Languages },
     { id: "agente-opex", label: "Agente Opex", icon: Bot },
     { id: "agente-maddox", label: "Agente Maddox", icon: Dices },
-    { id: "resumo-memorias", label: "Resumo de memórias", icon: ScrollText },
 ]
 
 /**
@@ -83,7 +81,6 @@ export function AiEditorForm({ def, data, draft, setDraft, dirty, pending, onSav
                 {tab === "importador-5etools" && <EntityImportTab key={resetKey} onDirtyChange={setTabDirty} />}
                 {tab === "agente-opex" && <OpexAgentTab key={resetKey} onDirtyChange={setTabDirty} />}
                 {tab === "agente-maddox" && <MaddoxTab key={resetKey} onDirtyChange={setTabDirty} />}
-                {tab === "resumo-memorias" && <MemorySummaryTab key={resetKey} onDirtyChange={setTabDirty} />}
             </IntegrationTabs>
         </motion.form>
     )
