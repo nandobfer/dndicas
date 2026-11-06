@@ -59,7 +59,7 @@ vi.mock("@/features/ai/server/settings", () => ({
     availabilityOfImageGenerator: vi.fn(async () => ({ available: true, reason: null })),
 }))
 vi.mock("@/features/ai/server/image-generator", () => ({ generateAndStoreDndImage }))
-vi.mock("@/features/ai/server/agent-memory-service", () => ({ agentMemoryTexts: vi.fn(async () => []) }))
+vi.mock("@/features/ai/server/memory-block", () => ({ memoryBlock: vi.fn(async () => "") }))
 vi.mock("@/lib/ai/consumption", () => ({ recordAiConsumption: vi.fn(async () => undefined) }))
 vi.mock("@/lib/ai/stream", () => ({
     prepareModel: vi.fn(async () => ({ model: {}, dispose: async () => undefined })),
@@ -101,7 +101,9 @@ vi.mock("ai", () => ({
     },
 }))
 
-const { MaddoxCampaignMemberModel, MaddoxCampaignMessageModel, MaddoxCampaignModel, MaddoxCharacterModel, MaddoxNpcModel, MaddoxSceneImageModel, MaddoxCampaignMemoryModel, MaddoxCombatModel } = await import("@/features/maddox/models")
+vi.mock("@/features/engramind/server/campaign-memories", async () => (await import("../../helpers/campaign-memories-mock")).campaignMemoriesModule)
+const { campaignMemoriesStore } = await import("../../helpers/campaign-memories-mock")
+const { MaddoxCampaignMemberModel, MaddoxCampaignMessageModel, MaddoxCampaignModel, MaddoxCharacterModel, MaddoxNpcModel, MaddoxSceneImageModel, MaddoxCombatModel } = await import("@/features/maddox/models")
 const campaigns = await import("@/features/maddox/server/campaigns")
 const game = await import("@/features/maddox/server/game")
 const images = await import("@/features/maddox/server/scene-images")
@@ -138,7 +140,7 @@ const releaseImages = async () => {
 beforeAll(async () => {
     mongo = await MongoMemoryServer.create()
     await mongoose.connect(mongo.getUri(), { dbName: "maddox_scene_image_campaign_test" })
-    await Promise.all([MaddoxCampaignModel.init(), MaddoxCampaignMemberModel.init(), MaddoxCharacterModel.init(), MaddoxCampaignMessageModel.init(), MaddoxNpcModel.init(), MaddoxSceneImageModel.init(), MaddoxCampaignMemoryModel.init(), MaddoxCombatModel.init()])
+    await Promise.all([MaddoxCampaignModel.init(), MaddoxCampaignMemberModel.init(), MaddoxCharacterModel.init(), MaddoxCampaignMessageModel.init(), MaddoxNpcModel.init(), MaddoxSceneImageModel.init(), MaddoxCombatModel.init()])
     await images.loadSceneImageEnvironment()
 }, 180_000)
 
@@ -150,6 +152,7 @@ afterAll(async () => {
 }, 30_000)
 
 beforeEach(async () => {
+    campaignMemoriesStore.reset()
     await Promise.all([
         mongoose.connection.collection("users").deleteMany({}),
         MaddoxCampaignModel.deleteMany({}),

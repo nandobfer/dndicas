@@ -1,6 +1,6 @@
 "use client"
 
-import { Compass, ScrollText } from "lucide-react"
+import { AlertTriangle, Compass, ScrollText } from "lucide-react"
 import { GlassCard as Card, GlassCardContent as CardContent, GlassCardHeader as CardHeader, GlassCardTitle as CardTitle } from "@/components/ui/glass-card"
 import { Markdown } from "@/components/ui/opex/markdown"
 import { rarityColors } from "@/lib/config/colors"
@@ -42,6 +42,11 @@ export function JournalStateCard({ summary, color }: { summary: MaddoxJournalSum
                             </div>
                         ))}
                     </dl>
+                )}
+                {summary.memoriesUnavailable && (
+                    <p className="flex items-start gap-2 rounded-lg border border-yellow-500/30 bg-yellow-500/10 px-3 py-2 text-sm text-white/80" role="status" data-testid="journal-memories-unavailable">
+                        <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-yellow-400" aria-hidden /> As anotações da campanha (missões, locais e eventos) estão indisponíveis no momento. Tente de novo em instantes.
+                    </p>
                 )}
                 {summary.activeQuests.length > 0 && (
                     <div className="space-y-2 border-t border-white/10 pt-3">

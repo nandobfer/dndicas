@@ -18,7 +18,6 @@ import {
 } from "../constants"
 import { normalizeCatalogName } from "../catalog-markup"
 import {
-    MaddoxCampaignMemoryModel,
     MaddoxCharacterModel,
     MaddoxCombatModel,
     MaddoxNpcModel,
@@ -314,23 +313,26 @@ export function combatantOutcomeLines(combat: Pick<IMaddoxCombat, "combatants">)
         .map((item) => `${item.name}${item.quantity > 1 ? ` (${item.quantity})` : ""}${item.side === "aliado" ? " [aliado]" : ""} — ${MADDOX_COMBATANT_OUTCOME_LABELS[item.outcome!]}`)
 }
 
-/** Marco da história (memória `evento`, visível aos jogadores): o desfecho do combate. */
+/**
+ * Marco da história (memória `evento`, visível aos jogadores): o desfecho do combate, no Engramind (única
+ * fonte), uma memória POR COMBATE (chave `mx:combate:<id>`). Sem a rede, entra na fila temporária; nunca
+ * derruba o fim do combate.
+ */
 async function saveCombatMemory(campaignId: Types.ObjectId, combat: IMaddoxCombat, turnNumber: number): Promise<void> {
     const title = clip(`Combate: ${combat.title} (turno ${combat.startedTurn})`, MADDOX_TOOL_NAME_MAX)
-    const titleKey = keyOf(title)
     const lines = [
         `${MADDOX_COMBAT_OUTCOME_LABELS[combat.outcome ?? "interrompido"]}${combat.location ? ` em ${combat.location}` : ""} (turnos ${combat.startedTurn}–${turnNumber}).`,
         combat.summary,
         ...(combatantOutcomeLines(combat).length ? [`Adversários: ${combatantOutcomeLines(combat).join("; ")}.`] : []),
         ...(combat.rewards.length ? [`Recompensas: ${combat.rewards.map((reward) => rewardText(reward)).join("; ")}.`] : []),
     ].filter(Boolean)
-    const set = { title, titleKey, text: lines.join("\n"), visibility: "players" as const, turnNumber, tags: ["combate"] }
-    // Uma memória POR COMBATE (chave `combatId`): dois combates com o mesmo título não se sobrescrevem.
-    await MaddoxCampaignMemoryModel.updateOne(
-        { campaignId, kind: "evento", combatId: combat._id },
-        { $set: set, $setOnInsert: { campaignId, kind: "evento", combatId: combat._id, origin: "agent", createdBy: "maddox" } },
-        { upsert: true },
-    )
+    try {
+        const { saveCampaignMemory } = await import("@/features/engramind/server/campaign-memories")
+        const { combatMemoryKey } = await import("@/features/engramind/campaign-memory-format")
+        await saveCampaignMemory(String(campaignId), { kind: "evento", title, text: lines.join("\n"), visibility: "players", turnNumber, tags: ["combate"], key: combatMemoryKey(String(combat._id)) })
+    } catch (error) {
+        log.warn({ campaignId: String(campaignId), combatId: String(combat._id), err: error instanceof Error ? error.message : String(error) }, "[maddox] marco do combate não gravado na rede de memórias")
+    }
 }
 
 const COIN_LABELS: Record<(typeof MADDOX_COIN_KEYS)[number], string> = { po: "po", pp: "pp", pe: "pe", pc: "pc", pl: "pl" }

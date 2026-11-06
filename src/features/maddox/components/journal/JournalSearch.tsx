@@ -87,11 +87,19 @@ function total(result: MaddoxJournalSearchDto) {
 
 export function JournalSearchResults({ campaignId, color, result, onNavigate }: { campaignId: string; color: string; result: MaddoxJournalSearchDto; onNavigate?: () => void }) {
     const q = result.query
+    const unavailable = result.memoriesUnavailable ? (
+        <p className="rounded-lg border border-yellow-500/30 bg-yellow-500/10 px-3 py-2 text-sm text-white/80" role="status" data-testid="journal-search-memories-unavailable">
+            As anotações da campanha estão indisponíveis no momento: a busca mostra só o restante do diário.
+        </p>
+    ) : null
     if (total(result) === 0) {
         return (
-            <p className="rounded-lg border border-white/10 bg-white/[0.03] px-3 py-4 text-center text-sm text-white/60" data-testid="journal-search-empty">
-                Nada encontrado para “{q}”.
-            </p>
+            <div className="space-y-2">
+                {unavailable}
+                <p className="rounded-lg border border-white/10 bg-white/[0.03] px-3 py-4 text-center text-sm text-white/60" data-testid="journal-search-empty">
+                    Nada encontrado para “{q}”.
+                </p>
+            </div>
         )
     }
     const places = { ...result.memories, items: result.memories.items.filter((item) => item.kind === "local") }
@@ -99,6 +107,7 @@ export function JournalSearchResults({ campaignId, color, result, onNavigate }: 
     const notes = { ...result.memories, items: result.memories.items.filter((item) => item.kind !== "local" && item.kind !== "missao") }
     return (
         <div className="space-y-3" aria-live="polite" data-testid="journal-search-results">
+            {unavailable}
             {result.state && (
                 <ResultGroup title="Situação atual" icon={Target} color={color} testId="search-group-state">
                     <ResultLink href={journalHref(campaignId)} onNavigate={onNavigate} title="Situação atual" excerpt={result.state.excerpt} query={q} />

@@ -18,7 +18,7 @@ import { DEFAULT_IMAGE_GENERATOR_INSTRUCTIONS, IMAGE_ASPECT_RATIOS } from "../..
 import { DEFAULT_IMAGE_GENERATOR_SETTINGS, imageGeneratorSettingsSchema, type ImageGeneratorSettings } from "../../schemas"
 import { useAiImageModels, useAiProviderStatuses, useImageGeneratorSettings, useSaveImageGeneratorSettings } from "../../hooks/useAi"
 import { FeatureFormShell } from "../FeatureFormShell"
-import { AgentMemoriesSection } from "../memories/AgentMemoriesSection"
+import { AgentMemoriesLink } from "@/features/engramind/components/AgentMemoriesLink"
 import { InstructionsCard } from "./InstructionsCard"
 
 const ASPECT_LABELS: Record<(typeof IMAGE_ASPECT_RATIOS)[number], string> = {
@@ -168,7 +168,7 @@ export function ImageGeneratorTab({ onDirtyChange }: { onDirtyChange: (dirty: bo
                     defaultInstructions={DEFAULT_IMAGE_GENERATOR_INSTRUCTIONS}
                 />
             </FeatureFormShell>
-            <AgentMemoriesSection tab="gerador-imagens" />
+            <AgentMemoriesLink />
         </>
     )
 }

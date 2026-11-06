@@ -28,6 +28,7 @@ export const INTEGRATION_CACHE_TTL_MS = 30_000
 
 let cache: { at: number; docs: Map<string, StoredIntegration> } | null = null
 let inflight: Promise<Map<string, StoredIntegration>> | null = null
+let generation = 0
 
 async function fetchAll(): Promise<Map<string, StoredIntegration>> {
     await dbConnect()
@@ -40,9 +41,11 @@ export async function loadStoredIntegrations(): Promise<Map<string, StoredIntegr
     if (process.env.NEXT_PHASE === "phase-production-build") return new Map()
     if (cache && Date.now() - cache.at < INTEGRATION_CACHE_TTL_MS) return cache.docs
     if (!inflight) {
+        const startedAt = generation
         inflight = fetchAll()
             .then((docs) => {
-                cache = { at: Date.now(), docs }
+                // Uma gravação no meio da leitura invalida o resultado: não vira cache velho por 30 s.
+                if (startedAt === generation) cache = { at: Date.now(), docs }
                 return docs
             })
             .finally(() => {
@@ -59,4 +62,6 @@ export async function loadStoredIntegration(id: string): Promise<StoredIntegrati
 
 export function invalidateStoredIntegrations(): void {
     cache = null
+    generation++
+    inflight = null
 }

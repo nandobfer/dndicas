@@ -12,8 +12,8 @@ import {
 import { createEntityUnderstandingTools } from "@/features/entity-understanding/services/entity-understanding-tools"
 import type { EntityUnderstandingChatRequest } from "@/features/entity-understanding/types/entity-understanding.types"
 import { ENTITY_UNDERSTANDING_CONSUMPTION_ORIGIN } from "../constants"
-import { agentMemoryTexts } from "./agent-memory-service"
 import { availabilityOfEntityUnderstanding, loadEntityUnderstandingSettings } from "./settings"
+import { memoryBlock } from "./memory-block"
 
 /**
  * Agente "Entender com IA": chat por entidade com as ferramentas de busca no catálogo, no provedor e
@@ -53,7 +53,7 @@ export async function* streamEntityUnderstanding(
     try {
         const result = streamText({
             model: ready.model,
-            instructions: buildEntityUnderstandingSystemInstruction(settings.instructions, await agentMemoryTexts(["entity-understanding"])),
+            instructions: buildEntityUnderstandingSystemInstruction(settings.instructions, await memoryBlock("entity-understanding")),
             messages: toEntityUnderstandingModelMessages(buildEntityUnderstandingHistory(input)),
             tools: createEntityUnderstandingTools(),
             stopWhen: stepCountIs(settings.maxToolRounds + 1),

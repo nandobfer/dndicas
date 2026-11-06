@@ -1,3 +1,4 @@
+import { memoriesSection } from "@/features/ai/memories-prompt"
 import { catalogEntityTypes } from "@/features/mcp/server/catalog-schemas"
 import { mentionsToMarkup } from "./catalog-mentions"
 import {
@@ -26,6 +27,8 @@ import { worldCatalogLines, type WorldCatalog } from "../world-catalog"
 export interface InterviewPromptContext {
     kind: MaddoxScriptKind
     interviewerInstructions: string
+    /** Bloco das memórias do agente (canal `dndicas/maddox` no Engramind), sem alteração. */
+    agentMemories?: string
     script: { version: number; guide: string; topics: readonly MaddoxScriptTopic[] }
     campaign: { name: string; rigor: MaddoxRigorLevel; setting: string; openingSituation: string; startingLevel?: number | null; startingStage?: string; worldCatalog?: WorldCatalog | null }
     /** Entrevista de personagem: nome do esboço e dos outros personagens da mesa. */
@@ -145,7 +148,7 @@ export function rigorBlock(rigor: MaddoxRigorLevel): string {
 export function buildInterviewInstructions(context: InterviewPromptContext): string {
     const topics = activeTopics(context.script.topics)
     const isScenario = context.kind === "scenario"
-    const parts: string[] = [context.interviewerInstructions.trim()]
+    const parts: string[] = [context.interviewerInstructions.trim() + memoriesSection(context.agentMemories)]
 
     parts.push(
         isScenario

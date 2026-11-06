@@ -14,7 +14,10 @@ vi.mock("@/features/maddox/server/settings", () => ({
     maddoxAvailability: vi.fn(async () => ({ available: true, reason: null })),
 }))
 
-const { MaddoxCampaignMemberModel, MaddoxCampaignMemoryModel, MaddoxCampaignMessageModel, MaddoxCampaignModel, MaddoxCharacterModel, MaddoxNpcModel, MaddoxSceneImageModel } = await import("@/features/maddox/models")
+vi.mock("@/features/engramind/server/campaign-memories", async () => (await import("../../helpers/campaign-memories-mock")).campaignMemoriesModule)
+
+const { campaignMemoriesStore, campaignMemoriesModule } = await import("../../helpers/campaign-memories-mock")
+const { MaddoxCampaignMemberModel, MaddoxCampaignMessageModel, MaddoxCampaignModel, MaddoxCharacterModel, MaddoxNpcModel, MaddoxSceneImageModel } = await import("@/features/maddox/models")
 const campaigns = await import("@/features/maddox/server/campaigns")
 const journal = await import("@/features/maddox/server/journal")
 
@@ -38,8 +41,11 @@ async function giveCharacter(campaignId: string, userId: string, name: string, e
     return String(member!._id)
 }
 
-const memory = (campaignId: string, kind: MaddoxCampaignMemoryKind, title: string, text: string, extra: Record<string, unknown> = {}) =>
-    MaddoxCampaignMemoryModel.create({ campaignId: new mongoose.Types.ObjectId(campaignId), kind, title, titleKey: title.toLowerCase(), text, origin: "agent", createdBy: "maddox", ...extra })
+/** Memória da campanha: só no Engramind (aqui, o substituto em memória com as mesmas regras). */
+async function memory(campaignId: string, kind: MaddoxCampaignMemoryKind, title: string, text: string, extra: { visibility?: "players" | "master"; tags?: string[]; status?: "ativa" | "concluida" | "falhou" | "abandonada" } = {}) {
+    await campaignMemoriesModule.saveCampaignMemory(campaignId, { kind, title, text, ...extra })
+    return { _id: campaignMemoriesStore.all(campaignId).find((item) => item.title === title)!.id }
+}
 
 const message = (campaignId: string, kind: MaddoxGameMessageKind, content: string, extra: Record<string, unknown> = {}) =>
     MaddoxCampaignMessageModel.create({ campaignId: new mongoose.Types.ObjectId(campaignId), turnNumber: 1, phase: kind === "narration" || kind === "answer" ? "master" : "players", kind, content, ...extra })
@@ -95,7 +101,7 @@ function expectNoSecrets(value: unknown) {
 beforeAll(async () => {
     mongo = await MongoMemoryServer.create()
     await mongoose.connect(mongo.getUri(), { dbName: "maddox_journal_test" })
-    await Promise.all([MaddoxCampaignModel.init(), MaddoxCampaignMemberModel.init(), MaddoxCharacterModel.init(), MaddoxCampaignMessageModel.init(), MaddoxNpcModel.init(), MaddoxCampaignMemoryModel.init()])
+    await Promise.all([MaddoxCampaignModel.init(), MaddoxCampaignMemberModel.init(), MaddoxCharacterModel.init(), MaddoxCampaignMessageModel.init(), MaddoxNpcModel.init()])
 }, 180_000)
 
 afterAll(async () => {
@@ -104,6 +110,7 @@ afterAll(async () => {
 }, 30_000)
 
 beforeEach(async () => {
+    campaignMemoriesStore.reset()
     await Promise.all([
         mongoose.connection.collection("users").deleteMany({}),
         MaddoxCampaignModel.deleteMany({}),
@@ -111,7 +118,6 @@ beforeEach(async () => {
         MaddoxCharacterModel.deleteMany({}),
         MaddoxCampaignMessageModel.deleteMany({}),
         MaddoxNpcModel.deleteMany({}),
-        MaddoxCampaignMemoryModel.deleteMany({}),
         MaddoxSceneImageModel.deleteMany({}),
     ])
 })
@@ -288,7 +294,7 @@ describe("Maddox 9 — consulta do diário", () => {
     it("parâmetros inválidos = 400 com as opções", async () => {
         const c = await campaignWithJournal()
         await expect(journal.listJournalMemories(c.id, { kind: "segredo" }, c.player)).rejects.toMatchObject({ status: 400, message: expect.stringContaining("local") })
-        await expect(journal.listJournalMemories(c.id, { kind: "local", cursor: "nao-e-id" }, c.player)).rejects.toMatchObject({ status: 400, message: "Cursor inválido" })
+        await expect(journal.listJournalMemories(c.id, { kind: "local", cursor: "x".repeat(501) }, c.player)).rejects.toMatchObject({ status: 400, message: "Cursor inválido" })
         await expect(journal.listJournalNpcs(c.id, { cursor: "x" }, c.player)).rejects.toMatchObject({ status: 400 })
     })
 
@@ -298,6 +304,19 @@ describe("Maddox 9 — consulta do diário", () => {
         await expect(journal.searchJournal(c.id, { q: "taverna" }, c.outsider)).rejects.toMatchObject({ status: 404 })
         await MaddoxCampaignMemberModel.updateOne({ _id: c.playerMember }, { $set: { status: "left" } })
         await expect(journal.listJournalNpcs(c.id, {}, c.player)).rejects.toMatchObject({ status: 404 })
+    })
+
+    it("anotações vêm do Engramind: sem a rede, o resumo avisa, a lista responde 503 e a busca mostra o resto do diário", async () => {
+        const c = await campaignWithJournal()
+        campaignMemoriesStore.setDown(true)
+        const summary = await journal.getJournalSummary(c.id, c.player)
+        expect(summary).toMatchObject({ memoriesUnavailable: true, activeQuests: [], counts: { npcs: 2, memories: { local: 0, missao: 0 } } })
+        await expect(journal.listJournalMemories(c.id, { kind: "local" }, c.player)).rejects.toMatchObject({ status: 503, code: "ENGRAMIND_UNAVAILABLE" })
+        const search = await journal.searchJournal(c.id, { q: "bartolomeu" }, c.player)
+        expect(search).toMatchObject({ memoriesUnavailable: true, memories: { items: [] } })
+        expect(search.npcs.items.map((item) => item.name)).toEqual(["Bartolomeu"])
+        campaignMemoriesStore.setDown(false)
+        expect(await journal.getJournalSummary(c.id, c.player)).toMatchObject({ memoriesUnavailable: false })
     })
 
     it("campanha no lobby: diário vazio sem erro", async () => {

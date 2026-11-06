@@ -2,6 +2,7 @@
 
 import { BookOpen, MapPin, ScrollText } from "lucide-react"
 import { GlassSelector } from "@/components/ui/glass-selector"
+import { apiErrorMessage } from "@/lib/api"
 import { rarityColors } from "@/lib/config/colors"
 import { MADDOX_CAMPAIGN_MEMORY_KIND_LABELS, MADDOX_QUEST_STATUSES, MADDOX_QUEST_STATUS_DEFS, type MaddoxCampaignMemoryKind, type MaddoxQuestStatus } from "../../constants"
 import { useMaddoxJournalMemories } from "../../hooks/useMaddoxJournal"
@@ -50,6 +51,7 @@ export function JournalMemoryList({ campaignId, color, kind, status = null }: { 
             <JournalListState
                 loading={memories.isLoading}
                 error={memories.isError}
+                errorText={memories.isError ? apiErrorMessage(memories.error, "Não foi possível carregar esta parte do diário.") : undefined}
                 empty={items.length === 0}
                 emptyText={status ? `Nenhuma missão ${MADDOX_QUEST_STATUS_DEFS[status].label.toLowerCase()}.` : EMPTY_TEXTS[kind]}
                 icon={kind === "local" || kind === "missao" ? ICONS[kind] : BookOpen}

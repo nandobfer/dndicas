@@ -31,7 +31,7 @@ const RESPONSE_FORMAT_RULES = [
  * Instruções de sistema do "Entender com IA": as instruções configuradas no agente (Integrações ›
  * Provedores de IA › Entender com IA), as memórias dele e as regras fixas de formato.
  */
-export function buildEntityUnderstandingSystemInstruction(instructions: string = DEFAULT_ENTITY_UNDERSTANDING_INSTRUCTIONS, memories: readonly string[] = []): string {
+export function buildEntityUnderstandingSystemInstruction(instructions: string = DEFAULT_ENTITY_UNDERSTANDING_INSTRUCTIONS, memories = ""): string {
     return [instructions.trim() + memoriesSection(memories), ...RESPONSE_FORMAT_RULES].join("\n")
 }
 

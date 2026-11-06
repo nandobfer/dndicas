@@ -23,8 +23,10 @@ fluxos normais de um usuário autenticado (suas fichas, perfil, NPCs e feedbacks
 `catalog.ts` usa o catálogo em árvore do Perfix, normaliza dependências e rejeita chaves
 desconhecidas. Edição depende da visualização correspondente. Ramos: `admin.access`, `users.*`,
 `roles.*`, `integrations.access`, `integrations.<id>.{view,edit,test,logs,explore}`, `catalog.edit`,
-`catalog.generate`, `sheets.view_all`, `maddox.play`, `feedback.moderate`, `feedback.agent`, `audit.view` e
-`mentions.review`.
+`catalog.generate`, `sheets.view_all`, `maddox.play`, `memories.view`/`memories.edit` (grupo "Memórias": ver a
+rede em `/memorias`; importar e gravar memórias, inclusive pelo Agente Opex), `feedback.moderate`,
+`feedback.agent`, `audit.view` e `mentions.review`. As chaves de memórias foram concedidas uma vez aos perfis com
+`admin.access` pela migração `grant-memories` (marca em `migration_marks`).
 
 ### Ao criar ou alterar recurso, tela, módulo ou API
 

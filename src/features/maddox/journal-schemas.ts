@@ -23,7 +23,8 @@ export const maddoxJournalNpcsSchema = z.object({ cursor })
 export const maddoxJournalMemoriesSchema = z.object({
     kind: z.enum(MADDOX_CAMPAIGN_MEMORY_KINDS, { message: `Tipo inválido. Use um destes: ${MADDOX_CAMPAIGN_MEMORY_KINDS.join(", ")}.` }),
     status: z.enum(MADDOX_QUEST_STATUSES, { message: `Situação inválida. Use uma destas: ${MADDOX_QUEST_STATUSES.join(", ")}.` }).optional(),
-    cursor,
+    /** Cursor opaco da rede de memórias (as anotações vêm do Engramind). */
+    cursor: z.string().trim().min(1).max(500, "Cursor inválido").optional(),
 })
 
 /** Filtro da aba Imagens do diário (DND-22): cenas (narração, fim de batalha e pedido manual) ou retratos de NPC. */

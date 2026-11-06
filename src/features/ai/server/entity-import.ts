@@ -2,8 +2,8 @@ import { AiProviderError } from "@/lib/ai/errors"
 import { generateAiText } from "@/lib/ai/stream"
 import { ENTITY_IMPORT_CONSUMPTION_ORIGIN } from "../constants"
 import { memoriesSection } from "../memories-prompt"
-import { agentMemoryTexts } from "./agent-memory-service"
 import { availabilityOfEntityImport, loadEntityImportSettings } from "./settings"
+import { memoryBlock } from "./memory-block"
 
 /**
  * Agente "Importador 5etools": traduz o conteúdo importado do 5etools (tela de geração por IA e
@@ -16,7 +16,7 @@ export async function generateEntityImportText(prompt: string, options: { subjec
     if (!availability.available || !settings.provider || !settings.model) {
         throw new AiProviderError(availability.reason ?? "O Importador 5etools não está configurado em Integrações › Provedores de IA.")
     }
-    const memories = await agentMemoryTexts(["entity-import"])
+    const memories = await memoryBlock("entity-import")
     const { text } = await generateAiText({
         provider: settings.provider,
         model: settings.model,

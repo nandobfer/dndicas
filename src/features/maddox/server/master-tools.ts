@@ -38,12 +38,12 @@ import {
     MADDOX_VISIBILITIES,
 } from "../constants"
 import { normalizeCatalogName } from "../catalog-markup"
-import { MaddoxCampaignMemberModel, MaddoxCampaignMemoryModel, MaddoxCampaignModel, MaddoxCharacterModel, MaddoxNpcModel, type IMaddoxCampaign, type IMaddoxCampaignMemory, type IMaddoxCharacter, type IMaddoxNpc } from "../models"
+import { MaddoxCampaignMemberModel, MaddoxCampaignModel, MaddoxCharacterModel, MaddoxNpcModel, type IMaddoxCampaign, type IMaddoxCharacter, type IMaddoxNpc } from "../models"
 import { MADDOX_ABILITIES, MADDOX_ABILITY_LABELS, MADDOX_SKILLS, checkAbility, checkTitle } from "../check-modifier"
 import { addDraftCheck, addDraftCombat, addDraftNpcPortrait, jobDraftChecks, jobDraftCombat, jobDraftSceneImage, jobWorkspace, maddoxJobMeta, setDraftSceneImage, type MaddoxDraftCombatReward } from "./game-live"
 import { catalogEntityTypeSchema } from "@/features/mcp/server/catalog-schemas"
 import type { TacticalDraftCombatant } from "./tactical-combat"
-import { accentInsensitivePattern } from "../journal-search"
+import type { CampaignMemoryView } from "@/features/engramind/campaign-memory-format"
 
 /**
  * Ferramentas de persistência do Maddox narrador (Maddox 4) — SOMENTE servidor. Definidas uma vez e expostas de
@@ -118,7 +118,9 @@ const npcDto = (npc: IMaddoxNpc, full: boolean) => ({
     ...(full ? { masterNotes: npc.masterNotes } : {}),
 })
 
-const memoryDto = (memory: IMaddoxCampaignMemory) => ({
+type CampaignMemoryLike = Pick<CampaignMemoryView, "kind" | "title" | "text" | "visibility" | "tags" | "status" | "turnNumber">
+
+const memoryDto = (memory: CampaignMemoryLike) => ({
     kind: memory.kind,
     title: memory.title,
     text: memory.text,
@@ -128,8 +130,12 @@ const memoryDto = (memory: IMaddoxCampaignMemory) => ({
     turnNumber: memory.turnNumber ?? null,
 })
 
-/** Busca sem acento e sem caixa, também por pedaço de palavra (a mesma do Diário da campanha). */
-const textMatch = (query: string) => ({ $regex: accentInsensitivePattern(query), $options: "i" })
+/** Erros da rede de memórias viram mensagem para o narrador (a narração segue). */
+function memoryToolError(error: unknown): never {
+    if (error instanceof MaddoxToolError) throw error
+    const message = error instanceof Error ? error.message : String(error)
+    throw new MaddoxToolError(error && typeof error === "object" && "code" in error && (error as { code?: string }).code === "ENGRAMIND_UNAVAILABLE" ? "A rede de memórias está indisponível agora; siga sem consultar." : message)
+}
 
 type SaveNpcInput = { name: string; newName?: string; publicDescription?: string; masterNotes?: string; visibility?: (typeof MADDOX_VISIBILITIES)[number]; status?: (typeof MADDOX_NPC_STATUSES)[number] }
 
@@ -271,16 +277,17 @@ export const MADDOX_MASTER_TOOLS: readonly MaddoxMasterTool[] = [
         }),
         async execute(context, input) {
             const query = input.query?.trim()
-            const filter = {
-                campaignId: context.campaignId,
-                ...(input.kind ? { kind: input.kind } : {}),
-                ...(query ? { $or: [{ title: textMatch(query) }, { text: textMatch(query) }, { tags: textMatch(query) }] } : {}),
+            const limit = input.limit ?? 20
+            const memories = await import("@/features/engramind/server/campaign-memories")
+            const campaignId = String(context.campaignId)
+            try {
+                const found = query
+                    ? await memories.searchCampaignMemories(campaignId, { query, kind: input.kind, limit, scope: "all", reader: "maddox" })
+                    : (await memories.listCampaignMemories(campaignId, { kind: input.kind, limit, scope: "all", reader: "maddox" })).items
+                return { memories: found.map(memoryDto) }
+            } catch (error) {
+                memoryToolError(error)
             }
-            const memories = await MaddoxCampaignMemoryModel.find(filter)
-                .sort({ updatedAt: -1 })
-                .limit(input.limit ?? 20)
-                .lean<IMaddoxCampaignMemory[]>()
-            return { memories: memories.map(memoryDto) }
         },
     }),
     define({
@@ -303,27 +310,23 @@ export const MADDOX_MASTER_TOOLS: readonly MaddoxMasterTool[] = [
         async execute(context, input) {
             const fit = fitter()
             const title = clip(input.title, MADDOX_TOOL_NAME_MAX)
-            const titleKey = keyOf(title)
-            if (!titleKey) throw new MaddoxToolError("Informe o título da memória.")
-            const set: Record<string, unknown> = { title, text: fit.fit("text", input.text), turnNumber: context.turnNumber }
-            if (input.visibility) set.visibility = input.visibility
-            if (input.tags) set.tags = input.tags.map((tag) => clip(tag, MADDOX_TOOL_TAG_MAX)).filter(Boolean).slice(0, MADDOX_TOOL_TAGS_MAX)
-            if (input.kind === "missao" && input.status) set.status = input.status
-            const existing = await MaddoxCampaignMemoryModel.findOne({ campaignId: context.campaignId, kind: input.kind, titleKey }).select("_id").lean()
-            if (existing) {
-                await MaddoxCampaignMemoryModel.updateOne({ _id: existing._id }, { $set: set })
-                return { saved: true, created: false, kind: input.kind, title, ...fit.notice() }
+            if (!keyOf(title)) throw new MaddoxToolError("Informe o título da memória.")
+            const tags = input.tags?.map((tag) => clip(tag, MADDOX_TOOL_TAG_MAX)).filter(Boolean).slice(0, MADDOX_TOOL_TAGS_MAX)
+            const { saveCampaignMemory } = await import("@/features/engramind/server/campaign-memories")
+            try {
+                const result = await saveCampaignMemory(String(context.campaignId), {
+                    kind: input.kind,
+                    title,
+                    text: fit.fit("text", input.text),
+                    turnNumber: context.turnNumber,
+                    ...(input.visibility ? { visibility: input.visibility } : {}),
+                    ...(tags ? { tags } : {}),
+                    ...(input.kind === "missao" && input.status ? { status: input.status } : {}),
+                })
+                return { ...result, kind: input.kind, title, ...fit.notice() }
+            } catch (error) {
+                memoryToolError(error)
             }
-            await MaddoxCampaignMemoryModel.create({
-                campaignId: context.campaignId,
-                kind: input.kind,
-                titleKey,
-                origin: "agent",
-                createdBy: "maddox",
-                ...set,
-                ...(input.kind === "missao" ? { status: input.status ?? "ativa" } : {}),
-            })
-            return { saved: true, created: true, kind: input.kind, title, ...fit.notice() }
         },
     }),
     define({

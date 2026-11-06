@@ -37,7 +37,7 @@ describe("navegação do header", () => {
             ["Fichas", ["Minhas Fichas", "Meus NPCs"]],
             ["Campanhas", ["Campanhas Maddox"]],
             ["Catálogo", ["Classes", "Raças", "Origens", "Regras", "Habilidades", "Talentos", "Magias", "Itens", "Monstros"]],
-            ["Administração", ["Usuários", "Todas as fichas", "Logs", "Referências Pendentes", "Integrações"]],
+            ["Administração", ["Usuários", "Todas as fichas", "Logs", "Referências Pendentes", "Memórias", "Integrações"]],
         ])
     })
 

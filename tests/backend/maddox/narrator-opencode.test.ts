@@ -25,7 +25,7 @@ vi.mock("@/features/maddox/server/settings", () => ({
     })),
 }))
 vi.mock("@/features/ai/server/settings", () => ({ availability: vi.fn(async () => ({ available: true, reason: null })) }))
-vi.mock("@/features/ai/server/agent-memory-service", () => ({ agentMemoryTexts: vi.fn(async () => []) }))
+vi.mock("@/features/ai/server/memory-block", () => ({ memoryBlock: vi.fn(async () => "") }))
 vi.mock("@/features/maddox/server/opencode-mcp", () => ({ ensureMaddoxMcp }))
 vi.mock("@/features/maddox/server/opencode-sessions", () => ({ ensureMaddoxSession }))
 vi.mock("@/lib/ai/stream", () => ({
@@ -38,6 +38,8 @@ vi.mock("@/lib/ai/stream", () => ({
         yield { type: "done", finishReason: "stop", usage: {}, durationMs: 1 }
     },
 }))
+
+vi.mock("@/features/engramind/server/campaign-memories", async () => (await import("../../helpers/campaign-memories-mock")).campaignMemoriesModule)
 
 const { MaddoxCampaignModel } = await import("@/features/maddox/models")
 const { aiMaddoxMaster } = await import("@/features/maddox/server/narrator")

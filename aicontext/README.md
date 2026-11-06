@@ -91,7 +91,8 @@ Arquivos:
 - **[integrations.md](./modules/integrations.md)**: central de integrações (`/integracoes`, acesso por permissão) — configuração no banco em vez do `.env`
 - **[perfix.md](./modules/perfix.md)**: perfis, permissões, hierarquia, perfil padrão e impersonação real de usuários
 - **[opex-feedback.md](./modules/opex-feedback.md)**: acesso automático e dashboard da central de feedback no Opex
-- **[ai.md](./modules/ai.md)**: provedores de IA, agentes (Gerador de imagens, Entender com IA, Importador 5etools, Resumo de memórias) e memórias
+- **[ai.md](./modules/ai.md)**: provedores de IA, agentes (Gerador de imagens, Entender com IA, Importador 5etools) e memórias
+- **[engramind.md](./modules/engramind.md)**: rede de memórias no Engramind (app consumidor): conexão, bootstrap, `/memorias`, contexto dos agentes, espelho das campanhas Maddox e migração
 - **[opex-agent.md](./modules/opex-agent.md)**: Agente Opex, o assistente por chat para todos (visitantes, usuários e administradores)
 - **[maddox.md](./modules/maddox.md)**: Agente Maddox e a fundação das Campanhas Maddox (modelos, configuração, roteiros de entrevista, sessões do OpenCode)
 

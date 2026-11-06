@@ -29,7 +29,6 @@ roteiros e as memórias salvam à parte.
 | Imagens | Imagens nas cenas (Maddox 10): chave geral, situações fixas e personalizadas, intervalo, teto diário, proporção e estilo (seção "Imagens nas cenas (Maddox 10)") |
 | JEV | Uma chave por decisão (`MADDOX_JEV_DECISIONS`): pergunta ou ação do jogador, validade de ação livre, pedir teste, início/fim de combate, conhecimento do mestre, fim da entrevista, gerar imagem na cena. Em uso: **"Fim da entrevista"** (Maddox 2), **"Validade de ação livre"** (Maddox 4, só Rigoroso e Fiel ao D&D), **"Pedir teste"** (Maddox 5, orientação ao narrador nos graus com testes) e **"Início ou fim de combate"** (Maddox 6, orientação ao narrador nos graus com combate narrativo), **"Custo de ação no combate"** (Maddox 7) e **"Gerar imagem na cena"** (Maddox 10, filtro da imagem pedida pelo narrador); as demais ainda sem uso |
 | OpenCode | Política das sessões e lista das sessões ativas com "Excluir" (confirmação) |
-| Memórias | Lista `maddox` de `agent_memories` (mesmo card dos demais agentes, sem limite de quantidade; API `/api/ai/agents/maddox/memories/**`) |
 
 A configuração fica em `ai_feature_settings` (feature `maddox`) com o schema `maddoxSettingsSchema`:
 `enabled`, `main` (provedor, modelo, agente, variante, temperatura, tokens), `interviewer` (provedor,
@@ -102,7 +101,7 @@ continua.
 | `maddox_campaign_members` | campanha, usuário, papel (dono/jogador), status (convidado, entrou, saiu, removido), personagem; único por campanha+usuário |
 | `maddox_characters` | personagem jogável: perfil narrativo (seções), retrato, ficha (`CharacterSheet`) no modo fiel, situação da entrevista |
 | `maddox_npcs` | NPC: descrição pública, notas exclusivas do mestre, visibilidade |
-| `maddox_campaign_memories` | memórias da campanha (fato, evento, local, missão, relação), visibilidade jogadores/mestre; listadas e buscadas no Diário da campanha (Maddox 9) |
+| `maddox_campaign_memories` | **legado** (até a DND-21): memórias da campanha antes de irem para o Engramind; nada lê nem grava, só "Mover memórias" (aba Migração da integração Engramind), que as importa e apaga |
 | `maddox_interview_scripts` | versões dos roteiros |
 | `maddox_interviews` | entrevistas (Maddox 2): conversa (`messages`), versão do roteiro, status, trava `generating`, resultado consolidado, `build` (ficha) e `world` (povos e classes do cenário no Fiel); única por `{ campaignId, kind, memberId }` |
 | `maddox_opencode_sessions` | sessões do OpenCode do Maddox |
@@ -113,7 +112,25 @@ por campanha/finalidade/membro, `sessionId`, `{ campaignId, userId }` dos membro
 **`ensure-maddox-indexes`** (`src/lib/db/migrations/`), já que o autoIndex não roda em models compilados antes
 da conexão.
 
-As memórias **de campanha** são diferentes das memórias **do agente** (lista `maddox`, escritas pelo admin).
+As memórias **de campanha** são diferentes das memórias **do agente** (canal `dndicas/maddox` no Engramind, lido
+pelo narrador e pelo entrevistador; a aba mostra só o link para `/memorias`).
+
+### Memórias de campanha no Engramind (DND-21)
+
+As memórias das campanhas existem **só no Engramind** (sem cópia no MongoDB; detalhes em `engramind.md`,
+`src/features/engramind/server/campaign-memories.ts`):
+
+- canais `dndicas/maddox/campanhas/<campaignId>/jogadores` e `…/mestre` (`visibility`), criados **na criação
+  da campanha** junto com as categorias `FATO`, `EVENTO`, `LOCAL`, `MISSAO`, `RELACAO` e `OUTRO` (`kind`);
+- `save_memory` grava pelo tipo + título (chave `mx:<tipo>:<título>`), com a situação da missão e o turno em tags;
+  o marco do combate usa a chave do combate; com a rede fora, a gravação espera na fila temporária e o narrador é
+  avisado;
+- `search_memories` e o prompt do narrador leem os dois canais; o **Diário** lê só o canal dos jogadores (ordem
+  da última alteração, cursor da rede). Sem a rede: prompt sem as memórias, erro acionável na busca do narrador e
+  aviso no Diário;
+- campanha `archived` arquiva os dois canais; saindo de `archived`, restaura;
+- as memórias antigas da coleção `maddox_campaign_memories` são movidas e apagadas pela aba Migração da
+  integração Engramind; até lá não aparecem.
 
 ## API (administradores)
 
@@ -377,7 +394,7 @@ Código: `server/narrator.ts` (geração), `server/narrator-prompt.ts` (módulo 
 `server/action-validation.ts`, `server/maddox-mcp.ts` + `server/master-turn-token.ts` + `server/opencode-mcp.ts` (OpenCode),
 `hooks/useMaddoxGameStream.ts`, `components/composer-focus.ts`.
 
-**Tom e regras.** As instruções são as da aba ("Maddox (narrador)") + memórias do agente (lista `maddox`) + as regras fixas do
+**Tom e regras.** As instruções são as da aba ("Maddox (narrador)") + memórias do agente (canal `dndicas/maddox` no Engramind) + as regras fixas do
 narrador (`MADDOX_NARRATOR_RULES`, adaptadas do `~/code/roleplay/agente-exemplo.md` para vários jogadores: cada jogador decide
 as ações, falas e escolhas do próprio personagem; o Maddox cuida do mundo, dos NPCs, dos resultados e do involuntário; prosa
 sensorial em segunda pessoa; cada narração desenvolve a situação e termina num ponto de decisão) + **modo narrativo puro**
@@ -397,7 +414,7 @@ retorno avisa o modelo (`truncated` com os campos cortados) para ele consolidar 
 | --- | --- |
 | `get_campaign_state` / `update_campaign_state` | `campaign.state` (`scene`, `location`, `situation`, `pendingDecision`, `updatedTurn`) |
 | `list_npcs`, `get_npc`, `save_npc` | `maddox_npcs` pelo nome sem acento e sem caixa (`nameKey`, sem duplicar): descrição pública, `masterNotes`, visibilidade, situação. A grafia gravada é mantida ao atualizar; renomear só com `newName` (nome já usado por outro NPC = erro) |
-| `search_memories`, `save_memory` | `maddox_campaign_memories` por tipo + título (`titleKey`): `local` (locais), `missao` (missões, com `status` ativa/concluída/falhou/abandonada — nasce `ativa`), `evento` (marcos), `relacao`, `fato`, `outro`; `origin: agent`, `createdBy: maddox`, `turnNumber` |
+| `search_memories`, `save_memory` | memórias da campanha no Engramind por tipo + título (chave `mx:<tipo>:<título>`): `local` (locais), `missao` (missões, com `status` ativa/concluída/falhou/abandonada — nasce `ativa`, tag `status:`), `evento` (marcos), `relacao`, `fato`, `outro`; turno na tag `turno:` |
 | `update_character_state` | `character.currentState` (o perfil da entrevista não muda) |
 
 **Provedores.** Gemini, Anthropic, OpenAI e DeepSeek: `streamText` com as ferramentas (até 12 passos,
@@ -981,8 +998,8 @@ API (todas `GET`, `maddox.play`, usuário efetivo):
 - `GET …/journal/search?q=` — busca.
 - O histórico usa `GET …/game/messages` (sem `before` = página mais recente).
 
-Índices novos (pela `ensure-maddox-indexes`): `{ campaignId, visibility, _id: -1 }` em `maddox_npcs` e
-`{ campaignId, visibility, kind, _id: -1 }` em `maddox_campaign_memories`.
+Índice novo (pela `ensure-maddox-indexes`): `{ campaignId, visibility, _id: -1 }` em `maddox_npcs`. As anotações
+do Diário vêm do Engramind (seção "Memórias de campanha no Engramind").
 
 **Tela `/campanhas/[id]/diario`** (`pageAccess`): cabeçalho da campanha (`CampaignChatHeader`, cor do rigor, "Voltar à mesa"),
 card de busca com espera de 300 ms e resultados agrupados (Situação atual, NPCs, Locais, Missões, Outras anotações, Grupo,

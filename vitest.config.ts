@@ -25,6 +25,9 @@ export default defineConfig({
         // Sem package.json: todo commit sobe a versão, e o gatilho padrão faria `vitest --changed`
         // rodar a suíte inteira (AGENTS.md, seção 5, "Rodando os testes").
         forceRerunTriggers: ['**/{vitest,vite}.config.*/**'],
+        // A lib da rede de memórias é processada pelo Vite: sem isso o Node carrega o pacote externo e os
+        // `vi.mock('@xyflow/react')` dos testes de UI não alcançam o código dele.
+        server: { deps: { inline: ['@engramind/client'] } },
         coverage: {
             provider: 'v8',
             reporter: ['text', 'json', 'html'],

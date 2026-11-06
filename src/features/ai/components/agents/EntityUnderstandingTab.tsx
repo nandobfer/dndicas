@@ -14,7 +14,7 @@ import { DEFAULT_ENTITY_UNDERSTANDING_INSTRUCTIONS, ENTITY_UNDERSTANDING_TOOL_RO
 import { DEFAULT_ENTITY_UNDERSTANDING_SETTINGS, entityUnderstandingSettingsSchema, type EntityUnderstandingSettings } from "../../schemas"
 import { useAiProviderStatuses, useEntityUnderstandingSettings, useSaveEntityUnderstandingSettings } from "../../hooks/useAi"
 import { FeatureFormShell } from "../FeatureFormShell"
-import { AgentMemoriesSection } from "../memories/AgentMemoriesSection"
+import { AgentMemoriesLink } from "@/features/engramind/components/AgentMemoriesLink"
 import { InstructionsCard } from "./InstructionsCard"
 
 /**
@@ -91,7 +91,7 @@ export function EntityUnderstandingTab({ onDirtyChange }: { onDirtyChange: (dirt
                     </div>
                 </InstructionsCard>
             </FeatureFormShell>
-            <AgentMemoriesSection tab="entender-com-ia" />
+            <AgentMemoriesLink />
         </>
     )
 }

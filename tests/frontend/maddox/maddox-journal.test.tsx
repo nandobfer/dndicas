@@ -39,6 +39,7 @@ const summary = (over: Partial<MaddoxJournalSummaryDto> = {}): MaddoxJournalSumm
     state: { scene: "O porão da taverna.", location: "Porão", situation: "", pendingDecision: "Descer ao túnel?", updatedTurn: 3 },
     activeQuests: [memory("q1", "missao", "Resgatar a filha do moleiro", { status: "ativa" })],
     counts: { npcs: 2, party: 2, images: 0, memories: { local: 1, missao: 2, evento: 1, relacao: 0, fato: 0, outro: 0 } },
+    memoriesUnavailable: false,
     ...over,
 })
 
@@ -163,6 +164,18 @@ describe("Diário da campanha (Maddox 9) — tela", () => {
         routes["/maddox/campaigns/c1/journal"] = () => summary({ state: { scene: "", location: "", situation: "", pendingDecision: "", updatedTurn: null }, activeQuests: [] })
         await renderJournal()
         expect(screen.getByTestId("journal-state")).toHaveTextContent("O Maddox ainda não registrou a situação atual.")
+    })
+
+    it("anotações indisponíveis (Engramind fora): aviso no card e a mensagem do servidor na aba", async () => {
+        routes["/maddox/campaigns/c1/journal"] = () => summary({ memoriesUnavailable: true, activeQuests: [] })
+        routes["/maddox/campaigns/c1/journal/memories"] = () => {
+            throw Object.assign(new Error("503"), { isAxiosError: true, response: { status: 503, data: { success: false, error: "As anotações da campanha estão indisponíveis no momento: a rede de memórias não respondeu." } } })
+        }
+        const view = await renderJournal()
+        expect(screen.getByTestId("journal-memories-unavailable")).toHaveTextContent("indisponíveis no momento")
+        view.unmount()
+        await renderJournal("aba=locais")
+        expect(await screen.findByRole("alert")).toHaveTextContent("a rede de memórias não respondeu")
     })
 
     it("histórico em modo leitura: mensagens com divisor, minha fala à direita, sem botão de rolar e com 'Carregar anteriores'", async () => {

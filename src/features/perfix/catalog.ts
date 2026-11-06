@@ -15,6 +15,9 @@ export const PERMISSION_TREE = [
     ] },
     { id: "fichas", label: "Fichas", children: [{ key: "sheets.view_all", label: "Ver todas as fichas", sensitive: true }] },
     { id: "maddox", label: "Campanhas Maddox", children: [{ key: "maddox.play", label: "Criar e participar de campanhas" }] },
+    { id: "memorias", label: "Memórias", viewKey: "memories.view", children: [
+        { key: "memories.view", label: "Ver a rede de memórias" }, { key: "memories.edit", label: "Importar e gravar memórias", sensitive: true },
+    ] },
     { id: "feedback", label: "Feedback", children: [
         { key: "feedback.moderate", label: "Moderar", sensitive: true }, { key: "feedback.agent", label: "Executar fluxo agêntico", sensitive: true },
     ] },

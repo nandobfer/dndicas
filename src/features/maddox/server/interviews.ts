@@ -216,9 +216,11 @@ export async function promptContext(subject: InterviewSubject, kind: MaddoxScrip
         const others = await MaddoxCharacterModel.find({ campaignId: subject.campaign._id, _id: { $ne: subject.character?._id } }).select("name").lean<{ name: string }[]>()
         otherCharacters = others.map((item) => item.name)
     }
+    const { memoryBlock } = await import("@/features/ai/server/memory-block")
     return {
         kind,
         interviewerInstructions: settings.interviewerInstructions,
+        agentMemories: await memoryBlock("maddox"),
         script: { version: script.version, guide: script.guide, topics: script.topics },
         campaign: {
             name: subject.campaign.name,

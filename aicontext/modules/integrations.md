@@ -66,6 +66,7 @@ Módulo puro (tela e servidor). Integrações ativas:
 | `analytics_umami` | Analytics (Umami) | Script carregado pelo layout raiz; desativado, o script não entra |
 | `translation` | Tradução | Tradutor padrão dos scripts de seed, LibreTranslate e Google Cloud Translation |
 | `perfix` | Perfix | `/integracoes/perfix`: padrão de novos usuários, perfis/hierarquia/permissões/membros e Visualizar como |
+| `engramind` | Engramind | `/integracoes/engramind`: abas Conexão (URL base, URL pública, token do app; salvar roda a configuração automática), Migração e Sincronização (ver `engramind.md`) |
 
 | `opex` | Tarefas Opex | URL pública, URL interna opcional e segredo `clientToken`; acesso automático e dashboard em `/feedback` (ver `opex-feedback.md`) |
 
@@ -78,6 +79,7 @@ listagem de usuários sem provisionar usuários de teste. A central antiga foi r
 | --- | --- | --- |
 | `integrations-health-check` | 5 min | Testa todas as integrações configuradas e grava o status |
 | `opex-files-cleanup` | 60 min | Remove arquivos do chat do Agente Opex não enviados em 24 h e as sessões de visitantes expiradas |
+| `engramind-campaign-memories-sync` | 15 min | Garante os canais das campanhas Maddox no Engramind, arquiva/restaura conforme o status e entrega a fila de gravações das memórias (some de Crons com a integração desativada) |
 
 O agendador inicia em `src/instrumentation.ts` (um único processo: PM2 com uma instância / um
 processo no Docker). `/api/routines/scheduler-tick` executa o mesmo motor sob demanda (Bearer do

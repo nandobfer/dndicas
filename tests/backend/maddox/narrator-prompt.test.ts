@@ -14,7 +14,7 @@ import {
 
 const context = (overrides: Partial<NarratorPromptContext> = {}): NarratorPromptContext => ({
     instructions: "Você é Maddox.",
-    agentMemories: [],
+    agentMemories: "",
     rigor: "narrativo",
     campaignName: "Brumas",
     setting: "## Universo\nPorto na névoa.",
@@ -59,7 +59,7 @@ describe("instruções do Maddox narrador", () => {
     })
 
     it("memórias do agente entram logo depois das instruções da aba", () => {
-        const text = buildNarratorInstructions(context({ agentMemories: ["Nunca mate um personagem sem aviso."] }), { kind: "ai-sdk" })
+        const text = buildNarratorInstructions(context({ agentMemories: "- Nunca mate um personagem sem aviso." }), { kind: "ai-sdk" })
         expect(text).toContain("- Nunca mate um personagem sem aviso.")
     })
 

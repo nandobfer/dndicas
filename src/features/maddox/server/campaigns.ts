@@ -234,6 +234,10 @@ export async function createCampaign(input: CreateMaddoxCampaignInput, userId: s
     }
     await recordAudit({ userId, entidade: MADDOX_CAMPAIGN_AUDIT_ENTITY, entidadeId: String(campaign._id), acao: AcaoAuditoria.CRIAR, depois: { name: input.name, rigor: input.rigor, showCheckDc: input.showCheckDc ?? false, sceneImages: input.sceneImages ?? true, density: input.density ?? MADDOX_DEFAULT_DENSITY, status: "lobby" } })
     await notifyCampaignChanged(String(campaign._id), [userId])
+    // Rede de memórias da campanha no Engramind (categorias + canais), sem segurar a criação.
+    void import("@/features/engramind/server/campaign-channels")
+        .then(({ provisionCampaignMemoryNetworkSafely }) => provisionCampaignMemoryNetworkSafely({ id: String(campaign._id), name: campaign.name, status: campaign.status }))
+        .catch((error: unknown) => log.warn({ campaignId: String(campaign._id), err: error instanceof Error ? error.message : String(error) }, "[maddox] rede de memórias da campanha não agendada"))
     return getCampaignDetail(String(campaign._id), userId)
 }
 

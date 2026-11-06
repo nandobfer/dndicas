@@ -16,7 +16,6 @@ import {
 import { createMarkupFilter } from "../catalog-markup"
 import {
     MaddoxCampaignMemberModel,
-    MaddoxCampaignMemoryModel,
     MaddoxCampaignMessageModel,
     MaddoxCampaignModel,
     MaddoxCharacterModel,
@@ -24,7 +23,6 @@ import {
     MaddoxNpcModel,
     type IMaddoxCampaign,
     type IMaddoxCombat,
-    type IMaddoxCampaignMemory,
     type IMaddoxCampaignMessage,
     type IMaddoxCharacter,
     type IMaddoxNpc,
@@ -87,7 +85,8 @@ async function loadContext(campaignId: Types.ObjectId): Promise<LoadedContext> {
         characterIds.length ? MaddoxCharacterModel.find({ _id: { $in: characterIds } }).lean<IMaddoxCharacter[]>() : Promise.resolve([]),
         userIds.length ? User.find({ _id: { $in: userIds } }).select("name username").lean<{ _id: Types.ObjectId; name?: string; username?: string }[]>() : Promise.resolve([]),
         MaddoxNpcModel.find({ campaignId }).sort({ updatedAt: -1 }).limit(MADDOX_NARRATOR_INDEX_ITEMS).lean<IMaddoxNpc[]>(),
-        MaddoxCampaignMemoryModel.find({ campaignId }).sort({ updatedAt: -1 }).limit(MADDOX_NARRATOR_INDEX_ITEMS * 2).lean<IMaddoxCampaignMemory[]>(),
+        // Memórias da campanha: só no Engramind (missões ativas sempre + as mais recentes); sem a rede, nenhuma.
+        import("@/features/engramind/server/campaign-memories").then(({ narratorMemoryIndex }) => narratorMemoryIndex(String(campaignId), MADDOX_NARRATOR_INDEX_ITEMS)),
         MaddoxCampaignMessageModel.find({ campaignId }).sort({ _id: -1 }).limit(200).lean<IMaddoxCampaignMessage[]>(),
     ])
     const sheets = await loadSheetSummaries(campaign, characters)
@@ -101,9 +100,6 @@ async function loadContext(campaignId: Types.ObjectId): Promise<LoadedContext> {
     const userName = new Map(users.map((user) => [String(user._id), user.name?.trim() || user.username || "Jogador"]))
     const byCharacter = new Map(members.filter((member) => member.characterId).map((member) => [String(member.characterId), member.userId]))
     const profileOf = (character: IMaddoxCharacter): Record<string, string> => (character.profile instanceof Map ? Object.fromEntries(character.profile) : { ...(character.profile ?? {}) })
-    // Missões ativas sempre entram; o resto até o limite, das mais recentes.
-    const quests = memories.filter((memory) => memory.kind === "missao" && (memory.status ?? "ativa") === "ativa")
-    const others = memories.filter((memory) => !quests.includes(memory)).slice(0, Math.max(0, MADDOX_NARRATOR_INDEX_ITEMS - quests.length))
     return {
         campaign,
         npcNames: npcs.map((npc) => npc.name),
@@ -126,7 +122,7 @@ async function loadContext(campaignId: Types.ObjectId): Promise<LoadedContext> {
                     sheet: character.sheetId ? (sheets.get(String(character.sheetId)) ?? null) : null,
                 })),
             npcs: npcs.map((npc) => ({ name: npc.name, status: npc.status, visibility: npc.visibility, publicDescription: npc.publicDescription ?? "", masterNotes: npc.masterNotes ?? "" })),
-            memories: [...quests, ...others].map((memory) => ({ kind: memory.kind, title: memory.title, text: memory.text, visibility: memory.visibility, status: memory.status ?? null })),
+            memories: memories.map((memory) => ({ kind: memory.kind, title: memory.title, text: memory.text, visibility: memory.visibility, status: memory.status ?? null })),
             combat: activeCombat
                 ? {
                       title: activeCombat.title,
@@ -225,13 +221,14 @@ export function checkResultOf(message: IMaddoxCampaignMessage): NarratorCheckRes
     }
 }
 
-async function agentMemories(): Promise<string[]> {
+/** Memórias do agente (canal `dndicas/maddox` no Engramind); sem elas, o Maddox narra assim mesmo. */
+async function agentMemories(): Promise<string> {
     try {
-        const { agentMemoryTexts } = await import("@/features/ai/server/agent-memory-service")
-        return await agentMemoryTexts(["maddox"])
+        const { memoryBlock } = await import("@/features/ai/server/memory-block")
+        return await memoryBlock("maddox")
     } catch (error) {
         log.warn({ err: error instanceof Error ? error.message : String(error) }, "[maddox] memórias do agente indisponíveis; narrando sem elas")
-        return []
+        return ""
     }
 }
 

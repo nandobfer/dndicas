@@ -8,7 +8,7 @@ import type { IntegrationId } from "@/lib/integrations/catalog"
 export const AI_PROVIDER_IDS = ["opencode", "gemini", "anthropic", "openai", "deepseek", "jev"] as const
 export type AiProviderId = (typeof AI_PROVIDER_IDS)[number]
 
-/** Provedores que geram texto (usados pelos agentes Importador 5etools e Resumo de memórias). */
+/** Provedores que geram texto (usados pelos agentes Importador 5etools, Entender com IA, Agente Opex, Agente Maddox e o curador da migração de memórias). */
 export const AI_TEXT_PROVIDER_IDS = ["opencode", "gemini", "anthropic", "openai", "deepseek"] as const
 export type AiTextProviderId = (typeof AI_TEXT_PROVIDER_IDS)[number]
 

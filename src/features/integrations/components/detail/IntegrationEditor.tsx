@@ -19,6 +19,7 @@ import { ExplorerPane } from "./ExplorerPane"
 import { LogsPanel } from "./LogsPanel"
 import { useLogsMaximized } from "./useLogsMaximized"
 import { PerfixEditorForm } from "@/features/perfix/components/PerfixEditorForm"
+import { EngramindEditorForm } from "@/features/engramind/components/integration/EngramindEditorForm"
 
 export function IntegrationEditor({ id, data }: { id: IntegrationId; data: IntegrationDetailDto }) {
     const def = getIntegrationDef(id)
@@ -78,7 +79,19 @@ export function IntegrationEditor({ id, data }: { id: IntegrationId; data: Integ
                         swaggerUrl={data.swaggerUrl}
                         onBack={() => setExploring(false)}
                     />
-                ) : id === "perfix" ? <PerfixEditorForm key="form" /> : id === "ai" ? (
+                ) : id === "perfix" ? <PerfixEditorForm key="form" /> : id === "engramind" ? (
+                    <EngramindEditorForm
+                        key="form"
+                        def={def}
+                        data={data}
+                        draft={draft}
+                        setDraft={setDraft}
+                        dirty={dirty}
+                        pending={mutation.isPending}
+                        onSave={save}
+                        onUndo={() => setDraft(draftFrom(data))}
+                    />
+                ) : id === "ai" ? (
                     <AiEditorForm
                         key="form"
                         def={def}

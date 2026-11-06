@@ -37,6 +37,7 @@ export const INTEGRATION_IDS = [
     "storage_s3",
     "analytics_umami",
     "translation",
+    "engramind",
 ] as const
 
 export type IntegrationId = (typeof INTEGRATION_IDS)[number]
@@ -203,9 +204,11 @@ export const HEALTH_CHECK_JOB_ID = "integrations-health-check"
 export const OPEX_FILES_CLEANUP_JOB_ID = "opex-files-cleanup"
 /** Agente Maddox: retoma as exclusões pendentes das sessões do OpenCode das campanhas. */
 export const MADDOX_SESSIONS_CLEANUP_JOB_ID = "maddox-opencode-sessions-cleanup"
+/** Reconciliação das memórias das campanhas Maddox com o Engramind (DND-21). */
+export const ENGRAMIND_CAMPAIGN_SYNC_JOB_ID = "engramind-campaign-memories-sync"
 
 /** Rotinas internas de uma integração ativável (id da rotina → id da integração): somem de Crons com ela desativada. */
-export const INTEGRATION_CRON_JOBS: Readonly<Record<string, IntegrationId>> = {}
+export const INTEGRATION_CRON_JOBS: Readonly<Record<string, IntegrationId>> = { [ENGRAMIND_CAMPAIGN_SYNC_JOB_ID]: "engramind" }
 
 export function cronJobIntegration(jobId: string): IntegrationId | null {
     return INTEGRATION_CRON_JOBS[jobId] ?? null
@@ -238,6 +241,13 @@ export const DEFAULT_CRON_JOBS: CronJobConfig[] = [
         label: "Limpar arquivos pendentes e sessões de visitantes expiradas do Agente Opex",
         kind: "internal",
         schedule: { type: "interval", minutes: 60 },
+        enabled: true,
+    },
+    {
+        id: ENGRAMIND_CAMPAIGN_SYNC_JOB_ID,
+        label: "Sincronizar as memórias das campanhas Maddox com o Engramind",
+        kind: "internal",
+        schedule: { type: "interval", minutes: 15 },
         enabled: true,
     },
     {
@@ -629,6 +639,32 @@ export const INTEGRATIONS: readonly IntegrationDef[] = [
         secretFields: [
             { key: "googleApiKey", label: "API key do Google Cloud Translation", env: ["GOOGLE_CLOUD_TRANSLATION_API_KEY"] },
             { key: "libretranslateApiKey", label: "API key do LibreTranslate", env: ["LIBRETRANSLATE_API_KEY"] },
+        ],
+    },
+    {
+        id: "engramind",
+        name: "Engramind",
+        description: "Rede de memórias dos agentes (Agente Opex, geradores e Maddox)",
+        defaultEnvironment: "externo",
+        streamsDebugOverPusher: true,
+        publicFields: [
+            { key: "baseUrl", label: "URL base do Engramind", kind: "url", required: true, placeholder: "https://engramind.exemplo.com", description: "Endereço que o servidor do dndicas alcança (sem /v1)." },
+            {
+                key: "publicAppUrl",
+                label: "URL pública do dndicas",
+                kind: "url",
+                urlOriginOnly: true,
+                description: "Origem pública usada no webhook (<URL>/api/engramind/webhook). Vazio usa NEXT_PUBLIC_APP_URL.",
+            },
+        ],
+        secretFields: [
+            { key: "appToken", label: "Token do app", required: true, description: "Token de app (kind: app) do app dndicas, emitido no Opex. Nunca use um token admin ou de agente." },
+            { key: "webhookSecret", label: "Segredo do webhook", group: "card", description: "Gerado pela configuração automática." },
+            { key: "agentTokenOpex", label: "Token do agente dndicas/opex", group: "card" },
+            { key: "agentTokenImageGenerator", label: "Token do agente dndicas/image-generator", group: "card" },
+            { key: "agentTokenEntityUnderstanding", label: "Token do agente dndicas/entity-understanding", group: "card" },
+            { key: "agentTokenEntityImport", label: "Token do agente dndicas/entity-import", group: "card" },
+            { key: "agentTokenMaddox", label: "Token do agente dndicas/maddox", group: "card" },
         ],
     },
 ]

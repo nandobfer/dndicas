@@ -287,4 +287,8 @@ export const INTEGRATION_TESTERS: Record<IntegrationId, IntegrationTester> = {
     storage_s3: testStorage,
     analytics_umami: testUmami,
     translation: testTranslation,
+    engramind: async (ctx) => {
+        const { testEngramind } = await import("@/features/engramind/server/tester")
+        return testEngramind(ctx)
+    },
 }
