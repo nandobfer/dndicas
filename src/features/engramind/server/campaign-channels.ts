@@ -11,7 +11,7 @@ import { AcaoAuditoria, auditEngramind, engramindLog, messageOf } from "./shared
 /**
  * Rede de uma campanha no Engramind: as categorias das campanhas e os canais
  * `dndicas/maddox/campanhas/<id>/jogadores` e `…/mestre`, criados por assinatura exata `search` do
- * `dndicas/maddox` (o token de app não tem `create_channel`). Nasce na criação da campanha (e o espelho
+ * `dndicas/maddox` (o token de app não tem `create_channel`). Nasce na criação da campanha (e a gravação
  * e o cron refazem o que faltar). Campanha `archived` → canais arquivados; saiu de `archived` →
  * restaurados. Tudo em melhor esforço: uma falha é logada e nunca bloqueia o jogo.
  *
@@ -74,7 +74,7 @@ export async function provisionCampaignMemoryNetwork(campaign: CampaignNetworkIn
     return true
 }
 
-/** Igual a `provisionCampaignMemoryNetwork`, sem lançar (criação da campanha e espelho). */
+/** Igual a `provisionCampaignMemoryNetwork`, sem lançar (criação da campanha e gravação das memórias). */
 export function provisionCampaignMemoryNetworkSafely(campaign: CampaignNetworkInput): Promise<boolean> {
     return provisionCampaignMemoryNetwork(campaign).catch((error: unknown) => {
         engramindLog.warn({ campaignId: campaign.id, err: messageOf(error) }, "[engramind] canais da campanha não criados: o cron tenta de novo")
