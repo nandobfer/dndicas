@@ -2,11 +2,12 @@ import { Types } from "mongoose"
 import type { ZodType } from "zod"
 import { dbConnect } from "@/lib/db"
 import { DomainError } from "@/lib/api/route"
+import type { CampaignMemoryView } from "@/features/engramind/campaign-memory-format"
 import { loggerFor } from "@/lib/logger"
 import { User } from "@/features/users/models/user"
 import { MADDOX_CAMPAIGN_MEMORY_KINDS, type MaddoxCampaignMemoryKind, type MaddoxCampaignStateField } from "../constants"
 import type { MaddoxSceneImagesSettings } from "../schemas"
-import { MaddoxCampaignMemberModel, MaddoxCampaignMemoryModel, MaddoxCampaignMessageModel, MaddoxCharacterModel, MaddoxNpcModel, MaddoxSceneImageModel, type IMaddoxCampaignMemory, type IMaddoxCharacter, type IMaddoxNpc, type IMaddoxSceneImage } from "../models"
+import { MaddoxCampaignMemberModel, MaddoxCampaignMessageModel, MaddoxCharacterModel, MaddoxNpcModel, MaddoxSceneImageModel, type IMaddoxCharacter, type IMaddoxNpc, type IMaddoxSceneImage } from "../models"
 import { accentInsensitivePattern, excerptAround } from "../journal-search"
 import { maddoxJournalImagesSchema, maddoxJournalMemoriesSchema, maddoxJournalNpcsSchema, maddoxJournalSearchSchema, type MaddoxJournalImageKind } from "../journal-schemas"
 import type {
@@ -36,19 +37,20 @@ import { loadMembership } from "./campaigns"
 const log = loggerFor({ module: "maddox", feature: "journal" })
 
 const PLAYER_VISIBLE = { visibility: "players" } as const
-/** Memórias visíveis no Diário: dos jogadores e não escondidas (arquivadas na rede de memórias). */
-const MEMORY_VISIBLE = { ...PLAYER_VISIBLE, hiddenAt: null } as const
 const NPC_FIELDS = "name portraitUrl status publicDescription updatedAt"
-const MEMORY_FIELDS = "kind title text tags status turnNumber updatedAt"
-
-const ACTIVE_QUEST = { $in: ["ativa", null] }
 
 export const MADDOX_JOURNAL_PAGE_SIZE = 30
 export const MADDOX_JOURNAL_SEARCH_LIMIT = 20
 const MADDOX_JOURNAL_SEARCHABLE_MESSAGES = ["narration", "declaration", "question", "answer"] as const
 
 type NpcDoc = Pick<IMaddoxNpc, "_id" | "name" | "portraitUrl" | "status" | "publicDescription" | "updatedAt">
-type MemoryDoc = Pick<IMaddoxCampaignMemory, "_id" | "kind" | "title" | "text" | "tags" | "status" | "turnNumber" | "updatedAt">
+type MemoryDoc = Pick<CampaignMemoryView, "id" | "kind" | "title" | "text" | "tags" | "status" | "turnNumber" | "updatedAt">
+
+/**
+ * Memórias da campanha (anotações do Diário): só no Engramind, SEMPRE só o canal dos jogadores (o do mestre
+ * nunca é lido aqui), com o token de app. Import sob demanda (a camada da rede fica fora do caminho quente).
+ */
+const campaignMemories = () => import("@/features/engramind/server/campaign-memories")
 
 function parse<T>(schema: ZodType<T>, input: unknown): T {
     const parsed = schema.safeParse(input)
@@ -85,14 +87,14 @@ function npcDto(npc: NpcDoc): MaddoxJournalNpcDto {
 
 function memoryDto(memory: MemoryDoc): MaddoxJournalMemoryDto {
     return {
-        id: String(memory._id),
+        id: memory.id,
         kind: memory.kind,
         title: memory.title,
         text: memory.text ?? "",
         tags: memory.tags ?? [],
         status: memory.kind === "missao" ? (memory.status ?? "ativa") : null,
         turnNumber: memory.turnNumber ?? null,
-        updatedAt: iso(memory.updatedAt),
+        updatedAt: memory.updatedAt,
     }
 }
 
@@ -116,20 +118,25 @@ function page<T extends { _id: Types.ObjectId }, D>(docs: T[], map: (doc: T) => 
 
 export async function getJournalSummary(campaignId: string, userId: string): Promise<MaddoxJournalSummaryDto> {
     const { campaign, member } = await loadJournalMembership(campaignId, userId)
-    const [npcs, party, byKind, activeQuests, avatarUrl, images] = await Promise.all([
+    const memoryPart = campaignMemories()
+        .then(async (service) => {
+            const id = String(campaign._id)
+            const [counts, quests] = await Promise.all([service.countPlayerMemories(id), service.activeQuests(id, "players", "app", 10)])
+            return { counts, quests, unavailable: false }
+        })
+        .catch((error: unknown) => {
+            log.warn({ campaignId, err: error instanceof Error ? error.message : String(error) }, "[maddox] anotações do Diário indisponíveis")
+            return { counts: null, quests: [] as MemoryDoc[], unavailable: true }
+        })
+    const [npcs, party, memoryState, avatarUrl, images] = await Promise.all([
         MaddoxNpcModel.countDocuments({ campaignId: campaign._id, ...PLAYER_VISIBLE }),
         MaddoxCampaignMemberModel.countDocuments({ campaignId: campaign._id, status: "joined", characterId: { $ne: null } }),
-        MaddoxCampaignMemoryModel.aggregate<{ _id: MaddoxCampaignMemoryKind; count: number }>([{ $match: { campaignId: campaign._id, ...MEMORY_VISIBLE } }, { $group: { _id: "$kind", count: { $sum: 1 } } }]),
-        MaddoxCampaignMemoryModel.find({ campaignId: campaign._id, ...MEMORY_VISIBLE, kind: "missao", status: ACTIVE_QUEST } as Record<string, unknown>)
-            .sort({ updatedAt: -1 })
-            .limit(10)
-            .select(MEMORY_FIELDS)
-            .lean<MemoryDoc[]>(),
+        memoryPart,
         maddoxAvatarUrl(),
         visibleImagesFilter(campaign._id, "todas").then((filter) => MaddoxSceneImageModel.countDocuments(filter)),
     ])
-    const memories = Object.fromEntries(MADDOX_CAMPAIGN_MEMORY_KINDS.map((kind) => [kind, 0])) as Record<MaddoxCampaignMemoryKind, number>
-    for (const item of byKind) if (item._id in memories) memories[item._id] = item.count
+    const memories = Object.fromEntries(MADDOX_CAMPAIGN_MEMORY_KINDS.map((kind) => [kind, memoryState.counts?.[kind] ?? 0])) as Record<MaddoxCampaignMemoryKind, number>
+    const activeQuests = memoryState.quests
     return {
         campaignId: String(campaign._id),
         name: campaign.name,
@@ -143,6 +150,7 @@ export async function getJournalSummary(campaignId: string, userId: string): Pro
         state: stateDto(campaign.state),
         activeQuests: activeQuests.map(memoryDto),
         counts: { npcs, party, images, memories },
+        memoriesUnavailable: memoryState.unavailable,
     }
 }
 
@@ -166,15 +174,10 @@ export async function listJournalNpcs(campaignId: string, input: unknown, userId
 export async function listJournalMemories(campaignId: string, input: unknown, userId: string): Promise<MaddoxJournalPageDto<MaddoxJournalMemoryDto>> {
     const query = parse(maddoxJournalMemoriesSchema, input)
     const campaign = await loadJournalCampaign(campaignId, userId)
-    // Missão sem situação gravada conta como ativa (a gravação do Maddox já nasce `ativa`).
-    const status = query.kind === "missao" && query.status ? { status: query.status === "ativa" ? ACTIVE_QUEST : query.status } : {}
-    const filter: Record<string, unknown> = { campaignId: campaign._id, ...MEMORY_VISIBLE, kind: query.kind, ...status, ...cursorFilter(query.cursor) }
-    const docs = await MaddoxCampaignMemoryModel.find(filter)
-        .sort({ _id: -1 })
-        .limit(MADDOX_JOURNAL_PAGE_SIZE + 1)
-        .select(MEMORY_FIELDS)
-        .lean<MemoryDoc[]>()
-    return page(docs, memoryDto)
+    // Da alteração mais recente (a ordem da rede), com o cursor da rede; situação da missão pela tag `status:`.
+    const { listCampaignMemories } = await campaignMemories()
+    const result = await listCampaignMemories(String(campaign._id), { scope: "players", reader: "app", kind: query.kind, status: query.status, limit: MADDOX_JOURNAL_PAGE_SIZE, cursor: query.cursor })
+    return { items: result.items.map(memoryDto), nextCursor: result.nextCursor }
 }
 
 type PartyCharacter = Pick<IMaddoxCharacter, "_id" | "name" | "portraitUrl" | "profile" | "currentState" | "currentStatePublic">
@@ -302,17 +305,16 @@ export async function searchJournal(campaignId: string, input: unknown, userId: 
     const regex = new RegExp(pattern, "i")
     const take = MADDOX_JOURNAL_SEARCH_LIMIT + 1
 
-    const [npcs, memories, messages, party, images] = await Promise.all([
+    const [npcs, memoryHits, messages, party, images] = await Promise.all([
         MaddoxNpcModel.find({ campaignId: campaign._id, ...PLAYER_VISIBLE, $or: [{ name: match }, { publicDescription: match }] })
             .sort({ name: 1 })
             .limit(take)
             .select(NPC_FIELDS)
             .lean<NpcDoc[]>(),
-        MaddoxCampaignMemoryModel.find({ campaignId: campaign._id, ...MEMORY_VISIBLE, $or: [{ title: match }, { text: match }, { tags: match }] })
-            .sort({ updatedAt: -1 })
-            .limit(take)
-            .select(MEMORY_FIELDS)
-            .lean<MemoryDoc[]>(),
+        campaignMemories()
+            .then(({ searchCampaignMemories }) => searchCampaignMemories(String(campaign._id), { query: q, scope: "players", reader: "app", limit: take }))
+            .then((items): { items: MemoryDoc[]; unavailable: boolean } => ({ items, unavailable: false }))
+            .catch((): { items: MemoryDoc[]; unavailable: boolean } => ({ items: [], unavailable: true })),
         MaddoxCampaignMessageModel.find({ campaignId: campaign._id, kind: { $in: MADDOX_JOURNAL_SEARCHABLE_MESSAGES }, error: null, content: match })
             .sort({ _id: -1 })
             .limit(take)
@@ -327,6 +329,7 @@ export async function searchJournal(campaignId: string, input: unknown, userId: 
                 .lean<ImageDoc[]>(),
         ),
     ])
+    const memories = memoryHits.items
     const imageNpcNames = await npcNames(campaign._id, images)
     const imageHits: MaddoxJournalSearchImageHit[] = images.map((image) => ({
         id: String(image._id),
@@ -358,7 +361,7 @@ export async function searchJournal(campaignId: string, input: unknown, userId: 
         memories: group(
             memories.map((memory) => {
                 const source = regex.test(memory.text ?? "") ? memory.text : regex.test(memory.title) ? memory.text || memory.title : (memory.tags ?? []).find((tag) => regex.test(tag)) ?? memory.text
-                return { id: String(memory._id), kind: memory.kind, title: memory.title, status: memory.kind === "missao" ? (memory.status ?? "ativa") : null, excerpt: excerptAround(source ?? "", q) }
+                return { id: memory.id, kind: memory.kind, title: memory.title, status: memory.kind === "missao" ? (memory.status ?? "ativa") : null, excerpt: excerptAround(source ?? "", q) }
             }),
         ),
         messages: group(
@@ -374,5 +377,6 @@ export async function searchJournal(campaignId: string, input: unknown, userId: 
         party: group(partyHits),
         images: group(imageHits),
         state: stateHit ? { excerpt: excerptAround(stateHit, q) } : null,
+        memoriesUnavailable: memoryHits.unavailable,
     }
 }

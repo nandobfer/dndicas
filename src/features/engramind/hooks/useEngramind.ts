@@ -44,6 +44,8 @@ export const useMigrationCompact = () => useEngramindMutation<string, MemoryMigr
 export const useMigrationReview = () => useEngramindMutation<MigrationItemPatch, MemoryMigrationDto>("migration", (input) => send("patch", "/engramind/migration/items", input))
 export const useMigrationBulk = () => useEngramindMutation<MigrationBulkInput, MemoryMigrationDto>("migration", (input) => send("post", "/engramind/migration/review/bulk", input))
 export const useMigrationImport = () => useEngramindMutation<void, MemoryMigrationDto>("migration", () => send("post", "/engramind/migration/import", { confirm: true }))
+export const useDiscardPendingWrite = () =>
+    useEngramindMutation<string, CampaignSyncDto>("sync", async (id) => unwrapApi((await api.delete<ApiResponse<CampaignSyncDto>>("/engramind/sync", { data: { id } })).data), "Gravação descartada")
 export const useMigrationHistory = () => useEngramindMutation<void, MemoryMigrationDto>("migration", () => send("post", "/engramind/migration/campaigns", { confirm: true }))
 
 /** Tempo real da integração (`engramind-updated` em `private-integration-engramind`): relê a área avisada. */

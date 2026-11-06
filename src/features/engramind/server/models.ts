@@ -22,10 +22,8 @@ export interface BootstrapStepRecord {
 export interface CampaignSyncRecord {
     lastRunAt: Date | null
     lastOkAt: Date | null
-    /** Maior `updated_at` lido nas listagens (a próxima busca parte daqui). */
-    cursor: string | null
     lastError: string | null
-    lastResult: { pushed: number; pulled: number; removed: number; failed: number; channels: number } | null
+    lastResult: { delivered: number; failed: number; remaining: number; channels: number } | null
 }
 
 export interface IEngramindState {
@@ -41,6 +39,10 @@ export interface IEngramindState {
     categoryWarnings: string[]
     /** O Engramind aceita `redator.rewrite_text` por canal para o token de app? `null` = ainda não conferido. */
     channelSettings: { supported: boolean | null; checkedAt: Date | null; message: string | null } | null
+    /** Último backup das memórias antigas das campanhas (antes de mover e apagar). */
+    campaignBackup: { id: string; count: number; sha256: string; createdAt: Date } | null
+    /** Resultado da última execução de "Mover as memórias das campanhas". */
+    campaignMove: { at: Date; results: import("../types").CampaignMoveRowDto[] } | null
 }
 
 export interface IEngramindContextCache {
@@ -69,6 +71,8 @@ const stateSchema = new Schema<IEngramindState>(
         campaignSync: { type: Schema.Types.Mixed, default: null },
         categoryWarnings: { type: [String], default: [] },
         channelSettings: { type: Schema.Types.Mixed, default: null },
+        campaignBackup: { type: Schema.Types.Mixed, default: null },
+        campaignMove: { type: Schema.Types.Mixed, default: null },
     },
     { collection: "engramind_state", versionKey: false, minimize: false },
 )

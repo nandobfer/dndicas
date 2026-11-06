@@ -1,18 +1,28 @@
 import { ok } from "@/lib/api/responses"
 import { parseBody, withRoute } from "@/lib/api/route"
 import { requirePermissionActor } from "@/features/auth/server/actor"
+import { migrationConfirmSchema } from "@/features/engramind/schemas/migration"
+import { downloadCampaignBackup } from "@/features/engramind/server/campaign-memory-move"
+import { moveCampaignHistory } from "@/features/engramind/server/migration"
+import { AcaoAuditoria, auditEngramind } from "@/features/engramind/server/shared"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
 
 const PERMISSION = "integrations.engramind.edit"
-import { migrationConfirmSchema } from "@/features/engramind/schemas/migration"
-import { mirrorHistory } from "@/features/engramind/server/migration"
 
-/** POST — espelha o histórico das campanhas (`maddox_campaign_memories`) sem curadoria, em lote idempotente. */
+/** GET — baixa o backup das memórias antigas das campanhas (JSON com SHA-256). */
+export const GET = withRoute(async () => {
+    const actor = await requirePermissionActor(PERMISSION)
+    const file = await downloadCampaignBackup()
+    await auditEngramind(actor.id, "migracao", AcaoAuditoria.EXECUTAR, { passo: "download-backup-campanhas" })
+    return new Response(file.body, { headers: { "Content-Type": "application/json; charset=utf-8", "Content-Disposition": `attachment; filename="${file.filename}"`, "Cache-Control": "no-store" } })
+})
+
+/** POST — backup, move as memórias das campanhas para o Engramind, confere e apaga as cópias do banco (confirmação explícita). */
 export const POST = withRoute(async ({ req }) => {
     const actor = await requirePermissionActor(PERMISSION)
     const body = await parseBody(req, migrationConfirmSchema)
     if (!body.ok) return body.response
-    return ok(await mirrorHistory(actor.id))
+    return ok(await moveCampaignHistory(actor.id))
 })

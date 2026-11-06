@@ -14,7 +14,8 @@ import { engramindLog, messageOf, publishEngramind } from "./shared"
  * Um evento válido:
  * - marca o contexto em cache do canal como sujo (menos `memory.consumed`);
  * - vai para o SSE da rede (só ids, slugs e tipos);
- * - `memory.*` de um canal de campanha dispara a sincronização com o jogo (em segundo plano);
+ * - `memory.*` do canal dos jogadores de uma campanha avisa os membros (o Diário recarrega; o Engramind é a
+ *   única fonte das memórias das campanhas, então não há nada a aplicar no banco);
  * - `settings.updated` relê as categorias.
  */
 
@@ -42,10 +43,13 @@ export async function onWebhookEvent(event: WebhookEvent): Promise<void> {
         const { markContextDirty } = await import("./memory-context")
         await markContextDirty(event.channel).catch((error: unknown) => engramindLog.warn({ err: messageOf(error) }, "[engramind] contexto não marcado como sujo"))
     }
-    if (event.type.startsWith("memory.") && (!event.channel || event.channel.startsWith(CAMPAIGN_CHANNEL_PREFIX))) {
-        void import("./campaign-mirror")
-            .then(({ handleCampaignMemoryEvent }) => handleCampaignMemoryEvent(event))
-            .catch((error: unknown) => engramindLog.warn({ err: messageOf(error) }, "[engramind] sincronização da campanha não disparada"))
+    if (event.type.startsWith("memory.") && event.channel?.startsWith(CAMPAIGN_CHANNEL_PREFIX)) {
+        void import("./campaign-memories")
+            .then(async ({ campaignOfPlayersChannel, notifyJournalChanged }) => {
+                const campaignId = campaignOfPlayersChannel(event.channel)
+                if (campaignId) await notifyJournalChanged(campaignId)
+            })
+            .catch((error: unknown) => engramindLog.warn({ err: messageOf(error) }, "[engramind] aviso do Diário não disparado"))
     }
     if (!event.type.startsWith("memory.")) await publishEngramind({ type: event.type })
 }

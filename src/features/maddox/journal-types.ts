@@ -61,6 +61,8 @@ export interface MaddoxJournalSummaryDto {
     activeQuests: MaddoxJournalMemoryDto[]
     /** `images`: imagens prontas que os jogadores veem (aba Imagens, DND-22). */
     counts: { npcs: number; party: number; images: number; memories: Record<MaddoxCampaignMemoryKind, number> }
+    /** As anotações vêm do Engramind; `true` quando a rede não respondeu (contagens zeradas, sem missões). */
+    memoriesUnavailable: boolean
 }
 
 /**
@@ -144,4 +146,6 @@ export interface MaddoxJournalSearchDto {
     images: MaddoxJournalSearchGroup<MaddoxJournalSearchImageHit>
     /** Trecho da situação atual, quando ela contém o termo. */
     state: { excerpt: string } | null
+    /** As anotações vêm do Engramind; `true` quando a rede não respondeu (o grupo de anotações fica vazio). */
+    memoriesUnavailable?: boolean
 }

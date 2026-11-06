@@ -26,6 +26,7 @@ import type { MemoryMigrationDto, MigrationImportReportDto, MigrationItemDto, Mi
 import { createCategory, invalidateCategoryCache } from "./categories"
 import { engramindAgentClient, engramindAppClient } from "./client"
 import { LEGACY_MEMORIES_COLLECTION, MIGRATION_ID, MemoryBackup, MemoryMigration, type IMemoryMigration, type IMigrationItem, type IMigrationStep, type MigrationStepKey } from "./migration-models"
+import { ENGRAMIND_STATE_ID, EngramindState } from "./models"
 import { AcaoAuditoria, auditEngramind, engramindLog, messageOf, publishEngramind } from "./shared"
 
 /**
@@ -523,14 +524,15 @@ export async function importApproved(actorId: string): Promise<MemoryMigrationDt
     return getMigration()
 }
 
-// ── Histórico das campanhas ─────────────────────────────────────────────────
+// ── Memórias das campanhas ──────────────────────────────────────────────────
 
-export async function mirrorHistory(actorId: string): Promise<MemoryMigrationDto> {
+/** Backup + mover para o Engramind + conferir + apagar do banco do dndicas (`campaign-memory-move.ts`). */
+export async function moveCampaignHistory(actorId: string): Promise<MemoryMigrationDto> {
     const state = await loadState()
     assertIdle(state, ["history"])
     void runInBackground("history", async () => {
-        const { mirrorCampaignHistory } = await import("./campaign-mirror")
-        await mirrorCampaignHistory(actorId)
+        const { moveCampaignMemories } = await import("./campaign-memory-move")
+        await moveCampaignMemories(actorId)
     })
     return getMigration()
 }
@@ -591,7 +593,9 @@ export async function getMigration(): Promise<MemoryMigrationDto> {
         row.counts[item.decision!.decisao]++
         byList.set(item.list, row)
     }
-    const { campaignHistoryCounts } = await import("./campaign-mirror")
+    const { campaignMoveRows } = await import("./campaign-memory-move")
+    const engramindState = await EngramindState.findById(ENGRAMIND_STATE_ID).select({ campaignBackup: 1 }).lean()
+    const campaignBackup = engramindState?.campaignBackup
     const settings = await migrationSettings().catch(() => null)
     return {
         legacyCount: await legacyMemoryCount().catch(() => state.items.length),
@@ -602,7 +606,8 @@ export async function getMigration(): Promise<MemoryMigrationDto> {
         report: triaged.length ? { byDecision, byList: [...byList.values()] } : null,
         importReport: importReport(state.items),
         budget: triaged.length ? await budgetOf(state, settings) : [],
-        campaigns: await campaignHistoryCounts().catch(() => []),
+        campaigns: await campaignMoveRows().catch(() => []),
+        campaignBackup: campaignBackup ? { count: campaignBackup.count, sha256: campaignBackup.sha256, createdAt: new Date(campaignBackup.createdAt).toISOString() } : null,
         categoryNotices: state.categoryNotices,
         categories: settings?.categories ?? [],
         textMax: settings?.textMax ?? 4000,

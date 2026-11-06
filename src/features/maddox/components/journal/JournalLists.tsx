@@ -27,7 +27,7 @@ export function JournalText({ children }: { children: string }) {
     return children.trim() ? <Markdown lineAction={null}>{children}</Markdown> : null
 }
 
-export function JournalListState({ loading, error, empty, emptyText, icon: Icon, onRetry }: { loading: boolean; error: boolean; empty: boolean; emptyText: string; icon: LucideIcon; onRetry: () => void }) {
+export function JournalListState({ loading, error, errorText, empty, emptyText, icon: Icon, onRetry }: { loading: boolean; error: boolean; errorText?: string; empty: boolean; emptyText: string; icon: LucideIcon; onRetry: () => void }) {
     if (loading) {
         return (
             <div className="grid gap-3 md:grid-cols-2" aria-busy="true" aria-label="Carregando">
@@ -39,7 +39,7 @@ export function JournalListState({ loading, error, empty, emptyText, icon: Icon,
     if (error) {
         return (
             <div className="flex flex-col items-center gap-2 rounded-xl border border-white/10 py-8 text-sm text-white/60" role="alert">
-                Não foi possível carregar esta parte do diário.
+                {errorText ?? "Não foi possível carregar esta parte do diário."}
                 <Button size="sm" variant="outline" onClick={onRetry}>
                     Tentar de novo
                 </Button>

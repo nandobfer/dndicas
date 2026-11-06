@@ -29,19 +29,27 @@ export interface CampaignSyncDto {
     lastRunAt: string | null
     lastOkAt: string | null
     lastError: string | null
-    lastResult: { pushed: number; pulled: number; removed: number; failed: number; channels: number } | null
+    lastResult: { delivered: number; failed: number; remaining: number; channels: number } | null
+    /** Gravações na fila temporária (o Engramind não as aceitou ainda). */
     pending: number
-    failures: { id: string; campaignId: string; title: string; error: string | null }[]
+    failures: { id: string; campaignId: string; title: string; error: string | null; failed: boolean }[]
+    /** Memórias antigas ainda no banco do dndicas (a mover na aba Migração). */
+    legacyCampaignMemories: number
     redator: { supported: boolean | null; checkedAt: string | null; message: string | null }
     categoryWarnings: string[]
     running: boolean
 }
 
-export interface CampaignHistoryCountDto {
+/** Mover as memórias antigas de uma campanha (`maddox_campaign_memories`) para o Engramind. */
+export interface CampaignMoveRowDto {
     campaignId: string
     name: string
+    /** Ainda no banco do dndicas. */
     source: number
-    mirrored: number
+    imported: number
+    verified: number
+    deleted: number
+    error: string | null
 }
 
 // ── Migração das listas (aba Migração) ──────────────────────────────────────
@@ -108,7 +116,8 @@ export interface MemoryMigrationDto {
     report: MigrationReportDto | null
     importReport: MigrationImportReportDto[]
     budget: { key: string; label: string; tokens: number; budget: number; over: boolean; memories: number }[]
-    campaigns: CampaignHistoryCountDto[]
+    campaigns: CampaignMoveRowDto[]
+    campaignBackup: { count: number; sha256: string; createdAt: string } | null
     categoryNotices: string[]
     /** Categorias e limite de texto do Engramind (vazio/padrão quando ele não responde). */
     categories: { key: string; label: string }[]

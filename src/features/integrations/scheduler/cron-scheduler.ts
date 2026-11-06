@@ -307,8 +307,8 @@ export function registerBuiltInJobs(): void {
         return processPendingMaddoxSessionDeletions()
     })
     registerInternalJob(ENGRAMIND_CAMPAIGN_SYNC_JOB_ID, async () => {
-        const { reconcileCampaignMemories } = await import("@/features/engramind/server/campaign-mirror")
-        return reconcileCampaignMemories("system:cron")
+        const { syncCampaignMemories } = await import("@/features/engramind/server/campaign-sync")
+        return syncCampaignMemories("system:cron")
     })
 }
 

@@ -1,7 +1,6 @@
 import {
     MaddoxCampaignMemberModel,
     MaddoxCampaignMessageModel,
-    MaddoxCampaignMemoryModel,
     MaddoxCampaignModel,
     MaddoxCharacterModel,
     MaddoxCombatModel,
@@ -30,7 +29,6 @@ export async function ensureMaddoxIndexes(): Promise<void> {
         MaddoxCampaignMemberModel.createIndexes(),
         MaddoxCharacterModel.createIndexes(),
         MaddoxNpcModel.createIndexes(),
-        MaddoxCampaignMemoryModel.createIndexes(),
         MaddoxInterviewScriptModel.createIndexes(),
         MaddoxInterviewModel.createIndexes(),
         MaddoxOpencodeSessionModel.createIndexes(),
