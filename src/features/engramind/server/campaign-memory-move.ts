@@ -54,25 +54,40 @@ export async function legacyCampaignMemoryCount(): Promise<number> {
     return (await collection()).countDocuments({})
 }
 
-/** Backup da coleção inteira (sempre antes de apagar). */
-async function backupCollection(actorId: string): Promise<{ id: string; count: number; sha256: string }> {
+/** Tamanho de cada parte do JSON do backup (bem abaixo dos 16 MB de um documento, mesmo com caracteres de 3 bytes). */
+export const BACKUP_PART_CHARS = 2_000_000
+
+/**
+ * Backup da coleção inteira antes de apagar. Cada execução ACRESCENTA um backup à lista (nenhum é substituído) e
+ * o JSON vai em partes (`<id>:p<n>`). Coleção vazia não gera backup (não há o que apagar).
+ */
+async function backupCollection(actorId: string): Promise<{ id: string; count: number; sha256: string } | null> {
     const rows = await (await collection()).find({}).sort({ _id: 1 }).toArray()
+    if (!rows.length) return null
     const json = JSON.stringify(rows)
     const sha256 = createHash("sha256").update(json).digest("hex")
     const id = `${BACKUP_PREFIX}${new Types.ObjectId().toString()}`
-    await MemoryBackup.create({ _id: id, createdAt: new Date(), count: rows.length, sha256, json })
-    await EngramindState.updateOne({ _id: ENGRAMIND_STATE_ID }, { $set: { campaignBackup: { id, count: rows.length, sha256, createdAt: new Date() } } }, { upsert: true })
-    await auditEngramind(actorId, "migracao", AcaoAuditoria.EXECUTAR, { passo: "backup-campanhas", quantidade: rows.length, sha256 })
+    const createdAt = new Date()
+    const parts: { _id: string; createdAt: Date; count: number; sha256: string; json: string }[] = []
+    for (let start = 0, index = 0; start < json.length; start += BACKUP_PART_CHARS, index++) parts.push({ _id: `${id}:p${index}`, createdAt, count: rows.length, sha256, json: json.slice(start, start + BACKUP_PART_CHARS) })
+    await MemoryBackup.insertMany(parts)
+    await EngramindState.updateOne({ _id: ENGRAMIND_STATE_ID }, { $push: { campaignBackups: { id, count: rows.length, sha256, createdAt, parts: parts.length } } }, { upsert: true })
+    await auditEngramind(actorId, "migracao", AcaoAuditoria.EXECUTAR, { passo: "backup-campanhas", quantidade: rows.length, sha256, partes: parts.length })
     return { id, count: rows.length, sha256 }
 }
 
-export async function downloadCampaignBackup(): Promise<{ filename: string; body: string }> {
+/** Baixa um backup (o mais recente sem `id`): as partes concatenadas, conferidas pelo SHA-256. */
+export async function downloadCampaignBackup(id?: string | null): Promise<{ filename: string; body: string }> {
     await dbConnect()
-    const state = await EngramindState.findById(ENGRAMIND_STATE_ID).select({ campaignBackup: 1 }).lean()
-    const id = state?.campaignBackup?.id
-    const backup = id ? await MemoryBackup.findById(id).lean() : null
+    const state = await EngramindState.findById(ENGRAMIND_STATE_ID).select({ campaignBackups: 1 }).lean()
+    const list = state?.campaignBackups ?? []
+    const backup = id ? list.find((item) => item.id === id) : list.at(-1)
     if (!backup) throw new DomainError(404, "Nenhum backup das memórias das campanhas ainda", "NOT_FOUND")
-    return { filename: `dndicas-memorias-campanhas-${backup.createdAt.toISOString().slice(0, 10)}-${backup.sha256.slice(0, 8)}.json`, body: backup.json }
+    const parts = await MemoryBackup.find({ _id: { $in: Array.from({ length: backup.parts }, (_, index) => `${backup.id}:p${index}`) } }).lean()
+    const ordered = Array.from({ length: backup.parts }, (_, index) => parts.find((part) => part._id === `${backup.id}:p${index}`))
+    const body = ordered.every(Boolean) ? ordered.map((part) => part!.json).join("") : ""
+    if (!body || createHash("sha256").update(body).digest("hex") !== backup.sha256) throw new DomainError(500, "O backup das memórias das campanhas está incompleto no banco: não confere com o SHA-256", "BACKUP_CORRUPTED")
+    return { filename: `dndicas-memorias-campanhas-${new Date(backup.createdAt).toISOString().slice(0, 10)}-${backup.sha256.slice(0, 8)}.json`, body }
 }
 
 /** Chaves das memórias de uma campanha: a do jogo; repetida no mesmo par campanha × chave → sufixo do `_id`. */
@@ -101,16 +116,21 @@ async function moveCampaign(campaign: { _id: Types.ObjectId; name: string; statu
     const categories = await listCategoryKeys(client)
     const keys = legacyKeys(rows)
     const verified = new Set<string>()
+    let oversized = 0
     for (const visibility of ["players", "master"] as const) {
         const channel = campaignChannel(String(campaign._id), visibility)
         const textMax = (settings.channels ?? []).find((item) => item.channel === channel)?.memory_text_max ?? settings.memory.text_max
-        const docs = rows.filter((item) => (item.visibility ?? "players") === visibility)
+        // Texto acima do limite do canal não é cortado: fica fora da importação e conta como divergência (nada apagado).
+        const all = rows.filter((item) => (item.visibility ?? "players") === visibility)
+        const tooLong = all.filter((item) => (item.text ?? "").length > textMax)
+        oversized += tooLong.length
+        const docs = all.filter((item) => !tooLong.includes(item))
         for (let start = 0; start < docs.length; start += batchSize) {
             const batch = docs.slice(start, start + batchSize)
             const memories = batch.map((item) => {
                 const kind = item.kind ?? "fato"
                 const title = remoteTitle(item.title ?? "")
-                const text = (item.text ?? "").slice(0, textMax) || (item.title ?? "—")
+                const text = item.text || (item.title ?? "—")
                 return {
                     text,
                     key: keys.get(String(item._id)),
@@ -139,7 +159,14 @@ async function moveCampaign(campaign: { _id: Types.ObjectId; name: string; statu
     }
     row.verified = verified.size
     if (verified.size !== rows.length) {
-        row.error = `${rows.length - verified.size} memória(s) não conferiram no Engramind: nada foi apagado desta campanha.`
+        const missing = rows.length - verified.size - oversized
+        row.error = [
+            oversized ? `${oversized} memória(s) passam do limite de texto do Engramind (memory.text_max) e não foram importadas: aumente o limite no Opex ou encurte o texto` : null,
+            missing ? `${missing} memória(s) não conferiram no Engramind` : null,
+        ]
+            .filter(Boolean)
+            .join("; ")
+            .concat(": nada foi apagado desta campanha.")
         engramindLog.warn({ campaignId: row.campaignId, missing: rows.length - verified.size }, "[engramind] memórias da campanha não conferiram: cópias mantidas")
         return row
     }
@@ -152,8 +179,7 @@ async function moveCampaign(campaign: { _id: Types.ObjectId; name: string; statu
 
 /** Backup + mover + conferir + apagar, campanha a campanha. */
 export async function moveCampaignMemories(actorId: string): Promise<CampaignMoveRowDto[]> {
-    const backup = await backupCollection(actorId)
-    if (!backup.sha256) throw new DomainError(500, "Backup das memórias das campanhas não gerado: nada foi movido", "BACKUP_FAILED")
+    await backupCollection(actorId)
     const campaigns = await MaddoxCampaignModel.find({}).select({ name: 1, status: 1 }).lean<{ _id: Types.ObjectId; name: string; status: string }[]>()
     const results: CampaignMoveRowDto[] = []
     for (const campaign of campaigns) {

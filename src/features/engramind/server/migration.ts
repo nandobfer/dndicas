@@ -594,8 +594,8 @@ export async function getMigration(): Promise<MemoryMigrationDto> {
         byList.set(item.list, row)
     }
     const { campaignMoveRows } = await import("./campaign-memory-move")
-    const engramindState = await EngramindState.findById(ENGRAMIND_STATE_ID).select({ campaignBackup: 1 }).lean()
-    const campaignBackup = engramindState?.campaignBackup
+    const engramindState = await EngramindState.findById(ENGRAMIND_STATE_ID).select({ campaignBackups: 1 }).lean()
+    const campaignBackups = [...(engramindState?.campaignBackups ?? [])].reverse()
     const settings = await migrationSettings().catch(() => null)
     return {
         legacyCount: await legacyMemoryCount().catch(() => state.items.length),
@@ -607,7 +607,7 @@ export async function getMigration(): Promise<MemoryMigrationDto> {
         importReport: importReport(state.items),
         budget: triaged.length ? await budgetOf(state, settings) : [],
         campaigns: await campaignMoveRows().catch(() => []),
-        campaignBackup: campaignBackup ? { count: campaignBackup.count, sha256: campaignBackup.sha256, createdAt: new Date(campaignBackup.createdAt).toISOString() } : null,
+        campaignBackups: campaignBackups.map((item) => ({ id: item.id, count: item.count, sha256: item.sha256, createdAt: new Date(item.createdAt).toISOString() })),
         categoryNotices: state.categoryNotices,
         categories: settings?.categories ?? [],
         textMax: settings?.textMax ?? 4000,

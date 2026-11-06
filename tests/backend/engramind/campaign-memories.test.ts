@@ -11,7 +11,7 @@ vi.mock("@/lib/pusher/channels", () => ({ publishToChannels }))
 vi.mock("@/features/maddox/server/game", () => ({ publishGameChanged: vi.fn(async () => undefined) }))
 
 const { runBootstrap } = await import("@/features/engramind/server/bootstrap")
-const { saveCampaignMemory, searchCampaignMemories, listCampaignMemories, narratorMemoryIndex, countPlayerMemories, flushPendingWrites } = await import("@/features/engramind/server/campaign-memories")
+const { saveCampaignMemory, searchCampaignMemories, listCampaignMemories, narratorMemoryIndex, countPlayerMemories, flushPendingWrites, PENDING_MAX_ATTEMPTS } = await import("@/features/engramind/server/campaign-memories")
 const { syncCampaignMemories, getCampaignSync } = await import("@/features/engramind/server/campaign-sync")
 const { syncCampaignChannelLifecycle } = await import("@/features/engramind/server/campaign-channels")
 const { onWebhookEvent } = await import("@/features/engramind/server/webhook")
@@ -125,6 +125,51 @@ describe("gravação (Engramind como única fonte)", () => {
     })
 })
 
+describe("fila: entrada ruim não trava as seguintes", () => {
+    it("5xx repetido conta tentativas e vira recusa depois do teto, sem impedir a entrega das próximas", async () => {
+        const body = (key: string, text: string) => ({ channel: players(), key, upsert: true, text, category: "FATO", title: key.slice(8) })
+        await PendingWrite.create({ _id: `${id}:mx:fato:ruim`, campaignId: id, key: "mx:fato:ruim", channel: players(), body: body("mx:fato:ruim", "RUIM") })
+        await PendingWrite.create({ _id: `${id}:mx:fato:boa`, campaignId: id, key: "mx:fato:boa", channel: players(), body: body("mx:fato:boa", "Boa.") })
+        const original = fake.fetch
+        vi.stubGlobal("fetch", (async (input: RequestInfo | URL, init?: RequestInit) => {
+            if (String(init?.body ?? "").includes('"RUIM"')) return new Response(JSON.stringify({ error: { code: "INTERNAL", message: "falhou" } }), { status: 500, headers: { "Content-Type": "application/json" } })
+            return original(input as string, init)
+        }) as typeof fetch)
+        expect(await flushPendingWrites()).toMatchObject({ delivered: 1, failed: 0, remaining: 1 })
+        expect(remotes().map((item) => item.key)).toEqual(["mx:fato:boa"])
+        for (let attempt = 1; attempt < PENDING_MAX_ATTEMPTS; attempt++) await flushPendingWrites()
+        expect(await PendingWrite.findById(`${id}:mx:fato:ruim`).lean()).toMatchObject({ failed: true, attempts: PENDING_MAX_ATTEMPTS })
+        expect(await flushPendingWrites()).toMatchObject({ delivered: 0, remaining: 1 })
+    })
+
+    it("rede inteira fora para a entrega (tenta tudo no próximo ciclo, sem gastar tentativas)", async () => {
+        await saveCampaignMemory(id, { kind: "fato", title: "Antes", text: "x" })
+        fake.state.down = true
+        await saveCampaignMemory(id, { kind: "fato", title: "Um", text: "Um." })
+        await saveCampaignMemory(id, { kind: "fato", title: "Dois", text: "Dois." })
+        expect(await flushPendingWrites()).toMatchObject({ delivered: 0, failed: 0, remaining: 2 })
+        expect(await PendingWrite.countDocuments({ attempts: { $gt: 0 } })).toBe(0)
+        fake.state.down = false
+        expect(await flushPendingWrites()).toMatchObject({ delivered: 2, remaining: 0 })
+    })
+
+    it("o texto já entra na fila cortado no limite conhecido do canal (rede fora e sem o token do agente)", async () => {
+        fake.state.textMax = 30
+        await saveCampaignMemory(id, { kind: "fato", title: "Lê o limite", text: "curto" })
+        fake.state.down = true
+        expect(await saveCampaignMemory(id, { kind: "fato", title: "Rede fora", text: "z".repeat(100) })).toMatchObject({ pending: true, truncated: true })
+        expect(String((await PendingWrite.findOne({ key: "mx:fato:rede-fora" }).lean())!.body.text)).toHaveLength(30)
+        // Sem o token do agente (e sem esperar o provisionamento sob demanda, que falha com a rede fora).
+        const { writeEngramindSecrets, resetEngramindLazyForTests } = await import("@/features/engramind/server/client")
+        await writeEngramindSecrets({ agentTokenMaddox: null }, "admin-1")
+        const { invalidateStoredIntegrations } = await import("@/lib/integrations/store")
+        invalidateStoredIntegrations()
+        resetEngramindLazyForTests({ waitMs: 0 })
+        expect(await saveCampaignMemory(id, { kind: "fato", title: "Sem token", text: "w".repeat(100) })).toMatchObject({ pending: true, truncated: true })
+        expect(String((await PendingWrite.findOne({ key: "mx:fato:sem-token" }).lean())!.body.text)).toHaveLength(30)
+    })
+})
+
 describe("leitura", () => {
     beforeEach(async () => {
         await saveCampaignMemory(id, { kind: "missao", title: "Achar o mapa", text: "O mapa do farol.", turnNumber: 1 })
@@ -149,6 +194,16 @@ describe("leitura", () => {
         const appCalls = fake.state.calls.filter((call) => call.token === `Bearer ${FAKE_APP_TOKEN}` && call.path.startsWith("/v1/memories"))
         expect(appCalls.length).toBeGreaterThan(0)
         for (const call of appCalls) expect(`${call.query.channels ?? ""} ${call.body ?? ""}`).not.toContain("/mestre")
+    })
+
+    it("missão sem a tag de situação (criada fora do jogo) conta como ativa no Diário e no prompt", async () => {
+        await net("POST", "/v1/memories", { channel: players(), text: "Achar o elmo.", title: "Elmo perdido", category: "MISSAO" })
+        const active = await listCampaignMemories(id, { scope: "players", reader: "app", kind: "missao", status: "ativa", limit: 10 })
+        expect(active.items.map((item) => item.title).sort()).toEqual(["Achar o mapa", "Elmo perdido"])
+        expect((await narratorMemoryIndex(id, 5)).filter((item) => item.status === "ativa").map((item) => item.title).sort()).toEqual(["Achar o mapa", "Elmo perdido"])
+        const page = await listCampaignMemories(id, { scope: "players", reader: "app", kind: "missao", status: "ativa", limit: 1 })
+        expect(page.nextCursor).toBe("o:1")
+        expect((await listCampaignMemories(id, { scope: "players", reader: "app", kind: "missao", status: "ativa", limit: 1, cursor: page.nextCursor! })).items).toHaveLength(1)
     })
 
     it("lista por tipo com filtro de situação e paginação pelo cursor da rede", async () => {

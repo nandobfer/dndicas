@@ -25,13 +25,6 @@ export function CampaignHistoryCard({ state }: { state: MemoryMigrationDto }) {
             description="As memórias das campanhas agora existem só no Engramind. As antigas, ainda no banco do dndicas, não aparecem no Diário nem para o narrador até serem movidas. Mover gera um backup, importa, confere cada uma pela chave e apaga do banco só as que conferiram."
             actions={
                 <div className="flex flex-wrap gap-2">
-                    {state.campaignBackup && (
-                        <Button asChild type="button" size="sm" variant="outline">
-                            <a href="/api/engramind/migration/campaigns" download>
-                                <Download className="mr-1.5 h-4 w-4" aria-hidden /> Baixar backup
-                            </a>
-                        </Button>
-                    )}
                     <Button type="button" size="sm" disabled={remaining === 0 || state.steps.history.status === "running" || run.isPending} onClick={() => setConfirming(true)}>
                         {run.isPending ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" aria-hidden /> : <History className="mr-1.5 h-4 w-4" aria-hidden />} Mover memórias ({remaining})
                     </Button>
@@ -39,10 +32,21 @@ export function CampaignHistoryCard({ state }: { state: MemoryMigrationDto }) {
             }
         >
             <StepStatus step={state.steps.history} doneText="Memórias das campanhas movidas" onRetry={() => run.mutate()} retrying={run.isPending} />
-            {state.campaignBackup && (
-                <p className="text-xs text-muted-foreground" data-testid="campaign-backup">
-                    Backup de {formatDateTime(state.campaignBackup.createdAt)}: {state.campaignBackup.count} memória(s), SHA-256 {state.campaignBackup.sha256.slice(0, 12)}…
-                </p>
+            {state.campaignBackups.length > 0 && (
+                <ul className="space-y-1 text-xs text-muted-foreground" aria-label="Backups das memórias das campanhas" data-testid="campaign-backups">
+                    {state.campaignBackups.map((backup) => (
+                        <li key={backup.id} className="flex flex-wrap items-center gap-2">
+                            <span>
+                                Backup de {formatDateTime(backup.createdAt)}: {backup.count} memória(s), SHA-256 {backup.sha256.slice(0, 12)}…
+                            </span>
+                            <Button asChild type="button" size="sm" variant="outline">
+                                <a href={`/api/engramind/migration/campaigns?id=${encodeURIComponent(backup.id)}`} download>
+                                    <Download className="mr-1.5 h-4 w-4" aria-hidden /> Baixar
+                                </a>
+                            </Button>
+                        </li>
+                    ))}
+                </ul>
             )}
             {state.campaigns.length === 0 ? (
                 <p className="rounded-md border border-dashed p-3 text-sm text-muted-foreground">Nenhuma campanha ainda.</p>

@@ -40,7 +40,8 @@ export interface IEngramindState {
     /** O Engramind aceita `redator.rewrite_text` por canal para o token de app? `null` = ainda não conferido. */
     channelSettings: { supported: boolean | null; checkedAt: Date | null; message: string | null } | null
     /** Último backup das memórias antigas das campanhas (antes de mover e apagar). */
-    campaignBackup: { id: string; count: number; sha256: string; createdAt: Date } | null
+    /** Backups das memórias antigas das campanhas (um por execução de "Mover memórias", em partes). */
+    campaignBackups: { id: string; count: number; sha256: string; createdAt: Date; parts: number }[]
     /** Resultado da última execução de "Mover as memórias das campanhas". */
     campaignMove: { at: Date; results: import("../types").CampaignMoveRowDto[] } | null
 }
@@ -71,7 +72,7 @@ const stateSchema = new Schema<IEngramindState>(
         campaignSync: { type: Schema.Types.Mixed, default: null },
         categoryWarnings: { type: [String], default: [] },
         channelSettings: { type: Schema.Types.Mixed, default: null },
-        campaignBackup: { type: Schema.Types.Mixed, default: null },
+        campaignBackups: { type: Schema.Types.Mixed, default: () => [] },
         campaignMove: { type: Schema.Types.Mixed, default: null },
     },
     { collection: "engramind_state", versionKey: false, minimize: false },

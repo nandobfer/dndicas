@@ -12,7 +12,6 @@ import {
     remoteTitle,
     resolveCategory,
     slugOfTitle,
-    statusTag,
     tagsOf,
     viewOf,
     type CampaignMemoryView,
@@ -50,10 +49,23 @@ const TEXT_MAX_TTL_MS = 60_000
 const textMaxCache = globalThis as typeof globalThis & { __engramindCampaignTextMax?: { at: number; value: number; channels: Map<string, number> } | null }
 
 /** Erro que não é culpa da gravação (rede, 5xx, 429, token recusado): a gravação vai para a fila. */
+/** A rede inteira está fora (ou o token do agente foi recusado): não adianta tentar as próximas entradas da fila. */
+function isServiceDown(error: unknown): boolean {
+    if (!(error instanceof EngramindError)) return false
+    const code = engramindCodeOf(error)
+    // `engramindCodeOf` devolve o código do contrato sem o prefixo `ENGRAMIND_`; o status já vem remapeado pelo cliente.
+    return code === "UNREACHABLE" || code === "AUTH_INVALID" || code === "RATE_LIMITED"
+}
+
+/** Tentativas de uma entrada da fila antes de ela virar recusa (fica visível com "Descartar"). */
+export const PENDING_MAX_ATTEMPTS = 5
+/** Limite padrão do contrato (`memory.text_max`), usado quando não há como consultar a rede. */
+const DEFAULT_TEXT_MAX = 4000
+
 export function isRetryable(error: unknown): boolean {
     if (!(error instanceof EngramindError)) return true
     const code = engramindCodeOf(error)
-    return code === "ENGRAMIND_UNREACHABLE" || code === "AUTH_INVALID" || error.status === 0 || error.status === 401 || error.status === 429 || error.status >= 500
+    return code === "UNREACHABLE" || code === "AUTH_INVALID" || code === "RATE_LIMITED" || error.status >= 500
 }
 
 async function textMaxOf(client: EngramindClient, channel: string): Promise<number> {
@@ -179,11 +191,21 @@ export async function saveCampaignMemory(campaignId: string, input: SaveCampaign
         origin: { source: "maddox", label: "Maddox" },
         ...(title ? { title } : {}),
     })
+    // Para a fila (sem consultar a rede): o último limite conhecido do canal, ou o padrão do contrato, já corta o texto.
+    const cached = textMaxCache.__engramindCampaignTextMax
+    const queueMax = cached ? (cached.channels.get(draftChannel) ?? cached.value) : DEFAULT_TEXT_MAX
+    const queueText = input.text.length > queueMax ? input.text.slice(0, queueMax).trimEnd() : input.text
+    const queued = (): SaveCampaignMemoryResult => ({
+        saved: true,
+        created: false,
+        pending: true,
+        ...(queueText.length < input.text.length ? { truncated: true as const, aviso: `${PENDING_NOTICE} Texto cortado em ${queueMax} caracteres (limite da rede de memórias).` } : { aviso: PENDING_NOTICE }),
+    })
     if (!client) {
-        await enqueue(campaignId, key, draftChannel, draftBody(input.text), new Error("Token do agente dndicas/maddox indisponível"))
-        return { saved: true, created: false, pending: true, aviso: PENDING_NOTICE }
+        await enqueue(campaignId, key, draftChannel, draftBody(queueText), new Error("Token do agente dndicas/maddox indisponível"))
+        return queued()
     }
-    let body: Record<string, unknown> = draftBody(input.text)
+    let body: Record<string, unknown> = draftBody(queueText)
     try {
         const existing = await findExisting(client, campaignId, key, input)
         const previous = existing ? readTags(existing.tags, input.kind) : null
@@ -218,7 +240,7 @@ export async function saveCampaignMemory(campaignId: string, input: SaveCampaign
             throw new DomainError(400, `A rede de memórias recusou a memória: ${messageOf(error)}`, "ENGRAMIND_REJECTED")
         }
         await enqueue(campaignId, key, String(body.channel), body, error)
-        return { saved: true, created: false, pending: true, aviso: PENDING_NOTICE }
+        return queued()
     }
 }
 
@@ -259,13 +281,16 @@ const channelsOf = (campaignId: string, scope: CampaignMemoryQuery["scope"]) => 
 export async function listCampaignMemories(campaignId: string, query: CampaignMemoryQuery): Promise<{ items: CampaignMemoryView[]; nextCursor: string | null }> {
     return guarded(campaignId, async () => {
         const client = await readClient(query.reader)
-        const result = await listPage(client, {
-            channels: channelsOf(campaignId, query.scope).join(","),
-            categories: query.kind ? categoryOfKind(query.kind) : undefined,
-            tag: query.kind === "missao" && query.status ? statusTag(query.status) : undefined,
-            limit: query.limit,
-            cursor: query.cursor,
-        })
+        const channels = channelsOf(campaignId, query.scope).join(",")
+        if (query.kind === "missao" && query.status) {
+            // A situação é decidida aqui, não pela tag: missão sem `status:` (criada no Opex, importada ou pelo
+            // Agente Opex) conta como ativa, como no jogo. Paginação pela posição na lista filtrada.
+            const all = views(await listAll(client, { channels, categories: categoryOfKind("missao") }), campaignId).filter((item) => item.status === query.status)
+            const start = Number(query.cursor?.match(/^o:(\d+)$/)?.[1] ?? 0)
+            const end = start + query.limit
+            return { items: all.slice(start, end), nextCursor: end < all.length ? `o:${end}` : null }
+        }
+        const result = await listPage(client, { channels, categories: query.kind ? categoryOfKind(query.kind) : undefined, limit: query.limit, cursor: query.cursor })
         return { items: views(result.memories, campaignId), nextCursor: result.next_cursor }
     })
 }
@@ -339,10 +364,15 @@ export async function flushPendingWrites(): Promise<{ delivered: number; failed:
                 await PendingWrite.deleteOne({ _id: entry._id, updatedAt: entry.updatedAt })
                 delivered++
             } catch (error) {
-                const retry = isRetryable(error)
-                await PendingWrite.updateOne({ _id: entry._id, updatedAt: entry.updatedAt }, { $set: { lastError: messageOf(error).slice(0, 500), failed: !retry }, $inc: { attempts: 1 } })
-                if (!retry) failed++
-                else break
+                // Rede inteira fora: para e tenta tudo no próximo ciclo. Falha desta entrada (validação, 5xx ou erro
+                // inesperado repetido): conta a tentativa e segue — uma entrada ruim não trava as seguintes.
+                if (isServiceDown(error)) {
+                    await PendingWrite.updateOne({ _id: entry._id, updatedAt: entry.updatedAt }, { $set: { lastError: messageOf(error).slice(0, 500) } })
+                    break
+                }
+                const giveUp = !isRetryable(error) || (entry.attempts ?? 0) + 1 >= PENDING_MAX_ATTEMPTS
+                await PendingWrite.updateOne({ _id: entry._id, updatedAt: entry.updatedAt }, { $set: { lastError: messageOf(error).slice(0, 500), failed: giveUp }, $inc: { attempts: 1 } })
+                if (giveUp) failed++
             }
         }
     }

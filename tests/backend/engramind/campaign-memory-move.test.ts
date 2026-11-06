@@ -10,9 +10,11 @@ vi.mock("@/lib/audit/record", () => ({ recordAudit, AcaoAuditoria: { CRIAR: "CRI
 vi.mock("@/lib/pusher/channels", () => ({ publishToChannels: vi.fn(async () => undefined) }))
 
 const { runBootstrap } = await import("@/features/engramind/server/bootstrap")
-const { moveCampaignMemories, campaignMoveRows, downloadCampaignBackup, legacyKeys } = await import("@/features/engramind/server/campaign-memory-move")
+const { moveCampaignMemories, campaignMoveRows, downloadCampaignBackup, legacyKeys, BACKUP_PART_CHARS } = await import("@/features/engramind/server/campaign-memory-move")
 const { campaignChannel } = await import("@/features/engramind/constants")
 const { MaddoxCampaignModel } = await import("@/features/maddox/models")
+const { EngramindState } = await import("@/features/engramind/server/models")
+const { MemoryBackup } = await import("@/features/engramind/server/migration-models")
 
 vi.setConfig({ testTimeout: 20_000 })
 
@@ -80,6 +82,41 @@ describe("mover as memórias antigas das campanhas", () => {
         expect(rows.find((row) => row.campaignId === String(campaignId))).toMatchObject({ deleted: 0, error: expect.any(String) })
         expect(await legacy().countDocuments({ campaignId })).toBe(3)
         expect(rows.find((row) => row.campaignId === String(other))).toMatchObject({ deleted: 1 })
+    })
+
+    it("cada execução acrescenta um backup (nenhum é substituído); coleção vazia não gera backup; JSON grande vai em partes", async () => {
+        await seed()
+        await legacy().insertOne({ campaignId, kind: "fato", title: "Longa", titleKey: "longa", text: "x".repeat(BACKUP_PART_CHARS + 10), visibility: "players", tags: [] })
+        fake.state.textMax = 20_000
+        await moveCampaignMemories("admin-1")
+        const state = await EngramindState.findById("global").lean()
+        expect(state!.campaignBackups).toHaveLength(1)
+        expect(state!.campaignBackups[0]).toMatchObject({ count: 5 })
+        expect(state!.campaignBackups[0]!.parts).toBeGreaterThan(1)
+        const first = await downloadCampaignBackup()
+        expect(JSON.parse(first.body)).toHaveLength(5)
+        // A memória longa passou do limite: ficou no banco, e a segunda execução gera outro backup (só com ela).
+        await moveCampaignMemories("admin-1")
+        const after = await EngramindState.findById("global").lean()
+        expect(after!.campaignBackups).toHaveLength(2)
+        expect(JSON.parse((await downloadCampaignBackup(after!.campaignBackups[0]!.id)).body)).toHaveLength(5)
+        await legacy().deleteMany({})
+        await moveCampaignMemories("admin-1")
+        expect((await EngramindState.findById("global").lean())!.campaignBackups).toHaveLength(2)
+        // Parte faltando: o download recusa em vez de entregar um arquivo truncado.
+        await MemoryBackup.deleteOne({ _id: `${after!.campaignBackups[0]!.id}:p1` })
+        await expect(downloadCampaignBackup(after!.campaignBackups[0]!.id)).rejects.toMatchObject({ status: 500 })
+    })
+
+    it("texto acima do limite do canal não é cortado: fica fora da importação e nada da campanha é apagado", async () => {
+        await seed()
+        await legacy().insertOne({ campaignId, kind: "fato", title: "Enorme", titleKey: "enorme", text: "y".repeat(5000), visibility: "players", tags: [] })
+        const rows = await moveCampaignMemories("admin-1")
+        const row = rows.find((item) => item.campaignId === String(campaignId))!
+        expect(row).toMatchObject({ deleted: 0, error: expect.stringContaining("passam do limite de texto") })
+        expect(await legacy().countDocuments({ campaignId })).toBe(4)
+        expect([...fake.state.memories.values()].some((item) => item.key === "mx:fato:enorme")).toBe(false)
+        expect(rows.find((item) => item.campaignId === String(other))).toMatchObject({ deleted: 1 })
     })
 
     it("chave repetida na mesma campanha recebe o sufixo do _id", () => {

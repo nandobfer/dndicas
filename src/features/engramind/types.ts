@@ -117,7 +117,8 @@ export interface MemoryMigrationDto {
     importReport: MigrationImportReportDto[]
     budget: { key: string; label: string; tokens: number; budget: number; over: boolean; memories: number }[]
     campaigns: CampaignMoveRowDto[]
-    campaignBackup: { count: number; sha256: string; createdAt: string } | null
+    /** Do mais recente ao mais antigo. */
+    campaignBackups: { id: string; count: number; sha256: string; createdAt: string }[]
     categoryNotices: string[]
     /** Categorias e limite de texto do Engramind (vazio/padrão quando ele não responde). */
     categories: { key: string; label: string }[]

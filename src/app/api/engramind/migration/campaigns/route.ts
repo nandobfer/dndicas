@@ -11,10 +11,11 @@ export const dynamic = "force-dynamic"
 
 const PERMISSION = "integrations.engramind.edit"
 
-/** GET — baixa o backup das memórias antigas das campanhas (JSON com SHA-256). */
-export const GET = withRoute(async () => {
+/** GET `?id=` — baixa um backup das memórias antigas das campanhas (sem `id`, o mais recente; JSON com SHA-256). */
+export const GET = withRoute(async ({ req }) => {
     const actor = await requirePermissionActor(PERMISSION)
-    const file = await downloadCampaignBackup()
+    const id = new URL(req.url).searchParams.get("id")
+    const file = await downloadCampaignBackup(id ? id.slice(0, 200) : null)
     await auditEngramind(actor.id, "migracao", AcaoAuditoria.EXECUTAR, { passo: "download-backup-campanhas" })
     return new Response(file.body, { headers: { "Content-Type": "application/json; charset=utf-8", "Content-Disposition": `attachment; filename="${file.filename}"`, "Cache-Control": "no-store" } })
 })
