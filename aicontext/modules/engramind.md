@@ -1,7 +1,7 @@
 # Módulo: Engramind — rede de memórias (DND-21)
 
 O dndicas é um **app consumidor** do Engramind (`@engramind/client`, modo `app`; versão em `package.json`).
-As memórias dos agentes e o espelho das memórias de campanha do Maddox ficam na rede; a **gestão** da rede
+As memórias dos agentes e as memórias das campanhas do Maddox (das quais a rede é a **única fonte**) ficam na rede; a **gestão** da rede
 (apps, tokens admin, configurações, consolidação, Redator) fica no Opex. Contrato: `docs/openapi.json` do
 repositório do Engramind (a versão conferida está no topo de `tests/helpers/fake-engramind.ts`).
 
@@ -70,34 +70,45 @@ adequada (chave normalizada; conflito e lista cheia voltam em pt-BR).
 Globais na rede; o dndicas só cria (`create_category`, idempotente; editar e remover ficam no Opex). As das
 campanhas são `FATO`, `EVENTO`, `LOCAL`, `MISSAO`, `RELACAO` e `OUTRO` (prioridades negativas, para não
 reordenar o contexto dos outros apps), garantidas no bootstrap e **na criação de cada campanha**. Conflito usa a
-existente; lista cheia vira aviso e o espelho grava em `OUTRO` (ou na primeira) sem trocar o tipo do jogo.
+existente; lista cheia vira aviso e a gravação usa `OUTRO` (ou a primeira).
 
-## Espelho das campanhas (`server/campaign-mirror.ts`, `server/campaign-channels.ts`)
+## Memórias das campanhas (`server/campaign-memories.ts`, `server/campaign-channels.ts`)
 
-O MongoDB é a fonte do jogo. Canais `dndicas/maddox/campanhas/<id>/{jogadores,mestre}`, criados na criação da
-campanha (assinatura exata `search` do Maddox). Formato (`campaign-mirror-format.ts`): `key = mx-<_id>` com
-`upsert` (o webhook que chega antes do id ser salvo acha a memória pela chave), `title` travado, categoria pelo
-tipo e a linha `Status: …` só nas missões (ausente/inválida mantém o status).
+O Engramind é a **única fonte**: nada fica no MongoDB. Canais `dndicas/maddox/campanhas/<id>/{jogadores,mestre}`,
+criados na criação da campanha (assinatura exata `search` do Maddox). Formato (`campaign-memory-format.ts`):
 
-- **Jogo → rede**: sem espera; escondida → arquivada; troca de visibilidade → `move_memory`. Falha marca
-  `engramindSyncPending` (o cron reenvia) e nunca afeta o jogo.
-- **Rede → jogo** (webhook e cron): lê com o token de app; aplica quando a versão é maior que
-  `engramindVersion` (anti-laço; vale a última gravação), em update condicional. Criar num canal de campanha
-  cria no jogo (`origin: "user"`); arquivar esconde (`hiddenAt`); excluir remove; mover troca visibilidade ou
-  campanha; para fora das campanhas remove; campanha inexistente é ignorada. Índice único em
-  `engramindMemoryId` evita duplicar com cron e webhook juntos.
-- **Cron** `engramind-campaign-memories-sync` (15 min) e "Sincronizar agora": rede das campanhas, pendentes,
-  alteradas desde a última execução e varredura de ids para exclusões perdidas.
-- **Ciclo de vida**: campanha `archived` arquiva os dois canais; fora de `archived`, restaura (melhor esforço,
-  auditado). Nenhum fluxo do dndicas muda o status para `archived` nem exclui campanha hoje, então quem aplica
-  isso é a reconciliação (cron e "Sincronizar agora"), que confere os canais de toda campanha.
-- **Movida para fora das campanhas** com o webhook perdido: a varredura de ids do cron relê a memória e a remove
-  do jogo.
+| Jogo | Engramind |
+|---|---|
+| campanha + visibilidade | canal `…/jogadores` ou `…/mestre` |
+| tipo | categoria (`FATO`, `EVENTO`, `LOCAL`, `MISSAO`, `RELACAO`, `OUTRO`) |
+| tipo + título (gravar sem duplicar) | `key` `mx:<tipo>:<título sem acento>` (até 80; título longo vira prefixo + hash) |
+| marco de combate | `key` `mx:combate:<combatId>` (um por combate) |
+| situação da missão / turno | tags reservadas `status:<situação>` e `turno:<n>` (não aparecem como tags) |
+| escondida | memória arquivada (o `upsert` da mesma chave reativa) |
+
+- **Gravação** (`save_memory`, marco de combate): token `dndicas/maddox`; acha pela chave nos dois canais (troca
+  de visibilidade → `move_memory`); sem chave (criada no Opex), acha pelo título na categoria e atualiza pelo id;
+  texto acima de `memory.text_max` é cortado com aviso ao narrador.
+- **Fila temporária** (`engramind_pending_writes`, `server/pending-writes.ts`): rede fora, 5xx, 429 ou token
+  recusado → a gravação espera ali (uma por campanha + chave; a mais nova substitui) e o narrador é avisado. O cron
+  entrega e **apaga**; recusa de validação fica marcada na aba Sincronização com "Descartar". Nada lê a fila.
+- **Leitura**: narrador (prompt: missões ativas + recentes; `search_memories`) nos dois canais com o token do
+  Maddox; **Diário** (resumo, listas por tipo com o cursor da rede, busca) **só no canal dos jogadores**, com o
+  token de app. Sem a rede, o prompt segue sem as memórias, `search_memories` responde erro acionável e o Diário
+  avisa (`memoriesUnavailable`, `503 ENGRAMIND_UNAVAILABLE` nas anotações). Não há cópia de reserva.
+- **Rotina** `engramind-campaign-memories-sync` (15 min, `server/campaign-sync.ts`) e "Sincronizar agora": rede de
+  cada campanha, ciclo de vida dos canais (`archived` arquiva; fora disso, restaura) e a entrega da fila.
+- **Webhook**: mudança no canal dos jogadores avisa os membros (`maddox.campaign.changed`) e o Diário recarrega.
+- **Memórias antigas** (`maddox_campaign_memories`, de antes desta revisão): aba Migração → "Mover memórias"
+  (`server/campaign-memory-move.ts`): backup da coleção (SHA-256, baixável), `import_memories` por campanha e canal
+  com as chaves acima, conferência de cada uma pela chave e exclusão **só** dos documentos da campanha que
+  conferiram (divergência → nada apagado, com o motivo). Até mover, elas não aparecem no Diário nem no narrador
+  (aviso na aba Sincronização).
 
 **Redator.** O Engramind só aceita `redator.rewrite_text` por canal com token admin. O dndicas tenta desligar a
 reescrita nos canais das campanhas; com `403` marca "não suportado" (`engramind_state.channelSettings`, aviso na
 aba Sincronização) e refaz a verificação a cada 24 h. Até lá, uma reescrita do Redator chega ao jogo pela regra
-"vale a última gravação" (título e status preservados). Pendente: pedido ao Engramind para liberar essa
+"vale a última gravação" (título e tags preservados): como a rede é a fonte, o texto reescrito é o que o jogo lê. Pendente: pedido ao Engramind para liberar essa
 configuração ao token de app nos canais que ele criou.
 
 ## Migração (`server/migration.ts`, aba Migração)
@@ -108,20 +119,19 @@ revisão; destino sempre o canal da lista; pode propor categoria nova) → **or�
 por combinação de turno, "Compactar com o curador") → **revisão** (aprovar, rejeitar, editar; descartadas pedem
 "Aceitar descarte" ou "Migrar mesmo assim"; o lote não aprova o que não cabe) → **importação** (só aprovadas,
 token de app, lotes de `limits.max_batch`, chave de idempotência; categorias novas criadas antes). Etapa em
-andamento num reinício vira falha. **Histórico das campanhas**: `import_memories` por campanha e canal com a
-`key` `mx-<id>`, contagem por campanha.
+andamento num reinício vira falha. **Memórias das campanhas**: ver "Memórias antigas" acima.
 
 ## Webhook (`/api/engramind/webhook`)
 
 Público, só pela assinatura (`401` sem corpo); eventos repetidos descartados (`engramind_webhook_events`, 24 h).
-Suja o contexto do canal, repassa ao SSE só ids e tipos, dispara o espelho das campanhas e relê as categorias em
-`settings.updated`.
+Suja o contexto do canal, repassa ao SSE só ids e tipos, avisa os membros da campanha quando o canal dos jogadores
+muda e relê as categorias em `settings.updated`.
 
 ## Dados
 
 `engramind_state` (bootstrap, saúde do contexto, sincronização, avisos), `engramind_context_cache`,
-`engramind_webhook_events`, `engramind_memory_backups`, `engramind_memory_migration` e os campos novos de
-`maddox_campaign_memories` (ver `maddox.md`).
+`engramind_webhook_events`, `engramind_memory_backups` (inclui o backup das memórias antigas das campanhas),
+`engramind_memory_migration` e `engramind_pending_writes` (fila temporária; não é fonte).
 
 ## Logs
 
@@ -131,5 +141,7 @@ token ou texto de memória.
 ## Testes
 
 `tests/helpers/fake-engramind.ts` (Engramind falso no `fetch`, só as rotas do contrato; resto → 405),
-`tests/helpers/xyflow.tsx`, `tests/backend/engramind/*` (bootstrap, contexto, proxy e webhook, espelho,
-migração, permissões, ferramentas e teste de conexão; MongoDB em memória) e `tests/frontend/engramind/*`.
+`tests/helpers/xyflow.tsx`, `tests/backend/engramind/*` (bootstrap, contexto, proxy e webhook, memórias das
+campanhas, mover e apagar, migração, permissões, ferramentas e teste de conexão; MongoDB em memória) e
+`tests/frontend/engramind/*`. Os testes do Maddox usam `tests/helpers/campaign-memories-mock.ts` (substituto em
+memória de `campaign-memories`, com as mesmas regras de chave e tags).
