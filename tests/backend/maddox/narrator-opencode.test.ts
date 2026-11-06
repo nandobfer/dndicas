@@ -39,6 +39,8 @@ vi.mock("@/lib/ai/stream", () => ({
     },
 }))
 
+vi.mock("@/features/engramind/server/campaign-memories", async () => (await import("../../helpers/campaign-memories-mock")).campaignMemoriesModule)
+
 const { MaddoxCampaignModel } = await import("@/features/maddox/models")
 const { aiMaddoxMaster } = await import("@/features/maddox/server/narrator")
 const { verifyMaddoxTurnToken } = await import("@/features/maddox/server/master-turn-token")
