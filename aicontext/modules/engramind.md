@@ -90,11 +90,11 @@ criados na criação da campanha (assinatura exata `search` do Maddox). Formato 
   de visibilidade → `move_memory`); sem chave (criada no Opex), acha pelo título na categoria e atualiza pelo id;
   texto acima de `memory.text_max` é cortado com aviso ao narrador.
 - **Fila temporária** (`engramind_pending_writes`, `server/pending-writes.ts`): rede fora, 5xx, 429 ou token
-  recusado → a gravação espera ali (uma por campanha + chave; a mais nova substitui; texto já cortado no último
-  limite conhecido do canal, ou 4000) e o narrador é avisado. O cron entrega e **apaga**. Rede inteira fora (sem
-  conexão, token recusado, limite de taxa) para a entrega até o próximo ciclo; falha só daquela entrada (validação,
-  5xx, erro inesperado) conta a tentativa e segue para a próxima — depois de 5 tentativas, ou na recusa de
-  validação, a entrada fica marcada na aba Sincronização com "Descartar". Nada lê a fila.
+  recusado → a gravação espera ali (uma por campanha + chave; a mais nova substitui; **texto inteiro** — o limite
+  real do canal é aplicado na entrega) e o narrador é avisado. O cron entrega e **apaga**. Rede inteira fora (sem
+  conexão, token recusado, limite de taxa, ou 5xx sem nenhuma entrega no ciclo) para sem gastar tentativas; um 5xx
+  só conta tentativa para a entrada quando outra foi entregue no mesmo ciclo. Recusa de validação, erro inesperado
+  repetido ou 5 tentativas marcam a entrada na aba Sincronização com "Descartar". Nada lê a fila.
 - **Leitura**: narrador (prompt: missões ativas + recentes; `search_memories`) nos dois canais com o token do
   Maddox; **Diário** (resumo, listas por tipo com o cursor da rede, busca) **só no canal dos jogadores**, com o
   token de app. Sem a rede, o prompt segue sem as memórias, `search_memories` responde erro acionável e o Diário
@@ -104,7 +104,7 @@ criados na criação da campanha (assinatura exata `search` do Maddox). Formato 
 - **Webhook**: mudança no canal dos jogadores avisa os membros (`maddox.campaign.changed`) e o Diário recarrega.
 - **Memórias antigas** (`maddox_campaign_memories`, de antes desta revisão): aba Migração → "Mover memórias"
   (`server/campaign-memory-move.ts`): backup da coleção a cada execução com dados (SHA-256, em partes de 2 milhões
-  de caracteres; os backups se acumulam em `engramind_state.campaignBackups` e cada um é baixável), `import_memories`
+  de caracteres, sem partir um emoji na fronteira; os backups se acumulam em `engramind_state.campaignBackups` e cada um é baixável), `import_memories`
   por campanha e canal com as chaves acima, conferência de cada uma pela chave e exclusão **só** dos documentos da
   campanha quando todos conferiram (divergência → nada apagado, com o motivo). Texto acima de `memory_text_max` do
   canal nunca é cortado: fica fora da importação e conta como divergência. Até mover, elas não aparecem no Diário nem no narrador

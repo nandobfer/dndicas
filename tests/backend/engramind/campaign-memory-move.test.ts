@@ -8,10 +8,12 @@ vi.mock("@/lib/db", async (importOriginal) => (await import("./helpers")).libDbM
 const recordAudit = vi.hoisted(() => vi.fn(async () => undefined))
 vi.mock("@/lib/audit/record", () => ({ recordAudit, AcaoAuditoria: { CRIAR: "CRIAR", ATUALIZAR: "ATUALIZAR", EXECUTAR: "EXECUTAR", IMPORTAR: "IMPORTAR", EXCLUIR: "EXCLUIR" } }))
 vi.mock("@/lib/pusher/channels", () => ({ publishToChannels: vi.fn(async () => undefined) }))
+vi.mock("@/features/auth/server/actor", () => ({ requirePermissionActor: vi.fn(async () => ({ id: "admin-1" })) }))
 
 const { runBootstrap } = await import("@/features/engramind/server/bootstrap")
-const { moveCampaignMemories, campaignMoveRows, downloadCampaignBackup, legacyKeys, BACKUP_PART_CHARS } = await import("@/features/engramind/server/campaign-memory-move")
+const { moveCampaignMemories, campaignMoveRows, downloadCampaignBackup, legacyKeys, BACKUP_PART_CHARS, splitBackupParts } = await import("@/features/engramind/server/campaign-memory-move")
 const { campaignChannel } = await import("@/features/engramind/constants")
+const campaignsRoute = await import("@/app/api/engramind/migration/campaigns/route")
 const { MaddoxCampaignModel } = await import("@/features/maddox/models")
 const { EngramindState } = await import("@/features/engramind/server/models")
 const { MemoryBackup } = await import("@/features/engramind/server/migration-models")
@@ -117,6 +119,56 @@ describe("mover as memórias antigas das campanhas", () => {
         expect(await legacy().countDocuments({ campaignId })).toBe(4)
         expect([...fake.state.memories.values()].some((item) => item.key === "mx:fato:enorme")).toBe(false)
         expect(rows.find((item) => item.campaignId === String(other))).toMatchObject({ deleted: 1 })
+    })
+
+    it("as partes do backup nunca partem um par substituto (emoji na fronteira)", () => {
+        for (let shift = 0; shift < 8; shift++) {
+            const json = JSON.stringify([{ text: `${"a".repeat(shift)}😀b😀😀c` }])
+            const size = 4
+            const parts = splitBackupParts(json, size)
+            expect(parts.join("")).toBe(json)
+            for (const part of parts) {
+                expect(part.length).toBeLessThanOrEqual(size)
+                const last = part.charCodeAt(part.length - 1)
+                expect(last >= 0xd800 && last <= 0xdbff).toBe(false)
+            }
+        }
+    })
+
+    it("backup grande com emoji exatamente na fronteira de uma parte baixa inteiro e confere o SHA-256", async () => {
+        // `[{"_id":…` → posiciona o emoji para o par cair sobre a fronteira da primeira parte.
+        const probe = JSON.stringify(await legacy().find({}).toArray())
+        expect(probe).toBe("[]")
+        const doc = { campaignId, kind: "fato", title: "Emoji", titleKey: "emoji", text: "", visibility: "players", tags: [] }
+        const inserted = await legacy().insertOne({ ...doc })
+        const prefix = JSON.stringify([{ ...(await legacy().findOne({ _id: inserted.insertedId })), text: "" }]).indexOf('"text":"') + 8
+        const filler = "a".repeat(BACKUP_PART_CHARS - 1 - prefix)
+        await legacy().updateOne({ _id: inserted.insertedId }, { $set: { text: `${filler}😀fim` } })
+        fake.state.textMax = 20
+        await moveCampaignMemories("admin-1")
+        const body = (await downloadCampaignBackup()).body
+        expect(JSON.parse(body)[0].text.endsWith("😀fim")).toBe(true)
+    })
+
+    it("rota GET: sem id baixa o mais recente; com id, aquele backup; id desconhecido = 404", async () => {
+        const { NextRequest } = await import("next/server")
+        const get = (query = "") => campaignsRoute.GET(new NextRequest(`https://dndicas.test/api/engramind/migration/campaigns${query}`), { params: Promise.resolve({}) })
+        expect((await get()).status).toBe(404)
+        await seed()
+        await legacy().insertOne({ campaignId, kind: "fato", title: "Enorme", titleKey: "enorme", text: "y".repeat(5000), visibility: "players", tags: [] })
+        await moveCampaignMemories("admin-1")
+        await moveCampaignMemories("admin-1")
+        const backups = (await EngramindState.findById("global").lean())!.campaignBackups
+        expect(backups.map((item) => item.count)).toEqual([5, 4])
+        const latest = await get()
+        expect(latest.status).toBe(200)
+        expect(latest.headers.get("content-disposition")).toContain(backups[1]!.sha256.slice(0, 8))
+        expect(JSON.parse(await latest.text())).toHaveLength(4)
+        const first = await get(`?id=${encodeURIComponent(backups[0]!.id)}`)
+        expect(JSON.parse(await first.text())).toHaveLength(5)
+        const unknown = await get("?id=campaign-memories-nao-existe")
+        expect(unknown.status).toBe(404)
+        expect(await unknown.json()).toMatchObject({ success: false, error: expect.stringContaining("Nenhum backup") })
     })
 
     it("chave repetida na mesma campanha recebe o sufixo do _id", () => {

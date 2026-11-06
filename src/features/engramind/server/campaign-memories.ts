@@ -59,8 +59,8 @@ function isServiceDown(error: unknown): boolean {
 
 /** Tentativas de uma entrada da fila antes de ela virar recusa (fica visível com "Descartar"). */
 export const PENDING_MAX_ATTEMPTS = 5
-/** Limite padrão do contrato (`memory.text_max`), usado quando não há como consultar a rede. */
-const DEFAULT_TEXT_MAX = 4000
+/** 5xx seguidos sem nenhuma entrega no ciclo: a rede está fora; para sem gastar tentativas. */
+const SERVER_ERRORS_BEFORE_STOP = 3
 
 export function isRetryable(error: unknown): boolean {
     if (!(error instanceof EngramindError)) return true
@@ -191,21 +191,13 @@ export async function saveCampaignMemory(campaignId: string, input: SaveCampaign
         origin: { source: "maddox", label: "Maddox" },
         ...(title ? { title } : {}),
     })
-    // Para a fila (sem consultar a rede): o último limite conhecido do canal, ou o padrão do contrato, já corta o texto.
-    const cached = textMaxCache.__engramindCampaignTextMax
-    const queueMax = cached ? (cached.channels.get(draftChannel) ?? cached.value) : DEFAULT_TEXT_MAX
-    const queueText = input.text.length > queueMax ? input.text.slice(0, queueMax).trimEnd() : input.text
-    const queued = (): SaveCampaignMemoryResult => ({
-        saved: true,
-        created: false,
-        pending: true,
-        ...(queueText.length < input.text.length ? { truncated: true as const, aviso: `${PENDING_NOTICE} Texto cortado em ${queueMax} caracteres (limite da rede de memórias).` } : { aviso: PENDING_NOTICE }),
-    })
+    // A fila guarda o texto inteiro: o limite real do canal é aplicado na entrega (`flushPendingWrites`).
+    const queued = (): SaveCampaignMemoryResult => ({ saved: true, created: false, pending: true, aviso: PENDING_NOTICE })
     if (!client) {
-        await enqueue(campaignId, key, draftChannel, draftBody(queueText), new Error("Token do agente dndicas/maddox indisponível"))
+        await enqueue(campaignId, key, draftChannel, draftBody(input.text), new Error("Token do agente dndicas/maddox indisponível"))
         return queued()
     }
-    let body: Record<string, unknown> = draftBody(queueText)
+    let body: Record<string, unknown> = draftBody(input.text)
     try {
         const existing = await findExisting(client, campaignId, key, input)
         const previous = existing ? readTags(existing.tags, input.kind) : null
@@ -349,6 +341,9 @@ export async function flushPendingWrites(): Promise<{ delivered: number; failed:
     const entries = await PendingWrite.find({ failed: false }).sort({ createdAt: 1 }).limit(500).lean()
     let delivered = 0
     let failed = 0
+    // Entradas que receberam 5xx: só contam tentativa se outra entrada for entregue no mesmo ciclo (aí o erro é
+    // dela); sem nenhuma entrega, o 5xx é da rede (banco fora, proxy sem upstream) e nada é gasto.
+    const serverErrors: { _id: string; updatedAt: Date; attempts: number; error: string }[] = []
     if (entries.length) {
         const client = await engramindAgentClient("maddox")
         for (const entry of entries) {
@@ -360,21 +355,39 @@ export async function flushPendingWrites(): Promise<{ delivered: number; failed:
                     continue
                 }
                 await provisionCampaignMemoryNetworkSafely(campaign)
-                await client.call("POST", "/v1/memories", { body: entry.body })
+                // Limite real do canal na entrega (a fila guarda o texto inteiro).
+                const text = String(entry.body.text ?? "")
+                const max = await textMaxOf(client, entry.channel)
+                const body = text.length > max ? { ...entry.body, text: text.slice(0, max).trimEnd() } : entry.body
+                await client.call("POST", "/v1/memories", { body })
                 await PendingWrite.deleteOne({ _id: entry._id, updatedAt: entry.updatedAt })
                 delivered++
             } catch (error) {
-                // Rede inteira fora: para e tenta tudo no próximo ciclo. Falha desta entrada (validação, 5xx ou erro
-                // inesperado repetido): conta a tentativa e segue — uma entrada ruim não trava as seguintes.
+                // Rede inteira fora: para e tenta tudo no próximo ciclo, sem gastar tentativas.
                 if (isServiceDown(error)) {
                     await PendingWrite.updateOne({ _id: entry._id, updatedAt: entry.updatedAt }, { $set: { lastError: messageOf(error).slice(0, 500) } })
                     break
                 }
+                if (error instanceof EngramindError && error.status >= 500) {
+                    serverErrors.push({ _id: entry._id, updatedAt: entry.updatedAt, attempts: entry.attempts ?? 0, error: messageOf(error).slice(0, 500) })
+                    if (!delivered && serverErrors.length >= SERVER_ERRORS_BEFORE_STOP) break
+                    continue
+                }
+                // Falha desta entrada (validação ou erro inesperado): conta a tentativa e segue para a próxima.
                 const giveUp = !isRetryable(error) || (entry.attempts ?? 0) + 1 >= PENDING_MAX_ATTEMPTS
                 await PendingWrite.updateOne({ _id: entry._id, updatedAt: entry.updatedAt }, { $set: { lastError: messageOf(error).slice(0, 500), failed: giveUp }, $inc: { attempts: 1 } })
                 if (giveUp) failed++
             }
         }
+    }
+    for (const entry of serverErrors) {
+        if (!delivered) {
+            await PendingWrite.updateOne({ _id: entry._id, updatedAt: entry.updatedAt }, { $set: { lastError: entry.error } })
+            continue
+        }
+        const giveUp = entry.attempts + 1 >= PENDING_MAX_ATTEMPTS
+        await PendingWrite.updateOne({ _id: entry._id, updatedAt: entry.updatedAt }, { $set: { lastError: entry.error, failed: giveUp }, $inc: { attempts: 1 } })
+        if (giveUp) failed++
     }
     const remaining = await PendingWrite.countDocuments({})
     return { delivered, failed, remaining }

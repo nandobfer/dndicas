@@ -58,6 +58,23 @@ export async function legacyCampaignMemoryCount(): Promise<number> {
 export const BACKUP_PART_CHARS = 2_000_000
 
 /**
+ * Divide o JSON em partes de até `size` unidades UTF-16 sem partir um par substituto (emoji): uma metade solta
+ * seria gravada pelo BSON como U+FFFD e o SHA-256 da concatenação deixaria de conferir.
+ */
+export function splitBackupParts(json: string, size = BACKUP_PART_CHARS): string[] {
+    const parts: string[] = []
+    let start = 0
+    while (start < json.length) {
+        let end = Math.min(start + size, json.length)
+        const last = json.charCodeAt(end - 1)
+        if (end < json.length && end - start > 1 && last >= 0xd800 && last <= 0xdbff) end--
+        parts.push(json.slice(start, end))
+        start = end
+    }
+    return parts
+}
+
+/**
  * Backup da coleção inteira antes de apagar. Cada execução ACRESCENTA um backup à lista (nenhum é substituído) e
  * o JSON vai em partes (`<id>:p<n>`). Coleção vazia não gera backup (não há o que apagar).
  */
@@ -69,7 +86,7 @@ async function backupCollection(actorId: string): Promise<{ id: string; count: n
     const id = `${BACKUP_PREFIX}${new Types.ObjectId().toString()}`
     const createdAt = new Date()
     const parts: { _id: string; createdAt: Date; count: number; sha256: string; json: string }[] = []
-    for (let start = 0, index = 0; start < json.length; start += BACKUP_PART_CHARS, index++) parts.push({ _id: `${id}:p${index}`, createdAt, count: rows.length, sha256, json: json.slice(start, start + BACKUP_PART_CHARS) })
+    splitBackupParts(json).forEach((part, index) => parts.push({ _id: `${id}:p${index}`, createdAt, count: rows.length, sha256, json: part }))
     await MemoryBackup.insertMany(parts)
     await EngramindState.updateOne({ _id: ENGRAMIND_STATE_ID }, { $push: { campaignBackups: { id, count: rows.length, sha256, createdAt, parts: parts.length } } }, { upsert: true })
     await auditEngramind(actorId, "migracao", AcaoAuditoria.EXECUTAR, { passo: "backup-campanhas", quantidade: rows.length, sha256, partes: parts.length })

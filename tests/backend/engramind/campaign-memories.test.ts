@@ -11,7 +11,7 @@ vi.mock("@/lib/pusher/channels", () => ({ publishToChannels }))
 vi.mock("@/features/maddox/server/game", () => ({ publishGameChanged: vi.fn(async () => undefined) }))
 
 const { runBootstrap } = await import("@/features/engramind/server/bootstrap")
-const { saveCampaignMemory, searchCampaignMemories, listCampaignMemories, narratorMemoryIndex, countPlayerMemories, flushPendingWrites, PENDING_MAX_ATTEMPTS } = await import("@/features/engramind/server/campaign-memories")
+const { saveCampaignMemory, searchCampaignMemories, listCampaignMemories, narratorMemoryIndex, countPlayerMemories, flushPendingWrites, PENDING_MAX_ATTEMPTS, resetCampaignMemoriesForTests } = await import("@/features/engramind/server/campaign-memories")
 const { syncCampaignMemories, getCampaignSync } = await import("@/features/engramind/server/campaign-sync")
 const { syncCampaignChannelLifecycle } = await import("@/features/engramind/server/campaign-channels")
 const { onWebhookEvent } = await import("@/features/engramind/server/webhook")
@@ -114,11 +114,9 @@ describe("gravação (Engramind como única fonte)", () => {
     })
 
     it("recusa de validação não vai para a fila: volta ao narrador; uma da fila recusada fica marcada", async () => {
-        fake.state.textMax = 5
-        await PendingWrite.create({ _id: `${id}:mx:fato:x`, campaignId: id, key: "mx:fato:x", channel: players(), body: { channel: players(), key: "mx:fato:x", upsert: true, text: "texto longo demais", category: "FATO" } })
+        await PendingWrite.create({ _id: `${id}:mx:fato:x`, campaignId: id, key: "mx:fato:x", channel: players(), body: { channel: players(), key: "mx:fato:x", upsert: true, text: "Categoria que não existe.", category: "NAO_EXISTE" } })
         expect(await flushPendingWrites()).toMatchObject({ delivered: 0, failed: 1, remaining: 1 })
         expect(await getCampaignSync()).toMatchObject({ failures: [expect.objectContaining({ failed: true })] })
-        fake.state.textMax = 4000
         await net("POST", `/v1/channels/${encodeURIComponent(players())}/archive`)
         await expect(tool("save_memory", { kind: "fato", title: "Nada", text: "Canal arquivado." })).rejects.toThrow(/recusou/)
         expect(await PendingWrite.countDocuments({ key: "mx:fato:nada" })).toBe(0)
@@ -126,20 +124,38 @@ describe("gravação (Engramind como única fonte)", () => {
 })
 
 describe("fila: entrada ruim não trava as seguintes", () => {
-    it("5xx repetido conta tentativas e vira recusa depois do teto, sem impedir a entrega das próximas", async () => {
+    it("5xx de uma entrada só conta tentativa quando outra é entregue no ciclo; vira recusa no teto sem travar as próximas", async () => {
         const body = (key: string, text: string) => ({ channel: players(), key, upsert: true, text, category: "FATO", title: key.slice(8) })
-        await PendingWrite.create({ _id: `${id}:mx:fato:ruim`, campaignId: id, key: "mx:fato:ruim", channel: players(), body: body("mx:fato:ruim", "RUIM") })
-        await PendingWrite.create({ _id: `${id}:mx:fato:boa`, campaignId: id, key: "mx:fato:boa", channel: players(), body: body("mx:fato:boa", "Boa.") })
+        const queue = (key: string, text: string) => PendingWrite.create({ _id: `${id}:${key}`, campaignId: id, key, channel: players(), body: body(key, text) })
+        await queue("mx:fato:ruim", "RUIM")
         const original = fake.fetch
         vi.stubGlobal("fetch", (async (input: RequestInfo | URL, init?: RequestInit) => {
             if (String(init?.body ?? "").includes('"RUIM"')) return new Response(JSON.stringify({ error: { code: "INTERNAL", message: "falhou" } }), { status: 500, headers: { "Content-Type": "application/json" } })
             return original(input as string, init)
         }) as typeof fetch)
-        expect(await flushPendingWrites()).toMatchObject({ delivered: 1, failed: 0, remaining: 1 })
-        expect(remotes().map((item) => item.key)).toEqual(["mx:fato:boa"])
-        for (let attempt = 1; attempt < PENDING_MAX_ATTEMPTS; attempt++) await flushPendingWrites()
+        for (let attempt = 1; attempt <= PENDING_MAX_ATTEMPTS; attempt++) {
+            await queue(`mx:fato:boa-${attempt}`, `Boa ${attempt}.`)
+            expect(await flushPendingWrites()).toMatchObject({ delivered: 1 })
+        }
+        expect(remotes().map((item) => item.key).sort()).toEqual(Array.from({ length: PENDING_MAX_ATTEMPTS }, (_, index) => `mx:fato:boa-${index + 1}`).sort())
         expect(await PendingWrite.findById(`${id}:mx:fato:ruim`).lean()).toMatchObject({ failed: true, attempts: PENDING_MAX_ATTEMPTS })
-        expect(await flushPendingWrites()).toMatchObject({ delivered: 0, remaining: 1 })
+    })
+
+    it("5xx em tudo (rede fora atrás de um proxy): nenhuma tentativa é gasta e tudo é entregue quando ela volta", async () => {
+        await saveCampaignMemory(id, { kind: "fato", title: "Antes", text: "x" })
+        fake.state.down = true
+        for (const title of ["Um", "Dois", "Tres", "Quatro"]) await saveCampaignMemory(id, { kind: "fato", title, text: `${title}.` })
+        fake.state.down = false
+        const original = fake.fetch
+        let serverDown = true
+        vi.stubGlobal("fetch", (async (input: RequestInfo | URL, init?: RequestInit) => {
+            if (serverDown && (init?.method ?? "GET") === "POST" && String(input).endsWith("/v1/memories")) return new Response("<html>502 Bad Gateway</html>", { status: 502, headers: { "Content-Type": "text/html" } })
+            return original(input as string, init)
+        }) as typeof fetch)
+        for (let cycle = 0; cycle < PENDING_MAX_ATTEMPTS + 2; cycle++) expect(await flushPendingWrites()).toMatchObject({ delivered: 0, failed: 0, remaining: 4 })
+        expect(await PendingWrite.countDocuments({ $or: [{ attempts: { $gt: 0 } }, { failed: true }] })).toBe(0)
+        serverDown = false
+        expect(await flushPendingWrites()).toMatchObject({ delivered: 4, remaining: 0 })
     })
 
     it("rede inteira fora para a entrega (tenta tudo no próximo ciclo, sem gastar tentativas)", async () => {
@@ -153,20 +169,31 @@ describe("fila: entrada ruim não trava as seguintes", () => {
         expect(await flushPendingWrites()).toMatchObject({ delivered: 2, remaining: 0 })
     })
 
-    it("o texto já entra na fila cortado no limite conhecido do canal (rede fora e sem o token do agente)", async () => {
-        fake.state.textMax = 30
-        await saveCampaignMemory(id, { kind: "fato", title: "Lê o limite", text: "curto" })
+    it("a fila guarda o texto inteiro e a entrega aplica o limite real do canal (sem adivinhar)", async () => {
         fake.state.down = true
-        expect(await saveCampaignMemory(id, { kind: "fato", title: "Rede fora", text: "z".repeat(100) })).toMatchObject({ pending: true, truncated: true })
-        expect(String((await PendingWrite.findOne({ key: "mx:fato:rede-fora" }).lean())!.body.text)).toHaveLength(30)
-        // Sem o token do agente (e sem esperar o provisionamento sob demanda, que falha com a rede fora).
+        expect(await saveCampaignMemory(id, { kind: "fato", title: "Longa", text: "z".repeat(6000) })).toMatchObject({ pending: true })
+        expect(String((await PendingWrite.findOne({ key: "mx:fato:longa" }).lean())!.body.text)).toHaveLength(6000)
+        // Sem o token do agente: também entra inteira.
         const { writeEngramindSecrets, resetEngramindLazyForTests } = await import("@/features/engramind/server/client")
         await writeEngramindSecrets({ agentTokenMaddox: null }, "admin-1")
         const { invalidateStoredIntegrations } = await import("@/lib/integrations/store")
         invalidateStoredIntegrations()
         resetEngramindLazyForTests({ waitMs: 0 })
-        expect(await saveCampaignMemory(id, { kind: "fato", title: "Sem token", text: "w".repeat(100) })).toMatchObject({ pending: true, truncated: true })
-        expect(String((await PendingWrite.findOne({ key: "mx:fato:sem-token" }).lean())!.body.text)).toHaveLength(30)
+        expect(await saveCampaignMemory(id, { kind: "fato", title: "Sem token", text: "w".repeat(6000) })).toMatchObject({ pending: true })
+        expect(String((await PendingWrite.findOne({ key: "mx:fato:sem-token" }).lean())!.body.text)).toHaveLength(6000)
+    })
+
+    it("na entrega, o texto acima do limite do canal é cortado no limite real (8000 aceita inteiro; 50 corta)", async () => {
+        const body = (key: string) => ({ channel: players(), key, upsert: true, text: "y".repeat(6000), category: "FATO", title: key.slice(8) })
+        await PendingWrite.create({ _id: `${id}:mx:fato:a`, campaignId: id, key: "mx:fato:a", channel: players(), body: body("mx:fato:a") })
+        fake.state.textMax = 8000
+        expect(await flushPendingWrites()).toMatchObject({ delivered: 1 })
+        expect(remotes().find((item) => item.key === "mx:fato:a")!.text).toHaveLength(6000)
+        resetCampaignMemoriesForTests()
+        fake.state.textMax = 50
+        await PendingWrite.create({ _id: `${id}:mx:fato:b`, campaignId: id, key: "mx:fato:b", channel: players(), body: body("mx:fato:b") })
+        expect(await flushPendingWrites()).toMatchObject({ delivered: 1, failed: 0 })
+        expect(remotes().find((item) => item.key === "mx:fato:b")!.text).toHaveLength(50)
     })
 })
 
