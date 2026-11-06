@@ -96,7 +96,9 @@ vi.mock("ai", () => ({
     },
 }))
 
-const { MaddoxCampaignMemberModel, MaddoxCampaignMemoryModel, MaddoxCampaignMessageModel, MaddoxCampaignModel, MaddoxCharacterModel, MaddoxCombatModel, MaddoxNpcModel } = await import("@/features/maddox/models")
+vi.mock("@/features/engramind/server/campaign-memories", async () => (await import("../../helpers/campaign-memories-mock")).campaignMemoriesModule)
+const { campaignMemoriesStore } = await import("../../helpers/campaign-memories-mock")
+const { MaddoxCampaignMemberModel, MaddoxCampaignMessageModel, MaddoxCampaignModel, MaddoxCharacterModel, MaddoxCombatModel, MaddoxNpcModel } = await import("@/features/maddox/models")
 const campaigns = await import("@/features/maddox/server/campaigns")
 const game = await import("@/features/maddox/server/game")
 const { applyCombatRewards } = await import("@/features/maddox/server/combat")
@@ -147,7 +149,7 @@ const kindsInOrder = async (id: string, turnNumber: number) =>
 beforeAll(async () => {
     mongo = await MongoMemoryServer.create()
     await mongoose.connect(mongo.getUri(), { dbName: "maddox_combat_campaign_test" })
-    await Promise.all([MaddoxCampaignModel.init(), MaddoxCampaignMemberModel.init(), MaddoxCharacterModel.init(), MaddoxCampaignMessageModel.init(), MaddoxNpcModel.init(), MaddoxCampaignMemoryModel.init(), MaddoxCombatModel.init()])
+    await Promise.all([MaddoxCampaignModel.init(), MaddoxCampaignMemberModel.init(), MaddoxCharacterModel.init(), MaddoxCampaignMessageModel.init(), MaddoxNpcModel.init(), MaddoxCombatModel.init()])
 }, 180_000)
 
 afterAll(async () => {
@@ -156,6 +158,7 @@ afterAll(async () => {
 }, 30_000)
 
 beforeEach(async () => {
+    campaignMemoriesStore.reset()
     await Promise.all([
         mongoose.connection.collection("users").deleteMany({}),
         MaddoxCampaignModel.deleteMany({}),
@@ -163,7 +166,6 @@ beforeEach(async () => {
         MaddoxCharacterModel.deleteMany({}),
         MaddoxCampaignMessageModel.deleteMany({}),
         MaddoxNpcModel.deleteMany({}),
-        MaddoxCampaignMemoryModel.deleteMany({}),
         MaddoxCombatModel.deleteMany({}),
         CharacterSheet.collection.deleteMany({}),
         CharacterItem.deleteMany({}),
@@ -286,8 +288,8 @@ describe("Maddox 6 — combate narrativo de ponta a ponta", () => {
         ])
         expect((await MaddoxNpcModel.findOne({ campaignId: id }).lean())!.status).toBe("dead")
         expect((await MaddoxCharacterModel.findById(doran.characterId).lean())!.currentState).toBe("Corte fundo no braço.")
-        const memory = await MaddoxCampaignMemoryModel.findOne({ campaignId: id, kind: "evento" }).lean()
-        expect(memory).toMatchObject({ title: "Combate: Emboscada no cais (turno 2)", visibility: "players", turnNumber: 4, combatId: ended!._id })
+        const memory = campaignMemoriesStore.all(String(id)).find((item) => item.kind === "evento")
+        expect(memory).toMatchObject({ title: "Combate: Emboscada no cais (turno 2)", visibility: "players", turnNumber: 4, key: `mx:combate:${ended!._id}` })
         expect(memory!.text).toContain("Varn caiu no cais")
         expect(memory!.text).toContain("Varn, o Cinzento — Morto")
         expect(await kindsInOrder(id, 4)).toEqual(["narration", "combat:end"])
@@ -543,7 +545,7 @@ describe("Maddox 6 — combate narrativo de ponta a ponta", () => {
         await game.startCampaign(id, owner)
         await waitForCampaignIdle(id)
         await playersTurn(id, owner, player, 1)
-        const memories = await MaddoxCampaignMemoryModel.find({ campaignId: id, kind: "evento" }).sort({ turnNumber: 1 }).lean()
+        const memories = campaignMemoriesStore.all(String(id)).filter((item) => item.kind === "evento").sort((a, b) => (a.turnNumber ?? 0) - (b.turnNumber ?? 0))
         expect(memories.map((memory) => [memory.title, memory.text.includes("Primeira") ? 1 : memory.text.includes("Segunda") ? 2 : 0])).toEqual([
             ["Combate: Emboscada de bandidos (turno 1)", 1],
             ["Combate: Emboscada de bandidos (turno 2)", 2],
@@ -604,7 +606,7 @@ describe("Maddox 6 — combate narrativo de ponta a ponta", () => {
         // Combate encerrado, mas sem card nem narração: os efeitos do fim ainda não rodaram.
         expect(await MaddoxCombatModel.findOne({ campaignId: id }).lean()).toMatchObject({ status: "ended", effectsApplied: false })
         expect((await MaddoxNpcModel.findOne({ campaignId: id }).lean())!.status).toBe("active")
-        expect(await MaddoxCampaignMemoryModel.countDocuments({ campaignId: id, kind: "evento" })).toBe(0)
+        expect(campaignMemoriesStore.all(String(id)).filter((item) => item.kind === "evento")).toHaveLength(0)
         expect(await MaddoxCampaignMessageModel.countDocuments({ campaignId: id, turnNumber: 2, kind: { $in: ["narration", "combat"] } })).toBe(0)
 
         // Retomada (passado o intervalo de nova tentativa).
@@ -613,7 +615,7 @@ describe("Maddox 6 — combate narrativo de ponta a ponta", () => {
         await waitForCampaignIdle(id)
         expect(await kindsInOrder(id, 2)).toEqual(["narration", "combat:end"])
         expect((await MaddoxNpcModel.findOne({ campaignId: id }).lean())!.status).toBe("dead")
-        expect(await MaddoxCampaignMemoryModel.countDocuments({ campaignId: id, kind: "evento" })).toBe(1)
+        expect(campaignMemoriesStore.all(String(id)).filter((item) => item.kind === "evento")).toHaveLength(1)
         expect(await MaddoxCombatModel.findOne({ campaignId: id }).lean()).toMatchObject({ effectsApplied: true })
         expect((await game.getGameState(id, owner)).turn).toMatchObject({ number: 2, phase: "players" })
     })

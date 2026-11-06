@@ -188,7 +188,7 @@ export function createFakeEngramind() {
             if (existing) {
                 if (!input.upsert) fail(409, "MEMORY_KEY_EXISTS", { existing_id: existing.id })
                 const status = (input.status as FakeMemory["status"]) ?? "active"
-                Object.assign(existing, { text: input.text, category, ...(input.title ? { title: input.title, title_state: "ready" } : {}), status, archived_at: status === "archived" ? (existing.archived_at ?? now) : null, version: existing.version + 1, updated_at: now })
+                Object.assign(existing, { text: input.text, category, ...(input.title ? { title: input.title, title_state: "ready" } : {}), ...(input.tags ? { tags: input.tags } : {}), status, archived_at: status === "archived" ? (existing.archived_at ?? now) : null, version: existing.version + 1, updated_at: now })
                 emit("memory.updated", existing.channel, [existing.id])
                 return { memory: existing, duplicate: false, created: false }
             }
@@ -374,10 +374,26 @@ export function createFakeEngramind() {
                 const statuses = (query.get("status") ?? "active,permanent").split(",")
                 const since = query.get("since")
                 const key = query.get("key")
-                const list = [...state.memories.values()]
-                    .filter((memory) => reachOf(token, memory.channel) && (!filters.length || filters.some((target) => targetMatches(target, memory.channel))) && statuses.includes(memory.status) && (!since || memory.updated_at >= since) && (!key || memory.key === key))
-                    .sort((a, b) => b.updated_at.localeCompare(a.updated_at))
-                return { status: 200, body: { memories: query.get("fields") === "title" ? list.map(({ id, title, channel, category, status, tags }) => ({ id, title, channel, category, status, tags })) : list, next_cursor: null } }
+                const categories = (query.get("categories") ?? "").split(",").filter(Boolean)
+                const tags = query.getAll("tag")
+                const all = [...state.memories.values()]
+                    .filter(
+                        (memory) =>
+                            reachOf(token, memory.channel) &&
+                            (!filters.length || filters.some((target) => targetMatches(target, memory.channel))) &&
+                            statuses.includes(memory.status) &&
+                            (!since || memory.updated_at >= since) &&
+                            (!key || memory.key === key) &&
+                            (!categories.length || categories.includes(memory.category)) &&
+                            tags.every((tag) => memory.tags.includes(tag)),
+                    )
+                    .sort((a, b) => b.updated_at.localeCompare(a.updated_at) || b.id.localeCompare(a.id))
+                // Cursor opaco: o índice da próxima página.
+                const start = Number(query.get("cursor") ?? 0) || 0
+                const limit = Math.min(200, Math.max(1, Number(query.get("limit") ?? 50)))
+                const list = all.slice(start, start + limit)
+                const next = start + limit < all.length ? String(start + limit) : null
+                return { status: 200, body: { memories: query.get("fields") === "title" ? list.map(({ id, title, channel, category, status, tags }) => ({ id, title, channel, category, status, tags })) : list, next_cursor: next } }
             }
             case "POST /v1/memories": {
                 const channel = String(body.channel)
@@ -415,7 +431,13 @@ export function createFakeEngramind() {
                 const channels = (body.channels as string[] | undefined) ?? [...state.channels.keys()]
                 for (const channel of channels) assertRead(token, channel)
                 const results = [...state.memories.values()]
-                    .filter((memory) => channels.includes(memory.channel) && (body.include_archived || memory.status !== "archived") && terms.some((term) => `${memory.title ?? ""} ${memory.text}`.toLowerCase().includes(term)))
+                    .filter(
+                        (memory) =>
+                            channels.includes(memory.channel) &&
+                            (body.include_archived || memory.status !== "archived") &&
+                            (!(body.categories as string[] | undefined)?.length || (body.categories as string[]).includes(memory.category)) &&
+                            terms.some((term) => `${memory.title ?? ""} ${memory.text}`.toLowerCase().includes(term)),
+                    )
                     .slice(0, Number(body.limit ?? 10))
                     .map((memory, rank) => ({ memory, rank: rank + 1, score: 1 / (rank + 1) }))
                 return { status: 200, body: { mode: "text", results } }
@@ -434,6 +456,7 @@ export function createFakeEngramind() {
                     ...(body.text !== undefined ? { text: String(body.text) } : {}),
                     ...(body.category !== undefined ? { category: String(body.category) } : {}),
                     ...(body.title !== undefined ? { title: String(body.title), title_state: "ready" } : {}),
+                    ...(Array.isArray(body.tags) ? { tags: body.tags as string[] } : {}),
                     version: memory.version + 1,
                     updated_at: tick(),
                 })

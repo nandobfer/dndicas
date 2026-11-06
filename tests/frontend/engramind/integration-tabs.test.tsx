@@ -11,12 +11,14 @@ const hooks = vi.hoisted(() => ({
     sync: null as CampaignSyncDto | null,
     bootstrap: { mutate: vi.fn(), isPending: false, data: undefined },
     syncNow: { mutate: vi.fn(), isPending: false },
+    discard: { mutate: vi.fn(), isPending: false },
 }))
 vi.mock("@/features/engramind/hooks/useEngramind", () => ({
     useEngramindConnection: () => ({ data: hooks.connection, isLoading: false }),
     useEngramindBootstrap: () => hooks.bootstrap,
     useEngramindSync: () => ({ data: hooks.sync, isLoading: false, error: null, refetch: vi.fn() }),
     useSyncNow: () => hooks.syncNow,
+    useDiscardPendingWrite: () => hooks.discard,
 }))
 
 const { ConnectionTab } = await import("@/features/engramind/components/integration/ConnectionTab")
@@ -84,24 +86,34 @@ describe("aba Conexão", () => {
 })
 
 describe("aba Sincronização", () => {
-    it("mostra pendentes, falhas, o aviso do Redator e sincroniza agora", () => {
+    it("mostra a fila, a recusa com Descartar (confirmação), os avisos e sincroniza agora", () => {
         hooks.sync = {
             configured: true,
             lastRunAt: "2026-11-05T10:00:00Z",
             lastOkAt: "2026-11-05T10:00:00Z",
             lastError: null,
-            lastResult: { pushed: 2, pulled: 1, removed: 0, failed: 1, channels: 4 },
-            pending: 1,
-            failures: [{ id: "x", campaignId: "c", title: "Cais", error: "Engramind fora do ar" }],
+            lastResult: { delivered: 2, failed: 1, remaining: 1, channels: 4 },
+            pending: 2,
+            failures: [
+                { id: "c:mx:fato:cais", campaignId: "c", title: "Cais", error: "Engramind fora do ar", failed: false },
+                { id: "c:mx:fato:ponte", campaignId: "c", title: "Ponte", error: "Canal arquivado", failed: true },
+            ],
+            legacyCampaignMemories: 3,
             redator: { supported: false, checkedAt: null, message: "O Redator do Engramind pode reescrever o texto (redator.rewrite_text)" },
             categoryWarnings: ["A lista de categorias do Engramind está cheia"],
             running: false,
         }
         render(<SyncTab />)
-        expect(screen.getByTestId("sync-pending")).toHaveTextContent("1")
+        expect(screen.getByTestId("sync-pending")).toHaveTextContent("2")
         expect(screen.getByText("Cais")).toBeInTheDocument()
+        expect(screen.getByText("Recusada: Canal arquivado")).toBeInTheDocument()
+        expect(screen.getByTestId("sync-legacy-warning")).toHaveTextContent("3 memória(s) antiga(s)")
         expect(screen.getByTestId("sync-redator-warning")).toHaveTextContent("redator.rewrite_text")
         expect(screen.getByText(/categorias do Engramind está cheia/)).toBeInTheDocument()
+        expect(screen.getAllByRole("button", { name: /Descartar/ })).toHaveLength(1)
+        fireEvent.click(screen.getByRole("button", { name: /Descartar/ }))
+        expect(hooks.discard.mutate).not.toHaveBeenCalled()
+        fireEvent.click(screen.getByRole("button", { name: "Descartar" }))
         fireEvent.click(screen.getByRole("button", { name: /Sincronizar agora/ }))
         expect(hooks.syncNow.mutate).toHaveBeenCalled()
     })

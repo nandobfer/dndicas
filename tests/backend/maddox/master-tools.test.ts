@@ -2,9 +2,11 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vites
 import mongoose from "mongoose"
 import { MongoMemoryServer } from "mongodb-memory-server"
 
-vi.mock("@/features/engramind/server/campaign-mirror", () => ({ mirrorCampaignMemoryLater: vi.fn(), searchCampaignMemories: vi.fn(async () => null) }))
+vi.mock("@/features/engramind/server/campaign-memories", async () => (await import("../../helpers/campaign-memories-mock")).campaignMemoriesModule)
 
-const { MaddoxCampaignMemberModel, MaddoxCampaignMemoryModel, MaddoxCampaignModel, MaddoxCharacterModel, MaddoxNpcModel } = await import("@/features/maddox/models")
+const { campaignMemoriesStore } = await import("../../helpers/campaign-memories-mock")
+
+const { MaddoxCampaignMemberModel, MaddoxCampaignModel, MaddoxCharacterModel, MaddoxNpcModel } = await import("@/features/maddox/models")
 const { enqueueMaddoxJob, jobDraftChecks, waitForCampaignIdle } = await import("@/features/maddox/server/game-live")
 const { findMaddoxTool, runMaddoxTool, MaddoxToolError } = await import("@/features/maddox/server/master-tools")
 const { MADDOX_TOOL_TEXT_MAX } = await import("@/features/maddox/constants")
@@ -28,7 +30,8 @@ afterAll(async () => {
 }, 30_000)
 
 beforeEach(async () => {
-    await Promise.all([MaddoxCampaignModel.deleteMany({}), MaddoxNpcModel.deleteMany({}), MaddoxCampaignMemoryModel.deleteMany({}), MaddoxCharacterModel.deleteMany({})])
+    campaignMemoriesStore.reset()
+    await Promise.all([MaddoxCampaignModel.deleteMany({}), MaddoxNpcModel.deleteMany({}), MaddoxCharacterModel.deleteMany({})])
 })
 
 describe("ferramentas do Maddox narrador", () => {
@@ -69,10 +72,10 @@ describe("ferramentas do Maddox narrador", () => {
         await run("save_memory", id, { kind: "missao", title: "Reacender o farol", text: "Descobrir a causa." }, 2)
         await run("save_memory", id, { kind: "missao", title: "reacender o FAROL", text: "Concluída.", status: "concluida" }, 5)
         await run("save_memory", id, { kind: "local", title: "Reacender o farol", text: "Outro tipo, outro registro." }, 5)
-        const quests = await MaddoxCampaignMemoryModel.find({ campaignId: id, kind: "missao" }).lean()
+        const quests = campaignMemoriesStore.all(String(id)).filter((item) => item.kind === "missao")
         expect(quests).toHaveLength(1)
-        expect(quests[0]).toMatchObject({ status: "concluida", text: "Concluída.", turnNumber: 5, origin: "agent", createdBy: "maddox" })
-        const local = await MaddoxCampaignMemoryModel.findOne({ campaignId: id, kind: "local" }).lean()
+        expect(quests[0]).toMatchObject({ status: "concluida", text: "Concluída.", turnNumber: 5 })
+        const local = campaignMemoriesStore.all(String(id)).find((item) => item.kind === "local")
         expect(local!.status).toBeNull()
         expect(await run("search_memories", id, { query: "concluída" })).toMatchObject({ memories: [{ kind: "missao" }] })
         expect(await run("search_memories", id, { kind: "local" })).toMatchObject({ memories: [{ kind: "local" }] })
@@ -93,11 +96,11 @@ describe("ferramentas do Maddox narrador", () => {
         const id = await campaign()
         const atLimit = await run("save_memory", id, { kind: "fato", title: "No limite", text: "x".repeat(MADDOX_TOOL_TEXT_MAX) })
         expect(atLimit).not.toHaveProperty("truncated")
-        expect((await MaddoxCampaignMemoryModel.findOne({ campaignId: id, title: "No limite" }).lean())!.text).toHaveLength(MADDOX_TOOL_TEXT_MAX)
+        expect(campaignMemoriesStore.all(String(id)).find((item) => item.title === "No limite")!.text).toHaveLength(MADDOX_TOOL_TEXT_MAX)
 
         const over = await run("save_memory", id, { kind: "fato", title: "Acima", text: "y".repeat(MADDOX_TOOL_TEXT_MAX + 1) })
         expect(over).toMatchObject({ saved: true, truncated: ["text"], note: expect.stringContaining("Consolide") })
-        const memory = await MaddoxCampaignMemoryModel.findOne({ campaignId: id, title: "Acima" }).lean()
+        const memory = campaignMemoriesStore.all(String(id)).find((item) => item.title === "Acima")
         expect(memory!.text).toHaveLength(MADDOX_TOOL_TEXT_MAX)
         expect(memory!.text.endsWith("…")).toBe(true)
 

@@ -137,9 +137,13 @@ async function findExisting(client: EngramindClient, campaignId: string, key: st
     if (byKey.memories[0]) return byKey.memories[0]
     if (input.key) return null
     const slug = slugOfTitle(input.title)
-    const candidates = await listAll(client, { channels, category: categoryOfKind(input.kind), status: "active,permanent,archived", fields: "title" })
-    const match = candidates.find((item) => !item.key && slugOfTitle(item.title ?? "") === slug)
-    return match ? ((await client.memories.get(match.id)) as unknown as RemoteCampaignMemory) : null
+    const candidates = await listAll(client, { channels, categories: categoryOfKind(input.kind), status: "active,permanent,archived", fields: "title" })
+    // `fields=title` não traz a chave: lê cada candidata e só aceita a que não tem chave (criada fora do jogo).
+    for (const candidate of candidates.filter((item) => slugOfTitle(item.title ?? "") === slug).slice(0, 5)) {
+        const full = (await client.memories.get(candidate.id)) as unknown as RemoteCampaignMemory
+        if (!full.key) return full
+    }
+    return null
 }
 
 async function writeWithCategory(client: EngramindClient, kind: MaddoxCampaignMemoryKind, body: Record<string, unknown>, write: (body: Record<string, unknown>) => Promise<{ memory: RemoteCampaignMemory; created?: boolean }>) {
@@ -257,7 +261,7 @@ export async function listCampaignMemories(campaignId: string, query: CampaignMe
         const client = await readClient(query.reader)
         const result = await listPage(client, {
             channels: channelsOf(campaignId, query.scope).join(","),
-            category: query.kind ? categoryOfKind(query.kind) : undefined,
+            categories: query.kind ? categoryOfKind(query.kind) : undefined,
             tag: query.kind === "missao" && query.status ? statusTag(query.status) : undefined,
             limit: query.limit,
             cursor: query.cursor,

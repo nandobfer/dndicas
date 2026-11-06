@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest"
 import { CAMPAIGN_CHANNEL_PREFIX, campaignChannel, normalizeCategoryKey, parseCampaignChannel, subscriptionsFor } from "@/features/engramind/constants"
-import { engramindTextOf, kindOfCategory, memoryIdOfKey, mirrorKey, parseEngramindText, resolveCategory } from "@/features/engramind/campaign-mirror-format"
+import { combatMemoryKey, kindOfCategory, memoryKeyOf, readTags, resolveCategory, tagsOf, viewOf } from "@/features/engramind/campaign-memory-format"
 import { applyCuratorRules, estimateBudgets, budgetCombinations, parseCuratorAnswer } from "@/features/engramind/memory-curator"
 
 const ID = "6650f1a2b3c4d5e6f7a8b9c0"
@@ -27,25 +27,39 @@ describe("canais e assinaturas", () => {
     })
 })
 
-describe("formato do espelho das campanhas", () => {
-    it("linha de status só nas missões; ausente ou inválida mantém o status anterior", () => {
-        expect(engramindTextOf({ kind: "missao", text: "Achar o mapa.", status: "ativa" })).toBe("Status: ativa\nAchar o mapa.")
-        expect(engramindTextOf({ kind: "fato", text: "Sol.", status: null })).toBe("Sol.")
-        expect(parseEngramindText("Status: concluida\nAchou.", "missao", "ativa")).toEqual({ text: "Achou.", status: "concluida" })
-        expect(parseEngramindText("Sem linha.", "missao", "falhou")).toEqual({ text: "Sem linha.", status: "falhou" })
-        expect(parseEngramindText("Status: talvez\nX", "missao", "abandonada")).toEqual({ text: "X", status: "abandonada" })
-        expect(parseEngramindText("Status: ativa\nTexto", "fato", null)).toEqual({ text: "Texto", status: null })
+describe("formato das memórias das campanhas", () => {
+    it("chave por tipo + título normalizado, limite de 80 com hash, e a do combate", () => {
+        expect(memoryKeyOf("missao", "O Mapá do Farol!")).toBe("mx:missao:o-mapa-do-farol")
+        expect(memoryKeyOf("fato", "o mapa do farol")).toBe(memoryKeyOf("fato", "O  MAPA do Farol"))
+        const long = memoryKeyOf("relacao", "Uma relação ".repeat(20))
+        expect(long.length).toBeLessThanOrEqual(80)
+        expect(long).toMatch(/^mx:relacao:uma-relacao.*-[a-f0-9]{8}$/)
+        expect(memoryKeyOf("fato", "!!!")).toMatch(/^mx:fato:-?[a-f0-9]{8}$/)
+        expect(memoryKeyOf("fato", "x")).toMatch(/^[A-Za-z0-9:_-]{1,80}$/)
+        expect(combatMemoryKey(ID)).toBe(`mx:combate:${ID}`)
     })
 
-    it("tipo ↔ categoria com fallback para OUTRO e chave mx-<id>", () => {
+    it("tags reservadas de situação (só missão) e turno, nos dois sentidos", () => {
+        expect(tagsOf({ kind: "missao", tags: ["pista", "status:falsa", " pista "], turnNumber: 3 })).toEqual(["pista", "status:ativa", "turno:3"])
+        expect(tagsOf({ kind: "fato", tags: ["x".repeat(60)], status: "concluida" })).toEqual(["x".repeat(40)])
+        expect(readTags(["pista", "status:concluida", "turno:3"], "missao")).toEqual({ tags: ["pista"], status: "concluida", turnNumber: 3 })
+        expect(readTags(["status:talvez"], "missao")).toMatchObject({ status: "ativa" })
+        expect(readTags(["status:ativa"], "fato")).toMatchObject({ status: null, tags: [] })
+    })
+
+    it("tipo ↔ categoria com fallback para OUTRO", () => {
         expect(kindOfCategory("RELACAO")).toBe("relacao")
         expect(kindOfCategory("PROJECT_RULES")).toBe("outro")
         expect(resolveCategory("local", ["LOCAL", "OUTRO"])).toBe("LOCAL")
         expect(resolveCategory("local", ["OUTRO", "X"])).toBe("OUTRO")
         expect(resolveCategory("local", ["X"])).toBe("X")
         expect(resolveCategory("local", null)).toBe("LOCAL")
-        expect(memoryIdOfKey(mirrorKey(ID))).toBe(ID)
-        expect(memoryIdOfKey("lore:dragao")).toBeNull()
+    })
+
+    it("memória da rede → forma do jogo; fora dos canais de campanha → null", () => {
+        const base = { id: "m_1", title: "Farol", text: "Ao norte.", category: "LOCAL", status: "archived" as const, version: 2, tags: ["turno:2"], updated_at: "2026-11-06T00:00:00Z" }
+        expect(viewOf({ ...base, channel: campaignChannel(ID, "master") })).toMatchObject({ campaignId: ID, visibility: "master", kind: "local", turnNumber: 2, archived: true, tags: [] })
+        expect(viewOf({ ...base, channel: "dndicas/maddox" })).toBeNull()
     })
 })
 

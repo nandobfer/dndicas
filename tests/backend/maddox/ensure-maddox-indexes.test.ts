@@ -9,7 +9,6 @@ vi.mock("@/features/maddox/models", () => ({
     MaddoxCampaignMemberModel: fake("MaddoxCampaignMember"),
     MaddoxCharacterModel: fake("MaddoxCharacter"),
     MaddoxNpcModel: fake("MaddoxNpc"),
-    MaddoxCampaignMemoryModel: fake("MaddoxCampaignMemory"),
     MaddoxInterviewScriptModel: fake("MaddoxInterviewScript"),
     MaddoxInterviewModel: fake("MaddoxInterview"),
     MaddoxOpencodeSessionModel: fake("MaddoxOpencodeSession"),
@@ -25,7 +24,7 @@ const indexes = (model: unknown) => (model as mongoose.Model<unknown>).schema.in
 describe("migração ensure-maddox-indexes", () => {
     it("cria os índices de todas as coleções Maddox e pode rodar de novo", async () => {
         await ensureMaddoxIndexes()
-        expect([...created].sort()).toEqual(["MaddoxCampaign", "MaddoxCampaignMember", "MaddoxCampaignMemory", "MaddoxCampaignMessage", "MaddoxCharacter", "MaddoxCombat", "MaddoxCombatOptionProfile", "MaddoxInterview", "MaddoxInterviewScript", "MaddoxNpc", "MaddoxOpencodeSession", "MaddoxSceneImage"])
+        expect([...created].sort()).toEqual(["MaddoxCampaign", "MaddoxCampaignMember", "MaddoxCampaignMessage", "MaddoxCharacter", "MaddoxCombat", "MaddoxCombatOptionProfile", "MaddoxInterview", "MaddoxInterviewScript", "MaddoxNpc", "MaddoxOpencodeSession", "MaddoxSceneImage"])
         await expect(ensureMaddoxIndexes()).resolves.toBeUndefined()
     })
 

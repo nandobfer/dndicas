@@ -60,12 +60,14 @@ export async function configureEngramind(options: { fake?: FakeEngramind; appTok
 }
 
 export async function resetEngramindRuntime(): Promise<void> {
-    const [{ resetEngramindLazyForTests }, { invalidateCategoryCache }, { resetCampaignNetworksForTests }, { invalidateStoredIntegrations }] = await Promise.all([
+    const [{ resetEngramindLazyForTests }, { invalidateCategoryCache }, { resetCampaignNetworksForTests }, { invalidateStoredIntegrations }, { resetCampaignMemoriesForTests }] = await Promise.all([
         import("@/features/engramind/server/client"),
         import("@/features/engramind/server/categories"),
         import("@/features/engramind/server/campaign-channels"),
         import("@/lib/integrations/store"),
+        import("@/features/engramind/server/campaign-memories"),
     ])
+    resetCampaignMemoriesForTests()
     resetEngramindLazyForTests({ waitMs: 3000 })
     invalidateCategoryCache()
     resetCampaignNetworksForTests()

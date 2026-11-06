@@ -100,7 +100,9 @@ vi.mock("ai", () => ({
     },
 }))
 
-const { MaddoxCampaignMemberModel, MaddoxCampaignMessageModel, MaddoxCampaignModel, MaddoxCharacterModel, MaddoxCombatModel, MaddoxNpcModel, MaddoxCampaignMemoryModel, MaddoxCombatOptionProfileModel } = await import("@/features/maddox/models")
+vi.mock("@/features/engramind/server/campaign-memories", async () => (await import("../../helpers/campaign-memories-mock")).campaignMemoriesModule)
+const { campaignMemoriesStore } = await import("../../helpers/campaign-memories-mock")
+const { MaddoxCampaignMemberModel, MaddoxCampaignMessageModel, MaddoxCampaignModel, MaddoxCharacterModel, MaddoxCombatModel, MaddoxNpcModel, MaddoxCombatOptionProfileModel } = await import("@/features/maddox/models")
 const campaigns = await import("@/features/maddox/server/campaigns")
 const game = await import("@/features/maddox/server/game")
 const tacticalActions = await import("@/features/maddox/server/tactical-actions")
@@ -279,7 +281,7 @@ const lastActionId = async (id: string, actorName: string) => String((await Madd
 beforeAll(async () => {
     mongo = await MongoMemoryServer.create()
     await mongoose.connect(mongo.getUri(), { dbName: "maddox_tactical_combat_test" })
-    await Promise.all([MaddoxCampaignModel.init(), MaddoxCampaignMemberModel.init(), MaddoxCharacterModel.init(), MaddoxCampaignMessageModel.init(), MaddoxNpcModel.init(), MaddoxCampaignMemoryModel.init(), MaddoxCombatModel.init(), MaddoxCombatOptionProfileModel.init()])
+    await Promise.all([MaddoxCampaignModel.init(), MaddoxCampaignMemberModel.init(), MaddoxCharacterModel.init(), MaddoxCampaignMessageModel.init(), MaddoxNpcModel.init(), MaddoxCombatModel.init(), MaddoxCombatOptionProfileModel.init()])
 }, 180_000)
 
 afterAll(async () => {
@@ -288,6 +290,7 @@ afterAll(async () => {
 }, 30_000)
 
 beforeEach(async () => {
+    campaignMemoriesStore.reset()
     await Promise.all(Object.values(mongoose.connection.collections).map((collection) => collection.deleteMany({})))
     calls.length = 0
     script.length = 0

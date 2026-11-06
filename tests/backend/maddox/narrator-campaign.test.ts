@@ -80,7 +80,9 @@ vi.mock("ai", () => ({
     },
 }))
 
-const { MaddoxCampaignMemberModel, MaddoxCampaignMemoryModel, MaddoxCampaignMessageModel, MaddoxCampaignModel, MaddoxCharacterModel, MaddoxNpcModel } = await import("@/features/maddox/models")
+vi.mock("@/features/engramind/server/campaign-memories", async () => (await import("../../helpers/campaign-memories-mock")).campaignMemoriesModule)
+const { campaignMemoriesStore } = await import("../../helpers/campaign-memories-mock")
+const { MaddoxCampaignMemberModel, MaddoxCampaignMessageModel, MaddoxCampaignModel, MaddoxCharacterModel, MaddoxNpcModel } = await import("@/features/maddox/models")
 const campaigns = await import("@/features/maddox/server/campaigns")
 const game = await import("@/features/maddox/server/game")
 const { subscribeGameLive, waitForCampaignIdle } = await import("@/features/maddox/server/game-live")
@@ -120,7 +122,7 @@ async function playersTurn(id: string, owner: string, player: string, turn: numb
 beforeAll(async () => {
     mongo = await MongoMemoryServer.create()
     await mongoose.connect(mongo.getUri(), { dbName: "maddox_narrator_campaign_test" })
-    await Promise.all([MaddoxCampaignModel.init(), MaddoxCampaignMemberModel.init(), MaddoxCharacterModel.init(), MaddoxCampaignMessageModel.init(), MaddoxNpcModel.init(), MaddoxCampaignMemoryModel.init()])
+    await Promise.all([MaddoxCampaignModel.init(), MaddoxCampaignMemberModel.init(), MaddoxCharacterModel.init(), MaddoxCampaignMessageModel.init(), MaddoxNpcModel.init()])
 }, 180_000)
 
 afterAll(async () => {
@@ -129,6 +131,7 @@ afterAll(async () => {
 }, 30_000)
 
 beforeEach(async () => {
+    campaignMemoriesStore.reset()
     await Promise.all([
         mongoose.connection.collection("users").deleteMany({}),
         MaddoxCampaignModel.deleteMany({}),
@@ -136,7 +139,6 @@ beforeEach(async () => {
         MaddoxCharacterModel.deleteMany({}),
         MaddoxCampaignMessageModel.deleteMany({}),
         MaddoxNpcModel.deleteMany({}),
-        MaddoxCampaignMemoryModel.deleteMany({}),
     ])
     calls.length = 0
     script.length = 0
@@ -202,9 +204,9 @@ describe("Maddox 4 — campanha narrativa de ponta a ponta", () => {
         const npcs = await MaddoxNpcModel.find({ campaignId: id }).lean()
         expect(npcs).toHaveLength(1)
         expect(npcs[0]).toMatchObject({ name: "Bartolomeu", publicDescription: "Faroleiro idoso.", masterNotes: "Esconde um contrabandista no farol." })
-        const local = await MaddoxCampaignMemoryModel.findOne({ campaignId: id, kind: "local" }).lean()
-        expect(local).toMatchObject({ title: "Porto de Brumas", origin: "agent", createdBy: "maddox", turnNumber: 2 })
-        const quests = await MaddoxCampaignMemoryModel.find({ campaignId: id, kind: "missao" }).lean()
+        const local = campaignMemoriesStore.all(String(id)).find((item) => item.kind === "local")
+        expect(local).toMatchObject({ title: "Porto de Brumas", turnNumber: 2 })
+        const quests = campaignMemoriesStore.all(String(id)).filter((item) => item.kind === "missao")
         expect(quests).toHaveLength(1)
         expect(quests[0]).toMatchObject({ title: "Reacender o farol", status: "concluida", text: "O farol voltou a brilhar.", turnNumber: 5 })
         const campaign = await MaddoxCampaignModel.findById(id).lean()
