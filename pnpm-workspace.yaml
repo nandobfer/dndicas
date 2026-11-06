@@ -6,4 +6,4 @@ allowBuilds:
   sharp: true
   unrs-resolver: true
 minimumReleaseAgeExclude:
-  - '@engramind/client@0.2.0'
+  - '@engramind/client@0.3.0'

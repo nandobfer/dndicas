@@ -32,7 +32,7 @@
         "@dnd-kit/core": "^6.3.1",
         "@dnd-kit/sortable": "^10.0.0",
         "@dnd-kit/utilities": "^3.2.2",
-        "@engramind/client": "0.2.0",
+        "@engramind/client": "0.3.0",
         "@google-cloud/translate": "^9.3.0",
         "@hookform/resolvers": "^5.2.2",
         "@modelcontextprotocol/sdk": "^1.29.0",
