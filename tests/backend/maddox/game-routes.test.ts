@@ -36,6 +36,8 @@ const sceneImagesService = {
 vi.doMock("@/features/maddox/server/scene-images", () => sceneImagesService)
 const campaignsService = { assertMemberCanPlay: vi.fn(async () => undefined) }
 vi.doMock("@/features/maddox/server/campaigns", () => campaignsService)
+const remindersService = { submitReminder: vi.fn(async () => state) }
+vi.doMock("@/features/maddox/server/reminders", () => remindersService)
 
 const ctx = (params: { id: string }) => ({ params: Promise.resolve(params) })
 const base = "http://localhost/api/maddox/campaigns/c1"
@@ -143,6 +145,26 @@ describe("rotas da mesa Maddox", () => {
         expect((await route.POST(post(`${base}/game/skip`, {}), ctx({ id: "c1" }))).status).toBe(400)
         await route.POST(post(`${base}/game/skip`, { memberId: "m2" }), ctx({ id: "c1" }))
         expect(service.skipPlayer).toHaveBeenCalledWith("c1", { memberId: "m2" }, "user-1")
+    })
+
+    it("Injetar Lembrança (DND-25): exige maddox.play, recusa texto vazio ou acima de 500 caracteres e repassa o texto ao serviço", async () => {
+        type ReminderRoute = typeof import("@/app/api/maddox/campaigns/[id]/game/reminders/route")
+        const path = "@/app/api/maddox/campaigns/[id]/game/reminders/route"
+        const url = `${base}/game/reminders`
+        remindersService.submitReminder.mockClear()
+        who = "noPermission"
+        expect((await (await importFresh<ReminderRoute>(path)).POST(post(url, { texto: "Oi" }), ctx({ id: "c1" }))).status).toBe(403)
+        who = "player"
+        const route = await importFresh<ReminderRoute>(path)
+        expect((await route.POST(post(url, { texto: "   " }), ctx({ id: "c1" }))).status).toBe(400)
+        expect((await route.POST(post(url, { texto: "a".repeat(501) }), ctx({ id: "c1" }))).status).toBe(400)
+        expect((await route.POST(post(url, { texto: "Oi", extra: 1 }), ctx({ id: "c1" }))).status).toBe(400)
+        expect(remindersService.submitReminder).not.toHaveBeenCalled()
+        const response = await route.POST(post(url, { texto: "  lembre-se que tenho o talento Alerta  " }), ctx({ id: "c1" }))
+        expect(response.status).toBe(200)
+        expect(permissions).toContain("maddox.play")
+        expect(remindersService.submitReminder).toHaveBeenCalledWith("c1", { texto: "lembre-se que tenho o talento Alerta" }, "user-1")
+        expect((await route.POST(post(url, { texto: "a".repeat(500) }), ctx({ id: "c1" }))).status).toBe(200)
     })
 
     it("erro de domínio do serviço vira a resposta padronizada", async () => {
