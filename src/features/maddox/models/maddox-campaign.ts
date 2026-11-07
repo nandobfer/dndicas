@@ -58,6 +58,8 @@ export interface IMaddoxCampaign {
          * `offlineSince` marca quando o jogador da vez foi visto offline (a vez passa depois da carência).
          */
         combatActor?: { combatId: Types.ObjectId; actorKey: string; memberId: Types.ObjectId; offlineSince: Date | null } | null
+        /** Combate tático (DND-25): pausa de leitura entre dois blocos; a continuação só entra na fila depois disto. */
+        pauseUntil?: Date | null
     }
     /** Mostra a CD dos testes aos jogadores (Maddox 5); padrão = secreta. */
     showCheckDc: boolean
@@ -127,6 +129,7 @@ const MaddoxCampaignSchema = new Schema<IMaddoxCampaign>(
             checkRound: { type: Number, default: 0 },
             awaitingChecks: { type: Boolean, default: false },
             combatActor: { type: new Schema({ combatId: Schema.Types.ObjectId, actorKey: String, memberId: Schema.Types.ObjectId, offlineSince: { type: Date, default: null } }, { _id: false }), default: null },
+            pauseUntil: { type: Date, default: null },
         },
         showCheckDc: { type: Boolean, default: false },
         sceneImages: { type: Boolean, default: true },

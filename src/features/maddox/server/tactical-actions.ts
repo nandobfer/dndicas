@@ -13,7 +13,7 @@ import type { MaddoxCombatActionInput, MaddoxEndCombatTurnInput } from "../comba
 import type { MaddoxGameStateDto } from "../game-types"
 import { MaddoxCampaignMemberModel, MaddoxCampaignMessageModel, MaddoxCampaignModel, MaddoxCharacterModel, type IMaddoxCampaign, type IMaddoxCampaignMember, type IMaddoxCampaignMessage } from "../models"
 import { assertMemberCanPlay } from "./campaigns"
-import { emitCombatRolled } from "./game-live"
+import { emitCombatRolled, emitCombatStepRolled } from "./game-live"
 import { assertActive, assertPlayersTurn, characterOf, evaluateTurn, getGameState, loadAsMember, publishGameChanged, recordTurnAction } from "./game"
 import { d20Expression, findActiveTactical, findActor, keptD20Of, mutateTactical, rollExpression, scheduleAbsenceCheck, type CombatActor, type TacticalCombat } from "./tactical-combat"
 import { characterDamage, characterHealing, concentrationRollDoc, damageCombatant, type CharacterHp } from "./tactical-master"
@@ -270,8 +270,18 @@ export async function submitCombatAction(campaignId: string, input: MaddoxCombat
         combatAction: { ...doc, cancellable: !spellLevel && !option.charges && option.category !== "items" && steps.length > 0 },
     })
     log.info({ campaignId, turnNumber, actor: actor.name, option: option.id, economy: option.economy, messageId: String(message._id) }, "[maddox] ação do personagem no combate")
+    // Salvaguardas dos adversários roladas pelo servidor (DND-25): todos veem o dado rolar no card.
+    emitServerSteps(campaignId, String(message._id), [], steps)
     await publishGameChanged(campaign._id)
     return getGameState(campaignId, userId)
+}
+
+/** Dados que o servidor rolou num card (salvaguarda de um adversário) e que ainda não estavam rolados antes. */
+function emitServerSteps(campaignId: string, messageId: string, before: readonly CombatActionStep[], after: readonly CombatActionStep[]) {
+    after.forEach((item, index) => {
+        if (item.roller !== "server" || item.kind !== "save" || !item.roll || before[index]?.roll) return
+        emitCombatStepRolled(campaignId, messageId, index, item.roll)
+    })
 }
 
 /** Resumo da ação para o Maddox e a transcrição. */
@@ -463,6 +473,7 @@ async function rollClaimedStep(
     if (extraRolls.length) await MaddoxCampaignMessageModel.insertMany(extraRolls.map((roll) => ({ ...roll, campaignId: campaign._id, turnNumber: message.turnNumber, phase: message.phase })))
     await afterDeaths(campaign._id)
     emitCombatRolled(campaignId, actionId, roll)
+    emitServerSteps(campaignId, actionId, action.steps, steps)
     await publishGameChanged(campaign._id)
     if (resolved && action.waitRound !== null) {
         const { advanceAfterChecks } = await import("./game-checks")
@@ -759,4 +770,10 @@ export async function onMemberLeftCombat(campaignId: Types.ObjectId, memberId: T
     await MaddoxCampaignMessageModel.updateMany({ campaignId, memberId, kind: "combat-roll", "combatRoll.status": "pending" }, { $set: { "combatRoll.status": "cancelled", "combatRoll.outcome": "O jogador saiu da campanha" } })
     await MaddoxCampaignMessageModel.updateMany({ campaignId, memberId, kind: "combat-reaction", "combatReaction.status": "pending" }, { $set: { "combatReaction.status": "declined", "combatReaction.outcome": "O jogador saiu da campanha" } })
     await MaddoxCampaignMessageModel.updateMany({ campaignId, memberId, kind: "combat-action", "combatAction.status": "pending" }, { $set: { "combatAction.status": "cancelled" } })
+    // A rodada pode ter ficado sem pendentes (ex.: era o último personagem na iniciativa: os inimigos rolam agora).
+    const campaign = await MaddoxCampaignModel.findById(campaignId).select("status turn").lean<Pick<CampaignDoc, "status" | "turn">>()
+    if (campaign?.status === "active" && campaign.turn?.phase === "master" && campaign.turn.awaitingChecks) {
+        const { advanceAfterChecks } = await import("./game-checks")
+        await advanceAfterChecks(campaignId, campaign.turn.number, campaign.turn.checkRound ?? 0)
+    }
 }

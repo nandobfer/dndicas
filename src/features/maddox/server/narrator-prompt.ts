@@ -117,8 +117,8 @@ export function tacticalCombatRule(rigor: MaddoxRigorLevel): string {
             (rigor === "fiel-dnd" ? " — no Fiel ao D&D, SÓ monstros do catálogo." : " ou, no Rigoroso, `estatisticas` próprias quando não houver um monstro adequado.") +
             " Indique `surpresa` quando um lado for pego desprevenido. Narre o começo da luta e PARE: os jogadores rolam a iniciativa.",
         "- A ordem de iniciativa é do servidor. Na vez de um personagem, o JOGADOR age pelos botões (Ação, Ação bônus, reações) e rola os próprios dados; o resultado chega pronto na tarefa. Você narra o que aconteceu com base nesses números, sem mudá-los.",
-        "- Na vez dos adversários, conduza cada um da lista \"agem agora\", na ordem, com `monster_action` (ataque, salvaguarda ou outra ação do bloco; Ataques Múltiplos = uma chamada por ataque). O SERVIDOR rola e aplica: nunca invente acertos, dano ou PV. Use os números do retorno na narração com moderação (o golpe, o ferimento), sem virar planilha.",
-        "- Quando o retorno disser que alguém pode reagir ou precisa rolar (salvaguarda, reação, concentração), narre até aquele instante e PARE; a continuação chega com o resultado e você segue com os adversários que faltarem.",
+        "- Os adversários agem UM DE CADA VEZ, cada um numa narração própria (o bloco dele, indicado na tarefa). No bloco, chame primeiro `monster_action` para ele (ataque, salvaguarda ou outra ação do bloco de estatísticas; Ataques Múltiplos = uma chamada por ataque) e só depois narre. O SERVIDOR rola e aplica, e a mesa vê os dados rolando antes do seu texto: nunca invente acertos, dano ou PV. Use os números do retorno na narração com moderação (o golpe, o ferimento), sem virar planilha.",
+        "- Quando o retorno disser que alguém pode reagir ou precisa rolar (salvaguarda, reação, concentração), narre até aquele instante e PARE; a continuação chega com o resultado e você conclui o mesmo adversário.",
         "- Quando um adversário sair do alcance de um personagem, ou conjurar uma magia diante de quem tem Contramágica, chame `offer_reaction`. Efeitos que você adjudica (ambiente, magia utilitária, ação livre aceita) usam `apply_effect` (condição, dano ou cura em dados rolados pelo servidor); dano de uma ação livre de personagem usa `request_damage_roll`.",
         "- \"Outra ação\" de um jogador já foi validada pelo rigor; resolva-a pelas regras (peça teste com `request_check` quando couber).",
         "- Personagem com 0 PV fica Inconsciente e faz testes contra a morte na vez dele; ninguém morre por conveniência da história, só pelas regras.",
@@ -312,7 +312,7 @@ function toolsBlock(mode: NarratorToolMode): string | null {
     if (mode.kind === "ai-sdk") return null
     return [
         "## Ferramentas desta narração",
-        `- As ferramentas de anotações da campanha estão no servidor MCP \`${mode.server}\` (get_campaign_state, update_campaign_state, list_npcs, get_npc, save_npc, search_memories, save_memory, update_character_state${mode.checks ? ", request_check" : ""}${mode.combat ? ", get_combat, start_combat, update_combat, end_combat" : ""}${mode.tactical ? ", monster_action, apply_effect, request_damage_roll, offer_reaction" : ""}${mode.sceneImages ? ", request_scene_image" : ""}, ${MADDOX_CATALOG_TOOL_NAMES.search}, ${MADDOX_CATALOG_TOOL_NAMES.get}).`,
+        `- As ferramentas de anotações da campanha estão no servidor MCP \`${mode.server}\` (get_campaign_state, update_campaign_state, list_npcs, get_npc, save_npc, search_memories, save_memory, update_character_state, resolve_reminder${mode.checks ? ", request_check" : ""}${mode.combat ? ", get_combat, start_combat, update_combat, end_combat" : ""}${mode.tactical ? ", monster_action, apply_effect, request_damage_roll, offer_reaction" : ""}${mode.sceneImages ? ", request_scene_image" : ""}, ${MADDOX_CATALOG_TOOL_NAMES.search}, ${MADDOX_CATALOG_TOOL_NAMES.get}).`,
         `- Em TODA chamada a essas ferramentas, envie o campo \`turno\` exatamente com este valor: \`${mode.turnToken}\`.`,
         "- Não use outras ferramentas (arquivos, terminal, web): a campanha vive só nessas anotações.",
     ].join("\n")
@@ -383,6 +383,11 @@ export interface NarratorTacticalTask {
     next: string | null
     enemiesDown: boolean
     charactersDown: boolean
+    /**
+     * Bloco desta geração (DND-25): a narração do que já aconteceu (`character`, nenhum adversário age) ou a vez de UM
+     * adversário (`npc`). `resumed` = continuação do mesmo bloco depois de uma espera; `remaining` = os que vêm depois.
+     */
+    block?: { kind: "character" | "npc"; actor: string | null; resumed: boolean; waits: number; remaining: readonly string[] } | null
 }
 
 export type NarratorTask =
@@ -416,6 +421,33 @@ export function tacticalTaskLines(tactical: NarratorTacticalTask | null | undefi
     if (tactical.phase === "initiative") return ["", "Combate tático: os jogadores ainda rolam a iniciativa. Não conduza ataques; narre o instante antes da luta e pare."]
     if (tactical.enemiesDown) return ["", "Combate tático: TODOS os inimigos estão fora de combate. Narre o desfecho e chame `end_combat` nesta narração."]
     if (tactical.charactersDown) return ["", "Combate tático: nenhum personagem está de pé. Narre o desfecho e chame `end_combat` nesta narração (derrota, captura ou o que fizer sentido)."]
+    const block = tactical.block
+    if (block?.kind === "npc" && block.actor) {
+        return [
+            "",
+            `Combate tático — bloco de **${block.actor}**: SÓ ele age agora.${block.resumed ? " Conclua a narração dele com o resultado acima, sem repetir o que já foi narrado." : ""}`,
+            block.resumed
+                ? `Se ainda faltar algum ataque dos Ataques Múltiplos de ${block.actor}, chame \`monster_action\` antes de narrar.`
+                : `Primeiro chame \`monster_action\` (Ataques Múltiplos = uma chamada por ataque, em sequência) ou \`apply_effect\`, ANTES de escrever; só depois narre, em um ou dois parágrafos, o que ${block.actor} fez e o resultado. Se ele não atacar (move-se, foge, usa Disparada), apenas narre, sem ferramentas.`,
+            "Não narre outros adversários nem decida o que os personagens fazem.",
+            block.remaining.length
+                ? `Depois dele, cada um no próprio bloco: ${block.remaining.join(", ")}. Termine no fim da ação de ${block.actor}.`
+                : tactical.next
+                  ? `Depois dele é a vez de **${tactical.next}**: termine passando a vez a esse personagem (sem decidir o que ele faz).`
+                  : "",
+        ].filter(Boolean)
+    }
+    if (block?.kind === "character") {
+        return [
+            "",
+            "Combate tático — nesta narração NENHUM adversário age: narre só o que já aconteceu (a vez que fechou ou o começo da luta) e não chame `monster_action`.",
+            tactical.queue.length
+                ? `Depois, cada adversário age no próprio bloco, nesta ordem: ${tactical.queue.join(", ")}. Termine no instante antes de eles agirem.`
+                : tactical.next
+                  ? `Depois é a vez de **${tactical.next}**: termine passando a vez a esse personagem (sem decidir o que ele faz).`
+                  : "",
+        ].filter(Boolean)
+    }
     return [
         "",
         tactical.queue.length
@@ -442,6 +474,11 @@ export function narratorTaskText(task: NarratorTask, options: { density?: Maddox
 }
 
 function taskBody(task: NarratorTask): string {
+    const tactical = task.kind !== "answer" ? task.tactical : null
+    const block = tactical?.block
+    if (block?.kind === "npc" && !block.resumed && !tactical?.enemiesDown && !tactical?.charactersDown) {
+        return [`# Turno ${task.turnNumber} do mestre — vez de ${block.actor}`, ...tacticalTaskLines(tactical), "", "Depois grave o que mudou."].join("\n")
+    }
     if (task.kind === "continuation") {
         const last = task.lastRound ?? task.round >= MADDOX_CHECK_ROUNDS_MAX - 1
         return [

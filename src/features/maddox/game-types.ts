@@ -50,7 +50,14 @@ export interface MaddoxGameMessageDto {
      * pelo dono podem dividir a mesma narração). Uma falha nunca aparece no lugar de uma imagem pronta.
      */
     sceneImages?: MaddoxGameSceneImageDto[]
+    /** Lembrança injetada por um jogador (`kind: "reminder"`, DND-25): o texto vem em `content`. */
+    reminder?: MaddoxReminderDto | null
     createdAt: string
+}
+
+/** Situação de uma lembrança: esperando a próxima narração, guardada como memória ou usada só naquela narração. */
+export interface MaddoxReminderDto {
+    status: "pending" | "saved" | "discarded"
 }
 
 /** Imagem gerada pelo Maddox numa cena (Maddox 10). A descrição enviada ao gerador nunca chega à tela. */
@@ -156,7 +163,7 @@ export interface MaddoxCombatActionDto {
 }
 
 export interface MaddoxCombatRollDto {
-    kind: "initiative" | "death-save" | "concentration" | "save" | "damage"
+    kind: "initiative" | "enemy-initiative" | "death-save" | "concentration" | "save" | "damage"
     status: "pending" | "rolled" | "cancelled"
     reason: string
     dice: string
@@ -167,6 +174,8 @@ export interface MaddoxCombatRollDto {
     success: boolean | null
     outcome: string | null
     rolledByName: string | null
+    /** Iniciativa dos inimigos (DND-25): o grupo que rola. */
+    groupName?: string | null
 }
 
 export interface MaddoxCombatReactionDto {
@@ -331,6 +340,21 @@ export interface MaddoxLiveGenerationDto {
     /** O Maddox está usando uma ferramenta (consultando ou gravando as anotações da campanha). */
     tool: boolean
     startedAt: string
+    /** Bloco de um adversário no combate tático (DND-25): os dados já rolados nesta geração, em ordem. */
+    rolls?: MaddoxLiveRollDto[]
+}
+
+/** Dado de um adversário rolado durante a geração (ataque, dano, salvaguarda, efeito), repetido na tela de todos. */
+export interface MaddoxLiveRollDto {
+    id: string
+    actorName: string
+    label: string
+    step: "attack" | "damage" | "save" | "heal"
+    targetName: string | null
+    verdict: "hit" | "miss" | "critical" | "success" | "fail" | null
+    amount: number | null
+    damageType: string | null
+    roll: DiceRollResponse
 }
 
 /** Linhas do stream NDJSON da mesa (`GET …/game/stream`). Reconectar recomeça pelo `snapshot`. */
@@ -342,4 +366,6 @@ export type MaddoxGameStreamLine =
     | { type: "live-end"; liveId: string; messageId: string | null; error: string | null }
     | { type: "check-rolled"; messageId: string; roll: DiceRollResponse }
     | { type: "combat-rolled"; messageId: string; roll: DiceRollResponse }
+    | { type: "combat-step-rolled"; messageId: string; stepIndex: number; roll: DiceRollResponse }
+    | { type: "live-roll"; liveId: string; roll: MaddoxLiveRollDto }
     | { type: "ping" }

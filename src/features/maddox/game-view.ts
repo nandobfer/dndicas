@@ -67,6 +67,8 @@ export function masterBannerText(state: Pick<MaddoxGameStateDto, "turn"> & { me?
     if (state.turn.awaitingChecks) {
         // Combate tático: as rolagens e reações pendentes contam junto com os testes.
         const waits = [...state.turn.pendingChecks.map((check) => ({ memberId: check.memberId, characterName: check.characterName })), ...(state.turn.pendingCombat ?? []).map((item) => ({ memberId: item.memberId, characterName: item.characterName }))]
+        // Sem ninguém a esperar: o dado dos inimigos rolando ou a pausa entre dois blocos do combate tático (DND-25).
+        if (!waits.length) return `${MADDOX_TURN_PHASE_LABELS.master} — o Maddox está narrando…`
         const mine = waits.some((check) => check.memberId === state.me?.memberId)
         const others = [...new Set(waits.filter((check) => check.memberId !== state.me?.memberId).map((check) => check.characterName))]
         if ((state.turn.pendingCombat ?? []).length && !state.turn.pendingChecks.length) {
@@ -96,4 +98,11 @@ export function visibleLiveGenerations(stream: { live: MaddoxLiveGenerationDto[]
 export function gameRefetchInterval(state: Pick<MaddoxGameStateDto, "status" | "turn"> | undefined, realtime: boolean): number | false {
     if (!realtime) return MADDOX_GAME_POLL_MS
     return state?.status === "active" && state.turn.phase === "master" && !state.turn.generating && !state.turn.awaitingChecks ? MADDOX_MASTER_RETRY_MS : false
+}
+
+/** Por que o jogador não pode injetar uma lembrança agora (`null` = pode). DND-25. */
+export function reminderBlockReason(state: Pick<MaddoxGameStateDto, "status"> & { me: Pick<MaddoxGameStateDto["me"], "memberId" | "ready"> }): string | null {
+    if (state.status !== "active") return "A campanha não está em andamento."
+    if (!state.me.memberId || !state.me.ready) return "Conclua a entrevista de personagem com o Maddox antes de entrar no jogo."
+    return null
 }

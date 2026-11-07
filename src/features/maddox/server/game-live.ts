@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto"
 import { loggerFor } from "@/lib/logger"
 import type { DiceRollResponse } from "@/features/dice-roller/types"
-import type { MaddoxGameStreamLine, MaddoxLiveGenerationDto } from "../game-types"
+import type { MaddoxGameStreamLine, MaddoxLiveGenerationDto, MaddoxLiveRollDto } from "../game-types"
 import type { TacticalDraftCombatant } from "./tactical-combat"
 
 /**
@@ -110,6 +110,19 @@ interface MaddoxJobState {
     npcPortraits: string[]
     /** Combate tático (Maddox 7): cópia de trabalho do combate e das fichas mexida pelas ferramentas dos adversários. */
     workspace: unknown
+    /** Geração ao vivo deste job (os dados dos adversários vão para ela, DND-25). */
+    liveId: string | null
+    /** Lembranças reivindicadas por esta geração e a decisão do Maddox sobre cada uma (DND-25). */
+    reminders: MaddoxDraftReminder[]
+}
+
+/** Lembrança considerada pela geração: `memory` = guardar como memória (aplicado depois de a narração ser gravada). */
+export interface MaddoxDraftReminder {
+    id: string
+    characterName: string
+    text: string
+    memory: { kind: string; title: string; text: string; visibility: "players" | "master" } | null
+    decided: boolean
 }
 
 const log = loggerFor({ module: "maddox", feature: "game-live" })
@@ -155,7 +168,7 @@ export function enqueueMaddoxJob(campaignId: string, label: string, run: (job: M
     hub.pending += 1
     const jobId = randomUUID()
     const next = hub.tail.then(async () => {
-        hub.jobs.set(jobId, { meta, checks: [], combat: [], sceneImage: null, npcPortraits: [], workspace: null })
+        hub.jobs.set(jobId, { meta, checks: [], combat: [], sceneImage: null, npcPortraits: [], workspace: null, liveId: null, reminders: [] })
         try {
             await run({ jobId })
         } catch (error) {
@@ -289,6 +302,34 @@ export function takeJobWorkspace<T>(campaignId: string, jobId: string): T | null
     return workspace
 }
 
+/** Lembranças que esta geração considera (reivindicadas no começo dela). */
+export function setJobReminders(campaignId: string, jobId: string, reminders: MaddoxDraftReminder[]): boolean {
+    const job = hubs.get(campaignId)?.jobs.get(jobId)
+    if (!job) return false
+    job.reminders = reminders
+    return true
+}
+
+export function jobReminders(campaignId: string, jobId: string): MaddoxDraftReminder[] {
+    return hubs.get(campaignId)?.jobs.get(jobId)?.reminders ?? []
+}
+
+/** Dado de um adversário rolado durante a geração: vai para a geração ao vivo do job (`snapshot` inclui os já rolados). */
+export function emitLiveRoll(campaignId: string, jobId: string, roll: MaddoxLiveRollDto): boolean {
+    const hub = hubs.get(campaignId)
+    const liveId = hub?.jobs.get(jobId)?.liveId
+    const live = liveId ? hub?.live.get(liveId) : undefined
+    if (!live) return false
+    live.rolls = [...(live.rolls ?? []), roll]
+    emit(campaignId, { type: "live-roll", liveId: live.liveId, roll })
+    return true
+}
+
+/** Avisa as mesas que um dado do servidor (salvaguarda de um adversário) saiu num card de ação (todos veem rolar). */
+export function emitCombatStepRolled(campaignId: string, messageId: string, stepIndex: number, roll: DiceRollResponse): void {
+    emit(campaignId, { type: "combat-step-rolled", messageId, stepIndex, roll })
+}
+
 /** Avisa as mesas abertas que uma rolagem do combate tático saiu (todos repetem a animação). */
 export function emitCombatRolled(campaignId: string, messageId: string, roll: DiceRollResponse): void {
     emit(campaignId, { type: "combat-rolled", messageId, roll })
@@ -307,10 +348,12 @@ export interface LiveSink {
 }
 
 /** Começa uma geração ao vivo (todos os ouvintes recebem `live-start`). */
-export function beginLive(campaignId: string, input: Pick<MaddoxLiveGenerationDto, "kind" | "turnNumber" | "replyToId">): LiveSink {
+export function beginLive(campaignId: string, input: Pick<MaddoxLiveGenerationDto, "kind" | "turnNumber" | "replyToId">, jobId: string | null = null): LiveSink {
     const hub = hubOf(campaignId)
-    const live: MaddoxLiveGenerationDto = { liveId: randomUUID(), ...input, text: "", tool: false, startedAt: new Date().toISOString() }
+    const live: MaddoxLiveGenerationDto = { liveId: randomUUID(), ...input, text: "", tool: false, startedAt: new Date().toISOString(), rolls: [] }
     hub.live.set(live.liveId, live)
+    const job = jobId ? hub.jobs.get(jobId) : undefined
+    if (job) job.liveId = live.liveId
     emit(campaignId, { type: "live-start", live: { ...live } })
     let ended = false
     return {
@@ -336,7 +379,7 @@ export function beginLive(campaignId: string, input: Pick<MaddoxLiveGenerationDt
 }
 
 export function liveSnapshot(campaignId: string): MaddoxLiveGenerationDto[] {
-    return [...(hubs.get(campaignId)?.live.values() ?? [])].map((live) => ({ ...live }))
+    return [...(hubs.get(campaignId)?.live.values() ?? [])].map((live) => ({ ...live, rolls: [...(live.rolls ?? [])] }))
 }
 
 /** Assina o barramento da campanha; devolve a função de saída. */

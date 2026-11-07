@@ -1,5 +1,5 @@
 import { z } from "zod"
-import { MADDOX_GAME_MESSAGE_MAX } from "./constants"
+import { MADDOX_GAME_MESSAGE_MAX, MADDOX_REMINDER_MAX_CHARS } from "./constants"
 
 /** Schemas da mesa (Maddox 3) — módulo PURO, usado pela tela e pelas rotas. */
 
@@ -20,6 +20,16 @@ export type MaddoxGameActionInput = z.infer<typeof maddoxGameActionSchema>
 /** Dono registra "não fez nada" no lugar de um jogador ausente. */
 export const maddoxSkipPlayerSchema = z.strictObject({ memberId: z.string({ error: "Informe o jogador" }).trim().min(1, { error: "Informe o jogador" }) })
 export type MaddoxSkipPlayerInput = z.infer<typeof maddoxSkipPlayerSchema>
+
+/** Injetar Lembrança (DND-25): texto livre para a próxima narração do Maddox. */
+export const maddoxReminderSchema = z.strictObject({
+    texto: z
+        .string({ error: "Escreva a lembrança" })
+        .trim()
+        .min(1, { error: "Escreva a lembrança" })
+        .max(MADDOX_REMINDER_MAX_CHARS, { error: `A lembrança tem até ${MADDOX_REMINDER_MAX_CHARS} caracteres` }),
+})
+export type MaddoxReminderInput = z.infer<typeof maddoxReminderSchema>
 
 /** Rolar um teste pedido pelo Maddox: sem campos (dado e modificador são do servidor). */
 export const maddoxRollCheckSchema = z.strictObject({}, { error: "A rolagem não aceita dados nem modificadores." })

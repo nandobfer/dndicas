@@ -158,7 +158,7 @@ describe("fichas e testes no prompt (Maddox 5)", () => {
     })
 
     it("no MCP, a lista de ferramentas só inclui request_check quando os testes valem", () => {
-        expect(buildNarratorInstructions(context({ rigor: "fiel-dnd" }), { kind: "mcp", server: "dndicas-maddox", turnToken: "t", checks: true })).toContain("update_character_state, request_check, search_catalog, get_catalog_entity)")
+        expect(buildNarratorInstructions(context({ rigor: "fiel-dnd" }), { kind: "mcp", server: "dndicas-maddox", turnToken: "t", checks: true })).toContain("update_character_state, resolve_reminder, request_check, search_catalog, get_catalog_entity)")
         expect(buildNarratorInstructions(context(), { kind: "mcp", server: "dndicas-maddox", turnToken: "t", checks: false })).not.toContain("request_check")
     })
 
@@ -216,7 +216,7 @@ describe("catálogo do DnDicas no narrador", () => {
     })
 
     it("no MCP, a lista de ferramentas inclui as de catálogo também sem testes", () => {
-        expect(buildNarratorInstructions(context(), { kind: "mcp", server: "dndicas-maddox", turnToken: "t", checks: false })).toContain("update_character_state, search_catalog, get_catalog_entity)")
+        expect(buildNarratorInstructions(context(), { kind: "mcp", server: "dndicas-maddox", turnToken: "t", checks: false })).toContain("update_character_state, resolve_reminder, search_catalog, get_catalog_entity)")
     })
 })
 

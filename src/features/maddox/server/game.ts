@@ -147,12 +147,15 @@ async function runMasterTurn(campaignId: Types.ObjectId, token: string, turnNumb
             }
             // Combate (Maddox 6 e 7): o combate ativo antes da narração e a orientação do JEV "Início ou fim de combate".
             const tacticalRigor = MADDOX_TACTICAL_COMBAT_RIGORS.includes(campaign.rigor)
+            let blockBefore: import("../combat-types").TacticalBlock | null = null
             const combatModule = MADDOX_COMBAT_RIGORS.includes(campaign.rigor) || tacticalRigor ? await import("./combat") : null
             if (tacticalRigor) {
                 // Combate tático: a iniciativa que acabou de fechar vira a ordem; a fila dos adversários deste turno é preparada.
                 const tactical = await import("./tactical-combat")
                 if (round > 0) await tactical.finishInitiativeIfReady(campaignId, turnNumber, round)
-                await tactical.prepareMonsterQueue(campaignId, turnNumber)
+                // DND-25: a narração do que já aconteceu vem primeiro (sem adversários); depois, um bloco por adversário.
+                const prepared = await tactical.prepareMonsterQueue(campaignId, turnNumber, { lead: declarations.length > 0 || round > 0, round })
+                blockBefore = prepared?.tactical.phase === "running" ? (prepared.tactical.block ?? null) : null
             }
             const combatBefore = combatModule ? await combatModule.findActiveCombat(campaignId) : null
             let combatHint: "start" | "end" | null = null
@@ -160,7 +163,7 @@ async function runMasterTurn(campaignId: Types.ObjectId, token: string, turnNumb
                 const { combatBoundaryHint } = await import("./combat-hints")
                 combatHint = await combatBoundaryHint(campaign, declarations, combatBefore ? { title: combatBefore.title } : null)
             }
-            live = beginLive(String(campaignId), { kind: "narration", turnNumber, replyToId: null })
+            live = beginLive(String(campaignId), { kind: "narration", turnNumber, replyToId: null }, jobId)
             const master = await getMaddoxMaster()
             const sink = live
             const content = await withGenerationTimeout((signal) => master.narrate({ campaignId: String(campaignId), jobId, turnNumber, round, declarations, combatHint, signal }, sink))
@@ -177,9 +180,11 @@ async function runMasterTurn(campaignId: Types.ObjectId, token: string, turnNumb
             const inserted = await MaddoxCampaignMessageModel.insertMany(
                 [
                     ...combat.messages.filter((plan) => plan.event === "start").map(combatCard),
+                    // Bloco de um adversário (DND-25): os dados (cards das ações) vêm antes da narração dele.
+                    ...(blockBefore?.kind === "npc" ? tacticalMessages : []),
                     { campaignId, turnNumber, phase: "master", kind: "narration", content, segment: round },
                     ...drafts.map((draft) => draftCheckMessage(campaignId, turnNumber, round, draft)),
-                    ...tacticalMessages,
+                    ...(blockBefore?.kind === "npc" ? [] : tacticalMessages),
                     ...combat.extraMessages,
                     ...combat.messages.filter((plan) => plan.event === "end").map(combatCard),
                 ],
@@ -188,6 +193,8 @@ async function runMasterTurn(campaignId: Types.ObjectId, token: string, turnNumb
             const message = inserted.find((item) => item.kind === "narration")
             if (combatModule && round === 0) await combatModule.countCombatNarration(campaignId, [...(combatBefore ? [combatBefore._id] : []), ...combat.touched])
             live.end({ messageId: String(message!._id), error: null })
+            // Lembranças desta narração (DND-25): guardadas como memória ou usadas só agora, depois da narração gravada.
+            await (await import("./reminders")).commitReminders(campaignId, jobId, turnNumber)
             // Imagens nas cenas (Maddox 10): a pedida nesta narração fica ligada a ela; os retratos marcados, aos NPCs.
             await scheduleDraftImages(campaignId, jobId, turnNumber, round, message!._id)
             if (drafts.length) log.info({ campaignId: String(campaignId), turnNumber, round, checks: drafts.length }, "[maddox] Maddox pediu testes")
@@ -208,12 +215,13 @@ async function runMasterTurn(campaignId: Types.ObjectId, token: string, turnNumb
 
         const { hasRoundWaits } = await import("./game-checks")
         const roundChecks = await hasRoundWaits(campaignId, turnNumber, round)
-        const opened = roundChecks ? null : tacticalCampaign ? await openCombatTurn(campaign, token, turnNumber) : null
+        if (roundChecks && tacticalCampaign) await (await import("./tactical-combat")).countBlockWait(campaignId, round)
+        const opened = roundChecks ? null : tacticalCampaign ? await nextCombatStep(campaign, token, turnNumber, round) : null
         if (opened === "done") {
             // A vez seguinte do combate tático já foi aberta (ou outro turno do mestre agendado).
         } else if (roundChecks) {
             // Os testes fazem parte do turno do mestre: a mesa espera as rolagens (sem trava de geração).
-            await MaddoxCampaignModel.updateOne({ _id: campaignId, "turn.generating.token": token }, { $set: { "turn.awaitingChecks": true, "turn.checkRound": round, "turn.generating": null, "turn.failedAt": null } })
+            await MaddoxCampaignModel.updateOne({ _id: campaignId, "turn.generating.token": token }, { $set: { "turn.awaitingChecks": true, "turn.checkRound": round, "turn.generating": null, "turn.failedAt": null, "turn.pauseUntil": null } })
             // Nenhum pendente (todos cancelados porque o jogador saiu): a continuação entra na fila logo.
             const { advanceAfterChecks } = await import("./game-checks")
             await advanceAfterChecks(campaignId, turnNumber, round)
@@ -243,6 +251,8 @@ async function runMasterTurn(campaignId: Types.ObjectId, token: string, turnNumb
         log.error({ err: error instanceof Error ? error.message : error, campaignId: String(campaignId), turnNumber, round, retryInMs: MADDOX_MASTER_RETRY_MS }, "[maddox] Falha no turno do mestre")
         // Encerra a geração ao vivo antes de gravar: se a gravação falhar, os clientes não ficam com uma bolha fantasma.
         live?.end({ messageId: null, error: "O Maddox teve um problema ao narrar. Uma nova tentativa acontece em instantes." })
+        // As lembranças que ela considerava voltam a esperar a próxima tentativa.
+        await (await import("./reminders")).releaseReminders(campaignId, jobId)
         try {
             await MaddoxCampaignModel.updateOne({ _id: campaignId, "turn.generating.token": token }, { $set: { "turn.generating": null, "turn.failedAt": new Date() } })
         } catch (writeError) {
@@ -288,6 +298,30 @@ async function scheduleDraftImages(campaignId: Types.ObjectId, jobId: string, tu
 }
 
 /**
+ * Combate tático, depois de uma narração sem esperas (DND-25): o bloco que acabou fecha e, se ainda houver adversário na
+ * fila, o turno do mestre faz a pausa de leitura (`turn.pauseUntil`) e o bloco seguinte entra na fila depois dela; senão,
+ * segue para `openCombatTurn` (vez do próximo personagem ou fim do combate).
+ */
+async function nextCombatStep(campaign: CampaignDoc, token: string, turnNumber: number, round: number): Promise<"done" | null> {
+    const tactical = await import("./tactical-combat")
+    const step = await tactical.advanceBlock(campaign._id, round)
+    if (step.kind !== "npc") return openCombatTurn(campaign, token, turnNumber)
+    const pauseUntil = new Date(Date.now() + tactical.combatTiming.npcBlockPauseMs)
+    const paused = await MaddoxCampaignModel.updateOne(
+        { _id: campaign._id, "turn.generating.token": token },
+        { $set: { "turn.awaitingChecks": true, "turn.checkRound": round, "turn.generating": null, "turn.failedAt": null, "turn.pauseUntil": pauseUntil } },
+    )
+    if (paused.modifiedCount > 0) {
+        log.info({ campaignId: String(campaign._id), turnNumber, round, next: step.actorKey }, "[maddox] bloco do combate concluído; pausa antes do próximo adversário")
+        tactical.scheduleTimer(`npc-block:${String(campaign._id)}`, tactical.combatTiming.npcBlockPauseMs + 50, async () => {
+            const { advanceAfterChecks } = await import("./game-checks")
+            await advanceAfterChecks(campaign._id, turnNumber, round)
+        })
+    }
+    return "done"
+}
+
+/**
  * Combate tático (Maddox 7), depois da narração sem esperas: abre a vez do próximo personagem (só o membro dele é
  * elegível), põe outro turno do mestre na fila quando os adversários seguem agindo, ou encerra o combate pelo servidor
  * quando o Maddox deixou passar o fim (todos os inimigos ou todos os personagens fora de combate). `null` = sem combate
@@ -298,7 +332,8 @@ async function openCombatTurn(campaign: CampaignDoc, token: string, turnNumber: 
     let combat = await tactical.findActiveTactical(campaign._id)
     if (!combat || combat.tactical.phase !== "running") return null
     const enemies = tactical.livingEnemies(combat).length
-    const standing = combat.tactical.characters.some(tactical.takesTurn)
+    // DND-25: nenhum personagem consciente (todos com 0 PV, mesmo que alguém ainda esteja morrendo) = derrota na hora.
+    const standing = tactical.consciousCharacters(combat).length > 0
     if (enemies === 0 || !standing) {
         const stale = (combat.tactical.staleEndNarrations ?? 0) + 1
         if (stale >= MADDOX_COMBAT_FORCE_END_AFTER || !standing) {
@@ -717,7 +752,7 @@ interface MessagesViewer {
 
 const visibleTo = (viewer: MessagesViewer) => (message: MessageDoc) =>
     !(message.kind === "check" && message.check?.status === "pending" && String(message.memberId) !== viewer.memberId) &&
-    !(message.kind === "combat-roll" && message.combatRoll?.status === "pending" && String(message.memberId) !== viewer.memberId)
+    !(message.kind === "combat-roll" && message.combatRoll?.status === "pending" && message.combatRoll.kind !== "enemy-initiative" && String(message.memberId) !== viewer.memberId)
 
 async function messagesDto(all: MessageDoc[], viewer: MessagesViewer): Promise<MaddoxGameMessageDto[]> {
     const messages = all.filter(visibleTo(viewer))
@@ -769,6 +804,7 @@ async function messagesDto(all: MessageDoc[], viewer: MessagesViewer): Promise<M
                     : null,
             combatReaction: message.combatReaction && tacticalDto ? tacticalDto.combatReactionDto(message.combatReaction, String(message.memberId) === viewer.memberId) : null,
             offlineSkip: Boolean(message.offlineSkip),
+            ...(message.kind === "reminder" ? { reminder: { status: message.reminder?.status ?? "pending" } } : {}),
             createdAt: new Date(message.createdAt).toISOString(),
         }
     })
@@ -862,7 +898,7 @@ export async function getGameState(campaignId: string, userId: string): Promise<
     const combatActor = campaign.status === "active" && campaign.turn?.phase === "players" ? (campaign.turn.combatActor ?? null) : null
     const pendingCombat =
         tacticalCombat && campaign.turn?.phase === "master"
-            ? await MaddoxCampaignMessageModel.find({ campaignId: campaign._id, turnNumber: campaign.turn.number, $or: [{ kind: "combat-roll", "combatRoll.status": "pending" }, { kind: "combat-reaction", "combatReaction.status": "pending" }] })
+            ? await MaddoxCampaignMessageModel.find({ campaignId: campaign._id, turnNumber: campaign.turn.number, $or: [{ kind: "combat-roll", "combatRoll.status": "pending", "combatRoll.kind": { $ne: "enemy-initiative" } }, { kind: "combat-reaction", "combatReaction.status": "pending" }] })
                   .sort({ _id: 1 })
                   .select("kind memberId characterName combatRoll.reason combatReaction.description")
                   .lean<{ _id: Types.ObjectId; kind: string; memberId: Types.ObjectId; characterName: string | null; combatRoll?: { reason: string }; combatReaction?: { description: string } }[]>()

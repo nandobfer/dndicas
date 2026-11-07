@@ -127,6 +127,8 @@ const { resolveProfiles, profileKey, resetClassifierAttempts } = await import("@
 const { loadMaddoxSettings } = await import("@/features/maddox/server/settings")
 const { waitForCampaignIdle } = await import("@/features/maddox/server/game-live")
 const { freshEconomy } = await import("@/features/maddox/combat-rules")
+const { settleCampaign, shortenCombatTiming } = await import("../../helpers/maddox-sequence")
+await shortenCombatTiming()
 const { monsterStatsFromCustom } = await import("@/features/maddox/server/combat-monsters")
 const { CharacterSheet } = await import("@/features/character-sheets/models/character-sheet")
 const { CharacterItem } = await import("@/features/character-sheets/models/character-item")
@@ -579,6 +581,7 @@ describe("Maddox 7 — revisão: recursos, concorrência e efeitos", () => {
     it("vez dos adversários: condição e dano pelo apply_effect, dano pedido ao jogador, salvaguarda com dano e concentração; reação sem fonte recusada", async () => {
         const { id, kael, lyra } = await scene({ goblinActions: [{ nome: "Bafo", tipo: "salvaguarda", cd: 13, atributo: "Destreza", dano: "2d6", tipoDano: "veneno", metadeNoSucesso: true }] })
         await MaddoxCombatModel.updateOne({ campaignId: id, "tactical.characters.actorKey": lyra.actorKey }, { $set: { "tactical.characters.$.concentration": { spell: "Bênção", sinceRound: 1 } } })
+        // DND-25: primeiro a narração da vez de Kael (efeitos adjudicados, sem adversários); depois o bloco do goblin.
         script.push([
             {
                 tools: [
@@ -588,23 +591,34 @@ describe("Maddox 7 — revisão: recursos, concorrência e efeitos", () => {
                     { name: "request_damage_roll", input: { personagem: "Kael", dados: "1d4", tipoDano: "concussão", alvo: "Goblin", motivo: "A estante que Kael derrubou" } },
                     { name: "monster_action", input: { combatente: "Goblin", acao: "Bafo", alvos: ["Lyra"] } },
                 ],
-                text: "O goblin sopra uma névoa verde.",
+                text: "Kael derruba a estante.",
             },
         ])
         await actions.endCombatTurn(id, {}, kael.userId)
-        await waitForCampaignIdle(id)
+        await settleCampaign(id)
         expect(toolLog.find((item) => item.name === "offer_reaction")!.error).toMatch(/informe em `fonte` o adversário/)
-        expect(toolLog.filter((item) => item.name !== "offer_reaction").every((item) => !item.error)).toBe(true)
+        // Na narração da vez de Kael nenhum adversário age.
+        expect(toolLog.find((item) => item.name === "monster_action")!.error).toMatch(/nenhum adversário age/)
+        expect(toolLog.filter((item) => item.name !== "offer_reaction" && item.name !== "monster_action").every((item) => !item.error)).toBe(true)
         // Gravado depois da narração: 3 de fogo (1d6 do servidor) no goblin, Lyra envenenada por 2 rodadas.
         expect((await goblinOf(id)).stats.hp).toBe(4)
         expect((await stateOf(id, lyra.actorKey)).conditions).toEqual([expect.objectContaining({ key: "poisoned", untilRound: 3 })])
         expect((await MaddoxCampaignModel.findById(id).lean())!.turn).toMatchObject({ phase: "master", awaitingChecks: true })
+        toolLog.length = 0
+        // Continuação da vez de Kael (resultado do dano) e, depois da pausa, o bloco do goblin.
+        script.push([{ text: "A estante esmaga o goblin." }], [{ tools: [{ name: "monster_action", input: { combatente: "Goblin", acao: "Bafo", alvos: ["Lyra"] } }], text: "O goblin sopra uma névoa verde." }])
 
         const damageCard = (await MaddoxCampaignMessageModel.findOne({ campaignId: id, kind: "combat-roll", "combatRoll.kind": "damage" }).lean())!
         expect(String(damageCard.memberId)).toBe(kael.memberId)
         dice.players.set(kael.userId, [[2]])
         await actions.rollCombatRoll(id, String(damageCard._id), kael.userId)
+        await settleCampaign(id)
         expect((await goblinOf(id)).stats.hp).toBe(2)
+        expect(toolLog.every((item) => !item.error)).toBe(true)
+        // O card do Bafo (o dado) vem antes da narração do goblin.
+        const bafo = (await MaddoxCampaignMessageModel.findOne({ campaignId: id, kind: "combat-action", "combatAction.label": "Bafo" }).lean())!
+        const goblinNarration = (await MaddoxCampaignMessageModel.findOne({ campaignId: id, kind: "narration", content: /névoa verde/ }).lean())!
+        expect(String(bafo._id) < String(goblinNarration._id)).toBe(true)
 
         // Salvaguarda da Lyra: falha (3 contra CD 13) = os 6 de dano rolados pelo servidor; ela concentrava → card de concentração.
         const saveCard = (await MaddoxCampaignMessageModel.findOne({ campaignId: id, kind: "combat-roll", "combatRoll.kind": "save" }).lean())!
@@ -615,7 +629,7 @@ describe("Maddox 7 — revisão: recursos, concorrência e efeitos", () => {
         const concentration = (await MaddoxCampaignMessageModel.findOne({ campaignId: id, kind: "combat-roll", "combatRoll.kind": "concentration" }).lean())!
         expect(concentration.combatRoll).toMatchObject({ dc: 10, status: "pending" })
         await actions.rollCombatRoll(id, String(concentration._id), lyra.userId)
-        await waitForCampaignIdle(id)
+        await settleCampaign(id)
         expect((await stateOf(id, lyra.actorKey)).concentration).toBeNull()
         expect((await MaddoxCampaignMessageModel.findById(concentration._id).lean())!.combatRoll!.outcome).toMatch(/perdeu a concentração em Bênção/)
         // As esperas fecharam: a continuação narrou.

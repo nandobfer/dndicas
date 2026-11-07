@@ -78,6 +78,13 @@ export function reduceGameStream(state: MaddoxGameStreamState, line: MaddoxGameS
         case "check-rolled":
         case "combat-rolled":
             return { ...state, rolled: [...state.rolled.filter((item) => item.messageId !== line.messageId), { messageId: line.messageId, roll: line.roll }].slice(-ROLLED_KEEP) }
+        case "combat-step-rolled": {
+            // Dado do servidor num passo de um card de ação (DND-25): chave `{mensagem}:{passo}`.
+            const key = `${line.messageId}:${line.stepIndex}`
+            return { ...state, rolled: [...state.rolled.filter((item) => item.messageId !== key), { messageId: key, roll: line.roll }].slice(-ROLLED_KEEP) }
+        }
+        case "live-roll":
+            return { ...state, live: patch(state.live, line.liveId, (item) => ({ ...item, rolls: [...(item.rolls ?? []).filter((roll) => roll.id !== line.roll.id), line.roll] })) }
         default:
             return state
     }
@@ -131,7 +138,7 @@ export function useMaddoxGameStream(campaignId: string, enabled: boolean): Maddo
                     buffer = parsed.rest
                     if (!parsed.lines.length) continue
                     setState((state) => ({ id: campaignId, value: parsed.lines.reduce(reduceGameStream, current(state)) }))
-                    if (parsed.lines.some((line) => line.type === "live-end" || line.type === "check-rolled" || line.type === "combat-rolled") || (first && parsed.lines.some((line) => line.type === "snapshot"))) refresh()
+                    if (parsed.lines.some((line) => line.type === "live-end" || line.type === "check-rolled" || line.type === "combat-rolled" || line.type === "combat-step-rolled") || (first && parsed.lines.some((line) => line.type === "snapshot"))) refresh()
                     first = false
                 }
             } catch (error) {

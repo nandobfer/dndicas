@@ -210,7 +210,7 @@ export const MADDOX_GAME_CHANGED_EVENT = "maddox.game.changed"
  * uma rolagem avulsa (`combat-roll`: iniciativa, salvaguarda, teste contra a morte, concentração, dano) e a janela de
  * reação (`combat-reaction`).
  */
-export const MADDOX_GAME_MESSAGE_KINDS = ["narration", "declaration", "pass", "question", "answer", "check", "combat", "combat-action", "combat-roll", "combat-reaction"] as const
+export const MADDOX_GAME_MESSAGE_KINDS = ["narration", "declaration", "pass", "question", "answer", "check", "combat", "combat-action", "combat-roll", "combat-reaction", "reminder"] as const
 export type MaddoxGameMessageKind = (typeof MADDOX_GAME_MESSAGE_KINDS)[number]
 
 /** O que o jogador envia no próprio turno. */
@@ -218,6 +218,19 @@ export const MADDOX_GAME_ACTION_KINDS = ["declaration", "pass", "question"] as c
 export type MaddoxGameActionKind = (typeof MADDOX_GAME_ACTION_KINDS)[number]
 
 export const MADDOX_GAME_MESSAGE_MAX = 4_000
+
+// ── Injetar Lembrança (DND-25) ────────────────────────────────────────────────
+
+/** Tamanho máximo de uma lembrança injetada por um jogador. */
+export const MADDOX_REMINDER_MAX_CHARS = 500
+export const MADDOX_REMINDER_STATUSES = ["pending", "saved", "discarded"] as const
+export type MaddoxReminderStatus = (typeof MADDOX_REMINDER_STATUSES)[number]
+export const MADDOX_REMINDER_STATUS_LABELS: Record<MaddoxReminderStatus, string> = {
+    pending: "Aguardando o Maddox",
+    saved: "Guardada como memória",
+    discarded: "Usada só neste turno",
+}
+export const MADDOX_REMINDER_PLACEHOLDER = "Ex.: lembre-se que tenho o talento Alerta e não posso ser surpreendido"
 /** Mensagens por página da mesa (as mais recentes; "Carregar anteriores" busca o resto). */
 export const MADDOX_GAME_PAGE_SIZE = 100
 /** Trava do turno do mestre mais antiga que isto é retomada (geração interrompida). */
@@ -509,6 +522,15 @@ export const MADDOX_COMBAT_FORCE_END_AFTER = 2
 export const MADDOX_COMBAT_FREE_TEXT_MAX = 1_000
 /** Alvos de uma magia de área. */
 export const MADDOX_COMBAT_TARGETS_MAX = 12
+/**
+ * Iniciativa dos inimigos (DND-25): tempo em que o dado ainda está na tela de todos depois de rolado. A ordem de
+ * iniciativa só fecha (e o Maddox só narra) depois disso.
+ */
+export const MADDOX_ENEMY_INITIATIVE_REVEAL_MS = 2_500
+/** Pausa de leitura entre o fim de um bloco do combate tático (narração de um NPC) e o bloco seguinte (DND-25). */
+export const MADDOX_NPC_BLOCK_PAUSE_MS = 3_000
+/** Teto de rodadas (blocos + esperas) de um turno do mestre do combate tático — proteção contra laço. */
+export const MADDOX_COMBAT_MASTER_ROUNDS_MAX = 60
 /** Ataques por ação "Atacar" de um adversário com Ataques Múltiplos. */
 export const MADDOX_MONSTER_MULTIATTACK_MAX = 4
 

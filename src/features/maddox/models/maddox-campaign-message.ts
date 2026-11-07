@@ -12,6 +12,7 @@ import {
     type MaddoxCheckMode,
     type MaddoxCheckStatus,
     type MaddoxGameMessageKind,
+    type MaddoxReminderStatus,
     type MaddoxTurnPhase,
 } from "../constants"
 import type { IMaddoxCombatAction, IMaddoxCombatReaction, IMaddoxCombatRoll } from "../combat-types"
@@ -40,6 +41,16 @@ export interface IMaddoxCheck {
     rolledAt: Date | null
     /** Motivo do cancelamento (o jogador saiu da campanha). */
     cancelReason: string | null
+}
+
+export interface IMaddoxReminder {
+    status: MaddoxReminderStatus
+    jobId: string | null
+    claimedAt: Date | null
+    resolvedAt: Date | null
+    memoryKind: string | null
+    memoryTitle: string | null
+    visibility: "players" | "master" | null
 }
 
 /**
@@ -79,6 +90,11 @@ export interface IMaddoxCampaignMessage {
     combatReaction: IMaddoxCombatReaction | null
     /** "Não fez nada" registrado porque o jogador estava offline na própria vez (combate tático). */
     offlineSkip: boolean
+    /**
+     * Lembrança injetada (`kind: "reminder"`, DND-25): `jobId` = geração do Maddox que a considerou (reivindicada no começo
+     * da narração; volta a `null` se a geração falhar); `status` muda depois de a narração ser gravada.
+     */
+    reminder: IMaddoxReminder | null
     createdAt: Date
     updatedAt: Date
 }
@@ -129,6 +145,7 @@ const MaddoxCampaignMessageSchema = new Schema<IMaddoxCampaignMessage>(
         combatRoll: { type: Schema.Types.Mixed, default: null },
         combatReaction: { type: Schema.Types.Mixed, default: null },
         offlineSkip: { type: Boolean, default: false },
+        reminder: { type: Schema.Types.Mixed, default: null },
     },
     { collection: "maddox_campaign_messages", timestamps: true, versionKey: false },
 )

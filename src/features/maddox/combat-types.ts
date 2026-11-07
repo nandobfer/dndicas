@@ -117,6 +117,23 @@ export interface TacticalCombatState {
     nextKey: string | null
     /** Turno do mestre para o qual a fila foi preparada (preparar de novo na retomada não repete nada). */
     queueTurn: number | null
+    /**
+     * DND-25: foco da geração atual do turno do mestre — a narração da vez do personagem (`character`) ou o bloco de UM
+     * adversário (`npc`). `waits` = esperas já abertas por este bloco. `null` = gravação antiga (todos na mesma narração).
+     */
+    block?: TacticalBlock | null
+    /** Adversários da fila que já concluíram o próprio bloco neste turno do mestre. */
+    acted?: string[]
+}
+
+export interface TacticalBlock {
+    kind: "character" | "npc"
+    actorKey: string | null
+    waits: number
+    /** Rodada (`checkRound`) em que o bloco começa: fechar um bloco é idempotente na retomada da mesma rodada. */
+    startRound: number
+    /** Rodadas em que este bloco abriu espera (contar `waits` uma vez por rodada, mesmo na retomada). */
+    waitRounds?: number[]
 }
 
 // ── Mensagens ─────────────────────────────────────────────────────────────────
@@ -178,7 +195,7 @@ export interface IMaddoxCombatAction {
 
 export interface IMaddoxCombatRoll {
     combatId: string
-    kind: "initiative" | "death-save" | "concentration" | "save" | "damage"
+    kind: "initiative" | "enemy-initiative" | "death-save" | "concentration" | "save" | "damage"
     waitRound: number | null
     status: "pending" | "rolled" | "cancelled"
     ability: AttributeType | null
@@ -196,6 +213,12 @@ export interface IMaddoxCombatRoll {
     targetKey: string | null
     outcome: string | null
     rolledBy: string | null
+    /** Iniciativa dos inimigos (DND-25): o grupo e até quando o dado ainda está rolando na tela (a ordem espera). */
+    groupKey?: string | null
+    groupName?: string | null
+    revealUntil?: Date | null
+    rolling?: boolean
+    rollingAt?: Date | null
 }
 
 export interface IMaddoxCombatReaction {
