@@ -150,16 +150,29 @@ async function tacticalCombatBlock(campaignId: Types.ObjectId): Promise<string |
 }
 
 /** Quem age nesta narração do combate tático (`null` = sem combate tático). */
-async function tacticalTask(campaignId: Types.ObjectId): Promise<NarratorTacticalTask | null> {
+async function tacticalTask(campaignId: Types.ObjectId, round: number): Promise<NarratorTacticalTask | null> {
     const tactical = await import("./tactical-combat")
     const combat = await tactical.findActiveTactical(campaignId)
     if (!combat) return null
+    const nameOf = (key: string) => tactical.findActor(combat, key)?.name ?? null
+    const block = combat.tactical.phase === "running" ? (combat.tactical.block ?? null) : null
     return {
         phase: combat.tactical.phase,
-        queue: combat.tactical.queue.map((key) => tactical.findActor(combat, key)?.name).filter((name): name is string => Boolean(name)),
-        next: combat.tactical.nextKey ? (tactical.findActor(combat, combat.tactical.nextKey)?.name ?? null) : null,
+        queue: combat.tactical.queue.map(nameOf).filter((name): name is string => Boolean(name)),
+        next: combat.tactical.nextKey ? nameOf(combat.tactical.nextKey) : null,
         enemiesDown: tactical.livingEnemies(combat).length === 0,
-        charactersDown: !combat.tactical.characters.some(tactical.takesTurn),
+        charactersDown: tactical.consciousCharacters(combat).length === 0,
+        ...(block
+            ? {
+                  block: {
+                      kind: block.kind,
+                      actor: block.actorKey ? nameOf(block.actorKey) : null,
+                      resumed: round > block.startRound,
+                      waits: block.waits,
+                      remaining: tactical.remainingBlocks(combat).map(nameOf).filter((name): name is string => Boolean(name)),
+                  },
+              }
+            : {}),
     }
 }
 
@@ -269,7 +282,7 @@ async function generate(args: GenerateArgs, sink: MaddoxMasterSink): Promise<str
     const [context, memories] = await Promise.all([loadContext(campaignId), agentMemories()])
     const transcript = narratorTranscript(
         context.messages
-            .filter((message) => !args.excludeIds.has(String(message._id)) && !message.error)
+            .filter((message) => !args.excludeIds.has(String(message._id)) && !message.error && message.kind !== "reminder")
             .map((message) => {
                 const check = checkResultOf(message)
                 if (message.kind === "combat") return { turnNumber: message.turnNumber, kind: message.kind, characterName: null, content: combatTranscriptLine(message, context.combats.get(String(message.combat?.combatId))) }
@@ -281,7 +294,13 @@ async function generate(args: GenerateArgs, sink: MaddoxMasterSink): Promise<str
         MADDOX_NARRATOR_HISTORY_CHARS,
     )
     const { mentionsToMarkup } = await import("./catalog-mentions")
-    const userText = [transcript ? `# Últimos acontecimentos\n\n${mentionsToMarkup(transcript)}` : null, narratorTaskText(args.task, { density: context.campaign.density ?? MADDOX_DEFAULT_DENSITY })].filter(Boolean).join("\n\n")
+    // Injetar Lembrança (DND-25): as pendentes valem para esta narração (as enviadas durante ela, para a próxima).
+    let remindersText = ""
+    if (args.task.kind !== "answer") {
+        const { claimReminders, remindersTaskSection } = await import("./reminders")
+        remindersText = remindersTaskSection(await claimReminders(campaignId, args.jobId), usesTacticalCombat(context.campaign.rigor))
+    }
+    const userText = [transcript ? `# Últimos acontecimentos\n\n${mentionsToMarkup(transcript)}` : null, narratorTaskText(args.task, { density: context.campaign.density ?? MADDOX_DEFAULT_DENSITY }), remindersText || null].filter(Boolean).join("\n\n")
     const promptContext: NarratorPromptContext = { instructions: settings.instructions, agentMemories: memories, ...context.prompt }
     const stream = liveText(sink)
     let failure: string | null = null
@@ -448,13 +467,13 @@ export const aiMaddoxMaster: MaddoxMaster = {
         // Combate tático (Maddox 7): quem age agora e o resultado das rolagens/reações da espera anterior.
         const campaignDoc = await MaddoxCampaignModel.findById(campaignId).select("rigor").lean<Pick<IMaddoxCampaign, "rigor">>()
         const tacticalRigor = Boolean(campaignDoc && usesTacticalCombat(campaignDoc.rigor))
-        const tactical = tacticalRigor ? await tacticalTask(campaignId) : null
+        const tactical = tacticalRigor ? await tacticalTask(campaignId, round) : null
         const waitDocs = tacticalRigor && round > 0 ? await MaddoxCampaignMessageModel.find({ campaignId, turnNumber: context.turnNumber, $or: [{ "combatRoll.waitRound": round - 1 }, { "combatReaction.waitRound": round - 1 }, { "combatAction.waitRound": round - 1 }] }).select("_id").lean<{ _id: Types.ObjectId }[]>() : []
         const combatResults = tacticalRigor && round > 0 ? await (await import("./combat-reactions")).waitRoundResults(campaignId, context.turnNumber, round - 1) : []
         const { MADDOX_COMBAT_WAIT_ROUNDS_MAX } = await import("../constants")
         const task: NarratorTask =
             round > 0
-                ? { kind: "continuation", turnNumber: context.turnNumber, round, declarations: context.declarations, results, combatResults, tactical, ...(tactical ? { lastRound: round >= MADDOX_COMBAT_WAIT_ROUNDS_MAX - 1 } : {}) }
+                ? { kind: "continuation", turnNumber: context.turnNumber, round, declarations: context.declarations, results, combatResults, tactical, ...(tactical ? { lastRound: tactical.block ? tactical.block.waits >= MADDOX_COMBAT_WAIT_ROUNDS_MAX - 1 : round >= MADDOX_COMBAT_WAIT_ROUNDS_MAX - 1 } : {}) }
                 : { kind: "narration", turnNumber: context.turnNumber, declarations: context.declarations, combatHint: context.combatHint ?? null, tactical }
         return generate(
             {

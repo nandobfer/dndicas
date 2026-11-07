@@ -808,7 +808,7 @@ uma cópia de trabalho), `server/combat-reactions.ts` (janelas de reação), `se
 `server/tactical-options.ts`, `server/tactical-dto.ts`. Tela em `components/game/combat/` e `hooks/useMaddoxCombat.ts`.
 
 **Estado (`maddox_combats`).** `mode: "tactical"`, `tactical { phase: initiative|running, round, activeIndex, order[], characters[],
-surprise, queue[], nextKey, queueTurn, staleEndNarrations }` e `rev` (cada gravação é condicional à versão: clique duplo e corridas
+surprise, queue[], nextKey, queueTurn, staleEndNarrations, block, acted[] }` e `rev` (cada gravação é condicional à versão: clique duplo e corridas
 viram 409 `COMBAT_CHANGED`, com até 3 tentativas internas). Cada adversário vira um **indivíduo** ("Goblin 1", "Goblin 2", PV próprios,
 iniciativa compartilhada pelo grupo) com `combatants[].tactical { actorKey, stats, conditions, flags, economy, concentration, defeated }`.
 `characters[]` guarda condições, flags (Esquivando, Desengajado, Disparada, Escudo, Ajudado), economia, concentração, `hpZero`,
@@ -825,17 +825,39 @@ Destreza CD 15", "metade do dano"), recarga rolada em d6 no começo do turno, At
 e efeitos regionais ficam fora (o Maddox só narra).
 
 **Iniciativa.** A narração que chama `start_combat` grava o card "Combate!" e um card `combat-roll` de iniciativa por personagem
-pronto com ficha (espera do turno do mestre, como os testes do Maddox 5; só quem rola o vê pendente). O servidor rola a dos
-adversários (desvantagem se `surpresa: "adversarios"`; a dos personagens com `surpresa: "personagens"`). O modificador vem da ficha.
-Depois da última rolagem, a ordem fecha (total → Destreza → personagens antes → entrada), grava o card `combat { event: "order" }`
-("Ordem de iniciativa") e a continuação narra o começo.
+pronto com ficha (espera do turno do mestre, como os testes do Maddox 5; só quem rola o vê pendente) e um card `combat-roll`
+**`enemy-initiative` por grupo** de adversários (público, "Aguardando os personagens"; fora de `turn.pendingCombat`). Os jogadores
+rolam ao mesmo tempo; o modificador vem da ficha (desvantagem com `surpresa: "personagens"`). **DND-25:** só quando o último card de
+personagem é rolado (ou cancelado porque o membro saiu) `rollEnemyInitiativeIfReady` (`tactical-combat.ts`, chamado por
+`advanceAfterChecks`) reivindica cada card dos inimigos, rola um d20 por grupo (desvantagem com `surpresa: "adversarios"`: os dois
+dados ficam em `selectedD20`, vale o menor), grava o total nas posições do grupo e emite `combat-rolled` de cada card — todos os grupos
+rolam juntos na tela de todos, e o card mostra "d20 X + mod = total" quando o dado para (`EnemyInitiativeCard`). Só o servidor rola esse card: a rota de rolagem avulsa responde 409 `ENEMY_ROLL_BY_SERVER` (inclusive para o dono). A reivindicação segue a da rolagem avulsa (trava mais velha que `MADDOX_COMBAT_ROLL_CLAIM_STALE_MS` é retomada) e uma falha no meio libera as travas para a próxima chamada. O card guarda
+`revealUntil` (`MADDOX_ENEMY_INITIATIVE_REVEAL_MS`, 2,5 s), que `hasRoundWaits` conta como espera: a ordem só fecha (total → Destreza
+→ personagens antes → entrada), o card `combat { event: "order" }` ("Ordem de iniciativa") só é gravado e a continuação só narra o
+começo depois dele (timer no processo; depois de um reinício, a retomada pelo `check`). Quem recarrega depois vê só o resultado.
+Reforços de `update_combat` com a luta em andamento continuam rolados na hora, sem card.
 
 **Motor da vez.** O motor do Maddox 3 continua: em combate, o **turno dos jogadores é a vez de UM personagem** (`turn.combatActor`,
 `eligibleMemberIds` = só o membro dele) e o **turno do mestre** narra a vez que fechou e conduz, na ordem, os adversários até o próximo
 personagem (`prepareMonsterQueue`, uma vez por turno do mestre, com o começo do turno de cada um: economia nova, flags e condições
 vencidas, recarga; rodada nova quando a ordem volta ao topo). Sem esperas, `openCombatTurn` abre a vez do próximo personagem (começo do
 turno dele; com 0 PV, o card do teste contra a morte). Personagem morto, estável ou que saiu é pulado; se o personagem da vez cair
-durante a vez dos adversários, os seguintes agem num novo turno do mestre. Perguntas ao mestre continuam livres para qualquer membro
+durante a vez dos adversários, os seguintes agem num novo turno do mestre.
+
+**Blocos dos adversários (DND-25).** O turno do mestre é uma sequência de gerações (rodadas do `checkRound`, uma por vez na fila):
+primeiro a **narração do que já aconteceu** (a vez do personagem que fechou ou o começo da luta; `tactical.block = { kind: "character" }`,
+`monster_action` recusado) e depois **um bloco por indivíduo** da fila, na ordem de iniciativa (`block = { kind: "npc", actorKey }`;
+`monster_action` só aceita esse adversário). Sem nada a narrar antes (o turno caiu direto nos adversários) começa pelo primeiro bloco.
+Ao fim de cada geração sem espera, `nextCombatStep` (`game.ts`) → `advanceBlock`/`nextBlockStep` (`tactical-combat.ts`, pura,
+idempotente pela `startRound` do bloco) fecha o bloco (`tactical.acted`) e escolhe o seguinte (pula derrotado, com desfecho ou
+incapacitado); havendo próximo, o turno faz a **pausa de leitura** (`turn.awaitingChecks` + `turn.pauseUntil`,
+`MADDOX_NPC_BLOCK_PAUSE_MS` = 3 s; `advanceAfterChecks` recusa antes dela; timer no processo e retomada pelo `check`) e a continuação
+gera o bloco. Salvaguarda ou reação dentro do bloco = espera normal: a continuação conclui **o mesmo** adversário (o teto de esperas
+`MADDOX_COMBAT_WAIT_ROUNDS_MAX` vale por bloco, `block.waits`; o turno inteiro tem o teto de proteção `MADDOX_COMBAT_MASTER_ROUNDS_MAX`,
+60). Depois do último bloco, `openCombatTurn` abre a vez do próximo personagem. **Nenhum personagem consciente** (todos com 0 PV,
+mesmo morrendo) = os adversários restantes não agem e o servidor encerra na hora como `derrota`. Cada bloco é uma geração: a falha não
+aplica nada daquele NPC e a nova tentativa rola de novo; os blocos já gravados ficam. No bloco de um NPC os cards das ações (os dados)
+são gravados **antes** da narração dele. Gravações antigas sem `block` seguem o modo anterior (todos na mesma narração). Perguntas ao mestre continuam livres para qualquer membro
 pronto durante a vez de outro (não mudam o turno); declarações de texto livre no combate respondem 409 `COMBAT_USE_ACTIONS`.
 
 **Ausência.** Jogador da vez offline: `offlineSince` é marcado e a vez passa depois de `MADDOX_COMBAT_OFFLINE_GRACE_MS` (30 s; timer no
@@ -900,15 +922,21 @@ inimigos caem ou nenhum personagem fica de pé; se o Maddox não encerrar em `MA
 imediatamente quando o grupo caiu), o servidor encerra como `vitoria`/`derrota` (log de aviso) e a mesa volta ao turno normal com todos
 os elegíveis.
 
-**Prompt.** Regra "## Combate tático" (`tacticalCombatRule`), bloco "## Combate tático em andamento" (estado do `get_combat`), tarefa
-com "agem agora, nesta ordem: …" e a vez seguinte (`tacticalTaskLines`), resultados das esperas na continuação
+**Prompt.** Regra "## Combate tático" (`tacticalCombatRule`: um adversário por vez, ferramentas antes do texto), bloco "## Combate
+tático em andamento" (estado do `get_combat`, com `agemAgora` = só o adversário do bloco e `depois` = os seguintes), tarefa pelo bloco
+(`tacticalTaskLines`: "nesta narração NENHUM adversário age" na narração da vez; "bloco de **Goblin 1**: SÓ ele age agora…" com o título
+"vez de Goblin 1"; continuação do mesmo bloco "Conclua a narração dele"), resultados das esperas na continuação
 (`waitRoundResults`) e a transcrição com os resumos dos cards. No OpenCode, a lista do MCP inclui `monster_action`, `apply_effect`,
 `request_damage_roll`, `offer_reaction`.
 
 **DTO e tela.** `combat.tactical` (ordem com PV dos personagens, faixa "Ileso/Ferido/Muito ferido/Caído" dos adversários — sem PV nem
 CA —, condições, concentração, morrendo/estável/morto, quem age), `turn.combatActor`, `turn.pendingCombat`, `me.combat` (vez, economia,
 opções de Ação/Ação bônus, morrendo) e `combatAction`/`combatRoll`/`combatReaction` nas mensagens (rolagem pendente só para quem rola;
-opções da reação só para quem reage). Stream: `combat-rolled` (todos repetem o dado). Tela: `InitiativeTracker` (coluna da direita e
+opções da reação só para quem reage). Stream: `combat-rolled` (todos repetem o dado), **`live-roll { liveId, roll }`** (DND-25: cada dado
+de `monster_action`/`apply_effect` vai para a geração ao vivo do job — `MaddoxLiveGenerationDto.rolls`, também no `snapshot`; a bolha
+`LiveNpcRolls` anima um de cada vez, ataque com Acertou/Errou/Crítico e depois o dano, e só então mostra o texto da narração) e
+**`combat-step-rolled { messageId, stepIndex, roll }`** (salvaguarda de um adversário rolada pelo servidor num card de ação de jogador:
+o passo anima antes do resultado). Dados do servidor repetidos com `ReplayDie` (`DiceRollerPanel` só com `externalResult`). Tela: `InitiativeTracker` (coluna da direita e
 faixa compacta no cabeçalho em telas pequenas), `CombatActionBar` (na minha vez substitui o campo: Ação, Ação bônus, economia,
 "Movimento e posição", Encerrar turno, "Perguntar ao mestre"; um único painel ancorado ao botão que o abriu, `anchorLeft` limita ao
 contêiner e à janela; categorias em `OptionTabs`, alvos/círculo/perícia em `GlassSelector`), `CombatWaitBar` ("Vez de Kael
@@ -917,6 +945,30 @@ contêiner e à janela; categorias em `OptionTabs`, alvos/círculo/perícia em `
 
 Sem permissão nova (`maddox.play` cobre). Fora do escopo: grid e alcance medido (o movimento é texto), ações lendárias e de covil,
 XP e subida de nível, reações dos adversários além do ataque de oportunidade conduzido pelo Maddox, novo personagem depois da morte.
+
+## Injetar Lembrança (DND-25)
+
+Todos os graus. Código: `server/reminders.ts`, `POST …/game/reminders` `{ texto }` (Zod `maddoxReminderSchema`: 1 a
+`MADDOX_REMINDER_MAX_CHARS` = 500, sem outros campos; `maddox.play`), `components/game/InjectReminderButton.tsx` (ao lado de "Gerar
+imagem da cena", `GlassPopover` com "Injetar Lembrança", o placeholder `MADDOX_REMINDER_PLACEHOLDER`, contador "N/500" e "Enviar"
+desabilitado vazio ou acima do limite; botão desabilitado com o motivo de `reminderBlockReason`), `ReminderLine.tsx` e
+`useInjectMaddoxReminder`.
+
+- **Envio:** membro `joined` (`loadAsMember`), campanha `active` (409 `CAMPAIGN_NOT_ACTIVE`) e `assertMemberCanPlay` (409
+  `INTERVIEW_REQUIRED`). Grava a mensagem `kind: "reminder"` (`content` = texto; `reminder { status, jobId, … }`), audita (`CRIAR`,
+  com o tamanho) e avisa a mesa. **Não** é declaração, não muda o turno e vale dentro e fora de combate, inclusive na vez de outro.
+  Sem edição nem exclusão; várias por narração.
+- **Consumo:** no começo de cada **narração** (não nas respostas a perguntas) `claimReminders` reivindica as pendentes para o job
+  (`reminder.jobId`; também as de um job que já não roda) — a enviada durante a geração fica para a seguinte; no combate tático cada
+  bloco é uma narração. A tarefa ganha "## Lembranças dos jogadores (considere nesta narração)" com `[id curto] **Personagem**: texto` e
+  a orientação (contexto, não muda as regras; no Rigoroso e no Fiel a ficha prevalece). As lembranças ficam fora da transcrição.
+- **Decisão:** ferramenta `resolve_reminder { lembranca, guardar, tipo?, titulo?, texto?, visibility? }` (AI SDK e MCP) guarda a decisão
+  no job. Depois de gravar a narração, `commitReminders` grava as escolhidas com `saveCampaignMemory` (canal dos jogadores ou do mestre;
+  tag `lembranca`; rede fora = fila `engramind_pending_writes`) → `saved` ("Guardada como memória"); as demais → `discarded` ("Usada só
+  neste turno"). Geração que falha devolve as lembranças a `pending` (`releaseReminders`); `commitReminders` nunca lança (falha ao gravar a situação = aviso no log e as lembranças voltam a esperar, sem refazer a narração gravada). Sem narração, fica "Aguardando o Maddox".
+- **Tela:** linha discreta para toda a mesa "{Personagem} lembrou o Maddox: “…”" com o aviso da situação abaixo.
+
+Sem permissão nova (`maddox.play` cobre).
 
 ## Modo fiel ao D&D (Maddox 8)
 
@@ -1201,6 +1253,14 @@ desligada sem a ferramenta; narração que falha sem imagem; resposta sem a ferr
 `maddox-mcp.test.ts`, `game-routes.test.ts`, `ensure-maddox-indexes.test.ts`, `tests/backend/ai/image-lazy-providers.test.ts`
 (referências só nos modelos que aceitam); na tela, `maddox-scene-images.test.tsx`, `maddox-game.test.tsx`, `maddox-tab.test.tsx` e
 `maddox-campaigns.test.tsx`.
+DND-25: `tactical-combat.test.ts` ("iniciativa dos inimigos depois dos personagens": um card por grupo, rolagem só depois do último
+personagem, `revealUntil` segurando a ordem, desvantagem, saída do último pendente; "um bloco por adversário": narração da vez, um bloco
+por goblin com os cards antes da narração, `live-roll`, pausa, derrotado sem bloco, NPC só com narração, todos com 0 PV = derrota,
+falha de um bloco), `narrator-tactical-combat-campaign.test.ts`, `reminders.test.ts` (narrador real: recusas, auditoria, turno
+intacto, lembrança no prompt, guardada no canal do mestre e descartada, enviada durante a narração, falha da geração, resposta não
+consome, fila da rede), `game-routes.test.ts` (rota), `narrator-prompt.test.ts` (blocos e seção das lembranças); na tela,
+`maddox-dnd25-combat.test.tsx` (popover, linha, card dos inimigos, dados ao vivo em sequência, passo do servidor, stream). Os testes
+encurtam os tempos com `shortenCombatTiming` e esperam a mesa com `settleCampaign` (`tests/helpers/maddox-sequence.ts`).
 DND-22: `campaigns.test.ts` (densidade padrão, na criação, editada em andamento com auditoria, campanha antiga e schema),
 `narrator-prompt.test.ts` (linha de tamanho nas narrações e não na resposta), `narrator-campaign.test.ts` (narrador real: densidade
 editada vale na narração seguinte e não na resposta), `journal.test.ts` (aba Imagens: só prontas, sem retrato de NPC secreto nem dados

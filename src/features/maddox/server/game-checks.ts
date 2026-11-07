@@ -110,11 +110,24 @@ async function loadSheet(sheetId: Types.ObjectId): Promise<MaddoxCheckSheet | nu
  */
 export async function advanceAfterChecks(campaignId: Types.ObjectId, turnNumber: number, round: number): Promise<boolean> {
     await cancelOrphanChecks(campaignId, turnNumber, round)
+    // Combate tático (DND-25): sem personagem pendente na iniciativa, os inimigos rolam agora (e a ordem espera o dado parar).
+    const { rollEnemyInitiativeIfReady } = await import("./tactical-combat")
+    await rollEnemyInitiativeIfReady(campaignId, turnNumber, round)
     if (await hasRoundWaits(campaignId, turnNumber, round, true)) return false
     const token = randomUUID()
+    const now = new Date()
     const won = await MaddoxCampaignModel.updateOne(
-        { _id: campaignId, status: "active", "turn.number": turnNumber, "turn.phase": "master", "turn.awaitingChecks": true, "turn.checkRound": round === 0 ? { $in: [0, null] } : round },
-        { $set: { "turn.awaitingChecks": false, "turn.checkRound": round + 1, "turn.generating": { token, startedAt: new Date() }, "turn.failedAt": null } },
+        {
+            _id: campaignId,
+            status: "active",
+            "turn.number": turnNumber,
+            "turn.phase": "master",
+            "turn.awaitingChecks": true,
+            "turn.checkRound": round === 0 ? { $in: [0, null] } : round,
+            // Pausa de leitura entre dois blocos do combate tático: a continuação só entra depois dela.
+            $or: [{ "turn.pauseUntil": null }, { "turn.pauseUntil": { $exists: false } }, { "turn.pauseUntil": { $lte: now } }],
+        },
+        { $set: { "turn.awaitingChecks": false, "turn.checkRound": round + 1, "turn.generating": { token, startedAt: new Date() }, "turn.failedAt": null, "turn.pauseUntil": null } },
     )
     if (won.modifiedCount === 0) return false
     log.info({ campaignId: String(campaignId), turnNumber, round }, "[maddox] Testes da rodada concluídos; o Maddox continua a narração")
@@ -138,7 +151,10 @@ export async function hasRoundWaits(campaignId: Types.ObjectId, turnNumber: numb
             { kind: "combat-action", "combatAction.waitRound": round, ...(pendingOnly ? { "combatAction.status": "pending" } : {}) },
         ],
     })
-    return Boolean(found)
+    if (found || !pendingOnly) return Boolean(found)
+    // Iniciativa dos inimigos (DND-25): o dado ainda está rolando na tela de todos.
+    const revealing = await MaddoxCampaignMessageModel.exists({ campaignId, turnNumber, kind: "combat-roll", "combatRoll.waitRound": round, "combatRoll.kind": "enemy-initiative", "combatRoll.revealUntil": { $gt: new Date() } })
+    return Boolean(revealing)
 }
 
 /**

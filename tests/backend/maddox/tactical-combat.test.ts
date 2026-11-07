@@ -84,7 +84,7 @@ vi.mock("@/lib/ai/stream", () => ({
     generateAiText: vi.fn(async () => ({ text: validation.verdict })),
 }))
 type ToolCall = { name: string; input: Record<string, unknown> }
-const script: { tools?: ToolCall[]; text?: string }[][] = []
+const script: { tools?: ToolCall[]; text?: string; fail?: boolean }[][] = []
 const toolLog: { name: string; output?: unknown; error?: string }[] = []
 vi.mock("ai", () => ({
     dynamicTool: (def: unknown) => def,
@@ -109,6 +109,10 @@ vi.mock("ai", () => ({
                             yield { type: "tool-error", toolCallId, toolName: call.name, error }
                         }
                     }
+                    if (step.fail) {
+                        yield { type: "error", error: new Error("provedor fora do ar") }
+                        return
+                    }
                     if (step.text) yield { type: "text-delta", text: step.text }
                 }
                 yield { type: "finish", finishReason: "stop", totalUsage: {} }
@@ -125,8 +129,10 @@ const tactical = await import("@/features/maddox/server/tactical-combat")
 const reactions = await import("@/features/maddox/server/combat-reactions")
 const { resolveProfiles, profileKey, resetClassifierAttempts } = await import("@/features/maddox/server/combat-classifier")
 const { loadMaddoxSettings } = await import("@/features/maddox/server/settings")
-const { waitForCampaignIdle } = await import("@/features/maddox/server/game-live")
+const { waitForCampaignIdle, subscribeGameLive } = await import("@/features/maddox/server/game-live")
 const { freshEconomy } = await import("@/features/maddox/combat-rules")
+const { settleCampaign, shortenCombatTiming } = await import("../../helpers/maddox-sequence")
+await shortenCombatTiming()
 const { monsterStatsFromCustom } = await import("@/features/maddox/server/combat-monsters")
 const { CharacterSheet } = await import("@/features/character-sheets/models/character-sheet")
 const { CharacterItem } = await import("@/features/character-sheets/models/character-item")
@@ -579,6 +585,7 @@ describe("Maddox 7 — revisão: recursos, concorrência e efeitos", () => {
     it("vez dos adversários: condição e dano pelo apply_effect, dano pedido ao jogador, salvaguarda com dano e concentração; reação sem fonte recusada", async () => {
         const { id, kael, lyra } = await scene({ goblinActions: [{ nome: "Bafo", tipo: "salvaguarda", cd: 13, atributo: "Destreza", dano: "2d6", tipoDano: "veneno", metadeNoSucesso: true }] })
         await MaddoxCombatModel.updateOne({ campaignId: id, "tactical.characters.actorKey": lyra.actorKey }, { $set: { "tactical.characters.$.concentration": { spell: "Bênção", sinceRound: 1 } } })
+        // DND-25: primeiro a narração da vez de Kael (efeitos adjudicados, sem adversários); depois o bloco do goblin.
         script.push([
             {
                 tools: [
@@ -588,23 +595,34 @@ describe("Maddox 7 — revisão: recursos, concorrência e efeitos", () => {
                     { name: "request_damage_roll", input: { personagem: "Kael", dados: "1d4", tipoDano: "concussão", alvo: "Goblin", motivo: "A estante que Kael derrubou" } },
                     { name: "monster_action", input: { combatente: "Goblin", acao: "Bafo", alvos: ["Lyra"] } },
                 ],
-                text: "O goblin sopra uma névoa verde.",
+                text: "Kael derruba a estante.",
             },
         ])
         await actions.endCombatTurn(id, {}, kael.userId)
-        await waitForCampaignIdle(id)
+        await settleCampaign(id)
         expect(toolLog.find((item) => item.name === "offer_reaction")!.error).toMatch(/informe em `fonte` o adversário/)
-        expect(toolLog.filter((item) => item.name !== "offer_reaction").every((item) => !item.error)).toBe(true)
+        // Na narração da vez de Kael nenhum adversário age.
+        expect(toolLog.find((item) => item.name === "monster_action")!.error).toMatch(/nenhum adversário age/)
+        expect(toolLog.filter((item) => item.name !== "offer_reaction" && item.name !== "monster_action").every((item) => !item.error)).toBe(true)
         // Gravado depois da narração: 3 de fogo (1d6 do servidor) no goblin, Lyra envenenada por 2 rodadas.
         expect((await goblinOf(id)).stats.hp).toBe(4)
         expect((await stateOf(id, lyra.actorKey)).conditions).toEqual([expect.objectContaining({ key: "poisoned", untilRound: 3 })])
         expect((await MaddoxCampaignModel.findById(id).lean())!.turn).toMatchObject({ phase: "master", awaitingChecks: true })
+        toolLog.length = 0
+        // Continuação da vez de Kael (resultado do dano) e, depois da pausa, o bloco do goblin.
+        script.push([{ text: "A estante esmaga o goblin." }], [{ tools: [{ name: "monster_action", input: { combatente: "Goblin", acao: "Bafo", alvos: ["Lyra"] } }], text: "O goblin sopra uma névoa verde." }])
 
         const damageCard = (await MaddoxCampaignMessageModel.findOne({ campaignId: id, kind: "combat-roll", "combatRoll.kind": "damage" }).lean())!
         expect(String(damageCard.memberId)).toBe(kael.memberId)
         dice.players.set(kael.userId, [[2]])
         await actions.rollCombatRoll(id, String(damageCard._id), kael.userId)
+        await settleCampaign(id)
         expect((await goblinOf(id)).stats.hp).toBe(2)
+        expect(toolLog.every((item) => !item.error)).toBe(true)
+        // O card do Bafo (o dado) vem antes da narração do goblin.
+        const bafo = (await MaddoxCampaignMessageModel.findOne({ campaignId: id, kind: "combat-action", "combatAction.label": "Bafo" }).lean())!
+        const goblinNarration = (await MaddoxCampaignMessageModel.findOne({ campaignId: id, kind: "narration", content: /névoa verde/ }).lean())!
+        expect(String(bafo._id) < String(goblinNarration._id)).toBe(true)
 
         // Salvaguarda da Lyra: falha (3 contra CD 13) = os 6 de dano rolados pelo servidor; ela concentrava → card de concentração.
         const saveCard = (await MaddoxCampaignMessageModel.findOne({ campaignId: id, kind: "combat-roll", "combatRoll.kind": "save" }).lean())!
@@ -615,7 +633,7 @@ describe("Maddox 7 — revisão: recursos, concorrência e efeitos", () => {
         const concentration = (await MaddoxCampaignMessageModel.findOne({ campaignId: id, kind: "combat-roll", "combatRoll.kind": "concentration" }).lean())!
         expect(concentration.combatRoll).toMatchObject({ dc: 10, status: "pending" })
         await actions.rollCombatRoll(id, String(concentration._id), lyra.userId)
-        await waitForCampaignIdle(id)
+        await settleCampaign(id)
         expect((await stateOf(id, lyra.actorKey)).concentration).toBeNull()
         expect((await MaddoxCampaignMessageModel.findById(concentration._id).lean())!.combatRoll!.outcome).toMatch(/perdeu a concentração em Bênção/)
         // As esperas fecharam: a continuação narrou.
@@ -642,6 +660,273 @@ describe("Maddox 7 — revisão: recursos, concorrência e efeitos", () => {
         expect(await stateOf(id, lyra.actorKey)).toMatchObject({ dead: true })
         expect((await MaddoxCharacterModel.findById(lyra.characterId).lean())!.status).toBe("dead")
         expect((await MaddoxCharacterModel.findById(kael.characterId).lean())!.status).not.toBe("dead")
+    })
+})
+
+/** Segundo goblin na ordem, entre o primeiro e a Lyra (Kael → Goblin → Goblin 2 → Lyra). */
+async function addSecondGoblin(id: string, options: { defeated?: boolean } = {}) {
+    const second = tactical.combatantState("npc:gob2", "goblin", monsterStatsFromCustom({ ca: 12, pv: 7, acoes: [{ nome: "Faca", tipo: "ataque", bonus: 4, dano: "1d4+2", tipoDano: "perfurante" }] }))
+    if (options.defeated) Object.assign(second, { defeated: true, stats: { ...second.stats, hp: 0 } })
+    const combat = (await MaddoxCombatModel.findOne({ campaignId: id }).lean())!
+    const order = [...combat.tactical!.order]
+    order.splice(2, 0, { actorKey: "npc:gob2", kind: "combatant", name: "Goblin 2", total: 9, d20: 7, modifier: 2, dexterity: 14, joinIndex: 3, groupKey: "goblin" })
+    await MaddoxCombatModel.updateOne(
+        { campaignId: id },
+        { $push: { combatants: { name: "Goblin 2", nameKey: "goblin 2", side: "inimigo", quantity: 1, description: "", condition: "", npcId: null, outcome: null, tactical: second } }, $set: { "tactical.order": order } },
+    )
+}
+
+/** Combate que começa agora (fase de iniciativa) com 2 goblins e 1 lobo; a mesa espera as rolagens no turno 3 do mestre. */
+async function initiativeScene(surprise: "adversarios" | null = null) {
+    const { id, kael, lyra } = await scene()
+    await MaddoxCombatModel.deleteMany({ campaignId: id })
+    const campaignId = new mongoose.Types.ObjectId(id)
+    const draft = (name: string, quantity: number, iniciativa: number) => ({ name, side: "inimigo" as const, quantity, description: "", condition: "", registerNpc: false, stats: monsterStatsFromCustom({ ca: 12, pv: 7, iniciativa, acoes: [{ nome: "Mordida", tipo: "ataque", bonus: 4, dano: "1d6" }] }) })
+    const plan = (await tactical.createTacticalCombat({ _id: campaignId }, 3, 0, { title: "Emboscada", location: "Estrada", surprise, combatants: [draft("Goblin", 2, 2), draft("Lobo", 1, 1)] }, async () => null))!
+    await MaddoxCampaignMessageModel.insertMany(plan.initiativeMessages)
+    await MaddoxCampaignModel.updateOne({ _id: id }, { $set: { "turn.number": 3, "turn.phase": "master", "turn.awaitingChecks": true, "turn.checkRound": 0, "turn.generating": null, "turn.combatActor": null, "turn.eligibleMemberIds": [] } })
+    const cardOf = async (userId: string) => (await MaddoxCampaignMessageModel.findOne({ campaignId: id, kind: "combat-roll", "combatRoll.kind": "initiative", userId }).lean())!
+    const enemyCards = () => MaddoxCampaignMessageModel.find({ campaignId: id, kind: "combat-roll", "combatRoll.kind": "enemy-initiative" }).sort({ _id: 1 }).lean()
+    return { id, kael, lyra, cardOf, enemyCards }
+}
+
+describe("DND-25 — iniciativa dos inimigos depois dos personagens", () => {
+    it("os inimigos só rolam depois do último personagem, um dado por grupo, e a ordem só fecha quando os dados param", async () => {
+        const { id, kael, lyra, cardOf, enemyCards } = await initiativeScene()
+        const rolled: string[] = []
+        const unsubscribe = subscribeGameLive(id, (line) => {
+            if (line.type === "combat-rolled") rolled.push(line.messageId)
+        })
+        // Um card por grupo, visível para toda a mesa e fora da lista "aguardando" dos jogadores.
+        let enemies = await enemyCards()
+        expect(enemies.map((card) => [card.combatRoll!.groupName, card.combatRoll!.dice, card.combatRoll!.status])).toEqual([
+            ["Goblin", "1d20+2", "pending"],
+            ["Lobo", "1d20+1", "pending"],
+        ])
+        const lyraView = await game.getGameState(id, lyra.userId)
+        expect(lyraView.messages.filter((message) => message.combatRoll?.kind === "enemy-initiative")).toHaveLength(2)
+        expect((lyraView.turn.pendingCombat ?? []).map((item) => item.characterName).sort()).toEqual(["Kael", "Lyra"])
+
+        dice.players.set(kael.userId, [[14]])
+        await actions.rollCombatRoll(id, String((await cardOf(kael.userId))._id), kael.userId)
+        expect((await enemyCards()).every((card) => card.combatRoll!.status === "pending")).toBe(true)
+        expect(rolled).toHaveLength(1)
+
+        tactical.combatTiming.enemyRevealMs = 400
+        dice.server.push([11], [6])
+        dice.players.set(lyra.userId, [[9]])
+        await actions.rollCombatRoll(id, String((await cardOf(lyra.userId))._id), lyra.userId)
+        enemies = await enemyCards()
+        expect(enemies.map((card) => [card.combatRoll!.status, card.combatRoll!.total, card.combatRoll!.outcome])).toEqual([
+            ["rolled", 13, "d20 11 + 2 = 13"],
+            ["rolled", 7, "d20 6 + 1 = 7"],
+        ])
+        expect(rolled).toEqual(expect.arrayContaining(enemies.map((card) => String(card._id))))
+        // Os dados ainda estão na tela: a ordem não fechou e o Maddox não narrou.
+        let combat = (await MaddoxCombatModel.findOne({ campaignId: id }).lean())!
+        expect(combat.tactical!.phase).toBe("initiative")
+        expect(combat.tactical!.order.filter((slot) => slot.kind === "combatant").map((slot) => `${slot.name}:${slot.total}`)).toEqual(["Goblin 1:13", "Goblin 2:13", "Lobo:7"])
+        expect(await MaddoxCampaignMessageModel.exists({ campaignId: id, kind: "combat", "combat.event": "order" })).toBeNull()
+        await game.checkTurn(id, kael.userId)
+        expect((await MaddoxCampaignModel.findById(id).lean())!.turn.awaitingChecks).toBe(true)
+
+        await settleCampaign(id)
+        unsubscribe()
+        tactical.combatTiming.enemyRevealMs = 20
+        combat = (await MaddoxCombatModel.findOne({ campaignId: id }).lean())!
+        expect(combat.tactical!.phase).toBe("running")
+        expect(combat.tactical!.order.map((slot) => slot.name)).toEqual(["Kael", "Goblin 1", "Goblin 2", "Lyra", "Lobo"])
+        expect(await MaddoxCampaignMessageModel.exists({ campaignId: id, kind: "combat", "combat.event": "order" })).toBeTruthy()
+        expect(await MaddoxCampaignMessageModel.exists({ campaignId: id, kind: "narration", turnNumber: 3 })).toBeTruthy()
+    })
+
+    it("o card dos inimigos não pode ser rolado pela rota de rolagem avulsa, nem pelo dono", async () => {
+        const { id, kael, enemyCards } = await initiativeScene()
+        const [goblins] = await enemyCards()
+        await expect(actions.rollCombatRoll(id, String(goblins!._id), kael.userId)).rejects.toMatchObject({ status: 409, code: "ENEMY_ROLL_BY_SERVER" })
+        expect((await MaddoxCampaignMessageModel.findById(goblins!._id).lean())!.combatRoll).toMatchObject({ status: "pending", roll: null, rolledBy: null })
+        const combat = (await MaddoxCombatModel.findOne({ campaignId: id }).lean())!
+        expect(combat.tactical!.order.filter((slot) => slot.kind === "combatant").every((slot) => slot.total === null)).toBe(true)
+    })
+
+    it("falha depois de reivindicar os cards dos inimigos: a trava é liberada e a chamada seguinte rola; trava abandonada também é retomada", async () => {
+        const { id, kael, lyra, cardOf, enemyCards } = await initiativeScene()
+        dice.players.set(kael.userId, [[14]])
+        await actions.rollCombatRoll(id, String((await cardOf(kael.userId))._id), kael.userId)
+        // A gravação da ordem com o total dos inimigos falha uma vez (banco fora).
+        const original = MaddoxCombatModel.findOneAndUpdate.bind(MaddoxCombatModel)
+        let failed = false
+        const spy = vi.spyOn(MaddoxCombatModel, "findOneAndUpdate").mockImplementation(((filter: never, update: { $set?: { tactical?: { phase?: string; order?: { kind: string; total: number | null }[] } } }, options: never) => {
+            const tacticalSet = update?.$set?.tactical
+            if (!failed && tacticalSet?.phase === "initiative" && tacticalSet.order?.some((slot) => slot.kind === "combatant" && slot.total !== null)) {
+                failed = true
+                throw new Error("banco indisponível")
+            }
+            return original(filter, update as never, options)
+        }) as never)
+        // O card da Lyra fecha sem disparar nada (o teste chama a rolagem dos inimigos direto).
+        await MaddoxCampaignMessageModel.updateOne({ _id: (await cardOf(lyra.userId))._id }, { $set: { "combatRoll.status": "cancelled" } })
+        const campaignId = new mongoose.Types.ObjectId(id)
+        expect(await tactical.rollEnemyInitiativeIfReady(campaignId, 3, 0)).toBe(0)
+        spy.mockRestore()
+        expect(failed).toBe(true)
+        expect((await enemyCards()).map((card) => [card.combatRoll!.status, card.combatRoll!.rolling])).toEqual([
+            ["pending", false],
+            ["pending", false],
+        ])
+        // Trava abandonada (processo que caiu depois da reivindicação): mais velha que o prazo, é retomada.
+        const [goblins] = await enemyCards()
+        await MaddoxCampaignMessageModel.updateOne({ _id: goblins!._id }, { $set: { "combatRoll.rolling": true, "combatRoll.rollingAt": new Date(Date.now() - 60_000) } })
+        expect(await tactical.rollEnemyInitiativeIfReady(campaignId, 3, 0)).toBe(2)
+        expect((await enemyCards()).every((card) => card.combatRoll!.status === "rolled" && !card.combatRoll!.rolling)).toBe(true)
+        await game.checkTurn(id, kael.userId)
+        await settleCampaign(id)
+        expect((await MaddoxCombatModel.findOne({ campaignId: id }).lean())!.tactical!.phase).toBe("running")
+    })
+
+    it("surpresa dos inimigos: dois d20 da desvantagem e vale o menor", async () => {
+        const { id, kael, lyra, cardOf, enemyCards } = await initiativeScene("adversarios")
+        expect((await enemyCards()).every((card) => card.combatRoll!.mode === "disadvantage")).toBe(true)
+        dice.players.set(kael.userId, [[14]])
+        dice.players.set(lyra.userId, [[9]])
+        dice.server.push([4, 17], [3, 15])
+        await actions.rollCombatRoll(id, String((await cardOf(kael.userId))._id), kael.userId)
+        await actions.rollCombatRoll(id, String((await cardOf(lyra.userId))._id), lyra.userId)
+        const [goblins, wolf] = await enemyCards()
+        expect(goblins!.combatRoll!.roll).toMatchObject({ mode: "disadvantage", selectedD20: { kept: 4, discarded: 17 } })
+        expect(goblins!.combatRoll!.total).toBe(6)
+        expect(wolf!.combatRoll!.total).toBe(4)
+        await settleCampaign(id)
+    })
+
+    it("o personagem que sai durante a iniciativa tem o card cancelado e, sendo o último pendente, os inimigos rolam", async () => {
+        const { id, kael, lyra, cardOf, enemyCards } = await initiativeScene()
+        dice.players.set(kael.userId, [[14]])
+        await actions.rollCombatRoll(id, String((await cardOf(kael.userId))._id), kael.userId)
+        await MaddoxCampaignMemberModel.updateOne({ _id: lyra.memberId }, { $set: { status: "left" } })
+        await game.onMemberLeftGame(new mongoose.Types.ObjectId(id), new mongoose.Types.ObjectId(lyra.memberId))
+        expect((await cardOf(lyra.userId)).combatRoll!.status).toBe("cancelled")
+        expect((await enemyCards()).every((card) => card.combatRoll!.status === "rolled")).toBe(true)
+        await settleCampaign(id)
+        expect((await MaddoxCombatModel.findOne({ campaignId: id }).lean())!.tactical!.phase).toBe("running")
+    })
+})
+
+describe("DND-25 — um bloco por adversário", () => {
+    it("narração da vez de Kael, depois o bloco de cada goblin na ordem, com os dados ao vivo antes do texto e a pausa entre eles", async () => {
+        const { id, kael, lyra } = await scene()
+        await addSecondGoblin(id)
+        const lines: { type: string; roll?: { step: string; verdict: string | null; actorName: string } }[] = []
+        const unsubscribe = subscribeGameLive(id, (line) => lines.push(line as never))
+        dice.server.push([15], [3], [2])
+        script.push(
+            [{ text: "Kael recua para a parede." }],
+            [{ tools: [{ name: "monster_action", input: { combatente: "Goblin", acao: "Faca", alvos: ["Kael"] } }], text: "O goblin crava a faca em Kael." }],
+            [
+                {
+                    tools: [
+                        { name: "monster_action", input: { combatente: "Goblin", acao: "Faca", alvos: ["Lyra"] } },
+                        { name: "monster_action", input: { combatente: "Goblin 2", acao: "Faca", alvos: ["Lyra"] } },
+                    ],
+                    text: "O segundo goblin erra Lyra.",
+                },
+            ],
+        )
+        await actions.endCombatTurn(id, {}, kael.userId)
+        await settleCampaign(id)
+        unsubscribe()
+        expect(toolLog.map((item) => [item.name, item.error ?? "ok"])).toEqual([
+            ["monster_action", "ok"],
+            ["monster_action", expect.stringMatching(/Não é a vez de Goblin: neste bloco age só Goblin 2/)],
+            ["monster_action", "ok"],
+        ])
+        // Mensagens do turno do mestre: narração de Kael; card do Goblin e a narração dele; card do Goblin 2 e a narração dele.
+        const master = await MaddoxCampaignMessageModel.find({ campaignId: id, turnNumber: 3 }).sort({ _id: 1 }).lean()
+        expect(master.map((message) => (message.kind === "narration" ? message.content : `${message.kind}:${message.combatAction?.actorName}`))).toEqual([
+            "Kael recua para a parede.",
+            "combat-action:Goblin",
+            "O goblin crava a faca em Kael.",
+            "combat-action:Goblin 2",
+            "O segundo goblin erra Lyra.",
+        ])
+        expect(master.filter((message) => message.kind === "narration").map((message) => message.segment)).toEqual([0, 1, 2])
+        // Pausa de leitura entre os blocos (encurtada no teste).
+        const [first, second] = master.filter((message) => message.kind === "narration").slice(1)
+        expect(new Date(second!.createdAt).getTime() - new Date(first!.createdAt).getTime()).toBeGreaterThanOrEqual(15)
+        // Os dados de cada NPC foram para a bolha ao vivo: ataque (com o veredito) e dano do Goblin; ataque do Goblin 2.
+        expect(lines.filter((line) => line.type === "live-roll").map((line) => [line.roll!.actorName, line.roll!.step, line.roll!.verdict])).toEqual([
+            ["Goblin", "attack", "hit"],
+            ["Goblin", "damage", null],
+            ["Goblin 2", "attack", "miss"],
+        ])
+        // Depois do último goblin, abre a vez da Lyra; a fila e o bloco ficam limpos.
+        const campaign = (await MaddoxCampaignModel.findById(id).lean())!
+        expect(campaign.turn).toMatchObject({ phase: "players", pauseUntil: null })
+        expect(campaign.turn.combatActor?.actorKey).toBe(lyra.actorKey)
+        const combat = (await MaddoxCombatModel.findOne({ campaignId: id }).lean())!
+        expect(combat.tactical).toMatchObject({ block: null, acted: [], queue: [] })
+    })
+
+    it("adversário derrotado antes da vez não ganha bloco; NPC sem ataque ganha um bloco só com a narração", async () => {
+        const { id, kael } = await scene()
+        await addSecondGoblin(id, { defeated: true })
+        script.push([{ text: "Kael respira." }], [{ text: "O goblin foge para o beco." }])
+        await actions.endCombatTurn(id, {}, kael.userId)
+        await settleCampaign(id)
+        const narrations = await MaddoxCampaignMessageModel.find({ campaignId: id, turnNumber: 3, kind: "narration" }).sort({ _id: 1 }).lean()
+        expect(narrations.map((message) => message.content)).toEqual(["Kael respira.", "O goblin foge para o beco."])
+        expect(await MaddoxCampaignMessageModel.countDocuments({ campaignId: id, turnNumber: 3, kind: "combat-action" })).toBe(0)
+        expect(script).toHaveLength(0)
+    })
+
+    it("todos os personagens com 0 PV no meio da sequência: os adversários restantes não agem e o combate termina em derrota", async () => {
+        const { id, kael } = await scene()
+        await addSecondGoblin(id)
+        script.push(
+            [{ text: "Kael tropeça." }],
+            [
+                {
+                    tools: [
+                        { name: "apply_effect", input: { alvo: "Kael", dano: "1d4+20", descricao: "O teto desaba" } },
+                        { name: "apply_effect", input: { alvo: "Lyra", dano: "1d4+20", descricao: "O teto desaba" } },
+                    ],
+                    text: "O goblin derruba a viga.",
+                },
+            ],
+        )
+        await actions.endCombatTurn(id, {}, kael.userId)
+        await settleCampaign(id)
+        expect(script).toHaveLength(0)
+        expect(await MaddoxCampaignMessageModel.countDocuments({ campaignId: id, turnNumber: 3, kind: "narration" })).toBe(2)
+        const combat = (await MaddoxCombatModel.findOne({ campaignId: id }).lean())!
+        expect(combat).toMatchObject({ status: "ended", outcome: "derrota" })
+    })
+
+    it("falha na geração de um bloco: nada daquele NPC é aplicado e a nova tentativa rola de novo; o bloco anterior fica", async () => {
+        const { id, kael } = await scene()
+        await addSecondGoblin(id)
+        dice.server.push([15], [3], [18], [4], [18], [1])
+        script.push(
+            [{ text: "Kael se abaixa." }],
+            [{ tools: [{ name: "monster_action", input: { combatente: "Goblin", acao: "Faca", alvos: ["Kael"] } }], text: "A faca acerta Kael." }],
+            [{ tools: [{ name: "monster_action", input: { combatente: "Goblin 2", acao: "Faca", alvos: ["Kael"] } }], fail: true }],
+        )
+        await actions.endCombatTurn(id, {}, kael.userId)
+        await settleCampaign(id)
+        const hpAfterFirst = (await CharacterSheet.findById(kael.sheetId).lean())!.hpCurrent
+        expect(hpAfterFirst).toBe(15)
+        let campaign = (await MaddoxCampaignModel.findById(id).lean())!
+        expect(campaign.turn.failedAt).toBeTruthy()
+        expect(await MaddoxCampaignMessageModel.countDocuments({ campaignId: id, turnNumber: 3, kind: "combat-action", "combatAction.actorName": "Goblin 2" })).toBe(0)
+        // Nova tentativa: o Goblin 2 rola de novo (18 + 4 = 22, dano 1 + 2 = 3).
+        script.push([{ tools: [{ name: "monster_action", input: { combatente: "Goblin 2", acao: "Faca", alvos: ["Kael"] } }], text: "A segunda faca acerta Kael." }])
+        await MaddoxCampaignModel.updateOne({ _id: id }, { $set: { "turn.failedAt": new Date(Date.now() - 60_000) } })
+        await game.checkTurn(id, kael.userId)
+        await settleCampaign(id)
+        expect((await CharacterSheet.findById(kael.sheetId).lean())!.hpCurrent).toBe(12)
+        expect(await MaddoxCampaignMessageModel.countDocuments({ campaignId: id, turnNumber: 3, kind: "combat-action", "combatAction.actorName": "Goblin" })).toBe(1)
+        campaign = (await MaddoxCampaignModel.findById(id).lean())!
+        expect(campaign.turn.phase).toBe("players")
     })
 })
 

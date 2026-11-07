@@ -15,6 +15,7 @@ import { MADDOX_CHECK_DIE_HIDE_MS } from "../../../constants"
 import type { MaddoxGameCombatEventDto, MaddoxGameMessageDto } from "../../../game-types"
 import { MemberAvatar, RarityChip } from "../../campaigns/campaign-visuals"
 import { COMBAT_COLOR } from "../GameCombatCard"
+import { ReplayDie } from "./ReplayDie"
 import { ECONOMY_COLORS, ECONOMY_LABELS, HP_BAND_COLORS } from "./combat-visuals"
 
 /**
@@ -71,7 +72,22 @@ function InlineRoller({ rollId, dice, label, mode, mine, replay, onRoll, buttonL
     )
 }
 
-function StepLine({ step }: { step: CombatActionStep }) {
+/** Passo do card; o dado rolado pelo servidor agora (`replay`) anima antes de o resultado aparecer. */
+function StepLine({ step, replay = null }: { step: CombatActionStep; replay?: DiceRollResponse | null }) {
+    const [settled, setSettled] = useState(false)
+    if (replay && !settled) {
+        return (
+            <li className="flex flex-wrap items-center gap-2 text-xs text-white/80" data-testid="combat-step" data-kind={step.kind} data-status="rolling">
+                <span className="font-semibold text-white/60">{STEP_LABELS[step.kind]}</span>
+                {step.targetName && <span className="text-white/70">→ {step.targetName}</span>}
+                <ReplayDie roll={replay} label={`${STEP_LABELS[step.kind]}${step.targetName ? ` · ${step.targetName}` : ""}`} onSettled={() => setSettled(true)} />
+            </li>
+        )
+    }
+    return <StepResult step={step} />
+}
+
+export function StepResult({ step }: { step: CombatActionStep }) {
     const critical = step.roll && step.kind === "attack" ? getDiceCriticalState(step.roll) : null
     const verdict =
         step.kind === "attack" && step.hit !== null
@@ -114,11 +130,13 @@ interface ActionCardProps {
     message: MaddoxGameMessageDto
     mine: boolean
     replay: DiceRollResponse | null
+    /** Dados que o servidor rolou neste card (salvaguarda de um adversário, DND-25), pelo índice do passo. */
+    stepReplays?: ReadonlyMap<number, DiceRollResponse>
     onRoll: (actionId: string) => Promise<DiceRollResponse>
     onCancel: (actionId: string) => void
 }
 
-export function CombatActionCard({ message, mine, replay, onRoll, onCancel }: ActionCardProps) {
+export function CombatActionCard({ message, mine, replay, stepReplays, onRoll, onCancel }: ActionCardProps) {
     const action = message.combatAction!
     const accent = action.actorKind === "character" ? ECONOMY_COLORS[action.economy] : COMBAT_COLOR
     const next = action.steps.find((step) => step.status === "pending" && step.roller === "player")
@@ -144,7 +162,7 @@ export function CombatActionCard({ message, mine, replay, onRoll, onCancel }: Ac
                                 {cancelled ? <span className="font-normal text-white/50"> (cancelada)</span> : null}
                             </p>
                             {action.freeText && <p className="text-xs italic text-white/70">“{action.freeText}”</p>}
-                            {action.steps.length > 0 && <ul className="space-y-1">{action.steps.map((step, index) => <StepLine key={index} step={step} />)}</ul>}
+                            {action.steps.length > 0 && <ul className="space-y-1">{action.steps.map((step, index) => <StepLine key={index} step={step} replay={stepReplays?.get(index) ?? null} />)}</ul>}
                         </div>
                     </div>
                     {next && !cancelled && (
@@ -163,10 +181,60 @@ export function CombatActionCard({ message, mine, replay, onRoll, onCancel }: Ac
     )
 }
 
-const ROLL_TITLES = { initiative: "Iniciativa", "death-save": "Teste contra a morte", concentration: "Concentração", save: "Salvaguarda", damage: "Dano" } as const
+const ROLL_TITLES = { initiative: "Iniciativa", "enemy-initiative": "Iniciativa", "death-save": "Teste contra a morte", concentration: "Concentração", save: "Salvaguarda", damage: "Dano" } as const
+
+/**
+ * Iniciativa de um grupo de inimigos (DND-25): espera os personagens rolarem; o servidor rola e todas as mesas veem o
+ * dado (`replay`); quando ele para, aparecem o valor do dado, o modificador e o total. Recarregada depois, mostra só o
+ * resultado.
+ */
+export function EnemyInitiativeCard({ message, replay }: { message: MaddoxGameMessageDto; replay: DiceRollResponse | null }) {
+    const roll = message.combatRoll!
+    const [settledId, setSettledId] = useState<string | null>(null)
+    const rolling = Boolean(replay) && settledId !== replay?.rollId
+    const name = roll.groupName ?? roll.reason.replace(/^Iniciativa · /, "")
+    const accent = COMBAT_COLOR
+    const result = roll.roll ?? replay
+    const d20 = result ? (result.selectedD20?.kept ?? result.terms.find((term) => term.dice === "d20")?.results[0] ?? null) : null
+    const discarded = result?.selectedD20?.discarded ?? null
+    const modifier = result?.modifier ?? 0
+    return (
+        <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="pb-4" data-testid="enemy-initiative-card" data-status={rolling ? "rolling" : roll.status}>
+            <div className="flex flex-col gap-3 rounded-2xl border bg-white/[0.03] p-3.5 sm:flex-row sm:items-center" style={{ borderColor: `${accent}55`, boxShadow: `inset 3px 0 0 ${accent}` }}>
+                <div className="flex min-w-0 flex-1 items-start gap-2.5">
+                    <Crosshair className="mt-1 h-5 w-5 shrink-0" style={{ color: accent }} aria-hidden />
+                    <div className="min-w-0 flex-1 space-y-1">
+                        <p className="flex items-center gap-1.5 text-xs text-white/60">
+                            <ListOrdered className="h-3.5 w-3.5" style={{ color: accent }} aria-hidden /> Iniciativa dos inimigos
+                        </p>
+                        <p className="text-sm font-semibold text-white" data-testid="enemy-initiative-name">
+                            {name}
+                        </p>
+                        <div className="flex flex-wrap items-center gap-1.5">
+                            <span className="rounded-md border border-white/20 bg-white/10 px-1.5 py-0.5 text-[11px] font-semibold text-white/80">{roll.dice}</span>
+                            {roll.mode === "disadvantage" && <RarityChip color={rarityColors.artifact}>Desvantagem (surpreendidos)</RarityChip>}
+                        </div>
+                        {roll.status === "pending" && !replay && <p className="text-xs text-white/50" data-testid="enemy-initiative-waiting">Aguardando os personagens</p>}
+                        {result && !rolling && (
+                            <p className="flex flex-wrap items-center gap-2 text-sm text-white/80" data-testid="enemy-initiative-result">
+                                <span className="text-2xl font-black text-white">{result.total}</span>
+                                <span>
+                                    d20 {d20 ?? "?"}
+                                    {discarded !== null ? ` (descartado ${discarded})` : ""} {modifier >= 0 ? "+" : "−"} {Math.abs(modifier)}
+                                </span>
+                            </p>
+                        )}
+                    </div>
+                </div>
+                {replay && rolling && <ReplayDie roll={replay} label={`Iniciativa · ${name}`} onSettled={(settled) => setSettledId(settled.rollId)} />}
+            </div>
+        </motion.div>
+    )
+}
 
 export function CombatRollCard({ message, mine, replay, onRoll }: { message: MaddoxGameMessageDto; mine: boolean; replay: DiceRollResponse | null; onRoll: (rollId: string) => Promise<DiceRollResponse> }) {
     const roll = message.combatRoll!
+    if (roll.kind === "enemy-initiative") return <EnemyInitiativeCard message={message} replay={replay} />
     const name = message.characterName ?? "Personagem"
     if (roll.status === "cancelled") {
         return (

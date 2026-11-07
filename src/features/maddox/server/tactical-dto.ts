@@ -113,7 +113,7 @@ export function combatActionDto(action: IMaddoxCombatAction & { cancellable?: bo
 }
 
 export function combatRollDto(roll: IMaddoxCombatRoll, rolledByName: string | null): MaddoxCombatRollDto {
-    return { kind: roll.kind, status: roll.status, reason: roll.reason, dice: roll.dice, mode: roll.mode, dc: roll.dc, roll: roll.roll ?? null, total: roll.total ?? null, success: roll.success ?? null, outcome: roll.outcome ?? null, rolledByName }
+    return { kind: roll.kind, status: roll.status, reason: roll.reason, dice: roll.dice, mode: roll.mode, dc: roll.dc, roll: roll.roll ?? null, total: roll.total ?? null, success: roll.success ?? null, outcome: roll.outcome ?? null, rolledByName, groupName: roll.groupName ?? null }
 }
 
 export function combatReactionDto(reaction: IMaddoxCombatReaction, mine: boolean): MaddoxCombatReactionDto {

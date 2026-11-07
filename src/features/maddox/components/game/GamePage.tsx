@@ -14,7 +14,7 @@ import { apiErrorCode, apiErrorMessage } from "@/lib/api"
 import { MADDOX_TURN_PHASE_LABELS } from "../../constants"
 import type { MaddoxGameMessageDto, MaddoxGameStateDto } from "../../game-types"
 import type { MaddoxGameActionInput } from "../../game-schemas"
-import { combatBannerText, composerBlockReason, masterBannerText, turnProgress, visibleLiveGenerations } from "../../game-view"
+import { combatBannerText, composerBlockReason, masterBannerText, reminderBlockReason, turnProgress, visibleLiveGenerations } from "../../game-view"
 import type { MaddoxCombatActionInput } from "../../combat-schemas"
 import { useCancelCombatAction, useDecideReaction, useEndCombatTurn, useRollCombatStep, useSubmitCombatAction } from "../../hooks/useMaddoxCombat"
 import { CombatActionBar, CombatWaitBar } from "./combat/CombatActionBar"
@@ -22,6 +22,7 @@ import { InitiativeTracker } from "./combat/InitiativeTracker"
 import {
     fetchOlderGameMessages,
     useMaddoxGame,
+    useInjectMaddoxReminder,
     useMaddoxGamePresence,
     useMaddoxGameRealtime,
     useRollMaddoxCheck,
@@ -36,6 +37,7 @@ import { COMBAT_COLOR } from "./GameCombatCard"
 import { GameMessageList } from "./GameMessageList"
 import { MySheetButton } from "./MySheetButton"
 import { NpcPanel } from "./NpcPanel"
+import { InjectReminderButton } from "./InjectReminderButton"
 import { SceneImageButton } from "./SceneImageButton"
 import { useRequestMaddoxNpcPortrait, useRequestMaddoxSceneImage } from "../../hooks/useMaddoxSceneImages"
 import { TurnPanel } from "./TurnPanel"
@@ -107,6 +109,7 @@ function GameTable({ state, presence, stream }: { state: MaddoxGameStateDto; pre
     const skip = useSkipMaddoxPlayer(state.campaignId)
     const rollCheck = useRollMaddoxCheck(state.campaignId)
     const sceneImage = useRequestMaddoxSceneImage(state.campaignId)
+    const reminder = useInjectMaddoxReminder(state.campaignId)
     const portrait = useRequestMaddoxNpcPortrait(state.campaignId)
     const replays = useMemo(() => new Map(stream.rolled.map((item) => [item.messageId, item.roll])), [stream.rolled])
     const [older, setOlder] = useState<MaddoxGameMessageDto[]>([])
@@ -192,6 +195,7 @@ function GameTable({ state, presence, stream }: { state: MaddoxGameStateDto; pre
                 actions={
                     <>
                         <SceneImageButton control={state.sceneImages} busy={sceneImage.isPending} onRequest={() => sceneImage.mutate()} />
+                        <InjectReminderButton blockReason={reminderBlockReason(state)} sending={reminder.isPending} onSend={(text) => reminder.mutateAsync(text)} />
                         <JournalSearchDialog campaignId={state.campaignId} color={color} />
                         <Button size="sm" variant="outline" asChild>
                             <Link href={journalHref(state.campaignId)} data-testid="journal-link">

@@ -3,10 +3,10 @@ import { Types } from "mongoose"
 import { DomainError } from "@/lib/api/route"
 import { loggerFor } from "@/lib/logger"
 import type { DiceRollResponse } from "@/features/dice-roller/types"
-import { MADDOX_COMBAT_OFFLINE_GRACE_MS, MADDOX_TACTICAL_COMBAT_RIGORS, type MaddoxRigorLevel } from "../constants"
+import { MADDOX_COMBAT_OFFLINE_GRACE_MS, MADDOX_COMBAT_ROLL_CLAIM_STALE_MS, MADDOX_ENEMY_INITIATIVE_REVEAL_MS, MADDOX_NPC_BLOCK_PAUSE_MS, MADDOX_TACTICAL_COMBAT_RIGORS, type MaddoxRigorLevel } from "../constants"
 import { normalizeCatalogName } from "../catalog-markup"
-import { freshEconomy, formatDiceExpression, parseDiceExpression, sortInitiative, type RollMode } from "../combat-rules"
-import type { InitiativeSlot, MonsterStats, TacticalCharacterState, TacticalCombatState, TacticalCombatantState } from "../combat-types"
+import { canAct, freshEconomy, formatDiceExpression, parseDiceExpression, sortInitiative, type RollMode } from "../combat-rules"
+import type { IMaddoxCombatRoll, InitiativeSlot, MonsterStats, TacticalCharacterState, TacticalCombatState, TacticalCombatantState } from "../combat-types"
 import { MaddoxCampaignMemberModel, MaddoxCampaignMessageModel, MaddoxCampaignModel, MaddoxCharacterModel, MaddoxCombatModel, type IMaddoxCampaign, type IMaddoxCombat, type IMaddoxCombatant } from "../models"
 import { rechargeHit } from "./combat-monsters"
 
@@ -20,6 +20,12 @@ import { rechargeHit } from "./combat-monsters"
  */
 
 const log = loggerFor({ module: "maddox", feature: "tactical-combat" })
+
+/**
+ * Tempos da sequência do combate tático (DND-25): o dado dos inimigos na tela e a pausa entre dois blocos. Objeto
+ * mutável só para os testes encurtarem a espera; a aplicação usa os padrões das constantes.
+ */
+export const combatTiming = { enemyRevealMs: MADDOX_ENEMY_INITIATIVE_REVEAL_MS, npcBlockPauseMs: MADDOX_NPC_BLOCK_PAUSE_MS }
 
 export const usesTacticalCombat = (rigor: MaddoxRigorLevel) => MADDOX_TACTICAL_COMBAT_RIGORS.includes(rigor)
 
@@ -63,6 +69,8 @@ export function normalizeTactical(combat: TacticalCombat): TacticalCombat {
     combat.tactical.characters = combat.tactical.characters ?? []
     combat.tactical.order = combat.tactical.order ?? []
     combat.tactical.queue = combat.tactical.queue ?? []
+    combat.tactical.acted = combat.tactical.acted ?? []
+    combat.tactical.block = combat.tactical.block ?? null
     for (const state of combat.tactical.characters) fix(state)
     for (const combatant of combat.combatants) if (combatant.tactical) fix(combatant.tactical)
     return combat
@@ -174,6 +182,11 @@ export async function rollMonsterInitiative(entries: readonly { actorKey: string
     return slots
 }
 
+/** Posições dos adversários ainda sem iniciativa (rolada depois dos personagens, DND-25). */
+export function pendingMonsterSlots(entries: readonly { actorKey: string; name: string; groupKey: string; stats: MonsterStats }[], joinStart: number): InitiativeSlot[] {
+    return entries.map((entry, index) => ({ actorKey: entry.actorKey, kind: "combatant", name: entry.name, total: null, d20: null, modifier: entry.stats.initiativeBonus, dexterity: entry.stats.dexterity, joinIndex: joinStart + index, groupKey: entry.groupKey }))
+}
+
 /** Personagens prontos com ficha que entram no combate. */
 export async function combatCharacters(campaignId: Types.ObjectId): Promise<TacticalCharacterState[]> {
     const members = await MaddoxCampaignMemberModel.find({ campaignId, status: "joined" }).sort({ joinedAt: 1, createdAt: 1 }).lean<{ _id: Types.ObjectId; userId: string; characterId: Types.ObjectId | null }[]>()
@@ -210,8 +223,9 @@ export interface TacticalStartPlan {
 
 /**
  * Cria o combate tático (fase de iniciativa) a partir do rascunho de `start_combat`: indivíduos com o bloco de
- * estatísticas, iniciativa dos adversários rolada pelo servidor e um card de iniciativa por personagem (espera do turno
- * do mestre). Quem está offline tem a iniciativa rolada pelo servidor, com aviso.
+ * estatísticas, um card de iniciativa por personagem (espera do turno do mestre) e um card por grupo de inimigos, que o
+ * servidor só rola depois do último personagem (DND-25). Quem está offline faz os inimigos esperarem (o dono pode
+ * rolar no lugar).
  */
 export async function createTacticalCombat(
     campaign: Pick<IMaddoxCampaign, "_id">,
@@ -237,9 +251,9 @@ export async function createTacticalCombat(
         })
     }
     const characters = await combatCharacters(campaign._id)
-    const monsterSlots = await rollMonsterInitiative(
+    // DND-25: a iniciativa dos inimigos só é rolada depois do último personagem (`rollEnemyInitiativeIfReady`).
+    const monsterSlots = pendingMonsterSlots(
         combatants.map((item) => ({ actorKey: item.tactical!.actorKey, name: item.name, groupKey: item.tactical!.groupKey, stats: item.tactical!.stats })),
-        event.surprise === "adversarios" ? "disadvantage" : "normal",
         characters.length,
     )
     const characterSlots: InitiativeSlot[] = characters.map((character, index) => ({ actorKey: character.actorKey, kind: "character", name: character.name, total: null, d20: null, modifier: 0, dexterity: 10, joinIndex: index, groupKey: character.actorKey }))
@@ -255,6 +269,8 @@ export async function createTacticalCombat(
         queue: [],
         nextKey: null,
         queueTurn: null,
+        block: null,
+        acted: [],
     }
     let created: IMaddoxCombat
     try {
@@ -302,8 +318,39 @@ export async function createTacticalCombat(
             },
         }
     })
+    const groups = new Map<string, { name: string; modifier: number }>()
+    for (const item of individuals) if (!groups.has(item.groupKey)) groups.set(item.groupKey, { name: item.name, modifier: item.stats.initiativeBonus })
+    const enemyMessages = [...groups.entries()].map(([groupKey, group]) => ({
+        campaignId: campaign._id,
+        turnNumber,
+        phase: "master" as const,
+        kind: "combat-roll" as const,
+        content: "",
+        segment: waitRound,
+        combatRoll: {
+            combatId: String(created._id),
+            kind: "enemy-initiative",
+            waitRound,
+            status: "pending",
+            ability: "dexterity",
+            dc: null,
+            mode: event.surprise === "adversarios" ? "disadvantage" : "normal",
+            dice: d20Expression(group.modifier),
+            roll: null,
+            total: null,
+            success: null,
+            reason: `Iniciativa · ${group.name}`,
+            effect: null,
+            targetKey: null,
+            outcome: null,
+            rolledBy: null,
+            groupKey,
+            groupName: group.name,
+            revealUntil: null,
+        },
+    }))
     log.info({ campaignId: String(campaign._id), combatId: String(created._id), turnNumber, combatants: combatants.length, characters: characters.length }, "[maddox] combate tático começou (iniciativa)")
-    return { combatId: created._id, initiativeMessages }
+    return { combatId: created._id, initiativeMessages: [...initiativeMessages, ...enemyMessages] }
 }
 
 /** Grava a iniciativa rolada de um personagem na ordem. */
@@ -323,7 +370,16 @@ export function setCharacterInitiative(combat: TacticalCombat, actorKey: string,
 export async function finishInitiativeIfReady(campaignId: Types.ObjectId, turnNumber: number, segment: number): Promise<boolean> {
     const combat = await findActiveTactical(campaignId)
     if (!combat || combat.tactical.phase !== "initiative") return false
-    const pending = await MaddoxCampaignMessageModel.exists({ campaignId, kind: "combat-roll", "combatRoll.combatId": String(combat._id), "combatRoll.kind": "initiative", "combatRoll.status": "pending" })
+    const pending = await MaddoxCampaignMessageModel.exists({
+        campaignId,
+        kind: "combat-roll",
+        "combatRoll.combatId": String(combat._id),
+        $or: [
+            { "combatRoll.kind": { $in: ["initiative", "enemy-initiative"] }, "combatRoll.status": "pending" },
+            // O dado dos inimigos ainda está rolando na tela: a ordem só fecha quando ele para.
+            { "combatRoll.kind": "enemy-initiative", "combatRoll.revealUntil": { $gt: new Date() } },
+        ],
+    })
     if (pending) return false
     combat.tactical.order = sortInitiative(combat.tactical.order.map((slot) => ({ ...slot, total: slot.total ?? slot.modifier })))
     combat.tactical.phase = "running"
@@ -339,6 +395,90 @@ export async function finishInitiativeIfReady(campaignId: Types.ObjectId, turnNu
     log.info({ campaignId: String(campaignId), combatId: String(combat._id), order: combat.tactical.order.map((slot) => `${slot.name}:${slot.total}`) }, "[maddox] ordem de iniciativa definida")
     return true
 }
+
+/**
+ * DND-25: o último personagem rolou a iniciativa — o servidor rola a dos grupos de inimigos (um d20 por grupo, todos ao
+ * mesmo tempo; desvantagem quando surpreendidos), grava o valor na ordem e avisa as mesas (todos veem o dado rolando).
+ * A ordem só fecha depois de `MADDOX_ENEMY_INITIATIVE_REVEAL_MS` (`revealUntil`, que `hasRoundWaits` conta como espera).
+ * Idempotente: cada card é reivindicado por troca condicional. Devolve quantos grupos rolou.
+ */
+export async function rollEnemyInitiativeIfReady(campaignId: Types.ObjectId, turnNumber: number, waitRound: number): Promise<number> {
+    const base = { campaignId, turnNumber, kind: "combat-roll" as const, "combatRoll.waitRound": waitRound }
+    const enemies = await MaddoxCampaignMessageModel.find({ ...base, "combatRoll.kind": "enemy-initiative", "combatRoll.status": "pending" }).lean<{ _id: Types.ObjectId; combatRoll: IMaddoxCombatRollDoc }[]>()
+    if (!enemies.length) return 0
+    if (await MaddoxCampaignMessageModel.exists({ ...base, "combatRoll.kind": "initiative", "combatRoll.status": "pending" })) return 0
+    const combat = await findActiveTactical(campaignId)
+    if (!combat || combat.tactical.phase !== "initiative") return 0
+    const claimedAt = new Date()
+    const staleCutoff = new Date(claimedAt.getTime() - MADDOX_COMBAT_ROLL_CLAIM_STALE_MS)
+    const rolled: { id: Types.ObjectId; groupKey: string; roll: DiceRollResponse }[] = []
+    try {
+        for (const message of enemies) {
+            // Reivindicação como a da rolagem avulsa: uma trava abandonada (falha ou processo que caiu) é retomada.
+            const claimed = await MaddoxCampaignMessageModel.updateOne(
+                { _id: message._id, "combatRoll.status": "pending", $or: [{ "combatRoll.rolling": { $ne: true } }, { "combatRoll.rollingAt": { $lt: staleCutoff } }] },
+                { $set: { "combatRoll.rolling": true, "combatRoll.rollingAt": claimedAt } },
+            )
+            if (claimed.modifiedCount === 0) continue
+            const request = message.combatRoll
+            const roll = await rollExpression(request.dice, { mode: request.mode, label: request.reason })
+            rolled.push({ id: message._id, groupKey: request.groupKey ?? "", roll })
+        }
+        if (!rolled.length) return 0
+        await mutateTactical(campaignId, (live) => {
+            for (const item of rolled) {
+                for (const slot of live.tactical.order) {
+                    if (slot.kind !== "combatant" || slot.groupKey !== item.groupKey) continue
+                    slot.total = item.roll.total
+                    slot.d20 = keptD20Of(item.roll)
+                }
+            }
+        })
+    } catch (error) {
+        // Libera as travas desta chamada: a próxima (rolagem, saída ou `check`) rola os inimigos de novo.
+        await MaddoxCampaignMessageModel.updateMany(
+            { ...base, "combatRoll.kind": "enemy-initiative", "combatRoll.status": "pending", "combatRoll.rollingAt": claimedAt },
+            { $set: { "combatRoll.rolling": false, "combatRoll.rollingAt": null } },
+        ).catch(() => undefined)
+        log.warn({ err: error instanceof Error ? error.message : String(error), campaignId: String(campaignId) }, "[maddox] falha ao rolar a iniciativa dos inimigos; nova tentativa na próxima chamada")
+        // Não derruba quem chamou (a rolagem do jogador já foi gravada): a retomada pelo `check` tenta de novo.
+        return 0
+    }
+    const revealUntil = new Date(Date.now() + combatTiming.enemyRevealMs)
+    const { emitCombatRolled } = await import("./game-live")
+    for (const item of rolled) {
+        const d20 = keptD20Of(item.roll)
+        const modifier = item.roll.modifier
+        await MaddoxCampaignMessageModel.updateOne(
+            { _id: item.id },
+            {
+                $set: {
+                    "combatRoll.rolling": false,
+                    "combatRoll.rollingAt": null,
+                    "combatRoll.status": "rolled",
+                    "combatRoll.roll": item.roll,
+                    "combatRoll.total": item.roll.total,
+                    "combatRoll.outcome": `d20 ${d20} ${modifier >= 0 ? "+" : "−"} ${Math.abs(modifier)} = ${item.roll.total}`,
+                    "combatRoll.rolledBy": "server",
+                    "combatRoll.revealUntil": revealUntil,
+                },
+            },
+        )
+        emitCombatRolled(String(campaignId), String(item.id), item.roll)
+    }
+    log.info({ campaignId: String(campaignId), combatId: String(combat._id), groups: rolled.map((item) => `${item.groupKey}:${item.roll.total}`) }, "[maddox] iniciativa dos inimigos rolada")
+    // Quando os dados param: a ordem fecha e o Maddox narra o começo (a retomada pelo `check` cobre um reinício).
+    scheduleTimer(`enemy-init:${String(campaignId)}`, combatTiming.enemyRevealMs + 50, async () => {
+        await finishInitiativeIfReady(campaignId, turnNumber, waitRound + 1)
+        const { advanceAfterChecks } = await import("./game-checks")
+        await advanceAfterChecks(campaignId, turnNumber, waitRound)
+    })
+    const { publishGameChanged } = await import("./game")
+    await publishGameChanged(campaignId)
+    return rolled.length
+}
+
+type IMaddoxCombatRollDoc = IMaddoxCombatRoll
 
 // ── Ordem, rodadas e começo de turno ──────────────────────────────────────────
 
@@ -405,7 +545,7 @@ export function planQueue(combat: TacticalCombat): QueuePlan & { wraps: number[]
  * Prepara a fila do turno do mestre `turnNumber` (uma vez por turno): os adversários que agem antes do próximo
  * personagem, com o começo de turno de cada um e a rodada nova quando a ordem volta ao topo.
  */
-export async function prepareMonsterQueue(campaignId: Types.ObjectId, turnNumber: number): Promise<TacticalCombat | null> {
+export async function prepareMonsterQueue(campaignId: Types.ObjectId, turnNumber: number, options: { lead?: boolean; round?: number } = {}): Promise<TacticalCombat | null> {
     const combat = await findActiveTactical(campaignId)
     if (!combat || combat.tactical.phase !== "running" || combat.tactical.queueTurn === turnNumber) return combat
     const plan = planQueue(combat)
@@ -418,6 +558,12 @@ export async function prepareMonsterQueue(campaignId: Types.ObjectId, turnNumber
     combat.tactical.queue = plan.monsters
     combat.tactical.nextKey = plan.next
     combat.tactical.queueTurn = turnNumber
+    // DND-25: primeiro a narração do que já aconteceu (a vez do personagem, o começo da luta); depois um bloco por
+    // adversário. Sem nada a narrar antes (a vez caiu direto nos adversários), começa pelo primeiro deles.
+    combat.tactical.acted = []
+    const first = options.lead === false ? nextNpcKey(combat) : null
+    const startRound = options.round ?? 0
+    combat.tactical.block = first ? { kind: "npc", actorKey: first, waits: 0, startRound } : { kind: "character", actorKey: null, waits: 0, startRound }
     try {
         const saved = await saveTactical(combat)
         if (notes.length) log.info({ campaignId: String(campaignId), notes }, "[maddox] começo do turno dos adversários")
@@ -426,6 +572,62 @@ export async function prepareMonsterQueue(campaignId: Types.ObjectId, turnNumber
         if (error instanceof DomainError && error.code === "COMBAT_CHANGED") return findActiveTactical(campaignId)
         throw error
     }
+}
+
+// ── Blocos do turno do mestre (DND-25) ────────────────────────────────────────
+
+/** O adversário da fila ainda pode ganhar um bloco: não agiu, não caiu, não saiu da luta e não está incapacitado. */
+const blockEligible = (combat: TacticalCombat, key: string) => {
+    if ((combat.tactical.acted ?? []).includes(key) || combat.tactical.block?.actorKey === key) return false
+    const actor = findActor(combat, key)
+    return Boolean(actor && actor.kind === "combatant" && !actor.state.defeated && !actor.combatant.outcome && canAct(actor.state))
+}
+
+/** Adversários que ainda vão agir neste turno do mestre, na ordem (sem o bloco atual). */
+export const remainingBlocks = (combat: TacticalCombat): string[] => combat.tactical.queue.filter((key) => blockEligible(combat, key))
+
+const nextNpcKey = (combat: TacticalCombat): string | null => remainingBlocks(combat)[0] ?? null
+
+export type BlockStep = { kind: "npc"; actorKey: string } | { kind: "character" } | { kind: "end" } | { kind: "legacy" }
+
+/**
+ * O que vem depois do bloco que acabou (PURA; muda `combat`): o adversário seguinte da fila (`npc`), a vez do próximo
+ * personagem (`character`) ou o fim do combate porque nenhum personagem está consciente (`end`: os adversários
+ * restantes não agem). `legacy` = combate sem blocos (gravação antiga: todos na mesma narração).
+ */
+export function nextBlockStep(combat: TacticalCombat, round: number): BlockStep {
+    const block = combat.tactical.block
+    if (!block) return { kind: "legacy" }
+    // Retomada da mesma rodada depois de o bloco já ter avançado: nada muda.
+    if (block.startRound > round) return block.kind === "npc" && block.actorKey ? { kind: "npc", actorKey: block.actorKey } : { kind: "character" }
+    if (block.kind === "npc" && block.actorKey && !(combat.tactical.acted ?? []).includes(block.actorKey)) combat.tactical.acted = [...(combat.tactical.acted ?? []), block.actorKey]
+    combat.tactical.block = null
+    if (consciousCharacters(combat).length === 0) return { kind: "end" }
+    const next = nextNpcKey(combat)
+    if (!next) return { kind: "character" }
+    combat.tactical.block = { kind: "npc", actorKey: next, waits: 0, startRound: round + 1 }
+    return { kind: "npc", actorKey: next }
+}
+
+/** Fecha o bloco atual e grava o seguinte (ver `nextBlockStep`). */
+export async function advanceBlock(campaignId: Types.ObjectId, round: number): Promise<BlockStep> {
+    const combat = await findActiveTactical(campaignId)
+    if (!combat || combat.tactical.phase !== "running" || !combat.tactical.block) return { kind: "legacy" }
+    const { result } = await mutateTactical(campaignId, (live) => nextBlockStep(live, round))
+    return result
+}
+
+/** O bloco atual abriu uma espera (reação, salvaguarda) na rodada `round`: conta para o teto de esperas do bloco. */
+export async function countBlockWait(campaignId: Types.ObjectId, round: number): Promise<void> {
+    const combat = await findActiveTactical(campaignId)
+    const block = combat?.tactical.block
+    if (!block || (block.waitRounds ?? []).includes(round)) return
+    await mutateTactical(campaignId, (live) => {
+        const current = live.tactical.block
+        if (!current || (current.waitRounds ?? []).includes(round)) return
+        current.waits += 1
+        current.waitRounds = [...(current.waitRounds ?? []), round]
+    })
 }
 
 export type OpenResult = { kind: "player"; memberId: Types.ObjectId; actorKey: string; offline: boolean } | { kind: "monsters" } | { kind: "none" }
@@ -445,6 +647,8 @@ export async function advanceToNextCharacter(campaignId: Types.ObjectId, turnNum
     combat.tactical.activeIndex = index
     combat.tactical.queue = []
     combat.tactical.nextKey = null
+    combat.tactical.block = null
+    combat.tactical.acted = []
     if (!nextActor || nextActor.kind !== "character" || !takesTurn(nextActor.state)) {
         // O personagem da vez caiu de vez (morto, estável ou saiu) durante a vez dos adversários: os que vêm depois dele
         // agem num novo turno do mestre.
@@ -492,12 +696,18 @@ export function scheduleAbsenceCheck(campaignId: string, delayMs = MADDOX_COMBAT
     timers.set(key, timer)
 }
 
+/** Há um prazo da sequência do combate (dado dos inimigos ou pausa entre blocos) agendado para a campanha. */
+export const hasSequenceTimer = (campaignId: string) => timers.has(`enemy-init:${campaignId}`) || timers.has(`npc-block:${campaignId}`)
+
 export function scheduleTimer(key: string, delayMs: number, run: () => Promise<unknown>) {
     const existing = timers.get(key)
     if (existing) clearTimeout(existing)
     const timer = setTimeout(() => {
-        timers.delete(key)
-        void run().catch((error) => log.warn({ err: error instanceof Error ? error.message : String(error), key }, "[maddox] falha num prazo do combate"))
+        void run()
+            .catch((error) => log.warn({ err: error instanceof Error ? error.message : String(error), key }, "[maddox] falha num prazo do combate"))
+            .finally(() => {
+                if (timers.get(key) === timer) timers.delete(key)
+            })
     }, Math.max(0, delayMs))
     timer.unref?.()
     timers.set(key, timer)

@@ -13,6 +13,8 @@ import { GameCheckCard } from "./GameCheckCard"
 import { GameSceneImage } from "./GameSceneImage"
 import { GameCombatCard } from "./GameCombatCard"
 import { CombatActionCard, CombatOrderCard, CombatReactionCard, CombatRollCard } from "./combat/CombatCards"
+import { LiveNpcRolls } from "./combat/LiveNpcRolls"
+import { ReminderLine } from "./ReminderLine"
 
 const NEAR_BOTTOM_PX = 80
 const bubble = { initial: { opacity: 0, y: 8 }, animate: { opacity: 1, y: 0 }, transition: { duration: 0.2, ease: "easeOut" as const } }
@@ -58,6 +60,16 @@ export interface CombatHandlers {
 const NO_REPLAYS: ReadonlyMap<string, DiceRollResponse> = new Map()
 const noRoll = async (): Promise<DiceRollResponse> => {
     throw new Error("Rolagem indisponível")
+}
+
+/** Dados do servidor num card de ação (`{messageId}:{passo}` no mapa de rolagens do stream, DND-25). */
+function stepReplaysOf(replays: ReadonlyMap<string, DiceRollResponse>, messageId: string, steps: number): ReadonlyMap<number, DiceRollResponse> | undefined {
+    let found: Map<number, DiceRollResponse> | undefined
+    for (let index = 0; index < steps; index += 1) {
+        const roll = replays.get(`${messageId}:${index}`)
+        if (roll) (found ??= new Map()).set(index, roll)
+    }
+    return found
 }
 
 const NO_COMBAT: CombatHandlers = { isOwner: false, reacting: false, onRollAction: noRoll, onRollCombat: noRoll, onCancelAction: () => undefined, onDecideReaction: () => undefined }
@@ -141,11 +153,13 @@ export function GameMessageList({ messages, myMemberId, maddoxAvatarUrl, color, 
                                         )
                                     ) : null
                                 ) : message.kind === "combat-action" && message.combatAction ? (
-                                    <CombatActionCard message={message} mine={actsAs(message)} replay={replays.get(message.id) ?? null} onRoll={combat.onRollAction} onCancel={combat.onCancelAction} />
+                                    <CombatActionCard message={message} mine={actsAs(message)} replay={replays.get(message.id) ?? null} stepReplays={stepReplaysOf(replays, message.id, message.combatAction.steps.length)} onRoll={combat.onRollAction} onCancel={combat.onCancelAction} />
                                 ) : message.kind === "combat-roll" && message.combatRoll ? (
                                     <CombatRollCard message={message} mine={actsAs(message)} replay={replays.get(message.id) ?? null} onRoll={combat.onRollCombat} />
                                 ) : message.kind === "combat-reaction" && message.combatReaction ? (
                                     <CombatReactionCard message={message} mine={actsAs(message)} isOwner={combat.isOwner} busy={combat.reacting} onDecide={combat.onDecideReaction} />
+                                ) : message.kind === "reminder" ? (
+                                    <ReminderLine message={message} color={color} />
                                 ) : message.kind === "check" && message.check ? (
                                     <GameCheckCard message={message} mine={actsAs(message)} color={color} replay={replays.get(message.id) ?? null} onRoll={onRollCheck} />
                                 ) : (
@@ -204,11 +218,16 @@ function TurnDivider({ number, color }: { number: number; color: string }) {
 
 /** Fala do Maddox chegando em streaming: texto parcial (citações em negrito até gravar), cursor e o uso de ferramentas. */
 function LiveGeneration({ item, replyTo, maddoxAvatarUrl, color }: { item: MaddoxLiveGenerationDto; replyTo: MaddoxGameMessageDto | null; maddoxAvatarUrl: string | null; color: string }) {
-    const text = liveMarkupToBold(item.text)
+    // Bloco de NPC (DND-25): os dados rolam primeiro, um de cada vez; o texto da narração só aparece depois que todos param.
+    const rolls = item.rolls ?? []
+    const [settled, setSettled] = useState(0)
+    const rolling = settled < rolls.length
+    const text = rolling ? "" : liveMarkupToBold(item.text)
     return (
         <MaddoxBubble avatarUrl={maddoxAvatarUrl} color={color} testId={item.kind === "answer" ? "maddox-live-answer" : "maddox-live-narration"}>
             {item.kind === "answer" && <ReplyTo replyTo={replyTo} color={color} />}
-            {text.trim() ? (
+            <LiveNpcRolls rolls={rolls} settled={Math.min(settled, rolls.length)} onSettled={setSettled} />
+            {rolling ? null : text.trim() ? (
                 <div aria-busy="true">
                     <Markdown lineAction={null}>{text}</Markdown>
                     <span className="ml-0.5 inline-block h-3.5 w-1.5 animate-pulse align-middle" style={{ backgroundColor: color }} aria-hidden data-testid="live-cursor" />

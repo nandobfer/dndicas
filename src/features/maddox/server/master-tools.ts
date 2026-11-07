@@ -330,6 +330,31 @@ export const MADDOX_MASTER_TOOLS: readonly MaddoxMasterTool[] = [
         },
     }),
     define({
+        name: "resolve_reminder",
+        description:
+            "Decide uma lembrança injetada por um jogador nesta narração (DND-25): `guardar: true` grava-a como memória da campanha (informe `tipo`, `titulo`, `texto` consolidado e `visibility`: players = os jogadores sabem; master = só o mestre); `guardar: false` = vale só para esta narração. Chame uma vez para cada lembrança listada na tarefa, pelo id entre colchetes.",
+        readOnly: false,
+        input: z.object({
+            lembranca: z.string().min(1).describe("Id da lembrança (entre colchetes na tarefa)"),
+            guardar: z.boolean(),
+            tipo: z.enum(MADDOX_CAMPAIGN_MEMORY_KINDS).optional(),
+            titulo: z.string().optional(),
+            texto: z.string().optional(),
+            visibility: z.enum(MADDOX_VISIBILITIES).optional(),
+        }),
+        async execute(context, input) {
+            const { decideReminder } = await import("./reminders")
+            const fit = fitter()
+            const result = decideReminder(context.campaignId, context.jobId, {
+                ...input,
+                ...(input.titulo !== undefined ? { titulo: clip(input.titulo, MADDOX_TOOL_NAME_MAX) } : {}),
+                ...(input.texto !== undefined ? { texto: fit.fit("texto", input.texto) } : {}),
+            })
+            if (typeof result === "string") throw new MaddoxToolError(result)
+            return { ...result, ...fit.notice() }
+        },
+    }),
+    define({
         name: "update_character_state",
         description:
             "Atualiza a condição atual de um personagem jogador na história (ferimentos, cansaço, recursos e equipamentos que mudaram, onde está). Substitui a condição anterior; o perfil da entrevista não muda. Todos os jogadores leem esta condição no Diário da campanha: nunca grave segredos do mestre aqui.",

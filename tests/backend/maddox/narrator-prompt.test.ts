@@ -6,11 +6,13 @@ import {
     narratorTaskText,
     narratorTranscript,
     sceneImagesRule,
+    tacticalTaskLines,
     usesChecks,
     usesCombat,
     type NarratorCheckResult,
     type NarratorPromptContext,
 } from "@/features/maddox/server/narrator-prompt"
+import { remindersTaskSection } from "@/features/maddox/server/reminders"
 
 const context = (overrides: Partial<NarratorPromptContext> = {}): NarratorPromptContext => ({
     instructions: "Você é Maddox.",
@@ -158,7 +160,7 @@ describe("fichas e testes no prompt (Maddox 5)", () => {
     })
 
     it("no MCP, a lista de ferramentas só inclui request_check quando os testes valem", () => {
-        expect(buildNarratorInstructions(context({ rigor: "fiel-dnd" }), { kind: "mcp", server: "dndicas-maddox", turnToken: "t", checks: true })).toContain("update_character_state, request_check, search_catalog, get_catalog_entity)")
+        expect(buildNarratorInstructions(context({ rigor: "fiel-dnd" }), { kind: "mcp", server: "dndicas-maddox", turnToken: "t", checks: true })).toContain("update_character_state, resolve_reminder, request_check, search_catalog, get_catalog_entity)")
         expect(buildNarratorInstructions(context(), { kind: "mcp", server: "dndicas-maddox", turnToken: "t", checks: false })).not.toContain("request_check")
     })
 
@@ -216,7 +218,7 @@ describe("catálogo do DnDicas no narrador", () => {
     })
 
     it("no MCP, a lista de ferramentas inclui as de catálogo também sem testes", () => {
-        expect(buildNarratorInstructions(context(), { kind: "mcp", server: "dndicas-maddox", turnToken: "t", checks: false })).toContain("update_character_state, search_catalog, get_catalog_entity)")
+        expect(buildNarratorInstructions(context(), { kind: "mcp", server: "dndicas-maddox", turnToken: "t", checks: false })).toContain("update_character_state, resolve_reminder, search_catalog, get_catalog_entity)")
     })
 })
 
@@ -338,5 +340,40 @@ describe("densidade das narrações (DND-22)", () => {
         const instructions = buildNarratorInstructions(context(), { kind: "ai-sdk" })
         expect(instructions).not.toContain("parágrafos curtos")
         expect(instructions).toContain("no tamanho pedido na tarefa")
+    })
+})
+
+describe("DND-25 — blocos do combate tático e lembranças no prompt", () => {
+    const tactical = (block: NonNullable<Parameters<typeof tacticalTaskLines>[0]>["block"], extra: Partial<NonNullable<Parameters<typeof tacticalTaskLines>[0]>> = {}) => ({ phase: "running" as const, queue: ["Goblin 1", "Goblin 2"], next: "Lyra", enemiesDown: false, charactersDown: false, block, ...extra })
+
+    it("narração da vez do personagem: nenhum adversário age e os blocos vêm depois", () => {
+        const text = tacticalTaskLines(tactical({ kind: "character", actor: null, resumed: false, waits: 0, remaining: ["Goblin 1", "Goblin 2"] })).join("\n")
+        expect(text).toContain("nesta narração NENHUM adversário age")
+        expect(text).toContain("cada adversário age no próprio bloco, nesta ordem: Goblin 1, Goblin 2")
+    })
+
+    it("bloco de um NPC: só ele age, ferramentas antes do texto, e a tarefa ganha o título da vez dele", () => {
+        const task = narratorTaskText({ kind: "continuation", turnNumber: 4, round: 1, declarations: [], results: [], combatResults: [], tactical: tactical({ kind: "npc", actor: "Goblin 1", resumed: false, waits: 0, remaining: ["Goblin 2"] }) })
+        expect(task).toContain("# Turno 4 do mestre — vez de Goblin 1")
+        expect(task).toContain("bloco de **Goblin 1**: SÓ ele age agora")
+        expect(task).toContain("ANTES de escrever")
+        expect(task).toContain("Depois dele, cada um no próprio bloco: Goblin 2")
+        const last = tacticalTaskLines(tactical({ kind: "npc", actor: "Goblin 2", resumed: false, waits: 0, remaining: [] })).join("\n")
+        expect(last).toContain("Depois dele é a vez de **Lyra**")
+        // Continuação do mesmo bloco depois de uma reação: conclui o mesmo NPC com o resultado.
+        const resumed = narratorTaskText({ kind: "continuation", turnNumber: 4, round: 2, declarations: [], results: [], combatResults: ["Lyra usou Escudo"], tactical: tactical({ kind: "npc", actor: "Goblin 1", resumed: true, waits: 1, remaining: [] }) })
+        expect(resumed).toContain("Lyra usou Escudo")
+        expect(resumed).toContain("Conclua a narração dele")
+        expect(resumed).not.toContain("— vez de Goblin 1")
+    })
+
+    it("lembranças: id curto, personagem, texto e a orientação de avaliar cada uma (ficha prevalece nos graus táticos)", () => {
+        const section = remindersTaskSection([{ id: "6aeea67b82ea9175dbde7df0", characterName: "Lyra", text: "Tenho  Alerta.\nNão sou surpreendida.", memory: null, decided: false }], true)
+        expect(section).toContain("## Lembranças dos jogadores (considere nesta narração)")
+        expect(section).toContain("- [de7df0] **Lyra**: Tenho Alerta. Não sou surpreendida.")
+        expect(section).toContain("a ficha prevalece")
+        expect(section).toContain("`resolve_reminder`")
+        expect(remindersTaskSection([], true)).toBe("")
+        expect(remindersTaskSection([{ id: "x1", characterName: "Doran", text: "Oi", memory: null, decided: false }], false)).not.toContain("ficha prevalece")
     })
 })

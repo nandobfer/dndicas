@@ -257,6 +257,32 @@ describe("mesa Maddox — conversa e turno", () => {
         expect(screen.queryByRole("button", { name: /Gerar retrato/ })).not.toBeInTheDocument()
     })
 
+    it("Injetar Lembrança (DND-25): o botão fica ao lado de 'Gerar imagem da cena', envia o texto e a linha aparece na conversa", async () => {
+        post.mockResolvedValue(ok(gameState()))
+        await renderGame(
+            gameState({
+                messages: [message("r1", { kind: "reminder", memberId: "m2", characterName: "Lyra", content: "Tenho o talento Alerta.", reminder: { status: "saved" } })],
+                sceneImages: { owner: true, canRequest: true, reason: null, generating: false, remainingToday: 9, campaignEnabled: true, canRequestPortrait: true },
+            }),
+        )
+        const reminder = screen.getByTestId("inject-reminder-button")
+        expect(reminder).toBeEnabled()
+        expect(screen.getByTestId("scene-image-button").nextElementSibling).toBe(reminder)
+        expect(screen.getByTestId("reminder-line")).toHaveTextContent("Lyra lembrou o Maddox: “Tenho o talento Alerta.”")
+        expect(screen.getByTestId("reminder-status")).toHaveTextContent("Guardada como memória")
+        fireEvent.click(reminder)
+        fireEvent.change(await screen.findByTestId("inject-reminder-text"), { target: { value: "Estou envenenado." } })
+        fireEvent.click(screen.getByTestId("inject-reminder-send"))
+        await waitFor(() => expect(post).toHaveBeenCalledWith("/maddox/campaigns/c1/game/reminders", { texto: "Estou envenenado." }))
+    })
+
+    it("Injetar Lembrança aparece para o jogador e fica desabilitado com o motivo enquanto ele não concluiu a entrevista", async () => {
+        await renderGame(gameState({ me: ME({ memberId: "m2", isOwner: false, ready: false }) }))
+        const reminder = screen.getByTestId("inject-reminder-button")
+        expect(reminder).toBeDisabled()
+        expect(reminder).toHaveAttribute("title", "Conclua a entrevista de personagem com o Maddox antes de entrar no jogo.")
+    })
+
     it("turno do mestre: o campo fica bloqueado e o Maddox aparece narrando", async () => {
         await renderGame(gameState({ turn: { number: 2, phase: "master", startedAt: null, generating: true, failed: false, awaitingChecks: false, pendingChecks: [] } }))
         expect(screen.getByTestId("turn-banner")).toHaveTextContent("Turno do mestre — o Maddox está narrando…")

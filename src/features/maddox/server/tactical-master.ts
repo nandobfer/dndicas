@@ -1,7 +1,8 @@
 import { Types } from "mongoose"
 import { loggerFor } from "@/lib/logger"
 import type { AttributeType } from "@/features/character-sheets/types/character-sheet.types"
-import { MADDOX_COMBAT_WAIT_ROUNDS_MAX, MADDOX_REACTION_TIMEOUT_MS, MADDOX_CONDITION_LABELS, MADDOX_CONDITIONS, type MaddoxConditionKey, type MaddoxReactionTrigger } from "../constants"
+import type { DiceRollResponse } from "@/features/dice-roller/types"
+import { MADDOX_COMBAT_MASTER_ROUNDS_MAX, MADDOX_COMBAT_WAIT_ROUNDS_MAX, MADDOX_REACTION_TIMEOUT_MS, MADDOX_CONDITION_LABELS, MADDOX_CONDITIONS, type MaddoxConditionKey, type MaddoxReactionTrigger } from "../constants"
 import { MADDOX_ABILITY_LABELS } from "../check-modifier"
 import { normalizeCatalogName } from "../catalog-markup"
 import {
@@ -27,8 +28,8 @@ import {
 } from "../combat-rules"
 import type { CombatActionStep, IMaddoxCombatAction, IMaddoxCombatReaction, IMaddoxCombatRoll, MonsterActionStat, TacticalCharacterState } from "../combat-types"
 import type { CombatOption } from "../combat-options"
-import { jobWorkspace, maddoxJobMeta, setJobWorkspace, takeJobWorkspace } from "./game-live"
-import { d20Expression, findActiveTactical, findActor, findActorByName, keptD20Of, livingEnemies, consciousCharacters, rollExpression, saveTactical, type CombatActor, type TacticalCombat } from "./tactical-combat"
+import { emitLiveRoll, jobWorkspace, maddoxJobMeta, setJobWorkspace, takeJobWorkspace } from "./game-live"
+import { d20Expression, remainingBlocks, findActiveTactical, findActor, findActorByName, keptD20Of, livingEnemies, consciousCharacters, rollExpression, saveTactical, type CombatActor, type TacticalCombat } from "./tactical-combat"
 
 /**
  * A vez dos adversários no combate tático (Maddox 7) — SOMENTE servidor. As ferramentas do Maddox (`monster_action`,
@@ -119,7 +120,20 @@ function baseMessage(workspace: TacticalWorkspace, kind: "combat-action" | "comb
     return { campaignId: workspace.combat.campaignId, turnNumber: workspace.turnNumber, phase: "master", kind, content: "", segment: workspace.round, ...extra }
 }
 
-const canWait = (workspace: TacticalWorkspace) => workspace.round < MADDOX_COMBAT_WAIT_ROUNDS_MAX - 1
+/**
+ * Ainda cabe uma espera (reação, salvaguarda, rolagem pedida). Com blocos (DND-25) o teto de esperas vale por bloco, e o
+ * turno do mestre inteiro tem o teto de proteção `MADDOX_COMBAT_MASTER_ROUNDS_MAX`.
+ */
+const canWait = (workspace: TacticalWorkspace) => {
+    const block = workspace.combat.tactical.block
+    if (!block) return workspace.round < MADDOX_COMBAT_WAIT_ROUNDS_MAX - 1
+    return block.waits < MADDOX_COMBAT_WAIT_ROUNDS_MAX - 1 && workspace.round < MADDOX_COMBAT_MASTER_ROUNDS_MAX - 1
+}
+
+/** Dado de um adversário rolado agora: vai para a bolha ao vivo da geração (todos veem rolar antes da narração). */
+function showRoll(campaignId: Types.ObjectId, jobId: string, roll: DiceRollResponse, input: { actorName: string; label: string; step: "attack" | "damage" | "save" | "heal"; targetName?: string | null; verdict?: "hit" | "miss" | "critical" | "success" | "fail" | null; amount?: number | null; damageType?: string | null }) {
+    emitLiveRoll(String(campaignId), jobId, { id: roll.rollId, actorName: input.actorName, label: input.label, step: input.step, targetName: input.targetName ?? null, verdict: input.verdict ?? null, amount: input.amount ?? null, damageType: input.damageType ?? null, roll })
+}
 
 /** Pontos de vida da ficha que o dano e a cura do combate mexem. */
 export interface CharacterHp {
@@ -293,7 +307,12 @@ function monsterActionOf(workspace: TacticalWorkspace, actor: Extract<CombatActo
     if (actor.state.defeated) throw new TacticalToolError(`${actor.name} está caído: não age mais.`)
     if (!canAct(actor.state)) throw new TacticalToolError(`${actor.name} está incapacitado (${actor.state.conditions.map((condition) => MADDOX_CONDITION_LABELS[condition.key]).join(", ")}): não age neste turno.`)
     const queue = workspace.combat.tactical.queue
-    if (!asReaction) {
+    const block = workspace.combat.tactical.block
+    if (!asReaction && block) {
+        // Blocos (DND-25): cada adversário age na própria geração.
+        if (block.kind !== "npc" || !block.actorKey) throw new TacticalToolError("Nesta narração nenhum adversário age: narre só o que já aconteceu. Cada adversário age depois, no próprio bloco.")
+        if (block.actorKey !== actor.key) throw new TacticalToolError(`Não é a vez de ${actor.name}: neste bloco age só ${findActor(workspace.combat, block.actorKey)?.name ?? "outro adversário"}.`)
+    } else if (!asReaction) {
         const position = queue.indexOf(actor.key)
         if (position < 0) {
             const names = queue.map((key) => findActor(workspace.combat, key)?.name).filter(Boolean)
@@ -359,6 +378,7 @@ export async function monsterAction(campaignId: Types.ObjectId, jobId: string, t
         const attackRoll = await rollExpression(d20Expression(action.bonus ?? 0), { mode, label: `${attacker.name} · ${action.name}` })
         const d20 = keptD20Of(attackRoll)
         const outcome = attackOutcome(d20, attackRoll.total, ac, autoCritical(target.state, ranged))
+        showRoll(campaignId, jobId, attackRoll, { actorName: attacker.name, label: `${action.name} · ataque`, step: "attack", targetName: target.name, verdict: outcome.critical ? "critical" : outcome.hit ? "hit" : "miss" })
         const steps: CombatActionStep[] = [step({ kind: "attack", targetKey: target.key, targetName: target.name, dice: d20Expression(action.bonus ?? 0), mode, roll: attackRoll, total: attackRoll.total, hit: outcome.hit, critical: outcome.critical })]
         let summary = `${attacker.name} atacou ${target.name} com ${action.name}: ${outcome.hit ? (outcome.critical ? "CRÍTICO" : "acertou") : "errou"} (${attackRoll.total}${d20 === 20 || d20 === 1 ? `, ${d20} natural` : ""} contra CA ${ac})`
         const result: Record<string, unknown> = { ataque: { total: attackRoll.total, d20, ca: ac, acertou: outcome.hit, critico: outcome.critical, modo: mode } }
@@ -383,6 +403,7 @@ export async function monsterAction(campaignId: Types.ObjectId, jobId: string, t
                     return { ...result, status: "aguardando_reacao", nota: `${target.name} pode reagir (${hit.map((option) => option.label).join(", ")}). Narre até o golpe chegar e PARE: o resultado vem na próxima mensagem. Não conduza outros adversários nesta narração.` }
                 }
                 const note = damageCharacter(workspace, target, damageRoll.total, outcome.critical, attacker.name)
+                showRoll(campaignId, jobId, damageRoll, { actorName: attacker.name, label: `${action.name} · dano`, step: "damage", targetName: target.name, amount: damageRoll.total, damageType: action.damageType })
                 steps.push(step({ kind: "damage", targetKey: target.key, targetName: target.name, dice: action.damage, roll: damageRoll, total: damageRoll.total, amount: damageRoll.total, damageType: action.damageType, note: note || null }))
                 summary += `; ${damageRoll.total} de dano${action.damageType ? ` ${action.damageType}` : ""}${note ? ` (${note})` : ""}`
                 const damaged = reactionsFor(workspace, target, "damaged")
@@ -391,6 +412,7 @@ export async function monsterAction(campaignId: Types.ObjectId, jobId: string, t
             } else {
                 const adjusted = adjustDamage(damageRoll.total, action.damageType, target.state.stats)
                 const note = damageCombatant(target, adjusted.amount)
+                showRoll(campaignId, jobId, damageRoll, { actorName: attacker.name, label: `${action.name} · dano`, step: "damage", targetName: target.name, amount: adjusted.amount, damageType: action.damageType })
                 steps.push(step({ kind: "damage", targetKey: target.key, targetName: target.name, dice: action.damage, roll: damageRoll, total: damageRoll.total, amount: adjusted.amount, damageType: action.damageType, note: [adjusted.note, note].filter(Boolean).join("; ") || null }))
                 summary += `; ${adjusted.amount} de dano${note ? ` (${note})` : ""}`
                 result.dano = { total: adjusted.amount, alvo: target.name, efeito: note || null }
@@ -404,6 +426,7 @@ export async function monsterAction(campaignId: Types.ObjectId, jobId: string, t
         if (!targets.length) throw new TacticalToolError("Informe os alvos da salvaguarda em `alvos`.")
         const ability = action.ability ?? "dexterity"
         const damageRoll = action.damage ? await rollExpression(action.damage, { label: `${attacker.name} · ${action.name}` }) : null
+        if (damageRoll) showRoll(campaignId, jobId, damageRoll, { actorName: attacker.name, label: `${action.name} · dano`, step: "damage", amount: damageRoll.total, damageType: action.damageType })
         const steps: CombatActionStep[] = []
         const waits: string[] = []
         for (const target of targets) {
@@ -436,6 +459,7 @@ export async function monsterAction(campaignId: Types.ObjectId, jobId: string, t
                 const forced = saveMode(target.state, ability)
                 const saveRoll = forced === "fail" ? null : await rollExpression(d20Expression(target.state.stats.saves[ability] ?? 0), { mode: forced, label: `${target.name} · salvaguarda` })
                 const success = saveRoll ? saveRoll.total >= (action.dc ?? 10) : false
+                if (saveRoll) showRoll(campaignId, jobId, saveRoll, { actorName: target.name, label: `Salvaguarda contra ${action.name}`, step: "save", targetName: target.name, verdict: success ? "success" : "fail" })
                 const base = damageRoll?.total ?? 0
                 const adjusted = adjustDamage(success ? (action.halfOnSave ? Math.floor(base / 2) : 0) : base, action.damageType, target.state.stats)
                 const note = adjusted.amount ? damageCombatant(target, adjusted.amount) : ""
@@ -489,6 +513,7 @@ export async function applyEffect(campaignId: Types.ObjectId, jobId: string, tur
         const expression = parseDiceExpression(raw)
         if (!expression) throw new TacticalToolError(`"${raw}" não é uma expressão de dados (ex.: 2d6+3).`)
         const roll = await rollExpression(formatDiceExpression(expression), { label: input.descricao.slice(0, 60) })
+        showRoll(campaignId, jobId, roll, { actorName: "Maddox", label: input.descricao.slice(0, 60), step: kind === "heal" ? "heal" : "damage", targetName: target.name, amount: roll.total, damageType: kind === "heal" ? null : (input.tipoDano ?? null) })
         if (kind === "heal") {
             const healed = healActor(workspace, target, roll.total)
             steps.push(step({ kind: "heal", targetKey: target.key, targetName: target.name, dice: raw, roll, total: roll.total, amount: healed }))
@@ -613,7 +638,8 @@ export async function tacticalView(campaignId: Types.ObjectId, jobId: string | u
         titulo: combat.title,
         fase: combat.tactical.phase,
         rodada: combat.tactical.round,
-        agemAgora: combat.tactical.queue.map((key) => findActor(combat, key)?.name).filter(Boolean),
+        agemAgora: (combat.tactical.block ? (combat.tactical.block.kind === "npc" && combat.tactical.block.actorKey ? [combat.tactical.block.actorKey] : []) : combat.tactical.queue).map((key) => findActor(combat, key)?.name).filter(Boolean),
+        ...(combat.tactical.block ? { depois: remainingBlocks(combat).map((key) => findActor(combat, key)?.name).filter(Boolean) } : {}),
         proximaVez: combat.tactical.nextKey ? (findActor(combat, combat.tactical.nextKey)?.name ?? null) : null,
         ordem: combat.tactical.order.map((slot) => {
             const actor = findActor(combat, slot.actorKey)

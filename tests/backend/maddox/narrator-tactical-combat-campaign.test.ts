@@ -107,7 +107,8 @@ const campaigns = await import("@/features/maddox/server/campaigns")
 const game = await import("@/features/maddox/server/game")
 const tacticalActions = await import("@/features/maddox/server/tactical-actions")
 const reactions = await import("@/features/maddox/server/combat-reactions")
-const { waitForCampaignIdle } = await import("@/features/maddox/server/game-live")
+const { settleCampaign, shortenCombatTiming } = await import("../../helpers/maddox-sequence")
+await shortenCombatTiming()
 const { CharacterSheet } = await import("@/features/character-sheets/models/character-sheet")
 const { CharacterItem } = await import("@/features/character-sheets/models/character-item")
 const { CharacterSpell } = await import("@/features/character-sheets/models/character-spell")
@@ -317,7 +318,7 @@ describe("Maddox 7 — combate fiel ao D&D de ponta a ponta", () => {
         ])
         dice.server.push([8]) // iniciativa do grupo de goblins: 8 + 2 = 10
         await game.startCampaign(id, kael.userId)
-        await waitForCampaignIdle(id)
+        await settleCampaign(id)
         expect(toolLog[0]!.error).toMatch(/Fiel ao D&D todo adversário vem do catálogo/)
         expect(toolLog[1]!.error).toMatch(/"Goblim" não está no catálogo de Monstros\. Parecidos no catálogo: Goblin/)
         expect(toolLog[2]!.output).toMatchObject({ started: true })
@@ -346,7 +347,7 @@ describe("Maddox 7 — combate fiel ao D&D de ponta a ponta", () => {
         await tacticalActions.rollCombatRoll(id, String(rollOf(kael.userId)._id), kael.userId)
         await tacticalActions.rollCombatRoll(id, String(rollOf(lyra.userId)._id), lyra.userId)
         await tacticalActions.rollCombatRoll(id, String(rollOf(bruno.userId)._id), bruno.userId)
-        await waitForCampaignIdle(id)
+        await settleCampaign(id)
 
         combat = (await MaddoxCombatModel.findOne({ campaignId: id }).lean())!
         expect(combat.tactical!.order.map((slot) => `${slot.name}:${slot.total}`)).toEqual(["Kael:18", "Lyra:12", "Goblin 1:10", "Goblin 2:10", "Bruno:3"])
@@ -391,7 +392,7 @@ describe("Maddox 7 — combate fiel ao D&D de ponta a ponta", () => {
         expect(combat.combatants[1]!.tactical!.stats.hp).toBe(2)
         script.push([{ text: "Kael derruba um goblin e fere o outro. Lyra, sua vez." }])
         await tacticalActions.endCombatTurn(id, { movimento: "Avança até a porta da cripta." }, kael.userId)
-        await waitForCampaignIdle(id)
+        await settleCampaign(id)
         expect(calls.at(-1)!.userText).toContain("Kael — Ação: Espada Curta em Goblin 1 → Goblin 1: acertou (18); 7 de dano perfurante em Goblin 1 (Goblin 1 caiu)")
         expect(calls.at(-1)!.userText).toContain("Movimento e posição: Avança até a porta da cripta.")
         campaign = (await MaddoxCampaignModel.findById(id).lean())!
@@ -408,7 +409,9 @@ describe("Maddox 7 — combate fiel ao D&D de ponta a ponta", () => {
 
         // ── Vez do Goblin 2 (Ataques Múltiplos): acerta o Kael e ataca a Lyra, que reage com Escudo ──
         dice.server.push([15], [3], [12], [4])
+        // DND-25: primeiro a narração da vez da Lyra (nenhum adversário age); depois o bloco do Goblin 2 (o 1 caiu: sem bloco).
         script.push(
+            [{ text: "O raio de Lyra passa longe." }],
             [
                 {
                     tools: [
@@ -423,7 +426,7 @@ describe("Maddox 7 — combate fiel ao D&D de ponta a ponta", () => {
             [{ tools: [{ name: "monster_action", input: { combatente: "Goblin 2", acao: "Cimitarra", alvos: ["Lyra"] } }], text: "A lâmina bate na barreira mágica. Bruno, sua vez." }],
         )
         await tacticalActions.endCombatTurn(id, {}, lyra.userId)
-        await waitForCampaignIdle(id)
+        await settleCampaign(id)
         const masterTools = toolLog.slice(-4)
         expect(masterTools[1]!.error).toMatch(/Goblin 1 está caído/)
         expect(masterTools[2]!.output).toMatchObject({ ataque: { total: 19, acertou: true }, dano: { total: 5, alvo: "Kael" } })
@@ -441,7 +444,7 @@ describe("Maddox 7 — combate fiel ao D&D de ponta a ponta", () => {
         expect(lyraSees.combatReaction!.options.map((option) => option.label)).toEqual(["Escudo"])
         await expect(reactions.decideReaction(id, String(reaction._id), lyraSees.combatReaction!.options[0]!.id, kael.userId)).rejects.toMatchObject({ code: "NOT_REACTION_TARGET" })
         await reactions.decideReaction(id, String(reaction._id), lyraSees.combatReaction!.options[0]!.id, lyra.userId)
-        await waitForCampaignIdle(id)
+        await settleCampaign(id)
         const settled = (await MaddoxCampaignMessageModel.findById(reaction._id).lean())!
         expect(settled.combatReaction!.outcome).toMatch(/Com o Escudo \(CA 17\), o ataque de Goblin 2 \(16\) errou/)
         const lyraSheet = (await CharacterSheet.findById(lyra.sheetId).lean())!
@@ -497,7 +500,7 @@ describe("Maddox 7 — combate fiel ao D&D de ponta a ponta", () => {
             },
         ])
         await tacticalActions.endCombatTurn(id, {}, bruno.userId)
-        await waitForCampaignIdle(id)
+        await settleCampaign(id)
         expect(calls.at(-1)!.userText).toContain("TODOS os inimigos estão fora de combate")
         combat = (await MaddoxCombatModel.findOne({ campaignId: id }).lean())!
         expect(combat).toMatchObject({ status: "ended", outcome: "vitoria", effectsApplied: true })

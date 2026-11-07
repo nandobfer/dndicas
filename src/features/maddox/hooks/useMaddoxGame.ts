@@ -190,3 +190,15 @@ export function useStartMaddoxCampaign(campaignId: string) {
         onError: (error) => toast.error(apiErrorMessage(error, "Não foi possível iniciar a campanha")),
     })
 }
+
+/** Injetar Lembrança (DND-25): o texto vale para a próxima narração do Maddox; o estado da mesa volta junto. */
+export function useInjectMaddoxReminder(campaignId: string) {
+    const queryClient = useQueryClient()
+    return useMutation({
+        mutationFn: async (texto: string) => unwrapApi((await api.post<ApiResponse<MaddoxGameStateDto>>(`${gamePath(campaignId)}/reminders`, { texto })).data),
+        onSuccess: (state) => {
+            queryClient.setQueryData(maddoxGameKey(campaignId), state)
+        },
+        onError: (error) => toast.error(apiErrorMessage(error, "Não foi possível enviar a lembrança")),
+    })
+}
