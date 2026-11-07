@@ -831,7 +831,7 @@ rolam ao mesmo tempo; o modificador vem da ficha (desvantagem com `surpresa: "pe
 personagem é rolado (ou cancelado porque o membro saiu) `rollEnemyInitiativeIfReady` (`tactical-combat.ts`, chamado por
 `advanceAfterChecks`) reivindica cada card dos inimigos, rola um d20 por grupo (desvantagem com `surpresa: "adversarios"`: os dois
 dados ficam em `selectedD20`, vale o menor), grava o total nas posições do grupo e emite `combat-rolled` de cada card — todos os grupos
-rolam juntos na tela de todos, e o card mostra "d20 X + mod = total" quando o dado para (`EnemyInitiativeCard`). O card guarda
+rolam juntos na tela de todos, e o card mostra "d20 X + mod = total" quando o dado para (`EnemyInitiativeCard`). Só o servidor rola esse card: a rota de rolagem avulsa responde 409 `ENEMY_ROLL_BY_SERVER` (inclusive para o dono). A reivindicação segue a da rolagem avulsa (trava mais velha que `MADDOX_COMBAT_ROLL_CLAIM_STALE_MS` é retomada) e uma falha no meio libera as travas para a próxima chamada. O card guarda
 `revealUntil` (`MADDOX_ENEMY_INITIATIVE_REVEAL_MS`, 2,5 s), que `hasRoundWaits` conta como espera: a ordem só fecha (total → Destreza
 → personagens antes → entrada), o card `combat { event: "order" }` ("Ordem de iniciativa") só é gravado e a continuação só narra o
 começo depois dele (timer no processo; depois de um reinício, a retomada pelo `check`). Quem recarrega depois vê só o resultado.
@@ -965,7 +965,7 @@ desabilitado vazio ou acima do limite; botão desabilitado com o motivo de `remi
 - **Decisão:** ferramenta `resolve_reminder { lembranca, guardar, tipo?, titulo?, texto?, visibility? }` (AI SDK e MCP) guarda a decisão
   no job. Depois de gravar a narração, `commitReminders` grava as escolhidas com `saveCampaignMemory` (canal dos jogadores ou do mestre;
   tag `lembranca`; rede fora = fila `engramind_pending_writes`) → `saved` ("Guardada como memória"); as demais → `discarded` ("Usada só
-  neste turno"). Geração que falha devolve as lembranças a `pending` (`releaseReminders`). Sem narração, fica "Aguardando o Maddox".
+  neste turno"). Geração que falha devolve as lembranças a `pending` (`releaseReminders`); `commitReminders` nunca lança (falha ao gravar a situação = aviso no log e as lembranças voltam a esperar, sem refazer a narração gravada). Sem narração, fica "Aguardando o Maddox".
 - **Tela:** linha discreta para toda a mesa "{Personagem} lembrou o Maddox: “…”" com o aviso da situação abaixo.
 
 Sem permissão nova (`maddox.play` cobre).

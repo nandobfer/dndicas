@@ -740,6 +740,50 @@ describe("DND-25 — iniciativa dos inimigos depois dos personagens", () => {
         expect(await MaddoxCampaignMessageModel.exists({ campaignId: id, kind: "narration", turnNumber: 3 })).toBeTruthy()
     })
 
+    it("o card dos inimigos não pode ser rolado pela rota de rolagem avulsa, nem pelo dono", async () => {
+        const { id, kael, enemyCards } = await initiativeScene()
+        const [goblins] = await enemyCards()
+        await expect(actions.rollCombatRoll(id, String(goblins!._id), kael.userId)).rejects.toMatchObject({ status: 409, code: "ENEMY_ROLL_BY_SERVER" })
+        expect((await MaddoxCampaignMessageModel.findById(goblins!._id).lean())!.combatRoll).toMatchObject({ status: "pending", roll: null, rolledBy: null })
+        const combat = (await MaddoxCombatModel.findOne({ campaignId: id }).lean())!
+        expect(combat.tactical!.order.filter((slot) => slot.kind === "combatant").every((slot) => slot.total === null)).toBe(true)
+    })
+
+    it("falha depois de reivindicar os cards dos inimigos: a trava é liberada e a chamada seguinte rola; trava abandonada também é retomada", async () => {
+        const { id, kael, lyra, cardOf, enemyCards } = await initiativeScene()
+        dice.players.set(kael.userId, [[14]])
+        await actions.rollCombatRoll(id, String((await cardOf(kael.userId))._id), kael.userId)
+        // A gravação da ordem com o total dos inimigos falha uma vez (banco fora).
+        const original = MaddoxCombatModel.findOneAndUpdate.bind(MaddoxCombatModel)
+        let failed = false
+        const spy = vi.spyOn(MaddoxCombatModel, "findOneAndUpdate").mockImplementation(((filter: never, update: { $set?: { tactical?: { phase?: string; order?: { kind: string; total: number | null }[] } } }, options: never) => {
+            const tacticalSet = update?.$set?.tactical
+            if (!failed && tacticalSet?.phase === "initiative" && tacticalSet.order?.some((slot) => slot.kind === "combatant" && slot.total !== null)) {
+                failed = true
+                throw new Error("banco indisponível")
+            }
+            return original(filter, update as never, options)
+        }) as never)
+        // O card da Lyra fecha sem disparar nada (o teste chama a rolagem dos inimigos direto).
+        await MaddoxCampaignMessageModel.updateOne({ _id: (await cardOf(lyra.userId))._id }, { $set: { "combatRoll.status": "cancelled" } })
+        const campaignId = new mongoose.Types.ObjectId(id)
+        expect(await tactical.rollEnemyInitiativeIfReady(campaignId, 3, 0)).toBe(0)
+        spy.mockRestore()
+        expect(failed).toBe(true)
+        expect((await enemyCards()).map((card) => [card.combatRoll!.status, card.combatRoll!.rolling])).toEqual([
+            ["pending", false],
+            ["pending", false],
+        ])
+        // Trava abandonada (processo que caiu depois da reivindicação): mais velha que o prazo, é retomada.
+        const [goblins] = await enemyCards()
+        await MaddoxCampaignMessageModel.updateOne({ _id: goblins!._id }, { $set: { "combatRoll.rolling": true, "combatRoll.rollingAt": new Date(Date.now() - 60_000) } })
+        expect(await tactical.rollEnemyInitiativeIfReady(campaignId, 3, 0)).toBe(2)
+        expect((await enemyCards()).every((card) => card.combatRoll!.status === "rolled" && !card.combatRoll!.rolling)).toBe(true)
+        await game.checkTurn(id, kael.userId)
+        await settleCampaign(id)
+        expect((await MaddoxCombatModel.findOne({ campaignId: id }).lean())!.tactical!.phase).toBe("running")
+    })
+
     it("surpresa dos inimigos: dois d20 da desvantagem e vale o menor", async () => {
         const { id, kael, lyra, cardOf, enemyCards } = await initiativeScene("adversarios")
         expect((await enemyCards()).every((card) => card.combatRoll!.mode === "disadvantage")).toBe(true)

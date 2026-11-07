@@ -597,6 +597,8 @@ export async function evaluateCombatAbsence(campaignId: Types.ObjectId): Promise
 
 // ── Rolagens avulsas (iniciativa, teste contra a morte, concentração, salvaguarda, dano pedido) ─────────────────────
 
+const ENEMY_ROLL_ERROR = () => new DomainError(409, "A iniciativa dos inimigos é rolada pelo servidor, depois que todos os personagens rolarem.", "ENEMY_ROLL_BY_SERVER")
+
 /** Rola o card `combat-roll`: o jogador indicado ou o dono, no lugar dele (auditado). */
 export async function rollCombatRoll(campaignId: string, rollId: string, userId: string): Promise<{ roll: DiceRollResponse; state: MaddoxGameStateDto }> {
     const { campaign, member } = await loadAsMember(campaignId, userId)
@@ -605,6 +607,7 @@ export async function rollCombatRoll(campaignId: string, rollId: string, userId:
     const message = await MaddoxCampaignMessageModel.findOne({ _id: new Types.ObjectId(rollId), campaignId: campaign._id, kind: "combat-roll" }).lean<MessageDoc>()
     const request = message?.combatRoll
     if (!message || !request) throw new DomainError(404, "Rolagem não encontrada", "NOT_FOUND")
+    if (request.kind === "enemy-initiative") throw ENEMY_ROLL_ERROR()
     const isTarget = String(message.memberId) === String(member._id)
     const isOwner = campaign.ownerId === userId
     if (!isTarget && !isOwner) throw new DomainError(403, "Esta rolagem é de outro jogador.", "NOT_ROLL_TARGET")
@@ -617,6 +620,8 @@ export async function rollCombatRoll(campaignId: string, rollId: string, userId:
 
 /** Rola e aplica a rolagem avulsa; continua o turno (espera concluída, ou vez encerrada no teste contra a morte). */
 export async function performCombatRoll(campaign: CampaignDoc, message: MessageDoc, request: IMaddoxCombatRoll, rollerUserId: string | null): Promise<DiceRollResponse> {
+    // A iniciativa dos inimigos só é rolada pelo servidor (`rollEnemyInitiativeIfReady`), depois dos personagens (DND-25).
+    if (request.kind === "enemy-initiative") throw ENEMY_ROLL_ERROR()
     // Reivindica a rolagem ANTES de rolar e aplicar: o dono rolando no lugar ao mesmo tempo que o jogador (ou dois
     // cliques) não aplica o efeito duas vezes — a outra chamada recebe 409.
     const claimedAt = new Date()

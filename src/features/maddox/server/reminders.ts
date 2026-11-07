@@ -121,6 +121,16 @@ export function decideReminder(campaignId: Types.ObjectId, jobId: string | undef
  * turno" com aviso no log (a narração já foi feita com ela).
  */
 export async function commitReminders(campaignId: Types.ObjectId, jobId: string, turnNumber: number): Promise<void> {
+    // Nunca lança: a narração já foi gravada, e uma falha aqui não pode virar uma nova narração do mesmo turno.
+    try {
+        await commitRemindersUnsafe(campaignId, jobId, turnNumber)
+    } catch (error) {
+        log.warn({ err: error instanceof Error ? error.message : String(error), campaignId: String(campaignId), jobId }, "[maddox] falha ao gravar a situação das lembranças; elas voltam a esperar a próxima narração")
+        await releaseReminders(campaignId, jobId)
+    }
+}
+
+async function commitRemindersUnsafe(campaignId: Types.ObjectId, jobId: string, turnNumber: number): Promise<void> {
     const reminders = jobReminders(String(campaignId), jobId)
     if (!reminders.length) return
     setJobReminders(String(campaignId), jobId, [])

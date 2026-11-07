@@ -235,6 +235,26 @@ describe("DND-25 — Injetar Lembrança", () => {
         expect((await remindersOf(id))[0]!.reminder!.status).toBe("discarded")
     })
 
+    it("falha ao gravar a situação das lembranças não derruba a narração já gravada (sem narração duplicada)", async () => {
+        const { id, owner, player } = await activeTable()
+        await start(id, owner)
+        await reminders.submitReminder(id, { texto: "Tenho um mapa." }, owner)
+        const original = MaddoxCampaignMessageModel.updateOne.bind(MaddoxCampaignMessageModel)
+        const spy = vi.spyOn(MaddoxCampaignMessageModel, "updateOne").mockImplementation(((filter: Record<string, unknown>, update: { $set?: Record<string, unknown> }, options: never) => {
+            if (filter?.["reminder.status"] === "pending" && update?.$set?.["reminder.status"]) throw new Error("banco indisponível")
+            return original(filter as never, update as never, options)
+        }) as never)
+        await game.submitGameAction(id, { kind: "pass" }, owner)
+        await game.submitGameAction(id, { kind: "pass" }, player)
+        await waitForCampaignIdle(id)
+        spy.mockRestore()
+        const campaign = (await MaddoxCampaignModel.findById(id).lean())!
+        expect(campaign.turn).toMatchObject({ phase: "players", failedAt: null })
+        expect(await MaddoxCampaignMessageModel.countDocuments({ campaignId: id, kind: "narration", turnNumber: campaign.turn.number - 1 })).toBe(1)
+        // A lembrança volta a esperar a próxima narração.
+        expect((await remindersOf(id))[0]!.reminder).toMatchObject({ status: "pending", jobId: null })
+    })
+
     it("a resposta a uma pergunta não consome as lembranças", async () => {
         const { id, owner, player } = await activeTable()
         await start(id, owner)

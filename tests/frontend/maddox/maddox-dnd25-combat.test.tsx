@@ -90,6 +90,13 @@ describe("DND-25 — Injetar Lembrança", () => {
         expect(button.title).toBe("A campanha não está em andamento.")
     })
 
+    it("na conversa da mesa, a mensagem de lembrança vira a linha discreta (não a bolha de declaração)", () => {
+        render(<GameMessageList messages={[message({ id: "r1", kind: "reminder", phase: "players", memberId: "m2", characterName: "Doran", content: "Falo élfico.", reminder: { status: "pending" } })]} myMemberId="m1" maddoxAvatarUrl={null} color="#fff" narrating={false} hasMore={false} loadingMore={false} onLoadMore={() => undefined} />)
+        expect(screen.getByTestId("reminder-line").textContent).toContain("Doran lembrou o Maddox: “Falo élfico.”")
+        expect(screen.getByTestId("reminder-status").textContent).toContain("Aguardando o Maddox")
+        expect(screen.queryByTestId("game-declaration")).toBeNull()
+    })
+
     it("a linha na conversa mostra quem lembrou e o aviso de cada situação", () => {
         const { rerender } = render(<ReminderLine message={message({ kind: "reminder", characterName: "Lyra", content: "Tenho Alerta.", reminder: { status: "pending" } })} color="#fff" />)
         expect(screen.getByTestId("reminder-line").textContent).toContain("Lyra lembrou o Maddox: “Tenho Alerta.”")

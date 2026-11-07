@@ -3,7 +3,7 @@ import { Types } from "mongoose"
 import { DomainError } from "@/lib/api/route"
 import { loggerFor } from "@/lib/logger"
 import type { DiceRollResponse } from "@/features/dice-roller/types"
-import { MADDOX_COMBAT_OFFLINE_GRACE_MS, MADDOX_ENEMY_INITIATIVE_REVEAL_MS, MADDOX_NPC_BLOCK_PAUSE_MS, MADDOX_TACTICAL_COMBAT_RIGORS, type MaddoxRigorLevel } from "../constants"
+import { MADDOX_COMBAT_OFFLINE_GRACE_MS, MADDOX_COMBAT_ROLL_CLAIM_STALE_MS, MADDOX_ENEMY_INITIATIVE_REVEAL_MS, MADDOX_NPC_BLOCK_PAUSE_MS, MADDOX_TACTICAL_COMBAT_RIGORS, type MaddoxRigorLevel } from "../constants"
 import { normalizeCatalogName } from "../catalog-markup"
 import { canAct, freshEconomy, formatDiceExpression, parseDiceExpression, sortInitiative, type RollMode } from "../combat-rules"
 import type { IMaddoxCombatRoll, InitiativeSlot, MonsterStats, TacticalCharacterState, TacticalCombatState, TacticalCombatantState } from "../combat-types"
@@ -410,27 +410,40 @@ export async function rollEnemyInitiativeIfReady(campaignId: Types.ObjectId, tur
     const combat = await findActiveTactical(campaignId)
     if (!combat || combat.tactical.phase !== "initiative") return 0
     const claimedAt = new Date()
+    const staleCutoff = new Date(claimedAt.getTime() - MADDOX_COMBAT_ROLL_CLAIM_STALE_MS)
     const rolled: { id: Types.ObjectId; groupKey: string; roll: DiceRollResponse }[] = []
-    for (const message of enemies) {
-        const claimed = await MaddoxCampaignMessageModel.updateOne(
-            { _id: message._id, "combatRoll.status": "pending", "combatRoll.rolling": { $ne: true } },
-            { $set: { "combatRoll.rolling": true, "combatRoll.rollingAt": claimedAt } },
-        )
-        if (claimed.modifiedCount === 0) continue
-        const request = message.combatRoll
-        const roll = await rollExpression(request.dice, { mode: request.mode, label: request.reason })
-        rolled.push({ id: message._id, groupKey: request.groupKey ?? "", roll })
-    }
-    if (!rolled.length) return 0
-    await mutateTactical(campaignId, (live) => {
-        for (const item of rolled) {
-            for (const slot of live.tactical.order) {
-                if (slot.kind !== "combatant" || slot.groupKey !== item.groupKey) continue
-                slot.total = item.roll.total
-                slot.d20 = keptD20Of(item.roll)
-            }
+    try {
+        for (const message of enemies) {
+            // Reivindicação como a da rolagem avulsa: uma trava abandonada (falha ou processo que caiu) é retomada.
+            const claimed = await MaddoxCampaignMessageModel.updateOne(
+                { _id: message._id, "combatRoll.status": "pending", $or: [{ "combatRoll.rolling": { $ne: true } }, { "combatRoll.rollingAt": { $lt: staleCutoff } }] },
+                { $set: { "combatRoll.rolling": true, "combatRoll.rollingAt": claimedAt } },
+            )
+            if (claimed.modifiedCount === 0) continue
+            const request = message.combatRoll
+            const roll = await rollExpression(request.dice, { mode: request.mode, label: request.reason })
+            rolled.push({ id: message._id, groupKey: request.groupKey ?? "", roll })
         }
-    })
+        if (!rolled.length) return 0
+        await mutateTactical(campaignId, (live) => {
+            for (const item of rolled) {
+                for (const slot of live.tactical.order) {
+                    if (slot.kind !== "combatant" || slot.groupKey !== item.groupKey) continue
+                    slot.total = item.roll.total
+                    slot.d20 = keptD20Of(item.roll)
+                }
+            }
+        })
+    } catch (error) {
+        // Libera as travas desta chamada: a próxima (rolagem, saída ou `check`) rola os inimigos de novo.
+        await MaddoxCampaignMessageModel.updateMany(
+            { ...base, "combatRoll.kind": "enemy-initiative", "combatRoll.status": "pending", "combatRoll.rollingAt": claimedAt },
+            { $set: { "combatRoll.rolling": false, "combatRoll.rollingAt": null } },
+        ).catch(() => undefined)
+        log.warn({ err: error instanceof Error ? error.message : String(error), campaignId: String(campaignId) }, "[maddox] falha ao rolar a iniciativa dos inimigos; nova tentativa na próxima chamada")
+        // Não derruba quem chamou (a rolagem do jogador já foi gravada): a retomada pelo `check` tenta de novo.
+        return 0
+    }
     const revealUntil = new Date(Date.now() + combatTiming.enemyRevealMs)
     const { emitCombatRolled } = await import("./game-live")
     for (const item of rolled) {
