@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useId, useRef, useState, type ReactNode } from "react"
+import { useEffect, useId, useLayoutEffect, useRef, useState, type ReactNode } from "react"
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion"
 import { ChevronDown } from "lucide-react"
 import { Button } from "@/components/ui/opex/button"
@@ -30,8 +30,11 @@ export function AnimatedExpand({ children, collapsedHeight = 176, expandLabel = 
     const reduceMotion = useReducedMotion()
     const [expanded, setExpanded] = useState(false)
     const [overflows, setOverflows] = useState(false)
+    // Só anima depois da primeira medição: o estado inicial (já recolhido) aparece sem encolher na frente do usuário.
+    const [animated, setAnimated] = useState(false)
 
-    useEffect(() => {
+    // Mede antes de pintar, para o primeiro quadro já sair com o corte.
+    useLayoutEffect(() => {
         const element = innerRef.current
         if (!element) return
         const measure = () => setOverflows(element.scrollHeight > collapsedHeight + 4)
@@ -42,6 +45,11 @@ export function AnimatedExpand({ children, collapsedHeight = 176, expandLabel = 
         return () => observer.disconnect()
     }, [collapsedHeight])
 
+    useEffect(() => {
+        const frame = requestAnimationFrame(() => setAnimated(true))
+        return () => cancelAnimationFrame(frame)
+    }, [])
+
     const collapsed = overflows && !expanded
     return (
         <div className={cn("space-y-2", className)} data-testid={testId}>
@@ -49,11 +57,15 @@ export function AnimatedExpand({ children, collapsedHeight = 176, expandLabel = 
                 id={id}
                 className="relative overflow-hidden"
                 initial={false}
+                style={animated ? undefined : { height: collapsed ? collapsedHeight : "auto" }}
                 animate={{ height: collapsed ? collapsedHeight : "auto" }}
-                transition={{ duration: reduceMotion ? 0 : 0.4, ease: EASE }}
+                transition={{ duration: reduceMotion || !animated ? 0 : 0.4, ease: EASE }}
                 data-expanded={expanded || !overflows}
             >
-                <div ref={innerRef}>{children}</div>
+                {/* Recolhido, o conteúdo cortado não recebe foco nem leitura: o botão abaixo expande. */}
+                <div ref={innerRef} inert={collapsed || undefined} data-testid={testId ? `${testId}-content` : undefined}>
+                    {children}
+                </div>
                 <AnimatePresence initial={false}>
                     {collapsed && (
                         <motion.div

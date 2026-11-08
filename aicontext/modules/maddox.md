@@ -1077,13 +1077,19 @@ antigo card do cenário:
 | Situação registrada (algum campo público ou `updatedTurn`, `hasJournalState`) | `JournalStateCard` com o conteúdo longo recolhível (`collapsible`) |
 
 - A fonte é a mesma do Diário (`useMaddoxJournalSummary(campaignId, enabled)` → `GET …/journal`, só os campos públicos); a
-  troca tutorial → situação acontece pelo `maddox.game.changed` que o lobby já escuta. Carregando = esqueleto; erro = aviso
-  discreto com "Tentar de novo" (o resto da página continua).
+  troca tutorial → situação acontece pelo `maddox.game.changed` que o lobby já escuta. Carregando = esqueleto; erro sem
+  dados = aviso discreto com "Tentar de novo" (o resto da página continua). Dados já carregados têm precedência: uma falha
+  num refetch mantém a situação na tela.
+- O tutorial também aparece com a mesa já iniciada quando o narrador ainda não registrou a situação (o registro é opcional):
+  nesse caso o chip vira "Mesa em andamento · Turno N" e o texto não fala em "antes do primeiro turno".
 - Os botões da demonstração ficam numa moldura `inert` + `aria-hidden` + `pointer-events-none`, com callbacks vazios: não
   recebem foco nem clique.
 - O texto do cenário saiu do lobby: o rodapé do card tem o link "Ver o cenário completo" para o Diário.
 - "Ver mais" anima a altura com `framer-motion` (`AnimatedExpand` em `components/AnimatedExpand.tsx`, botão com
-  `aria-expanded`/`aria-controls`, só aparece quando o conteúdo passa da altura recolhida) e respeita `useReducedMotion`. Os
+  `aria-expanded`/`aria-controls`, só aparece quando o conteúdo passa da altura recolhida) e respeita `useReducedMotion`.
+  A medição acontece antes da pintura (`useLayoutEffect`) e a primeira altura entra sem animação, então o conteúdo longo já
+  nasce recolhido. Recolhido, o conteúdo fica `inert` (sem foco por teclado nem leitura por leitor de tela, inclusive a
+  prévia visível); o botão expande. Os
   cards desses estados usam `GlassCard animate={false}`: o `GlassCard` animado troca a `div` por `motion.div` depois de
   montar e remonta os filhos, o que zeraria o estado do "ver mais".
 

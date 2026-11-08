@@ -20,17 +20,19 @@ import { TableTutorialCard } from "./TableTutorialCard"
  */
 export function CampaignStoryCard({ campaign }: { campaign: MaddoxCampaignDetailDto }) {
     const done = campaign.scenarioStatus === "done"
+    // O resumo do Diário só é buscado com o cenário pronto.
+    const summary = useMaddoxJournalSummary(campaign.id, done)
     if (!done) return <ScenarioInterviewCard campaign={campaign} />
-    return <StoryCard campaign={campaign} />
+    return <StoryCard campaign={campaign} summary={summary} />
 }
 
-function StoryCard({ campaign }: { campaign: MaddoxCampaignDetailDto }) {
+function StoryCard({ campaign, summary }: { campaign: MaddoxCampaignDetailDto; summary: ReturnType<typeof useMaddoxJournalSummary> }) {
     const reduceMotion = useReducedMotion()
-    const summary = useMaddoxJournalSummary(campaign.id, true)
     const color = rigorColor(campaign.rigor)
     const footer = <ScenarioLink campaignId={campaign.id} />
 
-    const view = summary.isLoading ? "loading" : summary.isError || !summary.data ? "error" : hasJournalState(summary.data.state) ? "state" : "tutorial"
+    // Dados já carregados têm precedência: uma falha num refetch (ex.: depois do `maddox.game.changed`) mantém o que está na tela.
+    const view = !summary.data ? (summary.isError ? "error" : "loading") : hasJournalState(summary.data.state) ? "state" : "tutorial"
 
     return (
         <motion.div layout={reduceMotion ? false : "size"} transition={{ duration: reduceMotion ? 0 : 0.3, ease: [0.22, 1, 0.36, 1] }}>

@@ -234,15 +234,52 @@ describe("card da história na página da campanha (DND-37)", () => {
         expect(toggle).toHaveAttribute("aria-expanded", "false")
         const region = document.getElementById(toggle.getAttribute("aria-controls")!)!
         expect(region).toHaveAttribute("data-expanded", "false")
+        // Já nasce recolhido (sem encolher a partir da altura inteira) e a parte cortada não recebe foco.
+        expect(region.style.height).toBe("240px")
+        expect(screen.getByTestId("journal-state-expand-content").hasAttribute("inert")).toBe(true)
 
         fireEvent.click(toggle)
         expect(toggle).toHaveAttribute("aria-expanded", "true")
         expect(toggle).toHaveTextContent("Mostrar menos")
         expect(region).toHaveAttribute("data-expanded", "true")
+        expect(screen.getByTestId("journal-state-expand-content").hasAttribute("inert")).toBe(false)
 
         fireEvent.click(toggle)
         expect(toggle).toHaveAttribute("aria-expanded", "false")
         expect(region).toHaveAttribute("data-expanded", "false")
+    })
+
+    it("falha num refetch mantém a situação atual já carregada (sem trocar pelo aviso de erro)", async () => {
+        campaign = detail({ status: "active", turnNumber: 2, turnPhase: "players", rigorLocked: true })
+        journal = async () => ok(withState())
+        renderWithQueryClient(<CampaignPage campaignId="c1" />)
+        await waitFor(() => expect(screen.getByTestId("journal-state-location")).toHaveTextContent("Desfiladeiro de Karn"))
+
+        journal = async () => {
+            throw Object.assign(new Error("500"), { response: { status: 500 } })
+        }
+        act(() => emit("maddox.game.changed"))
+        await waitFor(() => expect(journalCalls()).toBe(2))
+        await act(async () => new Promise((resolve) => setTimeout(resolve, 50)))
+        expect(screen.queryByTestId("campaign-story-error")).not.toBeInTheDocument()
+        expect(screen.getByTestId("journal-state-location")).toHaveTextContent("Desfiladeiro de Karn")
+    })
+
+    it("mesa já iniciada sem situação registrada: o tutorial não diz \"antes do primeiro turno\"", async () => {
+        campaign = detail({ status: "active", turnNumber: 4, turnPhase: "players", rigorLocked: true })
+        renderWithQueryClient(<CampaignPage campaignId="c1" />)
+        const tutorial = await screen.findByTestId("table-tutorial")
+        expect(tutorial).toHaveTextContent("Mesa em andamento · Turno 4")
+        expect(tutorial).not.toHaveTextContent("Antes do primeiro turno")
+        expect(screen.getByTestId("table-tutorial-description")).toHaveTextContent("O Maddox ainda não registrou a situação atual da história.")
+        expect(screen.getByTestId("table-tutorial-description")).not.toHaveTextContent("antes da primeira narração")
+    })
+
+    it("tutorial no lobby avisa que é antes do primeiro turno", async () => {
+        renderWithQueryClient(<CampaignPage campaignId="c1" />)
+        const tutorial = await screen.findByTestId("table-tutorial")
+        expect(tutorial).toHaveTextContent("Antes do primeiro turno")
+        expect(screen.getByTestId("table-tutorial-description")).toHaveTextContent("O cenário está pronto.")
     })
 
     it("situação curta: sem corte e sem botão de ver mais", async () => {
@@ -251,6 +288,7 @@ describe("card da história na página da campanha (DND-37)", () => {
         renderWithQueryClient(<CampaignPage campaignId="c1" />)
         const expand = await screen.findByTestId("journal-state-expand")
         expect(within(expand).queryByRole("button", { name: /Ver mais/ })).not.toBeInTheDocument()
+        expect(screen.getByTestId("journal-state-expand-content").hasAttribute("inert")).toBe(false)
     })
 
     it("a primeira narração troca o tutorial pela situação atual pelo maddox.game.changed, sem recarregar a página", async () => {

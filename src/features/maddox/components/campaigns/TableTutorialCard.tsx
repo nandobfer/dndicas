@@ -55,6 +55,8 @@ export function TableTutorialCard({ campaign, color, footer }: { campaign: Maddo
     const reduceMotion = useReducedMotion()
     const [open, setOpen] = useState(false)
     const isOwner = campaign.myRole === "owner"
+    // A situação atual é um registro opcional do narrador: a mesa pode já ter começado sem ele.
+    const started = (campaign.status !== "lobby" && campaign.status !== "interview") || campaign.turnNumber > 0
 
     const list: Variants = { hidden: {}, show: { transition: { staggerChildren: reduceMotion ? 0 : 0.08, delayChildren: reduceMotion ? 0 : 0.05 } } }
     const item: Variants = reduceMotion
@@ -77,9 +79,13 @@ export function TableTutorialCard({ campaign, color, footer }: { campaign: Maddo
                         <Sparkles className="h-4 w-4" />
                     </motion.span>
                     Como funciona a mesa
-                    <RarityChip color={color}>Antes do primeiro turno</RarityChip>
+                    <RarityChip color={color}>{started ? `Mesa em andamento · Turno ${campaign.turnNumber}` : "Antes do primeiro turno"}</RarityChip>
                 </CardTitle>
-                <CardDescription>O cenário está pronto. Veja como os turnos e os controles funcionam antes da primeira narração.</CardDescription>
+                <CardDescription data-testid="table-tutorial-description">
+                    {started
+                        ? "O Maddox ainda não registrou a situação atual da história. Enquanto isso, relembre como os turnos e os controles funcionam."
+                        : "O cenário está pronto. Veja como os turnos e os controles funcionam antes da primeira narração."}
+                </CardDescription>
             </CardHeader>
 
             <CardContent className="relative space-y-6">
