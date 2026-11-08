@@ -38,7 +38,7 @@ const member = (id: string, userId: string, name: string, role: "owner" | "playe
     avatarUrl: null,
     role,
     joinedAt: "2026-10-30T10:00:00.000Z",
-    character: { id: `ch-${id}`, name: role === "owner" ? "Kael" : "Lyra", portraitUrl: null, interviewStatus: "done", profile: {}, sheetSlug: null },
+    character: { id: `ch-${id}`, name: role === "owner" ? "Kael" : "Lyra", portraitUrl: null, portraitStatus: null, interviewStatus: "done", profile: {}, sheetSlug: null },
     ready: true,
 })
 

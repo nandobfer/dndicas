@@ -382,19 +382,25 @@ describe("Campanhas Maddox — edição e personagem", () => {
         expect(await service.getCampaignDetail(narrative.id, ids.owner)).toMatchObject({ startingLevel: null, startingStage: "caçadores recém-iniciados" })
     })
 
-    it("cada jogador cria e edita o próprio esboço, com a entrevista pendente", async () => {
+    it("o esboço do personagem (criado ao começar a entrevista) nasce sem nome e é reaproveitado; o DTO traz a situação do retrato", async () => {
         const campaign = await service.createCampaign({ name: "Heróis", rigor: "equilibrado" }, ids.owner)
         await service.joinByInvite(await tokenOf(campaign.id), ids.ana)
+        const member = (await MaddoxCampaignMemberModel.findOne({ campaignId: campaign.id, userId: ids.ana }).lean())!
+        const campaignDoc = { _id: member.campaignId }
 
-        const created = await service.upsertCharacterDraft(campaign.id, { name: "Lyra", portraitUrl: "/api/upload?key=lyra.png" }, ids.ana)
-        expect(created.myCharacter).toMatchObject({ name: "Lyra", portraitUrl: "/api/upload?key=lyra.png", interviewStatus: "pending" })
-        const updated = await service.upsertCharacterDraft(campaign.id, { name: "Lyra Ventobravo", portraitUrl: null }, ids.ana)
-        expect(updated.myCharacter).toMatchObject({ id: created.myCharacter!.id, name: "Lyra Ventobravo", portraitUrl: null })
+        const created = await service.ensureCharacterDraft(campaignDoc, member, ids.ana)
+        expect(created).toMatchObject({ name: "", portraitUrl: null, interview: { status: "pending" } })
+        const again = await service.ensureCharacterDraft(campaignDoc, { _id: member._id, characterId: created._id }, ids.ana)
+        expect(String(again._id)).toBe(String(created._id))
+        // Corrida: outra requisição já ligou um personagem (o membro lido estava sem); fica o vencedor.
+        const stale = await service.ensureCharacterDraft(campaignDoc, { _id: member._id, characterId: null }, ids.ana)
+        expect(String(stale._id)).toBe(String(created._id))
         expect(await MaddoxCharacterModel.countDocuments({ campaignId: campaign.id })).toBe(1)
 
+        const mine = await service.getCampaignDetail(campaign.id, ids.ana)
+        expect(mine.myCharacter).toMatchObject({ id: String(created._id), name: "", portraitUrl: null, portraitStatus: null, interviewStatus: "pending" })
         const ownerView = await service.getCampaignDetail(campaign.id, ids.owner)
         expect(ownerView.myCharacter).toBeNull()
-        expect(ownerView.members.find((member) => member.userId === ids.ana)?.character?.name).toBe("Lyra Ventobravo")
-        await expect(service.upsertCharacterDraft(campaign.id, { name: "Intruso" }, ids.stranger)).rejects.toMatchObject({ status: 404 })
+        expect(ownerView.members.find((item) => item.userId === ids.ana)?.character?.name).toBe("")
     })
 })

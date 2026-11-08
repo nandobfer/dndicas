@@ -8,6 +8,7 @@ import { ptBR } from "date-fns/locale"
 import { Crown, Swords, UserRound, Users } from "lucide-react"
 import { rarityColors } from "@/lib/config/colors"
 import type { MaddoxCampaignListItemDto } from "../../campaign-types"
+import { MADDOX_CHARACTER_UNNAMED_LABEL } from "../../constants"
 import { MemberAvatar, DensityChip, RarityChip, RigorChip, StartingLevelChip, StartingStageLine, StatusChip, rigorColor } from "./campaign-visuals"
 
 const VISIBLE_AVATARS = 5
@@ -73,9 +74,9 @@ export function CampaignCard({ campaign, index = 0 }: { campaign: MaddoxCampaign
                         <div className="flex items-center gap-2 text-sm text-white/70">
                             {campaign.myCharacter ? (
                                 <>
-                                    <MemberAvatar name={campaign.myCharacter.name} imageUrl={campaign.myCharacter.portraitUrl} color={color} className="h-7 w-7" />
+                                    <MemberAvatar name={campaign.myCharacter.name || MADDOX_CHARACTER_UNNAMED_LABEL} imageUrl={campaign.myCharacter.portraitUrl} color={color} className="h-7 w-7" />
                                     <span>
-                                        Seu personagem: <span className="font-medium text-white">{campaign.myCharacter.name}</span>
+                                        Seu personagem: <span className="font-medium text-white">{campaign.myCharacter.name || MADDOX_CHARACTER_UNNAMED_LABEL}</span>
                                     </span>
                                 </>
                             ) : (
@@ -85,7 +86,7 @@ export function CampaignCard({ campaign, index = 0 }: { campaign: MaddoxCampaign
                         <div className="flex items-center gap-3">
                             <div className="flex -space-x-2" aria-label={`${campaign.members.length} participante(s)`}>
                                 {campaign.members.slice(0, VISIBLE_AVATARS).map((member) => (
-                                    <MemberAvatar key={member.id} name={member.character?.name ?? member.name} imageUrl={member.character?.portraitUrl ?? member.avatarUrl} />
+                                    <MemberAvatar key={member.id} name={member.character?.name || member.name} imageUrl={member.character?.portraitUrl ?? member.avatarUrl} />
                                 ))}
                                 {extra > 0 && <span className="flex h-8 w-8 items-center justify-center rounded-full border-2 border-background bg-white/10 text-[11px] text-white/80">+{extra}</span>}
                             </div>

@@ -127,6 +127,8 @@ async function completeScenario(subject: InterviewSubject, doc: InterviewDoc, to
 async function completeCharacter(subject: InterviewSubject, doc: InterviewDoc, token: string, data: CharacterConsolidation, userId: string) {
     const character = subject.character!
     const name = data.name ?? character.name
+    // DND-31: o nome vem da entrevista. Sem ele, nada é gravado e a entrevista continua `proposed`.
+    if (!name) throw new DomainError(409, "O Maddox não combinou o nome do personagem. Peça a ele para definir o nome e apresentar a síntese de novo.", "CHARACTER_NAME_REQUIRED")
     const withSheet = MADDOX_SHEET_RIGORS.includes(subject.campaign.rigor)
     const card = withSheet ? submittedAbilityCard(doc.messages) : null
     const final = withSheet ? buildFinalScores(doc) : null
@@ -141,7 +143,17 @@ async function completeCharacter(subject: InterviewSubject, doc: InterviewDoc, t
     )
     await MaddoxCharacterModel.updateOne(
         { _id: character._id },
-        { $set: { name, profile, "interview.status": "done", "interview.scriptVersion": doc.scriptVersion, ...(sheet ? { sheetId: sheet.sheetId } : {}) } },
+        {
+            $set: {
+                name,
+                profile,
+                "interview.status": "done",
+                "interview.scriptVersion": doc.scriptVersion,
+                ...(sheet ? { sheetId: sheet.sheetId } : {}),
+                // DND-31: o retrato é pedido junto com a conclusão e gerado em segundo plano depois dela.
+                portrait: { status: "pending", error: null, startedAt: new Date(), completedAt: null },
+            },
+        },
     )
     // Por último: falha antes daqui mantém a entrevista em `proposed` e confirmar de novo reaplica.
     await finishInterview(doc, token, card?.base && final ? { ...data, abilityScores: { method: card.method, base: card.base, bonus: card.bonus ?? null, final }, build: doc.build ?? null } : data)
@@ -216,6 +228,10 @@ export async function completeInterview(campaignId: string, kind: MaddoxScriptKi
     }
     const { releaseInterviewSession } = await import("./opencode-sessions")
     await releaseInterviewSession(campaignId, kind === "scenario" ? "scenario-interview" : "character-interview", String(subject.member._id))
+    if (kind === "character" && subject.character) {
+        const { scheduleCharacterPortrait } = await import("./character-portrait")
+        scheduleCharacterPortrait(String(subject.character._id))
+    }
     await notifyInterviewChanged(campaignId, kind, userId)
     await changed(subject.campaign._id)
     return getCampaignDetail(campaignId, userId)

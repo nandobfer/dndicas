@@ -6,6 +6,7 @@ import type { AiStreamRequest } from "@/lib/ai/stream"
 import type { MaddoxSettings } from "@/features/maddox/schemas"
 import type { MaddoxInterviewStreamLine } from "@/features/maddox/interview-types"
 import { seedSheetCatalog, type SheetCatalogIds } from "./helpers/sheet-catalog"
+import { nameMaddoxCharacter } from "../../helpers/maddox-character"
 
 /**
  * Ficha completa pela entrevista de personagem (Maddox 5), de ponta a ponta: o entrevistador (`streamText` roteirizado)
@@ -83,6 +84,8 @@ vi.mock("ai", () => ({
 vi.mock("@/lib/ai/consumption", () => ({ recordAiConsumption: vi.fn(async () => undefined) }))
 vi.mock("@/lib/ai/jev", () => ({ askJevSystemOne: vi.fn() }))
 vi.mock("@/features/maddox/server/opencode-sessions", () => ({ ensureMaddoxSession: vi.fn(async () => "ses"), releaseInterviewSession: vi.fn(async () => undefined) }))
+// O retrato do personagem (DND-31) é coberto em interviews.test.ts: aqui a geração em segundo plano não roda.
+vi.mock("@/features/maddox/server/character-portrait", async (importOriginal) => ({ ...(await importOriginal<typeof import("@/features/maddox/server/character-portrait")>()), scheduleCharacterPortrait: vi.fn() }))
 vi.mock("@/features/character-sheets/api/character-sheets-service", () => ({ createBlankSheet }))
 // Catálogo real sobre o MongoDB em memória (menções e as ferramentas search_catalog/get_catalog_entity).
 vi.mock("@/features/dice-roller/server/dice-roll-service", () => ({ rollGeneralDice }))
@@ -131,8 +134,8 @@ async function characterInterview(rigor: "narrativo" | "equilibrado" | "rigoroso
     await run(await interviews.sendInterviewMessage(campaign.id, "scenario", { content: "Sombrio." }, ids.owner))
     generateAiText.mockResolvedValueOnce({ text: JSON.stringify({ setting: { universo: "Aethra", canone: "", contexto: "", regras: "", tom: "" }, openingSituation: "Numa taverna.", campaignName: null, startingLevel, startingStage }) })
     await completeInterview(campaign.id, "scenario", ids.owner)
-    await campaigns.upsertCharacterDraft(campaign.id, { name: "Lyra", portraitUrl: null }, ids.ana)
     const { turn } = await interviews.startInterview(campaign.id, "character", ids.ana)
+    await nameMaddoxCharacter(campaign.id, ids.ana, "Lyra")
     await run(turn!)
     return campaign.id
 }

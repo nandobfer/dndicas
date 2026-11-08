@@ -303,20 +303,33 @@ describe("entrevista de personagem", () => {
         expect(await screen.findByText("Aguardando o cenário")).toBeInTheDocument()
     })
 
-    it("sem personagem: pede para criar o esboço primeiro", async () => {
+    it("sem personagem: vai direto à entrevista (o Maddox pergunta o nome), sem formulário de nome e retrato", async () => {
         mockGets(campaign({ myRole: "player", status: "lobby", scenarioStatus: "done" }), null)
         renderWithQueryClient(<InterviewPage campaignId="c1" kind="character" />)
-        expect(await screen.findByText("Crie o seu personagem primeiro")).toBeInTheDocument()
-        fireEvent.click(screen.getByRole("button", { name: "Criar personagem" }))
-        expect(await screen.findByLabelText("Nome do personagem")).toBeInTheDocument()
+        expect(await screen.findByText("Vamos dar vida ao seu personagem")).toBeInTheDocument()
+        expect(screen.getByText(/sobre o nome, a origem/)).toBeInTheDocument()
+        expect(screen.getByText(/ele pinta o retrato do personagem/)).toBeInTheDocument()
+        expect(screen.getByRole("button", { name: /Começar entrevista/ })).toBeInTheDocument()
+        expect(screen.queryByText("Crie o seu personagem primeiro")).not.toBeInTheDocument()
+        expect(screen.queryByLabelText("Nome do personagem")).not.toBeInTheDocument()
     })
 
     it("com personagem e rigor Equilibrado avisa que a ficha do D&D será preparada", async () => {
-        const lyra = { id: "ch1", name: "Lyra", portraitUrl: null, interviewStatus: "pending" as const, profile: {}, sheetSlug: null }
+        const lyra = { id: "ch1", name: "Lyra", portraitUrl: null, portraitStatus: null, interviewStatus: "pending" as const, profile: {}, sheetSlug: null }
         mockGets(campaign({ myRole: "player", status: "lobby", scenarioStatus: "done", myCharacter: lyra }), null)
         renderWithQueryClient(<InterviewPage campaignId="c1" kind="character" />)
         expect(await screen.findByText("Vamos dar vida ao seu personagem")).toBeInTheDocument()
         expect(screen.getByText(/preparar a ficha do D&D/)).toBeInTheDocument()
+    })
+
+    it("concluída: mostra o personagem e avisa enquanto o Maddox pinta o retrato", async () => {
+        const lyra = { id: "ch1", name: "Lyra Ventobravo", portraitUrl: null, portraitStatus: "generating" as const, interviewStatus: "done" as const, profile: { identidade: "Elfa ladra" }, sheetSlug: null }
+        mockGets(campaign({ myRole: "player", status: "lobby", scenarioStatus: "done", myCharacter: lyra }), interview({ kind: "character", status: "done" }))
+        renderWithQueryClient(<InterviewPage campaignId="c1" kind="character" />)
+        expect(await screen.findByText(/Seu personagem está pronto para entrar no jogo/)).toBeInTheDocument()
+        const summary = screen.getByRole("region", { name: "Perfil do personagem" })
+        expect(within(summary).getByText("Lyra Ventobravo")).toBeInTheDocument()
+        expect(within(summary).getByTestId("portrait-generating")).toHaveTextContent("O Maddox está pintando o retrato do personagem…")
     })
 })
 

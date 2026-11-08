@@ -2,8 +2,6 @@ import { z } from "zod"
 import {
     MADDOX_CAMPAIGN_NAME_MAX,
     MADDOX_CAMPAIGN_NAME_MIN,
-    MADDOX_CHARACTER_NAME_MAX,
-    MADDOX_CHARACTER_NAME_MIN,
     MADDOX_DENSITY_LEVELS,
     MADDOX_LEVEL_MAX,
     MADDOX_LEVEL_MIN,
@@ -40,18 +38,5 @@ export const updateMaddoxCampaignSchema = z
     .refine((value) => value.name !== undefined || value.rigor !== undefined || value.showCheckDc !== undefined || value.startingLevel !== undefined || value.sceneImages !== undefined || value.density !== undefined, { error: "Nada para alterar" })
 export type UpdateMaddoxCampaignInput = z.infer<typeof updateMaddoxCampaignSchema>
 
-export const maddoxCharacterDraftSchema = z.strictObject({
-    name: z
-        .string({ error: "Informe o nome do personagem" })
-        .trim()
-        .min(MADDOX_CHARACTER_NAME_MIN, { error: `O nome do personagem precisa de ao menos ${MADDOX_CHARACTER_NAME_MIN} caracteres` })
-        .max(MADDOX_CHARACTER_NAME_MAX, { error: `O nome do personagem pode ter no máximo ${MADDOX_CHARACTER_NAME_MAX} caracteres` }),
-    portraitUrl: z
-        .string({ error: "Retrato inválido" })
-        .trim()
-        .max(2000, { error: "Endereço do retrato muito longo" })
-        .refine((value) => value === "" || value.startsWith("/") || /^https?:\/\//.test(value), { error: "Endereço do retrato inválido" })
-        .nullable()
-        .optional(),
-})
-export type MaddoxCharacterDraftInput = z.infer<typeof maddoxCharacterDraftSchema>
+/** Nova tentativa do retrato do personagem (DND-31): corpo vazio. */
+export const maddoxCharacterPortraitRetrySchema = z.strictObject({})

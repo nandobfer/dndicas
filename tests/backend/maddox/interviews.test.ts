@@ -1,10 +1,11 @@
-import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest"
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest"
 import mongoose from "mongoose"
 import { MongoMemoryServer } from "mongodb-memory-server"
 import type { AiStreamEvent, AiStreamRequest } from "@/lib/ai/stream"
 import type { MaddoxSettings } from "@/features/maddox/schemas"
 import type { MaddoxInterviewStreamLine } from "@/features/maddox/interview-types"
 import { fighterBuild, seedSheetCatalog, setInterviewBuild } from "./helpers/sheet-catalog"
+import { nameMaddoxCharacter } from "../../helpers/maddox-character"
 
 const recordAudit = vi.fn(async () => undefined)
 const publishToChannels = vi.fn(async () => undefined)
@@ -19,6 +20,7 @@ const askJevSystemOne = vi.fn()
 const ensureMaddoxSession = vi.fn(async () => "ses_entrevista")
 const releaseInterviewSession = vi.fn(async () => undefined)
 const createBlankSheet = vi.fn()
+const generateAndStoreDndImage = vi.fn()
 
 vi.mock("@/lib/db", () => ({
     dbConnect: vi.fn(async () => undefined),
@@ -64,6 +66,7 @@ vi.mock("@/lib/ai/consumption", () => ({ recordAiConsumption: vi.fn(async () => 
 vi.mock("@/lib/ai/jev", () => ({ askJevSystemOne }))
 vi.mock("@/features/maddox/server/opencode-sessions", () => ({ ensureMaddoxSession, releaseInterviewSession }))
 vi.mock("@/features/character-sheets/api/character-sheets-service", () => ({ createBlankSheet }))
+vi.mock("@/features/ai/server/image-generator", () => ({ generateAndStoreDndImage }))
 const { searchCatalogEntities } = vi.hoisted(() => ({
     searchCatalogEntities: vi.fn(async ({ query, types }: { query: string; types?: string[] }) => ({
         items: [
@@ -83,6 +86,7 @@ const { CharacterSheet } = await import("@/features/character-sheets/models/char
 const campaigns = await import("@/features/maddox/server/campaigns")
 const interviews = await import("@/features/maddox/server/interviews")
 const { completeInterview } = await import("@/features/maddox/server/interview-consolidation")
+const portraits = await import("@/features/maddox/server/character-portrait")
 
 let mongo: MongoMemoryServer
 const ids = { owner: "", ana: "", stranger: "" }
@@ -162,10 +166,17 @@ beforeEach(async () => {
     scripted.length = 0
     streamCalls.length = 0
     for (const fn of [recordAudit, publishToChannels, generateAiText, askJevSystemOne, ensureMaddoxSession, releaseInterviewSession, createBlankSheet]) fn.mockClear()
+    generateAndStoreDndImage.mockReset()
+    generateAndStoreDndImage.mockResolvedValue({ key: "maddox/retrato.png", url: "/api/upload?key=maddox/retrato.png", mimeType: "image/png" })
     generateAiText.mockReset()
     askJevSystemOne.mockReset()
     createBlankSheet.mockReset()
     createBlankSheet.mockImplementation(async (userId: string, username: string, name: string) => (await CharacterSheet.create({ userId, username, name, slug: `${username}/${name.toLowerCase()}` })).toObject())
+})
+
+// O retrato do personagem (DND-31) é gerado em segundo plano: nenhum teste termina com uma geração viva.
+afterEach(async () => {
+    await portraits.waitForCharacterPortraits()
 })
 
 describe("entrevista de cenário — início", () => {
@@ -385,10 +396,11 @@ describe("menções do catálogo", () => {
     it("personagem com o mesmo nome de um monstro do catálogo nunca vira menção (caso da prévia)", async () => {
         const campaignId = await newCampaign()
         await finishScenario(campaignId)
-        await campaigns.upsertCharacterDraft(campaignId, { name: "Lyra Ventobravo" }, ids.ana)
+        scripted.push(reply("Olá! Como se chama o seu personagem?"))
+        await run((await interviews.startInterview(campaignId, "character", ids.ana)).turn!)
+        await nameMaddoxCharacter(campaignId, ids.ana, "Lyra Ventobravo")
         scripted.push(reply("Olá! Vamos criar a {{Monstro:Lyra}}. Como a **Lyra** é por fora?"))
-        const { turn } = await interviews.startInterview(campaignId, "character", ids.ana)
-        await run(turn!)
+        await run(await interviews.sendInterviewMessage(campaignId, "character", { content: "Lyra Ventobravo." }, ids.ana))
         const stored = await MaddoxInterviewModel.findOne({ campaignId, kind: "character" }).lean()
         expect(stored!.messages.at(-1)!.content).toBe("Olá! Vamos criar a **Lyra**. Como a **Lyra** é por fora?")
         expect(stored!.messages.at(-1)!.content).not.toContain("#mention:")
@@ -499,18 +511,67 @@ describe("conclusão do cenário", () => {
 })
 
 describe("entrevista de personagem", () => {
-    it("antes do cenário: 409 SCENARIO_PENDING; sem esboço: 409 CHARACTER_DRAFT_REQUIRED", async () => {
+    it("antes do cenário: 409 SCENARIO_PENDING sem criar personagem; sem entrevista começada, responder dá 409 CHARACTER_DRAFT_REQUIRED", async () => {
         const campaignId = await newCampaign()
-        await campaigns.upsertCharacterDraft(campaignId, { name: "Lyra" }, ids.ana)
         await expect(interviews.startInterview(campaignId, "character", ids.ana)).rejects.toMatchObject({ status: 409, code: "SCENARIO_PENDING" })
+        expect(await MaddoxCharacterModel.countDocuments({ campaignId })).toBe(0)
         await finishScenario(campaignId)
-        await expect(interviews.startInterview(campaignId, "character", ids.owner)).rejects.toMatchObject({ status: 409, code: "CHARACTER_DRAFT_REQUIRED" })
+        await expect(interviews.sendInterviewMessage(campaignId, "character", { content: "Oi" }, ids.ana)).rejects.toMatchObject({ status: 409, code: "CHARACTER_DRAFT_REQUIRED" })
+    })
+
+    it("criar personagem = começar a entrevista: o personagem nasce sem nome e sem retrato, ligado ao membro, e o Maddox pergunta o nome", async () => {
+        const campaignId = await newCampaign()
+        await finishScenario(campaignId)
+        await run((await interviews.startInterview(campaignId, "character", ids.ana)).turn!)
+        const character = await MaddoxCharacterModel.findOne({ campaignId, userId: ids.ana }).lean()
+        expect(character).toMatchObject({ name: "", portraitUrl: null, interview: { status: "in-progress" } })
+        const member = await MaddoxCampaignMemberModel.findOne({ campaignId, userId: ids.ana }).lean()
+        expect(String(member!.characterId)).toBe(String(character!._id))
+        const interview = await MaddoxInterviewModel.findOne({ campaignId, kind: "character" }).lean()
+        expect(String(interview!.characterId)).toBe(String(character!._id))
+        expect(streamCalls.at(-1)!.instructions).toContain("## Nome do personagem")
+        expect(streamCalls.at(-1)!.instructions).toContain('Personagem do jogador: "a definir"')
+        const detail = await campaigns.getCampaignDetail(campaignId, ids.ana)
+        expect(detail.myCharacter).toMatchObject({ name: "", portraitUrl: null, portraitStatus: null, interviewStatus: "in-progress" })
+        expect(recordAudit).toHaveBeenCalledWith(expect.objectContaining({ acao: "CRIAR", depois: { character: "criado pela entrevista" } }))
+    })
+
+    it("personagem de outro jogador ainda sem nome não entra em 'Outros personagens da mesa'; com nome, entra", async () => {
+        const campaignId = await newCampaign()
+        await finishScenario(campaignId)
+        await run((await interviews.startInterview(campaignId, "character", ids.owner)).turn!)
+        await run((await interviews.startInterview(campaignId, "character", ids.ana)).turn!)
+        expect(streamCalls.at(-1)!.instructions).not.toContain("## Outros personagens da mesa")
+        expect(streamCalls.at(-1)!.instructions).not.toMatch(/^- $/m)
+
+        await nameMaddoxCharacter(campaignId, ids.owner, "Kael")
+        scripted.push(reply("E a sua origem?"))
+        await run(await interviews.sendInterviewMessage(campaignId, "character", { content: "Uma ladra." }, ids.ana))
+        expect(streamCalls.at(-1)!.instructions).toContain("## Outros personagens da mesa\n- Kael")
+    })
+
+    it("duas abas começando ao mesmo tempo criam um único personagem", async () => {
+        const campaignId = await newCampaign()
+        await finishScenario(campaignId)
+        const results = await Promise.allSettled([interviews.startInterview(campaignId, "character", ids.ana), interviews.startInterview(campaignId, "character", ids.ana)])
+        for (const result of results) if (result.status === "fulfilled" && result.value.turn) await run(result.value.turn).catch(() => undefined)
+        expect(await MaddoxCharacterModel.countDocuments({ campaignId, userId: ids.ana })).toBe(1)
+        const member = await MaddoxCampaignMemberModel.findOne({ campaignId, userId: ids.ana }).lean()
+        expect(String(member!.characterId)).toBe(String((await MaddoxCharacterModel.findOne({ campaignId, userId: ids.ana }).lean())!._id))
+    })
+
+    it("Maddox indisponível: começar a entrevista não cria personagem", async () => {
+        const campaignId = await newCampaign()
+        await finishScenario(campaignId)
+        availability.available = false
+        availability.reason = "Sem modelo"
+        await expect(interviews.startInterview(campaignId, "character", ids.ana)).rejects.toMatchObject({ status: 409 })
+        expect(await MaddoxCharacterModel.countDocuments({ campaignId })).toBe(0)
     })
 
     it("rigor narrativo: gera só o perfil narrativo, sem ficha, e o jogador fica pronto para jogar", async () => {
         const campaignId = await newCampaign("narrativo")
         await finishScenario(campaignId)
-        await campaigns.upsertCharacterDraft(campaignId, { name: "Lyra" }, ids.ana)
         await expect(campaigns.assertMemberCanPlay(campaignId, ids.ana)).rejects.toMatchObject({ status: 409, code: "INTERVIEW_REQUIRED" })
 
         const { turn } = await interviews.startInterview(campaignId, "character", ids.ana)
@@ -533,15 +594,36 @@ describe("entrevista de personagem", () => {
         expect(releaseInterviewSession).toHaveBeenLastCalledWith(campaignId, "character-interview", expect.any(String))
         await expect(campaigns.assertMemberCanPlay(campaignId, ids.ana)).resolves.toBeUndefined()
         expect((await MaddoxCampaignModel.findById(campaignId).lean())!.scriptVersions.character).toBe(0)
+
+        // DND-31: o retrato é pedido com a conclusão e gerado uma única vez em segundo plano.
+        expect(["pending", "generating", "done"]).toContain(me.character!.portraitStatus)
+        await portraits.waitForCharacterPortraits()
+        expect(generateAndStoreDndImage).toHaveBeenCalledTimes(1)
+        const request = generateAndStoreDndImage.mock.calls[0]![0] as { prompt: string; preferredAspectRatio: string; consumptionOrigin: string; storageKey: string }
+        expect(request).toMatchObject({ preferredAspectRatio: "1:1", consumptionOrigin: "maddox-character-portrait" })
+        expect(request.storageKey).toContain(`maddox/campaigns/${campaignId}/characters/`)
+        expect(request.prompt).toContain('"Lyra Ventobravo"')
+        expect(request.prompt).toContain("Elfa ladra")
+        expect(request.prompt).not.toContain("a definir durante a história")
+        character = await MaddoxCharacterModel.findOne({ userId: ids.ana }).lean()
+        expect(character).toMatchObject({ portraitUrl: "/api/upload?key=maddox/retrato.png", portrait: { status: "done", error: null } })
+        const after = await campaigns.getCampaignDetail(campaignId, ids.owner)
+        expect(after.members.find((member) => member.userId === ids.ana)!.character).toMatchObject({ portraitUrl: "/api/upload?key=maddox/retrato.png", portraitStatus: "done" })
+        expect(publishToChannels).toHaveBeenCalledWith(expect.arrayContaining([`private-maddox-u-${ids.ana}`]), "maddox.campaign.changed", expect.anything())
+        // Concluída não reabre: confirmar de novo não gera outra imagem.
+        await expect(completeInterview(campaignId, "character", ids.ana)).rejects.toMatchObject({ code: "INTERVIEW_DONE" })
+        await portraits.waitForCharacterPortraits()
+        expect(generateAndStoreDndImage).toHaveBeenCalledTimes(1)
     })
 
     it("rigor equilibrado: a ficha sai das escolhas gravadas e do card (menções do catálogo), nunca do texto da IA", async () => {
         const cat = await seedSheetCatalog()
         const campaignId = await newCampaign("equilibrado")
         await finishScenario(campaignId)
-        await campaigns.upsertCharacterDraft(campaignId, { name: "Lyra", portraitUrl: "/uploads/lyra.png" }, ids.ana)
         const { turn } = await interviews.startInterview(campaignId, "character", ids.ana)
         await run(turn!)
+        // Personagem do fluxo antigo (nome e retrato enviados antes da entrevista).
+        await nameMaddoxCharacter(campaignId, ids.ana, "Lyra", "/uploads/lyra.png")
         expect(streamCalls.at(-1)!.instructions).toContain("ficha do D&D")
         scripted.push(proposalReply())
         await run(await interviews.sendInterviewMessage(campaignId, "character", { content: "Humana guerreira." }, ids.ana))
@@ -558,7 +640,7 @@ describe("entrevista de personagem", () => {
         expect(createBlankSheet).toHaveBeenCalledWith(ids.ana, "ana", "Lyra")
         const character = await MaddoxCharacterModel.findOne({ userId: ids.ana }).lean()
         const sheet = await CharacterSheet.findById(character!.sheetId).lean()
-        expect(sheet).toMatchObject({ name: "Lyra", level: 1, strength: 15, dexterity: 13, constitution: 14, photo: "/uploads/lyra.png", age: "Humano de 30 anos", history: "<p>Cresceu no porto.</p><p>Virou <strong>soldada</strong>.</p>" })
+        expect(sheet).toMatchObject({ name: "Lyra", level: 1, strength: 15, dexterity: 13, constitution: 14, age: "Humano de 30 anos", history: "<p>Cresceu no porto.</p><p>Virou <strong>soldada</strong>.</p>" })
         expect(sheet!.race).toContain('data-entity-type="Raça"')
         expect(sheet!.race).toContain(">Humano</span>")
         expect(String(sheet!.raceRef)).toBe(String(cat.race))
@@ -566,13 +648,19 @@ describe("entrevista de personagem", () => {
         expect(JSON.stringify(sheet)).not.toContain("{{")
         expect(detail.members.find((member) => member.userId === ids.ana)!.character!.sheetSlug).toBe("ana/lyra")
         expect(recordAudit).toHaveBeenCalledWith(expect.objectContaining({ depois: expect.objectContaining({ sheet: "ficha criada" }) }))
-    })
+
+        // O retrato gerado substitui o enviado no fluxo antigo, no personagem e na foto da ficha; a raça vai ao pedido.
+        await portraits.waitForCharacterPortraits()
+        expect((generateAndStoreDndImage.mock.calls[0]![0] as { prompt: string }).prompt).toContain("Raça:")
+        expect((await MaddoxCharacterModel.findOne({ userId: ids.ana }).lean())!.portraitUrl).toBe("/api/upload?key=maddox/retrato.png")
+        expect((await CharacterSheet.findById(character!.sheetId).lean())!.photo).toBe("/api/upload?key=maddox/retrato.png")
+    }, 20_000)
 
     it("rigor equilibrado sem as escolhas da ficha: concluir responde 409 com o que falta, sem consolidar", async () => {
         const campaignId = await newCampaign("equilibrado")
         await finishScenario(campaignId)
-        await campaigns.upsertCharacterDraft(campaignId, { name: "Lyra" }, ids.ana)
         await run((await interviews.startInterview(campaignId, "character", ids.ana)).turn!)
+        await nameMaddoxCharacter(campaignId, ids.ana, "Lyra")
         scripted.push(proposalReply())
         await run(await interviews.sendInterviewMessage(campaignId, "character", { content: "Pronto." }, ids.ana))
         const consolidations = generateAiText.mock.calls.length
@@ -581,11 +669,10 @@ describe("entrevista de personagem", () => {
         expect((await MaddoxInterviewModel.findOne({ campaignId, kind: "character" }).lean())!.generating).toBeNull()
     })
 
-    it("campos longos da ficha (idade, peso, olhos) são gravados inteiros; renomear depois propaga à ficha", async () => {
+    it("campos longos da ficha (idade, peso, olhos) são gravados inteiros; nome longo é cortado no limite", async () => {
         const cat = await seedSheetCatalog()
         const campaignId = await newCampaign("equilibrado")
         await finishScenario(campaignId)
-        await campaigns.upsertCharacterDraft(campaignId, { name: "Lyra" }, ids.ana)
         await run((await interviews.startInterview(campaignId, "character", ids.ana)).turn!)
         scripted.push(proposalReply())
         await run(await interviews.sendInterviewMessage(campaignId, "character", { content: "Pronto." }, ids.ana))
@@ -598,13 +685,142 @@ describe("entrevista de personagem", () => {
         generateAiText.mockResolvedValueOnce({ text: JSON.stringify({ name: "L".repeat(200), profile: { identidade }, sheet: { weight, eyes, age } }) })
         await completeInterview(campaignId, "character", ids.ana)
         const character = await MaddoxCharacterModel.findOne({ userId: ids.ana }).lean()
-        // Nome fora do limite é ignorado (fica o do esboço), sem invalidar o resto.
-        expect(character!.name).toBe("Lyra")
+        // Nome acima do limite é cortado (o destino tem limite), sem invalidar o resto.
+        expect(character!.name).toBe("L".repeat(60))
         expect((character!.profile as unknown as Record<string, string>).identidade).toBe(identidade)
-        expect(await CharacterSheet.findById(character!.sheetId).lean()).toMatchObject({ weight, eyes, age })
+        expect(await CharacterSheet.findById(character!.sheetId).lean()).toMatchObject({ weight, eyes, age, name: "L".repeat(60) })
+    })
 
-        await campaigns.upsertCharacterDraft(campaignId, { name: "Lira", portraitUrl: "/uploads/lira.png" }, ids.ana)
-        expect(await CharacterSheet.findById(character!.sheetId).lean()).toMatchObject({ name: "Lira", photo: "/uploads/lira.png" })
-        expect((await MaddoxCharacterModel.findOne({ userId: ids.ana }).lean())!.name).toBe("Lira")
+    it("síntese sem nome combinado: 409 CHARACTER_NAME_REQUIRED, nada gravado, entrevista segue proposta e nenhum retrato é pedido", async () => {
+        const campaignId = await newCampaign("narrativo")
+        await finishScenario(campaignId)
+        await run((await interviews.startInterview(campaignId, "character", ids.ana)).turn!)
+        scripted.push(proposalReply())
+        await run(await interviews.sendInterviewMessage(campaignId, "character", { content: "Uma ladra." }, ids.ana))
+        generateAiText.mockResolvedValueOnce({ text: JSON.stringify({ name: null, profile: { identidade: "Ladra" }, sheet: null }) })
+        await expect(completeInterview(campaignId, "character", ids.ana)).rejects.toMatchObject({ status: 409, code: "CHARACTER_NAME_REQUIRED" })
+        const character = await MaddoxCharacterModel.findOne({ userId: ids.ana }).lean()
+        expect(character).toMatchObject({ name: "", interview: { status: "in-progress" } })
+        expect(character!.portrait?.status ?? null).toBeNull()
+        const interview = await MaddoxInterviewModel.findOne({ campaignId, kind: "character" }).lean()
+        expect(interview).toMatchObject({ status: "proposed", generating: null })
+        await portraits.waitForCharacterPortraits()
+        expect(generateAndStoreDndImage).not.toHaveBeenCalled()
+
+        // Confirmar de novo com o nome combinado conclui e pede o retrato.
+        generateAiText.mockResolvedValueOnce({ text: JSON.stringify({ name: "Nyx", profile: { identidade: "Ladra" }, sheet: null }) })
+        await completeInterview(campaignId, "character", ids.ana)
+        await portraits.waitForCharacterPortraits()
+        expect((await MaddoxCharacterModel.findOne({ userId: ids.ana }).lean())).toMatchObject({ name: "Nyx", portrait: { status: "done" } })
+    })
+})
+
+describe("retrato do personagem (DND-31)", () => {
+    async function concludedCharacter(rigor: "narrativo" = "narrativo") {
+        const campaignId = await newCampaign(rigor)
+        await finishScenario(campaignId)
+        await run((await interviews.startInterview(campaignId, "character", ids.ana)).turn!)
+        scripted.push(proposalReply())
+        await run(await interviews.sendInterviewMessage(campaignId, "character", { content: "Uma ladra." }, ids.ana))
+        generateAiText.mockResolvedValueOnce({ text: JSON.stringify({ name: "Nyx", profile: { identidade: "Ladra de olhos cinzentos" }, sheet: null }) })
+        await completeInterview(campaignId, "character", ids.ana)
+        return campaignId
+    }
+
+    it("prompt puro: nome, campanha, estilo, aparência e perfil (sem menções cruas nem seções vazias)", () => {
+        const prompt = portraits.buildCharacterPortraitPrompt({
+            campaignName: "Brumas",
+            style: "aquarela",
+            name: "Nyx",
+            profile: { identidade: "Elfa [Ladina](#mention:Classe:abc)", origem: "a definir durante a história", personalidade: "Teimosa" },
+            sheet: { race: "Elfo", hair: "prateado", eyes: "" },
+        })
+        expect(prompt).toContain('Retrato do personagem jogador "Nyx" da campanha de RPG "Brumas"')
+        expect(prompt).toContain("Estilo visual desta mesa: aquarela")
+        expect(prompt).toContain("- Raça: Elfo")
+        expect(prompt).toContain("- Cabelo: prateado")
+        expect(prompt).not.toContain("Olhos")
+        expect(prompt).toContain("Elfa Ladina")
+        expect(prompt).not.toContain("#mention")
+        expect(prompt).not.toContain("a definir durante a história")
+        expect(prompt).not.toContain("Teimosa")
+    })
+
+    it("falha do gerador (ou indisponível): retrato 'failed', sem imagem; o dono gera de novo uma vez só", async () => {
+        generateAndStoreDndImage.mockRejectedValueOnce(Object.assign(new Error("Gerador indisponível"), { status: 409 }))
+        const campaignId = await concludedCharacter()
+        await portraits.waitForCharacterPortraits()
+        let character = await MaddoxCharacterModel.findOne({ userId: ids.ana }).lean()
+        expect(character).toMatchObject({ portraitUrl: null, portrait: { status: "failed", error: "Não foi possível gerar o retrato do personagem." } })
+        expect((await campaigns.getCampaignDetail(campaignId, ids.ana)).myCharacter!.portraitStatus).toBe("failed")
+
+        await expect(portraits.retryCharacterPortrait(campaignId, ids.owner)).rejects.toMatchObject({ status: 404 })
+        await expect(portraits.retryCharacterPortrait(campaignId, ids.stranger)).rejects.toMatchObject({ status: 404 })
+        const results = await Promise.allSettled([portraits.retryCharacterPortrait(campaignId, ids.ana), portraits.retryCharacterPortrait(campaignId, ids.ana)])
+        expect(results.filter((result) => result.status === "fulfilled")).toHaveLength(1)
+        expect(results.find((result) => result.status === "rejected")).toMatchObject({ reason: { status: 409, code: "PORTRAIT_NOT_RETRYABLE" } })
+        await portraits.waitForCharacterPortraits()
+        expect(generateAndStoreDndImage).toHaveBeenCalledTimes(2)
+        character = await MaddoxCharacterModel.findOne({ userId: ids.ana }).lean()
+        expect(character).toMatchObject({ portraitUrl: "/api/upload?key=maddox/retrato.png", portrait: { status: "done" } })
+        // Pronto: nada de nova geração.
+        await expect(portraits.retryCharacterPortrait(campaignId, ids.ana)).rejects.toMatchObject({ status: 409, code: "PORTRAIT_NOT_RETRYABLE" })
+        expect(recordAudit).toHaveBeenCalledWith(expect.objectContaining({ depois: expect.objectContaining({ portrait: "nova tentativa" }) }))
+    })
+
+    it("gerador que não responde: o teto de tempo aborta a geração, o retrato fica 'failed' e a nova tentativa funciona", async () => {
+        const original = portraits.portraitTiming.timeoutMs
+        portraits.portraitTiming.timeoutMs = 50
+        let signal: AbortSignal | undefined
+        generateAndStoreDndImage.mockImplementationOnce((input: { signal?: AbortSignal }) => {
+            signal = input.signal
+            return new Promise(() => undefined)
+        })
+        try {
+            const campaignId = await concludedCharacter()
+            await portraits.waitForCharacterPortraits()
+            expect(signal?.aborted).toBe(true)
+            expect(await MaddoxCharacterModel.findOne({ userId: ids.ana }).lean()).toMatchObject({ portraitUrl: null, portrait: { status: "failed", error: "Não foi possível gerar o retrato do personagem." } })
+
+            await portraits.retryCharacterPortrait(campaignId, ids.ana)
+            await portraits.waitForCharacterPortraits()
+            expect(generateAndStoreDndImage).toHaveBeenCalledTimes(2)
+            expect(await MaddoxCharacterModel.findOne({ userId: ids.ana }).lean()).toMatchObject({ portraitUrl: "/api/upload?key=maddox/retrato.png", portrait: { status: "done" } })
+        } finally {
+            portraits.portraitTiming.timeoutMs = original
+        }
+    })
+
+    it("antes de concluir a entrevista não há retrato para gerar (409 INTERVIEW_REQUIRED)", async () => {
+        const campaignId = await newCampaign()
+        await finishScenario(campaignId)
+        await run((await interviews.startInterview(campaignId, "character", ids.ana)).turn!)
+        await expect(portraits.retryCharacterPortrait(campaignId, ids.ana)).rejects.toMatchObject({ status: 409, code: "INTERVIEW_REQUIRED" })
+    })
+
+    it("personagem antigo concluído sem imagem pode gerar o retrato; com retrato enviado, não", async () => {
+        const campaignId = await concludedCharacter()
+        await portraits.waitForCharacterPortraits()
+        await MaddoxCharacterModel.updateOne({ userId: ids.ana }, { $set: { portraitUrl: null }, $unset: { portrait: "" } })
+        await portraits.retryCharacterPortrait(campaignId, ids.ana)
+        await portraits.waitForCharacterPortraits()
+        expect((await MaddoxCharacterModel.findOne({ userId: ids.ana }).lean())!.portraitUrl).toBe("/api/upload?key=maddox/retrato.png")
+
+        await MaddoxCharacterModel.updateOne({ userId: ids.ana }, { $set: { portraitUrl: "/uploads/antigo.png" }, $unset: { portrait: "" } })
+        await expect(portraits.retryCharacterPortrait(campaignId, ids.ana)).rejects.toMatchObject({ code: "PORTRAIT_NOT_RETRYABLE" })
+    })
+
+    it("retrato preso (processo reiniciado) vira 'failed' na leitura da campanha; o que está gerando no processo não", async () => {
+        const campaignId = await concludedCharacter()
+        await portraits.waitForCharacterPortraits()
+        const old = new Date(Date.now() - 10 * 60 * 1000)
+        await MaddoxCharacterModel.updateOne({ userId: ids.ana }, { $set: { portraitUrl: null, portrait: { status: "generating", error: null, startedAt: old, completedAt: null } } })
+        const detail = await campaigns.getCampaignDetail(campaignId, ids.ana)
+        expect(detail.myCharacter!.portraitStatus).toBe("failed")
+        expect((await MaddoxCharacterModel.findOne({ userId: ids.ana }).lean())!.portrait!.status).toBe("failed")
+
+        // Recente: continua gerando.
+        await MaddoxCharacterModel.updateOne({ userId: ids.ana }, { $set: { portrait: { status: "generating", error: null, startedAt: new Date(), completedAt: null } } })
+        expect((await campaigns.getCampaignDetail(campaignId, ids.ana)).myCharacter!.portraitStatus).toBe("generating")
     })
 })
