@@ -25,7 +25,7 @@ roteiros e as memórias salvam à parte.
 
 | Seção | Conteúdo |
 | --- | --- |
-| Geral | Ativo; **Avatar** (upload/substituição pelo `GlassImageUploader` ou "Gerar com o Gerador de imagens" a partir da persona — 1:1, do peito para cima; só vale depois de salvar); modelo do **Maddox (narrador)** e do **Entrevistador** ("Mesmo do Maddox" = sem provedor próprio); instruções de cada um com "Restaurar padrão" |
+| Geral | Ativo; **Avatar** (upload/substituição pelo `GlassImageUploader` ou "Gerar com o Gerador de imagens" a partir da persona — 1:1, do peito para cima; só vale depois de salvar); modelo do **Maddox (narrador)** e do **Entrevistador** ("Mesmo do Maddox" = sem provedor próprio), cada um com blocos **"Por rigor"** (DND-32, abaixo); instruções de cada um com "Restaurar padrão" |
 | Entrevista: cenário / Entrevista: personagem | Roteiros versionados (abaixo), cada um com "Salvar nova versão do roteiro" e "Desfazer roteiro" |
 | Imagens | Imagens nas cenas (Maddox 10): chave geral, situações fixas e personalizadas, intervalo, teto diário, proporção e estilo (seção "Imagens nas cenas (Maddox 10)") |
 | JEV | Uma chave por decisão (`MADDOX_JEV_DECISIONS`): pergunta ou ação do jogador, validade de ação livre, pedir teste, início/fim de combate, conhecimento do mestre, fim da entrevista, gerar imagem na cena. Em uso: **"Fim da entrevista"** (Maddox 2), **"Validade de ação livre"** (Maddox 4, só Rigoroso e Fiel ao D&D), **"Pedir teste"** (Maddox 5, orientação ao narrador nos graus com testes) e **"Início ou fim de combate"** (Maddox 6, orientação ao narrador nos graus com combate narrativo), **"Custo de ação no combate"** (Maddox 7) e **"Gerar imagem na cena"** (Maddox 10, filtro da imagem pedida pelo narrador); as demais ainda sem uso |
@@ -34,11 +34,35 @@ roteiros e as memórias salvam à parte.
 A configuração fica em `ai_feature_settings` (feature `maddox`) com o schema `maddoxSettingsSchema`:
 `enabled`, `main` (provedor, modelo, agente, variante, temperatura, tokens), `interviewer` (provedor,
 modelo, agente, variante), `instructions`, `interviewerInstructions`, `avatar { url, persona }`,
-`opencode { deleteOnCampaignEnd, directory, mcpUrl }`, `jev { [decisão]: boolean }`. Campos novos
+`opencode { deleteOnCampaignEnd, directory, mcpUrl }`, `jev { [decisão]: boolean }`, `rigorModels { main[], interviewer[] }`. Campos novos
 recebem o padrão ao carregar (`withMaddoxDefaults`). Salvar normaliza (agente só no OpenCode, amostragem
 só onde o provedor aceita), confere modelo/variante/agente no catálogo (`assertCatalog`), audita
 (`FeatureIA`) e avisa em tempo real (`ai-feature-updated`). Sem configuração ativa, a disponibilidade
 explica o motivo em pt-BR.
+
+### Modelo por nível de rigor (DND-32, #245)
+
+A seleção de cada cartão (Maddox e Entrevistador) é o **padrão**. O botão curto **"Por rigor"** (`+`, no
+cabeçalho do cartão) acrescenta um bloco (`MaddoxRigorModelBlock`) com o **slider de rigor** (só os níveis de
+`MADDOX_RIGOR_LEVELS`, nas cores de raridade, como o `RigorCard`) e provedor, modelo, variante e agente do OpenCode
+(`MaddoxModelFields`, os mesmos campos da seleção padrão; temperatura e tokens só no padrão do Maddox). Cada cartão
+tem no máximo um bloco por nível: o bloco nasce no primeiro nível livre, o slider pula os níveis de outros blocos
+na direção do movimento (marcas esmaecidas, `muted` em `SliderMark`) e não sai do lugar sem nível livre; com todos
+usados, o botão fica desabilitado. Cada bloco tem "Remover".
+
+- **Formato:** `rigorModels.main` e `rigorModels.interviewer` são listas `{ rigor, provider, model, agent, variant }`
+  (`maddoxRigorModelSchema`). O schema recusa rigor repetido na mesma lista ("Já existe uma configuração para o
+  rigor X") e bloco sem provedor ou modelo (mesmo com o Maddox desativado). Configurações antigas carregam as listas
+  vazias, e o comportamento é o de antes. Salvar normaliza cada bloco e confere cada um no catálogo.
+- **Resolução** (`src/features/maddox/model-resolution.ts`, módulo puro): narrador = bloco do rigor da campanha >
+  padrão `main`; entrevistador = bloco dele > provedor próprio > ("Mesmo do Maddox") o modelo do narrador **no
+  mesmo rigor**. Temperatura e tokens vêm sempre do padrão do Maddox, só se o provedor resolvido os aceita (bloco
+  ou provedor próprio do entrevistador: sem amostragem). Sem rigor = padrão.
+- **Pontos de uso:** `loadNarrator(rigor)` (narração, validação de ação livre, descrição da cena para imagem),
+  `loadInterviewer(rigor)` (turnos e consolidação da entrevista) e `maddoxAvailability(settings, rigor)` na
+  criação da campanha (409 se o modelo do rigor escolhido estiver indisponível). No OpenCode, a sessão da
+  campanha recebe o modelo resolvido e é realinhada se o bloco mudar.
+- O aviso de disponibilidade da aba reflete só o padrão do narrador.
 
 **Provedores:** todos os de texto, **inclusive o OpenCode** (com seleção de agente). O OpenCode não aceita
 as ferramentas do app pela AI SDK: no narrador (Maddox 4) elas chegam ao agente pelo **MCP do Maddox**
@@ -162,7 +186,7 @@ Telas (`src/features/maddox/components/campaigns/`, rotas pt-BR):
 adversário do Opex com o `Slider` copiado em `src/components/ui/opex/slider.tsx` (Radix, prop `color` para a
 cor de raridade do nível). Abaixo do slider, duas colunas por nível: "Pelas regras do D&D" (`rules`) e
 "Livre, na narrativa" (`free`), de `MADDOX_RIGOR_LEVEL_DEFS`. Passo 1 = Narrativo, último = Fiel ao D&D.
-Com o Agente Maddox indisponível (`maddoxAvailability`), a criação responde **409 `MADDOX_UNAVAILABLE`** com o
+Com o Agente Maddox indisponível (`maddoxAvailability`, com o modelo do rigor escolhido), a criação responde **409 `MADDOX_UNAVAILABLE`** com o
 motivo, mostrado no diálogo. A campanha nasce no `lobby` com o criador como membro `owner`; se o membro não
 puder ser gravado, a campanha é apagada (sem transação). O dono renomeia a qualquer momento; o **rigor só muda
 no lobby** (409 `RIGOR_LOCKED`).
@@ -234,8 +258,8 @@ status `active` são do Maddox 3 (seção abaixo).
 **Instruções** (`buildInterviewInstructions`): instruções do entrevistador + entrevista atual + rigor (colunas
 `rules`/`free`) + no personagem o cenário, a situação inicial e os outros personagens (e, a partir de Equilibrado, o
 pedido de raça/classe/origem/atributos) + o guia da **versão gravada** + os **tópicos ativos numerados na ordem
-do roteiro** + o protocolo de conclusão. Modelo: o do entrevistador ou, sem provedor próprio, o do Maddox (com
-temperatura e tokens). Indisponível = 409 `MADDOX_UNAVAILABLE`. Consumo medido na origem `maddox-interview`.
+do roteiro** + o protocolo de conclusão. Modelo: o do entrevistador para o rigor da campanha (bloco "Por rigor" ou
+provedor próprio) ou, em "Mesmo do Maddox", o do Maddox no mesmo rigor (com temperatura e tokens; DND-32). Indisponível = 409 `MADDOX_UNAVAILABLE`. Consumo medido na origem `maddox-interview`.
 
 **Conversa.** Os provedores sem sessão recebem o histórico gravado (`messages`, abertura como primeira fala do
 usuário). A geração **não depende da conexão**: se o navegador fechar, a resposta é gravada mesmo assim; outras
@@ -1276,6 +1300,9 @@ Sem permissão nova: criar/editar já exigem `maddox.play` e ser o dono; o diár
 `tests/backend/maddox/*` (configuração, roteiros, avatar, sessões, rotas, `campaigns.test.ts` com MongoDB em
 memória, `campaign-routes.test.ts`, `grant-maddox-play.test.ts`) e `tests/frontend/maddox/*`
 (`maddox-tab.test.tsx`, `maddox-campaigns.test.tsx`, `maddox-campaigns-realtime.test.tsx`; happy-dom).
+Modelo por rigor (DND-32): `model-resolution.test.ts` (ordem de resolução e o pulo do slider), `settings.test.ts`
+(formato, validação, catálogo, disponibilidade por rigor), `narrator-opencode.test.ts`, `interviews.test.ts`,
+`action-validation.test.ts`, `campaigns.test.ts` e, na tela, `maddox-tab.test.tsx` ("modelo por rigor").
 DND-31: `interviews.test.ts` (personagem criado ao começar, corrida de duas abas, entrevistador indisponível sem esboço, nome
 obrigatório com 409 e reaplicação, nome longo cortado, retrato gerado uma vez com o pedido certo e a foto da ficha substituída,
 falha e nova tentativa concorrente, teto de tempo com gerador que não responde, personagem antigo sem imagem, retrato preso, personagem sem nome fora de "Outros personagens da mesa"), `interview-prompt.test.ts` (regra do nome),

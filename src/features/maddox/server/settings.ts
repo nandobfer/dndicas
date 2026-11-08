@@ -1,8 +1,9 @@
 import { z } from "zod"
 import { assertCatalog, availability, loadFeature, normalizeProvider, persistFeature } from "@/features/ai/server/settings"
 import type { AiFeatureAvailability } from "@/features/ai/types"
-import { MADDOX_FEATURE } from "../constants"
-import { DEFAULT_MADDOX_SETTINGS, maddoxSettingsSchema, type MaddoxSettings } from "../schemas"
+import { MADDOX_FEATURE, type MaddoxRigorLevel } from "../constants"
+import { resolveNarratorModel } from "../model-resolution"
+import { DEFAULT_MADDOX_SETTINGS, maddoxSettingsSchema, type MaddoxRigorModel, type MaddoxSettings } from "../schemas"
 import type { MaddoxSettingsDto } from "../types"
 import { getAllMaddoxScripts } from "./scripts"
 
@@ -17,6 +18,7 @@ export function withMaddoxDefaults(saved: unknown): unknown {
         ...value,
         main: { ...DEFAULT_MADDOX_SETTINGS.main, ...(value.main ?? {}) },
         interviewer: { ...DEFAULT_MADDOX_SETTINGS.interviewer, ...(value.interviewer ?? {}) },
+        rigorModels: { main: value.rigorModels?.main ?? [], interviewer: value.rigorModels?.interviewer ?? [] },
         avatar: { ...DEFAULT_MADDOX_SETTINGS.avatar, ...(value.avatar ?? {}) },
         opencode: { ...DEFAULT_MADDOX_SETTINGS.opencode, ...(value.opencode ?? {}) },
         jev: { ...DEFAULT_MADDOX_SETTINGS.jev, ...(value.jev ?? {}) },
@@ -32,8 +34,10 @@ export async function loadMaddoxSettings(): Promise<{ settings: MaddoxSettings; 
     return loadFeature<MaddoxSettings>(MADDOX_FEATURE, z.preprocess(withMaddoxDefaults, maddoxSettingsSchema), DEFAULT_MADDOX_SETTINGS)
 }
 
-export async function maddoxAvailability(settings: MaddoxSettings): Promise<AiFeatureAvailability> {
-    return availability({ enabled: settings.enabled, provider: settings.main.provider, model: settings.main.model }, '"Agente Maddox"')
+/** Disponibilidade do Maddox; com `rigor`, a do modelo que o narrador usa nesse nível (DND-32). */
+export async function maddoxAvailability(settings: MaddoxSettings, rigor?: MaddoxRigorLevel | null): Promise<AiFeatureAvailability> {
+    const model = rigor ? resolveNarratorModel(settings, rigor) : null
+    return availability({ enabled: settings.enabled, provider: model?.provider ?? settings.main.provider, model: model?.model ?? settings.main.model }, '"Agente Maddox"')
 }
 
 export async function getMaddoxSettings(): Promise<MaddoxSettingsDto> {
@@ -47,21 +51,29 @@ export function normalizeMaddoxSettings(input: MaddoxSettings): MaddoxSettings {
     const interviewer = input.interviewer.provider
         ? normalizeProvider({ enabled: false, ...input.interviewer, temperature: null, maxOutputTokens: null })
         : { provider: null, model: null, agent: null, variant: null }
+    const rigorBlock = (block: MaddoxRigorModel): MaddoxRigorModel => {
+        const value = normalizeProvider({ enabled: false, ...block, temperature: null, maxOutputTokens: null })
+        return { rigor: block.rigor, provider: value.provider, model: value.model, agent: value.agent, variant: value.variant }
+    }
     return {
         ...input,
         main: { provider: main.provider, model: main.model, agent: main.agent, variant: main.variant, temperature: main.temperature, maxOutputTokens: main.maxOutputTokens } as MaddoxSettings["main"],
         interviewer: { provider: interviewer.provider, model: interviewer.model, agent: interviewer.agent, variant: interviewer.variant } as MaddoxSettings["interviewer"],
+        rigorModels: { main: input.rigorModels.main.map(rigorBlock), interviewer: input.rigorModels.interviewer.map(rigorBlock) },
         avatar: { url: input.avatar.url?.trim() || null, persona: input.avatar.persona },
         opencode: { ...input.opencode, directory: input.opencode.directory?.trim() || null },
         sceneImages: { ...input.sceneImages, style: input.sceneImages.style.trim() },
     }
 }
 
-/** Salva conferindo no catálogo os modelos, variantes e agentes do OpenCode do Maddox e do entrevistador. */
+/** Salva conferindo no catálogo os modelos, variantes e agentes do OpenCode do Maddox, do entrevistador e de cada rigor. */
 export async function saveMaddoxSettings(input: MaddoxSettings, actorId: string): Promise<MaddoxSettingsDto> {
     const next = normalizeMaddoxSettings(input)
     await assertCatalog({ enabled: next.enabled, ...next.main })
     if (next.interviewer.provider) await assertCatalog({ enabled: next.enabled, ...next.interviewer, temperature: null, maxOutputTokens: null })
+    for (const block of [...next.rigorModels.main, ...next.rigorModels.interviewer]) {
+        await assertCatalog({ enabled: next.enabled, provider: block.provider, model: block.model, agent: block.agent, variant: block.variant, temperature: null, maxOutputTokens: null })
+    }
     const before = await loadMaddoxSettings()
     await persistFeature(MADDOX_FEATURE, next, actorId, before)
     return getMaddoxSettings()

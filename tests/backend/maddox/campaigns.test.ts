@@ -72,8 +72,11 @@ describe("Campanhas Maddox — criação e lista", () => {
     it("com o Agente Maddox indisponível responde 409 com o motivo e não cria", async () => {
         availability.available = false
         availability.reason = 'O "Agente Maddox" está desativado.'
-        await expect(service.createCampaign({ name: "Sem mestre", rigor: "narrativo" }, ids.owner)).rejects.toMatchObject({ status: 409, code: "MADDOX_UNAVAILABLE", message: 'O "Agente Maddox" está desativado.' })
+        await expect(service.createCampaign({ name: "Sem mestre", rigor: "rigoroso" }, ids.owner)).rejects.toMatchObject({ status: 409, code: "MADDOX_UNAVAILABLE", message: 'O "Agente Maddox" está desativado.' })
         expect(await MaddoxCampaignModel.countDocuments()).toBe(0)
+        // DND-32: a disponibilidade é a do modelo do rigor escolhido.
+        const { maddoxAvailability } = await import("@/features/maddox/server/settings")
+        expect(maddoxAvailability).toHaveBeenLastCalledWith(expect.anything(), "rigoroso")
     })
 
     it("desfaz a campanha se o membro dono não puder ser criado", async () => {

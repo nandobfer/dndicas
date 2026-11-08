@@ -167,5 +167,69 @@ describe("configuração do Agente Maddox", () => {
         expect(invalid.success).toBe(false)
         if (!invalid.success) expect(invalid.error.issues[0]!.message).toBe("Informe uma URL começando com http:// ou https://")
     })
-})
 
+    describe("modelo por rigor (DND-32)", () => {
+        const block = (rigor: string, patch: Record<string, unknown> = {}) => ({ rigor, provider: "gemini", model: "gemini-2.5-pro", agent: null, variant: null, ...patch }) as never
+        const withBlocks = (main: never[], interviewer: never[] = []) => configured({ rigorModels: { main, interviewer } })
+
+        it("configuração antiga recebe as listas vazias sem perder o resto", () => {
+            const legacy: Record<string, unknown> = { ...configured() }
+            delete legacy.rigorModels
+            const parsed = maddoxSettingsSchema.safeParse(withMaddoxDefaults(legacy))
+            expect(parsed.success).toBe(true)
+            if (parsed.success) {
+                expect(parsed.data.rigorModels).toEqual({ main: [], interviewer: [] })
+                expect(parsed.data.main.model).toBe("anthropic/claude")
+            }
+        })
+
+        it("salvar e recarregar devolve os blocos do narrador e do entrevistador, com agente e variante", async () => {
+            await saveMaddoxSettings(withBlocks([block("rigoroso", { provider: "opencode", model: "anthropic/claude", agent: "build", variant: "high" })], [block("narrativo", { agent: "build" })]), "admin-1")
+            const reloaded = await getMaddoxSettings()
+            expect(reloaded.settings.rigorModels.main).toEqual([{ rigor: "rigoroso", provider: "opencode", model: "anthropic/claude", agent: "build", variant: "high" }])
+            // Agente só vale no OpenCode.
+            expect(reloaded.settings.rigorModels.interviewer).toEqual([{ rigor: "narrativo", provider: "gemini", model: "gemini-2.5-pro", agent: null, variant: null }])
+            const audit = recordAudit.mock.calls.at(-1)![0] as unknown as { depois: { rigorModels: unknown } }
+            expect(audit.depois.rigorModels).toEqual(reloaded.settings.rigorModels)
+        })
+
+        it("rigor repetido na mesma lista é recusado; o mesmo rigor no narrador e no entrevistador é aceito", () => {
+            const repeated = maddoxSettingsSchema.safeParse(withBlocks([block("rigoroso"), block("rigoroso")]))
+            expect(repeated.success).toBe(false)
+            if (!repeated.success) expect(repeated.error.issues).toEqual([expect.objectContaining({ path: ["rigorModels", "main", 1, "rigor"], message: "Já existe uma configuração para o rigor Rigoroso" })])
+            expect(maddoxSettingsSchema.safeParse(withBlocks([block("rigoroso")], [block("rigoroso")])).success).toBe(true)
+        })
+
+        it("bloco sem provedor ou modelo é recusado mesmo com o Maddox desativado; rigor fora dos níveis também", () => {
+            const result = maddoxSettingsSchema.safeParse({ ...withBlocks([block("narrativo", { provider: null, model: null })]), enabled: false })
+            expect(result.success).toBe(false)
+            if (!result.success) expect(result.error.issues.map((issue) => `${issue.path.join(".")}: ${issue.message}`)).toEqual(["rigorModels.main.0.provider: Selecione o provedor", "rigorModels.main.0.model: Selecione o modelo"])
+            const invalid = maddoxSettingsSchema.safeParse(withBlocks([block("lendario")]))
+            expect(invalid.success).toBe(false)
+            if (!invalid.success) expect(invalid.error.issues[0]!.message).toBe("Escolha um grau de rigor válido")
+        })
+
+        it("modelo inexistente num bloco é recusado (400) e provedor do bloco desconectado com o Maddox ativo, 409", async () => {
+            await expect(saveMaddoxSettings(withBlocks([block("flexivel", { model: "fantasma" })]), "admin-1")).rejects.toMatchObject({ status: 400, code: "AI_MODEL_NOT_FOUND" })
+            await expect(saveMaddoxSettings(withBlocks([], [block("flexivel", { provider: "anthropic", model: "claude" })]), "admin-1")).rejects.toMatchObject({ status: 409, code: "AI_PROVIDER_DISCONNECTED" })
+            expect(store.size).toBe(0)
+        })
+
+        it("erros dos blocos aparecem no próprio bloco (não viram o aviso do Salvar)", async () => {
+            const { firstHiddenFormError } = await import("@/features/maddox/form-errors")
+            expect(firstHiddenFormError({ rigorModels: { main: [undefined, { model: { message: "Selecione o modelo", type: "custom" } }] } })).toBeNull()
+            expect(firstHiddenFormError({ rigorModels: { interviewer: [{ rigor: { message: "Já existe", type: "custom" } }] } })).toBeNull()
+            expect(firstHiddenFormError({ rigorModels: { main: [{ agent: { message: "Longo demais", type: "too_big" } }] } })).toBe("Longo demais")
+        })
+
+        it("disponibilidade por rigor: o modelo do bloco precisa estar conectado", async () => {
+            const { maddoxAvailability } = await import("@/features/maddox/server/settings")
+            const settings = withBlocks([block("rigoroso", { provider: "anthropic", model: "claude" })])
+            expect((await maddoxAvailability(settings)).available).toBe(true)
+            expect((await maddoxAvailability(settings, "narrativo")).available).toBe(true)
+            const rigoroso = await maddoxAvailability(settings, "rigoroso")
+            expect(rigoroso.available).toBe(false)
+            expect(rigoroso.reason).toMatch(/Anthropic/)
+        })
+    })
+})

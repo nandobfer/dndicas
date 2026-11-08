@@ -12,6 +12,7 @@ import {
     MADDOX_NARRATOR_MAX_STEPS,
     MADDOX_COMBAT_OUTCOME_LABELS,
     MADDOX_DEFAULT_DENSITY,
+    type MaddoxRigorLevel,
 } from "../constants"
 import { createMarkupFilter } from "../catalog-markup"
 import {
@@ -28,6 +29,7 @@ import {
     type IMaddoxNpc,
 } from "../models"
 import type { MaddoxSettings } from "../schemas"
+import { resolveNarratorModel, type MaddoxResolvedModel } from "../model-resolution"
 import type { MaddoxAnswerContext, MaddoxMaster, MaddoxMasterSink, MaddoxNarrationContext } from "./game-master"
 import { checkTitle, sheetSummary, type MaddoxCheckSheet } from "../check-modifier"
 import { worldCatalogOf } from "../world-catalog"
@@ -45,23 +47,19 @@ import { buildNarratorInstructions, checkResultLine, narratorTaskText, narratorT
 
 const log = loggerFor({ module: "maddox", feature: "narrator" })
 
-export interface NarratorModel {
-    provider: NonNullable<MaddoxSettings["main"]["provider"]>
-    model: string
-    agent: string | null
-    variant: string | null
-    temperature: number | null
-    maxOutputTokens: number | null
-}
+export type NarratorModel = MaddoxResolvedModel
 
-/** Modelo do narrador (o "Maddox" da aba); indisponível = 409 `MADDOX_UNAVAILABLE` com o motivo. */
-export async function loadNarrator(): Promise<{ settings: MaddoxSettings; model: NarratorModel }> {
+/**
+ * Modelo do narrador (o "Maddox" da aba) para o rigor da campanha: o bloco do nível ou o padrão (DND-32);
+ * indisponível = 409 `MADDOX_UNAVAILABLE` com o motivo.
+ */
+export async function loadNarrator(rigor?: MaddoxRigorLevel | null): Promise<{ settings: MaddoxSettings; model: NarratorModel }> {
     const [{ loadMaddoxSettings }, { availability }] = await Promise.all([import("./settings"), import("@/features/ai/server/settings")])
     const { settings } = await loadMaddoxSettings()
-    const main = settings.main
-    const status = await availability({ enabled: settings.enabled, provider: main.provider, model: main.model }, '"Agente Maddox"')
-    if (!status.available || !main.provider || !main.model) throw new DomainError(409, status.reason ?? 'O "Agente Maddox" não está disponível. Fale com um administrador.', "MADDOX_UNAVAILABLE")
-    return { settings, model: { provider: main.provider, model: main.model, agent: main.agent ?? null, variant: main.variant ?? null, temperature: main.temperature, maxOutputTokens: main.maxOutputTokens } }
+    const model = resolveNarratorModel(settings, rigor)
+    const status = await availability({ enabled: settings.enabled, provider: model?.provider ?? null, model: model?.model ?? null }, '"Agente Maddox"')
+    if (!status.available || !model) throw new DomainError(409, status.reason ?? 'O "Agente Maddox" não está disponível. Fale com um administrador.', "MADDOX_UNAVAILABLE")
+    return { settings, model }
 }
 
 // ── Contexto ───────────────────────────────────────────────────────────────────
@@ -278,8 +276,9 @@ function liveText(sink: MaddoxMasterSink) {
 
 async function generate(args: GenerateArgs, sink: MaddoxMasterSink): Promise<string> {
     const campaignId = new Types.ObjectId(args.campaignId)
-    const { settings, model } = await loadNarrator()
     const [context, memories] = await Promise.all([loadContext(campaignId), agentMemories()])
+    // O modelo depende do rigor da campanha (DND-32): bloco do nível ou a seleção padrão.
+    const { settings, model } = await loadNarrator(context.campaign.rigor)
     const transcript = narratorTranscript(
         context.messages
             .filter((message) => !args.excludeIds.has(String(message._id)) && !message.error && message.kind !== "reminder")

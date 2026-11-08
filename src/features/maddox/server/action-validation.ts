@@ -80,7 +80,7 @@ async function viaJev(input: ValidateDeclarationInput, signal: AbortSignal): Pro
 
 async function viaNarrator(input: ValidateDeclarationInput, signal: AbortSignal): Promise<DeclarationVerdict> {
     const [{ loadNarrator }, { generateAiText }] = await Promise.all([import("./narrator"), import("@/lib/ai/stream")])
-    const { model } = await loadNarrator()
+    const { model } = await loadNarrator(input.campaign.rigor)
     const instructions = [
         "Você é Maddox, o mestre da campanha. Decida se a ação que um jogador declarou é VÁLIDA: o personagem tem os meios para TENTÁ-LA (capacidades, poderes, equipamentos, condição), de forma coerente com o cenário e o grau de rigor. A ação pode falhar e ainda ser válida; só é inválida o que o personagem não poderia sequer tentar ou o que as regras não permitem.",
         rigorBlock(input.campaign.rigor),
