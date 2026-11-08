@@ -8,6 +8,10 @@ import { cn } from "@/lib/utils"
 export interface SliderMark {
     value: number
     label?: string
+    /** Marca esmaecida (ex.: valor já usado em outro lugar); continua clicável, quem decide é o `onChange`. */
+    muted?: boolean
+    /** Dica da marca (`title`). */
+    title?: string
 }
 
 export interface SliderProps {
@@ -90,7 +94,10 @@ export function Slider({ value, onChange, min, max, step = 1, disabled, id, form
                             className={cn(
                                 "absolute -translate-x-1/2 tabular-nums transition-colors hover:text-foreground disabled:pointer-events-none",
                                 mark.value === value && "font-semibold text-primary",
+                                mark.muted && mark.value !== value && "opacity-40",
                             )}
+                            title={mark.title}
+                            data-muted={mark.muted ? "" : undefined}
                             style={{ left: `${percent(mark.value)}%`, ...(color && mark.value === value ? { color } : {}) }}
                         >
                             {mark.label ?? mark.value}

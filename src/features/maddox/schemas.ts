@@ -8,6 +8,8 @@ import {
     MADDOX_INSTRUCTIONS_MAX,
     MADDOX_JEV_DECISIONS,
     MADDOX_PERSONA_MAX,
+    MADDOX_RIGOR_LEVEL_DEFS,
+    MADDOX_RIGOR_LEVELS,
     MADDOX_SCRIPT_GUIDE_MAX,
     MADDOX_SCRIPT_KINDS,
     MADDOX_SCRIPT_NOTES_MAX,
@@ -45,6 +47,23 @@ export type MaddoxMainModel = z.infer<typeof maddoxMainModelSchema>
 /** Modelo do entrevistador (sem provedor = o mesmo do Maddox). */
 export const maddoxInterviewerModelSchema = z.object(providerFields)
 export type MaddoxInterviewerModel = z.infer<typeof maddoxInterviewerModelSchema>
+
+/**
+ * Modelo próprio de um nível de rigor (DND-32): provedor, modelo, variante e agente. Temperatura e máximo de
+ * tokens vêm sempre da seleção padrão do Maddox.
+ */
+export const maddoxRigorModelSchema = z.object({
+    rigor: z.enum(MADDOX_RIGOR_LEVELS, { error: "Escolha um grau de rigor válido" }),
+    ...providerFields,
+})
+export type MaddoxRigorModel = z.infer<typeof maddoxRigorModelSchema>
+
+const rigorModelListSchema = z.array(maddoxRigorModelSchema).max(MADDOX_RIGOR_LEVELS.length, `Até ${MADDOX_RIGOR_LEVELS.length} configurações por rigor`)
+
+/** Modelos por nível de rigor do narrador e do entrevistador; nível sem bloco = a seleção padrão do cartão. */
+export const maddoxRigorModelsSchema = z.object({ main: rigorModelListSchema, interviewer: rigorModelListSchema })
+export type MaddoxRigorModels = z.infer<typeof maddoxRigorModelsSchema>
+export type MaddoxRigorModelTarget = keyof MaddoxRigorModels
 
 export const maddoxAvatarSchema = z.object({
     /** URL da imagem (upload ou gerada); `null` = sem avatar. */
@@ -127,6 +146,7 @@ export const maddoxSettingsSchema = z
         enabled: z.boolean({ error: "Informe se o Agente Maddox está ativo" }),
         main: maddoxMainModelSchema,
         interviewer: maddoxInterviewerModelSchema,
+        rigorModels: maddoxRigorModelsSchema,
         instructions: instructionsField,
         interviewerInstructions: instructionsField,
         avatar: maddoxAvatarSchema,
@@ -136,6 +156,15 @@ export const maddoxSettingsSchema = z
     })
     .superRefine((value, ctx) => {
         if (value.interviewer.provider && !value.interviewer.model) ctx.addIssue({ code: "custom", path: ["interviewer", "model"], message: "Selecione o modelo" })
+        for (const target of ["main", "interviewer"] as const) {
+            const seen = new Set<string>()
+            value.rigorModels[target].forEach((block, index) => {
+                if (seen.has(block.rigor)) ctx.addIssue({ code: "custom", path: ["rigorModels", target, index, "rigor"], message: `Já existe uma configuração para o rigor ${MADDOX_RIGOR_LEVEL_DEFS[block.rigor].label}` })
+                seen.add(block.rigor)
+                if (!block.provider) ctx.addIssue({ code: "custom", path: ["rigorModels", target, index, "provider"], message: "Selecione o provedor" })
+                if (!block.model) ctx.addIssue({ code: "custom", path: ["rigorModels", target, index, "model"], message: "Selecione o modelo" })
+            })
+        }
         if (!value.enabled) return
         if (!value.main.provider) ctx.addIssue({ code: "custom", path: ["main", "provider"], message: "Selecione o provedor" })
         if (!value.main.model) ctx.addIssue({ code: "custom", path: ["main", "model"], message: "Selecione o modelo" })
@@ -146,6 +175,7 @@ export const DEFAULT_MADDOX_SETTINGS: MaddoxSettings = {
     enabled: false,
     main: { provider: null, model: null, agent: null, variant: null, temperature: null, maxOutputTokens: null },
     interviewer: { provider: null, model: null, agent: null, variant: null },
+    rigorModels: { main: [], interviewer: [] },
     instructions: DEFAULT_MADDOX_INSTRUCTIONS,
     interviewerInstructions: DEFAULT_MADDOX_INTERVIEWER_INSTRUCTIONS,
     avatar: { url: null, persona: DEFAULT_MADDOX_PERSONA },

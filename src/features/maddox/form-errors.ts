@@ -24,8 +24,13 @@ export function flattenFormErrors(errors: unknown, prefix = ""): Array<{ path: s
         .flatMap(([key, value]) => flattenFormErrors(value, prefix ? `${prefix}.${key}` : key))
 }
 
+/** Blocos por rigor (DND-32): rigor, provedor e modelo aparecem no próprio bloco. */
+const RENDERED_ERROR_PATTERN = /^rigorModels\.(main|interviewer)\.\d+\.(rigor|provider|model)$/
+
+const isRendered = (path: string) => RENDERED_ERROR_PATHS.has(path) || RENDERED_ERROR_PATTERN.test(path)
+
 /** Primeira mensagem de erro sem lugar na tela (ex.: URL do avatar), para virar aviso. `null` se todas aparecem. */
 export function firstHiddenFormError(errors: unknown): string | null {
-    const hidden = flattenFormErrors(errors).find((item) => !RENDERED_ERROR_PATHS.has(item.path))
+    const hidden = flattenFormErrors(errors).find((item) => !isRendered(item.path))
     return hidden ? hidden.message : null
 }

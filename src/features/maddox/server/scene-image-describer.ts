@@ -56,7 +56,7 @@ export async function describeCurrentScene(campaignId: Types.ObjectId, lastNarra
     const fallback: DescribedScene = { description: lastNarration.trim().slice(0, 3000), caption: "", characters: characterNames, npcs: [], catalog: [] }
     try {
         const [{ loadNarrator }, { generateAiText }] = await Promise.all([import("./narrator"), import("@/lib/ai/stream")])
-        const { model } = await loadNarrator()
+        const { model } = await loadNarrator(campaign?.rigor)
         const instructions = [
             "Você é Maddox, o mestre da campanha. O dono da mesa pediu uma ILUSTRAÇÃO da cena atual. Descreva visualmente, para um gerador de imagens, o que está acontecendo AGORA: lugar, luz, clima, quem aparece, posições e ação. Não revele segredos do mestre: só o que os jogadores veem.",
             `## Campanha "${campaign?.name ?? ""}"\n${campaign?.setting?.trim().slice(0, 3000) || "(sem cenário registrado)"}`,

@@ -17,11 +17,13 @@ import {
     MADDOX_SHEET_RIGORS,
     MADDOX_WORLD_CATALOG_RIGORS,
     isMaddoxScriptKind,
+    type MaddoxRigorLevel,
     type MaddoxScriptKind,
     type MaddoxSessionPurpose,
 } from "../constants"
 import { MaddoxCampaignMemberModel, MaddoxCampaignModel, MaddoxCharacterModel, MaddoxInterviewModel, type IMaddoxCampaign, type IMaddoxCampaignMember, type IMaddoxCharacter, type IMaddoxInterview, type IMaddoxInterviewMessage } from "../models"
 import type { MaddoxSettings } from "../schemas"
+import { resolveInterviewerModel, type MaddoxResolvedModel } from "../model-resolution"
 import type { MaddoxAbilityRollsDto, MaddoxAbilityScoresDto, MaddoxHitPointsDto, MaddoxInterviewDto, MaddoxInterviewMessageDto, MaddoxInterviewStateDto, MaddoxInterviewStreamLine } from "../interview-types"
 import type { MaddoxInterviewMessageInput } from "../interview-schemas"
 import { changed, loadMembership } from "./campaigns"
@@ -159,34 +161,15 @@ export async function getInterview(campaignId: string, kind: MaddoxScriptKind, u
 
 // ── Modelo do entrevistador ────────────────────────────────────────────────────
 
-export interface InterviewerModel {
-    provider: NonNullable<MaddoxSettings["main"]["provider"]>
-    model: string
-    agent: string | null
-    variant: string | null
-    temperature: number | null
-    maxOutputTokens: number | null
-}
+export type InterviewerModel = MaddoxResolvedModel
 
-/** O entrevistador com provedor próprio, ou "Mesmo do Maddox" (o modelo principal). */
-export function resolveInterviewerModel(settings: MaddoxSettings): InterviewerModel | null {
-    const own = settings.interviewer.provider && settings.interviewer.model
-    const source = own ? settings.interviewer : settings.main
-    if (!source.provider || !source.model) return null
-    return {
-        provider: source.provider,
-        model: source.model,
-        agent: source.agent ?? null,
-        variant: source.variant ?? null,
-        temperature: own ? null : settings.main.temperature,
-        maxOutputTokens: own ? null : settings.main.maxOutputTokens,
-    }
-}
+/** Bloco do rigor > provedor próprio > "Mesmo do Maddox" no mesmo rigor (DND-32; regra em `model-resolution.ts`). */
+export { resolveInterviewerModel }
 
-export async function loadInterviewer(): Promise<{ settings: MaddoxSettings; model: InterviewerModel }> {
+export async function loadInterviewer(rigor?: MaddoxRigorLevel | null): Promise<{ settings: MaddoxSettings; model: InterviewerModel }> {
     const [{ loadMaddoxSettings }, { availability }] = await Promise.all([import("./settings"), import("@/features/ai/server/settings")])
     const { settings } = await loadMaddoxSettings()
-    const model = resolveInterviewerModel(settings)
+    const model = resolveInterviewerModel(settings, rigor)
     const status = await availability({ enabled: settings.enabled, provider: model?.provider ?? null, model: model?.model ?? null }, '"Agente Maddox"')
     if (!status.available || !model) throw new DomainError(409, status.reason ?? 'O "Agente Maddox" não está disponível. Fale com um administrador.', "MADDOX_UNAVAILABLE")
     return { settings, model }
@@ -283,7 +266,7 @@ export const usesInterviewTools = (subject: InterviewSubject, kind: MaddoxScript
 /** Resolve modelo, roteiro e sessão do OpenCode; qualquer falha libera a trava e propaga (erro JSON). */
 export async function prepareTurn(subject: InterviewSubject, kind: MaddoxScriptKind, userId: string, interview: InterviewDoc, token: string, userMessage: IMaddoxInterviewMessage | null): Promise<PreparedTurn> {
     try {
-        const { settings, model } = await loadInterviewer()
+        const { settings, model } = await loadInterviewer(subject.campaign.rigor)
         const context = await promptContext(subject, kind, interview.scriptVersion, settings)
         let opencodeSessionId: string | null = null
         if (model.provider === "opencode") {
@@ -571,7 +554,7 @@ export async function startInterview(campaignId: string, kind: MaddoxScriptKind,
     if (!doc) {
         if (kind === "scenario" && !["lobby", "interview"].includes(subject.campaign.status)) throw new DomainError(409, "A entrevista de cenário só acontece antes do início da campanha.", "SCENARIO_LOCKED")
         // Valida a disponibilidade antes de gravar qualquer coisa.
-        await loadInterviewer()
+        await loadInterviewer(subject.campaign.rigor)
         const { currentMaddoxScript } = await import("./scripts")
         const pinned = kind === "scenario" ? subject.campaign.scriptVersions?.scenario : subject.campaign.scriptVersions?.character
         const scriptVersion = pinned ?? (await currentMaddoxScript(kind)).version

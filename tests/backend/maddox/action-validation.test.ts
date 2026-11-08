@@ -8,7 +8,8 @@ const generateAiText = vi.fn<(input: Record<string, unknown>) => Promise<{ text:
 vi.mock("@/features/maddox/server/settings", () => ({ loadMaddoxSettings: vi.fn(async () => ({ settings: { jev: { "free-action-validity": jev.on } } })) }))
 vi.mock("@/lib/ai/jev", () => ({ askJevSystemOne }))
 vi.mock("@/lib/ai/stream", () => ({ generateAiText }))
-vi.mock("@/features/maddox/server/narrator", () => ({ loadNarrator: vi.fn(async () => ({ model: { provider: "gemini", model: "g", agent: null, variant: null } })) }))
+const loadNarrator = vi.fn<(rigor?: string | null) => Promise<{ model: Record<string, unknown> }>>(async () => ({ model: { provider: "gemini", model: "g", agent: null, variant: null } }))
+vi.mock("@/features/maddox/server/narrator", () => ({ loadNarrator }))
 
 const { validateDeclaration } = await import("@/features/maddox/server/action-validation")
 const { MADDOX_VALIDATION_TIMEOUT_MS } = await import("@/features/maddox/constants")
@@ -33,6 +34,8 @@ describe("validação da ação livre ao declarar", () => {
         expect(String(request.prompt)).toContain("Lanço uma bola de fogo.")
         expect(request).toMatchObject({ consumption: { origin: "maddox-validation" } })
         expect(askJevSystemOne).not.toHaveBeenCalled()
+        // DND-32: o modelo do narrador é o do rigor da campanha.
+        expect(loadNarrator).toHaveBeenLastCalledWith("fiel-dnd")
     })
 
     it("ação válida passa", async () => {

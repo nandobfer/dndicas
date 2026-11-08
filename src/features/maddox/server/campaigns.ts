@@ -221,7 +221,8 @@ export async function createCampaign(input: CreateMaddoxCampaignInput, userId: s
     const { loadMaddoxSettings, maddoxAvailability } = await import("./settings")
     await dbConnect()
     const { settings } = await loadMaddoxSettings()
-    const availability = await maddoxAvailability(settings)
+    // O modelo do rigor escolhido (DND-32) também precisa estar disponível.
+    const availability = await maddoxAvailability(settings, input.rigor)
     if (!availability.available) throw new DomainError(409, availability.reason ?? 'O "Agente Maddox" não está disponível. Fale com um administrador.', "MADDOX_UNAVAILABLE")
 
     const campaign = await MaddoxCampaignModel.create({ name: input.name, ownerId: userId, rigor: input.rigor, showCheckDc: input.showCheckDc ?? false, sceneImages: input.sceneImages ?? true, density: input.density ?? MADDOX_DEFAULT_DENSITY, status: "lobby", invite: { token: newToken(), rotatedAt: new Date() } })

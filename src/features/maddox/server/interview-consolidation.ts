@@ -196,7 +196,7 @@ export async function completeInterview(campaignId: string, kind: MaddoxScriptKi
         if (hpPending) throw new DomainError(409, `Defina os pontos de vida dos níveis 2 a ${level} no card de PV antes de concluir. Peça ao Maddox para abrir o card.`, "HIT_POINTS_PENDING")
         if (!submittedAbilityCard(doc.messages)) throw new DomainError(409, "Envie os atributos pelo card antes de concluir a entrevista.", "ABILITY_SCORES_PENDING")
     }
-    const { settings, model } = await loadInterviewer()
+    const { settings, model } = await loadInterviewer(subject.campaign.rigor)
     const { doc: locked, token } = await acquireInterviewLock(doc._id)
     // Outra aba pode ter enviado um ajuste entre a leitura e a trava: só consolida a síntese confirmada.
     if (locked.status !== "proposed") {

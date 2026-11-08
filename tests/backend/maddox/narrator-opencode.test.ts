@@ -15,6 +15,8 @@ vi.mock("@/features/maddox/server/settings", () => ({
         settings: {
             enabled: true,
             main: { provider: "opencode", model: "anthropic/claude", agent: "maddox", variant: null, temperature: null, maxOutputTokens: null },
+            // DND-32: o Flexível tem modelo próprio; os demais níveis usam o padrão acima.
+            rigorModels: { main: [{ rigor: "flexivel", provider: "opencode", model: "openai/gpt-5", agent: "mestre", variant: "high" }], interviewer: [] },
             instructions: "Você é Maddox.",
             avatar: { url: null },
             opencode: { deleteOnCampaignEnd: true, directory: null, mcpUrl: null },
@@ -81,6 +83,13 @@ describe("Maddox narrador no OpenCode", () => {
         const token = /exatamente com este valor: `([^`]+)`/.exec(String(request.instructions))?.[1]
         expect(verifyMaddoxTurnToken(token)).toMatchObject({ campaignId: String(campaign._id), jobId: "job-1", turnNumber: 1 })
         expect(String(request.prompt)).toContain("Abertura da campanha")
+    })
+
+    it("campanha com modelo próprio para o rigor (DND-32): a sessão do narrador e a geração usam o do nível", async () => {
+        const campaign = await MaddoxCampaignModel.create({ name: "Brumas", ownerId: "u1", rigor: "flexivel", setting: "Porto." })
+        await aiMaddoxMaster.narrate({ campaignId: String(campaign._id), jobId: "job-rigor", turnNumber: 1, declarations: [] }, { delta: () => undefined, tool: () => undefined })
+        expect(ensureMaddoxSession).toHaveBeenCalledWith(expect.objectContaining({ purpose: "narrator", agent: "mestre", model: "openai/gpt-5", variant: "high" }))
+        expect(requests[0]).toMatchObject({ provider: "opencode", model: "openai/gpt-5" })
     })
 
     it("MCP indisponível impede a narração (o motor marca a falha e tenta de novo depois)", async () => {
