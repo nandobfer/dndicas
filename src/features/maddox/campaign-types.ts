@@ -33,6 +33,8 @@ export interface MaddoxCampaignListItemDto {
     rigor: MaddoxRigorLevel
     status: MaddoxCampaignStatus
     coverUrl: string | null
+    /** Última imagem de cena concluída da campanha (DND-35), pela data do pedido; retrato de NPC não conta. */
+    lastSceneImageUrl: string | null
     ownerId: string
     ownerName: string
     myRole: MaddoxMemberRole

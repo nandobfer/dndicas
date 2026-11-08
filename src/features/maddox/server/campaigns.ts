@@ -5,7 +5,7 @@ import { DomainError } from "@/lib/api/route"
 import { loggerFor } from "@/lib/logger"
 import { User } from "@/features/users/models/user"
 import { MADDOX_CAMPAIGN_AUDIT_ENTITY, MADDOX_DEFAULT_DENSITY, MADDOX_INVITE_CLOSED_STATUSES, MADDOX_SHEET_RIGORS, type MaddoxCampaignStatus } from "../constants"
-import { MaddoxCampaignMemberModel, MaddoxCampaignModel, MaddoxCharacterModel, MaddoxCombatModel, type IMaddoxCampaign, type IMaddoxCampaignMember, type IMaddoxCharacter } from "../models"
+import { MaddoxCampaignMemberModel, MaddoxCampaignModel, MaddoxCharacterModel, MaddoxCombatModel, MaddoxSceneImageModel, type IMaddoxCampaign, type IMaddoxCampaignMember, type IMaddoxCharacter } from "../models"
 import type { CreateMaddoxCampaignInput, MaddoxCharacterDraftInput, UpdateMaddoxCampaignInput } from "../campaign-schemas"
 import type {
     MaddoxCampaignCharacterDto,
@@ -86,15 +86,34 @@ async function loadUsers(ids: string[]) {
     return new Map(users.map((user) => [String(user._id), { name: user.name?.trim() || user.username || "Usuário", username: user.username ?? null, avatarUrl: user.avatarUrl ?? null }]))
 }
 
+/**
+ * Última imagem de cena concluída por campanha (DND-35), numa única agregação para a lista inteira. Só `done` com URL; retrato de
+ * NPC não vira capa. Falha não derruba a lista: o card cai na capa ou nas espadas.
+ */
+async function loadLastSceneImages(ids: Types.ObjectId[]): Promise<Map<string, string>> {
+    try {
+        const rows = await MaddoxSceneImageModel.aggregate<{ _id: Types.ObjectId; url: string }>([
+            { $match: { campaignId: { $in: ids }, status: "done", url: { $nin: [null, ""] }, source: { $ne: "npc-portrait" } } },
+            { $sort: { campaignId: 1, createdAt: -1, _id: -1 } },
+            { $group: { _id: "$campaignId", url: { $first: "$url" } } },
+        ])
+        return new Map(rows.map((row) => [String(row._id), row.url]))
+    } catch (error) {
+        log.warn({ campaigns: ids.length, err: error instanceof Error ? error.message : String(error) }, "[maddox] Falha ao buscar a última imagem das campanhas")
+        return new Map()
+    }
+}
+
 /** Monta os DTOs com os membros ativos (dono primeiro), os perfis dos usuários e os personagens. */
 async function buildDtos(campaigns: CampaignDoc[], userId: string): Promise<(MaddoxCampaignListItemDto & { myMemberId: string | null })[]> {
     if (campaigns.length === 0) return []
     const ids = campaigns.map((campaign) => campaign._id)
     const members = await MaddoxCampaignMemberModel.find({ campaignId: { $in: ids }, status: "joined" }).sort({ joinedAt: 1, createdAt: 1 }).lean<MemberDoc[]>()
     const characterIds = members.map((member) => member.characterId).filter((id): id is Types.ObjectId => Boolean(id))
-    const [characters, users] = await Promise.all([
+    const [characters, users, lastSceneImages] = await Promise.all([
         characterIds.length ? MaddoxCharacterModel.find({ _id: { $in: characterIds } }).lean<CharacterDoc[]>() : Promise.resolve([] as CharacterDoc[]),
         loadUsers([...members.map((member) => member.userId), ...campaigns.map((campaign) => campaign.ownerId)]),
+        loadLastSceneImages(ids),
     ])
     const sheetIds = characters.map((character) => character.sheetId).filter((id): id is Types.ObjectId => Boolean(id))
     const sheetSlugs = new Map<string, string>()
@@ -135,6 +154,7 @@ async function buildDtos(campaigns: CampaignDoc[], userId: string): Promise<(Mad
             rigor: campaign.rigor,
             status: campaign.status,
             coverUrl: campaign.coverUrl ?? null,
+            lastSceneImageUrl: lastSceneImages.get(String(campaign._id)) ?? null,
             ownerId: campaign.ownerId,
             ownerName: users.get(campaign.ownerId)?.name ?? "Usuário",
             myRole: campaign.ownerId === userId ? "owner" : (mine?.role ?? "player"),
