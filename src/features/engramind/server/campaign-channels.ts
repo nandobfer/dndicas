@@ -1,7 +1,7 @@
 import { engramindCodeOf, type EngramindClient } from "@engramind/client/server"
 import { dbConnect } from "@/lib/db"
 import { MaddoxCampaignModel } from "@/features/maddox/models"
-import { CAMPAIGN_CATEGORY_LIST, campaignChannels } from "../constants"
+import { CAMPAIGN_CATEGORY_LIST, CAMPAIGN_VISIBILITY_NAMES, campaignChannels } from "../constants"
 import { ensureCategories, listCategoryKeys } from "./categories"
 import { engramindAppClient } from "./client"
 import { ensureSubscription, tidyChannel } from "./bootstrap"
@@ -27,7 +27,7 @@ const SETTINGS_RECHECK_MS = 24 * 60 * 60_000
 export const REDATOR_NOT_SUPPORTED_MESSAGE =
     "O Redator do Engramind pode reescrever o texto das memórias das campanhas: o Engramind ainda não deixa o token de app desligar a reescrita por canal (redator.rewrite_text). A reescrita chega ao jogo pela regra \"vale a última gravação\"."
 
-const VISIBILITY_NAMES = ["Jogadores", "Mestre"] as const
+const VISIBILITY_NAMES = [CAMPAIGN_VISIBILITY_NAMES.players, CAMPAIGN_VISIBILITY_NAMES.master] as const
 
 /** Tenta desligar a reescrita do Redator nos canais (só quando o Engramind já aceita para o token de app). */
 async function applyRedatorSettings(client: EngramindClient, channels: readonly string[]): Promise<void> {

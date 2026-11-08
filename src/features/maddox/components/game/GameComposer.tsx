@@ -1,13 +1,12 @@
 "use client"
 
 import { useEffect, useLayoutEffect, useRef, useState, type FormEvent, type KeyboardEvent } from "react"
-import { ArrowUp, HelpCircle, Loader2, MinusCircle } from "lucide-react"
-import { Button } from "@/components/ui/opex/button"
 import { Textarea } from "@/components/ui/opex/textarea"
 import { cn } from "@/lib/utils"
 import { MADDOX_GAME_MESSAGE_MAX } from "../../constants"
 import type { MaddoxGameActionInput } from "../../game-schemas"
 import { focusComposer } from "../composer-focus"
+import { AskMasterButton, DeclareButton, PassTurnButton } from "./composer-buttons"
 
 const MAX_HEIGHT = 180
 
@@ -88,15 +87,9 @@ export function GameComposer({ blockedReason, declared, busy, onSend, invalidRea
                     rows={1}
                     className="mb-1 max-h-[180px] min-h-[24px] flex-1 resize-none border-0 bg-transparent p-0 text-sm shadow-none focus-visible:ring-0"
                 />
-                <Button type="button" size="icon" variant="ghost" className="h-8 w-8 shrink-0 rounded-full" onClick={() => void send("question")} disabled={!canAsk} aria-label="Perguntar ao mestre" title="Perguntar ao mestre">
-                    <HelpCircle className="h-4 w-4" aria-hidden />
-                </Button>
-                <Button type="button" size="icon" variant="ghost" className="h-8 w-8 shrink-0 rounded-full" onClick={() => void onSend({ kind: "pass" })} disabled={!canPass} aria-label="Não fazer nada" title="Não fazer nada">
-                    <MinusCircle className="h-4 w-4" aria-hidden />
-                </Button>
-                <Button type="submit" size="icon" className="h-8 w-8 shrink-0 rounded-full" disabled={!canDeclare} aria-label="Declarar" title="Declarar (Enter)">
-                    {busy ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : <ArrowUp className="h-4 w-4" aria-hidden />}
-                </Button>
+                <AskMasterButton onClick={() => void send("question")} disabled={!canAsk} />
+                <PassTurnButton onClick={() => void onSend({ kind: "pass" })} disabled={!canPass} />
+                <DeclareButton disabled={!canDeclare} busy={busy} />
             </div>
             <div className="mt-1.5 flex items-start gap-3 px-1">
                 {invalidReason && !blocked ? (

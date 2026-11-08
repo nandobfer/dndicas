@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react"
 import Link from "next/link"
 import { motion } from "framer-motion"
-import { ArrowLeft, BookOpen, Dices, Hourglass, MessageCircle, Swords } from "lucide-react"
+import { ArrowLeft, Dices, Hourglass, MessageCircle, Swords } from "lucide-react"
 import { toast } from "sonner"
 import { Button } from "@/components/ui/opex/button"
 import { Skeleton } from "@/components/ui/opex/skeleton"
@@ -43,7 +43,7 @@ import { useRequestMaddoxNpcPortrait, useRequestMaddoxSceneImage } from "../../h
 import { TurnPanel } from "./TurnPanel"
 import { CampaignChatHeader } from "../CampaignChatHeader"
 import { JournalSearchDialog } from "../journal/JournalSearchDialog"
-import { journalHref } from "../journal/journal-links"
+import { JournalLinkButton } from "../journal/JournalLinkButton"
 
 const errorStatus = (error: unknown) => (error as { response?: { status?: number } } | null)?.response?.status
 
@@ -200,11 +200,7 @@ function GameTable({ state, presence, stream }: { state: MaddoxGameStateDto; pre
                         <SceneImageButton control={state.sceneImages} busy={sceneImage.isPending} onRequest={() => sceneImage.mutate()} />
                         <InjectReminderButton blockReason={reminderBlockReason(state)} sending={reminder.isPending} onSend={(text) => reminder.mutateAsync(text)} />
                         <JournalSearchDialog campaignId={state.campaignId} color={color} />
-                        <Button size="sm" variant="outline" asChild>
-                            <Link href={journalHref(state.campaignId)} data-testid="journal-link">
-                                <BookOpen aria-hidden /> Diário
-                            </Link>
-                        </Button>
+                        <JournalLinkButton campaignId={state.campaignId} />
                         <MySheetButton sheet={state.me.sheet} />
                     </>
                 }

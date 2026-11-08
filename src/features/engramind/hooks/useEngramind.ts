@@ -7,11 +7,11 @@ import { api, apiErrorMessage, unwrapApi } from "@/lib/api"
 import type { ApiResponse } from "@/lib/types/api"
 import { integrationChannel } from "@/lib/pusher/channel-names"
 import { acquireChannel, isPusherClientAvailable, releaseChannel } from "@/lib/pusher/client"
-import { ENGRAMIND_INTEGRATION_ID, ENGRAMIND_UPDATED_EVENT } from "../constants"
+import { ENGRAMIND_INTEGRATION_ID, ENGRAMIND_UPDATED_EVENT, UNIVERSE_LAYOUT_EVENT_TYPE } from "../constants"
 import type { CuratorRunInput, MigrationBulkInput, MigrationItemPatch } from "../schemas/migration"
 import type { BootstrapDto, CampaignSyncDto, EngramindConnectionDto, MemoryMigrationDto } from "../types"
 
-/** Consultas e mutações da integração Engramind (abas Conexão, Migração e Sincronização). */
+/** Consultas e mutações da integração Engramind (abas Conexão, Migração e Sincronização; Visualização em `useUniverseLayout`). */
 
 export const ENGRAMIND_QUERY_KEY = "engramind-integration"
 const key = (...parts: unknown[]) => [ENGRAMIND_QUERY_KEY, ...parts] as const
@@ -59,6 +59,7 @@ export function useEngramindRealtime(): void {
             const type = payload?.type ?? ""
             if (type.startsWith("migration")) void queryClient.invalidateQueries({ queryKey: key("migration") })
             else if (type.startsWith("sync")) void queryClient.invalidateQueries({ queryKey: key("sync") })
+            else if (type === UNIVERSE_LAYOUT_EVENT_TYPE) void queryClient.invalidateQueries({ queryKey: key("universe-layout") })
             else void queryClient.invalidateQueries({ queryKey: key() })
         }
         channel.bind(ENGRAMIND_UPDATED_EVENT, handler)
