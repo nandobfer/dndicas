@@ -2,9 +2,11 @@
 
 import Link from "next/link"
 import { Brain } from "lucide-react"
+import type { UniverseLayoutConfig } from "@engramind/client"
 import { ChannelDetail, EngramindNetwork } from "@engramind/client/react"
 import { GlassCard, GlassCardContent } from "@/components/ui/glass-card"
 import { Button } from "@/components/ui/opex/button"
+import type { CampaignChannelName } from "../../network/channel-labels"
 import { MemoriesProvider } from "./MemoriesProvider"
 
 /** Estado vazio de `/memorias` com a integração Engramind sem configuração. */
@@ -30,21 +32,23 @@ export function MemoriesNotConfigured({ canConfigure }: { canConfigure: boolean 
 /**
  * Página `/memorias`: a rede de memórias do dndicas (agentes × canais) pela lib `@engramind/client` no
  * modo app. Só leitura (o proxy recusa mutações de memória); `memories.edit` libera a importação.
+ * `campaigns`: id e nome das campanhas, para o nome no lugar do id nos canais delas.
+ * `universeLayout`: o layout dos universos gravado na aba Visualização da integração (`null` = padrão).
  */
-export function MemoriasPage({ configured, canConfigure }: { configured: boolean; canConfigure: boolean }) {
+export function MemoriasPage({ configured, canConfigure, campaigns, universeLayout = null }: { configured: boolean; canConfigure: boolean; campaigns?: CampaignChannelName[]; universeLayout?: UniverseLayoutConfig | null }) {
     if (!configured) return <MemoriesNotConfigured canConfigure={canConfigure} />
     return (
-        <MemoriesProvider>
+        <MemoriesProvider campaigns={campaigns} universeLayout={universeLayout}>
             <EngramindNetwork />
         </MemoriesProvider>
     )
 }
 
 /** Página `/memorias/canais/[channel]`. */
-export function MemoriesChannelPage({ slug, configured, canConfigure }: { slug: string; configured: boolean; canConfigure: boolean }) {
+export function MemoriesChannelPage({ slug, configured, canConfigure, campaigns, universeLayout = null }: { slug: string; configured: boolean; canConfigure: boolean; campaigns?: CampaignChannelName[]; universeLayout?: UniverseLayoutConfig | null }) {
     if (!configured) return <MemoriesNotConfigured canConfigure={canConfigure} />
     return (
-        <MemoriesProvider>
+        <MemoriesProvider campaigns={campaigns} universeLayout={universeLayout}>
             <ChannelDetail slug={slug} />
         </MemoriesProvider>
     )

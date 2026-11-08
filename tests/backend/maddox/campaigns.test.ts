@@ -18,7 +18,7 @@ vi.mock("@/features/maddox/server/settings", () => ({
 }))
 
 const { User } = await import("@/features/users/models/user")
-const { MaddoxCampaignMemberModel, MaddoxCampaignModel, MaddoxCharacterModel } = await import("@/features/maddox/models")
+const { MaddoxCampaignMemberModel, MaddoxCampaignModel, MaddoxCharacterModel, MaddoxSceneImageModel } = await import("@/features/maddox/models")
 const service = await import("@/features/maddox/server/campaigns")
 
 let mongo: MongoMemoryServer
@@ -37,7 +37,7 @@ async function tokenOf(campaignId: string) {
 beforeAll(async () => {
     mongo = await MongoMemoryServer.create()
     await mongoose.connect(mongo.getUri(), { dbName: "maddox_campaigns_test" })
-    await Promise.all([MaddoxCampaignModel.init(), MaddoxCampaignMemberModel.init(), MaddoxCharacterModel.init()])
+    await Promise.all([MaddoxCampaignModel.init(), MaddoxCampaignMemberModel.init(), MaddoxCharacterModel.init(), MaddoxSceneImageModel.init()])
 }, 180_000)
 
 afterAll(async () => {
@@ -46,7 +46,7 @@ afterAll(async () => {
 }, 30_000)
 
 beforeEach(async () => {
-    await Promise.all([User.deleteMany({}), MaddoxCampaignModel.deleteMany({}), MaddoxCampaignMemberModel.deleteMany({}), MaddoxCharacterModel.deleteMany({})])
+    await Promise.all([User.deleteMany({}), MaddoxCampaignModel.deleteMany({}), MaddoxCampaignMemberModel.deleteMany({}), MaddoxCharacterModel.deleteMany({}), MaddoxSceneImageModel.deleteMany({})])
     ids.owner = await seedUser("mestre", "Marina Dona")
     ids.ana = await seedUser("ana", "Ana Jogadora")
     ids.bruno = await seedUser("bruno", "Bruno Jogador")
@@ -103,6 +103,119 @@ describe("Campanhas Maddox — criação e lista", () => {
         const campaign = await service.createCampaign({ name: "Secreta", rigor: "narrativo" }, ids.owner)
         await expect(service.getCampaignDetail(campaign.id, ids.stranger)).rejects.toMatchObject({ status: 404 })
         await expect(service.getCampaignDetail("nao-e-id", ids.owner)).rejects.toMatchObject({ status: 404 })
+    })
+})
+
+describe("Campanhas Maddox — última imagem na lista (DND-35)", () => {
+    type Seed = { campaignId: string; minutesAgo: number; status?: string; source?: string; url?: string | null }
+    let turnSeq = 0
+    async function seedImages(images: Seed[]) {
+        const now = Date.now()
+        await mongoose.connection.collection("maddox_scene_images").insertMany(
+            images.map((image) => ({
+                campaignId: new mongoose.Types.ObjectId(image.campaignId),
+                turnNumber: ++turnSeq,
+                segment: 0,
+                source: image.source ?? "tool",
+                slot: image.source === "npc-portrait" ? "portrait" : "auto",
+                status: image.status ?? "done",
+                counts: true,
+                url: image.url === undefined ? `https://cdn.example/${image.campaignId}-${image.minutesAgo}.png` : image.url,
+                createdAt: new Date(now - image.minutesAgo * 60_000),
+                updatedAt: new Date(now),
+            })),
+        )
+    }
+    const lastOf = async (campaignId: string) => (await service.listMyCampaigns(ids.owner)).find((item) => item.id === campaignId)?.lastSceneImageUrl
+
+    it("campanha sem imagens fica sem imagem (o card mostra as espadas)", async () => {
+        const campaign = await service.createCampaign({ name: "Vazia", rigor: "narrativo" }, ids.owner)
+        expect(await lastOf(campaign.id)).toBeNull()
+    })
+
+    it("escolhe a imagem concluída mais recente da campanha", async () => {
+        const campaign = await service.createCampaign({ name: "Brumas", rigor: "narrativo" }, ids.owner)
+        await seedImages([
+            { campaignId: campaign.id, minutesAgo: 30 },
+            { campaignId: campaign.id, minutesAgo: 5, source: "manual" },
+            { campaignId: campaign.id, minutesAgo: 60, source: "combat-end" },
+        ])
+        expect(await lastOf(campaign.id)).toBe(`https://cdn.example/${campaign.id}-5.png`)
+    })
+
+    it("imagem em geração, que falhou ou foi pulada não vira capa; retrato de NPC também não", async () => {
+        const campaign = await service.createCampaign({ name: "Cinzas", rigor: "narrativo" }, ids.owner)
+        await seedImages([
+            { campaignId: campaign.id, minutesAgo: 40 },
+            { campaignId: campaign.id, minutesAgo: 1, status: "pending", url: null },
+            { campaignId: campaign.id, minutesAgo: 2, status: "generating", url: null },
+            { campaignId: campaign.id, minutesAgo: 3, status: "failed", url: null },
+            { campaignId: campaign.id, minutesAgo: 4, status: "skipped", url: null },
+            { campaignId: campaign.id, minutesAgo: 5, source: "npc-portrait" },
+            { campaignId: campaign.id, minutesAgo: 6, url: null },
+        ])
+        expect(await lastOf(campaign.id)).toBe(`https://cdn.example/${campaign.id}-40.png`)
+    })
+
+    it("campanha só com retratos de NPC fica sem imagem", async () => {
+        const campaign = await service.createCampaign({ name: "Retratos", rigor: "narrativo" }, ids.owner)
+        await seedImages([{ campaignId: campaign.id, minutesAgo: 1, source: "npc-portrait" }])
+        expect(await lastOf(campaign.id)).toBeNull()
+    })
+
+    it("cada campanha recebe a própria imagem, numa única consulta para a lista inteira", async () => {
+        const a = await service.createCampaign({ name: "A", rigor: "narrativo" }, ids.owner)
+        const b = await service.createCampaign({ name: "B", rigor: "rigoroso" }, ids.owner)
+        const c = await service.createCampaign({ name: "C", rigor: "fiel-dnd" }, ids.owner)
+        await seedImages([
+            { campaignId: a.id, minutesAgo: 10 },
+            { campaignId: b.id, minutesAgo: 1 },
+            { campaignId: b.id, minutesAgo: 20 },
+        ])
+        const aggregate = vi.spyOn(MaddoxSceneImageModel, "aggregate")
+        const find = vi.spyOn(MaddoxSceneImageModel, "find")
+        const findOne = vi.spyOn(MaddoxSceneImageModel, "findOne")
+        const list = await service.listMyCampaigns(ids.owner)
+        expect(aggregate).toHaveBeenCalledTimes(1)
+        expect(find).not.toHaveBeenCalled()
+        expect(findOne).not.toHaveBeenCalled()
+        aggregate.mockRestore()
+        find.mockRestore()
+        findOne.mockRestore()
+        const byId = new Map(list.map((item) => [item.id, item.lastSceneImageUrl]))
+        expect(byId.get(a.id)).toBe(`https://cdn.example/${a.id}-10.png`)
+        expect(byId.get(b.id)).toBe(`https://cdn.example/${b.id}-1.png`)
+        expect(byId.get(c.id)).toBeNull()
+    })
+
+    it("imagem nova aparece na próxima carga da lista", async () => {
+        const campaign = await service.createCampaign({ name: "Viva", rigor: "narrativo" }, ids.owner)
+        await seedImages([{ campaignId: campaign.id, minutesAgo: 10 }])
+        expect(await lastOf(campaign.id)).toBe(`https://cdn.example/${campaign.id}-10.png`)
+        await seedImages([{ campaignId: campaign.id, minutesAgo: 0 }])
+        expect(await lastOf(campaign.id)).toBe(`https://cdn.example/${campaign.id}-0.png`)
+    })
+
+    it("o detalhe da campanha não consulta as imagens nem leva o campo", async () => {
+        const campaign = await service.createCampaign({ name: "Detalhe", rigor: "narrativo" }, ids.owner)
+        await seedImages([{ campaignId: campaign.id, minutesAgo: 1 }])
+        const aggregate = vi.spyOn(MaddoxSceneImageModel, "aggregate")
+        const detail = await service.getCampaignDetail(campaign.id, ids.owner)
+        expect(aggregate).not.toHaveBeenCalled()
+        aggregate.mockRestore()
+        expect(detail).not.toHaveProperty("lastSceneImageUrl")
+    })
+
+    it("falha na busca da imagem não derruba a lista", async () => {
+        const campaign = await service.createCampaign({ name: "Resistente", rigor: "narrativo" }, ids.owner)
+        await seedImages([{ campaignId: campaign.id, minutesAgo: 1 }])
+        const aggregate = vi.spyOn(MaddoxSceneImageModel, "aggregate").mockImplementationOnce(() => {
+            throw new Error("mongo fora")
+        })
+        const list = await service.listMyCampaigns(ids.owner)
+        aggregate.mockRestore()
+        expect(list.map((item) => item.name)).toEqual(["Resistente"])
+        expect(list[0]!.lastSceneImageUrl).toBeNull()
     })
 })
 

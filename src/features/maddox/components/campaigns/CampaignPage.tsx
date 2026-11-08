@@ -20,7 +20,7 @@ import { EditCampaignDialog } from "./EditCampaignDialog"
 import { InvitePanel } from "./InvitePanel"
 import { CharacterProfileDialog } from "./CharacterProfileDialog"
 import { journalHref } from "../journal/journal-links"
-import { ScenarioCard } from "./ScenarioCard"
+import { CampaignStoryCard } from "./CampaignStoryCard"
 import { InterviewChip, MemberAvatar, DensityChip, RarityChip, RigorChip, StartingLevelChip, StartingStageLine, StatusChip, WorldCatalogLines, rigorColor } from "./campaign-visuals"
 import { rarityColors } from "@/lib/config/colors"
 
@@ -153,7 +153,7 @@ function CampaignView({ campaign, userId }: { campaign: MaddoxCampaignDetailDto;
                 </p>
             )}
 
-            <ScenarioCard campaign={campaign} />
+            <CampaignStoryCard campaign={campaign} />
 
             <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,380px)]">
                 <Card>

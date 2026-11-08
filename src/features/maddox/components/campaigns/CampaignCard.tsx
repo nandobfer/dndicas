@@ -1,5 +1,6 @@
 "use client"
 
+import { useState } from "react"
 import Link from "next/link"
 import { motion } from "framer-motion"
 import { formatDistanceToNow } from "date-fns"
@@ -11,6 +12,28 @@ import { MADDOX_CHARACTER_UNNAMED_LABEL } from "../../constants"
 import { MemberAvatar, DensityChip, RarityChip, RigorChip, StartingLevelChip, StartingStageLine, StatusChip, rigorColor } from "./campaign-visuals"
 
 const VISIBLE_AVATARS = 5
+
+const rigorGradient = (color: string) => `radial-gradient(circle at 30% 20%, ${color}55, transparent 70%), linear-gradient(135deg, ${color}26, transparent)`
+
+/**
+ * Capa do card (DND-35): a imagem (última cena → capa) cobre o bloco e o gradiente do rigor fica por cima, com um véu escuro para a
+ * cor aparecer sobre a foto. Sem imagem (ou se ela não carregar), gradiente e espadas como antes.
+ */
+function CampaignCover({ imageUrl, color }: { imageUrl: string | null; color: string }) {
+    const [failedUrl, setFailedUrl] = useState<string | null>(null)
+    const url = imageUrl && imageUrl !== failedUrl ? imageUrl : null
+    return (
+        <div className="relative flex h-28 shrink-0 items-center justify-center overflow-hidden sm:h-auto sm:w-44">
+            {url && (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={url} alt="" data-testid="campaign-cover-image" onError={() => setFailedUrl(url)} className="absolute inset-0 h-full w-full object-cover transition-transform duration-300 group-hover:scale-105" />
+            )}
+            {url && <div aria-hidden className="absolute inset-0 bg-black/35" />}
+            <div aria-hidden data-testid="campaign-cover-gradient" className="absolute inset-0" style={{ background: rigorGradient(color) }} />
+            {!url && <Swords data-testid="campaign-cover-swords" className="relative h-10 w-10 opacity-80 transition-transform group-hover:scale-110" style={{ color }} aria-hidden />}
+        </div>
+    )
+}
 
 /** Card largo (um por linha) de uma campanha: capa, rigor e status em cores de raridade, membros e personagem. */
 export function CampaignCard({ campaign, index = 0 }: { campaign: MaddoxCampaignListItemDto; index?: number }) {
@@ -24,17 +47,7 @@ export function CampaignCard({ campaign, index = 0 }: { campaign: MaddoxCampaign
                 className="group relative flex flex-col overflow-hidden rounded-xl border border-white/10 bg-white/[0.03] backdrop-blur-sm transition-all hover:-translate-y-0.5 hover:bg-white/[0.06] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary sm:flex-row"
                 style={{ boxShadow: `inset 3px 0 0 ${color}` }}
             >
-                <div
-                    className="relative flex h-28 shrink-0 items-center justify-center sm:h-auto sm:w-44"
-                    style={{ background: campaign.coverUrl ? undefined : `radial-gradient(circle at 30% 20%, ${color}55, transparent 70%), linear-gradient(135deg, ${color}26, transparent)` }}
-                >
-                    {campaign.coverUrl ? (
-                        // eslint-disable-next-line @next/next/no-img-element
-                        <img src={campaign.coverUrl} alt="" className="absolute inset-0 h-full w-full object-cover" />
-                    ) : (
-                        <Swords className="h-10 w-10 opacity-80 transition-transform group-hover:scale-110" style={{ color }} aria-hidden />
-                    )}
-                </div>
+                <CampaignCover imageUrl={campaign.lastSceneImageUrl ?? campaign.coverUrl} color={color} />
 
                 <div className="flex min-w-0 flex-1 flex-col gap-3 p-4">
                     <div className="flex flex-wrap items-start justify-between gap-2">

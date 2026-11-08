@@ -3,7 +3,9 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
 import { fireEvent, screen, waitFor, within } from "@testing-library/react"
 import { renderWithQueryClient } from "../test-utils"
 import type { MaddoxCampaignDetailDto, MaddoxCampaignListItemDto, MaddoxCampaignMemberDto } from "@/features/maddox/campaign-types"
+import type { MaddoxJournalSummaryDto } from "@/features/maddox/journal-types"
 import { rarityColors } from "@/lib/config/colors"
+import { rigorColor } from "@/features/maddox/components/campaigns/campaign-visuals"
 
 const push = vi.fn()
 const get = vi.fn()
@@ -41,6 +43,7 @@ const listItem = (over: Partial<MaddoxCampaignListItemDto> = {}): MaddoxCampaign
     rigor: "fiel-dnd",
     status: "lobby",
     coverUrl: null,
+    lastSceneImageUrl: null,
     ownerId: "u-owner",
     ownerName: "Marina Dona",
     myRole: "owner",
@@ -62,6 +65,23 @@ const listItem = (over: Partial<MaddoxCampaignListItemDto> = {}): MaddoxCampaign
 })
 
 const detail = (over: Partial<MaddoxCampaignDetailDto> = {}): MaddoxCampaignDetailDto => ({ ...listItem(), myMemberId: "m1", inviteOpen: true, setting: "", openingSituation: "", rigorLocked: false, ...over })
+
+/** Resumo do Diário sem situação registrada (a página da campanha mostra o tutorial da mesa, DND-37). */
+const emptyJournal = (campaignId = "c1"): MaddoxJournalSummaryDto => ({
+    campaignId,
+    name: "Brumas de Valdrenn",
+    rigor: "fiel-dnd",
+    status: "lobby",
+    turnNumber: 0,
+    myMemberId: "m1",
+    maddoxAvatarUrl: null,
+    setting: "",
+    openingSituation: "",
+    state: { scene: "", location: "", situation: "", pendingDecision: "", updatedTurn: null },
+    activeQuests: [],
+    counts: { npcs: 0, party: 0, images: 0, memories: { local: 0, missao: 0, evento: 0, relacao: 0, fato: 0, outro: 0 } },
+    memoriesUnavailable: false,
+})
 
 const { CampaignsPage } = await import("@/features/maddox/components/campaigns/CampaignsPage")
 const { CampaignPage } = await import("@/features/maddox/components/campaigns/CampaignPage")
@@ -104,6 +124,45 @@ describe("lista de campanhas", () => {
         expect(stage.className).toContain("whitespace-normal")
         for (const element of [stage, ...stage.querySelectorAll("*")]) expect(element.className).not.toContain("truncate")
         expect(screen.getAllByTestId("starting-level-chip")).toHaveLength(1)
+    })
+
+    it("capa (DND-35): a última imagem da campanha fica atrás do gradiente do rigor, sem as espadas", async () => {
+        get.mockResolvedValue(ok([listItem({ lastSceneImageUrl: "https://cdn.example/cena-2.png", coverUrl: "https://cdn.example/capa.png" }), listItem({ id: "c2", name: "Mar de Cinzas", rigor: "narrativo" })]))
+        renderWithQueryClient(<CampaignsPage />)
+
+        const first = await screen.findByRole("link", { name: "Abrir a campanha Brumas de Valdrenn" })
+        const image = within(first).getByTestId("campaign-cover-image")
+        expect(image).toHaveAttribute("src", "https://cdn.example/cena-2.png")
+        expect(image.className).toContain("object-cover")
+        const gradient = within(first).getByTestId("campaign-cover-gradient")
+        expect(gradient.getAttribute("style")).toContain(`${rigorColor("fiel-dnd")}26`)
+        // O gradiente vem depois da imagem: fica por cima dela.
+        expect(image.compareDocumentPosition(gradient) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+        expect(within(first).queryByTestId("campaign-cover-swords")).not.toBeInTheDocument()
+
+        // Sem imagem: gradiente e espadas como antes.
+        const second = screen.getByRole("link", { name: "Abrir a campanha Mar de Cinzas" })
+        expect(within(second).queryByTestId("campaign-cover-image")).not.toBeInTheDocument()
+        expect(within(second).getByTestId("campaign-cover-gradient").getAttribute("style")).toContain(`${rigorColor("narrativo")}26`)
+        expect(within(second).getByTestId("campaign-cover-swords")).toBeInTheDocument()
+    })
+
+    it("capa (DND-35): sem imagem de cena usa a capa da campanha, também atrás do gradiente", async () => {
+        get.mockResolvedValue(ok([listItem({ coverUrl: "https://cdn.example/capa.png" })]))
+        renderWithQueryClient(<CampaignsPage />)
+        const card = await screen.findByRole("link", { name: "Abrir a campanha Brumas de Valdrenn" })
+        expect(within(card).getByTestId("campaign-cover-image")).toHaveAttribute("src", "https://cdn.example/capa.png")
+        expect(within(card).getByTestId("campaign-cover-gradient")).toBeInTheDocument()
+        expect(within(card).queryByTestId("campaign-cover-swords")).not.toBeInTheDocument()
+    })
+
+    it("capa (DND-35): imagem que não carrega volta às espadas", async () => {
+        get.mockResolvedValue(ok([listItem({ lastSceneImageUrl: "https://cdn.example/sumiu.png" })]))
+        renderWithQueryClient(<CampaignsPage />)
+        const card = await screen.findByRole("link", { name: "Abrir a campanha Brumas de Valdrenn" })
+        fireEvent.error(within(card).getByTestId("campaign-cover-image"))
+        await waitFor(() => expect(within(card).queryByTestId("campaign-cover-image")).not.toBeInTheDocument())
+        expect(within(card).getByTestId("campaign-cover-swords")).toBeInTheDocument()
     })
 
     it("sem campanhas mostra o estado vazio em pt-BR", async () => {
@@ -550,7 +609,7 @@ describe("convite", () => {
 })
 
 describe("lobby com as entrevistas (Maddox 2)", () => {
-    const invite = (url: string, body: unknown) => (url.endsWith("/invite") ? ok({ token: TOKEN, rotatedAt: null }) : ok(body))
+    const invite = (url: string, body: unknown) => (url.endsWith("/invite") ? ok({ token: TOKEN, rotatedAt: null }) : url.endsWith("/journal") ? ok(emptyJournal()) : ok(body))
     const lyra = (over: Partial<NonNullable<MaddoxCampaignMemberDto["character"]>> = {}) => ({ id: "ch1", name: "Lyra", portraitUrl: null, portraitStatus: null, interviewStatus: "pending" as const, profile: {}, sheetSlug: null, ...over })
 
     it("dono com o cenário pendente vê a chamada para a entrevista de cenário", async () => {
@@ -575,12 +634,14 @@ describe("lobby com as entrevistas (Maddox 2)", () => {
         expect(screen.queryByRole("link", { name: /entrevista de cenário/ })).not.toBeInTheDocument()
     })
 
-    it("cenário pronto: mostra o cenário salvo e libera a entrevista do personagem", async () => {
+    it("cenário pronto: o card mostra o tutorial da mesa (sem o texto do cenário, que fica no Diário) e libera a entrevista do personagem", async () => {
         const members = detail().members.map((item) => (item.id === "m2" ? { ...item, character: lyra() } : item))
-        get.mockResolvedValue(ok(detail({ myRole: "player", myMemberId: "m2", myCharacter: lyra(), members, scenarioStatus: "done", setting: "## Universo e referências\nAethra", openingSituation: "Numa taverna." })))
+        get.mockImplementation(async (url: string) => invite(url, detail({ myRole: "player", myMemberId: "m2", myCharacter: lyra(), members, scenarioStatus: "done", setting: "## Universo e referências\nAethra", openingSituation: "Numa taverna." })))
         renderWithQueryClient(<CampaignPage campaignId="c1" />)
-        expect(await screen.findByText("Aethra")).toBeInTheDocument()
-        expect(screen.getByText("Numa taverna.")).toBeInTheDocument()
+        expect(await screen.findByTestId("table-tutorial")).toBeInTheDocument()
+        expect(screen.queryByText("Aethra")).not.toBeInTheDocument()
+        expect(screen.queryByText("Numa taverna.")).not.toBeInTheDocument()
+        expect(screen.getByTestId("campaign-scenario-link")).toHaveAttribute("href", "/campanhas/c1/diario")
         expect(screen.getByRole("link", { name: /Entrevista do personagem/ })).toHaveAttribute("href", "/campanhas/c1/entrevista/personagem")
         const row = within(screen.getByRole("list", { name: "Participantes" })).getByText("Lyra").closest("li")!
         expect(within(row).getByText("Entrevista pendente")).toBeInTheDocument()
@@ -590,7 +651,7 @@ describe("lobby com as entrevistas (Maddox 2)", () => {
     it("entrevista concluída: selo de pronto, 'Ver perfil' com as seções e o link da ficha (só para o dono do personagem)", async () => {
         const done = lyra({ interviewStatus: "done", profile: { identidade: "Elfa de olhos cinzentos", origem: "Órfã do porto" }, sheetSlug: "ana/lyra" })
         const members = detail().members.map((item) => (item.id === "m2" ? { ...item, character: done, ready: true } : item))
-        get.mockResolvedValue(ok(detail({ myRole: "player", myMemberId: "m2", myCharacter: done, members, scenarioStatus: "done", setting: "Aethra" })))
+        get.mockImplementation(async (url: string) => invite(url, detail({ myRole: "player", myMemberId: "m2", myCharacter: done, members, scenarioStatus: "done", setting: "Aethra" })))
         renderWithQueryClient(<CampaignPage campaignId="c1" />)
         const list = await screen.findByRole("list", { name: "Participantes" })
         const row = within(list).getByText("Lyra").closest("li")!
@@ -632,7 +693,7 @@ describe("lobby com as entrevistas (Maddox 2)", () => {
 })
 
 describe("lobby com a mesa (Maddox 3)", () => {
-    const invite = (url: string, body: unknown) => (url.endsWith("/invite") ? ok({ token: TOKEN, rotatedAt: null }) : ok(body))
+    const invite = (url: string, body: unknown) => (url.endsWith("/invite") ? ok({ token: TOKEN, rotatedAt: null }) : url.endsWith("/journal") ? ok(emptyJournal()) : ok(body))
     const ready = (name: string) => ({ id: `ch-${name}`, name, portraitUrl: null, portraitStatus: "done" as const, interviewStatus: "done" as const, profile: {}, sheetSlug: null })
     const readyMembers = () => detail().members.map((item) => ({ ...item, character: ready(item.id === "m1" ? "Kael" : "Lyra"), ready: true }))
 

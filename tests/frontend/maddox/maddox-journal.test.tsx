@@ -160,6 +160,25 @@ describe("Diário da campanha (Maddox 9) — tela", () => {
         expect(active.className).toContain("aria-selected:bg-primary")
     })
 
+    it("cenário longo (DND-37): \"Ver o cenário completo\" expande e recolhe com animação e aria-expanded", async () => {
+        Object.defineProperty(HTMLElement.prototype, "scrollHeight", { configurable: true, get: () => 900 })
+        try {
+            await renderJournal()
+            const toggle = await waitFor(() => within(screen.getByTestId("journal-setting")).getByRole("button", { name: /Ver o cenário completo/ }))
+            const region = document.getElementById(toggle.getAttribute("aria-controls")!)!
+            expect(toggle).toHaveAttribute("aria-expanded", "false")
+            expect(region).toHaveAttribute("data-expanded", "false")
+            fireEvent.click(toggle)
+            expect(toggle).toHaveAttribute("aria-expanded", "true")
+            expect(toggle).toHaveTextContent("Mostrar menos")
+            expect(region).toHaveAttribute("data-expanded", "true")
+            fireEvent.click(toggle)
+            expect(toggle).toHaveAttribute("aria-expanded", "false")
+        } finally {
+            delete (HTMLElement.prototype as { scrollHeight?: number }).scrollHeight
+        }
+    })
+
     it("situação atual vazia mostra o aviso", async () => {
         routes["/maddox/campaigns/c1/journal"] = () => summary({ state: { scene: "", location: "", situation: "", pendingDecision: "", updatedTurn: null }, activeQuests: [] })
         await renderJournal()
