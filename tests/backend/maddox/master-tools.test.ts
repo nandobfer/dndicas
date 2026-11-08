@@ -2,14 +2,21 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vites
 import mongoose from "mongoose"
 import { MongoMemoryServer } from "mongodb-memory-server"
 
+/** Combate tático ativo simulado para o `suggest_actions` (DND-30); os demais usos seguem o módulo real. */
+const tacticalActive = { value: false }
+vi.mock("@/features/maddox/server/tactical-combat", async (importOriginal) => {
+    const actual = await importOriginal<typeof import("@/features/maddox/server/tactical-combat")>()
+    return { ...actual, findActiveTactical: vi.fn(async (campaignId: mongoose.Types.ObjectId) => (tacticalActive.value ? ({ _id: campaignId } as never) : actual.findActiveTactical(campaignId))) }
+})
+
 vi.mock("@/features/engramind/server/campaign-memories", async () => (await import("../../helpers/campaign-memories-mock")).campaignMemoriesModule)
 
 const { campaignMemoriesStore } = await import("../../helpers/campaign-memories-mock")
 
 const { MaddoxCampaignMemberModel, MaddoxCampaignModel, MaddoxCharacterModel, MaddoxNpcModel } = await import("@/features/maddox/models")
-const { enqueueMaddoxJob, jobDraftChecks, waitForCampaignIdle } = await import("@/features/maddox/server/game-live")
-const { findMaddoxTool, runMaddoxTool, MaddoxToolError } = await import("@/features/maddox/server/master-tools")
-const { MADDOX_TOOL_TEXT_MAX } = await import("@/features/maddox/constants")
+const { enqueueMaddoxJob, jobDraftChecks, takeDraftActionOptions, waitForCampaignIdle } = await import("@/features/maddox/server/game-live")
+const { buildMaddoxAiTools, findMaddoxTool, runMaddoxTool, MaddoxToolError } = await import("@/features/maddox/server/master-tools")
+const { MADDOX_ACTION_OPTION_TEXT_MAX, MADDOX_TOOL_TEXT_MAX } = await import("@/features/maddox/constants")
 
 let mongo: MongoMemoryServer
 
@@ -31,6 +38,7 @@ afterAll(async () => {
 
 beforeEach(async () => {
     campaignMemoriesStore.reset()
+    tacticalActive.value = false
     await Promise.all([MaddoxCampaignModel.deleteMany({}), MaddoxNpcModel.deleteMany({}), MaddoxCharacterModel.deleteMany({})])
 })
 
@@ -213,5 +221,95 @@ describe("request_check (Maddox 5)", () => {
             await expect(call(table.id, jobId, { ...stealth, cd: 40 })).rejects.toThrow(/Entrada inválida/)
             expect(jobDraftChecks(String(table.id), jobId)).toHaveLength(0)
         })
+    })
+})
+
+describe("suggest_actions (DND-30)", () => {
+    /** Roda `test` num job da fila e devolve as sugestões que ficaram no rascunho ao fim dele. */
+    async function inJob(campaignId: mongoose.Types.ObjectId, kind: "narration" | "answer", test: (jobId: string) => Promise<void>) {
+        let failure: unknown = null
+        let drafts: ReturnType<typeof takeDraftActionOptions> = []
+        await enqueueMaddoxJob(
+            String(campaignId),
+            "teste",
+            async ({ jobId }) => {
+                try {
+                    await test(jobId)
+                    drafts = takeDraftActionOptions(String(campaignId), jobId)
+                } catch (error) {
+                    failure = error
+                }
+            },
+            { kind, turnNumber: 2, round: 0 },
+        )
+        await waitForCampaignIdle(String(campaignId))
+        if (failure) throw failure
+        return drafts
+    }
+
+    async function table(rigor: "narrativo" | "fiel-dnd" = "narrativo") {
+        const id = (await MaddoxCampaignModel.create({ name: "Porto", ownerId: "u1", rigor }))._id
+        const lyra = await MaddoxCampaignMemberModel.create({ campaignId: id, userId: "u2", role: "player", status: "joined" })
+        const lyraChar = await MaddoxCharacterModel.create({ campaignId: id, memberId: lyra._id, userId: "u2", name: "Lyra", interview: { status: "done", scriptVersion: 0 } })
+        const doran = await MaddoxCampaignMemberModel.create({ campaignId: id, userId: "u3", role: "player", status: "joined" })
+        await MaddoxCharacterModel.create({ campaignId: id, memberId: doran._id, userId: "u3", name: "Doran", interview: { status: "done", scriptVersion: 0 } })
+        return { id, lyraMember: String(lyra._id), lyraChar: String(lyraChar._id), doranMember: String(doran._id) }
+    }
+
+    const suggest = (id: mongoose.Types.ObjectId, jobId: string, input: unknown) => runMaddoxTool(findMaddoxTool("suggest_actions")!, { campaignId: id, turnNumber: 2, jobId }, input)
+
+    it("guarda as sugestões por personagem (nome sem caixa), sem repetidas, no máximo 4, e chamar de novo substitui", async () => {
+        const t = await table()
+        const drafts = await inJob(t.id, "narration", async (jobId) => {
+            const result = await suggest(t.id, jobId, {
+                opcoes: [
+                    { personagem: "lyra", acoes: ["Examino a porta", " examino   a porta ", "Chamo o guarda", "Subo no telhado", "Volto à taverna", "Espero"] },
+                    { personagem: "Doran", acoes: ["Ergo o escudo"] },
+                ],
+            })
+            expect(result).toMatchObject({ saved: [{ personagem: "Lyra", acoes: 4 }, { personagem: "Doran", acoes: 1 }] })
+            expect(result).not.toHaveProperty("truncated")
+            await suggest(t.id, jobId, { opcoes: [{ personagem: "Doran", acoes: ["Arrombo a porta", "Recuo"] }] })
+        })
+        expect(drafts).toEqual([
+            { memberId: t.lyraMember, characterId: t.lyraChar, characterName: "Lyra", options: ["Examino a porta", "Chamo o guarda", "Subo no telhado", "Volto à taverna"] },
+            expect.objectContaining({ memberId: t.doranMember, characterName: "Doran", options: ["Arrombo a porta", "Recuo"] }),
+        ])
+    })
+
+    it("ação longa é cortada no teto de proteção, avisando o modelo, sem recusar", async () => {
+        const t = await table()
+        const drafts = await inJob(t.id, "narration", async (jobId) => {
+            const result = await suggest(t.id, jobId, { opcoes: [{ personagem: "Lyra", acoes: ["x".repeat(MADDOX_ACTION_OPTION_TEXT_MAX + 40), "Corro"] }] })
+            expect(result).toMatchObject({ truncated: ["Lyra"] })
+        })
+        expect(drafts[0]!.options[0]!.length).toBeLessThanOrEqual(MADDOX_ACTION_OPTION_TEXT_MAX)
+        expect(drafts[0]!.options[1]).toBe("Corro")
+    })
+
+    it("recusa personagem desconhecido (com a lista), resposta a pergunta, combate tático e narração já terminada", async () => {
+        const t = await table()
+        const drafts = await inJob(t.id, "narration", async (jobId) => {
+            await expect(suggest(t.id, jobId, { opcoes: [{ personagem: "Ninguém", acoes: ["Corro"] }] })).rejects.toThrow(/Personagem desconhecido: Ninguém\. Personagens: .*Lyra/)
+            await expect(suggest(t.id, jobId, { opcoes: [{ personagem: "Lyra", acoes: ["   "] }] })).rejects.toThrow(/Nenhuma ação sugerida/)
+        })
+        expect(drafts).toEqual([])
+        await inJob(t.id, "answer", async (jobId) => {
+            await expect(suggest(t.id, jobId, { opcoes: [{ personagem: "Lyra", acoes: ["Corro"] }] })).rejects.toThrow(/só são dadas na narração/)
+        })
+        const tactical = await table("fiel-dnd")
+        tacticalActive.value = true
+        await inJob(tactical.id, "narration", async (jobId) => {
+            await expect(suggest(tactical.id, jobId, { opcoes: [{ personagem: "Lyra", acoes: ["Corro"] }] })).rejects.toThrow(/combate tático/)
+        })
+        tacticalActive.value = false
+        await expect(suggest(t.id, "job-encerrado", { opcoes: [{ personagem: "Lyra", acoes: ["Corro"] }] })).rejects.toThrow(MaddoxToolError)
+    })
+
+    it("a AI SDK só recebe a ferramenta com `actionOptions: true`", async () => {
+        const t = await table()
+        const context = { campaignId: t.id, turnNumber: 2, jobId: "x" }
+        expect(Object.keys(await buildMaddoxAiTools(context, {}))).not.toContain("suggest_actions")
+        expect(Object.keys(await buildMaddoxAiTools(context, { actionOptions: true }))).toContain("suggest_actions")
     })
 })

@@ -101,11 +101,21 @@ export interface MaddoxDraftSceneImage {
     catalog: { type: string; id: string }[]
 }
 
+/** Sugestões de ação pedidas pelo narrador (`suggest_actions`, DND-30) para um personagem. */
+export interface MaddoxDraftActionOptions {
+    memberId: string
+    characterId: string
+    characterName: string
+    options: string[]
+}
+
 interface MaddoxJobState {
     meta: MaddoxJobMeta | null
     checks: MaddoxDraftCheck[]
     combat: MaddoxDraftCombatEvent[]
     sceneImage: MaddoxDraftSceneImage | null
+    /** Sugestões de ação por personagem (DND-30), gravadas junto com a narração. */
+    actionOptions: MaddoxDraftActionOptions[]
     /** NPCs marcados para retrato (`save_npc { gerarRetrato }`), pelo id. */
     npcPortraits: string[]
     /** Combate tático (Maddox 7): cópia de trabalho do combate e das fichas mexida pelas ferramentas dos adversários. */
@@ -168,7 +178,7 @@ export function enqueueMaddoxJob(campaignId: string, label: string, run: (job: M
     hub.pending += 1
     const jobId = randomUUID()
     const next = hub.tail.then(async () => {
-        hub.jobs.set(jobId, { meta, checks: [], combat: [], sceneImage: null, npcPortraits: [], workspace: null, liveId: null, reminders: [] })
+        hub.jobs.set(jobId, { meta, checks: [], combat: [], sceneImage: null, actionOptions: [], npcPortraits: [], workspace: null, liveId: null, reminders: [] })
         try {
             await run({ jobId })
         } catch (error) {
@@ -261,6 +271,23 @@ export function setDraftSceneImage(campaignId: string, jobId: string, image: Mad
     if (!job) return false
     job.sceneImage = image
     return true
+}
+
+/** Guarda as sugestões de um personagem no job em andamento (substitui as anteriores dele); `false` se o job não está rodando. */
+export function setDraftActionOptions(campaignId: string, jobId: string, entry: MaddoxDraftActionOptions): boolean {
+    const job = hubs.get(campaignId)?.jobs.get(jobId)
+    if (!job) return false
+    job.actionOptions = [...job.actionOptions.filter((item) => item.memberId !== entry.memberId), entry]
+    return true
+}
+
+/** Retira as sugestões de ação pedidas no job (ao gravar a narração). */
+export function takeDraftActionOptions(campaignId: string, jobId: string): MaddoxDraftActionOptions[] {
+    const job = hubs.get(campaignId)?.jobs.get(jobId)
+    if (!job) return []
+    const taken = job.actionOptions
+    job.actionOptions = []
+    return taken
 }
 
 /** Marca um NPC para retrato no job em andamento; `false` se o job não está rodando. */

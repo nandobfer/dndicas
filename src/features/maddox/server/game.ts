@@ -42,7 +42,7 @@ import type { MaddoxGameCheckDto, MaddoxGameMessageDto, MaddoxGameMessagesPageDt
 import { checkSucceeded, keptD20 } from "../check-modifier"
 import { assertMemberCanPlay, isMemberReadyToPlay, loadMembership } from "./campaigns"
 import { getMaddoxMaster, type MaddoxMasterDeclaration } from "./game-master"
-import { beginLive, enqueueMaddoxJob, isCampaignBusy, takeDraftChecks, takeDraftCombat, takeDraftImages } from "./game-live"
+import { beginLive, enqueueMaddoxJob, isCampaignBusy, takeDraftActionOptions, takeDraftChecks, takeDraftCombat, takeDraftImages } from "./game-live"
 import { onlineUserIds } from "./game-presence"
 
 /**
@@ -170,6 +170,11 @@ async function runMasterTurn(campaignId: Types.ObjectId, token: string, turnNumb
             // Os testes pedidos nesta geração só viram mensagens agora, logo abaixo da narração (ordem dos `_id`).
             const { draftCheckMessage } = await import("./game-checks")
             const drafts = takeDraftChecks(String(campaignId), jobId)
+            // Sugestões de ação (DND-30): só valem quando a narração abre o turno dos jogadores; com testes pedidos, o turno do
+            // mestre continua e elas são descartadas.
+            const draftOptions = takeDraftActionOptions(String(campaignId), jobId)
+            if (draftOptions.length && drafts.length) log.info({ campaignId: String(campaignId), turnNumber, round, characters: draftOptions.length }, "[maddox] sugestões de ação descartadas: a narração pediu testes")
+            const actionOptions = draftOptions.length && !drafts.length ? draftOptions.map((item) => ({ memberId: new Types.ObjectId(item.memberId), characterId: new Types.ObjectId(item.characterId), characterName: item.characterName, options: item.options })) : null
             // O combate pedido nesta geração é aplicado ANTES de gravar a narração (o card precisa do id): o card de início vem acima
             // dela, o de fim abaixo. Os efeitos do fim só rodam depois (`finishCombatTurn`), que também grava o card que faltar.
             const combatEvents = takeDraftCombat(String(campaignId), jobId)
@@ -182,7 +187,7 @@ async function runMasterTurn(campaignId: Types.ObjectId, token: string, turnNumb
                     ...combat.messages.filter((plan) => plan.event === "start").map(combatCard),
                     // Bloco de um adversário (DND-25): os dados (cards das ações) vêm antes da narração dele.
                     ...(blockBefore?.kind === "npc" ? tacticalMessages : []),
-                    { campaignId, turnNumber, phase: "master", kind: "narration", content, segment: round },
+                    { campaignId, turnNumber, phase: "master", kind: "narration", content, segment: round, actionOptions },
                     ...drafts.map((draft) => draftCheckMessage(campaignId, turnNumber, round, draft)),
                     ...(blockBefore?.kind === "npc" ? [] : tacticalMessages),
                     ...combat.extraMessages,
@@ -750,6 +755,13 @@ interface MessagesViewer {
     showCheckDc: boolean
 }
 
+/** Sugestões de ação da narração só para o personagem de quem vê (DND-30): as dos outros nunca saem do servidor. */
+const actionOptionsFor = (message: MessageDoc, viewer: MessagesViewer): string[] | null => {
+    if (!viewer.memberId || !message.actionOptions?.length) return null
+    const mine = message.actionOptions.find((entry) => String(entry.memberId) === viewer.memberId)
+    return mine?.options.length ? [...mine.options] : null
+}
+
 const visibleTo = (viewer: MessagesViewer) => (message: MessageDoc) =>
     !(message.kind === "check" && message.check?.status === "pending" && String(message.memberId) !== viewer.memberId) &&
     !(message.kind === "combat-roll" && message.combatRoll?.status === "pending" && message.combatRoll.kind !== "enemy-initiative" && String(message.memberId) !== viewer.memberId)
@@ -805,6 +817,7 @@ async function messagesDto(all: MessageDoc[], viewer: MessagesViewer): Promise<M
             combatReaction: message.combatReaction && tacticalDto ? tacticalDto.combatReactionDto(message.combatReaction, String(message.memberId) === viewer.memberId) : null,
             offlineSkip: Boolean(message.offlineSkip),
             ...(message.kind === "reminder" ? { reminder: { status: message.reminder?.status ?? "pending" } } : {}),
+            ...(message.kind === "narration" ? { actionOptions: actionOptionsFor(message, viewer) } : {}),
             createdAt: new Date(message.createdAt).toISOString(),
         }
     })

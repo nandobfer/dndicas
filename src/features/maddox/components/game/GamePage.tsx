@@ -14,7 +14,7 @@ import { apiErrorCode, apiErrorMessage } from "@/lib/api"
 import { MADDOX_TURN_PHASE_LABELS } from "../../constants"
 import type { MaddoxGameMessageDto, MaddoxGameStateDto } from "../../game-types"
 import type { MaddoxGameActionInput } from "../../game-schemas"
-import { combatBannerText, composerBlockReason, masterBannerText, reminderBlockReason, turnProgress, visibleLiveGenerations } from "../../game-view"
+import { actionOptionsView, combatBannerText, composerBlockReason, masterBannerText, reminderBlockReason, turnProgress, visibleLiveGenerations } from "../../game-view"
 import type { MaddoxCombatActionInput } from "../../combat-schemas"
 import { useCancelCombatAction, useDecideReaction, useEndCombatTurn, useRollCombatStep, useSubmitCombatAction } from "../../hooks/useMaddoxCombat"
 import { CombatActionBar, CombatWaitBar } from "./combat/CombatActionBar"
@@ -168,6 +168,9 @@ function GameTable({ state, presence, stream }: { state: MaddoxGameStateDto; pre
     // Em combate tático o campo de texto só pergunta ao mestre (a vez é pelos botões).
     const questionBlock = state.status !== "active" ? "A campanha não está em andamento." : !state.me.ready ? "Conclua a entrevista de personagem com o Maddox para entrar no jogo." : state.turn.phase !== "players" ? "Perguntas ao mestre ficam para a vez de um personagem." : null
 
+    // Sugestões de ação (DND-30): o clique declara o texto, como o envio pelo campo.
+    const optionsView = actionOptionsView(state, messages)
+
     const progress = turnProgress(state, presence)
     const masterTurn = state.turn.phase === "master"
 
@@ -243,6 +246,7 @@ function GameTable({ state, presence, stream }: { state: MaddoxGameStateDto; pre
                             onCancelAction: (actionId) => combatCancel.mutate(actionId),
                             onDecideReaction: (reactionId, escolha) => combatReact.mutate({ id: reactionId, escolha }),
                         }}
+                        actionOptions={optionsView ? { view: optionsView, busy: send.isPending, onPick: (option) => onSend({ kind: "declaration", content: option }) } : null}
                     />
                     {tactical && state.me.combat ? (
                         <>

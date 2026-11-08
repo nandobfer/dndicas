@@ -446,6 +446,7 @@ retorno avisa o modelo (`truncated` com os campos cortados) para ele consolidar 
 | `list_npcs`, `get_npc`, `save_npc` | `maddox_npcs` pelo nome sem acento e sem caixa (`nameKey`, sem duplicar): descrição pública, `masterNotes`, visibilidade, situação. A grafia gravada é mantida ao atualizar; renomear só com `newName` (nome já usado por outro NPC = erro) |
 | `search_memories`, `save_memory` | memórias da campanha no Engramind por tipo + título (chave `mx:<tipo>:<título>`): `local` (locais), `missao` (missões, com `status` ativa/concluída/falhou/abandonada — nasce `ativa`, tag `status:`), `evento` (marcos), `relacao`, `fato`, `outro`; turno na tag `turno:` |
 | `update_character_state` | `character.currentState` (o perfil da entrevista não muda) |
+| `suggest_actions` | Sugestões de ação por personagem no job, gravadas com a narração (`message.actionOptions`). Veja "Sugestões de ação (DND-30)" |
 
 **Provedores.** Gemini, Anthropic, OpenAI e DeepSeek: `streamText` com as ferramentas (até 12 passos,
 `MADDOX_NARRATOR_MAX_STEPS`). **OpenCode:** sessão `narrator` da campanha (`ensureMaddoxSession`), sem ferramentas na chamada;
@@ -485,6 +486,8 @@ Quem já declarou recebe **409 `ALREADY_DECLARED` antes** da validação (sem ch
 Inválida = **409 `ACTION_INVALID`** com o motivo: nada é gravado e a vez não é gasta. Falha do
 validador aceita a declaração (aviso no log). **Narrativo, Flexível e Equilibrado** julgam na narração: a ação impossível vira
 uma tentativa frustrada narrada com a causa na ficção. Perguntas e "Não fazer nada" nunca são validadas.
+
+**Sugestões de ação** abaixo da última narração: seção "Sugestões de ação (DND-30)".
 
 **Tela.** A mesa assina o stream (`useMaddoxGameStream`): reconecta sozinho com espera crescente (3 s, dobrando até 60 s;
 sem linha nem `ping` por 45 s refaz a conexão) e **para** em 401/403/404; a fala do Maddox chega aos poucos numa bolha com
@@ -1231,6 +1234,40 @@ recentes, que vêm no estado da mesa).
 
 Sem permissão nova (`maddox.play` cobre a mesa e os dois pedidos; a configuração é da aba de IA, só administradores).
 
+## Sugestões de ação (DND-30)
+
+Código: ferramenta `suggest_actions` (`MADDOX_ACTION_OPTIONS_TOOLS` em `server/master-tools.ts`), rascunho no job
+(`setDraftActionOptions`/`takeDraftActionOptions` em `server/game-live.ts`), gravação em `runMasterTurn` (`server/game.ts`),
+`actionOptionsView` (`game-view.ts`), `components/game/GameActionOptions.tsx`. Constantes `MADDOX_ACTION_OPTIONS_MAX`,
+`MADDOX_ACTION_OPTION_GUIDE` e `MADDOX_ACTION_OPTION_TEXT_MAX` (`constants.ts`).
+
+**Geração.** O próprio Maddox sugere, na narração, algumas ações para cada personagem com `suggest_actions { opcoes: [{ personagem,
+acoes[] }] }`: sem chamada extra de IA. A orientação vai no **texto da tarefa** (`MADDOX_ACTION_OPTIONS_TASK_LINE`, via
+`narratorTaskText(task, { actionOptions })`), como a densidade, para valer com a sessão do OpenCode reaproveitada. A ferramenta é
+oferecida (AI SDK: `buildMaddoxAiTools({ actionOptions })`; OpenCode: listada no bloco do MCP `dndicas-maddox`) só nas narrações
+fora do combate tático; nunca nas respostas a perguntas. Se o modelo não chamar, a narração fica sem sugestões.
+
+| Regra | Comportamento |
+| --- | --- |
+| Onde vale | Só na narração do turno do mestre (`meta.kind === "narration"`); resposta a pergunta e combate tático ativo recusam com o motivo |
+| Personagem | Nome comparado sem acento e sem caixa entre os personagens ativos com entrevista concluída; desconhecido = erro com a lista |
+| Tamanho | Até `MADDOX_ACTION_OPTIONS_MAX` por personagem, repetidas saem; texto acima do teto de proteção é cortado e o retorno avisa (`truncated`), nunca recusa |
+| Repetir a chamada | Substitui as sugestões daquele personagem na narração |
+| Gravação | Com a narração (`actionOptions: [{ memberId, characterId, characterName, options }]`); narração que falha não grava nada |
+| Testes pedidos | Se a mesma narração pediu testes, o turno dos jogadores não abre: as sugestões são descartadas (log informativo) |
+
+**DTO.** `MaddoxGameMessageDto.actionOptions` (só nas narrações) traz **apenas a lista do personagem de quem vê**; as dos outros
+nunca saem do servidor. Mensagens antigas sem o campo = `null` (sem migração). Não entram na transcrição do narrador.
+
+**Tela.** Bloco "Sugestões do Maddox" logo abaixo da bolha da **última** narração, só quando ela é do turno atual, o turno dos
+jogadores está aberto fora do combate tático e o jogador está pronto e elegível (`actionOptionsView`). Cada sugestão é um botão
+(`aria-label` "Declarar: …") que envia `{ kind: "declaration", content }` pelo mesmo `onSend` do campo — inclusive a validação
+dos graus Rigoroso e Fiel ao D&D (`ACTION_INVALID` mostra o motivo acima do campo e as sugestões continuam clicáveis). Durante o
+envio os botões travam; depois de declarar ficam desabilitados com a escolhida marcada (`data-chosen`). Somem quando o turno do
+mestre começa ou chega a narração seguinte. O campo de texto livre continua igual. O diário (só leitura) não mostra o bloco.
+
+Sem permissão nova (`maddox.play` cobre a mesa).
+
 ## Retrato do personagem (DND-31)
 
 Código: `server/character-portrait.ts` (prompt puro `buildCharacterPortraitPrompt`, `scheduleCharacterPortrait`,
@@ -1386,6 +1423,11 @@ intacto, lembrança no prompt, guardada no canal do mestre e descartada, enviada
 consome, fila da rede), `game-routes.test.ts` (rota), `narrator-prompt.test.ts` (blocos e seção das lembranças); na tela,
 `maddox-dnd25-combat.test.tsx` (popover, linha, card dos inimigos, dados ao vivo em sequência, passo do servidor, stream). Os testes
 encurtam os tempos com `shortenCombatTiming` e esperam a mesa com `settleCampaign` (`tests/helpers/maddox-sequence.ts`).
+DND-30: `narrator-action-options-campaign.test.ts` (narrador real: sugestões gravadas com a narração e cada jogador só com as
+dele, clique = declaração e as novas na narração seguinte, descarte com testes pedidos, narração que falha, resposta sem a
+ferramenta), `master-tools.test.ts` (`suggest_actions`: nomes, repetidas, teto, corte, recusas e o filtro da AI SDK),
+`narrator-prompt.test.ts` (linha da tarefa e bloco do MCP), `maddox-mcp.test.ts`; na tela, `maddox-game.test.tsx` (bloco só na
+última narração do turno aberto, envio, desabilitado com a escolhida, `ACTION_INVALID`, campo livre e `actionOptionsView`).
 DND-22: `campaigns.test.ts` (densidade padrão, na criação, editada em andamento com auditoria, campanha antiga e schema),
 `narrator-prompt.test.ts` (linha de tamanho nas narrações e não na resposta), `narrator-campaign.test.ts` (narrador real: densidade
 editada vale na narração seguinte e não na resposta), `journal.test.ts` (aba Imagens: só prontas, sem retrato de NPC secreto nem dados

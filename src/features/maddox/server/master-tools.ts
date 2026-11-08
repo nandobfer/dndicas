@@ -3,6 +3,9 @@ import { Types } from "mongoose"
 import type { ToolSet } from "ai"
 import { loggerFor } from "@/lib/logger"
 import {
+    MADDOX_ACTION_OPTION_GUIDE,
+    MADDOX_ACTION_OPTION_TEXT_MAX,
+    MADDOX_ACTION_OPTIONS_MAX,
     MADDOX_CAMPAIGN_MEMORY_KINDS,
     MADDOX_CAMPAIGN_STATE_FIELDS,
     MADDOX_CHECK_DC_MAX,
@@ -40,7 +43,7 @@ import {
 import { normalizeCatalogName } from "../catalog-markup"
 import { MaddoxCampaignMemberModel, MaddoxCampaignModel, MaddoxCharacterModel, MaddoxNpcModel, type IMaddoxCampaign, type IMaddoxCharacter, type IMaddoxNpc } from "../models"
 import { MADDOX_ABILITIES, MADDOX_ABILITY_LABELS, MADDOX_SKILLS, checkAbility, checkTitle } from "../check-modifier"
-import { addDraftCheck, addDraftCombat, addDraftNpcPortrait, jobDraftChecks, jobDraftCombat, jobDraftSceneImage, jobWorkspace, maddoxJobMeta, setDraftSceneImage, type MaddoxDraftCombatReward } from "./game-live"
+import { addDraftCheck, addDraftCombat, addDraftNpcPortrait, setDraftActionOptions, jobDraftChecks, jobDraftCombat, jobDraftSceneImage, jobWorkspace, maddoxJobMeta, setDraftSceneImage, type MaddoxDraftCombatReward } from "./game-live"
 import { catalogEntityTypeSchema } from "@/features/mcp/server/catalog-schemas"
 import type { TacticalDraftCombatant } from "./tactical-combat"
 import type { CampaignMemoryView } from "@/features/engramind/campaign-memory-format"
@@ -900,8 +903,81 @@ export const MADDOX_SCENE_IMAGE_TOOLS: readonly MaddoxMasterTool[] = [
     }),
 ]
 
-/** Todas as ferramentas do narrador (persistência, testes, combate, a vez dos adversários e a imagem da cena). */
-export const MADDOX_NARRATOR_TOOLS: readonly MaddoxMasterTool[] = [...MADDOX_MASTER_TOOLS, ...MADDOX_COMBAT_TOOLS, ...MADDOX_TACTICAL_TOOLS, ...MADDOX_SCENE_IMAGE_TOOLS]
+export const MADDOX_ACTION_OPTIONS_TOOL_NAME = "suggest_actions"
+
+/**
+ * Sugestões de ação (DND-30): ao terminar a narração no ponto de decisão, o Maddox sugere algumas ações curtas para cada
+ * personagem; cada jogador vê as do próprio personagem abaixo da narração e pode declarar uma com um clique. Só na narração
+ * do turno do mestre e fora do combate tático (lá a vez é pelos botões). O pedido fica no job e é gravado com a narração.
+ * Texto longo é cortado no teto de proteção (nunca recusa por tamanho); chamar de novo substitui a lista do personagem.
+ */
+export const MADDOX_ACTION_OPTIONS_TOOLS: readonly MaddoxMasterTool[] = [
+    define({
+        name: MADDOX_ACTION_OPTIONS_TOOL_NAME,
+        description: [
+            "Sugere ações para os jogadores declararem no próximo turno, mostradas como atalhos abaixo desta narração (cada jogador vê só as do próprio personagem).",
+            `Chame no fim da narração, quando ela terminar num ponto de decisão: 2 a ${MADDOX_ACTION_OPTIONS_MAX} ações curtas (até uns ${MADDOX_ACTION_OPTION_GUIDE} caracteres), plausíveis, variadas e coerentes com a cena, escritas em primeira pessoa como o jogador declararia ("Examino a porta em busca de armadilhas").`,
+            "Uma entrada por personagem (nome exato). Não cite as sugestões na narração. Chamar de novo substitui as sugestões do personagem.",
+        ].join(" "),
+        readOnly: false,
+        input: z.object({
+            opcoes: z
+                .array(
+                    z.object({
+                        personagem: z.string().min(1).describe("Nome exato do personagem jogador"),
+                        acoes: z.array(z.string()).min(1).describe(`De 2 a ${MADDOX_ACTION_OPTIONS_MAX} ações curtas para esse personagem declarar`),
+                    }),
+                )
+                .min(1)
+                .max(10)
+                .describe("Sugestões por personagem"),
+        }),
+        async execute(context, input) {
+            const meta = context.jobId ? maddoxJobMeta(String(context.campaignId), context.jobId) : null
+            if (!meta || meta.kind !== "narration") throw new MaddoxToolError("Sugestões de ação só são dadas na narração do turno do mestre.")
+            const campaign = await MaddoxCampaignModel.findById(context.campaignId).select("rigor").lean<Pick<IMaddoxCampaign, "rigor">>()
+            if (campaign && MADDOX_TACTICAL_COMBAT_RIGORS.includes(campaign.rigor)) {
+                const { findActiveTactical } = await import("./tactical-combat")
+                if (await findActiveTactical(context.campaignId)) throw new MaddoxToolError("No combate tático a vez é pelos botões de ação: não sugira ações agora.")
+            }
+            const characters = await MaddoxCharacterModel.find({ campaignId: context.campaignId, status: "active", "interview.status": "done" }).select("name memberId").lean<Pick<IMaddoxCharacter, "_id" | "name" | "memberId">[]>()
+            const byKey = new Map(characters.map((item) => [keyOf(item.name), item]))
+            const missing = input.opcoes.map((entry) => entry.personagem).filter((name) => !byKey.has(keyOf(name)))
+            if (missing.length) throw new MaddoxToolError(`Personagem desconhecido: ${missing.join(", ")}. Personagens: ${keyList(characters.map((item) => item.name))}.`)
+            const cut: string[] = []
+            const saved: { personagem: string; acoes: number }[] = []
+            for (const entry of input.opcoes) {
+                const character = byKey.get(keyOf(entry.personagem))!
+                const seen = new Set<string>()
+                const options: string[] = []
+                for (const raw of entry.acoes) {
+                    const text = raw.trim().replace(/\s+/g, " ")
+                    if (!text) continue
+                    if (text.length > MADDOX_ACTION_OPTION_TEXT_MAX && !cut.includes(character.name)) cut.push(character.name)
+                    const option = clip(text, MADDOX_ACTION_OPTION_TEXT_MAX)
+                    const key = option.toLocaleLowerCase("pt-BR")
+                    if (seen.has(key)) continue
+                    seen.add(key)
+                    options.push(option)
+                    if (options.length >= MADDOX_ACTION_OPTIONS_MAX) break
+                }
+                if (!options.length) continue
+                const stored = setDraftActionOptions(String(context.campaignId), context.jobId!, { memberId: String(character.memberId), characterId: String(character._id), characterName: character.name, options })
+                if (!stored) throw new MaddoxToolError("Esta narração já terminou.")
+                saved.push({ personagem: character.name, acoes: options.length })
+            }
+            if (!saved.length) throw new MaddoxToolError("Nenhuma ação sugerida: envie ao menos uma ação com texto para cada personagem.")
+            return {
+                saved,
+                note: `No máximo ${MADDOX_ACTION_OPTIONS_MAX} ações por personagem (as repetidas saem). Continue sem citar as sugestões na narração.`,
+                ...(cut.length ? { truncated: cut, aviso: `Ações acima de ${MADDOX_ACTION_OPTION_TEXT_MAX} caracteres foram cortadas (${cut.join(", ")}): prefira ações curtas.` } : {}),
+            }
+        },
+    }),
+]
+
+/** Todas as ferramentas do narrador (persistência, testes, combate, a vez dos adversários, a imagem da cena e as sugestões de ação). */
+export const MADDOX_NARRATOR_TOOLS: readonly MaddoxMasterTool[] = [...MADDOX_MASTER_TOOLS, ...MADDOX_COMBAT_TOOLS, ...MADDOX_TACTICAL_TOOLS, ...MADDOX_SCENE_IMAGE_TOOLS, ...MADDOX_ACTION_OPTIONS_TOOLS]
 
 export function findMaddoxTool(name: string): MaddoxMasterTool | undefined {
     return MADDOX_NARRATOR_TOOLS.find((tool) => tool.name === name)
@@ -928,9 +1004,9 @@ export const MADDOX_CHECK_TOOL_NAME = "request_check"
 /**
  * Ferramentas no formato da AI SDK (a SDK `ai` entra sob demanda). `checks: false` tira o `request_check`; `combat: false`
  * tira as do combate (Maddox 6); `tactical: false` tira as da vez dos adversários (Maddox 7); `sceneImages: false` tira a da
- * imagem da cena (Maddox 10).
+ * imagem da cena (Maddox 10); `actionOptions: false` tira a das sugestões de ação (DND-30).
  */
-export async function buildMaddoxAiTools(context: MaddoxToolContext, options: { checks?: boolean; combat?: boolean; tactical?: boolean; sceneImages?: boolean } = {}): Promise<ToolSet> {
+export async function buildMaddoxAiTools(context: MaddoxToolContext, options: { checks?: boolean; combat?: boolean; tactical?: boolean; sceneImages?: boolean; actionOptions?: boolean } = {}): Promise<ToolSet> {
     const { dynamicTool } = await import("ai")
     const tools: ToolSet = {}
     for (const def of MADDOX_NARRATOR_TOOLS) {
@@ -938,6 +1014,7 @@ export async function buildMaddoxAiTools(context: MaddoxToolContext, options: { 
         if ((MADDOX_COMBAT_TOOL_NAMES as readonly string[]).includes(def.name) && !options.combat) continue
         if ((MADDOX_TACTICAL_TOOL_NAMES as readonly string[]).includes(def.name) && !options.tactical) continue
         if (def.name === MADDOX_SCENE_IMAGE_TOOL_NAME && !options.sceneImages) continue
+        if (def.name === MADDOX_ACTION_OPTIONS_TOOL_NAME && !options.actionOptions) continue
         tools[def.name] = dynamicTool({
             description: def.description,
             inputSchema: def.input,

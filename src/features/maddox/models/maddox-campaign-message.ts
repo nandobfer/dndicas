@@ -53,6 +53,14 @@ export interface IMaddoxReminder {
     visibility: "players" | "master" | null
 }
 
+/** Sugestões de ação de um personagem numa narração (DND-30). */
+export interface IMaddoxActionOptions {
+    memberId: Types.ObjectId
+    characterId: Types.ObjectId
+    characterName: string
+    options: string[]
+}
+
 /**
  * Mensagem da mesa (Maddox 3) — `maddox_campaign_messages`. Um documento por mensagem (o histórico cresce
  * sem limite). Declaração e "não fazer nada" (`turnAction: true`) são únicas por membro e turno.
@@ -95,6 +103,11 @@ export interface IMaddoxCampaignMessage {
      * da narração; volta a `null` se a geração falhar); `status` muda depois de a narração ser gravada.
      */
     reminder: IMaddoxReminder | null
+    /**
+     * Sugestões de ação pedidas pelo Maddox na narração (`suggest_actions`, DND-30), por personagem. Cada jogador só recebe
+     * a lista do próprio personagem.
+     */
+    actionOptions: IMaddoxActionOptions[] | null
     createdAt: Date
     updatedAt: Date
 }
@@ -146,6 +159,20 @@ const MaddoxCampaignMessageSchema = new Schema<IMaddoxCampaignMessage>(
         combatReaction: { type: Schema.Types.Mixed, default: null },
         offlineSkip: { type: Boolean, default: false },
         reminder: { type: Schema.Types.Mixed, default: null },
+        actionOptions: {
+            type: [
+                new Schema<IMaddoxActionOptions>(
+                    {
+                        memberId: { type: Schema.Types.ObjectId, ref: "MaddoxCampaignMember", required: true },
+                        characterId: { type: Schema.Types.ObjectId, ref: "MaddoxCharacter", required: true },
+                        characterName: { type: String, required: true },
+                        options: { type: [String], default: () => [] },
+                    },
+                    { _id: false },
+                ),
+            ],
+            default: null,
+        },
     },
     { collection: "maddox_campaign_messages", timestamps: true, versionKey: false },
 )

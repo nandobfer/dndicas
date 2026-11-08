@@ -1,5 +1,5 @@
 import { memoriesSection } from "@/features/ai/memories-prompt"
-import { MADDOX_CATALOG_TOOL_NAMES, MADDOX_DEFAULT_DENSITY, MADDOX_DENSITY_LEVEL_DEFS, MADDOX_CHECK_RIGORS, MADDOX_CHECK_ROUNDS_MAX, MADDOX_COMBAT_LONG_TURNS, MADDOX_COMBAT_RIGORS, MADDOX_DECLARATION_VALIDATION_RIGORS, MADDOX_PROFILE_SECTIONS, MADDOX_TACTICAL_COMBAT_RIGORS, MADDOX_TOOL_TEXT_GUIDE, MADDOX_WORLD_CATALOG_RIGORS, type MaddoxCampaignMemoryKind, type MaddoxDensityLevel, type MaddoxGameMessageKind, type MaddoxQuestStatus, type MaddoxRigorLevel, type MaddoxVisibility } from "../constants"
+import { MADDOX_ACTION_OPTIONS_MAX, MADDOX_CATALOG_TOOL_NAMES, MADDOX_DEFAULT_DENSITY, MADDOX_DENSITY_LEVEL_DEFS, MADDOX_CHECK_RIGORS, MADDOX_CHECK_ROUNDS_MAX, MADDOX_COMBAT_LONG_TURNS, MADDOX_COMBAT_RIGORS, MADDOX_DECLARATION_VALIDATION_RIGORS, MADDOX_PROFILE_SECTIONS, MADDOX_TACTICAL_COMBAT_RIGORS, MADDOX_TOOL_TEXT_GUIDE, MADDOX_WORLD_CATALOG_RIGORS, type MaddoxCampaignMemoryKind, type MaddoxDensityLevel, type MaddoxGameMessageKind, type MaddoxQuestStatus, type MaddoxRigorLevel, type MaddoxVisibility } from "../constants"
 import { CATALOG_CITATION_RULE, rigorBlock } from "./interview-prompt"
 import { checkSucceeded } from "../check-modifier"
 import { worldCatalogLines, type WorldCatalog } from "../world-catalog"
@@ -306,14 +306,14 @@ function memoriesBlock(memories: readonly NarratorMemory[]): string | null {
     return parts.join("\n")
 }
 
-export type NarratorToolMode = { kind: "ai-sdk" } | { kind: "mcp"; server: string; turnToken: string; checks?: boolean; combat?: boolean; tactical?: boolean; sceneImages?: boolean }
+export type NarratorToolMode = { kind: "ai-sdk" } | { kind: "mcp"; server: string; turnToken: string; checks?: boolean; combat?: boolean; tactical?: boolean; sceneImages?: boolean; actionOptions?: boolean }
 
 /** Bloco das ferramentas: na AI SDK elas vêm na chamada; no OpenCode, pelo MCP com o token de turno. */
 function toolsBlock(mode: NarratorToolMode): string | null {
     if (mode.kind === "ai-sdk") return null
     return [
         "## Ferramentas desta narração",
-        `- As ferramentas de anotações da campanha estão no servidor MCP \`${mode.server}\` (get_campaign_state, update_campaign_state, list_npcs, get_npc, save_npc, search_memories, save_memory, update_character_state, resolve_reminder${mode.checks ? ", request_check" : ""}${mode.combat ? ", get_combat, start_combat, update_combat, end_combat" : ""}${mode.tactical ? ", monster_action, apply_effect, request_damage_roll, offer_reaction" : ""}${mode.sceneImages ? ", request_scene_image" : ""}, ${MADDOX_CATALOG_TOOL_NAMES.search}, ${MADDOX_CATALOG_TOOL_NAMES.get}).`,
+        `- As ferramentas de anotações da campanha estão no servidor MCP \`${mode.server}\` (get_campaign_state, update_campaign_state, list_npcs, get_npc, save_npc, search_memories, save_memory, update_character_state, resolve_reminder${mode.checks ? ", request_check" : ""}${mode.combat ? ", get_combat, start_combat, update_combat, end_combat" : ""}${mode.tactical ? ", monster_action, apply_effect, request_damage_roll, offer_reaction" : ""}${mode.sceneImages ? ", request_scene_image" : ""}${mode.actionOptions ? ", suggest_actions" : ""}, ${MADDOX_CATALOG_TOOL_NAMES.search}, ${MADDOX_CATALOG_TOOL_NAMES.get}).`,
         `- Em TODA chamada a essas ferramentas, envie o campo \`turno\` exatamente com este valor: \`${mode.turnToken}\`.`,
         "- Não use outras ferramentas (arquivos, terminal, web): a campanha vive só nessas anotações.",
     ].join("\n")
@@ -468,10 +468,19 @@ export function narrationDensityLine(density: MaddoxDensityLevel): string {
     return `Tamanho desta narração (densidade **${def.label}**): ${def.size}. Ajuste o nível de detalhe a esse tamanho, sem deixar de narrar a consequência de cada declaração e sem cortar a cena no meio.`
 }
 
-/** Texto da tarefa da geração; com `density`, as narrações (não as respostas) recebem a linha de tamanho. */
-export function narratorTaskText(task: NarratorTask, options: { density?: MaddoxDensityLevel | null } = {}): string {
-    const text = taskBody(task)
-    return options.density && task.kind !== "answer" ? `${text}\n\n${narrationDensityLine(options.density)}` : text
+/**
+ * Linha das sugestões de ação (DND-30): vai no texto da tarefa das narrações em que a ferramenta `suggest_actions` é oferecida
+ * (nunca nas respostas nem no combate tático), para valer mesmo com a sessão do OpenCode reaproveitada.
+ */
+export const MADDOX_ACTION_OPTIONS_TASK_LINE = `Se a narração terminar no ponto de decisão (sem testes pedidos), chame \`suggest_actions\` no fim com 2 a ${MADDOX_ACTION_OPTIONS_MAX} ações curtas, plausíveis e variadas para cada personagem, em primeira pessoa, como o jogador declararia ("Examino a porta…"). Não cite as sugestões na narração.`
+
+/**
+ * Texto da tarefa da geração; com `density`, as narrações (não as respostas) recebem a linha de tamanho; com `actionOptions`,
+ * a linha das sugestões de ação.
+ */
+export function narratorTaskText(task: NarratorTask, options: { density?: MaddoxDensityLevel | null; actionOptions?: boolean } = {}): string {
+    if (task.kind === "answer") return taskBody(task)
+    return [taskBody(task), options.density ? narrationDensityLine(options.density) : null, options.actionOptions ? MADDOX_ACTION_OPTIONS_TASK_LINE : null].filter(Boolean).join("\n\n")
 }
 
 function taskBody(task: NarratorTask): string {
