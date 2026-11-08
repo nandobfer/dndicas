@@ -1132,7 +1132,7 @@ Sem atalho de teclado: Ctrl/⌘+K já é a busca global do app.
 ## Imagens nas cenas (Maddox 10)
 
 Código: `server/scene-images.ts` (regras, cota, reserva, geração em segundo plano, pedidos do dono, DTO), `server/scene-image-references.ts`
-(aparência), `server/scene-image-hints.ts` (JEV), `server/scene-image-describer.ts` (descrição para o pedido manual),
+(referências), `server/scene-image-appearance.ts` (aparência dos personagens, DND-33), `server/scene-image-hints.ts` (JEV), `server/scene-image-describer.ts` (descrição para o pedido manual),
 `server/combat-image.ts` (fim de batalha), ferramenta `request_scene_image` e `save_npc.gerarRetrato` em `server/master-tools.ts`,
 coleção `maddox_scene_images` (`models/maddox-scene-image.ts`), `components/game/GameSceneImage.tsx`, `SceneImageButton.tsx`,
 `NpcPanel.tsx`, `components/campaigns/SceneImagesField.tsx`, `components/settings/MaddoxSceneImagesCard.tsx`,
@@ -1168,19 +1168,37 @@ testes) e só vira imagem **depois** que a narração é gravada (`scheduleDraft
 nada. Oferecida à AI SDK só quando há situação ativa pedida pelo narrador; no MCP `dndicas-maddox` existe sempre e recusa pelo
 contexto. A regra **"## Imagens da cena"** (`sceneImagesRule`) lista as situações ativas e, fora da cota, avisa "AGORA: … Não peça
 imagem nesta narração."; com "Retrato de NPC" ativa, orienta o `gerarRetrato`. `save_npc` salva o NPC de qualquer jeito: o retorno
-`retrato` diz se o retrato foi pedido ou por quê não.
+`retrato` diz se o retrato foi pedido ou por quê não. A regra e a ferramenta pedem que a descrição siga o perfil e a ficha (sem inventar cabelo, olhos ou
+pele), e a regra de persistência manda registrar mudanças visíveis de aparência em `update_character_state`, para entrarem nas próximas
+imagens (DND-33).
 
 **Frequência.** Contam as imagens com `counts: true` (`pending`, `generating`, `done`); `failed` e `skipped` liberam a vaga. Intervalo
 (só automáticas): a última automática precisa estar `minNarrationsBetween` turnos do mestre antes. Uma automática por turno: índice
 único parcial `{ campaignId, turnNumber, slot }` com `counts: true, slot: "auto"` (a duplicata vira `skipped`). Teto: todas as origens
 nas últimas 24 h; a reserva reconta depois de gravar e descarta (`skipped`, `daily-limit`) o que passou em pedidos simultâneos.
 
-**Referências de aparência.** Como na imagem da ficha (`formData`), os **dados** de quem aparece vão em JSON (perfil da entrevista e
-campos visuais da ficha D&D dos personagens; descrição pública dos NPCs — nunca `masterNotes` —; entidades do catálogo compactas;
-cenário e local), e as **imagens cadastradas** vão como referência ao gerador (`prompt: { text, images }` da SDK `ai`), até 6, na
-ordem personagens (retrato da campanha ou, sem ele, a foto da ficha) → NPCs (retrato) → catálogo (`image`). Imagens do storage são lidas
-pela chave (`/api/upload?key=`), externas por `fetch` (10 s, 5 MB); a que falha sai com aviso. Modelos que aceitam imagens de entrada:
-Gemini `*-image*` e OpenAI `gpt-image-*` (`imageModelSupportsReferences`); nos demais (Imagen, `dall-e-*`), só os dados, com aviso no log.
+**Referências de aparência.** Os **dados** de quem aparece vão no pedido ao gerador e as **imagens cadastradas** vão como referência
+(`prompt: { text, images }` da SDK `ai`), até 6, na ordem personagens (retrato da campanha ou, sem ele, a foto da ficha) → NPCs (retrato)
+→ catálogo (`image`). Imagens do storage são lidas pela chave (`/api/upload?key=`), externas por `fetch` (10 s, 5 MB); a que falha sai
+com aviso. Modelos que aceitam imagens de entrada: Gemini `*-image*` e OpenAI `gpt-image-*` (`imageModelSupportsReferences`); nos
+demais (Imagen, `dall-e-*`), só os dados, com aviso no log.
+
+**Aparência dos personagens (DND-33, `scene-image-appearance.ts`).** Vale para `tool`, `combat-end` e `manual` (o retrato de NPC não
+leva). Por personagem, só o que é visual e está registrado: campos da ficha (raça, classe, idade, altura, peso, cabelo, olhos, pele,
+aparência — HTML vira texto), as seções **"Identidade e aparência"** e **"Equipamentos e recursos"** do perfil da entrevista, a condição
+atual e as **anotações da campanha no Engramind** sobre a aparência: busca pelo nome em `searchCampaignMemories` só no canal dos
+**jogadores** (nunca as do mestre), filtrada no código — a anotação precisa citar o nome como palavra inteira e ter um termo de aparência
+(`MADDOX_APPEARANCE_TERMS`: palavra inteira, também no plural, ou radical explícito com `*` — "olho" não casa "olhou", "capa" não casa "capaz"; decisão do plano: vocabulário fixo) —, até 3 por personagem (400 caracteres cada), com
+prazo de 5 s; rede fora ou prazo estourado = sem anotações (aviso no log), a imagem segue. As anotações entram como "Mudanças
+registradas na história (valem sobre a ficha quando a contradizem)". Campo vazio não aparece e personagem sem dados sai como
+"aparência não registrada: não invente traços marcantes como fatos": nada é deduzido. As seções não visuais do perfil (origem,
+personalidade, capacidades, relações) não vão ao gerador.
+
+**Pedido ao gerador** (`buildSceneImagePrompt`), nesta ordem: abertura e **estilo da mesa** (inalterados), **"## Cena a retratar (o que
+acontece AGORA)"** (momento + descrição), **"## Aparência de quem aparece (obrigatória)"** (o bloco acima, com a regra "detalhes não
+listados ficam livres, mas nunca contradizem os listados"), a linha das imagens anexadas, os demais dados em JSON (campanha — nome,
+cenário, local —, NPCs com a descrição pública — nunca `masterNotes` —, entidades do catálogo compactas), a **"Conferência final da
+aparência"** (uma linha por personagem: cabelo, olhos, pele, raça) e "Sem texto, letras…". O retrato de NPC mantém "Quem é: …" + JSON.
 
 **Geração.** Em segundo plano, **fora da fila da campanha** (o turno não espera), no máximo 2 simultâneas no processo, teto de 120 s.
 JEV "Gerar imagem na cena" (só `tool`): abaixo de 0,5 → `skipped` (`jev`); falha ou teto do JEV → gera (aviso no log). Arquivo em
@@ -1193,7 +1211,12 @@ no pedido manual, esperando a vez na fila da campanha neste processo. Legenda: o
 **Pedido manual.** `POST /api/maddox/campaigns/[id]/scene-images` (`maddox.play` + entrevista concluída + dono; 202). Reserva logo
 (o placeholder aparece na última narração) e põe na fila da campanha uma geração curta do narrador (30 s, sem ferramentas) que devolve
 `{ descricaoVisual, legenda, personagens, npcs }` (nomes fora da campanha são ignorados, com aviso); falhou → a última narração vira a
-descrição, com todos os personagens. Erros: 403 (não dono), 409 `SCENE_IMAGE_BUSY`, `SCENE_IMAGE_LIMIT`, `AI_IMAGE_UNAVAILABLE`,
+descrição, com todos os personagens. Essa geração (DND-33) recebe nas instruções o bloco de aparência de todos os personagens ativos e
+a descrição pública dos NPCs conhecidos, com a regra de copiar a aparência registrada e não atribuir cabelo, olhos, pele, marcas ou
+roupas que não estejam lá; o pedido é o **último turno em destaque** (`lastTurnContext`/`lastTurnBlock`): "## ÚLTIMO TURNO (turno N) —
+retrate ESTE momento" com as declarações, os testes (motivo, CD e "sucesso"/"falha"; pendente = "sem resultado ainda"; cancelado não entra), as ações
+de combate (o `combatAction.summary` do card; cancelada não entra) e os trechos de narração do turno em ordem (sem os que falharam; teto de 8.000 caracteres, cortando do mais antigo) e o último trecho como "MOMENTO A RETRATAR"; a narração
+do turno anterior vem depois, em "## Antes disso (só contexto, NÃO retrate)" (até 1.500 caracteres). Erros: 403 (não dono), 409 `SCENE_IMAGE_BUSY`, `SCENE_IMAGE_LIMIT`, `AI_IMAGE_UNAVAILABLE`,
 `NO_NARRATION`, `CAMPAIGN_NOT_ACTIVE`. **Retrato**: `POST /api/maddox/campaigns/[id]/npcs/[npcId]/portrait` (dono; NPC conhecido dos
 jogadores; 409 `SCENE_IMAGE_BUSY` se o retrato dele já está sendo pintado).
 
