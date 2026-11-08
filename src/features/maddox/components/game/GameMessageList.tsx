@@ -6,6 +6,8 @@ import { AlertCircle, ArrowDown, BookOpen, HelpCircle, Loader2, MinusCircle } fr
 import { Button } from "@/components/ui/opex/button"
 import { Markdown } from "@/components/ui/opex/markdown"
 import type { MaddoxGameMessageDto, MaddoxLiveGenerationDto } from "../../game-types"
+import type { MaddoxActionOptionsView } from "../../game-view"
+import { GameActionOptions } from "./GameActionOptions"
 import { liveMarkupToBold } from "../../catalog-markup"
 import type { DiceRollResponse } from "@/features/dice-roller/types"
 import { MemberAvatar } from "../campaigns/campaign-visuals"
@@ -41,6 +43,14 @@ interface Props {
     readOnly?: boolean
     /** Mensagem aberta pela busca do diário: recebe destaque e a rolagem vai até ela. */
     highlightId?: string | null
+    /** Sugestões de ação do Maddox (DND-30), abaixo da narração indicada; nunca no diário (só leitura). */
+    actionOptions?: ActionOptionsHandlers | null
+}
+
+export interface ActionOptionsHandlers {
+    view: MaddoxActionOptionsView
+    busy: boolean
+    onPick: (option: string) => Promise<boolean> | void
 }
 
 export interface CombatHandlers {
@@ -74,8 +84,9 @@ function stepReplaysOf(replays: ReadonlyMap<string, DiceRollResponse>, messageId
 
 const NO_COMBAT: CombatHandlers = { isOwner: false, reacting: false, onRollAction: noRoll, onRollCombat: noRoll, onCancelAction: () => undefined, onDecideReaction: () => undefined }
 
-export function GameMessageList({ messages, myMemberId, maddoxAvatarUrl, color, narrating, live = [], hasMore, loadingMore, onLoadMore, replays = NO_REPLAYS, onRollCheck = noRoll, combat: handlers = NO_COMBAT, readOnly = false, highlightId = null }: Props) {
+export function GameMessageList({ messages, myMemberId, maddoxAvatarUrl, color, narrating, live = [], hasMore, loadingMore, onLoadMore, replays = NO_REPLAYS, onRollCheck = noRoll, combat: handlers = NO_COMBAT, readOnly = false, highlightId = null, actionOptions: optionsInput = null }: Props) {
     const combat = readOnly ? NO_COMBAT : handlers
+    const actionOptions = readOnly ? null : optionsInput
     // Só leitura: nenhum card é "meu", então nenhum mostra botão de rolar, cancelar ou reagir.
     const actsAs = (message: MaddoxGameMessageDto) => !readOnly && message.memberId !== null && message.memberId === myMemberId
     const scrollRef = useRef<HTMLDivElement>(null)
@@ -98,7 +109,7 @@ export function GameMessageList({ messages, myMemberId, maddoxAvatarUrl, color, 
 
     const liveNarration = live.some((item) => item.kind === "narration")
     const lastTurn = messages.at(-1)?.turnNumber ?? null
-    const signature = `${messages.length}:${messages.at(-1)?.id ?? ""}:${narrating ? 1 : 0}:${live.map((item) => `${item.liveId}:${item.text.length}:${item.tool ? 1 : 0}`).join(",")}`
+    const signature = `${messages.length}:${messages.at(-1)?.id ?? ""}:${narrating ? 1 : 0}:${actionOptions ? actionOptions.view.messageId : ""}:${live.map((item) => `${item.liveId}:${item.text.length}:${item.tool ? 1 : 0}`).join(",")}`
     const highlightLoaded = highlightId !== null && byId.has(highlightId)
     useLayoutEffect(() => {
         if (stickRef.current && !highlightId) scrollToEnd()
@@ -165,6 +176,7 @@ export function GameMessageList({ messages, myMemberId, maddoxAvatarUrl, color, 
                                 ) : (
                                     <GameMessage message={message} mine={message.memberId !== null && message.memberId === myMemberId} replyTo={message.replyToId ? (byId.get(message.replyToId) ?? null) : null} maddoxAvatarUrl={maddoxAvatarUrl} color={color} />
                                 )}
+                                {actionOptions && actionOptions.view.messageId === message.id && <GameActionOptions view={actionOptions.view} color={color} busy={actionOptions.busy} onPick={actionOptions.onPick} />}
                             </div>
                         </Fragment>
                     )

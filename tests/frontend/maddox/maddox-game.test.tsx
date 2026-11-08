@@ -188,7 +188,7 @@ const gameState = (over: Partial<MaddoxGameStateDto> = {}): MaddoxGameStateDto =
 })
 
 const { GamePage } = await import("@/features/maddox/components/game/GamePage")
-const { seatStatus, turnProgress, composerBlockReason, gameRefetchInterval, masterBannerText, MADDOX_GAME_POLL_MS } = await import("@/features/maddox/game-view")
+const { seatStatus, turnProgress, composerBlockReason, gameRefetchInterval, masterBannerText, actionOptionsView, MADDOX_GAME_POLL_MS } = await import("@/features/maddox/game-view")
 const { MADDOX_MASTER_RETRY_MS } = await import("@/features/maddox/constants")
 
 beforeEach(() => {
@@ -1008,5 +1008,88 @@ describe("controles da mesa usam os componentes do projeto", () => {
             expect(source, file).not.toMatch(/<select[\s>]/)
             expect(source, file).not.toMatch(/type=["']checkbox["']/)
         }
+    })
+})
+
+describe("sugestões de ação do Maddox (DND-30)", () => {
+    const OPTIONS = ["Subo a escada do farol", "Procuro o faroleiro"]
+    /** Mesa com duas narrações: a antiga (turno 1) e a atual (turno 2), esta com as minhas sugestões. */
+    const withOptions = (over: Partial<MaddoxGameStateDto> = {}, extra: MaddoxGameMessageDto[] = []) =>
+        gameState({
+            turn: { number: 2, phase: "players", startedAt: null, generating: false, failed: false, awaitingChecks: false, pendingChecks: [] },
+            messages: [
+                message("n1", { kind: "narration", phase: "master", content: "Abertura.", actionOptions: ["Opção antiga"] }),
+                message("n2", { kind: "narration", phase: "master", turnNumber: 2, content: "O farol está escuro.", actionOptions: OPTIONS }),
+                ...extra,
+            ],
+            ...over,
+        })
+    const optionButton = (text: string) => screen.getByRole("button", { name: `Declarar: ${text}` })
+
+    it("aparecem só abaixo da última narração do turno aberto, não nas antigas nem nas respostas", async () => {
+        await renderGame(withOptions({}, [message("a1", { kind: "answer", turnNumber: 2, content: "Há dois guardas.", actionOptions: ["Não deveria"] })]))
+        const blocks = screen.getAllByTestId("action-options")
+        expect(blocks).toHaveLength(1)
+        expect(blocks[0]!.closest("[data-message-id]")).toHaveAttribute("data-message-id", "n2")
+        expect(within(blocks[0]!).getByText("Sugestões do Maddox")).toBeInTheDocument()
+        expect(screen.queryByText("Opção antiga")).not.toBeInTheDocument()
+        expect(screen.queryByText("Não deveria")).not.toBeInTheDocument()
+        for (const option of OPTIONS) expect(optionButton(option)).toBeEnabled()
+    })
+
+    it("o clique envia a sugestão como declaração do turno, igual ao campo", async () => {
+        await renderGame(withOptions())
+        post.mockResolvedValue(ok(withOptions()))
+        fireEvent.click(optionButton("Procuro o faroleiro"))
+        await waitFor(() => expect(post).toHaveBeenCalledWith("/maddox/campaigns/c1/game/actions", { kind: "declaration", content: "Procuro o faroleiro" }))
+        expect(post).toHaveBeenCalledTimes(1)
+    })
+
+    it("depois de declarar ficam desabilitadas com a escolhida marcada; o campo livre continua para perguntas", async () => {
+        const declared = withOptions({ me: ME({ declared: true }) }, [message("d9", { kind: "declaration", turnNumber: 2, memberId: "m1", characterName: "Kael", content: "procuro o faroleiro" })])
+        await renderGame(declared)
+        for (const option of OPTIONS) expect(optionButton(option)).toBeDisabled()
+        expect(optionButton("Procuro o faroleiro")).toHaveAttribute("data-chosen", "true")
+        expect(optionButton("Subo a escada do farol")).not.toHaveAttribute("data-chosen")
+        fireEvent.click(optionButton("Subo a escada do farol"))
+        expect(post).not.toHaveBeenCalled()
+    })
+
+    it("ação livre continua pelo campo, sem depender das sugestões", async () => {
+        await renderGame(withOptions())
+        post.mockResolvedValue(ok(withOptions()))
+        fireEvent.change(screen.getByLabelText("O que o seu personagem faz"), { target: { value: "Grito pelo faroleiro." } })
+        fireEvent.click(screen.getByRole("button", { name: "Declarar" }))
+        await waitFor(() => expect(post).toHaveBeenCalledWith("/maddox/campaigns/c1/game/actions", { kind: "declaration", content: "Grito pelo faroleiro." }))
+    })
+
+    it("sugestão recusada (ACTION_INVALID): o motivo aparece acima do campo e as opções continuam clicáveis", async () => {
+        await renderGame(withOptions({ rigor: "fiel-dnd" }))
+        post.mockRejectedValueOnce({ isAxiosError: true, response: { status: 409, data: { success: false, error: "Kael não alcança a escada.", code: "ACTION_INVALID" } } })
+        fireEvent.click(optionButton("Subo a escada do farol"))
+        expect(await screen.findByTestId("game-composer-invalid")).toHaveTextContent("Kael não alcança a escada.")
+        await waitFor(() => expect(optionButton("Procuro o faroleiro")).toBeEnabled())
+    })
+
+    it("somem no turno do mestre e com a narração seguinte", async () => {
+        const view = await renderGame(withOptions())
+        expect(screen.getByTestId("action-options")).toBeInTheDocument()
+        get.mockResolvedValue(ok(withOptions({ turn: { number: 2, phase: "master", startedAt: null, generating: true, failed: false, awaitingChecks: false, pendingChecks: [] } })))
+        await act(async () => emit("maddox.game.changed"))
+        await waitFor(() => expect(screen.queryByTestId("action-options")).not.toBeInTheDocument())
+        view.unmount()
+    })
+
+    it("actionOptionsView: só para quem pode declarar, fora do combate tático e na narração do turno atual", () => {
+        const state = withOptions()
+        expect(actionOptionsView(state, state.messages)).toEqual({ messageId: "n2", options: OPTIONS, chosen: null, disabled: false })
+        expect(actionOptionsView({ ...state, me: ME({ eligible: false }) }, state.messages)).toBeNull()
+        expect(actionOptionsView({ ...state, me: ME({ ready: false }) }, state.messages)).toBeNull()
+        expect(actionOptionsView({ ...state, status: "lobby" }, state.messages)).toBeNull()
+        expect(actionOptionsView({ ...state, turn: { ...state.turn, combatActor: { actorKey: "c:m1", memberId: "m1", characterName: "Kael" } } }, state.messages)).toBeNull()
+        // A narração nova (turno 3) ainda não chegou ao turno atual, ou chegou sem sugestões: nada a mostrar.
+        expect(actionOptionsView({ ...state, turn: { ...state.turn, number: 3 } }, state.messages)).toBeNull()
+        const newer = [...state.messages, message("n3", { kind: "narration", phase: "master", turnNumber: 2, content: "Continuação." })]
+        expect(actionOptionsView(state, newer)).toBeNull()
     })
 })

@@ -377,3 +377,23 @@ describe("DND-25 — blocos do combate tático e lembranças no prompt", () => {
         expect(remindersTaskSection([{ id: "x1", characterName: "Doran", text: "Oi", memory: null, decided: false }], false)).not.toContain("ficha prevalece")
     })
 })
+
+describe("sugestões de ação (DND-30)", () => {
+    const declarations = [{ characterName: "Lyra", kind: "declaration" as const, content: "Subo a escada.", skipped: false }]
+
+    it("a linha do `suggest_actions` entra na abertura, no turno e na continuação quando pedida, e nunca na resposta", () => {
+        expect(narratorTaskText({ kind: "narration", turnNumber: 1, declarations: [] }, { actionOptions: true })).toContain("chame `suggest_actions`")
+        expect(narratorTaskText({ kind: "narration", turnNumber: 3, declarations }, { actionOptions: true })).toContain("chame `suggest_actions`")
+        expect(narratorTaskText({ kind: "continuation", turnNumber: 3, round: 1, declarations, results: [] }, { actionOptions: true })).toContain("suggest_actions")
+        expect(narratorTaskText({ kind: "narration", turnNumber: 3, declarations })).not.toContain("suggest_actions")
+        expect(narratorTaskText({ kind: "answer", turnNumber: 3, characterName: "Lyra", question: "Há guardas?", declarations: [] }, { actionOptions: true })).not.toContain("suggest_actions")
+        // Com densidade e sugestões, as duas linhas vêm depois da tarefa.
+        const both = narratorTaskText({ kind: "narration", turnNumber: 3, declarations }, { density: "breve", actionOptions: true })
+        expect(both.indexOf("Tamanho desta narração")).toBeLessThan(both.indexOf("suggest_actions"))
+    })
+
+    it("o bloco das ferramentas do MCP lista `suggest_actions` só quando oferecida", () => {
+        expect(buildNarratorInstructions(context(), { kind: "mcp", server: "dndicas-maddox", turnToken: "t", actionOptions: true })).toContain(", suggest_actions,")
+        expect(buildNarratorInstructions(context(), { kind: "mcp", server: "dndicas-maddox", turnToken: "t" })).not.toContain("suggest_actions")
+    })
+})

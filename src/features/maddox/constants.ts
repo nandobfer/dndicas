@@ -430,6 +430,13 @@ export const MADDOX_SCENE_IMAGE_STYLE_MAX = 2000
 export const MADDOX_SCENE_IMAGE_CAPTION_GUIDE = 160
 export const MADDOX_SCENE_IMAGE_CAPTION_MAX = 500
 export const MADDOX_SCENE_IMAGE_DESCRIPTION_MAX = 4000
+/**
+ * Sugestões de ação (DND-30): até `MAX` por personagem em cada narração. `GUIDE` é o tamanho orientado de cada uma; `TEXT_MAX`
+ * é só o teto de PROTEÇÃO (corta e avisa, nunca invalida a chamada).
+ */
+export const MADDOX_ACTION_OPTIONS_MAX = 4
+export const MADDOX_ACTION_OPTION_GUIDE = 120
+export const MADDOX_ACTION_OPTION_TEXT_MAX = 300
 /** Imagens de referência enviadas ao gerador (personagens → NPCs → catálogo). */
 export const MADDOX_SCENE_IMAGE_REFERENCES_MAX = 6
 export const MADDOX_SCENE_IMAGE_REFERENCE_BYTES_MAX = 5 * 1024 * 1024

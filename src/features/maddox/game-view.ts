@@ -106,3 +106,35 @@ export function reminderBlockReason(state: Pick<MaddoxGameStateDto, "status"> & 
     if (!state.me.memberId || !state.me.ready) return "Conclua a entrevista de personagem com o Maddox antes de entrar no jogo."
     return null
 }
+
+/** Bloco de sugestões de ação abaixo de uma narração (DND-30). */
+export interface MaddoxActionOptionsView {
+    /** Narração abaixo da qual o bloco aparece. */
+    messageId: string
+    options: string[]
+    /** Sugestão que virou a minha declaração neste turno (`null` = nenhuma). */
+    chosen: string | null
+    /** Já declarei ou passei: as sugestões ficam visíveis, mas sem ação. */
+    disabled: boolean
+}
+
+const sameAction = (a: string, b: string) => a.trim().replace(/\s+/g, " ").toLocaleLowerCase("pt-BR") === b.trim().replace(/\s+/g, " ").toLocaleLowerCase("pt-BR")
+
+/**
+ * Sugestões de ação a mostrar (DND-30): só as da ÚLTIMA narração, e só quando ela é do turno atual, o turno dos jogadores está
+ * aberto fora do combate tático e eu posso declarar (pronto e elegível). Depois de declarar, ficam desabilitadas com a escolhida
+ * marcada; somem com a narração seguinte (que é outra mensagem) ou quando o turno do mestre começa.
+ */
+export function actionOptionsView(state: Pick<MaddoxGameStateDto, "status" | "turn" | "me">, messages: readonly Pick<MaddoxGameMessageDto, "id" | "kind" | "turnNumber" | "memberId" | "content" | "actionOptions">[]): MaddoxActionOptionsView | null {
+    if (state.status !== "active" || state.turn.phase !== "players" || state.turn.combatActor) return null
+    if (!state.me.memberId || !state.me.ready || !state.me.eligible) return null
+    const narration = [...messages].reverse().find((message) => message.kind === "narration")
+    if (!narration || narration.turnNumber !== state.turn.number || !narration.actionOptions?.length) return null
+    const mine = messages.find((message) => message.kind === "declaration" && message.turnNumber === state.turn.number && message.memberId === state.me.memberId)
+    return {
+        messageId: narration.id,
+        options: narration.actionOptions,
+        chosen: mine ? (narration.actionOptions.find((option) => sameAction(option, mine.content)) ?? null) : null,
+        disabled: state.me.declared,
+    }
+}

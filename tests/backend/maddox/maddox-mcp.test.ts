@@ -77,6 +77,8 @@ describe("MCP do Maddox (/api/maddox/mcp)", () => {
         expect(names).toEqual(expect.arrayContaining(["get_combat", "start_combat", "update_combat", "end_combat"]))
         // Imagens nas cenas (Maddox 10): a ferramenta existe no MCP e recusa pelo contexto (configuração, situação, cota).
         expect(names).toContain("request_scene_image")
+        // Sugestões de ação (DND-30): também no MCP; a própria ferramenta recusa fora da narração e no combate tático.
+        expect(names).toContain("suggest_actions")
         for (const tool of list.result!.tools!) expect(tool.inputSchema.properties).toHaveProperty("turno")
         const publicList = await rpc(publicRoute.POST, "tools/list")
         expect(publicList.result!.tools!.map((tool) => tool.name)).not.toContain("save_npc")

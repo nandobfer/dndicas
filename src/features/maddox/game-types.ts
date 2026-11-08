@@ -52,6 +52,8 @@ export interface MaddoxGameMessageDto {
     sceneImages?: MaddoxGameSceneImageDto[]
     /** Lembrança injetada por um jogador (`kind: "reminder"`, DND-25): o texto vem em `content`. */
     reminder?: MaddoxReminderDto | null
+    /** Sugestões de ação da narração para o personagem de quem vê (DND-30); as dos outros nunca chegam. */
+    actionOptions?: string[] | null
     createdAt: string
 }
 
