@@ -1,5 +1,5 @@
 import mongoose, { Schema, type Model, type Types } from "mongoose"
-import { MADDOX_CHARACTER_STATUSES, MADDOX_INTERVIEW_STATUSES, type MaddoxCharacterStatus, type MaddoxInterviewStatus } from "../constants"
+import { MADDOX_CHARACTER_PORTRAIT_STATUSES, MADDOX_CHARACTER_STATUSES, MADDOX_INTERVIEW_STATUSES, type MaddoxCharacterPortraitStatus, type MaddoxCharacterStatus, type MaddoxInterviewStatus } from "../constants"
 
 /**
  * Personagem jogável de uma campanha — `maddox_characters`. O perfil é narrativo (seções em Markdown,
@@ -10,8 +10,11 @@ export interface IMaddoxCharacter {
     campaignId: Types.ObjectId
     memberId: Types.ObjectId
     userId: string
+    /** Vazio até a entrevista combinar o nome (DND-31: o personagem nasce quando a entrevista começa). */
     name: string
     portraitUrl: string | null
+    /** Retrato gerado depois de confirmar a síntese da entrevista (DND-31); `status: null` = nunca pedido. */
+    portrait?: { status: MaddoxCharacterPortraitStatus | null; error: string | null; startedAt: Date | null; completedAt: Date | null }
     /** Seções narrativas (identidade, origem, personalidade, capacidades, equipamentos, relações, condição…). */
     profile: Record<string, string>
     sheetId: Types.ObjectId | null
@@ -33,8 +36,14 @@ const MaddoxCharacterSchema = new Schema<IMaddoxCharacter>(
         campaignId: { type: Schema.Types.ObjectId, ref: "MaddoxCampaign", required: true },
         memberId: { type: Schema.Types.ObjectId, ref: "MaddoxCampaignMember", required: true },
         userId: { type: String, required: true },
-        name: { type: String, required: true, trim: true },
+        name: { type: String, default: "", trim: true },
         portraitUrl: { type: String, default: null },
+        portrait: {
+            status: { type: String, enum: [...MADDOX_CHARACTER_PORTRAIT_STATUSES, null], default: null },
+            error: { type: String, default: null },
+            startedAt: { type: Date, default: null },
+            completedAt: { type: Date, default: null },
+        },
         profile: { type: Map, of: String, default: {} },
         sheetId: { type: Schema.Types.ObjectId, ref: "CharacterSheet", default: null },
         currentState: { type: String, default: "" },

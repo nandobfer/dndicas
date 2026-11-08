@@ -144,7 +144,7 @@ function streamFetch() {
 
 const { InterviewPage } = await import("@/features/maddox/components/interviews/InterviewPage")
 
-const lyra = { id: "ch1", name: "Lyra", portraitUrl: null, interviewStatus: "in-progress" as const, profile: {}, sheetSlug: null }
+const lyra = { id: "ch1", name: "Lyra", portraitUrl: null, portraitStatus: null, interviewStatus: "in-progress" as const, profile: {}, sheetSlug: null }
 const characterCampaign = (over: Partial<MaddoxCampaignDetailDto> = {}) => campaign({ rigor: "fiel-dnd", myRole: "player", status: "lobby", scenarioStatus: "done", myCharacter: lyra, ...over })
 const SCORES = { strength: 8, dexterity: 17, constitution: 12, intelligence: 14, wisdom: 9, charisma: 12 }
 const pendingCard = (over: Partial<NonNullable<MaddoxInterviewMessageDto["abilityScores"]>> = {}) => ({ status: "pending" as const, method: null, base: null, prefill: null, bonus: null, final: null, reason: "Hora dos atributos", submittedAt: null, ...over })

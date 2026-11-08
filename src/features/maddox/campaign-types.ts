@@ -1,12 +1,15 @@
 import type { WorldCatalog } from "./world-catalog"
-import type { MaddoxCampaignStatus, MaddoxDensityLevel, MaddoxInterviewStatus, MaddoxMemberRole, MaddoxRigorLevel, MaddoxScenarioStatus, MaddoxTurnPhase } from "./constants"
+import type { MaddoxCampaignStatus, MaddoxCharacterPortraitStatus, MaddoxDensityLevel, MaddoxInterviewStatus, MaddoxMemberRole, MaddoxRigorLevel, MaddoxScenarioStatus, MaddoxTurnPhase } from "./constants"
 
 /** DTOs das Campanhas Maddox (Maddox 1). */
 
 export interface MaddoxCampaignCharacterDto {
     id: string
+    /** Vazio até a entrevista combinar o nome (a tela mostra `MADDOX_CHARACTER_UNNAMED_LABEL`). */
     name: string
     portraitUrl: string | null
+    /** Retrato gerado ao concluir a entrevista (DND-31): `null` = nunca pedido. */
+    portraitStatus: MaddoxCharacterPortraitStatus | null
     interviewStatus: MaddoxInterviewStatus
     /** Perfil narrativo consolidado pela entrevista (seções de `MADDOX_PROFILE_SECTIONS`). */
     profile: Record<string, string>

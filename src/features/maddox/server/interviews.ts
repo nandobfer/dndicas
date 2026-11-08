@@ -24,7 +24,7 @@ import { MaddoxCampaignMemberModel, MaddoxCampaignModel, MaddoxCharacterModel, M
 import type { MaddoxSettings } from "../schemas"
 import type { MaddoxAbilityRollsDto, MaddoxAbilityScoresDto, MaddoxHitPointsDto, MaddoxInterviewDto, MaddoxInterviewMessageDto, MaddoxInterviewStateDto, MaddoxInterviewStreamLine } from "../interview-types"
 import type { MaddoxInterviewMessageInput } from "../interview-schemas"
-import { changed, loadMembership } from "./campaigns"
+import { changed, ensureCharacterDraft, loadMembership } from "./campaigns"
 import { notifyInterviewChanged } from "./campaign-realtime"
 import { createMarkupFilter } from "../catalog-markup"
 import { linkCatalogMentions, mentionsToMarkup } from "./catalog-mentions"
@@ -133,7 +133,7 @@ const sessionPurpose = (kind: MaddoxScriptKind): Exclude<MaddoxSessionPurpose, "
 const interviewFilter = (subject: InterviewSubject, kind: MaddoxScriptKind) => ({ campaignId: subject.campaign._id, kind, memberId: kind === "character" ? subject.member._id : null })
 
 /** Campanha, meu registro de membro e (na de personagem) meu personagem, com as regras de acesso. */
-export async function loadSubject(campaignId: string, kind: MaddoxScriptKind, userId: string, mode: "read" | "write"): Promise<InterviewSubject> {
+export async function loadSubject(campaignId: string, kind: MaddoxScriptKind, userId: string, mode: "read" | "write", options: { createCharacter?: boolean } = {}): Promise<InterviewSubject> {
     const { campaign, member } = await loadMembership(campaignId, userId)
     if (!member) throw new DomainError(404, "Campanha não encontrada", "NOT_FOUND")
     if (kind === "scenario" && campaign.ownerId !== userId) throw new DomainError(403, "Só o dono da campanha faz a entrevista de cenário com o Maddox.", "FORBIDDEN")
@@ -142,7 +142,13 @@ export async function loadSubject(campaignId: string, kind: MaddoxScriptKind, us
     if (MADDOX_INVITE_CLOSED_STATUSES.includes(campaign.status)) throw new DomainError(409, "A campanha foi encerrada: as entrevistas não podem mais ser alteradas.", "CAMPAIGN_CLOSED")
     if (kind === "character") {
         if (campaign.scenarioInterview?.status !== "done") throw new DomainError(409, "A entrevista de personagem começa depois que o dono definir o cenário com o Maddox.", "SCENARIO_PENDING")
-        if (!character) throw new DomainError(409, "Crie o personagem (nome e retrato) antes de começar a entrevista.", "CHARACTER_DRAFT_REQUIRED")
+        // DND-31: o personagem nasce quando a entrevista começa; nome e retrato vêm dela.
+        if (!character && options.createCharacter) {
+            // Valida o entrevistador antes de criar o personagem: indisponível não deixa esboço órfão.
+            await loadInterviewer()
+            return { campaign, member, character: await ensureCharacterDraft(campaign, member, userId) }
+        }
+        if (!character) throw new DomainError(409, "Comece a entrevista do personagem com o Maddox.", "CHARACTER_DRAFT_REQUIRED")
     }
     return { campaign, member, character }
 }
@@ -231,7 +237,7 @@ export async function promptContext(subject: InterviewSubject, kind: MaddoxScrip
             startingStage: subject.campaign.startingStage ?? "",
             worldCatalog: worldCatalogOf(subject.campaign.worldCatalog),
         },
-        character: subject.character ? { name: subject.character.name } : null,
+        character: subject.character ? { name: subject.character.name || null } : null,
         otherCharacters,
     }
 }
@@ -300,7 +306,7 @@ export async function prepareTurn(subject: InterviewSubject, kind: MaddoxScriptK
                 agent: model.agent,
                 model: model.model,
                 variant: model.variant,
-                title: kind === "scenario" ? `Maddox · cenário · ${subject.campaign.name}` : `Maddox · personagem ${subject.character?.name ?? ""} · ${subject.campaign.name}`,
+                title: kind === "scenario" ? `Maddox · cenário · ${subject.campaign.name}` : `Maddox · personagem ${subject.character?.name || "em criação"} · ${subject.campaign.name}`,
             })
         }
         return { subject, kind, userId, interview, token, userMessage, settings, model, opencodeSessionId, context }
@@ -566,7 +572,7 @@ const isDuplicateKey = (error: unknown) => typeof error === "object" && error !=
  */
 export async function startInterview(campaignId: string, kind: MaddoxScriptKind, userId: string): Promise<{ interview: MaddoxInterviewDto; turn: PreparedTurn | null }> {
     await dbConnect()
-    const subject = await loadSubject(campaignId, kind, userId, "write")
+    const subject = await loadSubject(campaignId, kind, userId, "write", { createCharacter: true })
     let doc = await MaddoxInterviewModel.findOne(interviewFilter(subject, kind)).lean<InterviewDoc>()
     if (!doc) {
         if (kind === "scenario" && !["lobby", "interview"].includes(subject.campaign.status)) throw new DomainError(409, "A entrevista de cenário só acontece antes do início da campanha.", "SCENARIO_LOCKED")
@@ -597,7 +603,7 @@ export async function startInterview(campaignId: string, kind: MaddoxScriptKind,
             entidade: MADDOX_CAMPAIGN_AUDIT_ENTITY,
             entidadeId: String(subject.campaign._id),
             acao: AcaoAuditoria.ATUALIZAR,
-            depois: { interview: kind === "scenario" ? "cenário iniciado" : `personagem iniciado: ${subject.character?.name}`, scriptVersion, rigor: subject.campaign.rigor },
+            depois: { interview: kind === "scenario" ? "cenário iniciado" : `personagem iniciado: ${subject.character?.name || "nome a combinar"}`, scriptVersion, rigor: subject.campaign.rigor },
         })
         await changed(subject.campaign._id)
     }

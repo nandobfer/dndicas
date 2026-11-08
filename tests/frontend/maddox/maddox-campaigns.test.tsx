@@ -45,7 +45,7 @@ const listItem = (over: Partial<MaddoxCampaignListItemDto> = {}): MaddoxCampaign
     ownerName: "Marina Dona",
     myRole: "owner",
     myCharacter: null,
-    members: [member("m1", "u-owner", "Marina Dona", "owner"), member("m2", "u-ana", "Ana Jogadora", "player", { id: "ch1", name: "Lyra", portraitUrl: null, interviewStatus: "pending", profile: {}, sheetSlug: null })],
+    members: [member("m1", "u-owner", "Marina Dona", "owner"), member("m2", "u-ana", "Ana Jogadora", "player", { id: "ch1", name: "Lyra", portraitUrl: null, portraitStatus: null, interviewStatus: "pending", profile: {}, sheetSlug: null })],
     turnNumber: 0,
     turnPhase: "master",
     startedAt: null,
@@ -266,14 +266,22 @@ describe("página da campanha (lobby)", () => {
         await waitFor(() => expect(del).toHaveBeenCalledWith("/maddox/campaigns/c1/members/m2"))
     })
 
-    it("cria o esboço do próprio personagem", async () => {
+    it("Criar personagem vai direto para a entrevista (sem formulário de nome e retrato); antes do cenário fica desabilitado", async () => {
+        get.mockImplementation(async (url: string) => (url.endsWith("/invite") ? ok({ token: TOKEN, rotatedAt: null }) : ok(detail({ scenarioStatus: "done" }))))
+        const view = renderWithQueryClient(<CampaignPage campaignId="c1" />)
+        const create = await screen.findByRole("link", { name: /Criar personagem/ })
+        expect(create).toHaveAttribute("href", "/campanhas/c1/entrevista/personagem")
+        fireEvent.click(create)
+        expect(screen.queryByRole("dialog")).not.toBeInTheDocument()
+        expect(screen.queryByLabelText("Nome do personagem")).not.toBeInTheDocument()
+        expect(put).not.toHaveBeenCalled()
+        view.unmount()
+
         get.mockImplementation(async (url: string) => (url.endsWith("/invite") ? ok({ token: TOKEN, rotatedAt: null }) : ok(detail())))
-        put.mockResolvedValue(ok(detail({ myCharacter: { id: "ch2", name: "Thorin", portraitUrl: null, interviewStatus: "pending", profile: {}, sheetSlug: null } })))
         renderWithQueryClient(<CampaignPage campaignId="c1" />)
-        fireEvent.click(await screen.findByRole("button", { name: /Criar personagem/ }))
-        fireEvent.change(await screen.findByLabelText("Nome do personagem"), { target: { value: "Thorin" } })
-        fireEvent.click(screen.getByRole("button", { name: "Salvar personagem" }))
-        await waitFor(() => expect(put).toHaveBeenCalledWith("/maddox/campaigns/c1/character", { name: "Thorin", portraitUrl: null }))
+        const pending = await screen.findByRole("button", { name: /Criar personagem/ })
+        expect(pending).toBeDisabled()
+        expect(pending).toHaveAttribute("title", "Disponível depois que o cenário estiver pronto")
     })
 
     it("jogador não vê o link nem pode remover; pode sair da campanha", async () => {
@@ -458,20 +466,42 @@ describe("página da campanha (lobby)", () => {
         expect(patch).not.toHaveBeenCalled()
     })
 
-    it("editar o personagem existente vem pré-preenchido e salva o mesmo personagem", async () => {
-        const lyra = { id: "ch1", name: "Lyra", portraitUrl: null, interviewStatus: "pending" as const, profile: {}, sheetSlug: null }
-        put.mockResolvedValue(ok(detail({ myRole: "player", myMemberId: "m2", myCharacter: { ...lyra, name: "Lyra Ventobravo" } })))
-        // A tela identifica o "você" pelo userId do useAuth (u-owner): o membro com personagem passa a ser o usuário logado.
-        const players = detail().members.map((item) => (item.id === "m2" ? { ...item, userId: "u-owner" } : { ...item, userId: "u-dono" }))
-        get.mockResolvedValue(ok(detail({ myRole: "player", myMemberId: "m2", myCharacter: lyra, members: players })))
+    it("não há edição de nome e retrato; personagem sem nome aparece como 'Personagem em criação'", async () => {
+        const draft = { id: "ch1", name: "", portraitUrl: null, portraitStatus: null, interviewStatus: "in-progress" as const, profile: {}, sheetSlug: null }
+        const players = detail().members.map((item) => (item.id === "m2" ? { ...item, userId: "u-owner", character: draft } : { ...item, userId: "u-dono" }))
+        get.mockResolvedValue(ok(detail({ myRole: "player", myMemberId: "m2", myCharacter: draft, members: players, scenarioStatus: "done" })))
         renderWithQueryClient(<CampaignPage campaignId="c1" />)
-        fireEvent.click(await screen.findByRole("button", { name: /Editar personagem/ }))
-        const name = (await screen.findByLabelText("Nome do personagem")) as HTMLInputElement
-        expect(name.value).toBe("Lyra")
-        expect(screen.getByText("Editar personagem", { selector: "h2" })).toBeInTheDocument()
-        fireEvent.change(name, { target: { value: "Lyra Ventobravo" } })
-        fireEvent.click(screen.getByRole("button", { name: "Salvar personagem" }))
-        await waitFor(() => expect(put).toHaveBeenCalledWith("/maddox/campaigns/c1/character", { name: "Lyra Ventobravo", portraitUrl: null }))
+        const row = (await screen.findByText("Personagem em criação")).closest("li")!
+        expect(within(row).getByRole("link", { name: /Entrevista do personagem/ })).toHaveAttribute("href", "/campanhas/c1/entrevista/personagem")
+        expect(screen.queryByRole("button", { name: /Editar personagem/ })).not.toBeInTheDocument()
+        expect(screen.queryByRole("button", { name: /Criar personagem/ })).not.toBeInTheDocument()
+    })
+
+    it("retrato: gerando mostra o aviso; pronto vira o avatar (sem iniciais); falhou oferece 'Gerar retrato de novo'", async () => {
+        const base = { id: "ch1", name: "Lyra Ventobravo", portraitUrl: null as string | null, portraitStatus: "generating" as "generating" | "failed" | "done", interviewStatus: "done" as const, profile: {}, sheetSlug: null }
+        const withCharacter = (character: typeof base) => {
+            const members = detail().members.map((item) => (item.id === "m2" ? { ...item, userId: "u-owner", character, ready: true } : { ...item, userId: "u-dono" }))
+            return detail({ myRole: "player", myMemberId: "m2", myCharacter: character, members, scenarioStatus: "done" })
+        }
+        get.mockResolvedValue(ok(withCharacter(base)))
+        let view = renderWithQueryClient(<CampaignPage campaignId="c1" />)
+        expect(await screen.findByTestId("portrait-generating")).toHaveTextContent("Gerando retrato…")
+        expect(screen.queryByRole("button", { name: /Gerar retrato/ })).not.toBeInTheDocument()
+        view.unmount()
+
+        get.mockResolvedValue(ok(withCharacter({ ...base, portraitStatus: "done", portraitUrl: "/api/upload?key=lyra.png" })))
+        view = renderWithQueryClient(<CampaignPage campaignId="c1" />)
+        const row = (await screen.findByText("Lyra Ventobravo")).closest("li")!
+        expect(row).toBeTruthy()
+        expect(screen.queryByTestId("portrait-generating")).not.toBeInTheDocument()
+        expect(screen.queryByRole("button", { name: /Gerar retrato/ })).not.toBeInTheDocument()
+        view.unmount()
+
+        get.mockResolvedValue(ok(withCharacter({ ...base, portraitStatus: "failed" })))
+        post.mockResolvedValue(ok(withCharacter({ ...base, portraitStatus: "generating" })))
+        renderWithQueryClient(<CampaignPage campaignId="c1" />)
+        fireEvent.click(await screen.findByRole("button", { name: /Gerar retrato de novo/ }))
+        await waitFor(() => expect(post).toHaveBeenCalledWith("/maddox/campaigns/c1/character/portrait", {}))
     })
 
     it("campanha que não é minha: 404 vira 'Campanha não encontrada'", async () => {
@@ -521,7 +551,7 @@ describe("convite", () => {
 
 describe("lobby com as entrevistas (Maddox 2)", () => {
     const invite = (url: string, body: unknown) => (url.endsWith("/invite") ? ok({ token: TOKEN, rotatedAt: null }) : ok(body))
-    const lyra = (over: Partial<NonNullable<MaddoxCampaignMemberDto["character"]>> = {}) => ({ id: "ch1", name: "Lyra", portraitUrl: null, interviewStatus: "pending" as const, profile: {}, sheetSlug: null, ...over })
+    const lyra = (over: Partial<NonNullable<MaddoxCampaignMemberDto["character"]>> = {}) => ({ id: "ch1", name: "Lyra", portraitUrl: null, portraitStatus: null, interviewStatus: "pending" as const, profile: {}, sheetSlug: null, ...over })
 
     it("dono com o cenário pendente vê a chamada para a entrevista de cenário", async () => {
         get.mockImplementation(async (url: string) => invite(url, detail()))
@@ -603,7 +633,7 @@ describe("lobby com as entrevistas (Maddox 2)", () => {
 
 describe("lobby com a mesa (Maddox 3)", () => {
     const invite = (url: string, body: unknown) => (url.endsWith("/invite") ? ok({ token: TOKEN, rotatedAt: null }) : ok(body))
-    const ready = (name: string) => ({ id: `ch-${name}`, name, portraitUrl: null, interviewStatus: "done" as const, profile: {}, sheetSlug: null })
+    const ready = (name: string) => ({ id: `ch-${name}`, name, portraitUrl: null, portraitStatus: "done" as const, interviewStatus: "done" as const, profile: {}, sheetSlug: null })
     const readyMembers = () => detail().members.map((item) => ({ ...item, character: ready(item.id === "m1" ? "Kael" : "Lyra"), ready: true }))
 
     it("dono com o cenário e a própria entrevista prontos inicia a campanha com confirmação e vai para a mesa", async () => {
