@@ -1,12 +1,14 @@
 "use client"
 
 import { useMemo, type ReactNode } from "react"
+import type { UniverseLayoutConfig } from "@engramind/client"
 import Link from "next/link"
 import { usePathname, useRouter, useSearchParams } from "next/navigation"
 import { toast } from "sonner"
 import { createHttpDataSource, EngramindProvider } from "@engramind/client/react"
 import { withBasePath } from "@/lib/base-path"
 import { ENGRAMIND_APP } from "../../constants"
+import { useUniverseLayout } from "../../hooks/useUniverseLayout"
 import { campaignChannelLabels, type CampaignChannelName } from "../../network/channel-labels"
 
 const dataSource = createHttpDataSource({ basePath: withBasePath("/api/engramind") })
@@ -17,11 +19,14 @@ const NO_CAMPAIGNS: readonly CampaignChannelName[] = []
  * Provider da lib `@engramind/client` no modo app: proxy e SSE do dndicas (`/api/engramind/**`), links e
  * navegação do Next, toasts do sonner e o tema do app (a lib usa só os tokens do Tailwind/shadcn). Os
  * textos padrão da lib já são pt-BR. "Configurar" leva à integração. `campaigns` (id e nome, lidos pela
- * página) viram os rótulos dos canais das campanhas: o nome no lugar do id (DND-29).
+ * página) viram os rótulos dos canais das campanhas: o nome no lugar do id (DND-29). `universeLayout` (lido
+ * pela página no servidor; `null` = padrão da lib) é o layout dos universos da aba Visualização (DND-34): a
+ * consulta parte dele e é relida quando o SSE avisa `universe-layout.updated`, sem recarregar a página.
  */
-export function MemoriesProvider({ children, campaigns = NO_CAMPAIGNS }: { children: ReactNode; campaigns?: readonly CampaignChannelName[] }) {
+export function MemoriesProvider({ children, campaigns = NO_CAMPAIGNS, universeLayout = null }: { children: ReactNode; campaigns?: readonly CampaignChannelName[]; universeLayout?: UniverseLayoutConfig | null }) {
     const router = useRouter()
     const channelLabels = useMemo(() => campaignChannelLabels(campaigns), [campaigns])
+    const layout = useUniverseLayout({ initial: universeLayout, live: true })
     return (
         <EngramindProvider
             dataSource={dataSource}
@@ -30,6 +35,7 @@ export function MemoriesProvider({ children, campaigns = NO_CAMPAIGNS }: { child
             appName="DnDicas"
             navigation={navigation}
             channelLabels={channelLabels}
+            universeLayout={layout.data && !layout.data.isDefault ? layout.data.config : null}
             renderLink={({ href, children, ...props }) => (
                 <Link href={href} {...props}>
                     {children}

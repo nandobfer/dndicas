@@ -8,8 +8,8 @@ export const ENGRAMIND_AUDIT_ENTITY = "Engramind"
 export { AcaoAuditoria }
 
 /** Auditoria das operações do Engramind (entrada já sem segredos nem textos de memória). */
-export async function auditEngramind(actorId: string, operation: string, acao: AcaoAuditoriaTipo, depois?: Record<string, unknown>): Promise<void> {
-    await recordAudit({ userId: actorId, entidade: ENGRAMIND_AUDIT_ENTITY, entidadeId: operation, acao, ...(depois ? { depois } : {}) })
+export async function auditEngramind(actorId: string, operation: string, acao: AcaoAuditoriaTipo, depois?: Record<string, unknown>, antes?: Record<string, unknown>): Promise<void> {
+    await recordAudit({ userId: actorId, entidade: ENGRAMIND_AUDIT_ENTITY, entidadeId: operation, acao, ...(depois ? { depois } : {}), ...(antes ? { antes } : {}) })
 }
 
 /** Avisa as telas da integração (`{ type }`, sem textos nem valores). Nunca lança. */

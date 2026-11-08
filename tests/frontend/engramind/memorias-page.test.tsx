@@ -1,7 +1,7 @@
 /** @vitest-environment happy-dom */
 import React from "react"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
-import { fireEvent, render, screen, waitFor, within } from "@testing-library/react"
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react"
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
 import { xyflowMock } from "../../helpers/xyflow"
 
@@ -10,6 +10,30 @@ vi.mock("next/link", () => ({ default: ({ children, href }: { children: React.Re
 const nav = vi.hoisted(() => ({ push: vi.fn(), replace: vi.fn(), params: new URLSearchParams() }))
 vi.mock("next/navigation", () => ({ useRouter: () => ({ push: nav.push, replace: nav.replace }), usePathname: () => "/memorias", useSearchParams: () => nav.params }))
 vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn(), info: vi.fn(), warning: vi.fn() } }))
+
+/** O `universeLayout` que cada render do provider da lib recebeu (DND-34). */
+const providerLayouts = vi.hoisted(() => [] as unknown[])
+vi.mock("@engramind/client/react", async (importOriginal) => {
+    const actual = await importOriginal<typeof import("@engramind/client/react")>()
+    const Provider = (props: React.ComponentProps<typeof actual.EngramindProvider>) => {
+        providerLayouts.push(props.universeLayout ?? null)
+        return <actual.EngramindProvider {...props} />
+    }
+    return { ...actual, EngramindProvider: Provider }
+})
+/** `GET /engramind/universe-layout` pelo axios do app (o resto da rede vai pelo `fetch` da lib). */
+const layoutApi = vi.hoisted(() => ({ data: null as unknown, calls: 0 }))
+vi.mock("@/lib/api", async (importOriginal) => {
+    const actual = await importOriginal<typeof import("@/lib/api")>()
+    const get = async (path: string) => {
+        if (path !== "/engramind/universe-layout") throw new Error(`rota inesperada: ${path}`)
+        layoutApi.calls += 1
+        return { data: { success: true, data: layoutApi.data } }
+    }
+    return { ...actual, api: { ...actual.api, get } }
+})
+
+import { DEFAULT_UNIVERSE_LAYOUT, type UniverseLayoutConfig } from "@engramind/client"
 
 const { MemoriasPage } = await import("@/features/engramind/components/page/MemoriasPage")
 
@@ -44,17 +68,30 @@ const responses: Record<string, unknown> = {
 const requested: string[] = []
 
 class FakeEventSource {
+    static instances: FakeEventSource[] = []
     onmessage = null
     onerror = null
     readyState = 1
-    constructor(readonly url: string) {}
-    addEventListener() {}
+    listeners = new Map<string, ((message: { data: string }) => void)[]>()
+    constructor(readonly url: string) {
+        FakeEventSource.instances.push(this)
+    }
+    addEventListener(type: string, listener: (message: { data: string }) => void) {
+        this.listeners.set(type, [...(this.listeners.get(type) ?? []), listener])
+    }
     removeEventListener() {}
     close() {}
+    emit(event: unknown) {
+        for (const listener of this.listeners.get("engramind") ?? []) listener({ data: JSON.stringify(event) })
+    }
 }
 
 beforeEach(() => {
     requested.length = 0
+    providerLayouts.length = 0
+    layoutApi.calls = 0
+    layoutApi.data = null
+    FakeEventSource.instances = []
     vi.stubGlobal("EventSource", FakeEventSource)
     vi.stubGlobal("fetch", async (input: RequestInfo | URL) => {
         const url = new URL(String(input instanceof Request ? input.url : input), "http://localhost")
@@ -68,7 +105,7 @@ afterEach(() => {
     nav.params = new URLSearchParams()
 })
 
-const mount = (props: { configured: boolean; canConfigure: boolean; campaigns?: { id: string; name: string }[] }) =>
+const mount = (props: { configured: boolean; canConfigure: boolean; campaigns?: { id: string; name: string }[]; universeLayout?: UniverseLayoutConfig | null }) =>
     render(
         <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
             <MemoriasPage {...props} />
@@ -95,6 +132,61 @@ describe("/memorias", () => {
         expect(await screen.findByTestId("agent-node-dndicas/opex")).toBeInTheDocument()
         expect(requested.every((path) => path.startsWith("/api/engramind/"))).toBe(true)
         expect(requested).not.toContain("/api/engramind/apps")
+    })
+
+    it("sem layout gravado: a rede recebe null e fica com o desenho padrão da lib", async () => {
+        mount({ configured: true, canConfigure: true, universeLayout: null })
+        expect(await screen.findByTestId("agent-node-dndicas/opex")).toBeInTheDocument()
+        expect(providerLayouts.length).toBeGreaterThan(0)
+        expect(providerLayouts.every((layout) => layout === null)).toBe(true)
+        expect(layoutApi.calls).toBe(0)
+    })
+
+    it("com layout gravado: a rede recebe a configuração lida no servidor, sem nova consulta", async () => {
+        const spiral: UniverseLayoutConfig = { ...DEFAULT_UNIVERSE_LAYOUT, layout: "spiral", particleMaxPx: 40 }
+        mount({ configured: true, canConfigure: true, universeLayout: spiral })
+        expect(await screen.findByTestId("agent-node-dndicas/opex")).toBeInTheDocument()
+        expect(providerLayouts.at(-1)).toEqual(spiral)
+        expect(layoutApi.calls).toBe(0)
+    })
+
+    it("tempo real: universe-layout.updated no SSE relê o layout e a rede passa a usá-lo sem recarregar", async () => {
+        mount({ configured: true, canConfigure: true, universeLayout: null })
+        expect(await screen.findByTestId("agent-node-dndicas/opex")).toBeInTheDocument()
+        const imported: UniverseLayoutConfig = { ...DEFAULT_UNIVERSE_LAYOUT, layout: "spiral", ringGap: 84 }
+        layoutApi.data = { config: imported, isDefault: false, updatedAt: "2026-11-08T03:00:00.000Z" }
+        const source = FakeEventSource.instances.find((instance) => instance.url.endsWith("/api/engramind/events"))
+        expect(source).toBeDefined()
+        // Evento de memória não relê o layout; só o do layout.
+        await act(async () => source!.emit({ type: "memory.created", channel: "dndicas/opex/global" }))
+        expect(layoutApi.calls).toBe(0)
+        await act(async () => source!.emit({ type: "universe-layout.updated" }))
+        await waitFor(() => expect(providerLayouts.at(-1)).toEqual(imported))
+        expect(layoutApi.calls).toBe(1)
+        expect(FakeEventSource.instances.filter((instance) => instance.url.endsWith("/api/engramind/events"))).toHaveLength(1)
+    })
+
+    it("voltar a /memorias com o cache ainda fresco usa o layout lido no servidor, não o antigo", async () => {
+        const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+        const page = (universeLayout: UniverseLayoutConfig | null) => (
+            <QueryClientProvider client={client}>
+                <MemoriasPage configured canConfigure universeLayout={universeLayout} />
+            </QueryClientProvider>
+        )
+        const first = render(page({ ...DEFAULT_UNIVERSE_LAYOUT, layout: "spiral" }))
+        expect(await screen.findByTestId("agent-node-dndicas/opex")).toBeInTheDocument()
+        first.unmount()
+        // Outro admin importou B enquanto a rede estava desmontada (sem SSE); o servidor entrega B na volta.
+        const imported: UniverseLayoutConfig = { ...DEFAULT_UNIVERSE_LAYOUT, layout: "rings", ringGap: 90 }
+        render(page(imported))
+        expect(await screen.findByTestId("agent-node-dndicas/opex")).toBeInTheDocument()
+        expect(providerLayouts.at(-1)).toEqual(imported)
+        // E se B for o padrão (restaurado), a rede volta ao padrão.
+        cleanup()
+        render(page(null))
+        expect(await screen.findByTestId("agent-node-dndicas/opex")).toBeInTheDocument()
+        expect(providerLayouts.at(-1)).toBeNull()
+        expect(layoutApi.calls).toBe(0)
     })
 })
 

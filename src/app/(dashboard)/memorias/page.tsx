@@ -4,6 +4,7 @@ import { can } from "@/features/perfix/catalog"
 import { MEMORIES_VIEW_PERMISSION } from "@/features/engramind/constants"
 import { engramindConnection } from "@/features/engramind/server/client"
 import { listCampaignChannelNames } from "@/features/engramind/server/channel-labels"
+import { readUniverseLayoutForPage } from "@/features/engramind/server/universe-layout"
 import { MemoriasPage } from "@/features/engramind/components/page/MemoriasPage"
 
 export const dynamic = "force-dynamic"
@@ -13,5 +14,6 @@ export default async function Page() {
     const access = await pageAccess(MEMORIES_VIEW_PERMISSION)
     const configured = Boolean(await engramindConnection().catch(() => null))
     const campaigns = configured ? await listCampaignChannelNames() : []
-    return <MemoriasPage configured={configured} canConfigure={can(access.effective, "integrations.engramind.edit")} campaigns={campaigns} />
+    const universeLayout = configured ? await readUniverseLayoutForPage() : null
+    return <MemoriasPage configured={configured} canConfigure={can(access.effective, "integrations.engramind.edit")} campaigns={campaigns} universeLayout={universeLayout} />
 }

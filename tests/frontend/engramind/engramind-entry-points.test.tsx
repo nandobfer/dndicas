@@ -26,12 +26,25 @@ vi.mock("@/features/engramind/hooks/useEngramind", () => ({
 vi.mock("@/features/engramind/components/integration/ConnectionTab", () => ({ ConnectionTab: () => <p>conteúdo da aba Conexão</p> }))
 vi.mock("@/features/engramind/components/integration/migration/MigrationTab", () => ({ MigrationTab: () => <p>conteúdo da aba Migração</p> }))
 vi.mock("@/features/engramind/components/integration/SyncTab", () => ({ SyncTab: () => <p>conteúdo da aba Sincronização</p> }))
+vi.mock("@/features/engramind/components/integration/universe-layout/UniverseLayoutTab", () => ({ UniverseLayoutTab: () => <p>conteúdo da aba Visualização</p> }))
+/** Layout dos universos lido no servidor pelas páginas (DND-34; `readUniverseLayoutForPage` nunca lança). */
+const layout = vi.hoisted(() => ({ value: null as unknown, reads: 0 }))
+vi.mock("@/features/engramind/server/universe-layout", () => ({
+    readUniverseLayoutForPage: vi.fn(async () => {
+        layout.reads += 1
+        return layout.value
+    }),
+}))
 vi.mock("@/features/perfix/server/page-access", () => ({ pageAccess: vi.fn(async () => ({ effective: access.effective })) }))
 vi.mock("@/features/engramind/server/client", () => ({ engramindConnection: vi.fn(async () => connection.value) }))
 vi.mock("@/features/engramind/server/channel-labels", () => ({ listCampaignChannelNames: campaignNames }))
 vi.mock("@/features/engramind/components/page/MemoriasPage", () => ({
-    MemoriasPage: ({ configured, canConfigure, campaigns }: { configured: boolean; canConfigure: boolean; campaigns?: { name: string }[] }) => <p data-testid="memorias">{`rede configured=${configured} canConfigure=${canConfigure} campanhas=${campaigns?.map((item) => item.name).join(",")}`}</p>,
-    MemoriesChannelPage: ({ slug, configured, canConfigure, campaigns }: { slug: string; configured: boolean; canConfigure: boolean; campaigns?: { name: string }[] }) => <p data-testid="memorias">{`canal ${slug} configured=${configured} canConfigure=${canConfigure} campanhas=${campaigns?.map((item) => item.name).join(",")}`}</p>,
+    MemoriasPage: ({ configured, canConfigure, campaigns, universeLayout }: { configured: boolean; canConfigure: boolean; campaigns?: { name: string }[]; universeLayout?: unknown }) => (
+        <p data-testid="memorias">{`rede configured=${configured} canConfigure=${canConfigure} campanhas=${campaigns?.map((item) => item.name).join(",")} layout=${JSON.stringify(universeLayout ?? null)}`}</p>
+    ),
+    MemoriesChannelPage: ({ slug, configured, canConfigure, campaigns, universeLayout }: { slug: string; configured: boolean; canConfigure: boolean; campaigns?: { name: string }[]; universeLayout?: unknown }) => (
+        <p data-testid="memorias">{`canal ${slug} configured=${configured} canConfigure=${canConfigure} campanhas=${campaigns?.map((item) => item.name).join(",")} layout=${JSON.stringify(universeLayout ?? null)}`}</p>
+    ),
 }))
 
 const { IntegrationEditor } = await import("@/features/integrations/components/detail/IntegrationEditor")
@@ -56,12 +69,14 @@ const detail: IntegrationDetailDto = {
 beforeEach(() => {
     access.effective = new Set(["memories.view"])
     connection.value = null
+    layout.value = null
+    layout.reads = 0
 })
 
 describe("IntegrationEditor com a integração Engramind", () => {
-    it("mostra o formulário do Engramind com as abas Conexão, Migração e Sincronização", () => {
+    it("mostra o formulário do Engramind com as abas Conexão, Migração, Sincronização e Visualização", () => {
         render(<IntegrationEditor id="engramind" data={detail} />)
-        for (const name of ["Conexão", "Migração", "Sincronização"]) expect(screen.getByRole("tab", { name: new RegExp(name) })).toBeInTheDocument()
+        for (const name of ["Conexão", "Migração", "Sincronização", "Visualização"]) expect(screen.getByRole("tab", { name: new RegExp(name) })).toBeInTheDocument()
         expect(screen.getByText("conteúdo da aba Conexão")).toBeInTheDocument()
     })
 })
@@ -88,5 +103,21 @@ describe("páginas /memorias", () => {
         connection.value = null
         render(await ChannelRoute({ params: Promise.resolve({ channel: "dndicas%2Fopex%2Fglobal" }) }))
         expect(screen.getAllByTestId("memorias")[1]).toHaveTextContent("canal dndicas/opex/global configured=false")
+    })
+
+    it("com a integração configurada, lê o layout dos universos no servidor e repassa à rede e ao canal", async () => {
+        connection.value = { baseUrl: "https://engramind.test", appToken: "t", agentTokens: {} }
+        layout.value = { layout: "spiral" }
+        render(await MemoriasRoute())
+        expect(screen.getByTestId("memorias")).toHaveTextContent('layout={"layout":"spiral"}')
+        render(await ChannelRoute({ params: Promise.resolve({ channel: "dndicas%2Fmaddox" }) }))
+        expect(screen.getAllByTestId("memorias")[1]).toHaveTextContent('layout={"layout":"spiral"}')
+        expect(layout.reads).toBe(2)
+    })
+
+    it("sem a integração configurada, não lê o layout (padrão)", async () => {
+        render(await MemoriasRoute())
+        expect(screen.getByTestId("memorias")).toHaveTextContent("layout=null")
+        expect(layout.reads).toBe(0)
     })
 })

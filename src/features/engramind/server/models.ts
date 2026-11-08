@@ -3,7 +3,8 @@ import { Schema, model, models, type Model } from "mongoose"
 /**
  * Coleções do Engramind no dndicas (DND-21):
  * - `engramind_state` (singleton `global`): último bootstrap (passos, sem segredos), saúde do contexto,
- *   estado da sincronização das campanhas e o que o Engramind ainda não aceita para o token de app.
+ *   estado da sincronização das campanhas, o que o Engramind ainda não aceita para o token de app e o
+ *   layout dos universos da rede.
  * - `engramind_context_cache`: último bloco de contexto por agente + canais (`_id` = sha256), usado
  *   quando o Engramind cai.
  * - `engramind_webhook_events`: ids dos eventos recebidos (TTL 24 h), para descartar repetidos.
@@ -44,6 +45,8 @@ export interface IEngramindState {
     campaignBackups: { id: string; count: number; sha256: string; createdAt: Date; parts: number }[]
     /** Resultado da última execução de "Mover as memórias das campanhas". */
     campaignMove: { at: Date; results: import("../types").CampaignMoveRowDto[] } | null
+    /** Layout dos universos da rede (DND-34, mesmo formato do Opex). `null`/ausente = padrão da lib. */
+    universeLayout?: { config: Record<string, unknown>; updatedAt: Date } | null
 }
 
 export interface IEngramindContextCache {
@@ -74,6 +77,7 @@ const stateSchema = new Schema<IEngramindState>(
         channelSettings: { type: Schema.Types.Mixed, default: null },
         campaignBackups: { type: Schema.Types.Mixed, default: () => [] },
         campaignMove: { type: Schema.Types.Mixed, default: null },
+        universeLayout: { type: Schema.Types.Mixed, default: null },
     },
     { collection: "engramind_state", versionKey: false, minimize: false },
 )

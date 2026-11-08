@@ -163,3 +163,8 @@ export const ENGRAMIND_UPDATED_EVENT = "engramind-updated"
 
 /** Espera máxima de um turno pelo provisionamento sob demanda do token do agente. */
 export const LAZY_WAIT_MS = 3_000
+
+/** Layout dos universos (DND-34): `{ type }` no canal da integração (aba Visualização). */
+export const UNIVERSE_LAYOUT_EVENT_TYPE = "universe-layout"
+/** Layout dos universos (DND-34): evento no SSE da rede (`/api/engramind/events`), que a lib ignora e `/memorias` escuta. */
+export const UNIVERSE_LAYOUT_LIVE_EVENT = "universe-layout.updated"

@@ -126,3 +126,12 @@ export interface MemoryMigrationDto {
     firstCompletedAt: string | null
     lastImportAt: string | null
 }
+
+/** Layout dos universos da rede (`GET /api/engramind/universe-layout`, DND-34; o mesmo contrato do Opex). */
+export interface UniverseLayoutDto {
+    /** Configuração completa em uso (o padrão da lib quando nada foi gravado). */
+    config: import("@engramind/client").UniverseLayoutConfig
+    /** `true` quando nada foi gravado (vale o padrão). */
+    isDefault: boolean
+    updatedAt: string | null
+}
