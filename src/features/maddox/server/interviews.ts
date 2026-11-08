@@ -220,7 +220,8 @@ export async function promptContext(subject: InterviewSubject, kind: MaddoxScrip
     let otherCharacters: string[] = []
     if (kind === "character") {
         const others = await MaddoxCharacterModel.find({ campaignId: subject.campaign._id, _id: { $ne: subject.character?._id } }).select("name").lean<{ name: string }[]>()
-        otherCharacters = others.map((item) => item.name)
+        // Personagem ainda sem nome (DND-31: nasce na entrevista) não entra na lista.
+        otherCharacters = others.map((item) => item.name).filter(Boolean)
     }
     const { memoryBlock } = await import("@/features/ai/server/memory-block")
     return {

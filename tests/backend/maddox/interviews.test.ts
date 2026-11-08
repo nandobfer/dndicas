@@ -518,6 +518,20 @@ describe("entrevista de personagem", () => {
         expect(recordAudit).toHaveBeenCalledWith(expect.objectContaining({ acao: "CRIAR", depois: { character: "criado pela entrevista" } }))
     })
 
+    it("personagem de outro jogador ainda sem nome não entra em 'Outros personagens da mesa'; com nome, entra", async () => {
+        const campaignId = await newCampaign()
+        await finishScenario(campaignId)
+        await run((await interviews.startInterview(campaignId, "character", ids.owner)).turn!)
+        await run((await interviews.startInterview(campaignId, "character", ids.ana)).turn!)
+        expect(streamCalls.at(-1)!.instructions).not.toContain("## Outros personagens da mesa")
+        expect(streamCalls.at(-1)!.instructions).not.toMatch(/^- $/m)
+
+        await nameMaddoxCharacter(campaignId, ids.owner, "Kael")
+        scripted.push(reply("E a sua origem?"))
+        await run(await interviews.sendInterviewMessage(campaignId, "character", { content: "Uma ladra." }, ids.ana))
+        expect(streamCalls.at(-1)!.instructions).toContain("## Outros personagens da mesa\n- Kael")
+    })
+
     it("duas abas começando ao mesmo tempo criam um único personagem", async () => {
         const campaignId = await newCampaign()
         await finishScenario(campaignId)
@@ -734,6 +748,29 @@ describe("retrato do personagem (DND-31)", () => {
         // Pronto: nada de nova geração.
         await expect(portraits.retryCharacterPortrait(campaignId, ids.ana)).rejects.toMatchObject({ status: 409, code: "PORTRAIT_NOT_RETRYABLE" })
         expect(recordAudit).toHaveBeenCalledWith(expect.objectContaining({ depois: expect.objectContaining({ portrait: "nova tentativa" }) }))
+    })
+
+    it("gerador que não responde: o teto de tempo aborta a geração, o retrato fica 'failed' e a nova tentativa funciona", async () => {
+        const original = portraits.portraitTiming.timeoutMs
+        portraits.portraitTiming.timeoutMs = 50
+        let signal: AbortSignal | undefined
+        generateAndStoreDndImage.mockImplementationOnce((input: { signal?: AbortSignal }) => {
+            signal = input.signal
+            return new Promise(() => undefined)
+        })
+        try {
+            const campaignId = await concludedCharacter()
+            await portraits.waitForCharacterPortraits()
+            expect(signal?.aborted).toBe(true)
+            expect(await MaddoxCharacterModel.findOne({ userId: ids.ana }).lean()).toMatchObject({ portraitUrl: null, portrait: { status: "failed", error: "Não foi possível gerar o retrato do personagem." } })
+
+            await portraits.retryCharacterPortrait(campaignId, ids.ana)
+            await portraits.waitForCharacterPortraits()
+            expect(generateAndStoreDndImage).toHaveBeenCalledTimes(2)
+            expect(await MaddoxCharacterModel.findOne({ userId: ids.ana }).lean()).toMatchObject({ portraitUrl: "/api/upload?key=maddox/retrato.png", portrait: { status: "done" } })
+        } finally {
+            portraits.portraitTiming.timeoutMs = original
+        }
     })
 
     it("antes de concluir a entrevista não há retrato para gerar (409 INTERVIEW_REQUIRED)", async () => {

@@ -1163,7 +1163,7 @@ Código: `server/character-portrait.ts` (prompt puro `buildCharacterPortraitProm
   estilo visual da mesa (`settings.sceneImages.style`), aparência consolidada (raça/classe/subclasse das escolhas da ficha,
   aparência, idade, altura, peso, olhos, pele, cabelo) e as seções identidade, origem, capacidades e equipamentos do perfil (menções
   viram texto; "a definir" fica de fora). Arquivo em `maddox/campaigns/{id}/characters/{personagem}-{ts}`; consumo na origem
-  `maddox-character-portrait`; teto de 120 s.
+  `maddox-character-portrait`; teto de 120 s (`portraitTiming.timeoutMs`, encurtado nos testes), que aborta o pedido ao gerador.
 - **Resultado:** `portraitUrl` (substitui inclusive o retrato enviado no fluxo antigo) e a `photo` da ficha D&D ligada. Como tudo lê
   `portraitUrl`, o retrato vira o avatar no lobby, no card da lista, no perfil, na mesa (falas, testes, combate, iniciativa, "Na
   mesa"), no diário e serve de referência de aparência nas imagens de cena. Sem retrato, o `MemberAvatar` cai na foto do usuário
@@ -1221,7 +1221,7 @@ memória, `campaign-routes.test.ts`, `grant-maddox-play.test.ts`) e `tests/front
 (`maddox-tab.test.tsx`, `maddox-campaigns.test.tsx`, `maddox-campaigns-realtime.test.tsx`; happy-dom).
 DND-31: `interviews.test.ts` (personagem criado ao começar, corrida de duas abas, entrevistador indisponível sem esboço, nome
 obrigatório com 409 e reaplicação, nome longo cortado, retrato gerado uma vez com o pedido certo e a foto da ficha substituída,
-falha e nova tentativa concorrente, personagem antigo sem imagem, retrato preso), `interview-prompt.test.ts` (regra do nome),
+falha e nova tentativa concorrente, teto de tempo com gerador que não responde, personagem antigo sem imagem, retrato preso, personagem sem nome fora de "Outros personagens da mesa"), `interview-prompt.test.ts` (regra do nome),
 `campaigns.test.ts` (`ensureCharacterDraft`), `campaign-routes.test.ts` (rota do retrato), `maddox-campaigns.test.tsx` ("Criar
 personagem" vai à entrevista, sem edição, "Personagem em criação", gerando/pronto/falhou) e `maddox-interview.test.tsx`. Os testes
 que só precisam de um nome antes da consolidação usam `tests/helpers/maddox-character.ts` (`nameMaddoxCharacter`); os de ficha

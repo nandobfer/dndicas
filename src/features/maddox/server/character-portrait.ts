@@ -31,6 +31,9 @@ type PortraitRuntime = { running: Map<string, Promise<void>> }
 const globalForPortraits = globalThis as typeof globalThis & { __maddoxPortraits?: PortraitRuntime }
 const runtime: PortraitRuntime = (globalForPortraits.__maddoxPortraits ??= { running: new Map() })
 
+/** Teto da geração (mutável só para os testes encurtarem, como o `combatTiming` do combate tático). */
+export const portraitTiming = { timeoutMs: MADDOX_CHARACTER_PORTRAIT_TIMEOUT_MS }
+
 const APPEARANCE_FIELDS: readonly [keyof CharacterSheetSeed, string][] = [
     ["race", "Raça"],
     ["class", "Classe"],
@@ -155,7 +158,7 @@ export async function runCharacterPortrait(characterId: string): Promise<void> {
                     consumptionSubject: String(campaignId),
                     signal,
                 }),
-            MADDOX_CHARACTER_PORTRAIT_TIMEOUT_MS,
+            portraitTiming.timeoutMs,
         )
         const saved = await MaddoxCharacterModel.updateOne(
             { _id: claimed._id, "portrait.status": "generating" },
