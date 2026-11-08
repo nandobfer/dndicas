@@ -40,7 +40,6 @@ const campaign = (over: Partial<MaddoxCampaignDetailDto> = {}): MaddoxCampaignDe
     rigor: "equilibrado",
     status: "interview",
     coverUrl: null,
-    lastSceneImageUrl: null,
     ownerId: "u-owner",
     ownerName: "Marina Dona",
     myRole: "owner",

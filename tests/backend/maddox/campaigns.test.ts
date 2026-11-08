@@ -188,13 +188,22 @@ describe("Campanhas Maddox — última imagem na lista (DND-35)", () => {
         expect(byId.get(c.id)).toBeNull()
     })
 
-    it("imagem nova aparece na próxima carga da lista e no detalhe", async () => {
+    it("imagem nova aparece na próxima carga da lista", async () => {
         const campaign = await service.createCampaign({ name: "Viva", rigor: "narrativo" }, ids.owner)
         await seedImages([{ campaignId: campaign.id, minutesAgo: 10 }])
         expect(await lastOf(campaign.id)).toBe(`https://cdn.example/${campaign.id}-10.png`)
         await seedImages([{ campaignId: campaign.id, minutesAgo: 0 }])
         expect(await lastOf(campaign.id)).toBe(`https://cdn.example/${campaign.id}-0.png`)
-        expect((await service.getCampaignDetail(campaign.id, ids.owner)).lastSceneImageUrl).toBe(`https://cdn.example/${campaign.id}-0.png`)
+    })
+
+    it("o detalhe da campanha não consulta as imagens nem leva o campo", async () => {
+        const campaign = await service.createCampaign({ name: "Detalhe", rigor: "narrativo" }, ids.owner)
+        await seedImages([{ campaignId: campaign.id, minutesAgo: 1 }])
+        const aggregate = vi.spyOn(MaddoxSceneImageModel, "aggregate")
+        const detail = await service.getCampaignDetail(campaign.id, ids.owner)
+        expect(aggregate).not.toHaveBeenCalled()
+        aggregate.mockRestore()
+        expect(detail).not.toHaveProperty("lastSceneImageUrl")
     })
 
     it("falha na busca da imagem não derruba a lista", async () => {

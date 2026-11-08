@@ -105,15 +105,14 @@ async function loadLastSceneImages(ids: Types.ObjectId[]): Promise<Map<string, s
 }
 
 /** Monta os DTOs com os membros ativos (dono primeiro), os perfis dos usuários e os personagens. */
-async function buildDtos(campaigns: CampaignDoc[], userId: string): Promise<(MaddoxCampaignListItemDto & { myMemberId: string | null })[]> {
+async function buildDtos(campaigns: CampaignDoc[], userId: string): Promise<(Omit<MaddoxCampaignListItemDto, "lastSceneImageUrl"> & { myMemberId: string | null })[]> {
     if (campaigns.length === 0) return []
     const ids = campaigns.map((campaign) => campaign._id)
     const members = await MaddoxCampaignMemberModel.find({ campaignId: { $in: ids }, status: "joined" }).sort({ joinedAt: 1, createdAt: 1 }).lean<MemberDoc[]>()
     const characterIds = members.map((member) => member.characterId).filter((id): id is Types.ObjectId => Boolean(id))
-    const [characters, users, lastSceneImages] = await Promise.all([
+    const [characters, users] = await Promise.all([
         characterIds.length ? MaddoxCharacterModel.find({ _id: { $in: characterIds } }).lean<CharacterDoc[]>() : Promise.resolve([] as CharacterDoc[]),
         loadUsers([...members.map((member) => member.userId), ...campaigns.map((campaign) => campaign.ownerId)]),
-        loadLastSceneImages(ids),
     ])
     const sheetIds = characters.map((character) => character.sheetId).filter((id): id is Types.ObjectId => Boolean(id))
     const sheetSlugs = new Map<string, string>()
@@ -154,7 +153,6 @@ async function buildDtos(campaigns: CampaignDoc[], userId: string): Promise<(Mad
             rigor: campaign.rigor,
             status: campaign.status,
             coverUrl: campaign.coverUrl ?? null,
-            lastSceneImageUrl: lastSceneImages.get(String(campaign._id)) ?? null,
             ownerId: campaign.ownerId,
             ownerName: users.get(campaign.ownerId)?.name ?? "Usuário",
             myRole: campaign.ownerId === userId ? "owner" : (mine?.role ?? "player"),
@@ -213,10 +211,12 @@ export async function listMyCampaigns(userId: string): Promise<MaddoxCampaignLis
     const campaigns = await MaddoxCampaignModel.find({ $or: [{ _id: { $in: memberships.map((member) => member.campaignId) } }, { ownerId: userId }] })
         .sort({ updatedAt: -1 })
         .lean<CampaignDoc[]>()
-    return (await buildDtos(campaigns, userId)).map((item) => {
+    // Só a lista mostra a última imagem (DND-35): o detalhe não paga a agregação.
+    const [dtos, lastSceneImages] = await Promise.all([buildDtos(campaigns, userId), campaigns.length ? loadLastSceneImages(campaigns.map((campaign) => campaign._id)) : new Map<string, string>()])
+    return dtos.map((item) => {
         const { myMemberId, ...rest } = item
         void myMemberId
-        return rest
+        return { ...rest, lastSceneImageUrl: lastSceneImages.get(item.id) ?? null }
     })
 }
 

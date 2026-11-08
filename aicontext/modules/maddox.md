@@ -1080,8 +1080,8 @@ coleção `maddox_scene_images` (`models/maddox-scene-image.ts`), `components/ga
 `NpcPanel.tsx`, `components/campaigns/SceneImagesField.tsx`, `components/settings/MaddoxSceneImagesCard.tsx`,
 `hooks/useMaddoxSceneImages.ts`. Usa o **Gerador de imagens** já integrado (`generateAndStoreDndImage`).
 
-**Capa na lista de campanhas (DND-35).** `buildDtos` (`server/campaigns.ts`) preenche `lastSceneImageUrl` com **uma** agregação
-para todas as campanhas da lista (índice `{ campaignId, createdAt }`): só `status: "done"` com `url`, sem `npc-portrait`, a mais
+**Capa na lista de campanhas (DND-35).** `listMyCampaigns` (`server/campaigns.ts`) preenche `lastSceneImageUrl` (só na DTO da
+lista; o detalhe não tem o campo nem roda a consulta) com **uma** agregação para todas as campanhas da lista (índice `{ campaignId, createdAt }`): só `status: "done"` com `url`, sem `npc-portrait`, a mais
 recente pela data do pedido (`createdAt`, desempate por `_id`). O `CampaignCard` mostra a imagem atrás do gradiente do rigor (com véu
 escuro), cai na `coverUrl` e, sem nenhuma (ou se a imagem não carregar), nas espadas. Imagem nova aparece na próxima carga da lista
 (não há evento próprio). Falha da agregação loga aviso e devolve a lista sem imagens.
