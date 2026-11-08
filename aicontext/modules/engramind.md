@@ -17,7 +17,7 @@ nunca exibidos, logados ou auditados.
 
 Abas (`components/integration/EngramindEditorForm.tsx`, `?aba=`): **Conexão** (salvar dispara a configuração
 automática e mostra os passos; "Repetir configuração automática"; aviso amarelo quando o contexto está
-indisponível), **Migração** e **Sincronização**.
+indisponível), **Migração**, **Sincronização** e **Visualização** (ver "Visualização da rede").
 
 Teste de conexão (`server/tester.ts`): vermelho sem configuração, com `/health/ready` fora, token recusado ou que
 não é `kind: app` do app `dndicas`; amarelo com a configuração automática pendente, categorias das campanhas
@@ -57,6 +57,40 @@ só leituras e `import_memories` (com `memories.edit`); toda outra operação re
 sem chamar o Engramind (o token de app não muta memória a memória; edite pelo Opex). Sem integração, a página
 mostra um estado vazio com o link para a integração. CSS: `globals.css` importa as folhas do React Flow e do
 react-day-picker e faz `@source` da lib; a folha do React Flow fica fora de `@layer` e vence o Tailwind.
+O desenho dos universos segue o layout da aba Visualização (ver "Visualização da rede"), atualizado em tempo real.
+
+## Visualização da rede (DND-34, `?aba=visualizacao`)
+
+O layout dos universos da rede de `/memorias` (anéis ou espiral, ordem, distâncias, desvio, tamanho das
+partículas) é a **mesma configuração do Opex** (aba Visualização dele): JSON `$schema:
+"engramind-universe-layout"`, `version: 1`, com os campos, intervalos e mensagens pt-BR do
+`universeLayoutSchema` da lib (requer `@engramind/client` ≥ 0.5.0). **Não há formulário** no dndicas: a aba
+(`components/integration/universe-layout/`) tem só o estado ("padrão da lib" ou "importada em …"),
+**Importar**, **Exportar** e **Restaurar padrão**, e a **prévia** do Opex (memórias de exemplo de
+`network/sample-universe.ts` com a configuração em uso; quantidade, canais e centro são só da prévia).
+
+- **Importar** (`integrations.engramind.edit`): cola o JSON exportado do Opex (inteiro ou só os campos
+  alterados; os ausentes assumem o **padrão**, não o valor em uso). `parseUniverseLayoutJson` valida no
+  cliente; JSON inválido lista os erros por campo e não chama a API. Válido → `PUT` e vale **na hora**
+  (sem "salvar" separado). A recusa do servidor (`400 UNIVERSE_LAYOUT_INVALID`, `details` por campo) aparece
+  na mesma lista.
+- **Exportar** (quem vê a aba): `formatUniverseLayoutJson` da configuração em uso, com Copiar; o Opex aceita
+  o JSON sem transformação.
+- **Restaurar padrão** (`integrations.engramind.edit`, com confirmação; desabilitado no padrão): apaga a
+  configuração.
+- **API** `GET/PUT/DELETE /api/engramind/universe-layout` (`server/universe-layout.ts`, mesmo contrato do
+  Opex: `{ config, isDefault, updatedAt }`). `GET` exige `memories.view` **ou** `integrations.engramind.view`;
+  `PUT`/`DELETE`, `integrations.engramind.edit`. O `PUT` valida o corpo cru com `parseUniverseLayout` (campo
+  desconhecido ou fora do intervalo é recusado sem gravar nada). Auditoria `universe-layout` (antes e depois).
+- **Persistência**: `engramind_state.universeLayout = { config, updatedAt }` (`null` = padrão). A leitura
+  revalida; gravação inválida cai no padrão com aviso no log.
+- **Aplicação**: as páginas `/memorias` e `/memorias/canais/[channel]` leem no servidor
+  (`readUniverseLayoutForPage`, só com a integração configurada; falha → padrão + aviso) e o
+  `MemoriesProvider` passa ao `EngramindProvider` (`universeLayout`; `null` = desenho padrão da lib).
+- **Tempo real**: gravar ou restaurar publica `universe-layout.updated` no SSE da rede (`engramindBus`, a
+  lib ignora o tipo) e `{ type: "universe-layout" }` no canal da integração. `/memorias` escuta pelo
+  `subscribeLive` da lib (a mesma conexão SSE) e relê `GET /api/engramind/universe-layout`; a rede se
+  redesenha sem recarregar. A aba relê pelo `useEngramindRealtime`.
 
 ## Ferramentas do Agente Opex
 
@@ -134,7 +168,7 @@ muda e relê as categorias em `settings.updated`.
 
 ## Dados
 
-`engramind_state` (bootstrap, saúde do contexto, sincronização, avisos), `engramind_context_cache`,
+`engramind_state` (bootstrap, saúde do contexto, sincronização, avisos, layout dos universos), `engramind_context_cache`,
 `engramind_webhook_events`, `engramind_memory_backups` (inclui o backup das memórias antigas das campanhas),
 `engramind_memory_migration` e `engramind_pending_writes` (fila temporária; não é fonte).
 
@@ -147,6 +181,7 @@ token ou texto de memória.
 
 `tests/helpers/fake-engramind.ts` (Engramind falso no `fetch`, só as rotas do contrato; resto → 405),
 `tests/helpers/xyflow.tsx`, `tests/backend/engramind/*` (bootstrap, contexto, proxy e webhook, memórias das
-campanhas, mover e apagar, migração, permissões, ferramentas e teste de conexão; MongoDB em memória) e
+campanhas, mover e apagar, migração, permissões, ferramentas, teste de conexão e layout dos universos;
+MongoDB em memória) e
 `tests/frontend/engramind/*`. Os testes do Maddox usam `tests/helpers/campaign-memories-mock.ts` (substituto em
 memória de `campaign-memories`, com as mesmas regras de chave e tags).

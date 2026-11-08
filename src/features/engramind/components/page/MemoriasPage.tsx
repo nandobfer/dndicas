@@ -2,6 +2,7 @@
 
 import Link from "next/link"
 import { Brain } from "lucide-react"
+import type { UniverseLayoutConfig } from "@engramind/client"
 import { ChannelDetail, EngramindNetwork } from "@engramind/client/react"
 import { GlassCard, GlassCardContent } from "@/components/ui/glass-card"
 import { Button } from "@/components/ui/opex/button"
@@ -30,21 +31,22 @@ export function MemoriesNotConfigured({ canConfigure }: { canConfigure: boolean 
 /**
  * Página `/memorias`: a rede de memórias do dndicas (agentes × canais) pela lib `@engramind/client` no
  * modo app. Só leitura (o proxy recusa mutações de memória); `memories.edit` libera a importação.
+ * `universeLayout`: o layout dos universos gravado na aba Visualização da integração (`null` = padrão).
  */
-export function MemoriasPage({ configured, canConfigure }: { configured: boolean; canConfigure: boolean }) {
+export function MemoriasPage({ configured, canConfigure, universeLayout = null }: { configured: boolean; canConfigure: boolean; universeLayout?: UniverseLayoutConfig | null }) {
     if (!configured) return <MemoriesNotConfigured canConfigure={canConfigure} />
     return (
-        <MemoriesProvider>
+        <MemoriesProvider universeLayout={universeLayout}>
             <EngramindNetwork />
         </MemoriesProvider>
     )
 }
 
 /** Página `/memorias/canais/[channel]`. */
-export function MemoriesChannelPage({ slug, configured, canConfigure }: { slug: string; configured: boolean; canConfigure: boolean }) {
+export function MemoriesChannelPage({ slug, configured, canConfigure, universeLayout = null }: { slug: string; configured: boolean; canConfigure: boolean; universeLayout?: UniverseLayoutConfig | null }) {
     if (!configured) return <MemoriesNotConfigured canConfigure={canConfigure} />
     return (
-        <MemoriesProvider>
+        <MemoriesProvider universeLayout={universeLayout}>
             <ChannelDetail slug={slug} />
         </MemoriesProvider>
     )
