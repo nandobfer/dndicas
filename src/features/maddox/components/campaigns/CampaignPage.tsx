@@ -4,7 +4,7 @@ import { useState } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { motion } from "framer-motion"
-import { ArrowLeft, BookOpen, CheckCircle2, Crown, Dices, DoorOpen, Hourglass, MessageCircle, Pencil, Play, ScrollText, Swords, UserMinus, UserRound, Users } from "lucide-react"
+import { ArrowLeft, BookOpen, CheckCircle2, Crown, Dices, DoorOpen, Hourglass, ImageOff, Loader2, MessageCircle, Pencil, Play, RefreshCw, ScrollText, Swords, UserMinus, UserRound, Users } from "lucide-react"
 import { Button } from "@/components/ui/opex/button"
 import { ConfirmDialog } from "@/components/ui/opex/confirm-dialog"
 import { Skeleton } from "@/components/ui/opex/skeleton"
@@ -12,11 +12,10 @@ import { ErrorState } from "@/components/feedback/ErrorState"
 import { EmptyState } from "@/components/feedback/EmptyState"
 import { GlassCard as Card, GlassCardContent as CardContent, GlassCardDescription as CardDescription, GlassCardHeader as CardHeader, GlassCardTitle as CardTitle } from "@/components/ui/glass-card"
 import { useAuth } from "@/core/hooks/useAuth"
-import { MADDOX_RIGOR_LEVEL_DEFS, MADDOX_TURN_PHASE_LABELS } from "../../constants"
+import { MADDOX_CHARACTER_UNNAMED_LABEL, MADDOX_RIGOR_LEVEL_DEFS, MADDOX_TURN_PHASE_LABELS } from "../../constants"
 import type { MaddoxCampaignCharacterDto, MaddoxCampaignDetailDto, MaddoxCampaignMemberDto } from "../../campaign-types"
-import { useMaddoxCampaign, useMaddoxCampaignsRealtime, useRemoveMaddoxMember } from "../../hooks/useMaddoxCampaigns"
+import { useMaddoxCampaign, useMaddoxCampaignsRealtime, useRemoveMaddoxMember, useRetryMaddoxCharacterPortrait } from "../../hooks/useMaddoxCampaigns"
 import { useStartMaddoxCampaign } from "../../hooks/useMaddoxGame"
-import { CharacterDraftDialog } from "./CharacterDraftDialog"
 import { EditCampaignDialog } from "./EditCampaignDialog"
 import { InvitePanel } from "./InvitePanel"
 import { CharacterProfileDialog } from "./CharacterProfileDialog"
@@ -73,7 +72,7 @@ function CampaignView({ campaign, userId }: { campaign: MaddoxCampaignDetailDto;
     const start = useStartMaddoxCampaign(campaign.id)
     const [starting, setStarting] = useState(false)
     const [editing, setEditing] = useState(false)
-    const [characterOpen, setCharacterOpen] = useState(false)
+    const retryPortrait = useRetryMaddoxCharacterPortrait(campaign.id)
     const [removing, setRemoving] = useState<MaddoxCampaignMemberDto | null>(null)
     const [leaving, setLeaving] = useState(false)
     const [viewing, setViewing] = useState<{ character: MaddoxCampaignCharacterDto; playerName: string; own: boolean } | null>(null)
@@ -143,7 +142,7 @@ function CampaignView({ campaign, userId }: { campaign: MaddoxCampaignDetailDto;
                     <Hourglass className="mt-0.5 h-4 w-4 shrink-0 text-primary" aria-hidden />
                     {scenarioDone
                         ? `Lobby: ${ready} de ${campaign.members.length} participante(s) prontos para jogar. Só entra no jogo quem concluir a entrevista de personagem com o Maddox.`
-                        : "Preparação: o dono define o cenário com o Maddox. Enquanto isso, convide os jogadores e crie o seu personagem."}
+                        : "Preparação: o dono define o cenário com o Maddox. Enquanto isso, convide os jogadores; cada um cria o personagem na entrevista com o Maddox depois do cenário."}
                 </p>
             )}
 
@@ -168,10 +167,10 @@ function CampaignView({ campaign, userId }: { campaign: MaddoxCampaignDetailDto;
                         <ul className="divide-y divide-white/5" aria-label="Participantes">
                             {campaign.members.map((member) => (
                                 <motion.li key={member.id} layout initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex flex-wrap items-center gap-3 py-3">
-                                    <MemberAvatar name={member.character?.name ?? member.name} imageUrl={member.character?.portraitUrl ?? member.avatarUrl} color={member.character ? color : undefined} className="h-11 w-11" />
+                                    <MemberAvatar name={member.character?.name || member.name} imageUrl={member.character?.portraitUrl ?? member.avatarUrl} color={member.character ? color : undefined} className="h-11 w-11" />
                                     <div className="min-w-0 flex-1">
                                         <p className="flex items-center gap-1.5 truncate text-sm font-medium text-white">
-                                            {member.character ? member.character.name : <span className="text-white/50">Personagem ainda não criado</span>}
+                                            {member.character?.name ? member.character.name : <span className="text-white/50">{member.character ? MADDOX_CHARACTER_UNNAMED_LABEL : "Personagem ainda não criado"}</span>}
                                             {member.ready && <CheckCircle2 className="h-3.5 w-3.5 shrink-0" style={{ color: rarityColors.legendary }} aria-label="Pronto para jogar" />}
                                         </p>
                                         <p className="flex items-center gap-1 truncate text-xs text-white/60">
@@ -187,23 +186,29 @@ function CampaignView({ campaign, userId }: { campaign: MaddoxCampaignDetailDto;
                                             <ScrollText aria-hidden /> Ver perfil
                                         </Button>
                                     )}
-                                    {member.id === campaign.myMemberId && campaign.inviteOpen && member.character && member.character.interviewStatus !== "done" && (
+                                    {(member.character?.portraitStatus === "pending" || member.character?.portraitStatus === "generating") && (
+                                        <span className="inline-flex items-center gap-1 text-xs text-white/60" data-testid="portrait-generating">
+                                            <Loader2 className="h-3 w-3 animate-spin" aria-hidden /> Gerando retrato…
+                                        </span>
+                                    )}
+                                    {member.id === campaign.myMemberId && campaign.inviteOpen && member.character?.interviewStatus === "done" && !member.character.portraitUrl && (member.character.portraitStatus === "failed" || member.character.portraitStatus === null) && (
+                                        <Button size="sm" variant="ghost" onClick={() => retryPortrait.mutate()} disabled={retryPortrait.isPending} title={member.character.portraitStatus === "failed" ? "A geração do retrato falhou" : undefined}>
+                                            {retryPortrait.isPending ? <Loader2 className="animate-spin" aria-hidden /> : member.character.portraitStatus === "failed" ? <RefreshCw aria-hidden /> : <ImageOff aria-hidden />}
+                                            {member.character.portraitStatus === "failed" ? "Gerar retrato de novo" : "Gerar retrato"}
+                                        </Button>
+                                    )}
+                                    {member.id === campaign.myMemberId && campaign.inviteOpen && member.character?.interviewStatus !== "done" && (
                                         scenarioDone ? (
                                             <Button size="sm" asChild>
                                                 <Link href={`/campanhas/${campaign.id}/entrevista/personagem`}>
-                                                    <MessageCircle aria-hidden /> Entrevista do personagem
+                                                    {member.character ? <MessageCircle aria-hidden /> : <UserRound aria-hidden />} {member.character ? "Entrevista do personagem" : "Criar personagem"}
                                                 </Link>
                                             </Button>
                                         ) : (
                                             <Button size="sm" disabled title="Disponível depois que o cenário estiver pronto">
-                                                <MessageCircle aria-hidden /> Entrevista do personagem
+                                                {member.character ? <MessageCircle aria-hidden /> : <UserRound aria-hidden />} {member.character ? "Entrevista do personagem" : "Criar personagem"}
                                             </Button>
                                         )
-                                    )}
-                                    {member.id === campaign.myMemberId && campaign.inviteOpen && (
-                                        <Button size="sm" variant={member.character ? "ghost" : "default"} onClick={() => setCharacterOpen(true)}>
-                                            {member.character ? <Pencil aria-hidden /> : <UserRound aria-hidden />} {member.character ? "Editar personagem" : "Criar personagem"}
-                                        </Button>
                                     )}
                                     {isOwner && member.role !== "owner" && (
                                         <Button size="sm" variant="ghost" className="text-destructive hover:text-destructive" onClick={() => setRemoving(member)} aria-label={`Remover ${member.name}`}>
@@ -230,7 +235,6 @@ function CampaignView({ campaign, userId }: { campaign: MaddoxCampaignDetailDto;
 
             {isOwner && <EditCampaignDialog campaign={campaign} open={editing} onOpenChange={setEditing} />}
             <CharacterProfileDialog character={viewing?.character ?? null} playerName={viewing?.playerName ?? ""} own={viewing?.own ?? false} color={color} onOpenChange={(open) => !open && setViewing(null)} />
-            <CharacterDraftDialog campaignId={campaign.id} character={campaign.myCharacter} open={characterOpen} onOpenChange={setCharacterOpen} />
             <ConfirmDialog
                 open={removing !== null}
                 onOpenChange={(open) => !open && setRemoving(null)}

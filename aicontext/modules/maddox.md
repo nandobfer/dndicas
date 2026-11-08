@@ -11,7 +11,8 @@ A **entrega 6 (DND-13, #205)** — combate narrativo (cinemático, sem iniciativ
 A **entrega 8 (DND-14, #204)** — modo fiel ao D&D: mundo, povos e classes restritos ao catálogo — está em "Modo fiel ao D&D (Maddox 8)".
 A **entrega 10 (DND-10, #203)** — imagens nas cenas (situações e frequência configuráveis, pedido manual do dono e retrato de NPC) — está
 em "Imagens nas cenas (Maddox 10)". A **DND-22 (#230)** — densidade das narrações e a aba Imagens no diário — está em "Densidade
-das narrações e imagens no diário (DND-22)".
+das narrações e imagens no diário (DND-22)". A **DND-31 (#244)** — personagem criado pela entrevista, sem formulário, e o retrato
+gerado ao confirmar a síntese — está em "Retrato do personagem (DND-31)".
 
 Código: `src/features/maddox/` (`constants`, `schemas`, `types`, `script-draft`, `models/`, `server/`,
 `hooks/`, `components/settings/`).
@@ -154,7 +155,7 @@ Telas (`src/features/maddox/components/campaigns/`, rotas pt-BR):
 | Rota | Conteúdo |
 | --- | --- |
 | `/campanhas` | Campanhas em que sou **dono ou membro ativo** (`joined`), da mais recente; um card largo por linha (capa: a **última imagem de cena** da campanha — DND-35 —, senão `coverUrl`, sempre atrás do gradiente na cor do rigor; sem imagem, gradiente e espadas; chips de rigor/status/papel em cores de raridade, meu personagem, avatares dos membros, "atualizada há…"). Clicar abre a campanha. "Nova campanha" abre a criação |
-| `/campanhas/[id]` | Cabeçalho, lobby (participantes e personagens), "Criar/Editar personagem", "Editar" (dono), "Sair da campanha" (jogador), "Remover" (dono, com confirmação) e o painel "Convidar jogadores" (dono) |
+| `/campanhas/[id]` | Cabeçalho, lobby (participantes e personagens), "Criar personagem" (link para a entrevista de personagem), "Gerar retrato (de novo)", "Editar" (dono), "Sair da campanha" (jogador), "Remover" (dono, com confirmação) e o painel "Convidar jogadores" (dono) |
 | `/campanhas/convite/[token]` | Resumo da campanha do link e "Entrar na campanha". Sem login vai ao login e volta; sem a permissão mostra "Acesso restrito" |
 
 **Criação:** nome (3–80) e **slider de rigor** (`RigorCard`), cópia do card de criticidade do agente
@@ -178,10 +179,12 @@ anterior deixa de valer. Entrar pelo link (`POST /invites/[token]`):
 **Membros:** quem não é membro recebe **404** (a campanha não é revelada). O dono não sai nem é removido
 (409); só o dono remove jogadores (403 para os demais).
 
-**Personagem (esboço):** cada membro cria/edita o próprio personagem com nome (2–60) e retrato opcional
-(`GlassImageUploader`, sem geração por IA). Um personagem por membro (`member.characterId`, gravação
-condicional resolve corridas), entrevista `pending`; o Maddox 2 completa o perfil pela entrevista. Bloqueado
-em campanha encerrada/arquivada.
+**Personagem (esboço):** desde a DND-31 não há formulário de nome e retrato, nem para criar nem para editar.
+"Criar personagem" leva à entrevista de personagem (desabilitado até o cenário ficar pronto) e o personagem
+nasce quando ela começa (`ensureCharacterDraft`), **sem nome** (`name: ""`, a tela mostra "Personagem em criação")
+e sem retrato. Um personagem por membro (`member.characterId`, ligação condicional resolve corridas: quem perde
+apaga o seu e usa o do vencedor). O nome vem da entrevista e o retrato é gerado ao confirmar a síntese (seção
+"Retrato do personagem (DND-31)"). Bloqueado em campanha encerrada/arquivada.
 
 **Tempo real:** canal privado por usuário **`private-maddox-u-{userId}`** (autorizado em `channel-auth.ts` só
 para o próprio usuário). Cada mudança (criação, entrada, saída, remoção, personagem, edição) publica
@@ -196,7 +199,7 @@ API (`src/app/api/maddox/campaigns/**`, todas com `maddox.play`, usuário efetiv
 - `GET/PATCH /api/maddox/campaigns/[id]` — detalhe (membros) / editar (dono).
 - `GET/POST /api/maddox/campaigns/[id]/invite` — link atual / gerar outro (dono).
 - `DELETE /api/maddox/campaigns/[id]/members/[memberId]` — sair (o próprio) ou remover (dono).
-- `PUT /api/maddox/campaigns/[id]/character` — esboço do meu personagem (`{ name, portraitUrl? }`).
+- `POST /api/maddox/campaigns/[id]/character/portrait` — `{}`: gera de novo o retrato do meu personagem (202; DND-31).
 - `GET/POST /api/maddox/campaigns/invites/[token]` — resumo do convite / entrar.
 
 Serviço: `server/campaigns.ts`; schemas `campaign-schemas.ts`; DTOs `campaign-types.ts`; hooks
@@ -219,13 +222,13 @@ status `active` são do Maddox 3 (seção abaixo).
 | Regra | Comportamento |
 | --- | --- |
 | Cenário | Só o dono (403 para jogadores; 404 para quem não participa) |
-| Personagem | Cada membro, depois do cenário `done` (409 `SCENARIO_PENDING`) e com o esboço criado (409 `CHARACTER_DRAFT_REQUIRED`; a tela abre o diálogo de nome/retrato). Grava `character.interview.scriptVersion` e, se vazio, `campaign.scriptVersions.character` |
+| Personagem | Cada membro, depois do cenário `done` (409 `SCENARIO_PENDING`). Começar cria o personagem sem nome (depois de validar o entrevistador: indisponível não deixa esboço); responder, repetir ou concluir sem ter começado = 409 `CHARACTER_DRAFT_REQUIRED`. Grava `character.interview.scriptVersion` e, se vazio, `campaign.scriptVersions.character` |
 | Campanha encerrada/arquivada | 409 `CAMPAIGN_CLOSED` |
 | Uma geração por vez | Trava `generating` condicional; ocupada = 409 `INTERVIEW_BUSY`; trava com mais de 5 min é retomada |
 | Limite | 200 mensagens (409 `INTERVIEW_TOO_LONG`); cada resposta até 4.000 caracteres (Zod) |
-| Concluída | Não reabre (409 `INTERVIEW_DONE`); nome e retrato seguem editáveis |
+| Concluída | Não reabre (409 `INTERVIEW_DONE`) |
 | Pronto para jogar | `isMemberReadyToPlay` (entrevista `done`) → `member.ready` no DTO; `assertMemberCanPlay` responde 409 `INTERVIEW_REQUIRED`. **Toda ação de jogo chama `assertMemberCanPlay` no servidor** (iniciar a campanha, declarar, passar, perguntar, pular jogador — `server/game.ts`); o selo e os botões da tela não bastam |
-| Nome e retrato depois da entrevista | Continuam editáveis no lobby; a mudança é propagada à ficha D&D ligada (`name` e, se houver retrato, `photo`). O `result` gravado na entrevista é o registro histórico e não muda |
+| Nome e retrato depois da entrevista | Não são editáveis (DND-31): o nome é o da entrevista e o retrato o gerado; só a falha do retrato tem nova tentativa |
 | Visibilidade | A conversa é só de quem é entrevistado; cenário, situação inicial e perfis ficam visíveis a todos os membros; o link da ficha só para o dono do personagem |
 
 **Instruções** (`buildInterviewInstructions`): instruções do entrevistador + entrevista atual + rigor (colunas
@@ -249,7 +252,7 @@ propor a síntese; falha do JEV é ignorada.
 Ao confirmar, uma geração **efêmera** (não suja a sessão do narrador) consolida a conversa em JSON validado por Zod,
 com uma nova tentativa; inválido duas vezes = 502 `CONSOLIDATION_FAILED` sem gravar nada. Os textos gerados
 **não têm teto de tamanho** no schema (um campo longo nunca invalida a consolidação); só raça/classe/subclasse/
-origem são cortadas em 2.000 caracteres ao gravar na ficha (`maxlength` dela) e o nome fora de 2..60 é ignorado.
+origem são cortadas em 2.000 caracteres ao gravar na ficha (`maxlength` dela) e o nome acima de 60 caracteres é cortado (abaixo de 2 conta como ausente).
 A conclusão revalida `proposed` depois de pegar a trava (`NO_PROPOSAL` se outra aba enviou um ajuste) e grava o
 cenário/perfil **antes** de marcar a entrevista como `done`: uma falha no meio deixa `proposed` e confirmar de
 novo reaplica. Uma nova resposta só é gravada depois de o turno ser preparado (entrevistador, roteiro, sessão do
@@ -259,7 +262,10 @@ OpenCode): falha na preparação não deixa mensagem órfã.
   regras internas, tom), `campaign.openingSituation` e, se um nome foi combinado, a campanha é renomeada (auditado).
 - **Personagem:** `character.profile` nas seções de `MADDOX_PROFILE_SECTIONS` (identidade, origem,
   personalidade, capacidades, equipamentos, relações, condição; vazias = "a definir durante a história") e o nome
-  combinado. A partir do rigor **Equilibrado** (`MADDOX_SHEET_RIGORS`) cria também a **ficha D&D**
+  combinado — **obrigatório** (DND-31): sem nome na consolidação nem no personagem, 409 `CHARACTER_NAME_REQUIRED`, nada é
+  gravado e a entrevista segue `proposed`. As instruções do entrevistador ganham a regra fixa `MADDOX_CHARACTER_NAME_RULE`
+  ("## Nome do personagem") enquanto o personagem não tem nome. A conclusão grava `portrait.status = "pending"` junto com o
+  perfil e dispara o retrato. A partir do rigor **Equilibrado** (`MADDOX_SHEET_RIGORS`) cria também a **ficha D&D**
   (`createBlankSheet` + raça, classe, subclasse, origem, aparência e medidas, retrato, nível 1 e atributos de 1 a
   30 — fora disso é descartado). `raceRef`/`classRef`/`originRef` por nome exato no catálogo (sem acento e sem
   caixa); sem correspondência fica só o texto. A ficha é ligada ao personagem logo ao ser criada (nova tentativa
@@ -1178,6 +1184,34 @@ recentes, que vêm no estado da mesa).
 
 Sem permissão nova (`maddox.play` cobre a mesa e os dois pedidos; a configuração é da aba de IA, só administradores).
 
+## Retrato do personagem (DND-31)
+
+Código: `server/character-portrait.ts` (prompt puro `buildCharacterPortraitPrompt`, `scheduleCharacterPortrait`,
+`runCharacterPortrait`, `expireStaleCharacterPortraits`, `retryCharacterPortrait`), rota
+`POST /api/maddox/campaigns/[id]/character/portrait`, hook `useRetryMaddoxCharacterPortrait`.
+
+- **Quando:** uma única vez, em segundo plano, logo depois de confirmar a síntese da entrevista de personagem (a conclusão não
+  espera a imagem). Estado em `character.portrait { status: null | pending | generating | done | failed, error, startedAt,
+  completedAt }`; `portraitStatus` no DTO do personagem.
+- **Pedido:** Gerador de imagens (`generateAndStoreDndImage`), 1:1, do peito para cima, sem imagens de referência: nome, campanha,
+  estilo visual da mesa (`settings.sceneImages.style`), aparência consolidada (raça/classe/subclasse das escolhas da ficha,
+  aparência, idade, altura, peso, olhos, pele, cabelo) e as seções identidade, origem, capacidades e equipamentos do perfil (menções
+  viram texto; "a definir" fica de fora). Arquivo em `maddox/campaigns/{id}/characters/{personagem}-{ts}`; consumo na origem
+  `maddox-character-portrait`; teto de 120 s (`portraitTiming.timeoutMs`, encurtado nos testes), que aborta o pedido ao gerador.
+- **Resultado:** `portraitUrl` (substitui inclusive o retrato enviado no fluxo antigo) e a `photo` da ficha D&D ligada. Como tudo lê
+  `portraitUrl`, o retrato vira o avatar no lobby, no card da lista, no perfil, na mesa (falas, testes, combate, iniciativa, "Na
+  mesa"), no diário e serve de referência de aparência nas imagens de cena. Sem retrato, o `MemberAvatar` cai na foto do usuário
+  e, por último, nas iniciais. Avisa o lobby (`maddox.campaign.changed`) e, com a campanha em jogo, a mesa (`publishGameChanged`).
+- **Falha** (gerador indisponível, erro ou teto): `failed` com "Não foi possível gerar o retrato do personagem.", sem tocar no
+  `portraitUrl`. `pending`/`generating` há mais de 5 min fora do processo (reinício) vira `failed` na leitura da campanha.
+- **Nova tentativa** ("Gerar retrato de novo"; "Gerar retrato" para personagem antigo concluído sem imagem): só o dono do
+  personagem, com `maddox.play`, entrevista concluída e campanha aberta; reserva condicional (`failed`, ou sem status e sem
+  imagem → `pending`), então dois cliques geram uma vez. Com retrato pronto ou gerando = 409 `PORTRAIT_NOT_RETRYABLE`; antes da
+  entrevista concluída = 409 `INTERVIEW_REQUIRED`.
+- **Auditoria** (`CampanhaMaddox`): personagem criado pela entrevista, retrato gerado, com falha e nova tentativa.
+
+Sem permissão nova: tudo exige `maddox.play` e ser o dono do personagem.
+
 ## Densidade das narrações e imagens no diário (DND-22)
 
 **Densidade.** `campaign.density` (`MADDOX_DENSITY_LEVELS`: `concisa`, `breve`, `equilibrada` — padrão —, `detalhada`, `extensa`;
@@ -1219,6 +1253,13 @@ Sem permissão nova: criar/editar já exigem `maddox.play` e ser o dono; o diár
 `tests/backend/maddox/*` (configuração, roteiros, avatar, sessões, rotas, `campaigns.test.ts` com MongoDB em
 memória, `campaign-routes.test.ts`, `grant-maddox-play.test.ts`) e `tests/frontend/maddox/*`
 (`maddox-tab.test.tsx`, `maddox-campaigns.test.tsx`, `maddox-campaigns-realtime.test.tsx`; happy-dom).
+DND-31: `interviews.test.ts` (personagem criado ao começar, corrida de duas abas, entrevistador indisponível sem esboço, nome
+obrigatório com 409 e reaplicação, nome longo cortado, retrato gerado uma vez com o pedido certo e a foto da ficha substituída,
+falha e nova tentativa concorrente, teto de tempo com gerador que não responde, personagem antigo sem imagem, retrato preso, personagem sem nome fora de "Outros personagens da mesa"), `interview-prompt.test.ts` (regra do nome),
+`campaigns.test.ts` (`ensureCharacterDraft`), `campaign-routes.test.ts` (rota do retrato), `maddox-campaigns.test.tsx` ("Criar
+personagem" vai à entrevista, sem edição, "Personagem em criação", gerando/pronto/falhou) e `maddox-interview.test.tsx`. Os testes
+que só precisam de um nome antes da consolidação usam `tests/helpers/maddox-character.ts` (`nameMaddoxCharacter`); os de ficha
+mockam `scheduleCharacterPortrait` (o retrato é coberto em `interviews.test.ts`).
 Maddox 5 (ficha): `interview-character-build.test.ts` (ponta a ponta com o catálogo real em memória: Fiel nível 3 com card de PV e a
 ficha campo a campo, 409 de escolhas e de PV, Mago com magias, refazer sem duplicar, Equilibrado com escolhas próprias, graus
 narrativos), `character-build-rules.test.ts`, `tests/frontend/character-sheets/sheet-rules.test.ts` e

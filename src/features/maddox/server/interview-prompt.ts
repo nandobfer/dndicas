@@ -32,7 +32,7 @@ export interface InterviewPromptContext {
     script: { version: number; guide: string; topics: readonly MaddoxScriptTopic[] }
     campaign: { name: string; rigor: MaddoxRigorLevel; setting: string; openingSituation: string; startingLevel?: number | null; startingStage?: string; worldCatalog?: WorldCatalog | null }
     /** Entrevista de personagem: nome do esboço e dos outros personagens da mesa. */
-    character?: { name: string } | null
+    character?: { name: string | null } | null
     otherCharacters?: string[]
     /**
      * Atributos pelo card (Maddox 5, entrevista de personagem nos graus com ficha): situação atual e como as
@@ -145,6 +145,13 @@ export function rigorBlock(rigor: MaddoxRigorLevel): string {
     return [`Grau de rigor da campanha: ${def.label} — ${def.description}`, "- Pelas regras do D&D:", rules, "- Livre, na narrativa:", free].join("\n")
 }
 
+/**
+ * DND-31: o personagem nasce sem nome (não há mais formulário no lobby). Regra fixa no código, independente do
+ * roteiro: o entrevistador pergunta e combina o nome, e a síntese precisa trazê-lo.
+ */
+export const MADDOX_CHARACTER_NAME_RULE =
+    "## Nome do personagem\nO personagem ainda não tem nome. Pergunte ao jogador como o personagem se chama (ou ofereça sugestões que combinem com o cenário) e combine o nome na conversa. A síntese final precisa trazer o nome combinado; sem nome, a entrevista não pode ser concluída."
+
 export function buildInterviewInstructions(context: InterviewPromptContext): string {
     const topics = activeTopics(context.script.topics)
     const isScenario = context.kind === "scenario"
@@ -153,8 +160,9 @@ export function buildInterviewInstructions(context: InterviewPromptContext): str
     parts.push(
         isScenario
             ? `## Entrevista atual\nEntrevista de CENÁRIO da campanha "${context.campaign.name}", com quem a criou.`
-            : `## Entrevista atual\nEntrevista de PERSONAGEM da campanha "${context.campaign.name}". Personagem do jogador: "${context.character?.name ?? "a definir"}".`,
+            : `## Entrevista atual\nEntrevista de PERSONAGEM da campanha "${context.campaign.name}". Personagem do jogador: "${context.character?.name || "a definir"}".`,
     )
+    if (!isScenario && !context.character?.name) parts.push(MADDOX_CHARACTER_NAME_RULE)
     parts.push(rigorBlock(context.campaign.rigor))
     parts.push(universeSection(context.campaign.rigor))
     parts.push(startingLevelSection(context))
@@ -342,6 +350,7 @@ export function buildConsolidationInstructions(context: InterviewPromptContext, 
             if (abilitiesDefined) base.push("Os atributos vêm do card de atributos.")
         }
         base.push(`Cenário da campanha:\n${context.campaign.setting.trim() || "(sem cenário)"}`)
+        base.push("O nome do personagem é obrigatório: use o nome combinado na conversa (de 2 a 60 caracteres). Só use null se nenhum nome foi combinado.")
         base.push(`Formato:\n{\n  "name": "<nome do personagem combinado, ou null>",\n  "profile": {\n${keys}\n  }${sheet}\n}`)
     }
     return base.join("\n\n")

@@ -25,9 +25,10 @@ const service = {
     previewInvite: vi.fn(async () => ({ campaignId: "c1" })),
     joinByInvite: vi.fn(async () => ({ campaignId: "c1" })),
     removeMember: vi.fn(async () => ({ left: true })),
-    upsertCharacterDraft: vi.fn(async () => ({ id: "c1" })),
 }
 vi.doMock("@/features/maddox/server/campaigns", () => service)
+const portraits = { retryCharacterPortrait: vi.fn(async () => ({ id: "c1" })) }
+vi.doMock("@/features/maddox/server/character-portrait", () => portraits)
 
 const ctx = <P extends Record<string, string>>(params: P) => ({ params: Promise.resolve(params) })
 const load = <T>(path: string) => importFresh<T>(path)
@@ -37,6 +38,7 @@ describe("rotas das Campanhas Maddox", () => {
         who = "player"
         permissions.length = 0
         Object.values(service).forEach((fn) => fn.mockClear())
+        portraits.retryCharacterPortrait.mockClear()
     })
 
     it("todas exigem maddox.play: sem login 401, sem permissão 403", async () => {
@@ -85,10 +87,13 @@ describe("rotas das Campanhas Maddox", () => {
         await members.DELETE(makeRequest("http://localhost/api/maddox/campaigns/c1/members/m1", { method: "DELETE" }), ctx({ id: "c1", memberId: "m1" }))
         expect(service.removeMember).toHaveBeenCalledWith("c1", "m1", "user-1")
 
-        const character = await load<typeof import("@/app/api/maddox/campaigns/[id]/character/route")>("@/app/api/maddox/campaigns/[id]/character/route")
-        expect((await character.PUT(makeJsonRequest("http://localhost/api/maddox/campaigns/c1/character", { method: "PUT", body: JSON.stringify({ name: "L", portraitUrl: "javascript:alert(1)" }) }), ctx({ id: "c1" }))).status).toBe(400)
-        await character.PUT(makeJsonRequest("http://localhost/api/maddox/campaigns/c1/character", { method: "PUT", body: JSON.stringify({ name: "Lyra", portraitUrl: "/api/upload?key=a.png" }) }), ctx({ id: "c1" }))
-        expect(service.upsertCharacterDraft).toHaveBeenCalledWith("c1", { name: "Lyra", portraitUrl: "/api/upload?key=a.png" }, "user-1")
+        // DND-31: sem formulário de nome e retrato; só a nova tentativa do retrato gerado (202, corpo vazio).
+        const portrait = await load<typeof import("@/app/api/maddox/campaigns/[id]/character/portrait/route")>("@/app/api/maddox/campaigns/[id]/character/portrait/route")
+        expect((await portrait.POST(makeJsonRequest("http://localhost/api/maddox/campaigns/c1/character/portrait", { method: "POST", body: JSON.stringify({ name: "Lyra" }) }), ctx({ id: "c1" }))).status).toBe(400)
+        expect(portraits.retryCharacterPortrait).not.toHaveBeenCalled()
+        const retried = await portrait.POST(makeJsonRequest("http://localhost/api/maddox/campaigns/c1/character/portrait", { method: "POST", body: JSON.stringify({}) }), ctx({ id: "c1" }))
+        expect(retried.status).toBe(202)
+        expect(portraits.retryCharacterPortrait).toHaveBeenCalledWith("c1", "user-1")
 
         const join = await load<typeof import("@/app/api/maddox/campaigns/invites/[token]/route")>("@/app/api/maddox/campaigns/invites/[token]/route")
         await join.GET(makeRequest("http://localhost/api/maddox/campaigns/invites/abc"), ctx({ token: "abc" }))

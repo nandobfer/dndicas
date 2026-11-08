@@ -1,6 +1,5 @@
 "use client"
 
-import { useState } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { motion } from "framer-motion"
@@ -15,8 +14,7 @@ import { MADDOX_PROFILE_SECTIONS, MADDOX_SHEET_RIGORS, type MaddoxScriptKind } f
 import type { MaddoxCampaignDetailDto } from "../../campaign-types"
 import { useMaddoxCampaign, useMaddoxCampaignsRealtime } from "../../hooks/useMaddoxCampaigns"
 import { useMaddoxInterview } from "../../hooks/useMaddoxInterview"
-import { CharacterDraftDialog } from "../campaigns/CharacterDraftDialog"
-import { InterviewChip, RigorChip, rigorColor } from "../campaigns/campaign-visuals"
+import { InterviewChip, MemberAvatar, RigorChip, rigorColor } from "../campaigns/campaign-visuals"
 import { InterviewComposer } from "./InterviewComposer"
 import { AbilityScoresCard } from "./AbilityScoresCard"
 import { HitPointsCard } from "./HitPointsCard"
@@ -65,9 +63,11 @@ function BackLink({ campaignId }: { campaignId: string }) {
     )
 }
 
-/** Pré-requisitos antes da conversa: dono no cenário; cenário pronto e personagem esboçado no personagem. */
+/**
+ * Pré-requisitos antes da conversa: dono no cenário; cenário pronto no personagem. O personagem nasce quando a
+ * entrevista começa (DND-31): não há formulário de nome e retrato.
+ */
 function InterviewGate({ campaign, kind, userId }: { campaign: MaddoxCampaignDetailDto; kind: MaddoxScriptKind; userId: string | null }) {
-    const [drafting, setDrafting] = useState(false)
     const header = <InterviewHeader campaign={campaign} kind={kind} />
     if (kind === "scenario" && campaign.myRole !== "owner") {
         return (
@@ -80,14 +80,6 @@ function InterviewGate({ campaign, kind, userId }: { campaign: MaddoxCampaignDet
         return (
             <Shell campaignId={campaign.id} header={header}>
                 <EmptyState icon={Hourglass} title="Aguardando o cenário" description="A entrevista de personagem começa depois que o dono da campanha definir o cenário com o Maddox." />
-            </Shell>
-        )
-    }
-    if (kind === "character" && !campaign.myCharacter) {
-        return (
-            <Shell campaignId={campaign.id} header={header}>
-                <EmptyState icon={UserRound} title="Crie o seu personagem primeiro" description="Dê um nome (e, se quiser, um retrato) ao personagem. Depois o Maddox conversa com você para completar a história dele." actionLabel="Criar personagem" onAction={() => setDrafting(true)} />
-                <CharacterDraftDialog campaignId={campaign.id} character={null} open={drafting} onOpenChange={setDrafting} />
             </Shell>
         )
     }
@@ -115,7 +107,7 @@ function InterviewHeader({ campaign, kind }: { campaign: MaddoxCampaignDetailDto
             </h1>
             <p className="mt-1 truncate text-sm text-white/70">
                 {campaign.name}
-                {kind === "character" && campaign.myCharacter ? ` · ${campaign.myCharacter.name}` : ""}
+                {kind === "character" && campaign.myCharacter?.name ? ` · ${campaign.myCharacter.name}` : ""}
             </p>
             <div className="mt-2 flex flex-wrap items-center gap-1.5">
                 <RigorChip rigor={campaign.rigor} />
@@ -134,7 +126,7 @@ function InterviewHeader({ campaign, kind }: { campaign: MaddoxCampaignDetailDto
 function ChatShell({ campaign, kind, children }: { campaign: MaddoxCampaignDetailDto; kind: MaddoxScriptKind; children: React.ReactNode }) {
     const color = rigorColor(campaign.rigor)
     const status = kind === "scenario" ? campaign.scenarioStatus : (campaign.myCharacter?.interviewStatus ?? "pending")
-    const subtitle = `${campaign.name}${kind === "character" && campaign.myCharacter ? ` · ${campaign.myCharacter.name}` : ""}`
+    const subtitle = `${campaign.name}${kind === "character" && campaign.myCharacter?.name ? ` · ${campaign.myCharacter.name}` : ""}`
     return (
         <motion.div
             initial={{ opacity: 0 }}
@@ -200,7 +192,7 @@ function InterviewConversation({ campaign, kind, userId, header }: { campaign: M
                     <p className="text-sm text-white/60">
                         {kind === "scenario"
                             ? "O Maddox vai conversar com você sobre o universo, o tom e a situação inicial da história. Ao começar, o grau de rigor fica travado."
-                            : `O Maddox vai conversar com você sobre a origem, a personalidade e as capacidades do personagem${MADDOX_SHEET_RIGORS.includes(campaign.rigor) ? " e preparar a ficha do D&D" : ""}.`}
+                            : `O Maddox vai conversar com você sobre o nome, a origem, a personalidade e as capacidades do personagem${MADDOX_SHEET_RIGORS.includes(campaign.rigor) ? " e preparar a ficha do D&D" : ""}. Ao concluir, ele pinta o retrato do personagem.`}
                     </p>
                 </div>
                 <Button onClick={() => void start()}>
@@ -306,9 +298,25 @@ function ScenarioSummary({ campaign }: { campaign: MaddoxCampaignDetailDto }) {
 }
 
 function ProfileSummary({ campaign }: { campaign: MaddoxCampaignDetailDto }) {
-    const profile = campaign.myCharacter?.profile ?? {}
+    const character = campaign.myCharacter
+    const profile = character?.profile ?? {}
+    const generating = character?.portraitStatus === "pending" || character?.portraitStatus === "generating"
     return (
         <section className="space-y-4 rounded-xl border border-white/10 bg-white/[0.03] p-5" aria-label="Perfil do personagem">
+            {character && (
+                <div className="flex items-center gap-3">
+                    <MemberAvatar name={character.name} imageUrl={character.portraitUrl} color={rigorColor(campaign.rigor)} className="h-16 w-16" />
+                    <div className="min-w-0">
+                        <p className="truncate text-base font-semibold text-white">{character.name}</p>
+                        {generating && (
+                            <p className="flex items-center gap-1 text-xs text-white/60" data-testid="portrait-generating">
+                                <Loader2 className="h-3 w-3 animate-spin" aria-hidden /> O Maddox está pintando o retrato do personagem…
+                            </p>
+                        )}
+                        {character.portraitStatus === "failed" && !character.portraitUrl && <p className="text-xs text-white/60">Não foi possível gerar o retrato. Tente de novo pela página da campanha.</p>}
+                    </div>
+                </div>
+            )}
             {MADDOX_PROFILE_SECTIONS.map((item) =>
                 profile[item.key] ? (
                     <div key={item.key} className="space-y-1">

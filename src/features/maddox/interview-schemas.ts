@@ -90,13 +90,19 @@ export type CharacterSheetSeed = z.infer<typeof characterSheetSeedSchema>
 
 /** Saída da consolidação do personagem. */
 export const characterConsolidationSchema = z.object({
-    /** Nome combinado; fora de 2..MAX caracteres é ignorado (fica o nome do esboço), sem invalidar o resto. */
+    /**
+     * Nome combinado; acima de MAX caracteres é cortado (o destino tem limite) e abaixo de 2 conta como ausente,
+     * sem invalidar o resto. Sem nome (nem o do personagem), a conclusão recusa com `CHARACTER_NAME_REQUIRED`.
+     */
     name: z
         .string()
         .trim()
         .nullable()
         .optional()
-        .transform((value) => (value && value.length >= 2 && value.length <= MADDOX_CHARACTER_NAME_MAX ? value : null)),
+        .transform((value) => {
+            const name = value ? value.slice(0, MADDOX_CHARACTER_NAME_MAX).trim() : ""
+            return name.length >= 2 ? name : null
+        }),
     profile: sectionsObject(MADDOX_PROFILE_SECTIONS),
     sheet: characterSheetSeedSchema.nullable().optional().transform((value) => value ?? null),
 })
