@@ -4,7 +4,7 @@ import { useState } from "react"
 import Link from "next/link"
 import { usePathname, useRouter, useSearchParams } from "next/navigation"
 import { motion } from "framer-motion"
-import { ArrowLeft, BookOpen, ChevronDown, Dices, Image as ImageIcon, MapPin, MessageCircle, ScrollText, Search, UserRound, Users } from "lucide-react"
+import { ArrowLeft, BookOpen, Dices, Image as ImageIcon, MapPin, MessageCircle, ScrollText, Search, UserRound, Users } from "lucide-react"
 import { Button } from "@/components/ui/opex/button"
 import { Markdown } from "@/components/ui/opex/markdown"
 import { Skeleton } from "@/components/ui/opex/skeleton"
@@ -13,7 +13,6 @@ import { EmptyState } from "@/components/feedback/EmptyState"
 import { ErrorState } from "@/components/feedback/ErrorState"
 import { IntegrationTabs, type IntegrationTabDef } from "@/features/integrations/components/tabs/IntegrationTabs"
 import { useAuth } from "@/core/hooks/useAuth"
-import { cn } from "@/lib/utils"
 import { MADDOX_QUEST_STATUSES } from "../../constants"
 import { MADDOX_JOURNAL_IMAGE_KINDS, type MaddoxJournalImageKind } from "../../journal-schemas"
 import type { MaddoxJournalSummaryDto } from "../../journal-types"
@@ -30,6 +29,7 @@ import { JournalPartyList } from "./JournalPartyList"
 import { JournalSearch } from "./JournalSearch"
 import { JournalStateCard } from "./JournalStateCard"
 import { announceJournalHash } from "./use-journal-hash-target"
+import { AnimatedExpand } from "../AnimatedExpand"
 
 const errorStatus = (error: unknown) => (error as { response?: { status?: number } } | null)?.response?.status
 
@@ -180,30 +180,28 @@ function Journal({ summary }: { summary: MaddoxJournalSummaryDto }) {
 }
 
 function SettingCard({ summary, color }: { summary: MaddoxJournalSummaryDto; color: string }) {
-    const [open, setOpen] = useState(false)
     if (!summary.setting.trim() && !summary.openingSituation.trim()) return null
     return (
-        <Card className="h-fit" data-testid="journal-setting">
+        <Card animate={false} className="h-fit" data-testid="journal-setting">
             <CardHeader>
                 <CardTitle className="flex items-center gap-2 text-base">
                     <BookOpen className="h-4 w-4" style={{ color }} aria-hidden /> Cenário
                 </CardTitle>
             </CardHeader>
-            <CardContent className="space-y-3">
-                <div className={cn("space-y-3 overflow-hidden", !open && "max-h-48 [mask-image:linear-gradient(to_bottom,black_70%,transparent)]")}>
-                    {summary.setting.trim() && <Markdown lineAction={null}>{summary.setting}</Markdown>}
-                    {summary.openingSituation.trim() && (
-                        <section className="space-y-1">
-                            <h3 className="text-sm font-semibold" style={{ color }}>
-                                Situação inicial
-                            </h3>
-                            <Markdown lineAction={null}>{summary.openingSituation}</Markdown>
-                        </section>
-                    )}
-                </div>
-                <Button size="sm" variant="ghost" onClick={() => setOpen((value) => !value)} aria-expanded={open}>
-                    <ChevronDown className={cn("transition-transform", open && "rotate-180")} aria-hidden /> {open ? "Mostrar menos" : "Ver o cenário completo"}
-                </Button>
+            <CardContent>
+                <AnimatedExpand collapsedHeight={192} expandLabel="Ver o cenário completo" collapseLabel="Mostrar menos" data-testid="journal-setting-expand">
+                    <div className="space-y-3">
+                        {summary.setting.trim() && <Markdown lineAction={null}>{summary.setting}</Markdown>}
+                        {summary.openingSituation.trim() && (
+                            <section className="space-y-1">
+                                <h3 className="text-sm font-semibold" style={{ color }}>
+                                    Situação inicial
+                                </h3>
+                                <Markdown lineAction={null}>{summary.openingSituation}</Markdown>
+                            </section>
+                        )}
+                    </div>
+                </AnimatedExpand>
             </CardContent>
         </Card>
     )

@@ -92,6 +92,21 @@ partículas) é a **mesma configuração do Opex** (aba Visualização dele): JS
   `subscribeLive` da lib (a mesma conexão SSE) e relê `GET /api/engramind/universe-layout`; a rede se
   redesenha sem recarregar. A aba relê pelo `useEngramindRealtime`.
 
+**Nome da campanha nos canais das campanhas (DND-29):** os canais `dndicas/maddox/campanhas/<id>/jogadores|mestre`
+aparecem como `dndicas/maddox/campanhas/<nome> · Jogadores|Mestre` em todo lugar da rede: nodes, legenda "Por canal"
+do universo do agente, painel e detalhe do canal, chips de filtro, trilha e filtro "Canal". A dica (tooltip) mostra
+`Memórias da campanha "<nome>" (<visibilidade>)` e o slug real, com o id. Como funciona:
+- as páginas (`src/app/(dashboard)/memorias/**/page.tsx`, server components) leem só o id e o nome de todas as
+  campanhas, inclusive as arquivadas, com `listCampaignChannelNames()` (`server/channel-labels.ts`). A leitura só
+  acontece com a integração configurada, e uma falha devolve `[]` com aviso no log;
+- o `MemoriesProvider` recebe a lista (`campaigns`), monta o mapa com `campaignChannelLabels` (`network/channel-labels.ts`,
+  puro) e o passa em `channelLabels` ao `EngramindProvider`;
+- o rótulo usa `ChannelLabel.prefix` da lib (`@engramind/client` 0.8.0 ou mais nova) para trocar também o id do meio do
+  slug, e não só a ponta;
+- campanha fora da lista ou com nome vazio continua com o slug como está; os canais que não são de campanha não mudam.
+  O nome é o do Mongo no carregamento da página: uma campanha criada ou renomeada com a página aberta só aparece
+  depois de recarregar. O `name` do canal no Engramind é gravado só na criação e não é usado aqui.
+
 ## Ferramentas do Agente Opex
 
 `server/tools/memories.ts` (`src/features/opex-agent`): `search_memories`, `get_memory` e `create_memory`

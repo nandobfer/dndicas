@@ -6,11 +6,13 @@ import type { IntegrationDetailDto } from "@/features/integrations/types"
 
 /**
  * Quem liga o Engramind na aplicação: o ramo `engramind` do `IntegrationEditor` (as abas da integração) e as
- * páginas `/memorias` e `/memorias/canais/[channel]` (configurado e permissão de configurar repassados).
+ * páginas `/memorias` e `/memorias/canais/[channel]` (configurado, permissão de configurar e os nomes das
+ * campanhas para os rótulos dos canais repassados).
  */
 
 const access = vi.hoisted(() => ({ effective: new Set<string>(["memories.view"]) }))
 const connection = vi.hoisted(() => ({ value: null as unknown }))
+const campaignNames = vi.hoisted(() => vi.fn(async () => [{ id: "6650f1a2b3c4d5e6f7a8b9c0", name: "Águas de Prata" }]))
 
 vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn() } }))
 vi.mock("@/features/integrations/hooks/useIntegrations", () => ({
@@ -35,12 +37,13 @@ vi.mock("@/features/engramind/server/universe-layout", () => ({
 }))
 vi.mock("@/features/perfix/server/page-access", () => ({ pageAccess: vi.fn(async () => ({ effective: access.effective })) }))
 vi.mock("@/features/engramind/server/client", () => ({ engramindConnection: vi.fn(async () => connection.value) }))
+vi.mock("@/features/engramind/server/channel-labels", () => ({ listCampaignChannelNames: campaignNames }))
 vi.mock("@/features/engramind/components/page/MemoriasPage", () => ({
-    MemoriasPage: ({ configured, canConfigure, universeLayout }: { configured: boolean; canConfigure: boolean; universeLayout?: unknown }) => (
-        <p data-testid="memorias">{`rede configured=${configured} canConfigure=${canConfigure} layout=${JSON.stringify(universeLayout ?? null)}`}</p>
+    MemoriasPage: ({ configured, canConfigure, campaigns, universeLayout }: { configured: boolean; canConfigure: boolean; campaigns?: { name: string }[]; universeLayout?: unknown }) => (
+        <p data-testid="memorias">{`rede configured=${configured} canConfigure=${canConfigure} campanhas=${campaigns?.map((item) => item.name).join(",")} layout=${JSON.stringify(universeLayout ?? null)}`}</p>
     ),
-    MemoriesChannelPage: ({ slug, configured, canConfigure, universeLayout }: { slug: string; configured: boolean; canConfigure: boolean; universeLayout?: unknown }) => (
-        <p data-testid="memorias">{`canal ${slug} configured=${configured} canConfigure=${canConfigure} layout=${JSON.stringify(universeLayout ?? null)}`}</p>
+    MemoriesChannelPage: ({ slug, configured, canConfigure, campaigns, universeLayout }: { slug: string; configured: boolean; canConfigure: boolean; campaigns?: { name: string }[]; universeLayout?: unknown }) => (
+        <p data-testid="memorias">{`canal ${slug} configured=${configured} canConfigure=${canConfigure} campanhas=${campaigns?.map((item) => item.name).join(",")} layout=${JSON.stringify(universeLayout ?? null)}`}</p>
     ),
 }))
 
@@ -81,20 +84,22 @@ describe("IntegrationEditor com a integração Engramind", () => {
 describe("páginas /memorias", () => {
     it("sem a integração configurada, repassa configured=false e a permissão de configurar", async () => {
         access.effective = new Set(["memories.view", "integrations.engramind.edit"])
+        campaignNames.mockClear()
         render(await MemoriasRoute())
-        expect(screen.getByTestId("memorias")).toHaveTextContent("rede configured=false canConfigure=true")
+        expect(screen.getByTestId("memorias")).toHaveTextContent("rede configured=false canConfigure=true campanhas=")
+        expect(campaignNames).not.toHaveBeenCalled()
     })
 
     it("configurada e sem permissão de configurar", async () => {
         connection.value = { baseUrl: "https://engramind.test", appToken: "t", agentTokens: {} }
         render(await MemoriasRoute())
-        expect(screen.getByTestId("memorias")).toHaveTextContent("rede configured=true canConfigure=false")
+        expect(screen.getByTestId("memorias")).toHaveTextContent("rede configured=true canConfigure=false campanhas=Águas de Prata")
     })
 
     it("página do canal decodifica o slug e repassa o estado da integração", async () => {
         connection.value = { baseUrl: "https://engramind.test", appToken: "t", agentTokens: {} }
         render(await ChannelRoute({ params: Promise.resolve({ channel: encodeURIComponent("dndicas/maddox") }) }))
-        expect(screen.getByTestId("memorias")).toHaveTextContent("canal dndicas/maddox configured=true canConfigure=false")
+        expect(screen.getByTestId("memorias")).toHaveTextContent("canal dndicas/maddox configured=true canConfigure=false campanhas=Águas de Prata")
         connection.value = null
         render(await ChannelRoute({ params: Promise.resolve({ channel: "dndicas%2Fopex%2Fglobal" }) }))
         expect(screen.getAllByTestId("memorias")[1]).toHaveTextContent("canal dndicas/opex/global configured=false")
