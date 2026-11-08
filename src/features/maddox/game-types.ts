@@ -30,6 +30,11 @@ export interface MaddoxGameMessageDto {
     characterName: string | null
     portraitUrl: string | null
     content: string
+    /**
+     * Declaração de outro jogador com "Ocultar as ações dos outros" ligado (DND-36): `content` vem vazio e a tela mostra
+     * "Fulano declarou sua ação". O autor sempre recebe o próprio texto.
+     */
+    hiddenAction?: boolean
     replyToId: string | null
     /** Nome do dono que pulou o jogador ("não fez nada" registrado por ele). */
     skippedByName: string | null

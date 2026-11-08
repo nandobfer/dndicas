@@ -227,6 +227,25 @@ describe("mesa Maddox — conversa e turno", () => {
         expect(acquireChannel).toHaveBeenCalledWith("private-maddox-u-u-owner")
     })
 
+    it("declarações ocultas (DND-36): a do outro jogador vira a linha discreta; a minha continua no balão com o texto", async () => {
+        await renderGame(
+            gameState({
+                messages: [
+                    message("d1", { kind: "declaration", memberId: "m2", characterName: "Lyra", content: "", hiddenAction: true }),
+                    message("d2", { kind: "declaration", memberId: "m1", characterName: "Kael", content: "Seguro a porta." }),
+                    message("p1", { kind: "pass", memberId: "m3", characterName: "Borin", content: "" }),
+                ],
+            }),
+        )
+        const hidden = screen.getByTestId("game-action-hidden")
+        expect(hidden).toHaveTextContent("Lyra declarou sua ação.")
+        expect(hidden.className).toBe(screen.getByTestId("game-pass").className)
+        const declarations = screen.getAllByTestId("game-declaration")
+        expect(declarations).toHaveLength(1)
+        expect(declarations[0]).toHaveTextContent("Seguro a porta.")
+        expect(declarations[0]!.className).toContain("flex-row-reverse")
+    })
+
     it("imagens nas cenas (Maddox 10): a imagem fica na bolha da narração; o dono pede a imagem da cena e o retrato do NPC", async () => {
         post.mockResolvedValue(ok({ id: "i2", status: "pending", url: null, caption: "", situationLabel: null, source: "manual", error: null }))
         await renderGame(

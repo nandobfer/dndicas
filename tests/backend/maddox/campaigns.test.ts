@@ -337,6 +337,23 @@ describe("Campanhas Maddox — edição e personagem", () => {
         expect(recordAudit).toHaveBeenCalledWith(expect.objectContaining({ acao: "ATUALIZAR", antes: expect.objectContaining({ showCheckDc: true }), depois: { showCheckDc: false } }))
     })
 
+    it("ações dos outros jogadores (DND-36): visíveis por padrão, escolhidas na criação, editáveis pelo dono mesmo em andamento (auditado)", async () => {
+        expect(await service.createCampaign({ name: "Padrão", rigor: "narrativo" }, ids.owner)).toMatchObject({ hidePlayerActions: false })
+        const campaign = await service.createCampaign({ name: "Às escuras", rigor: "narrativo", hidePlayerActions: true }, ids.owner)
+        expect(campaign.hidePlayerActions).toBe(true)
+        expect(recordAudit).toHaveBeenCalledWith(expect.objectContaining({ acao: "CRIAR", depois: expect.objectContaining({ hidePlayerActions: true }) }))
+        await service.joinByInvite(await tokenOf(campaign.id), ids.ana)
+        await expect(service.updateCampaign(campaign.id, { hidePlayerActions: false }, ids.ana)).rejects.toMatchObject({ status: 403 })
+        await MaddoxCampaignModel.updateOne({ _id: campaign.id }, { $set: { status: "active" } })
+        recordAudit.mockClear()
+        expect(await service.updateCampaign(campaign.id, { hidePlayerActions: false }, ids.owner)).toMatchObject({ hidePlayerActions: false })
+        expect(recordAudit).toHaveBeenCalledWith(expect.objectContaining({ acao: "ATUALIZAR", antes: expect.objectContaining({ hidePlayerActions: true }), depois: { hidePlayerActions: false } }))
+        expect((await service.getCampaignDetail(campaign.id, ids.owner)).hidePlayerActions).toBe(false)
+        const { createMaddoxCampaignSchema, updateMaddoxCampaignSchema } = await import("@/features/maddox/campaign-schemas")
+        expect(updateMaddoxCampaignSchema.safeParse({ hidePlayerActions: true }).success).toBe(true)
+        expect(createMaddoxCampaignSchema.safeParse({ name: "Mesa", rigor: "narrativo", hidePlayerActions: "sim" }).error?.issues[0]?.message).toBe("Escolha se as ações dos outros jogadores ficam visíveis")
+    })
+
     it("densidade das narrações (DND-22): Equilibrada por padrão, escolhida na criação, editável pelo dono a qualquer momento (auditado)", async () => {
         expect(await service.createCampaign({ name: "Padrão", rigor: "fiel-dnd" }, ids.owner)).toMatchObject({ density: "equilibrada" })
         const campaign = await service.createCampaign({ name: "Curtinha", rigor: "narrativo", density: "concisa" }, ids.owner)

@@ -547,7 +547,7 @@ async function recordCombatTurn(campaign: CampaignDoc, member: MemberDoc, actor:
     const content = [`Vez de ${actor.name} (rodada do combate)`, ...lines.map((line) => `- ${line}`), ...(movement ? [`- Movimento e posição: ${movement}`] : []), ...(extra.note ? [`- ${extra.note}`] : []), ...(lines.length || movement ? [] : ["- Não fez nada nesta vez."])].join("\n")
     const character = await characterOf(member)
     const kind = lines.length || movement ? "declaration" : "pass"
-    await recordTurnAction(campaign, member, character, kind, kind === "declaration" ? content : "", skippedBy, { offlineSkip: extra.offlineSkip })
+    await recordTurnAction(campaign, member, character, kind, kind === "declaration" ? content : "", skippedBy, { offlineSkip: extra.offlineSkip, combatTurn: true })
     await publishGameChanged(campaign._id)
     await evaluateTurn(campaign._id)
 }

@@ -9,6 +9,7 @@ import { MADDOX_CAMPAIGN_MEMORY_KINDS, type MaddoxCampaignMemoryKind, type Maddo
 import type { MaddoxSceneImagesSettings } from "../schemas"
 import { MaddoxCampaignMemberModel, MaddoxCampaignMessageModel, MaddoxCharacterModel, MaddoxNpcModel, MaddoxSceneImageModel, type IMaddoxCharacter, type IMaddoxNpc, type IMaddoxSceneImage } from "../models"
 import { accentInsensitivePattern, excerptAround } from "../journal-search"
+import { hiddenPlayerActionsFilter } from "../player-actions-visibility"
 import { maddoxJournalImagesSchema, maddoxJournalMemoriesSchema, maddoxJournalNpcsSchema, maddoxJournalSearchSchema, type MaddoxJournalImageKind } from "../journal-schemas"
 import type {
     MaddoxJournalImageDto,
@@ -299,7 +300,9 @@ function group<T>(items: T[]): MaddoxJournalSearchGroup<T> {
  */
 export async function searchJournal(campaignId: string, input: unknown, userId: string): Promise<MaddoxJournalSearchDto> {
     const { q } = parse(maddoxJournalSearchSchema, input)
-    const campaign = await loadJournalCampaign(campaignId, userId)
+    const { campaign, member } = await loadJournalMembership(campaignId, userId)
+    // Declarações dos outros ocultas no chat (DND-36): o texto delas também não entra na busca.
+    const hiddenActions = campaign.hidePlayerActions ? hiddenPlayerActionsFilter(member._id) : {}
     const pattern = accentInsensitivePattern(q)
     const match = { $regex: pattern, $options: "i" }
     const regex = new RegExp(pattern, "i")
@@ -315,7 +318,7 @@ export async function searchJournal(campaignId: string, input: unknown, userId: 
             .then(({ searchCampaignMemories }) => searchCampaignMemories(String(campaign._id), { query: q, scope: "players", reader: "app", limit: take }))
             .then((items): { items: MemoryDoc[]; unavailable: boolean } => ({ items, unavailable: false }))
             .catch((): { items: MemoryDoc[]; unavailable: boolean } => ({ items: [], unavailable: true })),
-        MaddoxCampaignMessageModel.find({ campaignId: campaign._id, kind: { $in: MADDOX_JOURNAL_SEARCHABLE_MESSAGES }, error: null, content: match })
+        MaddoxCampaignMessageModel.find({ campaignId: campaign._id, kind: { $in: MADDOX_JOURNAL_SEARCHABLE_MESSAGES }, error: null, content: match, ...hiddenActions })
             .sort({ _id: -1 })
             .limit(take)
             .select("kind turnNumber characterName content createdAt")

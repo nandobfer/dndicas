@@ -14,10 +14,11 @@ import type { MaddoxCampaignDetailDto } from "../../campaign-types"
 import { useCreateMaddoxCampaign } from "../../hooks/useMaddoxCampaigns"
 import { CheckDcField } from "./CheckDcField"
 import { SceneImagesField } from "./SceneImagesField"
+import { PlayerActionsField } from "./PlayerActionsField"
 import { DensityCard } from "./DensityCard"
 import { RigorCard } from "./RigorCard"
 
-const DEFAULTS: CreateMaddoxCampaignInput = { name: "", rigor: "equilibrado", showCheckDc: false, sceneImages: true, density: MADDOX_DEFAULT_DENSITY }
+const DEFAULTS: CreateMaddoxCampaignInput = { name: "", rigor: "equilibrado", showCheckDc: false, sceneImages: true, hidePlayerActions: false, density: MADDOX_DEFAULT_DENSITY }
 
 /** Criação da campanha: nome, grau de rigor e densidade das narrações. Nasce no lobby, com o criador como dono. */
 export function CreateCampaignDialog({ open, onOpenChange, onCreated }: { open: boolean; onOpenChange: (open: boolean) => void; onCreated: (campaign: MaddoxCampaignDetailDto) => void }) {
@@ -34,7 +35,7 @@ export function CreateCampaignDialog({ open, onOpenChange, onCreated }: { open: 
     }
 
     const submit = form.handleSubmit((values) =>
-        create.mutate({ name: values.name, rigor: values.rigor, density: values.density ?? MADDOX_DEFAULT_DENSITY, ...(MADDOX_CHECK_RIGORS.includes(values.rigor) ? { showCheckDc: values.showCheckDc ?? false } : {}), ...(values.sceneImages === false ? { sceneImages: false } : {}) }, {
+        create.mutate({ name: values.name, rigor: values.rigor, density: values.density ?? MADDOX_DEFAULT_DENSITY, ...(MADDOX_CHECK_RIGORS.includes(values.rigor) ? { showCheckDc: values.showCheckDc ?? false } : {}), ...(values.sceneImages === false ? { sceneImages: false } : {}), ...(values.hidePlayerActions ? { hidePlayerActions: true } : {}) }, {
             onSuccess: (campaign) => {
                 form.reset(DEFAULTS)
                 onCreated(campaign)
@@ -61,6 +62,7 @@ export function CreateCampaignDialog({ open, onOpenChange, onCreated }: { open: 
                     <DensityCard form={form} />
                     <CheckDcField form={form} />
                     <SceneImagesField form={form} />
+                    <PlayerActionsField form={form} />
 
                     {create.isError && (
                         <p role="alert" className="flex items-start gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-sm text-amber-200">

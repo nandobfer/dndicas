@@ -59,6 +59,7 @@ const detail = (over: Partial<MaddoxCampaignDetailDto> = {}): MaddoxCampaignDeta
     scenarioStatus: "done",
     showCheckDc: false,
     sceneImages: true,
+    hidePlayerActions: false,
     density: "equilibrada",
     startingLevel: null,
     startingStage: "",

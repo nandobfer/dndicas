@@ -394,7 +394,7 @@ quem só assiste, porque não grava nada em nome de ninguém.
 
 **Tempo real dos dados.** Cada mudança publica **`maddox.game.changed { campaignId, turnNumber, phase }`** no canal de
 cada membro ativo (`private-maddox-u-{userId}`); mesa e lobby recarregam. Todos recebem os mesmos dados (as declarações
-aparecem para todos na hora); só `me` muda por usuário.
+aparecem para todos na hora, salvo com "Ações dos outros jogadores: Ocultas", DND-36); só `me` muda por usuário.
 
 **Tela `/campanhas/[id]/mesa`** (`pageAccess`): cabeçalho com rigor, "Turno N" e a faixa da fase ("Turno dos jogadores — X
 de N jogador(es) online já declararam" / "Turno do mestre — o Maddox está narrando…"); conversa no padrão do chat do Opex
@@ -1070,7 +1070,8 @@ obedecer ao prompt; o segredo tem lugar próprio (`masterNotes` ou `save_memory`
 **Busca.** Regex que ignora acentos e caixa (`accentInsensitivePattern`: cada vogal/ç/ñ vira a classe das variantes; o resto é
 escapado), também por pedaço de palavra, sempre filtrada pela campanha — o índice de texto antigo das memórias não é usado (não
 começa por `campaignId` e só acha palavras inteiras). Procura em NPCs (nome e descrição pública), memórias (título, texto e tags),
-falas da mesa (`narration`, `declaration`, `question`, `answer`, sem as respostas que falharam), grupo (nome, perfil e condição) e
+falas da mesa (`narration`, `declaration`, `question`, `answer`, sem as respostas que falharam; com as declarações ocultas da
+DND-36, as dos outros jogadores ficam de fora pela mesma regra do chat), grupo (nome, perfil e condição) e
 situação atual. Termo de 2 a 100 caracteres (fora disso, 400). Até 20 por grupo (`hasMore`), cada um com um trecho de ~160
 caracteres em texto corrido (sem `{{Tipo:Nome}}` nem ênfase do Markdown). O `search_memories` do narrador usa o mesmo regex.
 
@@ -1332,6 +1333,27 @@ Imagens pendentes ou com falha continuam só na mesa e no histórico.
 
 Sem permissão nova: criar/editar já exigem `maddox.play` e ser o dono; o diário exige `maddox.play` e ser membro ativo.
 
+## Declarações dos outros jogadores ocultas (DND-36)
+
+**Configuração.** `campaign.hidePlayerActions` (padrão `false`; campanha antiga sem o campo = visíveis, sem migração). Card "Ações dos
+outros jogadores: Visíveis | Ocultas" (`PlayerActionsField`, `GlassSelector`) na criação e em "Editar campanha", em todos os graus.
+`POST /api/maddox/campaigns` e `PATCH /api/maddox/campaigns/[id]` aceitam `hidePlayerActions` (o POST só o envia quando ligado; o PATCH só
+quando mudou); o dono muda **a qualquer momento**, com auditoria (antes/depois). O detalhe da campanha devolve o campo.
+
+**Regra** (`src/features/maddox/player-actions-visibility.ts`, única para o chat e a busca): com o campo ligado, uma mensagem
+`kind: "declaration"` de **outro** membro fica oculta para quem lê. Nunca ocultas: a própria declaração, "não fez nada", perguntas ao
+mestre e respostas, narrações, cards e ações do combate tático e o **resumo da vez do combate** — que também é `declaration`
+(`recordCombatTurn`, "Encerrar turno"). O resumo é marcado com `combatTurn: true` em `maddox_campaign_messages`; os gravados antes da
+marca são reconhecidos pelo começo do texto (`COMBAT_TURN_SUMMARY_PATTERN`, "Vez de … (rodada do combate)").
+
+**Leitura.** Só na leitura: o banco guarda o texto inteiro e o narrador o recebe completo. `messagesDto` (estado da mesa e
+`GET …/game/messages`, também o histórico do Diário) entrega a mensagem oculta na mesma posição, com `content: ""` e
+`hiddenAction: true` (o texto não sai do servidor); a tela (`GameMessageList`) mostra a linha discreta "Fulano declarou sua ação."
+(`data-testid="game-action-hidden"`, mesmas classes do `game-pass`). A busca do Diário aplica `hiddenPlayerActionsFilter(memberId)`
+na consulta, antes do limite. Vale para todos os membros, inclusive o dono. Desligar devolve os textos a todos.
+
+Sem permissão nova: a configuração exige ser o dono e a leitura, `maddox.play` e ser membro.
+
 ## Testes
 
 `tests/backend/maddox/*` (configuração, roteiros, avatar, sessões, rotas, `campaigns.test.ts` com MongoDB em
@@ -1340,6 +1362,10 @@ memória, `campaign-routes.test.ts`, `grant-maddox-play.test.ts`) e `tests/front
 Modelo por rigor (DND-32): `model-resolution.test.ts` (ordem de resolução e o pulo do slider), `settings.test.ts`
 (formato, validação, catálogo, disponibilidade por rigor), `narrator-opencode.test.ts`, `interviews.test.ts`,
 `action-validation.test.ts`, `campaigns.test.ts` e, na tela, `maddox-tab.test.tsx` ("modelo por rigor").
+DND-36: `player-actions-visibility.test.ts` (tabela da regra), `game.test.ts` (oculta só para os outros, autor vê o texto, lista do
+mesmo tamanho, histórico, resumo do combate com e sem a marca, narrador com o texto completo, ligar e desligar),
+`tactical-combat.test.ts` (o "Encerrar turno" grava `combatTurn`), `journal.test.ts` (busca), `campaigns.test.ts` (criação, PATCH,
+auditoria, schema) e, na tela, `maddox-game.test.tsx` e `maddox-campaigns.test.tsx`.
 DND-31: `interviews.test.ts` (personagem criado ao começar, corrida de duas abas, entrevistador indisponível sem esboço, nome
 obrigatório com 409 e reaplicação, nome longo cortado, retrato gerado uma vez com o pedido certo e a foto da ficha substituída,
 falha e nova tentativa concorrente, teto de tempo com gerador que não responde, personagem antigo sem imagem, retrato preso, personagem sem nome fora de "Outros personagens da mesa"), `interview-prompt.test.ts` (regra do nome),

@@ -56,6 +56,8 @@ export interface MaddoxCampaignListItemDto {
     showCheckDc: boolean
     /** Imagens automáticas nas cenas (Maddox 10). */
     sceneImages: boolean
+    /** Declarações dos outros jogadores ocultas no chat (DND-36). */
+    hidePlayerActions: boolean
     /** Densidade das narrações (DND-22). */
     density: MaddoxDensityLevel
     /** Nível inicial da mesa (graus com ficha; `null` = cada personagem informa). */
