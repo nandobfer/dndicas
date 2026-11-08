@@ -2,7 +2,7 @@
 
 import type { Dispatch, SetStateAction } from "react"
 import { motion } from "framer-motion"
-import { ArrowLeftRight, Plug, RefreshCw } from "lucide-react"
+import { ArrowLeftRight, Orbit, Plug, RefreshCw } from "lucide-react"
 import type { IntegrationDef } from "@/lib/integrations/catalog"
 import type { IntegrationDetailDto } from "@/features/integrations/types"
 import { DetailHeader } from "@/features/integrations/components/detail/DetailHeader"
@@ -13,14 +13,16 @@ import { useEngramindBootstrap, useEngramindRealtime } from "../../hooks/useEngr
 import { ConnectionTab } from "./ConnectionTab"
 import { MigrationTab } from "./migration/MigrationTab"
 import { SyncTab } from "./SyncTab"
+import { UniverseLayoutTab } from "./universe-layout/UniverseLayoutTab"
 
-const ENGRAMIND_TABS = ["conexao", "migracao", "sincronizacao"] as const
+const ENGRAMIND_TABS = ["conexao", "migracao", "sincronizacao", "visualizacao"] as const
 type EngramindTab = (typeof ENGRAMIND_TABS)[number]
 
 const TABS: IntegrationTabDef<EngramindTab>[] = [
     { id: "conexao", label: "Conexão", icon: Plug },
     { id: "migracao", label: "Migração", icon: ArrowLeftRight },
     { id: "sincronizacao", label: "Sincronização", icon: RefreshCw },
+    { id: "visualizacao", label: "Visualização", icon: Orbit },
 ]
 
 interface EngramindEditorFormProps {
@@ -36,8 +38,9 @@ interface EngramindEditorFormProps {
 
 /**
  * Página da integração Engramind (`/integracoes/engramind`): Conexão (salvar dispara a configuração
- * automática), Migração das memórias e Sincronização das campanhas. Sem gestão da rede: apps, agentes,
- * tokens e configurações ficam no Opex.
+ * automática), Migração das memórias, Sincronização das campanhas e Visualização (importar/exportar o layout
+ * dos universos da rede, sem formulário). Sem gestão da rede: apps, agentes, tokens e configurações ficam
+ * no Opex.
  */
 export function EngramindEditorForm({ def, data, draft, setDraft, dirty, pending, onSave, onUndo }: EngramindEditorFormProps) {
     useEngramindRealtime()
@@ -64,6 +67,7 @@ export function EngramindEditorForm({ def, data, draft, setDraft, dirty, pending
                 {tab === "conexao" && <ConnectionTab def={def} data={data} draft={draft} setDraft={setDraft} dirty={dirty} pending={pending || bootstrap.isPending} onUndo={onUndo} />}
                 {tab === "migracao" && <MigrationTab />}
                 {tab === "sincronizacao" && <SyncTab />}
+                {tab === "visualizacao" && <UniverseLayoutTab />}
             </IntegrationTabs>
         </motion.form>
     )
