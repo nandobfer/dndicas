@@ -92,6 +92,9 @@ export function subscriptionsFor(): SubscriptionTarget[] {
 
 const VISIBILITY_SEGMENT: Record<MaddoxVisibility, string> = { players: "jogadores", master: "mestre" }
 
+/** Nome legível de cada visibilidade (nome do canal no Engramind e rótulo na rede de `/memorias`). */
+export const CAMPAIGN_VISIBILITY_NAMES: Record<MaddoxVisibility, string> = { players: "Jogadores", master: "Mestre" }
+
 export function campaignChannel(campaignId: string, visibility: MaddoxVisibility): string {
     return `${CAMPAIGN_CHANNEL_PREFIX}${campaignId}/${VISIBILITY_SEGMENT[visibility]}`
 }
