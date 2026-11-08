@@ -93,6 +93,7 @@ vi.mock("@/features/ai/server/memory-block", () => ({ memoryBlock: vi.fn(async (
 vi.mock("@/lib/ai/jev", () => ({ askJevSystemOne }))
 vi.mock("@/lib/ai/stream", () => ({ generateAiText }))
 vi.mock("@/core/storage/s3", () => ({ getFile }))
+vi.mock("@/features/engramind/server/campaign-memories", async () => (await import("../../helpers/campaign-memories-mock")).campaignMemoriesModule)
 vi.mock("@/features/mcp/server/catalog-entity-service", () => ({
     getCatalogEntity: vi.fn(async ({ id }: { id: string }) => (id === "goblin" ? { _id: "goblin", name: "Goblin", image: "/api/upload?key=catalogo%2Fgoblin.png", description: "<p>Pequeno e verde.</p>" } : null)),
 }))
@@ -105,6 +106,8 @@ const { MADDOX_SCENE_IMAGE_CAPTION_GUIDE, MADDOX_SCENE_IMAGE_CAPTION_MAX } = awa
 const { findMaddoxTool, runMaddoxTool } = await import("@/features/maddox/server/master-tools")
 const { onCombatEnded } = await import("@/features/maddox/server/combat-image")
 const { CharacterSheet } = await import("@/features/character-sheets/models/character-sheet")
+const { campaignMemoriesStore } = await import("../../helpers/campaign-memories-mock")
+const campaignMemories = await import("@/features/engramind/server/campaign-memories")
 
 let mongo: MongoMemoryServer
 const oid = () => new mongoose.Types.ObjectId()
@@ -191,6 +194,7 @@ beforeEach(async () => {
     Object.assign(gen, { fail: false, hang: false })
     Object.assign(jev, { score: 0.9, fail: false, hang: false })
     Object.assign(describer, { text: "", fail: false, hang: false })
+    campaignMemoriesStore.reset()
     vi.clearAllMocks()
 })
 
@@ -596,5 +600,127 @@ describe("revisão: várias imagens na mesma narração, legenda, tetos de tempo
         release()
         await settle(id)
         expect(await MaddoxSceneImageModel.findById(waiting!._id).lean()).toMatchObject({ status: "done" })
+    })
+})
+
+describe("aparência dos personagens e último turno (DND-33)", () => {
+    const promptOf = (index = 0) => (generateAndStoreDndImage.mock.calls[index]![0] as { prompt: string }).prompt
+
+    it("o pedido ao gerador traz a cena atual, a aparência obrigatória e a conferência final, mantendo o estilo da mesa", async () => {
+        const { campaignId, narrationId } = await table()
+        await MaddoxCharacterModel.updateOne({ campaignId, name: "Lyra" }, { $set: { "profile.origem": "Nasceu numa vila de pescadores.", "profile.personalidade": "Desconfiada.", "profile.equipamentos": "Arco longo e adagas gêmeas." } })
+        await images.scheduleSceneImage({ campaignId, source: "tool", turnNumber: 5, messageId: narrationId, situation: "new-location", description: "Lyra sobe a escada do farol.", caption: "", characters: ["Lyra"] })
+        await images.waitForSceneImages()
+        const prompt = promptOf()
+        const order = ["Estilo visual desta mesa: pintura a óleo", "## Cena a retratar (o que acontece AGORA)", "## Aparência de quem aparece (obrigatória)", "Conferência final da aparência", "Sem texto, letras"].map((text) => prompt.indexOf(text))
+        expect(order.every((position) => position >= 0)).toBe(true)
+        expect([...order].sort((a, b) => a - b)).toEqual(order)
+        expect(prompt).toContain("- Cabelo: prateado")
+        expect(prompt).toContain("- Olhos: verdes")
+        expect(prompt).toContain("- Aparência (ficha): Capa azul e cicatriz no queixo.")
+        expect(prompt).toContain("- Identidade e aparência (perfil): Elfa alta de olhar atento.")
+        expect(prompt).toContain("- Equipamentos e recursos: Arco longo e adagas gêmeas.")
+        expect(prompt).toContain("- Lyra — cabelo: prateado; olhos: verdes; raça: Elfa")
+        // Seções sem nada visual saem do pedido.
+        expect(prompt).not.toContain("Nasceu numa vila de pescadores.")
+        expect(prompt).not.toContain("Desconfiada.")
+    })
+
+    it("aparência não registrada não é inventada: personagem sem ficha só leva o que o perfil diz", async () => {
+        const { campaignId, narrationId } = await table()
+        await MaddoxCharacterModel.updateOne({ campaignId, name: "Doran" }, { $set: { profile: {} } })
+        await images.scheduleSceneImage({ campaignId, source: "tool", turnNumber: 5, messageId: narrationId, situation: "new-location", description: "Doran no cais.", caption: "", characters: ["Doran"] })
+        await images.waitForSceneImages()
+        const prompt = promptOf()
+        expect(prompt).toContain("### Doran\n- (aparência não registrada: não invente traços marcantes como fatos)")
+        expect(prompt).not.toContain("Conferência final da aparência")
+        expect(prompt).not.toMatch(/Cabelo:|Olhos:|Pele:/)
+    })
+
+    it("anotações de aparência do canal dos jogadores entram como mudanças registradas; as do mestre e as sem aparência ficam de fora", async () => {
+        const { campaignId, id, narrationId } = await table()
+        await campaignMemories.saveCampaignMemory(id, { kind: "fato", title: "Novo visual de Lyra", text: "Lyra tingiu o cabelo de prata no templo da lua." })
+        await campaignMemories.saveCampaignMemory(id, { kind: "fato", title: "Disfarce", text: "Lyra usa peruca de cabelo preto em segredo.", visibility: "master" })
+        await campaignMemories.saveCampaignMemory(id, { kind: "evento", title: "O ferreiro", text: "Lyra salvou o ferreiro do incêndio." })
+        await campaignMemories.saveCampaignMemory(id, { kind: "fato", title: "Lyrana", text: "Lyrana tem cabelo azul." })
+        await images.scheduleSceneImage({ campaignId, source: "tool", turnNumber: 5, messageId: narrationId, situation: "new-location", description: "Lyra no farol.", caption: "", characters: ["Lyra"] })
+        await images.waitForSceneImages()
+        const prompt = promptOf()
+        expect(prompt).toContain("- Mudanças registradas na história (valem sobre a ficha quando a contradizem):\n  - Novo visual de Lyra: Lyra tingiu o cabelo de prata no templo da lua.")
+        expect(prompt).not.toContain("peruca")
+        expect(prompt).not.toContain("ferreiro")
+        expect(prompt).not.toContain("Lyrana")
+    })
+
+    it("rede de memórias fora do ar: a imagem sai com a ficha e o perfil", async () => {
+        const { campaignId, narrationId } = await table()
+        campaignMemoriesStore.setDown(true)
+        const { image } = await images.scheduleSceneImage({ campaignId, source: "tool", turnNumber: 5, messageId: narrationId, situation: "new-location", description: "O farol.", caption: "", characters: ["Lyra"] })
+        await images.waitForSceneImages()
+        expect(await MaddoxSceneImageModel.findById(image!._id).lean()).toMatchObject({ status: "done" })
+        expect(promptOf()).toContain("- Cabelo: prateado")
+        expect(promptOf()).not.toContain("Mudanças registradas")
+    })
+
+    it("fim de batalha também leva a aparência do grupo", async () => {
+        const { campaignId } = await table()
+        const combat = await MaddoxCombatModel.create({ campaignId, title: "Emboscada", status: "ended", startedTurn: 4, endedTurn: 5, finalScene: "O cais vazio.", combatants: [] })
+        await onCombatEnded(combat.toObject())
+        await images.waitForSceneImages()
+        expect(promptOf()).toContain("### Lyra\n- Raça: Elfa")
+        expect(promptOf()).toContain("- Identidade e aparência (perfil): Anão ruivo de barba trançada.")
+    })
+
+    it("retrato de NPC continua sem o bloco de personagens", async () => {
+        const { id, owner } = await table()
+        const varn = await MaddoxNpcModel.findOne({ name: "Varn" }).lean()
+        await images.requestNpcPortrait(id, String(varn!._id), owner)
+        await images.waitForSceneImages()
+        expect(promptOf()).toContain("Quem é: Varn.")
+        expect(promptOf()).not.toContain("## Aparência de quem aparece")
+    })
+
+    it("pedido manual: a descrição recebe a aparência de todos e o último turno em destaque (testes com resultado, ações de combate; cancelados fora), com o turno anterior só como contexto", async () => {
+        const { campaignId, id, owner, narrationId } = await table()
+        await MaddoxCampaignMessageModel.deleteOne({ _id: narrationId })
+        await MaddoxCampaignMessageModel.create({ campaignId, turnNumber: 4, phase: "master", kind: "narration", content: "A tempestade cresce sobre o porto." })
+        await MaddoxCampaignMessageModel.create({ campaignId, turnNumber: 5, phase: "players", kind: "declaration", characterName: "Lyra", content: "Subo a escada do farol com a lanterna." })
+        const check = (reason: string, status: string, total: number | null) => ({ round: 0, status, kind: "pericia", ability: "Destreza", skill: "Acrobacia", dc: 12, mode: "normal", reason, sheetId: null, roll: total === null ? null : { total }, modifierParts: [], rolledBy: null, rolledAt: null, cancelReason: null })
+        await MaddoxCampaignMessageModel.collection.insertOne({ _id: oid(), campaignId, turnNumber: 5, phase: "master", kind: "check", memberId: oid(), characterName: "Lyra", content: "", error: null, check: check("Saltar o degrau quebrado", "rolled", 15) })
+        await MaddoxCampaignMessageModel.collection.insertOne({ _id: oid(), campaignId, turnNumber: 5, phase: "master", kind: "check", memberId: oid(), characterName: "Doran", content: "", error: null, check: check("Segurar o corrimão", "rolled", 7) })
+        await MaddoxCampaignMessageModel.collection.insertOne({ _id: oid(), campaignId, turnNumber: 5, phase: "master", kind: "check", memberId: oid(), characterName: "Doran", content: "", error: null, check: check("TESTE CANCELADO", "cancelled", null) })
+        await MaddoxCampaignMessageModel.collection.insertOne({ _id: oid(), campaignId, turnNumber: 5, phase: "master", kind: "check", memberId: oid(), characterName: "Lyra", content: "", error: null, check: check("Ouvir a porta", "pending", null) })
+        await MaddoxCampaignMessageModel.create({ campaignId, turnNumber: 5, phase: "master", kind: "combat-action", characterName: "Lyra", content: "", combatAction: { actorName: "Lyra", label: "Ataque", status: "resolved", summary: "Lyra atacou Goblin 1 com Espada Longa: acertou (17), 9 cortante" } })
+        await MaddoxCampaignMessageModel.create({ campaignId, turnNumber: 5, phase: "master", kind: "combat-action", characterName: "Doran", content: "", combatAction: { actorName: "Doran", label: "AÇÃO CANCELADA", status: "cancelled", summary: "" } })
+        await MaddoxCampaignMessageModel.create({ campaignId, turnNumber: 5, phase: "master", kind: "narration", content: "Os degraus rangem sob os pés de Lyra." })
+        await MaddoxCampaignMessageModel.create({ campaignId, turnNumber: 5, phase: "master", kind: "narration", content: "TEXTO QUE FALHOU", error: "falhou" })
+        await MaddoxCampaignMessageModel.create({ campaignId, turnNumber: 5, phase: "master", kind: "narration", segment: 1, content: "No topo, Lyra acende o farol e a luz corta a névoa." })
+        describer.text = JSON.stringify({ descricaoVisual: "Lyra acende o farol.", legenda: "", personagens: ["Lyra"], npcs: [] })
+        await images.requestManualSceneImage(id, owner)
+        await settle(id)
+        const call = generateAiText.mock.calls[0]![0] as { instructions: string; prompt: string }
+        expect(call.instructions).toContain("## Aparência dos personagens (fatos registrados, não altere)")
+        expect(call.instructions).toContain("- Cabelo: prateado")
+        expect(call.instructions).toContain("### Doran")
+        expect(call.instructions).toContain("- Varn: Contrabandista de casaco de couro.")
+        expect(call.instructions).not.toContain("SEGREDO")
+        expect(call.prompt).toContain("## ÚLTIMO TURNO (turno 5) — retrate ESTE momento")
+        expect(call.prompt).toContain(
+            [
+                "- Declaração de Lyra: Subo a escada do farol com a lanterna.",
+                "- Teste de Lyra: Saltar o degrau quebrado (CD 12) — total 15: sucesso",
+                "- Teste de Doran: Segurar o corrimão (CD 12) — total 7: falha",
+                "- Teste de Lyra: Ouvir a porta (CD 12) — sem resultado ainda",
+                "- Ação de combate: Lyra atacou Goblin 1 com Espada Longa: acertou (17), 9 cortante",
+                "- Narração do Maddox: Os degraus rangem sob os pés de Lyra.",
+                "- MOMENTO A RETRATAR (último trecho da narração): No topo, Lyra acende o farol e a luz corta a névoa.",
+            ].join("\n"),
+        )
+        // Teste e ação cancelados não aconteceram.
+        expect(call.prompt).not.toContain("TESTE CANCELADO")
+        expect(call.prompt).not.toContain("AÇÃO CANCELADA")
+        expect(call.prompt).toContain("## Antes disso (só contexto, NÃO retrate)\nA tempestade cresce sobre o porto.")
+        expect(call.prompt.indexOf("ÚLTIMO TURNO")).toBeLessThan(call.prompt.indexOf("Antes disso"))
+        expect(call.prompt).not.toContain("TEXTO QUE FALHOU")
     })
 })
