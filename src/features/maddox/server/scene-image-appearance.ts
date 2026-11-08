@@ -19,8 +19,8 @@ import { MaddoxCharacterModel, type IMaddoxCharacter } from "../models"
  * personagem e falam da aparência. Nada é deduzido: campo vazio não aparece e personagem sem dados é marcado como "não
  * registrada". As anotações valem sobre a ficha quando a contradizem (mudanças registradas na história).
  *
- * Decisão do plano: a anotação conta como de aparência pelo vocabulário fixo `MADDOX_APPEARANCE_TERMS` (começo de
- * palavra) e precisa citar o nome do personagem como palavra inteira. A busca tem prazo; falha = sem anotações.
+ * Decisão do plano: a anotação conta como de aparência pelo vocabulário fixo `MADDOX_APPEARANCE_TERMS` (palavra inteira ou
+ * radical explícito) e precisa citar o nome do personagem como palavra inteira. A busca tem prazo; falha = sem anotações.
  */
 
 const log = loggerFor({ module: "maddox", feature: "scene-image-appearance" })
@@ -116,6 +116,12 @@ export async function loadSceneCharacters(campaignId: Types.ObjectId, names: rea
 const escapeRegExp = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
 const wordsOf = (value: string) => keyOf(value).split(/[^a-z0-9]+/).filter(Boolean)
 
+/** Termo de aparência: palavra inteira (ou plural com "s"); radical com `*` casa pelo começo. */
+export function isAppearanceWord(word: string): boolean {
+    const singular = word.endsWith("s") ? word.slice(0, -1) : word
+    return MADDOX_APPEARANCE_TERMS.some((term) => (term.endsWith("*") ? word.startsWith(term.slice(0, -1)) : word === term || singular === term))
+}
+
 /** Anotação do canal dos jogadores que cita o personagem (palavra inteira) e fala da aparência. */
 export function isAppearanceMemory(memory: Pick<CampaignMemoryView, "title" | "text" | "tags" | "visibility" | "archived">, name: string): boolean {
     if (memory.visibility !== "players" || memory.archived) return false
@@ -124,8 +130,7 @@ export function isAppearanceMemory(memory: Pick<CampaignMemoryView, "title" | "t
     const mentions = new RegExp(`(^|[^a-z0-9])${escapeRegExp(needle)}($|[^a-z0-9])`)
     const haystack = [memory.title, memory.text, ...(memory.tags ?? [])].map(keyOf)
     if (!haystack.some((value) => mentions.test(value))) return false
-    const words = wordsOf(`${memory.title} ${memory.text}`)
-    return words.some((word) => MADDOX_APPEARANCE_TERMS.some((term) => word.startsWith(term)))
+    return wordsOf(`${memory.title} ${memory.text}`).some(isAppearanceWord)
 }
 
 /**

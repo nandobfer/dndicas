@@ -17,6 +17,7 @@ vi.mock("@/features/maddox/constants", async (importOriginal) => ({
 }))
 
 const { appearanceBlock, appearanceMemoriesFor, appearanceRecap, characterAppearance, isAppearanceMemory, sheetText } = await import("@/features/maddox/server/scene-image-appearance")
+const { turnEventOf } = await import("@/features/maddox/server/scene-image-describer")
 
 const memory = (title: string, text: string, extra: Partial<CampaignMemoryView> = {}): CampaignMemoryView => ({
     id: `m_${title}`,
@@ -47,6 +48,15 @@ describe("isAppearanceMemory", () => {
         expect(isAppearanceMemory(memory("Herói", "Lyra salvou o ferreiro."), "Lyra")).toBe(false)
         expect(isAppearanceMemory(memory("Outra", "Lyrana tem cabelo azul."), "Lyra")).toBe(false)
         expect(isAppearanceMemory(memory("Élfica", "Ana Clara usa um manto rubro."), "Ana Clara")).toBe(true)
+    })
+
+    it("palavras comuns que só começam como um termo de aparência não contam (palavra inteira ou radical explícito)", () => {
+        for (const text of ["Lyra olhou para o céu e é capaz de liderar.", "Lyra rezou no altar.", "Lyra subornou o porteiro.", "Lyra brincou com a capacidade do grupo.", "Lyra falou altamente baixo."]) {
+            expect(isAppearanceMemory(memory("Nota", text), "Lyra")).toBe(false)
+        }
+        for (const text of ["Lyra fechou os olhos.", "Lyra vestiu uma capa nova.", "Lyra tem porte nobre.", "Lyra ganhou brincos de prata.", "Lyra exibe tatuagens tribais."]) {
+            expect(isAppearanceMemory(memory("Nota", text), "Lyra")).toBe(true)
+        }
     })
 
     it("anotação do mestre ou arquivada não conta", () => {
@@ -106,5 +116,24 @@ describe("bloco de aparência", () => {
         const item = characterAppearance({ character: { name: "Doran", profile: {}, currentState: "" } as never, sheet: null })
         expect(appearanceBlock([item])).toBe("### Doran\n- (aparência não registrada: não invente traços marcantes como fatos)")
         expect(appearanceRecap([item])).toEqual([])
+    })
+})
+
+describe("linhas do último turno", () => {
+    const base = { _id: null as never, characterName: "Lyra", content: "", check: null, combatAction: null }
+    const check = (status: string, total: number | null) => ({ status, dc: 12, reason: "Saltar", roll: total === null ? null : { total } }) as never
+
+    it("teste rolado mostra sucesso ou falha; pendente sem resultado; cancelado não entra", () => {
+        expect(turnEventOf({ ...base, kind: "check", check: check("rolled", 12) })).toEqual({ label: "Teste de Lyra", text: "Saltar (CD 12) — total 12: sucesso" })
+        expect(turnEventOf({ ...base, kind: "check", check: check("rolled", 11) })).toEqual({ label: "Teste de Lyra", text: "Saltar (CD 12) — total 11: falha" })
+        expect(turnEventOf({ ...base, kind: "check", check: check("pending", null) })).toEqual({ label: "Teste de Lyra", text: "Saltar (CD 12) — sem resultado ainda" })
+        expect(turnEventOf({ ...base, kind: "check", check: check("cancelled", null) })).toBeNull()
+    })
+
+    it("ação de combate usa o resumo do card; cancelada não entra; pendente sem resumo fica sem resultado", () => {
+        const action = (status: string, summary: string) => ({ actorName: "Lyra", label: "Ataque", status, summary }) as never
+        expect(turnEventOf({ ...base, kind: "combat-action", combatAction: action("resolved", "Lyra acertou o goblin") })).toEqual({ label: "Ação de combate", text: "Lyra acertou o goblin" })
+        expect(turnEventOf({ ...base, kind: "combat-action", combatAction: action("pending", "") })).toEqual({ label: "Ação de combate", text: "Lyra: Ataque (sem resultado ainda)" })
+        expect(turnEventOf({ ...base, kind: "combat-action", combatAction: action("cancelled", "Lyra acertou") })).toBeNull()
     })
 })

@@ -68,19 +68,27 @@ export interface SceneTurnContext {
 const flat = (value: string | null | undefined) => (value ?? "").replace(/\s+/g, " ").trim()
 const cut = (value: string, max: number) => (value.length > max ? `${value.slice(0, max - 1).trimEnd()}…` : value)
 
-type TurnMessage = Pick<IMaddoxCampaignMessage, "_id" | "kind" | "characterName" | "content" | "check">
+type TurnMessage = Pick<IMaddoxCampaignMessage, "_id" | "kind" | "characterName" | "content" | "check" | "combatAction">
 
-function eventOf(message: TurnMessage): { label: string; text: string } | null {
+/** Linha do último turno de uma mensagem (`null` = não entra). */
+export function turnEventOf(message: TurnMessage): { label: string; text: string } | null {
     const who = message.characterName ?? "jogador"
     if (message.kind === "declaration") return flat(message.content) ? { label: `Declaração de ${who}`, text: flat(message.content) } : null
     if (message.kind === "narration") return flat(message.content) ? { label: "Narração do Maddox", text: flat(message.content) } : null
-    if (message.kind === "check" && message.check) {
+    // Teste cancelado (o jogador saiu) não aconteceu; pendente ainda não tem resultado.
+    if (message.kind === "check" && message.check && message.check.status !== "cancelled") {
         const check = message.check
         const total = check.roll?.total
-        const result = typeof total === "number" ? ` — total ${total}: ${total >= check.dc ? "sucesso" : "falha"}` : ""
-        return { label: `Teste de ${who}`, text: `${flat(check.reason)} (CD ${check.dc})${result}` }
+        const result = check.status === "rolled" && typeof total === "number" ? `total ${total}: ${total >= check.dc ? "sucesso" : "falha"}` : "sem resultado ainda"
+        return { label: `Teste de ${who}`, text: `${flat(check.reason)} (CD ${check.dc}) — ${result}` }
     }
-    if (message.kind === "combat-action" && flat(message.content)) return { label: "Ação de combate", text: flat(message.content) }
+    // Ação do combate tático: o texto fica em `combatAction.summary` (o `content` é vazio); cancelada não aconteceu.
+    if (message.kind === "combat-action" && message.combatAction && message.combatAction.status !== "cancelled") {
+        const action = message.combatAction
+        const fallback = [flat(action.actorName), flat(action.label)].filter(Boolean).join(": ")
+        const text = flat(action.summary) || (fallback ? `${fallback}${action.status === "pending" ? " (sem resultado ainda)" : ""}` : "")
+        return text ? { label: "Ação de combate", text } : null
+    }
     return null
 }
 
@@ -97,7 +105,7 @@ export async function lastTurnContext(campaignId: Types.ObjectId, narration: { _
                 kind: { $in: ["declaration", "narration", "check", "combat-action"] },
             })
                 .sort({ _id: 1 })
-                .select("_id kind characterName content check")
+                .select("_id kind characterName content check combatAction")
                 .lean<TurnMessage[]>(),
             MaddoxCampaignMessageModel.findOne({ campaignId, kind: "narration", error: null, turnNumber: { $lt: narration.turnNumber } })
                 .sort({ _id: -1 })
@@ -108,7 +116,7 @@ export async function lastTurnContext(campaignId: Types.ObjectId, narration: { _
         const events: { label: string; text: string }[] = []
         let size = base.lastNarration.length
         for (const message of [...messages].reverse()) {
-            const event = eventOf(message)
+            const event = turnEventOf(message)
             if (!event) continue
             size += event.label.length + event.text.length
             if (size > MADDOX_SCENE_IMAGE_LAST_TURN_TEXT_MAX) break

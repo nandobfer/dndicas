@@ -680,11 +680,18 @@ describe("aparência dos personagens e último turno (DND-33)", () => {
         expect(promptOf()).not.toContain("## Aparência de quem aparece")
     })
 
-    it("pedido manual: a descrição recebe a aparência de todos e o último turno em destaque, com o turno anterior só como contexto", async () => {
+    it("pedido manual: a descrição recebe a aparência de todos e o último turno em destaque (testes com resultado, ações de combate; cancelados fora), com o turno anterior só como contexto", async () => {
         const { campaignId, id, owner, narrationId } = await table()
         await MaddoxCampaignMessageModel.deleteOne({ _id: narrationId })
         await MaddoxCampaignMessageModel.create({ campaignId, turnNumber: 4, phase: "master", kind: "narration", content: "A tempestade cresce sobre o porto." })
         await MaddoxCampaignMessageModel.create({ campaignId, turnNumber: 5, phase: "players", kind: "declaration", characterName: "Lyra", content: "Subo a escada do farol com a lanterna." })
+        const check = (reason: string, status: string, total: number | null) => ({ round: 0, status, kind: "pericia", ability: "Destreza", skill: "Acrobacia", dc: 12, mode: "normal", reason, sheetId: null, roll: total === null ? null : { total }, modifierParts: [], rolledBy: null, rolledAt: null, cancelReason: null })
+        await MaddoxCampaignMessageModel.collection.insertOne({ _id: oid(), campaignId, turnNumber: 5, phase: "master", kind: "check", memberId: oid(), characterName: "Lyra", content: "", error: null, check: check("Saltar o degrau quebrado", "rolled", 15) })
+        await MaddoxCampaignMessageModel.collection.insertOne({ _id: oid(), campaignId, turnNumber: 5, phase: "master", kind: "check", memberId: oid(), characterName: "Doran", content: "", error: null, check: check("Segurar o corrimão", "rolled", 7) })
+        await MaddoxCampaignMessageModel.collection.insertOne({ _id: oid(), campaignId, turnNumber: 5, phase: "master", kind: "check", memberId: oid(), characterName: "Doran", content: "", error: null, check: check("TESTE CANCELADO", "cancelled", null) })
+        await MaddoxCampaignMessageModel.collection.insertOne({ _id: oid(), campaignId, turnNumber: 5, phase: "master", kind: "check", memberId: oid(), characterName: "Lyra", content: "", error: null, check: check("Ouvir a porta", "pending", null) })
+        await MaddoxCampaignMessageModel.create({ campaignId, turnNumber: 5, phase: "master", kind: "combat-action", characterName: "Lyra", content: "", combatAction: { actorName: "Lyra", label: "Ataque", status: "resolved", summary: "Lyra atacou Goblin 1 com Espada Longa: acertou (17), 9 cortante" } })
+        await MaddoxCampaignMessageModel.create({ campaignId, turnNumber: 5, phase: "master", kind: "combat-action", characterName: "Doran", content: "", combatAction: { actorName: "Doran", label: "AÇÃO CANCELADA", status: "cancelled", summary: "" } })
         await MaddoxCampaignMessageModel.create({ campaignId, turnNumber: 5, phase: "master", kind: "narration", content: "Os degraus rangem sob os pés de Lyra." })
         await MaddoxCampaignMessageModel.create({ campaignId, turnNumber: 5, phase: "master", kind: "narration", content: "TEXTO QUE FALHOU", error: "falhou" })
         await MaddoxCampaignMessageModel.create({ campaignId, turnNumber: 5, phase: "master", kind: "narration", segment: 1, content: "No topo, Lyra acende o farol e a luz corta a névoa." })
@@ -698,7 +705,20 @@ describe("aparência dos personagens e último turno (DND-33)", () => {
         expect(call.instructions).toContain("- Varn: Contrabandista de casaco de couro.")
         expect(call.instructions).not.toContain("SEGREDO")
         expect(call.prompt).toContain("## ÚLTIMO TURNO (turno 5) — retrate ESTE momento")
-        expect(call.prompt).toContain("- Declaração de Lyra: Subo a escada do farol com a lanterna.\n- Narração do Maddox: Os degraus rangem sob os pés de Lyra.\n- MOMENTO A RETRATAR (último trecho da narração): No topo, Lyra acende o farol e a luz corta a névoa.")
+        expect(call.prompt).toContain(
+            [
+                "- Declaração de Lyra: Subo a escada do farol com a lanterna.",
+                "- Teste de Lyra: Saltar o degrau quebrado (CD 12) — total 15: sucesso",
+                "- Teste de Doran: Segurar o corrimão (CD 12) — total 7: falha",
+                "- Teste de Lyra: Ouvir a porta (CD 12) — sem resultado ainda",
+                "- Ação de combate: Lyra atacou Goblin 1 com Espada Longa: acertou (17), 9 cortante",
+                "- Narração do Maddox: Os degraus rangem sob os pés de Lyra.",
+                "- MOMENTO A RETRATAR (último trecho da narração): No topo, Lyra acende o farol e a luz corta a névoa.",
+            ].join("\n"),
+        )
+        // Teste e ação cancelados não aconteceram.
+        expect(call.prompt).not.toContain("TESTE CANCELADO")
+        expect(call.prompt).not.toContain("AÇÃO CANCELADA")
         expect(call.prompt).toContain("## Antes disso (só contexto, NÃO retrate)\nA tempestade cresce sobre o porto.")
         expect(call.prompt.indexOf("ÚLTIMO TURNO")).toBeLessThan(call.prompt.indexOf("Antes disso"))
         expect(call.prompt).not.toContain("TEXTO QUE FALHOU")

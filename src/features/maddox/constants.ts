@@ -453,12 +453,17 @@ export const MADDOX_SCENE_IMAGE_FAILED_MESSAGE = "Não foi possível gerar a ima
 export const MADDOX_SCENE_IMAGE_APPEARANCE_MEMORIES_MAX = 3
 export const MADDOX_SCENE_IMAGE_APPEARANCE_MEMORY_TEXT_MAX = 400
 export const MADDOX_SCENE_IMAGE_APPEARANCE_MEMORIES_TIMEOUT_MS = 5_000
-/** Termos (sem acento, minúsculos) que marcam uma anotação como de aparência; casam pelo começo da palavra. */
+/**
+ * Termos (sem acento, minúsculos) que marcam uma anotação como de aparência. Palavra inteira (também no plural com "s"),
+ * menos os radicais terminados em `*`, que casam pelo começo da palavra — só radicais sem palavras comuns fora de aparência
+ * ("olho" não casa "olhou", "capa" não casa "capaz", "porte" não casa "porteiro").
+ */
 export const MADDOX_APPEARANCE_TERMS = [
-    "aparencia", "aspecto", "visual", "cabel", "madeix", "tranca", "careca", "calvo", "barba", "bigode", "olho", "pele", "rosto", "face",
-    "cicatriz", "tatuag", "marca", "queimadura", "altura", "alto", "alta", "baixo", "baixa", "magr", "corpulent", "muscul", "robust", "porte",
-    "roupa", "veste", "vestid", "traje", "capa", "manto", "capuz", "tunica", "armadura", "elmo", "botas", "luvas", "joia", "colar", "anel", "brinco",
-    "chifre", "orelha", "asa", "cauda", "escama", "pelagem", "tingi", "pintou", "prata", "pratead", "loir", "ruiv", "moren", "grisalh", "branc", "preto", "preta", "castanh",
+    "aparenc*", "aspecto", "visual", "cabel*", "madeix*", "careca", "calvo", "calva", "barba", "bigode", "olho", "pele", "rosto",
+    "cicatri*", "tatuag*", "queimadura", "altura", "estatura", "porte", "magro", "magra", "muscul*", "corpulent*", "robust*",
+    "roupa", "veste", "vestido", "vestida", "traje", "capa", "manto", "capuz", "tunica", "armadura", "elmo", "botas", "luvas",
+    "joia", "anel", "brinco", "chifre", "orelha", "asa", "cauda", "escama", "pelagem", "tingi*", "prata", "pratead*", "loir*",
+    "ruiv*", "moren*", "grisalh*", "castanh*", "branco", "branca", "preto", "preta",
 ] as const
 /** Pedido manual: tetos do último turno (declarações, testes e narrações) e da narração do turno anterior (só contexto). */
 export const MADDOX_SCENE_IMAGE_LAST_TURN_TEXT_MAX = 8000

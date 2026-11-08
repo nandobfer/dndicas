@@ -1124,7 +1124,7 @@ leva). Por personagem, só o que é visual e está registrado: campos da ficha (
 aparência — HTML vira texto), as seções **"Identidade e aparência"** e **"Equipamentos e recursos"** do perfil da entrevista, a condição
 atual e as **anotações da campanha no Engramind** sobre a aparência: busca pelo nome em `searchCampaignMemories` só no canal dos
 **jogadores** (nunca as do mestre), filtrada no código — a anotação precisa citar o nome como palavra inteira e ter um termo de aparência
-(`MADDOX_APPEARANCE_TERMS`, começo de palavra; decisão do plano: vocabulário fixo) —, até 3 por personagem (400 caracteres cada), com
+(`MADDOX_APPEARANCE_TERMS`: palavra inteira, também no plural, ou radical explícito com `*` — "olho" não casa "olhou", "capa" não casa "capaz"; decisão do plano: vocabulário fixo) —, até 3 por personagem (400 caracteres cada), com
 prazo de 5 s; rede fora ou prazo estourado = sem anotações (aviso no log), a imagem segue. As anotações entram como "Mudanças
 registradas na história (valem sobre a ficha quando a contradizem)". Campo vazio não aparece e personagem sem dados sai como
 "aparência não registrada: não invente traços marcantes como fatos": nada é deduzido. As seções não visuais do perfil (origem,
@@ -1150,8 +1150,8 @@ no pedido manual, esperando a vez na fila da campanha neste processo. Legenda: o
 descrição, com todos os personagens. Essa geração (DND-33) recebe nas instruções o bloco de aparência de todos os personagens ativos e
 a descrição pública dos NPCs conhecidos, com a regra de copiar a aparência registrada e não atribuir cabelo, olhos, pele, marcas ou
 roupas que não estejam lá; o pedido é o **último turno em destaque** (`lastTurnContext`/`lastTurnBlock`): "## ÚLTIMO TURNO (turno N) —
-retrate ESTE momento" com as declarações, os testes (motivo, CD e resultado), as ações de combate e os trechos de narração do turno em
-ordem (sem os que falharam; teto de 8.000 caracteres, cortando do mais antigo) e o último trecho como "MOMENTO A RETRATAR"; a narração
+retrate ESTE momento" com as declarações, os testes (motivo, CD e "sucesso"/"falha"; pendente = "sem resultado ainda"; cancelado não entra), as ações
+de combate (o `combatAction.summary` do card; cancelada não entra) e os trechos de narração do turno em ordem (sem os que falharam; teto de 8.000 caracteres, cortando do mais antigo) e o último trecho como "MOMENTO A RETRATAR"; a narração
 do turno anterior vem depois, em "## Antes disso (só contexto, NÃO retrate)" (até 1.500 caracteres). Erros: 403 (não dono), 409 `SCENE_IMAGE_BUSY`, `SCENE_IMAGE_LIMIT`, `AI_IMAGE_UNAVAILABLE`,
 `NO_NARRATION`, `CAMPAIGN_NOT_ACTIVE`. **Retrato**: `POST /api/maddox/campaigns/[id]/npcs/[npcId]/portrait` (dono; NPC conhecido dos
 jogadores; 409 `SCENE_IMAGE_BUSY` se o retrato dele já está sendo pintado).
