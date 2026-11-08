@@ -8,7 +8,7 @@ import type { ApiResponse } from "@/lib/types/api"
 import { maddoxUserChannel } from "@/lib/pusher/channel-names"
 import { acquireChannel, isPusherClientAvailable, releaseChannel } from "@/lib/pusher/client"
 import { MADDOX_CAMPAIGN_CHANGED_EVENT, MADDOX_GAME_CHANGED_EVENT } from "../constants"
-import type { CreateMaddoxCampaignInput, MaddoxCharacterDraftInput, UpdateMaddoxCampaignInput } from "../campaign-schemas"
+import type { CreateMaddoxCampaignInput, UpdateMaddoxCampaignInput } from "../campaign-schemas"
 import type { MaddoxCampaignDetailDto, MaddoxCampaignListItemDto, MaddoxInviteLinkDto, MaddoxInvitePreviewDto } from "../campaign-types"
 
 const BASE = "/maddox/campaigns"
@@ -137,15 +137,16 @@ export function useRemoveMaddoxMember(id: string) {
     })
 }
 
-export function useSaveMaddoxCharacterDraft(id: string) {
+/** "Gerar retrato (de novo)" do meu personagem (DND-31): a geração segue em segundo plano. */
+export function useRetryMaddoxCharacterPortrait(id: string) {
     const queryClient = useQueryClient()
     return useMutation({
-        mutationFn: async (input: MaddoxCharacterDraftInput) => unwrapApi((await api.put<ApiResponse<MaddoxCampaignDetailDto>>(`${BASE}/${id}/character`, input)).data),
+        mutationFn: async () => unwrapApi((await api.post<ApiResponse<MaddoxCampaignDetailDto>>(`${BASE}/${id}/character/portrait`, {})).data),
         onSuccess: (campaign) => {
             queryClient.setQueryData(campaignKey(id), campaign)
             void queryClient.invalidateQueries({ queryKey: MADDOX_CAMPAIGNS_KEY })
-            toast.success("Personagem salvo")
+            toast.success("O Maddox está pintando o retrato do seu personagem")
         },
-        onError: (error) => toast.error(apiErrorMessage(error, "Não foi possível salvar o personagem")),
+        onError: (error) => toast.error(apiErrorMessage(error, "Não foi possível gerar o retrato")),
     })
 }

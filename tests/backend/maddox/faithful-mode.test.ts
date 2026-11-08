@@ -6,6 +6,7 @@ import type { AiStreamRequest } from "@/lib/ai/stream"
 import type { MaddoxSettings } from "@/features/maddox/schemas"
 import type { MaddoxInterviewStreamLine } from "@/features/maddox/interview-types"
 import { fighterBuild, seedSheetCatalog, type SheetCatalogIds } from "./helpers/sheet-catalog"
+import { nameMaddoxCharacter } from "../../helpers/maddox-character"
 
 /**
  * Modo fiel ao D&D (Maddox 8), critério de aceite: uma campanha em cada extremo do slider. No Fiel ao D&D o cenário só
@@ -83,6 +84,8 @@ vi.mock("ai", () => ({
 vi.mock("@/lib/ai/consumption", () => ({ recordAiConsumption: vi.fn(async () => undefined) }))
 vi.mock("@/lib/ai/jev", () => ({ askJevSystemOne: vi.fn() }))
 vi.mock("@/features/maddox/server/opencode-sessions", () => ({ ensureMaddoxSession: vi.fn(async () => "ses"), releaseInterviewSession: vi.fn(async () => undefined) }))
+// O retrato do personagem (DND-31) é coberto em interviews.test.ts: aqui a geração em segundo plano não roda.
+vi.mock("@/features/maddox/server/character-portrait", async (importOriginal) => ({ ...(await importOriginal<typeof import("@/features/maddox/server/character-portrait")>()), scheduleCharacterPortrait: vi.fn() }))
 vi.mock("@/features/character-sheets/api/character-sheets-service", () => ({ createBlankSheet }))
 // Catálogo real sobre o MongoDB em memória (menções e as ferramentas search_catalog/get_catalog_entity).
 vi.mock("@/features/dice-roller/server/dice-roll-service", () => ({ rollGeneralDice }))
@@ -140,8 +143,8 @@ async function completeScenario(campaignId: string, universo: string) {
 }
 
 async function startCharacter(campaignId: string) {
-    await campaigns.upsertCharacterDraft(campaignId, { name: "Lyra", portraitUrl: null }, ids.ana)
     const { turn } = await interviews.startInterview(campaignId, "character", ids.ana)
+    await nameMaddoxCharacter(campaignId, ids.ana, "Lyra")
     await run(turn!)
 }
 
