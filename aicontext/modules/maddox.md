@@ -177,7 +177,7 @@ Telas (`src/features/maddox/components/campaigns/`, rotas pt-BR):
 
 | Rota | Conteúdo |
 | --- | --- |
-| `/campanhas` | Campanhas em que sou **dono ou membro ativo** (`joined`), da mais recente; um card largo por linha (capa ou gradiente na cor do rigor, chips de rigor/status/papel em cores de raridade, meu personagem, avatares dos membros, "atualizada há…"). Clicar abre a campanha. "Nova campanha" abre a criação |
+| `/campanhas` | Campanhas em que sou **dono ou membro ativo** (`joined`), da mais recente; um card largo por linha (capa: a **última imagem de cena** da campanha — DND-35 —, senão `coverUrl`, sempre atrás do gradiente na cor do rigor; sem imagem, gradiente e espadas; chips de rigor/status/papel em cores de raridade, meu personagem, avatares dos membros, "atualizada há…"). Clicar abre a campanha. "Nova campanha" abre a criação |
 | `/campanhas/[id]` | Cabeçalho, lobby (participantes e personagens), "Criar/Editar personagem", "Editar" (dono), "Sair da campanha" (jogador), "Remover" (dono, com confirmação) e o painel "Convidar jogadores" (dono) |
 | `/campanhas/convite/[token]` | Resumo da campanha do link e "Entrar na campanha". Sem login vai ao login e volta; sem a permissão mostra "Acesso restrito" |
 
@@ -303,8 +303,8 @@ API (todas com `maddox.play`, usuário efetivo; `[kind]` = `scenario` | `charact
 Linhas do NDJSON: `user`, `delta`, `done { message, interview }`, `error { message, interview? }`, `ping`.
 
 Telas: `/campanhas/[id]/entrevista/cenario` e `/campanhas/[id]/entrevista/personagem` (`pageAccess`). No lobby, o
-card **"Cenário"** (começar/continuar para o dono, espera para os jogadores, cenário salvo recolhível), chips da
-entrevista por participante, "Entrevista do personagem" (desabilitada até o cenário), selo "Pronto para jogar",
+card **"Cenário"** enquanto o cenário não está pronto (começar/continuar para o dono, espera para os jogadores; depois
+ele vira o card da história, ver "Card da história no lobby (DND-37)"), chips da entrevista por participante, "Entrevista do personagem" (desabilitada até o cenário), selo "Pronto para jogar",
 "Ver perfil" e "X de N prontos para jogar".
 
 `src/lib/ai/stream.ts` ganhou `messages` (conversa) e `opencodeSessionId` (sessão fixa) no `AiStreamRequest`.
@@ -1085,9 +1085,37 @@ histórico em modo leitura (`GameMessageList readOnly`: nenhum card é "meu", en
 locais, missões (filtro por situação em `GlassSelector` com as cores de raridade, na URL `?situacao=` — o link de um resultado
 da busca o zera), anotações (`?tipo=evento|relacao|fato|outro`) e grupo. NPCs e anotações abertos por link fora da primeira
 página: a lista carrega as páginas seguintes até o item (até 10, `MADDOX_JOURNAL_SEEK_PAGES`) e depois avisa "Item muito antigo:
-use “Carregar mais”". Ao lado, "Situação atual" (com "atualizada no turno N" e as missões ativas) e o cenário recolhível. Cada item tem âncora
+use “Carregar mais”". Ao lado, "Situação atual" (`JournalStateCard`, o mesmo da página da campanha: campos com ícone, "Decisão aguardada" em
+destaque, chip "atualizada no turno N" e as missões ativas) e o cenário com "Ver o cenário completo" animado (`AnimatedExpand`). Cada item tem âncora
 (`#npc-…`, `#anotacao-…`, `#personagem-…`) e fica em destaque quando aberto por link. Em dia pelo `maddox.game.changed`
 (as chaves ficam sob `MADDOX_CAMPAIGNS_KEY`).
+
+
+**Card da história no lobby (DND-37).** Em `/campanhas/[id]`, o `CampaignStoryCard` (`components/campaigns/`) substitui o
+antigo card do cenário:
+
+| Situação | Card |
+| --- | --- |
+| Cenário não concluído | Card "Cenário" com a entrevista (dono) ou a espera (jogadores), como antes; o resumo do Diário não é buscado |
+| Cenário pronto, sem situação registrada | `TableTutorialCard` "Como funciona a mesa": ciclo do turno em 3 etapas (o Maddox narra → cada jogador declara → o Maddox resolve), réplica do campo com os botões reais (`AskMasterButton`, `PassTurnButton`, `DeclareButton` de `game/composer-buttons.tsx`), "Injetar Lembrança", "Diário" (`JournalLinkButton`) e, só para o dono, "Gerar imagem da cena"; "Ver mais dicas" animado com as regras do turno e os atalhos (Enter declara, Shift+Enter quebra a linha) |
+| Situação registrada (algum campo público ou `updatedTurn`, `hasJournalState`) | `JournalStateCard` com o conteúdo longo recolhível (`collapsible`) |
+
+- A fonte é a mesma do Diário (`useMaddoxJournalSummary(campaignId, enabled)` → `GET …/journal`, só os campos públicos); a
+  troca tutorial → situação acontece pelo `maddox.game.changed` que o lobby já escuta. Carregando = esqueleto; erro sem
+  dados = aviso discreto com "Tentar de novo" (o resto da página continua). Dados já carregados têm precedência: uma falha
+  num refetch mantém a situação na tela.
+- O tutorial também aparece com a mesa já iniciada quando o narrador ainda não registrou a situação (o registro é opcional):
+  nesse caso o chip vira "Mesa em andamento · Turno N" e o texto não fala em "antes do primeiro turno".
+- Os botões da demonstração ficam numa moldura `inert` + `aria-hidden` + `pointer-events-none`, com callbacks vazios: não
+  recebem foco nem clique.
+- O texto do cenário saiu do lobby: o rodapé do card tem o link "Ver o cenário completo" para o Diário.
+- "Ver mais" anima a altura com `framer-motion` (`AnimatedExpand` em `components/AnimatedExpand.tsx`, botão com
+  `aria-expanded`/`aria-controls`, só aparece quando o conteúdo passa da altura recolhida) e respeita `useReducedMotion`.
+  A medição acontece antes da pintura (`useLayoutEffect`) e a primeira altura entra sem animação, então o conteúdo longo já
+  nasce recolhido. Recolhido, o conteúdo fica `inert` (sem foco por teclado nem leitura por leitor de tela, inclusive a
+  prévia visível); o botão expande. Os
+  cards desses estados usam `GlassCard animate={false}`: o `GlassCard` animado troca a `div` por `motion.div` depois de
+  montar e remonta os filhos, o que zeraria o estado do "ver mais".
 
 **Pontos de entrada.** Na mesa, "Buscar no diário" (diálogo com a mesma busca; o resultado leva ao diário na aba e no item) e
 "Diário" no cabeçalho; cada NPC do painel "NPCs conhecidos" abre o NPC no diário. No lobby, "Diário" depois que a campanha começa.
@@ -1103,6 +1131,12 @@ Código: `server/scene-images.ts` (regras, cota, reserva, geração em segundo p
 coleção `maddox_scene_images` (`models/maddox-scene-image.ts`), `components/game/GameSceneImage.tsx`, `SceneImageButton.tsx`,
 `NpcPanel.tsx`, `components/campaigns/SceneImagesField.tsx`, `components/settings/MaddoxSceneImagesCard.tsx`,
 `hooks/useMaddoxSceneImages.ts`. Usa o **Gerador de imagens** já integrado (`generateAndStoreDndImage`).
+
+**Capa na lista de campanhas (DND-35).** `listMyCampaigns` (`server/campaigns.ts`) preenche `lastSceneImageUrl` (só na DTO da
+lista; o detalhe não tem o campo nem roda a consulta) com **uma** agregação para todas as campanhas da lista (índice `{ campaignId, createdAt }`): só `status: "done"` com `url`, sem `npc-portrait`, a mais
+recente pela data do pedido (`createdAt`, desempate por `_id`). O `CampaignCard` mostra a imagem atrás do gradiente do rigor (com véu
+escuro), cai na `coverUrl` e, sem nenhuma (ou se a imagem não carregar), nas espadas. Imagem nova aparece na próxima carga da lista
+(não há evento próprio). Falha da agregação loga aviso e devolve a lista sem imagens.
 
 **Configuração** (`settings.sceneImages`, seção "Imagens" da aba; padrão tudo desligado; configuração antiga recebe o padrão):
 `enabled`, `situations` (fixas, `MADDOX_SCENE_IMAGE_SITUATIONS`: abertura da campanha, novo local ou cenário, fim de batalha, clímax ou
