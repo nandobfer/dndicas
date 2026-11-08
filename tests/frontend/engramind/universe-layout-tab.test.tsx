@@ -26,7 +26,7 @@ vi.mock("@/features/engramind/hooks/useUniverseLayout", async (importOriginal) =
 const { UniverseLayoutTab } = await import("@/features/engramind/components/integration/universe-layout/UniverseLayoutTab")
 
 const spiral: UniverseLayoutConfig = { ...DEFAULT_UNIVERSE_LAYOUT, layout: "spiral", ringGap: 84 }
-const renderTab = (permissions: string[] = ["integrations.engramind.view", "integrations.engramind.edit"]) =>
+const renderTab = (permissions: string[] = ["integrations.engramind.view", "memories.edit"]) =>
     render(
         <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
             <PermissionsProvider permissions={permissions}>
@@ -120,8 +120,8 @@ describe("aba Visualização (sem formulário)", () => {
         expect(hooks.reset).toHaveBeenCalledTimes(1)
     })
 
-    it("sem integrations.engramind.edit: só Exportar (sem Importar nem Restaurar)", () => {
-        renderTab(["integrations.engramind.view"])
+    it("sem memories.edit: só Exportar (sem Importar nem Restaurar)", () => {
+        renderTab(["integrations.engramind.view", "integrations.engramind.edit"])
         expect(screen.queryByRole("button", { name: /Importar/ })).toBeNull()
         expect(screen.queryByRole("button", { name: /Restaurar padrão/ })).toBeNull()
         expect(screen.getByRole("button", { name: /Exportar/ })).toBeInTheDocument()

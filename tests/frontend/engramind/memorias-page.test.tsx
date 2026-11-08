@@ -1,7 +1,7 @@
 /** @vitest-environment happy-dom */
 import React from "react"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
-import { act, render, screen, waitFor } from "@testing-library/react"
+import { act, cleanup, render, screen, waitFor } from "@testing-library/react"
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
 import { xyflowMock } from "../../helpers/xyflow"
 
@@ -158,5 +158,28 @@ describe("/memorias", () => {
         await waitFor(() => expect(providerLayouts.at(-1)).toEqual(imported))
         expect(layoutApi.calls).toBe(1)
         expect(FakeEventSource.instances.filter((instance) => instance.url.endsWith("/api/engramind/events"))).toHaveLength(1)
+    })
+
+    it("voltar a /memorias com o cache ainda fresco usa o layout lido no servidor, não o antigo", async () => {
+        const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+        const page = (universeLayout: UniverseLayoutConfig | null) => (
+            <QueryClientProvider client={client}>
+                <MemoriasPage configured canConfigure universeLayout={universeLayout} />
+            </QueryClientProvider>
+        )
+        const first = render(page({ ...DEFAULT_UNIVERSE_LAYOUT, layout: "spiral" }))
+        expect(await screen.findByTestId("agent-node-dndicas/opex")).toBeInTheDocument()
+        first.unmount()
+        // Outro admin importou B enquanto a rede estava desmontada (sem SSE); o servidor entrega B na volta.
+        const imported: UniverseLayoutConfig = { ...DEFAULT_UNIVERSE_LAYOUT, layout: "rings", ringGap: 90 }
+        render(page(imported))
+        expect(await screen.findByTestId("agent-node-dndicas/opex")).toBeInTheDocument()
+        expect(providerLayouts.at(-1)).toEqual(imported)
+        // E se B for o padrão (restaurado), a rede volta ao padrão.
+        cleanup()
+        render(page(null))
+        expect(await screen.findByTestId("agent-node-dndicas/opex")).toBeInTheDocument()
+        expect(providerLayouts.at(-1)).toBeNull()
+        expect(layoutApi.calls).toBe(0)
     })
 })

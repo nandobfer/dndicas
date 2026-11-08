@@ -8,17 +8,18 @@ import { Button } from "@/components/ui/opex/button"
 import { ConfirmDialog } from "@/components/ui/opex/confirm-dialog"
 import { Skeleton } from "@/components/ui/opex/skeleton"
 import { apiErrorMessage } from "@/lib/api"
+import { MEMORIES_EDIT_PERMISSION } from "../../../constants"
 import { universeLayoutErrorsOf, useResetUniverseLayout, useSaveUniverseLayout, useUniverseLayout } from "../../../hooks/useUniverseLayout"
 import { formatDateTime, Section } from "../Section"
 import { UniverseLayoutExportDialog, UniverseLayoutImportDialog } from "./UniverseLayoutJsonDialogs"
 import { UniverseLayoutPreview, UniverseLayoutPreviewSkeleton } from "./UniverseLayoutPreview"
 
-export const UNIVERSE_LAYOUT_EDIT_PERMISSION = "integrations.engramind.edit"
+export const UNIVERSE_LAYOUT_EDIT_PERMISSION = MEMORIES_EDIT_PERMISSION
 
 /**
  * Aba Visualização (DND-34): o layout único dos universos da rede de `/memorias`, **sem formulário** — só
  * Importar (o JSON exportado no Opex; grava na hora), Exportar e Restaurar padrão, com a prévia da
- * configuração em uso. Importar e restaurar exigem `integrations.engramind.edit`.
+ * configuração em uso. Importar e restaurar exigem `memories.edit` (como a importação de memórias).
  */
 export function UniverseLayoutTab() {
     const query = useUniverseLayout()
@@ -76,7 +77,7 @@ export function UniverseLayoutTab() {
                 <p className="text-sm" data-testid="universe-layout-status">
                     {layout.isDefault ? "Em uso: o padrão da lib (anéis concêntricos)." : `Em uso: configuração importada${layout.updatedAt ? ` em ${formatDateTime(layout.updatedAt)}` : ""}.`}
                 </p>
-                {!canEdit && <p className="text-xs text-muted-foreground">Importar e restaurar exigem a permissão de editar a integração Engramind.</p>}
+                {!canEdit && <p className="text-xs text-muted-foreground">Importar e restaurar exigem a permissão de importar e gravar memórias.</p>}
             </Section>
 
             <UniverseLayoutPreview config={layout.config} />

@@ -69,18 +69,18 @@ partículas) é a **mesma configuração do Opex** (aba Visualização dele): JS
 **Importar**, **Exportar** e **Restaurar padrão**, e a **prévia** do Opex (memórias de exemplo de
 `network/sample-universe.ts` com a configuração em uso; quantidade, canais e centro são só da prévia).
 
-- **Importar** (`integrations.engramind.edit`): cola o JSON exportado do Opex (inteiro ou só os campos
+- **Importar** (`memories.edit`, como a importação de memórias): cola o JSON exportado do Opex (inteiro ou só os campos
   alterados; os ausentes assumem o **padrão**, não o valor em uso). `parseUniverseLayoutJson` valida no
   cliente; JSON inválido lista os erros por campo e não chama a API. Válido → `PUT` e vale **na hora**
   (sem "salvar" separado). A recusa do servidor (`400 UNIVERSE_LAYOUT_INVALID`, `details` por campo) aparece
   na mesma lista.
 - **Exportar** (quem vê a aba): `formatUniverseLayoutJson` da configuração em uso, com Copiar; o Opex aceita
   o JSON sem transformação.
-- **Restaurar padrão** (`integrations.engramind.edit`, com confirmação; desabilitado no padrão): apaga a
+- **Restaurar padrão** (`memories.edit`, com confirmação; desabilitado no padrão): apaga a
   configuração.
 - **API** `GET/PUT/DELETE /api/engramind/universe-layout` (`server/universe-layout.ts`, mesmo contrato do
   Opex: `{ config, isDefault, updatedAt }`). `GET` exige `memories.view` **ou** `integrations.engramind.view`;
-  `PUT`/`DELETE`, `integrations.engramind.edit`. O `PUT` valida o corpo cru com `parseUniverseLayout` (campo
+  `PUT`/`DELETE`, `memories.edit` (editar a integração não basta). O `PUT` valida o corpo cru com `parseUniverseLayout` (campo
   desconhecido ou fora do intervalo é recusado sem gravar nada). Auditoria `universe-layout` (antes e depois).
 - **Persistência**: `engramind_state.universeLayout = { config, updatedAt }` (`null` = padrão). A leitura
   revalida; gravação inválida cai no padrão com aviso no log.

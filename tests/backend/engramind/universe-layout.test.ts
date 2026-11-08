@@ -76,7 +76,7 @@ beforeEach(async () => {
     await clearDb()
     recordAudit.mockClear()
     publishToChannels.mockClear()
-    permissions.granted = new Set(["memories.view", "integrations.engramind.edit"])
+    permissions.granted = new Set(["memories.view", "memories.edit"])
     permissions.logged = true
 })
 
@@ -170,8 +170,8 @@ describe("rota /api/engramind/universe-layout", () => {
         expect((await getUniverseLayout()).config).toEqual(opexConfig())
     })
 
-    it("PUT e DELETE exigem integrations.engramind.edit (memories.edit não basta)", async () => {
-        permissions.granted = new Set(["memories.view", "memories.edit"])
+    it("PUT e DELETE exigem memories.edit (editar a integração não basta)", async () => {
+        permissions.granted = new Set(["memories.view", "integrations.engramind.view", "integrations.engramind.edit"])
         expect((await call("PUT", JSON.stringify({ layout: "spiral" }))).status).toBe(403)
         expect((await call("DELETE")).status).toBe(403)
         expect((await getUniverseLayout()).isDefault).toBe(true)

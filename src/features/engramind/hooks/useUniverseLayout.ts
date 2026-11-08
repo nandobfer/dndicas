@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect } from "react"
+import { useEffect, useLayoutEffect } from "react"
 import axios from "axios"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { toast } from "sonner"
@@ -28,9 +28,22 @@ const fetchLayout = async () => unwrapApi((await api.get<ApiResponse<UniverseLay
 /** DTO a partir do que a página leu no servidor (`null` = padrão da lib). */
 export const layoutDtoFrom = (config: UniverseLayoutConfig | null): UniverseLayoutDto => (config ? { config, isDefault: false, updatedAt: null } : { config: DEFAULT_UNIVERSE_LAYOUT, isDefault: true, updatedAt: null })
 
+/**
+ * `initial` (o layout lido pela página no servidor) prevalece sobre o cache ao montar e quando muda: voltar a
+ * `/memorias` pela navegação do cliente com um cache ainda fresco (outro admin importou enquanto a rede
+ * estava desmontada, sem o SSE) não mantém o layout antigo. Antes da pintura, para não piscar o antigo.
+ */
 export function useUniverseLayout(options: { initial?: UniverseLayoutConfig | null; live?: boolean } = {}) {
     const queryClient = useQueryClient()
     const live = options.live === true
+    const hasInitial = options.initial !== undefined
+    const initialKey = hasInitial ? JSON.stringify(options.initial) : null
+    useLayoutEffect(() => {
+        if (initialKey === null) return
+        const fromServer = layoutDtoFrom(JSON.parse(initialKey) as UniverseLayoutConfig | null)
+        const cached = queryClient.getQueryData<UniverseLayoutDto>(UNIVERSE_LAYOUT_QUERY_KEY)
+        if (!cached || cached.isDefault !== fromServer.isDefault || JSON.stringify(cached.config) !== JSON.stringify(fromServer.config)) queryClient.setQueryData(UNIVERSE_LAYOUT_QUERY_KEY, fromServer)
+    }, [initialKey, queryClient])
     useEffect(() => {
         if (!live) return
         return subscribeLive(ENGRAMIND_EVENTS_URL, {
