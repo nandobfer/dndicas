@@ -21,11 +21,13 @@ const journalPath = (campaignId: string) => `/maddox/campaigns/${campaignId}/jou
 /** Espera da busca enquanto a pessoa digita. */
 export const MADDOX_JOURNAL_SEARCH_DEBOUNCE_MS = 300
 
-export function useMaddoxJournalSummary(campaignId: string) {
+/** Resumo do Diário (também a "Situação atual" da página da campanha, que só busca com o cenário pronto: `enabled`). */
+export function useMaddoxJournalSummary(campaignId: string, enabled = true) {
     return useQuery({
         queryKey: [...maddoxJournalKey(campaignId), "summary"],
         queryFn: async () => unwrapApi((await api.get<ApiResponse<MaddoxJournalSummaryDto>>(journalPath(campaignId))).data),
         retry: false,
+        enabled,
     })
 }
 
