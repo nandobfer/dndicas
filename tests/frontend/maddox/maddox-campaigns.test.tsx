@@ -4,6 +4,7 @@ import { fireEvent, screen, waitFor, within } from "@testing-library/react"
 import { renderWithQueryClient } from "../test-utils"
 import type { MaddoxCampaignDetailDto, MaddoxCampaignListItemDto, MaddoxCampaignMemberDto } from "@/features/maddox/campaign-types"
 import { rarityColors } from "@/lib/config/colors"
+import { rigorColor } from "@/features/maddox/components/campaigns/campaign-visuals"
 
 const push = vi.fn()
 const get = vi.fn()
@@ -41,6 +42,7 @@ const listItem = (over: Partial<MaddoxCampaignListItemDto> = {}): MaddoxCampaign
     rigor: "fiel-dnd",
     status: "lobby",
     coverUrl: null,
+    lastSceneImageUrl: null,
     ownerId: "u-owner",
     ownerName: "Marina Dona",
     myRole: "owner",
@@ -104,6 +106,45 @@ describe("lista de campanhas", () => {
         expect(stage.className).toContain("whitespace-normal")
         for (const element of [stage, ...stage.querySelectorAll("*")]) expect(element.className).not.toContain("truncate")
         expect(screen.getAllByTestId("starting-level-chip")).toHaveLength(1)
+    })
+
+    it("capa (DND-35): a última imagem da campanha fica atrás do gradiente do rigor, sem as espadas", async () => {
+        get.mockResolvedValue(ok([listItem({ lastSceneImageUrl: "https://cdn.example/cena-2.png", coverUrl: "https://cdn.example/capa.png" }), listItem({ id: "c2", name: "Mar de Cinzas", rigor: "narrativo" })]))
+        renderWithQueryClient(<CampaignsPage />)
+
+        const first = await screen.findByRole("link", { name: "Abrir a campanha Brumas de Valdrenn" })
+        const image = within(first).getByTestId("campaign-cover-image")
+        expect(image).toHaveAttribute("src", "https://cdn.example/cena-2.png")
+        expect(image.className).toContain("object-cover")
+        const gradient = within(first).getByTestId("campaign-cover-gradient")
+        expect(gradient.getAttribute("style")).toContain(`${rigorColor("fiel-dnd")}26`)
+        // O gradiente vem depois da imagem: fica por cima dela.
+        expect(image.compareDocumentPosition(gradient) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+        expect(within(first).queryByTestId("campaign-cover-swords")).not.toBeInTheDocument()
+
+        // Sem imagem: gradiente e espadas como antes.
+        const second = screen.getByRole("link", { name: "Abrir a campanha Mar de Cinzas" })
+        expect(within(second).queryByTestId("campaign-cover-image")).not.toBeInTheDocument()
+        expect(within(second).getByTestId("campaign-cover-gradient").getAttribute("style")).toContain(`${rigorColor("narrativo")}26`)
+        expect(within(second).getByTestId("campaign-cover-swords")).toBeInTheDocument()
+    })
+
+    it("capa (DND-35): sem imagem de cena usa a capa da campanha, também atrás do gradiente", async () => {
+        get.mockResolvedValue(ok([listItem({ coverUrl: "https://cdn.example/capa.png" })]))
+        renderWithQueryClient(<CampaignsPage />)
+        const card = await screen.findByRole("link", { name: "Abrir a campanha Brumas de Valdrenn" })
+        expect(within(card).getByTestId("campaign-cover-image")).toHaveAttribute("src", "https://cdn.example/capa.png")
+        expect(within(card).getByTestId("campaign-cover-gradient")).toBeInTheDocument()
+        expect(within(card).queryByTestId("campaign-cover-swords")).not.toBeInTheDocument()
+    })
+
+    it("capa (DND-35): imagem que não carrega volta às espadas", async () => {
+        get.mockResolvedValue(ok([listItem({ lastSceneImageUrl: "https://cdn.example/sumiu.png" })]))
+        renderWithQueryClient(<CampaignsPage />)
+        const card = await screen.findByRole("link", { name: "Abrir a campanha Brumas de Valdrenn" })
+        fireEvent.error(within(card).getByTestId("campaign-cover-image"))
+        await waitFor(() => expect(within(card).queryByTestId("campaign-cover-image")).not.toBeInTheDocument())
+        expect(within(card).getByTestId("campaign-cover-swords")).toBeInTheDocument()
     })
 
     it("sem campanhas mostra o estado vazio em pt-BR", async () => {

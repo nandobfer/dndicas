@@ -153,7 +153,7 @@ Telas (`src/features/maddox/components/campaigns/`, rotas pt-BR):
 
 | Rota | Conteúdo |
 | --- | --- |
-| `/campanhas` | Campanhas em que sou **dono ou membro ativo** (`joined`), da mais recente; um card largo por linha (capa ou gradiente na cor do rigor, chips de rigor/status/papel em cores de raridade, meu personagem, avatares dos membros, "atualizada há…"). Clicar abre a campanha. "Nova campanha" abre a criação |
+| `/campanhas` | Campanhas em que sou **dono ou membro ativo** (`joined`), da mais recente; um card largo por linha (capa: a **última imagem de cena** da campanha — DND-35 —, senão `coverUrl`, sempre atrás do gradiente na cor do rigor; sem imagem, gradiente e espadas; chips de rigor/status/papel em cores de raridade, meu personagem, avatares dos membros, "atualizada há…"). Clicar abre a campanha. "Nova campanha" abre a criação |
 | `/campanhas/[id]` | Cabeçalho, lobby (participantes e personagens), "Criar/Editar personagem", "Editar" (dono), "Sair da campanha" (jogador), "Remover" (dono, com confirmação) e o painel "Convidar jogadores" (dono) |
 | `/campanhas/convite/[token]` | Resumo da campanha do link e "Entrar na campanha". Sem login vai ao login e volta; sem a permissão mostra "Acesso restrito" |
 
@@ -1079,6 +1079,12 @@ Código: `server/scene-images.ts` (regras, cota, reserva, geração em segundo p
 coleção `maddox_scene_images` (`models/maddox-scene-image.ts`), `components/game/GameSceneImage.tsx`, `SceneImageButton.tsx`,
 `NpcPanel.tsx`, `components/campaigns/SceneImagesField.tsx`, `components/settings/MaddoxSceneImagesCard.tsx`,
 `hooks/useMaddoxSceneImages.ts`. Usa o **Gerador de imagens** já integrado (`generateAndStoreDndImage`).
+
+**Capa na lista de campanhas (DND-35).** `listMyCampaigns` (`server/campaigns.ts`) preenche `lastSceneImageUrl` (só na DTO da
+lista; o detalhe não tem o campo nem roda a consulta) com **uma** agregação para todas as campanhas da lista (índice `{ campaignId, createdAt }`): só `status: "done"` com `url`, sem `npc-portrait`, a mais
+recente pela data do pedido (`createdAt`, desempate por `_id`). O `CampaignCard` mostra a imagem atrás do gradiente do rigor (com véu
+escuro), cai na `coverUrl` e, sem nenhuma (ou se a imagem não carregar), nas espadas. Imagem nova aparece na próxima carga da lista
+(não há evento próprio). Falha da agregação loga aviso e devolve a lista sem imagens.
 
 **Configuração** (`settings.sceneImages`, seção "Imagens" da aba; padrão tudo desligado; configuração antiga recebe o padrão):
 `enabled`, `situations` (fixas, `MADDOX_SCENE_IMAGE_SITUATIONS`: abertura da campanha, novo local ou cenário, fim de batalha, clímax ou
