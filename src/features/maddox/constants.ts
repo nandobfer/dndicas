@@ -446,6 +446,23 @@ export const MADDOX_SCENE_IMAGE_DESCRIBE_TIMEOUT_MS = 30_000
 export const MADDOX_SCENE_IMAGE_JEV_TIMEOUT_MS = 20_000
 export const MADDOX_SCENE_IMAGE_CONSUMPTION_ORIGIN = "maddox-scene-image"
 export const MADDOX_SCENE_IMAGE_FAILED_MESSAGE = "Não foi possível gerar a imagem desta cena."
+/**
+ * Aparência dos personagens nas imagens (DND-33): anotações da campanha (canal dos jogadores) que citam o personagem e
+ * falam da aparência — até `MAX` por personagem, cada uma cortada em `TEXT_MAX`; a busca tem prazo (falha = sem elas).
+ */
+export const MADDOX_SCENE_IMAGE_APPEARANCE_MEMORIES_MAX = 3
+export const MADDOX_SCENE_IMAGE_APPEARANCE_MEMORY_TEXT_MAX = 400
+export const MADDOX_SCENE_IMAGE_APPEARANCE_MEMORIES_TIMEOUT_MS = 5_000
+/** Termos (sem acento, minúsculos) que marcam uma anotação como de aparência; casam pelo começo da palavra. */
+export const MADDOX_APPEARANCE_TERMS = [
+    "aparencia", "aspecto", "visual", "cabel", "madeix", "tranca", "careca", "calvo", "barba", "bigode", "olho", "pele", "rosto", "face",
+    "cicatriz", "tatuag", "marca", "queimadura", "altura", "alto", "alta", "baixo", "baixa", "magr", "corpulent", "muscul", "robust", "porte",
+    "roupa", "veste", "vestid", "traje", "capa", "manto", "capuz", "tunica", "armadura", "elmo", "botas", "luvas", "joia", "colar", "anel", "brinco",
+    "chifre", "orelha", "asa", "cauda", "escama", "pelagem", "tingi", "pintou", "prata", "pratead", "loir", "ruiv", "moren", "grisalh", "branc", "preto", "preta", "castanh",
+] as const
+/** Pedido manual: tetos do último turno (declarações, testes e narrações) e da narração do turno anterior (só contexto). */
+export const MADDOX_SCENE_IMAGE_LAST_TURN_TEXT_MAX = 8000
+export const MADDOX_SCENE_IMAGE_PREVIOUS_TURN_TEXT_MAX = 1500
 
 // ── Combate tático (Maddox 7) ──────────────────────────────────────────────────
 

@@ -19,6 +19,7 @@ import {
 import type { MaddoxGameSceneImageDto, MaddoxSceneImageControlDto } from "../game-types"
 import { MaddoxCampaignMessageModel, MaddoxCampaignModel, MaddoxNpcModel, MaddoxSceneImageModel, type IMaddoxCampaign, type IMaddoxNpc, type IMaddoxSceneImage } from "../models"
 import { DEFAULT_MADDOX_SCENE_IMAGES, type MaddoxSettings, type MaddoxSceneImagesSettings } from "../schemas"
+import { appearanceBlock, appearanceRecap, type CharacterAppearance } from "./scene-image-appearance"
 
 /**
  * Imagens nas cenas (Maddox 10) — SOMENTE servidor. Quatro origens: a ferramenta do narrador (`request_scene_image`,
@@ -285,20 +286,48 @@ async function withTimeout<T>(run: (signal: AbortSignal) => Promise<T>, ms: numb
     }
 }
 
-/** Pedido ao gerador: situação, cena, quem tem imagem de referência e os dados de aparência (JSON). */
-export function buildSceneImagePrompt(input: { kind: "scene" | "portrait"; campaignName: string; style: string; situation: string | null; description: string; imageLabels: readonly string[]; context: Record<string, unknown> }): string {
+/**
+ * Pedido ao gerador (DND-33): abertura e estilo da mesa (sem mudança de estética), a cena a retratar AGORA, a aparência
+ * obrigatória de quem aparece, as imagens de referência, o restante dos dados (JSON) e a conferência final da aparência.
+ */
+export function buildSceneImagePrompt(input: {
+    kind: "scene" | "portrait"
+    campaignName: string
+    style: string
+    situation: string | null
+    description: string
+    imageLabels: readonly string[]
+    context: Record<string, unknown>
+    appearances?: readonly CharacterAppearance[]
+}): string {
+    const appearances = input.kind === "portrait" ? [] : (input.appearances ?? [])
     const parts = [
         input.kind === "portrait"
             ? `Retrato de um personagem não jogador (NPC) da campanha de RPG "${input.campaignName}", do peito para cima, como um avatar.`
             : `Ilustração de uma cena da campanha de RPG "${input.campaignName}", narrada pelo mestre Maddox.`,
     ]
     if (input.style.trim()) parts.push(`Estilo visual desta mesa: ${input.style.trim()}`)
-    if (input.situation) parts.push(`Momento: ${input.situation}.`)
-    parts.push(input.kind === "portrait" ? `Quem é: ${input.description.trim()}` : `Cena: ${input.description.trim()}`)
+    if (input.kind === "portrait") {
+        if (input.situation) parts.push(`Momento: ${input.situation}.`)
+        parts.push(`Quem é: ${input.description.trim()}`)
+    } else {
+        parts.push(["## Cena a retratar (o que acontece AGORA)", ...(input.situation ? [`Momento: ${input.situation}.`] : []), input.description.trim()].join("\n"))
+    }
+    if (appearances.length) {
+        parts.push(
+            [
+                "## Aparência de quem aparece (obrigatória)",
+                "Siga exatamente estes traços registrados (cabelo, olhos, pele, porte, roupas e marcas). Detalhes não listados ficam livres, mas nunca contradizem os listados.",
+                appearanceBlock(appearances),
+            ].join("\n\n"),
+        )
+    }
     if (input.imageLabels.length) {
         parts.push(`As imagens anexadas mostram, nesta ordem, a aparência de: ${input.imageLabels.join("; ")}. Mantenha a aparência deles (rosto, corpo, roupas e cores) fiel às imagens.`)
     }
-    parts.push("Dados de aparência de quem aparece (respeite-os):", JSON.stringify(input.context, null, 2))
+    parts.push(appearances.length ? "Demais dados da cena (respeite-os):" : "Dados de aparência de quem aparece (respeite-os):", JSON.stringify(input.context, null, 2))
+    const recap = appearanceRecap(appearances)
+    if (recap.length) parts.push(["Conferência final da aparência (não troque estas cores):", ...recap.map((line) => `- ${line}`)].join("\n"))
     parts.push("Sem texto, letras, legendas, balões ou molduras na imagem.")
     return parts.join("\n\n")
 }
@@ -346,6 +375,7 @@ export async function runSceneImage(imageId: string): Promise<void> {
             description: claimed.description,
             imageLabels: images.length ? references.imageLabels : [],
             context: references.context,
+            appearances: references.appearances,
         })
         const { generateAndStoreDndImage } = await import("@/features/ai/server/image-generator")
         const folder = portrait ? `maddox/campaigns/${String(campaignId)}/npcs/${String(claimed.npcId)}-${Date.now()}` : `maddox/campaigns/${String(campaignId)}/scenes/${String(claimed._id)}`
@@ -479,7 +509,8 @@ async function assertCanAfford(campaign: IMaddoxCampaign, slot: MaddoxSceneImage
 
 /**
  * "Gerar imagem da cena" (dono, a qualquer momento): reserva logo (o placeholder aparece na última narração) e põe na
- * fila da campanha a descrição da cena atual pelo Maddox; depois gera. Só o teto diário e uma manual por vez.
+ * fila da campanha a descrição da cena atual pelo Maddox (com o último turno em destaque e a aparência registrada dos
+ * personagens, DND-33); depois gera. Só o teto diário e uma manual por vez.
  */
 export async function requestManualSceneImage(campaignId: string, userId: string): Promise<MaddoxGameSceneImageDto> {
     const campaign = await loadOwnedCampaign(campaignId, userId)
@@ -499,8 +530,8 @@ export async function requestManualSceneImage(campaignId: string, userId: string
     runtime.queued.add(String(image._id))
     void enqueueMaddoxJob(campaignId, "descrição da imagem da cena", async () => {
         try {
-            const { describeCurrentScene } = await import("./scene-image-describer")
-            const described = await describeCurrentScene(campaign._id, narration.content)
+            const { describeCurrentScene, lastTurnContext } = await import("./scene-image-describer")
+            const described = await describeCurrentScene(campaign._id, await lastTurnContext(campaign._id, narration))
             await MaddoxSceneImageModel.updateOne(
                 { _id: image._id, status: "pending" },
                 {

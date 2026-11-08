@@ -844,6 +844,7 @@ export const MADDOX_SCENE_IMAGE_TOOLS: readonly MaddoxMasterTool[] = [
             'Pede uma ILUSTRAÇÃO da cena desta narração, quando ela for uma das situações de imagem ativas (lista nas instruções, seção "Imagens da cena").',
             "Uma por narração. Descreva o que os jogadores VEEM (lugar, luz, clima, quem aparece, posições, ação), sem segredos do mestre.",
             "Informe quem aparece (personagens e NPCs pelo nome exato; entidades do catálogo por tipo e id): a aparência cadastrada deles entra como referência.",
+            "Na descricaoVisual, a aparência dos personagens segue o perfil e a ficha: não invente cor de cabelo, olhos ou pele que não esteja registrada.",
             "Fim de batalha gera imagem sozinho (pela cenaFinal do end_combat) e retrato de NPC é pelo save_npc { gerarRetrato }.",
         ].join(" "),
         readOnly: false,
