@@ -469,6 +469,20 @@ export const MADDOX_APPEARANCE_TERMS = [
 export const MADDOX_SCENE_IMAGE_LAST_TURN_TEXT_MAX = 8000
 export const MADDOX_SCENE_IMAGE_PREVIOUS_TURN_TEXT_MAX = 1500
 
+// ── Retrato do personagem (DND-31) ─────────────────────────────────────────────
+
+/** Situação do retrato gerado ao concluir a entrevista de personagem (`null` = nunca pedido). */
+export const MADDOX_CHARACTER_PORTRAIT_STATUSES = ["pending", "generating", "done", "failed"] as const
+export type MaddoxCharacterPortraitStatus = (typeof MADDOX_CHARACTER_PORTRAIT_STATUSES)[number]
+/** Teto de uma geração do retrato; passado, o retrato falha. */
+export const MADDOX_CHARACTER_PORTRAIT_TIMEOUT_MS = 120_000
+/** Retrato `pending`/`generating` há mais que isso, fora do processo, vira falha (processo reiniciado). */
+export const MADDOX_CHARACTER_PORTRAIT_STALE_MS = 5 * 60 * 1000
+export const MADDOX_CHARACTER_PORTRAIT_CONSUMPTION_ORIGIN = "maddox-character-portrait"
+export const MADDOX_CHARACTER_PORTRAIT_FAILED_MESSAGE = "Não foi possível gerar o retrato do personagem."
+/** Rótulo do personagem que ainda não tem nome (o nome vem da entrevista). */
+export const MADDOX_CHARACTER_UNNAMED_LABEL = "Personagem em criação"
+
 // ── Combate tático (Maddox 7) ──────────────────────────────────────────────────
 
 /** Condições do D&D (chaves do catálogo de Monstros) e os nomes em pt-BR. */

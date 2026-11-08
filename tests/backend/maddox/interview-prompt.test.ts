@@ -130,6 +130,23 @@ describe("marcador de proposta", () => {
     })
 })
 
+describe("nome do personagem (DND-31)", () => {
+    it("sem nome, o entrevistador recebe a regra de perguntar e combinar o nome; com nome, não", () => {
+        const unnamed = buildInterviewInstructions(base({ kind: "character", character: { name: null } }))
+        expect(unnamed).toContain("## Nome do personagem")
+        expect(unnamed).toContain('Personagem do jogador: "a definir"')
+        const named = buildInterviewInstructions(base({ kind: "character", character: { name: "Lyra" } }))
+        expect(named).not.toContain("## Nome do personagem")
+        expect(named).toContain('Personagem do jogador: "Lyra"')
+        expect(buildInterviewInstructions(base())).not.toContain("## Nome do personagem")
+    })
+
+    it("a consolidação do personagem exige o nome combinado", () => {
+        expect(buildConsolidationInstructions(base({ kind: "character" }), false)).toContain("O nome do personagem é obrigatório")
+        expect(buildConsolidationInstructions(base(), false)).not.toContain("O nome do personagem é obrigatório")
+    })
+})
+
 describe("consolidação", () => {
     it("pede JSON do cenário com as seções e o nome; do personagem com a ficha só quando aplicável", () => {
         const scenario = buildConsolidationInstructions(base(), false)

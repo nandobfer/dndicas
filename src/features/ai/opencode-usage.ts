@@ -20,6 +20,8 @@ export const AI_CONSUMPTION_ORIGIN_LABELS: Record<string, string> = {
     "maddox-interview": "Agente Maddox (entrevistas)",
     "maddox-narration": "Agente Maddox (narração)",
     "maddox-validation": "Agente Maddox (validação de ações)",
+    "maddox-scene-image": "Agente Maddox (imagens nas cenas)",
+    "maddox-character-portrait": "Agente Maddox (retratos dos personagens)",
 }
 
 export function aiConsumptionOriginLabel(origin: string): string {
