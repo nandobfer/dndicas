@@ -72,7 +72,7 @@ export async function provisionOpexCharacterAgent(ref: OpexMemberRef, actorId = 
         await tidyChannel(client, channel, `${name} · pensamentos`, `Memórias individuais do Personagem Opex na campanha "${campaign.name}" (${CAMPAIGN_VISIBILITY_NAMES.players.toLowerCase()} não leem).`, channelCreated)
         if (campaign.status === "archived") await client.channels.archive(channel).catch(() => undefined)
 
-        const member = await MaddoxCampaignMemberModel.findById(ref.memberId).select("+opex.engramind.tokenBox opex.engramind").lean<{ opex?: { engramind?: { tokenId?: string | null; tokenBox?: unknown } | null } | null }>()
+        const member = await MaddoxCampaignMemberModel.findById(ref.memberId).select("+opex.engramind.tokenBox").lean<{ opex?: { engramind?: { tokenId?: string | null; tokenBox?: unknown } | null } | null }>()
         const stored = member?.opex?.engramind
         if (stored?.tokenId && isEncryptedSecret(stored.tokenBox)) {
             await MaddoxCampaignMemberModel.updateOne({ _id: ref.memberId }, { $set: { "opex.engramind.agentSlug": slug, "opex.engramind.channel": channel, "opex.engramind.error": null } })

@@ -28,8 +28,8 @@ faltando ou webhook não registrado.
 Idempotente, auditada passo a passo (`entidade: "Engramind"`), uma por vez. Com o token de app:
 
 1. `whoami` (`kind: app`, app `dndicas`; outro tipo → mensagem clara; `401` → `ENGRAMIND_AUTH_INVALID`);
-2. agentes `dndicas/{opex,image-generator,entity-understanding,entity-import,maddox}` (reaproveita, reativa);
-3. os 7 canais fixos — **o token de app não tem `create_channel`**: o canal nasce numa assinatura **exata**
+2. agentes `dndicas/{opex,image-generator,entity-understanding,entity-import,maddox,personagem-opex}` (reaproveita, reativa);
+3. os 8 canais fixos (inclui `dndicas/personagem-opex`, o canal global dos Personagens Opex) — **o token de app não tem `create_channel`**: o canal nasce numa assinatura **exata**
    (prefixo nunca cria canal). Depois `update_channel` dá o nome pt-BR; arquivado é restaurado;
 4. assinaturas: `dndicas/opex` → `dndicas/opex/*` (`inject`) e os outros canais fixos em `manage` (alcança
    citando o canal, fora do contexto); `dndicas/maddox` → `dndicas/maddox/campanhas/*` (`search`);
@@ -165,6 +165,25 @@ aba Sincronização) e refaz a verificação a cada 24 h. Até lá, uma reescrit
 "vale a última gravação" (título e tags preservados): como a rede é a fonte, o texto reescrito é o que o jogo lê. Pendente: pedido ao Engramind para liberar essa
 configuração ao token de app nos canais que ele criou.
 
+## Personagens Opex (DND-26, `server/opex-characters.ts`)
+
+- **Agente por personagem.** Ao adicionar um Personagem Opex, o token de app cria o agente `dndicas/personagem-opex-<memberId>`
+  com 3 assinaturas **exatas**: `dndicas/personagem-opex` (global, `inject`), `dndicas/maddox/campanhas/<id>/jogadores`
+  (`search`; **nunca** o canal do Mestre) e o individual `dndicas/personagem-opex/<campaignId>/<memberId>` (`inject`; nasce
+  nessa assinatura). O token `agent` fica cifrado no membro (`opex.engramind.tokenBox`, `select: false`; sem
+  `INTEGRATIONS_ENCRYPTION_KEY` não é gravado e o Opex joga sem memórias). Idempotente; falha fica em `opex.engramind.error`
+  e a primeira decisão sem token tenta de novo.
+- **Contexto.** `opexCharacterMemoryBlock` pede `GET /v1/context` com o token do Opex nos 3 canais (nunca lança).
+- **Gravação.** A cada declaração, as `memorias` do JSON do Opex vão ao canal individual com a chave `opex:<título
+  normalizado>` e `upsert` (o mesmo assunto atualiza). Rede fora ou token recusado → `engramind_pending_writes` com
+  `agentMemberId`; `flushPendingWrites` entrega com o token do próprio Opex (sem token, a entrada é descartada).
+- **Ciclo de vida.** Remover o Opex arquiva o canal individual, desativa o agente e revoga o token
+  (`retireOpexCharacterAgent`). `syncCampaignChannelLifecycle` arquiva/restaura também os canais individuais dos Opex ativos.
+- **Leitura humana.** Só em `/memorias` (`memories.view`, administradores). O Diário continua lendo só o canal Jogadores.
+- **Memórias globais.** Na aba Agente Maddox › Personagem Opex: `GET/POST /api/ai/features/maddox/opex-memories` e
+  `PATCH/DELETE …/[memoryId]` (`integrations.ai.view`/`edit`), com o token do agente fixo `dndicas/personagem-opex`
+  (campo `agentTokenPersonagemOpex` da integração). Rede fora → 409 `ENGRAMIND_UNAVAILABLE`.
+
 ## Migração (`server/migration.ts`, aba Migração)
 
 Portada do Opex: **backup** de `agent_memories` (sem alterar, SHA-256, download) → **curador** (provedor e modelo
@@ -196,7 +215,8 @@ token ou texto de memória.
 
 `tests/helpers/fake-engramind.ts` (Engramind falso no `fetch`, só as rotas do contrato; resto → 405),
 `tests/helpers/xyflow.tsx`, `tests/backend/engramind/*` (bootstrap, contexto, proxy e webhook, memórias das
-campanhas, mover e apagar, migração, permissões, ferramentas, teste de conexão e layout dos universos;
+campanhas, mover e apagar, migração, permissões, ferramentas, teste de conexão, layout dos universos e
+`opex-characters.test.ts`;
 MongoDB em memória) e
 `tests/frontend/engramind/*`. Os testes do Maddox usam `tests/helpers/campaign-memories-mock.ts` (substituto em
 memória de `campaign-memories`, com as mesmas regras de chave e tags).

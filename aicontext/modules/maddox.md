@@ -1354,11 +1354,76 @@ na consulta, antes do limite. Vale para todos os membros, inclusive o dono. Desl
 
 Sem permissão nova: a configuração exige ser o dono e a leitura, `maddox.play` e ser membro.
 
+## Personagens Opex (DND-26)
+
+Personagens controlados por IA que o dono adiciona à campanha e que jogam como os outros: entrevista com o Maddox, ficha,
+retrato, mesa, testes e combate.
+
+**Permissão.** `maddox.opex` (`MADDOX_OPEX_PERMISSION`) só para **adicionar** (`POST /api/maddox/campaigns/[id]/opex` e o botão
+"Adicionar Personagem Opex", via `canAddOpex` no GET do detalhe). Remover, "Tentar de novo", "Pular", aprovar e o retrato exigem
+`maddox.play` e ser o dono. Migração `grant-maddox-opex` (uma vez, perfil `user` + padrão).
+
+**Configuração** (seção "Personagem Opex" da aba, `?secao=personagem-opex`): `opexCharacter` (provedor/modelo; `provider: null` =
+"Mesmo do Maddox"), blocos `rigorModels.opexCharacter[]`, `opexCharacterInstructions` com "Restaurar padrão"
+(`DEFAULT_MADDOX_OPEX_CHARACTER_INSTRUCTIONS`), no mesmo Salvar; memórias globais (`MaddoxOpexMemoriesCard`) salvam à parte.
+Resolução: `resolveOpexCharacterModel` (bloco do rigor → próprio → modelo do Maddox no rigor). Disponibilidade:
+`maddoxOpexAvailability`.
+
+**Membro** (`maddox_campaign_members`): `kind: "opex"`, `userId` sintético `opex:<memberId>` (`opexUserIdFor`) — os serviços que
+acham o membro pelo `userId` funcionam sem regra nova — e `opex: { ownerUserId, prompt, interviewMode, addedAt, run, engramind }`.
+`realUserIds` tira os ids sintéticos dos canais do Pusher e da busca de usuários; `notifyInterviewChanged` de um Opex avisa o dono.
+A ficha fica com o dono (`sheetOwnerUserId`, "Minhas fichas"); o retrato e a foto da ficha também (`runCharacterPortrait`).
+Sem presença: conta sempre como presente (combate, ausência, reações). DTO: `kind`, `opex: { interviewMode, status, error, prompt
+(só o dono) }`; `status` = `interviewing | awaiting-approval | failed | ready` (entrevista "em andamento" sem execução viva há mais de
+`MADDOX_OPEX_STALE_MS` vira `failed`).
+
+**Adicionar** (`server/opex.ts`): dono, campanha fora de `ended/archived` (409 `CAMPAIGN_CLOSED`), cenário pronto (409
+`SCENARIO_PENDING`) e modelo disponível (409 `MADDOX_UNAVAILABLE`, a mensagem da criação). Sem limite. Não bloqueia "Iniciar campanha";
+pronto no meio do jogo entra no turno seguinte (lista de elegíveis). Provisiona o Engramind e agenda a entrevista em segundo plano.
+Remover usa `removeMember` (a mesma confirmação) e chama `onOpexRemoved` (arquiva as memórias).
+
+**Entrevista** (`server/opex-interview.ts`), pelas mesmas funções de um jogador (`startInterview`, `sendInterviewMessage`,
+`submitAbilityScores`, `submitHitPoints`, `completeInterview`) com a identidade do Opex:
+- *Autônoma*: single-flight por membro (`opex-runtime.ts`); o Opex responde cada fala (JSON `{resposta}`), escolhe o método dos
+  atributos (rolagem = as 5 rolagens no servidor, depois distribui) e os PV (rola os níveis com "rolagem"), e confirma a síntese.
+  Conclusão recusada por algo corrigível (`CHARACTER_NAME_REQUIRED` etc.) vira pedido de ajuste ao entrevistador (até 2). Falha →
+  `opex.run = failed` com o motivo; `POST …/opex/[memberId]/interview/retry` continua de onde parou (refaz a fala do Maddox que falhou).
+- *Ao vivo*: cada resposta vira `interview.opexDraft` (`generating | ready | failed`, `kind` message/ability-scores/hit-points); nada
+  vai ao entrevistador antes de `POST …/interview/draft/approve` (vazio = como está; `{content}` ou o card editado, NDJSON da fala do
+  Maddox) ou `…/draft/regenerate {orientacao}`. A síntese espera `…/interview/complete`. Tela fechada = pausa ("Aguardando sua
+  aprovação" no lobby). Página `/campanhas/[id]/entrevista/opex/[memberId]` (`OpexInterviewPage`, `OpexDraftPanel`), só o dono.
+- Retrato: o fluxo da DND-31; "Gerar retrato de novo" do dono em `POST …/opex/[memberId]/portrait`.
+
+**Decisões** (`server/opex-player.ts`, `server/opex-prompt.ts` puro): geração efêmera com JSON validado por Zod e uma nova tentativa,
+teto `MADDOX_OPEX_GENERATION_TIMEOUT_MS`. Instruções = configuração + papel de jogador + memórias dos 3 canais + campanha + personagem
+(ficha) + prompt base. Consumo: `maddox-opex-interview`, `maddox-opex-turn`, `maddox-opex-combat`.
+
+**Mesa** (`server/opex-table.ts`): `driveOpex` roda depois de cada `publishGameChanged` (single-flight por campanha):
+- turno fora do combate: em `evaluateTurn`, quando os humanos presentes terminam (com ao menos uma ação humana), o primeiro Opex
+  elegível que não agiu, **na ordem de adição**, vira `turn.opexActor`; a vez entra na fila da campanha (`scheduleOpexTurn`). Até
+  `MADDOX_OPEX_QUESTIONS_MAX` (3) perguntas — a resposta é gerada **no job do Opex** (`answerQuestion`, nunca um job esperando outro) —
+  e depois declara ou "não faz nada" (`recordTurnAction`). Rigoroso/Fiel: declaração recusada volta com o motivo (até 2), depois
+  "não fez nada". Humanos que ainda não agiram recebem 409 `OPEX_TURN`. Com "Ocultas", a transcrição do Opex não traz as declarações
+  dos outros, e as dele ficam ocultas para os humanos (mesma regra da DND-36);
+- testes e rolagens do Opex (`check`, iniciativa, morte, concentração, salvaguarda, dano, ataque de oportunidade): rolados
+  automaticamente por `rollCheck`/`rollCombatRoll`/`rollCombatAction` (o card animado vai a todos);
+- reações: o Opex escolhe entre as opções; falha = não reage (`decideReaction("none")`), sem travar;
+- vez no combate tático: opções de `myCombatDto` → `submitCombatAction` → `rollCombatAction` até resolver → `endCombatTurn`; opção
+  recusada volta uma vez com o motivo;
+- falha do agente: fora do combate `turn.opexActor.failedAt/error`; no combate `opex.run = { failed, stage: "table" }`. A mesa espera o
+  dono: `POST …/game/opex/[memberId]/retry` ou `…/skip` ("não fez nada" / `skipCombatTurn`), auditados. Remover o Opex da vez libera.
+- DTO: `turn.opexActor` (`memberId`, `characterName`, `failed`, `error`, `combat`), `participant.opex`, `message.opex`, `slot.opex`,
+  `journal party.opex`. Tela: `OpexChip` (lobby, lista, "Na mesa", chat, diário, ordem de iniciativa), faixa `opexBannerText`,
+  `OpexFailureBanner` (dono), assento "Agindo…"/"Parado: aguardando o dono".
+
+**Memórias**: ver `aicontext/modules/engramind.md` › Personagens Opex.
+
 ## Testes
 
 `tests/backend/maddox/*` (configuração, roteiros, avatar, sessões, rotas, `campaigns.test.ts` com MongoDB em
-memória, `campaign-routes.test.ts`, `grant-maddox-play.test.ts`) e `tests/frontend/maddox/*`
-(`maddox-tab.test.tsx`, `maddox-campaigns.test.tsx`, `maddox-campaigns-realtime.test.tsx`; happy-dom).
+memória, `campaign-routes.test.ts`, `grant-maddox-play.test.ts`; Personagens Opex: `opex-interview.test.ts`,
+`opex-table.test.ts`, `opex-combat.test.ts`, `opex-prompt.test.ts`, `grant-maddox-opex.test.ts`) e `tests/frontend/maddox/*`
+(`maddox-tab.test.tsx`, `maddox-campaigns.test.tsx`, `maddox-campaigns-realtime.test.tsx`, `maddox-opex.test.tsx`; happy-dom).
 Modelo por rigor (DND-32): `model-resolution.test.ts` (ordem de resolução e o pulo do slider), `settings.test.ts`
 (formato, validação, catálogo, disponibilidade por rigor), `narrator-opencode.test.ts`, `interviews.test.ts`,
 `action-validation.test.ts`, `campaigns.test.ts` e, na tela, `maddox-tab.test.tsx` ("modelo por rigor").
