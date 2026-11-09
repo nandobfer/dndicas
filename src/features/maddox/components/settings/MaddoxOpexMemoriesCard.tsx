@@ -57,7 +57,7 @@ export function MaddoxOpexMemoriesCard({ copy = PERSONAGEM_OPEX_COPY }: { copy?:
         else create.mutate(input, { onSuccess: () => setEditing(null) })
     }
     return (
-        <Card>
+        <Card data-testid={`${copy.idPrefix}-card`}>
             <CardHeader>
                 <CardTitle className="flex items-center gap-2 text-base">
                     <Brain className="h-4 w-4 text-primary" aria-hidden /> {copy.title}

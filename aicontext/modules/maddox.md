@@ -1420,12 +1420,68 @@ teto `MADDOX_OPEX_GENERATION_TIMEOUT_MS`. Instruções = configuração + papel 
 
 **Memórias**: ver `aicontext/modules/engramind.md` › Personagens Opex.
 
+## NPCs Opex (DND-27)
+
+NPC importante da campanha com **agente de IA próprio** (memória no Engramind) que decide o que ele fala e faz nas narrações em que
+aparece (inclusive no combate narrativo) e na vez dele no combate tático. O Maddox resolve e narra a partir da decisão.
+
+**Dados** (`maddox_npcs.opex`): `{ active, promotedAt, promotedBy ("system:maddox" ou o dono), retiredAt, retiredReason
+(maddox | owner | death), engramind }`, índice `{ campaignId, "opex.active" }`. Nada é apagado ao desfazer (`active: false`).
+
+**Regras** (`server/opex-npcs.ts`, único lugar): `promoteOpexNpc` recusa NPC inexistente (404 `NPC_NOT_FOUND`, com a lista), morto
+(409 `NPC_DEAD`), campanha `ended/archived` (409 `CAMPAIGN_CLOSED`), limite 0 (409 `OPEX_NPC_DISABLED`) e limite atingido (409
+`OPEX_NPC_LIMIT`); já Opex não muda. Gravação condicional + recontagem (duas promoções simultâneas acima do limite: a última é
+desfeita). Em segundo plano: provisiona o agente e grava a memória inicial (`waitForOpexNpcWork` nos testes). `retireOpexNpc` (recusa
+campanha encerrada, exceto a morte) desliga a marca e aposenta o agente. `retireOpexNpcIfDead`: `save_npc { status: "dead" }` e o
+fim do combate (passo "npcs" de `afterCombatEnded`). Promover ou desfazer **não cria mensagem**: só `publishGameChanged` (o chip
+aparece ou some).
+
+**Configuração** (seção Personagem Opex): modelo e instruções do Personagem Opex (`loadOpexModel`); `opexNpcLimit` (`null` = sem
+limite, 0 desliga; baixar não desfaz ninguém) no mesmo Salvar; card "Memórias globais dos NPCs Opex" à parte.
+
+**Ferramentas do Maddox** (`master-tools.ts`, AI SDK e MCP `dndicas-maddox`): `promover_npc_opex {npc}`, `desfazer_npc_opex {npc}`,
+`gravar_memoria_npc_opex {npc, titulo, texto}` (canal do NPC, sem acionar o agente; vale na próxima consulta) e
+`consultar_npc_opex {npc, situacao, pergunta?}` — só nas narrações (na resposta a perguntas recusa e a AI SDK nem a oferece;
+`buildMaddoxAiTools({ opexNpcs })`). A consulta (`decideOpexNpcScene`, JSON `{fala, acao, memorias}`, uma tentativa,
+`MADDOX_OPEX_NPC_TIMEOUT_MS`) reaproveita a decisão do mesmo NPC no job e tem teto `MADDOX_OPEX_NPC_CONSULTS_PER_NARRATION`. Falha
+(provedor, tempo, JSON inválido) devolve `{ falhou: true, nota }` sem o motivo e registra `addDraftOpexNpcFailure` no job.
+Prompt do narrador: `[NPC Opex]` no bloco dos NPCs e a seção "NPCs Opex" na tarefa das narrações (`opexNpcsTaskSection`).
+
+**Agente** (`opex-prompt.ts`, `opex-player.ts`): instruções da seção Personagem Opex + `MADDOX_OPEX_NPC_ROLE_RULE` (papel de NPC) +
+regra de memórias + memórias dos 2 canais + campanha + nome e descrição pública (as notas do mestre só pela memória inicial).
+Consumo: `maddox-opex-npc` e `maddox-opex-npc-combat`.
+
+**Combate tático**: no bloco `npc` não retomado de um combatente ligado a NPC Opex vivo, `consultTacticalOpexNpc` (`narrator.ts`)
+consulta o agente antes da geração com as ações da ficha (`stats.actions`, Ataques Múltiplos) e as genéricas (Disparada, Esquivar,
+Desengajar, Fugir), os alvos com a faixa de PV e a situação; `opexNpcCombatSchema` só aceita ação entre as opções (duas
+tentativas). A decisão vai em `block.opexDecision` → linha "O NPC Opex {nome} decidiu: …" da tarefa. Falha = o Maddox decide como
+antes; nada fica pendente no banco. Aliados e adversários seguem a mesma regra.
+
+**Linha de falha**: `runMasterTurn` grava `takeDraftOpexNpcFailures` na própria narração (`opexNpcFailures: [{ npcId, npcName,
+error }]`). `messagesDto` só serializa `opexNpcFailures: [{ npcName, reason }]` para o dono (`MessagesViewer.isOwner`), no estado da
+mesa e no histórico; `OpexNpcFailureLine` desenha "O NPC Opex {nome} não respondeu; o Maddox decidiu por ele nesta narração." e o
+motivo. O motivo completo vai também ao log.
+
+**Dono**: `POST`/`DELETE /api/maddox/campaigns/[id]/npcs/[npcId]/opex` (`maddox.play` + `maddox.opex`; 403 "Você não tem permissão
+para cuidar de NPCs Opex."), `promoteOpexNpcAsOwner`/`retireOpexNpcAsOwner`: quem não participa 404, jogador 403, NPC só do mestre
+404; auditadas (`{ npcOpex, nome, acao }`); devolvem o estado da mesa. `canManageOpexNpcs` (estado da mesa e resumo do Diário) =
+dono com `maddox.opex`, pelas permissões da requisição (`optionalAccess`, respeita "Visualizar como"; fora de requisição, `false`).
+
+**DTOs e telas**: `opex` em `MaddoxGameNpcDto`/`MaddoxJournalNpcDto` (as listas já são só de NPCs conhecidos), nos combatentes do
+card de combate, no slot da iniciativa e no autor do card de ação (`knownOpexNpcIds`: Opex **e** conhecido). `NpcPanel` e
+`JournalNpcList` mostram o `OpexChip` e, com `canManageOpexNpcs`, `OpexNpcActions` (confirmações "Promover {nome} a NPC Opex?" /
+"Remover Opex de {nome}?", botões "Promover"/"Remover Opex" e "Cancelar"; NPC morto não tem "Promover"). Hook
+`useMaddoxOpexNpcActions`.
+
+**Memórias**: ver `aicontext/modules/engramind.md` › NPCs Opex.
+
 ## Testes
 
 `tests/backend/maddox/*` (configuração, roteiros, avatar, sessões, rotas, `campaigns.test.ts` com MongoDB em
 memória, `campaign-routes.test.ts`, `grant-maddox-play.test.ts`; Personagens Opex: `opex-interview.test.ts`,
-`opex-table.test.ts`, `opex-combat.test.ts`, `opex-prompt.test.ts`, `grant-maddox-opex.test.ts`) e `tests/frontend/maddox/*`
-(`maddox-tab.test.tsx`, `maddox-campaigns.test.tsx`, `maddox-campaigns-realtime.test.tsx`, `maddox-opex.test.tsx`; happy-dom).
+`opex-table.test.ts`, `opex-combat.test.ts`, `opex-prompt.test.ts`, `grant-maddox-opex.test.ts`; NPCs Opex: `opex-npc-tools.test.ts`,
+`opex-npc-combat.test.ts`, `opex-npc-routes.test.ts` e `tests/backend/engramind/opex-npcs.test.ts`) e `tests/frontend/maddox/*`
+(`maddox-tab.test.tsx`, `maddox-campaigns.test.tsx`, `maddox-campaigns-realtime.test.tsx`, `maddox-opex.test.tsx`, `maddox-opex-npc.test.tsx`; happy-dom).
 Modelo por rigor (DND-32): `model-resolution.test.ts` (ordem de resolução e o pulo do slider), `settings.test.ts`
 (formato, validação, catálogo, disponibilidade por rigor), `narrator-opencode.test.ts`, `interviews.test.ts`,
 `action-validation.test.ts`, `campaigns.test.ts` e, na tela, `maddox-tab.test.tsx` ("modelo por rigor").
