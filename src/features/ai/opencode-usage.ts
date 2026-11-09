@@ -22,6 +22,9 @@ export const AI_CONSUMPTION_ORIGIN_LABELS: Record<string, string> = {
     "maddox-validation": "Agente Maddox (validação de ações)",
     "maddox-scene-image": "Agente Maddox (imagens nas cenas)",
     "maddox-character-portrait": "Agente Maddox (retratos dos personagens)",
+    "maddox-opex-interview": "Personagens Opex (entrevistas)",
+    "maddox-opex-turn": "Personagens Opex (mesa)",
+    "maddox-opex-combat": "Personagens Opex (combate)",
 }
 
 export function aiConsumptionOriginLabel(origin: string): string {

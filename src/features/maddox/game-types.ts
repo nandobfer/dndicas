@@ -35,6 +35,8 @@ export interface MaddoxGameMessageDto {
      * "Fulano declarou sua ação". O autor sempre recebe o próprio texto.
      */
     hiddenAction?: boolean
+    /** Fala ou ação de um Personagem Opex (DND-26): a tela mostra o chip "Opex". */
+    opex?: boolean
     replyToId: string | null
     /** Nome do dono que pulou o jogador ("não fez nada" registrado por ele). */
     skippedByName: string | null
@@ -130,6 +132,8 @@ export interface MaddoxTacticalSlotDto {
     name: string
     portraitUrl: string | null
     memberId: string | null
+    /** Personagem Opex (DND-26). */
+    opex?: boolean
     /** `null` = ainda não rolou. */
     initiative: number | null
     active: boolean
@@ -272,6 +276,8 @@ export interface MaddoxGameParticipantDto {
     characterName: string | null
     portraitUrl: string | null
     role: "owner" | "player"
+    /** Personagem Opex (DND-26): sem presença (sempre conta como presente) e com o chip "Opex". */
+    opex?: boolean
     /** Concluiu a entrevista de personagem. */
     ready: boolean
     /** Faz parte do turno dos jogadores atual (fixado ao abrir o turno). */
@@ -301,6 +307,11 @@ export interface MaddoxGameStateDto {
         combatActor?: { actorKey: string; memberId: string; characterName: string } | null
         /** Combate tático: rolagens e reações que o turno do mestre espera (para a faixa e o "no lugar" do dono). */
         pendingCombat?: { id: string; kind: "roll" | "reaction"; memberId: string; characterName: string; label: string }[]
+        /**
+         * Personagens Opex (DND-26): quem está agindo agora (fora do combate tático, depois dos humanos) ou parou com falha.
+         * Com `failed`, a mesa espera o dono ("Tentar de novo" ou "Pular"). No combate, `combat: true`.
+         */
+        opexActor?: { memberId: string; characterName: string; failed: boolean; error: string | null; combat: boolean } | null
     }
     /** Mostra a CD dos testes aos jogadores. */
     showCheckDc: boolean

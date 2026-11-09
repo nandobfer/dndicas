@@ -126,6 +126,7 @@ export function interviewDto(doc: InterviewDoc): MaddoxInterviewDto {
         messages: (doc.messages ?? []).filter((message) => !message.internal).map((message) => messageDto(message, doc)),
         generating: Boolean(doc.generating?.token) && Date.now() - lockedAt < MADDOX_INTERVIEW_LOCK_MS,
         abilityRolls: abilityRollsDto(doc),
+        ...(doc.opexDraft ? { opexDraft: { ...doc.opexDraft, payload: doc.opexDraft.payload ?? null, guidance: doc.opexDraft.guidance ?? null, error: doc.opexDraft.error ?? null, createdAt: new Date(doc.opexDraft.createdAt).toISOString() } } : {}),
         completedAt: iso(doc.completedAt),
     }
 }

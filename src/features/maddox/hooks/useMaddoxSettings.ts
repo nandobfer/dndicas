@@ -102,3 +102,52 @@ export function useRegisterMaddoxMcp() {
         onError: (error) => toast.error(apiErrorMessage(error, "Não foi possível registrar o MCP no OpenCode")),
     })
 }
+
+// ── Memórias globais do Personagem Opex (DND-26) ──────────────────────────────
+
+export interface MaddoxOpexGlobalMemoryDto {
+    id: string
+    title: string
+    text: string
+    updatedAt: string | null
+}
+
+const OPEX_MEMORIES_KEY = [...MADDOX_SETTINGS_KEY, "opex-memories"] as const
+
+export const useMaddoxOpexMemories = () =>
+    useQuery({
+        queryKey: OPEX_MEMORIES_KEY,
+        queryFn: async () => unwrapApi((await api.get<ApiResponse<MaddoxOpexGlobalMemoryDto[]>>(`${BASE}/opex-memories`)).data),
+        retry: false,
+    })
+
+/** Incluir, editar e remover as memórias globais que todo Personagem Opex lê (canal `dndicas/personagem-opex`). */
+export function useMaddoxOpexMemoryMutations() {
+    const queryClient = useQueryClient()
+    const refresh = () => void queryClient.invalidateQueries({ queryKey: OPEX_MEMORIES_KEY })
+    const create = useMutation({
+        mutationFn: async (input: { title: string; text: string }) => unwrapApi((await api.post<ApiResponse<MaddoxOpexGlobalMemoryDto>>(`${BASE}/opex-memories`, input)).data),
+        onSuccess: () => {
+            refresh()
+            toast.success("Memória incluída")
+        },
+        onError: (error) => toast.error(apiErrorMessage(error, "Não foi possível incluir a memória")),
+    })
+    const update = useMutation({
+        mutationFn: async ({ id, ...input }: { id: string; title: string; text: string }) => unwrapApi((await api.patch<ApiResponse<MaddoxOpexGlobalMemoryDto>>(`${BASE}/opex-memories/${encodeURIComponent(id)}`, input)).data),
+        onSuccess: () => {
+            refresh()
+            toast.success("Memória atualizada")
+        },
+        onError: (error) => toast.error(apiErrorMessage(error, "Não foi possível salvar a memória")),
+    })
+    const remove = useMutation({
+        mutationFn: async (id: string) => unwrapApi((await api.delete<ApiResponse<{ deleted: boolean }>>(`${BASE}/opex-memories/${encodeURIComponent(id)}`)).data),
+        onSuccess: () => {
+            refresh()
+            toast.success("Memória removida")
+        },
+        onError: (error) => toast.error(apiErrorMessage(error, "Não foi possível remover a memória")),
+    })
+    return { create, update, remove }
+}

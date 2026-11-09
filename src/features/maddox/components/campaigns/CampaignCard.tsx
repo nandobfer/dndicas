@@ -9,7 +9,7 @@ import { Crown, Swords, UserRound, Users } from "lucide-react"
 import { rarityColors } from "@/lib/config/colors"
 import type { MaddoxCampaignListItemDto } from "../../campaign-types"
 import { MADDOX_CHARACTER_UNNAMED_LABEL } from "../../constants"
-import { MemberAvatar, DensityChip, RarityChip, RigorChip, StartingLevelChip, StartingStageLine, StatusChip, rigorColor } from "./campaign-visuals"
+import { MemberAvatar, OpexChip, DensityChip, RarityChip, RigorChip, StartingLevelChip, StartingStageLine, StatusChip, rigorColor } from "./campaign-visuals"
 
 const VISIBLE_AVATARS = 5
 
@@ -93,6 +93,11 @@ export function CampaignCard({ campaign, index = 0 }: { campaign: MaddoxCampaign
                             <span className="flex items-center gap-1 text-xs text-white/60">
                                 <Users className="h-3.5 w-3.5" aria-hidden /> {campaign.members.length}
                             </span>
+                            {campaign.members.some((member) => member.kind === "opex") && (
+                                <span className="flex items-center gap-1 text-xs text-white/60" data-testid="campaign-card-opex">
+                                    <OpexChip /> {campaign.members.filter((member) => member.kind === "opex").length}
+                                </span>
+                            )}
                         </div>
                     </div>
 

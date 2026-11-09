@@ -34,6 +34,8 @@ import type { MaddoxAnswerContext, MaddoxMaster, MaddoxMasterSink, MaddoxNarrati
 import { checkTitle, sheetSummary, type MaddoxCheckSheet } from "../check-modifier"
 import { worldCatalogOf } from "../world-catalog"
 import { buildNarratorInstructions, checkResultLine, narratorTaskText, narratorTranscript, usesChecks, usesCombat, usesTacticalCombat, type NarratorCheckResult, type NarratorDeclaration, type NarratorPromptContext, type NarratorTacticalTask, type NarratorTask } from "./narrator-prompt"
+import { isOpexUserId } from "./opex-members"
+import { MADDOX_OPEX_LABEL } from "../constants"
 
 /**
  * Maddox narrador (Maddox 4) — SOMENTE servidor. Monta as instruções com o estado gravado da campanha, gera em
@@ -114,7 +116,8 @@ async function loadContext(campaignId: Types.ObjectId): Promise<LoadedContext> {
                 .filter((character) => character.interview?.status === "done")
                 .map((character) => ({
                     name: character.name,
-                    playerName: userName.get(byCharacter.get(String(character._id)) ?? "") ?? "Jogador",
+                    // Personagem Opex (DND-26): o Maddox o trata como qualquer personagem; só o rótulo do "jogador" muda.
+                    playerName: userName.get(byCharacter.get(String(character._id)) ?? "") ?? (isOpexUserId(byCharacter.get(String(character._id))) ? MADDOX_OPEX_LABEL : "Jogador"),
                     profile: profileOf(character),
                     currentState: character.currentState ?? "",
                     sheet: character.sheetId ? (sheets.get(String(character.sheetId)) ?? null) : null,
@@ -175,7 +178,7 @@ async function tacticalTask(campaignId: Types.ObjectId, round: number): Promise<
 }
 
 /** Resumo das fichas D&D dos personagens (só nos graus com testes). Falha = narra sem os resumos (aviso no log). */
-async function loadSheetSummaries(campaign: IMaddoxCampaign, characters: readonly IMaddoxCharacter[]): Promise<Map<string, string>> {
+export async function loadSheetSummaries(campaign: IMaddoxCampaign, characters: readonly IMaddoxCharacter[]): Promise<Map<string, string>> {
     const summaries = new Map<string, string>()
     const sheetIds = characters.map((character) => character.sheetId).filter((id): id is Types.ObjectId => Boolean(id))
     if (!usesChecks(campaign.rigor) || sheetIds.length === 0) return summaries

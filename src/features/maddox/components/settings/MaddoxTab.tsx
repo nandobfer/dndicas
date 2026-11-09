@@ -5,7 +5,7 @@ import { AnimatePresence, motion } from "framer-motion"
 import { useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { toast } from "sonner"
-import { ImageIcon, Info, Loader2, MapPinned, RotateCcw, Save, ScanEye, Server, Settings2, Undo2, UserRound } from "lucide-react"
+import { Bot, ImageIcon, Info, Loader2, MapPinned, RotateCcw, Save, ScanEye, Server, Settings2, Undo2, UserRound } from "lucide-react"
 import { Button } from "@/components/ui/opex/button"
 import { GlassCard as Card, GlassCardContent as CardContent, GlassCardDescription as CardDescription, GlassCardHeader as CardHeader, GlassCardTitle as CardTitle } from "@/components/ui/glass-card"
 import { Field } from "@/components/ui/opex/field"
@@ -17,7 +17,7 @@ import { useAiProviderStatuses, useImageGeneratorSettings } from "@/features/ai/
 import { AgentSettingsTabs } from "@/features/ai/components/AgentSettingsTabs"
 import type { IntegrationTabDef } from "@/features/integrations/components/tabs/IntegrationTabs"
 import { apiErrorMessage } from "@/lib/api"
-import { DEFAULT_MADDOX_INSTRUCTIONS, DEFAULT_MADDOX_INTERVIEWER_INSTRUCTIONS, MADDOX_SCRIPT_KINDS, type MaddoxScriptKind } from "../../constants"
+import { DEFAULT_MADDOX_INSTRUCTIONS, DEFAULT_MADDOX_INTERVIEWER_INSTRUCTIONS, DEFAULT_MADDOX_OPEX_CHARACTER_INSTRUCTIONS, MADDOX_SCRIPT_KINDS, type MaddoxScriptKind } from "../../constants"
 import { DEFAULT_MADDOX_SETTINGS, maddoxSettingsSchema, type MaddoxSettings } from "../../schemas"
 import { firstHiddenFormError } from "../../form-errors"
 import { draftFromScript, isScriptDraftDirty, isScriptDraftValid, type MaddoxScriptDraft } from "../../script-draft"
@@ -30,12 +30,14 @@ import { MaddoxModelCard } from "./MaddoxModelCard"
 import { MaddoxOpencodeMcpCard, MaddoxOpencodePolicyCard, MaddoxOpencodeSessionsCard } from "./MaddoxOpencodeCard"
 import { MaddoxSceneImagesCard } from "./MaddoxSceneImagesCard"
 import { MaddoxScriptCard } from "./MaddoxScriptCard"
+import { MaddoxOpexMemoriesCard } from "./MaddoxOpexMemoriesCard"
 
-type MaddoxSection = "geral" | "entrevista-cenario" | "entrevista-personagem" | "imagens" | "jev" | "opencode"
+type MaddoxSection = "geral" | "entrevista-cenario" | "entrevista-personagem" | "personagem-opex" | "imagens" | "jev" | "opencode"
 const SECTIONS: IntegrationTabDef<MaddoxSection>[] = [
     { id: "geral", label: "Geral", icon: Settings2 },
     { id: "entrevista-cenario", label: "Entrevista: cenário", icon: MapPinned },
     { id: "entrevista-personagem", label: "Entrevista: personagem", icon: UserRound },
+    { id: "personagem-opex", label: "Personagem Opex", icon: Bot },
     { id: "imagens", label: "Imagens", icon: ImageIcon },
     { id: "jev", label: "JEV", icon: ScanEye },
     { id: "opencode", label: "OpenCode", icon: Server },
@@ -98,7 +100,7 @@ export function MaddoxTab({ onDirtyChange }: { onDirtyChange: (dirty: boolean) =
                 if (saved) form.reset(saved.settings)
             },
             (fieldErrors) => {
-                go(fieldErrors.opencode ? "opencode" : fieldErrors.sceneImages ? "imagens" : "geral")
+                go(fieldErrors.opencode ? "opencode" : fieldErrors.sceneImages ? "imagens" : fieldErrors.opexCharacter || fieldErrors.opexCharacterInstructions || fieldErrors.rigorModels?.opexCharacter ? "personagem-opex" : "geral")
                 // Campos sem mensagem própria na tela (ex.: URL do avatar) não podem falhar em silêncio.
                 const hidden = firstHiddenFormError(fieldErrors)
                 if (hidden) toast.error(`Não foi possível salvar: ${hidden}`)
@@ -202,6 +204,35 @@ export function MaddoxTab({ onDirtyChange }: { onDirtyChange: (dirty: boolean) =
                     )}
                     {section === SCRIPT_SECTION.scenario && scriptSection("scenario")}
                     {section === SCRIPT_SECTION.character && scriptSection("character")}
+                    {section === "personagem-opex" && (
+                        <>
+                            <MaddoxModelCard
+                                form={form}
+                                target="opexCharacter"
+                                providers={providers}
+                                title="Personagem Opex"
+                                description="Modelo dos personagens controlados por IA que o dono adiciona às campanhas: respondem à entrevista, declaram, perguntam ao mestre e agem no combate. Sem provedor próprio, usa o do Maddox."
+                            />
+                            <Card>
+                                <CardHeader>
+                                    <CardTitle className="text-base">Instruções do Personagem Opex</CardTitle>
+                                    <CardDescription>Como todo Personagem Opex joga. A campanha, o personagem, o prompt base do dono e as memórias entram sozinhos.</CardDescription>
+                                </CardHeader>
+                                <CardContent>
+                                    <Field id="maddox-opex-instructions" label="Instruções" error={errors.opexCharacterInstructions?.message}>
+                                        <Textarea id="maddox-opex-instructions" rows={8} className="font-mono text-xs" {...form.register("opexCharacterInstructions")} />
+                                        <div className="flex justify-end">
+                                            <Button type="button" variant="ghost" size="sm" className="gap-1.5" onClick={() => form.setValue("opexCharacterInstructions", DEFAULT_MADDOX_OPEX_CHARACTER_INSTRUCTIONS, { shouldDirty: true, shouldValidate: true })}>
+                                                <RotateCcw className="h-3.5 w-3.5" aria-hidden /> Restaurar padrão
+                                            </Button>
+                                        </div>
+                                    </Field>
+                                </CardContent>
+                            </Card>
+                            {footer(go)}
+                            <MaddoxOpexMemoriesCard />
+                        </>
+                    )}
                     {section === "imagens" && (
                         <>
                             <MaddoxSceneImagesCard form={form} generator={imageGenerator.data} />

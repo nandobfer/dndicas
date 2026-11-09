@@ -13,7 +13,7 @@ import { MaddoxRigorModelBlock } from "./MaddoxRigorModelBlock"
 
 interface MaddoxModelCardProps {
     form: UseFormReturn<MaddoxSettings>
-    target: "main" | "interviewer"
+    target: "main" | "interviewer" | "opexCharacter"
     providers: AiProviderStatusDto[]
     title: string
     description: string
@@ -49,7 +49,7 @@ export function MaddoxModelCard({ form, target, providers, title, description }:
                 </Button>
             </CardHeader>
             <CardContent className="space-y-5">
-                <MaddoxModelFields form={form} prefix={target} idPrefix={`maddox-${target}`} providers={providers} allowSameAsMain={target === "interviewer"} withSampling={target === "main"} showDisconnectedNotice={target === "main"} />
+                <MaddoxModelFields form={form} prefix={target} idPrefix={`maddox-${target}`} providers={providers} allowSameAsMain={target !== "main"} withSampling={target === "main"} showDisconnectedNotice={target === "main"} />
                 <AnimatePresence initial={false}>
                     {blocks.fields.map((field, index) => (
                         <MaddoxRigorModelBlock key={field.id} form={form} target={target} index={index} providers={providers} onRemove={() => blocks.remove(index)} />

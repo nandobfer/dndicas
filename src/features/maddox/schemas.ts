@@ -4,6 +4,7 @@ import { IMAGE_ASPECT_RATIOS } from "@/features/ai/constants"
 import {
     DEFAULT_MADDOX_INSTRUCTIONS,
     DEFAULT_MADDOX_INTERVIEWER_INSTRUCTIONS,
+    DEFAULT_MADDOX_OPEX_CHARACTER_INSTRUCTIONS,
     DEFAULT_MADDOX_PERSONA,
     MADDOX_INSTRUCTIONS_MAX,
     MADDOX_JEV_DECISIONS,
@@ -60,8 +61,8 @@ export type MaddoxRigorModel = z.infer<typeof maddoxRigorModelSchema>
 
 const rigorModelListSchema = z.array(maddoxRigorModelSchema).max(MADDOX_RIGOR_LEVELS.length, `Até ${MADDOX_RIGOR_LEVELS.length} configurações por rigor`)
 
-/** Modelos por nível de rigor do narrador e do entrevistador; nível sem bloco = a seleção padrão do cartão. */
-export const maddoxRigorModelsSchema = z.object({ main: rigorModelListSchema, interviewer: rigorModelListSchema })
+/** Modelos por nível de rigor do narrador, do entrevistador e do Personagem Opex; nível sem bloco = a seleção padrão do cartão. */
+export const maddoxRigorModelsSchema = z.object({ main: rigorModelListSchema, interviewer: rigorModelListSchema, opexCharacter: rigorModelListSchema })
 export type MaddoxRigorModels = z.infer<typeof maddoxRigorModelsSchema>
 export type MaddoxRigorModelTarget = keyof MaddoxRigorModels
 
@@ -146,9 +147,12 @@ export const maddoxSettingsSchema = z
         enabled: z.boolean({ error: "Informe se o Agente Maddox está ativo" }),
         main: maddoxMainModelSchema,
         interviewer: maddoxInterviewerModelSchema,
+        /** Modelo do Personagem Opex (DND-26); sem provedor = o mesmo do Maddox. */
+        opexCharacter: maddoxInterviewerModelSchema,
         rigorModels: maddoxRigorModelsSchema,
         instructions: instructionsField,
         interviewerInstructions: instructionsField,
+        opexCharacterInstructions: instructionsField,
         avatar: maddoxAvatarSchema,
         opencode: maddoxOpencodeSchema,
         jev: maddoxJevSchema,
@@ -156,7 +160,8 @@ export const maddoxSettingsSchema = z
     })
     .superRefine((value, ctx) => {
         if (value.interviewer.provider && !value.interviewer.model) ctx.addIssue({ code: "custom", path: ["interviewer", "model"], message: "Selecione o modelo" })
-        for (const target of ["main", "interviewer"] as const) {
+        if (value.opexCharacter.provider && !value.opexCharacter.model) ctx.addIssue({ code: "custom", path: ["opexCharacter", "model"], message: "Selecione o modelo" })
+        for (const target of ["main", "interviewer", "opexCharacter"] as const) {
             const seen = new Set<string>()
             value.rigorModels[target].forEach((block, index) => {
                 if (seen.has(block.rigor)) ctx.addIssue({ code: "custom", path: ["rigorModels", target, index, "rigor"], message: `Já existe uma configuração para o rigor ${MADDOX_RIGOR_LEVEL_DEFS[block.rigor].label}` })
@@ -175,9 +180,11 @@ export const DEFAULT_MADDOX_SETTINGS: MaddoxSettings = {
     enabled: false,
     main: { provider: null, model: null, agent: null, variant: null, temperature: null, maxOutputTokens: null },
     interviewer: { provider: null, model: null, agent: null, variant: null },
-    rigorModels: { main: [], interviewer: [] },
+    opexCharacter: { provider: null, model: null, agent: null, variant: null },
+    rigorModels: { main: [], interviewer: [], opexCharacter: [] },
     instructions: DEFAULT_MADDOX_INSTRUCTIONS,
     interviewerInstructions: DEFAULT_MADDOX_INTERVIEWER_INSTRUCTIONS,
+    opexCharacterInstructions: DEFAULT_MADDOX_OPEX_CHARACTER_INSTRUCTIONS,
     avatar: { url: null, persona: DEFAULT_MADDOX_PERSONA },
     opencode: { deleteOnCampaignEnd: true, directory: null, mcpUrl: null },
     jev: Object.fromEntries(MADDOX_JEV_DECISIONS.map((decision) => [decision, false])) as MaddoxJevSettings,

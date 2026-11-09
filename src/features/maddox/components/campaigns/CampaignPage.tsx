@@ -4,7 +4,7 @@ import { useState } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { motion } from "framer-motion"
-import { ArrowLeft, BookOpen, CheckCircle2, Crown, Dices, DoorOpen, Hourglass, ImageOff, Loader2, MessageCircle, Pencil, Play, RefreshCw, ScrollText, Swords, UserMinus, UserRound, Users } from "lucide-react"
+import { AlertTriangle, ArrowLeft, BookOpen, Bot, CheckCircle2, Crown, Dices, DoorOpen, Hourglass, ImageOff, Loader2, MessageCircle, Pencil, Play, RefreshCw, ScrollText, Swords, UserMinus, UserRound, Users } from "lucide-react"
 import { Button } from "@/components/ui/opex/button"
 import { ConfirmDialog } from "@/components/ui/opex/confirm-dialog"
 import { Skeleton } from "@/components/ui/opex/skeleton"
@@ -12,16 +12,18 @@ import { ErrorState } from "@/components/feedback/ErrorState"
 import { EmptyState } from "@/components/feedback/EmptyState"
 import { GlassCard as Card, GlassCardContent as CardContent, GlassCardDescription as CardDescription, GlassCardHeader as CardHeader, GlassCardTitle as CardTitle } from "@/components/ui/glass-card"
 import { useAuth } from "@/core/hooks/useAuth"
-import { MADDOX_CHARACTER_UNNAMED_LABEL, MADDOX_RIGOR_LEVEL_DEFS, MADDOX_TURN_PHASE_LABELS } from "../../constants"
+import { MADDOX_CHARACTER_UNNAMED_LABEL, MADDOX_OPEX_INTERVIEW_MODE_LABELS, MADDOX_OPEX_UNNAMED_LABEL, MADDOX_RIGOR_LEVEL_DEFS, MADDOX_TURN_PHASE_LABELS } from "../../constants"
 import type { MaddoxCampaignCharacterDto, MaddoxCampaignDetailDto, MaddoxCampaignMemberDto } from "../../campaign-types"
 import { useMaddoxCampaign, useMaddoxCampaignsRealtime, useRemoveMaddoxMember, useRetryMaddoxCharacterPortrait } from "../../hooks/useMaddoxCampaigns"
 import { useStartMaddoxCampaign } from "../../hooks/useMaddoxGame"
+import { useMaddoxOpexLobbyActions } from "../../hooks/useMaddoxOpex"
+import { AddOpexDialog } from "./AddOpexDialog"
 import { EditCampaignDialog } from "./EditCampaignDialog"
 import { InvitePanel } from "./InvitePanel"
 import { CharacterProfileDialog } from "./CharacterProfileDialog"
 import { journalHref } from "../journal/journal-links"
 import { CampaignStoryCard } from "./CampaignStoryCard"
-import { InterviewChip, MemberAvatar, DensityChip, RarityChip, RigorChip, StartingLevelChip, StartingStageLine, StatusChip, WorldCatalogLines, rigorColor } from "./campaign-visuals"
+import { InterviewChip, MemberAvatar, OpexChip, DensityChip, RarityChip, RigorChip, StartingLevelChip, StartingStageLine, StatusChip, WorldCatalogLines, rigorColor } from "./campaign-visuals"
 import { rarityColors } from "@/lib/config/colors"
 
 const errorStatus = (error: unknown) => (error as { response?: { status?: number } } | null)?.response?.status
@@ -75,6 +77,9 @@ function CampaignView({ campaign, userId }: { campaign: MaddoxCampaignDetailDto;
     const retryPortrait = useRetryMaddoxCharacterPortrait(campaign.id)
     const [removing, setRemoving] = useState<MaddoxCampaignMemberDto | null>(null)
     const [leaving, setLeaving] = useState(false)
+    const [addingOpex, setAddingOpex] = useState(false)
+    const opexActions = useMaddoxOpexLobbyActions(campaign.id)
+    const canAddOpex = isOwner && campaign.canAddOpex === true && campaign.inviteOpen
     const [viewing, setViewing] = useState<{ character: MaddoxCampaignCharacterDto; playerName: string; own: boolean } | null>(null)
     const ready = campaign.members.filter((member) => member.ready).length
     const scenarioDone = campaign.scenarioStatus === "done"
@@ -124,6 +129,11 @@ function CampaignView({ campaign, userId }: { campaign: MaddoxCampaignDetailDto;
                                 <Play aria-hidden /> Iniciar campanha
                             </Button>
                         )}
+                        {canAddOpex && (
+                            <Button variant="outline" onClick={() => setAddingOpex(true)} disabled={!scenarioDone} title={scenarioDone ? undefined : "Disponível depois que o cenário estiver pronto"}>
+                                <Bot aria-hidden /> Adicionar Personagem Opex
+                            </Button>
+                        )}
                         {isOwner ? (
                             <Button variant="outline" onClick={() => setEditing(true)}>
                                 <Pencil aria-hidden /> Editar
@@ -170,15 +180,25 @@ function CampaignView({ campaign, userId }: { campaign: MaddoxCampaignDetailDto;
                                     <MemberAvatar name={member.character?.name || member.name} imageUrl={member.character?.portraitUrl ?? member.avatarUrl} color={member.character ? color : undefined} className="h-11 w-11" />
                                     <div className="min-w-0 flex-1">
                                         <p className="flex items-center gap-1.5 truncate text-sm font-medium text-white">
-                                            {member.character?.name ? member.character.name : <span className="text-white/50">{member.character ? MADDOX_CHARACTER_UNNAMED_LABEL : "Personagem ainda não criado"}</span>}
+                                            {member.character?.name ? member.character.name : <span className="text-white/50">{member.kind === "opex" ? MADDOX_OPEX_UNNAMED_LABEL : member.character ? MADDOX_CHARACTER_UNNAMED_LABEL : "Personagem ainda não criado"}</span>}
+                                            {member.kind === "opex" && <OpexChip />}
                                             {member.ready && <CheckCircle2 className="h-3.5 w-3.5 shrink-0" style={{ color: rarityColors.legendary }} aria-label="Pronto para jogar" />}
                                         </p>
-                                        <p className="flex items-center gap-1 truncate text-xs text-white/60">
-                                            {member.role === "owner" ? <Crown className="h-3 w-3" style={{ color: rarityColors.legendary }} aria-label="Dono" /> : <UserRound className="h-3 w-3" aria-hidden />}
-                                            {member.name}
-                                            {member.username ? ` · @${member.username}` : ""}
-                                            {member.userId === userId ? " · você" : ""}
-                                        </p>
+                                        {member.kind === "opex" ? (
+                                            <p className="flex items-center gap-1 truncate text-xs text-white/60">
+                                                <Bot className="h-3 w-3" aria-hidden />
+                                                {member.name}
+                                                {member.opex ? ` · entrevista ${MADDOX_OPEX_INTERVIEW_MODE_LABELS[member.opex.interviewMode].toLowerCase()}` : ""}
+                                            </p>
+                                        ) : (
+                                            <p className="flex items-center gap-1 truncate text-xs text-white/60">
+                                                {member.role === "owner" ? <Crown className="h-3 w-3" style={{ color: rarityColors.legendary }} aria-label="Dono" /> : <UserRound className="h-3 w-3" aria-hidden />}
+                                                {member.name}
+                                                {member.username ? ` · @${member.username}` : ""}
+                                                {member.userId === userId ? " · você" : ""}
+                                            </p>
+                                        )}
+                                        {member.kind === "opex" && member.opex && <OpexStatusLine member={member} campaignId={campaign.id} isOwner={isOwner} open={campaign.inviteOpen} retrying={opexActions.retryInterview.isPending} onRetry={() => opexActions.retryInterview.mutate(member.id)} />}
                                     </div>
                                     {member.character && <InterviewChip status={member.character.interviewStatus} />}
                                     {member.character?.interviewStatus === "done" && (
@@ -190,6 +210,12 @@ function CampaignView({ campaign, userId }: { campaign: MaddoxCampaignDetailDto;
                                         <span className="inline-flex items-center gap-1 text-xs text-white/60" data-testid="portrait-generating">
                                             <Loader2 className="h-3 w-3 animate-spin" aria-hidden /> Gerando retrato…
                                         </span>
+                                    )}
+                                    {isOwner && member.kind === "opex" && campaign.inviteOpen && member.character?.interviewStatus === "done" && !member.character.portraitUrl && (member.character.portraitStatus === "failed" || member.character.portraitStatus === null) && (
+                                        <Button size="sm" variant="ghost" onClick={() => opexActions.retryPortrait.mutate(member.id)} disabled={opexActions.retryPortrait.isPending}>
+                                            {opexActions.retryPortrait.isPending ? <Loader2 className="animate-spin" aria-hidden /> : <RefreshCw aria-hidden />}
+                                            {member.character.portraitStatus === "failed" ? "Gerar retrato de novo" : "Gerar retrato"}
+                                        </Button>
                                     )}
                                     {member.id === campaign.myMemberId && campaign.inviteOpen && member.character?.interviewStatus === "done" && !member.character.portraitUrl && (member.character.portraitStatus === "failed" || member.character.portraitStatus === null) && (
                                         <Button size="sm" variant="ghost" onClick={() => retryPortrait.mutate()} disabled={retryPortrait.isPending} title={member.character.portraitStatus === "failed" ? "A geração do retrato falhou" : undefined}>
@@ -234,12 +260,13 @@ function CampaignView({ campaign, userId }: { campaign: MaddoxCampaignDetailDto;
             </div>
 
             {isOwner && <EditCampaignDialog campaign={campaign} open={editing} onOpenChange={setEditing} />}
+            {canAddOpex && <AddOpexDialog campaignId={campaign.id} open={addingOpex} onOpenChange={setAddingOpex} />}
             <CharacterProfileDialog character={viewing?.character ?? null} playerName={viewing?.playerName ?? ""} own={viewing?.own ?? false} color={color} onOpenChange={(open) => !open && setViewing(null)} />
             <ConfirmDialog
                 open={removing !== null}
                 onOpenChange={(open) => !open && setRemoving(null)}
-                title={`Remover ${removing?.name ?? "jogador"}?`}
-                description="O jogador sai da campanha e não poderá voltar pelo link de convite."
+                title={removing?.kind === "opex" ? `Remover ${removing.character?.name || "o Personagem Opex"}?` : `Remover ${removing?.name ?? "jogador"}?`}
+                description={removing?.kind === "opex" ? "O Personagem Opex sai da campanha e deixa de jogar. As memórias individuais dele são arquivadas." : "O jogador sai da campanha e não poderá voltar pelo link de convite."}
                 confirmLabel="Remover"
                 variant="destructive"
                 pending={remove.isPending}
@@ -265,5 +292,41 @@ function CampaignView({ campaign, userId }: { campaign: MaddoxCampaignDetailDto;
                 onConfirm={() => remove.mutate(campaign.myMemberId, { onSuccess: () => router.push("/campanhas"), onSettled: () => setLeaving(false) })}
             />
         </motion.div>
+    )
+}
+
+/** Situação do Personagem Opex no lobby (DND-26): entrevistando, aguardando aprovação (link), falha com "Tentar de novo". */
+function OpexStatusLine({ member, campaignId, isOwner, open, retrying, onRetry }: { member: MaddoxCampaignMemberDto; campaignId: string; isOwner: boolean; open: boolean; retrying: boolean; onRetry: () => void }) {
+    const opex = member.opex!
+    const href = `/campanhas/${campaignId}/entrevista/opex/${member.id}`
+    if (opex.status === "ready") return null
+    return (
+        <div className="mt-1 flex flex-wrap items-center gap-2 text-xs" data-testid="opex-status" data-status={opex.status}>
+            {opex.status === "interviewing" && (
+                <span className="inline-flex items-center gap-1 text-white/60">
+                    <Loader2 className="h-3 w-3 animate-spin" aria-hidden /> Entrevista com o Maddox em andamento…
+                </span>
+            )}
+            {opex.status === "awaiting-approval" && (
+                <span className="inline-flex items-center gap-1" style={{ color: rarityColors.legendary }}>
+                    <Hourglass className="h-3 w-3" aria-hidden /> {isOwner ? "Aguardando sua aprovação" : "Aguardando o dono da campanha"}
+                </span>
+            )}
+            {opex.status === "failed" && (
+                <span className="inline-flex items-center gap-1 text-destructive">
+                    <AlertTriangle className="h-3 w-3" aria-hidden /> {opex.error ?? "A entrevista do Personagem Opex parou."}
+                </span>
+            )}
+            {isOwner && open && (
+                <Link href={href} className="text-primary underline-offset-2 hover:underline">
+                    {opex.status === "awaiting-approval" ? "Continuar" : "Ver conversa"}
+                </Link>
+            )}
+            {isOwner && open && opex.status === "failed" && (
+                <Button size="sm" variant="outline" className="h-6 px-2 text-xs" onClick={onRetry} disabled={retrying}>
+                    {retrying ? <Loader2 className="animate-spin" aria-hidden /> : <RefreshCw aria-hidden />} Tentar de novo
+                </Button>
+            )}
+        </div>
     )
 }

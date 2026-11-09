@@ -1,5 +1,5 @@
 import type { WorldCatalog } from "./world-catalog"
-import type { MaddoxCampaignStatus, MaddoxCharacterPortraitStatus, MaddoxDensityLevel, MaddoxInterviewStatus, MaddoxMemberRole, MaddoxRigorLevel, MaddoxScenarioStatus, MaddoxTurnPhase } from "./constants"
+import type { MaddoxCampaignStatus, MaddoxCharacterPortraitStatus, MaddoxDensityLevel, MaddoxInterviewStatus, MaddoxMemberKind, MaddoxMemberRole, MaddoxOpexInterviewMode, MaddoxRigorLevel, MaddoxScenarioStatus, MaddoxTurnPhase } from "./constants"
 
 /** DTOs das Campanhas Maddox (Maddox 1). */
 
@@ -17,9 +17,24 @@ export interface MaddoxCampaignCharacterDto {
     sheetSlug: string | null
 }
 
+/** Situação do Personagem Opex no lobby (DND-26). */
+export type MaddoxOpexStatus = "interviewing" | "awaiting-approval" | "failed" | "ready"
+
+export interface MaddoxOpexMemberDto {
+    interviewMode: MaddoxOpexInterviewMode
+    status: MaddoxOpexStatus
+    /** Motivo da falha (entrevista ou mesa), em pt-BR. */
+    error: string | null
+    /** Prompt base: só o dono da campanha recebe. */
+    prompt: string | null
+}
+
 export interface MaddoxCampaignMemberDto {
     id: string
     userId: string
+    /** Pessoa ou Personagem Opex (DND-26). */
+    kind?: MaddoxMemberKind
+    opex?: MaddoxOpexMemberDto | null
     name: string
     username: string | null
     avatarUrl: string | null
@@ -80,6 +95,8 @@ export interface MaddoxCampaignDetailDto extends Omit<MaddoxCampaignListItemDto,
     openingSituation: string
     /** O rigor não muda mais (a entrevista de cenário já começou ou a campanha saiu do lobby). */
     rigorLocked: boolean
+    /** O usuário pode adicionar Personagens Opex (dono com a permissão `maddox.opex`; só no GET do detalhe). */
+    canAddOpex?: boolean
 }
 
 export interface MaddoxInviteLinkDto {

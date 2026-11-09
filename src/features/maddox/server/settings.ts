@@ -2,7 +2,7 @@ import { z } from "zod"
 import { assertCatalog, availability, loadFeature, normalizeProvider, persistFeature } from "@/features/ai/server/settings"
 import type { AiFeatureAvailability } from "@/features/ai/types"
 import { MADDOX_FEATURE, type MaddoxRigorLevel } from "../constants"
-import { resolveNarratorModel } from "../model-resolution"
+import { resolveInterviewerModel, resolveNarratorModel, resolveOpexCharacterModel } from "../model-resolution"
 import { DEFAULT_MADDOX_SETTINGS, maddoxSettingsSchema, type MaddoxRigorModel, type MaddoxSettings } from "../schemas"
 import type { MaddoxSettingsDto } from "../types"
 import { getAllMaddoxScripts } from "./scripts"
@@ -18,7 +18,8 @@ export function withMaddoxDefaults(saved: unknown): unknown {
         ...value,
         main: { ...DEFAULT_MADDOX_SETTINGS.main, ...(value.main ?? {}) },
         interviewer: { ...DEFAULT_MADDOX_SETTINGS.interviewer, ...(value.interviewer ?? {}) },
-        rigorModels: { main: value.rigorModels?.main ?? [], interviewer: value.rigorModels?.interviewer ?? [] },
+        opexCharacter: { ...DEFAULT_MADDOX_SETTINGS.opexCharacter, ...(value.opexCharacter ?? {}) },
+        rigorModels: { main: value.rigorModels?.main ?? [], interviewer: value.rigorModels?.interviewer ?? [], opexCharacter: value.rigorModels?.opexCharacter ?? [] },
         avatar: { ...DEFAULT_MADDOX_SETTINGS.avatar, ...(value.avatar ?? {}) },
         opencode: { ...DEFAULT_MADDOX_SETTINGS.opencode, ...(value.opencode ?? {}) },
         jev: { ...DEFAULT_MADDOX_SETTINGS.jev, ...(value.jev ?? {}) },
@@ -40,6 +41,20 @@ export async function maddoxAvailability(settings: MaddoxSettings, rigor?: Maddo
     return availability({ enabled: settings.enabled, provider: model?.provider ?? settings.main.provider, model: model?.model ?? settings.main.model }, '"Agente Maddox"')
 }
 
+/**
+ * Disponibilidade para adicionar um Personagem Opex (DND-26): o Maddox ativo com o entrevistador e o modelo do
+ * Personagem Opex resolvidos no rigor da campanha. Indisponível = a mesma mensagem do Agente Maddox.
+ */
+export async function maddoxOpexAvailability(settings: MaddoxSettings, rigor: MaddoxRigorLevel): Promise<AiFeatureAvailability> {
+    const base = await maddoxAvailability(settings, rigor)
+    if (!base.available) return base
+    for (const model of [resolveInterviewerModel(settings, rigor), resolveOpexCharacterModel(settings, rigor)]) {
+        const result = await availability({ enabled: settings.enabled, provider: model?.provider ?? null, model: model?.model ?? null }, '"Agente Maddox"')
+        if (!result.available) return result
+    }
+    return base
+}
+
 export async function getMaddoxSettings(): Promise<MaddoxSettingsDto> {
     const [{ settings, isDefault, updatedAt }, scripts] = await Promise.all([loadMaddoxSettings(), getAllMaddoxScripts()])
     return { settings, isDefault, availability: await maddoxAvailability(settings), updatedAt: updatedAt ? updatedAt.toISOString() : null, scripts }
@@ -51,6 +66,9 @@ export function normalizeMaddoxSettings(input: MaddoxSettings): MaddoxSettings {
     const interviewer = input.interviewer.provider
         ? normalizeProvider({ enabled: false, ...input.interviewer, temperature: null, maxOutputTokens: null })
         : { provider: null, model: null, agent: null, variant: null }
+    const opexCharacter = input.opexCharacter.provider
+        ? normalizeProvider({ enabled: false, ...input.opexCharacter, temperature: null, maxOutputTokens: null })
+        : { provider: null, model: null, agent: null, variant: null }
     const rigorBlock = (block: MaddoxRigorModel): MaddoxRigorModel => {
         const value = normalizeProvider({ enabled: false, ...block, temperature: null, maxOutputTokens: null })
         return { rigor: block.rigor, provider: value.provider, model: value.model, agent: value.agent, variant: value.variant }
@@ -59,7 +77,8 @@ export function normalizeMaddoxSettings(input: MaddoxSettings): MaddoxSettings {
         ...input,
         main: { provider: main.provider, model: main.model, agent: main.agent, variant: main.variant, temperature: main.temperature, maxOutputTokens: main.maxOutputTokens } as MaddoxSettings["main"],
         interviewer: { provider: interviewer.provider, model: interviewer.model, agent: interviewer.agent, variant: interviewer.variant } as MaddoxSettings["interviewer"],
-        rigorModels: { main: input.rigorModels.main.map(rigorBlock), interviewer: input.rigorModels.interviewer.map(rigorBlock) },
+        opexCharacter: { provider: opexCharacter.provider, model: opexCharacter.model, agent: opexCharacter.agent, variant: opexCharacter.variant } as MaddoxSettings["opexCharacter"],
+        rigorModels: { main: input.rigorModels.main.map(rigorBlock), interviewer: input.rigorModels.interviewer.map(rigorBlock), opexCharacter: input.rigorModels.opexCharacter.map(rigorBlock) },
         avatar: { url: input.avatar.url?.trim() || null, persona: input.avatar.persona },
         opencode: { ...input.opencode, directory: input.opencode.directory?.trim() || null },
         sceneImages: { ...input.sceneImages, style: input.sceneImages.style.trim() },
@@ -71,7 +90,8 @@ export async function saveMaddoxSettings(input: MaddoxSettings, actorId: string)
     const next = normalizeMaddoxSettings(input)
     await assertCatalog({ enabled: next.enabled, ...next.main })
     if (next.interviewer.provider) await assertCatalog({ enabled: next.enabled, ...next.interviewer, temperature: null, maxOutputTokens: null })
-    for (const block of [...next.rigorModels.main, ...next.rigorModels.interviewer]) {
+    if (next.opexCharacter.provider) await assertCatalog({ enabled: next.enabled, ...next.opexCharacter, temperature: null, maxOutputTokens: null })
+    for (const block of [...next.rigorModels.main, ...next.rigorModels.interviewer, ...next.rigorModels.opexCharacter]) {
         await assertCatalog({ enabled: next.enabled, provider: block.provider, model: block.model, agent: block.agent, variant: block.variant, temperature: null, maxOutputTokens: null })
     }
     const before = await loadMaddoxSettings()

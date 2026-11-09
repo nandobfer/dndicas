@@ -25,6 +25,8 @@ import type {
     MaddoxJournalSummaryDto,
 } from "../journal-types"
 import { loadMembership } from "./campaigns"
+import { isOpexUserId } from "./opex-members"
+import { MADDOX_OPEX_LABEL } from "../constants"
 
 /**
  * Diário da campanha (Maddox 9): o que os jogadores sabem — histórico da mesa, NPCs, locais, missões, anotações,
@@ -205,7 +207,8 @@ async function partyMembers(campaignId: Types.ObjectId): Promise<MaddoxJournalPa
         return [
             {
                 memberId: String(member._id),
-                playerName: names.get(member.userId) ?? "Usuário",
+                playerName: isOpexUserId(member.userId) ? MADDOX_OPEX_LABEL : (names.get(member.userId) ?? "Usuário"),
+                ...(isOpexUserId(member.userId) ? { opex: true } : {}),
                 characterId: String(character._id),
                 characterName: character.name,
                 portraitUrl: character.portraitUrl ?? null,

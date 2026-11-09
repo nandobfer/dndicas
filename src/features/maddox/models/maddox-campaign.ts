@@ -60,6 +60,11 @@ export interface IMaddoxCampaign {
         combatActor?: { combatId: Types.ObjectId; actorKey: string; memberId: Types.ObjectId; offlineSince: Date | null } | null
         /** Combate tático (DND-25): pausa de leitura entre dois blocos; a continuação só entra na fila depois disto. */
         pauseUntil?: Date | null
+        /**
+         * Personagens Opex (DND-26): depois que os humanos terminam o turno dos jogadores, cada Opex age um de cada vez.
+         * `failedAt` + `error` = o Opex não conseguiu agir e a mesa espera o dono ("Tentar de novo" ou "Pular").
+         */
+        opexActor?: { memberId: Types.ObjectId; startedAt: Date; questions: number; failedAt: Date | null; error: string | null } | null
     }
     /** Mostra a CD dos testes aos jogadores (Maddox 5); padrão = secreta. */
     showCheckDc: boolean
@@ -132,6 +137,10 @@ const MaddoxCampaignSchema = new Schema<IMaddoxCampaign>(
             awaitingChecks: { type: Boolean, default: false },
             combatActor: { type: new Schema({ combatId: Schema.Types.ObjectId, actorKey: String, memberId: Schema.Types.ObjectId, offlineSince: { type: Date, default: null } }, { _id: false }), default: null },
             pauseUntil: { type: Date, default: null },
+            opexActor: {
+                type: new Schema({ memberId: Schema.Types.ObjectId, startedAt: Date, questions: { type: Number, default: 0 }, failedAt: { type: Date, default: null }, error: { type: String, default: null } }, { _id: false }),
+                default: null,
+            },
         },
         showCheckDc: { type: Boolean, default: false },
         sceneImages: { type: Boolean, default: true },

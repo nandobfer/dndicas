@@ -38,7 +38,13 @@ vi.mock("@/features/maddox/hooks/useMaddoxSettings", () => ({
     useDeleteMaddoxSession: () => ({ mutate: deleteSession, isPending: false }),
     useMaddoxMcpStatus: () => ({ data: mcpStatus, isLoading: false, isError: false, isFetching: false, refetch: vi.fn() }),
     useRegisterMaddoxMcp: () => ({ mutate: registerMcp, isPending: false }),
+    useMaddoxOpexMemories: () => ({ data: opexMemories, isLoading: false, isError: false, error: null }),
+    useMaddoxOpexMemoryMutations: () => ({ create: { mutate: createOpexMemory, isPending: false }, update: { mutate: updateOpexMemory, isPending: false }, remove: { mutate: removeOpexMemory, isPending: false } }),
 }))
+const createOpexMemory = vi.fn()
+const updateOpexMemory = vi.fn()
+const removeOpexMemory = vi.fn()
+let opexMemories: Array<{ id: string; title: string; text: string; updatedAt: string | null }> = []
 
 /** Modelos falsos por provedor (vazio = nenhum). */
 let aiModels: Record<string, Array<{ id: string; name: string; variants: string[]; group: string | null; contextWindow: number | null }>> = {}
@@ -121,7 +127,7 @@ describe("aba Agente Maddox", () => {
     it("mostra as seções e o aviso de disponibilidade", () => {
         renderTab()
         const tabs = screen.getByRole("tablist", { name: "Seções do Agente Maddox" })
-        expect(within(tabs).getAllByRole("tab").map((tab) => tab.textContent)).toEqual(["Geral", "Entrevista: cenário", "Entrevista: personagem", "Imagens", "JEV", "OpenCode"])
+        expect(within(tabs).getAllByRole("tab").map((tab) => tab.textContent)).toEqual(["Geral", "Entrevista: cenário", "Entrevista: personagem", "Personagem Opex", "Imagens", "JEV", "OpenCode"])
         expect(screen.getByText(/está desativada/)).toBeTruthy()
         expect(screen.getByText("Avatar")).toBeTruthy()
     })
@@ -219,6 +225,35 @@ describe("aba Agente Maddox", () => {
         expect(input.topics).toHaveLength(total)
         expect(input.topics.at(-1)).toMatchObject({ text: "Facções e conflitos", active: true })
         expect(input.topics[0].text).not.toBe(defaultMaddoxScript("scenario").topics[0]!.text)
+    })
+
+    it("Personagem Opex (DND-26): instruções com Restaurar padrão no mesmo Salvar e memórias globais salvas à parte", async () => {
+        opexMemories = [{ id: "m_1", title: "Coopere", text: "Prefira cooperar.", updatedAt: null }]
+        createOpexMemory.mockReset()
+        removeOpexMemory.mockReset()
+        renderTab()
+        fireEvent.click(screen.getByRole("tab", { name: "Personagem Opex" }))
+        const instructions = (await screen.findByLabelText("Instruções")) as HTMLTextAreaElement
+        expect(instructions.value).toBe(DEFAULT_MADDOX_SETTINGS.opexCharacterInstructions)
+        fireEvent.change(instructions, { target: { value: "Jogue com coragem." } })
+        await waitFor(() => expect((screen.getByRole("button", { name: "Salvar" }) as HTMLButtonElement).disabled).toBe(false))
+        fireEvent.click(screen.getByRole("button", { name: "Salvar" }))
+        await waitFor(() => expect(saveSettings).toHaveBeenCalled())
+        expect(lastSaved().opexCharacterInstructions).toBe("Jogue com coragem.")
+        fireEvent.change(screen.getByLabelText("Instruções"), { target: { value: "Outra." } })
+        fireEvent.click(screen.getAllByRole("button", { name: /Restaurar padrão/ })[0]!)
+        expect((screen.getByLabelText("Instruções") as HTMLTextAreaElement).value).toBe(DEFAULT_MADDOX_SETTINGS.opexCharacterInstructions)
+
+        expect(screen.getByTestId("opex-global-memory")).toHaveTextContent("Prefira cooperar.")
+        fireEvent.click(screen.getByRole("button", { name: /Incluir memória/ }))
+        fireEvent.change(screen.getByLabelText("Título"), { target: { value: "Fale pouco" } })
+        fireEvent.change(screen.getByLabelText("Memória"), { target: { value: "Declarações curtas." } })
+        fireEvent.click(screen.getByRole("button", { name: "Incluir memória" }))
+        expect(createOpexMemory).toHaveBeenCalledWith({ title: "Fale pouco", text: "Declarações curtas." }, expect.anything())
+        fireEvent.click(screen.getByRole("button", { name: "Remover Coopere" }))
+        fireEvent.click(within(await screen.findByRole("alertdialog")).getByRole("button", { name: "Remover" }))
+        expect(removeOpexMemory).toHaveBeenCalledWith("m_1", expect.anything())
+        opexMemories = []
     })
 
     it("seção OpenCode: muda a política e salva", async () => {
@@ -351,7 +386,7 @@ describe("aba Agente Maddox", () => {
             fireEvent.click(within(mainProviders!).getByRole("radio", { name: "OpenCode" }))
             fireEvent.click(screen.getByRole("button", { name: "Salvar" }))
             await waitFor(() => expect(saveSettings).toHaveBeenCalled())
-            expect(lastSaved().rigorModels).toEqual({ main: [], interviewer: [] })
+            expect(lastSaved().rigorModels).toEqual({ main: [], interviewer: [], opexCharacter: [] })
         })
 
         it("o botão curto abre um bloco no primeiro nível livre; escolher provedor e modelo e salvar grava o bloco", async () => {

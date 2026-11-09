@@ -19,7 +19,7 @@ const SAME_AS_MAIN = "__same__"
 const toNumberOrNull = (value: string) => (value.trim() === "" ? null : Number(value))
 
 /** Onde ficam os campos no formulário: a seleção padrão de um cartão ou um bloco por rigor (DND-32). */
-export type MaddoxModelPrefix = "main" | "interviewer" | `rigorModels.${MaddoxRigorModelTarget}.${number}`
+export type MaddoxModelPrefix = "main" | "interviewer" | "opexCharacter" | `rigorModels.${MaddoxRigorModelTarget}.${number}`
 type ModelField = "provider" | "model" | "variant" | "agent"
 type FieldErrorsOf = Partial<Record<ModelField, { message?: string }>> | undefined
 

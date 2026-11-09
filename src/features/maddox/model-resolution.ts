@@ -24,7 +24,7 @@ export interface MaddoxResolvedModel {
 type Source = { provider: MaddoxSettings["main"]["provider"]; model: string | null; agent: string | null; variant: string | null }
 
 /** Bloco completo (provedor e modelo) do rigor na lista do alvo; configurações antigas sem o campo = nenhum. */
-export function rigorModelFor(settings: Pick<MaddoxSettings, "rigorModels">, target: "main" | "interviewer", rigor: MaddoxRigorLevel | null | undefined): MaddoxRigorModel | null {
+export function rigorModelFor(settings: Pick<MaddoxSettings, "rigorModels">, target: "main" | "interviewer" | "opexCharacter", rigor: MaddoxRigorLevel | null | undefined): MaddoxRigorModel | null {
     if (!rigor) return null
     const block = settings.rigorModels?.[target]?.find((item) => item.rigor === rigor)
     return block?.provider && block.model ? block : null
@@ -53,6 +53,14 @@ export function resolveInterviewerModel(settings: MaddoxSettings, rigor?: Maddox
     const block = rigorModelFor(settings, "interviewer", rigor)
     if (block) return resolved(block, null)
     if (settings.interviewer.provider && settings.interviewer.model) return resolved(settings.interviewer, null)
+    return resolveNarratorModel(settings, rigor)
+}
+
+/** Modelo do Personagem Opex (DND-26) para o rigor: bloco dele > provedor próprio > o do narrador no mesmo rigor. */
+export function resolveOpexCharacterModel(settings: MaddoxSettings, rigor?: MaddoxRigorLevel | null): MaddoxResolvedModel | null {
+    const block = rigorModelFor(settings, "opexCharacter", rigor)
+    if (block) return resolved(block, null)
+    if (settings.opexCharacter?.provider && settings.opexCharacter.model) return resolved(settings.opexCharacter, null)
     return resolveNarratorModel(settings, rigor)
 }
 

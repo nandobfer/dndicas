@@ -68,7 +68,8 @@ export function isRetryable(error: unknown): boolean {
     return code === "UNREACHABLE" || code === "AUTH_INVALID" || code === "RATE_LIMITED" || error.status >= 500
 }
 
-async function textMaxOf(client: EngramindClient, channel: string): Promise<number> {
+/** Limite real de texto de uma memória no canal (configuração do consumidor, em cache). */
+export async function textMaxOf(client: EngramindClient, channel: string): Promise<number> {
     const cached = textMaxCache.__engramindCampaignTextMax
     if (cached && Date.now() - cached.at < TEXT_MAX_TTL_MS) return cached.channels.get(channel) ?? cached.value
     const settings = await client.consumerSettings()
@@ -355,11 +356,22 @@ export async function flushPendingWrites(): Promise<{ delivered: number; failed:
                     continue
                 }
                 await provisionCampaignMemoryNetworkSafely(campaign)
+                // Memória de um Personagem Opex (DND-26): sai com o token dele; sem token (removido), a entrada é descartada.
+                let writer = client
+                if (entry.agentMemberId) {
+                    const { opexCharacterClient } = await import("./opex-characters")
+                    const own = await opexCharacterClient(entry.agentMemberId)
+                    if (!own) {
+                        await PendingWrite.deleteOne({ _id: entry._id, updatedAt: entry.updatedAt })
+                        continue
+                    }
+                    writer = own
+                }
                 // Limite real do canal na entrega (a fila guarda o texto inteiro).
                 const text = String(entry.body.text ?? "")
                 const max = await textMaxOf(client, entry.channel)
                 const body = text.length > max ? { ...entry.body, text: text.slice(0, max).trimEnd() } : entry.body
-                await client.call("POST", "/v1/memories", { body })
+                await writer.call("POST", "/v1/memories", { body })
                 await PendingWrite.deleteOne({ _id: entry._id, updatedAt: entry.updatedAt })
                 delivered++
             } catch (error) {

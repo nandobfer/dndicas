@@ -14,7 +14,9 @@ import { apiErrorCode, apiErrorMessage } from "@/lib/api"
 import { MADDOX_TURN_PHASE_LABELS } from "../../constants"
 import type { MaddoxGameMessageDto, MaddoxGameStateDto } from "../../game-types"
 import type { MaddoxGameActionInput } from "../../game-schemas"
-import { actionOptionsView, combatBannerText, composerBlockReason, masterBannerText, reminderBlockReason, turnProgress, visibleLiveGenerations } from "../../game-view"
+import { actionOptionsView, combatBannerText, composerBlockReason, masterBannerText, opexBannerText, reminderBlockReason, turnProgress, visibleLiveGenerations } from "../../game-view"
+import { useMaddoxOpexTableActions } from "../../hooks/useMaddoxOpex"
+import { OpexFailureBanner } from "./OpexFailureBanner"
 import type { MaddoxCombatActionInput } from "../../combat-schemas"
 import { useCancelCombatAction, useDecideReaction, useEndCombatTurn, useRollCombatStep, useSubmitCombatAction } from "../../hooks/useMaddoxCombat"
 import { CombatActionBar, CombatWaitBar } from "./combat/CombatActionBar"
@@ -107,6 +109,7 @@ function GameTable({ state, presence, stream }: { state: MaddoxGameStateDto; pre
     const [combatInvalid, setCombatInvalid] = useState<string | null>(null)
     const tactical = state.combat?.tactical ?? null
     const skip = useSkipMaddoxPlayer(state.campaignId)
+    const opexActions = useMaddoxOpexTableActions(state.campaignId)
     const rollCheck = useRollMaddoxCheck(state.campaignId)
     const sceneImage = useRequestMaddoxSceneImage(state.campaignId)
     const reminder = useInjectMaddoxReminder(state.campaignId)
@@ -210,11 +213,14 @@ function GameTable({ state, presence, stream }: { state: MaddoxGameStateDto; pre
                         {masterTurn ? <Dices className="h-3.5 w-3.5 shrink-0" style={{ color }} aria-hidden /> : <MessageCircle className="h-3.5 w-3.5 shrink-0" style={{ color }} aria-hidden />}
                         {masterTurn
                             ? masterBannerText(state)
-                            : state.turn.combatActor
+                            : opexBannerText(state)
+                              ? opexBannerText(state)
+                              : state.turn.combatActor
                               ? combatBannerText(state)
                               : `${MADDOX_TURN_PHASE_LABELS.players} — ${progress.declared} de ${progress.total} ${presence.available ? "jogador(es) online" : "jogador(es)"} já declararam`}
                     </p>
                     {tactical && state.combat && <InitiativeTracker combat={tactical} title={state.combat.title} color={color} compact />}
+                    {state.me.isOwner && state.turn.opexActor?.failed && <OpexFailureBanner actor={state.turn.opexActor} retrying={opexActions.retry.isPending} skipping={opexActions.skip.isPending} onRetry={() => opexActions.retry.mutate(state.turn.opexActor!.memberId)} onSkip={() => opexActions.skip.mutate(state.turn.opexActor!.memberId)} />}
                     </>
                 }
             />

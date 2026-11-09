@@ -13,6 +13,8 @@ export interface IPendingWrite {
     channel: string
     /** Corpo de `create_memory` (com `key` e `upsert`). */
     body: Record<string, unknown>
+    /** Personagem Opex (DND-26): a gravação sai com o token do agente dele, não com o do Maddox. */
+    agentMemberId?: string | null
     attempts: number
     lastError: string | null
     /** Recusa definitiva (validação): fica visível na aba Sincronização até ser descartada. */
@@ -28,6 +30,7 @@ const schema = new Schema<IPendingWrite>(
         key: { type: String, required: true },
         channel: { type: String, required: true },
         body: { type: Schema.Types.Mixed, required: true },
+        agentMemberId: { type: String, default: null },
         attempts: { type: Number, default: 0 },
         lastError: { type: String, default: null },
         failed: { type: Boolean, default: false },

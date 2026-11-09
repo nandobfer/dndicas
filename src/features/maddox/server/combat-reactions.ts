@@ -12,6 +12,7 @@ import { assertMemberCanPlay } from "./campaigns"
 import { assertActive, getGameState, loadAsMember, publishGameChanged } from "./game"
 import { d20Expression as d20ExpressionOf, findActiveTactical, findActor, mutateTactical, rollExpression, scheduleTimer } from "./tactical-combat"
 import { characterDamage, type CharacterHp } from "./tactical-master"
+import { isOpexUserId } from "./opex-members"
 
 /**
  * Reações dos personagens no combate tático (Maddox 7) — SOMENTE servidor. A janela é aberta pelo ataque de um adversário
@@ -38,7 +39,7 @@ export async function armReactionWindows(campaignId: Types.ObjectId): Promise<vo
     const { onlineUserIds } = await import("./game-presence")
     const online = await onlineUserIds(String(campaignId))
     for (const message of pending) {
-        if (online && message.userId && !online.has(message.userId)) {
+        if (online && message.userId && !online.has(message.userId) && !isOpexUserId(message.userId)) {
             await settleReaction(campaignId, message, { choice: null, status: "declined", decidedBy: null, reason: "Jogador offline: não reagiu." })
             continue
         }

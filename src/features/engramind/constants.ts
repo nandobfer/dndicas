@@ -10,7 +10,7 @@ export const ENGRAMIND_APP = "dndicas"
 export const ENGRAMIND_INTEGRATION_ID = "engramind"
 
 /** Identidades (agentes) do app: `dndicas/<identidade>`. */
-export const MEMORY_IDENTITIES = ["opex", "image-generator", "entity-understanding", "entity-import", "maddox"] as const
+export const MEMORY_IDENTITIES = ["opex", "image-generator", "entity-understanding", "entity-import", "maddox", "personagem-opex"] as const
 export type MemoryIdentity = (typeof MEMORY_IDENTITIES)[number]
 
 export const IDENTITY_LABELS: Record<MemoryIdentity, { name: string; description: string }> = {
@@ -19,6 +19,7 @@ export const IDENTITY_LABELS: Record<MemoryIdentity, { name: string; description
     "entity-understanding": { name: "Entender com IA", description: "Explica magias, classes, itens e demais entidades." },
     "entity-import": { name: "Importador 5etools", description: "Traduz e adapta as entidades importadas do 5etools." },
     maddox: { name: "Agente Maddox", description: "Mestre e entrevistador das Campanhas Maddox." },
+    "personagem-opex": { name: "Personagem Opex", description: "Dono do canal global lido por todos os Personagens Opex das Campanhas Maddox." },
 }
 
 /** Campo privado da integração com o token cifrado de cada agente. */
@@ -28,6 +29,7 @@ export const AGENT_TOKEN_FIELDS: Record<MemoryIdentity, string> = {
     "entity-understanding": "agentTokenEntityUnderstanding",
     "entity-import": "agentTokenEntityImport",
     maddox: "agentTokenMaddox",
+    "personagem-opex": "agentTokenPersonagemOpex",
 }
 
 export const agentSlug = (identity: MemoryIdentity) => `${ENGRAMIND_APP}/${identity}`
@@ -52,6 +54,7 @@ export const FIXED_CHANNELS: readonly FixedChannel[] = [
     { slug: "dndicas/entity-understanding", name: "Entender com IA", description: "Instruções do chat \"Entender com IA\".", owner: "entity-understanding" },
     { slug: "dndicas/entity-import", name: "Importador 5etools", description: "Instruções de tradução e adaptação da importação do 5etools.", owner: "entity-import" },
     { slug: "dndicas/maddox", name: "Agente Maddox", description: "Instruções que o Maddox segue como mestre e entrevistador em todas as campanhas.", owner: "maddox" },
+    { slug: "dndicas/personagem-opex", name: "Personagem Opex · global", description: "Memórias que todo Personagem Opex lê nas Campanhas Maddox (treino do jeito de jogar).", owner: "personagem-opex" },
 ] as const
 
 export const CAMPAIGN_CHANNEL_PREFIX = "dndicas/maddox/campanhas/"
@@ -87,6 +90,16 @@ export function subscriptionsFor(): SubscriptionTarget[] {
         return true
     })
 }
+
+// ── Personagens Opex (DND-26) ───────────────────────────────────────────────
+
+/** Canal global que todo Personagem Opex lê (dono: o agente fixo `dndicas/personagem-opex`). */
+export const OPEX_CHARACTER_GLOBAL_CHANNEL = "dndicas/personagem-opex"
+/** Prefixo dos canais individuais: `dndicas/personagem-opex/<campaignId>/<memberId>`. */
+export const OPEX_CHARACTER_CHANNEL_PREFIX = `${OPEX_CHARACTER_GLOBAL_CHANNEL}/`
+/** Agente próprio de cada Personagem Opex: `dndicas/personagem-opex-<memberId>`. */
+export const opexCharacterAgentSlug = (memberId: string) => `personagem-opex-${memberId}`
+export const opexCharacterChannel = (campaignId: string, memberId: string) => `${OPEX_CHARACTER_CHANNEL_PREFIX}${campaignId}/${memberId}`
 
 // ── Canais das campanhas ────────────────────────────────────────────────────
 

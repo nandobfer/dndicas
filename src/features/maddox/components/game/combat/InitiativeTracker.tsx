@@ -6,7 +6,7 @@ import { cn } from "@/core/utils"
 import { rarityColors } from "@/lib/config/colors"
 import { HP_BAND_LABELS } from "../../../combat-rules"
 import type { MaddoxTacticalCombatDto } from "../../../game-types"
-import { MemberAvatar, RarityChip } from "../../campaigns/campaign-visuals"
+import { MemberAvatar, OpexChip, RarityChip } from "../../campaigns/campaign-visuals"
 import { COMBAT_COLOR } from "../GameCombatCard"
 import { HP_BAND_COLORS, hpColor } from "./combat-visuals"
 
@@ -60,7 +60,10 @@ export function InitiativeTracker({ combat, title, color, compact = false }: { c
                                 </span>
                             )}
                             <div className="min-w-0 flex-1 space-y-1">
-                                <p className={cn("truncate text-sm font-medium text-white", out && "line-through")}>{slot.name}</p>
+                                <p className={cn("flex items-center gap-1.5 truncate text-sm font-medium text-white", out && "line-through")}>
+                                    {slot.name}
+                                    {slot.opex && <OpexChip />}
+                                </p>
                                 {slot.hp ? (
                                     <div className="flex items-center gap-2" data-testid="initiative-hp">
                                         <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-white/10">

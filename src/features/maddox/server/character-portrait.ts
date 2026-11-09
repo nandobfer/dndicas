@@ -14,6 +14,7 @@ import {
 import { MaddoxCampaignModel, MaddoxCharacterModel, MaddoxInterviewModel, type IMaddoxCampaign, type IMaddoxCharacter } from "../models"
 import type { CharacterSheetSeed } from "../interview-schemas"
 import type { MaddoxCampaignDetailDto } from "../campaign-types"
+import { isOpexUserId } from "./opex-members"
 
 /**
  * Retrato do personagem (DND-31) — SOMENTE servidor. Gerado uma única vez, em segundo plano, logo depois de
@@ -133,9 +134,12 @@ export async function runCharacterPortrait(characterId: string): Promise<void> {
     ).lean<CharacterDoc>()
     if (!claimed) return
     const campaignId = claimed.campaignId
+    // Personagem Opex (DND-26): a ficha e o consumo ficam com o dono da campanha.
+    let ownerUserId = claimed.userId
     try {
-        const campaign = await MaddoxCampaignModel.findById(campaignId).select("name").lean<Pick<IMaddoxCampaign, "_id" | "name">>()
+        const campaign = await MaddoxCampaignModel.findById(campaignId).select("name ownerId").lean<Pick<IMaddoxCampaign, "_id" | "name" | "ownerId">>()
         if (!campaign) throw new Error("campanha não encontrada")
+        if (isOpexUserId(claimed.userId)) ownerUserId = campaign.ownerId
         const { loadMaddoxSettings } = await import("./settings")
         const { settings } = await loadMaddoxSettings()
         const prompt = buildCharacterPortraitPrompt({
@@ -152,7 +156,7 @@ export async function runCharacterPortrait(characterId: string): Promise<void> {
                     prompt,
                     entityLabel: `Retrato de ${claimed.name} · ${campaign.name}`,
                     preferredAspectRatio: "1:1",
-                    userId: claimed.userId,
+                    userId: ownerUserId,
                     storageKey: `maddox/campaigns/${String(campaignId)}/characters/${String(claimed._id)}-${Date.now()}`,
                     consumptionOrigin: MADDOX_CHARACTER_PORTRAIT_CONSUMPTION_ORIGIN,
                     consumptionSubject: String(campaignId),
@@ -170,11 +174,11 @@ export async function runCharacterPortrait(characterId: string): Promise<void> {
         }
         if (claimed.sheetId) {
             const { CharacterSheet } = await import("@/features/character-sheets/models/character-sheet")
-            await CharacterSheet.updateOne({ _id: claimed.sheetId, userId: claimed.userId }, { $set: { photo: stored.url } })
+            await CharacterSheet.updateOne({ _id: claimed.sheetId, userId: ownerUserId }, { $set: { photo: stored.url } })
         }
         log.info({ campaignId: String(campaignId), characterId, key: stored.key }, "[maddox] retrato do personagem gerado")
         await recordAudit({
-            userId: claimed.userId,
+            userId: ownerUserId,
             entidade: MADDOX_CAMPAIGN_AUDIT_ENTITY,
             entidadeId: String(campaignId),
             acao: AcaoAuditoria.ATUALIZAR,
@@ -188,7 +192,7 @@ export async function runCharacterPortrait(characterId: string): Promise<void> {
         )
         log.warn({ campaignId: String(campaignId), characterId, err: reason }, "[maddox] o retrato do personagem falhou")
         await recordAudit({
-            userId: claimed.userId,
+            userId: ownerUserId,
             entidade: MADDOX_CAMPAIGN_AUDIT_ENTITY,
             entidadeId: String(campaignId),
             acao: AcaoAuditoria.ATUALIZAR,
@@ -242,11 +246,24 @@ export async function expireStaleCharacterPortraits(characters: CharacterDoc[]):
  */
 export async function retryCharacterPortrait(campaignId: string, userId: string): Promise<MaddoxCampaignDetailDto> {
     await dbConnect()
-    const { loadMembership, getCampaignDetail } = await import("./campaigns")
+    const { loadMembership } = await import("./campaigns")
     const { campaign, member } = await loadMembership(campaignId, userId)
     if (!member) throw new DomainError(404, "Campanha não encontrada", "NOT_FOUND")
-    if (MADDOX_INVITE_CLOSED_STATUSES.includes(campaign.status)) throw new DomainError(409, "A campanha foi encerrada: os personagens não podem mais ser alterados.", "CAMPAIGN_CLOSED")
     const character = member.characterId ? await MaddoxCharacterModel.findOne({ _id: member.characterId, userId }).lean<CharacterDoc>() : null
+    return reserveRetry(campaign, character, userId)
+}
+
+/** "Gerar retrato de novo" de um Personagem Opex (DND-26): só o dono da campanha. */
+export async function retryOpexCharacterPortrait(campaignId: string, memberId: string, userId: string): Promise<MaddoxCampaignDetailDto> {
+    const { loadOpexAsOwner } = await import("./opex-members")
+    const { campaign, character } = await loadOpexAsOwner(campaignId, memberId, userId)
+    return reserveRetry(campaign, character, userId)
+}
+
+async function reserveRetry(campaign: Pick<IMaddoxCampaign, "_id" | "status">, character: CharacterDoc | null, userId: string): Promise<MaddoxCampaignDetailDto> {
+    const { getCampaignDetail } = await import("./campaigns")
+    const campaignId = String(campaign._id)
+    if (MADDOX_INVITE_CLOSED_STATUSES.includes(campaign.status)) throw new DomainError(409, "A campanha foi encerrada: os personagens não podem mais ser alterados.", "CAMPAIGN_CLOSED")
     if (!character) throw new DomainError(404, "Você ainda não tem personagem nesta campanha.", "CHARACTER_NOT_FOUND")
     if (character.interview?.status !== "done") throw new DomainError(409, "O retrato é gerado depois que a entrevista do personagem é concluída.", "INTERVIEW_REQUIRED")
     await expireStaleCharacterPortraits([character])

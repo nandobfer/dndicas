@@ -2,7 +2,7 @@
 
 import { HeartPulse, UserRound, Users } from "lucide-react"
 import { useMaddoxJournalParty } from "../../hooks/useMaddoxJournal"
-import { MemberAvatar } from "../campaigns/campaign-visuals"
+import { MemberAvatar, OpexChip } from "../campaigns/campaign-visuals"
 import { CharacterProfileSections } from "../campaigns/CharacterProfileDialog"
 import { journalAnchor } from "./journal-links"
 import { JournalItemCard, JournalListState, JournalText } from "./JournalLists"
@@ -26,9 +26,12 @@ export function JournalPartyList({ campaignId, color, myMemberId }: { campaignId
                         <header className="flex items-center gap-3">
                             <MemberAvatar name={member.characterName} imageUrl={member.portraitUrl} color={color} className="h-12 w-12 shrink-0" />
                             <div className="min-w-0">
-                                <h3 className="break-words text-base font-semibold text-white">{member.characterName}</h3>
+                                <h3 className="flex flex-wrap items-center gap-1.5 break-words text-base font-semibold text-white">
+                                    {member.characterName}
+                                    {member.opex && <OpexChip />}
+                                </h3>
                                 <p className="flex items-center gap-1 text-xs text-white/60">
-                                    <UserRound className="h-3 w-3" aria-hidden /> {member.memberId === myMemberId ? "Seu personagem" : `Personagem de ${member.playerName}`}
+                                    <UserRound className="h-3 w-3" aria-hidden /> {member.memberId === myMemberId ? "Seu personagem" : member.opex ? "Personagem Opex (controlado por IA)" : `Personagem de ${member.playerName}`}
                                 </p>
                             </div>
                         </header>

@@ -27,7 +27,7 @@ beforeEach(async () => {
 })
 
 describe("configuração automática do Engramind", () => {
-    it("cria os 5 agentes, os 7 canais, as assinaturas, os tokens, o webhook e as categorias; repetir não duplica", async () => {
+    it("cria os 6 agentes, os 8 canais, as assinaturas, os tokens, o webhook e as categorias; repetir não duplica", async () => {
         const fake = await configureEngramind()
         const campaign = await MaddoxCampaignModel.create({ name: "Brumas", ownerId: "u1", rigor: "narrativo" })
         const first = await runBootstrap("admin-1")
@@ -46,7 +46,7 @@ describe("configuração automática do Engramind", () => {
         expect(Object.keys(connection!.agentTokens).sort()).toEqual([...MEMORY_IDENTITIES].sort())
         expect(connection!.webhookSecret).toBe(fake.state.apps.get("dndicas")!.webhook!.secret)
         const agentTokens = [...fake.state.tokens.values()].filter((token) => token.kind === "agent")
-        expect(agentTokens).toHaveLength(5)
+        expect(agentTokens).toHaveLength(MEMORY_IDENTITIES.length)
         expect(agentTokens.every((token) => token.scopes.join(",") === "read,write,delete")).toBe(true)
 
         const counts = { agents: fake.state.agents.size, channels: fake.state.channels.size, subs: fake.state.subscriptions.length, tokens: fake.state.tokens.size, categories: fake.state.categories.length }
@@ -113,10 +113,10 @@ describe("configuração automática do Engramind", () => {
         const failed = await runBootstrap("admin-1")
         expect(failed.ok).toBe(false)
         expect(failed.steps.map((step) => step.status)).toEqual(["ok", "ok", "ok", "ok", "error", "pending", "pending"])
-        expect(fake.state.agents.size).toBe(5)
+        expect(fake.state.agents.size).toBe(MEMORY_IDENTITIES.length)
         const retried = await runBootstrap("admin-1")
         expect(retried.ok).toBe(true)
-        expect(fake.state.agents.size).toBe(5)
+        expect(fake.state.agents.size).toBe(MEMORY_IDENTITIES.length)
     })
 
     it("registro do webhook interrompido: o passo que falha é auditado e a repetição não pula (segredo local = remoto)", async () => {

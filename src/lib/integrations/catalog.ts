@@ -665,6 +665,7 @@ export const INTEGRATIONS: readonly IntegrationDef[] = [
             { key: "agentTokenEntityUnderstanding", label: "Token do agente dndicas/entity-understanding", group: "card" },
             { key: "agentTokenEntityImport", label: "Token do agente dndicas/entity-import", group: "card" },
             { key: "agentTokenMaddox", label: "Token do agente dndicas/maddox", group: "card" },
+            { key: "agentTokenPersonagemOpex", label: "Token do agente dndicas/personagem-opex", group: "card" },
         ],
     },
 ]

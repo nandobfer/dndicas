@@ -71,7 +71,31 @@ export interface MaddoxInterviewDto {
     /** Há uma resposta do Maddox sendo gerada agora. */
     generating: boolean
     abilityRolls?: MaddoxAbilityRollsDto | null
+    /** Resposta do Personagem Opex aguardando o dono (modo ao vivo, DND-26). */
+    opexDraft?: MaddoxOpexDraftDto | null
     completedAt: string | null
+}
+
+/** Resposta do Personagem Opex aguardando aprovação (DND-26). `payload`: `{ method, scores }` (atributos) ou `{ escolhas }` (PV). */
+export interface MaddoxOpexDraftDto {
+    id: string
+    status: "generating" | "ready" | "failed"
+    kind: "message" | "ability-scores" | "hit-points"
+    content: string
+    payload: Record<string, unknown> | null
+    guidance: string | null
+    error: string | null
+    createdAt: string
+}
+
+/** Entrevista de um Personagem Opex vista pelo dono da campanha (DND-26). */
+export interface MaddoxOpexInterviewStateDto extends MaddoxInterviewStateDto {
+    memberId: string
+    characterName: string
+    interviewMode: import("./constants").MaddoxOpexInterviewMode
+    status: import("./campaign-types").MaddoxOpexStatus
+    error: string | null
+    prompt: string
 }
 
 /** Resposta da rolagem do dado de vida de um nível. */

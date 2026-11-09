@@ -106,3 +106,10 @@ export function WorldCatalogLines({ campaign, className }: { campaign: { worldCa
         </div>
     )
 }
+
+/** Chip "Opex" ao lado do nome do Personagem Opex (DND-26), em todo lugar onde aparecem personagens. */
+export const OpexChip = ({ className }: { className?: string }) => (
+    <RarityChip color={rarityColors.rare} className={cn("px-1.5 py-0 text-[10px] uppercase tracking-wide", className)}>
+        <span data-testid="opex-chip">Opex</span>
+    </RarityChip>
+)
