@@ -78,6 +78,7 @@ export function AiProviderEditorForm({ def, data, draft, setDraft, dirty, pendin
                 {tab === "modelos" && provider && <AiModelsCard provider={provider.id} dirty={dirty} />}
                 {tab === "consumo" && provider?.id === "jev" && <JevUsageCard />}
                 {tab === "consumo" && provider?.id === "opencode" && <OpencodeUsageCard />}
+                {tab === "consumo" && provider?.id === "opencode-go" && <OpencodeUsageCard provider="opencode-go" />}
             </IntegrationTabs>
         </motion.form>
     )

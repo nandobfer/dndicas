@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto"
 import { Types } from "mongoose"
 import { DomainError } from "@/lib/api/route"
 import { loggerFor } from "@/lib/logger"
+import { stepCostUsd } from "@/lib/ai/step-cost"
 import { User } from "@/features/users/models/user"
 import {
     MADDOX_MASTER_TIMEOUT_MESSAGE,
@@ -384,9 +385,10 @@ async function generateWithTools(input: ToolGeneration, stream: ReturnType<typeo
         import("@/lib/ai/consumption"),
     ])
     const { model } = input
-    const prepared = await prepareModel({ provider: model.provider, model: model.model, variant: model.variant })
+    const prepared = await prepareModel({ provider: model.provider, model: model.model, variant: model.variant, sessionKey: `maddox:${input.campaignId}:narrator` })
     let failure: string | null = null
     let stepHasText = false
+    let costUsd: number | null = null
     try {
         const result = streamText({
             model: prepared.model,
@@ -423,8 +425,13 @@ async function generateWithTools(input: ToolGeneration, stream: ReturnType<typeo
                 case "tool-error":
                     sink.tool(false)
                     break
+                case "finish-step": {
+                    const cost = stepCostUsd(part.providerMetadata)
+                    if (cost !== null) costUsd = (costUsd ?? 0) + cost
+                    break
+                }
                 case "error":
-                    failure = describeAiError(part.error)
+                    failure = describeAiError(part.error, model)
                     break
                 case "abort":
                     failure = MADDOX_MASTER_TIMEOUT_MESSAGE
@@ -443,7 +450,7 @@ async function generateWithTools(input: ToolGeneration, stream: ReturnType<typeo
                             inputTokens: num(usage.inputTokens),
                             outputTokens: num(usage.outputTokens),
                             totalTokens: num(usage.totalTokens),
-                            costUsd: null,
+                            costUsd,
                         })
                     }
                     break

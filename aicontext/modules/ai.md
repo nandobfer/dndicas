@@ -12,6 +12,7 @@ em [Integrações — Interface](./integrations.md#interface-dnd-6), sem contain
 | Id | Integração | Uso no DnDicas |
 | --- | --- | --- |
 | `opencode` | `ai_opencode` | Texto (modelos e agentes das contas do servidor OpenCode 2.x) |
+| `opencode-go` | `ai_opencode_go` | Texto e ferramentas pela API da assinatura OpenCode Go, **sem sessão no servidor OpenCode** (ver abaixo) |
 | `gemini` | `ai_gemini` | Texto, ferramentas e **imagem** (`*-image*`, Imagen) |
 | `anthropic` | `ai_anthropic` | Texto e ferramentas |
 | `openai` | `ai_openai` | Texto, ferramentas e **imagem** (`gpt-image-*`, `dall-e-*`) |
@@ -27,6 +28,42 @@ sessões do OpenCode para os agentes de sessão longa (Agente Maddox).
 (`await import()` no momento do uso), nunca no topo: quem só lê a configuração (ex.: `ai/server/settings`)
 não paga as SDKs. Os testes mockam esses módulos pelo caminho (`vi.mock('@/lib/ai/gemini')`), que vale
 também para o import dinâmico.
+
+## OpenCode Go (`opencode-go`, DND-39)
+
+Gateway de inferência da assinatura OpenCode Go do dono. É um provedor direto por API key, separado do `opencode` de
+sessão: não abre sessão no `opencode serve` do host e não tem agente.
+
+- **Chave:** `apiKey` (`oc_sk_…`, chave pessoal da assinatura) em Integrações › Provedores de IA › OpenCode Go
+  (`/integracoes/ia/opencode-go`). Sem chave: "OpenCode Go sem API key: configure em…".
+- **API:** `src/lib/ai/opencode-go.ts`, com `@ai-sdk/openai-compatible` em `https://opencode.ai/inference/go/openai/v1`
+  (`POST /chat/completions` em SSE e `GET /models`). A versão da lib fica fixa (`3.0.81`) para usar o mesmo
+  `@ai-sdk/provider` da SDK `ai`; com outro, o `LanguageModel` não fecha no tipo. Só o endpoint OpenAI-compatível é usado
+  (os endpoints Anthropic/Google do Go estão fora de escopo), e o provedor não gera imagem.
+- **Exigências do Go:** header `x-opencode-session` em toda geração (sem ele o Go recusa) e `User-Agent: dndicas/<versão>`
+  (o `fetch` próprio troca o nome genérico da SDK). O id da sessão vem de `sessionKey` (campo opcional de
+  `AiStreamRequest`/`prepareModel`) como `dndicas-<sha256 truncado>`: é estável por conversa (roteamento e cache de prompt)
+  e não expõe ids internos. As chaves usadas são `opex:<sessão>` (Agente Opex), `maddox:<campanha>:narrator`,
+  `maddox-interview:<entrevista>` e `entity-understanding:<usuário>:<tipo>:<entidade>`. Sem `sessionKey`, cada geração
+  recebe um id novo (lotes do Importador, títulos e curador).
+- **Modelos:** a lista é a do `GET /models`. Os `*-free` aparecem com o chip "grátis": o Go só garante esses modelos dentro do
+  OpenCode e pode recusá-los aqui. Os modelos não têm variantes, porque o suporte ao `reasoning_effort` não está confirmado.
+  O raciocínio do DeepSeek (`reasoning_content`) já é lido pela lib.
+- **Erros:** a classificação usa o `statusCode` estruturado (`describeAiError(error, { provider, model })`, inclusive dentro
+  de `RetryError.lastError`), nunca o texto. 401 = chave recusada. 403 = modelo recusado (grátis fora do OpenCode ou
+  DeepSeek sem a região **Global** habilitada em Settings › Privacy). 429 = limite da assinatura (allowance de 5 h, semanal
+  ou mensal). A chave nunca entra na mensagem.
+- **Consumo:** o `metadataExtractor` lê do corpo e dos chunks (no stream, `usage.cost` e `usage.opencode`) o `cost`
+  cobrado e `opencode.{billing_source, allowance, list_cost}`, e devolve `providerMetadata["opencode-go"]`. No plano Go o
+  `cost` vem 0 e o gasto sai do `allowance`. Por isso o `costUsd` registrado em `ai_consumption_logs` é **cobrado +
+  allowance**. `stepCostUsd` (`src/lib/ai/step-cost.ts`, puro) soma esse custo, ou o `opencode.cost` da sessão, por passo
+  no `streamAi` e nos loops próprios (Agente Opex, narrador e entrevistas do Maddox, Entender com IA). O allowance e o
+  preço de lista só vão para o log de debug. O provedor tem a aba **Consumo** (`OpencodeUsageCard provider="opencode-go"`,
+  `GET /api/ai/providers/opencode-go/usage`, permissão `integrations.ai.view`).
+- **Debug:** a listagem de modelos usa `debugFetch` (chave mascarada). A geração não passa por ele, porque o corpo traz o
+  conteúdo do usuário.
+- **Atenção:** o Go monitora o tráfego e espera uso compatível com agente de código. Gerações em lote (tradução do
+  Importador 5etools) contam no allowance e podem chamar atenção.
 
 ## Agentes (abas de `/integracoes/ia`)
 
@@ -70,5 +107,6 @@ memórias" (feature `memory-summary`) foi removido; o documento antigo em `ai_fe
 
 ## Testes
 
-`tests/backend/ai/*`, `tests/backend/core/ai-image-route.test.ts`,
+`tests/backend/ai/*` (OpenCode Go: `opencode-go.test.ts`, `opencode-go-tester.test.ts`, `measured-usage.test.ts` e o bloco
+do Go em `stream-lazy-providers.test.ts`), `tests/frontend/ai/measured-usage-card.test.tsx`, `tests/backend/core/ai-image-route.test.ts`,
 `tests/scripts/seed-data/translation/ai-translator.test.ts`.

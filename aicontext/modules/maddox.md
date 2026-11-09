@@ -448,8 +448,8 @@ retorno avisa o modelo (`truncated` com os campos cortados) para ele consolidar 
 | `update_character_state` | `character.currentState` (o perfil da entrevista não muda) |
 | `suggest_actions` | Sugestões de ação por personagem no job, gravadas com a narração (`message.actionOptions`). Veja "Sugestões de ação (DND-30)" |
 
-**Provedores.** Gemini, Anthropic, OpenAI e DeepSeek: `streamText` com as ferramentas (até 12 passos,
-`MADDOX_NARRATOR_MAX_STEPS`). **OpenCode:** sessão `narrator` da campanha (`ensureMaddoxSession`), sem ferramentas na chamada;
+**Provedores.** Gemini, Anthropic, OpenAI, DeepSeek e OpenCode Go: `streamText` com as ferramentas (até 12 passos,
+`MADDOX_NARRATOR_MAX_STEPS`; no OpenCode Go a chave de conversa é `maddox:<campanha>:narrator`). **OpenCode:** sessão `narrator` da campanha (`ensureMaddoxSession`), sem ferramentas na chamada;
 antes de narrar, `ensureMaddoxMcp` confere no OpenCode (`mcp.list`, no diretório das sessões) o MCP **`dndicas-maddox`** e, se
 faltar, adiciona (`mcp.add`, remoto, sem OAuth) e conecta; sem conexão = 409 `MADDOX_UNAVAILABLE` (o turno fica com falha e é
 tentado de novo). Um resultado positivo fica em cache por 1 min. **Troca de URL:** a URL registrada vem dos documentos de

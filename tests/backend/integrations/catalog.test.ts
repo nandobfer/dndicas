@@ -40,10 +40,15 @@ describe("catálogo das integrações do DnDicas", () => {
     })
 
     it("os provedores de IA ficam dentro do hub e têm a página própria", () => {
-        for (const id of ["ai_opencode", "ai_gemini", "ai_anthropic", "ai_openai", "ai_deepseek", "ai_jev"] as const) {
+        for (const id of ["ai_opencode", "ai_opencode_go", "ai_gemini", "ai_anthropic", "ai_openai", "ai_deepseek", "ai_jev"] as const) {
             expect(getIntegrationDef(id).parent).toBe("ai")
         }
         expect(integrationPath("ai_gemini")).toBe("/integracoes/ia/gemini")
+        expect(integrationPath("ai_opencode_go")).toBe("/integracoes/ia/opencode-go")
+        const go = getIntegrationDef("ai_opencode_go")
+        expect(go.name).toBe("OpenCode Go")
+        expect(go.streamsDebugOverPusher).toBe(true)
+        expect(go.secretFields.map((field) => [field.key, field.required, field.env])).toEqual([["apiKey", true, undefined]])
         expect(integrationPath("pusher")).toBe("/integracoes/pusher")
     })
 

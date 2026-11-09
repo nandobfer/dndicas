@@ -5,11 +5,11 @@
 
 import type { IntegrationId } from "@/lib/integrations/catalog"
 
-export const AI_PROVIDER_IDS = ["opencode", "gemini", "anthropic", "openai", "deepseek", "jev"] as const
+export const AI_PROVIDER_IDS = ["opencode", "opencode-go", "gemini", "anthropic", "openai", "deepseek", "jev"] as const
 export type AiProviderId = (typeof AI_PROVIDER_IDS)[number]
 
 /** Provedores que geram texto (usados pelos agentes Importador 5etools, Entender com IA, Agente Opex, Agente Maddox e o curador da migração de memórias). */
-export const AI_TEXT_PROVIDER_IDS = ["opencode", "gemini", "anthropic", "openai", "deepseek"] as const
+export const AI_TEXT_PROVIDER_IDS = ["opencode", "opencode-go", "gemini", "anthropic", "openai", "deepseek"] as const
 export type AiTextProviderId = (typeof AI_TEXT_PROVIDER_IDS)[number]
 
 /** Provedores com modelos de IMAGEM (agente "Gerador de imagens"). */
@@ -36,6 +36,7 @@ export interface AiProviderDef {
 
 export const AI_PROVIDERS: readonly AiProviderDef[] = [
     { id: "opencode", integrationId: "ai_opencode", name: "OpenCode", supportsTextGeneration: true, supportsSampling: false, supportsAgent: true, variantLabel: "Variante" },
+    { id: "opencode-go", integrationId: "ai_opencode_go", name: "OpenCode Go", supportsTextGeneration: true, supportsSampling: true, supportsAgent: false, variantLabel: "Raciocínio" },
     { id: "gemini", integrationId: "ai_gemini", name: "Gemini", supportsTextGeneration: true, supportsSampling: true, supportsAgent: false, variantLabel: "Raciocínio (thinking)" },
     { id: "anthropic", integrationId: "ai_anthropic", name: "Anthropic", supportsTextGeneration: true, supportsSampling: true, supportsAgent: false, variantLabel: "Raciocínio" },
     { id: "openai", integrationId: "ai_openai", name: "OpenAI", supportsTextGeneration: true, supportsSampling: true, supportsAgent: false, variantLabel: "Esforço de raciocínio" },
