@@ -106,6 +106,21 @@ export interface IMaddoxInterviewMessage {
     createdAt: Date
 }
 
+/**
+ * Resposta do Personagem Opex aguardando o dono no modo ao vivo (DND-26). `kind` diz o que ela responde: uma fala do
+ * Maddox (`content`), o card de atributos (`payload` = `{ method, scores }`) ou o card de PV (`payload` = `{ escolhas }`).
+ */
+export interface IMaddoxOpexDraft {
+    id: string
+    status: "generating" | "ready" | "failed"
+    kind: "message" | "ability-scores" | "hit-points"
+    content: string
+    payload: Record<string, unknown> | null
+    guidance: string | null
+    error: string | null
+    createdAt: Date
+}
+
 export interface IMaddoxInterview {
     _id: Types.ObjectId
     campaignId: Types.ObjectId
@@ -128,6 +143,8 @@ export interface IMaddoxInterview {
     world?: IMaddoxWorldCatalog | null
     /** Dados de vida rolados no card de PV (um por nível; reabrir o card mantém). */
     hitPointRolls?: { level: number; die: number; rollId: string }[] | null
+    /** Resposta do Personagem Opex aguardando aprovação (modo ao vivo, DND-26). */
+    opexDraft?: IMaddoxOpexDraft | null
     completedAt: Date | null
     createdAt: Date
     updatedAt: Date
@@ -164,6 +181,7 @@ const MaddoxInterviewSchema = new Schema<IMaddoxInterview>(
         build: { type: Schema.Types.Mixed, default: null },
         world: { type: Schema.Types.Mixed, default: null },
         hitPointRolls: { type: Schema.Types.Mixed, default: null },
+        opexDraft: { type: Schema.Types.Mixed, default: null },
         completedAt: { type: Date, default: null },
     },
     { collection: "maddox_interviews", timestamps: true, versionKey: false },

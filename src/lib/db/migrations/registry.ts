@@ -6,6 +6,7 @@ import { registerMigrations } from "./index"
 import { dropLegacyClerkIndex } from "./drop-legacy-clerk-index"
 import { migratePerfix } from "./migrate-perfix"
 import { grantMaddoxPlay } from "./grant-maddox-play"
+import { grantMaddoxOpex } from "./grant-maddox-opex"
 import { grantMemories } from "./grant-memories"
 import { seedIntegrationsFromEnv } from "./seed-integrations-from-env"
 import { repairIntegrationIndexes } from "./repair-integration-indexes"
@@ -19,6 +20,7 @@ registerMigrations(
     { name: "drop-legacy-clerk-index", run: () => dropLegacyClerkIndex() },
     { name: "migrate-perfix", run: migratePerfix },
     { name: "grant-maddox-play", run: () => grantMaddoxPlay() },
+    { name: "grant-maddox-opex", run: () => grantMaddoxOpex() },
     { name: "grant-memories", run: () => grantMemories() },
     { name: "seed-integrations-from-env", run: () => seedIntegrationsFromEnv() },
     { name: "repair-integration-indexes", run: () => repairIntegrationIndexes() },

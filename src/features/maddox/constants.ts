@@ -147,6 +147,10 @@ export const MADDOX_CAMPAIGN_CHANGED_EVENT = "maddox.campaign.changed"
 export const MADDOX_MEMBER_ROLES = ["owner", "player"] as const
 export type MaddoxMemberRole = (typeof MADDOX_MEMBER_ROLES)[number]
 
+/** Tipo do membro (DND-26): pessoa ou Personagem Opex (controlado por IA, adicionado pelo dono). */
+export const MADDOX_MEMBER_KINDS = ["human", "opex"] as const
+export type MaddoxMemberKind = (typeof MADDOX_MEMBER_KINDS)[number]
+
 export const MADDOX_MEMBER_STATUSES = ["invited", "joined", "left", "removed"] as const
 export type MaddoxMemberStatus = (typeof MADDOX_MEMBER_STATUSES)[number]
 
@@ -626,13 +630,14 @@ export const MADDOX_JEV_DECISION_DEFS: Record<MaddoxJevDecision, { label: string
  * Sessões do OpenCode, nunca compartilhadas: uma do narrador por campanha (recriada se sumir), uma da entrevista de cenário
  * e uma por membro na entrevista de personagem (as das entrevistas são excluídas ao concluir).
  */
-export const MADDOX_SESSION_PURPOSES = ["narrator", "scenario-interview", "character-interview"] as const
+export const MADDOX_SESSION_PURPOSES = ["narrator", "scenario-interview", "character-interview", "opex-character"] as const
 export type MaddoxSessionPurpose = (typeof MADDOX_SESSION_PURPOSES)[number]
 
 export const MADDOX_SESSION_PURPOSE_LABELS: Record<MaddoxSessionPurpose, string> = {
     narrator: "Narrador",
     "scenario-interview": "Entrevista de cenário",
     "character-interview": "Entrevista de personagem",
+    "opex-character": "Personagem Opex",
 }
 
 export const MADDOX_SESSION_STATUSES = ["active", "pending-deletion"] as const
@@ -846,3 +851,55 @@ export const MADDOX_PROFILE_SECTIONS = [
     { key: "condicao", label: "Condição atual" },
 ] as const
 export type MaddoxProfileSectionKey = (typeof MADDOX_PROFILE_SECTIONS)[number]["key"]
+
+// ── Personagens Opex (DND-26) ─────────────────────────────────────────────────
+
+/** Permissão Perfix para adicionar Personagens Opex (os que já existem continuam jogando sem ela). */
+export const MADDOX_OPEX_PERMISSION = "maddox.opex"
+
+/** Prefixo do `userId` sintético do membro Opex (`opex:<memberId>`): nunca é um usuário de verdade. */
+export const MADDOX_OPEX_USER_PREFIX = "opex:"
+
+/** Modo da entrevista do Personagem Opex: autônoma (em segundo plano) ou ao vivo (o dono aprova cada resposta). */
+export const MADDOX_OPEX_INTERVIEW_MODES = ["autonomous", "live"] as const
+export type MaddoxOpexInterviewMode = (typeof MADDOX_OPEX_INTERVIEW_MODES)[number]
+export const MADDOX_OPEX_INTERVIEW_MODE_LABELS: Record<MaddoxOpexInterviewMode, string> = { autonomous: "Autônoma", live: "Ao vivo" }
+
+/** Prompt base opcional do Personagem Opex. */
+export const MADDOX_OPEX_PROMPT_MAX = 4_000
+/** Orientação ao pedir outra resposta (modo ao vivo). */
+export const MADDOX_OPEX_GUIDANCE_MAX = 1_000
+
+/** Situação do trabalho do Opex fora da mesa (entrevista) e na mesa (falha que trava a mesa). */
+export const MADDOX_OPEX_RUN_STATUSES = ["running", "awaiting-approval", "failed", "idle"] as const
+export type MaddoxOpexRunStatus = (typeof MADDOX_OPEX_RUN_STATUSES)[number]
+
+/** Até quantas perguntas ao mestre cada Opex faz no turno, antes de declarar. */
+export const MADDOX_OPEX_QUESTIONS_MAX = 3
+/** Novas tentativas quando a declaração é recusada pela validação (Rigoroso e Fiel); depois, "não fez nada". */
+export const MADDOX_OPEX_INVALID_RETRIES = 2
+/** Pedidos de ajuste automáticos ao entrevistador quando a conclusão é recusada (modo autônomo). */
+export const MADDOX_OPEX_FIX_ATTEMPTS = 2
+/** Teto técnico de cada geração do Opex (decisão). */
+export const MADDOX_OPEX_GENERATION_TIMEOUT_MS = 3 * 60 * 1000
+/** Estado "em andamento" do Opex sem processo vivo há mais que isto (reinício) vira falha acionável. */
+export const MADDOX_OPEX_STALE_MS = 10 * 60 * 1000
+/** Memórias que o Opex pode gravar por declaração. */
+export const MADDOX_OPEX_MEMORIES_PER_TURN = 5
+export const MADDOX_OPEX_MEMORY_TITLE_MAX = 120
+export const MADDOX_OPEX_MEMORY_TEXT_MAX = 3_000
+
+/** Rótulo do Personagem Opex no lugar do nome do jogador (chip, narrador, diário). */
+export const MADDOX_OPEX_LABEL = "Personagem Opex"
+export const MADDOX_OPEX_UNNAMED_LABEL = "Personagem Opex em criação"
+
+export const MADDOX_OPEX_FAILED_MESSAGE = "O Personagem Opex não conseguiu agir agora."
+export const MADDOX_OPEX_INTERVIEW_FAILED_MESSAGE = "A entrevista do Personagem Opex parou."
+
+export const DEFAULT_MADDOX_OPEX_CHARACTER_INSTRUCTIONS = [
+    "Você é um jogador de RPG experiente que interpreta um personagem numa campanha narrada pelo Maddox. Pense e decida como esse personagem, de forma coerente com a personalidade, a história, as motivações e as relações dele.",
+    "Jogue em equipe: considere o que o grupo já fez, contribua para a história e evite ações que só atrapalhem os outros personagens sem motivo na ficção.",
+    "Decida apenas as ações, falas e escolhas do seu personagem. O mestre decide o mundo, os NPCs e os resultados.",
+    "Seja concreto e breve nas declarações: diga o que o personagem tenta fazer e como, em uma a três frases.",
+    "Fale sempre em português do Brasil.",
+].join("\n")
