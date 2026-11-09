@@ -6,8 +6,8 @@ export const OPEX_FEATURE = "opex-agent"
 /** Aba de `/integracoes/ia` com a configuração do agente. */
 export const OPEX_AI_TAB = "agente-opex" as const
 
-/** Provedores do agente: só os que aceitam ferramentas definidas pelo app (o OpenCode não aceita). */
-export const OPEX_PROVIDER_IDS = ["gemini", "anthropic", "openai", "deepseek"] as const
+/** Provedores do agente: só os que aceitam ferramentas definidas pelo app (o OpenCode de sessão não aceita; o OpenCode Go aceita). */
+export const OPEX_PROVIDER_IDS = ["gemini", "anthropic", "openai", "deepseek", "opencode-go"] as const
 export type OpexProviderId = (typeof OPEX_PROVIDER_IDS)[number]
 
 export function isOpexProviderId(value: string): value is OpexProviderId {

@@ -15,6 +15,7 @@ import { AI_PROVIDERS, getAiProvider, type AiAgentDto, type AiModelDto, type AiP
 
 const MODEL_LISTERS: Record<AiProviderId, (signal?: AbortSignal) => Promise<AiModelDto[]>> = {
     opencode: async (signal) => (await import("./opencode")).listOpencodeModels(signal),
+    "opencode-go": async (signal) => (await import("./opencode-go")).listOpencodeGoModels(signal),
     gemini: async (signal) => (await import("./gemini")).listGeminiModels(signal),
     anthropic: async (signal) => (await import("./anthropic")).listAnthropicModels(signal),
     openai: async (signal) => (await import("./openai")).listOpenaiModels(signal),

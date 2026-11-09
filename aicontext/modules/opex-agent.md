@@ -58,7 +58,8 @@ As entidades citadas usam a menção `<span data-type="mention" ...>` e aparecem
 
 ## Configuração (aba "Agente Opex" de `/integracoes/ia`)
 
-Geral (ativo, agente principal e subagente de título — Gemini, Anthropic, OpenAI ou DeepSeek,
+Geral (ativo, agente principal e subagente de título — Gemini, Anthropic, OpenAI, DeepSeek ou OpenCode Go
+(arquivos do chat no OpenCode Go e no DeepSeek vão como texto ou referência, nunca como conteúdo binário),
 instruções, arquivos e **Visitantes sem login**: atender, mensagens/hora por visitante e por IP,
 validade das sessões), Ferramentas (seleção e confirmação por ferramenta, com quem pode usar) e
 Memórias (`opex-global`, `opex-admin`, `opex-user`). Salva em `ai_feature_settings`

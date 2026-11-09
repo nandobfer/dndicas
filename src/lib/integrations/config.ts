@@ -44,6 +44,7 @@ export interface IntegrationConfigMap {
     crons: { schedulerEnabled: boolean; internalBaseUrl?: string; jobs: CronJobConfig[]; cronSecret?: string }
     ai: Record<string, never>
     ai_opencode: { baseUrl?: string; directory?: string; password?: string }
+    ai_opencode_go: { apiKey?: string }
     ai_gemini: { apiKey?: string }
     ai_anthropic: { apiKey?: string }
     ai_openai: { apiKey?: string }

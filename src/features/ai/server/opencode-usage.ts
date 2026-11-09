@@ -2,6 +2,7 @@ import { dbConnect } from "@/lib/db"
 import { AiConsumption } from "@/lib/db/models/AiConsumption"
 import {
     aiConsumptionOriginLabel,
+    type MeasuredUsageProvider,
     type OpencodeUsageOriginRow,
     type OpencodeUsageQuery,
     type OpencodeUsageSummary,
@@ -34,14 +35,14 @@ function sumOrNull(values: (number | null)[]): number | null {
 }
 
 /**
- * Consumo do OpenCode por origem (feature de IA, refinamento ou mesa), restrito ao período. Usa
+ * Consumo de um provedor medido (OpenCode ou OpenCode Go) por origem (feature de IA, refinamento ou mesa), restrito ao período. Usa
  * apenas `ai_consumption_logs` (medição prospectiva) — não soma os acumuladores legados, para não
  * duplicar. `coverageFrom` mostra desde quando há medição.
  */
-export async function getOpencodeUsage(query: OpencodeUsageQuery): Promise<OpencodeUsageSummary> {
+export async function getOpencodeUsage(query: OpencodeUsageQuery, provider: MeasuredUsageProvider = "opencode"): Promise<OpencodeUsageSummary> {
     await dbConnect()
     const filter = {
-        provider: "opencode",
+        provider,
         ...(query.from || query.to
             ? {
                   createdAt: {
@@ -70,7 +71,7 @@ export async function getOpencodeUsage(query: OpencodeUsageQuery): Promise<Openc
             },
             { $sort: { costUsd: -1, requests: -1 } },
         ]),
-        AiConsumption.findOne({ provider: "opencode" }).sort({ createdAt: 1 }).select({ createdAt: 1 }).lean(),
+        AiConsumption.findOne({ provider }).sort({ createdAt: 1 }).select({ createdAt: 1 }).lean(),
     ])
 
     const origins: OpencodeUsageOriginRow[] = rows.map((row) => ({

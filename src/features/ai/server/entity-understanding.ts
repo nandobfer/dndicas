@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto"
 import { DomainError } from "@/lib/api/route"
 import { recordAiConsumption } from "@/lib/ai/consumption"
 import { describeAiError, prepareModel, samplingOptions } from "@/lib/ai/stream"
+import { stepCostUsd } from "@/lib/ai/step-cost"
 import { loggerFor } from "@/lib/logger"
 import {
     buildEntityUnderstandingHistory,
@@ -45,9 +46,11 @@ export async function* streamEntityUnderstanding(
     const request = { provider, model, variant: settings.main.variant, temperature: settings.main.temperature, maxOutputTokens: settings.main.maxOutputTokens }
     let ready: Awaited<ReturnType<typeof prepareModel>>
     try {
-        ready = await prepareModel({ ...request, title: "Entender com IA" })
+        // Conversa = usuário + entidade: o OpenCode Go reaproveita o cache de prompt entre as perguntas.
+        const sessionKey = options.userId ? `entity-understanding:${options.userId}:${input.entityType}:${input.entityId}` : null
+        ready = await prepareModel({ ...request, title: "Entender com IA", sessionKey })
     } catch (error) {
-        yield { type: "error", message: describeAiError(error) }
+        yield { type: "error", message: describeAiError(error, request) }
         return
     }
     try {
@@ -62,10 +65,14 @@ export async function* streamEntityUnderstanding(
             ...(ready.reasoning ? { reasoning: ready.reasoning } : {}),
             ...samplingOptions(request),
         })
+        let costUsd: number | null = null
         for await (const part of result.fullStream) {
             if (part.type === "text-delta" && part.text) yield { type: "text", text: part.text }
-            else if (part.type === "error") {
-                yield { type: "error", message: describeAiError(part.error) }
+            else if (part.type === "finish-step") {
+                const cost = stepCostUsd(part.providerMetadata)
+                if (cost !== null) costUsd = (costUsd ?? 0) + cost
+            } else if (part.type === "error") {
+                yield { type: "error", message: describeAiError(part.error, request) }
                 return
             } else if (part.type === "finish") {
                 await recordAiConsumption({
@@ -77,14 +84,14 @@ export async function* streamEntityUnderstanding(
                     inputTokens: part.totalUsage.inputTokens ?? null,
                     outputTokens: part.totalUsage.outputTokens ?? null,
                     totalTokens: part.totalUsage.totalTokens ?? null,
-                    costUsd: null,
+                    costUsd,
                 })
             }
         }
     } catch (error) {
         if (!options.signal?.aborted) {
             log.warn({ provider, model, userId: options.userId, err: error instanceof Error ? error.message : error }, "[ai] falha no Entender com IA")
-            yield { type: "error", message: describeAiError(error) }
+            yield { type: "error", message: describeAiError(error, request) }
         }
     } finally {
         await ready.dispose().catch(() => undefined)

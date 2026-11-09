@@ -8,6 +8,23 @@ export const opencodeUsageQuerySchema = z.object({ from: optionalDate, to: optio
 )
 export type OpencodeUsageQuery = z.infer<typeof opencodeUsageQuerySchema>
 
+/** Provedores com painel de consumo medido em `ai_consumption_logs` (mesmo painel, filtrado por provedor). */
+export const MEASURED_USAGE_PROVIDERS = ["opencode", "opencode-go"] as const
+export type MeasuredUsageProvider = (typeof MEASURED_USAGE_PROVIDERS)[number]
+
+export const MEASURED_USAGE_COPY: Record<MeasuredUsageProvider, { title: string; description: string; empty: string }> = {
+    opencode: {
+        title: "Consumo do OpenCode",
+        description: "Uso originado pelo Opex, separado por origem (features de IA, refinamentos e mesas de desenvolvimento). A medição começou com este painel: o consumo anterior não é somado.",
+        empty: "Nenhum uso do OpenCode neste período",
+    },
+    "opencode-go": {
+        title: "Consumo do OpenCode Go",
+        description: "Uso das features de IA do DnDicas pela assinatura OpenCode Go, separado por origem. O custo é o informado pelo Go em cada geração e desconta do allowance da assinatura.",
+        empty: "Nenhum uso do OpenCode Go neste período",
+    },
+}
+
 /** Rótulos das origens do consumo medido (agentes de IA do DnDicas). */
 export const AI_CONSUMPTION_ORIGIN_LABELS: Record<string, string> = {
     "image-generator": "Gerador de imagens",

@@ -9,7 +9,7 @@ export type AiTab = (typeof AI_TABS)[number]
 /**
  * Abas da página de um provedor de IA (`/integracoes/ia/opencode`). `configuracao` é a padrão
  * (omitida da URL). Gemini, Anthropic, OpenAI e DeepSeek não têm consumo próprio medido aqui, então não
- * têm a aba Consumo.
+ * têm a aba Consumo. O OpenCode Go informa o custo de cada geração e tem a aba.
  */
 export const AI_PROVIDER_TABS = ["configuracao", "modelos", "consumo"] as const
 export type AiProviderTab = (typeof AI_PROVIDER_TABS)[number]
@@ -17,6 +17,7 @@ export type AiProviderTab = (typeof AI_PROVIDER_TABS)[number]
 /** Abas mostradas em cada provedor. [`configuracao`, `modelos`] ou com `consumo`. */
 export const AI_PROVIDER_TAB_IDS: Record<AiProviderId, readonly AiProviderTab[]> = {
     opencode: ["configuracao", "modelos", "consumo"],
+    "opencode-go": ["configuracao", "modelos", "consumo"],
     gemini: ["configuracao", "modelos"],
     anthropic: ["configuracao", "modelos"],
     openai: ["configuracao", "modelos"],
