@@ -1443,7 +1443,8 @@ limite, 0 desliga; baixar não desfaz ninguém) no mesmo Salvar; card "Memórias
 `gravar_memoria_npc_opex {npc, titulo, texto}` (canal do NPC, sem acionar o agente; vale na próxima consulta) e
 `consultar_npc_opex {npc, situacao, pergunta?}` — só nas narrações (na resposta a perguntas recusa e a AI SDK nem a oferece;
 `buildMaddoxAiTools({ opexNpcs })`). A consulta (`decideOpexNpcScene`, JSON `{fala, acao, memorias}`, uma tentativa,
-`MADDOX_OPEX_NPC_TIMEOUT_MS`) reaproveita a decisão do mesmo NPC no job e tem teto `MADDOX_OPEX_NPC_CONSULTS_PER_NARRATION`. Falha
+`MADDOX_OPEX_NPC_TIMEOUT_MS`) reaproveita a decisão do mesmo NPC no job (a promessa em andamento fica no job antes do primeiro `await`, então chamadas paralelas
+do mesmo passo também reaproveitam e a vaga no teto é reservada na hora) e tem teto `MADDOX_OPEX_NPC_CONSULTS_PER_NARRATION`. Falha
 (provedor, tempo, JSON inválido) devolve `{ falhou: true, nota }` sem o motivo e registra `addDraftOpexNpcFailure` no job.
 Prompt do narrador: `[NPC Opex]` no bloco dos NPCs e a seção "NPCs Opex" na tarefa das narrações (`opexNpcsTaskSection`).
 
@@ -1455,11 +1456,13 @@ Consumo: `maddox-opex-npc` e `maddox-opex-npc-combat`.
 consulta o agente antes da geração com as ações da ficha (`stats.actions`, Ataques Múltiplos) e as genéricas (Disparada, Esquivar,
 Desengajar, Fugir), os alvos com a faixa de PV e a situação; `opexNpcCombatSchema` só aceita ação entre as opções (duas
 tentativas). A decisão vai em `block.opexDecision` → linha "O NPC Opex {nome} decidiu: …" da tarefa. Falha = o Maddox decide como
-antes; nada fica pendente no banco. Aliados e adversários seguem a mesma regra.
+antes; nada fica pendente no banco, e a falha também fica no cache do job (`consultar_npc_opex` para o mesmo NPC na mesma geração
+devolve a falha sem tentar de novo). No bloco `npc`, a seção "NPCs Opex" sai da tarefa (o servidor já consultou). Aliados e adversários seguem a mesma regra.
 
 **Linha de falha**: `runMasterTurn` grava `takeDraftOpexNpcFailures` na própria narração (`opexNpcFailures: [{ npcId, npcName,
 error }]`). `messagesDto` só serializa `opexNpcFailures: [{ npcName, reason }]` para o dono (`MessagesViewer.isOwner`), no estado da
-mesa e no histórico; `OpexNpcFailureLine` desenha "O NPC Opex {nome} não respondeu; o Maddox decidiu por ele nesta narração." e o
+mesa e no histórico, e só as de NPCs que os jogadores conhecem (visibilidade lida na hora: a de um NPC só do mestre aparece quando
+ele fica conhecido); `OpexNpcFailureLine` desenha "O NPC Opex {nome} não respondeu; o Maddox decidiu por ele nesta narração." e o
 motivo. O motivo completo vai também ao log.
 
 **Dono**: `POST`/`DELETE /api/maddox/campaigns/[id]/npcs/[npcId]/opex` (`maddox.play` + `maddox.opex`; 403 "Você não tem permissão

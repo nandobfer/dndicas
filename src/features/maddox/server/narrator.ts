@@ -35,7 +35,7 @@ import { checkTitle, sheetSummary, type MaddoxCheckSheet } from "../check-modifi
 import { worldCatalogOf } from "../world-catalog"
 import { buildNarratorInstructions, checkResultLine, narratorTaskText, narratorTranscript, usesChecks, usesCombat, usesTacticalCombat, type NarratorCheckResult, type NarratorDeclaration, type NarratorPromptContext, type NarratorTacticalTask, type NarratorTask } from "./narrator-prompt"
 import { isOpexUserId } from "./opex-members"
-import { MADDOX_OPEX_LABEL } from "../constants"
+import { MADDOX_OPEX_LABEL, maddoxOpexNpcFallbackNote } from "../constants"
 
 /**
  * Maddox narrador (Maddox 4) — SOMENTE servidor. Monta as instruções com o estado gravado da campanha, gera em
@@ -251,6 +251,8 @@ async function consultTacticalOpexNpc(campaignId: Types.ObjectId, jobId: string,
         const reason = error instanceof Error ? error.message : String(error)
         log.warn({ campaignId: String(campaignId), npcId: String(npc._id), err: reason }, "[maddox] o agente do NPC Opex não escolheu a ação do combate")
         addDraftOpexNpcFailure(String(campaignId), jobId, { npcId: String(npc._id), npcName: npc.name, error: reason.slice(0, 500) })
+        // Já tentou nesta geração: `consultar_npc_opex` para o mesmo NPC devolve a falha, sem tentar de novo.
+        setJobOpexNpcConsult(String(campaignId), jobId, String(npc._id), { npc: npc.name, falhou: true, nota: maddoxOpexNpcFallbackNote(npc.name) })
     }
 }
 
@@ -383,9 +385,12 @@ async function generate(args: GenerateArgs, sink: MaddoxMasterSink): Promise<str
     const actionOptions = args.task.kind !== "answer" && !args.task.tactical
     // NPCs Opex (DND-27): a consulta ao agente só existe nas narrações (nas respostas, o Maddox decide sozinho).
     const opexNpcs = args.task.kind !== "answer" && context.opexNpcNames.length > 0
+    // No bloco de um adversário do combate tático, o servidor já consultou o agente (a decisão ou a falha vêm na tarefa): a
+    // seção que manda consultar fica de fora.
+    const npcBlock = args.task.kind !== "answer" && args.task.tactical?.block?.kind === "npc"
     const userText = [
         transcript ? `# Últimos acontecimentos\n\n${mentionsToMarkup(transcript)}` : null,
-        narratorTaskText(args.task, { density: context.campaign.density ?? MADDOX_DEFAULT_DENSITY, actionOptions, opexNpcs: opexNpcs ? context.opexNpcNames : [] }),
+        narratorTaskText(args.task, { density: context.campaign.density ?? MADDOX_DEFAULT_DENSITY, actionOptions, opexNpcs: opexNpcs && !npcBlock ? context.opexNpcNames : [] }),
         remindersText || null,
     ]
         .filter(Boolean)

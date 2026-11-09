@@ -282,6 +282,29 @@ describe("memória fora de cena e consulta ao agente", () => {
     })
 })
 
+describe("consultas paralelas no mesmo passo", () => {
+    it("duas chamadas ao mesmo NPC reaproveitam a decisão em andamento; quatro NPCs ao mesmo tempo respeitam o teto de 3", async () => {
+        const t = await table()
+        for (const name of ["Sildar", "Nezznar"]) await MaddoxNpcModel.create({ campaignId: t.campaignId, name, nameKey: name.toLowerCase(), visibility: "players" })
+        for (const name of ["Gundren", "Strahd", "Sildar", "Nezznar"]) await run("promover_npc_opex", t.campaignId, { npc: name })
+        const results = await inJob(t.campaignId, "narration", (jobId) =>
+            Promise.allSettled([
+                run("consultar_npc_opex", t.campaignId, { npc: "Gundren", situacao: "Cena." }, jobId),
+                run("consultar_npc_opex", t.campaignId, { npc: "Gundren", situacao: "Cena." }, jobId),
+                run("consultar_npc_opex", t.campaignId, { npc: "Strahd", situacao: "Cena." }, jobId),
+                run("consultar_npc_opex", t.campaignId, { npc: "Sildar", situacao: "Cena." }, jobId),
+                run("consultar_npc_opex", t.campaignId, { npc: "Nezznar", situacao: "Cena." }, jobId),
+            ]),
+        )
+        expect(results[0]).toEqual(results[1])
+        expect(results.filter((item) => item.status === "fulfilled")).toHaveLength(4)
+        const rejected = results.filter((item): item is PromiseRejectedResult => item.status === "rejected")
+        expect(rejected).toHaveLength(1)
+        expect(String(rejected[0]!.reason.message)).toContain("Limite de 3 consultas a NPCs Opex por narração atingido")
+        expect(npcCalls).toHaveLength(3)
+    })
+})
+
 describe("mesa: chip, ações do dono e a linha de falha", () => {
     it("a falha do agente não trava a narração e a linha com o motivo só chega ao dono (estado e histórico)", async () => {
         const t = await table()
@@ -305,6 +328,26 @@ describe("mesa: chip, ações do dono e a linha de falha", () => {
         expect(JSON.stringify(page)).not.toContain("MARCADOR-SECRETO")
         const ownerPage = await game.listGameMessages(t.id, null, t.owner)
         expect(JSON.stringify(ownerPage)).toContain("MARCADOR-SECRETO")
+    })
+
+    it("a falha de um NPC Opex só do mestre não aparece nem ao dono até ele ficar conhecido", async () => {
+        const t = await table()
+        await run("promover_npc_opex", t.campaignId, { npc: "Strahd" })
+        masterScript.consults = [{ npc: "Strahd", situacao: "Um nobre pálido observa." }]
+        npcReplies.push(new Error("MARCADOR-STRAHD provedor fora"))
+        await game.startCampaign(t.id, t.owner)
+        await settle(t.id)
+        expect(masterScript.answers[0]).toMatchObject({ npc: "Strahd", falhou: true })
+        const stored = await MaddoxCampaignMessageModel.findOne({ campaignId: t.campaignId, kind: "narration" }).lean()
+        expect(stored!.opexNpcFailures).toEqual([expect.objectContaining({ npcName: "Strahd" })])
+
+        const hidden = JSON.stringify([await game.getGameState(t.id, t.owner), await game.listGameMessages(t.id, null, t.owner)])
+        expect(hidden).not.toContain("Strahd")
+        expect(hidden).not.toContain("MARCADOR-STRAHD")
+
+        await MaddoxNpcModel.updateOne({ _id: t.strahd }, { $set: { visibility: "players" } })
+        const narration = (await game.getGameState(t.id, t.owner)).messages.find((message) => message.kind === "narration")!
+        expect(narration.opexNpcFailures).toEqual([{ npcName: "Strahd", reason: expect.stringContaining("MARCADOR-STRAHD") }])
     })
 
     it("o chip vale para todos só nos NPCs conhecidos; canManageOpexNpcs só para o dono com a permissão", async () => {

@@ -843,6 +843,7 @@ async function messagesDto(all: MessageDoc[], viewer: MessagesViewer): Promise<M
     const { combatEventDto } = combats ? await import("./combat") : { combatEventDto: null }
     const tacticalDto = messages.some((message) => message.combatAction || message.combatRoll || message.combatReaction) ? await import("./tactical-dto") : null
     const opexNpcs = await opexNpcChips(messages, combats)
+    const knownFailureNpcs = viewer.isOwner ? await knownFailureNpcIds(messages) : new Set<string>()
     const characterById = new Map(characters.map((character) => [String(character._id), character]))
     const userById = new Map(users.map((user) => [String(user._id), user.name?.trim() || user.username || "Dono"]))
     return messages.map((message) => {
@@ -877,7 +878,7 @@ async function messagesDto(all: MessageDoc[], viewer: MessagesViewer): Promise<M
             ...(message.kind === "reminder" ? { reminder: { status: message.reminder?.status ?? "pending" } } : {}),
             ...(message.kind === "narration" ? { actionOptions: actionOptionsFor(message, viewer) } : {}),
             // O motivo bruto do provedor só vai ao dono; para os demais o campo nem é serializado (DND-27).
-            ...(viewer.isOwner && message.opexNpcFailures?.length ? { opexNpcFailures: message.opexNpcFailures.map((item) => ({ npcName: item.npcName, reason: item.error })) } : {}),
+            ...opexNpcFailuresDto(message, viewer, knownFailureNpcs),
             createdAt: new Date(message.createdAt).toISOString(),
         }
     })
@@ -887,6 +888,24 @@ async function messagesDto(all: MessageDoc[], viewer: MessagesViewer): Promise<M
  * Chip "Opex" dos NPCs Opex conhecidos nos cards estruturados (DND-27): os combatentes dos cards de combate (início, fim e
  * ordem) e o autor do card de ação do combate tático. O texto da narração fica sem chip.
  */
+/**
+ * Falhas dos agentes dos NPCs Opex (DND-27): só o dono recebe, e só as de NPCs que os jogadores já conhecem — o dono também
+ * não vê os NPCs só do mestre, então a linha de um deles fica de fora até ele ficar conhecido.
+ */
+function opexNpcFailuresDto(message: MessageDoc, viewer: MessagesViewer, knownNpcIds: ReadonlySet<string>): { opexNpcFailures?: { npcName: string; reason: string }[] } {
+    if (!viewer.isOwner || !message.opexNpcFailures?.length) return {}
+    const visible = message.opexNpcFailures.filter((item) => knownNpcIds.has(String(item.npcId)))
+    return visible.length ? { opexNpcFailures: visible.map((item) => ({ npcName: item.npcName, reason: item.error })) } : {}
+}
+
+/** NPCs citados nas falhas que os jogadores conhecem (`visibility: "players"`), lidos agora: o NPC revelado depois passa a aparecer. */
+async function knownFailureNpcIds(messages: readonly MessageDoc[]): Promise<Set<string>> {
+    const ids = [...new Set(messages.flatMap((message) => (message.opexNpcFailures ?? []).map((item) => String(item.npcId))))].filter((id) => Types.ObjectId.isValid(id))
+    if (!ids.length) return new Set()
+    const rows = await MaddoxNpcModel.find({ _id: { $in: ids.map((id) => new Types.ObjectId(id)) }, visibility: "players" }).select("_id").lean<{ _id: Types.ObjectId }[]>()
+    return new Set(rows.map((row) => String(row._id)))
+}
+
 async function opexNpcChips(messages: readonly MessageDoc[], combats: Map<string, import("../models").IMaddoxCombat> | null): Promise<{ npcIds: Set<string>; actorKeys: Set<string> }> {
     const actions = messages.map((message) => message.combatAction).filter((action): action is NonNullable<MessageDoc["combatAction"]> => Boolean(action && action.actorKind === "combatant"))
     if (!actions.length && !combats?.size) return { npcIds: new Set(), actorKeys: new Set() }

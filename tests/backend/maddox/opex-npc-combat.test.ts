@@ -199,6 +199,24 @@ describe("vez do NPC Opex no combate tático", () => {
         expect(calls[0]!.userText).not.toContain("O NPC Opex Klarg decidiu")
         expect(calls[0]!.userText).toContain("bloco de **Klarg**")
 
+        // Já tentou nesta geração: a ferramenta devolve a falha sem acionar o agente de novo.
+        expect(calls[0]!.userText).not.toContain("## NPCs Opex")
+        const callsBefore = npcCalls.length
+        let consult: unknown
+        await enqueueMaddoxJob(
+            String(campaign._id),
+            "teste",
+            async ({ jobId }) => {
+                await aiMaddoxMaster.narrate({ campaignId: String(campaign._id), jobId, turnNumber: 3, round: 0, declarations: [], combatHint: null }, { delta: () => undefined, tool: () => undefined })
+                const { findMaddoxTool, runMaddoxTool } = await import("@/features/maddox/server/master-tools")
+                consult = await runMaddoxTool(findMaddoxTool("consultar_npc_opex")!, { campaignId: campaign._id, turnNumber: 3, jobId }, { npc: "Klarg", situacao: "Klarg ataca." })
+                takeDraftOpexNpcFailures(String(campaign._id), jobId)
+            },
+            { kind: "narration", turnNumber: 3, round: 0 },
+        )
+        expect(npcCalls.length - callsBefore).toBe(2)
+        expect(consult).toEqual({ npc: "Klarg", falhou: true, nota: "O NPC Opex não respondeu: decida você o que Klarg fala e faz nesta narração." })
+
         calls.length = 0
         npcReplies.push(new Error("provedor fora"), new Error("provedor fora"))
         expect(await narrateBlock(campaign._id)).toEqual([expect.objectContaining({ npcName: "Klarg", error: expect.stringContaining("provedor fora") })])

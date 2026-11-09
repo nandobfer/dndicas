@@ -921,6 +921,9 @@ export const MADDOX_OPEX_NPC_SYSTEM_ACTOR = "system:maddox"
 export const MADDOX_OPEX_NPC_RETIRE_REASONS = ["maddox", "owner", "death"] as const
 export type MaddoxOpexNpcRetireReason = (typeof MADDOX_OPEX_NPC_RETIRE_REASONS)[number]
 /** Linha abaixo da narração (só para o dono) quando o agente de um NPC Opex não respondeu. */
+/** Resposta ao Maddox quando o agente do NPC Opex falha (ferramenta e combate tático): sem o motivo. */
+export const maddoxOpexNpcFallbackNote = (name: string) => `O NPC Opex não respondeu: decida você o que ${name} fala e faz nesta narração.`
+
 export const maddoxOpexNpcFailureLine = (name: string) => `O NPC Opex ${name} não respondeu; o Maddox decidiu por ele nesta narração.`
 
 export const MADDOX_OPEX_INTERVIEW_FAILED_MESSAGE = "A entrevista do Personagem Opex parou."
