@@ -10,6 +10,9 @@ const RENDERED_ERROR_PATHS = new Set([
     "interviewer.model",
     "instructions",
     "interviewerInstructions",
+    "opexCharacter.provider",
+    "opexCharacter.model",
+    "opexCharacterInstructions",
     "avatar.persona",
     "opencode.directory",
 ])
@@ -25,7 +28,7 @@ export function flattenFormErrors(errors: unknown, prefix = ""): Array<{ path: s
 }
 
 /** Blocos por rigor (DND-32): rigor, provedor e modelo aparecem no próprio bloco. */
-const RENDERED_ERROR_PATTERN = /^rigorModels\.(main|interviewer)\.\d+\.(rigor|provider|model)$/
+const RENDERED_ERROR_PATTERN = /^rigorModels\.(main|interviewer|opexCharacter)\.\d+\.(rigor|provider|model)$/
 
 const isRendered = (path: string) => RENDERED_ERROR_PATHS.has(path) || RENDERED_ERROR_PATTERN.test(path)
 

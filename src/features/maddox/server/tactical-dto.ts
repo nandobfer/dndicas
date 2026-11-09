@@ -5,6 +5,7 @@ import type { IMaddoxCombatAction, IMaddoxCombatReaction, IMaddoxCombatRoll } fr
 import type { MaddoxCombatActionDto, MaddoxCombatReactionDto, MaddoxCombatRollDto, MaddoxMyCombatDto, MaddoxTacticalCombatDto } from "../game-types"
 import { MaddoxCharacterModel } from "../models"
 import { findActor, type TacticalCombat } from "./tactical-combat"
+import { isOpexUserId } from "./opex-members"
 
 /** DTOs do combate tático (Maddox 7): o que todos veem (ordem, faixa de PV dos adversários) e o que só eu vejo (opções). */
 
@@ -30,6 +31,7 @@ export function tacticalSnapshot(combat: TacticalCombat, hp: HpMap = new Map(), 
                         name: actor.name,
                         portraitUrl: portraits.get(actor.state.characterId) ?? null,
                         memberId: actor.state.memberId,
+                        ...(isOpexUserId(actor.state.userId) ? { opex: true } : {}),
                         initiative: slot.total,
                         active: slot.actorKey === activeKey,
                         hp: points ? { current: points.hp, max: points.hpMax, temp: points.tempHp } : null,

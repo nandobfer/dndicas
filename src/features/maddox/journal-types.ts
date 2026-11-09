@@ -37,6 +37,8 @@ export interface MaddoxJournalMemoryDto {
 export interface MaddoxJournalPartyMemberDto {
     memberId: string
     playerName: string
+    /** Personagem Opex (DND-26). */
+    opex?: boolean
     characterId: string
     characterName: string
     portraitUrl: string | null

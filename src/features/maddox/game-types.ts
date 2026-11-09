@@ -132,6 +132,8 @@ export interface MaddoxTacticalSlotDto {
     name: string
     portraitUrl: string | null
     memberId: string | null
+    /** Personagem Opex (DND-26). */
+    opex?: boolean
     /** `null` = ainda não rolou. */
     initiative: number | null
     active: boolean

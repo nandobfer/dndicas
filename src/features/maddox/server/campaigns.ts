@@ -70,10 +70,9 @@ function opexDto(member: MemberDoc, character: CharacterDoc | undefined, viewerI
     const run = member.opex.run
     const ready = isMemberReadyToPlay(character)
     const stale = run?.status === "running" && run.stage === "interview" && !isOpexRunning(`interview:${String(member._id)}`) && Date.now() - new Date(run.updatedAt ?? 0).getTime() > MADDOX_OPEX_STALE_MS
+    // Pronto = a entrevista terminou; uma falha na mesa aparece (e se resolve) na própria mesa.
     const status: MaddoxOpexMemberDto["status"] = ready
-        ? run?.status === "failed" && run.stage === "table"
-            ? "failed"
-            : "ready"
+        ? "ready"
         : run?.status === "failed" || stale
           ? "failed"
           : run?.status === "awaiting-approval"

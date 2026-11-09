@@ -9,7 +9,7 @@ import { rarityColors } from "@/lib/config/colors"
 import type { MaddoxGameParticipantDto, MaddoxGameStateDto } from "../../game-types"
 import { MADDOX_SEAT_LABELS, seatStatus, type MaddoxSeatStatus } from "../../game-view"
 import type { MaddoxGamePresence } from "../../hooks/useMaddoxGame"
-import { MemberAvatar, RarityChip } from "../campaigns/campaign-visuals"
+import { MemberAvatar, OpexChip, RarityChip } from "../campaigns/campaign-visuals"
 
 /** Cor de raridade de cada situação no turno. */
 export const SEAT_COLORS: Record<MaddoxSeatStatus, string> = {
@@ -20,6 +20,8 @@ export const SEAT_COLORS: Record<MaddoxSeatStatus, string> = {
     preparing: rarityColors.common,
     watching: rarityColors.rare,
     rolling: rarityColors.mythic,
+    acting: rarityColors.rare,
+    stuck: rarityColors.artifact,
 }
 
 interface Props {
@@ -56,7 +58,7 @@ export function TurnPanel({ state, presence, color, skipping, onSkip, rollingFor
                             <li key={participant.memberId} className="flex flex-wrap items-center gap-2.5 py-2.5" data-testid={`seat-${participant.memberId}`}>
                                 <div className="relative">
                                     <MemberAvatar name={participant.characterName ?? participant.name} imageUrl={participant.portraitUrl} color={color} className="h-9 w-9" />
-                                    {presence.available && (
+                                    {presence.available && !participant.opex && (
                                         <span
                                             className="absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full border-2 border-background"
                                             style={{ backgroundColor: online ? rarityColors.uncommon : rarityColors.common }}
@@ -66,7 +68,10 @@ export function TurnPanel({ state, presence, color, skipping, onSkip, rollingFor
                                     )}
                                 </div>
                                 <div className="min-w-0 flex-1">
-                                    <p className="truncate text-sm font-medium text-white">{participant.characterName ?? "Personagem ainda não criado"}</p>
+                                    <p className="flex items-center gap-1.5 truncate text-sm font-medium text-white">
+                                        {participant.characterName || (participant.opex ? "Personagem Opex em criação" : "Personagem ainda não criado")}
+                                        {participant.opex && <OpexChip />}
+                                    </p>
                                     <p className="flex items-center gap-1 truncate text-xs text-white/60">
                                         {participant.role === "owner" && <Crown className="h-3 w-3" style={{ color: rarityColors.legendary }} aria-label="Dono" />}
                                         {participant.name}

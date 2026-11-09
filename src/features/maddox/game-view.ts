@@ -6,7 +6,7 @@ export const MADDOX_GAME_POLL_MS = 5000
 
 /** Regras de exibição da mesa (Maddox 3) — módulo PURO, sem React. */
 
-export type MaddoxSeatStatus = "declared" | "waiting" | "offline" | "next-turn" | "preparing" | "watching" | "rolling"
+export type MaddoxSeatStatus = "declared" | "waiting" | "offline" | "next-turn" | "preparing" | "watching" | "rolling" | "acting" | "stuck"
 
 export const MADDOX_SEAT_LABELS: Record<MaddoxSeatStatus, string> = {
     declared: "Declarou",
@@ -16,6 +16,8 @@ export const MADDOX_SEAT_LABELS: Record<MaddoxSeatStatus, string> = {
     preparing: "Preparando personagem",
     watching: "Na mesa",
     rolling: "Rolando teste",
+    acting: "Agindo…",
+    stuck: "Parado: aguardando o dono",
 }
 
 /**
@@ -25,17 +27,21 @@ export const MADDOX_SEAT_LABELS: Record<MaddoxSeatStatus, string> = {
  */
 export function seatStatus(participant: MaddoxGameParticipantDto, state: Pick<MaddoxGameStateDto, "status" | "turn">, presence: { available: boolean; online: ReadonlySet<string> }): MaddoxSeatStatus {
     if (!participant.ready) return "preparing"
+    // Personagem Opex (DND-26): agindo agora, ou parado com falha até o dono decidir.
+    const opexActor = state.status === "active" && state.turn.phase === "players" ? state.turn.opexActor : null
+    if (opexActor && opexActor.memberId === participant.memberId) return opexActor.failed ? "stuck" : "acting"
     if (state.status === "active" && state.turn.phase === "master" && state.turn.awaitingChecks && [...state.turn.pendingChecks, ...(state.turn.pendingCombat ?? [])].some((check) => check.memberId === participant.memberId)) return "rolling"
     if (state.status !== "active" || state.turn.phase !== "players") return "watching"
     if (!participant.eligible) return "next-turn"
     if (participant.declared) return "declared"
-    if (presence.available && !presence.online.has(participant.userId)) return "offline"
+    if (presence.available && !participant.opex && !presence.online.has(participant.userId)) return "offline"
     return "waiting"
 }
 
 /** Quantos elegíveis presentes já declararam (faixa "aguardando X de N"). */
 export function turnProgress(state: Pick<MaddoxGameStateDto, "participants">, presence: { available: boolean; online: ReadonlySet<string> }) {
-    const required = state.participants.filter((participant) => participant.eligible && (participant.declared || !presence.available || presence.online.has(participant.userId)))
+    // Os Personagens Opex (DND-26) agem depois dos humanos: não entram na contagem da faixa.
+    const required = state.participants.filter((participant) => !participant.opex && participant.eligible && (participant.declared || !presence.available || presence.online.has(participant.userId)))
     return { declared: required.filter((participant) => participant.declared).length, total: required.length }
 }
 
@@ -47,6 +53,7 @@ export function composerBlockReason(state: Pick<MaddoxGameStateDto, "status" | "
         return state.turn.pendingChecks.some((check) => check.memberId === state.me.memberId) ? "O Maddox pediu um teste para você: role os dados na conversa." : "O Maddox aguarda os testes pedidos. Aguarde o turno dos jogadores."
     }
     if (state.turn.phase === "master") return "O Maddox está narrando. Aguarde o turno dos jogadores."
+    if (state.turn.opexActor && !state.turn.opexActor.combat) return "Os Personagens Opex estão agindo. Aguarde a narração do Maddox."
     if (!state.me.eligible) return "Você entra no jogo a partir do próximo turno."
     return null
 }
@@ -60,6 +67,14 @@ export function combatBannerText(state: Pick<MaddoxGameStateDto, "turn" | "comba
     if (!actor) return MADDOX_TURN_PHASE_LABELS.players
     const round = state.combat?.tactical?.round ?? 1
     return actor.memberId === state.me?.memberId ? `Combate — rodada ${round}: é a sua vez (${actor.characterName})` : `Combate — rodada ${round}: vez de ${actor.characterName}`
+}
+
+/** Faixa dos Personagens Opex (DND-26): quem está agindo, ou a falha que trava a mesa. `null` = nenhum Opex na vez. */
+export function opexBannerText(state: Pick<MaddoxGameStateDto, "turn" | "status"> & { me?: Pick<MaddoxGameStateDto["me"], "isOwner"> }): string | null {
+    const actor = state.status === "active" && state.turn.phase === "players" ? state.turn.opexActor : null
+    if (!actor) return null
+    if (actor.failed) return `${actor.characterName} (Personagem Opex) não conseguiu agir${actor.error ? `: ${actor.error}` : ""} — ${state.me?.isOwner ? "escolha Tentar de novo ou Pular" : "aguardando o dono da campanha"}`
+    return actor.combat ? `Combate: vez de ${actor.characterName} (Personagem Opex), que está escolhendo a ação…` : `Personagens Opex agindo — vez de ${actor.characterName}`
 }
 
 /** Faixa do turno do mestre: narrando, esperando os testes (Maddox 5) ou, depois de uma falha, a espera da nova tentativa. */

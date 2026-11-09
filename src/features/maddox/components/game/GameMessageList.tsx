@@ -10,7 +10,7 @@ import type { MaddoxActionOptionsView } from "../../game-view"
 import { GameActionOptions } from "./GameActionOptions"
 import { liveMarkupToBold } from "../../catalog-markup"
 import type { DiceRollResponse } from "@/features/dice-roller/types"
-import { MemberAvatar } from "../campaigns/campaign-visuals"
+import { MemberAvatar, OpexChip } from "../campaigns/campaign-visuals"
 import { GameCheckCard } from "./GameCheckCard"
 import { GameSceneImage } from "./GameSceneImage"
 import { GameCombatCard } from "./GameCombatCard"
@@ -287,7 +287,8 @@ function GameMessage({ message, mine, replyTo, maddoxAvatarUrl, color }: { messa
             <motion.p {...bubble} className="flex items-center justify-center gap-1.5 pb-3 text-xs text-white/50" data-testid="game-pass">
                 <MinusCircle className="h-3.5 w-3.5" aria-hidden />
                 <span>
-                    <span className="font-medium text-white/70">{name}</span> não fez nada{message.skippedByName ? ` (pulado por ${message.skippedByName})` : ""}.
+                    <span className="font-medium text-white/70">{name}</span>
+                    {message.opex && <OpexChip className="ml-1" />} não fez nada{message.skippedByName ? ` (pulado por ${message.skippedByName})` : ""}.
                 </span>
             </motion.p>
         )
@@ -298,7 +299,8 @@ function GameMessage({ message, mine, replyTo, maddoxAvatarUrl, color }: { messa
             <motion.p {...bubble} className="flex items-center justify-center gap-1.5 pb-3 text-xs text-white/50" data-testid="game-action-hidden">
                 <EyeOff className="h-3.5 w-3.5" aria-hidden />
                 <span>
-                    <span className="font-medium text-white/70">{name}</span> declarou sua ação.
+                    <span className="font-medium text-white/70">{name}</span>
+                    {message.opex && <OpexChip className="ml-1" />} declarou sua ação.
                 </span>
             </motion.p>
         )
@@ -310,6 +312,7 @@ function GameMessage({ message, mine, replyTo, maddoxAvatarUrl, color }: { messa
             <div className={`min-w-0 max-w-[85%] space-y-1 break-words rounded-2xl border px-3.5 py-2 text-sm text-foreground ${mine ? "rounded-tr-sm border-primary/30 bg-primary/15" : "rounded-tl-sm border-white/10 bg-white/[0.05]"}`}>
                 <p className="flex items-center gap-1 text-xs font-semibold text-white/80">
                     {name}
+                    {message.opex && <OpexChip />}
                     {question && (
                         <span className="inline-flex items-center gap-0.5 font-normal text-white/60">
                             <HelpCircle className="h-3 w-3" aria-hidden /> pergunta ao mestre
