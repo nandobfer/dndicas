@@ -933,6 +933,8 @@ export async function getGameState(campaignId: string, userId: string): Promise<
     if (campaign.status === "active") {
         if (await resumeMasterTurn(campaign)) campaign = await reloadCampaign(campaign._id)
         campaign = await fillEmptyTurn(campaign)
+        // Personagem Opex na vez (DND-26): depois de um reinício, a leitura da mesa retoma a execução (idempotente).
+        if (campaign.turn?.phase === "players" && (campaign.turn.opexActor || campaign.turn.combatActor)) void import("./opex-table").then(({ driveOpex }) => driveOpex(campaign._id)).catch(() => undefined)
     }
     const viewer = viewerOf(campaign, loaded.member)
     // Imagens nas cenas (Maddox 10): as presas (processo reiniciado) viram falha antes da leitura.
