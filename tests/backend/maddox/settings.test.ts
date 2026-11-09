@@ -170,7 +170,7 @@ describe("configuração do Agente Maddox", () => {
 
     describe("modelo por rigor (DND-32)", () => {
         const block = (rigor: string, patch: Record<string, unknown> = {}) => ({ rigor, provider: "gemini", model: "gemini-2.5-pro", agent: null, variant: null, ...patch }) as never
-        const withBlocks = (main: never[], interviewer: never[] = []) => configured({ rigorModels: { main, interviewer } })
+        const withBlocks = (main: never[], interviewer: never[] = []) => configured({ rigorModels: { main, interviewer, opexCharacter: [] } })
 
         it("configuração antiga recebe as listas vazias sem perder o resto", () => {
             const legacy: Record<string, unknown> = { ...configured() }
@@ -178,7 +178,7 @@ describe("configuração do Agente Maddox", () => {
             const parsed = maddoxSettingsSchema.safeParse(withMaddoxDefaults(legacy))
             expect(parsed.success).toBe(true)
             if (parsed.success) {
-                expect(parsed.data.rigorModels).toEqual({ main: [], interviewer: [] })
+                expect(parsed.data.rigorModels).toEqual({ main: [], interviewer: [], opexCharacter: [] })
                 expect(parsed.data.main.model).toBe("anthropic/claude")
             }
         })

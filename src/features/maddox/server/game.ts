@@ -21,6 +21,8 @@ import {
     MADDOX_MASTER_RETRY_MS,
     MADDOX_COMBAT_FORCE_END_AFTER,
     MADDOX_TACTICAL_COMBAT_RIGORS,
+    MADDOX_OPEX_FAILED_MESSAGE,
+    MADDOX_OPEX_LABEL,
     type MaddoxTurnPhase,
 } from "../constants"
 import {
@@ -45,6 +47,7 @@ import { assertMemberCanPlay, isMemberReadyToPlay, loadMembership } from "./camp
 import { getMaddoxMaster, type MaddoxMasterDeclaration } from "./game-master"
 import { beginLive, enqueueMaddoxJob, isCampaignBusy, takeDraftActionOptions, takeDraftChecks, takeDraftCombat, takeDraftImages } from "./game-live"
 import { onlineUserIds } from "./game-presence"
+import { isOpexMember, isOpexUserId, realUserIds } from "./opex-members"
 
 /**
  * Mesa e motor de turnos das Campanhas Maddox (Maddox 3). SOMENTE servidor; `userId` é o usuário EFETIVO.
@@ -108,11 +111,15 @@ export async function publishGameChanged(campaignId: Types.ObjectId, extraUserId
         await MaddoxCampaignModel.updateOne({ _id: campaignId }, { $set: { updatedAt: new Date() } }, { timestamps: false })
         const campaign = await MaddoxCampaignModel.findById(campaignId).select("turn").lean<Pick<CampaignDoc, "turn">>()
         const members = await MaddoxCampaignMemberModel.find({ campaignId, status: "joined" }).select("userId").lean<{ userId: string }[]>()
-        const channels = [...new Set([...members.map((member) => member.userId), ...extraUserIds].filter(Boolean))].map(maddoxUserChannel)
+        const channels = [...new Set(realUserIds([...members.map((member) => member.userId), ...extraUserIds]))].map(maddoxUserChannel)
         await publishToChannels(channels, MADDOX_GAME_CHANGED_EVENT, { campaignId: String(campaignId), turnNumber: campaign?.turn?.number ?? 0, phase: campaign?.turn?.phase ?? "master" })
     } catch (error) {
         log.warn({ err: error, campaignId: String(campaignId) }, "[maddox] Falha ao avisar a mesa")
     }
+    // Personagens Opex (DND-26): cada mudança da mesa pode ser a vez deles (rolar, reagir, agir). Fora da requisição atual.
+    setTimeout(() => {
+        void import("./opex-table").then(({ driveOpex }) => driveOpex(campaignId)).catch(() => undefined)
+    }, 0)
 }
 
 // ── Turno do mestre ────────────────────────────────────────────────────────────
@@ -408,7 +415,7 @@ export async function forceCloseCombatTurn(campaignId: Types.ObjectId): Promise<
     const number = campaign.turn.number
     const closed = await MaddoxCampaignModel.updateOne(
         { _id: campaignId, status: "active", "turn.number": number, "turn.phase": "players" },
-        { $set: { "turn.number": number + 1, "turn.phase": "master" as MaddoxTurnPhase, "turn.startedAt": new Date(), "turn.eligibleMemberIds": [], "turn.declaredMemberIds": [], "turn.generating": { token, startedAt: new Date() }, "turn.failedAt": null, "turn.checkRound": 0, "turn.awaitingChecks": false, "turn.combatActor": null } },
+        { $set: { "turn.number": number + 1, "turn.phase": "master" as MaddoxTurnPhase, "turn.startedAt": new Date(), "turn.eligibleMemberIds": [], "turn.declaredMemberIds": [], "turn.generating": { token, startedAt: new Date() }, "turn.failedAt": null, "turn.checkRound": 0, "turn.awaitingChecks": false, "turn.combatActor": null, "turn.opexActor": null } },
     )
     if (closed.modifiedCount === 0) return
     await publishGameChanged(campaignId)
@@ -511,17 +518,34 @@ export async function evaluateTurn(campaignId: Types.ObjectId): Promise<void> {
     const eligibleIds = (campaign.turn?.eligibleMemberIds ?? []).map(String)
     if (eligibleIds.length === 0 || declared.size === 0) return
 
-    const eligibleMembers = await MaddoxCampaignMemberModel.find({ _id: { $in: eligibleIds }, campaignId, status: "joined" }).select("userId").lean<{ _id: Types.ObjectId; userId: string }[]>()
+    const eligibleMembers = await MaddoxCampaignMemberModel.find({ _id: { $in: eligibleIds }, campaignId, status: "joined" }).select("userId kind opex.addedAt createdAt").lean<Pick<MemberDoc, "_id" | "userId" | "kind" | "opex" | "createdAt">[]>()
+    // Personagens Opex (DND-26) ficam fora da regra dos humanos: agem depois, um de cada vez.
+    const humans = eligibleMembers.filter((member) => member.kind !== "opex")
     const online = await onlineUserIds(String(campaignId))
-    const required = online ? eligibleMembers.filter((member) => online.has(member.userId)) : eligibleMembers
+    const required = online ? humans.filter((member) => online.has(member.userId)) : humans
     const pending = required.filter((member) => !declared.has(String(member._id)))
     if (pending.length > 0) return
+    if (campaign.turn.opexActor) return
+    const opex = eligibleMembers.filter((member) => member.kind === "opex" && !declared.has(String(member._id)))
+    if (opex.length > 0) {
+        // Mesa sem nenhuma ação humana (todos offline) não avança sozinha, nem com Opex.
+        if (!humans.some((member) => declared.has(String(member._id)))) return
+        const next = [...opex].sort((a, b) => new Date(a.opex?.addedAt ?? a.createdAt).getTime() - new Date(b.opex?.addedAt ?? b.createdAt).getTime())[0]!
+        const started = await MaddoxCampaignModel.updateOne(
+            { _id: campaignId, status: "active", "turn.number": campaign.turn.number, "turn.phase": "players", $or: [{ "turn.opexActor": null }, { "turn.opexActor": { $exists: false } }] },
+            { $set: { "turn.opexActor": { memberId: next._id, startedAt: new Date(), questions: 0, failedAt: null, error: null } } },
+        )
+        if (started.modifiedCount === 0) return
+        log.info({ campaignId: String(campaignId), turnNumber: campaign.turn.number, memberId: String(next._id) }, "[maddox] Vez do Personagem Opex")
+        await publishGameChanged(campaignId)
+        return
+    }
 
     const token = randomUUID()
     const number = campaign.turn.number
     const closed = await MaddoxCampaignModel.updateOne(
         { _id: campaignId, status: "active", "turn.number": number, "turn.phase": "players" },
-        { $set: { "turn.number": number + 1, "turn.phase": "master" as MaddoxTurnPhase, "turn.startedAt": new Date(), "turn.eligibleMemberIds": [], "turn.declaredMemberIds": [], "turn.generating": { token, startedAt: new Date() }, "turn.failedAt": null, "turn.checkRound": 0, "turn.awaitingChecks": false, "turn.combatActor": null } },
+        { $set: { "turn.number": number + 1, "turn.phase": "master" as MaddoxTurnPhase, "turn.startedAt": new Date(), "turn.eligibleMemberIds": [], "turn.declaredMemberIds": [], "turn.generating": { token, startedAt: new Date() }, "turn.failedAt": null, "turn.checkRound": 0, "turn.awaitingChecks": false, "turn.combatActor": null, "turn.opexActor": null } },
     )
     if (closed.modifiedCount === 0) return
     log.info({ campaignId: String(campaignId), turnNumber: number, required: required.length, presence: online ? "pusher" : "unknown" }, "[maddox] Turno dos jogadores fechado")
@@ -616,6 +640,10 @@ export async function submitGameAction(campaignId: string, input: MaddoxGameActi
         return endCombatTurn(campaignId, {}, userId)
     }
     if (!inCombatTurn && !idSet(campaign.turn.eligibleMemberIds).has(String(member._id))) throw new DomainError(409, "Você entra no jogo a partir do próximo turno.", "NEXT_TURN")
+    // Personagens Opex agindo (DND-26): os humanos já fecharam a vez deles; só perguntas continuam livres.
+    if (!inCombatTurn && input.kind !== "question" && campaign.turn.opexActor && String(campaign.turn.opexActor.memberId) !== String(member._id)) {
+        throw new DomainError(409, "Os Personagens Opex estão agindo. Aguarde a narração do Maddox.", "OPEX_TURN")
+    }
     const character = await characterOf(member)
 
     if (input.kind === "question") {
@@ -650,30 +678,41 @@ export async function submitGameAction(campaignId: string, input: MaddoxGameActi
     return getGameState(campaignId, userId)
 }
 
+/**
+ * Gera e grava a resposta do mestre a uma pergunta, transmitindo a todos; falha grava a resposta com `error`. Roda DENTRO
+ * de um job da fila da campanha (a resposta de uma pergunta do Personagem Opex, DND-26, roda no job do próprio Opex).
+ */
+export async function answerQuestion(campaignId: Types.ObjectId, jobId: string, turnNumber: number, questionId: Types.ObjectId, characterName: string, question: string): Promise<{ content: string; error: string | null }> {
+    const live = beginLive(String(campaignId), { kind: "answer", turnNumber, replyToId: String(questionId) })
+    let content = ""
+    let error: string | null = null
+    try {
+        const master = await getMaddoxMaster()
+        content = await withGenerationTimeout((signal) => master.answer({ campaignId: String(campaignId), jobId, turnNumber, questionId: String(questionId), characterName, question, signal }, live))
+    } catch (failure) {
+        log.warn({ err: failure instanceof Error ? failure.message : String(failure), campaignId: String(campaignId), turnNumber }, "[maddox] Falha ao responder a pergunta")
+        error = MADDOX_ANSWER_FAILED_MESSAGE
+    }
+    let stored = content
+    try {
+        const message = await MaddoxCampaignMessageModel.create({ campaignId, turnNumber, phase: "players", kind: "answer", content: error ? "" : content, error, replyToId: questionId })
+        stored = message.content
+        live.end({ messageId: String(message._id), error })
+    } catch (failure) {
+        live.end({ messageId: null, error: MADDOX_ANSWER_FAILED_MESSAGE })
+        throw failure
+    }
+    await publishGameChanged(campaignId)
+    return { content: error ? "" : stored, error }
+}
+
 /** Responde a pergunta na fila da campanha, transmitindo a todos; falha grava a resposta com `error`. */
 function scheduleAnswer(campaignId: Types.ObjectId, turnNumber: number, questionId: Types.ObjectId, characterName: string, question: string): Promise<void> {
     return enqueueMaddoxJob(
         String(campaignId),
         `resposta do turno ${turnNumber}`,
         async ({ jobId }) => {
-            const live = beginLive(String(campaignId), { kind: "answer", turnNumber, replyToId: String(questionId) })
-            let content = ""
-            let error: string | null = null
-            try {
-                const master = await getMaddoxMaster()
-                content = await withGenerationTimeout((signal) => master.answer({ campaignId: String(campaignId), jobId, turnNumber, questionId: String(questionId), characterName, question, signal }, live))
-            } catch (failure) {
-                log.warn({ err: failure instanceof Error ? failure.message : String(failure), campaignId: String(campaignId), turnNumber }, "[maddox] Falha ao responder a pergunta")
-                error = MADDOX_ANSWER_FAILED_MESSAGE
-            }
-            try {
-                const message = await MaddoxCampaignMessageModel.create({ campaignId, turnNumber, phase: "players", kind: "answer", content: error ? "" : content, error, replyToId: questionId })
-                live.end({ messageId: String(message._id), error })
-            } catch (failure) {
-                live.end({ messageId: null, error: MADDOX_ANSWER_FAILED_MESSAGE })
-                throw failure
-            }
-            await publishGameChanged(campaignId)
+            await answerQuestion(campaignId, jobId, turnNumber, questionId, characterName, question)
         },
         { kind: "answer", turnNumber, round: 0 },
     )
@@ -743,6 +782,8 @@ export async function onMemberLeftGame(campaignId: Types.ObjectId, memberId: Typ
         await forceCloseCombatTurn(campaignId)
         return
     }
+    // Personagem Opex removido na vez dele (DND-26): a vez é liberada e o turno segue para o próximo.
+    await MaddoxCampaignModel.updateOne({ _id: campaignId, "turn.opexActor.memberId": memberId }, { $set: { "turn.opexActor": null } })
     const pulled = await MaddoxCampaignModel.updateOne({ _id: campaignId, status: "active" }, { $pull: { "turn.eligibleMemberIds": memberId } })
     if (pulled.modifiedCount === 0) return
     await publishGameChanged(campaignId)
@@ -786,7 +827,7 @@ async function messagesDto(all: MessageDoc[], viewer: MessagesViewer): Promise<M
     ]
     const combatIds = messages.map((message) => message.combat?.combatId).filter((id): id is Types.ObjectId => Boolean(id))
     const [characters, users, combats] = await Promise.all([
-        characterIds.length ? MaddoxCharacterModel.find({ _id: { $in: characterIds } }).select("name portraitUrl").lean<Pick<CharacterDoc, "_id" | "name" | "portraitUrl">[]>() : Promise.resolve([]),
+        characterIds.length ? MaddoxCharacterModel.find({ _id: { $in: characterIds } }).select("name portraitUrl userId").lean<Pick<CharacterDoc, "_id" | "name" | "portraitUrl" | "userId">[]>() : Promise.resolve([]),
         skippers.length ? User.find({ _id: { $in: skippers } }).select("name username").lean<{ _id: Types.ObjectId; name?: string; username?: string }[]>() : Promise.resolve([]),
         combatIds.length ? import("./combat").then(({ loadCombats }) => loadCombats(combatIds)) : Promise.resolve(null),
     ])
@@ -807,6 +848,7 @@ async function messagesDto(all: MessageDoc[], viewer: MessagesViewer): Promise<M
             portraitUrl: character?.portraitUrl ?? null,
             content: hiddenAction ? "" : message.content,
             ...(hiddenAction ? { hiddenAction: true } : {}),
+            ...(isOpexUserId(message.userId) || isOpexUserId(character?.userId) ? { opex: true } : {}),
             replyToId: message.replyToId ? String(message.replyToId) : null,
             skippedByName: message.skippedBy ? (userById.get(message.skippedBy) ?? "Dono") : message.offlineSkip ? "ausência (offline)" : null,
             error: message.error ?? null,
@@ -932,7 +974,8 @@ export async function getGameState(campaignId: string, userId: string): Promise<
         .map(({ member, character }) => ({
             memberId: String(member._id),
             userId: member.userId,
-            name: users.get(member.userId) ?? "Usuário",
+            name: isOpexMember(member) ? MADDOX_OPEX_LABEL : (users.get(member.userId) ?? "Usuário"),
+            ...(isOpexMember(member) ? { opex: true } : {}),
             characterName: character?.name ?? null,
             portraitUrl: character?.portraitUrl ?? null,
             role: member.role,
@@ -940,8 +983,9 @@ export async function getGameState(campaignId: string, userId: string): Promise<
             eligible: playersTurn && eligible.has(String(member._id)),
             declared: playersTurn && declared.has(String(member._id)),
         }))
-        .sort((a, b) => (a.role === b.role ? 0 : a.role === "owner" ? -1 : 1))
+        .sort((a, b) => (a.role === "owner" ? 0 : a.opex ? 2 : 1) - (b.role === "owner" ? 0 : b.opex ? 2 : 1))
     const mine = participants.find((participant) => participant.memberId === String(loaded.member._id))
+    const opexActor = opexActorDto(campaign, members, combatActor)
     return {
         campaignId: String(campaign._id),
         name: campaign.name,
@@ -968,6 +1012,7 @@ export async function getGameState(campaignId: string, userId: string): Promise<
                 characterName: item.characterName ?? "Personagem",
                 label: item.combatRoll?.reason ?? item.combatReaction?.description ?? "",
             })),
+            opexActor,
         },
         showCheckDc: Boolean(campaign.showCheckDc),
         npcs: npcs.map((npc) => ({ id: String(npc._id), name: npc.name, portraitUrl: npc.portraitUrl ?? null, status: npc.status ?? "active", portraitGenerating: portraitsGenerating.has(String(npc._id)) })),
@@ -986,6 +1031,22 @@ export async function getGameState(campaignId: string, userId: string): Promise<
         messages: page.messages,
         hasMore: page.hasMore,
     }
+}
+
+/** Quem do Personagem Opex está agindo (ou parado com falha) neste turno dos jogadores (DND-26). */
+function opexActorDto(campaign: CampaignDoc, members: { member: MemberDoc; character: CharacterDoc | null }[], combatActor: CampaignDoc["turn"]["combatActor"] | null): NonNullable<MaddoxGameStateDto["turn"]["opexActor"]> | null {
+    if (campaign.status !== "active" || campaign.turn?.phase !== "players") return null
+    if (combatActor) {
+        const found = members.find(({ member }) => String(member._id) === String(combatActor.memberId))
+        if (!found || !isOpexMember(found.member)) return null
+        const run = found.member.opex?.run
+        const failed = run?.stage === "table" && run.status === "failed"
+        return { memberId: String(found.member._id), characterName: found.character?.name || MADDOX_OPEX_LABEL, failed, error: failed ? (run?.error ?? MADDOX_OPEX_FAILED_MESSAGE) : null, combat: true }
+    }
+    const actor = campaign.turn.opexActor
+    if (!actor) return null
+    const found = members.find(({ member }) => String(member._id) === String(actor.memberId))
+    return { memberId: String(actor.memberId), characterName: found?.character?.name || MADDOX_OPEX_LABEL, failed: Boolean(actor.failedAt), error: actor.failedAt ? (actor.error ?? MADDOX_OPEX_FAILED_MESSAGE) : null, combat: false }
 }
 
 /** Mensagens anteriores a `before` (paginação "Carregar anteriores"). */

@@ -29,30 +29,30 @@ describe("modelo do Maddox por rigor (DND-32)", () => {
     })
 
     it("bloco do narrador vale só no próprio nível, com variante e agente; a amostragem do padrão só entra se o provedor a aceita", () => {
-        const value = settings({ rigorModels: { main: [block("rigoroso")], interviewer: [] } })
+        const value = settings({ rigorModels: { main: [block("rigoroso")], interviewer: [], opexCharacter: [] } })
         expect(resolveNarratorModel(value, "rigoroso")).toEqual({ provider: "opencode", model: "anthropic/claude", agent: "build", variant: "max", temperature: null, maxOutputTokens: null })
         expect(resolveNarratorModel(value, "flexivel")).toEqual(DEFAULT_MAIN)
         expect(resolveNarratorModel(value, null)).toEqual(DEFAULT_MAIN)
-        const sampling = settings({ rigorModels: { main: [block("narrativo", { provider: "anthropic", model: "claude", agent: null, variant: null })], interviewer: [] } })
+        const sampling = settings({ rigorModels: { main: [block("narrativo", { provider: "anthropic", model: "claude", agent: null, variant: null })], interviewer: [], opexCharacter: [] } })
         expect(resolveNarratorModel(sampling, "narrativo")).toMatchObject({ provider: "anthropic", temperature: 0.7, maxOutputTokens: 4096 })
     })
 
     it("entrevistador: bloco próprio vence o provedor próprio e o do narrador", () => {
         const value = settings({
             interviewer: { provider: "gemini", model: "gemini-flash", agent: null, variant: null },
-            rigorModels: { main: [block("rigoroso", { model: "anthropic/main" })], interviewer: [block("rigoroso", { model: "anthropic/interviewer" })] },
+            rigorModels: { main: [block("rigoroso", { model: "anthropic/main" })], interviewer: [block("rigoroso", { model: "anthropic/interviewer" })], opexCharacter: [] },
         })
         expect(resolveInterviewerModel(value, "rigoroso")?.model).toBe("anthropic/interviewer")
         expect(resolveInterviewerModel(value, "narrativo")?.model).toBe("gemini-flash")
     })
 
     it("entrevistador com provedor próprio não herda o bloco do narrador", () => {
-        const value = settings({ interviewer: { provider: "gemini", model: "gemini-flash", agent: null, variant: null }, rigorModels: { main: [block("rigoroso")], interviewer: [] } })
+        const value = settings({ interviewer: { provider: "gemini", model: "gemini-flash", agent: null, variant: null }, rigorModels: { main: [block("rigoroso")], interviewer: [], opexCharacter: [] } })
         expect(resolveInterviewerModel(value, "rigoroso")).toEqual({ provider: "gemini", model: "gemini-flash", agent: null, variant: null, temperature: null, maxOutputTokens: null })
     })
 
     it("entrevistador em \"Mesmo do Maddox\" usa o modelo do narrador no mesmo rigor (bloco ou padrão com amostragem)", () => {
-        const value = settings({ rigorModels: { main: [block("fiel-dnd")], interviewer: [] } })
+        const value = settings({ rigorModels: { main: [block("fiel-dnd")], interviewer: [], opexCharacter: [] } })
         expect(resolveInterviewerModel(value, "fiel-dnd")).toEqual(resolveNarratorModel(value, "fiel-dnd"))
         expect(resolveInterviewerModel(value, "fiel-dnd")?.model).toBe("anthropic/claude")
         expect(resolveInterviewerModel(value, "equilibrado")).toEqual(DEFAULT_MAIN)
@@ -61,7 +61,7 @@ describe("modelo do Maddox por rigor (DND-32)", () => {
     it("configuração sem o campo novo (objeto antigo) e bloco incompleto caem no padrão", () => {
         const legacy = { ...settings(), rigorModels: undefined } as unknown as MaddoxSettings
         expect(resolveNarratorModel(legacy, "rigoroso")).toEqual(DEFAULT_MAIN)
-        const partial = settings({ rigorModels: { main: [block("rigoroso", { model: null })], interviewer: [] } })
+        const partial = settings({ rigorModels: { main: [block("rigoroso", { model: null })], interviewer: [], opexCharacter: [] } })
         expect(resolveNarratorModel(partial, "rigoroso")).toEqual(DEFAULT_MAIN)
     })
 

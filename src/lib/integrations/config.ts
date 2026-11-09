@@ -77,6 +77,7 @@ export interface IntegrationConfigMap {
         agentTokenEntityUnderstanding?: string
         agentTokenEntityImport?: string
         agentTokenMaddox?: string
+        agentTokenPersonagemOpex?: string
     }
 }
 

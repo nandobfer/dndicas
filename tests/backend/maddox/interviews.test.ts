@@ -352,7 +352,7 @@ describe("entrevista de cenário — conversa", () => {
 
     it("modelo por rigor (DND-32): em \"Mesmo do Maddox\" herda o bloco do narrador do rigor da campanha; o bloco do entrevistador vence", async () => {
         const narratorBlock = { rigor: "narrativo" as const, provider: "opencode" as const, model: "anthropic/narrador", agent: "maddox", variant: null }
-        state.settings = { ...state.settings!, rigorModels: { main: [narratorBlock], interviewer: [] } }
+        state.settings = { ...state.settings!, rigorModels: { main: [narratorBlock], interviewer: [], opexCharacter: [] } }
         const first = await newCampaign()
         await startScenario(first)
         expect(streamCalls.at(-1)).toMatchObject({ provider: "opencode", model: "anthropic/narrador" })
@@ -361,7 +361,7 @@ describe("entrevista de cenário — conversa", () => {
         await startScenario(other)
         expect(streamCalls.at(-1)).toMatchObject({ provider: "gemini", model: "gemini-pro" })
 
-        state.settings = { ...state.settings!, rigorModels: { main: [narratorBlock], interviewer: [{ ...narratorBlock, model: "anthropic/entrevistador", agent: null, variant: "high" }] } }
+        state.settings = { ...state.settings!, rigorModels: { main: [narratorBlock], interviewer: [{ ...narratorBlock, model: "anthropic/entrevistador", agent: null, variant: "high" }], opexCharacter: [] } }
         const second = await newCampaign()
         await startScenario(second)
         expect(ensureMaddoxSession).toHaveBeenLastCalledWith(expect.objectContaining({ campaignId: second, purpose: "scenario-interview", model: "anthropic/entrevistador", variant: "high" }))

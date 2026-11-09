@@ -83,15 +83,20 @@ async function ensureAgents(client: EngramindClient): Promise<StepResult> {
 
 /** Assinatura idempotente: repetida igual é reaproveitada; com outro modo, é atualizada. */
 export async function ensureSubscription(client: EngramindClient, identity: MemoryIdentity, target: string, mode: SubscriptionMode): Promise<{ created: boolean; channelCreated: boolean }> {
+    return ensureAgentSubscription(client, agentSlug(identity), target, mode)
+}
+
+/** Igual a `ensureSubscription`, pelo slug completo do agente (os agentes próprios dos Personagens Opex, DND-26). */
+export async function ensureAgentSubscription(client: EngramindClient, agent: string, target: string, mode: SubscriptionMode): Promise<{ created: boolean; channelCreated: boolean }> {
     try {
-        const result = (await client.subscriptions.create({ agent: agentSlug(identity), target, mode })) as { created?: boolean; channel_created?: boolean }
+        const result = (await client.subscriptions.create({ agent, target, mode })) as { created?: boolean; channel_created?: boolean }
         return { created: result.created !== false, channelCreated: result.channel_created === true }
     } catch (error) {
         if (engramindCodeOf(error) !== "SUBSCRIPTION_EXISTS") throw error
         const details = (error as { details?: { existing?: { id?: string } } }).details
         let id = details?.existing?.id
         if (!id) {
-            const { subscriptions } = await client.subscriptions.list({ agent: agentSlug(identity), limit: 200 })
+            const { subscriptions } = await client.subscriptions.list({ agent, limit: 200 })
             id = subscriptions.find((item) => item.target === target)?.id
         }
         if (!id) throw error

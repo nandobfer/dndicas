@@ -17,6 +17,7 @@ import { emitCombatRolled, emitCombatStepRolled } from "./game-live"
 import { assertActive, assertPlayersTurn, characterOf, evaluateTurn, getGameState, loadAsMember, publishGameChanged, recordTurnAction } from "./game"
 import { d20Expression, findActiveTactical, findActor, keptD20Of, mutateTactical, rollExpression, scheduleAbsenceCheck, type CombatActor, type TacticalCombat } from "./tactical-combat"
 import { characterDamage, characterHealing, concentrationRollDoc, damageCombatant, type CharacterHp } from "./tactical-master"
+import { isOpexUserId } from "./opex-members"
 
 /**
  * A vez do personagem no combate tático (Maddox 7) — SOMENTE servidor; `userId` é o usuário EFETIVO. O jogador escolhe
@@ -571,7 +572,8 @@ export async function evaluateCombatAbsence(campaignId: Types.ObjectId): Promise
     if (!member) return
     const { onlineUserIds } = await import("./game-presence")
     const online = await onlineUserIds(String(campaignId))
-    if (!online || online.has(member.userId)) {
+    // O Personagem Opex (DND-26) sempre conta como presente: a vez dele não passa por ausência.
+    if (!online || online.has(member.userId) || isOpexUserId(member.userId)) {
         if (combatActor.offlineSince) await MaddoxCampaignModel.updateOne({ _id: campaignId, "turn.number": campaign.turn.number }, { $set: { "turn.combatActor.offlineSince": null } })
         return
     }

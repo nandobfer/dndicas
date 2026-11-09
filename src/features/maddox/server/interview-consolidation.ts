@@ -26,6 +26,7 @@ async function missingWorldEntries(world: WorldCatalog): Promise<string[]> {
     return missing
 }
 import { acquireInterviewLock, campaignReservedNames, loadInterviewer, loadSubject, promptContext, releaseInterviewLock, type InterviewSubject } from "./interviews"
+import { sheetOwnerUserId } from "./opex-members"
 
 /**
  * Conclusão das entrevistas (Maddox 2) — SOMENTE servidor. Depois da confirmação, uma geração
@@ -70,8 +71,10 @@ async function ensureSheet(subject: InterviewSubject, name: string): Promise<{ s
     const current = subject.character?.sheetId ?? null
     if (current && (await CharacterSheet.exists({ _id: current }))) return { sheetId: current, created: false }
     const { createBlankSheet } = await import("@/features/character-sheets/api/character-sheets-service")
-    const user = await User.findById(subject.member.userId).select("username").lean<{ username?: string }>()
-    const sheet = await createBlankSheet(subject.member.userId, user?.username ?? "", name)
+    // Personagem Opex (DND-26): a ficha fica em "Minhas fichas" do dono da campanha.
+    const owner = sheetOwnerUserId(subject.member)
+    const user = await User.findById(owner).select("username").lean<{ username?: string }>()
+    const sheet = await createBlankSheet(owner, user?.username ?? "", name)
     const sheetId = new Types.ObjectId(String((sheet as { _id: unknown })._id))
     // Liga já: uma falha adiante não deixa uma ficha órfã (a nova tentativa reaproveita esta).
     await MaddoxCharacterModel.updateOne({ _id: subject.character!._id }, { $set: { sheetId } })

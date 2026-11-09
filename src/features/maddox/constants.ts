@@ -630,14 +630,13 @@ export const MADDOX_JEV_DECISION_DEFS: Record<MaddoxJevDecision, { label: string
  * Sessões do OpenCode, nunca compartilhadas: uma do narrador por campanha (recriada se sumir), uma da entrevista de cenário
  * e uma por membro na entrevista de personagem (as das entrevistas são excluídas ao concluir).
  */
-export const MADDOX_SESSION_PURPOSES = ["narrator", "scenario-interview", "character-interview", "opex-character"] as const
+export const MADDOX_SESSION_PURPOSES = ["narrator", "scenario-interview", "character-interview"] as const
 export type MaddoxSessionPurpose = (typeof MADDOX_SESSION_PURPOSES)[number]
 
 export const MADDOX_SESSION_PURPOSE_LABELS: Record<MaddoxSessionPurpose, string> = {
     narrator: "Narrador",
     "scenario-interview": "Entrevista de cenário",
     "character-interview": "Entrevista de personagem",
-    "opex-character": "Personagem Opex",
 }
 
 export const MADDOX_SESSION_STATUSES = ["active", "pending-deletion"] as const
@@ -888,6 +887,11 @@ export const MADDOX_OPEX_STALE_MS = 10 * 60 * 1000
 export const MADDOX_OPEX_MEMORIES_PER_TURN = 5
 export const MADDOX_OPEX_MEMORY_TITLE_MAX = 120
 export const MADDOX_OPEX_MEMORY_TEXT_MAX = 3_000
+
+/** Origens do consumo medido dos Personagens Opex. */
+export const MADDOX_OPEX_INTERVIEW_CONSUMPTION_ORIGIN = "maddox-opex-interview"
+export const MADDOX_OPEX_TURN_CONSUMPTION_ORIGIN = "maddox-opex-turn"
+export const MADDOX_OPEX_COMBAT_CONSUMPTION_ORIGIN = "maddox-opex-combat"
 
 /** Rótulo do Personagem Opex no lugar do nome do jogador (chip, narrador, diário). */
 export const MADDOX_OPEX_LABEL = "Personagem Opex"

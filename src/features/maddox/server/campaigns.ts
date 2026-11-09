@@ -4,7 +4,7 @@ import { AcaoAuditoria, dbConnect, recordAudit } from "@/lib/db"
 import { DomainError } from "@/lib/api/route"
 import { loggerFor } from "@/lib/logger"
 import { User } from "@/features/users/models/user"
-import { MADDOX_CAMPAIGN_AUDIT_ENTITY, MADDOX_DEFAULT_DENSITY, MADDOX_INVITE_CLOSED_STATUSES, MADDOX_SHEET_RIGORS, type MaddoxCampaignStatus } from "../constants"
+import { MADDOX_CAMPAIGN_AUDIT_ENTITY, MADDOX_DEFAULT_DENSITY, MADDOX_INVITE_CLOSED_STATUSES, MADDOX_OPEX_INTERVIEW_FAILED_MESSAGE, MADDOX_OPEX_LABEL, MADDOX_OPEX_STALE_MS, MADDOX_SHEET_RIGORS, type MaddoxCampaignStatus } from "../constants"
 import { MaddoxCampaignMemberModel, MaddoxCampaignModel, MaddoxCharacterModel, MaddoxCombatModel, MaddoxSceneImageModel, type IMaddoxCampaign, type IMaddoxCampaignMember, type IMaddoxCharacter } from "../models"
 import type { CreateMaddoxCampaignInput, UpdateMaddoxCampaignInput } from "../campaign-schemas"
 import type {
@@ -12,11 +12,14 @@ import type {
     MaddoxCampaignDetailDto,
     MaddoxCampaignListItemDto,
     MaddoxCampaignMemberDto,
+    MaddoxOpexMemberDto,
     MaddoxInviteLinkDto,
     MaddoxInvitePreviewDto,
 } from "../campaign-types"
 import { worldCatalogOf } from "../world-catalog"
 import { notifyCampaignChanged } from "./campaign-realtime"
+import { isOpexMember, realUserIds } from "./opex-members"
+import { isOpexRunning } from "./opex-runtime"
 
 /**
  * Campanhas Maddox (Maddox 1 e 2; a mesa do Maddox 3 fica em `./game`): lista, criação, lobby, link de convite, esboço de personagem e a
@@ -55,6 +58,32 @@ function characterDto(character: CharacterDoc | undefined, sheetSlugs: Map<strin
         interviewStatus: character.interview?.status ?? "pending",
         profile,
         sheetSlug: character.sheetId ? (sheetSlugs.get(String(character.sheetId)) ?? null) : null,
+    }
+}
+
+/**
+ * Situação do Personagem Opex no lobby (DND-26). Uma entrevista "em andamento" sem execução viva neste processo há mais
+ * de `MADDOX_OPEX_STALE_MS` (reinício) aparece como falha, com "Tentar de novo".
+ */
+function opexDto(member: MemberDoc, character: CharacterDoc | undefined, viewerIsOwner: boolean): MaddoxOpexMemberDto | null {
+    if (!isOpexMember(member) || !member.opex) return null
+    const run = member.opex.run
+    const ready = isMemberReadyToPlay(character)
+    const stale = run?.status === "running" && run.stage === "interview" && !isOpexRunning(`interview:${String(member._id)}`) && Date.now() - new Date(run.updatedAt ?? 0).getTime() > MADDOX_OPEX_STALE_MS
+    const status: MaddoxOpexMemberDto["status"] = ready
+        ? run?.status === "failed" && run.stage === "table"
+            ? "failed"
+            : "ready"
+        : run?.status === "failed" || stale
+          ? "failed"
+          : run?.status === "awaiting-approval"
+            ? "awaiting-approval"
+            : "interviewing"
+    return {
+        interviewMode: member.opex.interviewMode,
+        status,
+        error: status === "failed" ? (run?.error ?? MADDOX_OPEX_INTERVIEW_FAILED_MESSAGE) : null,
+        prompt: viewerIsOwner ? member.opex.prompt : null,
     }
 }
 
@@ -105,6 +134,8 @@ async function loadLastSceneImages(ids: Types.ObjectId[]): Promise<Map<string, s
     }
 }
 
+const rank = (member: Pick<MaddoxCampaignMemberDto, "role" | "kind">) => (member.role === "owner" ? 0 : member.kind === "opex" ? 2 : 1)
+
 /** Monta os DTOs com os membros ativos (dono primeiro), os perfis dos usuários e os personagens. */
 async function buildDtos(campaigns: CampaignDoc[], userId: string): Promise<(Omit<MaddoxCampaignListItemDto, "lastSceneImageUrl"> & { myMemberId: string | null })[]> {
     if (campaigns.length === 0) return []
@@ -113,7 +144,7 @@ async function buildDtos(campaigns: CampaignDoc[], userId: string): Promise<(Omi
     const characterIds = members.map((member) => member.characterId).filter((id): id is Types.ObjectId => Boolean(id))
     const [characters, users] = await Promise.all([
         characterIds.length ? MaddoxCharacterModel.find({ _id: { $in: characterIds } }).lean<CharacterDoc[]>() : Promise.resolve([] as CharacterDoc[]),
-        loadUsers([...members.map((member) => member.userId), ...campaigns.map((campaign) => campaign.ownerId)]),
+        loadUsers(realUserIds([...members.map((member) => member.userId), ...campaigns.map((campaign) => campaign.ownerId)])),
     ])
     // Retratos presos (processo reiniciado no meio da geração) viram falha antes de montar a tela.
     if (characters.some((character) => character.portrait?.status === "pending" || character.portrait?.status === "generating")) {
@@ -138,19 +169,23 @@ async function buildDtos(campaigns: CampaignDoc[], userId: string): Promise<(Omi
             .map((member) => {
                 const user = users.get(member.userId)
                 const character = member.characterId ? characterById.get(String(member.characterId)) : undefined
+                const opex = isOpexMember(member)
                 return {
                     id: String(member._id),
                     userId: member.userId,
-                    name: user?.name ?? "Usuário",
-                    username: user?.username ?? null,
-                    avatarUrl: user?.avatarUrl ?? null,
+                    kind: opex ? ("opex" as const) : ("human" as const),
+                    opex: opexDto(member, character, campaign.ownerId === userId),
+                    name: opex ? MADDOX_OPEX_LABEL : (user?.name ?? "Usuário"),
+                    username: opex ? null : (user?.username ?? null),
+                    avatarUrl: opex ? null : (user?.avatarUrl ?? null),
                     role: member.role,
                     joinedAt: iso(member.joinedAt),
                     character: characterDto(character, sheetSlugs),
                     ready: isMemberReadyToPlay(character),
                 }
             })
-            .sort((a, b) => (a.role === b.role ? 0 : a.role === "owner" ? -1 : 1))
+            // Dono primeiro, depois os jogadores e, por último, os Personagens Opex (na ordem de adição).
+            .sort((a, b) => rank(a) - rank(b))
         const mine = own.find((member) => member.userId === userId)
         const myDto = dtos.find((member) => member.userId === userId)
         return {
@@ -184,12 +219,12 @@ async function buildDtos(campaigns: CampaignDoc[], userId: string): Promise<(Omi
 }
 
 const memberUserIds = async (campaignId: Types.ObjectId) =>
-    (await MaddoxCampaignMemberModel.find({ campaignId, status: "joined" }).select("userId").lean<{ userId: string }[]>()).map((member) => member.userId)
+    realUserIds((await MaddoxCampaignMemberModel.find({ campaignId, status: "joined" }).select("userId").lean<{ userId: string }[]>()).map((member) => member.userId))
 
 /** Avisa os membros ativos (e quem mais for indicado, ex.: o removido) e marca a campanha como atualizada. */
 export async function changed(campaignId: Types.ObjectId, extraUserIds: string[] = []) {
     await MaddoxCampaignModel.updateOne({ _id: campaignId }, { $set: { updatedAt: new Date() } }, { timestamps: false })
-    await notifyCampaignChanged(String(campaignId), [...(await memberUserIds(campaignId)), ...extraUserIds])
+    await notifyCampaignChanged(String(campaignId), realUserIds([...(await memberUserIds(campaignId)), ...extraUserIds]))
 }
 
 /** Campanha + meu registro de membro ativo. Quem não participa recebe 404 (não revela a campanha). */
@@ -398,6 +433,8 @@ export async function removeMember(campaignId: string, memberId: string, userId:
     await MaddoxCampaignMemberModel.updateOne({ _id: target._id, status: "joined" }, { $set: { status } })
     await recordAudit({ userId, entidade: MADDOX_CAMPAIGN_AUDIT_ENTITY, entidadeId: String(campaign._id), acao: self ? AcaoAuditoria.ATUALIZAR : AcaoAuditoria.EXCLUIR, antes: { member: target.userId, status: "joined" }, depois: { member: target.userId, status } })
     await changed(campaign._id, [target.userId])
+    // Personagem Opex (DND-26): o canal individual de memórias é arquivado e o agente dele, aposentado.
+    if (isOpexMember(target)) void import("./opex").then(({ onOpexRemoved }) => onOpexRemoved(campaign._id, target._id, userId))
     if (campaign.status === "active") {
         // Sob demanda: `game` importa este módulo. Quem sai deixa de contar no turno dos jogadores. A saída já
         // foi gravada, auditada e avisada: uma falha ao reavaliar o turno não a desfaz (o `check` refaz depois).

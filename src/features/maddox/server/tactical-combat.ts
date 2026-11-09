@@ -9,6 +9,7 @@ import { canAct, freshEconomy, formatDiceExpression, parseDiceExpression, sortIn
 import type { IMaddoxCombatRoll, InitiativeSlot, MonsterStats, TacticalCharacterState, TacticalCombatState, TacticalCombatantState } from "../combat-types"
 import { MaddoxCampaignMemberModel, MaddoxCampaignMessageModel, MaddoxCampaignModel, MaddoxCharacterModel, MaddoxCombatModel, type IMaddoxCampaign, type IMaddoxCombat, type IMaddoxCombatant } from "../models"
 import { rechargeHit } from "./combat-monsters"
+import { isOpexUserId } from "./opex-members"
 
 /**
  * Combate tático (Maddox 7) — SOMENTE servidor: estado gravado, início com iniciativa, fila dos adversários do turno do
@@ -676,7 +677,7 @@ export async function advanceToNextCharacter(campaignId: Types.ObjectId, turnNum
     }
     const { onlineUserIds } = await import("./game-presence")
     const online = await onlineUserIds(String(campaignId))
-    return { kind: "player", memberId: new Types.ObjectId(actor.state.memberId), actorKey: nextKey, offline: online ? !online.has(actor.state.userId) : false }
+    return { kind: "player", memberId: new Types.ObjectId(actor.state.memberId), actorKey: nextKey, offline: online ? !online.has(actor.state.userId) && !isOpexUserId(actor.state.userId) : false }
 }
 
 // ── Ausência na própria vez ───────────────────────────────────────────────────
