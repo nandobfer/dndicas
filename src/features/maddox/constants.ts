@@ -886,7 +886,12 @@ export const MADDOX_OPEX_STALE_MS = 10 * 60 * 1000
 /** Memórias que o Opex pode gravar por declaração. */
 export const MADDOX_OPEX_MEMORIES_PER_TURN = 5
 export const MADDOX_OPEX_MEMORY_TITLE_MAX = 120
+/** Limite das memórias globais escritas pelo administrador (validação do formulário e da API). */
 export const MADDOX_OPEX_MEMORY_TEXT_MAX = 3_000
+/** Tamanho que o prompt pede ao Opex para cada memória dele. */
+export const MADDOX_OPEX_MEMORY_TEXT_EXPECTED = 600
+/** Corte de proteção da memória escrita pelo modelo (folgado: o teto real é o limite do canal no Engramind). */
+export const MADDOX_OPEX_MEMORY_TEXT_GUARD = 12_000
 
 /** Origens do consumo medido dos Personagens Opex. */
 export const MADDOX_OPEX_INTERVIEW_CONSUMPTION_ORIGIN = "maddox-opex-interview"

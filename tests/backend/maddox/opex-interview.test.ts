@@ -66,6 +66,7 @@ vi.mock("@/features/engramind/server/opex-characters", () => ({
 }))
 
 const { DEFAULT_MADDOX_SETTINGS } = await import("@/features/maddox/schemas")
+const { MADDOX_OPEX_INTERVIEW_FAILED_MESSAGE } = await import("@/features/maddox/constants")
 const { MaddoxCampaignModel, MaddoxCampaignMemberModel, MaddoxCharacterModel, MaddoxInterviewModel, MaddoxInterviewScriptModel } = await import("@/features/maddox/models")
 const { CharacterSheet } = await import("@/features/character-sheets/models/character-sheet")
 const campaigns = await import("@/features/maddox/server/campaigns")
@@ -281,6 +282,71 @@ describe("entrevista ao vivo", () => {
         expect((await MaddoxCharacterModel.findById(member!.characterId).lean())!.interview.status).toBe("done")
         const view = await opexInterview.getOpexInterview(id, memberId, ids.owner)
         expect(view).toMatchObject({ interviewMode: "live", status: "ready", characterName: "Brunna Pedraforte" })
+    })
+})
+
+describe("entrevista ao vivo — ajuste na síntese e retomada (DND-26)", () => {
+    it("o ajuste pedido na síntese vira rascunho e, aprovado, chega ao Maddox como resposta", async () => {
+        const id = await readyCampaign()
+        scripted.push(reply("Quem é você?"))
+        opexReplies.push(JSON.stringify({ resposta: "Sou Brunna." }))
+        await opex.addOpexCharacter(id, { prompt: "", interviewMode: "live" }, ids.owner)
+        await settle()
+        const member = await opexMember(id)
+        const memberId = String(member!._id)
+        scripted.push(proposal())
+        const first = await opexInterview.approveOpexDraft(id, memberId, {}, ids.owner)
+        await interviews.runTurn(first.turn, () => undefined)
+        first.after()
+        await settle()
+        expect((await interviewOf(member!._id))!.status).toBe("proposed")
+
+        opexReplies.push(JSON.stringify({ resposta: "Quero que ela venha de Karak." }))
+        await opexInterview.regenerateOpexDraft(id, memberId, "cidade natal", ids.owner)
+        await settle()
+        expect((await interviewOf(member!._id))!.opexDraft).toMatchObject({ status: "ready", content: "Quero que ela venha de Karak." })
+        scripted.push(proposal())
+        const adjust = await opexInterview.approveOpexDraft(id, memberId, {}, ids.owner)
+        await interviews.runTurn(adjust.turn, () => undefined)
+        adjust.after()
+        await settle()
+        const interview = await interviewOf(member!._id)
+        expect(interview!.messages.filter((message) => message.role === "user").map((message) => message.content)).toEqual(["Sou Brunna.", "Quero que ela venha de Karak."])
+        expect(interview!.opexDraft).toBeNull()
+    })
+
+    it("rascunho \"generating\" que sobrou de um reinício é gerado de novo pelo \"Tentar de novo\"", async () => {
+        const id = await readyCampaign()
+        scripted.push(reply("Quem é você?"))
+        opexReplies.push(new Error("caiu"), new Error("caiu"))
+        await opex.addOpexCharacter(id, { prompt: "", interviewMode: "live" }, ids.owner)
+        await settle()
+        const member = await opexMember(id)
+        // Reinício no meio da geração: o rascunho ficou "generating" sem execução viva, e a entrevista parada há tempo.
+        await MaddoxInterviewModel.updateOne({ memberId: member!._id }, { $set: { opexDraft: { id: "velho", status: "generating", kind: "message", content: "", payload: null, guidance: null, error: null, createdAt: new Date() } } })
+        await MaddoxCampaignMemberModel.updateOne({ _id: member!._id }, { $set: { "opex.run": { status: "running", stage: "interview", error: null, updatedAt: new Date(Date.now() - 60 * 60_000) } } })
+        expect((await campaigns.getCampaignDetail(id, ids.owner)).members.find((item) => item.kind === "opex")!.opex!.status).toBe("failed")
+
+        opexReplies.push(JSON.stringify({ resposta: "Sou Brunna." }))
+        await opexInterview.retryOpexInterview(id, String(member!._id), ids.owner)
+        await settle()
+        expect((await interviewOf(member!._id))!.opexDraft).toMatchObject({ status: "ready", content: "Sou Brunna." })
+        expect((await opexMember(id))!.opex!.run).toMatchObject({ status: "awaiting-approval" })
+    })
+
+    it("o motivo bruto da falha só vai ao dono; o jogador recebe a mensagem genérica", async () => {
+        const id = await readyCampaign()
+        scripted.push(reply("Quem é você?"))
+        opexReplies.push(new Error("401 chave sk-secreta recusada"), new Error("401 chave sk-secreta recusada"))
+        await opex.addOpexCharacter(id, { prompt: "", interviewMode: "autonomous" }, ids.owner)
+        await settle()
+        const asOwner = (await campaigns.getCampaignDetail(id, ids.owner)).members.find((item) => item.kind === "opex")!.opex!
+        const asPlayer = (await campaigns.getCampaignDetail(id, ids.ana)).members.find((item) => item.kind === "opex")!.opex!
+        expect(asOwner).toMatchObject({ status: "failed" })
+        expect(asOwner.error).toContain("sk-secreta")
+        expect(asPlayer.status).toBe("failed")
+        expect(asPlayer.error).not.toContain("sk-secreta")
+        expect(asPlayer.error).toBe(MADDOX_OPEX_INTERVIEW_FAILED_MESSAGE)
     })
 })
 

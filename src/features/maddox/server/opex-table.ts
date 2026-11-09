@@ -431,15 +431,27 @@ async function driveOnce(id: string): Promise<void> {
     if (!fresh || fresh.status !== "active" || fresh.turn?.phase !== "players") return
     const combatActor = fresh.turn.combatActor
     if (combatActor) {
-        const member = opex.get(String(combatActor.memberId))
-        if (!member) return
-        if (member.opex?.run?.stage === "table" && member.opex.run.status === "failed") return
-        const character = member.characterId ? await MaddoxCharacterModel.findById(member.characterId).lean<IMaddoxCharacter>() : null
-        void runOpexOnce(combatKey(id), () => runOpexCombatTurn(fresh, member, character))
+        if (!opex.has(String(combatActor.memberId))) return
+        // A tarefa relê o ator a cada passada: uma nova passada pedida durante a vez de um Opex age pelo ator da vez
+        // (o próximo Opex da iniciativa), não pelo que já encerrou.
+        void runOpexOnce(combatKey(id), () => runCurrentCombatActor(campaignId))
         return
     }
     const actor = fresh.turn.opexActor
     if (actor && !actor.failedAt) scheduleOpexTurn(campaignId, actor.memberId, fresh.turn.number)
+}
+
+/** Vez do Opex que está agindo agora no combate tático (campanha, membro e personagem lidos na hora). */
+async function runCurrentCombatActor(campaignId: Types.ObjectId): Promise<void> {
+    const campaign = await MaddoxCampaignModel.findById(campaignId).lean<CampaignDoc>()
+    if (!campaign || campaign.status !== "active" || campaign.turn?.phase !== "players") return
+    const actor = campaign.turn.combatActor
+    if (!actor) return
+    const member = await MaddoxCampaignMemberModel.findOne({ _id: actor.memberId, campaignId, kind: "opex", status: "joined" }).lean<MemberDoc>()
+    if (!member) return
+    if (member.opex?.run?.stage === "table" && member.opex.run.status === "failed") return
+    const character = member.characterId ? await MaddoxCharacterModel.findById(member.characterId).lean<IMaddoxCharacter>() : null
+    await runOpexCombatTurn(campaign, member, character)
 }
 
 // ── Ações do dono ───────────────────────────────────────────────────────────

@@ -1112,3 +1112,30 @@ describe("sugestões de ação do Maddox (DND-30)", () => {
         expect(actionOptionsView(state, newer)).toBeNull()
     })
 })
+
+describe("mesa Maddox — Personagem Opex parado (DND-26)", () => {
+    const stuck = (isOwner: boolean) =>
+        gameState({
+            turn: { number: 2, phase: "players", startedAt: null, generating: false, failed: false, awaitingChecks: false, pendingChecks: [], opexActor: { memberId: "m9", characterName: "Tork", failed: true, error: isOwner ? "provedor fora" : "O Personagem Opex não conseguiu agir.", combat: false } },
+            participants: [participant("m1", "u-owner", "Kael", { declared: true }), participant("m9", "opex:m9", "Tork", { opex: true })],
+            me: ME({ isOwner, memberId: isOwner ? "m1" : "m2", declared: true }),
+        })
+
+    it("o dono vê o motivo e decide: \"Tentar de novo\" e \"Pular\" (com confirmação) chamam as rotas da mesa", async () => {
+        post.mockResolvedValue(ok(gameState()))
+        await renderGame(stuck(true))
+        const banner = await screen.findByTestId("opex-failure")
+        expect(banner).toHaveTextContent("Tork não conseguiu agir: provedor fora")
+        fireEvent.click(within(banner).getByRole("button", { name: /Tentar de novo/ }))
+        await waitFor(() => expect(post).toHaveBeenCalledWith("/maddox/campaigns/c1/game/opex/m9/retry", {}))
+        fireEvent.click(within(screen.getByTestId("opex-failure")).getByRole("button", { name: /Pular/ }))
+        const dialog = await screen.findByRole("alertdialog")
+        fireEvent.click(within(dialog).getByRole("button", { name: "Pular" }))
+        await waitFor(() => expect(post).toHaveBeenCalledWith("/maddox/campaigns/c1/game/opex/m9/skip", {}))
+    })
+
+    it("quem não é o dono não recebe os botões", async () => {
+        await renderGame(stuck(false))
+        expect(screen.queryByTestId("opex-failure")).toBeNull()
+    })
+})

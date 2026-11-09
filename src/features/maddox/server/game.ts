@@ -987,7 +987,7 @@ export async function getGameState(campaignId: string, userId: string): Promise<
         }))
         .sort((a, b) => (a.role === "owner" ? 0 : a.opex ? 2 : 1) - (b.role === "owner" ? 0 : b.opex ? 2 : 1))
     const mine = participants.find((participant) => participant.memberId === String(loaded.member._id))
-    const opexActor = opexActorDto(campaign, members, combatActor)
+    const opexActor = opexActorDto(campaign, members, combatActor, loaded.member.role === "owner")
     return {
         campaignId: String(campaign._id),
         name: campaign.name,
@@ -1036,19 +1036,20 @@ export async function getGameState(campaignId: string, userId: string): Promise<
 }
 
 /** Quem do Personagem Opex está agindo (ou parado com falha) neste turno dos jogadores (DND-26). */
-function opexActorDto(campaign: CampaignDoc, members: { member: MemberDoc; character: CharacterDoc | null }[], combatActor: CampaignDoc["turn"]["combatActor"] | null): NonNullable<MaddoxGameStateDto["turn"]["opexActor"]> | null {
+/** O motivo bruto da falha (texto do provedor) só vai ao dono; os demais recebem a mensagem genérica. */
+function opexActorDto(campaign: CampaignDoc, members: { member: MemberDoc; character: CharacterDoc | null }[], combatActor: CampaignDoc["turn"]["combatActor"] | null, viewerIsOwner: boolean): NonNullable<MaddoxGameStateDto["turn"]["opexActor"]> | null {
     if (campaign.status !== "active" || campaign.turn?.phase !== "players") return null
     if (combatActor) {
         const found = members.find(({ member }) => String(member._id) === String(combatActor.memberId))
         if (!found || !isOpexMember(found.member)) return null
         const run = found.member.opex?.run
         const failed = run?.stage === "table" && run.status === "failed"
-        return { memberId: String(found.member._id), characterName: found.character?.name || MADDOX_OPEX_LABEL, failed, error: failed ? (run?.error ?? MADDOX_OPEX_FAILED_MESSAGE) : null, combat: true }
+        return { memberId: String(found.member._id), characterName: found.character?.name || MADDOX_OPEX_LABEL, failed, error: failed ? ((viewerIsOwner ? run?.error : null) ?? MADDOX_OPEX_FAILED_MESSAGE) : null, combat: true }
     }
     const actor = campaign.turn.opexActor
     if (!actor) return null
     const found = members.find(({ member }) => String(member._id) === String(actor.memberId))
-    return { memberId: String(actor.memberId), characterName: found?.character?.name || MADDOX_OPEX_LABEL, failed: Boolean(actor.failedAt), error: actor.failedAt ? (actor.error ?? MADDOX_OPEX_FAILED_MESSAGE) : null, combat: false }
+    return { memberId: String(actor.memberId), characterName: found?.character?.name || MADDOX_OPEX_LABEL, failed: Boolean(actor.failedAt), error: actor.failedAt ? ((viewerIsOwner ? actor.error : null) ?? MADDOX_OPEX_FAILED_MESSAGE) : null, combat: false }
 }
 
 /** Mensagens anteriores a `before` (paginação "Carregar anteriores"). */

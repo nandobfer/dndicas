@@ -68,7 +68,8 @@ export function isRetryable(error: unknown): boolean {
     return code === "UNREACHABLE" || code === "AUTH_INVALID" || code === "RATE_LIMITED" || error.status >= 500
 }
 
-async function textMaxOf(client: EngramindClient, channel: string): Promise<number> {
+/** Limite real de texto de uma memória no canal (configuração do consumidor, em cache). */
+export async function textMaxOf(client: EngramindClient, channel: string): Promise<number> {
     const cached = textMaxCache.__engramindCampaignTextMax
     if (cached && Date.now() - cached.at < TEXT_MAX_TTL_MS) return cached.channels.get(channel) ?? cached.value
     const settings = await client.consumerSettings()

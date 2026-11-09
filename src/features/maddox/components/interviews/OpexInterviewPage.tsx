@@ -55,7 +55,8 @@ export function OpexInterviewPage({ campaignId, memberId }: { campaignId: string
     const messages = interview?.messages ?? []
     const last = messages.at(-1)
     const live = data.interviewMode === "live"
-    const proposal = live && interview?.status === "proposed" && last?.role === "maddox" && last.proposal
+    // Um ajuste pedido na síntese vira rascunho: enquanto ele existe, o painel de aprovação toma o lugar do card de confirmação.
+    const proposal = live && interview?.status === "proposed" && last?.role === "maddox" && last.proposal && !interview?.opexDraft
     const busy = approve.isPending || Boolean(interview?.generating)
     const pendingAbility = [...messages].reverse().find((message) => message.abilityScores?.status === "pending")?.abilityScores ?? null
     const done = interview?.status === "done"

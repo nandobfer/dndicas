@@ -80,6 +80,11 @@ describe("agente do Personagem Opex", () => {
         expect(own[0]).toMatchObject({ text: "Kael mentiu para o grupo.", key: "opex:confianca-em-kael" })
         expect(own[0]!.author.agent).toBe(`dndicas/personagem-opex-${ref.memberId}`)
 
+        // O teto real é o limite de texto do canal no Engramind.
+        const max = fake.state.textMax
+        await opexChars.saveOpexCharacterMemories(ref, [{ title: "Diário", text: "x".repeat(max + 500) }])
+        expect([...fake.state.memories.values()].find((memory) => memory.key === "opex:diario")!.text.length).toBe(max)
+
         const original = fake.fetch
         vi.stubGlobal("fetch", (async (input: RequestInfo | URL, init?: RequestInit) => {
             if (String(input).includes("/v1/memories") && init?.method === "POST") throw Object.assign(new TypeError("fetch failed"), { cause: { code: "ECONNREFUSED" } })

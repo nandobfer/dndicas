@@ -81,7 +81,8 @@ function opexDto(member: MemberDoc, character: CharacterDoc | undefined, viewerI
     return {
         interviewMode: member.opex.interviewMode,
         status,
-        error: status === "failed" ? (run?.error ?? MADDOX_OPEX_INTERVIEW_FAILED_MESSAGE) : null,
+        // O motivo bruto (texto do provedor) só vai ao dono; os demais recebem a mensagem genérica.
+        error: status === "failed" ? ((viewerIsOwner ? run?.error : null) ?? MADDOX_OPEX_INTERVIEW_FAILED_MESSAGE) : null,
         prompt: viewerIsOwner ? member.opex.prompt : null,
     }
 }

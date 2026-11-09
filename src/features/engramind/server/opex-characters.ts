@@ -150,10 +150,13 @@ export async function saveOpexCharacterMemories(ref: OpexMemberRef, memories: re
     if (!memories.length || !(await engramindConnection().catch(() => null))) return { saved, pending }
     const channel = opexCharacterChannel(ref.campaignId, ref.memberId)
     const client = await opexCharacterClient(ref.memberId)
+    // O teto real é o limite do canal no Engramind (o corte em `opexMemoriesOf` é só proteção, bem acima).
+    const { textMaxOf } = await import("./campaign-memories")
+    const max = client ? await textMaxOf(client, channel).catch(() => null) : null
     for (const memory of memories) {
         const key = keyOf(memory.title)
         if (key === "opex:") continue
-        const body = { channel, key, upsert: true, title: memory.title.slice(0, 120), text: memory.text, tags: ["personagem-opex"], origin: { source: "maddox", label: ref.characterName || "Personagem Opex" } }
+        const body = { channel, key, upsert: true, title: memory.title.slice(0, 120), text: max && memory.text.length > max ? memory.text.slice(0, max).trimEnd() : memory.text, tags: ["personagem-opex"], origin: { source: "maddox", label: ref.characterName || "Personagem Opex" } }
         try {
             if (!client) throw new Error("Token do Personagem Opex indisponível")
             await client.call("POST", "/v1/memories", { body })

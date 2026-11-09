@@ -21,10 +21,10 @@ const rollCombatAction = vi.fn(async (campaignId: string, actionId: string) => {
     return { roll: {}, state: {} }
 })
 const submitCombatAction = vi.fn()
-const endCombatTurn = vi.fn(async () => ({}))
+const endCombatTurn = vi.fn(async (_campaignId: string, _input: unknown, _userId: string): Promise<object> => ({}))
 const skipCombatTurn = vi.fn(async () => undefined)
 const decideReaction = vi.fn(async () => ({}))
-const gameState: { value: MaddoxGameStateDto | null } = { value: null }
+const gameState: { value: MaddoxGameStateDto | null; byUser: Map<string, MaddoxGameStateDto> } = { value: null, byUser: new Map() }
 const publishGameChanged = vi.fn(async () => undefined)
 
 vi.mock("@/lib/db", () => ({ dbConnect: vi.fn(async () => undefined), recordAudit: vi.fn(async () => undefined), AcaoAuditoria: { ATUALIZAR: "ATUALIZAR" } }))
@@ -47,7 +47,7 @@ vi.mock("@/features/maddox/server/narrator", () => ({ loadSheetSummaries: vi.fn(
 vi.mock("@/features/maddox/server/game-checks", () => ({ rollCheck }))
 vi.mock("@/features/maddox/server/tactical-actions", () => ({ rollCombatRoll, rollCombatAction, submitCombatAction, endCombatTurn, skipCombatTurn }))
 vi.mock("@/features/maddox/server/combat-reactions", () => ({ decideReaction }))
-vi.mock("@/features/maddox/server/game", () => ({ getGameState: vi.fn(async () => gameState.value), publishGameChanged }))
+vi.mock("@/features/maddox/server/game", () => ({ getGameState: vi.fn(async (_campaignId: string, userId: string) => gameState.byUser.get(userId) ?? gameState.value), publishGameChanged }))
 
 const { MaddoxCampaignMemberModel, MaddoxCampaignMessageModel, MaddoxCampaignModel, MaddoxCharacterModel } = await import("@/features/maddox/models")
 const { driveOpex, retryOpexAction } = await import("@/features/maddox/server/opex-table")
@@ -96,6 +96,9 @@ beforeEach(async () => {
     for (const fn of [rollCheck, rollCombatRoll, rollCombatAction, submitCombatAction, endCombatTurn, decideReaction, publishGameChanged]) fn.mockClear()
     submitCombatAction.mockReset()
     gameState.value = null
+    gameState.byUser.clear()
+    endCombatTurn.mockReset()
+    endCombatTurn.mockImplementation(async () => ({}))
 })
 
 describe("Personagens Opex — testes e combate (DND-26)", () => {
@@ -183,5 +186,34 @@ describe("Personagens Opex — testes e combate (DND-26)", () => {
         await settle()
         expect(endCombatTurn).toHaveBeenCalledTimes(1)
         expect((await MaddoxCampaignMemberModel.findById(memberId).lean())!.opex!.run).toMatchObject({ status: "idle" })
+    })
+
+    it("dois Opex seguidos na iniciativa: o segundo age logo depois do primeiro, sem nenhuma leitura da mesa", async () => {
+        const { campaignId, memberId, userId } = await setup("players")
+        const secondId = new mongoose.Types.ObjectId()
+        const secondUser = opexUserIdFor(secondId)
+        const character = await MaddoxCharacterModel.create({ campaignId, memberId: secondId, userId: secondUser, name: "Brunna", interview: { status: "done", scriptVersion: 0 } })
+        await MaddoxCampaignMemberModel.create({ _id: secondId, campaignId, userId: secondUser, kind: "opex", role: "player", status: "joined", characterId: character._id, opex: { ownerUserId: owner, prompt: "", interviewMode: "autonomous", addedAt: new Date(), run: null, engramind: null } })
+        await MaddoxCampaignModel.updateOne({ _id: campaignId }, { $set: { "turn.combatActor": { memberId, actorKey: "c:1", startedAt: new Date() } } })
+        gameState.byUser.set(userId, combatState(String(memberId), true))
+        gameState.byUser.set(secondUser, combatState(String(secondId), true))
+        // "Encerrar turno" do primeiro passa a vez ao segundo e publica a mudança (o motor roda de novo) ainda dentro da vez do primeiro.
+        endCombatTurn.mockImplementation(async (id: string, _input: unknown, actingUser: string) => {
+            if (actingUser === userId) {
+                await MaddoxCampaignModel.updateOne({ _id: id }, { $set: { "turn.combatActor": { memberId: secondId, actorKey: "c:2", startedAt: new Date() } } })
+                gameState.byUser.set(userId, combatState(String(memberId), false))
+                // Espera o motor chegar à vez do segundo enquanto a do primeiro ainda roda (vira nova passada).
+                await driveOpex(id)
+            } else {
+                await MaddoxCampaignModel.updateOne({ _id: id }, { $set: { "turn.combatActor": null } })
+                gameState.byUser.set(secondUser, combatState(String(secondId), false))
+            }
+            return {}
+        })
+        opexReplies.push(JSON.stringify({ acoes: [], movimento: "Fico." }), JSON.stringify({ acoes: [], movimento: "Avanço." }))
+        await driveOpex(campaignId)
+        await settle()
+        expect(endCombatTurn.mock.calls.map((call) => call[2])).toEqual([userId, secondUser])
+        expect(endCombatTurn).toHaveBeenLastCalledWith(String(campaignId), { movimento: "Avanço." }, secondUser)
     })
 })

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest"
 import { buildOpexInstructions, opexCombatTask, opexMemoriesOf, opexTableActionSchema, opexTableTask, MADDOX_OPEX_ROLE_RULE, MADDOX_OPEX_MEMORY_RULE } from "@/features/maddox/server/opex-prompt"
-import { MADDOX_OPEX_MEMORIES_PER_TURN, MADDOX_OPEX_MEMORY_TITLE_MAX } from "@/features/maddox/constants"
+import { MADDOX_OPEX_MEMORIES_PER_TURN, MADDOX_OPEX_MEMORY_TEXT_EXPECTED, MADDOX_OPEX_MEMORY_TEXT_MAX, MADDOX_OPEX_MEMORY_TITLE_MAX } from "@/features/maddox/constants"
 
 /** Prompts e contratos do Personagem Opex (DND-26), módulo puro. */
 
@@ -40,6 +40,14 @@ describe("tarefa da mesa", () => {
         const memories = opexMemoriesOf(parsed)
         expect(memories).toHaveLength(MADDOX_OPEX_MEMORIES_PER_TURN)
         expect(memories[0]!.title.length).toBeLessThanOrEqual(MADDOX_OPEX_MEMORY_TITLE_MAX)
+    })
+
+    it("o prompt informa o tamanho esperado da memória e o corte de proteção fica bem acima do limite do administrador", () => {
+        expect(MADDOX_OPEX_MEMORY_RULE).toContain(`até ${MADDOX_OPEX_MEMORY_TEXT_EXPECTED} caracteres`)
+        const long = "Frase completa. ".repeat(250).trim()
+        expect(long.length).toBeGreaterThan(MADDOX_OPEX_MEMORY_TEXT_MAX)
+        const [memory] = opexMemoriesOf(opexTableActionSchema.parse({ acao: "nada", memorias: [{ titulo: "Longa", texto: long }] }))
+        expect(memory!.text).toBe(long)
     })
 })
 

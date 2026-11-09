@@ -253,8 +253,10 @@ async function runOpexInterview(memberId: string): Promise<void> {
                     await setOpexRun(campaign._id, member._id, "awaiting-approval", "interview")
                     return
                 }
-                if (doc.opexDraft && doc.opexDraft.status !== "failed") {
-                    if (doc.opexDraft.status === "ready") await setOpexRun(campaign._id, member._id, "awaiting-approval", "interview")
+                // Rascunho "generating" aqui não tem execução viva (as gerações rodam nesta mesma chave, em série): sobrou de
+                // um reinício e é gerado de novo.
+                if (doc.opexDraft?.status === "ready") {
+                    await setOpexRun(campaign._id, member._id, "awaiting-approval", "interview")
                     return
                 }
                 await generateDraft(state, pending, doc.opexDraft?.guidance ?? null)
@@ -397,7 +399,7 @@ export async function retryOpexInterview(campaignId: string, memberId: string, u
     if (isOpexRunning(runKey(memberId))) throw new DomainError(409, "O Personagem Opex ainda está respondendo. Aguarde.", "OPEX_BUSY")
     await MaddoxCampaignMemberModel.updateOne({ _id: member._id }, { $set: { "opex.run": { status: "running", stage: "interview", error: null, updatedAt: new Date() } } })
     const doc = await MaddoxInterviewModel.findOne({ campaignId: campaign._id, kind: KIND, memberId: member._id }).lean<InterviewDoc>()
-    if (doc?.opexDraft?.status === "failed") await MaddoxInterviewModel.updateOne({ _id: doc._id }, { $set: { opexDraft: null } })
+    if (doc?.opexDraft && doc.opexDraft.status !== "ready") await MaddoxInterviewModel.updateOne({ _id: doc._id }, { $set: { opexDraft: null } })
     const last = lastOf(doc)
     void runOpexOnce(runKey(memberId), async () => {
         if (last?.role === "maddox" && last.error && visible(doc).some((message) => message.role === "maddox" && !message.error)) {

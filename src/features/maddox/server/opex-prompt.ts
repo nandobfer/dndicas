@@ -1,5 +1,5 @@
 import { z } from "zod"
-import { MADDOX_ABILITY_METHODS, MADDOX_OPEX_MEMORIES_PER_TURN, MADDOX_OPEX_MEMORY_TEXT_MAX, MADDOX_OPEX_MEMORY_TITLE_MAX, MADDOX_PROFILE_SECTIONS, type MaddoxRigorLevel } from "../constants"
+import { MADDOX_ABILITY_METHODS, MADDOX_OPEX_MEMORIES_PER_TURN, MADDOX_OPEX_MEMORY_TEXT_EXPECTED, MADDOX_OPEX_MEMORY_TEXT_GUARD, MADDOX_OPEX_MEMORY_TITLE_MAX, MADDOX_PROFILE_SECTIONS, type MaddoxRigorLevel } from "../constants"
 import { ABILITY_LABEL_LIST } from "../interview-scores"
 import { rigorBlock } from "./interview-prompt"
 
@@ -24,6 +24,7 @@ export const MADDOX_OPEX_MEMORY_RULE = [
     `- A cada declaração você pode guardar até ${MADDOX_OPEX_MEMORIES_PER_TURN} memórias suas no campo "memorias": sentimentos, planos, motivações, opiniões sobre o que aconteceu e sobre os outros personagens, e relacionamentos.`,
     "- NÃO guarde fatos que já estão nas memórias da campanha (canal Jogadores): lugares, missões, eventos e fatos públicos já registrados. Guarde o que é SEU: o que o personagem sente, pensa e pretende.",
     "- Use um título curto e estável por assunto (ex.: \"Confiança em Lyra\"): o mesmo título atualiza a memória, em vez de criar outra.",
+    `- Cada memória tem até ${MADDOX_OPEX_MEMORY_TEXT_EXPECTED} caracteres: uma ou duas frases completas, sem cortar no meio.`,
 ].join("\n")
 
 export interface OpexPromptCampaign {
@@ -179,7 +180,7 @@ export type OpexTableAction = z.infer<typeof opexTableActionSchema>
 
 /** Memórias do Opex prontas para gravar (corte de proteção, sem invalidar a decisão). */
 export function opexMemoriesOf(action: Pick<OpexTableAction, "memorias">): { title: string; text: string }[] {
-    return action.memorias.slice(0, MADDOX_OPEX_MEMORIES_PER_TURN).map((memory) => ({ title: memory.titulo.slice(0, MADDOX_OPEX_MEMORY_TITLE_MAX).trim(), text: memory.texto.slice(0, MADDOX_OPEX_MEMORY_TEXT_MAX).trim() }))
+    return action.memorias.slice(0, MADDOX_OPEX_MEMORIES_PER_TURN).map((memory) => ({ title: memory.titulo.slice(0, MADDOX_OPEX_MEMORY_TITLE_MAX).trim(), text: memory.texto.slice(0, MADDOX_OPEX_MEMORY_TEXT_GUARD).trim() }))
 }
 
 // ── Combate tático ──────────────────────────────────────────────────────────

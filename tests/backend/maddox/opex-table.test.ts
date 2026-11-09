@@ -252,9 +252,12 @@ describe("Personagens Opex na mesa (DND-26)", () => {
         expect(state.turn.opexActor!.error).toContain("provedor fora")
         expect(await MaddoxCampaignMessageModel.countDocuments({ campaignId: id, kind: "narration" })).toBe(1)
 
-        // Só o dono decide.
+        // Só o dono decide (e só ele vê o motivo bruto; o jogador recebe a mensagem genérica).
         const player = await seedUser("jogador")
         await campaigns.joinByInvite((await campaigns.getInviteLink(id, owner)).token, player)
+        const asPlayer = (await game.getGameState(id, player)).turn.opexActor!
+        expect(asPlayer).toMatchObject({ failed: true })
+        expect(asPlayer.error).not.toContain("provedor fora")
         await expect(opex.retryOpexTableAction(id, opexId, player)).rejects.toMatchObject({ status: 403 })
 
         opexReplies.push(declare(id, { acao: "declarar", texto: "Agora vai." }))

@@ -4,7 +4,7 @@ import { fireEvent, render, screen, waitFor, within } from "@testing-library/rea
 import { renderWithQueryClient } from "../test-utils"
 import type { MaddoxCampaignDetailDto, MaddoxCampaignMemberDto } from "@/features/maddox/campaign-types"
 import type { MaddoxGameParticipantDto, MaddoxGameStateDto } from "@/features/maddox/game-types"
-import type { MaddoxOpexDraftDto } from "@/features/maddox/interview-types"
+import type { MaddoxOpexDraftDto, MaddoxOpexInterviewStateDto } from "@/features/maddox/interview-types"
 
 /** Telas dos Personagens Opex (DND-26): lobby, painel de aprovação (modo ao vivo) e as regras da faixa e da mesa. */
 
@@ -72,6 +72,7 @@ const detail = (over: Partial<MaddoxCampaignDetailDto> = {}): MaddoxCampaignDeta
 })
 
 const { CampaignPage } = await import("@/features/maddox/components/campaigns/CampaignPage")
+const { OpexInterviewPage } = await import("@/features/maddox/components/interviews/OpexInterviewPage")
 const { OpexDraftPanel } = await import("@/features/maddox/components/interviews/OpexDraftPanel")
 const { opexBannerText, seatStatus, turnProgress, composerBlockReason } = await import("@/features/maddox/game-view")
 
@@ -206,5 +207,67 @@ describe("regras da mesa com Personagens Opex", () => {
         expect(opexBannerText({ ...state({ memberId: "m9", characterName: "Tork", failed: true, error: null, combat: false }), me: { isOwner: false } })).toContain("aguardando o dono da campanha")
         expect(composerBlockReason({ ...state({ memberId: "m9", characterName: "Tork", failed: false, error: null, combat: false }), me: { ...state(null).me, declared: false } } as never)).toBe("Os Personagens Opex estão agindo. Aguarde a narração do Maddox.")
         expect(opexBannerText(state(null))).toBeNull()
+    })
+})
+
+describe("página da entrevista do Personagem Opex", () => {
+    const msg = (id: string, role: "maddox" | "user", content: string, proposal = false) => ({ id, role, content, proposal, error: null, createdAt: "2026-11-01T00:00:00.000Z" })
+    const view = (over: Partial<MaddoxOpexInterviewStateDto> & { messages?: ReturnType<typeof msg>[]; interviewStatus?: "in-progress" | "proposed" | "done"; draft?: MaddoxOpexDraftDto | null } = {}): MaddoxOpexInterviewStateDto => ({
+        interview: { id: "i1", campaignId: "c1", kind: "character", status: over.interviewStatus ?? "in-progress", scriptVersion: 0, messages: over.messages ?? [msg("a", "maddox", "Quem é você?")], generating: false, abilityRolls: null, opexDraft: over.draft ?? null, completedAt: null },
+        maddoxAvatarUrl: null,
+        memberId: "m9",
+        characterName: "Brunna",
+        interviewMode: over.interviewMode ?? "live",
+        status: over.status ?? "awaiting-approval",
+        error: over.error ?? null,
+        prompt: "",
+    })
+    const ready: MaddoxOpexDraftDto = { id: "d1", status: "ready", kind: "message", content: "Sou Brunna.", payload: null, guidance: null, error: null, createdAt: "2026-11-01T00:00:00.000Z" }
+    const serveInterview = (data: MaddoxOpexInterviewStateDto) => get.mockImplementation(async (url: string) => (url.endsWith("/interview") ? ok(data) : ok(detail())))
+
+    it("autônoma: só leitura, sem painel de aprovação", async () => {
+        serveInterview(view({ interviewMode: "autonomous", status: "interviewing", messages: [msg("a", "maddox", "Quem é você?"), msg("b", "user", "Sou Brunna.")] }))
+        renderWithQueryClient(<OpexInterviewPage campaignId="c1" memberId="m9" />)
+        expect(await screen.findByText(/Entrevista autônoma em andamento/)).toBeInTheDocument()
+        expect(screen.getByText("Sou Brunna.")).toBeInTheDocument()
+        expect(screen.queryByRole("button", { name: /^Aprovar$/ })).toBeNull()
+    })
+
+    it("ao vivo com rascunho: o painel de aprovação aparece e aprova pela rota", async () => {
+        serveInterview(view({ draft: ready }))
+        renderWithQueryClient(<OpexInterviewPage campaignId="c1" memberId="m9" />)
+        expect(await screen.findByRole("button", { name: /^Aprovar$/ })).toBeInTheDocument()
+        expect(screen.getByText("Sou Brunna.")).toBeInTheDocument()
+    })
+
+    it("ao vivo na síntese: confirma ou pede ajuste; com o ajuste gerado, o painel de aprovação substitui o card", async () => {
+        const messages = [msg("a", "maddox", "Quem é você?"), msg("b", "user", "Sou Brunna."), msg("c", "maddox", "Síntese: Brunna. Confirma?", true)]
+        let data = view({ interviewStatus: "proposed", messages })
+        get.mockImplementation(async (url: string) => (url.endsWith("/interview") ? ok(data) : ok(detail())))
+        post.mockImplementation(async (url: string) => {
+            if (url.endsWith("/draft/regenerate")) {
+                data = view({ interviewStatus: "proposed", messages, draft: { ...ready, content: "Quero que ela seja de Karak.", guidance: "cidade natal" } })
+                return ok(data)
+            }
+            return ok(detail())
+        })
+        renderWithQueryClient(<OpexInterviewPage campaignId="c1" memberId="m9" />)
+        expect(await screen.findByRole("button", { name: /Confirmar e concluir/ })).toBeInTheDocument()
+        expect(screen.queryByRole("button", { name: /^Aprovar$/ })).toBeNull()
+        fireEvent.change(screen.getByLabelText("Pedir um ajuste"), { target: { value: "cidade natal" } })
+        fireEvent.click(screen.getByRole("button", { name: "Pedir ajuste" }))
+        await waitFor(() => expect(post).toHaveBeenCalledWith("/maddox/campaigns/c1/opex/m9/interview/draft/regenerate", { orientacao: "cidade natal" }))
+        expect(await screen.findByRole("button", { name: /^Aprovar$/ })).toBeInTheDocument()
+        expect(screen.getByText("Quero que ela seja de Karak.")).toBeInTheDocument()
+        expect(screen.queryByRole("button", { name: /Confirmar e concluir/ })).toBeNull()
+    })
+
+    it("falha: mostra o motivo e \"Tentar de novo\" chama a rota", async () => {
+        serveInterview(view({ status: "failed", error: "O provedor não respondeu." }))
+        post.mockResolvedValue(ok(detail()))
+        renderWithQueryClient(<OpexInterviewPage campaignId="c1" memberId="m9" />)
+        const alert = await screen.findByText("O provedor não respondeu.")
+        fireEvent.click(within(alert.closest("[role=alert]") as HTMLElement).getByRole("button", { name: /Tentar de novo/ }))
+        await waitFor(() => expect(post).toHaveBeenCalledWith("/maddox/campaigns/c1/opex/m9/interview/retry", {}))
     })
 })

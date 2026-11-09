@@ -1375,7 +1375,8 @@ acham o membro pelo `userId` funcionam sem regra nova — e `opex: { ownerUserId
 A ficha fica com o dono (`sheetOwnerUserId`, "Minhas fichas"); o retrato e a foto da ficha também (`runCharacterPortrait`).
 Sem presença: conta sempre como presente (combate, ausência, reações). DTO: `kind`, `opex: { interviewMode, status, error, prompt
 (só o dono) }`; `status` = `interviewing | awaiting-approval | failed | ready` (entrevista "em andamento" sem execução viva há mais de
-`MADDOX_OPEX_STALE_MS` vira `failed`).
+`MADDOX_OPEX_STALE_MS` vira `failed`). O `error` bruto (texto do provedor) só vai ao dono; os demais recebem a mensagem genérica
+(vale também para `turn.opexActor.error` na mesa).
 
 **Adicionar** (`server/opex.ts`): dono, campanha fora de `ended/archived` (409 `CAMPAIGN_CLOSED`), cenário pronto (409
 `SCENARIO_PENDING`) e modelo disponível (409 `MADDOX_UNAVAILABLE`, a mensagem da criação). Sem limite. Não bloqueia "Iniciar campanha";
@@ -1391,7 +1392,8 @@ Remover usa `removeMember` (a mesma confirmação) e chama `onOpexRemoved` (arqu
 - *Ao vivo*: cada resposta vira `interview.opexDraft` (`generating | ready | failed`, `kind` message/ability-scores/hit-points); nada
   vai ao entrevistador antes de `POST …/interview/draft/approve` (vazio = como está; `{content}` ou o card editado, NDJSON da fala do
   Maddox) ou `…/draft/regenerate {orientacao}`. A síntese espera `…/interview/complete`. Tela fechada = pausa ("Aguardando sua
-  aprovação" no lobby). Página `/campanhas/[id]/entrevista/opex/[memberId]` (`OpexInterviewPage`, `OpexDraftPanel`), só o dono.
+  aprovação" no lobby). "Pedir ajuste" na síntese também vira rascunho: enquanto ele existe, o painel de aprovação toma o lugar
+  do card de confirmação. Um rascunho `generating` sem execução viva (reinício) é descartado e gerado de novo. Página `/campanhas/[id]/entrevista/opex/[memberId]` (`OpexInterviewPage`, `OpexDraftPanel`), só o dono.
 - Retrato: o fluxo da DND-31; "Gerar retrato de novo" do dono em `POST …/opex/[memberId]/portrait`.
 
 **Decisões** (`server/opex-player.ts`, `server/opex-prompt.ts` puro): geração efêmera com JSON validado por Zod e uma nova tentativa,
