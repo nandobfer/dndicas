@@ -108,5 +108,8 @@ memórias" (feature `memory-summary`) foi removido; o documento antigo em `ai_fe
 ## Testes
 
 `tests/backend/ai/*` (OpenCode Go: `opencode-go.test.ts`, `opencode-go-tester.test.ts`, `measured-usage.test.ts` e o bloco
-do Go em `stream-lazy-providers.test.ts`), `tests/frontend/ai/measured-usage-card.test.tsx`, `tests/backend/core/ai-image-route.test.ts`,
+do Go em `stream-lazy-providers.test.ts`, `entity-understanding-cost.test.ts`, `opencode-go-usage-route.test.ts`),
+`tests/backend/opex-agent/runner-cost.test.ts`, o caso de custo em `tests/backend/maddox/interview-ability-scores.test.ts` e
+`narrator-combat-campaign.test.ts`, `tests/frontend/ai/measured-usage-card.test.tsx`, `ai-provider-usage-tab.test.tsx`,
+`use-opencode-usage.test.tsx`, `tests/backend/core/ai-image-route.test.ts`,
 `tests/scripts/seed-data/translation/ai-translator.test.ts`.
