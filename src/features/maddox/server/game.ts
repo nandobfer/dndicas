@@ -45,7 +45,7 @@ import { checkSucceeded, keptD20 } from "../check-modifier"
 import { isHiddenPlayerAction, type PlayerActionsViewer } from "../player-actions-visibility"
 import { assertMemberCanPlay, isMemberReadyToPlay, loadMembership } from "./campaigns"
 import { getMaddoxMaster, type MaddoxMasterDeclaration } from "./game-master"
-import { beginLive, enqueueMaddoxJob, isCampaignBusy, takeDraftActionOptions, takeDraftChecks, takeDraftCombat, takeDraftImages } from "./game-live"
+import { beginLive, enqueueMaddoxJob, isCampaignBusy, takeDraftActionOptions, takeDraftChecks, takeDraftCombat, takeDraftImages, takeDraftOpexNpcFailures } from "./game-live"
 import { onlineUserIds } from "./game-presence"
 import { isOpexMember, isOpexUserId, realUserIds } from "./opex-members"
 
@@ -183,6 +183,8 @@ async function runMasterTurn(campaignId: Types.ObjectId, token: string, turnNumb
             const draftOptions = takeDraftActionOptions(String(campaignId), jobId)
             if (draftOptions.length && drafts.length) log.info({ campaignId: String(campaignId), turnNumber, round, characters: draftOptions.length }, "[maddox] sugestões de ação descartadas: a narração pediu testes")
             const actionOptions = draftOptions.length && !drafts.length ? draftOptions.map((item) => ({ memberId: new Types.ObjectId(item.memberId), characterId: new Types.ObjectId(item.characterId), characterName: item.characterName, options: item.options })) : null
+            // NPCs Opex (DND-27) cujo agente não respondeu: a linha de aviso fica na própria narração (só o dono a recebe).
+            const opexNpcFailures = takeDraftOpexNpcFailures(String(campaignId), jobId).map((item) => ({ npcId: new Types.ObjectId(item.npcId), npcName: item.npcName, error: item.error }))
             // O combate pedido nesta geração é aplicado ANTES de gravar a narração (o card precisa do id): o card de início vem acima
             // dela, o de fim abaixo. Os efeitos do fim só rodam depois (`finishCombatTurn`), que também grava o card que faltar.
             const combatEvents = takeDraftCombat(String(campaignId), jobId)
@@ -195,7 +197,7 @@ async function runMasterTurn(campaignId: Types.ObjectId, token: string, turnNumb
                     ...combat.messages.filter((plan) => plan.event === "start").map(combatCard),
                     // Bloco de um adversário (DND-25): os dados (cards das ações) vêm antes da narração dele.
                     ...(blockBefore?.kind === "npc" ? tacticalMessages : []),
-                    { campaignId, turnNumber, phase: "master", kind: "narration", content, segment: round, actionOptions },
+                    { campaignId, turnNumber, phase: "master", kind: "narration", content, segment: round, actionOptions, opexNpcFailures: opexNpcFailures.length ? opexNpcFailures : null },
                     ...drafts.map((draft) => draftCheckMessage(campaignId, turnNumber, round, draft)),
                     ...(blockBefore?.kind === "npc" ? [] : tacticalMessages),
                     ...combat.extraMessages,
@@ -796,9 +798,16 @@ export async function onMemberLeftGame(campaignId: Types.ObjectId, memberId: Typ
 interface MessagesViewer extends PlayerActionsViewer {
     memberId: string | null
     showCheckDc: boolean
+    /** Dono da campanha: recebe o aviso (com o motivo) dos NPCs Opex que não responderam (DND-27). */
+    isOwner: boolean
 }
 
-const viewerOf = (campaign: CampaignDoc, member: MemberDoc): MessagesViewer => ({ memberId: String(member._id), showCheckDc: Boolean(campaign.showCheckDc), hidePlayerActions: Boolean(campaign.hidePlayerActions) })
+const viewerOf = (campaign: CampaignDoc, member: MemberDoc): MessagesViewer => ({
+    memberId: String(member._id),
+    showCheckDc: Boolean(campaign.showCheckDc),
+    hidePlayerActions: Boolean(campaign.hidePlayerActions),
+    isOwner: member.role === "owner" && member.userId === campaign.ownerId,
+})
 
 /** Sugestões de ação da narração só para o personagem de quem vê (DND-30): as dos outros nunca saem do servidor. */
 const actionOptionsFor = (message: MessageDoc, viewer: MessagesViewer): string[] | null => {
@@ -833,6 +842,7 @@ async function messagesDto(all: MessageDoc[], viewer: MessagesViewer): Promise<M
     ])
     const { combatEventDto } = combats ? await import("./combat") : { combatEventDto: null }
     const tacticalDto = messages.some((message) => message.combatAction || message.combatRoll || message.combatReaction) ? await import("./tactical-dto") : null
+    const opexNpcs = await opexNpcChips(messages, combats)
     const characterById = new Map(characters.map((character) => [String(character._id), character]))
     const userById = new Map(users.map((user) => [String(user._id), user.name?.trim() || user.username || "Dono"]))
     return messages.map((message) => {
@@ -855,9 +865,9 @@ async function messagesDto(all: MessageDoc[], viewer: MessagesViewer): Promise<M
             check: message.check ? checkDto(message, viewer, userById) : null,
             combat: (() => {
                 const found = message.combat && combats ? combats.get(String(message.combat.combatId)) : undefined
-                return found && combatEventDto ? combatEventDto(found, message.combat!.event) : null
+                return found && combatEventDto ? combatEventDto(found, message.combat!.event, opexNpcs.npcIds) : null
             })(),
-            combatAction: message.combatAction && tacticalDto ? tacticalDto.combatActionDto(message.combatAction) : null,
+            combatAction: message.combatAction && tacticalDto ? tacticalDto.combatActionDto(message.combatAction, opexNpcs.actorKeys.has(`${message.combatAction.combatId}:${message.combatAction.actorKey}`)) : null,
             combatRoll:
                 message.combatRoll && tacticalDto
                     ? tacticalDto.combatRollDto(message.combatRoll, message.combatRoll.rolledBy && message.combatRoll.rolledBy !== message.userId ? (message.combatRoll.rolledBy === "server" ? "o servidor" : (userById.get(message.combatRoll.rolledBy) ?? "Dono")) : null)
@@ -866,9 +876,35 @@ async function messagesDto(all: MessageDoc[], viewer: MessagesViewer): Promise<M
             offlineSkip: Boolean(message.offlineSkip),
             ...(message.kind === "reminder" ? { reminder: { status: message.reminder?.status ?? "pending" } } : {}),
             ...(message.kind === "narration" ? { actionOptions: actionOptionsFor(message, viewer) } : {}),
+            // O motivo bruto do provedor só vai ao dono; para os demais o campo nem é serializado (DND-27).
+            ...(viewer.isOwner && message.opexNpcFailures?.length ? { opexNpcFailures: message.opexNpcFailures.map((item) => ({ npcName: item.npcName, reason: item.error })) } : {}),
             createdAt: new Date(message.createdAt).toISOString(),
         }
     })
+}
+
+/**
+ * Chip "Opex" dos NPCs Opex conhecidos nos cards estruturados (DND-27): os combatentes dos cards de combate (início, fim e
+ * ordem) e o autor do card de ação do combate tático. O texto da narração fica sem chip.
+ */
+async function opexNpcChips(messages: readonly MessageDoc[], combats: Map<string, import("../models").IMaddoxCombat> | null): Promise<{ npcIds: Set<string>; actorKeys: Set<string> }> {
+    const actions = messages.map((message) => message.combatAction).filter((action): action is NonNullable<MessageDoc["combatAction"]> => Boolean(action && action.actorKind === "combatant"))
+    if (!actions.length && !combats?.size) return { npcIds: new Set(), actorKeys: new Set() }
+    try {
+        const actionCombatIds = [...new Set(actions.map((action) => action.combatId))].filter((id) => Types.ObjectId.isValid(id) && !combats?.has(id))
+        const extra = actionCombatIds.length ? await MaddoxCombatModel.find({ _id: { $in: actionCombatIds.map((id) => new Types.ObjectId(id)) } }).select("combatants.npcId combatants.tactical.actorKey").lean<Pick<IMaddoxCombat, "_id" | "combatants">[]>() : []
+        const all = [...(combats?.values() ?? []), ...extra]
+        const { knownOpexNpcIds } = await import("./opex-npcs")
+        const npcIds = await knownOpexNpcIds(all.flatMap((combat) => (combat.combatants ?? []).map((item) => item.npcId)))
+        const actorKeys = new Set<string>()
+        for (const combat of all) {
+            for (const item of combat.combatants ?? []) if (item.npcId && item.tactical?.actorKey && npcIds.has(String(item.npcId))) actorKeys.add(`${String(combat._id)}:${item.tactical.actorKey}`)
+        }
+        return { npcIds, actorKeys }
+    } catch (error) {
+        log.warn({ err: error instanceof Error ? error.message : String(error) }, "[maddox] chips dos NPCs Opex indisponíveis")
+        return { npcIds: new Set(), actorKeys: new Set() }
+    }
 }
 
 function checkDto(message: MessageDoc, viewer: MessagesViewer, userById: Map<string, string>): MaddoxGameCheckDto {
@@ -944,7 +980,7 @@ export async function getGameState(campaignId: string, userId: string): Promise<
         joinedMembers(campaign._id),
         messagesPage(campaign._id, null, viewer),
         maddoxAvatarUrl(),
-        MaddoxNpcModel.find({ campaignId: campaign._id, visibility: "players" }).sort({ name: 1 }).select("name portraitUrl status").lean<{ _id: Types.ObjectId; name: string; portraitUrl: string | null; status?: IMaddoxNpc["status"] }[]>(),
+        MaddoxNpcModel.find({ campaignId: campaign._id, visibility: "players" }).sort({ name: 1 }).select("name portraitUrl status opex.active").lean<{ _id: Types.ObjectId; name: string; portraitUrl: string | null; status?: IMaddoxNpc["status"]; opex?: { active?: boolean } | null }[]>(),
         campaign.status === "active" && campaign.turn?.phase === "master" && campaign.turn.awaitingChecks
             ? MaddoxCampaignMessageModel.find({ campaignId: campaign._id, turnNumber: campaign.turn.number, kind: "check", "check.round": campaign.turn.checkRound ?? 0, "check.status": "pending" })
                   .sort({ _id: 1 })
@@ -1017,9 +1053,10 @@ export async function getGameState(campaignId: string, userId: string): Promise<
             opexActor,
         },
         showCheckDc: Boolean(campaign.showCheckDc),
-        npcs: npcs.map((npc) => ({ id: String(npc._id), name: npc.name, portraitUrl: npc.portraitUrl ?? null, status: npc.status ?? "active", portraitGenerating: portraitsGenerating.has(String(npc._id)) })),
+        npcs: npcs.map((npc) => ({ id: String(npc._id), name: npc.name, portraitUrl: npc.portraitUrl ?? null, status: npc.status ?? "active", portraitGenerating: portraitsGenerating.has(String(npc._id)), ...(npc.opex?.active ? { opex: true } : {}) })),
+        canManageOpexNpcs: await (await import("./opex-npcs")).canManageOpexNpcsAs(campaign.ownerId, userId),
         sceneImages: sceneImageControl,
-        combat: activeCombat ? { ...(await import("./combat")).combatDto(activeCombat), ...(tacticalCombat && tacticalModule ? { tactical: await tacticalModule.loadTacticalDto(tacticalCombat) } : {}) } : null,
+        combat: activeCombat ? { ...(await import("./combat")).combatDto(activeCombat, await (await import("./opex-npcs")).knownOpexNpcIds((activeCombat.combatants ?? []).map((item) => item.npcId))), ...(tacticalCombat && tacticalModule ? { tactical: await tacticalModule.loadTacticalDto(tacticalCombat) } : {}) } : null,
         participants,
         me: {
             memberId: String(loaded.member._id),

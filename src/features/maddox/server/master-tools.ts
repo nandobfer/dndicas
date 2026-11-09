@@ -43,7 +43,7 @@ import {
 import { normalizeCatalogName } from "../catalog-markup"
 import { MaddoxCampaignMemberModel, MaddoxCampaignModel, MaddoxCharacterModel, MaddoxNpcModel, type IMaddoxCampaign, type IMaddoxCharacter, type IMaddoxNpc } from "../models"
 import { MADDOX_ABILITIES, MADDOX_ABILITY_LABELS, MADDOX_SKILLS, checkAbility, checkTitle } from "../check-modifier"
-import { addDraftCheck, addDraftCombat, addDraftNpcPortrait, setDraftActionOptions, jobDraftChecks, jobDraftCombat, jobDraftSceneImage, jobWorkspace, maddoxJobMeta, setDraftSceneImage, type MaddoxDraftCombatReward } from "./game-live"
+import { addDraftCheck, addDraftCombat, addDraftNpcPortrait, addDraftOpexNpcFailure, jobOpexNpcConsult, jobOpexNpcConsultCount, setJobOpexNpcConsult, setDraftActionOptions, jobDraftChecks, jobDraftCombat, jobDraftSceneImage, jobWorkspace, maddoxJobMeta, setDraftSceneImage, type MaddoxDraftCombatReward } from "./game-live"
 import { catalogEntityTypeSchema } from "@/features/mcp/server/catalog-schemas"
 import type { TacticalDraftCombatant } from "./tactical-combat"
 import type { CampaignMemoryView } from "@/features/engramind/campaign-memory-format"
@@ -117,6 +117,7 @@ const npcDto = (npc: IMaddoxNpc, full: boolean) => ({
     name: npc.name,
     status: npc.status,
     visibility: npc.visibility,
+    ...(npc.opex?.active ? { npcOpex: true } : {}),
     publicDescription: full ? npc.publicDescription : preview(npc.publicDescription),
     ...(full ? { masterNotes: npc.masterNotes } : {}),
 })
@@ -263,6 +264,14 @@ export const MADDOX_MASTER_TOOLS: readonly MaddoxMasterTool[] = [
         }),
         async execute(context, input) {
             const saved = await saveNpc(context, input)
+            // NPC Opex que morre deixa de ser Opex sozinho (DND-27).
+            if (input.status === "dead") {
+                const npc = await MaddoxNpcModel.findOne({ campaignId: context.campaignId, nameKey: keyOf(saved.name) }).select("_id").lean<{ _id: Types.ObjectId }>()
+                if (npc) {
+                    const { retireOpexNpcIfDead } = await import("./opex-npcs")
+                    if (await retireOpexNpcIfDead(context.campaignId, npc._id)) Object.assign(saved, { npcOpex: "deixou de ser NPC Opex (morreu)" })
+                }
+            }
             if (!input.gerarRetrato) return saved
             return { ...saved, retrato: await requestNpcPortraitDraft(context, saved.name) }
         },
@@ -976,8 +985,149 @@ export const MADDOX_ACTION_OPTIONS_TOOLS: readonly MaddoxMasterTool[] = [
     }),
 ]
 
+
+// ── NPCs Opex (DND-27) ─────────────────────────────────────────────────────────
+
+export const MADDOX_OPEX_NPC_CONSULT_TOOL_NAME = "consultar_npc_opex"
+export const MADDOX_OPEX_NPC_TOOL_NAMES = ["promover_npc_opex", "desfazer_npc_opex", "gravar_memoria_npc_opex", MADDOX_OPEX_NPC_CONSULT_TOOL_NAME] as const
+
+/** Recusas do domínio (`DomainError`) viram mensagem para o narrador. */
+async function opexNpcCall<T>(work: () => Promise<T>): Promise<T> {
+    try {
+        return await work()
+    } catch (error) {
+        const { DomainError } = await import("@/lib/api/route")
+        if (error instanceof DomainError) throw new MaddoxToolError(error.message)
+        throw error
+    }
+}
+
+/** NPC Opex vivo pelo nome (recusa inexistente, que não é Opex e morto). */
+async function loadOpexNpc(context: MaddoxToolContext, name: string): Promise<IMaddoxNpc> {
+    const npc = await MaddoxNpcModel.findOne({ campaignId: context.campaignId, nameKey: keyOf(clip(name, MADDOX_TOOL_NAME_MAX)) }).lean<IMaddoxNpc>()
+    if (!npc) {
+        const opex = await MaddoxNpcModel.find({ campaignId: context.campaignId, "opex.active": true }).select("name").lean<{ name: string }[]>()
+        throw new MaddoxToolError(`Nenhum NPC chamado "${name}" nesta campanha. NPCs Opex: ${keyList(opex.map((item) => item.name))}.`)
+    }
+    if (!npc.opex?.active) throw new MaddoxToolError(`${npc.name} não é NPC Opex: decida você o que ele fala e faz.`)
+    if (npc.status === "dead") throw new MaddoxToolError(`${npc.name} está morto.`)
+    return npc
+}
+
+export interface OpexNpcConsultResult {
+    npc: string
+    fala?: string
+    acao?: string
+    falhou?: true
+    nota: string
+}
+
+const opexNpcFallbackNote = (name: string) => `O NPC Opex não respondeu: decida você o que ${name} fala e faz nesta narração.`
+
+/**
+ * Ferramentas dos NPCs Opex: promover e desfazer (o Maddox julga a importância do NPC), gravar memória fora de cena (sem
+ * acionar o agente) e consultar o agente do NPC (só nas narrações: nas respostas a perguntas o Maddox decide sozinho).
+ */
+export const MADDOX_OPEX_NPC_TOOLS: readonly MaddoxMasterTool[] = [
+    define({
+        name: "promover_npc_opex",
+        description: [
+            "Promove um NPC já registrado (save_npc) a NPC Opex: ele ganha um agente de IA próprio, com memória própria, que decide o que fala e faz nas narrações em que aparece e na vez dele no combate tático.",
+            "Use só para NPCs importantes ou recorrentes para a campanha (um aliado central, o vilão principal). Vale também para NPCs que os jogadores ainda não conhecem.",
+            "Recusa NPC inexistente, morto, campanha encerrada e o limite de NPCs Opex da configuração. Não cite a promoção na narração.",
+        ].join(" "),
+        readOnly: false,
+        input: z.object({ npc: z.string().min(1).describe("Nome do NPC") }),
+        async execute(context, input) {
+            const { promoteOpexNpc } = await import("./opex-npcs")
+            const { MADDOX_OPEX_NPC_SYSTEM_ACTOR } = await import("../constants")
+            const result = await opexNpcCall(() => promoteOpexNpc(context.campaignId, { name: input.npc }, MADDOX_OPEX_NPC_SYSTEM_ACTOR))
+            if (result.alreadyOpex) return { npc: result.npc.name, jaOpex: true, nota: `${result.npc.name} já é NPC Opex: nada mudou.` }
+            return {
+                npc: result.npc.name,
+                promovido: true,
+                nota: `${result.npc.name} agora é NPC Opex: nas próximas narrações em que ele aparecer, consulte-o com ${MADDOX_OPEX_NPC_CONSULT_TOOL_NAME} antes de narrar o que ele fala e faz.`,
+            }
+        },
+    }),
+    define({
+        name: "desfazer_npc_opex",
+        description: "Desfaz um NPC Opex: o agente dele é desligado, as memórias individuais são arquivadas (voltam numa nova promoção) e você volta a narrá-lo sozinho. NPC Opex que morre deixa de ser Opex sozinho.",
+        readOnly: false,
+        input: z.object({ npc: z.string().min(1).describe("Nome do NPC") }),
+        async execute(context, input) {
+            const { retireOpexNpc } = await import("./opex-npcs")
+            const { MADDOX_OPEX_NPC_SYSTEM_ACTOR } = await import("../constants")
+            const result = await opexNpcCall(() => retireOpexNpc(context.campaignId, { name: input.npc }, "maddox", MADDOX_OPEX_NPC_SYSTEM_ACTOR))
+            if (result.notOpex) return { npc: result.npc.name, naoOpex: true, nota: `${result.npc.name} não é NPC Opex: nada mudou.` }
+            return { npc: result.npc.name, desfeito: true, nota: `${result.npc.name} deixou de ser NPC Opex: você volta a narrá-lo sozinho.` }
+        },
+    }),
+    define({
+        name: "gravar_memoria_npc_opex",
+        description:
+            "Grava uma memória no canal individual de um NPC Opex SEM acionar o agente dele: algo que ele soube ou viveu fora de cena (ex.: \"seus espiões contaram que o grupo chegou a Vallaki\"). Vale na próxima consulta. O mesmo título atualiza a memória, sem duplicar.",
+        readOnly: false,
+        input: z.object({
+            npc: z.string().min(1).describe("Nome do NPC Opex"),
+            titulo: z.string().min(1).describe("Título curto e estável do assunto"),
+            texto: z.string().min(1).describe("O que o NPC passa a saber, do ponto de vista dele"),
+        }),
+        async execute(context, input) {
+            const npc = await loadOpexNpc(context, input.npc)
+            const fit = fitter()
+            const { saveOpexNpcMemories } = await import("@/features/engramind/server/opex-npcs")
+            const { MADDOX_OPEX_MEMORY_TITLE_MAX } = await import("../constants")
+            const result = await saveOpexNpcMemories({ campaignId: String(context.campaignId), npcId: String(npc._id), npcName: npc.name }, [{ title: clip(input.titulo, MADDOX_OPEX_MEMORY_TITLE_MAX), text: fit.fit("texto", input.texto) }], "Maddox")
+            if (!result.saved && !result.pending) return { npc: npc.name, gravada: false, nota: "A rede de memórias não está configurada: a memória não foi gravada. Siga sem ela." }
+            return { npc: npc.name, gravada: true, ...(result.pending ? { nota: "A rede de memórias está fora: a memória fica na fila e entra quando ela voltar." } : {}), ...fit.notice() }
+        },
+    }),
+    define({
+        name: MADDOX_OPEX_NPC_CONSULT_TOOL_NAME,
+        description: [
+            "Consulta o agente de um NPC Opex: ele decide o que o NPC fala e faz nesta cena. Chame ANTES de narrar a fala ou a ação de um NPC Opex que aparece ou interage com os personagens, e narre a partir da decisão (você resolve os resultados).",
+            "Em `situacao`, conte o que o NPC percebe da cena agora (sem segredos que ele não saberia). Só nas narrações.",
+        ].join(" "),
+        readOnly: false,
+        input: z.object({
+            npc: z.string().min(1).describe("Nome do NPC Opex"),
+            situacao: z.string().min(1).describe("O contexto da cena que o NPC percebe agora"),
+            pergunta: z.string().optional().describe("Pergunta direta ao NPC (opcional)"),
+        }),
+        async execute(context, input): Promise<OpexNpcConsultResult> {
+            const meta = context.jobId ? maddoxJobMeta(String(context.campaignId), context.jobId) : null
+            if (!meta || meta.kind !== "narration") throw new MaddoxToolError("Nas respostas a perguntas, decida você mesmo pelo NPC.")
+            const npc = await loadOpexNpc(context, input.npc)
+            const campaignId = String(context.campaignId)
+            const npcId = String(npc._id)
+            const cached = jobOpexNpcConsult<OpexNpcConsultResult>(campaignId, context.jobId!, npcId)
+            if (cached) return cached
+            const { MADDOX_OPEX_NPC_CONSULTS_PER_NARRATION } = await import("../constants")
+            if (jobOpexNpcConsultCount(campaignId, context.jobId!) >= MADDOX_OPEX_NPC_CONSULTS_PER_NARRATION) {
+                throw new MaddoxToolError(`Limite de ${MADDOX_OPEX_NPC_CONSULTS_PER_NARRATION} consultas a NPCs Opex por narração atingido: decida você o que ${npc.name} fala e faz.`)
+            }
+            const campaign = await MaddoxCampaignModel.findById(context.campaignId).select("name rigor setting openingSituation state").lean<IMaddoxCampaign>()
+            if (!campaign) throw new MaddoxToolError("Campanha não encontrada.")
+            let result: OpexNpcConsultResult
+            try {
+                const { decideOpexNpcScene } = await import("./opex-player")
+                const decision = await decideOpexNpcScene(campaign, npc, { situation: clip(input.situacao, MADDOX_TOOL_TEXT_MAX), question: input.pergunta ? clip(input.pergunta, MADDOX_TOOL_TEXT_MAX) : null })
+                result = { npc: npc.name, fala: decision.fala.trim(), acao: decision.acao.trim(), nota: `Narre a partir desta decisão de ${npc.name}: ele diz e tenta exatamente isso; você resolve os resultados.` }
+            } catch (error) {
+                const reason = error instanceof Error ? error.message : String(error)
+                log.warn({ campaignId, npcId, err: reason }, "[maddox] o agente do NPC Opex não respondeu")
+                addDraftOpexNpcFailure(campaignId, context.jobId!, { npcId, npcName: npc.name, error: reason.slice(0, 500) })
+                result = { npc: npc.name, falhou: true, nota: opexNpcFallbackNote(npc.name) }
+            }
+            setJobOpexNpcConsult(campaignId, context.jobId!, npcId, result)
+            return result
+        },
+    }),
+]
+
 /** Todas as ferramentas do narrador (persistência, testes, combate, a vez dos adversários, a imagem da cena e as sugestões de ação). */
-export const MADDOX_NARRATOR_TOOLS: readonly MaddoxMasterTool[] = [...MADDOX_MASTER_TOOLS, ...MADDOX_COMBAT_TOOLS, ...MADDOX_TACTICAL_TOOLS, ...MADDOX_SCENE_IMAGE_TOOLS, ...MADDOX_ACTION_OPTIONS_TOOLS]
+export const MADDOX_NARRATOR_TOOLS: readonly MaddoxMasterTool[] = [...MADDOX_MASTER_TOOLS, ...MADDOX_COMBAT_TOOLS, ...MADDOX_TACTICAL_TOOLS, ...MADDOX_SCENE_IMAGE_TOOLS, ...MADDOX_ACTION_OPTIONS_TOOLS, ...MADDOX_OPEX_NPC_TOOLS]
 
 export function findMaddoxTool(name: string): MaddoxMasterTool | undefined {
     return MADDOX_NARRATOR_TOOLS.find((tool) => tool.name === name)
@@ -1004,9 +1154,10 @@ export const MADDOX_CHECK_TOOL_NAME = "request_check"
 /**
  * Ferramentas no formato da AI SDK (a SDK `ai` entra sob demanda). `checks: false` tira o `request_check`; `combat: false`
  * tira as do combate (Maddox 6); `tactical: false` tira as da vez dos adversários (Maddox 7); `sceneImages: false` tira a da
- * imagem da cena (Maddox 10); `actionOptions: false` tira a das sugestões de ação (DND-30).
+ * imagem da cena (Maddox 10); `actionOptions: false` tira a das sugestões de ação (DND-30); `opexNpcs: false` tira a consulta
+ * aos NPCs Opex (DND-27; respostas a perguntas).
  */
-export async function buildMaddoxAiTools(context: MaddoxToolContext, options: { checks?: boolean; combat?: boolean; tactical?: boolean; sceneImages?: boolean; actionOptions?: boolean } = {}): Promise<ToolSet> {
+export async function buildMaddoxAiTools(context: MaddoxToolContext, options: { checks?: boolean; combat?: boolean; tactical?: boolean; sceneImages?: boolean; actionOptions?: boolean; opexNpcs?: boolean } = {}): Promise<ToolSet> {
     const { dynamicTool } = await import("ai")
     const tools: ToolSet = {}
     for (const def of MADDOX_NARRATOR_TOOLS) {
@@ -1015,6 +1166,7 @@ export async function buildMaddoxAiTools(context: MaddoxToolContext, options: { 
         if ((MADDOX_TACTICAL_TOOL_NAMES as readonly string[]).includes(def.name) && !options.tactical) continue
         if (def.name === MADDOX_SCENE_IMAGE_TOOL_NAME && !options.sceneImages) continue
         if (def.name === MADDOX_ACTION_OPTIONS_TOOL_NAME && !options.actionOptions) continue
+        if (def.name === MADDOX_OPEX_NPC_CONSULT_TOOL_NAME && !options.opexNpcs) continue
         tools[def.name] = dynamicTool({
             description: def.description,
             inputSchema: def.input,

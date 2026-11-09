@@ -40,13 +40,13 @@ import { MADDOX_OPEX_LABEL } from "../constants"
 const log = loggerFor({ module: "maddox", feature: "journal" })
 
 const PLAYER_VISIBLE = { visibility: "players" } as const
-const NPC_FIELDS = "name portraitUrl status publicDescription updatedAt"
+const NPC_FIELDS = "name portraitUrl status publicDescription updatedAt opex.active"
 
 export const MADDOX_JOURNAL_PAGE_SIZE = 30
 export const MADDOX_JOURNAL_SEARCH_LIMIT = 20
 const MADDOX_JOURNAL_SEARCHABLE_MESSAGES = ["narration", "declaration", "question", "answer"] as const
 
-type NpcDoc = Pick<IMaddoxNpc, "_id" | "name" | "portraitUrl" | "status" | "publicDescription" | "updatedAt">
+type NpcDoc = Pick<IMaddoxNpc, "_id" | "name" | "portraitUrl" | "status" | "publicDescription" | "updatedAt" | "opex">
 type MemoryDoc = Pick<CampaignMemoryView, "id" | "kind" | "title" | "text" | "tags" | "status" | "turnNumber" | "updatedAt">
 
 /**
@@ -85,7 +85,7 @@ async function maddoxAvatarUrl(): Promise<string | null> {
 const iso = (date: Date | null | undefined) => (date ? new Date(date).toISOString() : new Date(0).toISOString())
 
 function npcDto(npc: NpcDoc): MaddoxJournalNpcDto {
-    return { id: String(npc._id), name: npc.name, portraitUrl: npc.portraitUrl ?? null, status: npc.status ?? "active", publicDescription: npc.publicDescription ?? "", updatedAt: iso(npc.updatedAt) }
+    return { id: String(npc._id), name: npc.name, portraitUrl: npc.portraitUrl ?? null, status: npc.status ?? "active", publicDescription: npc.publicDescription ?? "", updatedAt: iso(npc.updatedAt), ...(npc.opex?.active ? { opex: true } : {}) }
 }
 
 function memoryDto(memory: MemoryDoc): MaddoxJournalMemoryDto {
@@ -154,6 +154,7 @@ export async function getJournalSummary(campaignId: string, userId: string): Pro
         activeQuests: activeQuests.map(memoryDto),
         counts: { npcs, party, images, memories },
         memoriesUnavailable: memoryState.unavailable,
+        canManageOpexNpcs: await (await import("./opex-npcs")).canManageOpexNpcsAs(campaign.ownerId, userId),
     }
 }
 

@@ -70,6 +70,8 @@ interface LoadedContext {
     campaign: IMaddoxCampaign
     prompt: Omit<NarratorPromptContext, "instructions" | "agentMemories">
     npcNames: string[]
+    /** NPCs Opex vivos (DND-27), consultados nas narrações. */
+    opexNpcNames: string[]
     messages: IMaddoxCampaignMessage[]
     /** Combates citados pelos cards da transcrição. */
     combats: Map<string, IMaddoxCombat>
@@ -81,13 +83,14 @@ async function loadContext(campaignId: Types.ObjectId): Promise<LoadedContext> {
     const members = await MaddoxCampaignMemberModel.find({ campaignId, status: "joined" }).select("userId characterId").lean<{ userId: string; characterId: Types.ObjectId | null }[]>()
     const characterIds = members.map((member) => member.characterId).filter((id): id is Types.ObjectId => Boolean(id))
     const userIds = members.map((member) => member.userId).filter((id) => Types.ObjectId.isValid(id))
-    const [characters, users, npcs, memories, recent] = await Promise.all([
+    const [characters, users, npcs, memories, recent, opexNpcs] = await Promise.all([
         characterIds.length ? MaddoxCharacterModel.find({ _id: { $in: characterIds } }).lean<IMaddoxCharacter[]>() : Promise.resolve([]),
         userIds.length ? User.find({ _id: { $in: userIds } }).select("name username").lean<{ _id: Types.ObjectId; name?: string; username?: string }[]>() : Promise.resolve([]),
         MaddoxNpcModel.find({ campaignId }).sort({ updatedAt: -1 }).limit(MADDOX_NARRATOR_INDEX_ITEMS).lean<IMaddoxNpc[]>(),
         // Memórias da campanha: só no Engramind (missões ativas sempre + as mais recentes); sem a rede, nenhuma.
         import("@/features/engramind/server/campaign-memories").then(({ narratorMemoryIndex }) => narratorMemoryIndex(String(campaignId), MADDOX_NARRATOR_INDEX_ITEMS)),
         MaddoxCampaignMessageModel.find({ campaignId }).sort({ _id: -1 }).limit(200).lean<IMaddoxCampaignMessage[]>(),
+        MaddoxNpcModel.find({ campaignId, "opex.active": true, status: { $ne: "dead" } }).sort({ name: 1 }).select("name").lean<{ name: string }[]>(),
     ])
     const sheets = await loadSheetSummaries(campaign, characters)
     const tacticalCombat = usesTacticalCombat(campaign.rigor) ? await tacticalCombatBlock(campaignId) : null
@@ -103,6 +106,7 @@ async function loadContext(campaignId: Types.ObjectId): Promise<LoadedContext> {
     return {
         campaign,
         npcNames: npcs.map((npc) => npc.name),
+        opexNpcNames: opexNpcs.map((npc) => npc.name),
         messages: recent.reverse(),
         combats: new Map(cardCombats.map((combat) => [String(combat._id), combat])),
         prompt: {
@@ -122,7 +126,7 @@ async function loadContext(campaignId: Types.ObjectId): Promise<LoadedContext> {
                     currentState: character.currentState ?? "",
                     sheet: character.sheetId ? (sheets.get(String(character.sheetId)) ?? null) : null,
                 })),
-            npcs: npcs.map((npc) => ({ name: npc.name, status: npc.status, visibility: npc.visibility, publicDescription: npc.publicDescription ?? "", masterNotes: npc.masterNotes ?? "" })),
+            npcs: npcs.map((npc) => ({ name: npc.name, status: npc.status, visibility: npc.visibility, publicDescription: npc.publicDescription ?? "", masterNotes: npc.masterNotes ?? "", ...(npc.opex?.active ? { opex: true } : {}) })),
             memories: memories.map((memory) => ({ kind: memory.kind, title: memory.title, text: memory.text, visibility: memory.visibility, status: memory.status ?? null })),
             combat: activeCombat
                 ? {
@@ -168,12 +172,85 @@ async function tacticalTask(campaignId: Types.ObjectId, round: number): Promise<
                   block: {
                       kind: block.kind,
                       actor: block.actorKey ? nameOf(block.actorKey) : null,
+                      actorKey: block.actorKey ?? null,
                       resumed: round > block.startRound,
                       waits: block.waits,
                       remaining: tactical.remainingBlocks(combat).map(nameOf).filter((name): name is string => Boolean(name)),
                   },
               }
             : {}),
+    }
+}
+
+/** Faixa de PV de um adversário (sem números exatos), para o agente do NPC Opex escolher o alvo. */
+function healthBand(hp: number, hpMax: number, defeated: boolean): string {
+    if (defeated || hp <= 0) return "fora de combate"
+    const ratio = hpMax > 0 ? hp / hpMax : 1
+    if (ratio >= 1) return "ileso"
+    if (ratio > 0.5) return "ferido"
+    if (ratio > 0.25) return "muito ferido"
+    return "quase caindo"
+}
+
+const clipLine = (value: string, max: number) => {
+    const text = value.replace(/\s+/g, " ").trim()
+    return text.length > max ? `${text.slice(0, max - 1).trimEnd()}…` : text
+}
+
+/**
+ * Vez de um NPC Opex no combate tático (DND-27): antes da narração do bloco dele (não retomado), o servidor consulta o
+ * agente, que escolhe uma das ações da ficha (ou uma genérica). A decisão vai na tarefa; a falha vira o aviso do dono
+ * (o Maddox decide como hoje). Nunca lança: nada fica pendente no banco e a mesa não trava.
+ */
+async function consultTacticalOpexNpc(campaignId: Types.ObjectId, jobId: string, tactical: NarratorTacticalTask | null): Promise<void> {
+    const block = tactical?.block
+    if (!tactical || !block || block.kind !== "npc" || block.resumed || !block.actorKey || tactical.enemiesDown || tactical.charactersDown) return
+    const tacticalModule = await import("./tactical-combat")
+    const combat = await tacticalModule.findActiveTactical(campaignId)
+    const actor = combat ? tacticalModule.findActor(combat, block.actorKey) : null
+    if (!combat || !actor || actor.kind !== "combatant" || !actor.combatant.npcId) return
+    const npc = await MaddoxNpcModel.findOne({ _id: actor.combatant.npcId, campaignId }).lean<IMaddoxNpc>()
+    if (!npc?.opex?.active || npc.status === "dead") return
+    const { addDraftOpexNpcFailure, setJobOpexNpcConsult } = await import("./game-live")
+    try {
+        const campaign = await MaddoxCampaignModel.findById(campaignId).select("name rigor setting openingSituation state").lean<IMaddoxCampaign>()
+        if (!campaign) return
+        const stats = actor.state.stats
+        const describe = (action: (typeof stats.actions)[number]) => {
+            if (action.kind === "attack") return `ataque ${action.bonus !== null ? (action.bonus >= 0 ? `+${action.bonus}` : String(action.bonus)) : ""}${action.damage ? `, dano ${action.damage}${action.damageType ? ` ${action.damageType}` : ""}` : ""}${action.ranged ? ", à distância" : ""}`.trim()
+            if (action.kind === "save") return `salvaguarda CD ${action.dc ?? "?"}${action.damage ? `, dano ${action.damage}` : ""}`
+            return clipLine(action.description, 160)
+        }
+        const options = [
+            ...(stats.multiattack > 1 ? [{ name: "Ataques Múltiplos", detail: `${stats.multiattack} ataques na mesma ação` }] : []),
+            ...stats.actions.filter((action) => action.available && action.economy !== "reaction").map((action) => ({ name: action.name, detail: `${action.economy === "bonus" ? "ação bônus; " : ""}${describe(action)}` })),
+            { name: "Disparada", detail: "dobra o deslocamento" },
+            { name: "Esquivar", detail: "ataques contra ele têm desvantagem até a próxima vez" },
+            { name: "Desengajar", detail: "move-se sem provocar ataques de oportunidade" },
+            { name: "Fugir", detail: "abandona o combate" },
+        ]
+        const targets = [
+            ...combat.combatants
+                .filter((item) => item.tactical && !item.tactical.defeated && item.tactical.actorKey !== block.actorKey)
+                .map((item) => ({ name: item.name, side: item.side === actor.combatant.side ? "do seu lado" : "do outro lado", health: healthBand(item.tactical!.stats.hp, item.tactical!.stats.hpMax, item.tactical!.defeated) })),
+            ...combat.tactical.characters
+                .filter((item) => !item.dead && !item.left)
+                .map((item) => ({ name: item.name, side: actor.combatant.side === "aliado" ? "personagem, do seu lado" : "personagem, do outro lado", health: item.hpZero ? "caído (0 PV)" : "de pé" })),
+        ]
+        const situation = [
+            `Combate: ${combat.title}${combat.location ? ` (${combat.location})` : ""}. Você está ${actor.combatant.side === "aliado" ? "do lado dos personagens" : "contra os personagens"}; os seus PV: ${healthBand(stats.hp, stats.hpMax, false)}.`,
+            campaign.state?.situation ? `Situação: ${campaign.state.situation}` : null,
+        ]
+            .filter(Boolean)
+            .join("\n")
+        const { decideOpexNpcCombat } = await import("./opex-player")
+        const decision = await decideOpexNpcCombat(campaign, npc, { round: combat.tactical.round, situation, options, targets })
+        block.opexDecision = { npcName: npc.name, action: decision.acao, targets: decision.alvos, speech: decision.fala }
+        setJobOpexNpcConsult(String(campaignId), jobId, String(npc._id), { npc: npc.name, fala: decision.fala.trim(), acao: `${decision.acao}${decision.alvos.length ? ` em ${decision.alvos.join(", ")}` : ""}`, nota: `Narre a partir desta decisão de ${npc.name}.` })
+    } catch (error) {
+        const reason = error instanceof Error ? error.message : String(error)
+        log.warn({ campaignId: String(campaignId), npcId: String(npc._id), err: reason }, "[maddox] o agente do NPC Opex não escolheu a ação do combate")
+        addDraftOpexNpcFailure(String(campaignId), jobId, { npcId: String(npc._id), npcName: npc.name, error: reason.slice(0, 500) })
     }
 }
 
@@ -304,7 +381,15 @@ async function generate(args: GenerateArgs, sink: MaddoxMasterSink): Promise<str
     }
     // Sugestões de ação (DND-30): só nas narrações fora do combate tático (lá a vez é pelos botões).
     const actionOptions = args.task.kind !== "answer" && !args.task.tactical
-    const userText = [transcript ? `# Últimos acontecimentos\n\n${mentionsToMarkup(transcript)}` : null, narratorTaskText(args.task, { density: context.campaign.density ?? MADDOX_DEFAULT_DENSITY, actionOptions }), remindersText || null].filter(Boolean).join("\n\n")
+    // NPCs Opex (DND-27): a consulta ao agente só existe nas narrações (nas respostas, o Maddox decide sozinho).
+    const opexNpcs = args.task.kind !== "answer" && context.opexNpcNames.length > 0
+    const userText = [
+        transcript ? `# Últimos acontecimentos\n\n${mentionsToMarkup(transcript)}` : null,
+        narratorTaskText(args.task, { density: context.campaign.density ?? MADDOX_DEFAULT_DENSITY, actionOptions, opexNpcs: opexNpcs ? context.opexNpcNames : [] }),
+        remindersText || null,
+    ]
+        .filter(Boolean)
+        .join("\n\n")
     const promptContext: NarratorPromptContext = { instructions: settings.instructions, agentMemories: memories, ...context.prompt }
     const stream = liveText(sink)
     let failure: string | null = null
@@ -325,7 +410,7 @@ async function generate(args: GenerateArgs, sink: MaddoxMasterSink): Promise<str
         await ensureMaddoxMcp(settings)
         const sessionId = await ensureMaddoxSession({ campaignId: args.campaignId, purpose: "narrator", agent: model.agent, model: model.model, variant: model.variant, title: `Maddox · narrador · ${context.campaign.name}` })
         const turnToken = createMaddoxTurnToken({ campaignId: args.campaignId, jobId: args.jobId, turnNumber: args.turnNumber })
-        const instructions = buildNarratorInstructions(promptContext, { kind: "mcp", server: MADDOX_MCP_SERVER_NAME, turnToken, checks, combat, tactical, sceneImages, actionOptions })
+        const instructions = buildNarratorInstructions(promptContext, { kind: "mcp", server: MADDOX_MCP_SERVER_NAME, turnToken, checks, combat, tactical, sceneImages, actionOptions, opexNpcs })
         for await (const event of streamAi({
             provider: "opencode",
             model: model.model,
@@ -344,7 +429,7 @@ async function generate(args: GenerateArgs, sink: MaddoxMasterSink): Promise<str
         }
     } else {
         failure = await generateWithTools(
-            { model, instructions: buildNarratorInstructions(promptContext, { kind: "ai-sdk" }), userText, campaignId, turnNumber: args.turnNumber, jobId: args.jobId, checks, combat, tactical, sceneImages, actionOptions, signal: args.signal },
+            { model, instructions: buildNarratorInstructions(promptContext, { kind: "ai-sdk" }), userText, campaignId, turnNumber: args.turnNumber, jobId: args.jobId, checks, combat, tactical, sceneImages, actionOptions, opexNpcs, signal: args.signal },
             stream,
             sink,
         )
@@ -372,6 +457,7 @@ interface ToolGeneration {
     tactical: boolean
     sceneImages: boolean
     actionOptions: boolean
+    opexNpcs: boolean
     signal?: AbortSignal
 }
 
@@ -392,7 +478,7 @@ async function generateWithTools(input: ToolGeneration, stream: ReturnType<typeo
             model: prepared.model,
             instructions: input.instructions,
             messages: [{ role: "user", content: input.userText }],
-            tools: await buildMaddoxAiTools({ campaignId: input.campaignId, turnNumber: input.turnNumber, jobId: input.jobId }, { checks: input.checks, combat: input.combat, tactical: input.tactical, sceneImages: input.sceneImages, actionOptions: input.actionOptions }),
+            tools: await buildMaddoxAiTools({ campaignId: input.campaignId, turnNumber: input.turnNumber, jobId: input.jobId }, { checks: input.checks, combat: input.combat, tactical: input.tactical, sceneImages: input.sceneImages, actionOptions: input.actionOptions, opexNpcs: input.opexNpcs }),
             stopWhen: stepCountIs(MADDOX_NARRATOR_MAX_STEPS),
             abortSignal: input.signal,
             providerOptions: prepared.providerOptions,
@@ -473,6 +559,8 @@ export const aiMaddoxMaster: MaddoxMaster = {
         const campaignDoc = await MaddoxCampaignModel.findById(campaignId).select("rigor").lean<Pick<IMaddoxCampaign, "rigor">>()
         const tacticalRigor = Boolean(campaignDoc && usesTacticalCombat(campaignDoc.rigor))
         const tactical = tacticalRigor ? await tacticalTask(campaignId, round) : null
+        // NPC Opex na vez (DND-27): o agente escolhe a ação antes da narração do bloco dele.
+        if (tactical) await consultTacticalOpexNpc(campaignId, context.jobId, tactical)
         const waitDocs = tacticalRigor && round > 0 ? await MaddoxCampaignMessageModel.find({ campaignId, turnNumber: context.turnNumber, $or: [{ "combatRoll.waitRound": round - 1 }, { "combatReaction.waitRound": round - 1 }, { "combatAction.waitRound": round - 1 }] }).select("_id").lean<{ _id: Types.ObjectId }[]>() : []
         const combatResults = tacticalRigor && round > 0 ? await (await import("./combat-reactions")).waitRoundResults(campaignId, context.turnNumber, round - 1) : []
         const { MADDOX_COMBAT_WAIT_ROUNDS_MAX } = await import("../constants")

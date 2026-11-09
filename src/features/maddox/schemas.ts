@@ -5,6 +5,7 @@ import {
     DEFAULT_MADDOX_INSTRUCTIONS,
     DEFAULT_MADDOX_INTERVIEWER_INSTRUCTIONS,
     DEFAULT_MADDOX_OPEX_CHARACTER_INSTRUCTIONS,
+    MADDOX_OPEX_NPC_LIMIT_MAX,
     DEFAULT_MADDOX_PERSONA,
     MADDOX_INSTRUCTIONS_MAX,
     MADDOX_JEV_DECISIONS,
@@ -153,6 +154,13 @@ export const maddoxSettingsSchema = z
         instructions: instructionsField,
         interviewerInstructions: instructionsField,
         opexCharacterInstructions: instructionsField,
+        /** NPCs Opex por campanha (DND-27): `null` = sem limite; 0 desliga a promoção. */
+        opexNpcLimit: z
+            .number({ error: "Informe um número inteiro" })
+            .int("Informe um número inteiro")
+            .min(0, "Use 0 ou mais")
+            .max(MADDOX_OPEX_NPC_LIMIT_MAX, `Até ${MADDOX_OPEX_NPC_LIMIT_MAX}`)
+            .nullable(),
         avatar: maddoxAvatarSchema,
         opencode: maddoxOpencodeSchema,
         jev: maddoxJevSchema,
@@ -185,6 +193,7 @@ export const DEFAULT_MADDOX_SETTINGS: MaddoxSettings = {
     instructions: DEFAULT_MADDOX_INSTRUCTIONS,
     interviewerInstructions: DEFAULT_MADDOX_INTERVIEWER_INSTRUCTIONS,
     opexCharacterInstructions: DEFAULT_MADDOX_OPEX_CHARACTER_INSTRUCTIONS,
+    opexNpcLimit: null,
     avatar: { url: null, persona: DEFAULT_MADDOX_PERSONA },
     opencode: { deleteOnCampaignEnd: true, directory: null, mcpUrl: null },
     jev: Object.fromEntries(MADDOX_JEV_DECISIONS.map((decision) => [decision, false])) as MaddoxJevSettings,

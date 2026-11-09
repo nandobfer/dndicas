@@ -8,6 +8,7 @@ import { Markdown } from "@/components/ui/opex/markdown"
 import type { MaddoxGameMessageDto, MaddoxLiveGenerationDto } from "../../game-types"
 import type { MaddoxActionOptionsView } from "../../game-view"
 import { GameActionOptions } from "./GameActionOptions"
+import { OpexNpcFailureLine } from "./OpexNpcFailureLine"
 import { liveMarkupToBold } from "../../catalog-markup"
 import type { DiceRollResponse } from "@/features/dice-roller/types"
 import { MemberAvatar, OpexChip } from "../campaigns/campaign-visuals"
@@ -176,6 +177,7 @@ export function GameMessageList({ messages, myMemberId, maddoxAvatarUrl, color, 
                                 ) : (
                                     <GameMessage message={message} mine={message.memberId !== null && message.memberId === myMemberId} replyTo={message.replyToId ? (byId.get(message.replyToId) ?? null) : null} maddoxAvatarUrl={maddoxAvatarUrl} color={color} />
                                 )}
+                                {message.kind === "narration" && message.opexNpcFailures?.length ? <OpexNpcFailureLine failures={message.opexNpcFailures} /> : null}
                                 {actionOptions && actionOptions.view.messageId === message.id && <GameActionOptions view={actionOptions.view} color={color} busy={actionOptions.busy} onPick={actionOptions.onPick} />}
                             </div>
                         </Fragment>

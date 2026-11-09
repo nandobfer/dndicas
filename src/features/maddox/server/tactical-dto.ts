@@ -11,7 +11,7 @@ import { isOpexUserId } from "./opex-members"
 
 type HpMap = Map<string, { hp: number; hpMax: number; tempHp: number }>
 
-export function tacticalSnapshot(combat: TacticalCombat, hp: HpMap = new Map(), portraits: Map<string, string | null> = new Map()): MaddoxTacticalCombatDto {
+export function tacticalSnapshot(combat: TacticalCombat, hp: HpMap = new Map(), portraits: Map<string, string | null> = new Map(), opexNpcIds: ReadonlySet<string> = new Set()): MaddoxTacticalCombatDto {
     const activeKey = combat.tactical.phase === "running" ? (combat.tactical.order[combat.tactical.activeIndex]?.actorKey ?? null) : null
     return {
         phase: combat.tactical.phase,
@@ -51,6 +51,7 @@ export function tacticalSnapshot(combat: TacticalCombat, hp: HpMap = new Map(), 
                     name: actor.name,
                     portraitUrl: null,
                     memberId: null,
+                    ...(actor.combatant.npcId && opexNpcIds.has(String(actor.combatant.npcId)) ? { opex: true } : {}),
                     initiative: slot.total,
                     active: slot.actorKey === activeKey,
                     hp: null,
@@ -80,7 +81,9 @@ export async function loadTacticalDto(combat: TacticalCombat): Promise<MaddoxTac
         const sheet = state.sheetId ? sheets.get(state.sheetId) : undefined
         if (sheet) hp.set(state.actorKey, sheet.hp)
     }
-    return tacticalSnapshot(combat, hp, new Map(characters.map((character) => [String(character._id), character.portraitUrl ?? null])))
+    const { knownOpexNpcIds } = await import("./opex-npcs")
+    const opexNpcIds = await knownOpexNpcIds(combat.combatants.map((item) => item.npcId))
+    return tacticalSnapshot(combat, hp, new Map(characters.map((character) => [String(character._id), character.portraitUrl ?? null])), opexNpcIds)
 }
 
 /** A minha vez: economia e as opções (só a Ação e a Ação bônus; as reações chegam na janela). */
@@ -95,8 +98,9 @@ export async function myCombatDto(combat: TacticalCombat, memberId: string, myTu
     return { ...base, attacksPerAction: view.options.attacksPerAction, options: { action: view.options.action, bonus: view.options.bonus } }
 }
 
-export function combatActionDto(action: IMaddoxCombatAction & { cancellable?: boolean }): MaddoxCombatActionDto {
+export function combatActionDto(action: IMaddoxCombatAction & { cancellable?: boolean }, opex = false): MaddoxCombatActionDto {
     return {
+        ...(opex ? { opex: true } : {}),
         actorKey: action.actorKey,
         actorName: action.actorName,
         actorKind: action.actorKind,

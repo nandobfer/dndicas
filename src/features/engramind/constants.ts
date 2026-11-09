@@ -10,7 +10,7 @@ export const ENGRAMIND_APP = "dndicas"
 export const ENGRAMIND_INTEGRATION_ID = "engramind"
 
 /** Identidades (agentes) do app: `dndicas/<identidade>`. */
-export const MEMORY_IDENTITIES = ["opex", "image-generator", "entity-understanding", "entity-import", "maddox", "personagem-opex"] as const
+export const MEMORY_IDENTITIES = ["opex", "image-generator", "entity-understanding", "entity-import", "maddox", "personagem-opex", "npc-opex"] as const
 export type MemoryIdentity = (typeof MEMORY_IDENTITIES)[number]
 
 export const IDENTITY_LABELS: Record<MemoryIdentity, { name: string; description: string }> = {
@@ -20,6 +20,7 @@ export const IDENTITY_LABELS: Record<MemoryIdentity, { name: string; description
     "entity-import": { name: "Importador 5etools", description: "Traduz e adapta as entidades importadas do 5etools." },
     maddox: { name: "Agente Maddox", description: "Mestre e entrevistador das Campanhas Maddox." },
     "personagem-opex": { name: "Personagem Opex", description: "Dono do canal global lido por todos os Personagens Opex das Campanhas Maddox." },
+    "npc-opex": { name: "NPC Opex", description: "Dono do canal global lido por todos os NPCs Opex das Campanhas Maddox." },
 }
 
 /** Campo privado da integração com o token cifrado de cada agente. */
@@ -30,6 +31,7 @@ export const AGENT_TOKEN_FIELDS: Record<MemoryIdentity, string> = {
     "entity-import": "agentTokenEntityImport",
     maddox: "agentTokenMaddox",
     "personagem-opex": "agentTokenPersonagemOpex",
+    "npc-opex": "agentTokenNpcOpex",
 }
 
 export const agentSlug = (identity: MemoryIdentity) => `${ENGRAMIND_APP}/${identity}`
@@ -45,7 +47,7 @@ export interface FixedChannel {
     owner: MemoryIdentity
 }
 
-/** Os 7 canais fixos (as 7 listas antigas de `agent_memories`). */
+/** Os canais fixos: as 7 listas antigas de `agent_memories` e os globais dos Personagens Opex (DND-26) e dos NPCs Opex (DND-27). */
 export const FIXED_CHANNELS: readonly FixedChannel[] = [
     { slug: "dndicas/opex/global", name: "Agente Opex · global", description: "Instruções que o Agente Opex segue em toda conversa (administradores, usuários e visitantes).", owner: "opex" },
     { slug: "dndicas/opex/admin", name: "Agente Opex · administradores", description: "Instruções que o Agente Opex segue só nos turnos de administradores.", owner: "opex" },
@@ -55,6 +57,7 @@ export const FIXED_CHANNELS: readonly FixedChannel[] = [
     { slug: "dndicas/entity-import", name: "Importador 5etools", description: "Instruções de tradução e adaptação da importação do 5etools.", owner: "entity-import" },
     { slug: "dndicas/maddox", name: "Agente Maddox", description: "Instruções que o Maddox segue como mestre e entrevistador em todas as campanhas.", owner: "maddox" },
     { slug: "dndicas/personagem-opex", name: "Personagem Opex · global", description: "Memórias que todo Personagem Opex lê nas Campanhas Maddox (treino do jeito de jogar).", owner: "personagem-opex" },
+    { slug: "dndicas/npc-opex", name: "NPC Opex · global", description: "Memórias que todo NPC Opex lê nas Campanhas Maddox (o jeito de interpretar os NPCs).", owner: "npc-opex" },
 ] as const
 
 export const CAMPAIGN_CHANNEL_PREFIX = "dndicas/maddox/campanhas/"
@@ -100,6 +103,16 @@ export const OPEX_CHARACTER_CHANNEL_PREFIX = `${OPEX_CHARACTER_GLOBAL_CHANNEL}/`
 /** Agente próprio de cada Personagem Opex: `dndicas/personagem-opex-<memberId>`. */
 export const opexCharacterAgentSlug = (memberId: string) => `personagem-opex-${memberId}`
 export const opexCharacterChannel = (campaignId: string, memberId: string) => `${OPEX_CHARACTER_CHANNEL_PREFIX}${campaignId}/${memberId}`
+
+// ── NPCs Opex (DND-27) ──────────────────────────────────────────────────────
+
+/** Canal global que todo NPC Opex lê (dono: o agente fixo `dndicas/npc-opex`). */
+export const OPEX_NPC_GLOBAL_CHANNEL = "dndicas/npc-opex"
+/** Prefixo dos canais individuais: `dndicas/npc-opex/<campaignId>/<npcId>`. */
+export const OPEX_NPC_CHANNEL_PREFIX = `${OPEX_NPC_GLOBAL_CHANNEL}/`
+/** Agente próprio de cada NPC Opex: `dndicas/npc-opex-<npcId>`. */
+export const opexNpcAgentSlug = (npcId: string) => `npc-opex-${npcId}`
+export const opexNpcChannel = (campaignId: string, npcId: string) => `${OPEX_NPC_CHANNEL_PREFIX}${campaignId}/${npcId}`
 
 // ── Canais das campanhas ────────────────────────────────────────────────────
 

@@ -13,6 +13,7 @@ const RENDERED_ERROR_PATHS = new Set([
     "opexCharacter.provider",
     "opexCharacter.model",
     "opexCharacterInstructions",
+    "opexNpcLimit",
     "avatar.persona",
     "opencode.directory",
 ])

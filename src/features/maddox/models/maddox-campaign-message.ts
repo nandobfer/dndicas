@@ -110,8 +110,19 @@ export interface IMaddoxCampaignMessage {
      * a lista do próprio personagem.
      */
     actionOptions: IMaddoxActionOptions[] | null
+    /**
+     * NPCs Opex (DND-27) cujo agente não respondeu nesta narração (o Maddox decidiu por eles). O motivo bruto só chega ao
+     * dono da campanha; para os demais o campo nem é serializado.
+     */
+    opexNpcFailures?: IMaddoxOpexNpcFailure[] | null
     createdAt: Date
     updatedAt: Date
+}
+
+export interface IMaddoxOpexNpcFailure {
+    npcId: Types.ObjectId
+    npcName: string
+    error: string
 }
 
 const MaddoxCampaignMessageSchema = new Schema<IMaddoxCampaignMessage>(
@@ -170,6 +181,19 @@ const MaddoxCampaignMessageSchema = new Schema<IMaddoxCampaignMessage>(
                         characterId: { type: Schema.Types.ObjectId, ref: "MaddoxCharacter", required: true },
                         characterName: { type: String, required: true },
                         options: { type: [String], default: () => [] },
+                    },
+                    { _id: false },
+                ),
+            ],
+            default: null,
+        },
+        opexNpcFailures: {
+            type: [
+                new Schema<IMaddoxOpexNpcFailure>(
+                    {
+                        npcId: { type: Schema.Types.ObjectId, ref: "MaddoxNpc", required: true },
+                        npcName: { type: String, required: true },
+                        error: { type: String, default: "" },
                     },
                     { _id: false },
                 ),

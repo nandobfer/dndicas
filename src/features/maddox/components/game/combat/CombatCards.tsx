@@ -13,7 +13,7 @@ import { parseDiceExpression } from "../../../combat-rules"
 import type { CombatActionStep } from "../../../combat-types"
 import { MADDOX_CHECK_DIE_HIDE_MS } from "../../../constants"
 import type { MaddoxGameCombatEventDto, MaddoxGameMessageDto } from "../../../game-types"
-import { MemberAvatar, RarityChip } from "../../campaigns/campaign-visuals"
+import { MemberAvatar, OpexChip, RarityChip } from "../../campaigns/campaign-visuals"
 import { COMBAT_COLOR } from "../GameCombatCard"
 import { ReplayDie } from "./ReplayDie"
 import { ECONOMY_COLORS, ECONOMY_LABELS, HP_BAND_COLORS } from "./combat-visuals"
@@ -154,6 +154,7 @@ export function CombatActionCard({ message, mine, replay, stepReplays, onRoll, o
                             <p className="flex flex-wrap items-center gap-1.5 text-xs text-white/60">
                                 <RarityChip color={accent}>{action.actorKind === "character" ? ECONOMY_LABELS[action.economy] : "Adversário"}</RarityChip>
                                 <span className="font-semibold text-white/80">{action.actorName}</span>
+                                {action.opex && <OpexChip />}
                                 {action.targets.length > 0 && <span>→ {action.targets.map((target) => target.name).join(", ")}</span>}
                             </p>
                             <p className="text-sm font-semibold text-white" data-testid="combat-action-label">
@@ -351,6 +352,7 @@ export function CombatOrderCard({ combat }: { combat: MaddoxGameCombatEventDto }
                             <span className="text-white/40">{index + 1}.</span>
                             {slot.kind === "character" ? <Heart className="h-3 w-3 text-sky-300" aria-hidden /> : <Swords className="h-3 w-3 text-red-300" aria-hidden />}
                             {slot.name}
+                            {slot.opex && <OpexChip />}
                             <span className="font-semibold text-white">{slot.initiative ?? "—"}</span>
                         </li>
                     ))}

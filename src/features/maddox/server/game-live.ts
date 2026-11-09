@@ -124,6 +124,16 @@ interface MaddoxJobState {
     liveId: string | null
     /** Lembranças reivindicadas por esta geração e a decisão do Maddox sobre cada uma (DND-25). */
     reminders: MaddoxDraftReminder[]
+    /** NPCs Opex (DND-27): decisões já consultadas nesta geração (pelo id do NPC) e as falhas do agente. */
+    opexNpcConsults: Map<string, unknown>
+    opexNpcFailures: MaddoxDraftOpexNpcFailure[]
+}
+
+/** Agente de um NPC Opex que não respondeu nesta geração (o Maddox decidiu por ele); o motivo só vai ao dono. */
+export interface MaddoxDraftOpexNpcFailure {
+    npcId: string
+    npcName: string
+    error: string
 }
 
 /** Lembrança considerada pela geração: `memory` = guardar como memória (aplicado depois de a narração ser gravada). */
@@ -178,7 +188,7 @@ export function enqueueMaddoxJob(campaignId: string, label: string, run: (job: M
     hub.pending += 1
     const jobId = randomUUID()
     const next = hub.tail.then(async () => {
-        hub.jobs.set(jobId, { meta, checks: [], combat: [], sceneImage: null, actionOptions: [], npcPortraits: [], workspace: null, liveId: null, reminders: [] })
+        hub.jobs.set(jobId, { meta, checks: [], combat: [], sceneImage: null, actionOptions: [], npcPortraits: [], workspace: null, liveId: null, reminders: [], opexNpcConsults: new Map(), opexNpcFailures: [] })
         try {
             await run({ jobId })
         } catch (error) {
@@ -339,6 +349,40 @@ export function setJobReminders(campaignId: string, jobId: string, reminders: Ma
 
 export function jobReminders(campaignId: string, jobId: string): MaddoxDraftReminder[] {
     return hubs.get(campaignId)?.jobs.get(jobId)?.reminders ?? []
+}
+
+/** Decisão já consultada do NPC Opex neste job (`undefined` = ainda não). */
+export function jobOpexNpcConsult<T>(campaignId: string, jobId: string, npcId: string): T | undefined {
+    return hubs.get(campaignId)?.jobs.get(jobId)?.opexNpcConsults.get(npcId) as T | undefined
+}
+
+/** Quantos NPCs Opex já foram consultados neste job. */
+export function jobOpexNpcConsultCount(campaignId: string, jobId: string): number {
+    return hubs.get(campaignId)?.jobs.get(jobId)?.opexNpcConsults.size ?? 0
+}
+
+export function setJobOpexNpcConsult(campaignId: string, jobId: string, npcId: string, decision: unknown): boolean {
+    const job = hubs.get(campaignId)?.jobs.get(jobId)
+    if (!job) return false
+    job.opexNpcConsults.set(npcId, decision)
+    return true
+}
+
+/** Registra a falha do agente de um NPC Opex no job (uma por NPC); `false` se o job não está rodando. */
+export function addDraftOpexNpcFailure(campaignId: string, jobId: string, failure: MaddoxDraftOpexNpcFailure): boolean {
+    const job = hubs.get(campaignId)?.jobs.get(jobId)
+    if (!job) return false
+    job.opexNpcFailures = [...job.opexNpcFailures.filter((item) => item.npcId !== failure.npcId), failure]
+    return true
+}
+
+/** Retira as falhas dos NPCs Opex do job (gravadas na própria narração). */
+export function takeDraftOpexNpcFailures(campaignId: string, jobId: string): MaddoxDraftOpexNpcFailure[] {
+    const job = hubs.get(campaignId)?.jobs.get(jobId)
+    if (!job) return []
+    const taken = job.opexNpcFailures
+    job.opexNpcFailures = []
+    return taken
 }
 
 /** Dado de um adversário rolado durante a geração: vai para a geração ao vivo do job (`snapshot` inclui os já rolados). */

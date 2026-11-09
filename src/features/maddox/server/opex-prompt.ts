@@ -252,3 +252,105 @@ export function opexReactionTask(input: { trigger: string; options: { id: string
 }
 
 export const opexReactionSchema = z.object({ escolha: z.string().trim().min(1) })
+
+// ── NPC Opex (DND-27) ───────────────────────────────────────────────────────
+
+export const MADDOX_OPEX_NPC_ROLE_RULE = [
+    "## Seu papel",
+    "- Você é um NPC da campanha narrada pelo Maddox, o mestre. Você NÃO é um jogador nem o mestre.",
+    "- Decida só as falas e as ações deste NPC, como ele decidiria: coerente com quem ele é, o que sabe, o que quer e o que esconde.",
+    "- Nunca narre resultados, nunca decida pelo mundo, pelos outros NPCs ou pelos personagens dos jogadores: o mestre resolve o que acontece a partir da sua decisão.",
+    "- Você só sabe o que o NPC viveu (as suas memórias) e o que o mestre conta da cena. Não invente fatos do mundo além disso.",
+    "- Responda SEMPRE e SOMENTE com o objeto JSON pedido na tarefa, sem texto antes ou depois.",
+].join("\n")
+
+export const MADDOX_OPEX_NPC_MEMORY_RULE = [
+    "## Suas memórias",
+    `- A cada consulta você pode guardar até ${MADDOX_OPEX_MEMORIES_PER_TURN} memórias suas no campo "memorias": o que viveu, decidiu ou descobriu, o que sente e planeja, e as suas relações com os personagens.`,
+    "- Use um título curto e estável por assunto (ex.: \"Desconfiança do grupo\"): o mesmo título atualiza a memória, em vez de criar outra.",
+    `- Cada memória tem até ${MADDOX_OPEX_MEMORY_TEXT_EXPECTED} caracteres: uma ou duas frases completas, sem cortar no meio.`,
+].join("\n")
+
+export interface OpexNpcPromptContext {
+    instructions: string
+    memories: string
+    npc: { name: string; publicDescription: string }
+    campaign: OpexPromptCampaign
+}
+
+/** Instruções de toda decisão do NPC Opex: configuração, papel de NPC, memórias dos 2 canais, campanha e o NPC. */
+export function buildOpexNpcInstructions(context: OpexNpcPromptContext): string {
+    return [
+        context.instructions.trim(),
+        MADDOX_OPEX_NPC_ROLE_RULE,
+        MADDOX_OPEX_NPC_MEMORY_RULE,
+        ...(context.memories.trim() ? [`## Memórias (global dos NPCs Opex e as suas)\n${context.memories.trim()}`] : []),
+        campaignSection(context.campaign),
+        [`## Você é: ${context.npc.name}`, context.npc.publicDescription.trim() || "(sem descrição registrada)"].join("\n\n"),
+    ].join("\n\n")
+}
+
+export interface OpexNpcSceneTask {
+    /** O que o NPC percebe da cena, contado pelo Maddox. */
+    situation: string
+    /** Pergunta direta do Maddox (opcional). */
+    question?: string | null
+}
+
+export function opexNpcSceneTask(task: OpexNpcSceneTask): string {
+    return [
+        "## Tarefa: o que você fala e faz nesta cena",
+        "O mestre está narrando uma cena em que você aparece ou interage com os personagens. Decida o que você FALA (em primeira pessoa, como o NPC falaria) e o que você FAZ (uma tentativa, nunca o resultado).",
+        `### A cena (o que você percebe)\n${task.situation.trim()}`,
+        ...(task.question?.trim() ? [`### O mestre pergunta\n${task.question.trim()}`] : []),
+        'Responda só com: {"fala": "o que você diz (vazio se ficar calado)", "acao": "o que você faz", "memorias": [{"titulo": "...", "texto": "..."}]}',
+    ].join("\n\n")
+}
+
+export const opexNpcSceneSchema = z
+    .object({
+        fala: z.string().optional().default(""),
+        acao: z.string().optional().default(""),
+        memorias: z.array(opexMemorySchema).optional().default([]),
+    })
+    .refine((value) => Boolean(value.fala.trim() || value.acao.trim()), { message: "Diga uma fala ou uma ação" })
+export type OpexNpcSceneDecision = z.infer<typeof opexNpcSceneSchema>
+
+export interface OpexNpcCombatOption {
+    name: string
+    detail: string
+}
+
+export interface OpexNpcCombatTask {
+    round: number
+    situation: string
+    options: readonly OpexNpcCombatOption[]
+    targets: readonly { name: string; side: string; health: string }[]
+}
+
+export function opexNpcCombatTask(task: OpexNpcCombatTask): string {
+    return [
+        `## Tarefa: a sua vez no combate (rodada ${task.round})`,
+        "Escolha o que você faz nesta vez, usando SÓ uma das opções abaixo (as da sua ficha). O mestre resolve as rolagens e narra o resultado.",
+        `### Situação\n${task.situation.trim() || "(sem detalhes)"}`,
+        `### Opções (use o nome exato)\n${task.options.map((option) => `- "${option.name}"${option.detail ? ` — ${option.detail}` : ""}`).join("\n") || "(nenhuma)"}`,
+        `### Quem está no combate\n${task.targets.map((target) => `- "${target.name}" (${target.side}; ${target.health})`).join("\n") || "(ninguém)"}`,
+        'Responda só com: {"acao": "nome exato de uma opção", "alvos": ["nome exato"], "fala": "o que você diz (opcional)", "memorias": [{"titulo": "...", "texto": "..."}]}',
+    ].join("\n\n")
+}
+
+const sameName = (a: string, b: string) => a.trim().toLocaleLowerCase("pt-BR") === b.trim().toLocaleLowerCase("pt-BR")
+
+/** Decisão do NPC Opex no combate: só vale com `acao` entre as opções (a grafia volta à da opção). */
+export function opexNpcCombatSchema(options: readonly OpexNpcCombatOption[]) {
+    return z
+        .object({
+            acao: z.string().trim().min(1),
+            alvos: z.array(z.string()).optional().default([]),
+            fala: z.string().optional().default(""),
+            memorias: z.array(opexMemorySchema).optional().default([]),
+        })
+        .refine((value) => options.some((option) => sameName(option.name, value.acao)), { message: "Ação fora das opções", path: ["acao"] })
+        .transform((value) => ({ ...value, acao: options.find((option) => sameName(option.name, value.acao))!.name }))
+}
+export type OpexNpcCombatDecision = z.infer<ReturnType<typeof opexNpcCombatSchema>>
