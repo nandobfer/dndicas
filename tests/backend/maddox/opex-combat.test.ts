@@ -101,7 +101,7 @@ beforeEach(async () => {
 describe("Personagens Opex — testes e combate (DND-26)", () => {
     it("rola sozinho os testes, a iniciativa e o teste contra a morte do Opex pelas funções de sempre", async () => {
         const { campaignId, memberId, userId } = await setup("master")
-        const check = await MaddoxCampaignMessageModel.create({ campaignId, turnNumber: 3, phase: "master", kind: "check", memberId, userId, content: "", check: { round: 0, kind: "skill", ability: "wisdom", skill: "perception", mode: "normal", reason: "Percepção", dc: 12, status: "pending", sheetId: null } })
+        const check = await MaddoxCampaignMessageModel.create({ campaignId, turnNumber: 3, phase: "master", kind: "check", memberId, userId, content: "", check: { round: 0, kind: "skill", ability: "wisdom", skill: "Percepção", mode: "normal", reason: "Percepção", dc: 12, status: "pending", sheetId: null } })
         const initiative = await MaddoxCampaignMessageModel.create({ campaignId, turnNumber: 3, phase: "master", kind: "combat-roll", memberId, userId, content: "", combatRoll: { kind: "initiative", status: "pending", reason: "Iniciativa", dice: "1d20+2", mode: "normal", dc: null } })
         const death = await MaddoxCampaignMessageModel.create({ campaignId, turnNumber: 3, phase: "master", kind: "combat-roll", memberId, userId, content: "", combatRoll: { kind: "death-save", status: "pending", reason: "Teste contra a morte", dice: "1d20", mode: "normal", dc: 10 } })
         await driveOpex(campaignId)
@@ -115,7 +115,7 @@ describe("Personagens Opex — testes e combate (DND-26)", () => {
 
     it("decide a reação entre as opções; falha do agente = não reage (sem travar a mesa)", async () => {
         const { campaignId, memberId, userId } = await setup("master")
-        const reaction = await MaddoxCampaignMessageModel.create({ campaignId, turnNumber: 3, phase: "master", kind: "combat-reaction", memberId, userId, content: "", combatReaction: { combatId: "c", waitRound: 0, trigger: "atingido", description: "O goblin acerta Tork", status: "pending", options: [{ id: "spell:escudo", label: "Escudo" }], choice: null, deadline: new Date(Date.now() + 45_000), pendingAttack: null, sourceKey: null, outcome: null, decidedBy: null } })
+        const reaction = await MaddoxCampaignMessageModel.create({ campaignId, turnNumber: 3, phase: "master", kind: "combat-reaction", memberId, userId, content: "", combatReaction: { combatId: "c", waitRound: 0, trigger: "hit", description: "O goblin acerta Tork", status: "pending", options: [{ id: "spell:escudo", label: "Escudo" }], choice: null, deadline: new Date(Date.now() + 45_000), pendingAttack: null, sourceKey: null, outcome: null, decidedBy: null } })
         opexReplies.push(JSON.stringify({ escolha: "spell:escudo" }))
         await driveOpex(campaignId)
         await settle()

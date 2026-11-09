@@ -106,7 +106,7 @@ async function readyCampaign() {
 }
 
 const opexMember = (campaignId: string) => MaddoxCampaignMemberModel.findOne({ campaignId, kind: "opex" }).lean()
-const interviewOf = (memberId: unknown) => MaddoxInterviewModel.findOne({ memberId }).lean()
+const interviewOf = (memberId: mongoose.Types.ObjectId) => MaddoxInterviewModel.findOne({ memberId }).lean()
 
 beforeAll(async () => {
     mongo = await MongoMemoryServer.create()
