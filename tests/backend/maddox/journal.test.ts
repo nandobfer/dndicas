@@ -398,3 +398,28 @@ describe("DND-22 — imagens do Maddox no diário", () => {
         await expect(journal.listJournalImages(c.id, {}, c.outsider)).rejects.toMatchObject({ status: 404 })
     })
 })
+
+describe("DND-36 — busca do Diário com as declarações dos outros ocultas", () => {
+    it("ligado: o texto da declaração de outro jogador sai da busca; a própria, perguntas, narração e o resumo do combate continuam", async () => {
+        const c = await campaignWithJournal()
+        await message(c.id, "declaration", "Seguro os baldes com a corda.", { memberId: new mongoose.Types.ObjectId(c.ownerMember), userId: c.owner, characterName: "Aldric", turnNumber: 2 })
+        await message(c.id, "question", "Os baldes têm furos?", { memberId: new mongoose.Types.ObjectId(c.playerMember), userId: c.player, characterName: "Lyra" })
+        await message(c.id, "declaration", "Vez de Lyra (rodada do combate)\n- Arremessa os baldes no goblin.", { memberId: new mongoose.Types.ObjectId(c.playerMember), userId: c.player, characterName: "Lyra", turnNumber: 4, combatTurn: true })
+        await message(c.id, "declaration", "Vez de Lyra (rodada do combate)\n- Esconde os baldes atrás do balcão.", { memberId: new mongoose.Types.ObjectId(c.playerMember), userId: c.player, characterName: "Lyra", turnNumber: 5 })
+        const contents = async (userId: string) => (await journal.searchJournal(c.id, { q: "baldes" }, userId)).messages.items.map((item) => item.excerpt).join(" | ")
+
+        const before = await contents(c.owner)
+        expect(before).toContain("Corro para buscar baldes")
+
+        await MaddoxCampaignModel.updateOne({ _id: c.id }, { $set: { hidePlayerActions: true } })
+        const owner = await contents(c.owner)
+        expect(owner).not.toContain("Corro para buscar baldes")
+        expect(owner).toContain("Seguro os baldes")
+        expect(owner).toContain("Os baldes têm furos?")
+        expect(owner).toContain("Arremessa os baldes")
+        expect(owner).toContain("Esconde os baldes")
+        const player = await contents(c.player)
+        expect(player).toContain("Corro para buscar baldes")
+        expect(player).not.toContain("Seguro os baldes")
+    })
+})

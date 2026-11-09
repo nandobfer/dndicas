@@ -65,6 +65,8 @@ export interface IMaddoxCampaign {
     showCheckDc: boolean
     /** Imagens automáticas nas cenas (Maddox 10): o dono desliga na campanha; o pedido manual continua. */
     sceneImages: boolean
+    /** Declarações dos outros jogadores ocultas no chat (DND-36): só na leitura; o texto fica salvo e o Maddox recebe tudo. */
+    hidePlayerActions: boolean
     /** Densidade das narrações (DND-22): o dono muda a qualquer momento; vale a partir da próxima narração. */
     density: MaddoxDensityLevel
     /** Nível inicial da mesa (graus com ficha), definido na entrevista de cenário; `null` = cada personagem informa. */
@@ -133,6 +135,7 @@ const MaddoxCampaignSchema = new Schema<IMaddoxCampaign>(
         },
         showCheckDc: { type: Boolean, default: false },
         sceneImages: { type: Boolean, default: true },
+        hidePlayerActions: { type: Boolean, default: false },
         density: { type: String, enum: MADDOX_DENSITY_LEVELS, default: MADDOX_DEFAULT_DENSITY },
         startingLevel: { type: Number, default: null, min: 1, max: 20 },
         startingStage: { type: String, default: "" },

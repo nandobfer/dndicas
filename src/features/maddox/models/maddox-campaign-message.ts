@@ -98,6 +98,8 @@ export interface IMaddoxCampaignMessage {
     combatReaction: IMaddoxCombatReaction | null
     /** "Não fez nada" registrado porque o jogador estava offline na própria vez (combate tático). */
     offlineSkip: boolean
+    /** Declaração que é o resumo da vez no combate tático ("Encerrar turno", DND-36): nunca fica oculta para os outros. */
+    combatTurn: boolean
     /**
      * Lembrança injetada (`kind: "reminder"`, DND-25): `jobId` = geração do Maddox que a considerou (reivindicada no começo
      * da narração; volta a `null` se a geração falhar); `status` muda depois de a narração ser gravada.
@@ -158,6 +160,7 @@ const MaddoxCampaignMessageSchema = new Schema<IMaddoxCampaignMessage>(
         combatRoll: { type: Schema.Types.Mixed, default: null },
         combatReaction: { type: Schema.Types.Mixed, default: null },
         offlineSkip: { type: Boolean, default: false },
+        combatTurn: { type: Boolean, default: false },
         reminder: { type: Schema.Types.Mixed, default: null },
         actionOptions: {
             type: [

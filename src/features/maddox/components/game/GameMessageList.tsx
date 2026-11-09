@@ -2,7 +2,7 @@
 
 import { Fragment, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react"
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion"
-import { AlertCircle, ArrowDown, BookOpen, HelpCircle, Loader2, MinusCircle } from "lucide-react"
+import { AlertCircle, ArrowDown, BookOpen, EyeOff, HelpCircle, Loader2, MinusCircle } from "lucide-react"
 import { Button } from "@/components/ui/opex/button"
 import { Markdown } from "@/components/ui/opex/markdown"
 import type { MaddoxGameMessageDto, MaddoxLiveGenerationDto } from "../../game-types"
@@ -288,6 +288,17 @@ function GameMessage({ message, mine, replyTo, maddoxAvatarUrl, color }: { messa
                 <MinusCircle className="h-3.5 w-3.5" aria-hidden />
                 <span>
                     <span className="font-medium text-white/70">{name}</span> não fez nada{message.skippedByName ? ` (pulado por ${message.skippedByName})` : ""}.
+                </span>
+            </motion.p>
+        )
+    }
+    // Declaração de outro jogador oculta pela campanha (DND-36): o texto não chega; só a linha discreta.
+    if (message.hiddenAction && !mine) {
+        return (
+            <motion.p {...bubble} className="flex items-center justify-center gap-1.5 pb-3 text-xs text-white/50" data-testid="game-action-hidden">
+                <EyeOff className="h-3.5 w-3.5" aria-hidden />
+                <span>
+                    <span className="font-medium text-white/70">{name}</span> declarou sua ação.
                 </span>
             </motion.p>
         )

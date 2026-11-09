@@ -879,6 +879,21 @@ describe("DND-25 — um bloco por adversário", () => {
         expect(script).toHaveLength(0)
     })
 
+    it("DND-36: o resumo do \"Encerrar turno\" é marcado como combate e não fica oculto para os outros", async () => {
+        const { id, kael, lyra } = await scene()
+        await MaddoxCampaignModel.updateOne({ _id: id }, { $set: { hidePlayerActions: true } })
+        await addSecondGoblin(id, { defeated: true })
+        script.push([{ text: "Kael recua." }], [{ text: "O goblin hesita." }])
+        await actions.endCombatTurn(id, { movimento: "Recuo para a porta." }, kael.userId)
+        await settleCampaign(id)
+        const summary = (await MaddoxCampaignMessageModel.findOne({ campaignId: id, kind: "declaration", memberId: kael.memberId }).lean())!
+        expect(summary).toMatchObject({ combatTurn: true })
+        expect(summary.content).toContain("Recuo para a porta.")
+        const seen = (await game.getGameState(id, lyra.userId)).messages.find((message) => message.id === String(summary._id))!
+        expect(seen.content).toContain("Recuo para a porta.")
+        expect(seen.hiddenAction).toBeUndefined()
+    })
+
     it("todos os personagens com 0 PV no meio da sequência: os adversários restantes não agem e o combate termina em derrota", async () => {
         const { id, kael } = await scene()
         await addSecondGoblin(id)

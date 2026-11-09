@@ -650,3 +650,84 @@ describe("Maddox 4 — validação da ação livre ao declarar", () => {
         expect(validateDeclaration).not.toHaveBeenCalled()
     })
 })
+
+describe("DND-36 — declarações dos outros jogadores ocultas no chat", () => {
+    const hide = (id: string, owner: string, value: boolean) => campaigns.updateCampaign(id, { hidePlayerActions: value }, owner)
+    const byKind = (messages: Awaited<ReturnType<typeof g.getGameState>>["messages"], kind: string) => messages.filter((message) => message.kind === kind)
+
+    it("ligado: o outro jogador recebe a declaração sem texto e com a marca; o autor vê o próprio texto; a lista não encolhe", async () => {
+        const { id, owner, seats } = await table(3)
+        await hide(id, owner, true)
+        await g.startCampaign(id, owner)
+        await declare(id, seats[1]!.userId, "Escondo a adaga na bota.")
+        await g.submitGameAction(id, { kind: "question", content: "Há guardas na porta?" }, seats[2]!.userId)
+
+        const other = await g.getGameState(id, seats[2]!.userId)
+        const author = await g.getGameState(id, seats[1]!.userId)
+        expect(other.messages.map((message) => message.id)).toEqual(author.messages.map((message) => message.id))
+        expect(byKind(other.messages, "declaration")[0]).toMatchObject({ content: "", hiddenAction: true, characterName: "Herói 1", memberId: seats[1]!.memberId })
+        expect(JSON.stringify(other.messages)).not.toContain("Escondo a adaga")
+        expect(byKind(author.messages, "declaration")[0]).toMatchObject({ content: "Escondo a adaga na bota." })
+        expect(byKind(author.messages, "declaration")[0]!.hiddenAction).toBeUndefined()
+        // Pergunta ao mestre e resposta do Maddox continuam visíveis para todos.
+        expect(byKind(other.messages, "question")[0]).toMatchObject({ content: "Há guardas na porta?" })
+        expect(byKind(author.messages, "question")[0]).toMatchObject({ content: "Há guardas na porta?" })
+        expect(byKind(author.messages, "answer")[0]!.content).toContain("o Maddox responde")
+    })
+
+    it("ligado: \"não fez nada\" e narração não mudam, e o narrador recebe o texto completo das declarações", async () => {
+        const { id, owner, seats } = await table(2)
+        await hide(id, owner, true)
+        await g.startCampaign(id, owner)
+        await declare(id, seats[0]!.userId, "Corro até a porta.")
+        await g.submitGameAction(id, { kind: "pass" }, seats[1]!.userId)
+        const context = fakeMaster.narrate.mock.calls.at(-1)![0]
+        expect(context.declarations).toEqual(expect.arrayContaining([expect.objectContaining({ kind: "declaration", content: "Corro até a porta." })]))
+        const other = await g.getGameState(id, seats[1]!.userId)
+        expect(byKind(other.messages, "pass")[0]).toMatchObject({ characterName: "Herói 1" })
+        expect(byKind(other.messages, "pass")[0]!.hiddenAction).toBeUndefined()
+        expect(byKind(other.messages, "narration").at(-1)!.content).toContain("Corro até a porta.")
+        expect(byKind(other.messages, "declaration")[0]).toMatchObject({ content: "", hiddenAction: true })
+        expect(await MaddoxCampaignMessageModel.findOne({ campaignId: id, kind: "declaration" }).lean()).toMatchObject({ content: "Corro até a porta." })
+    })
+
+    it("o histórico (listGameMessages) aplica a mesma regra", async () => {
+        const { id, owner, seats } = await table(2)
+        await hide(id, owner, true)
+        await g.startCampaign(id, owner)
+        await declare(id, seats[0]!.userId, "Acendo a tocha.")
+        await declare(id, seats[1]!.userId, "Vigio a rua.")
+        const marker = await MaddoxCampaignMessageModel.create({ campaignId: id, turnNumber: 99, phase: "players", kind: "narration", content: "Depois." })
+        const page = await game.listGameMessages(id, String(marker._id), seats[1]!.userId)
+        const declarations = byKind(page.messages, "declaration")
+        expect(declarations.find((message) => message.memberId === seats[0]!.memberId)).toMatchObject({ content: "", hiddenAction: true })
+        expect(declarations.find((message) => message.memberId === seats[1]!.memberId)).toMatchObject({ content: "Vigio a rua." })
+    })
+
+    it("o resumo da vez do combate tático nunca fica oculto (marca `combatTurn` e o formato antigo sem a marca)", async () => {
+        const { id, owner, seats } = await table(2)
+        await hide(id, owner, true)
+        await g.startCampaign(id, owner)
+        const base = { campaignId: id, phase: "players" as const, kind: "declaration" as const, memberId: seats[0]!.memberId, userId: seats[0]!.userId, characterName: "Herói 0" }
+        await MaddoxCampaignMessageModel.create({ ...base, turnNumber: 50, content: "Vez de Herói 0 (rodada do combate)\n- Ataca o goblin.", combatTurn: true })
+        await MaddoxCampaignMessageModel.create({ ...base, turnNumber: 51, content: "Vez de Herói 0 (rodada do combate)\n- Recua para a porta." })
+        const other = await g.getGameState(id, seats[1]!.userId)
+        const declarations = byKind(other.messages, "declaration")
+        expect(declarations.map((message) => message.content)).toEqual(["Vez de Herói 0 (rodada do combate)\n- Ataca o goblin.", "Vez de Herói 0 (rodada do combate)\n- Recua para a porta."])
+        expect(declarations.every((message) => message.hiddenAction === undefined)).toBe(true)
+    })
+
+    it("desligado (padrão) mostra tudo; ligar oculta e desligar devolve os textos sem perder nada", async () => {
+        const { id, owner, seats } = await table(2)
+        await g.startCampaign(id, owner)
+        await declare(id, seats[0]!.userId, "Pulo a janela.")
+        const declarationOf = async () => byKind((await g.getGameState(id, seats[1]!.userId)).messages, "declaration")[0]!
+        expect(await declarationOf()).toMatchObject({ content: "Pulo a janela." })
+        await hide(id, owner, true)
+        expect(await declarationOf()).toMatchObject({ content: "", hiddenAction: true })
+        await hide(id, owner, false)
+        const back = await declarationOf()
+        expect(back).toMatchObject({ content: "Pulo a janela." })
+        expect(back.hiddenAction).toBeUndefined()
+    })
+})

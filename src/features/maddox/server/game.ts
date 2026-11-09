@@ -40,6 +40,7 @@ import {
 import type { MaddoxGameActionInput, MaddoxSkipPlayerInput } from "../game-schemas"
 import type { MaddoxGameCheckDto, MaddoxGameMessageDto, MaddoxGameMessagesPageDto, MaddoxGameParticipantDto, MaddoxGameStateDto } from "../game-types"
 import { checkSucceeded, keptD20 } from "../check-modifier"
+import { isHiddenPlayerAction, type PlayerActionsViewer } from "../player-actions-visibility"
 import { assertMemberCanPlay, isMemberReadyToPlay, loadMembership } from "./campaigns"
 import { getMaddoxMaster, type MaddoxMasterDeclaration } from "./game-master"
 import { beginLive, enqueueMaddoxJob, isCampaignBusy, takeDraftActionOptions, takeDraftChecks, takeDraftCombat, takeDraftImages } from "./game-live"
@@ -536,7 +537,7 @@ async function assertNotDeclared(campaign: CampaignDoc, target: MemberDoc): Prom
 }
 
 /** Grava a declaração/"não fazer nada" de um membro e a conta no turno (409 se o turno fechou no meio). */
-export async function recordTurnAction(campaign: CampaignDoc, target: MemberDoc, character: CharacterDoc | null, kind: "declaration" | "pass", content: string, skippedBy: string | null, extra: { offlineSkip?: boolean } = {}) {
+export async function recordTurnAction(campaign: CampaignDoc, target: MemberDoc, character: CharacterDoc | null, kind: "declaration" | "pass", content: string, skippedBy: string | null, extra: { offlineSkip?: boolean; combatTurn?: boolean } = {}) {
     const turnNumber = campaign.turn.number
     if (idSet(campaign.turn.declaredMemberIds).has(String(target._id))) throw new DomainError(409, "Este jogador já declarou neste turno.", "ALREADY_DECLARED")
     let message
@@ -554,6 +555,7 @@ export async function recordTurnAction(campaign: CampaignDoc, target: MemberDoc,
             skippedBy,
             turnAction: true,
             ...(extra.offlineSkip ? { offlineSkip: true } : {}),
+            ...(extra.combatTurn ? { combatTurn: true } : {}),
         })
     } catch (error) {
         if (isDuplicateKey(error)) throw new DomainError(409, "Este jogador já declarou neste turno.", "ALREADY_DECLARED")
@@ -749,11 +751,13 @@ export async function onMemberLeftGame(campaignId: Types.ObjectId, memberId: Typ
 
 // ── Leitura ────────────────────────────────────────────────────────────────────
 
-/** Quem lê as mensagens: o teste pendente só chega ao jogador indicado. */
-interface MessagesViewer {
+/** Quem lê as mensagens: o teste pendente só chega ao jogador indicado; a declaração dos outros pode chegar oculta (DND-36). */
+interface MessagesViewer extends PlayerActionsViewer {
     memberId: string | null
     showCheckDc: boolean
 }
+
+const viewerOf = (campaign: CampaignDoc, member: MemberDoc): MessagesViewer => ({ memberId: String(member._id), showCheckDc: Boolean(campaign.showCheckDc), hidePlayerActions: Boolean(campaign.hidePlayerActions) })
 
 /** Sugestões de ação da narração só para o personagem de quem vê (DND-30): as dos outros nunca saem do servidor. */
 const actionOptionsFor = (message: MessageDoc, viewer: MessagesViewer): string[] | null => {
@@ -792,6 +796,7 @@ async function messagesDto(all: MessageDoc[], viewer: MessagesViewer): Promise<M
     const userById = new Map(users.map((user) => [String(user._id), user.name?.trim() || user.username || "Dono"]))
     return messages.map((message) => {
         const character = message.characterId ? characterById.get(String(message.characterId)) : undefined
+        const hiddenAction = isHiddenPlayerAction(message, viewer)
         return {
             id: String(message._id),
             turnNumber: message.turnNumber,
@@ -800,7 +805,8 @@ async function messagesDto(all: MessageDoc[], viewer: MessagesViewer): Promise<M
             memberId: message.memberId ? String(message.memberId) : null,
             characterName: character?.name ?? message.characterName ?? null,
             portraitUrl: character?.portraitUrl ?? null,
-            content: message.content,
+            content: hiddenAction ? "" : message.content,
+            ...(hiddenAction ? { hiddenAction: true } : {}),
             replyToId: message.replyToId ? String(message.replyToId) : null,
             skippedByName: message.skippedBy ? (userById.get(message.skippedBy) ?? "Dono") : message.offlineSkip ? "ausência (offline)" : null,
             error: message.error ?? null,
@@ -886,7 +892,7 @@ export async function getGameState(campaignId: string, userId: string): Promise<
         if (await resumeMasterTurn(campaign)) campaign = await reloadCampaign(campaign._id)
         campaign = await fillEmptyTurn(campaign)
     }
-    const viewer: MessagesViewer = { memberId: String(loaded.member._id), showCheckDc: Boolean(campaign.showCheckDc) }
+    const viewer = viewerOf(campaign, loaded.member)
     // Imagens nas cenas (Maddox 10): as presas (processo reiniciado) viram falha antes da leitura.
     const sceneImages = await import("./scene-images")
     await sceneImages.expireStaleSceneImages(campaign._id).catch((error) => log.warn({ err: error instanceof Error ? error.message : String(error) }, "[maddox] falha ao expirar imagens presas"))
@@ -987,7 +993,7 @@ export async function listGameMessages(campaignId: string, before: string | null
     const { campaign, member } = await loadAsMember(campaignId, userId)
     if (before !== null && !Types.ObjectId.isValid(before)) throw new DomainError(400, "Cursor inválido", "INVALID_CURSOR")
     await dbConnect()
-    return messagesPage(campaign._id, before ? new Types.ObjectId(before) : null, { memberId: String(member._id), showCheckDc: Boolean(campaign.showCheckDc) })
+    return messagesPage(campaign._id, before ? new Types.ObjectId(before) : null, viewerOf(campaign, member))
 }
 
 /** Ficha D&D do MEU personagem (só a minha chega à tela). */

@@ -55,6 +55,7 @@ const listItem = (over: Partial<MaddoxCampaignListItemDto> = {}): MaddoxCampaign
     scenarioStatus: "pending",
     showCheckDc: false,
     sceneImages: true,
+    hidePlayerActions: false,
     density: "equilibrada",
     startingLevel: null,
     startingStage: "",
@@ -243,6 +244,19 @@ describe("lista de campanhas", () => {
         fireEvent.change(screen.getByLabelText("Nome da campanha"), { target: { value: "Sem Imagens" } })
         fireEvent.click(screen.getByRole("button", { name: "Criar campanha" }))
         await waitFor(() => expect(post).toHaveBeenCalledWith("/maddox/campaigns", expect.objectContaining({ name: "Sem Imagens", sceneImages: false })))
+    })
+
+    it("ações dos outros jogadores na criação (DND-36): visíveis por padrão (não vão no POST); ocultas enviam hidePlayerActions: true", async () => {
+        post.mockResolvedValue(ok(detail({ id: "c9", name: "Às Escuras", rigor: "narrativo" })))
+        renderWithQueryClient(<CampaignsPage />)
+        fireEvent.click(await screen.findByRole("button", { name: /Nova campanha/ }))
+        const field = await screen.findByTestId("player-actions-field")
+        expect(field).toHaveTextContent("Todos veem o texto das declarações no chat.")
+        fireEvent.click(within(field).getByRole("button", { name: "Ocultas" }))
+        await waitFor(() => expect(screen.getByTestId("player-actions-field")).toHaveTextContent("Os outros jogadores veem só \"Fulano declarou sua ação\""))
+        fireEvent.change(screen.getByLabelText("Nome da campanha"), { target: { value: "Às Escuras" } })
+        fireEvent.click(screen.getByRole("button", { name: "Criar campanha" }))
+        await waitFor(() => expect(post).toHaveBeenCalledWith("/maddox/campaigns", expect.objectContaining({ name: "Às Escuras", hidePlayerActions: true })))
     })
 
     it("densidade na criação (DND-22): slider no modelo do rigor, com descrição e tamanho por passo, e o valor vai no POST", async () => {
@@ -447,6 +461,24 @@ describe("página da campanha (lobby)", () => {
         fireEvent.click(within(within(dialog).getByTestId("scene-images-field")).getByRole("button", { name: "Desligadas" }))
         fireEvent.click(within(dialog).getByRole("button", { name: "Salvar" }))
         await waitFor(() => expect(patch).toHaveBeenCalledWith("/maddox/campaigns/c1", { sceneImages: false }))
+    })
+
+    it("editar as ações dos outros jogadores (DND-36, mesmo em andamento) envia só hidePlayerActions; sem mudança não envia nada", async () => {
+        let current = detail({ status: "active", rigorLocked: true, hidePlayerActions: false })
+        get.mockImplementation(async (url: string) => (url.endsWith("/invite") ? ok({ token: TOKEN, rotatedAt: null }) : ok(current)))
+        patch.mockImplementation(async (_url: string, body: Record<string, unknown>) => {
+            current = { ...current, ...body }
+            return ok(current)
+        })
+        renderWithQueryClient(<CampaignPage campaignId="c1" />)
+        let dialog = await openEdit()
+        fireEvent.click(within(dialog).getByRole("button", { name: "Salvar" }))
+        await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull())
+        expect(patch).not.toHaveBeenCalled()
+        dialog = await openEdit()
+        fireEvent.click(within(within(dialog).getByTestId("player-actions-field")).getByRole("button", { name: "Ocultas" }))
+        fireEvent.click(within(dialog).getByRole("button", { name: "Salvar" }))
+        await waitFor(() => expect(patch).toHaveBeenCalledWith("/maddox/campaigns/c1", { hidePlayerActions: true }))
     })
 
     it("editar a densidade (DND-22) com a campanha em andamento e o rigor travado envia só density; o chip mostra o nível", async () => {
