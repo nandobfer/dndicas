@@ -79,7 +79,7 @@ async function workspaceOf(campaignId: Types.ObjectId, jobId: string, turnNumber
     if (!combat) throw new TacticalToolError("Não há combate tático em andamento: comece com start_combat quando a luta começar.")
     if (combat.tactical.phase !== "running") throw new TacticalToolError("O combate ainda está na iniciativa: espere os jogadores rolarem antes de agir pelos adversários.")
     const { loadCharacterOptions } = await import("./tactical-options")
-    const views = await loadCharacterOptions(combat.tactical.characters.filter((state) => !state.left && !state.dead))
+    const views = await loadCharacterOptions(combat.tactical.characters.filter((state) => !state.left && !state.dead), undefined, combat._id)
     const sheets: Record<string, SheetHp> = {}
     const reactions: Record<string, CombatOption[]> = {}
     for (const state of combat.tactical.characters) {

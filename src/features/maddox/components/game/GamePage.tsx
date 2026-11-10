@@ -18,9 +18,10 @@ import { actionOptionsView, combatBannerText, composerBlockReason, masterBannerT
 import { useMaddoxOpexTableActions } from "../../hooks/useMaddoxOpex"
 import { OpexFailureBanner } from "./OpexFailureBanner"
 import type { MaddoxCombatActionInput } from "../../combat-schemas"
-import { useCancelCombatAction, useDecideReaction, useEndCombatTurn, useRollCombatStep, useSubmitCombatAction } from "../../hooks/useMaddoxCombat"
+import { useCancelCombatAction, useDecideReaction, useEndCombatTurn, useRequestCombatAdjustment, useRetryCombatPrep, useRollCombatStep, useSkipCombatPrep, useSubmitCombatAction } from "../../hooks/useMaddoxCombat"
 import { CombatActionBar, CombatWaitBar } from "./combat/CombatActionBar"
 import { InitiativeTracker } from "./combat/InitiativeTracker"
+import { CombatPrepBlockedNotice } from "./combat/CombatCards"
 import {
     fetchOlderGameMessages,
     useMaddoxGame,
@@ -104,6 +105,9 @@ function GameTable({ state, presence, stream }: { state: MaddoxGameStateDto; pre
     const combatCancel = useCancelCombatAction(state.campaignId)
     const combatEnd = useEndCombatTurn(state.campaignId)
     const combatRoll = useRollCombatStep(state.campaignId)
+    const prepRetry = useRetryCombatPrep(state.campaignId)
+    const prepSkip = useSkipCombatPrep(state.campaignId)
+    const combatAdjust = useRequestCombatAdjustment(state.campaignId)
     const combatReact = useDecideReaction(state.campaignId)
     const [asking, setAsking] = useState(false)
     const [combatInvalid, setCombatInvalid] = useState<string | null>(null)
@@ -266,9 +270,25 @@ function GameTable({ state, presence, stream }: { state: MaddoxGameStateDto; pre
                                     onAct={onCombatAct}
                                     onEndTurn={(movimento) => combatEnd.mutate(movimento.trim() ? { movimento: movimento.trim() } : {})}
                                     onAsk={() => setAsking((value) => !value)}
+                                    onAdjust={async (input) => {
+                                        try {
+                                            await combatAdjust.mutateAsync(input)
+                                            return true
+                                        } catch {
+                                            return false
+                                        }
+                                    }}
+                                    adjusting={combatAdjust.isPending}
                                 />
                             ) : (
-                                <CombatWaitBar combat={tactical} canAsk={questionBlock === null} onAsk={() => setAsking((value) => !value)} />
+                                <>
+                                    {tactical.preparation?.blocked && (
+                                        <div className="border-t px-4 pt-3">
+                                            <CombatPrepBlockedNotice preparation={tactical.preparation} isOwner={state.me.isOwner} retrying={prepRetry.isPending} skipping={prepSkip.isPending} onRetry={(prepId) => prepRetry.mutate(prepId)} onSkip={(prepId) => prepSkip.mutate(prepId)} />
+                                        </div>
+                                    )}
+                                    <CombatWaitBar combat={tactical} isOwner={state.me.isOwner} canAsk={questionBlock === null} onAsk={() => setAsking((value) => !value)} />
+                                </>
                             )}
                             {asking && <GameComposer blockedReason={questionBlock} declared busy={send.isPending} onSend={onSend} invalidReason={null} focusKey={focusKey} />}
                         </>

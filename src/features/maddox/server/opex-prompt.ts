@@ -194,6 +194,10 @@ export interface OpexCombatOptionLine {
     levels?: number[]
     skills?: string[]
     needsText?: boolean
+    /** DND-41: dano adicional marcável ("Ataque furtivo (+1d6)"). */
+    sneakAttack?: string | null
+    /** DND-41: motivo do ajuste do Maddox na preparação. */
+    adjusted?: string | null
 }
 
 export interface OpexCombatTask {
@@ -208,7 +212,7 @@ export interface OpexCombatTask {
 export function opexCombatTask(task: OpexCombatTask): string {
     const lines = task.options.map(
         (option) =>
-            `- [${option.economy === "action" ? "Ação" : "Ação bônus"}] id="${option.id}" — ${option.label}${option.detail ? ` (${option.detail})` : ""}; alvo: ${option.target}${option.levels?.length ? `; círculos: ${option.levels.join(", ")}` : ""}${option.skills?.length ? `; perícias: ${option.skills.join(", ")}` : ""}${option.needsText ? "; exige texto (descreva a ação)" : ""}`,
+            `- [${option.economy === "action" ? "Ação" : "Ação bônus"}] id="${option.id}" — ${option.label}${option.detail ? ` (${option.detail})` : ""}; alvo: ${option.target}${option.levels?.length ? `; círculos: ${option.levels.join(", ")}` : ""}${option.skills?.length ? `; perícias: ${option.skills.join(", ")}` : ""}${option.needsText ? "; exige texto (descreva a ação)" : ""}${option.sneakAttack ? `; pode marcar ${option.sneakAttack} (uma vez por turno; precisa de vantagem ou de um aliado a até 1,5 m do alvo)` : ""}${option.adjusted ? `; ajustado pelo Maddox: ${option.adjusted}` : ""}`,
     )
     return [
         `## Tarefa: a vez do seu personagem no combate (rodada ${task.round})`,
@@ -218,7 +222,7 @@ export function opexCombatTask(task: OpexCombatTask): string {
         `### Opções\n${lines.join("\n") || "(nenhuma)"}`,
         `### Alvos (use a chave)\n${task.targets.map((target) => `- "${target.key}": ${target.name} (${target.side})`).join("\n") || "(nenhum)"}`,
         ...(task.previousError ? [`### A escolha anterior foi recusada\n${task.previousError}\nEscolha outra opção.`] : []),
-        'Responda só com: {"acoes": [{"economia": "action" | "bonus", "opcao": "id da opção", "alvos": ["chave"], "circulo": número opcional, "pericia": "opcional", "texto": "opcional"}], "movimento": "como o personagem se move e se posiciona (opcional)"}',
+        'Responda só com: {"acoes": [{"economia": "action" | "bonus", "opcao": "id da opção", "alvos": ["chave"], "circulo": número opcional, "pericia": "opcional", "texto": "opcional", "ataqueFurtivo": true | false (opcional)}], "movimento": "como o personagem se move e se posiciona (opcional)"}',
     ].join("\n\n")
 }
 
@@ -232,6 +236,7 @@ export const opexCombatPlanSchema = z.object({
                 circulo: z.number().int().optional(),
                 pericia: z.string().optional(),
                 texto: z.string().optional(),
+                ataqueFurtivo: z.boolean().optional(),
             }),
         )
         .max(4)

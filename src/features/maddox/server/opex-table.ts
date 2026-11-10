@@ -235,6 +235,8 @@ function optionLines(state: MaddoxGameStateDto): OpexCombatOptionLine[] {
             levels: option.spell?.levels,
             skills: option.skills,
             needsText: option.id === "free" || Boolean(option.uncertain),
+            sneakAttack: option.attack?.riders?.[0]?.label ?? null,
+            adjusted: option.adjusted?.reason ?? null,
         }))
 }
 
@@ -307,6 +309,7 @@ async function runOpexCombatTurn(campaign: CampaignDoc, member: MemberDoc, chara
                             ...(choice.circulo ? { spellLevel: choice.circulo } : {}),
                             ...(choice.pericia ? { skill: choice.pericia } : {}),
                             ...(choice.texto?.trim() ? { freeText: choice.texto.trim().slice(0, 1_000) } : {}),
+                            ...(choice.ataqueFurtivo ? { sneakAttack: true } : {}),
                         },
                         userId,
                     )

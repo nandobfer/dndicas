@@ -256,6 +256,8 @@ async function applyEnd(campaign: CampaignRef, turnNumber: number, event: Extrac
         { returnDocument: "after" },
     ).lean<IMaddoxCombat>()
     if (!ended) return null
+    // DND-41: a preparação que ainda não terminou é descartada (nada é gravado na ficha).
+    await (await import("./combat-prep")).discardCombatPreps(ended._id)
     log.info({ campaignId: String(campaign._id), combatId: String(ended._id), turnNumber, outcome: event.outcome, rewards: rewards.length }, "[maddox] combate terminou")
     // Os efeitos do fim só rodam depois que os cards e a narração forem gravados (`finishCombatTurn`).
     return { event: "end", combatId: ended._id }

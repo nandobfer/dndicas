@@ -763,6 +763,8 @@ export async function checkTurn(campaignId: string, userId: string): Promise<Mad
             const { evaluateCombatAbsence } = await import("./tactical-actions")
             await evaluateCombatAbsence(campaign._id)
         }
+        // DND-41: preparação da mesa de combate presa (processo reiniciado) volta para a fila.
+        await (await import("./combat-prep")).scheduleCombatPreps(campaign._id).catch((error: unknown) => log.warn({ err: error instanceof Error ? error.message : String(error) }, "[maddox] falha ao retomar a preparação do combate"))
         await evaluateTurn(campaign._id)
     }
     return getGameState(campaignId, userId)
@@ -796,9 +798,11 @@ export async function onMemberLeftGame(campaignId: Types.ObjectId, memberId: Typ
 interface MessagesViewer extends PlayerActionsViewer {
     memberId: string | null
     showCheckDc: boolean
+    /** Dono da campanha: recebe também o card "Sua mesa está pronta" dos Personagens Opex (a ficha deles é dele). */
+    isOwner: boolean
 }
 
-const viewerOf = (campaign: CampaignDoc, member: MemberDoc): MessagesViewer => ({ memberId: String(member._id), showCheckDc: Boolean(campaign.showCheckDc), hidePlayerActions: Boolean(campaign.hidePlayerActions) })
+const viewerOf = (campaign: CampaignDoc, member: MemberDoc): MessagesViewer => ({ memberId: String(member._id), showCheckDc: Boolean(campaign.showCheckDc), hidePlayerActions: Boolean(campaign.hidePlayerActions), isOwner: member.role === "owner" })
 
 /** Sugestões de ação da narração só para o personagem de quem vê (DND-30): as dos outros nunca saem do servidor. */
 const actionOptionsFor = (message: MessageDoc, viewer: MessagesViewer): string[] | null => {
@@ -809,7 +813,9 @@ const actionOptionsFor = (message: MessageDoc, viewer: MessagesViewer): string[]
 
 const visibleTo = (viewer: MessagesViewer) => (message: MessageDoc) =>
     !(message.kind === "check" && message.check?.status === "pending" && String(message.memberId) !== viewer.memberId) &&
-    !(message.kind === "combat-roll" && message.combatRoll?.status === "pending" && message.combatRoll.kind !== "enemy-initiative" && String(message.memberId) !== viewer.memberId)
+    !(message.kind === "combat-roll" && message.combatRoll?.status === "pending" && message.combatRoll.kind !== "enemy-initiative" && String(message.memberId) !== viewer.memberId) &&
+    // DND-41: "Sua mesa está pronta" é privado do dono do personagem (o do Personagem Opex vai ao dono da campanha).
+    !(message.kind === "combat-prep" && String(message.memberId) !== viewer.memberId && !(viewer.isOwner && isOpexUserId(message.userId)))
 
 async function messagesDto(all: MessageDoc[], viewer: MessagesViewer): Promise<MaddoxGameMessageDto[]> {
     const messages = all.filter(visibleTo(viewer))
@@ -866,6 +872,7 @@ async function messagesDto(all: MessageDoc[], viewer: MessagesViewer): Promise<M
             offlineSkip: Boolean(message.offlineSkip),
             ...(message.kind === "reminder" ? { reminder: { status: message.reminder?.status ?? "pending" } } : {}),
             ...(message.kind === "narration" ? { actionOptions: actionOptionsFor(message, viewer) } : {}),
+            ...(message.kind === "combat-prep" && message.combatPrep ? { combatPrep: { characterName: message.combatPrep.characterName, changes: message.combatPrep.changes ?? [] } } : {}),
             createdAt: new Date(message.createdAt).toISOString(),
         }
     })
@@ -1019,7 +1026,7 @@ export async function getGameState(campaignId: string, userId: string): Promise<
         showCheckDc: Boolean(campaign.showCheckDc),
         npcs: npcs.map((npc) => ({ id: String(npc._id), name: npc.name, portraitUrl: npc.portraitUrl ?? null, status: npc.status ?? "active", portraitGenerating: portraitsGenerating.has(String(npc._id)) })),
         sceneImages: sceneImageControl,
-        combat: activeCombat ? { ...(await import("./combat")).combatDto(activeCombat), ...(tacticalCombat && tacticalModule ? { tactical: await tacticalModule.loadTacticalDto(tacticalCombat) } : {}) } : null,
+        combat: activeCombat ? { ...(await import("./combat")).combatDto(activeCombat), ...(tacticalCombat && tacticalModule ? { tactical: await tacticalModule.loadTacticalDto(tacticalCombat, { isOwner: campaign.ownerId === userId }) } : {}) } : null,
         participants,
         me: {
             memberId: String(loaded.member._id),
@@ -1028,7 +1035,7 @@ export async function getGameState(campaignId: string, userId: string): Promise<
             eligible: mine?.eligible ?? false,
             declared: mine?.declared ?? false,
             sheet: await mySheet(members.find(({ member }) => String(member._id) === String(loaded.member._id))?.character ?? null),
-            combat: tacticalCombat && tacticalModule ? await tacticalModule.myCombatDto(tacticalCombat, String(loaded.member._id), Boolean(combatActor && String(combatActor.memberId) === String(loaded.member._id)), campaign._id) : null,
+            combat: tacticalCombat && tacticalModule ? await tacticalModule.myCombatDto(tacticalCombat, String(loaded.member._id), Boolean(combatActor && String(combatActor.memberId) === String(loaded.member._id)), campaign._id, campaign.ownerId === userId) : null,
         },
         messages: page.messages,
         hasMore: page.hasMore,

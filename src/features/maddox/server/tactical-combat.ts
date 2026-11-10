@@ -351,6 +351,9 @@ export async function createTacticalCombat(
         },
     }))
     log.info({ campaignId: String(campaign._id), combatId: String(created._id), turnNumber, combatants: combatants.length, characters: characters.length }, "[maddox] combate tático começou (iniciativa)")
+    // DND-41: durante a iniciativa, o Maddox prepara a mesa de cada personagem, um por um (a ordem espera).
+    const { createCombatPreps } = await import("./combat-prep")
+    await createCombatPreps(campaign._id, created._id, characters, turnNumber, waitRound)
     return { combatId: created._id, initiativeMessages: [...initiativeMessages, ...enemyMessages] }
 }
 
@@ -382,6 +385,9 @@ export async function finishInitiativeIfReady(campaignId: Types.ObjectId, turnNu
         ],
     })
     if (pending) return false
+    // DND-41: a ordem só fecha com a mesa de todos os personagens preparada (sem tempo limite; falha espera o dono).
+    const { preparationPending } = await import("./combat-prep")
+    if (await preparationPending(combat._id)) return false
     combat.tactical.order = sortInitiative(combat.tactical.order.map((slot) => ({ ...slot, total: slot.total ?? slot.modifier })))
     combat.tactical.phase = "running"
     combat.tactical.round = 1

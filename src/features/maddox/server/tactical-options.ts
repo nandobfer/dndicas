@@ -1,5 +1,8 @@
-import type { Types } from "mongoose"
+import { Types } from "mongoose"
 import { buildCombatOptions, type CombatOptions, type OptionAbility } from "../combat-options"
+import { applyCombatPrep } from "../combat-prep"
+import { canAct, freshEconomy } from "../combat-rules"
+import type { IMaddoxCombatPrep } from "../models"
 import type { TacticalCharacterState } from "../combat-types"
 import { loadCombatSheets, type CombatSheet } from "./combat-sheet"
 
@@ -14,11 +17,29 @@ export interface CharacterCombatView {
     options: CombatOptions
 }
 
-export async function loadCharacterOptions(states: readonly TacticalCharacterState[], campaignId?: Types.ObjectId): Promise<Map<string, CharacterCombatView>> {
+/**
+ * `combatId` (DND-41): aplica a preparação do Maddox de cada personagem sobre a lista base (`applyCombatPrep`). Sem ele,
+ * ou com `base: true`, devolve só a lista que o servidor calcula da ficha (`ignoreResources` = lista completa, para a
+ * própria preparação).
+ */
+export async function loadCharacterOptions(
+    states: readonly TacticalCharacterState[],
+    campaignId?: Types.ObjectId,
+    combatId?: Types.ObjectId | string | null,
+    mode: { base?: boolean; ignoreResources?: boolean } = {},
+): Promise<Map<string, CharacterCombatView>> {
     const result = new Map<string, CharacterCombatView>()
     const withSheet = states.filter((state) => state.sheetId)
     if (!withSheet.length) return result
     const sheets = await loadCombatSheets(withSheet.map((state) => state.sheetId!))
+    const preps = new Map<string, { overlay: IMaddoxCombatPrep["overlay"]; riders: IMaddoxCombatPrep["riders"] }>()
+    if (combatId && !mode.base) {
+        const { MaddoxCombatPrepModel } = await import("../models")
+        const found = await MaddoxCombatPrepModel.find({ combatId: new Types.ObjectId(String(combatId)), actorKey: { $in: withSheet.map((state) => state.actorKey) }, status: { $in: ["ready", "skipped"] } })
+            .select("actorKey overlay riders")
+            .lean<Pick<IMaddoxCombatPrep, "actorKey" | "overlay" | "riders">[]>()
+        for (const item of found) preps.set(item.actorKey, { overlay: item.overlay, riders: item.riders ?? [] })
+    }
     const { resolveProfiles, profileKey } = await import("./combat-classifier")
     const entries = [...sheets.values()].flatMap((sheet) =>
         sheet.abilities.map((ability) => {
@@ -42,17 +63,31 @@ export async function loadCharacterOptions(states: readonly TacticalCharacterSta
         if (!sheet) continue
         // Habilidades passivas (ou que não se usam em combate) não aparecem.
         const abilities = sheet.abilities.filter((ability) => ability.profile?.cost !== "passive" && ability.profile?.cost !== "other" && ability.description.trim())
-        const options = buildCombatOptions({
+        const economy = mode.ignoreResources ? { ...freshEconomy(), lightAttack: true } : state.economy
+        const built = buildCombatOptions({
+            ignoreResources: Boolean(mode.ignoreResources),
             sheet: sheet.option,
             weapons: sheet.weapons,
             spells: sheet.spells,
             items: sheet.items,
             abilities,
-            economy: state.economy,
-            conditions: state.conditions,
-            dying: state.hpZero || state.dead,
+            economy,
+            conditions: mode.ignoreResources ? [] : state.conditions,
+            dying: mode.ignoreResources ? false : state.hpZero || state.dead,
             ready: state.ready ? { optionId: state.ready.optionId, label: state.ready.label } : null,
         })
+        const prep = preps.get(state.actorKey)
+        const options = prep
+            ? applyCombatPrep(built, {
+                  overlay: prep.overlay,
+                  riders: prep.riders,
+                  economy: state.economy,
+                  sheet: sheet.option,
+                  charges: new Map(sheet.abilities.filter((ability) => ability.charge).map((ability) => [ability.charge!.id, ability.charge!])),
+                  items: new Map([...sheet.items.map((item) => [item.id, item.quantity] as const), ...sheet.weapons.map((weapon) => [weapon.id, weapon.quantity] as const)]),
+                  blocked: state.hpZero || state.dead || !canAct({ conditions: state.conditions }),
+              })
+            : built
         // Ataque Extra conta todas as habilidades (também as passivas, que é o caso do "Ataque Extra").
         options.attacksPerAction = buildCombatOptions({ ...{ sheet: sheet.option, weapons: [], spells: [], items: [], economy: state.economy, conditions: [], dying: false }, abilities: sheet.abilities }).attacksPerAction
         result.set(state.actorKey, { sheet, options })

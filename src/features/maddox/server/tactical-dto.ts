@@ -1,9 +1,9 @@
 import { Types } from "mongoose"
-import { MADDOX_CONDITION_LABELS } from "../constants"
+import { MADDOX_COMBAT_ADJUST_FAILED_MESSAGE, MADDOX_CONDITION_LABELS } from "../constants"
 import { hpBand } from "../combat-rules"
 import type { IMaddoxCombatAction, IMaddoxCombatReaction, IMaddoxCombatRoll } from "../combat-types"
-import type { MaddoxCombatActionDto, MaddoxCombatReactionDto, MaddoxCombatRollDto, MaddoxMyCombatDto, MaddoxTacticalCombatDto } from "../game-types"
-import { MaddoxCharacterModel } from "../models"
+import type { MaddoxCombatActionDto, MaddoxCombatReactionDto, MaddoxCombatRollDto, MaddoxMyCombatDto, MaddoxTacticalCombatDto, MaddoxTacticalSlotDto } from "../game-types"
+import { MaddoxCharacterModel, type IMaddoxCombatPrep } from "../models"
 import { findActor, type TacticalCombat } from "./tactical-combat"
 import { isOpexUserId } from "./opex-members"
 
@@ -67,8 +67,35 @@ export function tacticalSnapshot(combat: TacticalCombat, hp: HpMap = new Map(), 
     }
 }
 
+const PREP_SLOT: Record<IMaddoxCombatPrep["status"], NonNullable<MaddoxTacticalSlotDto["prep"]>["status"] | null> = { pending: "waiting", running: "preparing", ready: "ready", skipped: "ready", failed: "failed", discarded: null }
+
+/**
+ * DND-41: selos da preparação na ordem e o estado geral. O motivo da falha (texto do provedor) só vai ao dono da
+ * campanha; os demais veem só o selo "Falhou" e "Aguardando o dono da campanha".
+ */
+export function withPreparation(dto: MaddoxTacticalCombatDto, preps: readonly IMaddoxCombatPrep[], viewerIsOwner: boolean): MaddoxTacticalCombatDto {
+    const relevant = preps.filter((prep) => prep.status !== "discarded")
+    const active = relevant.some((prep) => prep.status === "pending" || prep.status === "running" || prep.status === "failed")
+    if (!active) return { ...dto, preparation: null }
+    const byKey = new Map(relevant.map((prep) => [prep.actorKey, prep]))
+    const failed = relevant.filter((prep) => prep.status === "failed")
+    return {
+        ...dto,
+        order: dto.order.map((slot) => {
+            const prep = slot.kind === "character" ? byKey.get(slot.actorKey) : undefined
+            const status = prep ? PREP_SLOT[prep.status] : null
+            return status ? { ...slot, prep: { status } } : slot
+        }),
+        preparation: {
+            active,
+            blocked: failed.length > 0,
+            failures: viewerIsOwner ? failed.map((prep) => ({ prepId: String(prep._id), characterName: prep.characterName, error: prep.error ?? "Falha sem detalhe." })) : [],
+        },
+    }
+}
+
 /** Ordem com os PV dos personagens (da ficha) e os retratos. */
-export async function loadTacticalDto(combat: TacticalCombat): Promise<MaddoxTacticalCombatDto> {
+export async function loadTacticalDto(combat: TacticalCombat, viewer: { isOwner: boolean } = { isOwner: false }): Promise<MaddoxTacticalCombatDto> {
     const states = combat.tactical.characters
     const [{ loadCombatSheets }, characters] = await Promise.all([
         import("./combat-sheet"),
@@ -80,19 +107,32 @@ export async function loadTacticalDto(combat: TacticalCombat): Promise<MaddoxTac
         const sheet = state.sheetId ? sheets.get(state.sheetId) : undefined
         if (sheet) hp.set(state.actorKey, sheet.hp)
     }
-    return tacticalSnapshot(combat, hp, new Map(characters.map((character) => [String(character._id), character.portraitUrl ?? null])))
+    const { loadCombatPreps } = await import("./combat-prep")
+    return withPreparation(tacticalSnapshot(combat, hp, new Map(characters.map((character) => [String(character._id), character.portraitUrl ?? null]))), await loadCombatPreps(combat._id), viewer.isOwner)
 }
 
 /** A minha vez: economia e as opções (só a Ação e a Ação bônus; as reações chegam na janela). */
-export async function myCombatDto(combat: TacticalCombat, memberId: string, myTurn: boolean, campaignId: Types.ObjectId): Promise<MaddoxMyCombatDto | null> {
+export async function myCombatDto(combat: TacticalCombat, memberId: string, myTurn: boolean, campaignId: Types.ObjectId, viewerIsOwner = false): Promise<MaddoxMyCombatDto | null> {
     const state = combat.tactical.characters.find((item) => item.memberId === memberId && !item.left)
     if (!state) return null
     const base: MaddoxMyCombatDto = { myTurn, actorKey: state.actorKey, economy: state.economy, attacksPerAction: 1, options: null, dying: state.hpZero && !state.stable && !state.dead }
     if (!myTurn || combat.tactical.phase !== "running") return base
     const { loadCharacterOptions } = await import("./tactical-options")
-    const view = (await loadCharacterOptions([state], campaignId)).get(state.actorKey)
+    const view = (await loadCharacterOptions([state], campaignId, combat._id)).get(state.actorKey)
     if (!view) return base
-    return { ...base, attacksPerAction: view.options.attacksPerAction, options: { action: view.options.action, bonus: view.options.bonus } }
+    const { MaddoxCombatPrepModel } = await import("../models")
+    const prep = await MaddoxCombatPrepModel.findOne({ combatId: combat._id, actorKey: state.actorKey }).select("adjustments").lean<Pick<IMaddoxCombatPrep, "adjustments">>()
+    const adjustments = (prep?.adjustments ?? []).map((item) => ({
+        id: item.id,
+        economy: item.economy,
+        optionId: item.optionId,
+        optionLabel: item.optionLabel,
+        text: item.text,
+        status: item.status,
+        // O motivo técnico da falha só vai ao dono da campanha.
+        reason: item.status === "error" ? (viewerIsOwner && item.error ? `${MADDOX_COMBAT_ADJUST_FAILED_MESSAGE} (${item.error})` : MADDOX_COMBAT_ADJUST_FAILED_MESSAGE) : item.reason,
+    }))
+    return { ...base, attacksPerAction: view.options.attacksPerAction, options: { action: view.options.action, bonus: view.options.bonus }, adjustments }
 }
 
 export function combatActionDto(action: IMaddoxCombatAction & { cancellable?: boolean }): MaddoxCombatActionDto {

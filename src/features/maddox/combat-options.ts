@@ -111,6 +111,8 @@ export interface CombatOption {
     trigger?: MaddoxReactionTrigger
     /** DND-41: a opção foi ajustada pelo Maddox (preparação do combate ou pedido de ajuste). */
     adjusted?: { reason: string }
+    /** DND-41: opção acrescentada pelo Maddox que gasta um item da ficha (quantidade − 1). */
+    consumes?: { itemId: string }
 }
 
 /** Dano adicional marcável num ataque (DND-41: "Ataque furtivo (+Xd6)"). */

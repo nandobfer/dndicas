@@ -15,7 +15,7 @@ import {
     type MaddoxReminderStatus,
     type MaddoxTurnPhase,
 } from "../constants"
-import type { IMaddoxCombatAction, IMaddoxCombatReaction, IMaddoxCombatRoll } from "../combat-types"
+import type { CombatPrepChange, IMaddoxCombatAction, IMaddoxCombatReaction, IMaddoxCombatRoll } from "../combat-types"
 
 /**
  * Teste pedido pelo Maddox (Maddox 5) para o personagem da mensagem (`memberId`/`characterId`). A CD é sempre gravada
@@ -110,6 +110,11 @@ export interface IMaddoxCampaignMessage {
      * a lista do próprio personagem.
      */
     actionOptions: IMaddoxActionOptions[] | null
+    /**
+     * Card privado "Sua mesa está pronta" (`kind: "combat-prep"`, DND-41): só o dono do personagem (`memberId`) o recebe.
+     * `content` fica vazio (fora da transcrição do narrador e do Diário).
+     */
+    combatPrep: { combatId: Types.ObjectId; actorKey: string; characterName: string; changes: CombatPrepChange[] } | null
     createdAt: Date
     updatedAt: Date
 }
@@ -162,6 +167,7 @@ const MaddoxCampaignMessageSchema = new Schema<IMaddoxCampaignMessage>(
         offlineSkip: { type: Boolean, default: false },
         combatTurn: { type: Boolean, default: false },
         reminder: { type: Schema.Types.Mixed, default: null },
+        combatPrep: { type: Schema.Types.Mixed, default: null },
         actionOptions: {
             type: [
                 new Schema<IMaddoxActionOptions>(
