@@ -133,6 +133,7 @@ criados na criação da campanha (assinatura exata `search` do Maddox). Formato 
 | tipo + título (gravar sem duplicar) | `key` `mx:<tipo>:<título sem acento>` (até 80; título longo vira prefixo + hash) |
 | marco de combate | `key` `mx:combate:<combatId>` (um por combate) |
 | situação da missão / turno | tags reservadas `status:<situação>` e `turno:<n>` (não aparecem como tags); missão sem `status:` (criada fora do jogo) conta como ativa — o filtro de situação é feito no dndicas, não pela tag |
+| instante da gravação (DND-44) | tag reservada `gravado:<ms>` (relógio do dndicas), em toda gravação do jogo, inclusive na fila; não aparece no Diário |
 | escondida | memória arquivada (o `upsert` da mesma chave reativa) |
 
 - **Gravação** (`save_memory`, marco de combate): token `dndicas/maddox`; acha pela chave nos dois canais (troca
@@ -149,7 +150,8 @@ criados na criação da campanha (assinatura exata `search` do Maddox). Formato 
   token de app. Sem a rede, o prompt segue sem as memórias, `search_memories` responde erro acionável e o Diário
   avisa (`memoriesUnavailable`, `503 ENGRAMIND_UNAVAILABLE` nas anotações). Não há cópia de reserva.
 - **Rotina** `engramind-campaign-memories-sync` (15 min, `server/campaign-sync.ts`) e "Sincronizar agora": rede de
-  cada campanha, ciclo de vida dos canais (`archived` arquiva; fora disso, restaura) e a entrega da fila.
+  cada campanha, ciclo de vida dos canais (`archived` arquiva; fora disso, restaura), a entrega da fila e os reparos da
+  volta a um turno (DND-44).
 - **Webhook**: mudança no canal dos jogadores avisa os membros (`maddox.campaign.changed`) e o Diário recarrega.
 - **Memórias antigas** (`maddox_campaign_memories`, de antes desta revisão): aba Migração → "Mover memórias"
   (`server/campaign-memory-move.ts`): backup da coleção a cada execução com dados (SHA-256, em partes de 2 milhões
@@ -158,6 +160,20 @@ criados na criação da campanha (assinatura exata `search` do Maddox). Formato 
   campanha quando todos conferiram (divergência → nada apagado, com o motivo). Texto acima de `memory_text_max` do
   canal nunca é cortado: fica fora da importação e conta como divergência. Até mover, elas não aparecem no Diário nem no narrador
   (aviso na aba Sincronização).
+
+**Voltar a um turno (DND-44, `server/campaign-rewind.ts`).** A volta de uma campanha Maddox a um turno leva as memórias ao
+estado do retrato do turno (`takenAt`). Candidatas: as gravadas depois do retrato (`gravado:`) e as já tocadas pela volta
+pendente (registradas no retrato de origem antes da primeira mudança). Para cada uma, `GET /v1/memories/{id}/history` dá a
+revisão de conteúdo (`create`, `update`, `redact`) gravada até o retrato; as revisões da própria volta (`revert`, `archive`,
+`restore`) e de organização (`move`, `pin`, `unpin`) não contam. Ação: `POST …/revert` (texto, título, categoria e tags) e
+`archive`/`restore` (situação); sem revisão até o retrato = arquivada, ou **excluída** quando nasceu de uma ação feita depois
+da volta. Ir para frente dentro da volta e retomar o turno de origem são a mesma operação com outro instante; o histórico
+nunca é reescrito e repetir não muda nada. Canais: Jogadores e Mestre (token do Maddox), o individual de cada Personagem Opex
+e o de cada NPC Opex (token de cada um; canal com token revogado é ignorado). A fila temporária também acompanha: as gravações
+posteriores ao retrato saem dela e voltam na retomada. Na **perda definitiva** (nova narração), as memórias nascidas no trecho
+descartado são excluídas (`DELETE`, escopo `delete` dos tokens dos agentes); a que falhar vai para `maddox_memory_repairs` e a
+rotina `engramind-campaign-memories-sync` tenta de novo, junto com o reparo das voltas que ficaram pela metade
+(`campaign.memoryRepair`). Memórias sem `turno:` nem `gravado:` (anteriores) nunca são afetadas; a troca de canal não é desfeita.
 
 **Redator.** O Engramind só aceita `redator.rewrite_text` por canal com token admin. O dndicas tenta desligar a
 reescrita nos canais das campanhas; com `403` marca "não suportado" (`engramind_state.channelSettings`, aviso na
@@ -175,8 +191,8 @@ configuração ao token de app nos canais que ele criou.
   e a primeira decisão sem token tenta de novo.
 - **Contexto.** `opexCharacterMemoryBlock` pede `GET /v1/context` com o token do Opex nos 3 canais (nunca lança).
 - **Gravação.** A cada declaração, as `memorias` do JSON do Opex vão ao canal individual com a chave `opex:<título
-  normalizado>` e `upsert` (o mesmo assunto atualiza). Rede fora ou token recusado → `engramind_pending_writes` com
-  `agentMemberId`; `flushPendingWrites` entrega com o token do próprio Opex (sem token, a entrada é descartada).
+  normalizado>`, `upsert` (o mesmo assunto atualiza) e as tags `personagem-opex`, `turno:<n>` e `gravado:<ms>` (DND-44: a volta
+  a um turno da campanha as acompanha). Rede fora ou token recusado → `engramind_pending_writes` com `agentMemberId`; `flushPendingWrites` entrega com o token do próprio Opex (sem token, a entrada é descartada).
 - **Ciclo de vida.** Remover o Opex arquiva o canal individual, desativa o agente e revoga o token
   (`retireOpexCharacterAgent`). `syncCampaignChannelLifecycle` arquiva/restaura também os canais individuais dos Opex ativos.
 - **Leitura humana.** Só em `/memorias` (`memories.view`, administradores). O Diário continua lendo só o canal Jogadores.
@@ -194,7 +210,7 @@ configuração ao token de app nos canais que ele criou.
 - **Memória inicial.** `seedOpexNpcInitialMemories`: chaves fixas `npc-inicial:descricao` ("Quem eu sou", a descrição pública) e
   `npc-inicial:segredos` ("Meus segredos", as notas do mestre), com `upsert` — uma nova promoção atualiza a memória inicial.
 - **Gravação.** `saveOpexNpcMemories` (do agente a cada consulta e do Maddox fora de cena): chave `opex:<título normalizado>`,
-  `upsert`. Rede fora ou token recusado → `engramind_pending_writes` com `agentNpcId`; `flushPendingWrites` entrega com o token do
+  `upsert`, tags `npc-opex`, `turno:<n>` e `gravado:<ms>` (também na memória inicial; DND-44). Rede fora ou token recusado → `engramind_pending_writes` com `agentNpcId`; `flushPendingWrites` entrega com o token do
   NPC (`opexNpcWriterFor`: provisiona se faltar; NPC que deixou de ser Opex = entrada descartada).
 - **Ciclo de vida.** Desfazer ou a morte arquivam o canal individual, desativam o agente e revogam o token
   (`retireOpexNpcAgent`); promover de novo restaura o canal (as memórias voltam) e emite outro token.
@@ -234,10 +250,11 @@ token ou texto de memória.
 
 ## Testes
 
-`tests/helpers/fake-engramind.ts` (Engramind falso no `fetch`, só as rotas do contrato; resto → 405),
+`tests/helpers/fake-engramind.ts` (Engramind falso no `fetch`, só as rotas do contrato, inclusive o histórico de revisões
+com `history` e `revert`; resto → 405),
 `tests/helpers/xyflow.tsx`, `tests/backend/engramind/*` (bootstrap, contexto, proxy e webhook, memórias das
 campanhas, mover e apagar, migração, permissões, ferramentas, teste de conexão, layout dos universos e
-`opex-characters.test.ts`;
+`opex-characters.test.ts` e `campaign-rewind.test.ts`;
 MongoDB em memória) e
 `tests/frontend/engramind/*`. Os testes do Maddox usam `tests/helpers/campaign-memories-mock.ts` (substituto em
 memória de `campaign-memories`, com as mesmas regras de chave e tags).

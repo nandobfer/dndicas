@@ -38,10 +38,50 @@ const campaignsService = { assertMemberCanPlay: vi.fn(async () => undefined) }
 vi.doMock("@/features/maddox/server/campaigns", () => campaignsService)
 const remindersService = { submitReminder: vi.fn(async () => state) }
 vi.doMock("@/features/maddox/server/reminders", () => remindersService)
+const rewindService = {
+    listRewindTurns: vi.fn(async () => ({ turns: [{ turnNumber: 2, excerpt: "A ponte cai." }], undoTarget: 2, originTurn: 3, atTurn: 3 })),
+    rewindToTurn: vi.fn(async () => state),
+    resumeCurrentTurn: vi.fn(async () => state),
+}
+vi.doMock("@/features/maddox/server/rewind", () => rewindService)
 
 const ctx = (params: { id: string }) => ({ params: Promise.resolve(params) })
 const base = "http://localhost/api/maddox/campaigns/c1"
 const post = (url: string, body: unknown) => makeJsonRequest(url, { method: "POST", body: JSON.stringify(body) })
+
+describe("rotas da volta a um turno (DND-44)", () => {
+    beforeEach(() => {
+        who = "player"
+        permissions.length = 0
+        Object.values(rewindService).forEach((fn) => fn.mockClear())
+    })
+
+    it("listar, ir ao turno e retomar: exigem maddox.play, validam o corpo e repassam o usuário efetivo", async () => {
+        type RewindRoute = typeof import("@/app/api/maddox/campaigns/[id]/game/rewind/route")
+        type ResumeRoute = typeof import("@/app/api/maddox/campaigns/[id]/game/rewind/resume/route")
+        const rewindPath = "@/app/api/maddox/campaigns/[id]/game/rewind/route"
+        const resumePath = "@/app/api/maddox/campaigns/[id]/game/rewind/resume/route"
+        who = "noPermission"
+        expect((await (await importFresh<RewindRoute>(rewindPath)).POST(post(`${base}/game/rewind`, { turnNumber: 2 }), ctx({ id: "c1" }))).status).toBe(403)
+        expect(rewindService.rewindToTurn).not.toHaveBeenCalled()
+        who = "player"
+        const route = await importFresh<RewindRoute>(rewindPath)
+        const list = await route.GET(makeRequest(`${base}/game/rewind`), ctx({ id: "c1" }))
+        expect(await list.json()).toMatchObject({ success: true, data: { undoTarget: 2, turns: [{ turnNumber: 2 }] } })
+        expect(rewindService.listRewindTurns).toHaveBeenCalledWith("c1", "user-1")
+        for (const body of [{}, { turnNumber: 0 }, { turnNumber: 2.5 }, { turnNumber: "2" }, { turnNumber: 2, extra: true }]) {
+            expect((await route.POST(post(`${base}/game/rewind`, body), ctx({ id: "c1" }))).status).toBe(400)
+        }
+        expect(rewindService.rewindToTurn).not.toHaveBeenCalled()
+        expect((await route.POST(post(`${base}/game/rewind`, { turnNumber: 2 }), ctx({ id: "c1" }))).status).toBe(200)
+        expect(rewindService.rewindToTurn).toHaveBeenCalledWith("c1", { turnNumber: 2 }, "user-1")
+        const resume = await importFresh<ResumeRoute>(resumePath)
+        expect((await resume.POST(post(`${base}/game/rewind/resume`, { turnNumber: 2 }), ctx({ id: "c1" }))).status).toBe(400)
+        expect((await resume.POST(post(`${base}/game/rewind/resume`, {}), ctx({ id: "c1" }))).status).toBe(200)
+        expect(rewindService.resumeCurrentTurn).toHaveBeenCalledWith("c1", "user-1")
+        expect(permissions.every((permission) => permission === "maddox.play")).toBe(true)
+    })
+})
 
 describe("rotas da mesa Maddox", () => {
     beforeEach(() => {

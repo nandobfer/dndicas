@@ -189,7 +189,7 @@ describe("promover e desfazer pelo Maddox", () => {
         await domain.waitForOpexNpcWork()
         expect((await MaddoxNpcModel.findById(t.gundren).lean())!.opex).toMatchObject({ active: true, promotedBy: "system:maddox", retiredReason: null })
         expect(engramindNpcs.provisionOpexNpcAgent).toHaveBeenCalledTimes(2)
-        expect(engramindNpcs.seedOpexNpcInitialMemories).toHaveBeenCalledWith({ campaignId: t.id, npcId: t.gundren, npcName: "Gundren" }, { publicDescription: "Anão mercador.", masterNotes: "Sabe onde fica a mina." })
+        expect(engramindNpcs.seedOpexNpcInitialMemories).toHaveBeenCalledWith({ campaignId: t.id, npcId: t.gundren, npcName: "Gundren" }, { publicDescription: "Anão mercador.", masterNotes: "Sabe onde fica a mina." }, 0)
         expect(await MaddoxCampaignMessageModel.countDocuments({ campaignId: t.campaignId })).toBe(0)
         expect(publishToChannels).toHaveBeenCalled()
 

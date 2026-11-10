@@ -6,7 +6,8 @@ import { Schema, type Query } from "mongoose"
  * O documento posterior ao turno de destino não é apagado enquanto a volta está pendente (o dono ainda pode retomar o
  * turno de origem): ele recebe `discardedBy` e some de TODAS as leituras — mesa, Diário (histórico, busca e imagens),
  * transcrição do narrador e do Opex, testes, reações e imagens — por um filtro aplicado no próprio schema. Só quem
- * passa `{ includeDiscarded: true }` nas opções da consulta (a volta, a perda definitiva e a cota de imagens) o enxerga.
+ * passa `{ includeDiscarded: true }` nas opções da consulta (a cota de imagens) ou filtra pelo próprio `discardedBy` (a volta e
+ * a perda definitiva) o enxerga.
  * Gravações atrasadas (uma imagem ou um timer que terminam depois da volta) também caem no filtro e não tocam o
  * documento descartado.
  */
@@ -27,7 +28,7 @@ export function applyDiscardFilter<T>(schema: Schema<T>): void {
         const options = this.getOptions() as { includeDiscarded?: boolean }
         if (options.includeDiscarded) return
         const filter = this.getFilter() as Record<string, unknown>
-        if (Object.prototype.hasOwnProperty.call(filter, "discardedBy")) return
+        if (Object.keys(filter).some((key) => key === "discardedBy" || key.startsWith("discardedBy."))) return
         this.where({ discardedBy: null })
     })
     schema.pre("aggregate", function () {

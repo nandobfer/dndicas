@@ -61,7 +61,8 @@ describe("gravação (Engramind como única fonte)", () => {
         await tool("save_memory", { kind: "missao", title: "o mapá", text: "Mapa achado.", status: "concluida" })
         expect(remotes()).toHaveLength(1)
         expect(remotes()[0]).toMatchObject({ channel: players(), key: "mx:missao:o-mapa", category: "MISSAO", title: "o mapá", text: "Mapa achado." })
-        expect(remotes()[0]!.tags).toEqual(["pista", "status:concluida", "turno:3"])
+        // DND-44: toda gravação leva também o instante (`gravado:<ms>`) para a volta a um turno.
+        expect(remotes()[0]!.tags).toEqual(["pista", "status:concluida", "turno:3", expect.stringMatching(/^gravado:\d+$/)])
         expect(await mongoose.connection.db!.collection("maddox_campaign_memories").countDocuments({})).toBe(0)
     })
 

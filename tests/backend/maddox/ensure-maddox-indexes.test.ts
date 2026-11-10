@@ -16,6 +16,8 @@ vi.mock("@/features/maddox/models", () => ({
     MaddoxCombatModel: fake("MaddoxCombat"),
     MaddoxCombatOptionProfileModel: fake("MaddoxCombatOptionProfile"),
     MaddoxSceneImageModel: fake("MaddoxSceneImage"),
+    MaddoxCampaignSnapshotModel: fake("MaddoxCampaignSnapshot"),
+    MaddoxMemoryRepairModel: fake("MaddoxMemoryRepair"),
 }))
 
 const { ensureMaddoxIndexes } = await import("@/lib/db/migrations/ensure-maddox-indexes")
@@ -24,7 +26,7 @@ const indexes = (model: unknown) => (model as mongoose.Model<unknown>).schema.in
 describe("migração ensure-maddox-indexes", () => {
     it("cria os índices de todas as coleções Maddox e pode rodar de novo", async () => {
         await ensureMaddoxIndexes()
-        expect([...created].sort()).toEqual(["MaddoxCampaign", "MaddoxCampaignMember", "MaddoxCampaignMessage", "MaddoxCharacter", "MaddoxCombat", "MaddoxCombatOptionProfile", "MaddoxInterview", "MaddoxInterviewScript", "MaddoxNpc", "MaddoxOpencodeSession", "MaddoxSceneImage"])
+        expect([...created].sort()).toEqual(["MaddoxCampaign", "MaddoxCampaignMember", "MaddoxCampaignMessage", "MaddoxCampaignSnapshot", "MaddoxCharacter", "MaddoxCombat", "MaddoxCombatOptionProfile", "MaddoxInterview", "MaddoxInterviewScript", "MaddoxMemoryRepair", "MaddoxNpc", "MaddoxOpencodeSession", "MaddoxSceneImage"])
         await expect(ensureMaddoxIndexes()).resolves.toBeUndefined()
     })
 
@@ -57,5 +59,8 @@ describe("migração ensure-maddox-indexes", () => {
         // Maddox 10: uma imagem automática por turno do mestre (as que falharam ou foram descartadas não ocupam a vaga).
         const { MaddoxSceneImageModel } = await vi.importActual<typeof import("@/features/maddox/models/maddox-scene-image")>("@/features/maddox/models/maddox-scene-image")
         expect(indexes(MaddoxSceneImageModel)).toContainEqual([{ campaignId: 1, turnNumber: 1, slot: 1 }, expect.objectContaining({ unique: true, partialFilterExpression: { counts: true, slot: "auto" } })])
+        // DND-44: um retrato por turno jogado (ponto de retorno de "Voltar ao turno…").
+        const { MaddoxCampaignSnapshotModel } = await vi.importActual<typeof import("@/features/maddox/models/maddox-campaign-snapshot")>("@/features/maddox/models/maddox-campaign-snapshot")
+        expect(indexes(MaddoxCampaignSnapshotModel)).toContainEqual([{ campaignId: 1, turnNumber: -1 }, expect.objectContaining({ unique: true, partialFilterExpression: { kind: "turn" } })])
     })
 })

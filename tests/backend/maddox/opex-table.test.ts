@@ -162,7 +162,7 @@ describe("Personagens Opex na mesa (DND-26)", () => {
         expect(narration.turnNumber).toBe(2)
         expect(narration.content).toContain("Tork: Ergo o escudo.")
         expect(narration.content.indexOf("Tork")).toBeLessThan(narration.content.indexOf("Brunna"))
-        expect(saveOpexCharacterMemories).toHaveBeenCalledWith(expect.objectContaining({ memberId: first }), [{ title: "Confiança em Kael", text: "Kael parece corajoso." }])
+        expect(saveOpexCharacterMemories).toHaveBeenCalledWith(expect.objectContaining({ memberId: first }), [{ title: "Confiança em Kael", text: "Kael parece corajoso." }], 1)
         const state = await game.getGameState(id, owner)
         expect(state.turn).toMatchObject({ number: 2, phase: "players", opexActor: null })
         expect(state.messages.find((message) => message.memberId === first && message.kind === "declaration")).toMatchObject({ opex: true })
