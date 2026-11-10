@@ -323,6 +323,7 @@ function GameTable({ state, presence, stream }: { state: MaddoxGameStateDto; pre
                         color={color}
                         campaignId={state.campaignId}
                         portraits={state.sceneImages?.owner ? { canRequest: state.sceneImages.canRequestPortrait, requesting: portrait.isPending ? (portrait.variables ?? null) : null, onRequest: (npcId) => portrait.mutate(npcId) } : null}
+                        manageOpex={Boolean(state.canManageOpexNpcs)}
                     />
                 </div>
             </div>

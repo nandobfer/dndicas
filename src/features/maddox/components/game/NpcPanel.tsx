@@ -6,8 +6,9 @@ import { GlassCard as Card, GlassCardContent as CardContent, GlassCardHeader as 
 import { Button } from "@/components/ui/opex/button"
 import type { MaddoxGameNpcDto } from "../../game-types"
 import { cn } from "@/lib/utils"
-import { MemberAvatar } from "../campaigns/campaign-visuals"
+import { MemberAvatar, OpexChip } from "../campaigns/campaign-visuals"
 import { journalHref } from "../journal/journal-links"
+import { OpexNpcActions } from "./OpexNpcActions"
 
 /** Situação que aparece sob o nome (Maddox 6: o combate pode matar ou pôr NPCs em fuga). */
 const NPC_STATUS_NOTES: Partial<Record<MaddoxGameNpcDto["status"], string>> = { dead: "Morto", unknown: "Paradeiro desconhecido" }
@@ -20,8 +21,12 @@ export interface NpcPortraitActions {
     onRequest: (npcId: string) => void
 }
 
-/** NPCs que os jogadores conhecem: nome e foto (ou as iniciais); cada um abre o NPC no Diário da campanha e o dono pede o retrato (Maddox 10). Os segredos do mestre nunca chegam aqui. */
-export function NpcPanel({ npcs, color, campaignId, portraits = null }: { npcs: MaddoxGameNpcDto[]; color: string; campaignId: string; portraits?: NpcPortraitActions | null }) {
+/**
+ * NPCs que os jogadores conhecem: nome e foto (ou as iniciais); cada um abre o NPC no Diário da campanha e o dono pede o
+ * retrato (Maddox 10). NPC Opex ganha o chip para todos e o dono com a permissão promove ou remove (DND-27). Os segredos do
+ * mestre nunca chegam aqui.
+ */
+export function NpcPanel({ npcs, color, campaignId, portraits = null, manageOpex = false }: { npcs: MaddoxGameNpcDto[]; color: string; campaignId: string; portraits?: NpcPortraitActions | null; manageOpex?: boolean }) {
     return (
         <Card className="h-fit">
             <CardHeader>
@@ -53,9 +58,11 @@ export function NpcPanel({ npcs, color, campaignId, portraits = null }: { npcs: 
                                         </span>
                                         <span className="min-w-0 whitespace-normal break-words text-sm text-white">
                                             {npc.name}
+                                            {npc.opex && <OpexChip className="ml-1 align-middle" />}
                                             {NPC_STATUS_NOTES[npc.status] && <span className="block text-[11px] text-white/60">{NPC_STATUS_NOTES[npc.status]}</span>}
                                         </span>
                                     </Link>
+                                    {manageOpex && <OpexNpcActions campaignId={campaignId} npc={npc} />}
                                     {portraits && (
                                         <Button
                                             type="button"

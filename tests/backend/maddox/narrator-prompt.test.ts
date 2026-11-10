@@ -160,7 +160,7 @@ describe("fichas e testes no prompt (Maddox 5)", () => {
     })
 
     it("no MCP, a lista de ferramentas só inclui request_check quando os testes valem", () => {
-        expect(buildNarratorInstructions(context({ rigor: "fiel-dnd" }), { kind: "mcp", server: "dndicas-maddox", turnToken: "t", checks: true })).toContain("update_character_state, resolve_reminder, request_check, search_catalog, get_catalog_entity)")
+        expect(buildNarratorInstructions(context({ rigor: "fiel-dnd" }), { kind: "mcp", server: "dndicas-maddox", turnToken: "t", checks: true })).toContain("update_character_state, resolve_reminder, request_check, promover_npc_opex, desfazer_npc_opex, gravar_memoria_npc_opex, search_catalog, get_catalog_entity)")
         expect(buildNarratorInstructions(context(), { kind: "mcp", server: "dndicas-maddox", turnToken: "t", checks: false })).not.toContain("request_check")
     })
 
@@ -218,7 +218,7 @@ describe("catálogo do DnDicas no narrador", () => {
     })
 
     it("no MCP, a lista de ferramentas inclui as de catálogo também sem testes", () => {
-        expect(buildNarratorInstructions(context(), { kind: "mcp", server: "dndicas-maddox", turnToken: "t", checks: false })).toContain("update_character_state, resolve_reminder, search_catalog, get_catalog_entity)")
+        expect(buildNarratorInstructions(context(), { kind: "mcp", server: "dndicas-maddox", turnToken: "t", checks: false })).toContain("update_character_state, resolve_reminder, promover_npc_opex, desfazer_npc_opex, gravar_memoria_npc_opex, search_catalog, get_catalog_entity)")
     })
 })
 
@@ -395,5 +395,31 @@ describe("sugestões de ação (DND-30)", () => {
     it("o bloco das ferramentas do MCP lista `suggest_actions` só quando oferecida", () => {
         expect(buildNarratorInstructions(context(), { kind: "mcp", server: "dndicas-maddox", turnToken: "t", actionOptions: true })).toContain(", suggest_actions,")
         expect(buildNarratorInstructions(context(), { kind: "mcp", server: "dndicas-maddox", turnToken: "t" })).not.toContain("suggest_actions")
+    })
+})
+
+describe("NPCs Opex no prompt do narrador (DND-27)", () => {
+    it("o NPC Opex é marcado no bloco dos NPCs e o MCP lista as ferramentas (a consulta só quando oferecida)", () => {
+        const npcs = [{ name: "Gundren", status: "active", visibility: "players" as const, publicDescription: "Anão mercador.", masterNotes: "", opex: true }]
+        expect(buildNarratorInstructions(context({ npcs }), { kind: "ai-sdk" })).toContain("- **Gundren** (active) [NPC Opex]: Anão mercador.")
+        const mcp = buildNarratorInstructions(context({ npcs }), { kind: "mcp", server: "dndicas-maddox", turnToken: "t", opexNpcs: true })
+        expect(mcp).toContain("promover_npc_opex, desfazer_npc_opex, gravar_memoria_npc_opex, consultar_npc_opex")
+        expect(buildNarratorInstructions(context({ npcs }), { kind: "mcp", server: "dndicas-maddox", turnToken: "t" })).not.toContain("consultar_npc_opex")
+    })
+
+    it("a tarefa das narrações traz a seção NPCs Opex com a regra de consultar; a resposta a perguntas, não", () => {
+        const narration = narratorTaskText({ kind: "narration", turnNumber: 2, declarations: [] }, { opexNpcs: ["Gundren", "Strahd"] })
+        expect(narration).toContain("## NPCs Opex\nNPCs Opex desta campanha: Gundren, Strahd.")
+        expect(narration).toContain("chame `consultar_npc_opex` ANTES de narrar a fala ou a ação dele e siga a decisão")
+        expect(narratorTaskText({ kind: "answer", turnNumber: 2, characterName: "Kael", question: "Quem é ele?", declarations: [] }, { opexNpcs: ["Gundren"] })).not.toContain("NPCs Opex")
+        expect(narratorTaskText({ kind: "narration", turnNumber: 2, declarations: [] }, { opexNpcs: [] })).not.toContain("NPCs Opex")
+    })
+
+    it("no bloco do NPC Opex, a decisão do agente vai na tarefa (só no bloco não retomado)", () => {
+        const decision = { npcName: "Klarg", action: "Cimitarra", targets: ["Kael"], speech: "" }
+        const block = { kind: "npc" as const, actor: "Klarg", resumed: false, waits: 0, remaining: [], opexDecision: decision }
+        const tactical = { phase: "running" as const, queue: ["Klarg"], next: "Kael", enemiesDown: false, charactersDown: false, block }
+        expect(tacticalTaskLines(tactical).join("\n")).toContain("O NPC Opex Klarg decidiu: Cimitarra em Kael. Execute exatamente essa ação com `monster_action` e narre a partir dela.")
+        expect(tacticalTaskLines({ ...tactical, block: { ...block, resumed: true } }).join("\n")).not.toContain("decidiu")
     })
 })

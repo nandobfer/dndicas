@@ -366,6 +366,15 @@ export async function flushPendingWrites(): Promise<{ delivered: number; failed:
                         continue
                     }
                     writer = own
+                } else if (entry.agentNpcId) {
+                    // NPC Opex (DND-27): sai com o token dele (provisionado se faltar); deixou de ser Opex = descartada.
+                    const { opexNpcWriterFor } = await import("./opex-npcs")
+                    const own = await opexNpcWriterFor(entry.campaignId, entry.agentNpcId)
+                    if (!own) {
+                        await PendingWrite.deleteOne({ _id: entry._id, updatedAt: entry.updatedAt })
+                        continue
+                    }
+                    writer = own
                 }
                 // Limite real do canal na entrega (a fila guarda o texto inteiro).
                 const text = String(entry.body.text ?? "")

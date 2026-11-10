@@ -2,13 +2,14 @@
 
 import { useEffect, useState } from "react"
 import { AnimatePresence, motion } from "framer-motion"
-import { useForm } from "react-hook-form"
+import { Controller, useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { toast } from "sonner"
 import { Bot, ImageIcon, Info, Loader2, MapPinned, RotateCcw, Save, ScanEye, Server, Settings2, Undo2, UserRound } from "lucide-react"
 import { Button } from "@/components/ui/opex/button"
 import { GlassCard as Card, GlassCardContent as CardContent, GlassCardDescription as CardDescription, GlassCardHeader as CardHeader, GlassCardTitle as CardTitle } from "@/components/ui/glass-card"
 import { Field } from "@/components/ui/opex/field"
+import { Input } from "@/components/ui/opex/input"
 import { Skeleton } from "@/components/ui/opex/skeleton"
 import { Textarea } from "@/components/ui/opex/textarea"
 import { FormToggleCard } from "@/components/ui/opex/toggle-card"
@@ -17,7 +18,7 @@ import { useAiProviderStatuses, useImageGeneratorSettings } from "@/features/ai/
 import { AgentSettingsTabs } from "@/features/ai/components/AgentSettingsTabs"
 import type { IntegrationTabDef } from "@/features/integrations/components/tabs/IntegrationTabs"
 import { apiErrorMessage } from "@/lib/api"
-import { DEFAULT_MADDOX_COMBAT_ADJUST_INSTRUCTIONS, DEFAULT_MADDOX_COMBAT_PREP_INSTRUCTIONS, DEFAULT_MADDOX_INSTRUCTIONS, DEFAULT_MADDOX_INTERVIEWER_INSTRUCTIONS, DEFAULT_MADDOX_OPEX_CHARACTER_INSTRUCTIONS, MADDOX_SCRIPT_KINDS, type MaddoxScriptKind } from "../../constants"
+import { DEFAULT_MADDOX_COMBAT_ADJUST_INSTRUCTIONS, DEFAULT_MADDOX_COMBAT_PREP_INSTRUCTIONS, DEFAULT_MADDOX_INSTRUCTIONS, DEFAULT_MADDOX_INTERVIEWER_INSTRUCTIONS, DEFAULT_MADDOX_OPEX_CHARACTER_INSTRUCTIONS, MADDOX_OPEX_NPC_LIMIT_MAX, MADDOX_SCRIPT_KINDS, type MaddoxScriptKind } from "../../constants"
 import { DEFAULT_MADDOX_SETTINGS, maddoxSettingsSchema, type MaddoxSettings } from "../../schemas"
 import { firstHiddenFormError } from "../../form-errors"
 import { draftFromScript, isScriptDraftDirty, isScriptDraftValid, type MaddoxScriptDraft } from "../../script-draft"
@@ -30,7 +31,7 @@ import { MaddoxModelCard } from "./MaddoxModelCard"
 import { MaddoxOpencodeMcpCard, MaddoxOpencodePolicyCard, MaddoxOpencodeSessionsCard } from "./MaddoxOpencodeCard"
 import { MaddoxSceneImagesCard } from "./MaddoxSceneImagesCard"
 import { MaddoxScriptCard } from "./MaddoxScriptCard"
-import { MaddoxOpexMemoriesCard } from "./MaddoxOpexMemoriesCard"
+import { MaddoxOpexMemoriesCard, NPC_OPEX_MEMORIES_COPY } from "./MaddoxOpexMemoriesCard"
 
 type MaddoxSection = "geral" | "entrevista-cenario" | "entrevista-personagem" | "personagem-opex" | "imagens" | "jev" | "opencode"
 const SECTIONS: IntegrationTabDef<MaddoxSection>[] = [
@@ -100,7 +101,7 @@ export function MaddoxTab({ onDirtyChange }: { onDirtyChange: (dirty: boolean) =
                 if (saved) form.reset(saved.settings)
             },
             (fieldErrors) => {
-                go(fieldErrors.opencode ? "opencode" : fieldErrors.sceneImages ? "imagens" : fieldErrors.opexCharacter || fieldErrors.opexCharacterInstructions || fieldErrors.rigorModels?.opexCharacter ? "personagem-opex" : "geral")
+                go(fieldErrors.opencode ? "opencode" : fieldErrors.sceneImages ? "imagens" : fieldErrors.opexCharacter || fieldErrors.opexCharacterInstructions || fieldErrors.opexNpcLimit || fieldErrors.rigorModels?.opexCharacter ? "personagem-opex" : "geral")
                 // Campos sem mensagem própria na tela (ex.: URL do avatar) não podem falhar em silêncio.
                 const hidden = firstHiddenFormError(fieldErrors)
                 if (hidden) toast.error(`Não foi possível salvar: ${hidden}`)
@@ -258,8 +259,43 @@ export function MaddoxTab({ onDirtyChange }: { onDirtyChange: (dirty: boolean) =
                                     </Field>
                                 </CardContent>
                             </Card>
+                            <Card>
+                                <CardHeader>
+                                    <CardTitle className="text-base">NPCs Opex</CardTitle>
+                                    <CardDescription>
+                                        O Maddox (ou o dono da campanha) pode promover um NPC importante a NPC Opex: ele ganha um agente próprio, com o modelo e as instruções acima, que decide o que o NPC fala e faz em cena.
+                                    </CardDescription>
+                                </CardHeader>
+                                <CardContent>
+                                    <Field
+                                        id="maddox-opex-npc-limit"
+                                        label="Limite de NPCs Opex por campanha"
+                                        error={errors.opexNpcLimit?.message}
+                                    >
+                                        <Controller
+                                            control={form.control}
+                                            name="opexNpcLimit"
+                                            render={({ field }) => (
+                                                <Input
+                                                    id="maddox-opex-npc-limit"
+                                                    type="number"
+                                                    min={0}
+                                                    max={MADDOX_OPEX_NPC_LIMIT_MAX}
+                                                    step={1}
+                                                    placeholder="Sem limite"
+                                                    className="max-w-40"
+                                                    value={field.value ?? ""}
+                                                    onChange={(event) => field.onChange(event.target.value.trim() === "" ? null : Number(event.target.value))}
+                                                />
+                                            )}
+                                        />
+                                        <p className="text-xs text-white/60">Vazio = sem limite; 0 desliga a promoção. Baixar o limite não desfaz ninguém: só bloqueia novas promoções.</p>
+                                    </Field>
+                                </CardContent>
+                            </Card>
                             {footer(go)}
                             <MaddoxOpexMemoriesCard />
+                            <MaddoxOpexMemoriesCard copy={NPC_OPEX_MEMORIES_COPY} />
                         </>
                     )}
                     {section === "imagens" && (

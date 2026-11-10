@@ -28,8 +28,8 @@ faltando ou webhook não registrado.
 Idempotente, auditada passo a passo (`entidade: "Engramind"`), uma por vez. Com o token de app:
 
 1. `whoami` (`kind: app`, app `dndicas`; outro tipo → mensagem clara; `401` → `ENGRAMIND_AUTH_INVALID`);
-2. agentes `dndicas/{opex,image-generator,entity-understanding,entity-import,maddox,personagem-opex}` (reaproveita, reativa);
-3. os 8 canais fixos (inclui `dndicas/personagem-opex`, o canal global dos Personagens Opex) — **o token de app não tem `create_channel`**: o canal nasce numa assinatura **exata**
+2. agentes `dndicas/<identidade>` de `MEMORY_IDENTITIES` (reaproveita, reativa);
+3. os canais fixos de `FIXED_CHANNELS` (inclui `dndicas/personagem-opex` e `dndicas/npc-opex`, os canais globais dos Personagens Opex e dos NPCs Opex) — **o token de app não tem `create_channel`**: o canal nasce numa assinatura **exata**
    (prefixo nunca cria canal). Depois `update_channel` dá o nome pt-BR; arquivado é restaurado;
 4. assinaturas: `dndicas/opex` → `dndicas/opex/*` (`inject`) e os outros canais fixos em `manage` (alcança
    citando o canal, fora do contexto); `dndicas/maddox` → `dndicas/maddox/campanhas/*` (`search`);
@@ -183,6 +183,27 @@ configuração ao token de app nos canais que ele criou.
 - **Memórias globais.** Na aba Agente Maddox › Personagem Opex: `GET/POST /api/ai/features/maddox/opex-memories` e
   `PATCH/DELETE …/[memoryId]` (`integrations.ai.view`/`edit`), com o token do agente fixo `dndicas/personagem-opex`
   (campo `agentTokenPersonagemOpex` da integração). Rede fora → 409 `ENGRAMIND_UNAVAILABLE`.
+
+## NPCs Opex (DND-27, `server/opex-npcs.ts`)
+
+- **Agente por NPC.** Na promoção, o token de app cria o agente `dndicas/npc-opex-<npcId>` com só 2 assinaturas **exatas**
+  `inject`: o global `dndicas/npc-opex` e o individual `dndicas/npc-opex/<campaignId>/<npcId>` (nasce nessa assinatura).
+  **Nunca** assina os canais Jogadores ou Mestre da campanha: o Maddox manda o contexto da cena em cada consulta. O token fica
+  cifrado no NPC (`opex.engramind.tokenBox`, `select: false`). Idempotente; falha em `opex.engramind.error`. Sem token (rede fora
+  na promoção), a próxima consulta (`opexNpcMemoryBlock`) ou a entrega da fila provisiona.
+- **Memória inicial.** `seedOpexNpcInitialMemories`: chaves fixas `npc-inicial:descricao` ("Quem eu sou", a descrição pública) e
+  `npc-inicial:segredos` ("Meus segredos", as notas do mestre), com `upsert` — uma nova promoção atualiza a memória inicial.
+- **Gravação.** `saveOpexNpcMemories` (do agente a cada consulta e do Maddox fora de cena): chave `opex:<título normalizado>`,
+  `upsert`. Rede fora ou token recusado → `engramind_pending_writes` com `agentNpcId`; `flushPendingWrites` entrega com o token do
+  NPC (`opexNpcWriterFor`: provisiona se faltar; NPC que deixou de ser Opex = entrada descartada).
+- **Ciclo de vida.** Desfazer ou a morte arquivam o canal individual, desativam o agente e revogam o token
+  (`retireOpexNpcAgent`); promover de novo restaura o canal (as memórias voltam) e emite outro token.
+  `syncCampaignChannelLifecycle` arquiva/restaura também os canais dos NPCs Opex ativos (`setOpexNpcChannelsArchived`).
+- **Memórias globais.** Na aba Agente Maddox › Personagem Opex (card "Memórias globais dos NPCs Opex"):
+  `GET/POST /api/ai/features/maddox/opex-npc-memories` e `PATCH/DELETE …/[memoryId]` (`integrations.ai.view`/`edit`), com o token do
+  agente fixo `dndicas/npc-opex` (campo `agentTokenNpcOpex`, emitido pelo bootstrap). Rede fora (ou bootstrap ainda não rodado)
+  → 409 `ENGRAMIND_UNAVAILABLE`. As operações vêm da fábrica `globalMemoriesFor` (`server/global-memories.ts`), a mesma das
+  memórias globais dos Personagens Opex.
 
 ## Migração (`server/migration.ts`, aba Migração)
 

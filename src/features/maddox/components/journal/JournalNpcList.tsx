@@ -3,14 +3,18 @@
 import { UserRound } from "lucide-react"
 import { MADDOX_NPC_STATUS_LABELS } from "../../constants"
 import { useMaddoxJournalNpcs } from "../../hooks/useMaddoxJournal"
-import { MemberAvatar } from "../campaigns/campaign-visuals"
+import { MemberAvatar, OpexChip } from "../campaigns/campaign-visuals"
+import { OpexNpcActions } from "../game/OpexNpcActions"
 import { cn } from "@/lib/utils"
 import { journalAnchor } from "./journal-links"
 import { JournalItemCard, JournalListState, JournalText, LoadMore, SeekNotice } from "./JournalLists"
 import { useJournalHash, useScrollToAnchor, useSeekAnchor } from "./use-journal-hash-target"
 
-/** NPCs que o grupo conhece: retrato, nome, situação e descrição pública (as notas do mestre nunca chegam aqui). */
-export function JournalNpcList({ campaignId, color }: { campaignId: string; color: string }) {
+/**
+ * NPCs que o grupo conhece: retrato, nome, situação e descrição pública (as notas do mestre nunca chegam aqui). NPC Opex
+ * ganha o chip para todos e o dono com a permissão promove ou remove (DND-27).
+ */
+export function JournalNpcList({ campaignId, color, manageOpex = false }: { campaignId: string; color: string; manageOpex?: boolean }) {
     const npcs = useMaddoxJournalNpcs(campaignId)
     const items = npcs.data?.pages.flatMap((page) => page.items) ?? []
     const anchors = new Set(items.map((npc) => journalAnchor.npc(npc.id)))
@@ -40,10 +44,14 @@ export function JournalNpcList({ campaignId, color }: { campaignId: string; colo
                         <JournalItemCard key={npc.id} anchor={anchor} highlighted={target === anchor} color={color} dimmed={gone} testId={`journal-npc-${npc.id}`}>
                             <header className="flex items-center gap-3">
                                 <MemberAvatar name={npc.name} imageUrl={npc.portraitUrl} color={color} className={cn("h-10 w-10 shrink-0", gone && "grayscale")} />
-                                <div className="min-w-0">
-                                    <h3 className="break-words text-sm font-semibold text-white">{npc.name}</h3>
+                                <div className="min-w-0 flex-1">
+                                    <h3 className="break-words text-sm font-semibold text-white">
+                                        {npc.name}
+                                        {npc.opex && <OpexChip className="ml-1.5 align-middle" />}
+                                    </h3>
                                     {npc.status !== "active" && <p className="text-[11px] text-white/60" data-testid="journal-npc-status">{MADDOX_NPC_STATUS_LABELS[npc.status]}</p>}
                                 </div>
+                                {manageOpex && <OpexNpcActions campaignId={campaignId} npc={npc} variant="button" />}
                             </header>
                             {npc.publicDescription.trim() ? <JournalText>{npc.publicDescription}</JournalText> : <p className="text-xs text-white/50">Sem descrição ainda.</p>}
                         </JournalItemCard>

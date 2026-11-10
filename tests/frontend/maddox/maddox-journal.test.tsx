@@ -224,6 +224,25 @@ describe("Diário da campanha (Maddox 9) — tela", () => {
         expect(screen.getByTestId("journal-npc-n1")).toHaveAttribute("id", "npc-n1")
     })
 
+    it("NPCs Opex (DND-27): o resumo com canManageOpexNpcs mostra Promover/Remover Opex; sem ele, só o chip", async () => {
+        const npcs = routes["/maddox/campaigns/c1/journal/npcs"]!
+        routes["/maddox/campaigns/c1/journal/npcs"] = (params) => {
+            const page = npcs(params) as { items: Record<string, unknown>[]; nextCursor: null }
+            return { ...page, items: page.items.map((item) => (item.id === "n1" ? { ...item, opex: true } : item)) }
+        }
+        const view = await renderJournal("aba=npcs")
+        const opex = await screen.findByTestId("journal-npc-n1")
+        expect(within(opex).getByTestId("opex-chip")).toBeTruthy()
+        expect(screen.queryByRole("button", { name: /Promover a NPC Opex|Remover Opex/ })).toBeNull()
+        view.unmount()
+
+        routes["/maddox/campaigns/c1/journal"] = () => summary({ canManageOpexNpcs: true })
+        await renderJournal("aba=npcs")
+        expect(within(await screen.findByTestId("journal-npc-n1")).getByRole("button", { name: "Remover Opex: Bartolomeu" })).toBeTruthy()
+        // NPC morto não tem "Promover".
+        expect(within(screen.getByTestId("journal-npc-n2")).queryByRole("button", { name: /Promover a NPC Opex/ })).toBeNull()
+    })
+
     it("missões: chips de situação e filtro pela situação na URL (?situacao=)", async () => {
         const view = await renderJournal("aba=missoes")
         const quest = await screen.findByTestId("journal-memory-q2")

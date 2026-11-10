@@ -276,6 +276,24 @@ describe("mesa Maddox — conversa e turno", () => {
         expect(screen.queryByRole("button", { name: /Gerar retrato/ })).not.toBeInTheDocument()
     })
 
+    it("NPCs Opex (DND-27): com canManageOpexNpcs o painel mostra Promover/Remover Opex e chama a rota; sem ele, só o chip", async () => {
+        const npcs = [
+            { id: "npc1", name: "Varn", portraitUrl: null, status: "active" as const, opex: true },
+            { id: "npc2", name: "Sildar", portraitUrl: null, status: "active" as const },
+        ]
+        const view = await renderGame(gameState({ npcs }))
+        expect(within(screen.getByTestId("npc-npc1")).getByTestId("opex-chip")).toBeTruthy()
+        expect(screen.queryByRole("button", { name: /Promover a NPC Opex|Remover Opex/ })).not.toBeInTheDocument()
+        view.unmount()
+
+        post.mockResolvedValue(ok(gameState({ npcs, canManageOpexNpcs: true })))
+        await renderGame(gameState({ npcs, canManageOpexNpcs: true }))
+        expect(screen.getByRole("button", { name: "Remover Opex: Varn" })).toBeInTheDocument()
+        fireEvent.click(screen.getByRole("button", { name: "Promover a NPC Opex: Sildar" }))
+        fireEvent.click(within(await screen.findByRole("alertdialog")).getByRole("button", { name: "Promover" }))
+        await waitFor(() => expect(post).toHaveBeenCalledWith("/maddox/campaigns/c1/npcs/npc2/opex", {}))
+    })
+
     it("Injetar Lembrança (DND-25): o botão fica ao lado de 'Gerar imagem da cena', envia o texto e a linha aparece na conversa", async () => {
         post.mockResolvedValue(ok(gameState()))
         await renderGame(

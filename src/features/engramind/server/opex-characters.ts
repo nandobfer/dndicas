@@ -3,7 +3,8 @@ import { dbConnect } from "@/lib/db"
 import { decryptSecret, encryptSecret, isEncryptedSecret, isSecretBoxConfigured } from "@/lib/crypto/secretBox"
 import { MaddoxCampaignMemberModel, MaddoxCampaignModel } from "@/features/maddox/models"
 import { AGENT_TOKEN_SCOPES, CAMPAIGN_VISIBILITY_NAMES, ENGRAMIND_APP, OPEX_CHARACTER_GLOBAL_CHANNEL, campaignChannel, opexCharacterAgentSlug, opexCharacterChannel } from "../constants"
-import { clientFor, engramindAgentClient, engramindAppClient, engramindConnection } from "./client"
+import { clientFor, engramindAppClient, engramindConnection } from "./client"
+import { globalMemoriesFor, type OpexGlobalMemory } from "./global-memories"
 import { ensureAgentSubscription, tidyChannel } from "./bootstrap"
 import { provisionCampaignMemoryNetworkSafely } from "./campaign-channels"
 import { PendingWrite, pendingWriteId } from "./pending-writes"
@@ -218,66 +219,15 @@ export async function setOpexChannelsArchived(client: EngramindClient, campaignI
 
 // ── Memórias globais (configuração do Agente Maddox, só administradores) ─────
 
-export interface OpexGlobalMemory {
-    id: string
-    title: string
-    text: string
-    updatedAt: string | null
-}
+export { OpexGlobalMemoriesUnavailableError, type OpexGlobalMemory } from "./global-memories"
 
-export class OpexGlobalMemoriesUnavailableError extends Error {
-    constructor() {
-        super("A rede de memórias (integração Engramind) não está disponível: as memórias globais do Personagem Opex não podem ser lidas nem gravadas agora.")
-        this.name = "OpexGlobalMemoriesUnavailableError"
-    }
-}
+const globalMemories = globalMemoriesFor(
+    "personagem-opex",
+    OPEX_CHARACTER_GLOBAL_CHANNEL,
+    "A rede de memórias (integração Engramind) não está disponível: as memórias globais do Personagem Opex não podem ser lidas nem gravadas agora.",
+)
 
-async function globalClient(): Promise<EngramindClient> {
-    const client = await engramindAgentClient("personagem-opex")
-    if (!client) throw new OpexGlobalMemoriesUnavailableError()
-    return client
-}
-
-interface RemoteMemory {
-    id: string
-    title?: string | null
-    text?: string | null
-    updated_at?: string | null
-}
-
-const globalView = (memory: RemoteMemory): OpexGlobalMemory => ({ id: memory.id, title: memory.title ?? "", text: memory.text ?? "", updatedAt: memory.updated_at ?? null })
-
-export async function listOpexGlobalMemories(): Promise<OpexGlobalMemory[]> {
-    const client = await globalClient()
-    const all: OpexGlobalMemory[] = []
-    let cursor: string | null = null
-    for (let page = 0; page < 20; page++) {
-        const result = (await client.call("GET", "/v1/memories", { query: { channels: OPEX_CHARACTER_GLOBAL_CHANNEL, limit: 100, ...(cursor ? { cursor } : {}) } })) as { memories: RemoteMemory[]; next_cursor: string | null }
-        all.push(...result.memories.map(globalView))
-        cursor = result.next_cursor
-        if (!cursor) break
-    }
-    return all
-}
-
-export async function createOpexGlobalMemory(input: OpexMemoryInput, actorId: string): Promise<OpexGlobalMemory> {
-    const client = await globalClient()
-    const written = (await client.call("POST", "/v1/memories", { body: { channel: OPEX_CHARACTER_GLOBAL_CHANNEL, title: input.title, text: input.text, origin: { source: "dndicas", label: "Configuração do Agente Maddox" } } })) as { memory?: RemoteMemory; id?: string }
-    const memory = written.memory ?? (written as RemoteMemory)
-    await auditEngramind(actorId, "create_memory", AcaoAuditoria.CRIAR, { canal: OPEX_CHARACTER_GLOBAL_CHANNEL, memoria: memory.id ?? null, titulo: input.title })
-    return globalView({ ...memory, title: memory.title ?? input.title, text: memory.text ?? input.text })
-}
-
-export async function updateOpexGlobalMemory(memoryId: string, input: OpexMemoryInput, actorId: string): Promise<OpexGlobalMemory> {
-    const client = await globalClient()
-    const written = (await client.call("PATCH", `/v1/memories/${encodeURIComponent(memoryId)}`, { body: { title: input.title, text: input.text } })) as { memory?: RemoteMemory }
-    const memory = written.memory ?? (written as RemoteMemory)
-    await auditEngramind(actorId, "update_memory", AcaoAuditoria.ATUALIZAR, { canal: OPEX_CHARACTER_GLOBAL_CHANNEL, memoria: memoryId, titulo: input.title })
-    return globalView({ ...memory, id: memory.id ?? memoryId, title: memory.title ?? input.title, text: memory.text ?? input.text })
-}
-
-export async function deleteOpexGlobalMemory(memoryId: string, actorId: string): Promise<void> {
-    const client = await globalClient()
-    await client.memories.delete(memoryId)
-    await auditEngramind(actorId, "delete_memory", AcaoAuditoria.EXCLUIR, { canal: OPEX_CHARACTER_GLOBAL_CHANNEL, memoria: memoryId })
-}
+export const listOpexGlobalMemories = (): Promise<OpexGlobalMemory[]> => globalMemories.list()
+export const createOpexGlobalMemory = (input: OpexMemoryInput, actorId: string): Promise<OpexGlobalMemory> => globalMemories.create(input, actorId)
+export const updateOpexGlobalMemory = (memoryId: string, input: OpexMemoryInput, actorId: string): Promise<OpexGlobalMemory> => globalMemories.update(memoryId, input, actorId)
+export const deleteOpexGlobalMemory = (memoryId: string, actorId: string): Promise<void> => globalMemories.remove(memoryId, actorId)

@@ -5,7 +5,7 @@ import { Coins, Flag, Gift, Package, Swords } from "lucide-react"
 import { rarityColors } from "@/lib/config/colors"
 import { MADDOX_COMBAT_OUTCOME_LABELS, MADDOX_COMBATANT_OUTCOME_LABELS, type MaddoxCombatOutcome } from "../../constants"
 import type { MaddoxGameCombatEventDto, MaddoxCombatRewardDto } from "../../game-types"
-import { RarityChip } from "../campaigns/campaign-visuals"
+import { OpexChip, RarityChip } from "../campaigns/campaign-visuals"
 
 /** Cor do combate em andamento (chip do cabeçalho e card de início). */
 export const COMBAT_COLOR = rarityColors.artifact
@@ -52,13 +52,14 @@ export function GameCombatCard({ combat }: { combat: MaddoxGameCombatEventDto })
                         <p className="text-xs font-medium text-white/60">{ended ? "Adversários e aliados" : "Na luta"}</p>
                         <ul className="flex flex-wrap gap-1.5" aria-label={ended ? "Desfecho dos participantes" : "Participantes do combate"}>
                             {people.map((item, index) => (
-                                <li key={index} data-testid="combatant">
+                                <li key={index} data-testid="combatant" className="flex items-center gap-1">
                                     <RarityChip color={item.side === "aliado" ? rarityColors.uncommon : COMBAT_COLOR}>
                                         {item.name}
                                         {item.quantity > 1 ? ` (${item.quantity})` : ""}
                                         {item.side === "aliado" ? " · aliado" : ""}
                                         {ended && item.outcome ? ` · ${MADDOX_COMBATANT_OUTCOME_LABELS[item.outcome]}` : ""}
                                     </RarityChip>
+                                    {item.opex && <OpexChip />}
                                 </li>
                             ))}
                         </ul>

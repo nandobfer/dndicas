@@ -5,6 +5,7 @@ import {
     DEFAULT_MADDOX_INSTRUCTIONS,
     DEFAULT_MADDOX_INTERVIEWER_INSTRUCTIONS,
     DEFAULT_MADDOX_OPEX_CHARACTER_INSTRUCTIONS,
+    MADDOX_OPEX_NPC_LIMIT_MAX,
     DEFAULT_MADDOX_COMBAT_PREP_INSTRUCTIONS,
     DEFAULT_MADDOX_COMBAT_ADJUST_INSTRUCTIONS,
     DEFAULT_MADDOX_PERSONA,
@@ -155,6 +156,13 @@ export const maddoxSettingsSchema = z
         instructions: instructionsField,
         interviewerInstructions: instructionsField,
         opexCharacterInstructions: instructionsField,
+        /** NPCs Opex por campanha (DND-27): `null` = sem limite; 0 desliga a promoção. */
+        opexNpcLimit: z
+            .number({ error: "Informe um número inteiro" })
+            .int("Informe um número inteiro")
+            .min(0, "Use 0 ou mais")
+            .max(MADDOX_OPEX_NPC_LIMIT_MAX, `Até ${MADDOX_OPEX_NPC_LIMIT_MAX}`)
+            .nullable(),
         /** DND-41: critério da preparação da mesa de combate e dos pedidos de ajuste. */
         combatPrepInstructions: instructionsField,
         combatAdjustInstructions: instructionsField,
@@ -190,6 +198,7 @@ export const DEFAULT_MADDOX_SETTINGS: MaddoxSettings = {
     instructions: DEFAULT_MADDOX_INSTRUCTIONS,
     interviewerInstructions: DEFAULT_MADDOX_INTERVIEWER_INSTRUCTIONS,
     opexCharacterInstructions: DEFAULT_MADDOX_OPEX_CHARACTER_INSTRUCTIONS,
+    opexNpcLimit: null,
     combatPrepInstructions: DEFAULT_MADDOX_COMBAT_PREP_INSTRUCTIONS,
     combatAdjustInstructions: DEFAULT_MADDOX_COMBAT_ADJUST_INSTRUCTIONS,
     avatar: { url: null, persona: DEFAULT_MADDOX_PERSONA },

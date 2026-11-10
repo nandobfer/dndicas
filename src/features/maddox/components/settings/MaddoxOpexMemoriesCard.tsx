@@ -9,17 +9,43 @@ import { Input } from "@/components/ui/opex/input"
 import { Textarea } from "@/components/ui/opex/textarea"
 import { GlassCard as Card, GlassCardContent as CardContent, GlassCardDescription as CardDescription, GlassCardHeader as CardHeader, GlassCardTitle as CardTitle } from "@/components/ui/glass-card"
 import { MADDOX_OPEX_MEMORY_TEXT_MAX, MADDOX_OPEX_MEMORY_TITLE_MAX } from "../../constants"
-import { useMaddoxOpexMemories, useMaddoxOpexMemoryMutations, type MaddoxOpexGlobalMemoryDto } from "../../hooks/useMaddoxSettings"
+import { useMaddoxOpexMemories, useMaddoxOpexMemoryMutations, type MaddoxOpexGlobalMemoryDto, type MaddoxOpexMemoriesEndpoint } from "../../hooks/useMaddoxSettings"
 
 const apiError = (error: unknown) => (error as { response?: { data?: { error?: string } } } | null)?.response?.data?.error
 
+interface MemoriesCardCopy {
+    endpoint: MaddoxOpexMemoriesEndpoint
+    idPrefix: string
+    title: string
+    description: string
+    removeDescription: string
+}
+
+const PERSONAGEM_OPEX_COPY: MemoriesCardCopy = {
+    endpoint: "opex-memories",
+    idPrefix: "maddox-opex-memory",
+    title: "Memórias globais do Personagem Opex",
+    description: 'Todo Personagem Opex lê estas memórias em toda decisão: use-as para treinar o jeito de jogar (ex.: "prefira cooperar com o grupo"). Salvam na hora, fora do botão Salvar.',
+    removeDescription: "Nenhum Personagem Opex vai mais ler esta memória.",
+}
+
+/** Card das memórias globais dos NPCs Opex (DND-27): o canal `dndicas/npc-opex`. */
+export const NPC_OPEX_MEMORIES_COPY: MemoriesCardCopy = {
+    endpoint: "opex-npc-memories",
+    idPrefix: "maddox-opex-npc-memory",
+    title: "Memórias globais dos NPCs Opex",
+    description: 'Todo NPC Opex lê estas memórias em toda consulta: use-as para orientar o jeito de interpretar os NPCs (ex.: "NPCs desconfiam de estranhos armados"). Salvam na hora, fora do botão Salvar.',
+    removeDescription: "Nenhum NPC Opex vai mais ler esta memória.",
+}
+
 /**
- * Memórias globais do Personagem Opex (DND-26): o canal `dndicas/personagem-opex`, lido por todo Personagem Opex. Salva à
- * parte do formulário (cada inclusão, edição ou remoção vai direto à rede de memórias).
+ * Memórias globais lidas por todo Personagem Opex (DND-26, canal `dndicas/personagem-opex`) ou, com
+ * `NPC_OPEX_MEMORIES_COPY`, por todo NPC Opex (DND-27, canal `dndicas/npc-opex`). Salva à parte do formulário (cada
+ * inclusão, edição ou remoção vai direto à rede de memórias).
  */
-export function MaddoxOpexMemoriesCard() {
-    const query = useMaddoxOpexMemories()
-    const { create, update, remove } = useMaddoxOpexMemoryMutations()
+export function MaddoxOpexMemoriesCard({ copy = PERSONAGEM_OPEX_COPY }: { copy?: MemoriesCardCopy } = {}) {
+    const query = useMaddoxOpexMemories(copy.endpoint)
+    const { create, update, remove } = useMaddoxOpexMemoryMutations(copy.endpoint)
     const [editing, setEditing] = useState<{ id: string | null; title: string; text: string } | null>(null)
     const [removing, setRemoving] = useState<MaddoxOpexGlobalMemoryDto | null>(null)
     const saving = create.isPending || update.isPending
@@ -31,18 +57,18 @@ export function MaddoxOpexMemoriesCard() {
         else create.mutate(input, { onSuccess: () => setEditing(null) })
     }
     return (
-        <Card>
+        <Card data-testid={`${copy.idPrefix}-card`}>
             <CardHeader>
                 <CardTitle className="flex items-center gap-2 text-base">
-                    <Brain className="h-4 w-4 text-primary" aria-hidden /> Memórias globais do Personagem Opex
+                    <Brain className="h-4 w-4 text-primary" aria-hidden /> {copy.title}
                 </CardTitle>
-                <CardDescription>Todo Personagem Opex lê estas memórias em toda decisão: use-as para treinar o jeito de jogar (ex.: &quot;prefira cooperar com o grupo&quot;). Salvam na hora, fora do botão Salvar.</CardDescription>
+                <CardDescription>{copy.description}</CardDescription>
             </CardHeader>
             <CardContent className="space-y-3">
                 {query.isLoading && <Loader2 className="h-4 w-4 animate-spin text-white/60" aria-label="Carregando as memórias" />}
                 {query.isError && <p className="text-sm text-destructive" role="alert">{apiError(query.error) ?? "Não foi possível carregar as memórias globais."}</p>}
                 {query.data && query.data.length === 0 && !editing && <p className="text-sm text-white/60">Nenhuma memória global ainda.</p>}
-                <ul className="space-y-2" aria-label="Memórias globais">
+                <ul className="space-y-2" aria-label={copy.title}>
                     {query.data?.map((memory) => (
                         <li key={memory.id} className="flex items-start gap-3 rounded-lg border border-white/10 bg-white/[0.03] p-3" data-testid="opex-global-memory">
                             <div className="min-w-0 flex-1">
@@ -60,11 +86,11 @@ export function MaddoxOpexMemoriesCard() {
                 </ul>
                 {editing ? (
                     <div className="space-y-3 rounded-lg border border-white/10 p-3" data-testid="opex-memory-editor">
-                        <Field id="maddox-opex-memory-title" label="Título">
-                            <Input id="maddox-opex-memory-title" maxLength={MADDOX_OPEX_MEMORY_TITLE_MAX} value={editing.title} onChange={(event) => setEditing({ ...editing, title: event.target.value })} />
+                        <Field id={`${copy.idPrefix}-title`} label="Título">
+                            <Input id={`${copy.idPrefix}-title`} maxLength={MADDOX_OPEX_MEMORY_TITLE_MAX} value={editing.title} onChange={(event) => setEditing({ ...editing, title: event.target.value })} />
                         </Field>
-                        <Field id="maddox-opex-memory-text" label="Memória">
-                            <Textarea id="maddox-opex-memory-text" rows={4} maxLength={MADDOX_OPEX_MEMORY_TEXT_MAX} value={editing.text} onChange={(event) => setEditing({ ...editing, text: event.target.value })} />
+                        <Field id={`${copy.idPrefix}-text`} label="Memória">
+                            <Textarea id={`${copy.idPrefix}-text`} rows={4} maxLength={MADDOX_OPEX_MEMORY_TEXT_MAX} value={editing.text} onChange={(event) => setEditing({ ...editing, text: event.target.value })} />
                         </Field>
                         <div className="flex justify-end gap-2">
                             <Button type="button" variant="ghost" size="sm" onClick={() => setEditing(null)} disabled={saving}>
@@ -85,7 +111,7 @@ export function MaddoxOpexMemoriesCard() {
                 open={removing !== null}
                 onOpenChange={(open) => !open && setRemoving(null)}
                 title={`Remover "${removing?.title ?? "memória"}"?`}
-                description="Nenhum Personagem Opex vai mais ler esta memória."
+                description={copy.removeDescription}
                 confirmLabel="Remover"
                 variant="destructive"
                 pending={remove.isPending}

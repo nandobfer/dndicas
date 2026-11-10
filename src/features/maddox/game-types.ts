@@ -61,6 +61,8 @@ export interface MaddoxGameMessageDto {
     reminder?: MaddoxReminderDto | null
     /** Sugestões de ação da narração para o personagem de quem vê (DND-30); as dos outros nunca chegam. */
     actionOptions?: string[] | null
+    /** NPCs Opex cujo agente não respondeu nesta narração (DND-27): só o dono recebe, com o motivo. */
+    opexNpcFailures?: { npcName: string; reason: string }[]
     /** DND-41: card privado "Sua mesa está pronta" (só o dono do personagem o recebe). */
     combatPrep?: MaddoxCombatPrepCardDto | null
     createdAt: string
@@ -108,6 +110,8 @@ export interface MaddoxCombatantDto {
     quantity: number
     condition: string
     outcome: MaddoxCombatantOutcome | null
+    /** NPC Opex conhecido dos jogadores (DND-27). */
+    opex?: boolean
 }
 
 /** Combate em andamento (Maddox 6). Notas do mestre e a cena final nunca chegam à tela. */
@@ -134,7 +138,7 @@ export interface MaddoxTacticalSlotDto {
     name: string
     portraitUrl: string | null
     memberId: string | null
-    /** Personagem Opex (DND-26). */
+    /** Personagem Opex (DND-26) ou NPC Opex conhecido dos jogadores (DND-27). */
     opex?: boolean
     /** `null` = ainda não rolou. */
     initiative: number | null
@@ -191,6 +195,8 @@ export interface MaddoxCombatActionDto {
     summary: string
     cancellable: boolean
     round: number
+    /** Ator é um NPC Opex conhecido dos jogadores (DND-27). */
+    opex?: boolean
 }
 
 export interface MaddoxCombatRollDto {
@@ -306,6 +312,8 @@ export interface MaddoxGameNpcDto {
     status: "active" | "inactive" | "dead" | "unknown"
     /** Retrato sendo gerado (Maddox 10). */
     portraitGenerating?: boolean
+    /** NPC Opex (DND-27): chip "Opex" para todos. */
+    opex?: boolean
 }
 
 export interface MaddoxGameParticipantDto {
@@ -356,6 +364,8 @@ export interface MaddoxGameStateDto {
     showCheckDc: boolean
     /** NPCs que os jogadores conhecem. */
     npcs: MaddoxGameNpcDto[]
+    /** Dono com a permissão "Adicionar Personagens Opex": vê "Promover a NPC Opex" e "Remover Opex" (DND-27). */
+    canManageOpexNpcs?: boolean
     /** Imagens nas cenas (Maddox 10): situação do pedido manual e do retrato para o dono. */
     sceneImages?: MaddoxSceneImageControlDto
     /** Combate narrativo em andamento (Maddox 6). */

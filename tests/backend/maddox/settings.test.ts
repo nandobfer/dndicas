@@ -126,6 +126,19 @@ describe("configuração do Agente Maddox", () => {
         expect(normalizeMaddoxSettings(configured({ sceneImages: { ...base, style: "  óleo  " } })).sceneImages.style).toBe("óleo")
     })
 
+    it("limite de NPCs Opex (DND-27): padrão sem limite (null), aceita 0 e positivos e recusa negativo ou fracionário", () => {
+        expect(DEFAULT_MADDOX_SETTINGS.opexNpcLimit).toBeNull()
+        const legacy = maddoxSettingsSchema.safeParse(withMaddoxDefaults({ enabled: false }))
+        expect(legacy.success && legacy.data.opexNpcLimit).toBeNull()
+        for (const value of [null, 0, 3]) expect(maddoxSettingsSchema.safeParse({ ...DEFAULT_MADDOX_SETTINGS, opexNpcLimit: value }).success).toBe(true)
+        for (const value of [-1, 1.5]) {
+            const result = maddoxSettingsSchema.safeParse({ ...DEFAULT_MADDOX_SETTINGS, opexNpcLimit: value })
+            expect(result.success).toBe(false)
+            if (!result.success) expect(result.error.issues[0]!.path).toEqual(["opexNpcLimit"])
+        }
+        expect(normalizeMaddoxSettings(configured({ opexNpcLimit: 2 })).opexNpcLimit).toBe(2)
+    })
+
     it("ativo exige provedor e modelo; entrevistador com provedor exige modelo", () => {
         const result = maddoxSettingsSchema.safeParse({ ...DEFAULT_MADDOX_SETTINGS, enabled: true, interviewer: { provider: "gemini", model: null, agent: null, variant: null } })
         expect(result.success).toBe(false)
