@@ -95,6 +95,7 @@ vi.mock("@/lib/ai/jev", () => ({ askJevSystemOne }))
 vi.mock("@/lib/ai/stream", () => ({ generateAiText }))
 vi.mock("@/core/storage/s3", () => ({ getFile }))
 vi.mock("@/features/engramind/server/campaign-memories", async () => (await import("../../helpers/campaign-memories-mock")).campaignMemoriesModule)
+vi.mock("@/features/maddox/server/combat-prep-ai", async () => (await import("../../helpers/combat-prep-mock")).combatPrepAiModule)
 vi.mock("@/features/mcp/server/catalog-entity-service", () => ({
     getCatalogEntity: vi.fn(async ({ id }: { id: string }) => (id === "goblin" ? { _id: "goblin", name: "Goblin", image: "/api/upload?key=catalogo%2Fgoblin.png", description: "<p>Pequeno e verde.</p>" } : null)),
 }))
@@ -107,6 +108,9 @@ const { MADDOX_SCENE_IMAGE_CAPTION_GUIDE, MADDOX_SCENE_IMAGE_CAPTION_MAX } = awa
 const { findMaddoxTool, runMaddoxTool } = await import("@/features/maddox/server/master-tools")
 const { onCombatEnded } = await import("@/features/maddox/server/combat-image")
 const { applyCombatDrafts } = await import("@/features/maddox/server/combat")
+const { monsterStatsFromCustom } = await import("@/features/maddox/server/combat-monsters")
+const { waitForCombatPreps } = await import("@/features/maddox/server/combat-prep")
+const aiSettings = await import("@/features/ai/server/settings")
 const { CharacterSheet } = await import("@/features/character-sheets/models/character-sheet")
 const { campaignMemoriesStore } = await import("../../helpers/campaign-memories-mock")
 const campaignMemories = await import("@/features/engramind/server/campaign-memories")
@@ -838,5 +842,48 @@ describe("retrato automático de NPC conhecido (DND-43)", () => {
         expect(await portraits(varn!._id)).toHaveLength(0)
         await images.waitForSceneImages()
         expect((await MaddoxNpcModel.findById(rubra!._id).lean())!.portraitUrl).toBeTruthy()
+    })
+
+    it("combate tático: o NPC registrado (indivíduo único) ganha o retrato", async () => {
+        const { campaignId } = await table()
+        const campaign = await MaddoxCampaignModel.findById(campaignId).lean()
+        const stats = monsterStatsFromCustom({ ca: 13, pv: 11, iniciativa: 2, acoes: [{ nome: "Sabre", tipo: "ataque", bonus: 4, dano: "1d6+2" }] })
+        const draft = (name: string, quantity: number) => ({ name, side: "inimigo" as const, quantity, description: `${name}, pirata de tapa-olho.`, condition: "ileso", registerNpc: true, stats })
+        await applyCombatDrafts(campaign!, 5, [{ type: "start", title: "Abordagem", location: "Convés", combatants: [], tactical: { surprise: null, combatants: [draft("Capitã Sal", 1), draft("Marujo", 2)] } }])
+        await waitForCombatPreps()
+        const sal = await MaddoxNpcModel.findOne({ campaignId, name: "Capitã Sal" }).lean()
+        expect(sal).toMatchObject({ visibility: "players" })
+        expect(await portraits(sal!._id)).toHaveLength(1)
+        // Grupo (quantidade > 1) não vira NPC: nada a retratar.
+        expect(await MaddoxSceneImageModel.countDocuments({ source: "npc-portrait" })).toBe(1)
+        await images.waitForSceneImages()
+        expect((await MaddoxNpcModel.findById(sal!._id).lean())!.portraitUrl).toBeTruthy()
+    })
+
+    it("erro interno no agendamento (ambiente das imagens lança): save_npc e o início do combate seguem, sem pedido", async () => {
+        const { campaignId } = await table()
+        const boom = new Error("falha inesperada no ambiente")
+        vi.mocked(aiSettings.availabilityOfImageGenerator).mockRejectedValueOnce(boom)
+        expect(await saveNpc(campaignId, null, { name: "Mira", publicDescription: "Faroleira.", visibility: "players" })).toMatchObject({ saved: true, created: true })
+        expect(await MaddoxNpcModel.exists({ campaignId, name: "Mira" })).toBeTruthy()
+
+        vi.mocked(aiSettings.availabilityOfImageGenerator).mockRejectedValueOnce(boom)
+        const campaign = await MaddoxCampaignModel.findById(campaignId).lean()
+        const applied = await applyCombatDrafts(campaign!, 5, [{ type: "start", title: "Emboscada", location: "Cais", combatants: [{ name: "Barba Rubra", side: "inimigo", quantity: 1, description: "Pirata.", condition: "ileso", registerNpc: true }] }])
+        expect(applied.messages).toEqual([expect.objectContaining({ event: "start" })])
+        expect(await MaddoxNpcModel.exists({ campaignId, name: "Barba Rubra" })).toBeTruthy()
+        expect(await MaddoxSceneImageModel.countDocuments({ source: "npc-portrait" })).toBe(0)
+    })
+
+    it("contexto do narrador: só o retrato automático ligado ainda monta a regra, com autoPortraits", async () => {
+        const { campaignId } = await table()
+        env.situations = {}
+        const campaign = await MaddoxCampaignModel.findById(campaignId).lean()
+        expect(await images.narratorSceneImageContext(campaign!, 5)).toMatchObject({ situations: [], portraits: false, autoPortraits: true })
+        env.autoPortraits = false
+        expect(await images.narratorSceneImageContext(campaign!, 5)).toBeNull()
+        env.autoPortraits = true
+        await MaddoxCampaignModel.updateOne({ _id: campaignId }, { $set: { sceneImages: false } })
+        expect(await images.narratorSceneImageContext((await MaddoxCampaignModel.findById(campaignId).lean())!, 5)).toBeNull()
     })
 })

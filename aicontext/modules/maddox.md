@@ -1274,7 +1274,9 @@ Desligadas" na criação e na edição, muda a qualquer momento) — desligada, 
 **Retrato automático (DND-43).** Com `enabled` e `autoPortraits` ligados e a chave da campanha ligada (independe da situação "Retrato
 de NPC"), `scheduleAutoNpcPortraits` pede o retrato de todo NPC **conhecido dos jogadores, sem retrato e sem pedido anterior**
 (`pending`, `generating`, `done` ou `failed`: uma tentativa por NPC; a nova fica no "Gerar retrato" do dono). Gatilhos: `save_npc` que
-deixa o NPC com `visibility: "players"` (criação, mudança de visibilidade ou atualização de NPC já conhecido e ainda sem retrato) e
+deixa o NPC com `visibility: "players"` (criação, mudança de visibilidade ou atualização de NPC já conhecido e ainda sem retrato —
+**decisão do dono** no planejamento da DND-43: os NPCs legados ganham retrato aos poucos, conforme o Maddox os atualiza; cada um
+uma vez, dentro do teto diário) e
 o NPC registrado ao abrir um combate (`linkCombatant`, já nasce conhecido; o NPC existente só ligado ao combate não dispara). Pede na
 hora, sem rascunho, dentro ou fora da narração (pergunta, Opex); o retorno do `save_npc` traz `retrato: "pedido automaticamente…"`
 e, nesse caso, o `gerarRetrato` da mesma chamada não pede outro. O slot `portrait` só conta no **teto diário**: o intervalo
