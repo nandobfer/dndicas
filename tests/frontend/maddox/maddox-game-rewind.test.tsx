@@ -21,7 +21,8 @@ vi.mock("@/features/character-sheets/api/character-sheets-queries", () => ({ use
 vi.mock("@/features/character-sheets/components/sheet-form", () => ({ SheetForm: () => <div data-testid="sheet-form" /> }))
 vi.mock("@/core/context/window-context", () => ({ useWindows: () => ({ addWindow: vi.fn(), removeWindow: vi.fn() }) }))
 vi.mock("@/lib/pusher/client", () => ({ isPusherClientAvailable: () => false, acquireChannel: vi.fn(), releaseChannel: vi.fn() }))
-vi.mock("@/features/maddox/hooks/useMaddoxGameStream", () => ({ useMaddoxGameStream: () => ({ live: [], settled: [], finished: 0, connected: true, rolled: [] }) }))
+const streamState = vi.hoisted(() => ({ current: { live: [] as unknown[], settled: [] as unknown[], finished: 0, connected: true, rolled: [] as unknown[] } }))
+vi.mock("@/features/maddox/hooks/useMaddoxGameStream", () => ({ useMaddoxGameStream: () => streamState.current }))
 vi.mock("@/lib/api", async (importOriginal) => {
     const actual = await importOriginal<typeof import("@/lib/api")>()
     return { ...actual, api: { get, post, put: vi.fn(), patch: vi.fn(), delete: vi.fn() } }
@@ -88,6 +89,7 @@ const openMenu = async () => {
 beforeEach(() => {
     get.mockReset()
     post.mockReset()
+    streamState.current = { live: [], settled: [], finished: 0, connected: true, rolled: [] }
 })
 
 describe("mesa Maddox — Turnos (DND-44)", () => {
@@ -202,5 +204,51 @@ describe("mesa Maddox — Turnos (DND-44)", () => {
         await confirmVia(again)
         expect(await screen.findByText("Depois da nova volta.")).toBeTruthy()
         await waitFor(() => expect(screen.queryByText("Página antiga.")).toBeNull())
+    })
+})
+
+describe("mesa Maddox — gerações terminadas depois de voltar a um turno (DND-46)", () => {
+    const hex = (n: number) => n.toString(16).padStart(24, "0")
+    const settled = (n: number, over: Record<string, unknown>) => ({ liveId: `l${n}`, kind: "narration", turnNumber: 12, replyToId: null, text: "", tool: false, startedAt: "2026-11-10T10:00:00.000Z", messageId: hex(n), ...over })
+    const dividers = () => screen.queryAllByTestId("turn-divider").map((item) => item.textContent)
+
+    // A página ficou aberta: o stream guardou os dois segmentos do turno 12 (depois descartados) e a resposta de uma
+    // pergunta apagada pela volta. Nada disso volta à tela.
+    const STALE = [settled(20, { text: "Narração descartada do turno 12." }), settled(21, { text: "Continuação descartada do turno 12." }), settled(25, { kind: "answer", turnNumber: 11, replyToId: hex(24), text: "Resposta apagada." })]
+    const notice = message(hex(30), { kind: "rewind", turnNumber: 11, rewindNotice: { event: "goto", turnNumber: 11, originTurn: 12 } })
+    const atTurn11 = [message(hex(10), { turnNumber: 11, content: "Narração do turno 11." }), notice]
+
+    it("na volta ao turno 11, com uma pergunta, o 'Turno 11' aparece uma vez e nada descartado volta (AC1)", async () => {
+        streamState.current = { ...streamState.current, settled: STALE }
+        await renderGame(gameState({ turn: { ...gameState().turn, number: 11 }, messages: [...atTurn11, message(hex(31), { kind: "question", turnNumber: 11, memberId: "m1", characterName: "Kael", content: "Há guardas na porta?" }), message(hex(32), { kind: "answer", turnNumber: 11, replyToId: hex(31), content: "Dois guardas." })] }))
+        expect(screen.getByText("Dois guardas.")).toBeTruthy()
+        expect(dividers()).toEqual(["Turno 11"])
+        expect(screen.queryByText("Narração descartada do turno 12.")).toBeNull()
+        expect(screen.queryByText("Continuação descartada do turno 12.")).toBeNull()
+        expect(screen.queryByText("Resposta apagada.")).toBeNull()
+    })
+
+    it("depois da declaração e da nova narração, o turno descartado e a resposta presa nele somem (AC2)", async () => {
+        streamState.current = { ...streamState.current, settled: [...STALE, settled(41, { text: "Nova narração do turno 12." })] }
+        await renderGame(gameState({ turn: { ...gameState().turn, number: 12 }, messages: [...atTurn11, message(hex(40), { kind: "declaration", turnNumber: 11, memberId: "m1", characterName: "Kael", content: "Abro a porta." }), message(hex(41), { turnNumber: 12, content: "Nova narração do turno 12." })] }))
+        expect(dividers()).toEqual(["Turno 11", "Turno 12"])
+        expect(screen.getAllByText("Nova narração do turno 12.")).toHaveLength(1)
+        expect(screen.queryByText("Narração descartada do turno 12.")).toBeNull()
+        expect(screen.queryByText("Resposta apagada.")).toBeNull()
+    })
+
+    it("fluxo normal: a resposta terminada fica até a mensagem gravada chegar, sem duplicar (AC3)", async () => {
+        streamState.current = { ...streamState.current, settled: [settled(33, { kind: "answer", turnNumber: 11, replyToId: hex(31), text: "Resposta a caminho." })] }
+        await renderGame(gameState({ turn: { ...gameState().turn, number: 11 }, messages: [...atTurn11, message(hex(31), { kind: "question", turnNumber: 11, memberId: "m1", characterName: "Kael", content: "Há guardas?" })] }))
+        expect(screen.getByText("Resposta a caminho.")).toBeTruthy()
+        expect(dividers()).toEqual(["Turno 11"])
+    })
+
+    it("duas narrações ao vivo do mesmo turno mostram um único divisor", async () => {
+        streamState.current = { ...streamState.current, settled: [settled(35, { liveId: "a", turnNumber: 12, text: "Bloco do goblin." })], live: [{ liveId: "b", kind: "narration", turnNumber: 12, replyToId: null, text: "Bloco do orc.", tool: false, startedAt: "2026-11-10T10:00:00.000Z" }] }
+        await renderGame(gameState({ turn: { ...gameState().turn, number: 11 }, messages: atTurn11 }))
+        expect(screen.getByText("Bloco do goblin.")).toBeTruthy()
+        expect(screen.getByText("Bloco do orc.")).toBeTruthy()
+        expect(dividers()).toEqual(["Turno 11", "Turno 12"])
     })
 })

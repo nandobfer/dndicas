@@ -523,11 +523,12 @@ describe("Maddox 4 — narração ao vivo, falhas e foco", () => {
     })
 
     it("geração que terminou fica na tela até a mensagem gravada chegar (sem piscar nem duplicar)", async () => {
-        const settled = { ...liveItem({ text: "Fim da cena." }), messageId: "n2" }
+        // Id mais novo que os da mesa (DND-46): uma geração só espera a mensagem que ainda vai chegar.
+        const settled = { ...liveItem({ text: "Fim da cena." }), messageId: "z2" }
         await renderGame(gameState({ turn: masterTurn }))
         act(() => setStream({ settled: [settled], finished: 1 }))
         expect(screen.getByTestId("maddox-live-narration")).toHaveTextContent("Fim da cena.")
-        get.mockResolvedValue(ok(gameState({ turn: { ...masterTurn, phase: "players", generating: false }, messages: [...gameState().messages, message("n2", { kind: "narration", phase: "master", turnNumber: 2, content: "Fim da cena." })] })))
+        get.mockResolvedValue(ok(gameState({ turn: { ...masterTurn, phase: "players", generating: false }, messages: [...gameState().messages, message("z2", { kind: "narration", phase: "master", turnNumber: 2, content: "Fim da cena." })] })))
         emit("maddox.game.changed")
         await waitFor(() => expect(screen.queryByTestId("maddox-live-narration")).not.toBeInTheDocument())
         expect(screen.getAllByText("Fim da cena.")).toHaveLength(1)
