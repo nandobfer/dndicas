@@ -978,7 +978,7 @@ async function rollInitiatives(id: string, who: { kael: { userId: string }; lyra
 }
 
 /** Preparação pronta para um personagem da `scene` (a vez já está aberta). */
-async function readyPrep(id: string, combatId: unknown, who: { actorKey: string; characterId: string; memberId: string; userId: string; sheetId: string }, patch: Record<string, unknown> = {}) {
+async function readyPrep(id: string, combatId: mongoose.Types.ObjectId, who: { actorKey: string; characterId: string; memberId: string; userId: string; sheetId: string }, patch: Record<string, unknown> = {}) {
     return MaddoxCombatPrepModel.create({ campaignId: id, combatId, actorKey: who.actorKey, characterId: who.characterId, memberId: who.memberId, userId: who.userId, sheetId: who.sheetId, characterName: "Kael", turnNumber: 1, waitRound: 0, status: "ready", overlay: { modify: [], remove: [], add: [], suppress: [] }, riders: [], changes: [], adjustments: [], ...patch })
 }
 
@@ -1186,7 +1186,7 @@ describe("DND-41 — pedido de ajuste na própria vez", () => {
     })
 
     it("falha da IA: o jogador recebe a mensagem genérica; o motivo técnico só vai ao dono da campanha", async () => {
-        const { id, kael, lyra, combatId } = await scene()
+        const { id, lyra, combatId } = await scene()
         await readyPrep(id, combatId, lyra, { characterName: "Lyra" })
         await MaddoxCampaignModel.updateOne({ _id: id }, { $set: { "turn.combatActor.actorKey": lyra.actorKey, "turn.combatActor.memberId": new mongoose.Types.ObjectId(lyra.memberId), "turn.eligibleMemberIds": [new mongoose.Types.ObjectId(lyra.memberId)] } })
         await MaddoxCombatModel.updateOne({ campaignId: id }, { $set: { "tactical.activeIndex": 2 } })

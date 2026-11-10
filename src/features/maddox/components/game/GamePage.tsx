@@ -165,7 +165,9 @@ function GameTable({ state, presence, stream }: { state: MaddoxGameStateDto; pre
             await combatAct.mutateAsync(input)
             return true
         } catch (error) {
-            if (apiErrorCode(error) === "ACTION_INVALID") setCombatInvalid(apiErrorMessage(error, "Essa ação não é possível para o seu personagem."))
+            // O motivo da recusa (ação livre ou ataque furtivo, DND-41) aparece no próprio menu.
+            const code = apiErrorCode(error)
+            if (code === "ACTION_INVALID" || code?.startsWith("SNEAK_ATTACK_")) setCombatInvalid(apiErrorMessage(error, "Essa ação não é possível para o seu personagem."))
             else toast.error(apiErrorMessage(error, "Não foi possível agir"))
             return false
         }
