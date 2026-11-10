@@ -1,14 +1,29 @@
 "use client"
 
 import { motion } from "framer-motion"
-import { Brain, HeartPulse, ListOrdered, Skull, Swords } from "lucide-react"
+import { AlertTriangle, Brain, Check, Clock, HeartPulse, ListOrdered, Loader2, Skull, Swords } from "lucide-react"
 import { cn } from "@/core/utils"
 import { rarityColors } from "@/lib/config/colors"
 import { HP_BAND_LABELS } from "../../../combat-rules"
-import type { MaddoxTacticalCombatDto } from "../../../game-types"
+import type { MaddoxCombatPrepSlotDto, MaddoxTacticalCombatDto } from "../../../game-types"
 import { MemberAvatar, OpexChip, RarityChip } from "../../campaigns/campaign-visuals"
 import { COMBAT_COLOR } from "../GameCombatCard"
 import { HP_BAND_COLORS, hpColor } from "./combat-visuals"
+
+const PREP_LABELS: Record<MaddoxCombatPrepSlotDto["status"], string> = { waiting: "Aguardando", preparing: "Preparando…", ready: "Pronto", failed: "Falhou" }
+const PREP_COLORS: Record<MaddoxCombatPrepSlotDto["status"], string> = { waiting: rarityColors.common, preparing: rarityColors.legendary, ready: rarityColors.uncommon, failed: rarityColors.artifact }
+
+/** DND-41: selo da preparação da mesa de um personagem. */
+export function PrepSeal({ prep }: { prep: MaddoxCombatPrepSlotDto }) {
+    const Icon = prep.status === "ready" ? Check : prep.status === "failed" ? AlertTriangle : prep.status === "preparing" ? Loader2 : Clock
+    return (
+        <span data-testid="initiative-prep" data-status={prep.status}>
+            <RarityChip color={PREP_COLORS[prep.status]}>
+                <Icon className={cn("h-3 w-3", prep.status === "preparing" && "animate-spin")} aria-hidden /> {PREP_LABELS[prep.status]}
+            </RarityChip>
+        </span>
+    )
+}
 
 /**
  * Rastreador de iniciativa (Maddox 7): rodada, ordem, quem age (destaque na cor do rigor), PV dos personagens (o grupo
@@ -24,6 +39,7 @@ export function InitiativeTracker({ combat, title, color, compact = false }: { c
                     <span key={slot.actorKey} className={cn("flex shrink-0 items-center gap-1 rounded-full border px-2 py-0.5 text-[11px]", slot.defeated || slot.dead ? "text-white/40 line-through" : "text-white/80")} style={{ borderColor: slot.active ? color : "rgba(255,255,255,0.15)", background: slot.active ? `${color}22` : undefined }}>
                         {slot.name}
                         <span className="font-semibold">{slot.initiative ?? "…"}</span>
+                        {slot.prep && <span className="text-[10px]" style={{ color: PREP_COLORS[slot.prep.status] }} data-testid="initiative-strip-prep" data-status={slot.prep.status}>· {PREP_LABELS[slot.prep.status]}</span>}
                     </span>
                 ))}
             </div>
@@ -34,7 +50,7 @@ export function InitiativeTracker({ combat, title, color, compact = false }: { c
             <header className="mb-3 flex items-center gap-2">
                 <ListOrdered className="h-4 w-4" style={{ color: COMBAT_COLOR }} aria-hidden />
                 <h2 className="min-w-0 flex-1 truncate text-sm font-semibold text-white">{title}</h2>
-                <RarityChip color={initiative ? rarityColors.legendary : COMBAT_COLOR}>{initiative ? "Rolando iniciativa" : `Rodada ${combat.round}`}</RarityChip>
+                <RarityChip color={initiative ? rarityColors.legendary : COMBAT_COLOR}>{combat.preparation?.active ? "Preparando o combate" : initiative ? "Rolando iniciativa" : `Rodada ${combat.round}`}</RarityChip>
             </header>
             <ol className="space-y-1.5">
                 {combat.order.map((slot) => {
@@ -64,6 +80,7 @@ export function InitiativeTracker({ combat, title, color, compact = false }: { c
                                     {slot.name}
                                     {slot.opex && <OpexChip />}
                                 </p>
+                                {slot.prep && <PrepSeal prep={slot.prep} />}
                                 {slot.hp ? (
                                     <div className="flex items-center gap-2" data-testid="initiative-hp">
                                         <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-white/10">

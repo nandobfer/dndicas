@@ -24,6 +24,8 @@ const scripted = (queue: number[][] | undefined) => {
     return (min: number, max: number) => values[index++] ?? Math.floor((min + max - 1) / 2)
 }
 
+// DND-41: a IA da preparação da mesa de combate (padrão: sem mudanças).
+vi.mock("@/features/maddox/server/combat-prep-ai", async () => (await import("../../helpers/combat-prep-mock")).combatPrepAiModule)
 vi.mock("@/features/dice-roller/server/dice-engine", async (importOriginal) => {
     const actual = await importOriginal<typeof import("@/features/dice-roller/server/dice-engine")>()
     return { ...actual, rollDice: (input: Parameters<typeof actual.rollDice>[0], options: Parameters<typeof actual.rollDice>[1] = {}) => actual.rollDice(input, { ...options, randomInt: options.randomInt ?? scripted(dice.server) }) }

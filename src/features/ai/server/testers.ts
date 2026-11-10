@@ -47,7 +47,7 @@ export const testGemini: IntegrationTester = async ({ emit, signal }) => {
 }
 
 /** Provedores diretos por API key: o teste lista os modelos de texto. */
-const API_KEY_INTEGRATIONS = { anthropic: "ai_anthropic", openai: "ai_openai", deepseek: "ai_deepseek" } as const
+const API_KEY_INTEGRATIONS = { "opencode-go": "ai_opencode_go", anthropic: "ai_anthropic", openai: "ai_openai", deepseek: "ai_deepseek" } as const
 
 function apiKeyModelsTester(providerId: keyof typeof API_KEY_INTEGRATIONS, keyHint: string, endpoint: string): IntegrationTester {
     return async ({ emit, signal }) => {
@@ -57,11 +57,14 @@ function apiKeyModelsTester(providerId: keyof typeof API_KEY_INTEGRATIONS, keyHi
         emit("step", `GET ${endpoint}`)
         const models = await listAiModels(providerId, { fresh: true, signal: stepSignal(signal, 20_000) }).catch(failFrom)
         emit(models.length ? "success" : "warn", `${models.length} modelo(s) de texto disponível(is)`)
+        const free = models.filter((model) => model.free).length
+        if (free) emit("info", `${free} modelo(s) grátis: só funcionam dentro do OpenCode e podem ser recusados aqui`)
         if (!models.length) return warnResult("API key válida, mas nenhum modelo de texto disponível")
         return `API key válida; ${models.length} modelo(s)`
     }
 }
 
+export const testOpencodeGo = apiKeyModelsTester("opencode-go", "da assinatura OpenCode Go (oc_sk_…)", "/models")
 export const testAnthropic = apiKeyModelsTester("anthropic", "do Claude Console", "/v1/models")
 export const testOpenai = apiKeyModelsTester("openai", "da plataforma OpenAI", "/v1/models")
 export const testDeepseek = apiKeyModelsTester("deepseek", "da plataforma DeepSeek", "/models")

@@ -9,7 +9,7 @@ import { MongoMemoryServer } from "mongodb-memory-server"
  */
 
 type ToolCall = { name: string; input: Record<string, unknown> }
-type Step = { tools?: ToolCall[]; text?: string; fail?: boolean }
+type Step = { tools?: ToolCall[]; text?: string; fail?: boolean; providerMetadata?: Record<string, Record<string, unknown>> }
 
 const calls: { instructions: string; userText: string; toolNames: string[] }[] = []
 const script: Step[][] = []
@@ -89,6 +89,7 @@ vi.mock("ai", () => ({
                         yield { type: "error", error: new Error("provedor caiu no meio") }
                         return
                     }
+                    yield { type: "finish-step", providerMetadata: step.providerMetadata }
                 }
                 yield { type: "finish", finishReason: "stop", totalUsage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 } }
             })(),
@@ -349,6 +350,21 @@ describe("Maddox 6 — combate narrativo de ponta a ponta", () => {
         expect(await MaddoxNpcModel.countDocuments({ campaignId: id })).toBe(0)
         expect(await MaddoxCampaignMessageModel.countDocuments({ campaignId: id, kind: { $in: ["combat", "narration"] } })).toBe(0)
         expect((await game.getGameState(id, owner)).turn.failed).toBe(true)
+    })
+
+    it("custo informado pelo provedor (OpenCode Go) em cada passo entra somado no consumo da narração, com a chave de conversa da campanha", async () => {
+        const { prepareModel } = await import("@/lib/ai/stream")
+        const { recordAiConsumption } = await import("@/lib/ai/consumption")
+        vi.mocked(recordAiConsumption).mockClear()
+        const { id, owner } = await table("narrativo")
+        script.push([
+            { tools: [], text: "A névoa cobre o cais.", providerMetadata: { "opencode-go": { cost: 0, allowance: 0.002, costUsd: 0.002 } } },
+            { text: " O que vocês fazem?", providerMetadata: { "opencode-go": { cost: 0, allowance: 0.003, costUsd: 0.003 } } },
+        ])
+        await game.startCampaign(id, owner)
+        await waitForCampaignIdle(id)
+        expect(vi.mocked(prepareModel)).toHaveBeenCalledWith(expect.objectContaining({ sessionKey: `maddox:${id}:narrator` }))
+        expect(vi.mocked(recordAiConsumption)).toHaveBeenCalledWith(expect.objectContaining({ origin: "maddox-narration", subject: id, costUsd: 0.005 }))
     })
 
     it("Rigoroso e Fiel ao D&D usam o combate tático (Maddox 7): ferramentas e regra táticas, sem o combate narrativo", async () => {

@@ -3,6 +3,7 @@ import { Types } from "mongoose"
 import { DomainError } from "@/lib/api/route"
 import { recordAiConsumption } from "@/lib/ai/consumption"
 import { describeAiError, prepareModel, samplingOptions, type PreparedModel } from "@/lib/ai/stream"
+import { stepCostUsd } from "@/lib/ai/step-cost"
 import { loggerFor } from "@/lib/logger"
 import { OPEX_ANONYMOUS_CONSUMPTION_ORIGIN, OPEX_CONSUMPTION_ORIGIN, type OpexProviderId } from "../constants"
 import { appDocsInstructions } from "../app-docs"
@@ -240,6 +241,7 @@ async function executeTurn(args: TurnArgs): Promise<void> {
     let errorMessage: string | null = null
     let aborted = false
     let usage: OpexUsageDto | null = null
+    let costUsd: number | null = null
     let responseMessages: unknown[] | null = null
     const toolNames: string[] = []
 
@@ -258,7 +260,7 @@ async function executeTurn(args: TurnArgs): Promise<void> {
                 if (!toolPermittedFor(tool, toolContext.scope, input)) throw new OpexToolError("Esta ação não está disponível para o seu perfil.")
             },
         })
-        prepared = await prepareModel({ provider: main.provider!, model: main.model!, variant: main.variant })
+        prepared = await prepareModel({ provider: main.provider!, model: main.model!, variant: main.variant, sessionKey: `opex:${sessionId}` })
         const result = streamText({
             model: prepared.model,
             instructions: instructionsFor(settings, scope, await memoryBlock("opex", roleOf(scope)), { docs: tools.some((tool) => tool.group === "docs") }),
@@ -315,11 +317,16 @@ async function executeTurn(args: TurnArgs): Promise<void> {
                     })
                     break
                 case "error":
-                    errorMessage = describeAiError(part.error)
+                    errorMessage = describeAiError(part.error, { provider: main.provider!, model: main.model! })
                     break
                 case "abort":
                     aborted = true
                     break
+                case "finish-step": {
+                    const cost = stepCostUsd(part.providerMetadata)
+                    if (cost !== null) costUsd = (costUsd ?? 0) + cost
+                    break
+                }
                 case "finish":
                     usage = { inputTokens: numberOrNull(part.totalUsage.inputTokens), outputTokens: numberOrNull(part.totalUsage.outputTokens), totalTokens: numberOrNull(part.totalUsage.totalTokens) }
                     if (part.finishReason === "error" && !errorMessage) errorMessage = "O modelo terminou com erro"
@@ -330,14 +337,14 @@ async function executeTurn(args: TurnArgs): Promise<void> {
     } catch (error) {
         if (controller.signal.aborted) aborted = true
         else {
-            errorMessage = describeAiError(error)
+            errorMessage = describeAiError(error, { provider: main.provider!, model: main.model! })
             log.warn({ sessionId, provider: main.provider, model: main.model, err: errorMessage }, "[opex] falha no turno")
         }
     } finally {
         await prepared?.dispose().catch(() => undefined)
     }
 
-    await finishTurn(args, { startedAt, errorMessage, aborted, usage, responseMessages, toolNames })
+    await finishTurn(args, { startedAt, errorMessage, aborted, usage, costUsd, responseMessages, toolNames })
 }
 
 interface TurnOutcome {
@@ -345,6 +352,8 @@ interface TurnOutcome {
     errorMessage: string | null
     aborted: boolean
     usage: OpexUsageDto | null
+    /** Custo em USD informado pelo provedor (OpenCode Go), somado entre os passos. */
+    costUsd: number | null
     responseMessages: unknown[] | null
     toolNames: string[]
 }
@@ -399,7 +408,7 @@ async function finishTurn(args: TurnArgs, outcome: TurnOutcome): Promise<void> {
             subject: sessionId,
             model: settings.main.model,
             ...outcome.usage,
-            costUsd: null,
+            costUsd: outcome.costUsd,
         })
     }
     if (status !== "interrupted" || text) {

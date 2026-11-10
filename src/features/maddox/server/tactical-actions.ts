@@ -7,7 +7,7 @@ import type { SkillName } from "@/features/character-sheets/types/character-shee
 import { MADDOX_CAMPAIGN_AUDIT_ENTITY, MADDOX_COMBAT_OFFLINE_GRACE_MS, MADDOX_COMBAT_ROLL_CLAIM_STALE_MS, MADDOX_DECLARATION_VALIDATION_RIGORS, MADDOX_STANDARD_ACTION_DEFS, type MaddoxStandardAction } from "../constants"
 import { MADDOX_ABILITY_LABELS } from "../check-modifier"
 import { adjustDamage, attackMode, attackOutcome, autoCritical, criticalExpression, deathSave, exhaustionPenalty, formatDiceExpression, parseDiceExpression, saveMode } from "../combat-rules"
-import { findCombatOption, type CombatOption } from "../combat-options"
+import { findCombatOption, weaponItemId, type CombatOption } from "../combat-options"
 import type { CombatActionStep, IMaddoxCombatAction, IMaddoxCombatRoll, TacticalCharacterState } from "../combat-types"
 import type { MaddoxCombatActionInput, MaddoxEndCombatTurnInput } from "../combat-schemas"
 import type { MaddoxGameStateDto } from "../game-types"
@@ -34,6 +34,9 @@ type MemberDoc = IMaddoxCampaignMember
 type MessageDoc = IMaddoxCampaignMessage
 
 const signed = (value: number) => (value >= 0 ? `+${value}` : String(value))
+
+/** A vez do personagem do usuário (DND-41: também usada pelo pedido de ajuste). */
+export const loadMyCombatTurn = (campaignId: string, userId: string) => loadMyTurn(campaignId, userId)
 
 async function loadMyTurn(campaignId: string, userId: string): Promise<{ campaign: CampaignDoc; member: MemberDoc; combat: TacticalCombat; actor: Extract<CombatActor, { kind: "character" }> }> {
     const { campaign, member } = await loadAsMember(campaignId, userId)
@@ -108,7 +111,7 @@ export async function submitCombatAction(campaignId: string, input: MaddoxCombat
     const pending = await MaddoxCampaignMessageModel.exists({ campaignId: campaign._id, turnNumber, kind: "combat-action", "combatAction.actorKey": actor.key, "combatAction.status": "pending" })
     if (pending) throw new DomainError(409, "Termine (ou cancele) a ação em andamento antes de outra.", "ACTION_PENDING")
     const { loadCharacterOptions } = await import("./tactical-options")
-    const view = (await loadCharacterOptions([actor.state], campaign._id)).get(actor.key)
+    const view = (await loadCharacterOptions([actor.state], campaign._id, combat._id)).get(actor.key)
     if (!view) throw new DomainError(409, "A ficha do personagem não foi encontrada.", "SHEET_REQUIRED")
     const option = findCombatOption(view.options, input.economy, input.optionId)
     if (!option) throw new DomainError(409, "Esta opção não está disponível agora para o seu personagem.", "OPTION_UNAVAILABLE")
@@ -137,6 +140,9 @@ export async function submitCombatAction(campaignId: string, input: MaddoxCombat
         throw new DomainError(409, "Esta opção não tem os dados para o servidor resolver; use \"Outra ação\" e descreva o efeito.", "OPTION_UNRESOLVABLE")
     }
 
+    // DND-41: ataque furtivo — elegível, uma vez por turno e com a condição conferida ANTES de qualquer gasto.
+    const sneakRider = input.sneakAttack ? await assertSneakAttack(campaign, actor, option, targets, view.sheet.option) : null
+
     // Passos e efeitos imediatos.
     const steps: CombatActionStep[] = []
     const notes: string[] = []
@@ -145,7 +151,7 @@ export async function submitCombatAction(campaignId: string, input: MaddoxCombat
     if (option.resolution === "attack") {
         steps.push(newStep({ kind: "attack", targetKey: targets[0]!.key, targetName: targets[0]!.name, dice: d20Expression(option.attack!.bonus + exhaustionPenalty(actor.state)) }))
         // O dano já fica no card: rolado só se o ataque acertar (o erro o marca como pulado).
-        if (option.attack!.damage && option.attack!.damage !== "0") steps.push(newStep({ kind: "damage", targetKey: targets[0]!.key, targetName: targets[0]!.name, dice: option.attack!.damage, damageType: option.attack!.damageType }))
+        if (option.attack!.damage && option.attack!.damage !== "0") steps.push(newStep({ kind: "damage", targetKey: targets[0]!.key, targetName: targets[0]!.name, dice: sneakRider ? `${option.attack!.damage}+${sneakRider.dice}` : option.attack!.damage, damageType: option.attack!.damageType, ...(sneakRider ? { note: `ataque furtivo +${sneakRider.dice}` } : {}) }))
     }
     else if (option.resolution === "auto") steps.push(newStep({ kind: "damage", targetKey: targets[0]?.key ?? null, targetName: targets[0]?.name ?? null, dice: option.attack!.damage, damageType: option.attack!.damageType }))
     else if (option.resolution === "heal") steps.push(newStep({ kind: "heal", targetKey: targets[0]!.key, targetName: targets[0]!.name, dice: option.heal!.dice }))
@@ -184,7 +190,7 @@ export async function submitCombatAction(campaignId: string, input: MaddoxCombat
             else throw new DomainError(409, "Você já usou a Ação neste turno.", "ACTION_ALREADY_USED")
             if (option.attack?.light && !economy.lightAttack) {
                 economy.lightAttack = true
-                economy.lightWeaponId = option.id.slice("weapon:".length)
+                economy.lightWeaponId = weaponItemId(option.id)
             }
         } else {
             if (!economy.action) throw new DomainError(409, "Você já usou a Ação neste turno.", "ACTION_ALREADY_USED")
@@ -228,7 +234,8 @@ export async function submitCombatAction(campaignId: string, input: MaddoxCombat
         await refund()
         throw new DomainError(409, "Esta habilidade não tem mais usos.", "NO_CHARGES")
     }
-    if (option.category === "items" && option.id.startsWith("item:") && !(await consumeSheetItem(sheetId, option.id.split(":")[1]!))) {
+    const consumedItem = option.consumes?.itemId ?? (option.category === "items" && option.id.startsWith("item:") ? option.id.split(":")[1]! : null)
+    if (consumedItem && !(await consumeSheetItem(sheetId, consumedItem))) {
         await refund()
         throw new DomainError(409, "Você não tem mais esse item.", "ITEM_UNAVAILABLE")
     }
@@ -256,6 +263,7 @@ export async function submitCombatAction(campaignId: string, input: MaddoxCombat
         waitRound: null,
         save: option.save ? { ability: option.save.ability, dc: option.save.dc, halfOnSave: option.save.halfOnSave } : null,
         ranged: Boolean(option.attack?.ranged),
+        sneakAttack: sneakRider ? { dice: sneakRider.dice } : null,
     }
     doc.summary = actionSummary(doc, notes)
     const message = await MaddoxCampaignMessageModel.create({
@@ -275,6 +283,37 @@ export async function submitCombatAction(campaignId: string, input: MaddoxCombat
     emitServerSteps(campaignId, String(message._id), [], steps)
     await publishGameChanged(campaign._id)
     return getGameState(campaignId, userId)
+}
+
+/**
+ * DND-41: o ataque furtivo pedido vale? A opção precisa ter o dano adicional (arma de Acuidade ou à distância de quem tem
+ * a característica), ainda não usado no turno e com a condição: vantagem (aceita sem IA), desvantagem (recusa) ou, sem
+ * nenhuma das duas, um aliado a até 1,5 m do alvo (JEV com a chave ligada; senão, o narrador). Falha da conferência
+ * aceita (o jogo não trava; fica no log). Recusa = 409 com o motivo, nada gasto.
+ */
+async function assertSneakAttack(campaign: CampaignDoc, actor: Extract<CombatActor, { kind: "character" }>, option: CombatOption, targets: CombatActor[], sheet: { level: number }): Promise<{ dice: string }> {
+    const rider = option.attack?.riders?.find((item) => item.key === "sneak-attack")
+    if (!rider) throw new DomainError(409, "Esta opção não permite o ataque furtivo (só arma de Acuidade ou à distância).", "SNEAK_ATTACK_UNAVAILABLE")
+    if (actor.state.economy.sneakAttackUsed) throw new DomainError(409, "Você já usou o ataque furtivo neste turno.", "SNEAK_ATTACK_USED")
+    const target = targets[0]
+    if (!target) return { dice: rider.dice }
+    const mode = attackMode({ attacker: actor.state, target: target.state, ranged: Boolean(option.attack?.ranged), helped: Boolean(actor.state.flags.helped) }).mode
+    if (mode === "disadvantage") throw new DomainError(409, "Com desvantagem no ataque não há ataque furtivo.", "SNEAK_ATTACK_DENIED")
+    if (mode === "advantage") return { dice: rider.dice }
+    try {
+        const combat = await findActiveTactical(campaign._id)
+        const allies = combat ? combat.tactical.characters.filter((state) => state.actorKey !== actor.key && !state.left && !state.dead && !state.hpZero).map((state) => state.name) : []
+        const allyCombatants = combat ? combat.combatants.filter((item) => item.side === "aliado" && item.tactical && !item.tactical.defeated).map((item) => item.name) : []
+        const recent = await MaddoxCampaignMessageModel.find({ campaignId: campaign._id, kind: "declaration", combatTurn: true }).sort({ _id: -1 }).limit(6).select("content").lean<{ content: string }[]>()
+        const situation = [campaign.state?.situation?.trim() ?? "", ...recent.reverse().map((item) => item.content)].filter(Boolean).join("\n\n")
+        const { checkSneakAttackCondition } = await import("./combat-prep-ai")
+        const verdict = await checkSneakAttackCondition({ campaign, characterName: actor.name, targetName: target.name, allies: [...allies, ...allyCombatants], situation })
+        if (!verdict.ok) throw new DomainError(409, verdict.reason, "SNEAK_ATTACK_DENIED")
+    } catch (error) {
+        if (error instanceof DomainError) throw error
+        log.warn({ err: error instanceof Error ? error.message : String(error), campaignId: String(campaign._id), level: sheet.level }, "[maddox] conferência do ataque furtivo indisponível; o ataque furtivo foi aceito")
+    }
+    return { dice: rider.dice }
 }
 
 /** Dados que o servidor rolou num card (salvaguarda de um adversário) e que ainda não estavam rolados antes. */
@@ -302,7 +341,8 @@ export function actionSummary(action: IMaddoxCombatAction, notes: readonly strin
         .filter(Boolean)
     const free = action.freeText ? `: "${action.freeText}"` : ""
     const spell = action.spellLevel ? ` (${action.spellLevel}º círculo)` : ""
-    return `${action.actorName} — ${slot}: ${action.label}${spell}${targets}${free}${parts.length ? ` → ${parts.join("; ")}` : ""}${notes.length ? ` [${notes.join("; ")}]` : ""}${action.status === "cancelled" ? " (cancelada)" : ""}`
+    const sneak = action.sneakAttack ? ` + Ataque furtivo (+${action.sneakAttack.dice})` : ""
+    return `${action.actorName} — ${slot}: ${action.label}${sneak}${spell}${targets}${free}${parts.length ? ` → ${parts.join("; ")}` : ""}${notes.length ? ` [${notes.join("; ")}]` : ""}${action.status === "cancelled" ? " (cancelada)" : ""}`
 }
 
 /** O jogador rola o próximo passo pendente da ação (ataque, dano, cura, teste). */
@@ -355,7 +395,7 @@ async function rollClaimedStep(
     const actionId = String(message._id)
     const current = action.steps[index]!
     const { loadCharacterOptions } = await import("./tactical-options")
-    const view = (await loadCharacterOptions([actor.state])).get(actor.key)
+    const view = (await loadCharacterOptions([actor.state], undefined, combat._id)).get(actor.key)
     const { sheetSkill } = await import("./combat-sheet")
 
     // Rola fora da troca condicional: uma nova tentativa de gravação não rola de novo.
@@ -451,6 +491,8 @@ async function rollClaimedStep(
                 done.amount = roll.total
             } else if (liveTarget) {
                 applyDamageTo(live, liveTarget, done, roll.total, Boolean(steps[index - 1]?.critical), hpWrites, extraRolls)
+                // DND-41: o ataque furtivo conta como usado quando o dano com ele é rolado (o ataque que erra não gasta).
+                if (action.sneakAttack) me.state.economy.sneakAttackUsed = true
             }
         } else if (done.kind === "heal" && liveTarget && liveTarget.kind === "character") {
             const hp = await sheetHp(liveTarget.state)
@@ -774,6 +816,8 @@ export async function onMemberLeftCombat(campaignId: Types.ObjectId, memberId: T
         const state = live.tactical.characters.find((item) => item.memberId === String(memberId))
         if (state) state.left = true
     })
+    // DND-41: a preparação da mesa dele deixa de bloquear a ordem de iniciativa.
+    await (await import("./combat-prep")).discardMemberPrep(combat._id, memberId)
     await MaddoxCampaignMessageModel.updateMany({ campaignId, memberId, kind: "combat-roll", "combatRoll.status": "pending" }, { $set: { "combatRoll.status": "cancelled", "combatRoll.outcome": "O jogador saiu da campanha" } })
     await MaddoxCampaignMessageModel.updateMany({ campaignId, memberId, kind: "combat-reaction", "combatReaction.status": "pending" }, { $set: { "combatReaction.status": "declined", "combatReaction.outcome": "O jogador saiu da campanha" } })
     await MaddoxCampaignMessageModel.updateMany({ campaignId, memberId, kind: "combat-action", "combatAction.status": "pending" }, { $set: { "combatAction.status": "cancelled" } })

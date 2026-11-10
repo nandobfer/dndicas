@@ -60,7 +60,7 @@ Módulo puro (tela e servidor). Integrações ativas:
 | `pusher` | Pusher | Cluster (nuvem) ou host próprio (Soketi), URL pública do cliente com vários endereços |
 | `internal_api` | API dndicas | Documentação OpenAPI gerenciada (`/api/openapi.json`, Swagger em `/api/docs`), explorador e card do servidor MCP |
 | `crons` | Crons | Agendador interno, URL base interna, rotinas, `cronSecret`; aba "Jobs" do Agente Opex |
-| `ai` | Provedores de IA | Hub `/integracoes/ia` com `ai_opencode`, `ai_gemini`, `ai_anthropic`, `ai_openai`, `ai_deepseek`, `ai_jev` (ver `ai.md`) |
+| `ai` | Provedores de IA | Hub `/integracoes/ia` com `ai_opencode`, `ai_opencode_go`, `ai_gemini`, `ai_anthropic`, `ai_openai`, `ai_deepseek`, `ai_jev` (ver `ai.md`) |
 | `smtp` | SMTP | Sem host, os envios ficam em modo simulado (só log) |
 | `storage_s3` | Storage S3 | MinIO/S3; endpoint público para URLs assinadas |
 | `analytics_umami` | Analytics (Umami) | Script carregado pelo layout raiz; desativado, o script não entra |

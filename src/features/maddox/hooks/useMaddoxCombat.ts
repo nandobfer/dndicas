@@ -5,7 +5,7 @@ import { toast } from "sonner"
 import { api, apiErrorMessage, unwrapApi } from "@/lib/api"
 import type { ApiResponse } from "@/lib/types/api"
 import type { DiceRollResponse } from "@/features/dice-roller/types"
-import type { MaddoxCombatActionInput, MaddoxEndCombatTurnInput } from "../combat-schemas"
+import type { MaddoxCombatActionInput, MaddoxCombatAdjustmentInput, MaddoxEndCombatTurnInput } from "../combat-schemas"
 import type { MaddoxGameStateDto } from "../game-types"
 import { MADDOX_CAMPAIGNS_KEY } from "./useMaddoxCampaigns"
 import { maddoxGameKey } from "./useMaddoxGame"
@@ -57,3 +57,14 @@ export const useRollCombatStep = (campaignId: string) =>
 
 export const useDecideReaction = (campaignId: string) =>
     useCombatMutation<{ id: string; escolha: string }, MaddoxGameStateDto>(campaignId, async ({ id, escolha }) => unwrapApi((await api.post<ApiResponse<MaddoxGameStateDto>>(`${combatPath(campaignId)}/reactions/${id}`, { escolha })).data), "Não foi possível escolher a reação")
+
+/** DND-41: decisão do dono da campanha sobre uma preparação da mesa que falhou. */
+export const useRetryCombatPrep = (campaignId: string) =>
+    useCombatMutation<string, MaddoxGameStateDto>(campaignId, async (prepId) => unwrapApi((await api.post<ApiResponse<MaddoxGameStateDto>>(`${combatPath(campaignId)}/preps/${prepId}/retry`, {})).data), "Não foi possível tentar de novo")
+
+export const useSkipCombatPrep = (campaignId: string) =>
+    useCombatMutation<string, MaddoxGameStateDto>(campaignId, async (prepId) => unwrapApi((await api.post<ApiResponse<MaddoxGameStateDto>>(`${combatPath(campaignId)}/preps/${prepId}/skip`, {})).data), "Não foi possível seguir sem a preparação")
+
+/** DND-41: pedido de ajuste de uma opção (o resultado chega pela mesa atualizada). */
+export const useRequestCombatAdjustment = (campaignId: string) =>
+    useCombatMutation<MaddoxCombatAdjustmentInput, MaddoxGameStateDto>(campaignId, async (input) => unwrapApi((await api.post<ApiResponse<MaddoxGameStateDto>>(`${combatPath(campaignId)}/adjustments`, input)).data), "Não foi possível pedir o ajuste")

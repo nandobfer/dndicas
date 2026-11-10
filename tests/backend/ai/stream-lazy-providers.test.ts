@@ -8,6 +8,7 @@ const mocks = vi.hoisted(() => ({
     openaiFactory: vi.fn(),
     deepseekFactory: vi.fn(),
     opencodeFactory: vi.fn(),
+    opencodeGoFactory: vi.fn(),
     streamText: vi.fn(),
     recordAiConsumption: vi.fn(async () => undefined),
 }));
@@ -17,11 +18,12 @@ vi.mock('@/lib/ai/gemini', () => ({ createGeminiProvider: mocks.geminiFactory })
 vi.mock('@/lib/ai/openai', () => ({ createOpenaiProvider: mocks.openaiFactory }));
 vi.mock('@/lib/ai/deepseek', () => ({ createDeepseekProvider: mocks.deepseekFactory }));
 vi.mock('@/lib/ai/opencode', () => ({ createOpencodeProvider: mocks.opencodeFactory }));
+vi.mock('@/lib/ai/opencode-go', () => ({ createOpencodeGoProvider: mocks.opencodeGoFactory }));
 vi.mock('@/lib/ai/consumption', () => ({ recordAiConsumption: mocks.recordAiConsumption }));
 vi.mock('ai', () => ({ streamText: mocks.streamText }));
 
 import { AiProviderError } from '@/lib/ai/errors';
-import { prepareModel, streamAi, type AiStreamEvent } from '@/lib/ai/stream';
+import { describeAiError, prepareModel, stepCostUsd, streamAi, type AiStreamEvent } from '@/lib/ai/stream';
 
 async function collect(generator: AsyncGenerator<AiStreamEvent>): Promise<AiStreamEvent[]> {
     const events: AiStreamEvent[] = [];
@@ -161,6 +163,88 @@ describe('lib/ai/stream — provedores sob demanda', () => {
             const events = await collect(streamAi({ provider: 'opencode', model: 'opencode-go/deepseek-v4.1-flash', instructions: 'i', prompt: 'oi' }));
 
             expect(events).toEqual([{ type: 'error', message: 'Connection lost while reading the response' }]);
+        });
+    });
+
+    describe('OpenCode Go (gateway por API key, sem sessão no host)', () => {
+        const goModel = vi.fn((modelId: string) => ({ provider: 'opencode-go', modelId }));
+        const apiError = (statusCode: number) => Object.assign(new Error('Invalid credential oc_sk_segredo'), { name: 'AI_APICallError', statusCode });
+
+        beforeEach(() => {
+            goModel.mockClear();
+            mocks.opencodeFactory.mockReset();
+            mocks.opencodeGoFactory.mockReset().mockResolvedValue(goModel);
+            mocks.recordAiConsumption.mockClear();
+        });
+
+        it('gera em streaming com deepseek-v4.1-flash, sem abrir sessão no OpenCode, e registra o custo do Go', async () => {
+            mocks.streamText.mockReset().mockReturnValue({
+                fullStream: (async function* () {
+                    yield { type: 'text-delta', text: 'ok' };
+                    yield { type: 'finish-step', providerMetadata: { 'opencode-go': { cost: 0, allowance: 0.00000783, listCost: 0.00001305, billingSource: 'go', costUsd: 0.00000783 } } };
+                    yield { type: 'finish', finishReason: 'stop', totalUsage: { inputTokens: 35, outputTokens: 13, totalTokens: 48 } };
+                })(),
+            });
+
+            const events = await collect(
+                streamAi({ provider: 'opencode-go', model: 'deepseek-v4.1-flash', instructions: 'i', prompt: 'oi', sessionKey: 'opex:s1', consumption: { origin: 'opex-agent', subject: 's1' } }),
+            );
+
+            expect(mocks.opencodeGoFactory).toHaveBeenCalledWith({ sessionKey: 'opex:s1' });
+            expect(goModel).toHaveBeenCalledWith('deepseek-v4.1-flash');
+            expect(mocks.opencodeFactory).not.toHaveBeenCalled();
+            expect(events[0]).toEqual({ type: 'delta', text: 'ok' });
+            expect(events[1]).toMatchObject({ type: 'done', finishReason: 'stop', usage: { totalTokens: 48, costUsd: 0.00000783 } });
+            expect(mocks.recordAiConsumption).toHaveBeenCalledWith(
+                expect.objectContaining({ provider: 'opencode-go', model: 'deepseek-v4.1-flash', origin: 'opex-agent', costUsd: 0.00000783 }),
+            );
+        });
+
+        it('repassa o nível de raciocínio e aceita amostragem', async () => {
+            const prepared = await prepareModel({ provider: 'opencode-go', model: 'deepseek-v4-pro', variant: 'high' });
+            expect(prepared.reasoning).toBe('high');
+            expect(mocks.opencodeGoFactory).toHaveBeenCalledWith({ sessionKey: undefined });
+        });
+
+        it('chave ausente vira erro acionável em pt-BR', async () => {
+            mocks.opencodeGoFactory.mockRejectedValue(new AiProviderError('OpenCode Go sem API key: configure em Integrações › Provedores de IA › OpenCode Go'));
+
+            const events = await collect(streamAi({ provider: 'opencode-go', model: 'deepseek-v4.1-flash', instructions: '', prompt: 'oi' }));
+
+            expect(events).toEqual([{ type: 'error', message: 'OpenCode Go sem API key: configure em Integrações › Provedores de IA › OpenCode Go' }]);
+        });
+
+        it('chave inválida (401) vira mensagem pt-BR pelo status, sem repetir o texto do provedor nem a chave', async () => {
+            mocks.streamText.mockReset().mockReturnValue({
+                fullStream: (async function* () {
+                    yield { type: 'error', error: apiError(401) };
+                })(),
+            });
+
+            const events = await collect(streamAi({ provider: 'opencode-go', model: 'deepseek-v4.1-flash', instructions: '', prompt: 'oi' }));
+
+            expect(events).toHaveLength(1);
+            expect(events[0]).toEqual({ type: 'error', message: expect.stringContaining('O OpenCode Go recusou a API key') });
+            expect(JSON.stringify(events)).not.toContain('oc_sk_segredo');
+        });
+
+        it('403 explica modelos grátis e a região Global; 429 o limite da assinatura (também via RetryError)', () => {
+            expect(describeAiError(apiError(403), { provider: 'opencode-go', model: 'deepseek-v4-pro' })).toContain('região Global');
+            expect(describeAiError(apiError(403), { provider: 'opencode-go', model: 'deepseek-v4-pro' })).toContain('deepseek-v4-pro');
+            const retry = Object.assign(new Error('Failed after 3 attempts'), { lastError: apiError(429) });
+            expect(describeAiError(retry, { provider: 'opencode-go' })).toContain('Limite da assinatura OpenCode Go');
+        });
+
+        it('outros provedores mantêm a mensagem genérica', () => {
+            expect(describeAiError(apiError(401), { provider: 'deepseek' })).toBe('Invalid credential oc_sk_segredo');
+            expect(describeAiError(apiError(500), { provider: 'opencode-go' })).toBe('Invalid credential oc_sk_segredo');
+        });
+
+        it('stepCostUsd soma o custo do OpenCode e do Go e devolve null sem custo', () => {
+            expect(stepCostUsd({ opencode: { cost: 0.5 } })).toBe(0.5);
+            expect(stepCostUsd({ 'opencode-go': { costUsd: 0.25 } })).toBe(0.25);
+            expect(stepCostUsd({ 'opencode-go': { costUsd: null } })).toBeNull();
+            expect(stepCostUsd(undefined)).toBeNull();
         });
     });
 });

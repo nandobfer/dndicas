@@ -27,6 +27,8 @@ const decideReaction = vi.fn(async () => ({}))
 const gameState: { value: MaddoxGameStateDto | null; byUser: Map<string, MaddoxGameStateDto> } = { value: null, byUser: new Map() }
 const publishGameChanged = vi.fn(async () => undefined)
 
+// DND-41: a IA da preparação da mesa de combate (padrão: sem mudanças).
+vi.mock("@/features/maddox/server/combat-prep-ai", async () => (await import("../../helpers/combat-prep-mock")).combatPrepAiModule)
 vi.mock("@/lib/db", () => ({ dbConnect: vi.fn(async () => undefined), recordAudit: vi.fn(async () => undefined), AcaoAuditoria: { ATUALIZAR: "ATUALIZAR" } }))
 vi.mock("@/features/maddox/server/settings", async () => {
     const { DEFAULT_MADDOX_SETTINGS } = await import("@/features/maddox/schemas")
@@ -149,6 +151,25 @@ describe("Personagens Opex — testes e combate (DND-26)", () => {
         expect(submitCombatAction).toHaveBeenCalledWith(String(campaignId), { economy: "action", optionId: "weapon:machado", targets: ["m:goblin-1"] }, userId)
         expect(rollCombatAction).toHaveBeenCalledTimes(1)
         expect(endCombatTurn).toHaveBeenCalledWith(String(campaignId), { movimento: "Avanço até o goblin." }, userId)
+    })
+
+    it("DND-41: vê o ataque furtivo e o ajuste do Maddox na opção e pode marcar o ataque furtivo (chega ao submitCombatAction)", async () => {
+        const { campaignId, memberId, userId } = await setup("players")
+        await MaddoxCampaignModel.updateOne({ _id: campaignId }, { $set: { "turn.combatActor": { memberId, actorKey: "c:1", startedAt: new Date() } } })
+        const state = combatState(String(memberId), true)
+        const dagger = { id: "weapon:adaga", category: "weapons", economy: "action", label: "Adaga", detail: "+5 para acertar · 1d4+3 perfurante", target: "enemy", multiTarget: false, resolution: "attack", attack: { bonus: 5, damage: "1d4+3", damageType: "perfurante", ranged: false, light: true, finesse: true, riders: [{ key: "sneak-attack", label: "Ataque furtivo (+1d6)", dice: "1d6" }] }, adjusted: { reason: "A adaga tem Acuidade." } }
+        state.me.combat!.options = { action: [dagger as never], bonus: [] }
+        gameState.value = state
+        submitCombatAction.mockImplementation(async () => {
+            await MaddoxCampaignMessageModel.create({ campaignId, turnNumber: 3, phase: "players", kind: "combat-action", memberId, userId, content: "", combatAction: { status: "pending", summary: "" } })
+            return {}
+        })
+        opexReplies.push(JSON.stringify({ acoes: [{ economia: "action", opcao: "weapon:adaga", alvos: ["m:goblin-1"], ataqueFurtivo: true }], movimento: "" }))
+        await driveOpex(campaignId)
+        await settle()
+        expect(opexCalls[0]!.prompt).toContain("pode marcar Ataque furtivo (+1d6)")
+        expect(opexCalls[0]!.prompt).toContain("ajustado pelo Maddox: A adaga tem Acuidade.")
+        expect(submitCombatAction).toHaveBeenCalledWith(String(campaignId), { economy: "action", optionId: "weapon:adaga", targets: ["m:goblin-1"], sneakAttack: true }, userId)
     })
 
     it("opção recusada volta ao Opex uma vez com o motivo", async () => {

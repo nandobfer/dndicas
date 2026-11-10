@@ -4,6 +4,7 @@ import type { ModelMessage } from "ai"
 import { AcaoAuditoria, dbConnect, recordAudit } from "@/lib/db"
 import { DomainError } from "@/lib/api/route"
 import { loggerFor } from "@/lib/logger"
+import { stepCostUsd } from "@/lib/ai/step-cost"
 import { User } from "@/features/users/models/user"
 import {
     MADDOX_CAMPAIGN_AUDIT_ENTITY,
@@ -346,7 +347,7 @@ type InterviewStreamEvent = { type: "delta"; text: string } | { type: "error"; m
  * ferramentas sai separado por parágrafo.
  */
 async function* streamWithInterviewTools(
-    request: { provider: InterviewerModel["provider"]; model: string; variant: string | null; temperature: number | null; maxOutputTokens: number | null; instructions: string; messages: ModelMessage[]; consumption: { origin: string; subject: string } },
+    request: { provider: InterviewerModel["provider"]; model: string; variant: string | null; temperature: number | null; maxOutputTokens: number | null; instructions: string; messages: ModelMessage[]; sessionKey: string; consumption: { origin: string; subject: string } },
     context: { interviewId: Types.ObjectId; lockToken: string },
     kind: MaddoxScriptKind,
 ): AsyncGenerator<InterviewStreamEvent> {
@@ -358,9 +359,9 @@ async function* streamWithInterviewTools(
     ])
     let prepared: Awaited<ReturnType<typeof prepareModel>>
     try {
-        prepared = await prepareModel({ provider: request.provider, model: request.model, variant: request.variant })
+        prepared = await prepareModel({ provider: request.provider, model: request.model, variant: request.variant, sessionKey: request.sessionKey })
     } catch (error) {
-        yield { type: "error", message: describeAiError(error) }
+        yield { type: "error", message: describeAiError(error, request) }
         return
     }
     try {
@@ -376,8 +377,13 @@ async function* streamWithInterviewTools(
         })
         let written = ""
         let stepHasText = false
+        let costUsd: number | null = null
         for await (const part of result.fullStream) {
             if (part.type === "start-step") stepHasText = false
+            else if (part.type === "finish-step") {
+                const cost = stepCostUsd(part.providerMetadata)
+                if (cost !== null) costUsd = (costUsd ?? 0) + cost
+            }
             else if (part.type === "text-delta" && part.text) {
                 if (!stepHasText && written && !written.endsWith("\n")) {
                     written += "\n\n"
@@ -387,7 +393,7 @@ async function* streamWithInterviewTools(
                 written += part.text
                 yield { type: "delta", text: part.text }
             } else if (part.type === "error") {
-                yield { type: "error", message: describeAiError(part.error) }
+                yield { type: "error", message: describeAiError(part.error, request) }
             } else if (part.type === "finish") {
                 if (part.finishReason === "error") yield { type: "error", message: "O modelo terminou com erro" }
                 else {
@@ -402,7 +408,7 @@ async function* streamWithInterviewTools(
                         inputTokens: num(usage?.inputTokens),
                         outputTokens: num(usage?.outputTokens),
                         totalTokens: num(usage?.totalTokens),
-                        costUsd: null,
+                        costUsd,
                     }).catch((error: unknown) => log.warn({ err: error instanceof Error ? error.message : String(error) }, "[maddox] não foi possível registrar o consumo da entrevista"))
                 }
             }
@@ -467,6 +473,7 @@ export async function runTurn(turn: PreparedTurn, emit: (line: MaddoxInterviewSt
             prompt: openingPrompt(kind),
             messages: conversationMessages(kind, interview.messages),
             opencodeSessionId: turn.opencodeSessionId,
+            sessionKey: `maddox-interview:${String(interview._id)}`,
             title: `Maddox · entrevista · ${turn.subject.campaign.name}`,
             consumption: { origin: MADDOX_INTERVIEW_CONSUMPTION_ORIGIN, subject: String(turn.subject.campaign._id) },
         }

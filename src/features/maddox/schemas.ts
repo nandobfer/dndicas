@@ -6,6 +6,8 @@ import {
     DEFAULT_MADDOX_INTERVIEWER_INSTRUCTIONS,
     DEFAULT_MADDOX_OPEX_CHARACTER_INSTRUCTIONS,
     MADDOX_OPEX_NPC_LIMIT_MAX,
+    DEFAULT_MADDOX_COMBAT_PREP_INSTRUCTIONS,
+    DEFAULT_MADDOX_COMBAT_ADJUST_INSTRUCTIONS,
     DEFAULT_MADDOX_PERSONA,
     MADDOX_INSTRUCTIONS_MAX,
     MADDOX_JEV_DECISIONS,
@@ -161,6 +163,9 @@ export const maddoxSettingsSchema = z
             .min(0, "Use 0 ou mais")
             .max(MADDOX_OPEX_NPC_LIMIT_MAX, `Até ${MADDOX_OPEX_NPC_LIMIT_MAX}`)
             .nullable(),
+        /** DND-41: critério da preparação da mesa de combate e dos pedidos de ajuste. */
+        combatPrepInstructions: instructionsField,
+        combatAdjustInstructions: instructionsField,
         avatar: maddoxAvatarSchema,
         opencode: maddoxOpencodeSchema,
         jev: maddoxJevSchema,
@@ -194,6 +199,8 @@ export const DEFAULT_MADDOX_SETTINGS: MaddoxSettings = {
     interviewerInstructions: DEFAULT_MADDOX_INTERVIEWER_INSTRUCTIONS,
     opexCharacterInstructions: DEFAULT_MADDOX_OPEX_CHARACTER_INSTRUCTIONS,
     opexNpcLimit: null,
+    combatPrepInstructions: DEFAULT_MADDOX_COMBAT_PREP_INSTRUCTIONS,
+    combatAdjustInstructions: DEFAULT_MADDOX_COMBAT_ADJUST_INSTRUCTIONS,
     avatar: { url: null, persona: DEFAULT_MADDOX_PERSONA },
     opencode: { deleteOnCampaignEnd: true, directory: null, mcpUrl: null },
     jev: Object.fromEntries(MADDOX_JEV_DECISIONS.map((decision) => [decision, false])) as MaddoxJevSettings,

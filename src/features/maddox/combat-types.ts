@@ -187,6 +187,8 @@ export interface IMaddoxCombatAction {
     save?: { ability: AttributeType; dc: number; halfOnSave: boolean } | null
     /** Ataque à distância (desvantagem contra alvo caído, sem crítico automático). */
     ranged?: boolean
+    /** DND-41: ataque furtivo somado ao dano (os dados extras já estão na expressão do passo de dano). */
+    sneakAttack?: { dice: string } | null
     /** Gravados no card: pode cancelar; passo reivindicado por uma rolagem em andamento (uma chamada vence). */
     cancellable?: boolean
     rollingStep?: number | null
@@ -236,3 +238,78 @@ export interface IMaddoxCombatReaction {
     outcome: string | null
     decidedBy: string | null
 }
+
+// ── Preparação da mesa de combate (DND-41) ────────────────────────────────────
+
+export type CombatPrepStatus = "pending" | "running" | "ready" | "failed" | "skipped" | "discarded"
+
+/** O que a preparação muda numa opção que o servidor já calcula (pelo id estável da opção). */
+export interface CombatOptionPatch {
+    label?: string
+    detail?: string
+    economy?: "action" | "bonus"
+    attack?: { bonus: number; damage: string; damageType: string | null; ranged: boolean; light: boolean; finesse?: boolean }
+    save?: { ability: AttributeType; dc: number; halfOnSave: boolean; damage: string | null; damageType: string | null }
+    heal?: { dice: string }
+}
+
+/** Opção acrescentada pelo Maddox (id `prep:<slug>`), com o recurso que a libera a cada turno. */
+export interface PreparedCombatOption {
+    id: string
+    category: CombatOptionCategory
+    economy: "action" | "bonus" | "reaction"
+    label: string
+    detail: string
+    target: CombatOption["target"]
+    multiTarget: boolean
+    resolution: CombatOption["resolution"]
+    attack?: CombatOptionPatch["attack"]
+    save?: CombatOptionPatch["save"]
+    heal?: CombatOptionPatch["heal"]
+    trigger?: MaddoxReactionTrigger
+    requires?: { chargeId?: string | null; itemId?: string | null; spellCircle?: number | null; concentration?: boolean } | null
+}
+
+export interface CombatPrepOverlay {
+    modify: { optionId: string; patch: CombatOptionPatch; reason: string }[]
+    remove: { optionId: string; reason: string }[]
+    add: { option: PreparedCombatOption; reason: string }[]
+    /** Ids da lista base criados por uma gravação na ficha que já virou uma opção acrescentada (não duplicar). */
+    suppress: string[]
+}
+
+/** Dano adicional marcável (ataque furtivo): detectado pelo servidor ou ajustado pelo Maddox. */
+export interface CombatPrepRider {
+    key: "sneak-attack"
+    dice: string
+    source: "server" | "maddox"
+    reason: string | null
+}
+
+/** Uma mudança para o card "Sua mesa está pronta": o que era, o que ficou e o motivo. */
+export interface CombatPrepChange {
+    area: "ficha" | "opcao" | "dano-adicional"
+    label: string
+    before: string
+    after: string
+    reason: string
+    /** `false` = não aplicada (a ficha mudou ou o valor não passou na validação). */
+    applied: boolean
+}
+
+export interface CombatPrepAdjustment {
+    id: string
+    economy: "action" | "bonus"
+    optionId: string
+    optionLabel: string
+    text: string
+    status: "pending" | "accepted" | "refused" | "error"
+    reason: string | null
+    /** Motivo técnico da falha (só para o dono da campanha). */
+    error: string | null
+    changes: CombatPrepChange[]
+    requestedAt: Date
+    decidedAt: Date | null
+}
+
+export const emptyOverlay = (): CombatPrepOverlay => ({ modify: [], remove: [], add: [], suppress: [] })

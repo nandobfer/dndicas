@@ -2,7 +2,7 @@
  * Catálogo das integrações administráveis do DnDicas (copiado do Opex).
  *
  * Integrações ativas: Autenticação Google, Pusher, API dndicas, Crons, Provedores de IA (hub `ai`
- * com os provedores `ai_opencode`, `ai_gemini`, `ai_anthropic`, `ai_openai`, `ai_deepseek` e
+ * com os provedores `ai_opencode`, `ai_opencode_go`, `ai_gemini`, `ai_anthropic`, `ai_openai`, `ai_deepseek` e
  * `ai_jev`, que só aparecem dentro do hub), SMTP, Storage S3, Analytics (Umami) e Tradução.
  * `opex` conecta os usuários à central de feedback externa.
  *
@@ -28,6 +28,7 @@ export const INTEGRATION_IDS = [
     "crons",
     "ai",
     "ai_opencode",
+    "ai_opencode_go",
     "ai_gemini",
     "ai_anthropic",
     "ai_openai",
@@ -509,6 +510,16 @@ export const INTEGRATIONS: readonly IntegrationDef[] = [
         ],
     },
     {
+        id: "ai_opencode_go",
+        name: "OpenCode Go",
+        description: "Modelos da assinatura OpenCode Go (DeepSeek, GLM, Kimi…) pela API do Go, sem sessão no servidor OpenCode",
+        defaultEnvironment: "externo",
+        streamsDebugOverPusher: true,
+        parent: "ai",
+        publicFields: [],
+        secretFields: [{ key: "apiKey", label: "API key", description: "Chave pessoal da assinatura OpenCode Go (oc_sk_…, em opencode.ai › Go). DeepSeek exige a região Global habilitada em Settings › Privacy", required: true }],
+    },
+    {
         id: "ai_gemini",
         name: "Gemini",
         description: "Modelos Google Gemini pela API do Google AI Studio",
@@ -694,6 +705,7 @@ const CUSTOM_PATHS: Partial<Record<IntegrationId, string>> = {
     perfix: `${INTEGRATIONS_BASE_PATH}/perfix`,
     ai: `${INTEGRATIONS_BASE_PATH}/ia`,
     ai_opencode: `${INTEGRATIONS_BASE_PATH}/ia/opencode`,
+    ai_opencode_go: `${INTEGRATIONS_BASE_PATH}/ia/opencode-go`,
     ai_gemini: `${INTEGRATIONS_BASE_PATH}/ia/gemini`,
     ai_anthropic: `${INTEGRATIONS_BASE_PATH}/ia/anthropic`,
     ai_openai: `${INTEGRATIONS_BASE_PATH}/ia/openai`,

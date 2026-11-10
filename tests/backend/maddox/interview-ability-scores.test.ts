@@ -16,7 +16,7 @@ import { nameMaddoxCharacter } from "../../helpers/maddox-character"
 
 process.env.AUTH_SECRET ||= "segredo-de-teste-do-maddox"
 
-type Step = { type: "delta"; text: string } | { type: "error"; message: string } | { type: "call"; name: string; input: unknown }
+type Step = { type: "delta"; text: string } | { type: "error"; message: string } | { type: "call"; name: string; input: unknown } | { type: "cost"; usd: number }
 
 const recordAudit = vi.fn(async () => undefined)
 const availability = { available: true, reason: null as string | null }
@@ -67,6 +67,7 @@ vi.mock("ai", () => ({
                 for (const step of steps) {
                     if (step.type === "delta") yield { type: "text-delta", text: step.text }
                     else if (step.type === "error") yield { type: "error", error: new Error(step.message) }
+                    else if (step.type === "cost") yield { type: "finish-step", providerMetadata: { "opencode-go": { cost: 0, allowance: step.usd, costUsd: step.usd } } }
                     else {
                         try {
                             toolResults.push({ name: step.name, output: await options.tools[step.name]!.execute(step.input) })
@@ -481,6 +482,21 @@ describe("atributos pelo card na entrevista de personagem", () => {
             const character = await MaddoxCharacterModel.findOne({ userId: ids.ana }).lean()
             expect(await CharacterSheet.findById(character!.sheetId).lean()).toMatchObject({ strength: 17, constitution: 14 })
         })
+    })
+
+    it("custo informado pelo provedor (OpenCode Go) em cada passo entra somado no consumo, com a chave de conversa da entrevista", async () => {
+        const { prepareModel } = await import("@/lib/ai/stream")
+        const { recordAiConsumption } = await import("@/lib/ai/consumption")
+        const campaignId = await characterInterview()
+        vi.mocked(prepareModel).mockClear()
+        vi.mocked(recordAiConsumption).mockClear()
+        scripted.push([say("Primeira parte."), { type: "cost", usd: 0.002 }, say(" Segunda parte."), { type: "cost", usd: 0.003 }])
+        await run(await interviews.sendInterviewMessage(campaignId, "character", { content: "Conte mais." }, ids.ana))
+        const interviewId = String((await interviewDoc())._id)
+        expect(vi.mocked(prepareModel)).toHaveBeenCalledWith(expect.objectContaining({ sessionKey: `maddox-interview:${interviewId}` }))
+        expect(vi.mocked(recordAiConsumption)).toHaveBeenCalledTimes(1)
+        expect(vi.mocked(recordAiConsumption).mock.calls[0]![0]).toMatchObject({ origin: "maddox-interview", subject: campaignId })
+        expect(vi.mocked(recordAiConsumption).mock.calls[0]![0].costUsd).toBeCloseTo(0.005, 10)
     })
 
     it("graus sem ficha não usam card: sem ferramentas, sem seção, rolagem 409; entrevista de cenário responde 404", async () => {

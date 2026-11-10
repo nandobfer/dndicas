@@ -40,6 +40,7 @@ const PROVIDER_KINDS: Record<OpexProviderId, ReadonlySet<OpexFileKind>> = {
     anthropic: new Set(["image", "pdf"]),
     openai: new Set(["image", "pdf"]),
     deepseek: new Set(),
+    "opencode-go": new Set(),
 }
 
 /**

@@ -152,6 +152,9 @@ export async function hasRoundWaits(campaignId: Types.ObjectId, turnNumber: numb
         ],
     })
     if (found || !pendingOnly) return Boolean(found)
+    // DND-41: a preparação da mesa de combate aberta nesta rodada (iniciativa) também é espera.
+    const { MaddoxCombatPrepModel } = await import("../models")
+    if (await MaddoxCombatPrepModel.exists({ campaignId, turnNumber, waitRound: round, status: { $in: ["pending", "running", "failed"] } })) return true
     // Iniciativa dos inimigos (DND-25): o dado ainda está rolando na tela de todos.
     const revealing = await MaddoxCampaignMessageModel.exists({ campaignId, turnNumber, kind: "combat-roll", "combatRoll.waitRound": round, "combatRoll.kind": "enemy-initiative", "combatRoll.revealUntil": { $gt: new Date() } })
     return Boolean(revealing)

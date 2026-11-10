@@ -4,10 +4,13 @@ import { loggerFor } from "@/lib/logger"
 import { getAiProvider, isAiReasoningLevel, type AiProviderId } from "./providers"
 import { AiProviderError } from "./errors"
 import { recordAiConsumption } from "./consumption"
+import { stepCostUsd } from "./step-cost"
+
+export { stepCostUsd } from "./step-cost"
 
 /**
  * Geração em streaming pela Vercel AI SDK — SOMENTE servidor. Ponto único das features: nenhuma
- * feature fala com OpenCode, Gemini, Anthropic, OpenAI ou DeepSeek diretamente.
+ * feature fala com OpenCode, OpenCode Go, Gemini, Anthropic, OpenAI ou DeepSeek diretamente.
  *
  * A SDK `ai` e os clientes dos provedores entram sob demanda (`await import`): no topo, eles custam
  * centenas de ms de carga em todo módulo (e arquivo de teste) que só alcança este ponto de entrada.
@@ -26,6 +29,11 @@ export interface AiStreamRequest {
      * última mensagem do usuário é enviada; a sessão não é excluída no `dispose`.
      */
     opencodeSessionId?: string | null
+    /**
+     * Só OpenCode Go: chave estável da conversa (ex.: `opex:<sessão>`), que vira o `x-opencode-session`
+     * (roteamento e cache de prompt no Go). Ausente = um id novo por geração.
+     */
+    sessionKey?: string | null
     /** OpenCode: variante do modelo; Gemini: nível de thinking; Anthropic, OpenAI e DeepSeek: nível de raciocínio. */
     variant?: string | null
     /** Só OpenCode. */
@@ -44,7 +52,7 @@ export interface AiUsage {
     inputTokens: number | null
     outputTokens: number | null
     totalTokens: number | null
-    /** Custo em USD informado pelo provedor (OpenCode). */
+    /** Custo em USD informado pelo provedor (OpenCode e OpenCode Go). */
     costUsd: number | null
 }
 
@@ -79,7 +87,7 @@ const DIRECT_PROVIDERS = {
 } as const satisfies Partial<Record<AiProviderId, () => Promise<(modelId: string) => LanguageModel>>>
 
 /** Modelo da AI SDK pronto para o provedor (exportado para o loop de ferramentas do Agente Opex). */
-export async function prepareModel(request: Pick<AiStreamRequest, "provider" | "model" | "variant" | "agent" | "title" | "opencodeSessionId">): Promise<PreparedModel> {
+export async function prepareModel(request: Pick<AiStreamRequest, "provider" | "model" | "variant" | "agent" | "title" | "opencodeSessionId" | "sessionKey">): Promise<PreparedModel> {
     if (request.provider === "opencode") {
         const { createOpencodeProvider } = await import("./opencode")
         const { provider, directory } = await createOpencodeProvider()
@@ -102,6 +110,16 @@ export async function prepareModel(request: Pick<AiStreamRequest, "provider" | "
         return {
             model: google(request.model),
             providerOptions: request.variant ? { google: { thinkingConfig: { thinkingLevel: request.variant, includeThoughts: false } } } : undefined,
+            dispose: noDispose,
+        }
+    }
+    if (request.provider === "opencode-go") {
+        // Gateway por API key: não abre sessão no servidor OpenCode do host.
+        const { createOpencodeGoProvider } = await import("./opencode-go")
+        const go = await createOpencodeGoProvider({ sessionKey: request.sessionKey })
+        return {
+            model: go(request.model),
+            reasoning: request.variant && isAiReasoningLevel(request.variant) ? request.variant : undefined,
             dispose: noDispose,
         }
     }
@@ -129,8 +147,32 @@ function numberOrNull(value: unknown): number | null {
     return typeof value === "number" && Number.isFinite(value) ? value : null
 }
 
-export function describeAiError(error: unknown): string {
+/** Status HTTP estruturado de um erro de chamada da AI SDK (`APICallError.statusCode`). */
+function errorStatus(error: unknown): number | null {
+    if (!error || typeof error !== "object") return null
+    const { statusCode, lastError } = error as { statusCode?: unknown; lastError?: unknown }
+    if (typeof statusCode === "number") return statusCode
+    // As tentativas esgotadas da AI SDK chegam como `RetryError`, com a última falha em `lastError`.
+    return lastError && lastError !== error ? errorStatus(lastError) : null
+}
+
+/** Mensagens acionáveis do OpenCode Go, pelo status HTTP (nunca pelo texto, que pode trazer detalhes do provedor). */
+function describeOpencodeGoError(status: number | null, model?: string): string | null {
+    if (status === 401) return "O OpenCode Go recusou a API key: confira a chave oc_sk_… em Integrações › Provedores de IA › OpenCode Go."
+    if (status === 403) {
+        const target = model ? `o modelo ${model}` : "o modelo"
+        return `O OpenCode Go recusou ${target} (HTTP 403): modelos grátis (*-free) só funcionam dentro do OpenCode, e os modelos DeepSeek exigem a região Global habilitada em Settings › Privacy da conta OpenCode. Troque o modelo ou ajuste a conta.`
+    }
+    if (status === 429) return "Limite da assinatura OpenCode Go atingido (HTTP 429): aguarde a renovação do allowance, habilite o Extra Usage no OpenCode ou troque o provedor do agente."
+    return null
+}
+
+export function describeAiError(error: unknown, context?: { provider?: AiProviderId; model?: string }): string {
     if (error instanceof AiProviderError) return error.message
+    if (context?.provider === "opencode-go") {
+        const specific = describeOpencodeGoError(errorStatus(error), context.model)
+        if (specific) return specific
+    }
     const message = error instanceof Error ? error.message : String(error)
     if (/401|unauthori[sz]ed|api key/i.test(message)) return `Credencial recusada pelo provedor: ${message}`
     if (/ECONNREFUSED|fetch failed|ENOTFOUND/i.test(message)) return `Provedor inacessível: ${message}`
@@ -163,7 +205,7 @@ export async function* streamAi(request: AiStreamRequest): AsyncGenerator<AiStre
     try {
         prepared = await prepareModel(request)
     } catch (error) {
-        yield { type: "error", message: describeAiError(error) }
+        yield { type: "error", message: describeAiError(error, request) }
         return
     }
     let reasoningAnnounced = false
@@ -206,15 +248,19 @@ export async function* streamAi(request: AiStreamRequest): AsyncGenerator<AiStre
                     yield { type: "notice", message: "O agente pediu aprovação para usar uma ferramenta; aprovações não são suportadas aqui. Ajuste as permissões do agente no OpenCode." }
                     break
                 case "finish-step": {
-                    const meta = part.providerMetadata?.opencode as { cost?: unknown; error?: OpencodeStepError } | undefined
-                    const cost = numberOrNull(meta?.cost)
+                    const meta = part.providerMetadata?.opencode as { error?: OpencodeStepError } | undefined
+                    const cost = stepCostUsd(part.providerMetadata)
                     if (cost !== null) costUsd = (costUsd ?? 0) + cost
                     if (meta?.error && typeof meta.error === "object") stepError = meta.error
+                    const go = part.providerMetadata?.["opencode-go"] as { billingSource?: unknown; allowance?: unknown; listCost?: unknown } | undefined
+                    if (go && (go.allowance != null || go.billingSource != null)) {
+                        log.debug({ provider: request.provider, model: request.model, billingSource: go.billingSource, allowance: go.allowance, listCost: go.listCost }, "[ai] allowance do OpenCode Go")
+                    }
                     break
                 }
                 case "error":
                     failed = true
-                    yield { type: "error", message: describeAiError(part.error) }
+                    yield { type: "error", message: describeAiError(part.error, request) }
                     break
                 case "abort":
                     failed = true
@@ -253,7 +299,7 @@ export async function* streamAi(request: AiStreamRequest): AsyncGenerator<AiStre
     } catch (error) {
         if (!request.signal?.aborted) {
             log.warn({ provider: request.provider, model: request.model, err: error instanceof Error ? error.message : error }, "[ai] falha na geração")
-            yield { type: "error", message: describeAiError(error) }
+            yield { type: "error", message: describeAiError(error, request) }
         }
     } finally {
         await prepared.dispose().catch(() => undefined)

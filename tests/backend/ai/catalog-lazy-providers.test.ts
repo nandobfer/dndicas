@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 const mocks = vi.hoisted(() => ({
     listGeminiModels: vi.fn(),
     listOpenaiModels: vi.fn(),
+    listOpencodeGoModels: vi.fn(),
     listOpencodeAgents: vi.fn(),
     imageListers: { gemini: vi.fn(), openai: vi.fn() },
 }));
@@ -15,6 +16,7 @@ vi.mock('@/lib/integrations/config', () => ({
 }));
 vi.mock('@/lib/ai/gemini', () => ({ listGeminiModels: mocks.listGeminiModels }));
 vi.mock('@/lib/ai/openai', () => ({ listOpenaiModels: mocks.listOpenaiModels }));
+vi.mock('@/lib/ai/opencode-go', () => ({ listOpencodeGoModels: mocks.listOpencodeGoModels }));
 vi.mock('@/lib/ai/opencode', () => ({ listOpencodeAgents: mocks.listOpencodeAgents, listOpencodeModels: vi.fn() }));
 vi.mock('@/lib/ai/image', () => ({ IMAGE_MODEL_LISTERS: mocks.imageListers }));
 
@@ -35,6 +37,13 @@ describe('lib/ai/catalog — listagens com provedores sob demanda', () => {
 
         expect(mocks.listGeminiModels).toHaveBeenCalledTimes(1);
         expect(mocks.listOpenaiModels).not.toHaveBeenCalled();
+    });
+
+    it('lista os modelos do OpenCode Go pelo módulo próprio, sem tocar no OpenCode de sessão', async () => {
+        mocks.listOpencodeGoModels.mockResolvedValue([model('deepseek-v4.1-flash')]);
+
+        await expect(listAiModels('opencode-go')).resolves.toEqual([model('deepseek-v4.1-flash')]);
+        expect(mocks.listOpencodeAgents).not.toHaveBeenCalled();
     });
 
     it('propaga a falha do provedor (sem cachear o erro)', async () => {
