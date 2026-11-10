@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { attacksPerAction, buildCombatOptions, costFromCastingTime, findCombatOption, profileFromText, spellDice, spellResolution, type CombatOptionsInput } from "@/features/maddox/combat-options"
+import { attacksPerAction, buildCombatOptions, weaponItemId, weaponProperties, costFromCastingTime, findCombatOption, profileFromText, spellDice, spellResolution, type CombatOptionsInput } from "@/features/maddox/combat-options"
 import { freshEconomy } from "@/features/maddox/combat-rules"
 
 const sheet = {
@@ -50,6 +50,7 @@ describe("combate tático — opções do personagem (Maddox 7): só o que ele p
         expect(weapons.map((option) => [option.label, option.attack!.bonus, option.attack!.damage])).toEqual([
             ["Espada Longa", 6, "1d8+3"],
             ["Adaga", 6, "1d4+3"],
+            ["Adaga (arremesso)", 6, "1d4+3"],
             ["Arco Curto", 5, "1d6+2"],
             ["Ataque desarmado", 6, "4"],
         ])
@@ -146,5 +147,51 @@ describe("combate tático — opções do personagem (Maddox 7): só o que ele p
         expect(spellResolution({ saveAttribute: null, baseDice: null, description: "Quando for atingido por uma jogada de ataque, +5 na CA", profile: null })).toBe("utility")
         expect(spellDice({ circle: 0, baseDice: { quantidade: 1, tipo: "d10" }, extraDicePerLevel: null }, 11, 0)).toBe("3d10")
         expect(spellDice({ circle: 3, baseDice: { quantidade: 8, tipo: "d6" }, extraDicePerLevel: { quantidade: 1, tipo: "d6" } }, 9, 5)).toBe("10d6")
+    })
+})
+
+describe("DND-41 — propriedades das armas lidas do catálogo", () => {
+    const mention = (label: string) => ({ description: `<span data-type="mention" data-id="x" data-entity-type="Regra" class="mention">Propriedade: ${label}</span>`, level: 1 })
+    const nala = { level: 1, abilities: { strength: 8, dexterity: 17, constitution: 14, intelligence: 8, wisdom: 16, charisma: 10 }, proficiencyBonus: 2, spellAttribute: null, spellSaveDc: 10, spellAttackBonus: 2, spellSlots: {} }
+    const dagger = () => ({ id: "adaga", name: "Adaga", quantity: 1, damageDice: { quantidade: 1, tipo: "d4" }, damageType: "perfurante", ...weaponProperties([mention("Acuidade / Finesse"), mention("Leve"), mention("Arremesso")]) })
+
+    it("lê as propriedades pela menção em `description` quando o nome vem vazio", () => {
+        expect(weaponProperties([mention("Acuidade / Finesse"), mention("Leve")]).properties).toEqual(["Acuidade / Finesse", "Leve"])
+        expect(weaponProperties([{ name: "Munição", description: "" }]).properties).toEqual(["Munição"])
+        expect(weaponProperties([mention("Versátil (1d8)")]).versatileDice).toEqual({ quantidade: 1, tipo: "d8" })
+        expect(weaponProperties(undefined)).toEqual({ properties: [], versatileDice: null })
+    })
+
+    it("a Adaga da Nala (FOR 8, DES 17) usa Destreza: +5 e 1d4+3; a arma Leve libera a Ação bônus", () => {
+        const input = { ...base(), sheet: nala, weapons: [dagger()], spells: [], items: [], abilities: [] }
+        const first = buildCombatOptions(input)
+        const option = first.action.find((item) => item.id === "weapon:adaga")!
+        expect([option.attack!.bonus, option.attack!.damage, option.attack!.finesse, option.attack!.light]).toEqual([5, "1d4+3", true, true])
+        expect(first.action.find((item) => item.id === "weapon:adaga:thrown")!.attack).toMatchObject({ bonus: 5, ranged: true })
+        // Depois de atacar com a Adaga, a Ação bônus só oferece a Adaga se houver duas.
+        const twoDaggers = buildCombatOptions({ ...input, weapons: [{ ...dagger(), quantity: 2 }], economy: { ...freshEconomy(), action: false, attackAction: true, lightAttack: true, lightWeaponId: "adaga" } })
+        expect(twoDaggers.bonus.map((item) => item.id)).toEqual(["offhand:adaga", "free"])
+    })
+
+    it("Versátil: a opção de duas mãos com o dado maior, só sem escudo", () => {
+        const staff = { id: "cajado", name: "Cajado", quantity: 1, damageDice: { quantidade: 1, tipo: "d6" }, damageType: "contundente", ...weaponProperties([mention("Versátil (1d8)")]) }
+        const input = { ...base(), weapons: [staff], spells: [], items: [], abilities: [] }
+        const free = buildCombatOptions(input).action.filter((item) => item.category === "weapons").map((item) => [item.id, item.attack!.damage])
+        expect(free).toEqual([["weapon:cajado", "1d6+3"], ["weapon:cajado:two-handed", "1d8+3"], ["unarmed", "4"]])
+        const shielded = buildCombatOptions({ ...input, sheet: { ...sheet, shieldEquipped: true } })
+        expect(shielded.action.some((item) => item.id === "weapon:cajado:two-handed")).toBe(false)
+    })
+
+    it("o id do item sai do id da opção com e sem variante", () => {
+        expect(weaponItemId("weapon:abc")).toBe("abc")
+        expect(weaponItemId("weapon:abc:two-handed")).toBe("abc")
+        expect(weaponItemId("offhand:abc")).toBe("abc")
+        expect(weaponItemId("spell:abc")).toBeNull()
+    })
+
+    it("lista completa para a preparação: cargas, espaços e quantidades esgotados não tiram a opção", () => {
+        const full = buildCombatOptions({ ...base(), ignoreResources: true })
+        expect(full.bonus.some((item) => item.id === "ability:trait:a")).toBe(true)
+        expect(full.action.some((item) => item.id === "spell:s1")).toBe(true)
     })
 })

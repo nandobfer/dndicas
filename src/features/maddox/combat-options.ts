@@ -33,6 +33,8 @@ export interface OptionSheet {
     spellSaveDc: number
     spellAttackBonus: number
     spellSlots: Record<string, { total: number; used: number }>
+    /** Escudo equipado (DND-41): a arma Versátil não ganha a opção de duas mãos. */
+    shieldEquipped?: boolean
 }
 
 export interface OptionWeapon {
@@ -44,6 +46,8 @@ export interface OptionWeapon {
     damageType: string | null
     /** Nomes das propriedades, em texto puro ("Acuidade", "Leve", "Munição"). */
     properties: string[]
+    /** Dado da propriedade Versátil ("Versátil (1d8)"): a opção de duas mãos (DND-41). */
+    versatileDice?: { quantidade: number; tipo: string } | null
 }
 
 export interface OptionSpell {
@@ -94,7 +98,7 @@ export interface CombatOption {
     target: CombatOptionTarget
     multiTarget: boolean
     resolution: CombatOptionResolution
-    attack?: { bonus: number; damage: string; damageType: string | null; ranged: boolean; light: boolean }
+    attack?: { bonus: number; damage: string; damageType: string | null; ranged: boolean; light: boolean; finesse?: boolean; riders?: CombatRider[] }
     save?: { ability: AttributeType; dc: number; halfOnSave: boolean; damage: string | null; damageType: string | null }
     heal?: { dice: string }
     spell?: { circle: number; levels: number[]; concentration: boolean }
@@ -105,6 +109,16 @@ export interface CombatOption {
     uncertain?: boolean
     /** Reação: o gatilho que a abre. */
     trigger?: MaddoxReactionTrigger
+    /** DND-41: a opção foi ajustada pelo Maddox (preparação do combate ou pedido de ajuste). */
+    adjusted?: { reason: string }
+}
+
+/** Dano adicional marcável num ataque (DND-41: "Ataque furtivo (+Xd6)"). */
+export interface CombatRider {
+    key: "sneak-attack"
+    label: string
+    /** Dados somados ao dano ("2d6"). */
+    dice: string
 }
 
 export interface CombatOptionsInput {
@@ -119,6 +133,8 @@ export interface CombatOptionsInput {
     dying: boolean
     /** Ação preparada guardada (vira a reação de gatilho "preparada"). */
     ready?: { optionId: string; label: string } | null
+    /** DND-41: lista completa para a preparação (cargas, espaços e quantidades esgotados não tiram a opção). */
+    ignoreResources?: boolean
 }
 
 export interface CombatOptions {
@@ -219,10 +235,38 @@ export function attacksPerAction(abilities: readonly Pick<OptionAbility, "name">
 
 // ── Armas ─────────────────────────────────────────────────────────────────────
 
-const hasProperty = (weapon: OptionWeapon, pattern: RegExp) => weapon.properties.some((property) => pattern.test(fold(property)))
-export const isLight = (weapon: OptionWeapon) => hasProperty(weapon, /^leve|\blight\b/)
+/** Nome da propriedade sem o prefixo do catálogo ("Propriedade: Leve" → "leve"). */
+const propertyKey = (property: string) => fold(property).replace(/^propriedade\s*:\s*/, "")
+const hasProperty = (weapon: OptionWeapon, pattern: RegExp) => weapon.properties.some((property) => pattern.test(propertyKey(property)))
+export const isLight = (weapon: OptionWeapon) => hasProperty(weapon, /^leve\b|\blight\b/)
 export const isRanged = (weapon: OptionWeapon) => hasProperty(weapon, /municao|ammunition|distancia\b/)
 export const isFinesse = (weapon: OptionWeapon) => hasProperty(weapon, /acuidade|finesse/)
+export const isThrown = (weapon: OptionWeapon) => hasProperty(weapon, /arremesso|thrown/)
+export const isVersatile = (weapon: OptionWeapon) => hasProperty(weapon, /versatil|versatile/)
+
+/**
+ * DND-41: propriedades da arma do catálogo. O catálogo grava a propriedade como menção em `description`
+ * ("Propriedade: Acuidade / Finesse"), com `name` vazio; o nome vem de um ou de outro, sem o prefixo. O dado da
+ * Versátil sai do parêntese ("Versátil (1d8)").
+ */
+export function weaponProperties(raw: readonly { name?: string | null; description?: string | null }[] | null | undefined): { properties: string[]; versatileDice: { quantidade: number; tipo: string } | null } {
+    const properties = (raw ?? [])
+        .map((property) => plainText(property.name?.trim() ? property.name : (property.description ?? "")).replace(/^propriedade\s*:\s*/i, "").trim())
+        .filter(Boolean)
+    let versatileDice: { quantidade: number; tipo: string } | null = null
+    for (const property of properties) {
+        if (!/versatil|versatile/.test(fold(property))) continue
+        const match = /(\d+)\s*d\s*(\d+)/i.exec(property)
+        if (match) versatileDice = { quantidade: Number(match[1]), tipo: `d${match[2]}` }
+    }
+    return { properties, versatileDice }
+}
+
+/** Id do item na ficha a partir do id da opção (`weapon:<id>`, `offhand:<id>`, `weapon:<id>:two-handed`, `weapon:<id>:thrown`). */
+export function weaponItemId(optionId: string): string | null {
+    const match = /^(?:weapon|offhand):([^:]+)/.exec(optionId)
+    return match ? match[1]! : null
+}
 
 /** Modificador do ataque com a arma: Acuidade = o maior entre Força e Destreza; à distância = Destreza; senão Força. */
 export function weaponModifier(weapon: OptionWeapon, sheet: OptionSheet): number {
@@ -232,22 +276,29 @@ export function weaponModifier(weapon: OptionWeapon, sheet: OptionSheet): number
     return isRanged(weapon) ? dex : str
 }
 
-function weaponOption(weapon: OptionWeapon, sheet: OptionSheet, economy: CombatEconomySlot, offhand: boolean): CombatOption {
+type WeaponVariant = "main" | "offhand" | "two-handed" | "thrown"
+
+function weaponOption(weapon: OptionWeapon, sheet: OptionSheet, economy: CombatEconomySlot, variant: WeaponVariant | boolean): CombatOption {
+    const kind: WeaponVariant = variant === true ? "offhand" : variant === false ? "main" : variant
+    const offhand = kind === "offhand"
     const modifier = weaponModifier(weapon, sheet)
     const bonus = sheet.proficiencyBonus + modifier
     const damageModifier = offhand ? Math.min(0, modifier) : modifier
-    const damage = withModifier(dice(weapon.damageDice), damageModifier)
-    const ranged = isRanged(weapon)
+    const damageDice = kind === "two-handed" && weapon.versatileDice ? weapon.versatileDice : weapon.damageDice
+    const damage = withModifier(dice(damageDice), damageModifier)
+    const ranged = kind === "thrown" || isRanged(weapon)
+    const id = offhand ? `offhand:${weapon.id}` : kind === "main" ? `weapon:${weapon.id}` : `weapon:${weapon.id}:${kind}`
+    const label = offhand ? `${weapon.name} (outra mão)` : kind === "two-handed" ? `${weapon.name} (duas mãos)` : kind === "thrown" ? `${weapon.name} (arremesso)` : weapon.name
     return {
-        id: `${offhand ? "offhand" : "weapon"}:${weapon.id}`,
+        id,
         category: "weapons",
         economy,
-        label: offhand ? `${weapon.name} (outra mão)` : weapon.name,
-        detail: `${signed(bonus)} para acertar · ${damage}${weapon.damageType ? ` ${weapon.damageType}` : ""}${ranged ? " · à distância" : ""}`,
+        label,
+        detail: `${signed(bonus)} para acertar · ${damage}${weapon.damageType ? ` ${weapon.damageType}` : ""}${kind === "thrown" ? " · arremessada" : ranged ? " · à distância" : ""}`,
         target: "enemy",
         multiTarget: false,
         resolution: "attack",
-        attack: { bonus, damage, damageType: weapon.damageType, ranged, light: isLight(weapon) },
+        attack: { bonus, damage, damageType: weapon.damageType, ranged, light: isLight(weapon), finesse: isFinesse(weapon) },
     }
 }
 
@@ -407,10 +458,17 @@ export function buildCombatOptions(input: CombatOptionsInput): CombatOptions {
     const bonus: CombatOption[] = []
     const reactions: CombatOption[] = []
     const canAttack = economy.action || (economy.attackAction && economy.attacksLeft > 0)
-    const weapons = input.weapons.filter((weapon) => weapon.quantity > 0)
+    const ignore = Boolean(input.ignoreResources)
+    const weapons = input.weapons.filter((weapon) => ignore || weapon.quantity > 0)
 
     if (canAttack) {
-        for (const weapon of weapons) action.push(weaponOption(weapon, sheet, "action", false))
+        for (const weapon of weapons) {
+            action.push(weaponOption(weapon, sheet, "action", "main"))
+            // Versátil (DND-41): duas mãos sem escudo e sem ter atacado com outra arma neste turno.
+            const otherInHand = Boolean(economy.lightWeaponId && economy.lightWeaponId !== weapon.id)
+            if (isVersatile(weapon) && weapon.versatileDice && !sheet.shieldEquipped && !otherInHand) action.push(weaponOption(weapon, sheet, "action", "two-handed"))
+            if (isThrown(weapon)) action.push(weaponOption(weapon, sheet, "action", "thrown"))
+        }
         action.push(unarmedOption(sheet))
     }
     if (economy.bonus && economy.lightAttack) {
@@ -425,15 +483,16 @@ export function buildCombatOptions(input: CombatOptionsInput): CombatOptions {
         if (spell.circle > 0 && !spell.prepared) continue
         const cost = costFromCastingTime(spell.castingTime)
         if (cost === "other" || cost === "passive") continue
-        const levels = spell.circle === 0 ? [] : availableSlotLevels(sheet, spell.circle)
-        if (spell.circle > 0 && (levels.length === 0 || economy.slotSpellCast)) continue
+        const free = spell.circle === 0 ? [] : availableSlotLevels(sheet, spell.circle)
+        const levels = ignore && spell.circle > 0 && free.length === 0 ? [spell.circle] : free
+        if (!ignore && spell.circle > 0 && (levels.length === 0 || economy.slotSpellCast)) continue
         if (cost === "action" && economy.action) action.push(spellOption(spell, sheet, "action", levels))
         else if (cost === "bonus" && economy.bonus) bonus.push(spellOption(spell, sheet, "bonus", levels))
         else if (cost === "reaction" && economy.reaction) reactions.push({ ...spellOption(spell, sheet, "reaction", levels), trigger: spell.profile?.trigger ?? reactionTriggerFromText(fold(spell.description)) })
     }
 
     for (const item of input.items) {
-        if (!item.consumable || item.quantity <= 0) continue
+        if (!item.consumable || (!ignore && item.quantity <= 0)) continue
         if (isHealingItem(item)) {
             const heal = { dice: dice(item.effectDice) || "0" }
             if (economy.bonus) bonus.push({ id: `item:${item.id}:self`, category: "items", economy: "bonus", label: `${item.name} (em você)`, detail: `Cura ${heal.dice} · ${item.quantity} restante(s)`, target: "self", multiTarget: false, resolution: "heal", heal })
@@ -444,7 +503,7 @@ export function buildCombatOptions(input: CombatOptionsInput): CombatOptions {
     }
 
     for (const ability of input.abilities) {
-        if (!hasCharges(ability)) continue
+        if (!ignore && !hasCharges(ability)) continue
         const cost = ability.profile?.cost
         if (cost === "action" && economy.action) action.push(abilityOption(ability, "action"))
         else if (cost === "bonus" && economy.bonus) bonus.push(abilityOption(ability, "bonus"))

@@ -7,7 +7,7 @@ import type { SkillName } from "@/features/character-sheets/types/character-shee
 import { MADDOX_CAMPAIGN_AUDIT_ENTITY, MADDOX_COMBAT_OFFLINE_GRACE_MS, MADDOX_COMBAT_ROLL_CLAIM_STALE_MS, MADDOX_DECLARATION_VALIDATION_RIGORS, MADDOX_STANDARD_ACTION_DEFS, type MaddoxStandardAction } from "../constants"
 import { MADDOX_ABILITY_LABELS } from "../check-modifier"
 import { adjustDamage, attackMode, attackOutcome, autoCritical, criticalExpression, deathSave, exhaustionPenalty, formatDiceExpression, parseDiceExpression, saveMode } from "../combat-rules"
-import { findCombatOption, type CombatOption } from "../combat-options"
+import { findCombatOption, weaponItemId, type CombatOption } from "../combat-options"
 import type { CombatActionStep, IMaddoxCombatAction, IMaddoxCombatRoll, TacticalCharacterState } from "../combat-types"
 import type { MaddoxCombatActionInput, MaddoxEndCombatTurnInput } from "../combat-schemas"
 import type { MaddoxGameStateDto } from "../game-types"
@@ -184,7 +184,7 @@ export async function submitCombatAction(campaignId: string, input: MaddoxCombat
             else throw new DomainError(409, "Você já usou a Ação neste turno.", "ACTION_ALREADY_USED")
             if (option.attack?.light && !economy.lightAttack) {
                 economy.lightAttack = true
-                economy.lightWeaponId = option.id.slice("weapon:".length)
+                economy.lightWeaponId = weaponItemId(option.id)
             }
         } else {
             if (!economy.action) throw new DomainError(409, "Você já usou a Ação neste turno.", "ACTION_ALREADY_USED")

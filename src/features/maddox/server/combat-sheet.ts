@@ -3,7 +3,7 @@ import { loggerFor } from "@/lib/logger"
 import type { AttributeType, SkillName } from "@/features/character-sheets/types/character-sheet.types"
 import type { CalcPart } from "@/features/character-sheets/utils/dnd-calculations"
 import { MADDOX_ABILITIES, checkModifier, proficiencyOf, type MaddoxCheckSheet } from "../check-modifier"
-import { plainText, type OptionAbility, type OptionItem, type OptionSheet, type OptionSpell, type OptionWeapon } from "../combat-options"
+import { plainText, weaponProperties, type OptionAbility, type OptionItem, type OptionSheet, type OptionSpell, type OptionWeapon } from "../combat-options"
 import type { DeathSaves, HitPoints } from "../combat-rules"
 
 /**
@@ -85,7 +85,7 @@ export async function loadCombatSheets(sheetIds: readonly string[]): Promise<Map
     ])
     const itemIds = items.map((item) => item.catalogItemId).filter((id): id is Types.ObjectId => Boolean(id))
     const spellIds = spells.map((spell) => spell.catalogSpellId).filter((id): id is Types.ObjectId => Boolean(id))
-    type CatalogItem = { _id: Types.ObjectId; type?: string; itemType?: string; damageDice?: Dice; damageType?: string; properties?: { name?: string }[]; effectDice?: Dice; description?: string }
+    type CatalogItem = { _id: Types.ObjectId; type?: string; itemType?: string; damageDice?: Dice; damageType?: string; properties?: { name?: string; description?: string }[]; effectDice?: Dice; description?: string }
     type CatalogSpell = { _id: Types.ObjectId; circle?: number; castingTime?: string; saveAttribute?: string; baseDice?: Dice; extraDicePerLevel?: Dice; description?: string }
     const [{ ItemModel }, { Spell }] = await Promise.all([import("@/features/items/database/item"), import("@/features/spells/models/spell")])
     const [catalogItems, catalogSpells] = await Promise.all([
@@ -130,12 +130,15 @@ export async function loadCombatSheets(sheetIds: readonly string[]): Promise<Map
                 spellSaveDc: calc.getSpellSaveDC(spellScore, prof, sheet.spellSaveDCOverride ?? null).value,
                 spellAttackBonus: calc.getSpellAttackBonus(spellScore, prof, sheet.spellAttackBonusOverride ?? null).value,
                 spellSlots: slots,
+                shieldEquipped: ownItems.some((item) => item.equipped && (item.catalogItemType ?? (item.catalogItemId ? itemById.get(String(item.catalogItemId))?.type : undefined)) === "escudo"),
             },
             weapons: ownItems
                 .filter((item) => item.equipped && item.catalogItemId && (itemById.get(String(item.catalogItemId))?.type ?? item.catalogItemType) === "arma")
                 .map((item) => {
                     const catalog = itemById.get(String(item.catalogItemId))!
-                    return { id: String(item._id), name: plainText(item.name), quantity: item.quantity ?? 1, damageDice: catalog.damageDice ?? null, damageType: catalog.damageType ?? null, properties: (catalog.properties ?? []).map((property) => plainText(property.name ?? "")) }
+                    // DND-41: o catálogo grava a propriedade como menção em `description` (o `name` costuma vir vazio).
+                    const { properties, versatileDice } = weaponProperties(catalog.properties)
+                    return { id: String(item._id), name: plainText(item.name), quantity: item.quantity ?? 1, damageDice: catalog.damageDice ?? null, damageType: catalog.damageType ?? null, properties, versatileDice }
                 }),
             spells: own(spells).map((spell) => {
                 const catalog = spell.catalogSpellId ? spellById.get(String(spell.catalogSpellId)) : undefined

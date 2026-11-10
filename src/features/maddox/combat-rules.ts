@@ -46,9 +46,11 @@ export interface CombatEconomy {
     lightAttack: boolean
     /** Arma Leve usada na ação Atacar: a Ação bônus só oferece OUTRA (ou a mesma, havendo duas). */
     lightWeaponId?: string | null
+    /** Ataque furtivo já somado a um dano neste turno (DND-41: uma vez por turno). */
+    sneakAttackUsed?: boolean
 }
 
-export const freshEconomy = (): CombatEconomy => ({ action: true, bonus: true, reaction: true, attacksLeft: 0, attackAction: false, slotSpellCast: false, lightAttack: false, lightWeaponId: null })
+export const freshEconomy = (): CombatEconomy => ({ action: true, bonus: true, reaction: true, attacksLeft: 0, attackAction: false, slotSpellCast: false, lightAttack: false, lightWeaponId: null, sneakAttackUsed: false })
 
 export interface CombatSubject {
     conditions: readonly CombatCondition[]
