@@ -313,7 +313,7 @@ describe("Maddox 7 — combate fiel ao D&D de ponta a ponta", () => {
                 tools: [
                     { name: "start_combat", input: { titulo: "Cripta", adversarios: [{ nome: "Goblin", quantidade: 2, estatisticas: { ca: 12, pv: 5, acoes: [{ nome: "Faca", tipo: "ataque", bonus: 3, dano: "1d4" }] } }] } },
                     { name: "start_combat", input: { titulo: "Cripta", adversarios: [{ nome: "Goblin", quantidade: 2, monstro: "Goblim" }] } },
-                    { name: "start_combat", input: { titulo: "Cripta", local: "Cripta antiga", adversarios: [{ nome: "Goblin", quantidade: 2, monstro: "Goblin" }] } },
+                    { name: "start_combat", input: { titulo: "Cripta", local: "Cripta antiga", adversarios: [{ nome: "Goblin", quantidade: 2, monstro: "Goblin", descricao: "Sonolentos: desvantagem nos ataques" }] } },
                 ],
                 text: "Dois goblins saltam das sombras!",
             },
@@ -431,6 +431,10 @@ describe("Maddox 7 — combate fiel ao D&D de ponta a ponta", () => {
         await settleCampaign(id)
         const masterTools = toolLog.slice(-4)
         expect(masterTools[1]!.error).toMatch(/Goblin 1 está caído/)
+        // DND-42: a descrição do adversário (a penalidade da ficção) volta no get_combat a cada bloco; personagens não têm.
+        const view = masterTools[0]!.output as { ordem: { nome: string; descricao?: string }[] }
+        expect(view.ordem.find((slot) => slot.nome === "Goblin 2")?.descricao).toBe("Sonolentos: desvantagem nos ataques")
+        expect(view.ordem.find((slot) => slot.nome === "Kael")?.descricao).toBeUndefined()
         expect(masterTools[2]!.output).toMatchObject({ ataque: { total: 19, acertou: true }, dano: { total: 5, alvo: "Kael" } })
         expect(masterTools[3]!.output).toMatchObject({ status: "aguardando_reacao" })
         expect(calls.at(-1)!.toolNames).toEqual(expect.arrayContaining(["monster_action", "apply_effect", "request_damage_roll", "offer_reaction", "start_combat", "end_combat"]))

@@ -1,6 +1,8 @@
 import mongoose, { Schema, type Model, type Types } from "mongoose"
 import {
     MADDOX_CAMPAIGN_STATUSES,
+    MADDOX_COMBAT_DIFFICULTY_DEFAULT,
+    MADDOX_COMBAT_DIFFICULTY_LEVELS,
     MADDOX_DEFAULT_DENSITY,
     MADDOX_DENSITY_LEVELS,
     MADDOX_RIGOR_LEVELS,
@@ -8,6 +10,7 @@ import {
     MADDOX_TURN_PHASES,
     type MaddoxCampaignStateField,
     type MaddoxCampaignStatus,
+    type MaddoxCombatDifficultyLevel,
     type MaddoxDensityLevel,
     type MaddoxRigorLevel,
     type MaddoxScenarioStatus,
@@ -74,6 +77,8 @@ export interface IMaddoxCampaign {
     hidePlayerActions: boolean
     /** Densidade das narrações (DND-22): o dono muda a qualquer momento; vale a partir da próxima narração. */
     density: MaddoxDensityLevel
+    /** Dificuldade dos combates (DND-42): só vale nos graus táticos; o dono muda a qualquer momento, vale a partir do próximo combate. */
+    combatDifficulty: MaddoxCombatDifficultyLevel
     /** Nível inicial da mesa (graus com ficha), definido na entrevista de cenário; `null` = cada personagem informa. */
     startingLevel?: number | null
     /** Estágio de experiência inicial (graus narrativos), adaptado ao cenário. */
@@ -146,6 +151,7 @@ const MaddoxCampaignSchema = new Schema<IMaddoxCampaign>(
         sceneImages: { type: Boolean, default: true },
         hidePlayerActions: { type: Boolean, default: false },
         density: { type: String, enum: MADDOX_DENSITY_LEVELS, default: MADDOX_DEFAULT_DENSITY },
+        combatDifficulty: { type: String, enum: MADDOX_COMBAT_DIFFICULTY_LEVELS, default: MADDOX_COMBAT_DIFFICULTY_DEFAULT },
         startingLevel: { type: Number, default: null, min: 1, max: 20 },
         startingStage: { type: String, default: "" },
         worldCatalog: { type: Schema.Types.Mixed, default: null },

@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest"
 import mongoose from "mongoose"
 import { MongoMemoryServer } from "mongodb-memory-server"
+import type { CreateMaddoxCampaignInput } from "@/features/maddox/campaign-schemas"
 
 /**
  * Critério de aceite do Maddox 4: campanha narrativa com 2 jogadores por mais de 5 turnos, com o narrador REAL
@@ -101,9 +102,9 @@ async function giveCharacter(campaignId: string, userId: string, name: string, p
     await MaddoxCampaignMemberModel.updateOne({ _id: member!._id }, { $set: { characterId: character._id } })
 }
 
-async function narrativeTable() {
+async function narrativeTable(options: Partial<Pick<CreateMaddoxCampaignInput, "rigor" | "combatDifficulty">> = {}) {
     const owner = await seedUser("dono")
-    const created = await campaigns.createCampaign({ name: "Brumas do Norte", rigor: "narrativo" }, owner)
+    const created = await campaigns.createCampaign({ name: "Brumas do Norte", rigor: "narrativo", ...options }, owner)
     await MaddoxCampaignModel.updateOne({ _id: created.id }, { $set: { "scenarioInterview.status": "done", setting: "## Universo\nUm porto envolto em névoa.", openingSituation: "O farol do porto se apagou." } })
     const token = (await campaigns.getInviteLink(created.id, owner)).token
     const player = await seedUser("jogadora")
@@ -261,6 +262,29 @@ describe("Maddox 4 — campanha narrativa de ponta a ponta", () => {
         await playersTurn(id, owner, player, 1)
         expect(calls[2]!.userText).toContain("densidade **Concisa**")
         expect(calls[2]!.userText).toContain("até umas 60 palavras")
+    })
+
+    it("dificuldade dos combates (DND-42): só nos graus táticos, nas narrações (não nas respostas), e a edição vale na narração seguinte", async () => {
+        const { id, owner, player } = await narrativeTable({ rigor: "rigoroso", combatDifficulty: "facil" })
+        script.push([{ text: "Abertura." }], [{ text: "Há dois guardas." }], [{ text: "Turno 1 narrado." }])
+        await game.startCampaign(id, owner)
+        await waitForCampaignIdle(id)
+        expect(calls[0]!.userText).toContain("Dificuldade dos combates desta campanha (**Fácil**)")
+        expect(calls[0]!.userText).toContain("no máximo 3 goblins contra 4 personagens de nível 1")
+        await campaigns.updateCampaign(id, { combatDifficulty: "mortal" }, owner)
+        await game.submitGameAction(id, { kind: "question", content: "Quantos guardas há?" }, player)
+        await waitForCampaignIdle(id)
+        expect(calls[1]!.userText).not.toContain("Dificuldade dos combates")
+        await playersTurn(id, owner, player, 1)
+        expect(calls[2]!.userText).toContain("Dificuldade dos combates desta campanha (**Mortal**)")
+    })
+
+    it("dificuldade dos combates (DND-42): grau não tático não recebe a linha, mesmo com o valor gravado", async () => {
+        const { id, owner } = await narrativeTable({ rigor: "equilibrado", combatDifficulty: "facil" })
+        script.push([{ text: "Abertura." }])
+        await game.startCampaign(id, owner)
+        await waitForCampaignIdle(id)
+        expect(calls[0]!.userText).not.toContain("Dificuldade dos combates")
     })
 
     it("ferramenta com entrada inválida volta ao modelo como erro e a narração continua", async () => {

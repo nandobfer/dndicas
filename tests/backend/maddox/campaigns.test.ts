@@ -380,6 +380,54 @@ describe("Campanhas Maddox — edição e personagem", () => {
         expect(updateMaddoxCampaignSchema.safeParse({ density: "breve" }).success).toBe(true)
     })
 
+    it("dificuldade dos combates (DND-42): 5 passos com raridades distintas, Equilibrado no meio e por padrão", async () => {
+        const { MADDOX_COMBAT_DIFFICULTY_DEFAULT, MADDOX_COMBAT_DIFFICULTY_LEVEL_DEFS, MADDOX_COMBAT_DIFFICULTY_LEVELS } = await import("@/features/maddox/constants")
+        expect(MADDOX_COMBAT_DIFFICULTY_LEVELS).toEqual(["muito-facil", "facil", "equilibrado", "dificil", "mortal"])
+        expect(MADDOX_COMBAT_DIFFICULTY_DEFAULT).toBe("equilibrado")
+        expect(MADDOX_COMBAT_DIFFICULTY_LEVELS[2]).toBe(MADDOX_COMBAT_DIFFICULTY_DEFAULT)
+        expect(MADDOX_COMBAT_DIFFICULTY_LEVELS.map((level) => MADDOX_COMBAT_DIFFICULTY_LEVEL_DEFS[level].rarity)).toEqual(["common", "uncommon", "rare", "veryRare", "legendary"])
+        for (const level of MADDOX_COMBAT_DIFFICULTY_LEVELS) {
+            const def = MADDOX_COMBAT_DIFFICULTY_LEVEL_DEFS[level]
+            expect(def.label && def.description && def.encounter).toBeTruthy()
+            expect(def.rules.length).toBeGreaterThan(0)
+            expect(def.free.length).toBeGreaterThan(0)
+        }
+        expect(MADDOX_COMBAT_DIFFICULTY_LEVEL_DEFS.facil.encounter).toContain("no máximo 3 goblins contra 4 personagens de nível 1")
+        expect(MADDOX_COMBAT_DIFFICULTY_LEVEL_DEFS.facil.encounter).toContain("4 goblins bêbados ou sonolentos, com desvantagem nos ataques")
+        expect(MADDOX_COMBAT_DIFFICULTY_LEVEL_DEFS.equilibrado.encounter).toContain("4 goblins contra 4 personagens de nível 1")
+    })
+
+    it("dificuldade dos combates (DND-42): Equilibrado por padrão, escolhida na criação, editável pelo dono a qualquer momento (auditado)", async () => {
+        expect(await service.createCampaign({ name: "Padrão", rigor: "fiel-dnd" }, ids.owner)).toMatchObject({ combatDifficulty: "equilibrado" })
+        expect(recordAudit).toHaveBeenCalledWith(expect.objectContaining({ acao: "CRIAR", depois: expect.objectContaining({ combatDifficulty: "equilibrado" }) }))
+        const campaign = await service.createCampaign({ name: "Masmorra", rigor: "rigoroso", combatDifficulty: "mortal" }, ids.owner)
+        expect(campaign.combatDifficulty).toBe("mortal")
+        expect(recordAudit).toHaveBeenCalledWith(expect.objectContaining({ acao: "CRIAR", depois: expect.objectContaining({ combatDifficulty: "mortal" }) }))
+        await service.joinByInvite(await tokenOf(campaign.id), ids.ana)
+        await expect(service.updateCampaign(campaign.id, { combatDifficulty: "facil" }, ids.ana)).rejects.toMatchObject({ status: 403 })
+        // Em andamento, com o rigor já travado, a dificuldade continua editável (vale a partir do próximo combate).
+        await MaddoxCampaignModel.updateOne({ _id: campaign.id }, { $set: { status: "active", "scenarioInterview.status": "done" } })
+        recordAudit.mockClear()
+        expect(await service.updateCampaign(campaign.id, { combatDifficulty: "facil" }, ids.owner)).toMatchObject({ combatDifficulty: "facil", rigorLocked: true })
+        expect(recordAudit).toHaveBeenCalledWith(expect.objectContaining({ acao: "ATUALIZAR", antes: expect.objectContaining({ combatDifficulty: "mortal" }), depois: { combatDifficulty: "facil" } }))
+        expect((await MaddoxCampaignModel.findById(campaign.id).lean())?.combatDifficulty).toBe("facil")
+    })
+
+    it("dificuldade dos combates (DND-42): aceita num grau não tático (não perde o valor), campanha antiga é lida como Equilibrado e valor inválido é recusado", async () => {
+        const narrative = await service.createCampaign({ name: "Narrada", rigor: "narrativo", combatDifficulty: "dificil" }, ids.owner)
+        expect(narrative.combatDifficulty).toBe("dificil")
+        expect(await service.updateCampaign(narrative.id, { combatDifficulty: "muito-facil" }, ids.owner)).toMatchObject({ combatDifficulty: "muito-facil" })
+        await MaddoxCampaignModel.collection.updateOne({ _id: new mongoose.Types.ObjectId(narrative.id) }, { $unset: { combatDifficulty: "" } })
+        expect((await service.getCampaignDetail(narrative.id, ids.owner)).combatDifficulty).toBe("equilibrado")
+        const { createMaddoxCampaignSchema, updateMaddoxCampaignSchema } = await import("@/features/maddox/campaign-schemas")
+        expect(createMaddoxCampaignSchema.safeParse({ name: "Mesa", rigor: "rigoroso" }).success).toBe(true)
+        const invalid = createMaddoxCampaignSchema.safeParse({ name: "Mesa", rigor: "rigoroso", combatDifficulty: "impossivel" })
+        expect(invalid.success).toBe(false)
+        expect(invalid.error?.issues[0]?.message).toBe("Escolha uma dificuldade de combate válida")
+        expect(updateMaddoxCampaignSchema.safeParse({ combatDifficulty: "mortal" }).success).toBe(true)
+        expect(updateMaddoxCampaignSchema.safeParse({}).error?.issues[0]?.message).toBe("Nada para alterar")
+    })
+
     it("nível inicial (Maddox 5): só nos graus com ficha, o dono muda antes de começar (auditado), e o detalhe mostra nível e estágio", async () => {
         const campaign = await service.createCampaign({ name: "Mesa", rigor: "fiel-dnd" }, ids.owner)
         expect(campaign).toMatchObject({ startingLevel: null, startingStage: "" })

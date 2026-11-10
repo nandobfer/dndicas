@@ -57,6 +57,7 @@ const listItem = (over: Partial<MaddoxCampaignListItemDto> = {}): MaddoxCampaign
     sceneImages: true,
     hidePlayerActions: false,
     density: "equilibrada",
+    combatDifficulty: "equilibrado",
     startingLevel: null,
     startingStage: "",
     worldCatalog: { races: [], classes: [] },
@@ -113,6 +114,9 @@ describe("lista de campanhas", () => {
         expect(sameColor(within(second).getByText("Narrativo").style.color, rarityColors.common)).toBe(true)
         expect(within(second).getByText("Jogador")).toBeInTheDocument()
         expect(get).toHaveBeenCalledWith("/maddox/campaigns")
+        // DND-42: chip da dificuldade só no grau tático (Fiel ao D&D), não no Narrativo.
+        expect(within(first).getByTestId("maddox-combat-difficulty-chip")).toHaveTextContent("Combate equilibrado")
+        expect(within(second).queryByTestId("maddox-combat-difficulty-chip")).not.toBeInTheDocument()
     })
 
     it("card da lista: chip do nível nos graus com ficha; estágio narrativo longo aparece inteiro, sem reticências", async () => {
@@ -198,7 +202,7 @@ describe("lista de campanhas", () => {
 
         fireEvent.change(screen.getByLabelText("Nome da campanha"), { target: { value: "Nova Mesa" } })
         fireEvent.click(screen.getByRole("button", { name: "Criar campanha" }))
-        await waitFor(() => expect(post).toHaveBeenCalledWith("/maddox/campaigns", { name: "Nova Mesa", rigor: "fiel-dnd", density: "equilibrada", showCheckDc: false }))
+        await waitFor(() => expect(post).toHaveBeenCalledWith("/maddox/campaigns", { name: "Nova Mesa", rigor: "fiel-dnd", density: "equilibrada", combatDifficulty: "equilibrado", showCheckDc: false }))
         await waitFor(() => expect(push).toHaveBeenCalledWith("/campanhas/c9/entrevista/cenario"))
     })
 
@@ -216,7 +220,7 @@ describe("lista de campanhas", () => {
         await waitFor(() => expect(slider).toHaveAttribute("aria-valuetext", "Rigoroso"))
         fireEvent.change(screen.getByLabelText("Nome da campanha"), { target: { value: "Nova Mesa" } })
         fireEvent.click(screen.getByRole("button", { name: "Criar campanha" }))
-        await waitFor(() => expect(post).toHaveBeenCalledWith("/maddox/campaigns", { name: "Nova Mesa", rigor: "rigoroso", density: "equilibrada", showCheckDc: true }))
+        await waitFor(() => expect(post).toHaveBeenCalledWith("/maddox/campaigns", { name: "Nova Mesa", rigor: "rigoroso", density: "equilibrada", combatDifficulty: "equilibrado", showCheckDc: true }))
     })
 
     it("CD dos testes na criação: grau narrativo esconde o campo e não envia showCheckDc", async () => {
@@ -280,6 +284,42 @@ describe("lista de campanhas", () => {
         fireEvent.change(screen.getByLabelText("Nome da campanha"), { target: { value: "Mesa Curta" } })
         fireEvent.click(screen.getByRole("button", { name: "Criar campanha" }))
         await waitFor(() => expect(post).toHaveBeenCalledWith("/maddox/campaigns", expect.objectContaining({ name: "Mesa Curta", density: "breve" })))
+    })
+
+    it("dificuldade dos combates na criação (DND-42): só nos graus táticos, 5 passos com descrição no formato do rigor, e o valor vai no POST", async () => {
+        post.mockResolvedValue(ok(detail({ id: "c9", name: "Mesa Fácil", rigor: "rigoroso", combatDifficulty: "facil" })))
+        renderWithQueryClient(<CampaignsPage />)
+        fireEvent.click(await screen.findByRole("button", { name: /Nova campanha/ }))
+        const rigor = await screen.findByRole("slider", { name: "Grau de rigor da campanha" })
+        // Equilibrado (padrão) não tem combate tático: o card não aparece.
+        expect(screen.queryByRole("slider", { name: "Dificuldade dos combates da campanha" })).not.toBeInTheDocument()
+        fireEvent.keyDown(rigor, { key: "ArrowRight" })
+        await waitFor(() => expect(rigor).toHaveAttribute("aria-valuetext", "Rigoroso"))
+        const slider = await screen.findByRole("slider", { name: "Dificuldade dos combates da campanha" })
+        expect(slider).toHaveAttribute("aria-valuetext", "Equilibrado")
+        expect(screen.getByTestId("maddox-combat-difficulty-description")).toHaveTextContent("Equilibrado: Combates equilibrados")
+        expect(screen.getByText("• Adversários na medida do grupo (4 goblins para 4 personagens de nível 1)")).toBeInTheDocument()
+        for (const label of ["Muito fácil", "Fácil", "Difícil", "Mortal"]) expect(screen.getByRole("button", { name: label, hidden: true })).toBeInTheDocument()
+        fireEvent.keyDown(slider, { key: "ArrowLeft" })
+        await waitFor(() => expect(slider).toHaveAttribute("aria-valuetext", "Fácil"))
+        expect(screen.getByTestId("maddox-combat-difficulty-description")).toHaveTextContent("Fácil: Os combates são favoráveis ao grupo")
+        expect(screen.getByText("• Menos adversários do que personagens (no máximo 3 goblins para 4 personagens de nível 1)")).toBeInTheDocument()
+        expect(screen.getByText("• Ou a quantidade cheia, enfraquecida pela cena (bêbados, sonolentos, feridos), com desvantagem nos ataques")).toBeInTheDocument()
+        // Fiel ao D&D também mostra; voltar a um grau sem combate tático esconde.
+        fireEvent.keyDown(rigor, { key: "End" })
+        await waitFor(() => expect(rigor).toHaveAttribute("aria-valuetext", "Fiel ao D&D"))
+        expect(screen.getByRole("slider", { name: "Dificuldade dos combates da campanha" })).toBeInTheDocument()
+        fireEvent.keyDown(rigor, { key: "Home" })
+        await waitFor(() => expect(rigor).toHaveAttribute("aria-valuetext", "Narrativo"))
+        expect(screen.queryByRole("slider", { name: "Dificuldade dos combates da campanha" })).not.toBeInTheDocument()
+        // De volta ao Rigoroso, a escolha continua no formulário e vai no POST.
+        fireEvent.keyDown(rigor, { key: "End" })
+        fireEvent.keyDown(rigor, { key: "ArrowLeft" })
+        await waitFor(() => expect(rigor).toHaveAttribute("aria-valuetext", "Rigoroso"))
+        expect(screen.getByRole("slider", { name: "Dificuldade dos combates da campanha" })).toHaveAttribute("aria-valuetext", "Fácil")
+        fireEvent.change(screen.getByLabelText("Nome da campanha"), { target: { value: "Mesa Fácil" } })
+        fireEvent.click(screen.getByRole("button", { name: "Criar campanha" }))
+        await waitFor(() => expect(post).toHaveBeenCalledWith("/maddox/campaigns", expect.objectContaining({ name: "Mesa Fácil", rigor: "rigoroso", combatDifficulty: "facil" })))
     })
 
     it("Maddox indisponível: mostra o motivo no diálogo", async () => {
@@ -499,6 +539,34 @@ describe("página da campanha (lobby)", () => {
         fireEvent.click(within(dialog).getByRole("button", { name: "Salvar" }))
         await waitFor(() => expect(patch).toHaveBeenCalledWith("/maddox/campaigns/c1", { density: "detalhada" }))
         await waitFor(() => expect(screen.getByTestId("maddox-density-chip")).toHaveTextContent("Narração detalhada"))
+    })
+
+    it("editar a dificuldade dos combates (DND-42) com a campanha em andamento envia só combatDifficulty; o chip mostra o passo", async () => {
+        let current = detail({ status: "active", rigor: "rigoroso", rigorLocked: true, combatDifficulty: "equilibrado" })
+        get.mockImplementation(async (url: string) => (url.endsWith("/invite") ? ok({ token: TOKEN, rotatedAt: null }) : ok(current)))
+        patch.mockImplementation(async (_url: string, body: Record<string, unknown>) => {
+            current = { ...current, ...body }
+            return ok(current)
+        })
+        renderWithQueryClient(<CampaignPage campaignId="c1" />)
+        expect(await screen.findByTestId("maddox-combat-difficulty-chip")).toHaveTextContent("Combate equilibrado")
+        const dialog = await openEdit()
+        const slider = within(dialog).getByRole("slider", { name: "Dificuldade dos combates da campanha" })
+        expect(slider).not.toHaveAttribute("data-disabled")
+        fireEvent.keyDown(slider, { key: "End" })
+        await waitFor(() => expect(slider).toHaveAttribute("aria-valuetext", "Mortal"))
+        fireEvent.click(within(dialog).getByRole("button", { name: "Salvar" }))
+        await waitFor(() => expect(patch).toHaveBeenCalledWith("/maddox/campaigns/c1", { combatDifficulty: "mortal" }))
+        await waitFor(() => expect(screen.getByTestId("maddox-combat-difficulty-chip")).toHaveTextContent("Combate mortal"))
+    })
+
+    it("dificuldade dos combates (DND-42): grau sem combate tático não mostra o chip nem o card na edição", async () => {
+        get.mockImplementation(async (url: string) => (url.endsWith("/invite") ? ok({ token: TOKEN, rotatedAt: null }) : ok(detail({ rigor: "narrativo", combatDifficulty: "facil" }))))
+        renderWithQueryClient(<CampaignPage campaignId="c1" />)
+        expect(await screen.findByTestId("maddox-density-chip")).toBeInTheDocument()
+        expect(screen.queryByTestId("maddox-combat-difficulty-chip")).not.toBeInTheDocument()
+        const dialog = await openEdit()
+        expect(within(dialog).queryByRole("slider", { name: "Dificuldade dos combates da campanha" })).not.toBeInTheDocument()
     })
 
     it("nível inicial: chip no lobby; o dono muda pelo Select glass antes de começar (PATCH só com startingLevel)", async () => {

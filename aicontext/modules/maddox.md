@@ -945,7 +945,7 @@ reenviada (e a configuração relida) depois de `MADDOX_COMBAT_CLASSIFY_RETRY_MS
 | `apply_effect { alvo, condicao?, remover?, duracaoRodadas?, dano?, tipoDano?, cura?, descricao }` | Efeito adjudicado: condição (com duração) e dano/cura em dados rolados pelo servidor |
 | `request_damage_roll { personagem, dados, tipoDano?, alvo, motivo }` | Dano de uma ação livre aceita: o JOGADOR rola (espera) |
 | `offer_reaction { personagens[], gatilho, descricao, fonte? }` | Abre a janela (saiu do alcance, conjura magia, preparada, outro) para quem tem reação disponível; `saiu-do-alcance` exige `fonte` (o adversário) |
-| `get_combat` | Ordem, rodada, "agem agora", próxima vez, PV/CA/condições/ações |
+| `get_combat` | Ordem, rodada, "agem agora", próxima vez, PV/CA/condições/ações e a `descricao` de cada adversário (DND-42) |
 
 Tudo mexe numa **cópia de trabalho** no job da fila (`jobWorkspace`): ferramentas seguintes veem o PV já reduzido, e a cópia só é
 gravada (`commitTacticalWorkspace`: combate pela versão, PV e testes contra a morte na ficha, mortes) depois que a narração foi gerada,
@@ -971,7 +971,10 @@ tático em andamento" (estado do `get_combat`, com `agemAgora` = só o adversár
 (`tacticalTaskLines`: "nesta narração NENHUM adversário age" na narração da vez; "bloco de **Goblin 1**: SÓ ele age agora…" com o título
 "vez de Goblin 1"; continuação do mesmo bloco "Conclua a narração dele"), resultados das esperas na continuação
 (`waitRoundResults`) e a transcrição com os resumos dos cards. No OpenCode, a lista do MCP inclui `monster_action`, `apply_effect`,
-`request_damage_roll`, `offer_reaction`.
+`request_damage_roll`, `offer_reaction`. Desde a DND-42 a regra tática também orienta o adversário enfraquecido pela ficção (motivo na
+`descricao` do `start_combat`/`update_combat` e `modo: "desvantagem"` em cada ataque dele, só quando a cena justificar) e o
+`tacticalView` devolve a `descricao` (cortada em 200 caracteres) para a penalidade não se perder entre os blocos — a `condicao` em texto é
+sobrescrita pela faixa de PV depois do primeiro dano. Veja "Dificuldade dos combates (DND-42)".
 
 **DTO e tela.** `combat.tactical` (ordem com PV dos personagens, faixa "Ileso/Ferido/Muito ferido/Caído" dos adversários — sem PV nem
 CA —, condições, concentração, morrendo/estável/morto, quem age), `turn.combatActor`, `turn.pendingCombat`, `me.combat` (vez, economia,
@@ -1433,6 +1436,43 @@ e procura nas páginas seguintes, como as outras listas. Atualiza pelo `maddox.g
 Imagens pendentes ou com falha continuam só na mesa e no histórico.
 
 Sem permissão nova: criar/editar já exigem `maddox.play` e ser o dono; o diário exige `maddox.play` e ser membro ativo.
+
+## Dificuldade dos combates (DND-42)
+
+**Campo.** `campaign.combatDifficulty` (`MADDOX_COMBAT_DIFFICULTY_LEVELS`: `muito-facil`, `facil`, `equilibrado` — padrão
+`MADDOX_COMBAT_DIFFICULTY_DEFAULT`, o do meio —, `dificil`, `mortal`; `MADDOX_COMBAT_DIFFICULTY_LEVEL_DEFS` com rótulo, descrição, raridade
+common → legendary, `rules[]`/`free[]` no formato do card de rigor e `encounter`, o texto enviado ao narrador). É o **balanceamento dos
+adversários** contra o grupo (quantidade, força e condições), não o rigor das regras, e só **vale** nos graus com combate tático
+(`MADDOX_TACTICAL_COMBAT_RIGORS`: Rigoroso e Fiel ao D&D). Campanha antiga sem o campo é lida como `equilibrado` (default do Mongoose e
+do DTO; sem migração). `POST /api/maddox/campaigns` e `PATCH /api/maddox/campaigns/[id]` aceitam `combatDifficulty` opcional em
+**qualquer** grau (o valor não se perde se o grau mudar no lobby; inválido = 400 "Escolha uma dificuldade de combate válida"); o dono
+muda a qualquer momento, inclusive em andamento e com o rigor travado, com auditoria (`antes`/`depois`). Sem permissão nova
+(`maddox.play` e dono da campanha).
+
+| Passo | Raridade | Orientação (resumo) |
+| --- | --- | --- |
+| Muito fácil | common | Bem menos adversários e mais fracos (2 goblins para 4 personagens de nível 1); nunca ameaça real |
+| Fácil | uncommon | No máximo 3 goblins para 4 personagens de nível 1, **ou** os 4 enfraquecidos pela cena (bêbados, sonolentos), com desvantagem nos ataques |
+| Equilibrado | rare | Encontro médio pelo orçamento de XP do Guia do Mestre: 4 goblins para 4 personagens de nível 1 |
+| Difícil | veryRare | No limite do orçamento de XP: mais adversários ou monstros mais fortes |
+| Mortal | legendary | Acima do orçamento, com risco real de morte |
+
+**Prompt.** `combatDifficultyLine(level)` vai no **texto da tarefa** (`narratorTaskText(task, { combatDifficulty })`), como a densidade,
+para valer já no próximo combate mesmo com a sessão do OpenCode reaproveitada. O narrador (`narrator.ts`) só a envia nos graus táticos,
+nas narrações **sem combate tático em andamento** (`!task.tactical`, onde `start_combat` pode ser chamado) e nunca nas respostas às
+perguntas: por isso a mudança vale "a partir do próximo combate". A linha manda contar os personagens e o nível antes de escolher
+quantidade e monstro, lembra que no Fiel ao D&D os monstros vêm só do catálogo (o ajuste é pela quantidade, pela escolha do monstro e
+pelas condições) e vale também para reforços (`update_combat`). **Decisão do dono:** a desvantagem dos adversários é só orientação de
+prompt (sem campo nem regra nova no motor) e precisa fazer sentido narrativo — a linha e a regra tática exigem motivo na cena e proíbem
+enfraquecer todos os adversários em todo combate; sem motivo, a dificuldade baixa pela quantidade ou por um monstro mais fraco. O
+adversário enfraquecido tem o motivo na `descricao` (que volta no `get_combat`/`tacticalView`) e ataca com `modo: "desvantagem"` no
+`monster_action`. Não é validador: o modelo pode errar a conta.
+
+**Tela.** `CombatDifficultyCard` (cópia estrutural do `DensityCard`: slider com 5 marcas, cor de raridade, descrição animada e as
+colunas "Nos encontros" e "Fica com o Maddox", rodapé "valendo a partir do próximo combate") na criação (`CreateCampaignDialog`) e na
+edição (`EditCampaignDialog`), **só** quando o rigor do formulário é tático (`useWatch("rigor")`); a criação envia `combatDifficulty`
+só nos graus táticos, a edição só se mudou. `CombatDifficultyChip` ("Combate fácil") no card da lista e na página da campanha, só nos
+graus táticos.
 
 ## Declarações dos outros jogadores ocultas (DND-36)
 
