@@ -20,8 +20,6 @@ export const SEAT_COLORS: Record<MaddoxSeatStatus, string> = {
     preparing: rarityColors.common,
     watching: rarityColors.rare,
     rolling: rarityColors.mythic,
-    acting: rarityColors.rare,
-    stuck: rarityColors.artifact,
 }
 
 interface Props {
@@ -78,7 +76,7 @@ export function TurnPanel({ state, presence, color, skipping, onSkip, rollingFor
                                         {participant.memberId === state.me.memberId ? " · você" : ""}
                                     </p>
                                 </div>
-                                <RarityChip color={SEAT_COLORS[seat]}>{MADDOX_SEAT_LABELS[seat]}</RarityChip>
+                                {!participant.opex && <RarityChip color={SEAT_COLORS[seat]}>{MADDOX_SEAT_LABELS[seat]}</RarityChip>}
                                 {canRollFor &&
                                     participant.memberId !== state.me.memberId &&
                                     state.turn.pendingChecks

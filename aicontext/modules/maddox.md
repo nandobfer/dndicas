@@ -1631,7 +1631,16 @@ teto `MADDOX_OPEX_GENERATION_TIMEOUT_MS`. Instruções = configuração + papel 
   dono: `POST …/game/opex/[memberId]/retry` ou `…/skip` ("não fez nada" / `skipCombatTurn`), auditados. Remover o Opex da vez libera.
 - DTO: `turn.opexActor` (`memberId`, `characterName`, `failed`, `error`, `combat`), `participant.opex`, `message.opex`, `slot.opex`,
   `journal party.opex`. Tela: `OpexChip` (lobby, lista, "Na mesa", chat, diário, ordem de iniciativa), faixa `opexBannerText`,
-  `OpexFailureBanner` (dono), assento "Agindo…"/"Parado: aguardando o dono".
+  `OpexFailureBanner` (dono) e o balão "<Nome> está agindo…" no chat (DND-45, abaixo).
+- **Vez do Opex no chat (DND-45).** `opexActingView(state)` (`game-view.ts`) devolve o Opex da vez (`turn.opexActor` na fase
+  `players`, inclusive no combate tático, com o retrato do participante) ou `null` em falha, no turno do mestre e fora do jogo.
+  `GameMessageList` (prop `opexActing`) desenha um único balão `data-testid="opex-acting"` no fim da conversa, no mesmo estilo do
+  "O Maddox está narrando…" (`SpeakerBubble` com retrato, nome, `OpexChip` e as bolinhas de `WritingIndicator`); ele deriva só do
+  estado do jogo, então não duplica em re-render nem em reconexão. O diário (só leitura) nunca mostra o balão. A falha continua só
+  na faixa e no `OpexFailureBanner`.
+- **Lateral sem chip de situação para o Opex (DND-45).** Por decisão do dono, que contraria o "manter o indicador lateral" da
+  especificação da DND-45, o painel "Na mesa" (`TurnPanel`) não mostra nenhum chip de situação para Personagens Opex (nem
+  "Aguardando", "Agindo…", "Parado", "Declarou"…); os estados `acting`/`stuck` saíram de `seatStatus`. O "Pular" do dono continua.
 
 **Memórias**: ver `aicontext/modules/engramind.md` › Personagens Opex.
 

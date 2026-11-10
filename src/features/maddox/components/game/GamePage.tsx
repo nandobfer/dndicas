@@ -14,7 +14,7 @@ import { apiErrorCode, apiErrorMessage } from "@/lib/api"
 import { MADDOX_TURN_PHASE_LABELS } from "../../constants"
 import type { MaddoxGameMessageDto, MaddoxGameStateDto } from "../../game-types"
 import type { MaddoxGameActionInput } from "../../game-schemas"
-import { actionOptionsView, combatBannerText, newestRewindNoticeId, composerBlockReason, masterBannerText, opexBannerText, reminderBlockReason, turnProgress, visibleLiveGenerations } from "../../game-view"
+import { actionOptionsView, combatBannerText, newestRewindNoticeId, composerBlockReason, masterBannerText, opexActingView, opexBannerText, reminderBlockReason, turnProgress, visibleLiveGenerations } from "../../game-view"
 import { useMaddoxOpexTableActions } from "../../hooks/useMaddoxOpex"
 import { OpexFailureBanner } from "./OpexFailureBanner"
 import type { MaddoxCombatActionInput } from "../../combat-schemas"
@@ -263,6 +263,7 @@ function GameTable({ state, presence, stream }: { state: MaddoxGameStateDto; pre
                         color={color}
                         narrating={masterTurn && !state.turn.failed && !state.turn.awaitingChecks}
                         live={live}
+                        opexActing={opexActingView(state)}
                         hasMore={hasMore}
                         loadingMore={loadingMore}
                         onLoadMore={() => void loadMore()}
