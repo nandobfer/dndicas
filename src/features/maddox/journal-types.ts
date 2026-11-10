@@ -20,6 +20,8 @@ export interface MaddoxJournalNpcDto {
     status: MaddoxNpcStatus
     publicDescription: string
     updatedAt: string
+    /** NPC Opex (DND-27): chip "Opex" para todos. */
+    opex?: boolean
 }
 
 export interface MaddoxJournalMemoryDto {
@@ -65,6 +67,8 @@ export interface MaddoxJournalSummaryDto {
     counts: { npcs: number; party: number; images: number; memories: Record<MaddoxCampaignMemoryKind, number> }
     /** As anotações vêm do Engramind; `true` quando a rede não respondeu (contagens zeradas, sem missões). */
     memoriesUnavailable: boolean
+    /** Dono com a permissão "Adicionar Personagens Opex": vê "Promover a NPC Opex" e "Remover Opex" na aba NPCs (DND-27). */
+    canManageOpexNpcs?: boolean
 }
 
 /**

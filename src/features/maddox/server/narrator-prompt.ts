@@ -188,6 +188,8 @@ export interface NarratorNpc {
     visibility: MaddoxVisibility
     publicDescription: string
     masterNotes: string
+    /** NPC Opex (DND-27): tem agente próprio, consultado nas narrações. */
+    opex?: boolean
 }
 
 export interface NarratorMemory {
@@ -286,7 +288,8 @@ function npcsBlock(npcs: readonly NarratorNpc[]): string | null {
     const lines = npcs.map((npc) => {
         const secret = npc.masterNotes.trim() ? ` — [SÓ O MESTRE] ${oneLine(npc.masterNotes, 240)}` : ""
         const hidden = npc.visibility === "master" ? " [desconhecido dos jogadores]" : ""
-        return `- **${npc.name}** (${npc.status})${hidden}: ${oneLine(npc.publicDescription, 240) || "sem descrição"}${secret}`
+        const opex = npc.opex ? " [NPC Opex]" : ""
+        return `- **${npc.name}** (${npc.status})${hidden}${opex}: ${oneLine(npc.publicDescription, 240) || "sem descrição"}${secret}`
     })
     return ["## NPCs", ...lines].join("\n")
 }
@@ -307,14 +310,14 @@ function memoriesBlock(memories: readonly NarratorMemory[]): string | null {
     return parts.join("\n")
 }
 
-export type NarratorToolMode = { kind: "ai-sdk" } | { kind: "mcp"; server: string; turnToken: string; checks?: boolean; combat?: boolean; tactical?: boolean; sceneImages?: boolean; actionOptions?: boolean }
+export type NarratorToolMode = { kind: "ai-sdk" } | { kind: "mcp"; server: string; turnToken: string; checks?: boolean; combat?: boolean; tactical?: boolean; sceneImages?: boolean; actionOptions?: boolean; opexNpcs?: boolean }
 
 /** Bloco das ferramentas: na AI SDK elas vêm na chamada; no OpenCode, pelo MCP com o token de turno. */
 function toolsBlock(mode: NarratorToolMode): string | null {
     if (mode.kind === "ai-sdk") return null
     return [
         "## Ferramentas desta narração",
-        `- As ferramentas de anotações da campanha estão no servidor MCP \`${mode.server}\` (get_campaign_state, update_campaign_state, list_npcs, get_npc, save_npc, search_memories, save_memory, update_character_state, resolve_reminder${mode.checks ? ", request_check" : ""}${mode.combat ? ", get_combat, start_combat, update_combat, end_combat" : ""}${mode.tactical ? ", monster_action, apply_effect, request_damage_roll, offer_reaction" : ""}${mode.sceneImages ? ", request_scene_image" : ""}${mode.actionOptions ? ", suggest_actions" : ""}, ${MADDOX_CATALOG_TOOL_NAMES.search}, ${MADDOX_CATALOG_TOOL_NAMES.get}).`,
+        `- As ferramentas de anotações da campanha estão no servidor MCP \`${mode.server}\` (get_campaign_state, update_campaign_state, list_npcs, get_npc, save_npc, search_memories, save_memory, update_character_state, resolve_reminder${mode.checks ? ", request_check" : ""}${mode.combat ? ", get_combat, start_combat, update_combat, end_combat" : ""}${mode.tactical ? ", monster_action, apply_effect, request_damage_roll, offer_reaction" : ""}${mode.sceneImages ? ", request_scene_image" : ""}${mode.actionOptions ? ", suggest_actions" : ""}, promover_npc_opex, desfazer_npc_opex, gravar_memoria_npc_opex${mode.opexNpcs ? ", consultar_npc_opex" : ""}, ${MADDOX_CATALOG_TOOL_NAMES.search}, ${MADDOX_CATALOG_TOOL_NAMES.get}).`,
         `- Em TODA chamada a essas ferramentas, envie o campo \`turno\` exatamente com este valor: \`${mode.turnToken}\`.`,
         "- Não use outras ferramentas (arquivos, terminal, web): a campanha vive só nessas anotações.",
     ].join("\n")
@@ -389,7 +392,32 @@ export interface NarratorTacticalTask {
      * Bloco desta geração (DND-25): a narração do que já aconteceu (`character`, nenhum adversário age) ou a vez de UM
      * adversário (`npc`). `resumed` = continuação do mesmo bloco depois de uma espera; `remaining` = os que vêm depois.
      */
-    block?: { kind: "character" | "npc"; actor: string | null; resumed: boolean; waits: number; remaining: readonly string[] } | null
+    block?: {
+        kind: "character" | "npc"
+        actor: string | null
+        /** Chave do ator do bloco (servidor; não entra no texto). */
+        actorKey?: string | null
+        resumed: boolean
+        waits: number
+        remaining: readonly string[]
+        /** NPC Opex na vez (DND-27): a ação que o agente dele escolheu (o servidor consultou antes da narração). */
+        opexDecision?: NarratorOpexNpcDecision | null
+    } | null
+}
+
+/** Decisão do agente de um NPC Opex na vez dele no combate tático. */
+export interface NarratorOpexNpcDecision {
+    npcName: string
+    action: string
+    targets: readonly string[]
+    speech: string
+}
+
+/** Linha da decisão do NPC Opex na tarefa do bloco dele. */
+export function opexNpcDecisionLine(decision: NarratorOpexNpcDecision): string {
+    const targets = decision.targets.length ? ` em ${decision.targets.join(", ")}` : ""
+    const speech = decision.speech.trim() ? `; fala: "${decision.speech.trim()}"` : ""
+    return `O NPC Opex ${decision.npcName} decidiu: ${decision.action}${targets}${speech}. Execute exatamente essa ação com \`monster_action\` e narre a partir dela.`
 }
 
 export type NarratorTask =
@@ -431,6 +459,7 @@ export function tacticalTaskLines(tactical: NarratorTacticalTask | null | undefi
             block.resumed
                 ? `Se ainda faltar algum ataque dos Ataques Múltiplos de ${block.actor}, chame \`monster_action\` antes de narrar.`
                 : `Primeiro chame \`monster_action\` (Ataques Múltiplos = uma chamada por ataque, em sequência) ou \`apply_effect\`, ANTES de escrever; só depois narre, em um ou dois parágrafos, o que ${block.actor} fez e o resultado. Se ele não atacar (move-se, foge, usa Disparada), apenas narre, sem ferramentas.`,
+            ...(!block.resumed && block.opexDecision ? [opexNpcDecisionLine(block.opexDecision)] : []),
             "Não narre outros adversários nem decida o que os personagens fazem.",
             block.remaining.length
                 ? `Depois dele, cada um no próprio bloco: ${block.remaining.join(", ")}. Termine no fim da ação de ${block.actor}.`
@@ -500,16 +529,31 @@ export function combatDifficultyReinforcementLine(level: MaddoxCombatDifficultyL
 export const MADDOX_ACTION_OPTIONS_TASK_LINE = `Se a narração terminar no ponto de decisão (sem testes pedidos), chame \`suggest_actions\` no fim com 2 a ${MADDOX_ACTION_OPTIONS_MAX} ações curtas, plausíveis e variadas para cada personagem, em primeira pessoa, como o jogador declararia ("Examino a porta…"). Não cite as sugestões na narração.`
 
 /**
- * Texto da tarefa da geração; com `density`, as narrações (não as respostas) recebem a linha de tamanho; com
- * `combatDifficulty`, a da dificuldade dos combates (DND-42: completa fora do combate tático, curta para reforços nele); com `actionOptions`, a linha das sugestões de ação.
+ * Seção "NPCs Opex" (DND-27) da tarefa das narrações (nunca das respostas): quem é NPC Opex e a regra de consultar o agente
+ * antes de narrar a fala ou a ação dele.
  */
-export function narratorTaskText(task: NarratorTask, options: { density?: MaddoxDensityLevel | null; combatDifficulty?: MaddoxCombatDifficultyLevel | null; actionOptions?: boolean } = {}): string {
+export function opexNpcsTaskSection(names: readonly string[]): string | null {
+    if (!names.length) return null
+    return [
+        "## NPCs Opex",
+        `NPCs Opex desta campanha: ${names.join(", ")}.`,
+        "Se algum deles aparece ou interage com os personagens nesta narração, chame `consultar_npc_opex` ANTES de narrar a fala ou a ação dele e siga a decisão (você resolve os resultados). Se a consulta falhar, decida você o que ele fala e faz.",
+    ].join("\n")
+}
+
+/**
+ * Texto da tarefa da geração; com `density`, as narrações (não as respostas) recebem a linha de tamanho; com
+ * `combatDifficulty`, a da dificuldade dos combates (DND-42: completa fora do combate tático, curta para reforços nele); com
+ * `actionOptions`, a linha das sugestões de ação; com `opexNpcs`, a seção dos NPCs Opex (DND-27).
+ */
+export function narratorTaskText(task: NarratorTask, options: { density?: MaddoxDensityLevel | null; combatDifficulty?: MaddoxCombatDifficultyLevel | null; actionOptions?: boolean; opexNpcs?: readonly string[] } = {}): string {
     if (task.kind === "answer") return taskBody(task)
     return [
         taskBody(task),
         options.density ? narrationDensityLine(options.density) : null,
         options.combatDifficulty ? (task.tactical ? combatDifficultyReinforcementLine(options.combatDifficulty) : combatDifficultyLine(options.combatDifficulty)) : null,
         options.actionOptions ? MADDOX_ACTION_OPTIONS_TASK_LINE : null,
+        opexNpcsTaskSection(options.opexNpcs ?? []),
     ]
         .filter(Boolean)
         .join("\n\n")

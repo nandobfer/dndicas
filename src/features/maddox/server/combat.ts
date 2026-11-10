@@ -298,6 +298,8 @@ async function afterCombatEnded(campaign: CampaignRef, combat: IMaddoxCombat, tu
         for (const item of combat.combatants) {
             const status = npcStatusAfter(item.outcome)
             if (item.npcId && status) await MaddoxNpcModel.updateOne({ _id: item.npcId, campaignId: campaign._id }, { $set: { status } })
+            // NPC Opex que morre no combate deixa de ser Opex sozinho (DND-27).
+            if (item.npcId && status === "dead") await (await import("./opex-npcs")).retireOpexNpcIfDead(campaign._id, item.npcId)
         }
     })
     await step("characters", async () => {
@@ -487,14 +489,14 @@ export async function countCombatNarration(campaignId: Types.ObjectId, ids: read
 
 // ── DTOs ───────────────────────────────────────────────────────────────────────
 
-export function combatDto(combat: IMaddoxCombat): MaddoxGameCombatDto {
+export function combatDto(combat: IMaddoxCombat, opexNpcIds: ReadonlySet<string> = new Set()): MaddoxGameCombatDto {
     return {
         id: String(combat._id),
         title: combat.title,
         location: combat.location ?? "",
         startedTurn: combat.startedTurn,
         masterTurns: combat.masterTurns ?? 0,
-        combatants: (combat.combatants ?? []).map((item) => ({ name: item.name, side: item.side, quantity: item.quantity ?? 1, condition: item.condition ?? "", outcome: item.outcome ?? null })),
+        combatants: (combat.combatants ?? []).map((item) => ({ name: item.name, side: item.side, quantity: item.quantity ?? 1, condition: item.condition ?? "", outcome: item.outcome ?? null, ...(item.npcId && opexNpcIds.has(String(item.npcId)) ? { opex: true } : {}) })),
         mode: combat.mode === "tactical" ? "tactical" : "narrative",
         tactical: null,
     }
@@ -503,11 +505,11 @@ export function combatDto(combat: IMaddoxCombat): MaddoxGameCombatDto {
 const rewardDto = (reward: IMaddoxCombatReward): MaddoxCombatRewardDto => ({ kind: reward.kind, description: rewardText(reward), characterName: reward.characterName ?? null, applied: Boolean(reward.applied), warning: reward.warning ?? null })
 
 /** Card do combate: o início mostra o encontro; o fim, o desfecho (sem notas do mestre nem a cena final). */
-export function combatEventDto(combat: IMaddoxCombat, event: "start" | "end" | "order"): MaddoxGameCombatEventDto {
-    const base = combatDto(combat)
+export function combatEventDto(combat: IMaddoxCombat, event: "start" | "end" | "order", opexNpcIds: ReadonlySet<string> = new Set()): MaddoxGameCombatEventDto {
+    const base = combatDto(combat, opexNpcIds)
     if (event === "order") {
         // Ordem de iniciativa: o retrato da ordem como está (sem PV, que a tela lê do combate ativo).
-        const tactical = combat.mode === "tactical" && combat.tactical ? tacticalSnapshot(combat as TacticalCombat) : null
+        const tactical = combat.mode === "tactical" && combat.tactical ? tacticalSnapshot(combat as TacticalCombat, new Map(), new Map(), opexNpcIds) : null
         return { ...base, tactical, event, outcome: null, summary: "", rewards: [], endedTurn: null }
     }
     if (event === "start") return { ...base, event, outcome: null, summary: "", rewards: [], endedTurn: null, combatants: base.combatants.map((item) => ({ ...item, outcome: null })) }

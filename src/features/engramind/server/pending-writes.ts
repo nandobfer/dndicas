@@ -15,6 +15,8 @@ export interface IPendingWrite {
     body: Record<string, unknown>
     /** Personagem Opex (DND-26): a gravação sai com o token do agente dele, não com o do Maddox. */
     agentMemberId?: string | null
+    /** NPC Opex (DND-27): a gravação sai com o token do agente do NPC. */
+    agentNpcId?: string | null
     attempts: number
     lastError: string | null
     /** Recusa definitiva (validação): fica visível na aba Sincronização até ser descartada. */
@@ -31,6 +33,7 @@ const schema = new Schema<IPendingWrite>(
         channel: { type: String, required: true },
         body: { type: Schema.Types.Mixed, required: true },
         agentMemberId: { type: String, default: null },
+        agentNpcId: { type: String, default: null },
         attempts: { type: Number, default: 0 },
         lastError: { type: String, default: null },
         failed: { type: Boolean, default: false },

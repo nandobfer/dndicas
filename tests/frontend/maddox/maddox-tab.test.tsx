@@ -38,13 +38,18 @@ vi.mock("@/features/maddox/hooks/useMaddoxSettings", () => ({
     useDeleteMaddoxSession: () => ({ mutate: deleteSession, isPending: false }),
     useMaddoxMcpStatus: () => ({ data: mcpStatus, isLoading: false, isError: false, isFetching: false, refetch: vi.fn() }),
     useRegisterMaddoxMcp: () => ({ mutate: registerMcp, isPending: false }),
-    useMaddoxOpexMemories: () => ({ data: opexMemories, isLoading: false, isError: false, error: null }),
-    useMaddoxOpexMemoryMutations: () => ({ create: { mutate: createOpexMemory, isPending: false }, update: { mutate: updateOpexMemory, isPending: false }, remove: { mutate: removeOpexMemory, isPending: false } }),
+    useMaddoxOpexMemories: (endpoint = "opex-memories") => ({ data: endpoint === "opex-npc-memories" ? npcOpexMemories : opexMemories, isLoading: false, isError: false, error: null }),
+    useMaddoxOpexMemoryMutations: (endpoint = "opex-memories") =>
+        endpoint === "opex-npc-memories"
+            ? { create: { mutate: createNpcOpexMemory, isPending: false }, update: { mutate: vi.fn(), isPending: false }, remove: { mutate: vi.fn(), isPending: false } }
+            : { create: { mutate: createOpexMemory, isPending: false }, update: { mutate: updateOpexMemory, isPending: false }, remove: { mutate: removeOpexMemory, isPending: false } },
 }))
 const createOpexMemory = vi.fn()
 const updateOpexMemory = vi.fn()
 const removeOpexMemory = vi.fn()
 let opexMemories: Array<{ id: string; title: string; text: string; updatedAt: string | null }> = []
+const createNpcOpexMemory = vi.fn()
+let npcOpexMemories: Array<{ id: string; title: string; text: string; updatedAt: string | null }> = []
 
 /** Modelos falsos por provedor (vazio = nenhum). */
 let aiModels: Record<string, Array<{ id: string; name: string; variants: string[]; group: string | null; contextWindow: number | null }>> = {}
@@ -286,15 +291,49 @@ describe("aba Agente Maddox", () => {
         expect((screen.getByLabelText("Instruções") as HTMLTextAreaElement).value).toBe(DEFAULT_MADDOX_SETTINGS.opexCharacterInstructions)
 
         expect(screen.getByTestId("opex-global-memory")).toHaveTextContent("Prefira cooperar.")
-        fireEvent.click(screen.getByRole("button", { name: /Incluir memória/ }))
+        // Os cards das memórias globais do Personagem Opex e dos NPCs Opex (DND-27) ficam lado a lado.
+        const card = screen.getByTestId("maddox-opex-memory-card")
+        fireEvent.click(within(card).getByRole("button", { name: /Incluir memória/ }))
         fireEvent.change(screen.getByLabelText("Título"), { target: { value: "Fale pouco" } })
         fireEvent.change(screen.getByLabelText("Memória"), { target: { value: "Declarações curtas." } })
-        fireEvent.click(screen.getByRole("button", { name: "Incluir memória" }))
+        fireEvent.click(within(card).getByRole("button", { name: "Incluir memória" }))
         expect(createOpexMemory).toHaveBeenCalledWith({ title: "Fale pouco", text: "Declarações curtas." }, expect.anything())
         fireEvent.click(screen.getByRole("button", { name: "Remover Coopere" }))
         fireEvent.click(within(await screen.findByRole("alertdialog")).getByRole("button", { name: "Remover" }))
         expect(removeOpexMemory).toHaveBeenCalledWith("m_1", expect.anything())
         opexMemories = []
+    })
+
+    it("NPCs Opex (DND-27): limite por campanha no mesmo Salvar (vazio = sem limite) e memórias globais dos NPCs Opex à parte", async () => {
+        npcOpexMemories = [{ id: "n_1", title: "Estranhos", text: "NPCs desconfiam de estranhos armados.", updatedAt: null }]
+        createNpcOpexMemory.mockReset()
+        renderTab()
+        fireEvent.click(screen.getByRole("tab", { name: "Personagem Opex" }))
+        const limit = (await screen.findByLabelText("Limite de NPCs Opex por campanha")) as HTMLInputElement
+        expect(limit.value).toBe("")
+        expect(limit.placeholder).toBe("Sem limite")
+        expect(screen.getByText("Vazio = sem limite; 0 desliga a promoção. Baixar o limite não desfaz ninguém: só bloqueia novas promoções.")).toBeTruthy()
+        fireEvent.change(limit, { target: { value: "0" } })
+        await waitFor(() => expect((screen.getByRole("button", { name: "Salvar" }) as HTMLButtonElement).disabled).toBe(false))
+        fireEvent.click(screen.getByRole("button", { name: "Salvar" }))
+        await waitFor(() => expect(saveSettings).toHaveBeenCalled())
+        expect(lastSaved().opexNpcLimit).toBe(0)
+        fireEvent.change(screen.getByLabelText("Limite de NPCs Opex por campanha"), { target: { value: "" } })
+        await waitFor(() => expect((screen.getByRole("button", { name: "Salvar" }) as HTMLButtonElement).disabled).toBe(false))
+        fireEvent.click(screen.getByRole("button", { name: "Salvar" }))
+        await waitFor(() => expect(saveSettings).toHaveBeenCalledTimes(2))
+        expect(lastSaved().opexNpcLimit).toBeNull()
+
+        const card = screen.getByTestId("maddox-opex-npc-memory-card")
+        expect(within(card).getByText("Memórias globais dos NPCs Opex")).toBeTruthy()
+        expect(screen.getByText("NPCs desconfiam de estranhos armados.")).toBeTruthy()
+        fireEvent.click(within(card).getByRole("button", { name: /Incluir memória/ }))
+        fireEvent.change(screen.getByLabelText("Título"), { target: { value: "Vilões" } })
+        fireEvent.change(screen.getByLabelText("Memória"), { target: { value: "Vilões não se rendem fácil." } })
+        fireEvent.click(within(card).getByRole("button", { name: "Incluir memória" }))
+        expect(createNpcOpexMemory).toHaveBeenCalledWith({ title: "Vilões", text: "Vilões não se rendem fácil." }, expect.anything())
+        expect(createOpexMemory).not.toHaveBeenCalledWith({ title: "Vilões", text: "Vilões não se rendem fácil." }, expect.anything())
+        npcOpexMemories = []
     })
 
     it("seção OpenCode: muda a política e salva", async () => {

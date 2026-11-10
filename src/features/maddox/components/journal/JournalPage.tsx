@@ -152,7 +152,7 @@ function Journal({ summary }: { summary: MaddoxJournalSummaryDto }) {
                                 <JournalImageGallery campaignId={summary.campaignId} color={color} kind={imageKind} />
                             </div>
                         )}
-                        {tab === "npcs" && <JournalNpcList campaignId={summary.campaignId} color={color} />}
+                        {tab === "npcs" && <JournalNpcList campaignId={summary.campaignId} color={color} manageOpex={Boolean(summary.canManageOpexNpcs)} />}
                         {tab === "locais" && <JournalMemoryList campaignId={summary.campaignId} color={color} kind="local" />}
                         {tab === "missoes" && (
                             <div className="space-y-4">

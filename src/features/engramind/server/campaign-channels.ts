@@ -114,6 +114,10 @@ export async function syncCampaignChannelLifecycle(campaign: CampaignNetworkInpu
         const { setOpexChannelsArchived } = await import("./opex-characters")
         const opexChanged = await setOpexChannelsArchived(client, campaign.id, archived)
         if (opexChanged) await auditEngramind(actorId, archived ? "archive_channel" : "restore_channel", AcaoAuditoria.ATUALIZAR, { campanha: campaign.id, personagensOpex: opexChanged })
+        // Canais individuais dos NPCs Opex ativos (DND-27) também.
+        const { setOpexNpcChannelsArchived } = await import("./opex-npcs")
+        const npcChanged = await setOpexNpcChannelsArchived(client, campaign.id, archived)
+        if (npcChanged) await auditEngramind(actorId, archived ? "archive_channel" : "restore_channel", AcaoAuditoria.ATUALIZAR, { campanha: campaign.id, npcsOpex: npcChanged })
     } catch (error) {
         engramindLog.warn({ campaignId: campaign.id, err: messageOf(error) }, "[engramind] canais da campanha não arquivados/restaurados")
     }

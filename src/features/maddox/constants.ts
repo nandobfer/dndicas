@@ -996,6 +996,29 @@ export const MADDOX_OPEX_LABEL = "Personagem Opex"
 export const MADDOX_OPEX_UNNAMED_LABEL = "Personagem Opex em criação"
 
 export const MADDOX_OPEX_FAILED_MESSAGE = "O Personagem Opex não conseguiu agir agora."
+
+// ── NPCs Opex (DND-27) ────────────────────────────────────────────────────────
+
+/** Teto de cada consulta ao agente de um NPC Opex: roda DENTRO do teto da narração do Maddox. */
+export const MADDOX_OPEX_NPC_TIMEOUT_MS = 60 * 1000
+/** Maior limite de NPCs Opex por campanha aceito na configuração (vazio = sem limite). */
+export const MADDOX_OPEX_NPC_LIMIT_MAX = 100
+/** Consultas a NPCs Opex por narração (o mesmo NPC na mesma narração reaproveita a decisão). */
+export const MADDOX_OPEX_NPC_CONSULTS_PER_NARRATION = 3
+/** Origens do consumo medido dos NPCs Opex. */
+export const MADDOX_OPEX_NPC_CONSUMPTION_ORIGIN = "maddox-opex-npc"
+export const MADDOX_OPEX_NPC_COMBAT_CONSUMPTION_ORIGIN = "maddox-opex-npc-combat"
+/** Autor das promoções feitas pelo próprio Maddox (ferramenta do narrador). */
+export const MADDOX_OPEX_NPC_SYSTEM_ACTOR = "system:maddox"
+/** Por que um NPC deixou de ser Opex. */
+export const MADDOX_OPEX_NPC_RETIRE_REASONS = ["maddox", "owner", "death"] as const
+export type MaddoxOpexNpcRetireReason = (typeof MADDOX_OPEX_NPC_RETIRE_REASONS)[number]
+/** Linha abaixo da narração (só para o dono) quando o agente de um NPC Opex não respondeu. */
+/** Resposta ao Maddox quando o agente do NPC Opex falha (ferramenta e combate tático): sem o motivo. */
+export const maddoxOpexNpcFallbackNote = (name: string) => `O NPC Opex não respondeu: decida você o que ${name} fala e faz nesta narração.`
+
+export const maddoxOpexNpcFailureLine = (name: string) => `O NPC Opex ${name} não respondeu; o Maddox decidiu por ele nesta narração.`
+
 export const MADDOX_OPEX_INTERVIEW_FAILED_MESSAGE = "A entrevista do Personagem Opex parou."
 
 /** Critério da preparação da mesa de combate (DND-41). O contrato da resposta fica fixo no código. */

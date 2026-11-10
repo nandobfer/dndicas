@@ -112,21 +112,27 @@ export interface MaddoxOpexGlobalMemoryDto {
     updatedAt: string | null
 }
 
-const OPEX_MEMORIES_KEY = [...MADDOX_SETTINGS_KEY, "opex-memories"] as const
+/** Canal das memórias globais: Personagem Opex (DND-26) ou NPCs Opex (DND-27). */
+export type MaddoxOpexMemoriesEndpoint = "opex-memories" | "opex-npc-memories"
 
-export const useMaddoxOpexMemories = () =>
+const opexMemoriesKey = (endpoint: MaddoxOpexMemoriesEndpoint) => [...MADDOX_SETTINGS_KEY, endpoint] as const
+
+export const useMaddoxOpexMemories = (endpoint: MaddoxOpexMemoriesEndpoint = "opex-memories") =>
     useQuery({
-        queryKey: OPEX_MEMORIES_KEY,
-        queryFn: async () => unwrapApi((await api.get<ApiResponse<MaddoxOpexGlobalMemoryDto[]>>(`${BASE}/opex-memories`)).data),
+        queryKey: opexMemoriesKey(endpoint),
+        queryFn: async () => unwrapApi((await api.get<ApiResponse<MaddoxOpexGlobalMemoryDto[]>>(`${BASE}/${endpoint}`)).data),
         retry: false,
     })
 
-/** Incluir, editar e remover as memórias globais que todo Personagem Opex lê (canal `dndicas/personagem-opex`). */
-export function useMaddoxOpexMemoryMutations() {
+/**
+ * Incluir, editar e remover as memórias globais que todo Personagem Opex lê (canal `dndicas/personagem-opex`) ou, com
+ * `opex-npc-memories`, as que todo NPC Opex lê (canal `dndicas/npc-opex`, DND-27).
+ */
+export function useMaddoxOpexMemoryMutations(endpoint: MaddoxOpexMemoriesEndpoint = "opex-memories") {
     const queryClient = useQueryClient()
-    const refresh = () => void queryClient.invalidateQueries({ queryKey: OPEX_MEMORIES_KEY })
+    const refresh = () => void queryClient.invalidateQueries({ queryKey: opexMemoriesKey(endpoint) })
     const create = useMutation({
-        mutationFn: async (input: { title: string; text: string }) => unwrapApi((await api.post<ApiResponse<MaddoxOpexGlobalMemoryDto>>(`${BASE}/opex-memories`, input)).data),
+        mutationFn: async (input: { title: string; text: string }) => unwrapApi((await api.post<ApiResponse<MaddoxOpexGlobalMemoryDto>>(`${BASE}/${endpoint}`, input)).data),
         onSuccess: () => {
             refresh()
             toast.success("Memória incluída")
@@ -134,7 +140,7 @@ export function useMaddoxOpexMemoryMutations() {
         onError: (error) => toast.error(apiErrorMessage(error, "Não foi possível incluir a memória")),
     })
     const update = useMutation({
-        mutationFn: async ({ id, ...input }: { id: string; title: string; text: string }) => unwrapApi((await api.patch<ApiResponse<MaddoxOpexGlobalMemoryDto>>(`${BASE}/opex-memories/${encodeURIComponent(id)}`, input)).data),
+        mutationFn: async ({ id, ...input }: { id: string; title: string; text: string }) => unwrapApi((await api.patch<ApiResponse<MaddoxOpexGlobalMemoryDto>>(`${BASE}/${endpoint}/${encodeURIComponent(id)}`, input)).data),
         onSuccess: () => {
             refresh()
             toast.success("Memória atualizada")
@@ -142,7 +148,7 @@ export function useMaddoxOpexMemoryMutations() {
         onError: (error) => toast.error(apiErrorMessage(error, "Não foi possível salvar a memória")),
     })
     const remove = useMutation({
-        mutationFn: async (id: string) => unwrapApi((await api.delete<ApiResponse<{ deleted: boolean }>>(`${BASE}/opex-memories/${encodeURIComponent(id)}`)).data),
+        mutationFn: async (id: string) => unwrapApi((await api.delete<ApiResponse<{ deleted: boolean }>>(`${BASE}/${endpoint}/${encodeURIComponent(id)}`)).data),
         onSuccess: () => {
             refresh()
             toast.success("Memória removida")
