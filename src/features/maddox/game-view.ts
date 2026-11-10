@@ -98,13 +98,25 @@ export function masterBannerText(state: Pick<MaddoxGameStateDto, "turn"> & { me?
     return state.turn.failed ? `${MADDOX_TURN_PHASE_LABELS.master} — o Maddox teve um problema; tentando de novo em instantes…` : `${MADDOX_TURN_PHASE_LABELS.master} — o Maddox está narrando…`
 }
 
+/** `a` é um id de mensagem mais novo que `b` (ObjectIds em hex crescem no tempo; tamanho maior = mais novo). */
+export function isNewerMessageId(a: string, b: string): boolean {
+    return a.length > b.length || (a.length === b.length && a > b)
+}
+
 /**
  * Gerações do Maddox a mostrar: as ao vivo e as que já terminaram até a mensagem gravada chegar à lista (sem
  * piscar entre o fim do stream e a recarga da mesa).
+ *
+ * Uma geração terminada só espera a mensagem dela enquanto ela é mais nova que tudo o que está carregado (DND-46): se já
+ * chegou uma mensagem mais nova, a dela ou chegou junto ou não vai chegar nunca — saiu da mesa numa volta a um turno
+ * (descartada ou apagada) — e a bolha não volta. Os ids nascem num único processo, então crescem com o tempo.
  */
 export function visibleLiveGenerations(stream: { live: MaddoxLiveGenerationDto[]; settled: (MaddoxLiveGenerationDto & { messageId: string })[] }, messages: readonly Pick<MaddoxGameMessageDto, "id">[]): MaddoxLiveGenerationDto[] {
     const saved = new Set(messages.map((message) => message.id))
-    return [...stream.settled.filter((item) => !saved.has(item.messageId)), ...stream.live]
+    let newest: string | null = null
+    for (const message of messages) if (newest === null || isNewerMessageId(message.id, newest)) newest = message.id
+    const pending = stream.settled.filter((item) => !saved.has(item.messageId) && (newest === null || isNewerMessageId(item.messageId, newest)))
+    return [...pending, ...stream.live]
 }
 
 /**

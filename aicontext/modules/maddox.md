@@ -415,6 +415,7 @@ e `RewindNoticeLine.tsx`. API: `GET/POST /api/maddox/campaigns/[id]/game/rewind`
 | Descarte | `discardedBy` some de **todas** as leituras por um filtro no schema (mensagens e imagens): mesa, Diário (histórico, busca, imagens), transcrição do narrador e do Opex, testes e reações. Só a cota de imagens, a gravação do resultado de uma imagem em geração e o varredor de imagens presas (`includeDiscarded`) e as consultas pelo próprio `discardedBy` o enxergam: a imagem descartada durante a geração recebe `status`, `url` e `key` (a retomada a traz pronta); se já virou lápide, o arquivo gerado é excluído. A declaração descartada sai do índice único (`turnAction` vai para `discardedBy.turnAction`) |
 | Perda definitiva | No começo da nova narração (`commitRewind` em `runMasterTurn`, dentro da fila e da trava): exclui as memórias nascidas no trecho (falha → `maddox_memory_repairs`, a narração segue e a rotina do Engramind tenta de novo), apaga as mensagens descartadas, as imagens viram lápide (`slot: "discarded"`, `counts` mantido: **a cota não volta**; arquivo excluído do S3), apaga o retrato de origem e os retratos posteriores, aposenta os agentes dos NPCs Opex que sumiram e encerra a volta (auditoria `depois.rewind: "commit"`). A numeração segue em X+1 |
 | Lobby | "Em andamento · Turno N · fase" mostra o turno em que a mesa está |
+| Tela aberta (DND-46) | As falas do Maddox que terminaram com a página aberta (narrações do trecho descartado, resposta de uma pergunta apagada) não voltam como bolhas ao vivo: só a geração mais nova que a última mensagem carregada espera a mensagem gravada. Sem recarregar a página, a mesa mostra o mesmo que depois de recarregar |
 
 **Memórias.** Cada gravação do jogo leva `turno:<n>` e `gravado:<ms>` (relógio do dndicas; reservada, fora do Diário),
 inclusive as dos Personagens Opex (`personagem-opex`) e dos NPCs Opex (`npc-opex`). Ir ao turno lê o histórico de cada
@@ -539,7 +540,10 @@ uma tentativa frustrada narrada com a causa na ficção. Perguntas e "Não fazer
 **Tela.** A mesa assina o stream (`useMaddoxGameStream`): reconecta sozinho com espera crescente (3 s, dobrando até 60 s;
 sem linha nem `ping` por 45 s refaz a conexão) e **para** em 401/403/404; a fala do Maddox chega aos poucos numa bolha com
 cursor e "Consultando as anotações da campanha…" enquanto ele usa ferramentas; a resposta ao vivo aparece ligada à pergunta; a
-geração que terminou fica na tela até a mensagem gravada chegar (sem piscar). A faixa mostra "o Maddox teve um problema;
+geração que terminou fica na tela até a mensagem gravada chegar (sem piscar) — e só enquanto ela é mais nova que a mensagem
+mais recente carregada (`visibleLiveGenerations`, DND-46): a de uma mensagem que saiu da mesa numa volta a um turno não
+volta, e o stream guarda só as últimas gerações terminadas. Nas gerações ao vivo, o divisor "Turno N" sai uma vez por turno
+(comparado ao item anterior, gravado ou ao vivo). A faixa mostra "o Maddox teve um problema;
 tentando de novo em instantes…" depois de uma falha. `ACTION_INVALID` aparece acima do campo e o rascunho volta.
 **Foco:** sempre que o Maddox termina de responder — na mesa e na entrevista — o campo de texto recebe o foco
 (`focusComposer`), sem roubá-lo de outro campo editável nem de um diálogo aberto.

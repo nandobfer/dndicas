@@ -39,6 +39,8 @@ export interface MaddoxRolledCheck {
 
 /** Rolagens recentes guardadas para repetir a animação (as mais antigas saem). */
 const ROLLED_KEEP = 20
+/** Gerações terminadas guardadas até a mensagem gravada chegar (as mais antigas saem). */
+const SETTLED_KEEP = 20
 
 export const MADDOX_GAME_STREAM_INITIAL: MaddoxGameStreamState = { live: [], settled: [], finished: 0, connected: false, rolled: [] }
 
@@ -72,7 +74,7 @@ export function reduceGameStream(state: MaddoxGameStreamState, line: MaddoxGameS
             return { ...state, live: patch(state.live, line.liveId, (item) => ({ ...item, tool: line.running })) }
         case "live-end": {
             const ended = state.live.find((item) => item.liveId === line.liveId)
-            const settled = ended && line.messageId && !line.error ? [...state.settled, { ...ended, tool: false, messageId: line.messageId }] : state.settled
+            const settled = ended && line.messageId && !line.error ? [...state.settled, { ...ended, tool: false, messageId: line.messageId }].slice(-SETTLED_KEEP) : state.settled
             return { ...state, live: state.live.filter((item) => item.liveId !== line.liveId), settled, finished: state.finished + 1 }
         }
         case "check-rolled":
