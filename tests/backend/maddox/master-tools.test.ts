@@ -10,6 +10,12 @@ vi.mock("@/features/maddox/server/tactical-combat", async (importOriginal) => {
 })
 
 vi.mock("@/features/engramind/server/campaign-memories", async () => (await import("../../helpers/campaign-memories-mock")).campaignMemoriesModule)
+// Configuração padrão sem banco: imagens desligadas, então o retrato automático do `save_npc` (DND-43) não pede nada.
+vi.mock("@/features/maddox/server/settings", async (importOriginal) => {
+    const actual = await importOriginal<typeof import("@/features/maddox/server/settings")>()
+    const { DEFAULT_MADDOX_SETTINGS } = await import("@/features/maddox/schemas")
+    return { ...actual, loadMaddoxSettings: vi.fn(async () => ({ settings: DEFAULT_MADDOX_SETTINGS, isDefault: true, updatedAt: null })) }
+})
 
 const { campaignMemoriesStore } = await import("../../helpers/campaign-memories-mock")
 

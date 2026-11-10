@@ -23,7 +23,8 @@ import { appearanceBlock, appearanceRecap, type CharacterAppearance } from "./sc
 
 /**
  * Imagens nas cenas (Maddox 10) — SOMENTE servidor. Quatro origens: a ferramenta do narrador (`request_scene_image`,
- * ligada à narração gravada), o fim de batalha (automático, com a cena final), o pedido manual do dono e o retrato de NPC.
+ * ligada à narração gravada), o fim de batalha (automático, com a cena final), o pedido manual do dono e o retrato de NPC
+ * (`save_npc { gerarRetrato }`, "Gerar retrato" do dono ou o retrato automático do NPC conhecido, DND-43).
  *
  * - **Situações**: fixas (`MADDOX_SCENE_IMAGE_SITUATIONS`) e personalizadas da aba, cada uma com chave ativa; a chave da
  *   campanha (`campaign.sceneImages`) desliga as automáticas (o pedido manual continua).
@@ -133,6 +134,8 @@ export interface SceneImageRequest {
     requestedBy?: string | null
     /** Pedido do dono (manual ou "Gerar retrato"): ignora situações, chave da campanha e intervalo; só o teto diário. */
     byOwner?: boolean
+    /** Retrato automático (DND-43): a chave `autoPortraits` substitui a situação ativa; o resto da regra vale. */
+    auto?: boolean
 }
 
 export type SceneImageDecision = { ok: true } | { ok: false; reason: string }
@@ -140,14 +143,16 @@ export type SceneImageDecision = { ok: true } | { ok: false; reason: string }
 const slotOf = (source: MaddoxSceneImageSource): MaddoxSceneImageSlot => (source === "manual" ? "manual" : source === "npc-portrait" ? "portrait" : "auto")
 
 /** Pode pedir? (configuração, situação, chave da campanha, Gerador e cota). Não grava nada. */
-export async function checkSceneImageRequest(request: Pick<SceneImageRequest, "campaignId" | "source" | "turnNumber" | "situation" | "byOwner">, env: SceneImageEnvironment): Promise<SceneImageDecision> {
+export async function checkSceneImageRequest(request: Pick<SceneImageRequest, "campaignId" | "source" | "turnNumber" | "situation" | "byOwner" | "auto">, env: SceneImageEnvironment): Promise<SceneImageDecision> {
     const scene = env.settings.sceneImages
     if (!request.byOwner) {
         if (!scene?.enabled) return { ok: false, reason: "As imagens nas cenas estão desligadas na configuração do Maddox." }
         const campaign = await MaddoxCampaignModel.findById(request.campaignId).select("sceneImages").lean<Pick<IMaddoxCampaign, "sceneImages">>()
         if (campaign?.sceneImages === false) return { ok: false, reason: "O dono desligou as imagens automáticas nesta campanha." }
         const active = activeSituations(scene)
-        if (!request.situation || !active.some((item) => item.key === request.situation)) {
+        if (request.auto) {
+            if (request.source !== "npc-portrait" || scene.autoPortraits !== true) return { ok: false, reason: "O retrato automático de NPC está desligado na configuração do Maddox." }
+        } else if (!request.situation || !active.some((item) => item.key === request.situation)) {
             return { ok: false, reason: `Situação "${request.situation ?? ""}" não está ativa. Situações ativas: ${active.map((item) => `${item.key} (${item.label})`).join(", ") || "nenhuma"}.` }
         }
     }
@@ -599,6 +604,47 @@ export async function scheduleNpcPortraits(campaignId: Types.ObjectId, npcIds: r
     }
 }
 
+export type AutoNpcPortraitTrigger = "save_npc" | "combat"
+
+/**
+ * Retrato automático (DND-43): NPC conhecido dos jogadores, sem retrato e sem pedido anterior (nem `failed`: a nova
+ * tentativa fica com o dono), com "Imagens nas cenas", "Retrato automático de NPC" e a chave da campanha ligados. Pede na
+ * hora, dentro ou fora da narração; o slot "portrait" só conta no teto diário (sem intervalo nem uma por turno). Nunca
+ * lança: recusa e erro vão para o log, a criação do NPC e a narração seguem. Devolve os NPCs com pedido reservado. A mesa
+ * fica sabendo pelo aviso do job que salvou o NPC e, de novo, quando o retrato fica pronto.
+ */
+export async function scheduleAutoNpcPortraits(campaignId: Types.ObjectId, npcIds: readonly (Types.ObjectId | string)[], trigger: AutoNpcPortraitTrigger): Promise<string[]> {
+    const requested: string[] = []
+    if (!npcIds.length) return requested
+    try {
+        // Checagem barata antes de carregar o Gerador: com a função desligada, nada além disso roda.
+        const { loadMaddoxSettings } = await import("./settings")
+        const scene = (await loadMaddoxSettings()).settings.sceneImages
+        if (!scene?.enabled || scene.autoPortraits !== true) return requested
+        const campaign = await MaddoxCampaignModel.findById(campaignId).select("turn sceneImages").lean<Pick<IMaddoxCampaign, "_id" | "turn" | "sceneImages">>()
+        if (!campaign || campaign.sceneImages === false) return requested
+        let env: SceneImageEnvironment | null = null
+        for (const id of npcIds) {
+            const npc = await MaddoxNpcModel.findOne({ _id: id, campaignId }).lean<IMaddoxNpc>()
+            if (!npc || npc.visibility !== "players" || npc.portraitUrl) continue
+            if (await MaddoxSceneImageModel.exists({ npcId: npc._id, source: "npc-portrait", status: { $in: ["pending", "generating", "done", "failed"] } })) continue
+            env ??= await loadSceneImageEnvironment()
+            const { image, reason } = await scheduleSceneImage({ ...npcPortraitRequest(campaign, npc, null, false), auto: true }, env)
+            if (!image) {
+                log.info({ campaignId: String(campaignId), npcId: String(npc._id), origin: "auto", trigger, reason }, "[maddox] retrato automático de NPC não pedido")
+                // Gerador indisponível ou teto: os próximos NPCs teriam o mesmo motivo.
+                if (!env.generator.available || reason?.startsWith("Limite")) break
+                continue
+            }
+            requested.push(String(npc._id))
+            log.info({ campaignId: String(campaignId), npcId: String(npc._id), imageId: String(image._id), origin: "auto", trigger }, "[maddox] retrato automático de NPC pedido")
+        }
+    } catch (error) {
+        log.warn({ err: error instanceof Error ? error.message : String(error), campaignId: String(campaignId), origin: "auto", trigger }, "[maddox] falha ao pedir o retrato automático de NPC")
+    }
+    return requested
+}
+
 // ── Narrador ───────────────────────────────────────────────────────────────────
 
 /**
@@ -613,9 +659,10 @@ export async function narratorSceneImageContext(campaign: Pick<IMaddoxCampaign, 
         if (!scene?.enabled || !env.generator.available) return null
         const situations = toolSituations(scene).map(({ key, label, description }) => ({ key, label, description }))
         const portraits = Boolean(scene.situations["npc-portrait"])
-        if (!situations.length && !portraits) return null
+        const autoPortraits = scene.autoPortraits === true
+        if (!situations.length && !portraits && !autoPortraits) return null
         const quota = await sceneImageQuota(campaign._id, turnNumber, scene, "auto")
-        return { situations, portraits, blocked: quota.allowed ? null : quota.reason }
+        return { situations, portraits, autoPortraits, blocked: quota.allowed ? null : quota.reason }
     } catch (error) {
         log.warn({ err: error instanceof Error ? error.message : String(error), campaignId: String(campaign._id) }, "[maddox] situação das imagens indisponível; narrando sem elas")
         return null

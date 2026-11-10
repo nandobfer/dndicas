@@ -226,13 +226,15 @@ export interface NarratorSceneImages {
     situations: readonly { key: string; label: string; description: string }[]
     /** Situação "Retrato de NPC" ativa (`save_npc { gerarRetrato }`). */
     portraits: boolean
+    /** Retrato automático de NPC ligado (DND-43): NPC conhecido ganha retrato sem `gerarRetrato`. */
+    autoPortraits?: boolean
     /** Motivo pelo qual não cabe imagem automática agora (intervalo, teto do dia). */
     blocked: string | null
 }
 
 /** Regra "## Imagens da cena" (Maddox 10): só com alguma situação pedida pelo narrador ativa. */
 export function sceneImagesRule(images: NarratorSceneImages | null | undefined): string | null {
-    if (!images || (!images.situations.length && !images.portraits)) return null
+    if (!images || (!images.situations.length && !images.portraits && !images.autoPortraits)) return null
     const lines = ["## Imagens da cena"]
     if (images.situations.length) {
         lines.push(
@@ -244,7 +246,8 @@ export function sceneImagesRule(images: NarratorSceneImages | null | undefined):
         )
         if (images.blocked) lines.push(`- AGORA: ${images.blocked} Não peça imagem nesta narração.`)
     }
-    if (images.portraits) lines.push("- Retrato de NPC: ao apresentar aos jogadores um NPC importante para a história, salve-o com save_npc { gerarRetrato: true } (uma vez por NPC).")
+    if (images.autoPortraits) lines.push("- Retrato de NPC: todo NPC salvo como conhecido dos jogadores (save_npc com visibility players) ganha um retrato sozinho, uma vez; não precisa pedir gerarRetrato. Mantenha a publicDescription com a aparência dele.")
+    else if (images.portraits) lines.push("- Retrato de NPC: ao apresentar aos jogadores um NPC importante para a história, salve-o com save_npc { gerarRetrato: true } (uma vez por NPC).")
     return lines.join("\n")
 }
 

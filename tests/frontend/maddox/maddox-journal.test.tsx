@@ -222,6 +222,8 @@ describe("Diário da campanha (Maddox 9) — tela", () => {
         expect(within(dead).getByTestId("journal-npc-status")).toHaveTextContent("Morto")
         expect(screen.getByTestId("journal-npc-n1")).toHaveTextContent("Taverneiro gordo.")
         expect(screen.getByTestId("journal-npc-n1")).toHaveAttribute("id", "npc-n1")
+        // Um NPC por linha (DND-43).
+        expect(screen.getByLabelText("NPCs conhecidos").className).not.toMatch(/grid-cols-2/)
     })
 
     it("NPCs Opex (DND-27): o resumo com canManageOpexNpcs mostra Promover/Remover Opex; sem ele, só o chip", async () => {

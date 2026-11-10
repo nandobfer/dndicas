@@ -469,6 +469,12 @@ export const MADDOX_SCENE_IMAGE_SITUATION_DEFS: Record<MaddoxSceneImageSituation
     "npc-portrait": { label: "Retrato de NPC", description: "Quando o Maddox marca um NPC como importante, ele ganha um retrato (uma vez) que aparece em \"NPCs conhecidos\"." },
 }
 
+/** Retrato automático de NPC (DND-43): chave própria, independente da situação "Retrato de NPC". */
+export const MADDOX_SCENE_IMAGE_AUTO_PORTRAITS_DEF = {
+    label: "Retrato automático de NPC",
+    description: "Quando um NPC passa a ser conhecido dos jogadores (ou é atualizado ainda sem retrato), ganha um retrato, sem o Maddox precisar pedir. Uma vez por NPC; conta no teto diário.",
+} as const
+
 /** Origem da imagem: ferramenta do narrador, fim de combate, botão do dono ou retrato de NPC. */
 export const MADDOX_SCENE_IMAGE_SOURCES = ["tool", "combat-end", "manual", "npc-portrait"] as const
 export type MaddoxSceneImageSource = (typeof MADDOX_SCENE_IMAGE_SOURCES)[number]

@@ -111,6 +111,14 @@ describe("configuração do Agente Maddox", () => {
         if (partial.success) expect(partial.data.sceneImages).toMatchObject({ enabled: true, maxPerDay: 10, situations: { climax: true, "new-location": false } })
     })
 
+    it("retrato automático de NPC (DND-43): configuração sem o campo assume ligado; desligado gravado é mantido", () => {
+        expect(DEFAULT_MADDOX_SETTINGS.sceneImages.autoPortraits).toBe(true)
+        const old = maddoxSettingsSchema.safeParse(withMaddoxDefaults({ enabled: false, sceneImages: { enabled: true, situations: { "npc-portrait": true } } }))
+        expect(old.success && old.data.sceneImages.autoPortraits).toBe(true)
+        const off = maddoxSettingsSchema.safeParse(withMaddoxDefaults({ enabled: false, sceneImages: { enabled: true, autoPortraits: false } }))
+        expect(off.success && off.data.sceneImages.autoPortraits).toBe(false)
+    })
+
     it("imagens nas cenas: limites da frequência e situação personalizada exige nome e descrição", () => {
         const base = DEFAULT_MADDOX_SETTINGS.sceneImages
         const invalid = maddoxSettingsSchema.safeParse({

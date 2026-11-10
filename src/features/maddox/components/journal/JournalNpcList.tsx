@@ -36,7 +36,7 @@ export function JournalNpcList({ campaignId, color, manageOpex = false }: { camp
     return (
         <div className="space-y-4">
             <SeekNotice {...seek} />
-            <div className="grid gap-3 md:grid-cols-2" aria-label="NPCs conhecidos">
+            <div className="grid gap-3" aria-label="NPCs conhecidos">
                 {items.map((npc) => {
                     const anchor = journalAnchor.npc(npc.id)
                     const gone = npc.status === "dead"
