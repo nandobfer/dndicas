@@ -1636,6 +1636,11 @@ teto `MADDOX_OPEX_GENERATION_TIMEOUT_MS`. Instruções = configuração + papel 
 NPC importante da campanha com **agente de IA próprio** (memória no Engramind) que decide o que ele fala e faz nas narrações em que
 aparece (inclusive no combate narrativo) e na vez dele no combate tático. O Maddox resolve e narra a partir da decisão.
 
+**Consultas paralelas (DND-44).** `consultar_npc_opex` reserva a vaga do teto de consultas por narração pelo **nome pedido**, antes
+da leitura do NPC, e a reserva passa para a chave do NPC quando ele é lido: chamadas do mesmo NPC no mesmo passo reaproveitam
+uma consulta só, o teto segue a ordem em que o narrador pediu (não a ordem em que o banco respondeu) e o narrador do combate
+enxerga a mesma decisão.
+
 **Voltar a um turno (DND-44).** As memórias do NPC (`gravar_memoria_npc_opex`, decisões e a memória inicial da promoção) levam
 `turno:<n>` e `gravado:<ms>` e acompanham a volta com o token do NPC (o do retrato de origem quando o NPC sumiu da mesa). O NPC criado
 depois do turno some da mesa e do contexto; volta ao retomar e é apagado na perda definitiva, que também aposenta o agente dos NPCs

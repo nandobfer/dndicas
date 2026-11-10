@@ -303,6 +303,39 @@ describe("consultas paralelas no mesmo passo", () => {
         expect(String(rejected[0]!.reason.message)).toContain("Limite de 3 consultas a NPCs Opex por narração atingido")
         expect(npcCalls).toHaveLength(3)
     })
+
+    it("o NPC repetido que o banco responde por último também ganha a vaga: a reserva vale na ordem do pedido", async () => {
+        const t = await table()
+        for (const name of ["Sildar", "Nezznar"]) await MaddoxNpcModel.create({ campaignId: t.campaignId, name, nameKey: name.toLowerCase(), visibility: "players" })
+        for (const name of ["Gundren", "Strahd", "Sildar", "Nezznar"]) await run("promover_npc_opex", t.campaignId, { npc: name })
+        // O runner lento responde a leitura de Gundren (o NPC pedido duas vezes, primeiro) DEPOIS das outras três.
+        const original = MaddoxNpcModel.findOne.bind(MaddoxNpcModel)
+        const spy = vi.spyOn(MaddoxNpcModel, "findOne").mockImplementation(((filter: Record<string, unknown>, ...rest: unknown[]) => {
+            const query = original(filter as never, ...(rest as never[]))
+            if (filter?.nameKey !== "gundren") return query
+            const read = query.lean() as unknown as Promise<unknown>
+            return { lean: () => new Promise((resolve) => setTimeout(() => resolve(read), 60)) }
+        }) as never)
+        try {
+            const results = await inJob(t.campaignId, "narration", (jobId) =>
+                Promise.allSettled([
+                    run("consultar_npc_opex", t.campaignId, { npc: "Gundren", situacao: "Cena." }, jobId),
+                    run("consultar_npc_opex", t.campaignId, { npc: "Gundren", situacao: "Cena." }, jobId),
+                    run("consultar_npc_opex", t.campaignId, { npc: "Strahd", situacao: "Cena." }, jobId),
+                    run("consultar_npc_opex", t.campaignId, { npc: "Sildar", situacao: "Cena." }, jobId),
+                    run("consultar_npc_opex", t.campaignId, { npc: "Nezznar", situacao: "Cena." }, jobId),
+                ]),
+            )
+            expect(results[0]).toEqual(results[1])
+            expect(results.filter((item) => item.status === "fulfilled")).toHaveLength(4)
+            const rejected = results.filter((item): item is PromiseRejectedResult => item.status === "rejected")
+            expect(rejected).toHaveLength(1)
+            expect(String(rejected[0]!.reason.message)).toContain("Limite de 3 consultas a NPCs Opex por narração atingido")
+            expect(npcCalls).toHaveLength(3)
+        } finally {
+            spy.mockRestore()
+        }
+    })
 })
 
 describe("mesa: chip, ações do dono e a linha de falha", () => {

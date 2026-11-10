@@ -368,6 +368,24 @@ export function setJobOpexNpcConsult(campaignId: string, jobId: string, npcId: s
     return true
 }
 
+/** Solta a reserva de uma consulta que falhou por inteiro (o NPC não existe, está morto ou não é Opex): a vaga volta. */
+export function deleteJobOpexNpcConsult(campaignId: string, jobId: string, npcId: string): boolean {
+    return hubs.get(campaignId)?.jobs.get(jobId)?.opexNpcConsults.delete(npcId) ?? false
+}
+
+/**
+ * Liga a reserva feita pelo nome pedido à chave do NPC (DND-44): a consulta continua valendo uma vaga só no teto e passa a
+ * ser a mesma vista pelo narrador do combate, que guarda pela chave do NPC.
+ */
+export function linkJobOpexNpcConsult(campaignId: string, jobId: string, slot: string, npcId: string): boolean {
+    const job = hubs.get(campaignId)?.jobs.get(jobId)
+    if (!job) return false
+    const value = job.opexNpcConsults.get(slot)
+    job.opexNpcConsults.delete(slot)
+    if (value !== undefined) job.opexNpcConsults.set(npcId, value)
+    return true
+}
+
 /** Registra a falha do agente de um NPC Opex no job (uma por NPC); `false` se o job não está rodando. */
 export function addDraftOpexNpcFailure(campaignId: string, jobId: string, failure: MaddoxDraftOpexNpcFailure): boolean {
     const job = hubs.get(campaignId)?.jobs.get(jobId)
